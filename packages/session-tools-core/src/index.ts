@@ -216,6 +216,9 @@ export {
   // Outputs
   handleCreateOutput,
   handleMediaProviderRequest,
+  handleCreateLabSong,
+  handleSaveLabLyrics,
+  handleListLabSongs,
   // Visual surface
   handleVisualSurface,
   handleVisualSurfaceState,
@@ -324,6 +327,11 @@ export type {
   MediaProvider,
   MediaProviderRequestInput,
   MediaRequestMethod,
+  CreateLabSongToolInput,
+  SaveLabLyricsToolInput,
+  ListLabSongsToolInput,
+  LabSongCaptureInput,
+  LabSongToolResult,
   VisualSurfaceToolInput,
   VisualSurfaceToolResult,
   VisualSurfaceStateCapture,
@@ -372,6 +380,9 @@ export {
   RecallMemorySchema,
   CreateOutputSchema,
   MediaProviderRequestSchema,
+  CreateLabSongSchema,
+  SaveLabLyricsSchema,
+  ListLabSongsSchema,
   VisualSurfaceSchema,
   VisualSurfaceStateSchema,
   // Descriptions

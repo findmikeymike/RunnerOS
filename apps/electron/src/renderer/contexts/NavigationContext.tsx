@@ -64,6 +64,7 @@ import type {
 } from '../../shared/types'
 import {
   isCampaignNavigation,
+  isLabNavigation,
   isSessionsNavigation,
   isSourcesNavigation,
   isSettingsNavigation,
@@ -97,7 +98,7 @@ export type { Route }
 
 // Re-export navigation state types for consumers
 export type { NavigationState, SessionFilter }
-export { isCampaignNavigation, isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isAgentsNavigation, isAutomationsNavigation, isWorkspaceContextNavigation, isAgendaNavigation, isCommunityNavigation, isVaultNavigation, isOutputsNavigation }
+export { isCampaignNavigation, isLabNavigation, isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isAgentsNavigation, isAutomationsNavigation, isWorkspaceContextNavigation, isAgendaNavigation, isCommunityNavigation, isVaultNavigation, isOutputsNavigation }
 
 // =============================================================================
 // Context

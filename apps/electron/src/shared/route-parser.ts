@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'campaign' | 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'agenda' | 'community' | 'vault' | 'workflows' | 'workflowRun' | 'deepResearchRun' | 'outputs' | 'videoStudio' | 'settings'
+export type NavigatorType = 'campaign' | 'lab' | 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'agenda' | 'community' | 'vault' | 'workflows' | 'workflowRun' | 'deepResearchRun' | 'outputs' | 'videoStudio' | 'settings'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -56,6 +56,8 @@ export interface ParsedCompoundRoute {
   videoStudioOutputId?: string
   /** Campaign subpage. */
   campaignSubpage?: 'home' | 'calendar'
+  /** Lab sub-page. */
+  labTab?: 'home' | 'songs' | 'pad' | 'sequence'
   /** Details page info (null for empty state) */
   details: {
     type: string
@@ -71,7 +73,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 export const COMPOUND_ROUTE_PREFIXES = [
-  'campaign', 'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'agenda', 'community', 'vault', 'workflows', 'runs', 'deep-research', 'outputs', 'video-studio', 'settings'
+  'campaign', 'lab', 'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'agenda', 'community', 'vault', 'workflows', 'runs', 'deep-research', 'outputs', 'video-studio', 'settings'
 ] as const
 
 /**
@@ -107,6 +109,20 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   if (first === 'campaign') {
     const subpage = segments[1] === 'calendar' ? 'calendar' : 'home'
     return { navigator: 'campaign', campaignSubpage: subpage, details: null }
+  }
+
+  if (first === 'lab') {
+    const tab = segments[1]
+    if (!tab) return { navigator: 'lab', labTab: 'home', details: null }
+    if (tab === 'songs') return { navigator: 'lab', labTab: 'songs', details: null }
+    if (tab === 'pad') {
+      if (segments[2] === 'song' && segments[3]) {
+        return { navigator: 'lab', labTab: 'pad', details: { type: 'song', id: decodeURIComponent(segments[3]) } }
+      }
+      return { navigator: 'lab', labTab: 'pad', details: null }
+    }
+    if (tab === 'sequence') return { navigator: 'lab', labTab: 'sequence', details: null }
+    return null
   }
 
   // Settings navigator
@@ -368,6 +384,16 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
     return parsed.campaignSubpage === 'calendar' ? 'campaign/calendar' : 'campaign'
   }
 
+  if (parsed.navigator === 'lab') {
+    if (parsed.labTab === 'pad') {
+      return parsed.details?.type === 'song'
+        ? `lab/pad/song/${encodeURIComponent(parsed.details.id)}`
+        : 'lab/pad'
+    }
+    if (parsed.labTab === 'sequence') return 'lab/sequence'
+    return parsed.labTab === 'songs' ? 'lab/songs' : 'lab'
+  }
+
   if (parsed.navigator === 'settings') {
     const detailsType = parsed.details?.type || 'ai'
     return `settings/${detailsType}`
@@ -584,6 +610,17 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
   if (compound.navigator === 'workspaceContext') {
     return { type: 'view', name: 'workspace-context', params: {} }
   }
+  if (compound.navigator === 'lab') {
+    const params: Record<string, string> = compound.labTab && compound.labTab !== 'home' ? { tab: compound.labTab } : {}
+    if (compound.labTab === 'pad' && compound.details?.type === 'song') {
+      params.songId = compound.details.id
+    }
+    return {
+      type: 'view',
+      name: 'lab',
+      params,
+    }
+  }
   if (compound.navigator === 'agenda') {
     return { type: 'view', name: 'agenda', params: {} }
   }
@@ -715,6 +752,17 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
       navigator: 'campaign',
       ...(compound.campaignSubpage === 'calendar' ? { subpage: 'calendar' as const } : {}),
     }
+  }
+
+  if (compound.navigator === 'lab') {
+    if (compound.labTab === 'songs') return { navigator: 'lab', tab: 'songs' }
+    if (compound.labTab === 'pad') {
+      return compound.details?.type === 'song'
+        ? { navigator: 'lab', tab: 'pad', songId: compound.details.id }
+        : { navigator: 'lab', tab: 'pad' }
+    }
+    if (compound.labTab === 'sequence') return { navigator: 'lab', tab: 'sequence' }
+    return { navigator: 'lab' }
   }
 
   // Settings
@@ -852,6 +900,15 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
   switch (parsed.name) {
     case 'campaign':
       return { navigator: 'campaign' }
+    case 'lab':
+      if (parsed.params.tab === 'songs') return { navigator: 'lab', tab: 'songs' }
+      if (parsed.params.tab === 'pad') {
+        return parsed.params.songId
+          ? { navigator: 'lab', tab: 'pad', songId: parsed.params.songId }
+          : { navigator: 'lab', tab: 'pad' }
+      }
+      if (parsed.params.tab === 'sequence') return { navigator: 'lab', tab: 'sequence' }
+      return { navigator: 'lab' }
     case 'settings':
       return { navigator: 'settings', subpage: 'ai' }
     case 'workspace':
@@ -1030,6 +1087,14 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
       navigator: 'campaign',
       campaignSubpage: state.subpage ?? 'home',
       details: null,
+    }
+  }
+
+  if (state.navigator === 'lab') {
+    return {
+      navigator: 'lab',
+      labTab: state.tab ?? 'home',
+      details: state.tab === 'pad' && state.songId ? { type: 'song', id: state.songId } : null,
     }
   }
 

@@ -10,5 +10,6 @@ describe('inferScheduledWorkScope', () => {
   test('fails closed when workspace metadata has not been migrated', () => {
     expect(() => inferScheduledWorkScope({})).toThrow(/missing its persisted artist calendar scope/)
     expect(() => inferScheduledWorkScope({ artistWorkspaceScope: 'general' })).toThrow(/Artist HQ or a Campaign/)
+    expect(() => inferScheduledWorkScope({ artistWorkspaceScope: 'lab' })).toThrow(/Artist HQ or a Campaign/)
   })
 })

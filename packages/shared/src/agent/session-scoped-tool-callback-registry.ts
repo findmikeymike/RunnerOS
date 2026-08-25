@@ -162,6 +162,18 @@ export interface SessionScopedToolCallbacks {
   promoteOutputToFinalFn?: (
     input: import('@craft-agent/session-tools-core').PromoteOutputToFinalToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').PromoteOutputToFinalResult>;
+  /** Create a Lab song in the current workspace. */
+  createLabSongFn?: (
+    input: import('@craft-agent/session-tools-core').CreateLabSongToolInput,
+  ) => Promise<unknown>;
+  /** Save exact lyric excerpts into a Lab song in the current workspace. */
+  saveLabLyricsFn?: (
+    input: import('@craft-agent/session-tools-core').SaveLabLyricsToolInput,
+  ) => Promise<unknown>;
+  /** List Lab songs in the current workspace. */
+  listLabSongsFn?: (
+    input?: import('@craft-agent/session-tools-core').ListLabSongsToolInput,
+  ) => Promise<unknown[]>;
   /** Apply a safe visual surface operation to the current session Canvas. */
   applyVisualSurfaceEventFn?: (
     input: import('@craft-agent/session-tools-core').VisualSurfaceToolInput,

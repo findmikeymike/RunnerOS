@@ -108,6 +108,41 @@ describe('route-parser: library routes', () => {
     expect(parseRouteToNavigationState('campaign/calendar')).toEqual({ navigator: 'campaign', subpage: 'calendar' })
   })
 
+  it('parses "lab" as the creative lab navigator', () => {
+    const parsed = parseCompoundRoute('lab')
+    expect(parsed).toEqual({ navigator: 'lab', labTab: 'home', details: null })
+    expect(buildCompoundRoute(parsed!)).toBe('lab')
+    expect(parseRouteToNavigationState('lab')).toEqual({ navigator: 'lab' })
+  })
+
+  it('parses "lab/songs" as the lab songs tab', () => {
+    const parsed = parseCompoundRoute('lab/songs')
+    expect(parsed).toEqual({ navigator: 'lab', labTab: 'songs', details: null })
+    expect(buildCompoundRoute(parsed!)).toBe('lab/songs')
+    expect(parseRouteToNavigationState('lab/songs')).toEqual({ navigator: 'lab', tab: 'songs' })
+  })
+
+  it('parses "lab/pad" as the lab song pad tab', () => {
+    const parsed = parseCompoundRoute('lab/pad')
+    expect(parsed).toEqual({ navigator: 'lab', labTab: 'pad', details: null })
+    expect(buildCompoundRoute(parsed!)).toBe('lab/pad')
+    expect(parseRouteToNavigationState('lab/pad')).toEqual({ navigator: 'lab', tab: 'pad' })
+  })
+
+  it('parses "lab/pad/song/:id" as a route-scoped song pad', () => {
+    const parsed = parseCompoundRoute('lab/pad/song/night-drive')
+    expect(parsed).toEqual({ navigator: 'lab', labTab: 'pad', details: { type: 'song', id: 'night-drive' } })
+    expect(buildCompoundRoute(parsed!)).toBe('lab/pad/song/night-drive')
+    expect(parseRouteToNavigationState('lab/pad/song/night-drive')).toEqual({ navigator: 'lab', tab: 'pad', songId: 'night-drive' })
+  })
+
+  it('parses "lab/sequence" as the lab sequence tab', () => {
+    const parsed = parseCompoundRoute('lab/sequence')
+    expect(parsed).toEqual({ navigator: 'lab', labTab: 'sequence', details: null })
+    expect(buildCompoundRoute(parsed!)).toBe('lab/sequence')
+    expect(parseRouteToNavigationState('lab/sequence')).toEqual({ navigator: 'lab', tab: 'sequence' })
+  })
+
   it('parses "agents" as the agents navigator', () => {
     const state = parseRouteToNavigationState('agents')
     expect(state).toEqual({ navigator: 'agents', details: null })

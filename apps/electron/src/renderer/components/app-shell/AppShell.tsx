@@ -11,10 +11,12 @@ import {
   RotateCw,
   Flag,
   ListFilter,
+  ListMusic,
   Tag,
   Check,
   X,
   Pencil,
+  PenLine,
   Search,
   Plus,
   Trash2,
@@ -22,7 +24,9 @@ import {
   ListTodo,
   Inbox,
   Brain,
+  FileText,
   Globe,
+  FlaskConical,
   FolderOpen,
   Calendar,
   Mail,
@@ -103,6 +107,7 @@ import {
   useNavigation,
   useNavigationState,
   isCampaignNavigation,
+  isLabNavigation,
   isSessionsNavigation,
   isSourcesNavigation,
   isSettingsNavigation,
@@ -149,8 +154,8 @@ import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
 import { useOutputs } from "@/hooks/useOutputs"
-import { findArtistHQWorkspace, isArtistHQWorkspace as getIsArtistHQWorkspace } from "@/lib/artist-workspace"
-import { getArtistHqNavActiveState, isReusableConciergeSession } from "@/lib/artist-hq-nav-state"
+import { findArtistHQWorkspace, isArtistHQWorkspace as getIsArtistHQWorkspace, isLabWorkspace as getIsLabWorkspace } from "@/lib/artist-workspace"
+import { getArtistHqNavActiveState, isConciergeSessionLike, isReusableConciergeSession } from "@/lib/artist-hq-nav-state"
 import { openAgentSessionComposer } from "@/lib/run-agent"
 import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
 
@@ -1446,9 +1451,7 @@ function AppShellContent({
   // Agents library powers chat routing and the main Agents screen.
   const {
     activeAgents,
-  } = useAgents(activeWorkspaceId, {
-    defaultVisibleSlugs: isArtistHQWorkspace ? [] : ['world-builder', 'content-genius'],
-  })
+  } = useAgents(activeWorkspaceId)
   const {
     outputs,
     loading: outputsLoading,
@@ -1691,6 +1694,11 @@ function AppShellContent({
     navigate(routes.view.agenda())
   }, [])
 
+  const handleSessionsNavClick = useCallback(() => {
+    setSessionsNavExpanded((expanded) => !expanded)
+    if (!isSessionsNavigation(navState)) navigate(routes.view.allSessions())
+  }, [navState])
+
   const handleArtistHQNavClick = useCallback((tab: 'home' | 'profile' | 'voice' | 'calendar' | 'network' | 'research' | 'branding') => {
     const hqWorkspace = findArtistHQWorkspace(workspaces)
     if (!hqWorkspace) {
@@ -1792,6 +1800,42 @@ function AppShellContent({
     navigate(routes.view.campaign('calendar'))
   }, [])
 
+  const handleLabHomeClick = useCallback(() => {
+    if (window.location.hash.startsWith('#artist-hq/')) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+      setArtistHqHash('')
+    }
+    setSessionsNavExpanded(false)
+    navigate(routes.view.lab())
+  }, [])
+
+  const handleLabSongsClick = useCallback(() => {
+    if (window.location.hash.startsWith('#artist-hq/')) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+      setArtistHqHash('')
+    }
+    setSessionsNavExpanded(false)
+    navigate(routes.view.lab('songs'))
+  }, [])
+
+  const handleLabSequenceClick = useCallback(() => {
+    if (window.location.hash.startsWith('#artist-hq/')) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+      setArtistHqHash('')
+    }
+    setSessionsNavExpanded(false)
+    navigate(routes.view.lab('sequence'))
+  }, [])
+
+  const handleLabPadClick = useCallback(() => {
+    if (window.location.hash.startsWith('#artist-hq/')) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+      setArtistHqHash('')
+    }
+    setSessionsNavExpanded(false)
+    navigate(routes.view.lab('pad'))
+  }, [])
+
   const handleWorkChatClick = useCallback(async () => {
     if (!activeWorkspaceId) return
     setSessionsNavExpanded(true)
@@ -1818,8 +1862,8 @@ function AppShellContent({
 
     const agent = activeAgents.find((a) => a.slug === CONCIERGE_SLUG)
     if (!agent) {
-      toast.error('HNIC worker is not installed')
-      navigate(routes.view.agents())
+      navigate(routes.view.allSessions(), { skipAutoSelect: true })
+      setTimeout(() => focusZone('chat', { intent: 'programmatic' }), 50)
       return
     }
 
@@ -2086,9 +2130,16 @@ function AppShellContent({
 
   const activeSessionRouteId = isSessionsNavigation(navState) ? navState.details?.sessionId : undefined
   const artistHqTabOpen = isArtistHQWorkspace && artistHqHash.startsWith('#artist-hq/')
+  const isLabWorkspace = !isArtistHQWorkspace && getIsLabWorkspace(activeWorkspace, workspaces)
+  const activeRouteSession = activeSessionRouteId ? sessionMetaMap.get(activeSessionRouteId) : undefined
+  const activeRouteIsConcierge = activeRouteSession ? isConciergeSessionLike({
+    ...activeRouteSession,
+    conciergeSlug: CONCIERGE_SLUG,
+  }) : false
   const workChatActive = isSessionsNavigation(navState)
     && !!activeSessionRouteId
     && !artistHqTabOpen
+    && (!isLabWorkspace || activeRouteIsConcierge)
   const { hqHomeActive } = getArtistHqNavActiveState({
     isArtistHQWorkspace,
     isSessionsNavigation: isSessionsNavigation(navState),
@@ -2101,6 +2152,13 @@ function AppShellContent({
   const campaignHomeActive = campaignActive && (navState.subpage ?? 'home') === 'home'
   const campaignCalendarActive = campaignActive && navState.subpage === 'calendar'
   const activeCampaignId = !isArtistHQWorkspace ? activeWorkspaceId ?? undefined : undefined
+  const labHomeActive = isLabWorkspace && isLabNavigation(navState) && !navState.tab
+  const labSongsActive = isLabWorkspace && isLabNavigation(navState) && navState.tab === 'songs'
+  const labSequenceActive = isLabWorkspace && isLabNavigation(navState) && navState.tab === 'sequence'
+  const labPadActive = isLabWorkspace && isLabNavigation(navState) && navState.tab === 'pad'
+  const labSessionsActive = isLabWorkspace
+    && isSessionsNavigation(navState)
+    && !workChatActive
   const planExpanded = expandedMainNavGroups.has('plan')
   const peopleExpanded = expandedMainNavGroups.has('people')
   const workExpanded = expandedMainNavGroups.has('work')
@@ -2121,6 +2179,22 @@ function AppShellContent({
 
   const unifiedSidebarItems = React.useMemo((): KeyboardSidebarItem[] => {
     const result: KeyboardSidebarItem[] = []
+
+    if (isLabWorkspace) {
+      result.push({ id: 'nav:lab', type: 'nav', action: handleLabHomeClick })
+      result.push({ id: 'nav:songs', type: 'nav', action: handleLabSongsClick })
+      result.push({ id: 'nav:sequence', type: 'nav', action: handleLabSequenceClick })
+      result.push({ id: 'nav:pad', type: 'nav', action: handleLabPadClick })
+      result.push({ id: 'nav:chat', type: 'nav', action: handleWorkChatClick })
+      result.push({ id: 'nav:create', type: 'nav', action: () => toggleMainNavGroup('work') })
+      if (workExpanded) {
+        result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
+        result.push({ id: 'nav:outputs', type: 'nav', action: handleOutputsClick })
+        result.push({ id: 'nav:context', type: 'nav', action: () => navigate(routes.view.workspaceContext()) })
+      }
+      result.push({ id: 'nav:sessions', type: 'nav', action: handleSessionsNavClick })
+      return result
+    }
 
     if (!isArtistHQWorkspace) {
       result.push({ id: 'nav:campaign', type: 'nav', action: handleCampaignHomeClick })
@@ -2163,7 +2237,7 @@ function AppShellContent({
     }
 
     return result
-  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleWorkChatClick, isArtistHQWorkspace, navigate, peopleExpanded, planExpanded, toggleMainNavGroup, vaultActive, workExpanded])
+  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, isArtistHQWorkspace, isLabWorkspace, navigate, peopleExpanded, planExpanded, toggleMainNavGroup, vaultActive, workExpanded])
 
   const sidebarProjectGroups = React.useMemo(() => {
     const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
@@ -2408,6 +2482,7 @@ function AppShellContent({
   const shouldShowNavigator = useMemo(() => {
     if (effectiveSidebarAndNavigatorHidden) return false
     if (isCampaignNavigation(navState)) return false
+    if (isLabNavigation(navState)) return false
     if (isAutoCompact) return true
     if (isSessionsNavigation(navState)) return false
     if (isAgentsNavigation(navState)) return false
@@ -2425,6 +2500,88 @@ function AppShellContent({
   }, [effectiveSidebarAndNavigatorHidden, isAutoCompact, navState])
 
   const primarySidebarLinks = React.useMemo<LeftSidebarItem[]>(() => {
+    if (isLabWorkspace) {
+      return [
+        {
+          id: "nav:lab",
+          title: "Lab",
+          icon: FlaskConical,
+          variant: labHomeActive ? "default" : "ghost",
+          onClick: handleLabHomeClick,
+        },
+        {
+          id: "nav:songs",
+          title: "Songs",
+          icon: FileText,
+          variant: labSongsActive ? "default" : "ghost",
+          onClick: handleLabSongsClick,
+        },
+        {
+          id: "nav:sequence",
+          title: "Projects",
+          icon: ListMusic,
+          variant: labSequenceActive ? "default" : "ghost",
+          onClick: handleLabSequenceClick,
+        },
+        {
+          id: "nav:pad",
+          title: "Pad",
+          icon: PenLine,
+          variant: labPadActive ? "default" : "ghost",
+          onClick: handleLabPadClick,
+        },
+        {
+          id: "nav:chat",
+          title: "Chat",
+          icon: MessageSquare,
+          variant: workChatActive ? "default" : "ghost",
+          onClick: handleWorkChatClick,
+        },
+        {
+          id: "nav:create",
+          title: "Create",
+          icon: Sparkles,
+          variant: "ghost",
+          onClick: () => toggleMainNavGroup('work'),
+          onToggle: () => toggleMainNavGroup('work'),
+          expandable: true,
+          expanded: workExpanded,
+          items: workExpanded ? [
+            {
+              id: "nav:agents",
+              title: "Workers",
+              icon: Bot,
+              variant: isAgentsNavigation(navState) ? "default" : "ghost",
+              onClick: handleAgentsClick,
+            },
+            {
+              id: "nav:outputs",
+              title: "Outputs",
+              icon: FileText,
+              variant: isOutputsNavigation(navState) ? "default" : "ghost",
+              onClick: handleOutputsClick,
+            },
+            {
+              id: "nav:context",
+              title: "Context",
+              icon: Layers,
+              variant: isWorkspaceContextNavigation(navState) ? "default" : "ghost",
+              onClick: () => navigate(routes.view.workspaceContext()),
+            },
+          ] : [],
+        },
+        { id: "separator:sessions", type: "separator" },
+        {
+          id: "nav:sessions",
+          title: "Drafts",
+          label: String(workspaceSessionMetas.length),
+          icon: MessageSquare,
+          variant: labSessionsActive ? "default" : "ghost",
+          onClick: handleSessionsNavClick,
+        },
+      ]
+    }
+
     if (!isArtistHQWorkspace) {
       return [
         {
@@ -2646,7 +2803,7 @@ function AppShellContent({
         ],
       },
     ]
-  }, [artistHqHash, automations.length, brainActive, brainExpanded, campaignActive, campaignCalendarActive, campaignHomeActive, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleChatHistoryToggle, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, navigate, navState, openAddAutomation, peopleActive, peopleExpanded, planActive, planExpanded, sessionsNavExpanded, t, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
+  }, [artistHqHash, automations.length, brainActive, brainExpanded, campaignActive, campaignCalendarActive, campaignHomeActive, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleChatHistoryToggle, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, isLabWorkspace, labHomeActive, labPadActive, labSequenceActive, labSessionsActive, labSongsActive, navigate, navState, openAddAutomation, peopleActive, peopleExpanded, planActive, planExpanded, sessionsNavExpanded, t, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
 
   const sidebarSessionHistory = React.useMemo(() => {
     if (!sessionsNavExpanded || !workChatActive) return null

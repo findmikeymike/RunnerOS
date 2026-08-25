@@ -306,6 +306,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.secrets.SAVE,
   RPC_CHANNELS.secrets.DELETE,
   RPC_CHANNELS.secrets.CHANGED,
+  RPC_CHANNELS.secrets.TEST_GENIUS,
   RPC_CHANNELS.secrets.ZERO_STATUS,
   RPC_CHANNELS.secrets.INSTALL_ZERO,
   RPC_CHANNELS.secrets.INIT_ZERO,
@@ -401,6 +402,11 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.workspace.WRITE_IMAGE,
   RPC_CHANNELS.workspace.SETTINGS_GET,
   RPC_CHANNELS.workspace.SETTINGS_UPDATE,
+
+  // Creative Lab — canonical state follows the workspace owner.
+  RPC_CHANNELS.lab.GET_STATE,
+  RPC_CHANNELS.lab.SAVE_STATE,
+  RPC_CHANNELS.lab.UPDATED,
 
   // permissions — workspace permissions
   RPC_CHANNELS.permissions.GET_DEFAULTS,

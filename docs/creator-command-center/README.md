@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-09
+last_verified: 2026-08-25
 source_of_truth: true
 ---
 
@@ -24,6 +24,9 @@ Core Artist HQ and campaign workspace specs live here.
 - [13 Scheduled Work Composer And Execution](./13-scheduled-work-composer-execution-spec.md)
 - [14 State Of Play Opportunity Engine](./14-state-of-play-opportunity-engine-spec.md)
 - [15 Artist OS Runtime Isolation Plan](./15-artist-os-runtime-isolation-plan.md)
+- [16 Lab Workspace](./16-lab-workspace-spec.md)
+- [17 Lab Worker Routing Foundation](./17-lab-worker-routing-foundation-spec.md)
+- [18 Lab Integration Hardening](./18-lab-integration-hardening-spec.md)
 
 Current V1 implementation notes:
 
@@ -34,5 +37,6 @@ Current V1 implementation notes:
 - College Radio and Spotify Playlist Creator are default HQ/Campaign workers; College Radio hands verified email work to Outreach Agent.
 - Artist HQ Home now derives `Next`, `This Week`, `Workers`, and `Projects` from State of Play, Calendar, Scheduled Work, Automations, and campaign workspace data instead of sample cards. State of Play also renders live HQ goals and refreshes when its derived snapshot is missing or older than 12 hours.
 - Weekly Spotify Snapshot and YouTube Intel Pulse remain opt-in. When activated they run Mondays at 9:00 AM and 10:00 AM local time, respectively. Their read/research work uses safe permission mode; any later public post, send, spend, delete, or external account mutation still requires exact approval.
+- Creative Lab is implemented on `codex/lab-integration-hardening` with explicit workspace purpose, canonical song/project persistence, Lab-only tools, user-controlled starter workers, and bounded Prosody support. Automated integration gates pass; manual Electron and packaged/offline smoke remain.
 
 Add new Creator Command Center specs here unless they clearly belong in another feature folder.

@@ -1,7 +1,7 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-08-20
+last_verified: 2026-08-25
 source_of_truth: true
 ---
 
@@ -9,18 +9,20 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-08-20
-- Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/integration/creator-social-integration`
-- Branch: `codex/artist-os-runtime-isolation`
-- Implementation head: `1813a40ce feat: hide background agent protocol details`
-- Remote: 2 commits ahead of `origin/codex/artist-os-runtime-isolation`; intentionally unpushed.
-- Current goal: manual Electron smoke of HQ Home, Campaign Release Board routing, default workflows, and the daily social-reply automation.
-- Overall state: integrated beta. Core product foundations are built; live-provider proof, packaging, Creative Lab, Team Mode, and Windows remain.
+- Date: 2026-08-25
+- Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/integration/lab-integration-hardening`
+- Branch: `codex/lab-integration-hardening`
+- Integration base: `codex/artist-os-runtime-isolation`
+- Current goal: finish Creative Lab integration verification, then perform manual Electron smoke.
+- Overall state: integrated beta. Creative Lab is implemented on this integration branch; manual/package smoke, live-provider proof, Team Mode, and Windows remain.
 
 ## Recently Completed
 
 - Verified Claude Sonnet background completion after the parent turn, compact parent status, child-session opening, interruption, same-session resume, and renderer reload. Internal receipt/session plumbing and delegation protocol are now hidden from the normal transcript while remaining durably stored for runtime use.
 - Closed two additional runtime gates: existing DeepSeek/Pi chat plus terminal-tool execution is verified, and Claude Sonnet recovered correctly after Explore mode blocked a Write without creating the requested file.
+- Integrated Creative Lab as an explicit persisted Artist OS workspace purpose with isolated routing, scoped tools, user-controlled starter workers, canonical song/project persistence, honest live UI, and recoverable pending edits.
+- Added bounded Prosody integration with packaged resources, first-use progress, explicit offline/runtime errors, and a still-usable Song Pad when rhyme tooling is unavailable.
+- Preserved the original dirty Artist OS and Lab source worktrees; integration work is isolated to `codex/lab-integration-hardening`.
 
 - Compacted Artist HQ Home into a focused operational dashboard backed by persisted State of Play, Spotify, YouTube Intel, Calendar, Finals, projects, workers, signals, and needs-attention data.
 - Restored the stronger campaign-style HQ header, added optional banner upload, and aligned Spotify / Intel pulse cards with matching manual Run controls.
@@ -65,6 +67,19 @@ source_of_truth: true
 
 ## Verification State
 
+Creative Lab automated integration gates passed on `codex/lab-integration-hardening`:
+
+- 216 focused tests across Lab storage, migration, tools, routing, workspace isolation, Prosody selection, and IPC inventory.
+- `bun run typecheck:all`.
+- Main, preload, renderer, resources, and asset-copy builds.
+- `bun run lint:ipc-sends`.
+- `bun run test:product-isolation`.
+- `git diff --check`.
+
+Manual Electron and packaged/offline Prosody smoke remain pending; automated checks do not certify those runtime paths.
+
+The optional full-repository run completed with 5,761 passes and 15 failures. Eight failures reproduce on the untouched Artist OS base; the other seven passed immediately when rerun in isolation and are test-order dependent. None touch the Lab integration paths.
+
 Passed for the latest Campaign Release Board and Social Publisher slice:
 
 ```bash
@@ -84,17 +99,18 @@ The development app launched successfully from this worktree, restored Artist HQ
 
 ## Next Actions
 
-1. Smoke every Campaign Release Board play control and verify the correct worker/workflow, inherited context, immediate first message, and non-public boundary.
-2. Smoke HQ Home banner, live cards, manual pulse runs, weekly toggles, detail links, and compact lower sections.
-3. Smoke Content Mastermind, Paid Campaign, Industry Outreach, College Radio, and Merch Product Builder from their intended libraries.
-4. Run the Daily Social Comment Replies five-step checklist in `docs/backlog/external-integration-live-verification.md`.
-5. Continue live-account/provider smoke for Social Publisher, YouTube Intelligence, Spotify, Printify/Shopify, TryPost/Postiz, and paid ads.
-6. Record verified workers in `docs/development/vetted.md` and fix failures before adding more surface area.
-7. Review the full 10-commit local stack before any push or merge.
+1. Run the eight-step Creative Lab manual smoke in `docs/creator-command-center/18-lab-integration-hardening-spec.md`.
+2. Smoke every Campaign Release Board play control and verify the correct worker/workflow, inherited context, immediate first message, and non-public boundary.
+3. Smoke HQ Home banner, live cards, manual pulse runs, weekly toggles, detail links, and compact lower sections.
+4. Smoke Content Mastermind, Paid Campaign, Industry Outreach, College Radio, and Merch Product Builder from their intended libraries.
+5. Run the Daily Social Comment Replies five-step checklist in `docs/backlog/external-integration-live-verification.md`.
+6. Continue live-account/provider smoke for Social Publisher, YouTube Intelligence, Spotify, Printify/Shopify, TryPost/Postiz, and paid ads.
+7. Record verified workers in `docs/development/vetted.md` and fix failures before adding more surface area.
+8. Review the integration branch before any push or merge into the Artist OS branch.
 
 ## Notes For Next Agent
 
-- Start with `../HANDOFF.md`, then this file, then the generated system map.
+- Start with `../HANDOFF.md`, then this file, then the generated system map and Lab hardening spec.
 - Regenerate maps with `bun run docs:system-map`; never hand-edit generated map outputs.
-- Preserve the stacked branch history and keep Trade God isolated.
+- Preserve both original dirty worktrees and keep general Runner, ScriptOS, and Trade God isolated.
 - Treat real-account smoke as unfinished even though focused automated checks pass.

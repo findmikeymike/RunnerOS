@@ -50,6 +50,7 @@ export interface BroadcastEventMap {
     eventType: 'created' | 'updated' | 'completed',
   ]
   [RPC_CHANNELS.outputs.UPDATED]: [workspaceId: string, outputs?: OutputSummary[]]
+  [RPC_CHANNELS.lab.UPDATED]: [workspaceId: string]
   [RPC_CHANNELS.notifications.UPDATED]: [workspaceId: string, entries: NotificationEntry[]]
   [RPC_CHANNELS.pulses.TICK]: [workspaceId: string, tick: PulseTickEntry]
   [RPC_CHANNELS.skills.CHANGED]: [workspaceId: string, skills: LoadedSkill[]]

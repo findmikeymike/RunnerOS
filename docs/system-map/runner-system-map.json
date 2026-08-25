@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-02",
+  "generatedAt": "2026-08-25",
   "sourceFiles": {
     "starterAgents": "packages/shared/src/agent-definitions/starter-templates.ts",
     "agentTypes": "packages/shared/src/agent-definitions/types.ts",
@@ -32,24 +32,25 @@
     "automationQueueHandler": "packages/shared/src/automations/handlers/queue-work-handler.ts",
     "hnicScheduledWork": "packages/server-core/src/scheduled-work/HnicScheduledWork.ts",
     "socialBrowserExecutor": "apps/electron/src/main/scheduled-social-browser-executor.ts",
-    "missionBrief": "apps/electron/src/renderer/lib/mission-brief.ts"
+    "missionBrief": "apps/electron/src/renderer/lib/mission-brief.ts",
+    "labWorkspaceHome": "apps/electron/src/renderer/components/app-shell/LabWorkspaceHome.tsx"
   },
   "summary": {
-    "agentCount": 44,
+    "agentCount": 49,
     "domains": {
       "Command": 3,
       "Content Creation": 9,
-      "Creative": 5,
+      "Creative": 6,
       "Merch": 2,
       "Operators": 2,
-      "Other Workers": 2,
+      "Other Workers": 6,
       "Outreach": 5,
       "Promotion": 9,
       "Research": 4,
       "Socials": 3
     },
     "permissionModes": {
-      "ask": 36,
+      "ask": 41,
       "safe": 8
     },
     "hiddenWorkerHomeCount": 5,
@@ -78,16 +79,24 @@
       "record-doctor",
       "industry-hunter"
     ],
+    "labDefaultWorkerSlugs": [
+      "the-excavator",
+      "reverse-magic",
+      "hooker",
+      "legendary-writer",
+      "reference-master",
+      "record-doctor"
+    ],
     "workflowCount": 7,
     "sharedIntelPromptWired": true,
     "finalsPromotionWired": true,
     "scheduledWorkWired": true
   },
   "referenceHealth": {
-    "knownSkillCount": 124,
-    "bundledSkillCount": 85,
+    "knownSkillCount": 125,
+    "bundledSkillCount": 89,
     "systemSkillCount": 6,
-    "userGlobalSkillCount": 124,
+    "userGlobalSkillCount": 125,
     "knownSourceCount": 27,
     "missingSkills": [],
     "machineLocalOnlySkills": [],
@@ -301,6 +310,7 @@
     "Workers page shows active agents, except system agents and hidden worker-home slugs.",
     "Artist HQ default workers are currently branding-agent, world-builder, college-radio-agent, spotify-playlist-creator.",
     "Campaign default workers are currently branding-agent, world-builder, college-radio-agent, spotify-playlist-creator, content-genius, scroll-stopper, anticipation-director, content-director, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.",
+    "Lab workspaces can pass defaultVisibleSlugs, currently the-excavator, reverse-magic, hooker, legendary-writer, reference-master, record-doctor.",
     "run-agent drops missing skills/sources before session creation and includes a launch receipt.",
     "Concierge receives broad workspace context and an active-agent capability catalog for routing.",
     "Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.",
@@ -874,6 +884,42 @@
       "outputs": "A persona-lens critique with the strongest verdicts, contradictions, recommended edits, and next creative move."
     },
     {
+      "slug": "legendary-writer",
+      "name": "Legendary Writer",
+      "description": "Songwriting coach and lyric surgeon grounded in The Yoga of Songwriting.",
+      "domain": "Creative",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "yoga-of-songwriting"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [
+        "list_lab_songs",
+        "create_lab_song",
+        "save_lab_lyrics"
+      ],
+      "visualAgent": false,
+      "tags": [
+        "lab",
+        "lyrics",
+        "songwriting",
+        "writing",
+        "coach"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active",
+        "lab-workers-default-visible"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "trusted-worker-tools"
+      ],
+      "inputs": "Lyrics, rough sections, song concept, artist context, references, or a specific writing block.",
+      "outputs": "A concise lyric diagnosis, section surgery, rewrite options, stronger hooks, and next writing moves."
+    },
+    {
       "slug": "record-doctor",
       "name": "Record Doctor",
       "description": "Submit a song for premium producer vetting, feedback, or enhancement by sending a clean approval-gated packet to mikeymikemusic@gmail.com.",
@@ -900,7 +946,8 @@
       ],
       "launchSurfaces": [
         "workspace-workers-when-active",
-        "campaign-workers-default-visible"
+        "campaign-workers-default-visible",
+        "lab-workers-default-visible"
       ],
       "riskSignals": [
         "approval-capable",
@@ -1088,6 +1135,42 @@
       "outputs": "A short maintenance report with blockers, needs-review items, safe follow-ups, and exact next commands."
     },
     {
+      "slug": "hooker",
+      "name": "Hooker",
+      "description": "Writes, diagnoses, and upgrades song hooks, choruses, refrains, and title lines.",
+      "domain": "Other Workers",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "hook-writer"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [
+        "list_lab_songs",
+        "create_lab_song",
+        "save_lab_lyrics"
+      ],
+      "visualAgent": false,
+      "tags": [
+        "lab",
+        "hooks",
+        "chorus",
+        "lyrics",
+        "songwriting"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active",
+        "lab-workers-default-visible"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "trusted-worker-tools"
+      ],
+      "inputs": "A song concept, verse, existing hook, chorus draft, title line, genre, ambition, or rhythmic pocket.",
+      "outputs": "Hook candidates, chorus punch-ups, title-line options, diagnosis, setup fixes, and singability notes."
+    },
+    {
       "slug": "open-slide-agent",
       "name": "Open Slide",
       "description": "Create clean slide decks and export them to HTML or PDF.",
@@ -1123,6 +1206,115 @@
       ],
       "inputs": "A deck brief (topic, audience, length, tone), or an existing deck to edit/export.",
       "outputs": "A static HTML build (and optional PDF) of the deck, published as a Canvas-visible Output. Edit URL and dist path included."
+    },
+    {
+      "slug": "reference-master",
+      "name": "Reference Master",
+      "description": "Finds fresh cultural allusions, imagery wells, and reference palettes for songs.",
+      "domain": "Other Workers",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "reference-finder"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [
+        "list_lab_songs",
+        "create_lab_song",
+        "save_lab_lyrics"
+      ],
+      "visualAgent": false,
+      "tags": [
+        "lab",
+        "references",
+        "allusions",
+        "imagery",
+        "songwriting",
+        "lyrics"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active",
+        "lab-workers-default-visible"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "trusted-worker-tools"
+      ],
+      "inputs": "A theme, mood, lyric, song concept, artist context, or a cultural well the writer leans on.",
+      "outputs": "Fresh reference palettes grouped by well, meaning, lyric-use notes, cliche warnings, and optional lines/images to save into the Lab."
+    },
+    {
+      "slug": "reverse-magic",
+      "name": "Reverse Magic",
+      "description": "Turns song annotations and reference psychology into wholly new original lyrics.",
+      "domain": "Other Workers",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [
+        "list_lab_songs",
+        "create_lab_song",
+        "save_lab_lyrics"
+      ],
+      "visualAgent": false,
+      "tags": [
+        "lab",
+        "lyrics",
+        "songwriting",
+        "annotations",
+        "creative"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active",
+        "lab-workers-default-visible"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "artifact-output-aware",
+        "trusted-worker-tools"
+      ],
+      "inputs": "A reference artist/song, Genius annotations or song-analysis notes, and the new song concept.",
+      "outputs": "A new original song draft built from the reference psychology, with section notes and annotation-bait reasoning."
+    },
+    {
+      "slug": "the-excavator",
+      "name": "The Excavator",
+      "description": "Finds the buried song idea when the writer feels blocked or generic.",
+      "domain": "Other Workers",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "song-excavator"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [
+        "list_lab_songs",
+        "create_lab_song",
+        "save_lab_lyrics"
+      ],
+      "visualAgent": false,
+      "tags": [
+        "lab",
+        "songwriting",
+        "concepts",
+        "prompts",
+        "creative-block",
+        "lyrics"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active",
+        "lab-workers-default-visible"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "trusted-worker-tools"
+      ],
+      "inputs": "Writer block, loose life details, a flat draft, a vague theme, or a need for a song prompt.",
+      "outputs": "One-question-at-a-time digs, song titles, first lines, charged concepts, and follow-up doors for writing."
     },
     {
       "slug": "writer",

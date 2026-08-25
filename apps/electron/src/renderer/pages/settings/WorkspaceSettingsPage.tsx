@@ -104,7 +104,7 @@ export default function WorkspaceSettingsPage() {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('ask')
   const [workingDirectory, setWorkingDirectory] = useState('')
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
-  const [artistWorkspaceScope, setArtistWorkspaceScope] = useState<'hq' | 'campaign' | 'general'>('general')
+  const [artistWorkspaceScope, setArtistWorkspaceScope] = useState<'hq' | 'campaign' | 'lab' | 'general'>('general')
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true)
 
   // Default sources state
@@ -230,12 +230,16 @@ export default function WorkspaceSettingsPage() {
   )
 
   const handleWorkspaceTypeChange = useCallback(async (value: string) => {
-    if (value !== 'campaign' && value !== 'general') return
+    if (value !== 'campaign' && value !== 'lab' && value !== 'general') return
     const saved = await updateWorkspaceSetting('artistWorkspaceScope', value)
     if (!saved) return
     setArtistWorkspaceScope(value)
     await Promise.resolve(onRefreshWorkspaces?.())
-    toast.success(value === 'campaign' ? 'Workspace set as an artist campaign' : 'Workspace set as general')
+    toast.success(value === 'campaign'
+      ? 'Workspace set as an artist campaign'
+      : value === 'lab'
+        ? 'Workspace set as Creative Lab'
+        : 'Workspace set as general')
   }, [onRefreshWorkspaces, updateWorkspaceSetting])
 
   // Workspace icon upload handler
@@ -443,7 +447,8 @@ export default function WorkspaceSettingsPage() {
                   options={isHQWorkspace ? [
                     { value: 'hq', label: 'Artist HQ', description: 'The protected global artist workspace.' },
                   ] : [
-                    { value: 'general', label: 'General', description: 'Labs, operations, trading, and non-release projects.' },
+                    { value: 'general', label: 'General', description: 'Operations, trading, and non-release projects.' },
+                    { value: 'lab', label: 'Creative Lab', description: 'Songwriting, hooks, references, and creative experiments.' },
                     { value: 'campaign', label: 'Artist campaign', description: 'A release, rollout, single, album, or tour.' },
                   ]}
                 />

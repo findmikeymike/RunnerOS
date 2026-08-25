@@ -21,6 +21,8 @@ export const CAMPAIGN_DEFAULT_WORKER_SLUGS = [
   'industry-hunter',
 ] as const
 
+export { LAB_DEFAULT_ACTIVATED_AGENT_SLUGS as LAB_DEFAULT_WORKER_SLUGS } from '@craft-agent/shared/agent-definitions/defaults'
+
 export function defaultWorkerSlugs(includeCampaignWorkers: boolean): readonly string[] {
   return includeCampaignWorkers
     ? [...BASE_DEFAULT_WORKER_SLUGS, ...CAMPAIGN_DEFAULT_WORKER_SLUGS]

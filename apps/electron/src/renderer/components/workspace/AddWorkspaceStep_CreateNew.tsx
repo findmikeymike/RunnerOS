@@ -12,12 +12,13 @@ import { ServerDirectoryBrowser } from "@/components/ServerDirectoryBrowser"
 import { PRODUCT_DATA_DIR_NAME } from "@/lib/product-identity"
 
 type LocationOption = 'default' | 'custom'
-type WorkspacePurpose = 'general' | 'campaign'
+type WorkspacePurpose = 'general' | 'campaign' | 'lab'
 
 interface AddWorkspaceStep_CreateNewProps {
   onBack: () => void
   onCreate: (folderPath: string, name: string, purpose: WorkspacePurpose) => Promise<void>
   isCreating: boolean
+  initialName?: string
 }
 
 /**
@@ -30,10 +31,11 @@ interface AddWorkspaceStep_CreateNewProps {
 export function AddWorkspaceStep_CreateNew({
   onBack,
   onCreate,
-  isCreating
+  isCreating,
+  initialName = '',
 }: AddWorkspaceStep_CreateNewProps) {
   const { t } = useTranslation()
-  const [name, setName] = useState('')
+  const [name, setName] = useState(initialName)
   const [purpose, setPurpose] = useState<WorkspacePurpose>('general')
   const [locationOption, setLocationOption] = useState<LocationOption>('default')
   const [customPath, setCustomPath] = useState<string | null>(null)
@@ -153,7 +155,15 @@ export function AddWorkspaceStep_CreateNew({
             onChange={() => setPurpose('general')}
             disabled={isCreating}
             title="General workspace"
-            subtitle="A neutral space for labs, operations, trading, or other projects."
+            subtitle="A neutral space for operations, trading, or other projects."
+          />
+          <AddWorkspace_RadioOption
+            name="purpose"
+            checked={purpose === 'lab'}
+            onChange={() => setPurpose('lab')}
+            disabled={isCreating}
+            title="Creative Lab"
+            subtitle="Songwriting, hooks, references, and creative experiments."
           />
           <AddWorkspace_RadioOption
             name="purpose"

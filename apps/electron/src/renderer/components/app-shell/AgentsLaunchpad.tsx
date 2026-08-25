@@ -80,7 +80,10 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
   }, [onCreateSession, onInputChange, skills, sources, workspaceId])
 
   const grouped = React.useMemo(() => {
-    const visibleAgents = dedupeLaunchpadAgents(activeAgents.filter((a) => !isSystemAgent(a.slug) && !isHiddenFromWorkerHome(a.slug)))
+    const visibleAgents = dedupeLaunchpadAgents(activeAgents.filter((a) => (
+      !isSystemAgent(a.slug)
+      && !isHiddenFromWorkerHome(a.slug)
+    )))
     const orch = visibleAgents.find((a) => a.slug === ORCHESTRATOR_SLUG)
     const defaultOrder = new Map(defaultVisibleSlugs.map((slug, index) => [slug, index]))
     const rest = visibleAgents

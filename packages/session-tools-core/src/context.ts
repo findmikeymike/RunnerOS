@@ -445,6 +445,15 @@ export interface SessionToolContext {
    */
   createOutput?(input: import('./handlers/outputs.ts').CreateOutputToolInput): Promise<import('./handlers/outputs.ts').CreateOutputResult>;
 
+  /** Create a Lab song in the current workspace. */
+  createLabSong?(input: import('./handlers/lab-songs.ts').CreateLabSongToolInput): Promise<unknown>;
+
+  /** Save exact lyric excerpts into a Lab song in the current workspace. */
+  saveLabLyrics?(input: import('./handlers/lab-songs.ts').SaveLabLyricsToolInput): Promise<unknown>;
+
+  /** List Lab songs in the current workspace. */
+  listLabSongs?(input?: import('./handlers/lab-songs.ts').ListLabSongsToolInput): Promise<unknown[]>;
+
   /**
    * Promote an existing Output into the current workspace Finals registry.
    * Backend owns validation and the Finals context doc update.

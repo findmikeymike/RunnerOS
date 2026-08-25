@@ -51,6 +51,16 @@ describe('session tool filtering helpers', () => {
     expect(getSessionToolNames({ includeScheduleWork: true }).has('schedule_work')).toBe(true);
   });
 
+  it('exposes Creative Lab tools only when explicitly enabled', () => {
+    expect(getSessionToolNames().has('create_lab_song')).toBe(false);
+    expect(getSessionToolNames().has('save_lab_lyrics')).toBe(false);
+    expect(getSessionToolNames().has('list_lab_songs')).toBe(false);
+    const labNames = getSessionToolNames({ includeLabTools: true });
+    expect(labNames.has('create_lab_song')).toBe(true);
+    expect(labNames.has('save_lab_lyrics')).toBe(true);
+    expect(labNames.has('list_lab_songs')).toBe(true);
+  });
+
   it('all canonical session tools declare safeMode metadata', () => {
     for (const def of SESSION_TOOL_DEFS) {
       expect(def.safeMode === 'allow' || def.safeMode === 'block').toBe(true);

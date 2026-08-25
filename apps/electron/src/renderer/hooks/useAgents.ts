@@ -42,6 +42,8 @@ export interface UseAgentsResult {
 
 export interface UseAgentsOptions {
   defaultVisibleSlugs?: readonly string[]
+  /** System surfaces can pin built-ins; explicit libraries such as Lab honor the saved manifest. */
+  includeSystemVisibleAgents?: boolean
 }
 
 const NULL_WORKSPACE_KEY = '__no_workspace__'
@@ -104,6 +106,13 @@ export function useAgents(activeWorkspaceId: string | null | undefined, options:
     () => defaultVisibleKey ? defaultVisibleKey.split('\u0000') : EMPTY_DEFAULT_VISIBLE_SLUGS,
     [defaultVisibleKey],
   )
+  const systemVisibleSlugs = options.includeSystemVisibleAgents === false
+    ? EMPTY_DEFAULT_VISIBLE_SLUGS
+    : BUILTIN_VISIBLE_AGENT_SLUGS
+
+  const withVisibleSlugs = useCallback((slugs: string[], agents: AgentDefinitionDTO[]) => (
+    withSystemActiveSlugs(slugs, agents, [...systemVisibleSlugs, ...defaultVisibleSlugs])
+  ), [defaultVisibleSlugs, systemVisibleSlugs])
 
   const refresh = useCallback(async () => {
     const existing = inFlightRefreshes.get(workspaceKey)
@@ -121,7 +130,7 @@ export function useAgents(activeWorkspaceId: string | null | undefined, options:
         const allAgents = sortAgents(libraryRaw)
         const next: AgentsState = {
           allAgents,
-          activeSlugs: withSystemActiveSlugs(activeRaw, allAgents, defaultVisibleSlugs),
+          activeSlugs: withVisibleSlugs(activeRaw, allAgents),
           loading: false,
           error: null,
         }
@@ -139,7 +148,7 @@ export function useAgents(activeWorkspaceId: string | null | undefined, options:
 
     inFlightRefreshes.set(workspaceKey, run)
     return run
-  }, [activeWorkspaceId, defaultVisibleSlugs, setState, workspaceKey])
+  }, [activeWorkspaceId, setState, withVisibleSlugs, workspaceKey])
 
   useEffect(() => {
     refreshersByWorkspaceKey.set(workspaceKey, refresh)
@@ -177,13 +186,13 @@ export function useAgents(activeWorkspaceId: string | null | undefined, options:
 
   const setActive = useCallback(async (slug: string, active: boolean) => {
     if (!activeWorkspaceId) return
-    if ([...BUILTIN_VISIBLE_AGENT_SLUGS, ...defaultVisibleSlugs].includes(slug) && !active) {
-      setState((prev) => ({ ...prev, activeSlugs: withSystemActiveSlugs(prev.activeSlugs, prev.allAgents, defaultVisibleSlugs) }))
+    if ([...systemVisibleSlugs, ...defaultVisibleSlugs].includes(slug) && !active) {
+      setState((prev) => ({ ...prev, activeSlugs: withVisibleSlugs(prev.activeSlugs, prev.allAgents) }))
       return
     }
     const result = await window.electronAPI.setAgentDefinitionActive(activeWorkspaceId, slug, active)
-    setState((prev) => ({ ...prev, activeSlugs: withSystemActiveSlugs(result.active, prev.allAgents, defaultVisibleSlugs) }))
-  }, [activeWorkspaceId, defaultVisibleSlugs, setState])
+    setState((prev) => ({ ...prev, activeSlugs: withVisibleSlugs(result.active, prev.allAgents) }))
+  }, [activeWorkspaceId, defaultVisibleSlugs, setState, systemVisibleSlugs, withVisibleSlugs])
 
   const upsert = useCallback(async (input: {
     slug: string

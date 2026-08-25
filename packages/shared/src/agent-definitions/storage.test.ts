@@ -25,7 +25,7 @@ import {
   removeBuiltInAgentSkills,
 } from './storage.ts'
 import { STARTER_AGENTS } from './starter-templates.ts'
-import { DEFAULT_ACTIVATED_AGENT_SLUGS } from './defaults.ts'
+import { DEFAULT_ACTIVATED_AGENT_SLUGS, LAB_DEFAULT_ACTIVATED_AGENT_SLUGS, initialAgentSlugsForWorkspace } from './defaults.ts'
 import { SOCIAL_PUBLISHER_SLUG } from './types.ts'
 import { BUNDLED_STARTER_SKILLS, STARTER_SKILLS } from '../skills/index.ts'
 
@@ -737,6 +737,20 @@ body
     expect(DEFAULT_ACTIVATED_AGENT_SLUGS).toContain('spotify-playlist-creator')
   })
 
+  test('Creative Lab defaults are bounded to the songwriting team', () => {
+    expect(LAB_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual([
+      'the-excavator',
+      'reverse-magic',
+      'hooker',
+      'legendary-writer',
+      'reference-master',
+      'record-doctor',
+    ])
+    expect(initialAgentSlugsForWorkspace('lab', false)).toEqual(LAB_DEFAULT_ACTIVATED_AGENT_SLUGS)
+    expect(initialAgentSlugsForWorkspace('lab', true)).toEqual([])
+    expect(initialAgentSlugsForWorkspace('campaign', false)).toEqual([])
+  })
+
   test('Outreach Agent accepts a verified College Radio packet and keeps send approval exact', () => {
     const outreach = STARTER_AGENTS.find((agent) => agent.slug === 'outreach-agent')
 
@@ -1098,6 +1112,81 @@ body
     expect(recordDoctor?.systemPrompt).toContain('POST /users/me/drafts')
     expect(recordDoctor?.systemPrompt).toContain('POST /users/me/drafts/send')
     expect(recordDoctor?.systemPrompt).toContain('Never mention internal app names')
+  })
+
+  test('starter library includes Reverse Magic as a Lab lyric worker', () => {
+    const reverseMagic = STARTER_AGENTS.find((agent) => agent.slug === 'reverse-magic')
+
+    expect(reverseMagic).toBeDefined()
+    expect(reverseMagic?.metadata.name).toBe('Reverse Magic')
+    expect(reverseMagic?.metadata.permissionMode).toBe('ask')
+    expect(reverseMagic?.metadata.thinkingLevel).toBe('high')
+    expect(reverseMagic?.metadata.tags).toContain('lyrics')
+    expect(reverseMagic?.metadata.tags).toContain('annotations')
+    expect(reverseMagic?.systemPrompt).toContain('reverse-engineer why a song feels powerful')
+    expect(reverseMagic?.systemPrompt).toContain('Do not reproduce or closely paraphrase copyrighted lyrics')
+    expect(reverseMagic?.systemPrompt).toContain('Genius API')
+  })
+
+  test('starter library includes Legendary Writer with Yoga of Songwriting skill', () => {
+    const legendaryWriter = STARTER_AGENTS.find((agent) => agent.slug === 'legendary-writer')
+
+    expect(legendaryWriter).toBeDefined()
+    expect(legendaryWriter?.metadata.name).toBe('Legendary Writer')
+    expect(legendaryWriter?.metadata.permissionMode).toBe('ask')
+    expect(legendaryWriter?.metadata.thinkingLevel).toBe('high')
+    expect(legendaryWriter?.metadata.skills).toContain('yoga-of-songwriting')
+    expect(legendaryWriter?.metadata.tags).toContain('songwriting')
+    expect(legendaryWriter?.systemPrompt).toContain('Great Truth')
+    expect(legendaryWriter?.systemPrompt).toContain('Bones')
+    expect(legendaryWriter?.systemPrompt).toContain('Blood')
+    expect(legendaryWriter?.systemPrompt).toContain('Breathe')
+    expect(legendaryWriter?.systemPrompt).toContain('Do not imitate a living artist')
+  })
+
+  test('starter library includes Hooker as a Lab hook and chorus worker', () => {
+    const hooker = STARTER_AGENTS.find((agent) => agent.slug === 'hooker')
+
+    expect(hooker).toBeDefined()
+    expect(hooker?.metadata.name).toBe('Hooker')
+    expect(hooker?.metadata.permissionMode).toBe('ask')
+    expect(hooker?.metadata.thinkingLevel).toBe('high')
+    expect(hooker?.metadata.skills).toContain('hook-writer')
+    expect(hooker?.metadata.tags).toContain('chorus')
+    expect(hooker?.metadata.tags).toContain('hooks')
+    expect(hooker?.systemPrompt).toContain('Paint specific, sing plain')
+    expect(hooker?.systemPrompt).toContain('Do not reproduce or closely paraphrase copyrighted hooks')
+  })
+
+  test('starter library includes Reference Master with reference-finder skill', () => {
+    const referenceMaster = STARTER_AGENTS.find((agent) => agent.slug === 'reference-master')
+
+    expect(referenceMaster).toBeDefined()
+    expect(referenceMaster?.metadata.name).toBe('Reference Master')
+    expect(referenceMaster?.metadata.permissionMode).toBe('ask')
+    expect(referenceMaster?.metadata.thinkingLevel).toBe('high')
+    expect(referenceMaster?.metadata.skills).toContain('reference-finder')
+    expect(referenceMaster?.metadata.tags).toContain('references')
+    expect(referenceMaster?.metadata.tags).toContain('allusions')
+    expect(referenceMaster?.systemPrompt).toContain('reference-finder')
+    expect(referenceMaster?.systemPrompt).toContain('cultural reference and allusion specialist')
+    expect(referenceMaster?.systemPrompt).toContain('Do not reproduce or closely paraphrase copyrighted lyrics')
+  })
+
+  test('starter library includes The Excavator with song-excavator skill', () => {
+    const excavator = STARTER_AGENTS.find((agent) => agent.slug === 'the-excavator')
+
+    expect(excavator).toBeDefined()
+    expect(excavator?.metadata.name).toBe('The Excavator')
+    expect(excavator?.metadata.permissionMode).toBe('ask')
+    expect(excavator?.metadata.thinkingLevel).toBe('high')
+    expect(excavator?.metadata.skills).toContain('song-excavator')
+    expect(excavator?.metadata.tags).toContain('creative-block')
+    expect(excavator?.metadata.tags).toContain('songwriting')
+    expect(excavator?.systemPrompt).toContain('song-finding specialist')
+    expect(excavator?.systemPrompt).toContain("there's your song")
+    expect(excavator?.systemPrompt).toContain('evocative, not therapy')
+    expect(excavator?.systemPrompt).toContain('Do not reproduce or closely paraphrase copyrighted lyrics')
   })
 
   test('starter library includes Art Director with taste-led image generation rules', () => {

@@ -18,7 +18,7 @@ export interface RemoteServerConfig {
   remoteWorkspaceId: string; // ID of the workspace on the remote server
 }
 
-export type ArtistWorkspaceScope = 'hq' | 'campaign' | 'general';
+export type ArtistWorkspaceScope = 'hq' | 'campaign' | 'lab' | 'general';
 
 /**
  * Client-facing workspace DTO — safe to send over RPC to remote clients.

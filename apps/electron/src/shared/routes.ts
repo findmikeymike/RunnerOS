@@ -95,6 +95,15 @@ export const routes = {
     /** Campaign command center/home for non-HQ workspaces */
     campaign: (subpage?: 'calendar') => subpage ? `campaign/${subpage}` as const : 'campaign' as const,
 
+    /** Lab workspace for creative exploration, lyrics, concepts, and research */
+    lab: (tab?: 'songs' | 'pad' | 'sequence', songId?: string) => (
+      tab === 'pad' && songId
+        ? `lab/pad/song/${encodeURIComponent(songId)}` as const
+        : tab
+          ? `lab/${tab}` as const
+          : 'lab' as const
+    ),
+
     /** All sessions view (sessions navigator, allSessions filter) */
     allSessions: (sessionId?: string) =>
       sessionId ? `allSessions/session/${sessionId}` as const : 'allSessions' as const,

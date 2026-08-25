@@ -460,6 +460,31 @@ export interface CommunityEmailSendResult {
   error?: string
 }
 
+export interface ProsodyLookupRequest {
+  selection: string
+  line: string
+}
+
+export interface ProsodyRhymeItem {
+  word: string
+  syllables?: number
+  stress?: string
+  kind: 'perfect' | 'assonance' | 'consonance' | 'near'
+}
+
+export interface ProsodyLookupResult {
+  ok: boolean
+  target: string
+  selection: string
+  line: string
+  inDictionary: boolean
+  syllables?: number
+  stress?: string
+  perfect: ProsodyRhymeItem[]
+  slant: ProsodyRhymeItem[]
+  error?: string
+}
+
 export interface ElectronAPI {
   // Session management
   getSessions(): Promise<Session[]>
@@ -522,10 +547,13 @@ export interface ElectronAPI {
     folderPath: string,
     name: string,
     remoteServer?: { url: string; token: string; remoteWorkspaceId: string },
-    artistWorkspaceScope?: 'campaign' | 'general',
+    artistWorkspaceScope?: 'campaign' | 'lab' | 'general',
   ): Promise<Workspace>
   checkWorkspaceSlug(slug: string): Promise<{ exists: boolean; path: string }>
   updateWorkspaceRemoteServer(workspaceId: string, remoteServer: { url: string; token: string; remoteWorkspaceId: string }): Promise<{ success: boolean }>
+  getLabState(workspaceId: string): Promise<import('@craft-agent/shared/lab').LabState>
+  saveLabState(workspaceId: string, state: import('@craft-agent/shared/lab').LabState): Promise<import('@craft-agent/shared/lab').LabState>
+  onLabStateChanged(callback: (workspaceId: string) => void): () => void
 
   // Server-level workspace operations (for thin client / remote workspace discovery)
   getServerWorkspaces(): Promise<WorkspaceInfo[]>
@@ -577,6 +605,9 @@ export interface ElectronAPI {
   generateThumbnail(base64: string, mimeType: string): Promise<string | null>
   /** Returns the absolute filesystem path for a File (only works for file-picker / OS-drag Files). */
   getFilePath(file: File): string | null
+
+  // Ambient songwriting utilities
+  lookupProsodyRhymes(input: ProsodyLookupRequest): Promise<ProsodyLookupResult>
 
   // Filesystem search (for @ mention file selection)
   searchFiles(basePath: string, query: string): Promise<FileSearchResult[]>
@@ -650,6 +681,7 @@ export interface ElectronAPI {
   saveSecret(name: string, value: string): Promise<{ success: boolean; error?: string }>
   deleteSecret(name: string): Promise<{ success: boolean }>
   onSecretsChanged(callback: () => void): () => void
+  testGeniusAccessToken(token?: string): Promise<{ success: boolean; error?: string; hits?: number }>
   getZeroStatus(): Promise<ZeroStatus>
   installZero(): Promise<{ success: boolean; error?: string }>
   initZero(): Promise<{ success: boolean; output?: string; error?: string }>
@@ -1360,6 +1392,13 @@ export interface CampaignNavigationState {
   rightSidebar?: RightSidebarPanel
 }
 
+export interface LabNavigationState {
+  navigator: 'lab'
+  tab?: 'home' | 'songs' | 'pad' | 'sequence'
+  songId?: string
+  rightSidebar?: RightSidebarPanel
+}
+
 /**
  * Source type filter for sources navigation
  */
@@ -1494,6 +1533,7 @@ export interface VideoStudioNavigationState {
  */
 export type NavigationState =
   | CampaignNavigationState
+  | LabNavigationState
   | SessionsNavigationState
   | SourcesNavigationState
   | SettingsNavigationState
@@ -1517,6 +1557,10 @@ export const isSessionsNavigation = (
 export const isCampaignNavigation = (
   state: NavigationState
 ): state is CampaignNavigationState => state.navigator === 'campaign'
+
+export const isLabNavigation = (
+  state: NavigationState
+): state is LabNavigationState => state.navigator === 'lab'
 
 export const isSourcesNavigation = (
   state: NavigationState
@@ -1583,6 +1627,11 @@ export const DEFAULT_NAVIGATION_STATE: NavigationState = {
 export const getNavigationStateKey = (state: NavigationState): string => {
   if (state.navigator === 'campaign') {
     return state.subpage === 'calendar' ? 'campaign/calendar' : 'campaign'
+  }
+  if (state.navigator === 'lab') {
+    if (state.tab === 'pad') return state.songId ? `lab/pad/song/${encodeURIComponent(state.songId)}` : 'lab/pad'
+    if (state.tab === 'sequence') return 'lab/sequence'
+    return state.tab === 'songs' ? 'lab/songs' : 'lab'
   }
   if (state.navigator === 'sources') {
     if (state.details) {
@@ -1659,6 +1708,14 @@ export const getNavigationStateKey = (state: NavigationState): string => {
 export const parseNavigationStateKey = (key: string): NavigationState | null => {
   if (key === 'campaign') return { navigator: 'campaign' }
   if (key === 'campaign/calendar') return { navigator: 'campaign', subpage: 'calendar' }
+  if (key === 'lab') return { navigator: 'lab' }
+  if (key === 'lab/songs') return { navigator: 'lab', tab: 'songs' }
+  if (key === 'lab/pad') return { navigator: 'lab', tab: 'pad' }
+  if (key.startsWith('lab/pad/song/')) {
+    const songId = key.slice('lab/pad/song/'.length)
+    return songId ? { navigator: 'lab', tab: 'pad', songId: decodeURIComponent(songId) } : { navigator: 'lab', tab: 'pad' }
+  }
+  if (key === 'lab/sequence') return { navigator: 'lab', tab: 'sequence' }
 
   // Handle sources
   if (key === 'sources') return { navigator: 'sources', details: null }

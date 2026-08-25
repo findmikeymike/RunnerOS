@@ -16,4 +16,9 @@ describe('Pi backend session tool parity', () => {
     expect(getSessionToolProxyDefs().some((tool) => tool.name === 'mcp__session__schedule_work')).toBe(false);
     expect(getSessionToolProxyDefs({ includeScheduleWork: true }).some((tool) => tool.name === 'mcp__session__schedule_work')).toBe(true);
   });
+
+  it('exposes Lab tools only for Lab proxy registration', () => {
+    expect(getSessionToolProxyDefs().some((tool) => tool.name === 'mcp__session__create_lab_song')).toBe(false);
+    expect(getSessionToolProxyDefs({ includeLabTools: true }).some((tool) => tool.name === 'mcp__session__create_lab_song')).toBe(true);
+  });
 });

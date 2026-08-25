@@ -16,10 +16,11 @@ export type SessionToolProxyDef = JsonSchemaToolDef;
 
 export { SESSION_TOOL_NAMES };
 
-export function getSessionToolProxyDefs(options?: { includeScheduleWork?: boolean }): SessionToolProxyDef[] {
+export function getSessionToolProxyDefs(options?: { includeScheduleWork?: boolean; includeLabTools?: boolean }): SessionToolProxyDef[] {
   return getToolDefsAsJsonSchema({
     prefix: 'mcp__session__',
     includeDeveloperFeedback: FEATURE_FLAGS.developerFeedback,
     includeScheduleWork: options?.includeScheduleWork ?? false,
+    includeLabTools: options?.includeLabTools ?? false,
   });
 }

@@ -1,0 +1,8 @@
+{
+  "meta": {
+    "name": "Saved reference favorites",
+    "note": "Your go-to palette. The reference-finder Skill adds here when you love a reference. Each entry: image, well, meaning, and an optional note on how you like to use it.",
+    "version": "1.0.0"
+  },
+  "favorites": []
+}

@@ -101,7 +101,7 @@ import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/share
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, type CreateSessionOptions, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
 import { messageToStored, storedToMessage, type AgentMessageNoticeMetadata, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
-import { loadAllSkills, loadGlobalSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
+import { loadAllSkills, loadGlobalSkills, loadGlobalSkillBySlug, loadSkillBySlug, setGlobalSkillEnabled, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
 import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
@@ -128,6 +128,7 @@ import {
   MemorySidecarService,
 } from '../memory/MemorySidecarService'
 import { listDeepResearchRuns, readDeepResearchRun, profileDeepResearchSource } from '@craft-agent/shared/deep-research'
+import { createLabSong, loadLabSongs, saveLabLyrics } from '@craft-agent/shared/lab'
 import { OutputService } from '../outputs/OutputService'
 import { scheduleHqStateContextRefresh } from '../hq-state/refresh'
 import {
@@ -1537,6 +1538,32 @@ export function createManagedSession(
   return managed
 }
 
+export function ensureDeclaredGlobalSkillsEnabledForAgent(
+  workspaceRoot: string,
+  declaredSkillSlugs: string[],
+  skills: LoadedSkill[],
+  deps: {
+    loadGlobalSkillBySlug?: typeof loadGlobalSkillBySlug
+    setGlobalSkillEnabled?: typeof setGlobalSkillEnabled
+    loadAllSkills?: typeof loadAllSkills
+  } = {},
+): LoadedSkill[] {
+  const skillBySlug = new Map(skills.map((skill) => [skill.slug, skill]))
+  const loadGlobalSkill = deps.loadGlobalSkillBySlug ?? loadGlobalSkillBySlug
+  const enableGlobalSkill = deps.setGlobalSkillEnabled ?? setGlobalSkillEnabled
+  const reloadSkills = deps.loadAllSkills ?? loadAllSkills
+  const missingDeclaredGlobalSkills = declaredSkillSlugs.filter((slug) => (
+    !skillBySlug.has(slug) && loadGlobalSkill(slug) !== null
+  ))
+
+  if (missingDeclaredGlobalSkills.length === 0) return skills
+
+  for (const slug of missingDeclaredGlobalSkills) {
+    enableGlobalSkill(workspaceRoot, slug, true)
+  }
+  return reloadSkills(workspaceRoot)
+}
+
 /**
  * Resolve supportsBranching for a managed session.
  * Prefers the live agent instance; falls back to true for all backends.
@@ -1608,6 +1635,12 @@ const DELTA_BATCH_INTERVAL_MS = 50  // Flush batched deltas every 50ms
 interface PendingDelta {
   delta: string
   turnId?: string
+}
+
+function isCreativeLabWorkspaceInfo(workspace: { id?: string; name?: string; rootPath: string; artistWorkspaceScope?: 'hq' | 'campaign' | 'lab' | 'general' }): boolean {
+  if (workspace.artistWorkspaceScope) return workspace.artistWorkspaceScope === 'lab'
+  const text = `${workspace.id ?? ''} ${workspace.name ?? ''} ${basename(workspace.rootPath)}`.toLowerCase()
+  return /(^|[^a-z0-9])(?:creative[-\s]?lab|song[-\s]?lab|writing[-\s]?lab|concept[-\s]?lab|studio[-\s]?lab|lyrics?|lab)(?:\d+)?($|[^a-z0-9])/.test(text)
 }
 
 export class SessionManager implements ISessionManager {
@@ -2300,9 +2333,9 @@ export class SessionManager implements ISessionManager {
     const { loadActiveContextDocsForAgent } = await import('@craft-agent/shared/workspace-context')
     const agent = loadGlobalAgent(agentSlug)
     if (!agent) throw new Error(`Agent not found: ${agentSlug}`)
-    const skills = loadAllSkills(ws.rootPath)
-    const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
     const declaredSkillSlugs = agent.metadata.skills ?? []
+    const skills = ensureDeclaredGlobalSkillsEnabledForAgent(ws.rootPath, declaredSkillSlugs, loadAllSkills(ws.rootPath))
+    const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
     const canUseSystemSkills = agent.slug === CONCIERGE_SLUG || agent.slug === ORCHESTRATOR_SLUG
     const resolvedSkillSlugs = declaredSkillSlugs.filter((slug) => (
       skillBySlug.has(slug) || (canUseSystemSkills && isSystemGlobalSkillSlug(slug))
@@ -2929,7 +2962,7 @@ export class SessionManager implements ISessionManager {
         // Chat nav entry), Setup Concierge, Social Publisher, TryPost, Postiz, Hypermotion, Video Director, Lottie Animation,
         // Video Editor, Lyric Video, Content Genius, Scroll Stopper, Anticipation Director, Content Director, promotion helpers, Shopify, Print Agent,
         // Outreach, Industry Hunter, Art Director, World Builder, Record Doctor,
-        // and Update System Agent.
+        // Reverse Magic, Legendary Writer, Reference Master, and Update System Agent.
         const required = STARTER_AGENTS.filter(
           (a) => a.slug === ORCHESTRATOR_SLUG
             || a.slug === CONCIERGE_SLUG
@@ -2965,6 +2998,11 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'art-director'
             || a.slug === 'world-builder'
             || a.slug === 'record-doctor'
+            || a.slug === 'reverse-magic'
+            || a.slug === 'hooker'
+            || a.slug === 'legendary-writer'
+            || a.slug === 'reference-master'
+            || a.slug === 'the-excavator'
             || a.slug === 'update-system-agent',
         )
         const { ensured } = ensureRequiredAgents(required)
@@ -3062,7 +3100,7 @@ export class SessionManager implements ISessionManager {
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
             let updatedWorkspaces = 0
             for (const ws of getWorkspaces()) {
-              if (ws.remoteServer) continue
+              if (ws.remoteServer || isCreativeLabWorkspaceInfo(ws)) continue
               let workspaceUpdated = false
               if (!readActivatedAgents(ws.rootPath).active.includes('branding-agent')) {
                 setAgentActive(ws.rootPath, 'branding-agent', true)
@@ -3188,7 +3226,7 @@ export class SessionManager implements ISessionManager {
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
             let updatedWorkspaces = 0
             for (const ws of getWorkspaces()) {
-              if (ws.remoteServer) continue
+              if (ws.remoteServer || isCreativeLabWorkspaceInfo(ws)) continue
               let workspaceUpdated = false
               if (!readActivatedAgents(ws.rootPath).active.includes('content-genius')) {
                 setAgentActive(ws.rootPath, 'content-genius', true)
@@ -3219,7 +3257,7 @@ export class SessionManager implements ISessionManager {
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
             let updatedWorkspaces = 0
             for (const ws of getWorkspaces()) {
-              if (ws.remoteServer) continue
+              if (ws.remoteServer || isCreativeLabWorkspaceInfo(ws)) continue
               let workspaceUpdated = false
               if (!readActivatedAgents(ws.rootPath).active.includes('world-builder')) {
                 setAgentActive(ws.rootPath, 'world-builder', true)
@@ -6497,6 +6535,55 @@ user a clickable link to where the thing now lives.`
           })
           return { ok: true, finalId: final.id }
         },
+        ...(isCreativeLabWorkspaceInfo(managed.workspace) ? {
+          createLabSongFn: async (input) => {
+            const song = createLabSong(managed.workspace.rootPath, {
+              ...input,
+              captures: input.captures?.map((capture) => ({
+                ...capture,
+                sourceSessionId: capture.sourceSessionId ?? managed.id,
+                sourceAgentSlug: capture.sourceAgentSlug ?? managed.spawnedFromAgent?.agentSlug,
+              })),
+            })
+            this.eventSink?.(RPC_CHANNELS.lab.UPDATED, { to: 'workspace', workspaceId: managed.workspace.id }, managed.workspace.id)
+            return song
+          },
+          saveLabLyricsFn: async (input) => {
+            const song = saveLabLyrics(managed.workspace.rootPath, {
+              ...input,
+              captures: input.captures.map((capture) => ({
+                ...capture,
+                sourceSessionId: capture.sourceSessionId ?? managed.id,
+                sourceAgentSlug: capture.sourceAgentSlug ?? managed.spawnedFromAgent?.agentSlug,
+              })),
+            })
+            this.eventSink?.(RPC_CHANNELS.lab.UPDATED, { to: 'workspace', workspaceId: managed.workspace.id }, managed.workspace.id)
+            return song
+          },
+          listLabSongsFn: async (input = {}) => {
+            const query = input.search?.trim().toLowerCase()
+            let songs = loadLabSongs(managed.workspace.rootPath)
+            if (input.project?.trim()) {
+              const project = input.project.trim().toLowerCase()
+              songs = songs.filter((song) => song.project?.toLowerCase() === project)
+            }
+            if (input.status) songs = songs.filter((song) => song.status === input.status)
+            if (typeof input.focused === 'boolean') songs = songs.filter((song) => song.focused === input.focused)
+            if (query) {
+              songs = songs.filter((song) => [
+                song.title,
+                song.project ?? '',
+                song.roughText,
+                song.rememberText,
+                song.sections.map((section) => section.text).join('\n'),
+              ].join('\n').toLowerCase().includes(query))
+            }
+            const limit = input.limit && input.limit > 0 ? Math.min(input.limit, 100) : 20
+            return songs
+              .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+              .slice(0, limit)
+          },
+        } : {}),
         applyVisualSurfaceEventFn: async (input) => {
           const outputService = new OutputService({
             getWorkspaceRootPath: (workspaceId) => {

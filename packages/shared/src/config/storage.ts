@@ -105,10 +105,16 @@ const LEGACY_HQ_WORKSPACE_NAMES = new Set([
   'my-workspace',
 ]);
 const ARTIST_WORKSPACE_SCOPE_MIGRATION = 'artist-workspace-general-scope-v1';
+const ARTIST_LAB_SCOPE_MIGRATION = 'artist-workspace-lab-scope-v1';
 
 function looksLikeCampaignWorkspace(workspace: Pick<Workspace, 'name' | 'slug'>): boolean {
   const text = `${workspace.name} ${workspace.slug ?? ''}`.toLowerCase();
   return /\b(campaign|release|rollout|single|album|ep|mixtape|tour)\b/.test(text);
+}
+
+function looksLikeLabWorkspace(workspace: Pick<Workspace, 'name' | 'slug'>): boolean {
+  const text = `${workspace.name} ${workspace.slug ?? ''}`.toLowerCase();
+  return /\b(creative[ -]?lab|artist[ -]?lab|songwriting[ -]?lab)\b/.test(text);
 }
 
 export function assignMissingArtistWorkspaceScopes(workspaces: Workspace[]): boolean {
@@ -125,24 +131,41 @@ export function assignMissingArtistWorkspaceScopes(workspaces: Workspace[]): boo
   for (const workspace of missing) {
     workspace.artistWorkspaceScope = workspace.id === legacyHq?.id
       ? 'hq'
-      : looksLikeCampaignWorkspace(workspace)
-        ? 'campaign'
-        : 'general';
+      : looksLikeLabWorkspace(workspace)
+        ? 'lab'
+        : looksLikeCampaignWorkspace(workspace)
+          ? 'campaign'
+          : 'general';
   }
   return true;
 }
 
 export function repairLegacyInferredArtistWorkspaceScopes(config: StoredConfig): boolean {
-  const applied = config.migrationsApplied ?? [];
-  if (applied.includes(ARTIST_WORKSPACE_SCOPE_MIGRATION)) return false;
+  const applied = new Set(config.migrationsApplied ?? []);
+  let changed = false;
 
-  for (const workspace of config.workspaces) {
-    if (workspace.artistWorkspaceScope === 'campaign' && !looksLikeCampaignWorkspace(workspace)) {
-      workspace.artistWorkspaceScope = 'general';
+  if (!applied.has(ARTIST_WORKSPACE_SCOPE_MIGRATION)) {
+    for (const workspace of config.workspaces) {
+      if (workspace.artistWorkspaceScope === 'campaign' && !looksLikeCampaignWorkspace(workspace)) {
+        workspace.artistWorkspaceScope = 'general';
+      }
     }
+    applied.add(ARTIST_WORKSPACE_SCOPE_MIGRATION);
+    changed = true;
   }
-  config.migrationsApplied = [...applied, ARTIST_WORKSPACE_SCOPE_MIGRATION];
-  return true;
+
+  if (!applied.has(ARTIST_LAB_SCOPE_MIGRATION)) {
+    for (const workspace of config.workspaces) {
+      if (workspace.artistWorkspaceScope === 'general' && looksLikeLabWorkspace(workspace)) {
+        workspace.artistWorkspaceScope = 'lab';
+      }
+    }
+    applied.add(ARTIST_LAB_SCOPE_MIGRATION);
+    changed = true;
+  }
+
+  if (changed) config.migrationsApplied = [...applied];
+  return changed;
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -749,7 +772,7 @@ export function updateWorkspaceRemoteServer(
 
 export function updateWorkspaceArtistScope(
   workspaceId: string,
-  artistWorkspaceScope: 'campaign' | 'general',
+  artistWorkspaceScope: 'campaign' | 'lab' | 'general',
 ): void {
   const config = loadStoredConfig();
   if (!config) throw new Error('No config found');

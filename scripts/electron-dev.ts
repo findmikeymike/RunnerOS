@@ -29,6 +29,20 @@ const MAIN_PROCESS_EXTERNAL = [
   // into the CJS Electron main process turns that into undefined at runtime.
   "@anthropic-ai/claude-agent-sdk",
 ];
+const PI_OPTIONAL_EXTERNAL = [
+  "@earendil-works/pi-ai",
+  "@earendil-works/pi-ai/compat",
+  "@earendil-works/pi-ai/oauth",
+  "@earendil-works/pi-agent-core",
+  "@earendil-works/pi-coding-agent",
+];
+
+function getMainProcessExternal(): string[] {
+  if (process.env.CRAFT_SKIP_PI_AGENT_SERVER === "1") {
+    return [...MAIN_PROCESS_EXTERNAL, ...PI_OPTIONAL_EXTERNAL];
+  }
+  return MAIN_PROCESS_EXTERNAL;
+}
 
 // MCP server paths
 const SESSION_SERVER_DIR = join(ROOT_DIR, "packages/session-mcp-server");
@@ -256,7 +270,9 @@ async function buildMcpServers(): Promise<void> {
   // Build Pi agent server with bun (not esbuild) because its Pi SDK deps are ESM-only.
   // esbuild with packages:external leaves them as require() calls which fail at runtime.
   // Optional: skip if package directory is missing (e.g., not synced to OSS).
-  if (existsSync(join(PI_AGENT_SERVER_DIR, "src"))) {
+  if (process.env.CRAFT_SKIP_PI_AGENT_SERVER === "1") {
+    console.log("⏭️  Pi agent server skipped (CRAFT_SKIP_PI_AGENT_SERVER=1)");
+  } else if (existsSync(join(PI_AGENT_SERVER_DIR, "src"))) {
     const piResult = await buildPiAgentServer();
     if (!piResult.success) {
       console.error("❌ Pi agent server build failed:", piResult.error);
@@ -319,7 +335,7 @@ async function runEsbuild(
       platform: "node",
       format: "cjs",
       outfile: join(ROOT_DIR, outfile),
-      external: MAIN_PROCESS_EXTERNAL,
+      external: getMainProcessExternal(),
       ...(options.packagesExternal ? { packages: "external" as const } : {}),
       ...(options.alias ? { alias: options.alias } : {}),
       define: defines,
@@ -557,7 +573,7 @@ async function main(): Promise<void> {
     platform: "node",
     format: "cjs",
     outfile: join(ROOT_DIR, "apps/electron/dist/main.cjs"),
-    external: MAIN_PROCESS_EXTERNAL,
+    external: getMainProcessExternal(),
     alias: MAIN_PROCESS_ALIAS,
     define: oauthDefines,
     logLevel: "info",

@@ -22,6 +22,7 @@ interface WorkspaceCreationScreenProps {
   onClose: () => void
   className?: string
   initialStep?: Extract<CreationStep, 'choice' | 'create' | 'open'>
+  initialName?: string
   /** When set, skip choice step and open ConnectRemote in reconnect mode */
   reconnectWorkspace?: Workspace
   /** Reconnect an existing remote workspace and resolve only on real success. */
@@ -41,6 +42,7 @@ export function WorkspaceCreationScreen({
   onClose,
   className,
   initialStep = 'choice',
+  initialName,
   reconnectWorkspace,
   onReconnectWorkspace,
 }: WorkspaceCreationScreenProps) {
@@ -72,7 +74,7 @@ export function WorkspaceCreationScreen({
     folderPath: string,
     name: string,
     remoteServer?: { url: string; token: string; remoteWorkspaceId: string },
-    artistWorkspaceScope?: 'campaign' | 'general',
+    artistWorkspaceScope?: 'campaign' | 'lab' | 'general',
   ) => {
     setIsCreating(true)
     try {
@@ -118,6 +120,7 @@ export function WorkspaceCreationScreen({
             onBack={() => setStep('choice')}
             onCreate={(folderPath, name, purpose) => handleCreateWorkspace(folderPath, name, undefined, purpose)}
             isCreating={isCreating}
+            initialName={initialName}
           />
         )
 

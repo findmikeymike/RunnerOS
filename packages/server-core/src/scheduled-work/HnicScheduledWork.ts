@@ -51,11 +51,11 @@ export async function persistHnicScheduleWork(options: ScheduleWorkPersistenceOp
   return persistCalendarWork(options, execution)
 }
 
-export function inferScheduledWorkScope(workspace: { artistWorkspaceScope?: WorkspaceScope | 'general' }): WorkspaceScope {
+export function inferScheduledWorkScope(workspace: { artistWorkspaceScope?: WorkspaceScope | 'lab' | 'general' }): WorkspaceScope {
   if (!workspace.artistWorkspaceScope) {
     throw new Error('Workspace is missing its persisted artist calendar scope. Restart RunnerOS to migrate workspace metadata.')
   }
-  if (workspace.artistWorkspaceScope === 'general') {
+  if (workspace.artistWorkspaceScope === 'general' || workspace.artistWorkspaceScope === 'lab') {
     throw new Error('Scheduled artist work must be created from Artist HQ or a Campaign workspace.')
   }
   return workspace.artistWorkspaceScope

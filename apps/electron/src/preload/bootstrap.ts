@@ -460,5 +460,6 @@ client.onConnectionStateChanged((state) => {
     return null
   }
 }
+;(api as ElectronAPI).lookupProsodyRhymes = (input) => ipcRenderer.invoke('prosody:lookup', input)
 
 contextBridge.exposeInMainWorld('electronAPI', api)

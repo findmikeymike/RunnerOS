@@ -128,6 +128,7 @@ export const CHANNEL_MAP = {
   saveSecret: invoke(RPC_CHANNELS.secrets.SAVE),
   deleteSecret: invoke(RPC_CHANNELS.secrets.DELETE),
   onSecretsChanged: listener(RPC_CHANNELS.secrets.CHANGED),
+  testGeniusAccessToken: invoke(RPC_CHANNELS.secrets.TEST_GENIUS),
   getZeroStatus: invoke(RPC_CHANNELS.secrets.ZERO_STATUS),
   installZero: invoke(RPC_CHANNELS.secrets.INSTALL_ZERO),
   initZero: invoke(RPC_CHANNELS.secrets.INIT_ZERO),
@@ -291,6 +292,11 @@ export const CHANNEL_MAP = {
   // Workspace images
   readWorkspaceImage: invoke(RPC_CHANNELS.workspace.READ_IMAGE),
   writeWorkspaceImage: invoke(RPC_CHANNELS.workspace.WRITE_IMAGE),
+
+  // Creative Lab — workspace-scoped canonical song/project state
+  getLabState: invoke(RPC_CHANNELS.lab.GET_STATE),
+  saveLabState: invoke(RPC_CHANNELS.lab.SAVE_STATE),
+  onLabStateChanged: listener(RPC_CHANNELS.lab.UPDATED),
 
   // Theme
   getAppTheme: invoke(RPC_CHANNELS.theme.GET_APP),

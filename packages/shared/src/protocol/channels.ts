@@ -169,6 +169,7 @@ export const RPC_CHANNELS = {
     SAVE: 'secrets:save',
     DELETE: 'secrets:delete',
     CHANGED: 'secrets:changed',
+    TEST_GENIUS: 'secrets:testGenius',
     ZERO_STATUS: 'secrets:zeroStatus',
     INSTALL_ZERO: 'secrets:installZero',
     INIT_ZERO: 'secrets:initZero',
@@ -285,6 +286,11 @@ export const RPC_CHANNELS = {
     SETTINGS_GET: 'workspaceSettings:get',
     SETTINGS_UPDATE: 'workspaceSettings:update',
     SELF_EDIT_TARGET_GET: 'workspace:selfEditTarget:get',
+  },
+  lab: {
+    GET_STATE: 'lab:getState',
+    SAVE_STATE: 'lab:saveState',
+    UPDATED: 'lab:updated',
   },
   permissions: {
     GET_DEFAULTS: 'permissions:getDefaults',

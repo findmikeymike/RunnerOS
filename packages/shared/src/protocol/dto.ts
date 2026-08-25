@@ -546,7 +546,7 @@ export interface UpdateInfo {
 
 export interface WorkspaceSettings {
   name?: string
-  artistWorkspaceScope?: 'hq' | 'campaign' | 'general'
+  artistWorkspaceScope?: 'hq' | 'campaign' | 'lab' | 'general'
   model?: string
   permissionMode?: PermissionMode
   cyclablePermissionModes?: PermissionMode[]

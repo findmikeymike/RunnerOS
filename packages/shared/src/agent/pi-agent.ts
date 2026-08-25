@@ -512,6 +512,7 @@ export class PiAgent extends BaseAgent {
     this.assertBackendSessionToolParity();
     const sessionToolDefs = getSessionToolProxyDefs({
       includeScheduleWork: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge',
+      includeLabTools: this.config.workspace.artistWorkspaceScope === 'lab',
     });
 
     // Patch call_llm description with provider-specific model hint

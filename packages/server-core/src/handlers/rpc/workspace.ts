@@ -18,6 +18,8 @@ export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.window.SWITCH_WORKSPACE,
   RPC_CHANNELS.workspace.READ_IMAGE,
   RPC_CHANNELS.workspace.WRITE_IMAGE,
+  RPC_CHANNELS.lab.GET_STATE,
+  RPC_CHANNELS.lab.SAVE_STATE,
   RPC_CHANNELS.theme.GET_APP,
   RPC_CHANNELS.theme.GET_PRESETS,
   RPC_CHANNELS.theme.LOAD_PRESET,
@@ -49,7 +51,7 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     folderPath: string,
     name: string,
     remoteServer?: { url: string; token: string; remoteWorkspaceId: string },
-    artistWorkspaceScope?: 'campaign' | 'general',
+    artistWorkspaceScope?: 'campaign' | 'lab' | 'general',
   ) => {
     const rootPath = folderPath.trim()
     const validation = isValidWorkspaceRootPath(rootPath)
@@ -82,6 +84,17 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     } catch (err) {
       deps.platform.logger.warn?.(`[workflows] Failed to auto-activate starters in new workspace: ${(err as Error).message}`)
     }
+    try {
+      if (!rootExistedBeforeAdd && workspace.artistWorkspaceScope === 'lab') {
+        const {
+          initialAgentSlugsForWorkspace,
+          writeActivatedAgents,
+        } = await import('@craft-agent/shared/agent-definitions')
+        writeActivatedAgents(workspace.rootPath, [...initialAgentSlugsForWorkspace(workspace.artistWorkspaceScope, rootExistedBeforeAdd)])
+      }
+    } catch (err) {
+      deps.platform.logger.warn?.(`[agents] Failed to activate the new Creative Lab team: ${(err as Error).message}`)
+    }
     deps.platform.logger.info(`Created workspace "${name}" at ${rootPath}${remoteServer ? ` (remote: ${remoteServer.url})` : ''}`)
     return workspace
   })
@@ -99,6 +112,37 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     updateWorkspaceRemoteServer(workspaceId, remoteServer)
     deps.platform.logger.info(`Updated remote server for workspace ${workspaceId}: ${remoteServer.url}`)
     return { success: true }
+  })
+
+  const getLabWorkspace = (workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+    if (workspace.artistWorkspaceScope !== 'lab') {
+      throw new Error('Creative Lab data is only available inside a Lab workspace.')
+    }
+    return workspace
+  }
+
+  server.handle(RPC_CHANNELS.lab.GET_STATE, async (_ctx, workspaceId: string) => {
+    const workspace = getLabWorkspace(workspaceId)
+    const { loadLabState } = await import('@craft-agent/shared/lab')
+    return loadLabState(workspace.rootPath)
+  })
+
+  server.handle(RPC_CHANNELS.lab.SAVE_STATE, async (_ctx, workspaceId: string, state: unknown) => {
+    const workspace = getLabWorkspace(workspaceId)
+    if (!state || typeof state !== 'object' || !Array.isArray((state as { songs?: unknown }).songs)) {
+      throw new Error('Invalid Creative Lab state.')
+    }
+    const serializedSize = Buffer.byteLength(JSON.stringify(state), 'utf8')
+    if (serializedSize > 10 * 1024 * 1024) {
+      throw new Error('Creative Lab state is too large to save safely.')
+    }
+    if ((state as { songs: unknown[] }).songs.length > 5_000) {
+      throw new Error('Creative Lab supports up to 5,000 songs per workspace.')
+    }
+    const { saveLabState } = await import('@craft-agent/shared/lab')
+    return saveLabState(workspace.rootPath, state as import('@craft-agent/shared/lab').LabState)
   })
 
   // Get workspace ID for the calling window

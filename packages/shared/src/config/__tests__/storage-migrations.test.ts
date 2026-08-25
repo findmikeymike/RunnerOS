@@ -29,6 +29,16 @@ describe('assignMissingArtistWorkspaceScopes', () => {
     expect(workspaces.find(workspace => workspace.id === 'newer')?.artistWorkspaceScope).toBe('general')
   })
 
+  it('persists a legacy Creative Lab as an explicit lab workspace', () => {
+    const workspaces = [
+      { id: 'hq', name: 'Artist HQ', slug: 'artist-hq', rootPath: '/tmp/hq', createdAt: 1, artistWorkspaceScope: 'hq' as const },
+      { id: 'lab', name: 'Creative Lab', slug: 'creative-lab', rootPath: '/tmp/lab', createdAt: 2 },
+    ] as Workspace[]
+
+    expect(assignMissingArtistWorkspaceScopes(workspaces)).toBe(true)
+    expect(workspaces[1]?.artistWorkspaceScope).toBe('lab')
+  })
+
   it('repairs the old blanket campaign inference once while preserving campaign-like names', () => {
     const config: StoredConfig = {
       workspaces: [
@@ -41,6 +51,21 @@ describe('assignMissingArtistWorkspaceScopes', () => {
 
     expect(repairLegacyInferredArtistWorkspaceScopes(config)).toBe(true)
     expect(config.workspaces.map(workspace => workspace.artistWorkspaceScope)).toEqual(['general', 'campaign'])
+    expect(repairLegacyInferredArtistWorkspaceScopes(config)).toBe(false)
+  })
+
+  it('migrates a previously general Creative Lab even after the general-scope migration ran', () => {
+    const config: StoredConfig = {
+      workspaces: [
+        { id: 'lab', name: 'Creative Lab', slug: 'creative-lab', rootPath: '/tmp/lab', createdAt: 1, artistWorkspaceScope: 'general' as const },
+      ],
+      activeWorkspaceId: 'lab',
+      activeSessionId: null,
+      migrationsApplied: ['artist-workspace-general-scope-v1'],
+    }
+
+    expect(repairLegacyInferredArtistWorkspaceScopes(config)).toBe(true)
+    expect(config.workspaces[0]?.artistWorkspaceScope).toBe('lab')
     expect(repairLegacyInferredArtistWorkspaceScopes(config)).toBe(false)
   })
 })

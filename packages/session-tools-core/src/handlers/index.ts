@@ -211,6 +211,14 @@ export type {
   ListAgentMessageReceiptsResult,
 } from './list-agent-message-receipts.ts';
 
+export { handleCreateLabSong, handleSaveLabLyrics, handleListLabSongs } from './lab-songs.ts';
+export type {
+  CreateLabSongToolInput,
+  SaveLabLyricsToolInput,
+  ListLabSongsToolInput,
+  LabSongCaptureInput,
+  LabSongToolResult,
+} from './lab-songs.ts';
 export { handleArtworkCompose } from './artwork-compose.ts';
 export type {
   ArtworkComposeInput,

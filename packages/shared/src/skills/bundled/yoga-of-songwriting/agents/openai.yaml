@@ -1,0 +1,4 @@
+interface:
+  display_name: "Yoga of Songwriting"
+  short_description: "Songwriting wisdom and lyric audit framework"
+  default_prompt: "Use $yoga-of-songwriting to audit these lyrics through Great Truth, Bones, Blood, Breathe, and Who."

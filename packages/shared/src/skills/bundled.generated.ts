@@ -26659,6 +26659,434 @@ Use real hyphenated commands. Some upstream introspection may show underscore na
     ],
   },
   {
+    slug: "hook-writer",
+    files: [
+      {
+        path: "references/craft-notes.md",
+        content: `# Craft Notes & the Science Underneath
+
+For TEACH mode, or when an artist wants the "why" beneath a hook choice. The point of this file: the Yoga of Songwriting method isn't just intuition — respected songwriting pedagogy and peer-reviewed research land on the same places. When you teach, you can offer both the method's language and the outside grounding.
+
+Each claim is graded: **[SOLID]** = peer-reviewed or near-universal craft consensus · **[CRAFT]** = respected teacher's heuristic · **[SOFT]** = correlational / trade-source · **[POP]** = evocative but unproven — use as intuition, never assert as fact.
+
+## The method and the craft canon agree
+
+The Yoga method, Pat Pattison (Berklee), and Andrea Stolpe are describing the same machine in different words:
+
+- **"Everything serves the Great Truth" ≈ prosody.** Pattison's one rule: every element — the words, their rhythm, rhyme, and phrasing — supports a single emotion. [CRAFT, authoritative] A hook fails when some element is fighting the feeling. (Pattison includes melody too, but that's the artist's layer, not ours — we work the words.)
+- **Fear→Love ≈ unstable→stable resolution.** Decide the feeling first, then pick tools. Verses often sit *unstable* (longing, doubt); the hook *resolves* to stable — that resolution is the release the method calls Love/Remembrance. [CRAFT]
+- **The Reveal ≈ "the hook is the only answer to the verse's question."** Stolpe: every verse line should point at the hook so it feels like it sums up *this song and only this song*. [CRAFT]
+- **The Reversal / spotlight ≈ contrast + the surprise "sweet spot."** Spotlight the hook by contrasting it with the lines before it — a beat of space, a shift in the words' rhythm or density, fewer words after a busy verse. [CRAFT] And memorability peaks at *moderate* surprise — a hook wants a familiar shape with one unexpected turn, not total predictability nor chaos. [SOLID for the general principle; [POP] for the tidy dopamine story]
+- **Child-simple title ≈ the one-word-title trend + "chunking."** Short, simple phrases are easier for the brain to store as one retrievable unit. [SOLID/CRAFT]
+
+## Prosody, in usable pieces (Pattison)
+
+- **Mind where the stress falls in the words.** When the natural stress of the words falls where the line's weight wants to be, it reads like speech and disappears into the feeling; a stress in the wrong spot sounds hurried and pulls attention off the emotion. Say the hook out loud — where does the stress *want* to fall? [CRAFT]
+- **Front-heavy lines feel committed; back-heavy lines feel in-motion.** A line whose weight lands early feels solid and resolute — good for the hook's truth. A line that leans late feels like longing or uncertainty — good for setup. "Motion creates e-motion." (You can hear this in the words alone.) [CRAFT]
+- **Rhyme by how resolved the moment should feel.** Perfect rhyme *closes* (use it when the hook means it); vowel-only rhyme (assonance) leaves things *open* (use it when the feeling is unsettled). Rhyme is a tool for resolution, not decoration. [CRAFT]
+
+## Hook layers & stacking
+
+- A hook can work on more than one layer at once. In the words alone you have the **line/title** and its **rhythm** (repetition, cadence, internal echo). Stacking a plain title line with an internal repeat or a rhythmic echo is the "hook inside the hook." (The full record also has melody and groove — the artist's layers, not ours; we make the words carry.) The strongest hooks stack at least two layers, each kept simple so they don't compete. [CRAFT]
+- **Title convention:** the hook is usually the title, the most-repeated line, sitting in the first and/or last position of the chorus. Practical reason: people can't request or remember a song whose title they never caught. [CRAFT consensus]
+
+## The memorability science (why the principles hold)
+
+- **Front-load it.** Hit-song intros collapsed from ~20 seconds (mid-80s) to ~5 seconds (2015); the voice is the fastest way to grab attention. [SOLID trend; SOFT on the streaming-caused mechanism] The "stadium/forever" tests are really about grabbing fast and lodging clean.
+- **Familiar shape + one signature oddity.** Catchy hooks use a *typical, expected* shape (easy to grab) with one unusual turn as a fingerprint (Jakubowski, ~3,000 songs). [SOLID] Mirrors "familiar enough to sing, surprising enough to notice." (The research is about melody; the same familiar-plus-one-twist principle applies to the words.)
+- **Repetition is the single strongest lever** (Margulis, *On Repeat*): it drives both liking (mere-exposure) and sing-along participation; looping can even make plain speech feel like a chant. But there's a fatigue ceiling — repeat to lodge, vary slightly to hold. [SOLID] This *is* the method's "repetition with slight augmentation."
+- **No magic number.** There is no validated "catchiness score." These are correlations, not a formula — the final judge is a real listener's face, exactly as the method says. [SOLID]
+
+## How to teach with this
+
+Point at the artist's actual hook, name the move in plain words, then — if they're curious — offer the term and the grounding. "This lands because the verse was all doubt and the hook is the first calm thing — tension and release. Pattison calls it unstable-to-stable; the method calls it Fear→Love. Same thing." Keep it short. The goal is that they feel it and can do it again, not that they memorize theory.
+
+## Sources (for the curious)
+
+Pattison, "Prosody in Music and Songwriting" (Berklee Online) · Pattison, "The Art of Phrasing" · Andrea Stolpe, "How to Write Songs with Killer Hooks" · Berklee Online, "How to Write Killer Song Hooks" · Jakubowski et al., "Dissecting an Earworm" (APA, 2016) · Léveillé Gauvin, intro/tempo/title study (Ohio State / *Musicae Scientiae*, 2018) · Margulis, *On Repeat* (Oxford UP, 2014) · linguistics: sonority hierarchy.
+`,
+      },
+      {
+        path: "references/examples.md",
+        content: `# Annotated Hook Library
+
+Models to reach for, and to show artists. Each entry names *why* the hook works. Use these to calibrate your own candidates, or to hold up a comparison ("here's what makes 'Let it be' land — yours is missing the release"). Drawn from the Yoga of Songwriting book and the wider canon.
+
+**The through-line of nearly every one:** the *punch is plain*, and something *specific and colorful set it up* so the plain thing lands hard instead of hollow. Paint specific, sing plain. Watch for it in each entry.
+
+## The Great Truth, said plainest
+
+**"Let it be" — The Beatles.** Every verse line is tension — trouble, darkness, brokenhearted people — and the hook is the exhale into acceptance. Three plain words a whole stadium owns instantly, earned by all the trouble that came before. The simplicity works *because* the setup was specific and heavy.
+
+**"I will always love you" — the line, not just the Whitney belt.** A universal truth stated with zero cleverness. Works because the setup earns it. Proof that the plainest possible line, set up right, "you can't ever go wrong with."
+
+**"Here comes the sun / it's alright" — The Beatles.** The truth is the reassurance. "It's alright" is the payoff — the fear laid to rest.
+
+**"So be good to me and I'll be good to you."** The book's origin example — karma, loyalty, the doctrine of love, in words an 85-year-old neighbor said on a porch. Everyone gets it instantly. A whole song could be built to arrive here.
+
+## Simplicity as the whole point
+
+**"Doin' me" — Mikey Mike** _(the method's author; illustrative, not canon-authority)._ "Absurdly child-like simplicity — a 6-year-old could relate." The chorus *stacks* Great Truths ("I want to be happy / I want to be free / fuck what they say / I'm doin' me") into a cumulative slam-dunk. The bold, casual line ("fuck what they say") makes it feel like a real person, not a "song." The plain punch is set up by specific, colorful lines around it.
+
+**"Mmm mmm mmm mmm" — Crash Test Dummies.** Not even a word. Works on pure Original Sound (the *mmm* that needs no tongue). Proof that sonics alone, with enough conviction and repetition, can carry a hook.
+
+## The Reveal held to the last possible moment
+
+**"I'm just a fool waitin' on the wrong block" — Led Zeppelin, "Fool in the Rain."** The whole song is a man aching for a woman who never shows — and the reveal, in the final line, is that he's been on the wrong corner the entire time. Delaying the payoff to the very end makes the arrival more intoxicating. A hook doesn't have to be in the chorus.
+
+## The Reversal + "hook inside the hook"
+
+**"I just kind of wish you were gay" — Billie Eilish.** A reveal *and* a reversal — you don't see the line coming, and it swings the listener from ache to a laugh (the emotional "ride"). It also says the strange, honest thing most people think and never voice. Layered surprise.
+
+**"Bitch don't kill my vibe" — Kendrick Lamar.** Moves from passive self-criticism ("I am a sinner...") to a sudden, jarring assault. The contrast *is* the power — soft setup, hard hook.
+
+## Repetition with slight variation (the Breathe)
+
+**"...like I am home / whole / young / fun again" — The Cure / Adele, "Lovesong."** One frame, one word moving each pass. The repetition lodges it; the variation keeps it breathing. People sing the *verses* back — the whole song became a hook. Ends on the plainest Great Truth: "I will always love you."
+
+**"Re— spect— Walk!" — Pantera.** Staccato, one word per breath, after verses that hold you underwater. The space between the words is the hook.
+
+## The bold opener / un-turn-off-able line
+
+**"Jesus died for somebody's sins, but not mine" — Patti Smith, "Gloria."** Don't fear offending. A polarizing, edged line is hard to turn off — it spikes emotion whether the listener is thrilled or enraged.
+
+## The one mysterious word the listener leans into
+
+**"Warm smell of colitas rising up through the air" — Eagles, "Hotel California."** Nobody knows what colitas are — and that's the pull. The warmth in the *sound* of the word makes you "get it." The question is more seductive than the answer. A hook is allowed one evocative, ambiguous word.
+
+**"A bump with the king" — Doin' Me** _(author's own)._ Elvis? A crown? The double meaning doubles the engagement; people still ask which king. Leave room for the listener's mind to paint.
+
+## Modern & non-lyric-forward models
+
+The book's canon skews classic and lyric-forward; these balance it. A great hook is not always an epiphany in words — sometimes it's a sound, a cadence, or a chant. Don't let "great hook" quietly collapse into "1970s lyrical truth."
+
+**The wordless vocable.** In a huge amount of current pop and dance music the biggest hook is a wordless vocable — "oh-oh-oh," "eh-eh," "na na na" — the sound carrying countless festival records. No truth, no sentence; on the page it's just the syllables — pure open-vowel sound and repetition. Judge it only on the sound (singable, unforgettable). This is a *complete* hook, not a placeholder.
+
+**The chant / rhythmic hook (hip-hop & club).** Often the hook is a short phrase repeated in a tight rhythmic pocket — the cadence and repetition of the words themselves are the memorable thing. Two to four bars, ad-libs filling the gaps. Repetition is not laziness here — it *is* the hook. Calibrate to the vibe, not to meaning.
+
+**The one-word / title-as-chant.** Modern hits increasingly ride a single word or the title shouted as the hook. Chunkable, instantly requestable, maximum crowd. When a song's energy is momentum, don't out-write it — find the one right word.
+
+_(Use these as the *kind* of move, not names to drop. The lesson is the mechanism — sound, cadence, repetition — not the specific track.)_
+
+## How to use these
+
+- **Generating?** Find which model the current song is closest to, then chase that *kind* of hook — not a copy, the same move.
+- **Upgrading?** Hold the artist's hook next to the closest model and name the gap ("'Let it be' is the release from the verse's fear — yours doesn't resolve anything yet").
+- **Teaching?** These are the clearest illustrations of each lever; point at the actual line, not the abstraction.
+
+Keep the library alive — when the artist loves a hook you land, or names one that moves them, it's worth remembering the move behind it.
+`,
+      },
+      {
+        path: "references/hook-teardowns.md",
+        content: `# Hook Teardowns — Real Hits, Read Closely
+
+The best way to learn what a great hook does is to take real ones apart. These are worked teardowns of hit hooks, classic to modern, each read through the same lens the skill teaches. Study the *pattern*, not the lines — never copy a hook, but learn the move behind it.
+
+**Read for the throughline.** Across every one of these, the same shape repeats:
+
+- **The punch is plain, short, timeless, and conversational.** "Since you been gone." "New York." "Fuck you." "Royals." A few words — often words you've heard a thousand times — that say everything. Familiar is the point.
+- **Color and specificity in the setup make the plain punch land.** "I see you driving 'round town with the girl I love" is what makes "fuck you" hit. The vivid, specific, human setup earns the simple payoff.
+- **A turn sets it up** — a "but," a "so," a lead-in line, a reversal — signaling the big statement is coming, or flipping the verse's expectation.
+- **Repetition and directness** — the punch repeats, stays simple, and often speaks straight to the person the song is about.
+- **A timeless archetype underneath** — freedom, loyalty, heartbreak, escape, defiance — the human thing everyone already feels.
+
+Use these to calibrate your own candidates, or to hold up a mirror for an artist ("here's what makes 'Rolling in the Deep' land — yours is missing the color in the setup").
+
+---
+
+## "Since U Been Gone" — Kelly Clarkson
+
+> **But** since you been gone, I can breathe for the first time
+> I'm so moving on, yeah yeah
+> Thanks to you, now I get what I want
+> Since you been gone
+
+- The opening **"but"** is the turning point — the reversal off the verse's build-up.
+- **"Since you been gone"** is the memorable punch: few words that say so much, and feel timeless.
+- Notice how human and conversational it feels.
+- Not wordy or long-winded — direct and to the point.
+
+## "Ms. Jackson" — OutKast
+
+> I'm sorry Ms. Jackson, I am for real
+> Never meant to make your daughter cry
+> I apologized a trillion times
+> (repeats)
+
+- **"I'm sorry Ms. Jackson"** is the memorable punch.
+- It sums up the verse with an interesting twist — he's apologizing to the *girl's mother*, not the girl.
+- Notice the simplicity and repetition.
+
+## "Empire State of Mind" — Jay-Z & Alicia Keys
+
+> New York — concrete jungle where dreams are made of
+> There's nothing you can't do
+> Now you're in New York
+
+- Look how it sums up the whole ethos of the song.
+- The simple name **"New York"** is the memorable punch — the thing that cuts and sticks.
+- Notice the repetition.
+
+## "Umbrella" — Rihanna
+
+> When the sun shine, we shine together
+> Told you I'll be here forever
+> Said I'll always be your friend
+> Took an oath, I'ma stick it out to the end
+> Now that it's raining more than ever
+> Know that we'll still have each other
+> You can stand under my umbrella
+> You can stand under my umbrella — ella, ella
+
+- Notice the archetypes: "forever," "friend," "the end," "we'll still have each other" — timeless.
+- Notice the directness and simplicity. It doesn't introduce some big new idea — it *empowers* the verses.
+- **"Took an oath"** adds emotional weight and stake that heightens the feeling.
+- **"You can stand under my umbrella"** is the memorable punch that brings the whole notion of the song together.
+- Notice the repetition and simplicity (and how "-ella, ella" turns the punch into pure singable sound).
+
+## "Rolling in the Deep" — Adele
+
+> _(I can't help feeling)_ ← lead-in
+> We could have had it all
+> Rolling in the deep
+> You had my heart inside of your hand
+> And you played it, to the beat
+
+- Notice the **lead-in** ("I can't help feeling") that tells you the big statement is coming.
+- **"Rolling in the deep"** gives color to the simplicity and directness of the other lines.
+- **"We could have had it all"** — timeless notion and the memorable punch.
+- Notice the simplicity and repetition.
+- Notice the power in the singer speaking *directly* to who the song is about.
+
+## "Fire and Rain" — James Taylor
+
+> Oh, I've seen fire and I've seen rain
+> I've seen sunny days that I thought would never end
+> I've seen lonely times when I could not find a friend
+> But I always thought that I'd see you again
+
+- The opposing imagery and emotions (fire/rain, sunny/lonely) take the listener on an emotional ride.
+- Notice the repetition of just a key piece — **"I've seen."**
+- **"I always thought that I'd see you again"** — the memorable punch, a summation of the feeling, a timeless archetype.
+- Notice again that it's not overly wordy or long-winded.
+
+## "Fuck You (Forget You)" — CeeLo Green
+
+> I see you driving 'round town with the girl I love
+> and I'm like, "Fuck you!"
+> I guess the change in my pocket wasn't enough
+> I'm like, "Fuck you, and fuck her too."
+
+- **"Fuck you"** is the memorable punch — the simplest, most direct, most conversational way to sum up the entire sentiment and emotion of the song in two words.
+- Notice the attitude and edge — that's what makes it feel fun.
+- **"I see you driving 'round town"** adds the color and visual image that gives flavor to the simplicity of "fuck you." Someone driving around town and passing a person they know is a timeless cultural archetype of human life.
+
+## "Royals" — Lorde
+
+> And we'll never be royals
+> It don't run in our blood
+> That kind of luxe just ain't for us
+> We crave a different kind of buzz
+> Let me be your ruler, you can call me queen bee
+> And baby, I'll rule (I'll rule), I'll rule (I'll rule)
+> Let me live that fantasy
+
+- The memorable punch is **"royals"** — a single word that inverts status. She isn't wishing for royalty; she's rejecting it as unattainable and uncool. That defiant anti-status *is* the hook.
+- Look at the conversational contractions and slang: "ain't for us," "different kind of buzz." It feels like a teenager talking in a diner, not a poet on a stage. That relatability is the entry point.
+- The magic is the twist in the second half ("Let me be your ruler") — she trades the crown for a "queen bee," a more organic form of leadership. "We can't have your world, so let's build mine."
+- Notice the repetition of "I'll rule." A minimalist, almost childish chant. Great hooks often reduce complex ideas to playground-level repetition.
+
+## "Blank Space" — Taylor Swift
+
+> So it's gonna be forever, or it's gonna go down in flames
+> You can tell me when it's over, if the high was worth the pain
+> Got a long list of ex-lovers, they'll tell you I'm insane
+> But I got a blank space, baby, and I'll write your name
+
+- Notice the hook starts with **"So"** — a conversational lead-in that makes you feel you're joining a conversation already in progress. It disarms you.
+- The memorable punch is **"blank space"** — a twist on a cliché. Instead of "I'm ready for a new relationship," she visualizes a literal empty page, inviting the listener to be the next chapter.
+- The magic is the self-aware wink ("they'll tell you I'm insane") — it owns the reputation, then turns it into a threat/offer ("I'll write your name").
+- Look at the binary: forever vs. flames. No middle ground. That emotional extremity makes the hook explosive even sung softly.
+
+## "Waterfalls" — TLC
+
+> Don't go chasing waterfalls
+> Please stick to the rivers and the lakes that you're used to
+> I know that you're gonna have it your way or nothing at all
+> But I think you're moving too fast
+
+- The memorable punch is **"Don't go chasing waterfalls"** — a direct imperative (a command) that feels like advice from an older sibling. Universal and easy to picture.
+- The magic is the contrast: exotic danger (waterfalls) vs. boring safety (rivers and lakes). It doesn't explain *why* chasing them is bad — the listener fills in the blank.
+- The second half ("have it your way or nothing at all") grounds the metaphor in a common relationship dynamic — pivoting from poetic imagery to blunt human stubbornness.
+- Notice the conversational flow: it reads like a text message or a plea, not a poem. The simplicity makes it instantly singable.
+
+## "Fast Car" — Tracy Chapman
+
+> You got a fast car
+> I want a ticket to anywhere
+> Maybe we make a deal
+> Maybe together we can get somewhere
+> Anyplace is better
+> Starting from zero, got nothing to lose
+> Maybe we'll make something
+> But me, myself, I got nothing to prove
+
+- Notice the concrete object — **"fast car"** — as the memorable punch. A physical symbol that carries the massive abstract weight of escape, freedom, and class struggle.
+- Look at the conversational hedging: "Maybe," "Anyplace," "got nothing to lose." Not boastful — fragile and human. That vulnerability makes the hook land harder.
+- "Starting from zero" and "nothing to prove" are timeless underdog archetypes. It doesn't explain a backstory — it states the emotional math of the situation.
+- Notice the drive of the hard consonant sounds (got, ticket, together, zero) — rhythmic push you can feel in the words alone, no beat required.
+
+---
+
+## What to take from all of these
+
+None of these punches is "new." "Fast car," "New York," "fuck you," "we could have had it all" — every one is something you've heard people say. Their power is that they're **plain, timeless, and human**, and that the writer built a **specific, colorful, conversational world** around them so the familiar words suddenly land like a truth. That is the whole job: paint specific, sing plain. Say the thing everyone already feels, and set it up so it finally hits.
+`,
+      },
+      {
+        path: "references/sonics.md",
+        content: `# Sonics — The Phonetics of Singability
+
+How a hook *sounds in the mouth* is co-equal with what it means. This is about the **words themselves** — the sounds, not the melody. (Melody is the artist's job, not this skill's; everything here you can hear just by saying the words out loud.) It's the working engine behind the two questions your ear is really asking: **could a stadium sing these words back with ease, and would one hearing lodge them for life?** Use it when sound is the focus of a generate/upgrade/review.
+
+The one principle under everything here: **the sound lives on the vowels.** A crowd — mostly untrained voices — can only hold, carry, and lock together on an open, unobstructed sound. Consonants are the punctuation between vowels. The more a hook keeps the voice open, the more of a room can lock onto it. (This is the linguists' *sonority hierarchy* — vowels are the most singable sounds, then glides, liquids, nasals, and last the hard stops. It's also exactly what the Yoga method calls the "Original Sounds": Aaaa, Uuuu, Mmmm — the sounds of AUM.)
+
+## The rules, in order of impact
+
+1. **Put the peak of the hook on an open vowel** — *ah* (father), *oh*, *ay*, *eye* (my/high), *oo*. These carry, hold, and are the easiest for a crowd to belt out. The word you stretch out longest and loudest should almost never sit on a pinched vowel like *ee* or *ih*.
+
+2. **End phrases on open syllables** (ending in a vowel) so the word can ring out — *be, ya, na, oh, free, away*. A closed syllable ending in a hard consonant (*stop, back, cut*) forces you to clip the word off. Great for punch; bad for holding a word and for singalong.
+
+3. **When you need consonants, reach for the singable (sonorant) ones** — *m, n, ng, l, r, w, y*. They're voiced and semi-open, so a crowd can glide or hum through them without stopping the airflow (*mmm, laaa, nnn*). They keep the line flowing.
+
+4. **Use hard stops (p, t, k, b, d, g) to launch, not to land.** A plosive at the *front* of a word gives a crisp, percussive attack ("**L**et it **B**e," "**D**oin' me"). A plosive at the *end* of a drawn-out word kills the ring. Use them to attack a word, not to close out one you're holding.
+
+5. **Repeat one vowel shape across the hook (assonance)** so a crowd locks onto a single sound. "Hey ya" lives on *ay/ah*. "Na na na" is one shape entirely. Changing vowel on every syllable makes a crowd re-aim constantly and blurs the unison.
+
+6. **Front the consonant, stretch the vowel within each syllable** — "consonant early, vowel long." Get the consonant out of the way fast, then live on the open sound. This is how a single syllable becomes singable by thousands at once.
+
+7. **The most universally singable unit is the wordless vocable** — *na-na-na, oh-oh-oh, la-la-la, whoa-oh*. Zero meaning to remember, maximum open resonance. When a hook needs a pure crowd moment (the part between the words), this is the tool. Don't over-explain why it works — it just does; the "it hits some pre-verbal part of the brain" story is a nice intuition but not established fact, so don't sell it as science.
+
+## The Breathe — space and repetition
+
+Singability isn't only the sounds; it's the *pacing* — and pacing is fully in the words: how many, how tight, how much space. (Rhythm here means the rhythm of the words themselves — repetition, spacing, stress — not a musical arrangement.)
+
+- **Give the hook room to land.** Don't crowd a great moment by cramming the next line against it. Space right before the hook is like the white of a canvas — it's what makes the hook glow. Let it hit, let it sit, then repeat.
+- **Repetition is the strongest memory tool there is** — but use **repetition with slight variation** to keep it alive. Same frame, one word moving: the Cure's "Lovesong" runs "like I am home / whole / young / fun again." The repetition lodges it; the small change keeps it from going stale. (There's a real fatigue ceiling on pure repetition — vary to delay it.)
+- **Fewer unique words = more force.** "Love Me Do" gets by on 19. Strip a hook to its irreducible core.
+- **Staccato with space between words is its own kind of hook** — "Re— spect— Walk!" (Pantera): each word standing alone. One-word hooks with space around them can be enormous.
+- **Repetition can turn a whole section into a hook.** When the frame is simple and repeated enough, people will sing the *verse* back to you (Lovesong again). A hook doesn't have to be labeled "chorus" to be the thing they remember.
+
+## Quick diagnostic for a hook that "won't sing"
+
+- Is the word you stretch longest stuck on a closed vowel (*ee/ih*)? → open it up.
+- Does the line end on a hard stop that clips the ring? → move it or swap for an open syllable.
+- Is every syllable a different vowel? → find a repeating vowel to anchor.
+- Is it consonant-clustered and tongue-twisting (too many stops in a row)? → thin the consonants, favor sonorants.
+- Is there no space before it? → the sounds may be fine; the *setup* is crowding it.
+
+## Honesty note
+
+The vowel/consonant principle is near-universal in vocal and choral teaching — safe to lean on hard. The finer sonority rankings and the "singer's formant" (the ring that lets a trained voice cut through a band) come from voice acoustics and don't fully transfer to an amateur stadium crowd — so treat sonics as *one* lever, working alongside rhythm and repetition, not the whole secret. When in doubt, say the line out loud and imagine the back row singing it.
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: hook-writer
+description: >-
+  Write, upgrade, review, or fully rewrite the HOOK of a song — the chorus line, title,
+  refrain, or central repeated phrase a song is remembered by. Use whenever an artist is
+  working on a hook or chorus: generating candidates from a verse/concept/mood, punching up
+  a hook that feels flat, diagnosing why one isn't landing, writing alternative directions,
+  or teaching hook craft. Trigger even when the word "hook" isn't used — "the chorus feels
+  weak," "the part people sing back," "what should they sing here," "the payoff isn't
+  hitting," "make this catchier," or "this needs a title" all count, as long as the thing in
+  question is a chorus, refrain, title line, or repeated payoff. Built on the Yoga of
+  Songwriting method. Do NOT use for full-song lyric writing with no hook focus, verse/bridge
+  writing, beat/production, naming a project or instrumental, or music-business tasks.
+---
+
+# The Hook
+
+A song is a journey; the hook is where it arrives. It's the moment the whole thing clicks — the line that makes a listener feel *"yes, that's it."* Everything before it is the walk up; the hook is the payoff the walk was for.
+
+Your job is to write hooks that **hit** — not to satisfy a checklist. Everything below exists only to help you *find* the one that lands, or to spot *why* one isn't. Hold it all loosely: when in doubt, trust the simplest true thing over the cleverest. And read the song's ambition — a song reaching to mean something, or to last, should never settle for merely competent; a vibe record or banger can win on pure catch and feel, so don't over-work what just wants to be fun.
+
+Speak plainly and warmly, like a co-writer in the room — not a teacher. Keep the craft under the hood; only name a concept when it actually helps the artist.
+
+## The core — the three things that are always true
+
+These are load-bearing. Everything else in this skill is optional wisdom in service of these.
+
+1. **A hook is an epiphany.** It brings the whole world of the song together in one stroke — it doesn't extend the scene, it *resolves* it into meaning. It should feel discovered, like the point the song was always walking toward. If the hook doesn't make everything around it suddenly *mean* something, it isn't a hook yet. (When there's no verse yet, just a concept, the hook is still that arrival point — the thing the rest will be built to reach.)
+
+2. **The punch is direct and simple.** The hook usually holds a Great Truth — a plain, direct summation of the song's core feeling. "Let it be." "I will always love you." "Doin' me." The key punch lands *plain* — not clever, not wordy, not a display of vocabulary. The clean, true thing, said so simply a whole stadium owns it instantly.
+
+3. **It sings.** How it rolls off the tongue matters as much as what it says. Could 60,000 people sing it back with ease, and would one listen lodge it in someone for life? Sound is co-equal with meaning, never an afterthought.
+
+## The one move that makes a simple hook land: paint specific, sing plain
+
+A hook is *meant* to be familiar. Its whole job is to say something timeless and human — the thing everyone already knows and feels — in a way that finally lands. "Let it be." "I will always love you." Even "can't tell me nothing." They say nothing "new," and that is the point: a great hook is universal, archetypal, *everyone's*. So never fear a plain, direct, or even well-worn punch. Familiar and timeless is the target, not the enemy — a hook you've "heard before" is often exactly right.
+
+What makes a familiar punch *land* is the setup. A plain punch on its own is wallpaper — "I will always love you" means nothing in a vacuum. It becomes devastating because *specific, vivid, colorful* lyric set it up and led into it. The color lives in the setup and in the lines *around* the punch; the punch itself stays plain, direct, universal. The colorful, specific setup is what earns the simple timeless payoff and makes it hit instead of just sit. "Can't tell me nothing" is a flat brag or a knockout hook depending entirely on the world you build around it.
+
+But specific doesn't mean ornate: **one sharp, true detail beats three vague colorful ones**, and the setup still has to breathe. Vividness that crowds the punch just smothers it another way.
+
+So when a hook feels flat, it almost never has a "too familiar" or "too simple" problem — it has a **nothing-colorful-set-it-up** problem, or a **beige-filler** problem where the setup lines paint nothing and the punch lands on empty. Fix the setup; don't run from the plain punch. Two things to watch:
+
+- **The setup is where the craft lives — hold it to a high bar.** A timeless punch propped up by beige filler ("gettin' colder," "the strongest thing a man can do") still falls flat. If a setup line paints no picture and adds nothing, sharpen it or cut it. The punch is only as strong as the specific color feeding it.
+- **Take a beat before you ship — but don't throw out gold.** Don't reflexively hand over the very first thing that fell out; sit with it and ask, *can I beat this?* Sometimes the first line is the great one, sometimes the fifth is. Keep whichever actually hits — the goal is the one that lands, not the one that took the most work.
+
+The magic is a **timeless, human truth said plain and singable, earned by colorful, specific setup.** That's the target every time.
+
+## Looser wisdom — tools to reach for, not rules to obey
+
+These are the moves a strong hook-writer has internalized. Use the ones a given song actually wants; a great hook can lean on almost none of them. Never run them as a checklist — they're here to draw on with judgment when a hook needs finding or fixing.
+
+- **The Reveal.** Land the hook as the *answer* to the question the verse quietly asked. When a hook feels flat, it's often because it restates the verse's feeling instead of resolving it. Make it the arrival.
+- **Tension → release (Fear → Love).** Verses often sit in tension — doubt, longing, trouble; the hook is the exhale. A punch lands harder when it releases something the setup built. If the hook feels weak, check whether the verse is charged enough to discharge.
+- **The reversal / the unsaid.** A small twist right before the punch — expecting one thing, getting another — makes the hook feel like a bigger arrival. So does saying the true thing people usually don't say out loud.
+- **One vivid or open word.** A single colorful, or even slightly mysterious, word can carry a whole hook ("colitas") — the listener leans in. The question is often more seductive than the answer.
+- **The Breathe.** Give the punch room to land; don't crowd it. Repetition is the strongest memory tool there is — use it, with slight variation to keep it alive. Fewer words hit harder.
+- **Sonics.** The words themselves should sing — build the hook on open, singable vowels (ah, oh, ay, eye, oo), favor flowing consonants, and let hard stops launch a word rather than close out a drawn-out one. This is about how the words feel in the mouth, not melody. Full playbook in \`references/sonics.md\` when sound is the focus.
+- **Universal, not personal.** The biggest hooks belong to *everyone* — they say the human thing anyone could mean, the truth a whole stadium already feels. A hook transcends the singer; it isn't chained to one persona or a private detail only this artist would say. Reach for what's true for all of us. (Save the personal specifics for the setup and the verse; the punch is the part the world takes for itself.)
+
+## Calibration — read what the song wants
+
+The right hook depends entirely on the song. A club or rap banger can ride a simple, specific chant where repetition and cadence *are* the hook — don't force a profound truth onto a vibe record. A song built to last a hundred years leans on the Great Truth — reach for the universal remembrance. Most songs live in between. Read the genre and the ambition first, and don't push depth or catchiness where it doesn't belong.
+
+The simplest hooks — a two-word chant, a repeated ad-lib — are the reminder that **none of this is a hard rule.** A great hook can break every guideline in this skill and win on pure sound and vibe alone. Don't over-think or over-judge the simple ones; if it's catchy and it feels right, it's done. The wisdom here is for finding and fixing hooks that aren't landing — not a bar every hook must clear. (If the words already sit in a rhythmic pocket — a set number of beats, a stress pattern like "da-DA-da-da-DA" — match that shape: same syllable count, stresses in the same spots. That's rhythm you can hear in the words themselves. Leave the melody to the artist; you're writing the words.)
+
+## Working with the artist
+
+Read the situation, then act. If you have enough — a verse, a concept, an existing hook, a clear intent — just go. If it's genuinely thin, ask only for what you actually need — the material, the genre/ambition, any rhythmic pocket the words already sit in.
+
+Do what's asked or obviously wanted — generate candidates, punch up an existing hook, diagnose why one's flat, write a real alternative swing, or explain a choice if they want to learn. Most requests are a blend.
+
+When **generating**, work in two passes. *First pass:* find the one true thing *this specific song* is reaching for, and get candidates down — don't fear a plain or familiar punch, that's often the right one. *Second pass:* sit with them and push — does the setup paint something specific enough to make the punch actually *land*, or are the setup lines beige filler? Then ask, *can I beat this?* Sharpen the setups, and keep the candidates that hit — whether they came first or fifth. Do this silently; show the artist the keepers, not the process.
+
+When **upgrading or diagnosing**: usually it's the setup — a good, plain punch landing on beige lines that paint nothing, so it falls flat. Less often the punch itself is unearned or unclear. Name which, honestly — but reach for the setup first; most "weak hooks" just need the world around the punch to get specific, not a whole new punch. Praise what's genuinely good; don't inflate what isn't. The truth serves the artist.
+
+## Output
+
+Give them what they came for, in the shape that serves the moment — options, a fix, a full alternative, or just the hooks raw if they're mid-flow. Let the artist *feel* the candidate the way a listener would; the real test is playing it for someone and watching their face. Keep commentary light and in service of the hook, never an essay around it. Deliver with conviction, and if you're uncertain whether something connects, say so once, at the end — not on every line.
+
+Above all: for any song reaching to mean something, don't hand over what you'd call merely competent — if it doesn't hit, it isn't done. (A pure vibe hook is the exception to that bar, never the excuse for skipping the work.)
+
+## Reference files
+
+Load as needed — not all upfront:
+- \`references/hook-teardowns.md\` — **the main place to learn from real hits.** Full worked teardowns of great hooks, classic to modern (Kelly Clarkson, OutKast, Adele, Lorde, Taylor Swift, Rihanna, TLC, Tracy Chapman, and more), each showing how a plain, timeless punch is made to land by colorful setup. Read this to internalize the pattern, to calibrate a candidate, or to show an artist a model of the move they're missing.
+- \`references/sonics.md\` — the phonetics of singability: open vowels, singable consonants, the Breathe and repetition mechanics. Read when sound is the focus.
+- \`references/examples.md\` — quick one-line annotations organized by technique, plus non-lyrical/modern hook *forms* (the wordless vocable, the chant hook). Read for a fast model of one specific move.
+- \`references/craft-notes.md\` — deeper craft and the supporting science (prosody, structure, memorability), graded for how solid each claim is. Read for teaching or the "why" underneath.
+`,
+      },
+    ],
+  },
+  {
     slug: "hyperframes",
     files: [
       {
@@ -31702,6 +32130,609 @@ Approval checklist:
 
 Missing info:
 \`\`\`
+`,
+      },
+    ],
+  },
+  {
+    slug: "reference-finder",
+    files: [
+      {
+        path: "saved/favorites.json",
+        content: `{
+  "meta": {
+    "name": "Saved reference favorites",
+    "note": "Your go-to palette. The reference-finder Skill adds here when you love a reference. Each entry: image, well, meaning, and an optional note on how you like to use it.",
+    "version": "1.0.0"
+  },
+  "favorites": []
+}
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: reference-finder
+description: >-
+  Find and present cultural allusions and references for a song — biblical, mythic, historical,
+  decade-nostalgia, regional, and cosmic imagery a lyric can draw on. Use when a writer wants
+  reference material to color a song: "I use a lot of biblical references, give me more,"
+  "suggest 90s nostalgia images," "what allusions fit a song about betrayal," "give me Old West
+  imagery," "I want this to feel Southern gothic," or when a lyric feels thin and needs texture
+  and gravity. Two modes: expand within a WELL (a source the writer leans on) and match across
+  wells by MEANING (the feeling/theme a song is about). Backed by the Reference Wells catalog as
+  a scaffold, but generates deep and fresh on demand. Pairs with impact-phrases (which supplies
+  the punch line) and hook-writer. Do NOT use for writing the punch/hook itself, full verses,
+  beats, or business tasks.
+---
+
+# Reference Finder — the allusion engine
+
+References are the **color of a song** — the loaded images pulled from a shared cultural well
+that give a lyric texture, gravity, and place. "Judas kiss," "neon on wet asphalt," "the tide
+going out." A reference rarely *is* the punch (that's the impact-phrase's job); it **sets the
+punch up** — it paints the specific, vivid world that makes a plain, timeless payoff land.
+
+This skill finds the right references for a song and presents them, going as deep and fresh as
+the writer wants. It is **generative** — it uses the Reference Wells catalog as a scaffold and
+a balancer, then draws on the full cultural memory of each well to go far past the seed list.
+
+## The catalog (scaffold, not a cage)
+
+\`wells/wells.json\` catalogs ~20 wells across categories (sacred-mythic, myth, literary,
+folklore, esoteric, decade, historical-era, regional-genre, cosmic, nature). Each well has a
+**tone**, what it **evokes** (the meaning axis), a set of **signature images** with meanings,
+a **deploy** note, and a **cliche_watch** list. Read it to ground tone and to see what a well
+already offers — then generate well beyond it. The catalog exists to keep coverage balanced and
+consistent, not to limit you. If a writer names a well that isn't in the catalog (Egyptian myth,
+Appalachian folk, cyberpunk, medieval, disco, the Beat generation), just build it on the fly.
+
+## Two modes
+
+### Mode A — Expand within a well ("I lean biblical, give me more")
+
+The writer names a source they draw on. Surface a rich, organized family from that well:
+
+1. Read the well's \`tone\`, \`evokes\`, and \`signatures\` for grounding.
+2. Generate **10–20 references** from that well, going well past the seed — group them loosely
+   by the feeling they serve (e.g. biblical → *betrayal:* Judas kiss, thirty pieces of silver;
+   *exile:* east of Eden, forty years wandering; *sacrifice:* the lamb, Gethsemane).
+3. Give each a **one-line meaning** so the writer knows what it evokes and can reach for it.
+4. Flag the \`cliche_watch\` ones honestly and offer a twist instead of the tired version.
+
+### Mode B — Match across wells by meaning ("a song about betrayal")
+
+The writer gives a theme, mood, or situation. Pull the strongest images from *any* well:
+
+1. Identify the core feeling(s) — betrayal, rebirth, distance, doom, homesickness.
+2. Scan wells whose \`evokes\` match, and pull the sharpest images from several, so the writer
+   gets range (betrayal → *biblical:* Judas kiss; *noir:* the double-cross; *myth:* the Trojan
+   horse; *Shakespeare:* et tu; *folklore:* the wolf in the red hood's story).
+3. Present **grouped by well** so the writer can feel each texture, or ranked by fit — whichever
+   serves. Note which well each comes from.
+
+Most real requests blend both — a writer who "leans biblical" and is "writing about betrayal"
+wants biblical betrayal images first, then a few from other wells to widen the palette.
+
+## How to present
+
+- **Grouped, glossed, and usable.** Each reference gets the image + one line on what it evokes.
+  Cluster by feeling (Mode A) or by well (Mode B). Lead with the freshest, strongest images.
+- **Go deep on request.** If they want "20 more," give 20 more without repeating. The wells are
+  deep; don't stop at the catalog's signatures.
+- **Show how it lands, lightly.** For the top few, a quick note on how to drop it into a lyric
+  ("'east of Eden' as the place you got exiled to after the fight") — but keep it light, options
+  not essays.
+- **Offer a twist for the worn ones.** The whole point is to avoid tired allusions. When an image
+  is on \`cliche_watch\` or just overused (phoenix rising, star-crossed, sold my soul), say so and
+  offer the fresh angle — a fresh image, or the cliché subverted.
+- **Respect real people and events.** With historical/decade wells, keep real figures and
+  tragedies handled with a light, respectful touch; reach for texture and imagery, not
+  exploitation.
+
+## Cliché guard (the core value)
+
+A generic allusion is worse than none — it makes a song feel secondhand. Steer away from the
+exhausted images (phoenix rising, Icarus straight, "devil at the crossroads," "star-crossed,"
+tie-dye-as-60s). Prefer the deep cut and the specific detail: not "a biblical flood" but "forty
+days and I stopped counting"; not "like a fairytale" but "breadcrumbs the birds already ate."
+When you do reach for a famous image, twist or ground it. Say honestly when something's worn.
+
+## Working with the other tools
+
+This is one of a family:
+
+- **reference-finder** (this) → the *color*: loaded images that paint the verse and set up the punch.
+- **impact-phrases** → the *punch*: the plain, timeless phrase the chorus lands on.
+- **hook-writer** → the *build*: shaping the whole hook, the setup, the breathe, the sonics.
+
+A full flow: find the well and its images here → set them up as vivid, specific verse → land a
+plain impact-phrase as the chorus payoff → let hook-writer tighten the whole thing. When a
+request spans these, move between them naturally.
+
+## Saving useful references
+
+When a writer loves specific references, offer to save them into the Lab song's \`remember\`
+area or another user-visible note surface. Save the image, well, meaning, and an optional note
+on how they want to use it. Keep references generic — cultural images, idioms, and allusions,
+never verbatim copyrighted lyrics.
+`,
+      },
+      {
+        path: "wells/wells.json",
+        content: `{
+  "meta": {
+    "name": "Reference Wells",
+    "version": "1.0.0",
+    "updated": "2026-07-07",
+    "purpose": "A balanced catalog of cultural 'wells' a songwriter draws allusions from — biblical, mythic, historical eras, decade nostalgia, regional textures, cosmic. Each well lists signature images with meanings, the tone it carries, and what it evokes. This is a scaffold, not a closed list: the reference-finder Skill uses it to generate deep, on-theme references on demand and to keep coverage across wells balanced.",
+    "how_to_use": "Browse to find a well's texture and signature images, or feed a well/theme to the reference-finder Skill to go deeper. References color the SETUP of a song (verse imagery, gravity, texture); they pair with an impact phrase, which lands the punch.",
+    "field_guide": {
+      "id": "stable well id",
+      "name": "the well's name",
+      "category": "grouping (sacred-mythic, myth, literary, folklore, esoteric, decade, historical-era, regional-genre, cosmic, domain, nature)",
+      "era": "when it lives / its timeframe",
+      "tone": "the emotional color it brings",
+      "evokes": "themes/feelings it is strong for — the meaning axis",
+      "signatures": "signature reference images, each with img (the allusion) and means (what it evokes / how it reads)",
+      "deploy": "craft note on using this well in a lyric",
+      "cliche_watch": "the most overused images in this well — use sparingly or twist"
+    },
+    "categories": ["sacred-mythic","myth","literary","folklore","esoteric","decade","historical-era","regional-genre","cosmic","domain","nature"]
+  },
+  "wells": [
+    {
+      "id":"well-biblical",
+      "name":"Biblical / Scripture",
+      "category":"sacred-mythic",
+      "era":"antiquity / timeless",
+      "tone":"weighty, moral, redemptive, prophetic",
+      "evokes":["betrayal","sacrifice","redemption","exile","temptation","judgment","rebirth","faith","sin","deliverance","mercy"],
+      "signatures":[
+        {"img":"Judas kiss","means":"betrayal disguised as affection"},
+        {"img":"cross to bear","means":"a burden you carry as penance"},
+        {"img":"baptism by fire","means":"transformation through trial"},
+        {"img":"garden of Eden","means":"lost innocence, paradise before the fall"},
+        {"img":"prodigal son","means":"the one who leaves and is welcomed back"},
+        {"img":"thirty pieces of silver","means":"the cheap price of a betrayal"},
+        {"img":"forty days in the wilderness","means":"a stretch of testing and temptation"},
+        {"img":"Jacob's ladder","means":"a hard climb toward the divine"},
+        {"img":"walking on water","means":"the impossible done by faith"},
+        {"img":"the promised land","means":"deliverance you may never reach"},
+        {"img":"writing on the wall","means":"the doom you can already read"},
+        {"img":"turn the other cheek","means":"grace instead of vengeance"},
+        {"img":"valley of the shadow","means":"walking through fear and death"}
+      ],
+      "deploy":"Biblical images carry instant moral gravity — one lands a whole verse in the register of sin and grace. Great for songs about betrayal, guilt, and redemption. Twist the worn ones (a Judas who kisses himself in the mirror).",
+      "cliche_watch":["prodigal son","promised land (as a straight uplift)","amazing grace"]
+    },
+    {
+      "id":"well-greek-roman",
+      "name":"Greek & Roman Myth",
+      "category":"myth",
+      "era":"classical antiquity",
+      "tone":"tragic, fated, grand, hubristic",
+      "evokes":["hubris","doom","longing","obsession","fate","transformation","the underworld","impossible love","warning"],
+      "signatures":[
+        {"img":"Icarus / wings of wax","means":"flying too high, undone by your own ambition"},
+        {"img":"Achilles' heel","means":"the one fatal weakness in the strong"},
+        {"img":"Pandora's box","means":"the ruin you can't put back once opened"},
+        {"img":"siren song","means":"a beautiful lure toward destruction"},
+        {"img":"the Midas touch","means":"getting everything you wanted and it kills you"},
+        {"img":"crossing the Styx","means":"the point of no return / death's ferry"},
+        {"img":"Sisyphus and the boulder","means":"endless, pointless struggle"},
+        {"img":"Orpheus looking back","means":"losing love the instant you doubt"},
+        {"img":"Narcissus at the pool","means":"drowning in your own reflection"},
+        {"img":"the Trojan horse","means":"the gift that carries your undoing"},
+        {"img":"Prometheus / stolen fire","means":"punished forever for a gift to others"},
+        {"img":"the labyrinth / Minotaur","means":"lost in a maze of your own making"}
+      ],
+      "deploy":"Myth turns a personal feeling into a fated, cosmic one — good for tragedy, obsession, and grand doomed love. The story-shape does the work; you rarely need to explain it.",
+      "cliche_watch":["phoenix rising (badly overused)","Icarus (common — twist it)","Achilles' heel"]
+    },
+    {
+      "id":"well-norse-celtic",
+      "name":"Norse & Celtic Myth",
+      "category":"myth",
+      "era":"dark-age northern Europe",
+      "tone":"cold, stoic, doom-laden, elemental",
+      "evokes":["fate","endurance","the end of things","the wild","honor","the veil","winter","the unseen"],
+      "signatures":[
+        {"img":"Ragnarök","means":"the foretold end you march toward anyway"},
+        {"img":"Valhalla","means":"a glorious reward earned only through death"},
+        {"img":"the Norns / threads of fate","means":"a life already being woven and cut"},
+        {"img":"Yggdrasil / the world tree","means":"everything connected by one root"},
+        {"img":"the raven's wing","means":"an omen, a messenger between worlds"},
+        {"img":"the long winter / Fimbulwinter","means":"a cold that outlasts hope"},
+        {"img":"the wild hunt","means":"a spectral chase across the night sky"},
+        {"img":"the selkie's skin","means":"a wild love that must return to the sea"},
+        {"img":"the thin veil / Samhain","means":"the night the dead walk close"},
+        {"img":"rune-carved stone","means":"a fate written in something that outlasts you"}
+      ],
+      "deploy":"Northern myth brings cold stoicism and inevitability — perfect for endurance, grief, and doomed courage. Leans folk and elemental; pairs with weather and wilderness imagery.",
+      "cliche_watch":["Valhalla (metal cliché)","'winter is coming' echoes"]
+    },
+    {
+      "id":"well-shakespeare-lit",
+      "name":"Shakespeare & Classic Literature",
+      "category":"literary",
+      "era":"Renaissance to 19th c.",
+      "tone":"eloquent, tragic, star-crossed, literary",
+      "evokes":["doomed love","madness","ambition","jealousy","fate","revenge","illusion","mortality"],
+      "signatures":[
+        {"img":"star-crossed lovers","means":"love the universe itself is against"},
+        {"img":"out, damned spot","means":"guilt that won't wash off"},
+        {"img":"the green-eyed monster","means":"jealousy that devours from inside"},
+        {"img":"to be or not to be","means":"the edge between going on and not"},
+        {"img":"a pound of flesh","means":"a debt collected cruelly, to the letter"},
+        {"img":"the winter of discontent","means":"a long cold season of the soul"},
+        {"img":"Yorick's skull","means":"holding death and looking it in the face"},
+        {"img":"the balcony","means":"love reaching across an impossible distance"},
+        {"img":"sound and fury, signifying nothing","means":"a loud life that meant nothing"},
+        {"img":"the white whale","means":"the obsession that will sink you (Melville)"},
+        {"img":"the green light across the water","means":"the dream just out of reach (Gatsby)"},
+        {"img":"the raven at the door","means":"grief that keeps saying nevermore (Poe)"}
+      ],
+      "deploy":"Literary allusion adds eloquence and tragic scale. Works when the song wants to feel timeless and literate; keep the reference light so it colors rather than shows off.",
+      "cliche_watch":["star-crossed lovers","'to be or not to be' quoted straight"]
+    },
+    {
+      "id":"well-fairytale-folklore",
+      "name":"Fairy Tale & Folklore",
+      "category":"folklore",
+      "era":"timeless / oral tradition",
+      "tone":"enchanted, dark, cautionary, innocent-then-not",
+      "evokes":["innocence","danger","transformation","longing","warning","lost children","false promises","the woods"],
+      "signatures":[
+        {"img":"breadcrumbs in the woods","means":"a way home that disappears behind you"},
+        {"img":"the poisoned apple","means":"a sweetness that puts you to sleep"},
+        {"img":"the glass slipper","means":"a fit that proves who you really are — or doesn't"},
+        {"img":"spinning straw into gold","means":"an impossible promise with a hidden price"},
+        {"img":"the big bad wolf","means":"the danger dressed up as something safe"},
+        {"img":"the tower with no door","means":"beauty locked away, waiting"},
+        {"img":"the frog and the crown","means":"what looks lowly holding what you need"},
+        {"img":"the wishing well","means":"hope you throw away and never get back"},
+        {"img":"the crossroads at midnight","means":"a bargain made in the dark"},
+        {"img":"the wolf at the door","means":"ruin waiting just outside"},
+        {"img":"the girl in the red hood","means":"innocence walking straight toward the teeth"}
+      ],
+      "deploy":"Folklore gives childhood-dark texture — familiar and unsettling at once. Strong for songs about lost innocence, temptation, and false safety. The dark undertow is the point.",
+      "cliche_watch":["happily ever after (unless subverted)","fairytale ending"]
+    },
+    {
+      "id":"well-tarot-occult",
+      "name":"Tarot & the Occult",
+      "category":"esoteric",
+      "era":"timeless / mystical",
+      "tone":"fated, mysterious, ominous, revelatory",
+      "evokes":["fate","upheaval","hidden truth","cycles","warning","death-and-rebirth","the unknown","reckoning"],
+      "signatures":[
+        {"img":"the Tower struck by lightning","means":"sudden collapse of what you built"},
+        {"img":"the Death card","means":"an ending that is really a change, not a grave"},
+        {"img":"the Fool at the cliff's edge","means":"a reckless, hopeful first step into nothing"},
+        {"img":"the Hanged Man","means":"surrender, seeing the world upside down"},
+        {"img":"the Wheel of Fortune","means":"luck turning, high to low and back"},
+        {"img":"the Lovers","means":"a choice as much as a romance"},
+        {"img":"reading tea leaves","means":"looking for the future in scraps"},
+        {"img":"crossing a stranger's palm with silver","means":"paying for a truth you may not want"},
+        {"img":"the black cat / broken mirror","means":"small omens of a turning tide"},
+        {"img":"the séance / the other side","means":"reaching for someone past the veil"}
+      ],
+      "deploy":"Occult imagery brings fate and dread with a whisper. Good for foreboding, transformation, and songs that flirt with the mystical. The Tower and Death cards are rich because they mean the opposite of how they look.",
+      "cliche_watch":["'the cards don't lie'","crystal ball as a lazy prop"]
+    },
+    {
+      "id":"well-old-west",
+      "name":"Old West & Frontier",
+      "category":"historical-era",
+      "era":"American frontier, 1840s–1890s",
+      "tone":"dusty, lawless, lonesome, mythic-American",
+      "evokes":["freedom","lawlessness","loneliness","revenge","the open road","survival","reinvention","last stands"],
+      "signatures":[
+        {"img":"high noon showdown","means":"a reckoning you can't walk away from"},
+        {"img":"riding off into the sunset","means":"leaving before the town can hold you"},
+        {"img":"the last stagecoach out","means":"a final chance to escape"},
+        {"img":"a ghost town","means":"a place love and money already left"},
+        {"img":"the wanted poster","means":"a past that follows your face"},
+        {"img":"gold-rush fever","means":"chasing a fortune that ruins you"},
+        {"img":"the lone rider","means":"freedom that is really loneliness"},
+        {"img":"boot hill / the pine box","means":"the cheap end of a hard life"},
+        {"img":"snake oil","means":"a beautiful lie sold door to door"},
+        {"img":"the last bullet","means":"the choice you save for yourself"},
+        {"img":"dust on the horizon","means":"trouble or salvation coming, can't tell which"}
+      ],
+      "deploy":"Frontier imagery is pure mythic-Americana — freedom, violence, and loneliness in wide open space. Perfect for outlaw hearts, restlessness, and reinvention. Pairs with country, folk, and rock.",
+      "cliche_watch":["ride off into the sunset (unless twisted)","this town ain't big enough"]
+    },
+    {
+      "id":"well-prohibition-jazz",
+      "name":"Prohibition & the Jazz Age",
+      "category":"historical-era",
+      "era":"1920s–early '30s",
+      "tone":"glittering, illicit, doomed-glamour, reckless",
+      "evokes":["excess","secrecy","forbidden pleasure","glamour with rot underneath","reinvention","the party before the crash"],
+      "signatures":[
+        {"img":"the speakeasy's hidden door","means":"pleasure you need a password for"},
+        {"img":"bathtub gin","means":"a homemade vice that might blind you"},
+        {"img":"the last dance before the crash","means":"joy on the edge of ruin"},
+        {"img":"a string of pearls","means":"borrowed glamour hiding empty pockets"},
+        {"img":"the getaway car idling","means":"a life ready to bolt at any second"},
+        {"img":"the green light across the bay","means":"a dream you reach for and never touch"},
+        {"img":"the flapper's fringe","means":"defiant, disposable freedom"},
+        {"img":"the bootlegger's promise","means":"a charming man who deals in lies"},
+        {"img":"the smoke-filled backroom","means":"where the real deals get made"},
+        {"img":"the stock ticker going quiet","means":"the moment the good times died"}
+      ],
+      "deploy":"Jazz Age imagery = glamour with rot underneath, the party you know is doomed. Great for reckless love, excess, and bittersweet highs. Cinematic and sensual.",
+      "cliche_watch":["'the roaring twenties' said plainly","Gatsby name-drops"]
+    },
+    {
+      "id":"well-depression-dustbowl",
+      "name":"Great Depression & the Dust Bowl",
+      "category":"historical-era",
+      "era":"1930s America",
+      "tone":"weathered, hungry, dignified, enduring",
+      "evokes":["hardship","endurance","faith","migration","loss of land","dignity in poverty","hope against odds"],
+      "signatures":[
+        {"img":"dust on the horizon","means":"disaster rolling in, slow and total"},
+        {"img":"the bread line","means":"pride swallowed to survive"},
+        {"img":"the family piled in the truck","means":"leaving everything to chase work west"},
+        {"img":"a hole in every pocket","means":"working hard and holding nothing"},
+        {"img":"the bank took the farm","means":"losing the land your name was on"},
+        {"img":"patched knees and a straight back","means":"poverty carried with dignity"},
+        {"img":"one radio, whole town listening","means":"clinging to a shared thread of hope"},
+        {"img":"the last dollar sewn in a coat","means":"a small guarded hope against the worst"},
+        {"img":"riding the rails","means":"chasing survival from town to town"},
+        {"img":"rain that never comes","means":"praying for a mercy the sky won't give"}
+      ],
+      "deploy":"Dust Bowl imagery brings weathered dignity and endurance — hardship faced with a straight back. Strong for songs about struggle, family, and stubborn hope. Woody-Guthrie-adjacent; pairs with folk and Americana.",
+      "cliche_watch":["'hard times' as a plain refrain"]
+    },
+    {
+      "id":"well-film-noir",
+      "name":"Film Noir & Detective",
+      "category":"regional-genre",
+      "era":"1940s–'50s cinema",
+      "tone":"shadowed, cynical, rain-slick, fatalistic",
+      "evokes":["betrayal","desire","doom","secrets","the femme fatale","the city at night","being played"],
+      "signatures":[
+        {"img":"rain-slick neon streets","means":"a city that keeps its secrets wet and bright"},
+        {"img":"the femme fatale","means":"a love that's setting you up"},
+        {"img":"cigarette smoke under a streetlamp","means":"waiting alone for bad news"},
+        {"img":"the long shadow down the alley","means":"a man at the end of his options"},
+        {"img":"the blinds cutting the light","means":"truth you only see in stripes"},
+        {"img":"a one-way ticket out of town","means":"a clean escape that never stays clean"},
+        {"img":"the double-cross","means":"the partner who was against you all along"},
+        {"img":"the payoff in a brown envelope","means":"a soul bought quietly"},
+        {"img":"the dame who walked in","means":"trouble that arrives looking like a rescue"},
+        {"img":"the dead phone line","means":"the moment you realize you're alone in it"}
+      ],
+      "deploy":"Noir is cynical romance in the rain — desire, betrayal, and doom in a nighttime city. Perfect for songs about being played, wanting what's bad for you, and glamorous defeat.",
+      "cliche_watch":["'she was trouble' straight","the trench-coat detective as costume"]
+    },
+    {
+      "id":"well-50s-americana",
+      "name":"1950s Americana",
+      "category":"decade",
+      "era":"post-war 1950s",
+      "tone":"bright surface, teenage, chrome-and-heartbreak, uneasy underneath",
+      "evokes":["young love","innocence","longing","conformity vs rebellion","nostalgia","the drive-in dream"],
+      "signatures":[
+        {"img":"the drive-in movie","means":"first love in the front seat"},
+        {"img":"a letterman jacket","means":"belonging you wear on your sleeve"},
+        {"img":"the malt shop / soda counter","means":"small-town innocence, now gone"},
+        {"img":"cruising the strip","means":"restless youth with nowhere to be"},
+        {"img":"the class ring","means":"a promise too young to keep"},
+        {"img":"chrome fins and a full tank","means":"the open promise of the American car"},
+        {"img":"the sock hop","means":"joy before anyone had to grow up"},
+        {"img":"the picket fence","means":"the dream that felt like a cage"},
+        {"img":"the jukebox in the corner","means":"a nickel's worth of feeling"},
+        {"img":"the duck-and-cover drill","means":"dread humming under the bright surface"}
+      ],
+      "deploy":"50s imagery = bright chrome nostalgia with unease underneath. Great for young love, longing for a lost innocence, and the tension between the picket fence and wanting out.",
+      "cliche_watch":["'the good old days' straight","greaser costume clichés"]
+    },
+    {
+      "id":"well-60s-counterculture",
+      "name":"1960s Counterculture",
+      "category":"decade",
+      "era":"1960s",
+      "tone":"idealistic, electric, searching, on the cusp",
+      "evokes":["revolution","freedom","idealism","awakening","protest","love as politics","the dream and its cost"],
+      "signatures":[
+        {"img":"flowers in gun barrels","means":"gentleness answering violence"},
+        {"img":"the long march / the picket line","means":"putting your body where your belief is"},
+        {"img":"the summer that felt endless","means":"a brief window when anything seemed possible"},
+        {"img":"a bus painted every color","means":"escape and reinvention on the move"},
+        {"img":"burning the draft card","means":"refusing a fate assigned to you"},
+        {"img":"the dream on the mountaintop","means":"a vision of justice glimpsed, not reached"},
+        {"img":"tuning out the static","means":"turning away from a world that lies to you"},
+        {"img":"the candle at the vigil","means":"grief held up as a light"},
+        {"img":"the road trip with no map","means":"freedom as pure forward motion"}
+      ],
+      "deploy":"60s imagery brings idealism and electric hope, shadowed by what it cost. Strong for protest, awakening, and love framed as defiance. Handle real figures/events with a light, respectful touch.",
+      "cliche_watch":["'peace and love' as decoration","tie-dye as shorthand"]
+    },
+    {
+      "id":"well-80s",
+      "name":"1980s",
+      "category":"decade",
+      "era":"1980s",
+      "tone":"neon, synthetic, yearning, big-and-bright",
+      "evokes":["yearning","excess","escape","first heartbreak","nostalgia","chasing the dream","glossy loneliness"],
+      "signatures":[
+        {"img":"neon on wet asphalt","means":"glamour and loneliness in the same glow"},
+        {"img":"the mixtape you made","means":"a whole heart handed over on cassette"},
+        {"img":"a payphone and a pocket of quarters","means":"reaching someone before it was easy"},
+        {"img":"the arcade's blue light","means":"escape by the token, one more life"},
+        {"img":"top down, radio up","means":"outrunning a feeling on the highway"},
+        {"img":"the boombox held up high","means":"a grand, public, hopeless gesture"},
+        {"img":"shoulder pads and armor","means":"dressing tough to survive the decade"},
+        {"img":"the last slow dance in the gym","means":"teenage love under crepe-paper stars"},
+        {"img":"static on the VHS","means":"a memory you keep rewinding"},
+        {"img":"the mall at closing time","means":"a bright empty temple of wanting"}
+      ],
+      "deploy":"80s imagery is neon yearning — big feelings, synthetic glow, escape on the highway. Great for nostalgia, first heartbreak, and glossy loneliness. Pairs naturally with synth-pop and driving choruses.",
+      "cliche_watch":["'like a movie' straight","generic 'neon dreams'"]
+    },
+    {
+      "id":"well-90s-nostalgia",
+      "name":"1990s Nostalgia",
+      "category":"decade",
+      "era":"1990s",
+      "tone":"lo-fi, earnest, slacker-tender, pre-internet ache",
+      "evokes":["nostalgia","young friendship","first love","boredom-as-freedom","analog memory","growing up before the feed"],
+      "signatures":[
+        {"img":"dial-up handshake","means":"the sound of the world slowly opening"},
+        {"img":"rewinding the tape / 'be kind, rewind'","means":"having to earn a memory back"},
+        {"img":"the mixtape with the hand-drawn cover","means":"love that took two hours to record"},
+        {"img":"a Tamagotchi you kept alive","means":"small tender responsibility"},
+        {"img":"the busy signal","means":"a person you simply couldn't reach"},
+        {"img":"passing a note folded into a triangle","means":"a secret you could hold in your hand"},
+        {"img":"the disposable camera","means":"27 tries and you wouldn't see them for a week"},
+        {"img":"blowing into the cartridge","means":"faith that a little effort would fix it"},
+        {"img":"the landline cord stretched down the hall","means":"privacy fought for, whispered for"},
+        {"img":"the mall food court after school","means":"a whole social life in fluorescent light"},
+        {"img":"the away message","means":"saying how you feel without saying it to them"},
+        {"img":"the last day before summer","means":"freedom that felt like it would last forever"}
+      ],
+      "deploy":"90s imagery is analog-tender: earnest, lo-fi, the last era before everything was instant. Perfect for nostalgia, young friendship, and first love that took effort to reach. The friction (busy signals, rewinding, waiting) IS the romance.",
+      "cliche_watch":["'the good old days' straight","just listing brand names for their own sake"]
+    },
+    {
+      "id":"well-y2k-2000s",
+      "name":"2000s / Y2K",
+      "category":"decade",
+      "era":"early 2000s",
+      "tone":"glossy, digital-dawn, hyper, bittersweet-online",
+      "evokes":["early internet love","reinvention","gloss and anxiety","coming of age online","millennium dread and hope"],
+      "signatures":[
+        {"img":"the away message that was really for one person","means":"a public post meant privately"},
+        {"img":"burning a CD for someone","means":"a mixtape for the digital age"},
+        {"img":"the flip phone snapped shut","means":"ending a call with punctuation"},
+        {"img":"low battery, one bar","means":"a connection about to drop"},
+        {"img":"the top-8 friends list","means":"love and status ranked in public"},
+        {"img":"Y2K midnight","means":"waiting for an ending that didn't come"},
+        {"img":"the buffering wheel","means":"wanting something that won't quite load"},
+        {"img":"frosted tips and butterfly clips","means":"trying on an identity that won't age well"},
+        {"img":"film-to-pixel crossover","means":"the last of film meeting the first of digital"},
+        {"img":"the chatroom full of strangers","means":"a room of strangers who felt like home"}
+      ],
+      "deploy":"Y2K imagery = the digital dawn, glossy and anxious. Good for coming-of-age-online, early internet love, and reinvention. Bittersweet because it's the moment before the feed swallowed everything.",
+      "cliche_watch":["overloading on brand nostalgia","'it's so Y2K' as a wink"]
+    },
+    {
+      "id":"well-southern-gothic",
+      "name":"Southern Gothic",
+      "category":"regional-genre",
+      "era":"American South, timeless",
+      "tone":"humid, haunted, sacred-and-sinful, decaying-grand",
+      "evokes":["guilt","sin and salvation","family curses","heat","ghosts","decay","redemption in the mud"],
+      "signatures":[
+        {"img":"kudzu swallowing the house","means":"the past overgrowing the present"},
+        {"img":"the revival tent","means":"salvation sold under canvas, sweat and hope"},
+        {"img":"the river baptism","means":"trying to wash a sin off in brown water"},
+        {"img":"cicadas screaming in the heat","means":"tension that won't let up"},
+        {"img":"the family plot out back","means":"the dead you live on top of"},
+        {"img":"the porch light and the moths","means":"small hope circled by hungry things"},
+        {"img":"whiskey and hymns","means":"sin and salvation drunk from the same cup"},
+        {"img":"the crossroads at midnight","means":"a bargain with something you can't name"},
+        {"img":"the crumbling grand house","means":"grandeur rotting on a rotten foundation"},
+        {"img":"Sunday clothes over Saturday sins","means":"piety worn thin over what you did"}
+      ],
+      "deploy":"Southern Gothic braids the sacred and the sinful in humid, haunted air. Powerful for guilt, redemption, family curses, and heat. Pairs with country, blues, and slow-burn ballads.",
+      "cliche_watch":["'devil at the crossroads' overused","magnolia-and-moonlight as decoration"]
+    },
+    {
+      "id":"well-blues-gospel",
+      "name":"Blues & Gospel Tradition",
+      "category":"regional-genre",
+      "era":"American South, early 20th c. onward",
+      "tone":"aching, rooted, call-and-response, sacred-and-secular",
+      "evokes":["heartache","hard travel","faith","temptation","deliverance","the road","trouble and grace"],
+      "signatures":[
+        {"img":"the crossroads bargain","means":"trading your soul for the gift"},
+        {"img":"the midnight train","means":"leaving trouble, carrying it with you"},
+        {"img":"the hellhound on your trail","means":"a doom that keeps pace with you"},
+        {"img":"the river as Jordan","means":"crossing over to the other side / freedom / death"},
+        {"img":"the mojo hand","means":"a charm to turn your luck"},
+        {"img":"a mansion on the hill you'll never own","means":"the reward that stays out of reach"},
+        {"img":"the levee about to break","means":"a pressure that will flood everything"},
+        {"img":"the wayfaring stranger","means":"a soul just passing through this world of woe"},
+        {"img":"the empty bed at daybreak","means":"the plainest shape of the blues"},
+        {"img":"wade in the water","means":"trouble crossed on faith"}
+      ],
+      "deploy":"Blues and gospel imagery is the root of American song — trouble and grace in the same breath, sacred and secular blurred. Great for heartache, hard travel, and deliverance. Use with respect for the tradition.",
+      "cliche_watch":["'sold my soul at the crossroads' overused","'woke up this morning' as a lazy opener"]
+    },
+    {
+      "id":"well-nautical",
+      "name":"Nautical & Seafaring",
+      "category":"domain",
+      "era":"age of sail / timeless",
+      "tone":"vast, lonesome, fated, elemental",
+      "evokes":["longing","distance","danger","home far away","fate","being lost","the pull of the deep"],
+      "signatures":[
+        {"img":"the siren on the rocks","means":"a beautiful call toward wreckage"},
+        {"img":"the lighthouse / the beam","means":"a guide home you can see but not reach"},
+        {"img":"the anchor / dropping anchor","means":"weight that holds you, for good or ill"},
+        {"img":"the sailor's wife at the window","means":"a love that is mostly waiting"},
+        {"img":"the storm off the bow","means":"trouble you can see coming and can't avoid"},
+        {"img":"the message in a bottle","means":"a plea sent out with no promise of arrival"},
+        {"img":"the ship on the horizon","means":"a hope or a leaving, growing small"},
+        {"img":"the whale / the deep","means":"an obsession or grief too big to hold"},
+        {"img":"the last lifeboat","means":"a rescue that can't take everyone"},
+        {"img":"the tide going out","means":"a love or a chance quietly withdrawing"}
+      ],
+      "deploy":"Sea imagery is vast and lonesome — perfect for distance, longing, and fate too big to fight. The lighthouse (guidance just out of reach) and the tide (love withdrawing) are especially strong. Pairs with folk and swelling ballads.",
+      "cliche_watch":["'lost at sea' straight","'my anchor' as a plain compliment"]
+    },
+    {
+      "id":"well-space-cosmic",
+      "name":"Space Race & Cosmic",
+      "category":"cosmic",
+      "era":"1960s space age / timeless sky",
+      "tone":"awed, lonely, infinite, yearning-upward",
+      "evokes":["distance","insignificance and wonder","longing","isolation","reaching","the void","fate written in stars"],
+      "signatures":[
+        {"img":"the last radio contact","means":"a voice fading into the dark"},
+        {"img":"orbit / circling and never landing","means":"staying close but never touching"},
+        {"img":"the flag on a dead moon","means":"a triumph planted somewhere lifeless"},
+        {"img":"a light from a star already gone","means":"loving something that no longer exists"},
+        {"img":"escape velocity","means":"the speed it takes to finally leave for good"},
+        {"img":"the countdown","means":"a point past which there's no aborting"},
+        {"img":"the blue marble from far away","means":"seeing home whole and unreachable"},
+        {"img":"the black between the stars","means":"the loneliness the wonder is set against"},
+        {"img":"a satellite still transmitting to no one","means":"devotion that outlives its purpose"},
+        {"img":"gravity / falling toward each other","means":"a pull you can't argue with"}
+      ],
+      "deploy":"Cosmic imagery makes a feeling vast and lonely at once — great for distance, longing, and awe. 'Light from a dead star' (loving what's gone) and 'orbit' (close but never touching) are rich, fresh moves. Pairs with spacious, reverb-heavy production.",
+      "cliche_watch":["'you're my whole universe' straight","'shoot for the stars'"]
+    },
+    {
+      "id":"well-nature-seasons",
+      "name":"Nature, Seasons & the Pastoral",
+      "category":"nature",
+      "era":"timeless",
+      "tone":"cyclical, tender, elemental, quietly wise",
+      "evokes":["change","grief","renewal","time passing","love growing or dying","memory","the body's seasons"],
+      "signatures":[
+        {"img":"the first frost","means":"the moment warmth turns to endings"},
+        {"img":"the last leaf holding on","means":"stubborn hope against the season"},
+        {"img":"the river that never passes the same way","means":"a moment you can't step in twice"},
+        {"img":"the harvest coming due","means":"reaping a life's choices"},
+        {"img":"the drought and the long-prayed-for rain","means":"an ache and its relief"},
+        {"img":"the tide and the moon","means":"a pull that governs you from far away"},
+        {"img":"the wildfire that clears for new growth","means":"destruction that makes room"},
+        {"img":"the migrating birds","means":"the instinct to leave and to return"},
+        {"img":"the seed under the snow","means":"life waiting out a cold season"},
+        {"img":"the tree ring / the scar in the wood","means":"a hard year written into you for good"}
+      ],
+      "deploy":"Nature imagery carries change and grief gently, through cycles. Seasons map onto love and time without you having to explain. 'Last leaf holding on' and 'seed under the snow' are quietly powerful. Universal and always singable.",
+      "cliche_watch":["'weather the storm' straight","'new day, new dawn' clichés"]
+    }
+  ]
+}
 `,
       },
     ],
@@ -38010,6 +39041,252 @@ Observed result:
 URL or evidence:
 Timestamp:
 \`\`\`
+`,
+      },
+    ],
+  },
+  {
+    slug: "song-excavator",
+    files: [
+      {
+        path: "engine/engine.json",
+        content: `{
+  "meta": {
+    "name": "The Excavator — Find the Song in Them",
+    "version": "1.0.0",
+    "updated": "2026-07-07",
+    "purpose": "A perception engine that finds 'the song' in a writer — not by digging only into their trauma, but by changing how they SEE. It comes at inspiration from an angle they'd never pick: sometimes excavating a buried, specific truth; sometimes making the ordinary strange; sometimes colliding two unrelated worlds; sometimes rupturing the polite frame to reach the unsayable. The ethos: bypass the 'what should I write about' filter and surface the specific, true, slightly-dangerous thing that's right under their nose — then hand it back as a song.",
+    "founding_story": "A kid said he had nothing to write about. Asked 'what's the last thing you gave up or cut from your life?' he said 'watching porn.' Answer: 'There's your song — I Quit Watching Porn Today.' That's the whole thesis: an oblique question bypasses the blank page and surfaces a specific, confessional, song-worthy truth the writer was sitting on. The reflect-it-back move ('there's your song') is the capstone.",
+    "design": "Four LENS FAMILIES (Inward/Outward/Lateral/Provoke), each a way of seeing. The agent picks the ORTHOGONAL lens on purpose — sensing where the writer would go and handing them a different door. Moves are not all questions: also provocations, dares, collisions, reframes, personas, pattern-mirrors, found objects, sensory cues, reflections. Built from researched creativity + elicitation methods (sources credited per lens).",
+    "field_guide": {
+      "families": "the four ways of seeing",
+      "move_types": "the modalities the agent works in — questions are only one gear",
+      "lenses": "the operators; each has a source (the method distilled), a mechanism, the move, and songwriter-facing example prompts",
+      "dig_dynamics": "how to run a live dig once material starts surfacing",
+      "reflect_move": "the capstone: turning the writer's answer into a title / first line ('there's your song')",
+      "calibration": "how to choose lenses and read the writer",
+      "safety": "evocative, NOT therapy — the ethics of prying with care"
+    }
+  },
+  "families": [
+    {"id":"inward","name":"Inward — Excavate","gist":"Dig the specific, charged truth already in them. Not 'what hurt you' — the exact sensory, confessional, patterned detail they've never named."},
+    {"id":"outward","name":"Outward — Observe","gist":"Find the song hiding in plain sight: the object, the stranger, the overlooked background, the ordinary made strange. The song is already in the room."},
+    {"id":"lateral","name":"Lateral — Collide","gist":"Come at it sideways. Smash two unrelated worlds, strip a feeling to its atoms, invert a single dial, let chance pick the angle."},
+    {"id":"provoke","name":"Provoke — Rupture","gist":"Break the safe, polite frame. Say the unsayable, take the villain's side, obey a brutal constraint, honor the embarrassing error."}
+  ],
+  "move_types": [
+    {"id":"question","name":"Question","desc":"An oblique, open question that bypasses the rehearsed answer."},
+    {"id":"provocation","name":"Provocation","desc":"An absurd or false statement to move forward FROM, not to defend (de Bono's PO)."},
+    {"id":"dare","name":"Dare / Constraint","desc":"A hard rule the writer must obey — the limit forces invention."},
+    {"id":"collision","name":"Collision","desc":"Force two unrelated things (or a random word) into the subject."},
+    {"id":"reframe","name":"Reframe","desc":"Re-see the same material through a new vantage or vocabulary."},
+    {"id":"persona","name":"Persona","desc":"Hand the writer a POV that isn't theirs so they can finally say it."},
+    {"id":"pattern-mirror","name":"Pattern-mirror","desc":"Reflect a recurring pattern in their own life back at them."},
+    {"id":"found-object","name":"Found object","desc":"Point them at real material — a photo, a text, an overheard line — to write from."},
+    {"id":"sensory-cue","name":"Sensory cue","desc":"Cue a specific sense at a specific time to retrieve a concrete scene."},
+    {"id":"reflection","name":"Reflection","desc":"Restate the meaning of what they said as a statement, then wait — the correction is the gold."},
+    {"id":"scale","name":"Scale","desc":"Turn a vague feeling into a number, then interrogate the gap ('why a 7 not a 3')."}
+  ],
+  "lenses": [
+    {"id":"sense-time-cue","family":"inward","name":"The Sense at a Certain Age","source":"Pattison object writing + autobiographical-memory / Proust phenomenon","mechanism":"Specific multi-sensory, time-anchored cues retrieve specific vivid memories; smell is the most potent, direct line to emotion.","move":"Cue one specific sense at a specific age, then walk them into the scene it retrieves.","prompts":["Name the smell that instantly puts you back at seventeen. Whose house, what room, who's about to walk in?","What sound from your teens would you know in half a second — and the first time it meant something?"],"best_for":"a blank page; nostalgia; getting concrete fast"},
+    {"id":"hidden-senses","family":"inward","name":"The Two Hidden Senses","source":"Pattison (organic + kinesthetic senses)","mechanism":"Emotion lives in inner-body sensation (heartbeat, stomach-drop, breath) and motion/orientation (swaying, bracing, falling), not in scenery.","move":"Ask where in the body they felt it, and whether the motion was leaning-in or bracing.","prompts":["Forget what it meant — where did you feel it: throat, chest, stomach? Report the exact sensation, don't explain it.","You're back on that drive. Was your body leaning into the turn or bracing against it? Give me the motion."],"best_for":"turning a stated feeling into physical, un-clichéd writing"},
+    {"id":"abstract-to-concrete","family":"inward","name":"Not the Category, the Instance","source":"Interview craft + Motivational Interviewing","mechanism":"Vague prompts get vague clichés; demanding the specific instance unlocks the real, vivid story.","move":"Refuse the abstraction; demand the single worst/exact moment.","prompts":["Not 'the breakup' — the most frustrating single moment, the second you thought I can't do this anymore. When exactly?","Don't tell me you were lonely. Tell me the one thing you did that proved it."],"best_for":"when answers stay general and safe"},
+    {"id":"oblique-confession","family":"inward","name":"The Sidestep Confession","source":"Proust Questionnaire","mechanism":"Oblique introspective prompts bypass the defended public self and reveal true character through preference and confession.","move":"Ask the confession question that sidesteps the guarded one.","prompts":["What's the trait you most deplore in yourself — the one you keep editing out of your bio?","If the house was burning, what's the one thing you'd grab that would embarrass you to admit?"],"best_for":"reaching real self past the rehearsed answer"},
+    {"id":"scaling-gap","family":"inward","name":"Why a 7 and Not a 3","source":"Motivational Interviewing (scaling questions)","mechanism":"Turning a vague feeling into a number, then interrogating the gap, forces them to articulate what the feeling is actually made of.","move":"Scale it 0–10, then dig the gap between their number and a lower one.","prompts":["0 to 10, how much do you still want them back? … A 6. What's the 6 made of — and what's the missing 4?","How much does it still sting, 0–10? Why that high and not half that?"],"best_for":"quantifying and then unpacking a mixed feeling"},
+    {"id":"evocative-argue","family":"inward","name":"Argue the Song Into Existence","source":"Motivational Interviewing (evoking change talk)","mechanism":"People commit harder to material they argue for themselves than to what you name for them.","move":"Ask an evocative question whose answer is their own case for the song.","prompts":["What has to be true in this song for you to feel like you finally told the truth?","What's the risk if you never say this — and what happens if you do?"],"best_for":"finding why THIS song matters to them"},
+    {"id":"life-pattern","family":"inward","name":"The Pattern You Keep Living","source":"Excavator ethos (pattern-mirror)","mechanism":"A recurring mistake, lie, or role across a life is a truer subject than any single event — and it's usually invisible to the person living it.","move":"Name the repetition back to them and ask what it is.","prompts":["You've told the same lie in three relationships. What is it?","What's the argument you keep having with different people — the one that's actually with yourself?"],"best_for":"the deeper song under the surface story"},
+    {"id":"reminiscence-bump","family":"inward","name":"Mine the Bump (14–25)","source":"Reminiscence-bump memory research","mechanism":"Vivid autobiographical memories cluster in the identity-forming years (~10–30); it's the richest seam of first loves, first losses, formative rooms.","move":"Aim a time-anchored prompt straight at their teens/early twenties.","prompts":["Who was the first person who made you feel like a stranger in your own house?","What room from when you were nineteen could you still draw the floor plan of — and why that one?"],"best_for":"formative material, coming-of-age songs"},
+    {"id":"state-first","family":"inward","name":"Feeling First, Then Memory","source":"State-dependent memory","mechanism":"Being in an emotional state helps retrieve other events tagged with that same feeling; get them into the key, then ask.","move":"Get them back into the exact feeling, then ask for the first memory that surfaces from inside it.","prompts":["Get back into how it actually felt — not the story you tell now. From that exact feeling, what's the first memory that surfaces?","Sit in the anger for ten seconds. Now — what's the oldest thing it reminds you of?"],"best_for":"accessing memories that match the song's emotional key"},
+    {"id":"strip-the-name","family":"outward","name":"Strip the Name","source":"Shklovsky — defamiliarization / ostranenie","mechanism":"Habit stops us seeing what we know too well; refusing the word forces a re-encounter ('make the stone stony').","move":"Describe the subject only by sensation and function — never using the word for it.","prompts":["Write the chorus about your phone as a small glowing god you consult a hundred times a day that never once looks back.","Describe your morning coffee as if you'd never seen a human drink — a warm dark liquid they cradle like something wounded. Never say 'coffee.'"],"best_for":"making an over-familiar subject strange and new"},
+    {"id":"swap-the-perceiver","family":"outward","name":"Swap the Perceiver","source":"Shklovsky / Tolstoy's horse POV","mechanism":"Giving the point of view to a non-human, object, or outsider does the estranging automatically — ritual and ownership suddenly look absurd.","move":"Hand the POV to an object, an animal, an alien, or the room.","prompts":["Narrate the end of your relationship from the POV of the doorway you both kept walking through. Only what the doorway saw.","Tell your worst night from your dog's point of view — it doesn't understand the words, only the change in the air."],"best_for":"a fresh angle on an emotional scene"},
+    {"id":"overlooked-background","family":"outward","name":"Write the Background","source":"Phenomenology of attention / Mary Oliver","mechanism":"Attention always overlooks something; the unclaimed background detail is instantly specific and unclichéd.","move":"Ignore the main event; write only what the scene is NOT about.","prompts":["In the scene of the breakup, ignore the breakup. Write only the fridge hum, the muzak, the one moth at the porch light.","At the funeral, don't write the grief. Write what the caterer was doing."],"best_for":"specificity; sidestepping a too-big subject"},
+    {"id":"astonishment-hunt","family":"outward","name":"The Astonishment Hunt","source":"Mary Oliver / beginner's mind","mechanism":"Staring at the mundane until it stuns you reopens perception; one noticed detail pulls the next ('notice more and more').","move":"Make them stare at the most boring object until it astonishes them, then follow the chain.","prompts":["Pick the most boring object in your room. Don't stop looking until it astonishes you — the dust holding light, the crack that's been widening a year. Start there.","What's the most ordinary thing you saw today that, looked at long enough, would break your heart?"],"best_for":"generating a first image from nothing"},
+    {"id":"message-from-ordinary","family":"outward","name":"A Message Addressed to You","source":"Rick Rubin — The Creative Act","mechanism":"Treating the day's small anomaly as a signal meant only for you turns passive noticing into a prompt with built-in narrative charge.","move":"Take the day's small anomaly and write the reply, as if it were sent to you.","prompts":["A stranger held a door, a bird hit the window, a book fell open — treat today's small odd thing as a message meant only for you. Write the answer.","What did the world do today that felt like it was trying to tell you something? Say what it said."],"best_for":"turning an ordinary day into a song"},
+    {"id":"the-object","family":"outward","name":"The Thing You Kept","source":"Object writing + folk tradition","mechanism":"A kept object you should have thrown away is a compressed story with built-in contradiction and testimony.","move":"Find the object they kept against reason and let it testify.","prompts":["What's the one thing you kept that you should've thrown out? Let it tell the story of why it's still in the drawer.","Whose hoodie, ticket stub, or voicemail have you not deleted? Write from the object's refusal to leave."],"best_for":"a concrete anchor for a memory song"},
+    {"id":"the-stranger","family":"outward","name":"The Stranger Who Marked You","source":"Excavator ethos (found person)","mechanism":"A person you'll never see again who altered your day carries mystery and universality at once.","move":"Find the one-time stranger who wrecked or made a day.","prompts":["Who's a stranger you'll never see again who changed how a whole day felt? What did they do?","Whose face from a crowd do you still, inexplicably, remember? Write toward why."],"best_for":"mystery, longing, small-encounter songs"},
+    {"id":"the-overheard","family":"outward","name":"The Overheard Line","source":"Found text / cut-up","mechanism":"A line overheard or misheard arrives free of your own frame and often carries an accidental, uncanny truth.","move":"Build from a line they overheard or misheard.","prompts":["What's the last thing you overheard a stranger say that stuck with you? Make it the title.","What song lyric or phrase have you been mishearing for years? Write the song your wrong version is secretly about."],"best_for":"a fresh title or hook seed"},
+    {"id":"mundane-monument","family":"outward","name":"The Mundane Monument","source":"Kanye ethos / defamiliarization","mechanism":"Declaring something trivial monumental (the croissant, the nothing) forces the writer to find the real weight inside the small.","move":"Take something tiny and treat it with the gravity of the sacred.","prompts":["Write about doing the dishes tonight as if it were the most important thing you will ever do. Find out why it might be.","Give a two-dollar object the reverence of a relic. What does it actually hold?"],"best_for":"making the small enormous; wry-but-true songs"},
+    {"id":"random-entry","family":"lateral","name":"Random Entry","source":"de Bono — lateral thinking","mechanism":"Injecting an unrelated concrete noun and forcing a bridge drags the subject into an angle direct analysis never reaches.","move":"Drop a random noun into the song and make it load-bearing.","prompts":["Open a dictionary blind and land on a noun — ballast, switchboard, linoleum. Make it the central image of a love song.","Pick the third object you can see right now. It's the secret subject of the song about your father. Go."],"best_for":"breaking out of an obvious image set"},
+    {"id":"po-provocation","family":"lateral","name":"PO — Move Forward From the Impossible","source":"de Bono — provocation operation","mechanism":"Stating something false/impossible as a stepping-stone (not a truth) and harvesting the consequence reaches ideas judgment would block. Engines: reversal, escape, exaggeration, wishful.","move":"Assert an impossible premise about the subject and move forward from it.","prompts":["PO: the breakup happened in reverse — you met at its funeral and grew younger together. Write from there.","PO: this song has no chorus and no 'you.' What's left, and why does it still ache?"],"best_for":"escaping the default shape of the song"},
+    {"id":"first-principles-emotion","family":"lateral","name":"Delete the Emotion-Word","source":"First-principles reasoning (the Elon lens)","mechanism":"Refusing the inherited label ('sad,' 'in love') and rebuilding the state from physical evidence produces un-clichéd emotional writing almost automatically.","move":"Ban the feeling-word; rebuild the state from its raw atoms.","prompts":["Don't write 'lonely.' Give me only the evidence: two cups set from habit, the radio on for company, your thumb over a name you won't call. Build the chorus from the cups.","Reduce 'I miss you' to fundamentals — a weight that isn't there when you lean back, a joke with no one to land on. Write about the specific absent weight."],"best_for":"honest emotion without clichés"},
+    {"id":"name-the-unnamed","family":"lateral","name":"Name the Un-Named Feeling","source":"First-principles reasoning","mechanism":"The gap between the raw fact and the story you bolted onto it holds a compound emotion with no clean word yet — and that is the fresh subject.","move":"Reassemble the atoms into a feeling that has no word, and make THAT the song.","prompts":["What's the exact feeling of being relieved a hard thing ended and grieving it at once? Don't name it — build it, and let the song be its definition.","Describe the feeling you get that no existing word covers. The song's job is to be the word."],"best_for":"an original emotional subject"},
+    {"id":"domain-collision","family":"lateral","name":"Say It in the Wrong Language","source":"Morphological / cut-up / Kanye sampling","mechanism":"Forcing a subject into an unrelated vocabulary generates uncanny, exact metaphors intuition would never volunteer.","move":"Write X entirely in the vocabulary of an unrelated Y.","prompts":["Write your divorce in the language of a car-recall notice. 'Under certain conditions the component may fail without warning.'","Describe falling in love as a weather forecast, a terms-of-service agreement, or a crime-scene report. Pick the one that scares you."],"best_for":"fresh metaphor; wit with a wound under it"},
+    {"id":"improbable-intersection","family":"lateral","name":"The Cell No One Would Pick","source":"Morphological analysis (Zwicky box)","mechanism":"Spinning independent axes and committing to the improbable combination lands you where no intuition would go on purpose.","move":"Spin narrator × setting × object × what's-withheld, then commit to the cell that feels most wrong.","prompts":["Roll it: narrator = a night-shift nurse · setting = a flooded parking garage · emotion = relief · object = a losing lottery ticket. Find the song that only exists at that crossing.","Keep your subject; spin only 'what's withheld.' What if the one thing the song refuses to say is the narrator's own name?"],"best_for":"a wholly unexpected premise"},
+    {"id":"cut-up","family":"lateral","name":"Cut It Up","source":"Burroughs / Gysin / Bowie","mechanism":"Slicing your own draft plus a stolen text and reassembling blind introduces the spontaneous factor and ignites unexpected juxtapositions.","move":"Cut a draft plus a found text into lines, shuffle, and keep the collisions.","prompts":["Print your verse and a random news paragraph. Cut both into single lines, shuffle face-down, lay the first eight. Keep whatever sparks.","Take last night's text thread and a psalm. Interleave them line by line. What's the song in the seam?"],"best_for":"jolting a stale draft; surprising lines"},
+    {"id":"axis-inversion","family":"lateral","name":"Flip One Dial","source":"SCAMPER (reverse) / Oblique Strategies","mechanism":"Inverting a single variable while changing nothing else re-lights the whole song.","move":"Flip exactly one dial — POV, blame, time-direction, or power — and leave the rest.","prompts":["Rewrite the song with the blame reversed: you were the villain the whole time. Change nothing else.","Tell it backwards — start at the last goodbye and move toward the first hello."],"best_for":"reviving a draft that feels flat or one-sided"},
+    {"id":"scale-jump","family":"lateral","name":"The Scale Jump","source":"First-principles / Rubin / the cosmic-personal lens","mechanism":"Zooming a trivial moment to cosmic scale (or a cosmic fact to a kitchen) exposes the stakes hiding in the ordinary.","move":"Jam the personal against the cosmic, or the cosmic against the domestic.","prompts":["You'll be dead in sixty years. Write about doing the dishes tonight.","The universe is 13 billion years old and you're upset about a text. Write the song that takes both facts completely seriously."],"best_for":"finding weight in a small moment"},
+    {"id":"honor-the-error","family":"provoke","name":"Honor the Error","source":"Oblique Strategies (Eno/Schmidt)","mechanism":"Treating the draft's worst or most embarrassing line as a hidden intention turns a flaw into the true center.","move":"Take the worst/most embarrassing line and build the whole song to arrive at it.","prompts":["What's the most embarrassing line in your draft — the one you'd cut first? That's the title. Build toward it.","Your throwaway line, the dumb one you almost deleted, is the actual hook. Prove it."],"best_for":"unsticking a draft; finding the real center"},
+    {"id":"say-the-unsayable","family":"provoke","name":"The Unsayable","source":"Excavator ethos / confession research","mechanism":"The true thing people don't say out loud carries the most charge; naming it is the song.","move":"Ask for the meanest/truest thing they've never said aloud.","prompts":["What's the meanest true thing you've never said to someone you love? Say it here first.","What do you think at 3am that you'd never admit in daylight?"],"best_for":"high-charge, confessional songs"},
+    {"id":"villains-side","family":"provoke","name":"Take the Villain's Side","source":"Reframe / persona","mechanism":"Defending the indefensible or inhabiting the antagonist reveals the complexity that makes a song true rather than righteous.","move":"Hand them the antagonist's POV and make them defend it.","prompts":["Write the breakup from the POV of the one who left — and make them right.","Defend the person everyone agrees was the bad guy. What did the world never see?"],"best_for":"depth, empathy, moral complexity"},
+    {"id":"ego-declaration","family":"provoke","name":"The Ego Declaration","source":"Kanye ethos","mechanism":"Stating your grandest or ugliest self-belief flat-out, without apology, unlocks a voice most writers censor.","move":"Have them declare the biggest (or ugliest) thing they secretly believe about themselves, deadpan.","prompts":["Finish this and mean it: 'The truth about me that I'd never post is ___.' Now say it like it's scripture.","What do you believe you deserve that you'd be ashamed to say out loud? Declare it."],"best_for":"anthems; voice; unapologetic songs"},
+    {"id":"the-dare","family":"provoke","name":"The Dare / Hard Constraint","source":"Oblique Strategies / constraint craft","mechanism":"A brutal limit forces invention the open field never would.","move":"Impose one hard rule they must obey.","prompts":["Write the whole song using only words a six-year-old knows.","One image. The entire song is one image, held and turned. No second subject allowed."],"best_for":"forcing focus and freshness"},
+    {"id":"editor-bypass","family":"provoke","name":"Outrun the Editor","source":"Surrealism — automatic writing (Breton)","mechanism":"Writing faster than you can judge lets lines foreign to conscious thought surface; then you mine the wreckage.","move":"Make them write at un-re-readable speed, then underline the words they'd be embarrassed to have meant.","prompts":["300 words on this in four minutes. No stopping, no re-reading. Then highlight the six words you'd be embarrassed to have written on purpose — that's the lyric.","Answer out loud before you can think: the song is secretly about ___."],"best_for":"beating the inner critic; raw material"},
+    {"id":"withhold-the-center","family":"provoke","name":"Withhold the Center","source":"SCAMPER (eliminate) / Oblique Strategies","mechanism":"Removing the very thing the song is 'about' makes its absence carry the weight — the shape of the missing thing is louder than naming it.","move":"Remove the name, the event, or the feeling-word and let the gap do the work.","prompts":["Write the grief song without ever mentioning the death, the person, or the word 'gone.' Only the after.","Never name what you lost. Make me feel its exact shape by everything around the hole."],"best_for":"restraint; devastating understatement"},
+    {"id":"the-obsession","family":"provoke","name":"Your Obsession Is the Single","source":"Excavator ethos / Rubin (passion as signal)","mechanism":"What you'd bore a friend ranting about is your real subject — the heat is the compass, not the therapy.","move":"Ask what they can't shut up about, and point at it.","prompts":["What would you rant about for an hour that nobody asked about? That's the single, not the therapy.","What's the take you defend too hard? The song is under the thing you're overreacting to."],"best_for":"finding a subject with real personal fuel"},
+    {"id":"the-subtraction","family":"provoke","name":"The Subtraction (the founding lever)","source":"Excavator founding story","mechanism":"The last thing you gave up, cut, or hide is a specific noun with a built-in before/after — an instant title and a confession in one.","move":"Ask for the thing they quit, cut, or hide — and name it plainly.","prompts":["What's the last thing you gave up or cut out of your life? (Whatever they say — that's the song. 'I Quit ___ Today.')","What do you do that you'd never tell your mother? Name it flat. That's the first line."],"best_for":"the classic blank-page break; confessional titles"}
+  ],
+  "dig_dynamics": [
+    {"id":"follow-heat","name":"Follow the heat","rule":"Watch for the energy spike — the tangent they light up on, the detail they linger on, the voice that quickens. Drop your script and chase THAT. Emotional arousal marks live material."},
+    {"id":"mirror-words","name":"Mirror their exact words","rule":"Note the 2–3 words they keep using and feed those exact words back — not synonyms. Their language becomes the song's language and proves you're listening."},
+    {"id":"abstract-concrete","name":"Abstract → concrete, always","rule":"Never accept the category; demand the instance. Not 'it was hard' but 'which day, what did you actually say, what was in the room.'"},
+    {"id":"one-at-a-time","name":"One question at a time","rule":"Ask, then shut up. Stacked questions let people dodge to the easy part. Let the silence after a question do the work."},
+    {"id":"reflect-wait","name":"Reflect, then wait","rule":"Restate the underlying meaning as a statement ('So it wasn't the leaving — it was that nobody noticed you'd gone') and let them correct it. The correction is often the truest line."},
+    {"id":"escalate-tiers","name":"Escalate in earned tiers","rule":"Open warm/playful, step into charged material only once rapport is built. Never lead with the deepest wound; earn depth, don't demand it (Aron)."},
+    {"id":"state-then-ask","name":"Get them into the feeling first","rule":"State-dependent memory: use tone and framing to bring the feeling up, THEN ask for the memory, so retrieval matches the song's emotional key."},
+    {"id":"affirm-risk","name":"Affirm the risk they took","rule":"When they disclose something raw, acknowledge it before mining it. It's ethical and it licenses more disclosure."},
+    {"id":"pick-orthogonal","name":"Pick the lens they wouldn't","rule":"The intelligence of the tool is choosing the orthogonal angle on purpose — sense they'd write a sad ballad and hand them the recall notice. Surprise is the product."}
+  ],
+  "reflect_move": {
+    "name": "There's Your Song (the capstone)",
+    "what": "The move that closes a dig: take the writer's own answer and hand it back as a title or first line, so they SEE the song hiding in what they just said.",
+    "how": ["Listen for the phrase with the most specific, confessional charge — usually a concrete noun or an exact sentence they said plainly.","Reflect it straight back as a title or opening line, in THEIR words, with conviction: 'There's your song — <line>.'","Don't over-polish it in the moment; the rawness is the point. Show them it was already there.","Then, if they want, hand it to the rest of the toolkit: References for color, Impact Phrases for the punch, hook-writer to build the hook."],
+    "example": "Writer: 'I guess... I stopped watching porn.' → 'There's your song: I Quit Watching Porn Today.'"
+  },
+  "calibration": [
+    {"id":"read-then-pick","name":"Read the writer, then pick the family","note":"Blank page with no material → start Outward or Provoke (Subtraction, the Object, Random Entry) to generate from nothing. A charged story already on the table → go Inward to get specific. A flat/derivative draft → go Lateral to re-see it."},
+    {"id":"one-door","name":"One door at a time","note":"Offer one lens, not a menu. A single sharp provocation beats a list; the list is for you, not them."},
+    {"id":"range-not-rut","name":"Range, not a rut","note":"Deliberately vary families across a session so it never becomes 'the trauma interview.' If the last three were Inward, throw a Lateral collision."},
+    {"id":"heat-over-plan","name":"Heat over plan","note":"If a lens strikes a nerve, abandon the plan and dig there. The map serves the moment, not the reverse."}
+  ],
+  "safety": [
+    {"id":"art-not-therapy","name":"Evocative, not therapy","rule":"The goal is surfacing song material, not processing trauma. Don't diagnose, interpret, or push someone to 'work through' pain. Collaborator, not clinician."},
+    {"id":"earn-depth","name":"Earn depth, never demand it","rule":"Build rapport in tiers; never open with the deepest wound. Invited vulnerability feels like trust; demanded vulnerability feels unsafe."},
+    {"id":"honor-pass","name":"Honor the pass","rule":"The writer steers. Offer, don't insist. A deflection or silence is a boundary — accept it, widen the aperture, or offer a lighter door."},
+    {"id":"heat-vs-flooded","name":"Heat vs. flooded","rule":"Creative heat is generative; a flooded stress response (shaking, shutting down, tears beyond the useful kind) is not. If they seem overwhelmed, slow down, ground to a concrete sensory detail, and give an exit."},
+    {"id":"grounding-offramp","name":"Keep a grounding off-ramp","rule":"A safe exit from anything too intense: 'What's one thing you can see in the room right now?' Return to concrete, present, neutral."},
+    {"id":"no-righting-reflex","name":"No fixing","rule":"Resist advice-giving. Reflect and evoke; don't solve their life. The material serves their song, not a life-coaching agenda."},
+    {"id":"serious-support","name":"Route real crisis to real support","rule":"If genuine crisis or risk surfaces, drop the creative frame and gently point toward real human support. A song is never worth pushing someone past what they can hold."}
+  ],
+  "examples": [
+    {"title":"The founding dig — the Subtraction","lens":"the-subtraction","dig":"Writer: 'I've got nothing, I'm not inspired.' → 'What's the last thing you gave up or cut from your life?' → 'Watching porn.' → Reflect: 'There's your song — I Quit Watching Porn Today.' One oblique question bypassed the blank page and surfaced a specific, confessional, universal title."},
+    {"title":"The recall notice — domain collision","lens":"domain-collision","dig":"Writer stuck on a too-sad divorce ballad. → 'Write it in the language of a car-recall notice: under certain conditions the component may fail without warning.' → the cold bureaucratic voice against the private wound becomes the whole song's tension and its fresh angle."},
+    {"title":"The doorway — swap the perceiver","lens":"swap-the-perceiver","dig":"Writer keeps writing the breakup head-on and it's flat. → 'Narrate it from the POV of the doorway you both kept walking through — only what the doorway saw the air do.' → the estranged vantage makes the ordinary scene ache again."},
+    {"title":"The cups — delete the emotion-word","lens":"first-principles-emotion","dig":"Writer: 'It's a song about being lonely.' → 'Ban the word lonely. Give me the evidence.' → 'Two cups I still set out. The radio on so it's not quiet. My thumb over a name.' → Reflect: 'There's your song — it's the two cups. Build the chorus on the cups.'"}
+  ]
+}
+`,
+      },
+      {
+        path: "saved/finds.json",
+        content: `{
+  "meta": {
+    "name": "Saved finds",
+    "note": "The doors that work for this writer, and the ideas a dig surfaced. The song-excavator Skill saves here. Each entry: the lens that worked, the raw answer it pulled, and the title/first line it became.",
+    "version": "1.0.0"
+  },
+  "finds": []
+}
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: song-excavator
+description: >-
+  Find "the song" in a writer when they have nothing — or think they have nothing. A perception
+  engine that surfaces a specific, true, song-worthy idea by coming at inspiration from an angle
+  the writer would never pick: excavating a buried detail, making the ordinary strange, colliding
+  two unrelated worlds, or rupturing the polite frame to reach the unsayable. Use when a writer
+  says "I have nothing to write about," "I'm not inspired," "help me find a song," "give me a
+  prompt," "I'm blocked," "everything I write is generic," or wants to dig a real idea out of their
+  own life. Runs a live, one-question-at-a-time dig and ends by handing the idea back as a title or
+  first line ("there's your song"). Built on researched creativity + elicitation methods. This is
+  evocative, NOT therapy. Do NOT use for writing the finished lyric, the hook, or music.
+---
+
+# The Excavator — find the song in them
+
+A writer says they have nothing to write about. They're wrong — they're just looking where they
+always look, and finding the blank page there. Your job is to **change how they see** until the
+song appears. Not by asking "what do you want to write about" (the trap), but by coming at them
+sideways with the one angle they'd never pick themselves.
+
+The founding move: a kid said he had nothing. *"What's the last thing you gave up or cut from your
+life?"* — *"Watching porn."* — *"There's your song: I Quit Watching Porn Today."* One oblique
+question bypassed the blank page and surfaced something specific, confessional, and universal. That
+capstone — **reflecting their own answer back as the song** — is where every dig is headed.
+
+## The engine (\`engine/engine.json\`)
+
+Four **lens families** — four ways of seeing — each holding operators distilled (and credited) from
+researched creativity and elicitation methods:
+
+- **Inward — Excavate.** Dig the specific, charged truth already in them (sensory-time cues, the two
+  hidden body senses, abstract→concrete, oblique confession, scaling the gap, the life-pattern).
+- **Outward — Observe.** Find the song in plain sight (strip the name / defamiliarize, swap the
+  perceiver, write the overlooked background, the astonishment hunt, the kept object, the overheard).
+- **Lateral — Collide.** Come at it sideways (random entry, PO-provocation, delete the emotion-word,
+  say it in the wrong language, the improbable intersection, cut-up, flip one dial, the scale jump).
+- **Provoke — Rupture.** Break the safe frame (honor the error, the unsayable, the villain's side,
+  the ego declaration, a hard dare, outrun the editor, withhold the center, the subtraction).
+
+Also in the engine: **move_types** (questions are one gear — also provocations, dares, collisions,
+reframes, personas, pattern-mirrors, found objects, sensory cues, reflections, scales), **dig_dynamics**
+(how to run a live dig), the **reflect_move** capstone, **calibration**, and **safety**.
+
+## How to run a dig
+
+**1. Read the writer, then pick the family — orthogonally.**
+- Blank page, no material → **Outward** or **Provoke** to generate from nothing (the Subtraction, the
+  kept object, Random Entry, the ego declaration).
+- A charged story already on the table → **Inward** to get specific and physical.
+- A flat or derivative draft → **Lateral** to re-see it (domain collision, flip one dial, cut-up).
+- The core intelligence: **choose the angle they wouldn't.** Sense they'd write a sad ballad and hand
+  them the recall notice. Surprise is the product, not comfort.
+
+**2. Offer ONE door, not a menu.** A single sharp question or provocation, then stop. The list is for
+you; they get one live move at a time.
+
+**3. Run the dig dynamics.** Follow the heat (chase the tangent they light up on), mirror their exact
+words back, push abstract→concrete relentlessly, reflect meaning as a statement and *wait* for the
+correction, escalate in earned tiers, and get them into the feeling *before* asking for the memory.
+One question at a time — let silence work.
+
+**4. Vary families across the session.** Never let it become "the trauma interview." If the last three
+moves were Inward, throw a Lateral collision. Range is what keeps it feeling like genius, not therapy.
+
+**5. Land the capstone — "there's your song."** When a phrase lands with real charge (usually a
+concrete noun or a plain sentence they said), reflect it straight back as a title or first line, in
+*their* words, with conviction. Don't over-polish it — the rawness is the point. Show them it was
+already there. Then, if they want, hand off: **References** for color, **Impact Phrases** for the
+punch, **hook-writer** to build the hook.
+
+## The ethos in one line
+
+Bypass the "what should I write about" filter and surface the specific, true, slightly-dangerous
+thing that's right under their nose — then hand it back as a song.
+
+## Range check (don't get predictable)
+
+The failure mode is defaulting to confessional wound-digging ("the text you never sent"). That's one
+quadrant. A genius dig might instead: hand them a random noun, make them defend the villain, force
+their divorce into legalese, give the POV to a doorway, declare their ugliest self-belief as scripture,
+or make them stare at a boring object until it breaks their heart. Reach across all four families.
+
+## Safety — evocative, not therapy
+
+This pries into grief, shame, addiction, memory — with care. The goal is surfacing song material, not
+processing trauma: don't diagnose, interpret, or try to fix their life (resist the righting reflex).
+Earn depth in tiers; never open with the deepest wound. The writer steers — offer, don't insist, and
+honor any pass or silence as a boundary. Distinguish generative *heat* from a *flooded* stress response;
+if someone seems overwhelmed, slow down, ground to a concrete present detail ("what's one thing you can
+see in the room right now?"), and give an exit. If genuine crisis surfaces, drop the creative frame and
+gently point toward real human support — a song is never worth pushing someone past what they can hold.
+
+## Growing it
+
+Add lenses or example digs to \`engine/engine.json\` and keep the field set intact. Save a writer's
+best-working doors and the ideas a dig surfaced to \`saved/finds.json\` so their personal set of keys
+builds over time.
+
+## Sources the engine is built on
+
+Oblique Strategies (Eno/Schmidt); de Bono's lateral thinking (PO, random entry); SCAMPER; morphological
+analysis (Zwicky); surrealist cut-up (Burroughs/Gysin/Bowie) & automatic writing (Breton); Shklovsky's
+defamiliarization; first-principles reasoning; Rick Rubin's *The Creative Act*; phenomenology / beginner's
+mind / Mary Oliver; Pat Pattison's object writing & hidden senses; StoryCorps great questions;
+Motivational Interviewing (OARS, evocative & scaling questions); the Proust Questionnaire & Aron's 36
+Questions; and autobiographical-memory / reminiscence-bump / Proust-phenomenon research.
 `,
       },
     ],
@@ -46890,6 +48167,5185 @@ Data format spec and HTML report template are in \`references/quality-analytics.
 ---
 
 *Translated from the original Chinese SKILL.md authored by [@alchaincyf](https://github.com/alchaincyf). All English direct quotes and platform terms preserved. Original repo: https://github.com/alchaincyf/x-mentor-skill (master branch). Reference files live there; install separately if needed.*
+`,
+      },
+    ],
+  },
+  {
+    slug: "yoga-of-songwriting",
+    files: [
+      {
+        path: "agents/openai.yaml",
+        content: `interface:
+  display_name: "Yoga of Songwriting"
+  short_description: "Songwriting wisdom and lyric audit framework"
+  default_prompt: "Use $yoga-of-songwriting to audit these lyrics through Great Truth, Bones, Blood, Breathe, and Who."
+`,
+      },
+      {
+        path: "references/doctrine.md",
+        content: `# Doctrine
+
+The Yoga of Songwriting frames songwriting as the transfer of energy, truth, and human experience through word, melody, rhythm, silence, and character.
+
+## Core Belief
+
+A song is not just information or clever language. It is a living emotional object. It should move energy from the writer or singer into the listener with enough clarity that the listener feels seen, changed, relieved, provoked, or awakened.
+
+## Primary Lenses
+
+### God-Zone
+
+The source state. The writer gets quiet enough to receive instead of forcing. Use this when the user is blocked, overthinking, chasing trends, or writing from the head instead of lived feeling.
+
+Diagnostic question: What real thing is trying to come through?
+
+### Great Truth
+
+The heart of the song. A simple, universal revelation the listener can feel in one line. Use this when lyrics sound good but do not say anything.
+
+Diagnostic question: What does the listener know, remember, or gain by the end?
+
+### Bones
+
+The narrative structure. Character, want, tension, reversal, reveal, journey, destination. Use this when a song has images but no motion, or sections do not build.
+
+Diagnostic question: Where are we going, and why does the payoff matter?
+
+### Blood
+
+The emotional current. Fear and love move through the song, creating tension and release. Use this when the song feels emotionally flat.
+
+Diagnostic question: Where does fear enter, where does love answer, and where is The Ride?
+
+### Breathe
+
+The pacing and negative space. Silence, simplicity, repetition, line length, and word economy let the listener absorb the song. Use this when the song is too dense or exhausting.
+
+Diagnostic question: Where does the listener get to exhale?
+
+### Character
+
+The vivid human inside the song. Detail, body, action, contradiction, and voice make the listener believe the speaker.
+
+Diagnostic question: Who is speaking, what are they doing, and what makes them impossible to confuse with anyone else?
+
+### Who
+
+The artist-level identity. The clear center of gravity that makes an artist feel like a world, not a collection of songs.
+
+Diagnostic question: Does this song deepen the artist's mythology or blur it?
+
+## Song Body Model
+
+Use section labels as anatomy, not rigid rules:
+
+- **Intro**: opens the portal and tells the listener what kind of world they entered.
+- **Verse**: establishes character, world, conflict, and images.
+- **Pre-chorus**: raises pressure, turns the emotional key, or creates a reversal.
+- **Chorus**: delivers the Great Truth, mantra, release, or central spell.
+- **Bridge**: adds a new angle, deeper wound, final reversal, or elevated perspective.
+- **Outro**: leaves the aftertaste.
+
+Blood, Bones, Breathe, Great Truth, and Who can appear anywhere. Do not map them mechanically to sections.
+`,
+      },
+      {
+        path: "references/exercises.md",
+        content: `# Exercises
+
+Use these when the user is stuck, vague, or needs a creative entry point.
+
+## Great Truth Finder
+
+Ask:
+
+1. What has been the dominant emotion of the last week?
+2. What changed recently?
+3. What are you avoiding saying plainly?
+4. What line would be true even if the production disappeared?
+5. What would the listener gain by hearing this?
+
+Output 5 possible Great Truths in plain speech.
+
+## God-Zone Reset
+
+Use when the user is overthinking.
+
+Prompt:
+
+- Put away the phone.
+- Sit in silence for 3 minutes.
+- Write one real thing you noticed today.
+- Write the sentence someone said that stuck with you.
+- Write what it was really about underneath.
+
+Then turn the best sentence into a first line, title, or chorus truth.
+
+## Bones Map
+
+Fill:
+
+- Speaker:
+- Want:
+- Fear:
+- Obstacle:
+- First image:
+- Turn/reversal:
+- Final truth:
+
+Use this before drafting or repairing a verse/chorus relationship.
+
+## Blood Map
+
+Create a section-by-section table:
+
+\`\`\`text
+Section | Fear present | Love/answer present | Energy movement
+\`\`\`
+
+If every section has the same emotional state, prescribe a turn.
+
+## Breathe Cut
+
+Ask the user to mark:
+
+- Best line.
+- Most necessary image.
+- Most generic line.
+- Longest phrase.
+
+Then cut 20-40% of the words while preserving the song's truth.
+
+## Who Finder
+
+Ask:
+
+1. What wound does this artist keep returning to?
+2. What do they want that they never fully get?
+3. What do they believe that most people around them do not?
+4. What kind of world follows them around?
+5. What would make a listener say, "only they would say that"?
+
+Use the answers to judge whether a song fits the artist.
+`,
+      },
+      {
+        path: "references/lenses/blood.md",
+        content: `# Blood
+
+Use when the song is emotionally flat, one-note, or not making the listener feel enough.
+
+## Definition
+
+Blood is the emotional current of the song. The book reduces this to a dance between fear and love: tension and answer, wound and relief, shadow and light.
+
+## Diagnostic Questions
+
+- What fear is alive in the verse?
+- What love, faith, freedom, humor, or surrender answers it?
+- Does the chorus release pressure or merely repeat mood?
+- Where is the strongest emotional turn?
+- Is there a ride between opposite feelings?
+
+## Fixes
+
+- Put fear in the setup and love/clarity in the payoff.
+- Add body signals where emotion peaks.
+- Use humor or bluntness to snap the listener into a new feeling.
+- Move from uncertainty to revelation.
+- Avoid static sadness unless the point is trance, numbness, or collapse.
+`,
+      },
+      {
+        path: "references/lenses/bones.md",
+        content: `# Bones
+
+Use when the song has no clear story, journey, reveal, or payoff.
+
+## Definition
+
+Bones are the song's narrative structure: speaker, want, obstacle, movement, reversal, and destination.
+
+## Diagnostic Questions
+
+- Who is the speaker?
+- What do they want?
+- What is in the way?
+- Where does the listener start?
+- Where does the listener end?
+- What changes by the final chorus?
+
+## Section Logic
+
+- Verse: world, character, tension, concrete images.
+- Pre-chorus: pressure, turn, reversal, lift.
+- Chorus: revelation, mantra, emotional payoff.
+- Bridge: new angle or deeper wound.
+
+## Fixes
+
+- Start with action instead of explanation.
+- Add a reversal before the chorus.
+- Make verse two develop instead of repeat.
+- Delay the reveal if the payoff needs more charge.
+- Remove scenes that do not build toward the Great Truth.
+`,
+      },
+      {
+        path: "references/lenses/breathe.md",
+        content: `# Breathe
+
+Use when lyrics are wordy, crowded, tiring, or not letting strong moments land.
+
+## Definition
+
+Breathe is the pacing, silence, repetition, line length, and negative space that lets the listener absorb the song.
+
+## Diagnostic Questions
+
+- Where is the listener supposed to exhale?
+- Which line needs more space around it?
+- Are there too many images in a row?
+- Can the verse be shorter and stronger?
+- Is repetition hypnotic or lazy?
+
+## Fixes
+
+- Cut throat-clearing words.
+- Replace explanation with one concrete image.
+- Break long thoughts into singable phrases.
+- Let the hook arrive cleanly.
+- Make the best line the room's center of gravity.
+`,
+      },
+      {
+        path: "references/lenses/character.md",
+        content: `# Character
+
+Use when the speaker, world, or imagery feels generic.
+
+## Definition
+
+Character is the vivid human presence inside the song. It appears through action, scene, body, contradiction, humor, object, and voice.
+
+## Diagnostic Questions
+
+- Who is speaking?
+- What are they doing on screen?
+- What would only this person say?
+- What body detail proves the emotion?
+- What object or location makes the scene real?
+
+## Fixes
+
+- Turn abstract emotion into action.
+- Add one strange but true detail.
+- Use conversational lines if they have force.
+- Let contradiction stay if it reveals the person.
+- Avoid generic "you/me/tonight" filler unless the melody earns it.
+`,
+      },
+      {
+        path: "references/lenses/god-zone.md",
+        content: `# God-Zone
+
+Use when the writer is blocked, overthinking, forcing ideas, or asking what to write about.
+
+## Diagnosis
+
+The user is probably too close to noise, trend, craft anxiety, or abstract ambition. The move is to return them to lived truth and observation.
+
+## Ask
+
+- What real thing happened recently that you cannot stop thinking about?
+- What sentence did someone say that felt charged?
+- What emotion has been dominating your body?
+- What truth are you embarrassed to admit?
+- What would you write if no one could judge it?
+
+## Prescription
+
+Give a small ritual, then extract raw material:
+
+1. Silence.
+2. Observation.
+3. Plain speech.
+4. Emotional underneath.
+5. First line or title.
+
+Do not over-mystify it. The God-Zone is useful only if it produces usable truth.
+`,
+      },
+      {
+        path: "references/lenses/great-truth.md",
+        content: `# Great Truth
+
+Use when the song lacks a heart, destination, chorus payoff, or universal point.
+
+## Definition
+
+The Great Truth is the song's simple earned revelation. It should feel obvious once heard, but powerful because the song made the listener arrive there emotionally.
+
+## Diagnostic Questions
+
+- What is the song really saying?
+- Can the destination be stated in one plain line?
+- What does the listener gain?
+- Does the chorus reveal, release, or remember something?
+- If the production disappeared, would the truth still hold?
+
+## Common Failures
+
+- Beautiful images with no destination.
+- Clever hook that says nothing.
+- Multiple ideas fighting for the center.
+- Verse tension that the chorus does not answer.
+
+## Fixes
+
+- Draft 5 plain-language truth statements.
+- Choose the one with the most human weight.
+- Make the chorus serve that truth.
+- Cut lines that point to a different song.
+`,
+      },
+      {
+        path: "references/lenses/who.md",
+        content: `# Who
+
+Use when judging artist identity, voice, persona, mythology, or whether a song fits the singer.
+
+## Definition
+
+The Who is the artist's center of gravity: wound, desire, code, contradiction, world, and repeatable emotional promise.
+
+## Diagnostic Questions
+
+- What is this artist always secretly singing about?
+- What do they want from the world?
+- What wound or hunger keeps returning?
+- What is their code?
+- Could another artist sing this unchanged?
+- Does this song deepen the mythology or blur it?
+
+## Fixes
+
+- Sharpen the speaker's point of view.
+- Add details from the artist's actual world.
+- Remove lines that could belong to anyone.
+- Make the chorus express the artist's code, not just the song topic.
+- Let the artist evolve, but keep the core recognizable.
+`,
+      },
+      {
+        path: "references/song-audit-framework.md",
+        content: `# Song Audit Framework
+
+Use this when reviewing full lyrics or a major song section.
+
+## First Read
+
+Read once like a listener. Do not start editing immediately.
+
+Capture:
+
+- Immediate emotional impression.
+- Clearest line or moment.
+- Weakest confusion point.
+- Whether the song has a destination.
+
+## Whole Song Rubric
+
+Score lightly if useful, but prioritize diagnosis.
+
+### Great Truth
+
+- Can the song be summed up in one earned line?
+- Does the listener gain a revelation, permission, warning, comfort, or release?
+- Is the hook a truth, or just a phrase?
+
+### Bones
+
+- Who is the protagonist or speaker?
+- What do they want?
+- What blocks them?
+- What changes by the end?
+- Does each section increase pressure, deepen the picture, or reveal a new angle?
+
+### Blood
+
+- What fear is present?
+- What love, faith, freedom, humor, surrender, or clarity answers it?
+- Does the emotional state move, or does it loop?
+- Is there a sharp ride between opposing feelings?
+
+### Breathe
+
+- Are there too many words?
+- Are the best lines given space?
+- Does repetition create power or laziness?
+- Can any verse say twice as much with half the language?
+
+### Character
+
+- Does the speaker feel physically and socially real?
+- Are there concrete images, body signals, actions, locations, objects, or overheard lines?
+- Does the voice sound lived-in or generic?
+
+### Who
+
+- Does the song deepen the artist's world?
+- Could another artist sing it unchanged?
+- Does it reveal something about the singer's myth, wound, hunger, humor, contradiction, or code?
+
+## Section Rubric
+
+### Intro
+
+Job: open the portal.
+
+Check:
+
+- Does it establish vibe, world, or tension quickly?
+- Does it make a promise the song will fulfill?
+
+### Verse
+
+Job: place us in the world and move the story.
+
+Check:
+
+- Is there action or image?
+- Is the speaker specific?
+- Does the verse build toward a need for the chorus?
+
+### Pre-Chorus
+
+Job: turn the key.
+
+Check:
+
+- Does pressure rise?
+- Is there a reversal, realization, acceleration, or emotional lift?
+- Does the chorus feel more inevitable because of it?
+
+### Chorus
+
+Job: deliver the spell.
+
+Check:
+
+- Is the Great Truth clear?
+- Is it simple enough to remember?
+- Does it release or transform the verse tension?
+
+### Bridge
+
+Job: reveal a new angle.
+
+Check:
+
+- Does it deepen the wound or widen the frame?
+- Does it avoid repeating the second verse's job?
+- Does it set up the final chorus with new meaning?
+
+### Outro
+
+Job: leave the aftertaste.
+
+Check:
+
+- Does the final emotion linger?
+- Does repetition feel like mantra, collapse, victory, or haunting?
+
+## Recommended Output
+
+Keep it concise:
+
+\`\`\`text
+Core read:
+
+Main issue:
+
+Strongest lens:
+
+Great Truth:
+
+Section notes:
+
+Best fixes:
+
+Optional rewrite:
+\`\`\`
+
+## Rewrite Rules
+
+- Preserve the user's intent and voice unless they ask for a bigger swing.
+- Rewrite the highest-leverage section first.
+- Prefer sharper nouns, verbs, body details, and scene over abstract explanation.
+- Cut filler before adding more.
+- Do not polish away weirdness if it creates character.
+`,
+      },
+      {
+        path: "references/source/full-clean.md",
+        content: `# The Yoga of Songwriting V2
+
+HE             GA F
+   NG                 I ING
+UNCOVERING THE DNA OF GREAT SONGS
+
+
+
+
+           IKEY     IKE
+  A Secret Science
+
+ THE YOGA OF
+SONGWRITING
+    MIKEY MIKE
+      Mikey Mike
+    Springield, TN
+www.findmikeymike.com
+                  PROLOGUE
+   A Look through the Cosmic Lens At The DNA of great
+songs… The secret science I discovered from a lifetime of
+obsession and dedication to Mastery. For the dreamer, who
+knows their is a world of magic and beauty just Beyond..
+       INTRODUCTION
+THE YOGA OF SONGWRITING
+
+
+
+
+“You want to be enlightened? Feed people.”
+
+
+
+    “Dear God, what the hell have I done? This is going to
+ be the longest three months of my life,” I thought to
+ myself as I stared out at the crowd. It was as if the
+ hundreds of weary, spaced-out faces had blur into one
+ giant mural of boredom. The microphone felt like a brick
+ in my sweaty hand. “Opening” was beginning to feel like
+ a bad acid trip that no cold shower could cure. I was 3,000
+ miles from home, in a cold, new world and all I wanted
+ was to be back in the comfort of the California sun,
+ strumming my guitar on the porch for my neighbor. Tour
+ would be fun they said…
+    My “Opener” set ended and I got off the stage as
+ nonchalantly as possible. As I pushed through the crowd
+ back towards the merch booth, on what felt like a
+ pilgrimage through Hell, I could see the shining face of
+ my good buddy Cyrus through all the chaos. He was
+ smiling and waving me over, and I instantly felt
+ something recognizable and comforting. “Mikey get over
+ here! I have somebody you need to meet,” he shouted.
+ Cyrus took me over to a young guy and his girlfriend
+who’s faces were swollen and covered in tears. They both
+grabbed me and hugged me fiercely at the same time. “We
+only came to see you, and hear ‘Doin Me.’ A few months
+ago I had a gun in my hand and I was about to put it to my
+head… and that song randomly started playing on my
+phone, and it saved my life. It saved my damn life man,”
+the young guy whispered. “Thank you so much, you will
+never understand,” his girlfriend said as she gripped my
+shoulders. I will never forget the look on her face. It was
+in that very moment that I realized what the whole Thing
+was about: the songs, the music, the work, the journey… I
+always knew there was power and purpose to it, but to see
+it right there in front of me, another human’s heart still
+pumping, a being still so full of life… it changed me. To
+think that the energy from a handful of lyrics and
+melodies could give a complete stranger the inspiration
+and Will to continue their journey on Earth, to know a
+mother was not crying herself to sleep every night for
+eternity, it lit a fire under my ass. There was so much
+work to be done, so much to write. Songwriting was not
+something I did anymore. It was something I lived. It was
+my Yoga.
+    The word Yoga holds a lot of mystery to people. There
+is a certain open ended-ness and all-inclusiveness that
+gives it this power. When some people hear the word
+Yoga, they picture a middle aged woman in spandex bent
+over, others imagine a half naked man in a cave deep in
+meditation. A visitor once said to the great guru Maharaji,
+“Baba, which yoga is best to become enlightened? Which
+posture and meditation should I practice?” Maharaji
+responded simply “Feed People.. you want to find God..
+feed people.. Jow!” Yoga in the context of this book, is
+much the same. It is the idea of learning to manipulate
+and harness the energy of word and sound at the deepest
+level in order to feed and inspire the world around us.
+                  CHAPTER 1
+      THROUGH THE COSMIC LENS
+
+
+
+
+“If you want to understand the secrets of the Universe,
+  think in terms of energy, frequency and vibration.”
+
+
+         Nikola Tesla once said “If you want to understand the
+      secrets of the Universe, think in terms of energy,
+      frequency and vibration.” Beyond the world we see with
+      our eyes and hear with our ears, lies another dimension
+      entirely. This energetic realm, unconscious to most, is the
+      world of the yogi. He exists and operates from this deeper
+      dimension of life, where anything is possible and it is his
+      destiny to do the Unthinkable.
+         For most of us, we call certain unexplainable
+      phenomenas of life “magic,” but for the yogi, there is no
+      such thing. If you were to flip a light switch in the 1800’s,
+      and a light turned on, someone would shout “Oh my god!
+      It’s a miracle!” when in reality, it was a simple function of
+      electricity following certain laws which weren’t yet
+      understood. In the same way, many things that we think of
+as magic today are just certain manipulations of energy
+we do not understand. Becoming a yogi is about
+understanding and harnessing this mysterious energy for
+the good of ourselves and the good of others. To become a
+yogic songwriter is to harness this positive power in the
+form of song. When we learn to use the laws of this secret
+science in our writing, the influence and energy we
+deliver to the world, in the form of song, holds no bounds.
+A great song literally has the power to change the world.
+   Thinking of songwriting from a spirit level, we change
+our whole perception of what we’re doing. We set out
+with intention, and a deep respect for the “magic” we’re
+engaged in. We understand that every lyric, every rhythm,
+every melody has an influence on the world around us.
+We not only have the power to heal and uplift, but also to
+confuse and destroy. The more we learn to harness this
+sonic energy, and transfer it in the most impactful form,
+the more power we hold as songwriters. As we study
+songwriting through this cosmic lens, we can start to
+discover the DNA of what makes certain songs so damn
+unforgettable. We all have songs that touch us so deeply,
+that speak so much truth and power to us, it’s as if they
+came from the lips of God himself. As we embark on the
+journey of the yogi-songwriter, the ability to write the
+Great Ones consciously becomes more of a reality every
+day.
+The Vibes
+
+    Every sound in existence carries a physical vibration.
+The great mystics, and many scientists alike, believe that
+Creation was born of sound, and the entire Cosmos itself
+is nothing more than a symphony of sound vibrations. In
+ancient Hinduism, they called this study the Mantra Yoga.
+The ancients believed that by harnessing certain sound
+vibrations, melodic structures, and rhythmic timings, they
+could actually bend and influence Creation. From
+changing the weather, to healing the sick, song and sound
+was the ultimate force. Modern esoterics call this science
+Cymatics. With the use of today’s technology, the
+esoterics have actually begun to map the geometric
+patterns of sound waves and the effects held on the human
+system when exposed to specific tones and vibrations.
+    If we think of songs as being a pattern of sound
+vibrations, and songwriting as the direction and
+arrangement of these vibrations, ordered together in a way
+where the sum of the energy is exponentially greater than
+it’s parts, we open the door to a higher level of writing. In
+the words of the Great Yogananda, songs can carry “the
+force of an atomic bomb.” Traveling from the writer’s
+heart straight to the heart of the listener, songs become a
+shared emotion and experience. When we hear a song that
+moves us, it’s as if the space between the writer and the
+listener collapses, the illusion of separation dissolves, the
+mind stops, and pure Oneness is felt. I call this intuitive
+space of pure presence, where we are momentarily freed
+from ourselves and world, the God-Zone.
+    Late one night, when I was about 23, I had my first real
+experience that led me down the rabbit hole of this
+madness. I had just met this guy named Famous Jonny at
+a party. He was bizarre, the type of guy that wore sandals
+in December, and would stare at your lips as you spoke.
+Jonny and I shot the shit all night. We talked mostly about
+his favorite subject, drugs: new drugs, old drugs, happy
+drugs, sad drugs, drugs that shrunk his genitals, drugs that
+helped him bond with his 11-year-old neighbor Billy,
+drugs that made him want to stop doing drugs. There was
+one psychedelic drug in particular that Jonny loved more
+than the rest: Ketamine, a compound discovered in 1962
+that was mostly used to tranquilize large animals, like
+horses. Apparently, if you insufflated enough of it, by
+Jonny’s estimation about “5 fat ass rails,” you would free-
+fall down into “The Hole,” and when you got down in
+there, you could actually see the mechanics of Life on
+Earth and watch the gears churn along, doing their best to
+keep the Great Illusion in motion. He also said there was a
+scientist who, with years of regular use, tapped into a
+place in his consciousness where he could actively script
+the events of his life. Jonny had set out on the same
+mission, and encouraged me to take the dive. The whole
+thing sounded like a bad idea, so I met up with Jonny the
+next day at a Chinese restaurant in downtown L.A. and
+bought some ketamine off him in the bathroom. I
+remember before I walked out the door he shouted “Hey
+man! Put on Pink Floyd Dark Side of the Moon, it’ll get
+pretty weird! Safe Travels!” I liked Famous Jonny, and I
+trusted him, so I took his advice. I got home and did
+enough ketamine to take down the Kentucky Derby, threw
+on my headphones, laid down, and slowly dissolved into
+Pink Floyd’s Dark Side of the Moon. One minute I was
+there listening and the next… There was no longer an I.
+There was no longer a Listener… I had become the
+Listened To. I became the vibrating waves of the music:
+the metallic levers to every strike of the guitar, the waves
+of light that would burst brilliantly when the sound of a
+human voice wailed a Great Truth, the pounding drums
+that kept the illusion of time moving linearly from one
+point to another. It began a long, strange love affair with
+the most peculiar and powerful molecule I had ever
+discovered, and a true study into the DNA of songs.
+   EDIT/WRITE I investigated all kinds of songs: spoken
+word songs, orchestral songs, rap songs, rock songs, new
+songs, old songs, good songs, bad songs, peaceful songs,
+violent song. via. it changed the way I looked at songs
+and experienced music forever. A great song was no
+longer just a series of words strung together melodically
+over a band of accompanying instruments, it was pure
+energy, and it was alive.
+   As I continued my exploration, I found more science
+backing the metaphysical power of words and song. In
+“The Hidden Messages in Water” by the Japanese doctor
+Masura Emoto, a series of experiments were conducted
+where certain archetypal words were written on the side
+of a glass of water. Dr. Emoto left the scripted water to sit
+for a few days and then studied the water crystals under a
+microscope. Incredibly, he observed the water transcribed
+with harmonious words, like “loyalty” and “peace,”
+caused the formation of very uniform and beautiful water
+crystals, whereas the water tagged with negative words
+like “hate” and “deception” caused distorted, damaged
+looking crystals. The most immaculate crystals he
+observed were from the glasses of water tagged “Love.”
+When Dr. Emoto placed a speaker in front of the water,
+and played the harmonious vibrations of music like the
+Tibet Sutra, the water also formed pristine and symmetric
+crystals. When the water was exposed to heavy metal
+bands with violent, distorted music on the other hand, the
+water crystals began to disfigure and collapse.
+   Dr. Emoto said he could see these “wave energies
+move through matter” and named the harmonious, healing
+vibrational energy Hado. He even prescribed certain
+songs to his patients to heal different organs and areas of
+the central nervous system with great success. The body
+after all, is about 60% water. If a small amount of water
+exposed to such simple vibrations can can cause a
+definitive reaction to its state, imagine what a classic song
+can do..
+
+
+
+
+                      “Love”
+   The water experiment can be replicated by the use of
+other mediums as well. Set fine sand on a metal plate and
+attach it to a speaker and watch how it reacts. Much like
+the water, the sand will take on all sorts of different
+patterns and shapes. Be careful of the Brown Note though
+— there is apparently a very specific low frequency hum
+that causes people to lose controls of their bowels. Yes,
+music can literally make you to shit your pants..
+   When we shift our perspective to think of songs in this
+Yogic way, as waves of energy and emotion traveling
+through the ether, connecting human beings, we start to
+build a clear visualization of the writing process. I
+visualize great songs as a pure, uniform beam of rapidly
+vibrating waves of light that cut like a bullet through the
+air, straight to the heart chakra of the listener, while un-
+inspired, lifeless songs I visualize as slow, scattering
+greyish waves with no direction or destination. When I
+am in an un-inspired place, and I’m “trying” to write a
+song, sometimes I’ll have flashbacks to being in The Hole
+and having visions of a flock of in-bred birds flying
+manically in every direction. This ability to “see” songs
+gives us another tool to judge their strength and impact.
+               CHAPTER 2
+              THE GOD ZONE
+
+
+
+
+“If you are on the right path, you will find that
+ invisible hands are helping.” Joseph Campbell
+
+
+
+
+      Songwriting, in its essence, is not a process of doing or
+   creating but discovering. It’s being a witness. It’s about
+   entering that silent space within ourselves, where thought
+   seizes, and all that’s left is pure presence, awareness and
+   experience. This space, where the Cosmos commune with
+   the soul, and the Yogi exists perpetually, I call the God-
+   Zone. When we enter the God-Zone, we transform into a
+   pure channel to the source of creation itself. Like a radio
+receiver being tuned into just the right frequency, we
+move from a place of noise and static into a place where
+the music comes through loud and clear. When we work
+from this intuitive space, we have the power to Receive
+and write with an authenticity the Lower Mind never
+could.
+
+
+
+         “The same spirit that hovered over the waters of
+         creation at the beginning of creation hovers over
+         the mind of the artist at work”
+                      - Thomas Aquinas (Catholic scholar)
+
+
+
+   Though I’ve given it my own name, the God-Zone is
+not a new idea. It’s an internal realm that’s been accessed
+for thousands of years by some of the greatest mystics,
+scientists, artists, mathematicians, inventors, and
+philosophers alike. The English word “invent” is actually
+derived from a Latin word that means “to find or
+encounter,” not to build or create. Steve Jobs, arguably
+one of the most inspired minds of modern time, was
+deeply fascinated with intuition and even credited most of
+his work to coming from this mysterious place within. It’s
+no surprise he spent a lot of his time in India and gave a
+copy of the Autobiography of a Yogi to everyone who
+visited his home. If Steve hadn’t been able to commune
+with the Cosmos, we might still be playing Snake.
+The Door to the God-Zone
+
+   The great yogis used to say about “finding God” that
+there are a million paths that lead to the top of the
+mountain. Finding the door to the God-Zone in our day-
+to-day life is no different. For every writer there will be a
+different path to that space within. It doesn't matter how
+you get there, all that matters is that your centered in the
+heart and silent in the mind.
+   My door into The God-Zone opens when I shut out the
+world completely. There are so many things in our daily
+lives that pull us into the Illusion of Confusion: text
+messages from friends asking to be untagged in some
+picture they look funny in, neighbors complaining about
+the boxer briefs you left drying up on the fence, some
+prescription that’s been ready for pick up for over a week.
+All these things keep us in the realm of worldly thought
+and out of realm of intuition.
+   Step one for me: I turn my phone on silent and chunk it
+across the room, then I take off my shoes, step outside,
+take a few deep breathes, sit down in a chair and
+experience the..
+
+         Silence.
+        An extended period of silence.
+        I close my eyes and imagine myself from above.
+        I zoom out and see my whole neighborhood from above.
+        I zoom further. The cars on the street look line ants.
+        I’m halfway to space now, looking back at Cali Coastline.
+        I’m alone on the moon.
+        It’s dead silent.
+        I’m looking back at the Earth
+        And thinking about how small it all is.
+        All my thoughts, all my problems, all my dreams.
+        An illusion, so big and so small at the same time.
+        A place where there’s nothing to gain or lose.
+        You leave with what you came with.
+        It’s not that serious.
+        Enjoy the Experience.
+        I feel clarity.
+        I feel peace.
+        I feel free..
+        I open my eyes and see Little Lisa walking towards me.
+        She has an innocent smile on her face.
+        And no place to be, nothing to do.
+        She’s just existing.
+        Experiencing the day.
+        Taking in the sun.
+        Looking up at the birds.
+        She’s in It.
+
+
+
+
+  Little Lisa is my 85 year old Thai neighbor and my
+cosmic adopted grandmother. We speak all the time, like
+cavemen, on the surface we barely understand each other,
+but on a deeper level, we communicate as well as anyone.
+We converse emotionally, in smiles and funny looks, and
+share a similar sense of humor.
+
+She smiles and grabs my shoulder.
+
+         “Be niCe to the laDy. She Good Woman.
+         You Be good To her. And sHe be Good to you..”
+
+And there it is. A Great Truth: The fruit of the God- Zone,
+and exactly what we came for. The soul of the universe
+speaking to me through Little Lisa’s shining face. “So be
+good to me, and I’ll be good to you,” a phrase so simple,
+that means so much..
+                CHAPTER 3
+               A GREAT TRUTH
+
+
+
+
+“Three things that cannot hide for long: the sun, the
+                moon and the truth”
+
+                        Buddha
+
+
+
+
+        There are certain archetypal “truths” in our human
+     experience that we all just “Get.” While we may all live
+     completely different lives, there is a subconscious
+     agreement between us that “Yes, that is So. That’s the
+     heart of the matter.” We know these truths when we hear
+     them, and when spoken or shared in the shortest, sweetest,
+     and most all encompassing way, they elicit a very primal
+     reaction in us. We have the “Ah-Ha!” moment, and can
+     feel the juice being squeezed from the core of the lemon.
+     A Remembrance is triggered somewhere deep within us,
+     and we are left feeling Whole again. I call them the Great
+     Truths.
+   Great Truths are the lightening-strike epiphanies that
+sum up big ideas in a way a longer explanation never
+could. They are universal, and something we come face to
+face with again and again, life after life. A wink from
+God, “Do you get it now?” I like to imagine that the
+longer these themes and symbols have held truth and
+meaning to man, and have solidified themselves into the
+collective unconsciousness, the more power they have
+come to harness.
+   Jung said these archetypes and collective forms were
+not something that develop in humans, but something
+they are born with. He thought of them as a set of
+universal images and motifs that helped man make sense
+of his experience. Freud also spoke of these archetypal
+truths. He stated that “within each person’s mind, there
+are archaic remnants whose existence cannot be explained
+by that particular individual’s life experience. These
+forms are innate and shared by everyone.” It’s for this
+reason that songs built on these archetypal truths and
+motifs cause such a strong emotional reaction in a listener.
+Put plainly, they have the power to reach a deeper part of
+people, and like an entirely separate primal language of
+their own. Great Truths are something every single
+human, no matter their gender, age, race, or religion can
+relate to.
+   At the core, Great Truths are always beautifully simple
+and effortlessly relatable. They are the moment of
+revelation on the winding journey . For this reason, Great
+Truths are the Heart of great songs..
+
+“So be good to me, and I’ll be good to you”
+
+Everyone gets that.
+It’s a man and woman.
+It’s karma.
+It’s loyalty.
+It’s the Doctrine of Love.
+
+It’s real. It’s true- and it could be the basis for a great
+song. A place to build from. A destination where the
+journey will lead. The crux of a tale worth telling. If you
+do just one thing in your writing, know the Great Truth of
+your song, and take us on the adventure to discover it.
+This one specific and singular Truth is the key to castle. If
+you do one thing right in your writing, know your Truth.
+Without it, you are blowing hot air.
+    A good way to know if your song leads to a Great Truth
+is to ask yourself: Do we have a destination? Is something
+of value gained? Can I sum up the climax and reward of
+the journey in one succinct line? If you can’t answer yes
+to all three, you probably don’t have the heart of a
+timeless song yet. You should be able to say:
+
+         The song is about an entitled guy who cheats on
+         his lover and realizes that you never know what
+         you got until it’s gone.
+
+   One of the biggest pitfalls I see with novice
+songwriters, and some experienced ones alike, is while
+they may have a song that takes you on journey, they
+don’t actually lead you anywhere. They don’t ever “say”
+anything. You end the listening experience feeling
+confused and deflated, wondering why you went along for
+the ride. At the least, make sure that what you write has a
+destination and a clear path to get there. There is nothing
+worse than listening to a song, enjoying the way it sounds,
+but being completely confused by what is actually
+unfolding, where you are going, or what it’s really all
+about.
+   While there’s no right way start a song or take people
+on this journey, I’ve found there is an easy way, and that’s
+by starting with the heart of your narrative. Starting with a
+Great Truth is the foundation you build on. When your
+destination is set in stone, there’s never a question of
+where you’re going. As you progress and have tapped
+fully in, you will be able to start your story anywhere,
+because one way or another, an honest narrative will
+always lead to a Great Truth, even if you didn’t start the
+journey of your song with it known. I was talking with a
+friend who’s a songwriter the other day and he said he had
+been feeling “stuck.” He couldn’t find any inspiration or
+anything to write about. I asked him “What’s the biggest
+change you have made in your life in the last year?” and
+he thought for a moment, chuckled, and then said, “Well..
+I quit watching porn last week!” I then asked him why
+and he said “Because I always knew there was dark vibe
+to it.. but the lack of self reservation and control I had
+with it.. just made me feel weak and sad … like a leech”
+Well there’s your song buddy! Right under your nose, a
+Truth right smack dab at the center of your life, and what
+a great song it would make. Where to start? His literal
+words were a great first line “I quit watching porn last
+week.” If I heard someone come in with that line, so
+simple and direct, you better believe I would keep
+listening no matter what it sounded like or how well it
+was recorded. In my eyes, that is the power of compelling
+and honest lyrics, they trump every other aspect of the
+music. Hell it could have been an acapella poem and I’d
+still have been in for the ride.
+   When searching for my own Truth’s to write about I
+often explore the same questions within myself. Stop
+thinking and just feel for a minute. What is it you feel?
+What’s the most dominant emotion you have been
+existing in recently? Why do you feel that way? What is it
+really about underneath the surface? They say that the
+Truth can never be hidden for long, and somehow, it will
+always be revealed. As writers it’s our job to discover
+these “hidden in plain site” Truths and share them for
+those who may need to hear it, consciously or
+unconsciously.
+   The Beatles were masters of Great Truths, and it’s a big
+part of the reason millions of people all across the world,
+from completely different backgrounds, connected so
+deeply to their music. The Truths they shared were
+timeless. They touched a deeper place in us. They cloaked
+universal motifs in incredibly hooky melodies and vivid
+narratives, the apex of impactful songs. Let’s look at some
+classic Beatles lyrics.
+
+
+
+
+         “There will be an answer, let it be.”
+
+         Let it be.
+
+         “Life goes on, within or without you”
+
+         Life goes on.
+
+         “Here comes the sun, it’s alright”
+
+         It’s alright.
+Masters! Masters of the simple. Masters of the beautiful.
+The Beatles were healers and inspirers. They were fully
+submerged in the Yoga, and wrote songs that help us
+Remember something we all know, but often forget.
+   I don’t believe their songs and success were
+“accidental,” either. Like Steve Jobs, they were
+obsessively intrigued with the world of yoga and
+meditation, spent lots of time in India, and studied under
+the Great Maharishi. I believe they Knew exactly what
+they were doing and understood the power of this
+Original Language.
+
+With New Eyes
+
+   Great Truths are hidden everywhere: in conversations
+with your 85 year old Vietnamese neighbor who barely
+speaks English, in pretty much every good novel ever
+written, in text messages sent from someone with the
+wrong number, and most importantly, in our own heart’s
+and minds. Harry Neilson wrote “One is the Loneliest
+Number” after he called someone and felt despair as the
+busy signal repeated over and over. He stayed on the line
+and used the beeping as the inspiration for the rest of the
+song. Being clear and present enough to see and hear the
+truths written into the fabric of our live’s is the way of the
+yogi.
+   I once opened a piece of mail that came addressed to
+the previous tenant at my apartment. The handwriting on
+the envelope was scratchy, and curiosity got the best of
+me. In retrospect, I guess I’m just a nosey creature. Inside
+the envelope was one of the most beautiful and authentic
+letters I’d ever read. “Paul” was pouring his whole heart
+out about how much he loved his friendship with the
+previous tenant and having a major epiphany. “At the end
+of the day, all we have is love, and each other, and
+everything else is.. well it’s not our business, and it will
+work itself out I suppose,” he wrote. Country hit anyone?
+
+Were gonna play it for you one more time folks! Number 1
+for the 8th week in a row, Paul the Letter Man’s “Aint Our
+                         Business”
+
+
+
+Paul’s letter was four pages long and stacked head-to-toe
+with Great Truths and incredible imagery. I inherited a
+handful of song ideas from it. It inspired me that someone
+could write something so powerful and honest to a person
+who would never get a chance to read it. There was
+something so poetic about it. At the end of the day, his
+letter had an impact, no matter who it was intended for,
+and on a cosmic level, I know that I was always going to
+the be one the one who read it. I like to imagine maybe
+one day Paul will hear one of the songs it inspired and
+have no idea. Life is just that strange and beautiful
+sometimes. The short lesson is, if you have an intuitive
+curiosity about something or someone, never turn from it.
+Run towards it (even if you have to be a little nosey.)
+   We will always be watching. We will always be
+listening. We will see the deepest Truths and fundamental
+emotions driving all the interactions between the humans
+around us. That is our mantra.
+            CHAPTER 4
+               THE BONES
+
+
+
+
+                “insert quote.”
+
+
+
+
+   Back when I began my college days, as a business
+major, I was bored to tears in class, I was uninspired to do
+any of the homework, and I couldn’t stand my elitist
+professors. So I did what any serious young man would
+do, I quit business, and decided to study one of the most
+steady and reliable jobs out there besides making music..
+screenwriting. In the end, surprise, it has netted me a total
+of zero dollars, but the value I got from the study of film
+is priceless. It is the single most important thing I did that
+shaped my songwriting and understanding of songs.
+   Beyond songwriting, studying myth and narrative,
+taught me something even more important. It gave me a
+new understanding of the story of my life. I started to
+have a keen eye for all the archetypal characters in my
+own Hero’s Journey: the henchman, the jesters, the
+mentors, the allys. I saw the femme fatale’s there at every
+turn, using temptation to lure me off the Path. I started to
+realize that all the little devils in my story had tried their
+best to keep me submerged in the illusory physical world,
+always offering some sort of sweet sensation, and the
+ally’s were the ones calling me from beyond it.
+   I would strongly encourage anyone who wants to take
+their songwriting to another dimension to study film and
+narrative. A song at the end of the day, is a lot like a film
+condensed into four minutes. At the core, most great films
+and songs are driven by the same forces. You have a
+protagonist, a lot of times with some fatal flaw, who is
+yearns for something. You have the journey, with all kinds
+of twists, turns, and surprises(reversals) that the main
+character embarks on, and at the end of that journey, you
+have the reward. In film, the surface reward is usually
+something physical, like a hot girl or a mystical scroll
+hidden away on some Caribbean island. But the real
+reward, the thing that character unknowingly really
+wanted and gained, was the discovery of A Great Truth.
+   When I think of song structure, there are two main
+parts of substance in my mind. You have a Great Truth or
+truths, and then you have Framing. In a general sense,
+framing is bones that holds it all together. Framing is the
+world and narrative you set up that lead to the reveal of
+your truths. The more vividly you script your verse and
+bridge sections, ie the framing, the more powerful and
+relatable your impact moments will be. The great songs
+are framed in a way that the energy, emotion, and tension
+constantly build until the storyteller finally has that
+breakthrough moment, where it all comes together and
+they discover or remember something timeless. It’s the
+reward and release for being on the journey for both the
+storyteller and the listener.
+   *Keep in mind, there are no absolute rules to songs or
+structure. If you write from the heart, there is no wrong
+way to do it. This is strictly a study of the most powerful
+way I have found to arrange those sound vibrations for the
+greatest and most lasting impact on a listener. We’re here
+to examine the DNA behind the real and timeless songs
+that have effected people’s lives on a truly deep level.
+There are obviously other songs to write too, but for the
+serious writer the timeless greats are our Holy Grail.
+Maybe my next book will be “The Yoga of Bangers that
+Get the Party Started.”*
+    The strangest part is, even when you think you broke a
+rule or have done something bizarre, you may still
+unknowingly be following certain laws of creation. Take
+“Mmmm” by Crash Test Dummies. What kind of truth or
+revelation is that? It’s not even a word you say! The
+“Mmm” sound is one of the “Original Sounds” and one of
+the three sounds you can make without using your tongue.
+The ancient yogis believed the “Mmm” sound represented
+the transformational energy within the Universe, and that
+making the “Mmm” sound stimulated and vibrated the
+crown chakra at the top of the head. Little did we know,
+singing along to “Mmm” on the radio was a legitimate
+form of yoga. The other two Original Sounds are “Aaaa”
+and “Uuuu.” Put them together and you get “AUM,” what
+the mystics believe is the original sound of all creation
+and the vibration that is said to hold our universe in
+motion. It is the “Om” of India, the “Amen” of the
+Christianity, the “ALM” of Islam at the beginning of the
+Koran (In Arabic L is pronounced O). Even the most
+skeptical person would have to wonder why every major
+religion has AUM as the focal point of its Holy Sounds.
+Maybe it’s coincidental, or maybe there is a Truth they all
+share. Legend has it that the Crash Test Dummies were
+secretly high level scientists of Cymetics and channeled
+“Mmm” on twelve day fast in the woods of Alaska.
+
+
+
+
+A Deeper Look
+
+   In terms of energy, emotion and framing, one of the
+best songs I’ve probably ever “written” was a full on
+narrative. The intricately titled “Doin Me.” (Note the
+absurdly child like simplicity of the title. A 6-year old
+could relate to it.) To be fair, I don’t take credit for this,
+nor any of the other good ones. They already exist, I just
+show up every day, put myself in that silent space, and
+hope if a great song shows up, I’m a clear enough channel
+to write it down on paper in a focused and impactful form.
+The lame songs though, they’re all us. God had nothing to
+do with it.. Let’s look at the first verse of Doin Me.
+
+         I was walking around the neighborhood with my
+         mom
+         And she said “Mike, Don’t you want to meet
+         someone”
+         I said “No! I want to meet everyone”
+         I want to get drunk with punks
+         And do bump with the king
+         Creep down the hall
+         And go to bed with the queen
+         And when they come for my head
+         I’ll be somewhere at sea
+         Singing loud
+         Singing proud
+         Its good to be free
+         Cuz I won’t waste another day
+         Living someone else’s way
+         I want to be happy
+         I want to be free
+         Fuck what they say
+         Im doin me
+
+Let’s start with the set up. The first line of a song is
+arguably the most important line in the song. You have
+about ten seconds to make someone care, so you have to
+hit them hard, and you have to hit them quick. I always
+try to make the first line or two of my songs visceral,
+visual, conversational, or all three. The more vivid a
+picture you can paint with the least amount of words the
+better. The more unexpected a lyric, the better the shot
+you have at capturing someone’s attention and bringing
+them along on the journey. Like film, cut the fat, and start
+the story where things are heating up. No one has the time
+or attention for some long-winded back story, and the
+great challenge with songs is that you only have a few
+minutes to speak your piece. There is zero room for
+bullshit and zero room to say things that don’t add to the
+energy and the emotion of the narrative. Say what needs
+to be said, and nothing more.
+
+         I was walking around the neighborhood with my
+         mom
+         And she said “Mike don’t you want to meet
+         someone?”
+         I said “No, I want to meet everyone.”
+It was Christmas of 2017 I believe, and the conversation
+was verbatim. Like the song yogi I am, the minute the
+words “No, I want to meet everyone” rolled off my
+tongue I shouted:
+
+         “A-ha! Thats it!”
+         “Thats what?” My mother replied.
+         “The song mom! The song.. you’re a damn
+         genius, you’re so money and you don’t even
+         know it!”
+
+She looked at me confused, per most of our conversations
+about life. The takeaway here is that having that reflexive
+instinct and always being ready for the God Wink will put
+you in a space where songs seem to reign down from the
+heavens. Learning to Listen can turn a seemingly random
+conversation in your life into the catalyst that gets you in
+the room with one of your musical heroes. Like I said
+before, Great Truths and the big ideas are often hidden in
+plain site.
+
+Let’s look at those first few lines of “Doin Me” again. We
+start with action and motion (ie energy). I am walking and
+talking with my mother. Everyone can relate to that. She’s
+tries to convince me that I need to stop fooling around and
+settle down or I will end up alone. Scary.. A lot of people
+can relate to that, too.
+
+         “No, I want to meet everyone!”
+
+In the film world we call this a reversal. It’s a twist, where
+you expect one thing to happen but something counter-
+intuitive happens. It’s a good way to keep listeners on
+their toes and build tension in a story. I love to add a good
+reversal right before a chorus. It makes your chorus feel
+more powerful, like its launching into an uncharted world.
+Reversals make the chorus feel like an even bigger
+revelation. Read the first few lines of this chapter again.
+See what I did there?
+
+Carrying on with the verse..
+
+         I want to get drunk with the punks
+         And do bump with the king
+         Creep down the hall
+         And go to bed with the queen
+
+The internal rhyme is nice ear candy but the real power
+here is the visual. “A bump with the king” is a double
+slammer. Some people envision Elvis, some people think
+of a King with a crown. Some people wonder which of
+the two it is, and are twice as engaged from the brain
+teaser. People still occasionally ask which King I was
+referring to. The answer: Whoever the hell you want it be!
+That’s the beauty of songs and leaving things open to the
+imagination. Let listener’s mind paint whatever they
+emotionally relate to the most. Also note, the motion/
+speed of the narrative. Again, we always want to keep in
+mind energy, pace, vibration. Hit them hard, hit them fast,
+and keep it moving.
+
+         And when they come for my head
+         I’ll be somewhere at sea
+         Singing loud
+         Singing proud
+         Its good to be free
+“Singing loud, singing proud, it’s good to be free.” This is
+the set up for the chorus. From a technical perspective, it’s
+not the best, either. I give away the main Truth of the song
+before the chorus even starts— but in this case it works
+fine because the whole narrative is about the archetype of
+freedom, so in essence, everything past the first line is the
+reveal, and in a way, the whole song is a chorus or mantra
+of its own.
+
+         Cuz I won’t wast another day
+         Living someone else’s way
+         I want to be happy
+         I want to be free
+         Fuck what they say
+         I’m doin’ me
+
+The entire chorus section is a stack of A Great Truths. It’s
+full of simple archetypes that mean something to
+everyone’s psyche. They remind people to strive for
+liberation from the illusory thoughts of others in times
+when their spirit can’t seem to Remember. When you
+stack them together, in all their simplicity, it’s an
+emotional and inspirational slam dunk. Now for verse 2:
+
+         My Mom said Mike Don’t you want to be
+         comfortable?
+         I said No! I don’t want to be comfortable
+         I want to be scared out of my head
+         Out out of my mind
+         I want to fall in and out of love
+         A few thousand times
+         I want spend all my money on my friends
+         And on drugs
+         I wanna ride around on a horse
+         And give people hugs
+         And when I come into town
+         They’ll say Aww there’s Mike!
+         There’s something wrong with that boy
+         I swear he just ain’t right..
+
+The second verse continues and develops the narrative.
+By bringing in a montage of different visuals you send
+people on an emotional journey. Again, think of your
+songs as an extremely short film. When your character
+leaves their normal world and enters into what Joseph
+Campbell used to call “The New World,” there is a sense
+of thrill and wonder at what they might encounter.
+
+Lets look at verse three..
+
+         Don’t you want to have kids
+         No I am a kid
+         And if you go looking momma
+         You might find some
+         Cuz my pull out game
+         Ain’t so hot
+         And if u find them
+         U tell them daddy said
+         Follow no man
+         Follow the god within
+         They’ll be coming for your heart
+         Real soon, son
+         This whole this is rigged
+         Your back in the matrix
+         And you gotta find your own way out
+There were a lot of people who told me I should pull out
+the “pull out game” bit, that it was too crass, and hurt the
+“This Song is For Everyone” thing, but I always loved it.
+In terms of impact, it served a deeper purpose, too. When
+you can yank somebody from one emotion to another
+emotion on the completely other side of the spectrum,
+from tears to laughter, in the blink of an eye, something
+powerful happens. Occultists call it mesmerism. Feeling
+each emotion holds power on its own, but internally The
+Ride from one strong emotion to an opposite emotion is
+the real power, and the Holy Grail of making people Feel.
+There is a reason why lovers will go back to an abusive ex
+they had a whirlwind relationship with— The Ride from
+the extreme highs to the most gruesome lows captivates
+the human spirit. It is Feeling that reminds us that we’re
+here, alive, experiencing. This emotional magnetism was
+used purposely by the great seducers in history to conquer
+innocent hearts. The 17th Century Duc De Lazaun used to
+write vivid and passionate letters to his lovers, spark their
+imaginations and emotions, and then disappear for weeks
+on end. And they loved it! Brilliant.. but manipulating
+energy and emotion for one’s own illusory benefit is the
+definition of Black Magic, and said to be one of the
+biggest sins a yogi can commit. Unless you are ready to
+pay a serious karmic debt, don’t use The Ride to seduce
+other human beings for your own good. We want to
+practice “White Magic,” where we consciously
+manipulate words and energy to share Great Truths and
+dissolve the separation between human beings.
+
+         Follow No Man
+         Follow the God within
+A few more AGTs coming in hot. I’m guessing if you are
+reading this book, you’re probably a spiritual person.
+Don’t shy away from addressing God or a higher power in
+your songs. It immediately pulls the listener out of the
+mundane and into the Unknown, and also puts their mind
+back on what’s Real.
+                  CHAPTER 4
+                     THE BLOOD
+
+
+
+
+“People won’t remember what you said or did, but they
+   will remember how you made them feel..” Maya
+                     Angelou
+
+
+
+
+          Beneath the surface of everything human beings
+       experience on Earth lies two opposing emotional energies,
+       fear and love. Every decision we make in life is guided by
+       one of these forces, and ultimately the Path we walk is
+       determined by the dance between these dominating forces
+       of the psyche. They are the only real emotions, every
+       other emotion being a shade or hue of the two. Love is the
+       grounding, freeing, expanding, and healing energy. Love
+       is Everything In Its Place. Fear is the lack of these, the
+       darkness where the light does not shine, or has yet to
+       shine. Love and fear are the blood of songs. They run
+       throughout the entire body and connect all the parts.
+       Without continuous blood flow, a song has no life.
+   As we write songs, it’s important to keep a close
+awareness of which of these two emotions powers our
+narrative at any give. It’s the ever-evolving dance between
+these two emotions that makes us connect to a song on a
+human level. It’s the yin and yang, the push and the pull.
+There is no sensation of light without the shadow.
+   The greatest songs are rarely just one emotion. Many
+times you will find that while one of these emotions may
+be predominant, the other emotion will still peek its head
+out to keep things interesting and create a sense of
+tension. One of the most common structures you will see
+in great songs is the verse sections or framing of the song
+is more rooted in fear-based emotions, and the chorus
+section is where all the uncertainty and anxiety is laid to
+rest. A Truth bomb drops, and there’s a Remembrance or
+understanding rooted in love. It’s the moment we relax
+and re-center in ourselves. A good example of this is Mac
+Miller’s “Dunno”
+
+Verse 2
+Well I was busy when you hit my phone
+but you miss me told me come back home
+and you don’t really like to sleep alone
+but I’m taking too long
+I’m always taking too long
+
+The verse is dominated by Mac’s girlfriend’s general fear
+of loneliness and fear of lost love. The desire for that
+security is one of the most common and relatable things
+we feel as humans. The verse ends on Mac’s fear that he
+may be doing something wrong, and could also
+potentially lose that love. That feeling is quelled though
+when the next section comes..
+Pre-Chorus
+Baby we don’t need to trip
+We can be right here
+When the shit get weird
+we can switch up gears
+I wanna see them lips
+kiss them ear to ear
+I wanna hear your song
+Oh I wanna feel just how you feel
+Touch it one more time
+So I know your real
+we can spin that wheel
+wouldn’t you rather get along
+
+Chorus
+Until there is no longer
+Lets get lost inside the clouds
+and you don’t have to work harder
+I can calm you down
+
+I think we just might be alright
+thank god
+I think we’re gonna be alright..
+
+Mac puts to rest all the fear with his reassurance and faith
+in the love they have, and there’s a release in all the
+tension and anxiety that was building. Notice how casual
+some of the lyrics are: “when the shit get weird.” It
+doesn’t sound songy, it sounds conversational, and brings
+us even closer to his life and story. We feel like we’re
+getting to know him. When Mac passed, a lot of people
+felt like they lost a friend, myself included. I hadn’t ever
+really had that feeling when other artists passed away. It
+was in the vividness, sincerity, and truth he spoke that
+made us feel like we knew him personally. Because in a
+way, we did.
+   Another powerful way to balance the dance between
+love and fear is bouncing quickly back and forth between
+the two. I’ve always found that this polarization makes
+the narrative feel energized and well-developed because
+the Ride we go on emotionally never stagnates. Again,
+we’re going back to some verses from the Beatles…
+
+When I find myself in times of trouble (fear)
+Mother Mary comes to me
+Speaking words of wisdom
+Let it be (love)
+
+And in my hour of darkness (fear)
+She is standing right in front of me
+Speaking words of wisdom
+Let it be (love)
+
+And when the brokenhearted people (fear)
+Living in the world agree
+There will be an answer
+Let it be (love)
+
+Notice the first line of each verse contains words like
+“trouble, darkness, brokenhearted” These are all words
+vibrationally we associate with fear. Don’t think you have
+to get overly literal and say “I was swimming with
+sharks” to have people make the fear association. Another
+great version of this is using the Fear and Love dance in a
+song’s chorus, like James Taylor’s “Fire and Rain.”
+Oh I’ve seen fire
+and I’ve seen rain (fear)
+I’ve seen sunny days
+I thought would never end (love)
+I’ve seen lonely times
+When I could not find a friend (fear)
+But I’ve always thought
+That I would see you again.. (love)
+
+Beautifully simple. A quick ride through the tides of life.
+Somehow, in a matter of ten seconds, we feel like we’ve
+been there with him through it all.
+            CHAPTER 4
+             THE BREATHE
+
+
+
+
+                 “quote here.”
+
+
+
+
+   We have the heart, the bones, the blood of the song.
+But what else keeps a song alive? What keeps the song
+flowing and the listener engaged?
+   The Breathe of a song is all about the pace and rhythm
+of the energy being transferred. It’s rarely mastered and
+often overlooked because it’s essentially “invisible.” The
+Breathe isn’t so much about what’s There, but what’s Not
+There. Like a painter blessing a canvas, it’s the parts of
+the canvas left untouched that gives form and dimension
+to the image created. Silence in song is the white of your
+canvas. Think of it like the auric field of your song, where
+your lyric and melody have a place to glow.
+   Silence in songs is also the space where the vibrations
+being transferred from artist to the Listener have room to
+soak into the consciousness of the Listener. For every
+inhale, the listener also needs a chance to exhale. Without
+space and silence, none of the emotion and energy of a
+song will be internalized by the listener. In fact, without
+space, the listener will end up exerting and losing energy
+as they try to deal with the overwhelming amount of
+information pummeling them. It’s for this reason that
+some songs that are seemingly “high energy” actually
+make you feel confused and exhausted, while some more
+“mellow” songs leave you feeling fully energized.
+
+         “To the ordinary musician the sound is
+         important. To the master musician the silence is
+         important “- Osho
+
+   Hands down, the number one place I see songs lose
+their life-force comes down to the pacing and spacing of
+energy being delivered. A lot of times, songs are killed
+before they even really start: too many words, too many
+melodies, too many rhythms, too much energy and not
+nearly enough silence. An overdose of tension, an under-
+dose of release.
+   When we look at the script of our songs, there are
+questions we should always ask ourselves. How many
+useless words can we cut? How can we tighten our
+phrasing so that the song breathes more? Can we find a
+way to make the third verse half as long and say twice as
+much? The Beatles “Love Me Do” has only 19 unique
+words and the effect it had on people was enormous.
+
+A straight forward example of Breathe is illustrated in
+“Lovesong” by the Cure (or Adele’s version.) This song
+has some serious “breathe” in it, and is an extremely easy
+and energizing listen despite the melancholy feel of the
+song.
+
+Whenever I’m alone with you (inhale)
+You make me feel
+like I am home again (exhale)
+Whenever I’m alone with you (inhale)
+ You make me feel
+like I am whole again (exhale)
+
+Musical interlude (giant breathe)
+
+Whenever I’m alone with you (inhale)
+you make me feel
+like I am young again (exhale)
+Whenever I’m alone with you (inhale)
+you make me feel
+like I am fun again (exhale)
+
+However far away (breathe)
+I will always love you (Great Truth, breathe)
+
+Notice how there is almost just as much white in the
+canvas of this song as there is paint. As a listener, it’s
+effortless to absorb the energy coming at you and
+extremely easy to process exactly what the song is saying.
+This song is also a great example of the power of
+simplicity. The repetitive and slightly augmented verse
+lines are so catchy, it makes the entire song feel like a
+chorus. If you asked someone to sing you this song,
+there’s a good chance they would hum the verses instead
+of the chorus. The simple line ending the chorus is a
+classic example of a Great Truth. It sums up the sentiment
+of the song and ups the ante. “I will always love you.”
+When set up in an exciting way, you can’t ever go wrong
+with a line like that. There is a good reason “love” might
+be the most used word in song history. The vibration of
+the word alone has the power to heal. It it one of the
+ultimate archetypes and probably the strongest word in
+our language.
+   Let us be clear though, the message here is not to write
+a bunch of soft, sleepy ballads, it’s to give whatever
+energy and emotion we release, no matter how fast or
+heavy, a chance to land. The speed of the things is
+negligent.
+   Pantera’s “Walk” is an interesting case of Breathe.
+While I’m sure this song would blow Dr. Emoto’s
+beautiful water crystals to smithereens and wilt a bed of
+roses, its awesomely done. Side note, I like to think of
+writing and listening to heavy, dark music the way I think
+of smoking a cigarette or watching a horror movie. It’s
+definitely not “healthy” but it’s okay to indulge in every
+once in a while if you do it meditatively and are fully
+present to the experience and sensations. Osho used to say
+if you were to rob a man and do it fully consciously, no
+sin would be incurred. The catch is here, of course, that if
+you were fully conscious and aware of the feelings you
+would create for the person you robbed, and the laws of
+karma, you would never rob them to begin with. Pantera’s
+“Walk” will be our one cigarette for the book. The
+overwhelming emotion of the song is fear and hate
+dominated..
+Can’t you see I’m easily bothered by persistence
+One step from lashing out at you
+You want in, to get under my skin
+and call yourself a friend?
+I’ve got more friends like you
+What do I do?
+Is there no standard anymore?
+What it takes, who I am, where I’ve belong
+You can’t be something you’re not
+Be yourself, by yourself, stay away from me
+A lesson learned in life
+Known from the dawn of time
+
+Re—
+Spect—
+Walk!
+
+There’s a lot of energetic information in the verses. It’s,
+no pun intended, walking that fine line of a being a cold
+blooded pummeling. It feels a bit like the vocalist has our
+head under water as a listener. We’re struggling for air
+and right before our consciousness starts to fade, the
+chorus hits, and he rips us up out of the water..
+
+Re! -we gasp for air.
+Spect! -Ah another breathe! How sweet the taste!
+Walk! -And just like that we are back to life and wide
+awake.
+
+   Another great way to study silence is by looking at
+some of the most famous speakers and speeches of all
+time. Without the accompanying of music, the effect The
+Breathe has is amplified. Martin Luther King’s “I have a
+Dream” speech is a great example of tension and release
+and how you can use it as an emotional pump to build
+energy.
+
+I have a dream—
+That one day—
+Little black girls..
+
+Throughout the entire speech, Dr. King pauses regularly
+to build the tension and anticipation. More importantly, he
+gives the energy of his words time to sit and absorb in the
+consciousness of the listener. No one left Washington
+D.C. that day feeling tired or deflated, they left feeling
+energized and inspired, like they could change the world.
+“I Have A Dream” is the perfect example of how one soul
+transferring simple sound vibrations emanating from the
+heart, can literally change the course of history. There is
+no question in my mind, that every single human being
+walking this Earth holds the same potential.
+    The Breathe in songs makes them shine. Don’t let a
+great moment land flat by following it up too quickly. Let
+it hit, let it land, and then do it over and over again.
+                  CHAPTER 5
+         ENHANCING CHARACTER
+
+
+
+
+“If you want to understand the secrets of the Universe,
+  think in terms of energy, frequency and vibration.”
+
+
+
+
+         By having a thumping heart, strong bones, healthy
+      blood and a deep breath, we’ve created the full body of a
+      living song. The listener is emotionally engaged and
+      energized. Now let’s take a look at the more detailed
+      places in songs where we can up the ante and add to the
+      uniqueness and memorability.
+
+      A Beautiful Face
+
+         The introduction of your song, or first few lines, is the
+      face of your song. It’s a make or break moment,
+      especially in the era of streaming and short attention
+      spans, where we can bring someone on the journey or lose
+      them forever. A lot like the site of a beautiful face, the
+introduction can instantly attract us and make us curious
+to learn what else is there.
+   The more surprising, raw, vivid and articulate your
+introduction, the better. This is the place to set the scene
+of a story worth hearing. Bright Eyes “First Day of My
+Life” does this wonderfully..
+
+This is the first day of my life
+I swear I was born right in the doorway
+I went out in the rain
+Suddenly everything changed..
+
+The first line draws us in right away. As a listener, we
+wonder who is telling the story. Is it from the perspective
+of a newborn, or is the narrator having some sort of
+rebirth? Either way, we know we are going on a journey
+with someone entering into a new world, and there’s
+always excitement in that feeling. “I swear I was born
+right in the doorway” is a beautifully vivid line. It paints a
+picture that draws us in even more.
+
+Oasis “Champagne Supernova” is another classic song
+with a great opener.
+
+How many special people change?
+How many lives are living strange?
+Where were you while we getting high?
+
+Opening a song with a series of questions engages a
+listener because it’s a call to action. It puts the listener on
+the spot and addresses them directly. “Where were you
+while we were getting high?” is so human and
+conversational. It sounds like something a friend would
+say. Talking about altered states of being, whether through
+drugs, dreams, meditation etc, are always captivating
+because it pulls us out of the mundane, everyday head
+space.
+
+Let’s look at the legendary intro from Patti Smith
+“Gloria.”
+
+Jesus died for somebody’s sins
+But not mine
+
+Valuable lesson: Do not be afraid to offend. The most
+legendary writers and yogis alike were very polarizing
+figures. The great Krishnamurti stood about 5’5 but had
+the intensity and ferocity of a bull. The man had a
+piercing stare and never bit his tongue. His goal was not
+to be liked, but to challenge people. The writer’s goal is
+the same. Your only job is to speak your Truth. Pushing
+the boundaries and saying the things that aren’t popular
+with everyone will spike listeners emotions, whether
+they’re tickled or enraged. The edge and element of
+surprise in Patti’s opener above make this song hard to
+turn off. She has all of our attention from minute one.
+History favors the bold, and so does songwriting. Go
+where no man has gone, and someone will listen closely.
+Using vivid imagery and unusual descriptors in your first
+few lyrics is another tried and true method for capturing a
+listener’s attention. Let’s look at The Eagles “Hotel
+California.”
+
+On a dark dessert highway
+Cool wind in my hair
+Warm smell of colitas
+Rising up through the air
+
+The visual here is painted so well, we feel like we’re
+riding along in the passenger seat. Notice the variation in
+descriptors: the look of the highway, the feel of the wind,
+the smell in the air. It’s hitting numerous senses, which
+helps fully bring us into the moment. I don’t even know
+what the hell colitas are but the vibration of the word and
+the warmth attached to it makes me “get it.” The fact that
+I as a listener don’t know what colitas are doesn’t “lose
+me,” it draws me in even more. Again, it’s the question
+that’s more seductive than the answer. As I listener, I’m
+going “Is that a flower? I think it’s a flower. It sounds like
+it’s flower. It’s warm, so probably some type of creamy,
+homey yellow pedaled scent.” If you can get people to
+actively be engaging with the song in this way, you’ve got
+someone who’s probably going to come along for the ride.
+Sometimes when I have a lyric that feels a little flat, I’ll
+put one of the key words in a different language or find an
+old way of turning the phrase. Don’t be afraid to get
+weird. It’s all a balance. Challenging the listener is always
+a good thing.
+A Great Reveal
+
+
+
+
+         The journey has reached a pinnacle moment.
+         The tension has hit its peak.
+         It breaks.
+         and All is Revealed.
+
+
+The Reveal is the “Ah Ha!” moment.. Where the journey
+breaks through and storyteller discovers and delivers A
+Great Truth or his epiphany about the human experience.
+It is the soul’s version of getting the hotty or finding the
+ancient scroll on the island. In basic earthling song talk,
+this is usually a moment in your chorus section or
+transition into the chorus, but it doesn’t always have to be.
+
+Let’s look at “I Wish You were Gay,” a song by the
+incredible Billie Eilish. (Sometimes I get the feeling Billie
+was Kurt Cobain in a past life. It’s something in her eyes
+and the look in her face when she stares out a window.)
+
+         How am I supposed to make you feel okay?
+         When all you do is walk the other way
+         I can’t tell you how much
+         I wish I didn’t want to say
+         I just kind of wish you were gay
+
+Now that’s an incredible reveal. Billie is so upset with her
+crush’s unrequited interest she realizes, “but only if he
+was gay! Ah that would make it all so much easier. I
+wouldn’t have to feel any of this confusion and insecurity
+about myself. Of course I wouldn’t be worthy of his
+interest, he doesn’t even like girls.” Part of what make
+this reveal so awesome is that it’s a great reversal. You
+don’t see the gay line coming (besides the title). There’s
+some emotional mesmerism going on here too. Billy
+swings us from a feeling of melancholy and sadness all
+way to the other side of the emotional pendulum, laughter
+and joy. She’s taking us on The Ride and seducing us
+emotionally without even realizing it. Another “hook
+inside the hook” here is her verbalizing the strange things
+in her head that most people think but never say out loud.
+It’s honest, endearing, and adds a lot of dynamic to the
+song. There’s a certain edge and wow factor that
+immediately draws us in. Everybody loves the guy or girl
+who will stand up in a crowded room and speak their
+Truth, with no regard for the opinions of others. On a
+spiritual level, I think we subconsciously recognize those
+people are operating from the Higher Mind, and in a way,
+are a step closer to god. There’s a clarity and conviction
+that you don’t find in the average person.
+
+Let’s switch it up and look at Kendrick Lamar’s “Bitch
+Don’t Kill My Vibe”
+
+         I am sinner
+         Who’s probably gonna sin again
+         Lord forgive me
+         Sometimes I need to be alone
+         Bitch don’t kill my vibe
+         Bitch don’t kill my vibe
+
+Kendrick reveals this chorus in classic hip-hop fashion, he
+smacks you right in the face and shouts “sometimes I
+need to be alone, bitch don’t kill my vibe.” Point taken.
+The power here is moving from his passive and self
+critical perspective into unexpected a jarring assault. And
+like Billie, it’s part of the reason people love him so
+much. Through a montage of imagery, he takes you on the
+most vivid journey, and then nails you with the way he
+really feels in one simple line. His writing feels so
+otherworldly, there’s no question the guy is tapped into
+his Higher Mind and receiving the magic from the God
+Zone. And take note, arguably the most beloved and
+creative artist in rap music speaks about god, spirit, and
+the Unknown more than anyone else in the genre.
+   While Great Revelations generally unfold in the
+chorus, they don’t always have to. Leaving them until the
+very end of the song can make the journey even more
+intoxicating. Led Zeppelin’s “Fool in the Rain” is a
+perfect example.
+
+Examine the set up, verse 1:
+
+          Well there's a light in your eye that keeps
+          shinin'
+          Like a star that can't wait for night
+          I hate to think I been blinded baby
+          Why can't I see you tonight?
+          An' the warmth of your smile starts a burnin'
+          An' the thrill of your touch give me fright
+          And I'm shakin' so much, really yearnin'
+          Why don't you show up and make it alright-
+          yeah?
+          It's alright-right
+
+
+The speaker starts painting the narrative of his yearning
+for a woman. “Why can’t I see you tonight?” Asking
+questions in songs makes them more conversational and
+adds the tension of an unresolved situation.
+Verse 2 evolves the narrative:
+
+         Now I will stand in the rain on the corner
+         I watch the people go shufflin' downtown
+         A-nother ten minutes no longer
+         An' then I'm turnin' around 'round
+         An' the clock on the wall's movin' slower
+         Oh my heart it sinks to the ground
+         An' the storm that I thought would blow over
+         Clouds the light of the love that I found, found
+
+Notice the vividness of the picture being painted. The
+more detailed it’s painted, the more we share the
+experience and emotion of the speaker. “Oh my heart
+sinks to the ground.” In film, this is called the “All is lost”
+moment, when our protagonist has become hopeless, and
+contemplates giving up “The Hero’s Journey.”
+
+Let’s look at the final verse, the culmination of the
+narrative:
+
+         Ooh now my body is starting to quiver
+         An' the palms of my hands gettin' wet oh
+         I got no reason to doubt you baby
+         It's all a terrible mess
+         An' I'll run in the rain 'til I'm breathless
+         When I'm breathless I'll run 'til I drop, hey!
+         An' the thoughts of a fool's gotta count of
+         careless
+         I'm just a fool waitin' on the wrong block ohh-ye
+
+The whole time, he was on the wrong block! And maybe
+she actually did love him too.. We will never know.
+There’s a big power in that, the wondering. Like
+everything in life, the Question is far more exhilarating
+than the Answer. Robert Plant literally leaves the Reveal
+until the last line, and the high we get as a listener when
+we finally Get It makes the journey worth it. The ultimate
+pay-off. Also note, as the story develops his imagery
+becomes more visceral, explaining the physical reaction
+his body is having. The images of“body starts to quiver”
+“palms of my hands gettin wet” “breathless” bring us into
+his physical being. These are some of my favorite lines to
+use in songs because of the effect they have on the
+listener.
+
+         I feel it in my bones.
+         My blood is pumping.
+         Ice running through my veins.
+         My cold, cold heart.
+         My face goes flush.
+
+These are just a few examples from songs of my own.
+Placing these moments in a “pre-chorus” or a bridge
+section helps the song pick up momentum before
+launching into A Great Revelation/Truth.
+       Listen to the songs above and pay close attention to
+the rising energy and emotion before The Great
+Revelation. A big part of the reason these reveals are so
+strong and feel so good is because of the precision and
+pacing they are set up with.
+            CHAPTER 5
+     EXERCISING THE BODY
+
+
+
+
+                      “If yo.”
+
+
+
+
+   Our song is now alive and kicking. All of its organs are
+pumping, it’s bones are strong, and it has the face of
+Pamela Anderson.. but our work is not done. Just like a
+human body, it has to be fed and taken care of to become
+the highest version of itself.
+   One of the best things you can do after writing a new
+song, or the majority of a song, is to let it breathe. Get
+away from it. As tempting as it is to listen to day after
+day, giving a song some space for a few days or a week
+will give you the ability to actually Hear it. It’s really easy
+to get attached to the emotion and excitement you had
+when writing it, and in turn, the way you hear it may be
+clouded by all that passion. Back before I was aware of
+the DNA, I can’t tell you how many times I was so
+excited about a song, convinced it was a great creation,
+and then realizing on fresh ears that it just wasn’t very
+good: sometimes the emotion was lost in translation, other
+times it just didn’t come together in a way that felt
+powerful, most of the time there no Great Truth. The
+beauty of understanding this teaching and the DNA of
+songs is that it keeps us from spending too much time
+pursing un-inspired ideas and writing songs with no heart.
+The changes and upgrades our songs need is less critical
+and more nuanced.
+   When the heart, blood, and bones are all in place, the
+questions we should be asking ourselves are the little
+things, like:
+
+Can I make this verse less wordy and more focused?
+Am I entering into the chorus of the song in the most
+exciting way?
+Does my bridge section bring in a new idea or add
+tension?
+
+   Now, it’s time to play it for someone else. Pick
+someone who’s preferably not a songwriter, someone you
+can trust to just listen and feel, someone you know has a
+certain understanding and appreciation for art and
+aesthetic. This may be an old high school friend, or your
+uncle. We all know those people who have a good ear and
+“Get It” but aren’t overly analytical or judge-mental. My
+girlfriend happens to be one of those people for me, I can
+tell in the first 30 seconds by her facial expression and
+body reaction if I have a song that is really connecting
+and captivating. At the end of the day, we don’t write for
+ourselves, we write to communicate with other humans,
+so if no one Gets It, then there is probably more serious
+work to do. With all this said, don’t ever let one person’s
+opinion discourage you if you are truly convicted in the
+ song, they may just be wrong. We all have had those
+ songs we didn’t think much of, but some weeks or days
+ later, when we entered a new phase of our journey, they
+ became our favorite thing. If the majority of the people
+ you share your song with have no reaction, or a bad
+ reaction, they are probably right. There’s no shame in
+ letting it be, moving on, and stepping back into the God
+ Zone on the quest for the next big idea.
+
+
+
+
+  THE SOUL OF THE WRITER
+
+
+
+
+“You want to be enlightened? Feed people.”
+
+
+   We’ve looked at the DNA of great songs, but what
+ about the DNA of the writer and the story they tell? What
+ about us as the vessel and instrument these great songs are
+ channeled through? How can we live our lives and in
+ what way can we enhance and define our own singular
+perspective and awareness? How can we go beyond the
+beyond, and share our journey with the world?
+   Like any tool or instrument, it is important that we tune
+and evolve ourselves to Be and receive on the highest
+level. Think for a moment of a guitar or piano, what
+happens when we tune the instrument? We are adjusting
+the vibration of the instrument to create a certain harmony
+and alignment in its state of being so it can be heard in the
+most impactful way. Naturally, as humans we are much
+more complex than a guitar or piano, and “tuning”
+ourselves is not nearly as straightforward as a musical
+instrument, but with conscious effort it is wholly possible
+and endlessly fruitful for ourselves as creators, yogis, and
+humans alike.
+
+   Like learning anything in life, one of the best ways to
+Becoming is to understand those that Became before us.
+By having a close look through the Yogic lens at the lives
+and adventures of the legends, and even the not-so-
+legendary, we can begin to observe and understand what
+made them Who they were. Like any basic science, the
+discovery and study of the common factors held between
+them, and the things that set them apart from each other
+can serve as a roadmap for our own journey. We can use
+these understandings to get “in-tune” with the real magic
+of our own lives, and share it in our songs.
+   Through this discovery and on our own path to inner
+attunement, somewhere along the way a self-Definition
+occurs. It becomes more and more clear Who We Are and
+what we’re doing here. Think of it as the Great Truth of
+ourselves, the heart of the artist. Songs hold a deepest
+truth, and we do too. Artistically speaking, it is the
+supreme hook, and what separates the legends from those
+forgotten by time. The clarity and conviction of Who we
+are, bringing people into our world, and helping them to
+find the Definition in themselves it what separates the true
+artists and writers from the rest.
+   There are many young songwriters and artists who are
+extremely gifted and have unlimited potential, but they,
+and their songs, are “missing” the most important
+ingredient in the recipe. They have catchy melodies, witty
+lyrics, and slick productions but for some reason it just
+doesn’t feel quite like the Real Deal. The turn your head
+“Who in the world is that?” reaction just isn’t there. If the
+goal is to do this journey in a legendary way, we know
+that indescribable magic has to be there, so let’s go
+beyond the surface, and see what we find.
+
+The Who
+
+   The discovery and development of this Who is the
+foundation of any great artist or creator. Without it, we are
+lost in the proverbial woods, directionless, and our
+listeners are lost too. From Cobain to Banksy, there lies a
+singularity and definitiveness to their entire ethos and
+Being. While this Who should naturally evolve over the
+course of one’s story, establishing the original Who is step
+one on the real journey. For artists the key will be finding
+this Voice in ourselves, for those who are strictly
+songwriters, the key will be to See and develop this in the
+artists or singers you are creating for. They are two sides
+of the same coin, and the process is essentially the same
+discovery.
+    Let’s look at some individual examples in popular
+music culture to get a better understanding of this Who.
+Lana Del Rey
+The hopeless, insecure romantic, always pining for the
+love and approval of the strong, unattainable
+Machiavellian man. We join her ride on the endless doom
+loop of trying to acquire the un-acquirable, hoping that
+sooner or later the fantasy will become real. Lana’s
+character is also a great example of a character that never
+seems to evolve or grow, and over the years has become
+sadly somewhat stale and boring to follow. The same
+narrative a thousand times, over the same sonic backdrop,
+never moving or growing from where it began. As great
+as she and her songs are, I get endlessly frustrated as a
+listener because I know there has to be more to her as a
+human and a character that we know nothing about.
+There’s almost something un-human about the one-
+dimensionality of it all, making her feel more like a
+cartoon and less like a real person.
+
+Lewis Capaldi
+The pudgy, funny guy with a heart of gold, constantly
+striking out with the opposite sex and getting his
+heartbroken because he whole heartedly believed his
+mother and the rest of society when they said “being nice
+and funny” would get the girl. I hope as Lewis’s story
+develops, we will see him evolve and potentially take on a
+less naive and needy character. How cool and surprising
+would it be to see Lewis drop a song along the lines of
+“Baby You Can Leave if You’d Like.”
+
+Olivia Rodrigo
+The quintessential 17 year old girl, struggling to
+understand her place in the world, and like Lana, hoping
+some great love affair will cure the wounds of the heart.
+Olivia shows us that you can be lost, and tell the narrative
+of Lostness, and if it’s done in a style and way that’s so
+specific and vivid, we get the idea that she actually knows
+exactly Who she is. She’s so aware and tapped in to her
+lostness, it’s as if she isn’t lost at all. It’s pretty damn cool
+that as a 34-year old man, I whole heartedly feel like a
+teenage girl in high school when I listen to her songs. I’m
+right there in her shoes. I Get It.
+
+
+
+
+Wiz Khalifa
+
+On the opposite end of the spectrum, take an artist like
+Wiz Khalifa. We know exactly what he’s about. He just
+wants to get high and enjoy his life, and doesn’t have the
+time or energy for any bullshit or bad vibes. When life
+feels too much, we know we can turn to a guy like Wiz
+and his music to step into a more carefree world and
+mindset. Wiz may not be remembered in 200 years, but
+his character was defined and clear enough for an entire
+generation latch onto.
+
+Mac Miller
+Mac is, in my eyes, one of the few of our time that truly
+had the legendary spark, and had the type of ever-
+evolving narrative worth sticking around for. We started
+with him as a carefree kid smoking pot behind the
+gymnasium, stuck by his side during the heartbreaks and
+confusion of his young adult life, contemplated the deeper
+aspects of the human existence as the boy grew into a
+man, and picked up much Truth and wisdom along the
+way. His persona and music grew, changed, and matured
+for the entirety of the time we spent with him. A truly
+dynamic and lovable guy. Someone we wanted to be
+friends with and could relate to in so many ways, year
+after year.
+
+Nailing down this Original Who in ourselves or those we
+write for is about setting the scene and hook for the
+adventures to come. It’s the starting place for an entire
+world and story to be born from. Figure out your Who,
+and you have the Great Truth, the heart, and the
+foundation all great things You are born from.
+
+
+
+The Film Parallel
+
+To look from another angle, let’s jump for a moment to
+the world of film and television. Here too, defining your
+characters is where it all begins. If you were to pitch a
+movie or show to any executive, the first thing they will
+want to know is about your main protagonist: who they
+are, what they want in life, what makes them tick, why
+they are worth watching. The greatest characters in these
+mediums are unique, full of dynamo, and most
+importantly to the narrative, evolving. Looking at these
+characters with a focus on their archetype, and how
+clearly they are defined, and how drastically they evolve
+is a valuable lesson in the narrative that needs to unfold
+for ourselves as artists, or for the artists we write for.
+A few examples of compelling characters:
+Walter White (Breaking Bad)
+Walter is a jaded man, weathered and worn by the trials of
+his life. He is faced with the ultimate dilemma, knowing
+he is going to die and willing to do anything to leave his
+family with the security and safety they will need when
+he’s gone. An unexpected and deadly circumstance
+catapults an average Joe high school chemistry teacher
+into a full bad-boy, savage. What makes his character so
+captivating is this ultimate 360 transformation. If we
+make clear to our listeners a great dilemma or inner
+conflict we battle, and must overcome, we can take them
+on a real adventure. What also makes Walter’s “Who” and
+story so compelling is the fish out of water aspect. Any
+time we are surprised by something, it triggers an
+excitement and willingness to hear more. Take for a
+example a country singer who grew up in the Brooklyn
+projects selling drugs, or a neurotic Jewish goof ball
+injected into the world of black culture(Little Dicky): as a
+listener, we know we are going to be apart of something
+exciting and unpredictable. Again, another case of the
+Question being much more seductive and captivating than
+the Answer.
+
+Cameron Frye(Ferris Bueller’s Day Off)
+Cameron begins the movie as pessimistic, apathetic to
+life, and close minded. He is uncomfortable in his skin,
+and angry at the world. We all know a Cameron, and his
+character is as clear as day to us. As the story unfolds,
+with Ferris as the catalyst, he is ripped unwilling from the
+tight confines of his own personal hell. Cameron’s
+character explodes into a whole new world. He finally
+“let’s go” and taps into the freedom, magic, and madness
+of it all. He is another great example of an evolving Who
+that makes the journey worth taking.
+
+Forrest Gump
+The magic in Forrest’s character worth exploring is the
+awe-inspiring and always unpredictable juxtaposition of
+his personality. Forrest is as simple and “stupid” as they
+come, but what he lacks in IQ and societal abilities he
+makes up for ten-fold in his innate wisdom and
+understanding of the deeper layers to life. His simplicity
+and meekness is also the foundation of his deeper
+wisdom. As an adult with the mind and innocence of a
+child, we can’t help but envy something about the way he
+sees and experiences the world around him. Being able to
+discover the Who about ourselves that sees and
+experiences the world in a unique way, and being able to
+share that singularness clearly and repeatedly through our
+songs and story is part of the legendary tale.
+
+
+
+Going back to a previous example of an artist and their
+narrative for a minute, imagine if Lana Del Rey’s eternal
+inner conflict of wanting to be loved lead to a situation
+where she was so fully broken by a man, it was the final
+straw, and she left Hollywood to become a monk. As
+ridiculous and extreme as that may sound, if I were to
+read a Rolling Stones headline that said “Lana Del Rey
+gives up on the modern life and spends a year alone in the
+woods. Her new album tells the tale,” I would race to the
+nearest set of speakers to play that album. That kind of
+jolting twist from an artist or the story that unfolds in their
+songs is the magnetism that keeps us along for the ride.
+Think to yourself for a minute about all the artists you
+loved for years and lost interest in. There’s a very good
+chance that their narrative and songs never evolved or left
+the world they started in. Most importantly, in order to
+write that exciting and evolving narrative, we have to live
+that exciting and evolving narrative. We have to push
+ourselves and our lives to the limit, constantly saying
+“yes” to things we once said “no” to, exploring the things
+and places we never paid any mind, and constantly
+stepping into the places and experiences that we fear the
+most.
+
+
+
+
+The Common DNA
+
+   If we look more closely at some of great minds and
+creators of the past, we find certain Spirits held in
+common between many of them. Life is not coincidental,
+and it’s no coincidence the majority of them embodied
+much of the same alchemy. You could argue that these
+core characteristics are at the heart of world’s most
+legendary Beings and Yogis, and in order to ascend to that
+apex of existence or artistry, historically and statistically
+speaking, these particular inner Spirits seem to be of great
+importance. You may already Be some of these things,
+and aware of it. You may also be aware that you are less
+or lacking in some of these characteristics. You don’t have
+to “Be” anything at the end of the day, but these are all
+positive and powerful mental structures that are worth
+exploring and bringing forth in our own lives. Becoming
+more of any of these qualities I think you could argue, for
+the sake of writing or Being in general, is a great thing.
+We will call these traits: The Yogi Spirit.
+
+Relentless
+
+    How does one get to anywhere in this life? How do
+compelling characters overcome their fatal flaws and
+conquer The Treasure of their story? It’s simple: They
+push forward. No matter what, against all odds and
+villains, they push forward. They do not shuffle or
+meander, or go the round about way, they push straight
+through. They tap into the infinite inner energy, and force
+their way through to the Otherside. They are relentless.
+    To the complacent person, relentlessness may be seen
+as offensive or off-putting. Many of these types would
+even swap the word relentless out and replace it with
+“stubborn” to give it a negative connotation. Pay no mind
+to these people, as the majority of them are existing in the
+lower realms and living a Fear-based existence. They are
+fearful to watch others inhabit this Spirit as it forces them
+to confront their own shortcomings or laziness. As
+humans, as writers, as Yogis, the opinions of other people
+is none of our business. Push forward in your life and
+journey.
+    Someone once asked the great Yogi Babaji, “Baba if
+there is going to be a third World War, and most of
+humankind will perish, why should one do anything?
+What should one do?” and Babaji replied “You should do
+your Yoga until your last dying breath. You should do
+your work until your last breath. It’s none of your
+concern. Go on with your life.” The message here is clear:
+it is not about where we are going or where we end up,
+it’s about how we do the Going that is the key. It’s about
+pushing forward on the journey no matter what lies ahead.
+The destination is irrelevant. The one they call Jesus
+allegedly did not submit even as they whipped him to
+shreds.
+   In 1993, Kurt Cobain walked into a rehearsal room
+with a new riff he had just discovered. He played it for the
+band and got one the average writer’s most dreaded
+reactions: hatred. His bandmates were not indifferent, but
+actively had a strong dislike for what he had played them.
+Cobain, being relentless, was not fazed in the least. He
+did not cower or retreat and move on to a new idea. His
+conviction and energetic force overcame the adversaries
+to his idea, and he made them play the same four chords
+over and over for two hours straight. The song went on to
+become “Smells like Teen Spirit.”
+   How many truly remarkable people or ideas were
+initially paid no mind or even disliked, but went on to
+change the world? The Beatles for one, were turned down
+by just about every label known to man before breaking
+through. In more modern times, Katy Perry was dropped
+by a number of record labels before her first hit song. The
+stories are endless. The Great Things in life are always
+going to be faced with opposing energy. If you truly
+believe in something, do not take opposition or road
+blocks as a sign you are on the wrong path. If you feel it
+from the heart, and have pure conviction, take it as a
+positive sign that you are encountering one of the check-
+points on The Path. Do not take no for an answer. Do not
+be drained energetically by those around you. Push
+forward at all costs. It is this relentless Spirit that got the
+legends to wherever it is they were Going.
+Curiosity
+
+Curiosity is the want to understand how things work, and
+another one of the archetypal Spirits you will find in most
+of the Great Ones. Thomas Hobbs appropriately called it
+“mental lust.” You are reading this book because you have
+some level of mental lust for songwriting and how it
+works, so clearly you hold some amount of the curious
+Spirit within yourself. It is curiosity that leads us to open
+new doors along the Path and to explore the Unknown.
+   Unbeknownst to most, Leonardo Da Vinci, one of the
+most iconic painters of all time, also had a deep passion
+for engineering, architecture, mathematics, anatomy,
+poetry, cooking, and even zoology. One of the most
+interesting aspects of Da Vinci’s curiosity is that he did
+anatomical studies of the body so he could paint it more
+realistically. Talk about passion… One of the beauties and
+powers of curiosity lies in gaining an understanding of
+how many different things and systems in life work
+similarly. In a yogic sense, this is higher intelligence. The
+more we can make connections in the things that
+seemingly have no relation, the deeper our understanding
+of life, harmony, Oneness, and the connection and
+reflection of the All. This understanding and awareness is
+a major key to writing songs with deeper truths and
+ageless wisdom.
+   Much like Da Vinci, Charles Darwin was another great
+“curist.” Darwin wrote an endless stream of letters to
+scholars around the world, enquiring on everything from
+insects to human emotion. He had a burning desire to
+know how different things worked and functioned, and
+like Da Vinci used it to make sense of his own focuses.
+   Personally, something pretty random I’ve always held a
+deep curiosity about was the lives of truck drivers. I could
+not begin to tell you why, and that’s the magic in it. It’s an
+intuitive feeling that never should have, logically
+speaking, crossed my mind for any reason, but it did. The
+mental lust is there, and instead of judging it as silly or
+random, I am following that higher intuition. It may be
+that on a deeper level, it’s not about “truck driving” at all,
+but more so my spirit setting me off on the Path to meet
+someone important or enlightening in my life. To pursue
+this instinct I have decided to buy a CB radio off the
+internet to contact and communicate with truckers, and to
+fully step into their world. That secondary instinct to get
+the radio then sparked the idea: how cool would it be do a
+side project where I tell the story of a truck driver through
+my own voice? Through CB radio conversations I can get
+the trucker’s stories and transcribe them into song. At the
+absolute least, it will be good practice in the art of
+storytelling and may lead me to tell my own tale in a more
+interesting way. Seeing the commonalities in what truck
+drivers and I both value in life, or similar fears we both
+have, again, will help make those deeper connections in
+all things. How many Great Truths await me? How many
+Great Truths are awaiting you down a surprising back
+road? Follow the curiosity, if it is there, it’s for a reason
+you may not understand now, but will in time.
+
+Boldness
+`,
+      },
+      {
+        path: "references/source/pages/page-001.md",
+        content: `# Page 1
+
+HE             GA F
+   NG                 I ING
+UNCOVERING THE DNA OF GREAT SONGS
+
+
+
+
+           IKEY     IKE
+`,
+      },
+      {
+        path: "references/source/pages/page-002.md",
+        content: `# Page 2
+
+A Secret Science
+
+ THE YOGA OF
+SONGWRITING
+    MIKEY MIKE
+`,
+      },
+      {
+        path: "references/source/pages/page-003.md",
+        content: `# Page 3
+
+Mikey Mike
+    Springield, TN
+www.findmikeymike.com
+`,
+      },
+      {
+        path: "references/source/pages/page-004.md",
+        content: `# Page 4
+
+
+`,
+      },
+      {
+        path: "references/source/pages/page-005.md",
+        content: `# Page 5
+
+PROLOGUE
+   A Look through the Cosmic Lens At The DNA of great
+songs… The secret science I discovered from a lifetime of
+obsession and dedication to Mastery. For the dreamer, who
+knows their is a world of magic and beauty just Beyond..
+`,
+      },
+      {
+        path: "references/source/pages/page-006.md",
+        content: `# Page 6
+
+INTRODUCTION
+THE YOGA OF SONGWRITING
+
+
+
+
+“You want to be enlightened? Feed people.”
+
+
+
+    “Dear God, what the hell have I done? This is going to
+ be the longest three months of my life,” I thought to
+ myself as I stared out at the crowd. It was as if the
+ hundreds of weary, spaced-out faces had blur into one
+ giant mural of boredom. The microphone felt like a brick
+ in my sweaty hand. “Opening” was beginning to feel like
+ a bad acid trip that no cold shower could cure. I was 3,000
+ miles from home, in a cold, new world and all I wanted
+ was to be back in the comfort of the California sun,
+ strumming my guitar on the porch for my neighbor. Tour
+ would be fun they said…
+    My “Opener” set ended and I got off the stage as
+ nonchalantly as possible. As I pushed through the crowd
+ back towards the merch booth, on what felt like a
+ pilgrimage through Hell, I could see the shining face of
+ my good buddy Cyrus through all the chaos. He was
+ smiling and waving me over, and I instantly felt
+ something recognizable and comforting. “Mikey get over
+ here! I have somebody you need to meet,” he shouted.
+ Cyrus took me over to a young guy and his girlfriend
+`,
+      },
+      {
+        path: "references/source/pages/page-007.md",
+        content: `# Page 7
+
+who’s faces were swollen and covered in tears. They both
+grabbed me and hugged me fiercely at the same time. “We
+only came to see you, and hear ‘Doin Me.’ A few months
+ago I had a gun in my hand and I was about to put it to my
+head… and that song randomly started playing on my
+phone, and it saved my life. It saved my damn life man,”
+the young guy whispered. “Thank you so much, you will
+never understand,” his girlfriend said as she gripped my
+shoulders. I will never forget the look on her face. It was
+in that very moment that I realized what the whole Thing
+was about: the songs, the music, the work, the journey… I
+always knew there was power and purpose to it, but to see
+it right there in front of me, another human’s heart still
+pumping, a being still so full of life… it changed me. To
+think that the energy from a handful of lyrics and
+melodies could give a complete stranger the inspiration
+and Will to continue their journey on Earth, to know a
+mother was not crying herself to sleep every night for
+eternity, it lit a fire under my ass. There was so much
+work to be done, so much to write. Songwriting was not
+something I did anymore. It was something I lived. It was
+my Yoga.
+    The word Yoga holds a lot of mystery to people. There
+is a certain open ended-ness and all-inclusiveness that
+gives it this power. When some people hear the word
+Yoga, they picture a middle aged woman in spandex bent
+over, others imagine a half naked man in a cave deep in
+meditation. A visitor once said to the great guru Maharaji,
+“Baba, which yoga is best to become enlightened? Which
+posture and meditation should I practice?” Maharaji
+responded simply “Feed People.. you want to find God..
+feed people.. Jow!” Yoga in the context of this book, is
+much the same. It is the idea of learning to manipulate
+and harness the energy of word and sound at the deepest
+level in order to feed and inspire the world around us.
+`,
+      },
+      {
+        path: "references/source/pages/page-008.md",
+        content: `# Page 8
+
+CHAPTER 1
+      THROUGH THE COSMIC LENS
+
+
+
+
+“If you want to understand the secrets of the Universe,
+  think in terms of energy, frequency and vibration.”
+
+
+         Nikola Tesla once said “If you want to understand the
+      secrets of the Universe, think in terms of energy,
+      frequency and vibration.” Beyond the world we see with
+      our eyes and hear with our ears, lies another dimension
+      entirely. This energetic realm, unconscious to most, is the
+      world of the yogi. He exists and operates from this deeper
+      dimension of life, where anything is possible and it is his
+      destiny to do the Unthinkable.
+         For most of us, we call certain unexplainable
+      phenomenas of life “magic,” but for the yogi, there is no
+      such thing. If you were to flip a light switch in the 1800’s,
+      and a light turned on, someone would shout “Oh my god!
+      It’s a miracle!” when in reality, it was a simple function of
+      electricity following certain laws which weren’t yet
+      understood. In the same way, many things that we think of
+`,
+      },
+      {
+        path: "references/source/pages/page-009.md",
+        content: `# Page 9
+
+as magic today are just certain manipulations of energy
+we do not understand. Becoming a yogi is about
+understanding and harnessing this mysterious energy for
+the good of ourselves and the good of others. To become a
+yogic songwriter is to harness this positive power in the
+form of song. When we learn to use the laws of this secret
+science in our writing, the influence and energy we
+deliver to the world, in the form of song, holds no bounds.
+A great song literally has the power to change the world.
+   Thinking of songwriting from a spirit level, we change
+our whole perception of what we’re doing. We set out
+with intention, and a deep respect for the “magic” we’re
+engaged in. We understand that every lyric, every rhythm,
+every melody has an influence on the world around us.
+We not only have the power to heal and uplift, but also to
+confuse and destroy. The more we learn to harness this
+sonic energy, and transfer it in the most impactful form,
+the more power we hold as songwriters. As we study
+songwriting through this cosmic lens, we can start to
+discover the DNA of what makes certain songs so damn
+unforgettable. We all have songs that touch us so deeply,
+that speak so much truth and power to us, it’s as if they
+came from the lips of God himself. As we embark on the
+journey of the yogi-songwriter, the ability to write the
+Great Ones consciously becomes more of a reality every
+day.
+`,
+      },
+      {
+        path: "references/source/pages/page-010.md",
+        content: `# Page 10
+
+The Vibes
+
+    Every sound in existence carries a physical vibration.
+The great mystics, and many scientists alike, believe that
+Creation was born of sound, and the entire Cosmos itself
+is nothing more than a symphony of sound vibrations. In
+ancient Hinduism, they called this study the Mantra Yoga.
+The ancients believed that by harnessing certain sound
+vibrations, melodic structures, and rhythmic timings, they
+could actually bend and influence Creation. From
+changing the weather, to healing the sick, song and sound
+was the ultimate force. Modern esoterics call this science
+Cymatics. With the use of today’s technology, the
+esoterics have actually begun to map the geometric
+patterns of sound waves and the effects held on the human
+system when exposed to specific tones and vibrations.
+    If we think of songs as being a pattern of sound
+vibrations, and songwriting as the direction and
+arrangement of these vibrations, ordered together in a way
+where the sum of the energy is exponentially greater than
+it’s parts, we open the door to a higher level of writing. In
+the words of the Great Yogananda, songs can carry “the
+force of an atomic bomb.” Traveling from the writer’s
+heart straight to the heart of the listener, songs become a
+shared emotion and experience. When we hear a song that
+moves us, it’s as if the space between the writer and the
+listener collapses, the illusion of separation dissolves, the
+mind stops, and pure Oneness is felt. I call this intuitive
+space of pure presence, where we are momentarily freed
+from ourselves and world, the God-Zone.
+    Late one night, when I was about 23, I had my first real
+experience that led me down the rabbit hole of this
+`,
+      },
+      {
+        path: "references/source/pages/page-011.md",
+        content: `# Page 11
+
+madness. I had just met this guy named Famous Jonny at
+a party. He was bizarre, the type of guy that wore sandals
+in December, and would stare at your lips as you spoke.
+Jonny and I shot the shit all night. We talked mostly about
+his favorite subject, drugs: new drugs, old drugs, happy
+drugs, sad drugs, drugs that shrunk his genitals, drugs that
+helped him bond with his 11-year-old neighbor Billy,
+drugs that made him want to stop doing drugs. There was
+one psychedelic drug in particular that Jonny loved more
+than the rest: Ketamine, a compound discovered in 1962
+that was mostly used to tranquilize large animals, like
+horses. Apparently, if you insufflated enough of it, by
+Jonny’s estimation about “5 fat ass rails,” you would free-
+fall down into “The Hole,” and when you got down in
+there, you could actually see the mechanics of Life on
+Earth and watch the gears churn along, doing their best to
+keep the Great Illusion in motion. He also said there was a
+scientist who, with years of regular use, tapped into a
+place in his consciousness where he could actively script
+the events of his life. Jonny had set out on the same
+mission, and encouraged me to take the dive. The whole
+thing sounded like a bad idea, so I met up with Jonny the
+next day at a Chinese restaurant in downtown L.A. and
+bought some ketamine off him in the bathroom. I
+remember before I walked out the door he shouted “Hey
+man! Put on Pink Floyd Dark Side of the Moon, it’ll get
+pretty weird! Safe Travels!” I liked Famous Jonny, and I
+trusted him, so I took his advice. I got home and did
+enough ketamine to take down the Kentucky Derby, threw
+on my headphones, laid down, and slowly dissolved into
+Pink Floyd’s Dark Side of the Moon. One minute I was
+there listening and the next… There was no longer an I.
+There was no longer a Listener… I had become the
+`,
+      },
+      {
+        path: "references/source/pages/page-012.md",
+        content: `# Page 12
+
+Listened To. I became the vibrating waves of the music:
+the metallic levers to every strike of the guitar, the waves
+of light that would burst brilliantly when the sound of a
+human voice wailed a Great Truth, the pounding drums
+that kept the illusion of time moving linearly from one
+point to another. It began a long, strange love affair with
+the most peculiar and powerful molecule I had ever
+discovered, and a true study into the DNA of songs.
+   EDIT/WRITE I investigated all kinds of songs: spoken
+word songs, orchestral songs, rap songs, rock songs, new
+songs, old songs, good songs, bad songs, peaceful songs,
+violent song. via. it changed the way I looked at songs
+and experienced music forever. A great song was no
+longer just a series of words strung together melodically
+over a band of accompanying instruments, it was pure
+energy, and it was alive.
+   As I continued my exploration, I found more science
+backing the metaphysical power of words and song. In
+“The Hidden Messages in Water” by the Japanese doctor
+Masura Emoto, a series of experiments were conducted
+where certain archetypal words were written on the side
+of a glass of water. Dr. Emoto left the scripted water to sit
+for a few days and then studied the water crystals under a
+microscope. Incredibly, he observed the water transcribed
+with harmonious words, like “loyalty” and “peace,”
+caused the formation of very uniform and beautiful water
+crystals, whereas the water tagged with negative words
+like “hate” and “deception” caused distorted, damaged
+looking crystals. The most immaculate crystals he
+observed were from the glasses of water tagged “Love.”
+When Dr. Emoto placed a speaker in front of the water,
+and played the harmonious vibrations of music like the
+Tibet Sutra, the water also formed pristine and symmetric
+`,
+      },
+      {
+        path: "references/source/pages/page-013.md",
+        content: `# Page 13
+
+crystals. When the water was exposed to heavy metal
+bands with violent, distorted music on the other hand, the
+water crystals began to disfigure and collapse.
+   Dr. Emoto said he could see these “wave energies
+move through matter” and named the harmonious, healing
+vibrational energy Hado. He even prescribed certain
+songs to his patients to heal different organs and areas of
+the central nervous system with great success. The body
+after all, is about 60% water. If a small amount of water
+exposed to such simple vibrations can can cause a
+definitive reaction to its state, imagine what a classic song
+can do..
+
+
+
+
+                      “Love”
+`,
+      },
+      {
+        path: "references/source/pages/page-014.md",
+        content: `# Page 14
+
+The water experiment can be replicated by the use of
+other mediums as well. Set fine sand on a metal plate and
+attach it to a speaker and watch how it reacts. Much like
+the water, the sand will take on all sorts of different
+patterns and shapes. Be careful of the Brown Note though
+— there is apparently a very specific low frequency hum
+that causes people to lose controls of their bowels. Yes,
+music can literally make you to shit your pants..
+   When we shift our perspective to think of songs in this
+Yogic way, as waves of energy and emotion traveling
+through the ether, connecting human beings, we start to
+build a clear visualization of the writing process. I
+visualize great songs as a pure, uniform beam of rapidly
+vibrating waves of light that cut like a bullet through the
+air, straight to the heart chakra of the listener, while un-
+inspired, lifeless songs I visualize as slow, scattering
+greyish waves with no direction or destination. When I
+am in an un-inspired place, and I’m “trying” to write a
+song, sometimes I’ll have flashbacks to being in The Hole
+and having visions of a flock of in-bred birds flying
+manically in every direction. This ability to “see” songs
+gives us another tool to judge their strength and impact.
+`,
+      },
+      {
+        path: "references/source/pages/page-015.md",
+        content: `# Page 15
+
+CHAPTER 2
+              THE GOD ZONE
+
+
+
+
+“If you are on the right path, you will find that
+ invisible hands are helping.” Joseph Campbell
+
+
+
+
+      Songwriting, in its essence, is not a process of doing or
+   creating but discovering. It’s being a witness. It’s about
+   entering that silent space within ourselves, where thought
+   seizes, and all that’s left is pure presence, awareness and
+   experience. This space, where the Cosmos commune with
+   the soul, and the Yogi exists perpetually, I call the God-
+   Zone. When we enter the God-Zone, we transform into a
+   pure channel to the source of creation itself. Like a radio
+`,
+      },
+      {
+        path: "references/source/pages/page-016.md",
+        content: `# Page 16
+
+receiver being tuned into just the right frequency, we
+move from a place of noise and static into a place where
+the music comes through loud and clear. When we work
+from this intuitive space, we have the power to Receive
+and write with an authenticity the Lower Mind never
+could.
+
+
+
+         “The same spirit that hovered over the waters of
+         creation at the beginning of creation hovers over
+         the mind of the artist at work”
+                      - Thomas Aquinas (Catholic scholar)
+
+
+
+   Though I’ve given it my own name, the God-Zone is
+not a new idea. It’s an internal realm that’s been accessed
+for thousands of years by some of the greatest mystics,
+scientists, artists, mathematicians, inventors, and
+philosophers alike. The English word “invent” is actually
+derived from a Latin word that means “to find or
+encounter,” not to build or create. Steve Jobs, arguably
+one of the most inspired minds of modern time, was
+deeply fascinated with intuition and even credited most of
+his work to coming from this mysterious place within. It’s
+no surprise he spent a lot of his time in India and gave a
+copy of the Autobiography of a Yogi to everyone who
+visited his home. If Steve hadn’t been able to commune
+with the Cosmos, we might still be playing Snake.
+`,
+      },
+      {
+        path: "references/source/pages/page-017.md",
+        content: `# Page 17
+
+The Door to the God-Zone
+
+   The great yogis used to say about “finding God” that
+there are a million paths that lead to the top of the
+mountain. Finding the door to the God-Zone in our day-
+to-day life is no different. For every writer there will be a
+different path to that space within. It doesn't matter how
+you get there, all that matters is that your centered in the
+heart and silent in the mind.
+   My door into The God-Zone opens when I shut out the
+world completely. There are so many things in our daily
+lives that pull us into the Illusion of Confusion: text
+messages from friends asking to be untagged in some
+picture they look funny in, neighbors complaining about
+the boxer briefs you left drying up on the fence, some
+prescription that’s been ready for pick up for over a week.
+All these things keep us in the realm of worldly thought
+and out of realm of intuition.
+   Step one for me: I turn my phone on silent and chunk it
+across the room, then I take off my shoes, step outside,
+take a few deep breathes, sit down in a chair and
+experience the..
+
+         Silence.
+        An extended period of silence.
+        I close my eyes and imagine myself from above.
+        I zoom out and see my whole neighborhood from above.
+        I zoom further. The cars on the street look line ants.
+        I’m halfway to space now, looking back at Cali Coastline.
+        I’m alone on the moon.
+        It’s dead silent.
+        I’m looking back at the Earth
+        And thinking about how small it all is.
+        All my thoughts, all my problems, all my dreams.
+`,
+      },
+      {
+        path: "references/source/pages/page-018.md",
+        content: `# Page 18
+
+An illusion, so big and so small at the same time.
+        A place where there’s nothing to gain or lose.
+        You leave with what you came with.
+        It’s not that serious.
+        Enjoy the Experience.
+        I feel clarity.
+        I feel peace.
+        I feel free..
+        I open my eyes and see Little Lisa walking towards me.
+        She has an innocent smile on her face.
+        And no place to be, nothing to do.
+        She’s just existing.
+        Experiencing the day.
+        Taking in the sun.
+        Looking up at the birds.
+        She’s in It.
+
+
+
+
+  Little Lisa is my 85 year old Thai neighbor and my
+cosmic adopted grandmother. We speak all the time, like
+`,
+      },
+      {
+        path: "references/source/pages/page-019.md",
+        content: `# Page 19
+
+cavemen, on the surface we barely understand each other,
+but on a deeper level, we communicate as well as anyone.
+We converse emotionally, in smiles and funny looks, and
+share a similar sense of humor.
+
+She smiles and grabs my shoulder.
+
+         “Be niCe to the laDy. She Good Woman.
+         You Be good To her. And sHe be Good to you..”
+
+And there it is. A Great Truth: The fruit of the God- Zone,
+and exactly what we came for. The soul of the universe
+speaking to me through Little Lisa’s shining face. “So be
+good to me, and I’ll be good to you,” a phrase so simple,
+that means so much..
+`,
+      },
+      {
+        path: "references/source/pages/page-020.md",
+        content: `# Page 20
+
+CHAPTER 3
+               A GREAT TRUTH
+
+
+
+
+“Three things that cannot hide for long: the sun, the
+                moon and the truth”
+
+                        Buddha
+
+
+
+
+        There are certain archetypal “truths” in our human
+     experience that we all just “Get.” While we may all live
+     completely different lives, there is a subconscious
+     agreement between us that “Yes, that is So. That’s the
+     heart of the matter.” We know these truths when we hear
+     them, and when spoken or shared in the shortest, sweetest,
+     and most all encompassing way, they elicit a very primal
+     reaction in us. We have the “Ah-Ha!” moment, and can
+     feel the juice being squeezed from the core of the lemon.
+     A Remembrance is triggered somewhere deep within us,
+     and we are left feeling Whole again. I call them the Great
+     Truths.
+`,
+      },
+      {
+        path: "references/source/pages/page-021.md",
+        content: `# Page 21
+
+Great Truths are the lightening-strike epiphanies that
+sum up big ideas in a way a longer explanation never
+could. They are universal, and something we come face to
+face with again and again, life after life. A wink from
+God, “Do you get it now?” I like to imagine that the
+longer these themes and symbols have held truth and
+meaning to man, and have solidified themselves into the
+collective unconsciousness, the more power they have
+come to harness.
+   Jung said these archetypes and collective forms were
+not something that develop in humans, but something
+they are born with. He thought of them as a set of
+universal images and motifs that helped man make sense
+of his experience. Freud also spoke of these archetypal
+truths. He stated that “within each person’s mind, there
+are archaic remnants whose existence cannot be explained
+by that particular individual’s life experience. These
+forms are innate and shared by everyone.” It’s for this
+reason that songs built on these archetypal truths and
+motifs cause such a strong emotional reaction in a listener.
+Put plainly, they have the power to reach a deeper part of
+people, and like an entirely separate primal language of
+their own. Great Truths are something every single
+human, no matter their gender, age, race, or religion can
+relate to.
+   At the core, Great Truths are always beautifully simple
+and effortlessly relatable. They are the moment of
+revelation on the winding journey . For this reason, Great
+Truths are the Heart of great songs..
+
+“So be good to me, and I’ll be good to you”
+
+Everyone gets that.
+`,
+      },
+      {
+        path: "references/source/pages/page-022.md",
+        content: `# Page 22
+
+It’s a man and woman.
+It’s karma.
+It’s loyalty.
+It’s the Doctrine of Love.
+
+It’s real. It’s true- and it could be the basis for a great
+song. A place to build from. A destination where the
+journey will lead. The crux of a tale worth telling. If you
+do just one thing in your writing, know the Great Truth of
+your song, and take us on the adventure to discover it.
+This one specific and singular Truth is the key to castle. If
+you do one thing right in your writing, know your Truth.
+Without it, you are blowing hot air.
+    A good way to know if your song leads to a Great Truth
+is to ask yourself: Do we have a destination? Is something
+of value gained? Can I sum up the climax and reward of
+the journey in one succinct line? If you can’t answer yes
+to all three, you probably don’t have the heart of a
+timeless song yet. You should be able to say:
+
+         The song is about an entitled guy who cheats on
+         his lover and realizes that you never know what
+         you got until it’s gone.
+
+   One of the biggest pitfalls I see with novice
+songwriters, and some experienced ones alike, is while
+they may have a song that takes you on journey, they
+don’t actually lead you anywhere. They don’t ever “say”
+anything. You end the listening experience feeling
+confused and deflated, wondering why you went along for
+the ride. At the least, make sure that what you write has a
+destination and a clear path to get there. There is nothing
+worse than listening to a song, enjoying the way it sounds,
+`,
+      },
+      {
+        path: "references/source/pages/page-023.md",
+        content: `# Page 23
+
+but being completely confused by what is actually
+unfolding, where you are going, or what it’s really all
+about.
+   While there’s no right way start a song or take people
+on this journey, I’ve found there is an easy way, and that’s
+by starting with the heart of your narrative. Starting with a
+Great Truth is the foundation you build on. When your
+destination is set in stone, there’s never a question of
+where you’re going. As you progress and have tapped
+fully in, you will be able to start your story anywhere,
+because one way or another, an honest narrative will
+always lead to a Great Truth, even if you didn’t start the
+journey of your song with it known. I was talking with a
+friend who’s a songwriter the other day and he said he had
+been feeling “stuck.” He couldn’t find any inspiration or
+anything to write about. I asked him “What’s the biggest
+change you have made in your life in the last year?” and
+he thought for a moment, chuckled, and then said, “Well..
+I quit watching porn last week!” I then asked him why
+and he said “Because I always knew there was dark vibe
+to it.. but the lack of self reservation and control I had
+with it.. just made me feel weak and sad … like a leech”
+Well there’s your song buddy! Right under your nose, a
+Truth right smack dab at the center of your life, and what
+a great song it would make. Where to start? His literal
+words were a great first line “I quit watching porn last
+week.” If I heard someone come in with that line, so
+simple and direct, you better believe I would keep
+listening no matter what it sounded like or how well it
+was recorded. In my eyes, that is the power of compelling
+and honest lyrics, they trump every other aspect of the
+music. Hell it could have been an acapella poem and I’d
+still have been in for the ride.
+`,
+      },
+      {
+        path: "references/source/pages/page-024.md",
+        content: `# Page 24
+
+When searching for my own Truth’s to write about I
+often explore the same questions within myself. Stop
+thinking and just feel for a minute. What is it you feel?
+What’s the most dominant emotion you have been
+existing in recently? Why do you feel that way? What is it
+really about underneath the surface? They say that the
+Truth can never be hidden for long, and somehow, it will
+always be revealed. As writers it’s our job to discover
+these “hidden in plain site” Truths and share them for
+those who may need to hear it, consciously or
+unconsciously.
+   The Beatles were masters of Great Truths, and it’s a big
+part of the reason millions of people all across the world,
+from completely different backgrounds, connected so
+deeply to their music. The Truths they shared were
+timeless. They touched a deeper place in us. They cloaked
+universal motifs in incredibly hooky melodies and vivid
+narratives, the apex of impactful songs. Let’s look at some
+classic Beatles lyrics.
+
+
+
+
+         “There will be an answer, let it be.”
+
+         Let it be.
+
+         “Life goes on, within or without you”
+
+         Life goes on.
+
+         “Here comes the sun, it’s alright”
+
+         It’s alright.
+`,
+      },
+      {
+        path: "references/source/pages/page-025.md",
+        content: `# Page 25
+
+Masters! Masters of the simple. Masters of the beautiful.
+The Beatles were healers and inspirers. They were fully
+submerged in the Yoga, and wrote songs that help us
+Remember something we all know, but often forget.
+   I don’t believe their songs and success were
+“accidental,” either. Like Steve Jobs, they were
+obsessively intrigued with the world of yoga and
+meditation, spent lots of time in India, and studied under
+the Great Maharishi. I believe they Knew exactly what
+they were doing and understood the power of this
+Original Language.
+
+With New Eyes
+
+   Great Truths are hidden everywhere: in conversations
+with your 85 year old Vietnamese neighbor who barely
+speaks English, in pretty much every good novel ever
+written, in text messages sent from someone with the
+wrong number, and most importantly, in our own heart’s
+and minds. Harry Neilson wrote “One is the Loneliest
+Number” after he called someone and felt despair as the
+busy signal repeated over and over. He stayed on the line
+and used the beeping as the inspiration for the rest of the
+song. Being clear and present enough to see and hear the
+truths written into the fabric of our live’s is the way of the
+yogi.
+   I once opened a piece of mail that came addressed to
+the previous tenant at my apartment. The handwriting on
+the envelope was scratchy, and curiosity got the best of
+me. In retrospect, I guess I’m just a nosey creature. Inside
+the envelope was one of the most beautiful and authentic
+letters I’d ever read. “Paul” was pouring his whole heart
+`,
+      },
+      {
+        path: "references/source/pages/page-026.md",
+        content: `# Page 26
+
+out about how much he loved his friendship with the
+previous tenant and having a major epiphany. “At the end
+of the day, all we have is love, and each other, and
+everything else is.. well it’s not our business, and it will
+work itself out I suppose,” he wrote. Country hit anyone?
+
+Were gonna play it for you one more time folks! Number 1
+for the 8th week in a row, Paul the Letter Man’s “Aint Our
+                         Business”
+
+
+
+Paul’s letter was four pages long and stacked head-to-toe
+with Great Truths and incredible imagery. I inherited a
+handful of song ideas from it. It inspired me that someone
+could write something so powerful and honest to a person
+who would never get a chance to read it. There was
+something so poetic about it. At the end of the day, his
+letter had an impact, no matter who it was intended for,
+and on a cosmic level, I know that I was always going to
+the be one the one who read it. I like to imagine maybe
+one day Paul will hear one of the songs it inspired and
+have no idea. Life is just that strange and beautiful
+sometimes. The short lesson is, if you have an intuitive
+curiosity about something or someone, never turn from it.
+Run towards it (even if you have to be a little nosey.)
+   We will always be watching. We will always be
+listening. We will see the deepest Truths and fundamental
+emotions driving all the interactions between the humans
+around us. That is our mantra.
+`,
+      },
+      {
+        path: "references/source/pages/page-027.md",
+        content: `# Page 27
+
+
+`,
+      },
+      {
+        path: "references/source/pages/page-028.md",
+        content: `# Page 28
+
+CHAPTER 4
+               THE BONES
+
+
+
+
+                “insert quote.”
+
+
+
+
+   Back when I began my college days, as a business
+major, I was bored to tears in class, I was uninspired to do
+any of the homework, and I couldn’t stand my elitist
+professors. So I did what any serious young man would
+do, I quit business, and decided to study one of the most
+steady and reliable jobs out there besides making music..
+screenwriting. In the end, surprise, it has netted me a total
+of zero dollars, but the value I got from the study of film
+is priceless. It is the single most important thing I did that
+shaped my songwriting and understanding of songs.
+   Beyond songwriting, studying myth and narrative,
+taught me something even more important. It gave me a
+new understanding of the story of my life. I started to
+have a keen eye for all the archetypal characters in my
+own Hero’s Journey: the henchman, the jesters, the
+mentors, the allys. I saw the femme fatale’s there at every
+`,
+      },
+      {
+        path: "references/source/pages/page-029.md",
+        content: `# Page 29
+
+turn, using temptation to lure me off the Path. I started to
+realize that all the little devils in my story had tried their
+best to keep me submerged in the illusory physical world,
+always offering some sort of sweet sensation, and the
+ally’s were the ones calling me from beyond it.
+   I would strongly encourage anyone who wants to take
+their songwriting to another dimension to study film and
+narrative. A song at the end of the day, is a lot like a film
+condensed into four minutes. At the core, most great films
+and songs are driven by the same forces. You have a
+protagonist, a lot of times with some fatal flaw, who is
+yearns for something. You have the journey, with all kinds
+of twists, turns, and surprises(reversals) that the main
+character embarks on, and at the end of that journey, you
+have the reward. In film, the surface reward is usually
+something physical, like a hot girl or a mystical scroll
+hidden away on some Caribbean island. But the real
+reward, the thing that character unknowingly really
+wanted and gained, was the discovery of A Great Truth.
+   When I think of song structure, there are two main
+parts of substance in my mind. You have a Great Truth or
+truths, and then you have Framing. In a general sense,
+framing is bones that holds it all together. Framing is the
+world and narrative you set up that lead to the reveal of
+your truths. The more vividly you script your verse and
+bridge sections, ie the framing, the more powerful and
+relatable your impact moments will be. The great songs
+are framed in a way that the energy, emotion, and tension
+constantly build until the storyteller finally has that
+breakthrough moment, where it all comes together and
+they discover or remember something timeless. It’s the
+reward and release for being on the journey for both the
+storyteller and the listener.
+`,
+      },
+      {
+        path: "references/source/pages/page-030.md",
+        content: `# Page 30
+
+*Keep in mind, there are no absolute rules to songs or
+structure. If you write from the heart, there is no wrong
+way to do it. This is strictly a study of the most powerful
+way I have found to arrange those sound vibrations for the
+greatest and most lasting impact on a listener. We’re here
+to examine the DNA behind the real and timeless songs
+that have effected people’s lives on a truly deep level.
+There are obviously other songs to write too, but for the
+serious writer the timeless greats are our Holy Grail.
+Maybe my next book will be “The Yoga of Bangers that
+Get the Party Started.”*
+    The strangest part is, even when you think you broke a
+rule or have done something bizarre, you may still
+unknowingly be following certain laws of creation. Take
+“Mmmm” by Crash Test Dummies. What kind of truth or
+revelation is that? It’s not even a word you say! The
+“Mmm” sound is one of the “Original Sounds” and one of
+the three sounds you can make without using your tongue.
+The ancient yogis believed the “Mmm” sound represented
+the transformational energy within the Universe, and that
+making the “Mmm” sound stimulated and vibrated the
+crown chakra at the top of the head. Little did we know,
+singing along to “Mmm” on the radio was a legitimate
+form of yoga. The other two Original Sounds are “Aaaa”
+and “Uuuu.” Put them together and you get “AUM,” what
+the mystics believe is the original sound of all creation
+and the vibration that is said to hold our universe in
+motion. It is the “Om” of India, the “Amen” of the
+Christianity, the “ALM” of Islam at the beginning of the
+Koran (In Arabic L is pronounced O). Even the most
+skeptical person would have to wonder why every major
+religion has AUM as the focal point of its Holy Sounds.
+Maybe it’s coincidental, or maybe there is a Truth they all
+`,
+      },
+      {
+        path: "references/source/pages/page-031.md",
+        content: `# Page 31
+
+share. Legend has it that the Crash Test Dummies were
+secretly high level scientists of Cymetics and channeled
+“Mmm” on twelve day fast in the woods of Alaska.
+
+
+
+
+A Deeper Look
+
+   In terms of energy, emotion and framing, one of the
+best songs I’ve probably ever “written” was a full on
+narrative. The intricately titled “Doin Me.” (Note the
+absurdly child like simplicity of the title. A 6-year old
+could relate to it.) To be fair, I don’t take credit for this,
+nor any of the other good ones. They already exist, I just
+show up every day, put myself in that silent space, and
+hope if a great song shows up, I’m a clear enough channel
+to write it down on paper in a focused and impactful form.
+The lame songs though, they’re all us. God had nothing to
+do with it.. Let’s look at the first verse of Doin Me.
+
+         I was walking around the neighborhood with my
+         mom
+         And she said “Mike, Don’t you want to meet
+         someone”
+         I said “No! I want to meet everyone”
+         I want to get drunk with punks
+         And do bump with the king
+         Creep down the hall
+         And go to bed with the queen
+         And when they come for my head
+         I’ll be somewhere at sea
+         Singing loud
+`,
+      },
+      {
+        path: "references/source/pages/page-032.md",
+        content: `# Page 32
+
+Singing proud
+         Its good to be free
+         Cuz I won’t waste another day
+         Living someone else’s way
+         I want to be happy
+         I want to be free
+         Fuck what they say
+         Im doin me
+
+Let’s start with the set up. The first line of a song is
+arguably the most important line in the song. You have
+about ten seconds to make someone care, so you have to
+hit them hard, and you have to hit them quick. I always
+try to make the first line or two of my songs visceral,
+visual, conversational, or all three. The more vivid a
+picture you can paint with the least amount of words the
+better. The more unexpected a lyric, the better the shot
+you have at capturing someone’s attention and bringing
+them along on the journey. Like film, cut the fat, and start
+the story where things are heating up. No one has the time
+or attention for some long-winded back story, and the
+great challenge with songs is that you only have a few
+minutes to speak your piece. There is zero room for
+bullshit and zero room to say things that don’t add to the
+energy and the emotion of the narrative. Say what needs
+to be said, and nothing more.
+
+         I was walking around the neighborhood with my
+         mom
+         And she said “Mike don’t you want to meet
+         someone?”
+         I said “No, I want to meet everyone.”
+`,
+      },
+      {
+        path: "references/source/pages/page-033.md",
+        content: `# Page 33
+
+It was Christmas of 2017 I believe, and the conversation
+was verbatim. Like the song yogi I am, the minute the
+words “No, I want to meet everyone” rolled off my
+tongue I shouted:
+
+         “A-ha! Thats it!”
+         “Thats what?” My mother replied.
+         “The song mom! The song.. you’re a damn
+         genius, you’re so money and you don’t even
+         know it!”
+
+She looked at me confused, per most of our conversations
+about life. The takeaway here is that having that reflexive
+instinct and always being ready for the God Wink will put
+you in a space where songs seem to reign down from the
+heavens. Learning to Listen can turn a seemingly random
+conversation in your life into the catalyst that gets you in
+the room with one of your musical heroes. Like I said
+before, Great Truths and the big ideas are often hidden in
+plain site.
+
+Let’s look at those first few lines of “Doin Me” again. We
+start with action and motion (ie energy). I am walking and
+talking with my mother. Everyone can relate to that. She’s
+tries to convince me that I need to stop fooling around and
+settle down or I will end up alone. Scary.. A lot of people
+can relate to that, too.
+
+         “No, I want to meet everyone!”
+
+In the film world we call this a reversal. It’s a twist, where
+you expect one thing to happen but something counter-
+intuitive happens. It’s a good way to keep listeners on
+`,
+      },
+      {
+        path: "references/source/pages/page-034.md",
+        content: `# Page 34
+
+their toes and build tension in a story. I love to add a good
+reversal right before a chorus. It makes your chorus feel
+more powerful, like its launching into an uncharted world.
+Reversals make the chorus feel like an even bigger
+revelation. Read the first few lines of this chapter again.
+See what I did there?
+
+Carrying on with the verse..
+
+         I want to get drunk with the punks
+         And do bump with the king
+         Creep down the hall
+         And go to bed with the queen
+
+The internal rhyme is nice ear candy but the real power
+here is the visual. “A bump with the king” is a double
+slammer. Some people envision Elvis, some people think
+of a King with a crown. Some people wonder which of
+the two it is, and are twice as engaged from the brain
+teaser. People still occasionally ask which King I was
+referring to. The answer: Whoever the hell you want it be!
+That’s the beauty of songs and leaving things open to the
+imagination. Let listener’s mind paint whatever they
+emotionally relate to the most. Also note, the motion/
+speed of the narrative. Again, we always want to keep in
+mind energy, pace, vibration. Hit them hard, hit them fast,
+and keep it moving.
+
+         And when they come for my head
+         I’ll be somewhere at sea
+         Singing loud
+         Singing proud
+         Its good to be free
+`,
+      },
+      {
+        path: "references/source/pages/page-035.md",
+        content: `# Page 35
+
+“Singing loud, singing proud, it’s good to be free.” This is
+the set up for the chorus. From a technical perspective, it’s
+not the best, either. I give away the main Truth of the song
+before the chorus even starts— but in this case it works
+fine because the whole narrative is about the archetype of
+freedom, so in essence, everything past the first line is the
+reveal, and in a way, the whole song is a chorus or mantra
+of its own.
+
+         Cuz I won’t wast another day
+         Living someone else’s way
+         I want to be happy
+         I want to be free
+         Fuck what they say
+         I’m doin’ me
+
+The entire chorus section is a stack of A Great Truths. It’s
+full of simple archetypes that mean something to
+everyone’s psyche. They remind people to strive for
+liberation from the illusory thoughts of others in times
+when their spirit can’t seem to Remember. When you
+stack them together, in all their simplicity, it’s an
+emotional and inspirational slam dunk. Now for verse 2:
+
+         My Mom said Mike Don’t you want to be
+         comfortable?
+         I said No! I don’t want to be comfortable
+         I want to be scared out of my head
+         Out out of my mind
+         I want to fall in and out of love
+         A few thousand times
+         I want spend all my money on my friends
+`,
+      },
+      {
+        path: "references/source/pages/page-036.md",
+        content: `# Page 36
+
+And on drugs
+         I wanna ride around on a horse
+         And give people hugs
+         And when I come into town
+         They’ll say Aww there’s Mike!
+         There’s something wrong with that boy
+         I swear he just ain’t right..
+
+The second verse continues and develops the narrative.
+By bringing in a montage of different visuals you send
+people on an emotional journey. Again, think of your
+songs as an extremely short film. When your character
+leaves their normal world and enters into what Joseph
+Campbell used to call “The New World,” there is a sense
+of thrill and wonder at what they might encounter.
+
+Lets look at verse three..
+
+         Don’t you want to have kids
+         No I am a kid
+         And if you go looking momma
+         You might find some
+         Cuz my pull out game
+         Ain’t so hot
+         And if u find them
+         U tell them daddy said
+         Follow no man
+         Follow the god within
+         They’ll be coming for your heart
+         Real soon, son
+         This whole this is rigged
+         Your back in the matrix
+         And you gotta find your own way out
+`,
+      },
+      {
+        path: "references/source/pages/page-037.md",
+        content: `# Page 37
+
+There were a lot of people who told me I should pull out
+the “pull out game” bit, that it was too crass, and hurt the
+“This Song is For Everyone” thing, but I always loved it.
+In terms of impact, it served a deeper purpose, too. When
+you can yank somebody from one emotion to another
+emotion on the completely other side of the spectrum,
+from tears to laughter, in the blink of an eye, something
+powerful happens. Occultists call it mesmerism. Feeling
+each emotion holds power on its own, but internally The
+Ride from one strong emotion to an opposite emotion is
+the real power, and the Holy Grail of making people Feel.
+There is a reason why lovers will go back to an abusive ex
+they had a whirlwind relationship with— The Ride from
+the extreme highs to the most gruesome lows captivates
+the human spirit. It is Feeling that reminds us that we’re
+here, alive, experiencing. This emotional magnetism was
+used purposely by the great seducers in history to conquer
+innocent hearts. The 17th Century Duc De Lazaun used to
+write vivid and passionate letters to his lovers, spark their
+imaginations and emotions, and then disappear for weeks
+on end. And they loved it! Brilliant.. but manipulating
+energy and emotion for one’s own illusory benefit is the
+definition of Black Magic, and said to be one of the
+biggest sins a yogi can commit. Unless you are ready to
+pay a serious karmic debt, don’t use The Ride to seduce
+other human beings for your own good. We want to
+practice “White Magic,” where we consciously
+manipulate words and energy to share Great Truths and
+dissolve the separation between human beings.
+
+         Follow No Man
+         Follow the God within
+`,
+      },
+      {
+        path: "references/source/pages/page-038.md",
+        content: `# Page 38
+
+A few more AGTs coming in hot. I’m guessing if you are
+reading this book, you’re probably a spiritual person.
+Don’t shy away from addressing God or a higher power in
+your songs. It immediately pulls the listener out of the
+mundane and into the Unknown, and also puts their mind
+back on what’s Real.
+`,
+      },
+      {
+        path: "references/source/pages/page-039.md",
+        content: `# Page 39
+
+CHAPTER 4
+                     THE BLOOD
+
+
+
+
+“People won’t remember what you said or did, but they
+   will remember how you made them feel..” Maya
+                     Angelou
+
+
+
+
+          Beneath the surface of everything human beings
+       experience on Earth lies two opposing emotional energies,
+       fear and love. Every decision we make in life is guided by
+       one of these forces, and ultimately the Path we walk is
+       determined by the dance between these dominating forces
+       of the psyche. They are the only real emotions, every
+       other emotion being a shade or hue of the two. Love is the
+       grounding, freeing, expanding, and healing energy. Love
+       is Everything In Its Place. Fear is the lack of these, the
+       darkness where the light does not shine, or has yet to
+       shine. Love and fear are the blood of songs. They run
+       throughout the entire body and connect all the parts.
+       Without continuous blood flow, a song has no life.
+`,
+      },
+      {
+        path: "references/source/pages/page-040.md",
+        content: `# Page 40
+
+As we write songs, it’s important to keep a close
+awareness of which of these two emotions powers our
+narrative at any give. It’s the ever-evolving dance between
+these two emotions that makes us connect to a song on a
+human level. It’s the yin and yang, the push and the pull.
+There is no sensation of light without the shadow.
+   The greatest songs are rarely just one emotion. Many
+times you will find that while one of these emotions may
+be predominant, the other emotion will still peek its head
+out to keep things interesting and create a sense of
+tension. One of the most common structures you will see
+in great songs is the verse sections or framing of the song
+is more rooted in fear-based emotions, and the chorus
+section is where all the uncertainty and anxiety is laid to
+rest. A Truth bomb drops, and there’s a Remembrance or
+understanding rooted in love. It’s the moment we relax
+and re-center in ourselves. A good example of this is Mac
+Miller’s “Dunno”
+
+Verse 2
+Well I was busy when you hit my phone
+but you miss me told me come back home
+and you don’t really like to sleep alone
+but I’m taking too long
+I’m always taking too long
+
+The verse is dominated by Mac’s girlfriend’s general fear
+of loneliness and fear of lost love. The desire for that
+security is one of the most common and relatable things
+we feel as humans. The verse ends on Mac’s fear that he
+may be doing something wrong, and could also
+potentially lose that love. That feeling is quelled though
+when the next section comes..
+`,
+      },
+      {
+        path: "references/source/pages/page-041.md",
+        content: `# Page 41
+
+Pre-Chorus
+Baby we don’t need to trip
+We can be right here
+When the shit get weird
+we can switch up gears
+I wanna see them lips
+kiss them ear to ear
+I wanna hear your song
+Oh I wanna feel just how you feel
+Touch it one more time
+So I know your real
+we can spin that wheel
+wouldn’t you rather get along
+
+Chorus
+Until there is no longer
+Lets get lost inside the clouds
+and you don’t have to work harder
+I can calm you down
+
+I think we just might be alright
+thank god
+I think we’re gonna be alright..
+
+Mac puts to rest all the fear with his reassurance and faith
+in the love they have, and there’s a release in all the
+tension and anxiety that was building. Notice how casual
+some of the lyrics are: “when the shit get weird.” It
+doesn’t sound songy, it sounds conversational, and brings
+us even closer to his life and story. We feel like we’re
+getting to know him. When Mac passed, a lot of people
+felt like they lost a friend, myself included. I hadn’t ever
+`,
+      },
+      {
+        path: "references/source/pages/page-042.md",
+        content: `# Page 42
+
+really had that feeling when other artists passed away. It
+was in the vividness, sincerity, and truth he spoke that
+made us feel like we knew him personally. Because in a
+way, we did.
+   Another powerful way to balance the dance between
+love and fear is bouncing quickly back and forth between
+the two. I’ve always found that this polarization makes
+the narrative feel energized and well-developed because
+the Ride we go on emotionally never stagnates. Again,
+we’re going back to some verses from the Beatles…
+
+When I find myself in times of trouble (fear)
+Mother Mary comes to me
+Speaking words of wisdom
+Let it be (love)
+
+And in my hour of darkness (fear)
+She is standing right in front of me
+Speaking words of wisdom
+Let it be (love)
+
+And when the brokenhearted people (fear)
+Living in the world agree
+There will be an answer
+Let it be (love)
+
+Notice the first line of each verse contains words like
+“trouble, darkness, brokenhearted” These are all words
+vibrationally we associate with fear. Don’t think you have
+to get overly literal and say “I was swimming with
+sharks” to have people make the fear association. Another
+great version of this is using the Fear and Love dance in a
+song’s chorus, like James Taylor’s “Fire and Rain.”
+`,
+      },
+      {
+        path: "references/source/pages/page-043.md",
+        content: `# Page 43
+
+Oh I’ve seen fire
+and I’ve seen rain (fear)
+I’ve seen sunny days
+I thought would never end (love)
+I’ve seen lonely times
+When I could not find a friend (fear)
+But I’ve always thought
+That I would see you again.. (love)
+
+Beautifully simple. A quick ride through the tides of life.
+Somehow, in a matter of ten seconds, we feel like we’ve
+been there with him through it all.
+`,
+      },
+      {
+        path: "references/source/pages/page-044.md",
+        content: `# Page 44
+
+CHAPTER 4
+             THE BREATHE
+
+
+
+
+                 “quote here.”
+
+
+
+
+   We have the heart, the bones, the blood of the song.
+But what else keeps a song alive? What keeps the song
+flowing and the listener engaged?
+   The Breathe of a song is all about the pace and rhythm
+of the energy being transferred. It’s rarely mastered and
+often overlooked because it’s essentially “invisible.” The
+Breathe isn’t so much about what’s There, but what’s Not
+There. Like a painter blessing a canvas, it’s the parts of
+the canvas left untouched that gives form and dimension
+to the image created. Silence in song is the white of your
+canvas. Think of it like the auric field of your song, where
+your lyric and melody have a place to glow.
+   Silence in songs is also the space where the vibrations
+being transferred from artist to the Listener have room to
+`,
+      },
+      {
+        path: "references/source/pages/page-045.md",
+        content: `# Page 45
+
+soak into the consciousness of the Listener. For every
+inhale, the listener also needs a chance to exhale. Without
+space and silence, none of the emotion and energy of a
+song will be internalized by the listener. In fact, without
+space, the listener will end up exerting and losing energy
+as they try to deal with the overwhelming amount of
+information pummeling them. It’s for this reason that
+some songs that are seemingly “high energy” actually
+make you feel confused and exhausted, while some more
+“mellow” songs leave you feeling fully energized.
+
+         “To the ordinary musician the sound is
+         important. To the master musician the silence is
+         important “- Osho
+
+   Hands down, the number one place I see songs lose
+their life-force comes down to the pacing and spacing of
+energy being delivered. A lot of times, songs are killed
+before they even really start: too many words, too many
+melodies, too many rhythms, too much energy and not
+nearly enough silence. An overdose of tension, an under-
+dose of release.
+   When we look at the script of our songs, there are
+questions we should always ask ourselves. How many
+useless words can we cut? How can we tighten our
+phrasing so that the song breathes more? Can we find a
+way to make the third verse half as long and say twice as
+much? The Beatles “Love Me Do” has only 19 unique
+words and the effect it had on people was enormous.
+
+A straight forward example of Breathe is illustrated in
+“Lovesong” by the Cure (or Adele’s version.) This song
+has some serious “breathe” in it, and is an extremely easy
+`,
+      },
+      {
+        path: "references/source/pages/page-046.md",
+        content: `# Page 46
+
+and energizing listen despite the melancholy feel of the
+song.
+
+Whenever I’m alone with you (inhale)
+You make me feel
+like I am home again (exhale)
+Whenever I’m alone with you (inhale)
+ You make me feel
+like I am whole again (exhale)
+
+Musical interlude (giant breathe)
+
+Whenever I’m alone with you (inhale)
+you make me feel
+like I am young again (exhale)
+Whenever I’m alone with you (inhale)
+you make me feel
+like I am fun again (exhale)
+
+However far away (breathe)
+I will always love you (Great Truth, breathe)
+
+Notice how there is almost just as much white in the
+canvas of this song as there is paint. As a listener, it’s
+effortless to absorb the energy coming at you and
+extremely easy to process exactly what the song is saying.
+This song is also a great example of the power of
+simplicity. The repetitive and slightly augmented verse
+lines are so catchy, it makes the entire song feel like a
+chorus. If you asked someone to sing you this song,
+there’s a good chance they would hum the verses instead
+of the chorus. The simple line ending the chorus is a
+classic example of a Great Truth. It sums up the sentiment
+`,
+      },
+      {
+        path: "references/source/pages/page-047.md",
+        content: `# Page 47
+
+of the song and ups the ante. “I will always love you.”
+When set up in an exciting way, you can’t ever go wrong
+with a line like that. There is a good reason “love” might
+be the most used word in song history. The vibration of
+the word alone has the power to heal. It it one of the
+ultimate archetypes and probably the strongest word in
+our language.
+   Let us be clear though, the message here is not to write
+a bunch of soft, sleepy ballads, it’s to give whatever
+energy and emotion we release, no matter how fast or
+heavy, a chance to land. The speed of the things is
+negligent.
+   Pantera’s “Walk” is an interesting case of Breathe.
+While I’m sure this song would blow Dr. Emoto’s
+beautiful water crystals to smithereens and wilt a bed of
+roses, its awesomely done. Side note, I like to think of
+writing and listening to heavy, dark music the way I think
+of smoking a cigarette or watching a horror movie. It’s
+definitely not “healthy” but it’s okay to indulge in every
+once in a while if you do it meditatively and are fully
+present to the experience and sensations. Osho used to say
+if you were to rob a man and do it fully consciously, no
+sin would be incurred. The catch is here, of course, that if
+you were fully conscious and aware of the feelings you
+would create for the person you robbed, and the laws of
+karma, you would never rob them to begin with. Pantera’s
+“Walk” will be our one cigarette for the book. The
+overwhelming emotion of the song is fear and hate
+dominated..
+`,
+      },
+      {
+        path: "references/source/pages/page-048.md",
+        content: `# Page 48
+
+Can’t you see I’m easily bothered by persistence
+One step from lashing out at you
+You want in, to get under my skin
+and call yourself a friend?
+I’ve got more friends like you
+What do I do?
+Is there no standard anymore?
+What it takes, who I am, where I’ve belong
+You can’t be something you’re not
+Be yourself, by yourself, stay away from me
+A lesson learned in life
+Known from the dawn of time
+
+Re—
+Spect—
+Walk!
+
+There’s a lot of energetic information in the verses. It’s,
+no pun intended, walking that fine line of a being a cold
+blooded pummeling. It feels a bit like the vocalist has our
+head under water as a listener. We’re struggling for air
+and right before our consciousness starts to fade, the
+chorus hits, and he rips us up out of the water..
+
+Re! -we gasp for air.
+Spect! -Ah another breathe! How sweet the taste!
+Walk! -And just like that we are back to life and wide
+awake.
+
+   Another great way to study silence is by looking at
+some of the most famous speakers and speeches of all
+time. Without the accompanying of music, the effect The
+Breathe has is amplified. Martin Luther King’s “I have a
+`,
+      },
+      {
+        path: "references/source/pages/page-049.md",
+        content: `# Page 49
+
+Dream” speech is a great example of tension and release
+and how you can use it as an emotional pump to build
+energy.
+
+I have a dream—
+That one day—
+Little black girls..
+
+Throughout the entire speech, Dr. King pauses regularly
+to build the tension and anticipation. More importantly, he
+gives the energy of his words time to sit and absorb in the
+consciousness of the listener. No one left Washington
+D.C. that day feeling tired or deflated, they left feeling
+energized and inspired, like they could change the world.
+“I Have A Dream” is the perfect example of how one soul
+transferring simple sound vibrations emanating from the
+heart, can literally change the course of history. There is
+no question in my mind, that every single human being
+walking this Earth holds the same potential.
+    The Breathe in songs makes them shine. Don’t let a
+great moment land flat by following it up too quickly. Let
+it hit, let it land, and then do it over and over again.
+`,
+      },
+      {
+        path: "references/source/pages/page-050.md",
+        content: `# Page 50
+
+CHAPTER 5
+         ENHANCING CHARACTER
+
+
+
+
+“If you want to understand the secrets of the Universe,
+  think in terms of energy, frequency and vibration.”
+
+
+
+
+         By having a thumping heart, strong bones, healthy
+      blood and a deep breath, we’ve created the full body of a
+      living song. The listener is emotionally engaged and
+      energized. Now let’s take a look at the more detailed
+      places in songs where we can up the ante and add to the
+      uniqueness and memorability.
+
+      A Beautiful Face
+
+         The introduction of your song, or first few lines, is the
+      face of your song. It’s a make or break moment,
+      especially in the era of streaming and short attention
+      spans, where we can bring someone on the journey or lose
+      them forever. A lot like the site of a beautiful face, the
+`,
+      },
+      {
+        path: "references/source/pages/page-051.md",
+        content: `# Page 51
+
+introduction can instantly attract us and make us curious
+to learn what else is there.
+   The more surprising, raw, vivid and articulate your
+introduction, the better. This is the place to set the scene
+of a story worth hearing. Bright Eyes “First Day of My
+Life” does this wonderfully..
+
+This is the first day of my life
+I swear I was born right in the doorway
+I went out in the rain
+Suddenly everything changed..
+
+The first line draws us in right away. As a listener, we
+wonder who is telling the story. Is it from the perspective
+of a newborn, or is the narrator having some sort of
+rebirth? Either way, we know we are going on a journey
+with someone entering into a new world, and there’s
+always excitement in that feeling. “I swear I was born
+right in the doorway” is a beautifully vivid line. It paints a
+picture that draws us in even more.
+
+Oasis “Champagne Supernova” is another classic song
+with a great opener.
+
+How many special people change?
+How many lives are living strange?
+Where were you while we getting high?
+
+Opening a song with a series of questions engages a
+listener because it’s a call to action. It puts the listener on
+the spot and addresses them directly. “Where were you
+while we were getting high?” is so human and
+conversational. It sounds like something a friend would
+`,
+      },
+      {
+        path: "references/source/pages/page-052.md",
+        content: `# Page 52
+
+say. Talking about altered states of being, whether through
+drugs, dreams, meditation etc, are always captivating
+because it pulls us out of the mundane, everyday head
+space.
+
+Let’s look at the legendary intro from Patti Smith
+“Gloria.”
+
+Jesus died for somebody’s sins
+But not mine
+
+Valuable lesson: Do not be afraid to offend. The most
+legendary writers and yogis alike were very polarizing
+figures. The great Krishnamurti stood about 5’5 but had
+the intensity and ferocity of a bull. The man had a
+piercing stare and never bit his tongue. His goal was not
+to be liked, but to challenge people. The writer’s goal is
+the same. Your only job is to speak your Truth. Pushing
+the boundaries and saying the things that aren’t popular
+with everyone will spike listeners emotions, whether
+they’re tickled or enraged. The edge and element of
+surprise in Patti’s opener above make this song hard to
+turn off. She has all of our attention from minute one.
+History favors the bold, and so does songwriting. Go
+where no man has gone, and someone will listen closely.
+`,
+      },
+      {
+        path: "references/source/pages/page-053.md",
+        content: `# Page 53
+
+Using vivid imagery and unusual descriptors in your first
+few lyrics is another tried and true method for capturing a
+listener’s attention. Let’s look at The Eagles “Hotel
+California.”
+
+On a dark dessert highway
+Cool wind in my hair
+Warm smell of colitas
+Rising up through the air
+
+The visual here is painted so well, we feel like we’re
+riding along in the passenger seat. Notice the variation in
+descriptors: the look of the highway, the feel of the wind,
+the smell in the air. It’s hitting numerous senses, which
+helps fully bring us into the moment. I don’t even know
+what the hell colitas are but the vibration of the word and
+the warmth attached to it makes me “get it.” The fact that
+I as a listener don’t know what colitas are doesn’t “lose
+me,” it draws me in even more. Again, it’s the question
+that’s more seductive than the answer. As I listener, I’m
+going “Is that a flower? I think it’s a flower. It sounds like
+it’s flower. It’s warm, so probably some type of creamy,
+homey yellow pedaled scent.” If you can get people to
+actively be engaging with the song in this way, you’ve got
+someone who’s probably going to come along for the ride.
+Sometimes when I have a lyric that feels a little flat, I’ll
+put one of the key words in a different language or find an
+old way of turning the phrase. Don’t be afraid to get
+weird. It’s all a balance. Challenging the listener is always
+a good thing.
+`,
+      },
+      {
+        path: "references/source/pages/page-054.md",
+        content: `# Page 54
+
+A Great Reveal
+
+
+
+
+         The journey has reached a pinnacle moment.
+         The tension has hit its peak.
+         It breaks.
+         and All is Revealed.
+
+
+The Reveal is the “Ah Ha!” moment.. Where the journey
+breaks through and storyteller discovers and delivers A
+Great Truth or his epiphany about the human experience.
+It is the soul’s version of getting the hotty or finding the
+ancient scroll on the island. In basic earthling song talk,
+this is usually a moment in your chorus section or
+transition into the chorus, but it doesn’t always have to be.
+
+Let’s look at “I Wish You were Gay,” a song by the
+incredible Billie Eilish. (Sometimes I get the feeling Billie
+was Kurt Cobain in a past life. It’s something in her eyes
+and the look in her face when she stares out a window.)
+
+         How am I supposed to make you feel okay?
+         When all you do is walk the other way
+         I can’t tell you how much
+         I wish I didn’t want to say
+         I just kind of wish you were gay
+
+Now that’s an incredible reveal. Billie is so upset with her
+crush’s unrequited interest she realizes, “but only if he
+was gay! Ah that would make it all so much easier. I
+wouldn’t have to feel any of this confusion and insecurity
+about myself. Of course I wouldn’t be worthy of his
+`,
+      },
+      {
+        path: "references/source/pages/page-055.md",
+        content: `# Page 55
+
+interest, he doesn’t even like girls.” Part of what make
+this reveal so awesome is that it’s a great reversal. You
+don’t see the gay line coming (besides the title). There’s
+some emotional mesmerism going on here too. Billy
+swings us from a feeling of melancholy and sadness all
+way to the other side of the emotional pendulum, laughter
+and joy. She’s taking us on The Ride and seducing us
+emotionally without even realizing it. Another “hook
+inside the hook” here is her verbalizing the strange things
+in her head that most people think but never say out loud.
+It’s honest, endearing, and adds a lot of dynamic to the
+song. There’s a certain edge and wow factor that
+immediately draws us in. Everybody loves the guy or girl
+who will stand up in a crowded room and speak their
+Truth, with no regard for the opinions of others. On a
+spiritual level, I think we subconsciously recognize those
+people are operating from the Higher Mind, and in a way,
+are a step closer to god. There’s a clarity and conviction
+that you don’t find in the average person.
+
+Let’s switch it up and look at Kendrick Lamar’s “Bitch
+Don’t Kill My Vibe”
+
+         I am sinner
+         Who’s probably gonna sin again
+         Lord forgive me
+         Sometimes I need to be alone
+         Bitch don’t kill my vibe
+         Bitch don’t kill my vibe
+
+Kendrick reveals this chorus in classic hip-hop fashion, he
+smacks you right in the face and shouts “sometimes I
+need to be alone, bitch don’t kill my vibe.” Point taken.
+The power here is moving from his passive and self
+critical perspective into unexpected a jarring assault. And
+`,
+      },
+      {
+        path: "references/source/pages/page-056.md",
+        content: `# Page 56
+
+like Billie, it’s part of the reason people love him so
+much. Through a montage of imagery, he takes you on the
+most vivid journey, and then nails you with the way he
+really feels in one simple line. His writing feels so
+otherworldly, there’s no question the guy is tapped into
+his Higher Mind and receiving the magic from the God
+Zone. And take note, arguably the most beloved and
+creative artist in rap music speaks about god, spirit, and
+the Unknown more than anyone else in the genre.
+   While Great Revelations generally unfold in the
+chorus, they don’t always have to. Leaving them until the
+very end of the song can make the journey even more
+intoxicating. Led Zeppelin’s “Fool in the Rain” is a
+perfect example.
+
+Examine the set up, verse 1:
+
+          Well there's a light in your eye that keeps
+          shinin'
+          Like a star that can't wait for night
+          I hate to think I been blinded baby
+          Why can't I see you tonight?
+          An' the warmth of your smile starts a burnin'
+          An' the thrill of your touch give me fright
+          And I'm shakin' so much, really yearnin'
+          Why don't you show up and make it alright-
+          yeah?
+          It's alright-right
+
+
+The speaker starts painting the narrative of his yearning
+for a woman. “Why can’t I see you tonight?” Asking
+questions in songs makes them more conversational and
+adds the tension of an unresolved situation.
+`,
+      },
+      {
+        path: "references/source/pages/page-057.md",
+        content: `# Page 57
+
+Verse 2 evolves the narrative:
+
+         Now I will stand in the rain on the corner
+         I watch the people go shufflin' downtown
+         A-nother ten minutes no longer
+         An' then I'm turnin' around 'round
+         An' the clock on the wall's movin' slower
+         Oh my heart it sinks to the ground
+         An' the storm that I thought would blow over
+         Clouds the light of the love that I found, found
+
+Notice the vividness of the picture being painted. The
+more detailed it’s painted, the more we share the
+experience and emotion of the speaker. “Oh my heart
+sinks to the ground.” In film, this is called the “All is lost”
+moment, when our protagonist has become hopeless, and
+contemplates giving up “The Hero’s Journey.”
+
+Let’s look at the final verse, the culmination of the
+narrative:
+
+         Ooh now my body is starting to quiver
+         An' the palms of my hands gettin' wet oh
+         I got no reason to doubt you baby
+         It's all a terrible mess
+         An' I'll run in the rain 'til I'm breathless
+         When I'm breathless I'll run 'til I drop, hey!
+         An' the thoughts of a fool's gotta count of
+         careless
+         I'm just a fool waitin' on the wrong block ohh-ye
+
+The whole time, he was on the wrong block! And maybe
+she actually did love him too.. We will never know.
+There’s a big power in that, the wondering. Like
+everything in life, the Question is far more exhilarating
+`,
+      },
+      {
+        path: "references/source/pages/page-058.md",
+        content: `# Page 58
+
+than the Answer. Robert Plant literally leaves the Reveal
+until the last line, and the high we get as a listener when
+we finally Get It makes the journey worth it. The ultimate
+pay-off. Also note, as the story develops his imagery
+becomes more visceral, explaining the physical reaction
+his body is having. The images of“body starts to quiver”
+“palms of my hands gettin wet” “breathless” bring us into
+his physical being. These are some of my favorite lines to
+use in songs because of the effect they have on the
+listener.
+
+         I feel it in my bones.
+         My blood is pumping.
+         Ice running through my veins.
+         My cold, cold heart.
+         My face goes flush.
+
+These are just a few examples from songs of my own.
+Placing these moments in a “pre-chorus” or a bridge
+section helps the song pick up momentum before
+launching into A Great Revelation/Truth.
+       Listen to the songs above and pay close attention to
+the rising energy and emotion before The Great
+Revelation. A big part of the reason these reveals are so
+strong and feel so good is because of the precision and
+pacing they are set up with.
+`,
+      },
+      {
+        path: "references/source/pages/page-059.md",
+        content: `# Page 59
+
+CHAPTER 5
+     EXERCISING THE BODY
+
+
+
+
+                      “If yo.”
+
+
+
+
+   Our song is now alive and kicking. All of its organs are
+pumping, it’s bones are strong, and it has the face of
+Pamela Anderson.. but our work is not done. Just like a
+human body, it has to be fed and taken care of to become
+the highest version of itself.
+   One of the best things you can do after writing a new
+song, or the majority of a song, is to let it breathe. Get
+away from it. As tempting as it is to listen to day after
+day, giving a song some space for a few days or a week
+will give you the ability to actually Hear it. It’s really easy
+to get attached to the emotion and excitement you had
+when writing it, and in turn, the way you hear it may be
+clouded by all that passion. Back before I was aware of
+the DNA, I can’t tell you how many times I was so
+excited about a song, convinced it was a great creation,
+and then realizing on fresh ears that it just wasn’t very
+`,
+      },
+      {
+        path: "references/source/pages/page-060.md",
+        content: `# Page 60
+
+good: sometimes the emotion was lost in translation, other
+times it just didn’t come together in a way that felt
+powerful, most of the time there no Great Truth. The
+beauty of understanding this teaching and the DNA of
+songs is that it keeps us from spending too much time
+pursing un-inspired ideas and writing songs with no heart.
+The changes and upgrades our songs need is less critical
+and more nuanced.
+   When the heart, blood, and bones are all in place, the
+questions we should be asking ourselves are the little
+things, like:
+
+Can I make this verse less wordy and more focused?
+Am I entering into the chorus of the song in the most
+exciting way?
+Does my bridge section bring in a new idea or add
+tension?
+
+   Now, it’s time to play it for someone else. Pick
+someone who’s preferably not a songwriter, someone you
+can trust to just listen and feel, someone you know has a
+certain understanding and appreciation for art and
+aesthetic. This may be an old high school friend, or your
+uncle. We all know those people who have a good ear and
+“Get It” but aren’t overly analytical or judge-mental. My
+girlfriend happens to be one of those people for me, I can
+tell in the first 30 seconds by her facial expression and
+body reaction if I have a song that is really connecting
+and captivating. At the end of the day, we don’t write for
+ourselves, we write to communicate with other humans,
+so if no one Gets It, then there is probably more serious
+work to do. With all this said, don’t ever let one person’s
+opinion discourage you if you are truly convicted in the
+`,
+      },
+      {
+        path: "references/source/pages/page-061.md",
+        content: `# Page 61
+
+song, they may just be wrong. We all have had those
+ songs we didn’t think much of, but some weeks or days
+ later, when we entered a new phase of our journey, they
+ became our favorite thing. If the majority of the people
+ you share your song with have no reaction, or a bad
+ reaction, they are probably right. There’s no shame in
+ letting it be, moving on, and stepping back into the God
+ Zone on the quest for the next big idea.
+
+
+
+
+  THE SOUL OF THE WRITER
+
+
+
+
+“You want to be enlightened? Feed people.”
+
+
+   We’ve looked at the DNA of great songs, but what
+ about the DNA of the writer and the story they tell? What
+ about us as the vessel and instrument these great songs are
+ channeled through? How can we live our lives and in
+ what way can we enhance and define our own singular
+`,
+      },
+      {
+        path: "references/source/pages/page-062.md",
+        content: `# Page 62
+
+perspective and awareness? How can we go beyond the
+beyond, and share our journey with the world?
+   Like any tool or instrument, it is important that we tune
+and evolve ourselves to Be and receive on the highest
+level. Think for a moment of a guitar or piano, what
+happens when we tune the instrument? We are adjusting
+the vibration of the instrument to create a certain harmony
+and alignment in its state of being so it can be heard in the
+most impactful way. Naturally, as humans we are much
+more complex than a guitar or piano, and “tuning”
+ourselves is not nearly as straightforward as a musical
+instrument, but with conscious effort it is wholly possible
+and endlessly fruitful for ourselves as creators, yogis, and
+humans alike.
+
+   Like learning anything in life, one of the best ways to
+Becoming is to understand those that Became before us.
+By having a close look through the Yogic lens at the lives
+and adventures of the legends, and even the not-so-
+legendary, we can begin to observe and understand what
+made them Who they were. Like any basic science, the
+discovery and study of the common factors held between
+them, and the things that set them apart from each other
+can serve as a roadmap for our own journey. We can use
+these understandings to get “in-tune” with the real magic
+of our own lives, and share it in our songs.
+   Through this discovery and on our own path to inner
+attunement, somewhere along the way a self-Definition
+occurs. It becomes more and more clear Who We Are and
+what we’re doing here. Think of it as the Great Truth of
+ourselves, the heart of the artist. Songs hold a deepest
+truth, and we do too. Artistically speaking, it is the
+supreme hook, and what separates the legends from those
+`,
+      },
+      {
+        path: "references/source/pages/page-063.md",
+        content: `# Page 63
+
+forgotten by time. The clarity and conviction of Who we
+are, bringing people into our world, and helping them to
+find the Definition in themselves it what separates the true
+artists and writers from the rest.
+   There are many young songwriters and artists who are
+extremely gifted and have unlimited potential, but they,
+and their songs, are “missing” the most important
+ingredient in the recipe. They have catchy melodies, witty
+lyrics, and slick productions but for some reason it just
+doesn’t feel quite like the Real Deal. The turn your head
+“Who in the world is that?” reaction just isn’t there. If the
+goal is to do this journey in a legendary way, we know
+that indescribable magic has to be there, so let’s go
+beyond the surface, and see what we find.
+
+The Who
+
+   The discovery and development of this Who is the
+foundation of any great artist or creator. Without it, we are
+lost in the proverbial woods, directionless, and our
+listeners are lost too. From Cobain to Banksy, there lies a
+singularity and definitiveness to their entire ethos and
+Being. While this Who should naturally evolve over the
+course of one’s story, establishing the original Who is step
+one on the real journey. For artists the key will be finding
+this Voice in ourselves, for those who are strictly
+songwriters, the key will be to See and develop this in the
+artists or singers you are creating for. They are two sides
+of the same coin, and the process is essentially the same
+discovery.
+    Let’s look at some individual examples in popular
+music culture to get a better understanding of this Who.
+`,
+      },
+      {
+        path: "references/source/pages/page-064.md",
+        content: `# Page 64
+
+Lana Del Rey
+The hopeless, insecure romantic, always pining for the
+love and approval of the strong, unattainable
+Machiavellian man. We join her ride on the endless doom
+loop of trying to acquire the un-acquirable, hoping that
+sooner or later the fantasy will become real. Lana’s
+character is also a great example of a character that never
+seems to evolve or grow, and over the years has become
+sadly somewhat stale and boring to follow. The same
+narrative a thousand times, over the same sonic backdrop,
+never moving or growing from where it began. As great
+as she and her songs are, I get endlessly frustrated as a
+listener because I know there has to be more to her as a
+human and a character that we know nothing about.
+There’s almost something un-human about the one-
+dimensionality of it all, making her feel more like a
+cartoon and less like a real person.
+
+Lewis Capaldi
+The pudgy, funny guy with a heart of gold, constantly
+striking out with the opposite sex and getting his
+heartbroken because he whole heartedly believed his
+mother and the rest of society when they said “being nice
+and funny” would get the girl. I hope as Lewis’s story
+develops, we will see him evolve and potentially take on a
+less naive and needy character. How cool and surprising
+would it be to see Lewis drop a song along the lines of
+“Baby You Can Leave if You’d Like.”
+
+Olivia Rodrigo
+The quintessential 17 year old girl, struggling to
+understand her place in the world, and like Lana, hoping
+some great love affair will cure the wounds of the heart.
+`,
+      },
+      {
+        path: "references/source/pages/page-065.md",
+        content: `# Page 65
+
+Olivia shows us that you can be lost, and tell the narrative
+of Lostness, and if it’s done in a style and way that’s so
+specific and vivid, we get the idea that she actually knows
+exactly Who she is. She’s so aware and tapped in to her
+lostness, it’s as if she isn’t lost at all. It’s pretty damn cool
+that as a 34-year old man, I whole heartedly feel like a
+teenage girl in high school when I listen to her songs. I’m
+right there in her shoes. I Get It.
+
+
+
+
+Wiz Khalifa
+
+On the opposite end of the spectrum, take an artist like
+Wiz Khalifa. We know exactly what he’s about. He just
+wants to get high and enjoy his life, and doesn’t have the
+time or energy for any bullshit or bad vibes. When life
+feels too much, we know we can turn to a guy like Wiz
+and his music to step into a more carefree world and
+mindset. Wiz may not be remembered in 200 years, but
+his character was defined and clear enough for an entire
+generation latch onto.
+
+Mac Miller
+Mac is, in my eyes, one of the few of our time that truly
+had the legendary spark, and had the type of ever-
+evolving narrative worth sticking around for. We started
+with him as a carefree kid smoking pot behind the
+gymnasium, stuck by his side during the heartbreaks and
+confusion of his young adult life, contemplated the deeper
+`,
+      },
+      {
+        path: "references/source/pages/page-066.md",
+        content: `# Page 66
+
+aspects of the human existence as the boy grew into a
+man, and picked up much Truth and wisdom along the
+way. His persona and music grew, changed, and matured
+for the entirety of the time we spent with him. A truly
+dynamic and lovable guy. Someone we wanted to be
+friends with and could relate to in so many ways, year
+after year.
+
+Nailing down this Original Who in ourselves or those we
+write for is about setting the scene and hook for the
+adventures to come. It’s the starting place for an entire
+world and story to be born from. Figure out your Who,
+and you have the Great Truth, the heart, and the
+foundation all great things You are born from.
+
+
+
+The Film Parallel
+
+To look from another angle, let’s jump for a moment to
+the world of film and television. Here too, defining your
+characters is where it all begins. If you were to pitch a
+movie or show to any executive, the first thing they will
+want to know is about your main protagonist: who they
+are, what they want in life, what makes them tick, why
+they are worth watching. The greatest characters in these
+mediums are unique, full of dynamo, and most
+importantly to the narrative, evolving. Looking at these
+characters with a focus on their archetype, and how
+clearly they are defined, and how drastically they evolve
+is a valuable lesson in the narrative that needs to unfold
+for ourselves as artists, or for the artists we write for.
+A few examples of compelling characters:
+`,
+      },
+      {
+        path: "references/source/pages/page-067.md",
+        content: `# Page 67
+
+Walter White (Breaking Bad)
+Walter is a jaded man, weathered and worn by the trials of
+his life. He is faced with the ultimate dilemma, knowing
+he is going to die and willing to do anything to leave his
+family with the security and safety they will need when
+he’s gone. An unexpected and deadly circumstance
+catapults an average Joe high school chemistry teacher
+into a full bad-boy, savage. What makes his character so
+captivating is this ultimate 360 transformation. If we
+make clear to our listeners a great dilemma or inner
+conflict we battle, and must overcome, we can take them
+on a real adventure. What also makes Walter’s “Who” and
+story so compelling is the fish out of water aspect. Any
+time we are surprised by something, it triggers an
+excitement and willingness to hear more. Take for a
+example a country singer who grew up in the Brooklyn
+projects selling drugs, or a neurotic Jewish goof ball
+injected into the world of black culture(Little Dicky): as a
+listener, we know we are going to be apart of something
+exciting and unpredictable. Again, another case of the
+Question being much more seductive and captivating than
+the Answer.
+
+Cameron Frye(Ferris Bueller’s Day Off)
+Cameron begins the movie as pessimistic, apathetic to
+life, and close minded. He is uncomfortable in his skin,
+and angry at the world. We all know a Cameron, and his
+character is as clear as day to us. As the story unfolds,
+with Ferris as the catalyst, he is ripped unwilling from the
+tight confines of his own personal hell. Cameron’s
+character explodes into a whole new world. He finally
+“let’s go” and taps into the freedom, magic, and madness
+`,
+      },
+      {
+        path: "references/source/pages/page-068.md",
+        content: `# Page 68
+
+of it all. He is another great example of an evolving Who
+that makes the journey worth taking.
+
+Forrest Gump
+The magic in Forrest’s character worth exploring is the
+awe-inspiring and always unpredictable juxtaposition of
+his personality. Forrest is as simple and “stupid” as they
+come, but what he lacks in IQ and societal abilities he
+makes up for ten-fold in his innate wisdom and
+understanding of the deeper layers to life. His simplicity
+and meekness is also the foundation of his deeper
+wisdom. As an adult with the mind and innocence of a
+child, we can’t help but envy something about the way he
+sees and experiences the world around him. Being able to
+discover the Who about ourselves that sees and
+experiences the world in a unique way, and being able to
+share that singularness clearly and repeatedly through our
+songs and story is part of the legendary tale.
+
+
+
+Going back to a previous example of an artist and their
+narrative for a minute, imagine if Lana Del Rey’s eternal
+inner conflict of wanting to be loved lead to a situation
+where she was so fully broken by a man, it was the final
+straw, and she left Hollywood to become a monk. As
+ridiculous and extreme as that may sound, if I were to
+read a Rolling Stones headline that said “Lana Del Rey
+gives up on the modern life and spends a year alone in the
+woods. Her new album tells the tale,” I would race to the
+nearest set of speakers to play that album. That kind of
+jolting twist from an artist or the story that unfolds in their
+songs is the magnetism that keeps us along for the ride.
+Think to yourself for a minute about all the artists you
+`,
+      },
+      {
+        path: "references/source/pages/page-069.md",
+        content: `# Page 69
+
+loved for years and lost interest in. There’s a very good
+chance that their narrative and songs never evolved or left
+the world they started in. Most importantly, in order to
+write that exciting and evolving narrative, we have to live
+that exciting and evolving narrative. We have to push
+ourselves and our lives to the limit, constantly saying
+“yes” to things we once said “no” to, exploring the things
+and places we never paid any mind, and constantly
+stepping into the places and experiences that we fear the
+most.
+
+
+
+
+The Common DNA
+
+   If we look more closely at some of great minds and
+creators of the past, we find certain Spirits held in
+common between many of them. Life is not coincidental,
+and it’s no coincidence the majority of them embodied
+much of the same alchemy. You could argue that these
+core characteristics are at the heart of world’s most
+legendary Beings and Yogis, and in order to ascend to that
+apex of existence or artistry, historically and statistically
+speaking, these particular inner Spirits seem to be of great
+importance. You may already Be some of these things,
+and aware of it. You may also be aware that you are less
+or lacking in some of these characteristics. You don’t have
+to “Be” anything at the end of the day, but these are all
+positive and powerful mental structures that are worth
+exploring and bringing forth in our own lives. Becoming
+more of any of these qualities I think you could argue, for
+`,
+      },
+      {
+        path: "references/source/pages/page-070.md",
+        content: `# Page 70
+
+the sake of writing or Being in general, is a great thing.
+We will call these traits: The Yogi Spirit.
+
+Relentless
+
+    How does one get to anywhere in this life? How do
+compelling characters overcome their fatal flaws and
+conquer The Treasure of their story? It’s simple: They
+push forward. No matter what, against all odds and
+villains, they push forward. They do not shuffle or
+meander, or go the round about way, they push straight
+through. They tap into the infinite inner energy, and force
+their way through to the Otherside. They are relentless.
+    To the complacent person, relentlessness may be seen
+as offensive or off-putting. Many of these types would
+even swap the word relentless out and replace it with
+“stubborn” to give it a negative connotation. Pay no mind
+to these people, as the majority of them are existing in the
+lower realms and living a Fear-based existence. They are
+fearful to watch others inhabit this Spirit as it forces them
+to confront their own shortcomings or laziness. As
+humans, as writers, as Yogis, the opinions of other people
+is none of our business. Push forward in your life and
+journey.
+    Someone once asked the great Yogi Babaji, “Baba if
+there is going to be a third World War, and most of
+humankind will perish, why should one do anything?
+What should one do?” and Babaji replied “You should do
+your Yoga until your last dying breath. You should do
+your work until your last breath. It’s none of your
+concern. Go on with your life.” The message here is clear:
+it is not about where we are going or where we end up,
+it’s about how we do the Going that is the key. It’s about
+`,
+      },
+      {
+        path: "references/source/pages/page-071.md",
+        content: `# Page 71
+
+pushing forward on the journey no matter what lies ahead.
+The destination is irrelevant. The one they call Jesus
+allegedly did not submit even as they whipped him to
+shreds.
+   In 1993, Kurt Cobain walked into a rehearsal room
+with a new riff he had just discovered. He played it for the
+band and got one the average writer’s most dreaded
+reactions: hatred. His bandmates were not indifferent, but
+actively had a strong dislike for what he had played them.
+Cobain, being relentless, was not fazed in the least. He
+did not cower or retreat and move on to a new idea. His
+conviction and energetic force overcame the adversaries
+to his idea, and he made them play the same four chords
+over and over for two hours straight. The song went on to
+become “Smells like Teen Spirit.”
+   How many truly remarkable people or ideas were
+initially paid no mind or even disliked, but went on to
+change the world? The Beatles for one, were turned down
+by just about every label known to man before breaking
+through. In more modern times, Katy Perry was dropped
+by a number of record labels before her first hit song. The
+stories are endless. The Great Things in life are always
+going to be faced with opposing energy. If you truly
+believe in something, do not take opposition or road
+blocks as a sign you are on the wrong path. If you feel it
+from the heart, and have pure conviction, take it as a
+positive sign that you are encountering one of the check-
+points on The Path. Do not take no for an answer. Do not
+be drained energetically by those around you. Push
+forward at all costs. It is this relentless Spirit that got the
+legends to wherever it is they were Going.
+`,
+      },
+      {
+        path: "references/source/pages/page-072.md",
+        content: `# Page 72
+
+Curiosity
+
+Curiosity is the want to understand how things work, and
+another one of the archetypal Spirits you will find in most
+of the Great Ones. Thomas Hobbs appropriately called it
+“mental lust.” You are reading this book because you have
+some level of mental lust for songwriting and how it
+works, so clearly you hold some amount of the curious
+Spirit within yourself. It is curiosity that leads us to open
+new doors along the Path and to explore the Unknown.
+   Unbeknownst to most, Leonardo Da Vinci, one of the
+most iconic painters of all time, also had a deep passion
+for engineering, architecture, mathematics, anatomy,
+poetry, cooking, and even zoology. One of the most
+interesting aspects of Da Vinci’s curiosity is that he did
+anatomical studies of the body so he could paint it more
+realistically. Talk about passion… One of the beauties and
+powers of curiosity lies in gaining an understanding of
+how many different things and systems in life work
+similarly. In a yogic sense, this is higher intelligence. The
+more we can make connections in the things that
+seemingly have no relation, the deeper our understanding
+of life, harmony, Oneness, and the connection and
+reflection of the All. This understanding and awareness is
+a major key to writing songs with deeper truths and
+ageless wisdom.
+   Much like Da Vinci, Charles Darwin was another great
+“curist.” Darwin wrote an endless stream of letters to
+scholars around the world, enquiring on everything from
+insects to human emotion. He had a burning desire to
+know how different things worked and functioned, and
+like Da Vinci used it to make sense of his own focuses.
+`,
+      },
+      {
+        path: "references/source/pages/page-073.md",
+        content: `# Page 73
+
+Personally, something pretty random I’ve always held a
+deep curiosity about was the lives of truck drivers. I could
+not begin to tell you why, and that’s the magic in it. It’s an
+intuitive feeling that never should have, logically
+speaking, crossed my mind for any reason, but it did. The
+mental lust is there, and instead of judging it as silly or
+random, I am following that higher intuition. It may be
+that on a deeper level, it’s not about “truck driving” at all,
+but more so my spirit setting me off on the Path to meet
+someone important or enlightening in my life. To pursue
+this instinct I have decided to buy a CB radio off the
+internet to contact and communicate with truckers, and to
+fully step into their world. That secondary instinct to get
+the radio then sparked the idea: how cool would it be do a
+side project where I tell the story of a truck driver through
+my own voice? Through CB radio conversations I can get
+the trucker’s stories and transcribe them into song. At the
+absolute least, it will be good practice in the art of
+storytelling and may lead me to tell my own tale in a more
+interesting way. Seeing the commonalities in what truck
+drivers and I both value in life, or similar fears we both
+have, again, will help make those deeper connections in
+all things. How many Great Truths await me? How many
+Great Truths are awaiting you down a surprising back
+road? Follow the curiosity, if it is there, it’s for a reason
+you may not understand now, but will in time.
+
+Boldness
+`,
+      },
+      {
+        path: "references/wisdom-map.yaml",
+        content: `version: 1
+purpose: "Route songwriting problems to the right Yoga of Songwriting lens."
+
+scopes:
+  whole_song:
+    use_when:
+      - "user provides full lyrics"
+      - "song feels good but not great"
+      - "user asks for an audit, critique, diagnosis, or rewrite plan"
+    read:
+      - "song-audit-framework.md"
+      - "doctrine.md"
+  section:
+    use_when:
+      - "user asks about verse, chorus, pre-chorus, bridge, intro, or outro"
+      - "one section is not landing"
+    read:
+      - "song-audit-framework.md"
+  line:
+    use_when:
+      - "user asks for better wording"
+      - "lyrics feel clunky, generic, too songy, or too wordy"
+    lenses:
+      - "breathe"
+      - "character"
+      - "great-truth"
+  artist_identity:
+    use_when:
+      - "user asks if a song fits an artist"
+      - "user asks about voice, brand, persona, or mythology"
+    lenses:
+      - "who"
+      - "character"
+
+lenses:
+  god-zone:
+    file: "lenses/god-zone.md"
+    use_when:
+      - "blocked"
+      - "overthinking"
+      - "no inspiration"
+      - "trying too hard"
+      - "needs source material"
+    core_move: "Return the writer to silence, lived feeling, and honest observation."
+
+  great-truth:
+    file: "lenses/great-truth.md"
+    use_when:
+      - "song says nothing"
+      - "chorus has no payoff"
+      - "song lacks destination"
+      - "strong vibe but weak meaning"
+    core_move: "Find the simple universal revelation the song earns."
+
+  bones:
+    file: "lenses/bones.md"
+    use_when:
+      - "story is confusing"
+      - "verses do not build"
+      - "chorus does not feel earned"
+      - "needs reveal, reversal, or journey"
+    core_move: "Clarify character, want, conflict, turn, and payoff."
+
+  blood:
+    file: "lenses/blood.md"
+    use_when:
+      - "emotion is flat"
+      - "song has one static mood"
+      - "needs tension and release"
+      - "listener will not feel enough"
+    core_move: "Map fear and love across sections and create emotional motion."
+
+  breathe:
+    file: "lenses/breathe.md"
+    use_when:
+      - "too many words"
+      - "song feels exhausting"
+      - "phrasing is crowded"
+      - "listener cannot absorb the hook"
+    core_move: "Cut, space, repeat, simplify, and let important lines glow."
+
+  character:
+    file: "lenses/character.md"
+    use_when:
+      - "speaker feels generic"
+      - "images are vague"
+      - "song needs specificity"
+      - "line needs body/action/detail"
+    core_move: "Make the speaker visible through action, contradiction, body, and scene."
+
+  who:
+    file: "lenses/who.md"
+    use_when:
+      - "artist identity"
+      - "voice"
+      - "persona"
+      - "catalog fit"
+      - "artist mythology"
+    core_move: "Clarify the artist's center of gravity and whether the song strengthens it."
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: yoga-of-songwriting
+description: "Songwriting coaching and lyric auditing based on The Yoga of Songwriting. Use when helping write, revise, diagnose, or critique songs, lyrics, hooks, verses, choruses, bridges, artist voice, emotional arc, song concept, or songwriter block through the book's lenses: God-Zone, Great Truth, Bones, Blood, Breathe, Character, and Who."
+---
+
+# Yoga of Songwriting
+
+Use this skill to help a songwriter make a song more true, alive, memorable, and emotionally transferable.
+
+Do not treat the book as generic inspiration. Treat it as a diagnostic system:
+
+1. Read the user's material or problem.
+2. Identify the songwriting scope: whole song, section, line, or artist identity.
+3. Route to the smallest useful lens.
+4. Give concrete diagnosis and next moves.
+5. Rewrite only when asked, or after explaining the principle.
+
+## Source Map
+
+- Core doctrine: \`references/doctrine.md\`
+- Situation router: \`references/wisdom-map.yaml\`
+- Full lyric audit: \`references/song-audit-framework.md\`
+- Exercises and prompts: \`references/exercises.md\`
+- Book source fallback: \`references/source/full-clean.md\`
+- Page source fallback: \`references/source/pages/page-001.md\` through \`page-073.md\`
+
+Read only what is needed. Prefer the distilled references first. Open the raw source only when nuance, provenance, or exact context matters.
+
+## Default Workflow
+
+### 1. Classify the request
+
+- **Stuck / no idea / blocked**: use God-Zone and Great Truth.
+- **Song feels empty**: use Great Truth.
+- **Story does not land**: use Bones.
+- **Emotion feels flat**: use Blood.
+- **Too wordy / tiring / overstuffed**: use Breathe.
+- **Generic speaker / weak point of view**: use Character and Who.
+- **Full lyrics review**: use the song audit framework.
+- **Specific section work**: use the section rubric, then one or two relevant lenses.
+
+### 2. Audit before rewriting
+
+For lyrics, give a short diagnosis first:
+
+- What is working.
+- What is missing.
+- Which lens matters most.
+- The highest-leverage fix.
+
+Then provide revisions if useful.
+
+### 3. Keep the book's moral center
+
+The goal is not clever lyrics. The goal is transferring lived truth through song.
+
+- Favor specificity over decorative language.
+- Favor one strong truth over many vague emotions.
+- Favor conversational force over "songy" filler.
+- Favor emotional motion over static mood.
+- Favor breath and silence over lyrical clutter.
+- Avoid manipulative seduction for its own sake. Use emotional movement to reveal truth and connect people.
+
+## Output Shapes
+
+### Full Song Audit
+
+Use this structure:
+
+1. **Core Read**: one blunt paragraph.
+2. **Great Truth**: what the song is really saying, or what it should say.
+3. **Bones**: story, setup, reveal, payoff.
+4. **Blood**: fear/love movement and emotional charge.
+5. **Breathe**: word density, pacing, space.
+6. **Who**: speaker identity and artist fit.
+7. **Best Fixes**: 3-5 concrete moves.
+8. **Optional Rewrite**: only the highest-leverage section unless asked for more.
+
+### Section Surgery
+
+Use this structure:
+
+1. What the section must do.
+2. What it currently does.
+3. What's missing.
+4. Rewrite options or line-level edits.
+
+### Idea Generation
+
+Use this structure:
+
+1. Ask for the lived truth.
+2. Extract the emotional conflict.
+3. State possible Great Truths.
+4. Suggest song angles and section destinations.
+
+## Guardrails
+
+- Do not bury the user in theory.
+- Do not force every lens into every answer.
+- Do not quote long passages from the book in normal responses.
+- Do not imitate another artist's lyrics or voice. Use references as craft lenses only.
+- Do not call a song great unless the diagnosis supports it.
 `,
       },
     ],

@@ -65,6 +65,7 @@ import {
   handleRecallMemory,
 } from './handlers/memory.ts';
 import { handleCreateOutput, handlePromoteOutputToFinal } from './handlers/outputs.ts';
+import { handleCreateLabSong, handleSaveLabLyrics, handleListLabSongs } from './handlers/lab-songs.ts';
 import { handleArtworkCompose } from './handlers/artwork-compose.ts';
 import { handleMediaProviderRequest } from './handlers/media-provider-request.ts';
 import { handleVisualSurface } from './handlers/visual-surface.ts';
@@ -670,6 +671,51 @@ export const PromoteOutputToFinalSchema = z.object({
   assetId: z.string().min(1).optional().describe('Optional asset id inside the Output. Defaults to the Output primary asset.'),
   makePrimary: z.boolean().optional().describe('Mark this final as the current primary choice for the slot without removing other finals.'),
   note: z.string().optional().describe('Optional short note about why this was promoted.'),
+});
+
+const LabSongStatusSchema = z.enum(['working', 'done']);
+const LabSongDestinationSchema = z.enum(['rough_pad', 'remember', 'section']);
+const LabSongWriteModeSchema = z.enum(['append', 'replace']);
+
+const LabSongCaptureSchema = z.object({
+  text: z.string().min(1).describe('Exact lyric excerpt to save. When an agent response contains multiple alternates, pass only the specific chosen option(s), not the whole response.'),
+  selectionLabel: z.string().optional().describe('Human label for traceability, e.g. "option 3", "chorus alternate B", "best title line".'),
+  destination: LabSongDestinationSchema.optional().describe('Where to place the excerpt. Defaults to rough_pad. Use section only with sectionId or sectionLabel.'),
+  sectionId: z.string().optional().describe('Target section ID, e.g. chorus, verse-1, bridge. Required when destination is section unless sectionLabel is provided.'),
+  sectionLabel: z.string().optional().describe('Visible target section label, e.g. Chorus, V1, Bridge. Can create a section if needed.'),
+  mode: LabSongWriteModeSchema.optional().describe('append adds to existing text; replace overwrites the destination. Defaults to append.'),
+  sourceSessionId: z.string().optional().describe('Origin chat/session ID when known.'),
+  sourceAgentSlug: z.string().optional().describe('Origin agent slug when known.'),
+  sourceMessageId: z.string().optional().describe('Origin message ID when known.'),
+  note: z.string().optional().describe('Short note about why this excerpt was saved.'),
+});
+
+export const CreateLabSongSchema = z.object({
+  title: z.string().min(1).describe('Song title.'),
+  project: z.string().optional().describe('Optional project/album bucket.'),
+  status: LabSongStatusSchema.optional().describe('Song status. Defaults to working.'),
+  focused: z.boolean().optional().describe('Whether this song is currently a focus item.'),
+  captures: z.array(LabSongCaptureSchema).optional().describe('Optional exact lyric excerpts to seed into the new song.'),
+});
+
+export const SaveLabLyricsSchema = z.object({
+  songId: z.string().optional().describe('Existing Lab song ID. Prefer this when known.'),
+  songTitle: z.string().optional().describe('Existing Lab song title. Used if songId is not known.'),
+  createIfMissing: z.object({
+    title: z.string().min(1),
+    project: z.string().optional(),
+    status: LabSongStatusSchema.optional(),
+    focused: z.boolean().optional(),
+  }).optional().describe('Create a new song if no existing song matches.'),
+  captures: z.array(LabSongCaptureSchema).min(1).describe('Exact excerpt items to save. For multi-option responses, include only the user-selected option numbers/labels.'),
+});
+
+export const ListLabSongsSchema = z.object({
+  search: z.string().optional().describe('Search title, project, or lyric text.'),
+  project: z.string().optional().describe('Filter by project.'),
+  status: LabSongStatusSchema.optional().describe('Filter by status.'),
+  focused: z.boolean().optional().describe('Filter by focused flag.'),
+  limit: z.number().optional().describe('Max songs to return. Defaults to 20, max 100.'),
 });
 
 export const ArtworkComposeSchema = z.object({
@@ -1379,6 +1425,31 @@ Inputs:
 
 Finals are trusted pointers to Outputs. This does not duplicate files, publish anything, send anything, or delete competing options.`,
 
+  create_lab_song: `Create a new Song in the Lab.
+
+Use this when the user says to make a new song, start a song from an idea, or save a full agent draft as its own song.
+
+Important precision rule: when your response contains multiple lyric options or alternates, do not save the whole response unless the user asks for all of it. Save only exact chosen excerpts in \`captures\`, with \`selectionLabel\` like "option 2", "title hook A", or "chorus alternate B".
+
+Destinations:
+- \`rough_pad\`: loose draft material
+- \`remember\`: strong lines/images to park
+- \`section\`: structured song section; include \`sectionId\` or \`sectionLabel\`
+
+After success, tell the user the song title and where the excerpt landed.`,
+
+  save_lab_lyrics: `Save exact lyric excerpts into an existing Lab song, or create the song if needed.
+
+Use this when the user says "save that", "move option 3 to chorus", "put those two lines in Remember This", or "send this to the song pad."
+
+Selection rule: be specific. If an agent gave 5 hooks and the user picks #4, call this with one capture whose \`text\` is exactly option #4 and \`selectionLabel\` is "option 4". If the user wants multiple options, pass multiple capture items. Never dump an entire multi-option response unless the user explicitly says to save all options.
+
+Use \`mode: append\` by default. Use \`replace\` only when the user clearly asks to replace that destination.`,
+
+  list_lab_songs: `List existing Lab songs so you can target the right song before saving lyrics.
+
+Use this before save_lab_lyrics when the user names a song but you do not know its exact ID. This is read-only.`,
+
   artwork_compose: `Create an editable artwork composition and optionally publish it to Canvas.
 
 Use this after a cover-art, merch, poster, or campaign-visual concept has an approved base image or an approved layout direction. It writes:
@@ -1555,6 +1626,9 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'recall_memory', description: TOOL_DESCRIPTIONS.recall_memory, inputSchema: RecallMemorySchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleRecallMemory },
   { name: 'create_output', description: TOOL_DESCRIPTIONS.create_output, inputSchema: CreateOutputSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateOutput },
   { name: 'promote_output_to_final', description: TOOL_DESCRIPTIONS.promote_output_to_final, inputSchema: PromoteOutputToFinalSchema, executionMode: 'registry', safeMode: 'block', handler: handlePromoteOutputToFinal },
+  { name: 'create_lab_song', description: TOOL_DESCRIPTIONS.create_lab_song, inputSchema: CreateLabSongSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateLabSong },
+  { name: 'save_lab_lyrics', description: TOOL_DESCRIPTIONS.save_lab_lyrics, inputSchema: SaveLabLyricsSchema, executionMode: 'registry', safeMode: 'block', handler: handleSaveLabLyrics },
+  { name: 'list_lab_songs', description: TOOL_DESCRIPTIONS.list_lab_songs, inputSchema: ListLabSongsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListLabSongs },
   { name: 'artwork_compose', description: TOOL_DESCRIPTIONS.artwork_compose, inputSchema: ArtworkComposeSchema, executionMode: 'registry', safeMode: 'block', handler: handleArtworkCompose },
   { name: 'media_provider_request', description: TOOL_DESCRIPTIONS.media_provider_request, inputSchema: MediaProviderRequestSchema, executionMode: 'registry', safeMode: 'block', handler: handleMediaProviderRequest },
   { name: 'video_project_create', description: TOOL_DESCRIPTIONS.video_project_create, inputSchema: VideoProjectCreateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectCreate },
@@ -1573,6 +1647,8 @@ export interface SessionToolFilterOptions {
   includeDeveloperFeedback?: boolean;
   /** Include the HNIC-only schedule_work tool. */
   includeScheduleWork?: boolean;
+  /** Include Creative Lab song tools only inside an explicit Lab workspace. */
+  includeLabTools?: boolean;
 }
 
 /**
@@ -1584,12 +1660,14 @@ export interface SessionToolFilterOptions {
 export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionToolDef[] {
   const includeDeveloperFeedback = options?.includeDeveloperFeedback ?? true;
   const includeScheduleWork = options?.includeScheduleWork ?? false;
+  const includeLabTools = options?.includeLabTools ?? false;
 
   return SESSION_TOOL_DEFS.filter(def => {
     if (!includeDeveloperFeedback && def.name === 'send_developer_feedback') {
       return false;
     }
     if (!includeScheduleWork && def.name === 'schedule_work') return false;
+    if (!includeLabTools && ['create_lab_song', 'save_lab_lyrics', 'list_lab_songs'].includes(def.name)) return false;
     return true;
   });
 }
@@ -1702,11 +1780,13 @@ export function getToolDefsAsJsonSchema(opts?: {
   prefix?: string;
   includeDeveloperFeedback?: boolean;
   includeScheduleWork?: boolean;
+  includeLabTools?: boolean;
 }): JsonSchemaToolDef[] {
   const prefix = opts?.prefix || '';
   const defs = getSessionToolDefs({
     includeDeveloperFeedback: opts?.includeDeveloperFeedback,
     includeScheduleWork: opts?.includeScheduleWork,
+    includeLabTools: opts?.includeLabTools,
   });
 
   return defs.map(def => {

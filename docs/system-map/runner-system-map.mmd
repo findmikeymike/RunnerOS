@@ -106,6 +106,9 @@ flowchart LR
   A_persona_agent --> S_steve_jobs_perspective["skill:steve-jobs-perspective"]
   A_persona_agent --> S_mrbeast_perspective["skill:mrbeast-perspective"]
   A_persona_agent --> S_tom_ford["skill:tom-ford"]
+  Registry --> A_legendary_writer["Legendary Writer\nask\nCreative"]
+  Workers --> A_legendary_writer
+  A_legendary_writer --> S_yoga_of_songwriting["skill:yoga-of-songwriting"]
   Registry --> A_record_doctor["Record Doctor\nask\nCreative"]
   Workers --> A_record_doctor
   A_record_doctor --> S_record_doctor_handoff["skill:record-doctor-handoff"]
@@ -132,11 +135,22 @@ flowchart LR
   Registry --> A_coder["Coder\nask\nOperators"]
   Workers --> A_coder
   Registry --> A_update_system_agent["Update System Agent\nsafe\nOperators"]
+  Registry --> A_hooker["Hooker\nask\nOther Workers"]
+  Workers --> A_hooker
+  A_hooker --> S_hook_writer["skill:hook-writer"]
   Registry --> A_open_slide_agent["Open Slide\nask\nOther Workers"]
   A_open_slide_agent --> S_open_slide_decks["skill:open-slide-decks"]
   A_open_slide_agent --> S_slide_design_taste["skill:slide-design-taste"]
   A_open_slide_agent --> T_open_slide["source:open-slide"]
   A_open_slide_agent -. hidden .-> Workers
+  Registry --> A_reference_master["Reference Master\nask\nOther Workers"]
+  Workers --> A_reference_master
+  A_reference_master --> S_reference_finder["skill:reference-finder"]
+  Registry --> A_reverse_magic["Reverse Magic\nask\nOther Workers"]
+  Workers --> A_reverse_magic
+  Registry --> A_the_excavator["The Excavator\nask\nOther Workers"]
+  Workers --> A_the_excavator
+  A_the_excavator --> S_song_excavator["skill:song-excavator"]
   Registry --> A_writer["Writer\nask\nOther Workers"]
   Workers --> A_writer
   Registry --> A_college_radio_agent["College Radio\nask\nOutreach"]

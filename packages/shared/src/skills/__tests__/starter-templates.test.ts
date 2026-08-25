@@ -220,6 +220,57 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(parsed.content).not.toContain('Runner');
   });
 
+  it('includes yoga-of-songwriting for Lab lyric coaching', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'yoga-of-songwriting');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('yoga-of-songwriting');
+    expect(parsed.content).toContain('Great Truth');
+    expect(parsed.content).toContain('Bones');
+    expect(parsed.content).toContain('Blood');
+    expect(parsed.content).toContain('Breathe');
+    expect(skill?.files.some(f => f.path === 'references/song-audit-framework.md')).toBe(true);
+  });
+
+  it('includes hook-writer for Lab hook and chorus work', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'hook-writer');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('hook-writer');
+    expect(parsed.data.description).toContain('chorus');
+    expect(parsed.content).toContain('The punch is direct and simple');
+    expect(parsed.content).toContain('references/sonics.md');
+    expect(skill?.files.some(f => f.path === 'references/hook-teardowns.md')).toBe(true);
+  });
+
+  it('includes reference-finder for Lab reference wells', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'reference-finder');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('reference-finder');
+    expect(parsed.data.description).toContain('cultural allusions');
+    expect(parsed.content).toContain('Reference Finder');
+    expect(parsed.content).toContain('wells/wells.json');
+    expect(parsed.content).toContain('Lab song');
+    expect(parsed.content).not.toContain('browser/build.py');
+    expect(skill?.files.some(f => f.path === 'wells/wells.json')).toBe(true);
+    expect(skill?.files.some(f => f.path === 'saved/favorites.json')).toBe(true);
+  });
+
+  it('includes song-excavator for Lab song concept digs', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'song-excavator');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('song-excavator');
+    expect(parsed.data.description).toContain('Find "the song"');
+    expect(parsed.content).toContain('The Excavator');
+    expect(parsed.content).toContain('engine/engine.json');
+    expect(parsed.content).toContain('saved/finds.json');
+    expect(parsed.content).not.toContain('browser/build.py');
+    expect(skill?.files.some(f => f.path === 'engine/engine.json')).toBe(true);
+    expect(skill?.files.some(f => f.path === 'saved/finds.json')).toBe(true);
+  });
+
   it('includes magnetic-outreach for cold first-contact draft craft', () => {
     const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'magnetic-outreach');
     expect(skill).toBeDefined();

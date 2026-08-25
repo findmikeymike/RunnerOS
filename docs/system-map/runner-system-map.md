@@ -1,13 +1,13 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-08-02
+last_verified: 2026-08-25
 source_of_truth: true
 ---
 
 # Runner System Map
 
-Generated: 2026-08-02
+Generated: 2026-08-25
 
 ## Why This Exists
 
@@ -47,19 +47,21 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - hnicScheduledWork: `packages/server-core/src/scheduled-work/HnicScheduledWork.ts`
 - socialBrowserExecutor: `apps/electron/src/main/scheduled-social-browser-executor.ts`
 - missionBrief: `apps/electron/src/renderer/lib/mission-brief.ts`
+- labWorkspaceHome: `apps/electron/src/renderer/components/app-shell/LabWorkspaceHome.tsx`
 
 ## Summary
 
-- Agents mapped: 44
+- Agents mapped: 49
 - Hidden from Workers home: 5
 - Campaign default workers: `branding-agent`, `world-builder`, `college-radio-agent`, `spotify-playlist-creator`, `content-genius`, `scroll-stopper`, `anticipation-director`, `content-director`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
+- Lab default workers: `the-excavator`, `reverse-magic`, `hooker`, `legendary-writer`, `reference-master`, `record-doctor`
 - Starter workflows mapped: 7
 - Shared Intel prompt injection: wired
 - Outputs -> Finals promotion: wired
 - Scheduled Work execution: wired
-- Domains: Command 3, Content Creation 9, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 5, Promotion 9, Research 4, Socials 3
-- Permission modes: ask 36, safe 8
-- Known skills: 124 (85 bundled, 6 system, 124 user-global on this machine)
+- Domains: Command 3, Content Creation 9, Creative 6, Merch 2, Operators 2, Other Workers 6, Outreach 5, Promotion 9, Research 4, Socials 3
+- Permission modes: ask 41, safe 8
+- Known skills: 125 (89 bundled, 6 system, 125 user-global on this machine)
 - Known builtin sources: 27
 
 ## Reference Health
@@ -72,6 +74,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Workers page shows active agents, except system agents and hidden worker-home slugs.
 - Artist HQ default workers are currently branding-agent, world-builder, college-radio-agent, spotify-playlist-creator.
 - Campaign default workers are currently branding-agent, world-builder, college-radio-agent, spotify-playlist-creator, content-genius, scroll-stopper, anticipation-director, content-director, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.
+- Lab workspaces can pass defaultVisibleSlugs, currently the-excavator, reverse-magic, hooker, legendary-writer, reference-master, record-doctor.
 - run-agent drops missing skills/sources before session creation and includes a launch receipt.
 - Concierge receives broad workspace context and an active-agent capability catalog for routing.
 - Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.
@@ -402,11 +405,25 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Inputs: A product, brand, offer, script, video idea, campaign, deck, launch plan, or creative decision that needs a persona-led critique.
 - Outputs: A persona-lens critique with the strongest verdicts, contradictions, recommended edits, and next creative move.
 
+#### Legendary Writer (`legendary-writer`)
+
+- Description: Songwriting coach and lyric surgeon grounded in The Yoga of Songwriting.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`, `lab-workers-default-visible`
+- Skills: `yoga-of-songwriting`
+- Sources: none
+- Optional sources: none
+- Trusted tools: `list_lab_songs`, `create_lab_song`, `save_lab_lyrics`
+- Tags: `lab`, `lyrics`, `songwriting`, `writing`, `coach`
+- Signals: `approval-capable`, `trusted-worker-tools`
+- Inputs: Lyrics, rough sections, song concept, artist context, references, or a specific writing block.
+- Outputs: A concise lyric diagnosis, section surgery, rewrite options, stronger hooks, and next writing moves.
+
 #### Record Doctor (`record-doctor`)
 
 - Description: Submit a song for premium producer vetting, feedback, or enhancement by sending a clean approval-gated packet to mikeymikemusic@gmail.com.
 - Permission: `ask`; thinking: `high`
-- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`, `lab-workers-default-visible`
 - Skills: `record-doctor-handoff`, `artist-comms-strategist`
 - Sources: none
 - Optional sources: `gmail`
@@ -492,6 +509,20 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 ### Other Workers
 
+#### Hooker (`hooker`)
+
+- Description: Writes, diagnoses, and upgrades song hooks, choruses, refrains, and title lines.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`, `lab-workers-default-visible`
+- Skills: `hook-writer`
+- Sources: none
+- Optional sources: none
+- Trusted tools: `list_lab_songs`, `create_lab_song`, `save_lab_lyrics`
+- Tags: `lab`, `hooks`, `chorus`, `lyrics`, `songwriting`
+- Signals: `approval-capable`, `trusted-worker-tools`
+- Inputs: A song concept, verse, existing hook, chorus draft, title line, genre, ambition, or rhythmic pocket.
+- Outputs: Hook candidates, chorus punch-ups, title-line options, diagnosis, setup fixes, and singability notes.
+
 #### Open Slide (`open-slide-agent`)
 
 - Description: Create clean slide decks and export them to HTML or PDF.
@@ -505,6 +536,48 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Signals: `approval-capable`, `artifact-output-aware`, `canvas-visual-agent`, `external-action-boundary`, `requires-source-activation`
 - Inputs: A deck brief (topic, audience, length, tone), or an existing deck to edit/export.
 - Outputs: A static HTML build (and optional PDF) of the deck, published as a Canvas-visible Output. Edit URL and dist path included.
+
+#### Reference Master (`reference-master`)
+
+- Description: Finds fresh cultural allusions, imagery wells, and reference palettes for songs.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`, `lab-workers-default-visible`
+- Skills: `reference-finder`
+- Sources: none
+- Optional sources: none
+- Trusted tools: `list_lab_songs`, `create_lab_song`, `save_lab_lyrics`
+- Tags: `lab`, `references`, `allusions`, `imagery`, `songwriting`, `lyrics`
+- Signals: `approval-capable`, `trusted-worker-tools`
+- Inputs: A theme, mood, lyric, song concept, artist context, or a cultural well the writer leans on.
+- Outputs: Fresh reference palettes grouped by well, meaning, lyric-use notes, cliche warnings, and optional lines/images to save into the Lab.
+
+#### Reverse Magic (`reverse-magic`)
+
+- Description: Turns song annotations and reference psychology into wholly new original lyrics.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`, `lab-workers-default-visible`
+- Skills: none
+- Sources: none
+- Optional sources: none
+- Trusted tools: `list_lab_songs`, `create_lab_song`, `save_lab_lyrics`
+- Tags: `lab`, `lyrics`, `songwriting`, `annotations`, `creative`
+- Signals: `approval-capable`, `artifact-output-aware`, `trusted-worker-tools`
+- Inputs: A reference artist/song, Genius annotations or song-analysis notes, and the new song concept.
+- Outputs: A new original song draft built from the reference psychology, with section notes and annotation-bait reasoning.
+
+#### The Excavator (`the-excavator`)
+
+- Description: Finds the buried song idea when the writer feels blocked or generic.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`, `lab-workers-default-visible`
+- Skills: `song-excavator`
+- Sources: none
+- Optional sources: none
+- Trusted tools: `list_lab_songs`, `create_lab_song`, `save_lab_lyrics`
+- Tags: `lab`, `songwriting`, `concepts`, `prompts`, `creative-block`, `lyrics`
+- Signals: `approval-capable`, `trusted-worker-tools`
+- Inputs: Writer block, loose life details, a flat draft, a vague theme, or a need for a song prompt.
+- Outputs: One-question-at-a-time digs, song titles, first lines, charged concepts, and follow-up doors for writing.
 
 #### Writer (`writer`)
 
