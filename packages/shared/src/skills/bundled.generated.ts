@@ -50733,8 +50733,6 @@ www.findmikeymike.com
       {
         path: "references/source/pages/page-004.md",
         content: `# Page 4
-
-
 `,
       },
       {
@@ -51472,8 +51470,6 @@ around us. That is our mantra.
       {
         path: "references/source/pages/page-027.md",
         content: `# Page 27
-
-
 `,
       },
       {
