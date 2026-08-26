@@ -1,4 +1,7 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdtemp, rm } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 
 import {
   OPTIONS_EXECUTION_RECORD_SCHEMA_VERSION,
@@ -8,7 +11,10 @@ import {
   type OptionsExecutionRecord,
   type OptionsExpirationSchedule,
 } from '@trade-god/contracts'
-import { OptionsExpirationCustodyPlanner, sha256 } from '../src/index.ts'
+import { FileOptionsExpirationCustodyStore, OptionsExpirationCustodyPlanner, OptionsExpirationCustodySupervisor, sha256 } from '../src/index.ts'
+
+const roots: string[] = []
+afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))))
 
 const checksum = 'a'.repeat(64)
 const checksumB = 'b'.repeat(64)
@@ -80,5 +86,77 @@ describe('options expiration custody', () => {
     delete (body as { content_checksum?: string }).content_checksum
     expect(() => planner.assess({ entry: entry(), policy: policy(), schedule: checksummed(body) as OptionsExpirationSchedule,
       assessed_at: '2026-09-18T19:20:00.000Z', provider_automatic_close_certified: false, provider_do_not_exercise_certified: false })).toThrow('does not bind')
+  })
+
+  test('retains exact schedules and warns without claiming automatic close authority', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'options-expiration-')); roots.push(root)
+    const store = new FileOptionsExpirationCustodyStore(root)
+    await store.saveSchedule(schedule())
+    const closes: unknown[] = []
+    const supervisor = new OptionsExpirationCustodySupervisor({
+      store,
+      plans: async () => [{ policy: policy(), connection: { connection_id: 'connection-expiry-one', account_ref: 'account-expiry-one' },
+        contract: { canonical_id: 'USOPT:SPY:2026-09-18:C:650' }, decision: { decision_id: 'intent-expiry-one' } }],
+      getRecord: async () => entry(),
+      closePosition: async (_connectionId, input) => { closes.push(input); return { state: 'closed-flat' } },
+      certification: async () => undefined,
+      now: () => '2026-09-18T19:20:00.000Z',
+    })
+    expect(await supervisor.sweep()).toBe(1)
+    expect(closes).toHaveLength(0)
+    expect((await store.listAssessments())[0]).toMatchObject({
+      state: 'close-due', automatic_close_allowed: false, operator_action_required: true,
+    })
+  })
+
+  test('uses one deterministic full-close request only with exact custody certification', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'options-expiration-')); roots.push(root)
+    const store = new FileOptionsExpirationCustodyStore(root)
+    await store.saveSchedule(schedule())
+    const requests: string[] = []
+    const supervisor = new OptionsExpirationCustodySupervisor({
+      store,
+      plans: async () => [{ policy: policy(), connection: { connection_id: 'connection-expiry-one', account_ref: 'account-expiry-one' },
+        contract: { canonical_id: 'USOPT:SPY:2026-09-18:C:650' }, decision: { decision_id: 'intent-expiry-one' } }],
+      getRecord: async () => entry(),
+      closePosition: async (_connectionId, input) => { requests.push(input.request_id); return { state: 'close-working' } },
+      certification: async () => ({ provider_automatic_close_certified: true, provider_do_not_exercise_certified: true, content_checksum: checksum }),
+      now: () => '2026-09-18T19:20:00.000Z',
+    })
+    expect(await supervisor.sweep()).toBe(1)
+    expect(await supervisor.sweep()).toBe(1)
+    expect(requests).toHaveLength(2)
+    expect(requests[1]).toBe(requests[0])
+    expect((await store.listAssessments())).toHaveLength(1)
+  })
+
+  test('isolates a missing schedule without calling the provider', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'options-expiration-')); roots.push(root)
+    const errors: string[] = []
+    const supervisor = new OptionsExpirationCustodySupervisor({
+      store: new FileOptionsExpirationCustodyStore(root),
+      plans: async () => [{ policy: policy(), connection: { connection_id: 'connection-expiry-one', account_ref: 'account-expiry-one' },
+        contract: { canonical_id: 'USOPT:SPY:2026-09-18:C:650' }, decision: { decision_id: 'intent-expiry-one' } }],
+      getRecord: async () => entry(),
+      closePosition: async () => { throw new Error('must not run') },
+      certification: async () => undefined,
+      onError: (_connection, _intent, error) => { errors.push((error as Error).message) },
+      now: () => '2026-09-18T19:20:00.000Z',
+    })
+    expect(await supervisor.sweep()).toBe(0)
+    expect(errors[0]).toContain('No retained broker expiration schedule')
+  })
+
+  test('returns retained assessments in explicit chronological order', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'options-expiration-')); roots.push(root)
+    const store = new FileOptionsExpirationCustodyStore(root)
+    const planner = new OptionsExpirationCustodyPlanner()
+    for (const assessedAt of ['2026-09-18T21:31:00.000Z', '2026-09-18T19:20:00.000Z', '2026-09-18T20:05:00.000Z']) {
+      await store.saveAssessment(planner.assess({ entry: entry(), policy: policy(), schedule: schedule(), assessed_at: assessedAt,
+        provider_automatic_close_certified: false, provider_do_not_exercise_certified: false }))
+    }
+    expect((await store.listAssessments()).map((item) => item.assessed_at)).toEqual([
+      '2026-09-18T19:20:00.000Z', '2026-09-18T20:05:00.000Z', '2026-09-18T21:31:00.000Z',
+    ])
   })
 })

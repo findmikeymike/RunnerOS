@@ -7,6 +7,20 @@ source_of_truth: true
 
 # Verification System
 
+## 2026-08-26 Options Autopilot Slice 12 — Expiration Custody Supervisor
+
+- Added append-only exact schedule/assessment storage, startup and one-minute
+  custody sweeps, account-scoped failure containment, plain-language source
+  warnings, and deterministic certified full-close dispatch.
+- Automatic close requires the exact policy and custody certification checksum
+  plus retained automatic-close and do-not-exercise proof. Without it, the app
+  warns and blocks; it never invents broker deadlines or authority.
+- Verification: 31 focused expiration, automatic-entry, and Electron runtime
+  tests passed with 141 expectations; repository typecheck passed. Rival found
+  and closed hash-filename ordering that could show stale warning evidence.
+- Not proven: real provider schedule capture, automatic expiration close, or
+  do-not-exercise lifecycle. Those remain activation blockers.
+
 ## 2026-08-26 Options Autopilot Slice 11 — Working-Order Timeout
 
 - Added startup and five-second custody sweeps for expired automatic entry

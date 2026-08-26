@@ -7,6 +7,17 @@ source_of_truth: false
 
 # Trade God Handoff
 
+## 2026-08-26 Automatic Options Expiration Custody Handoff
+
+- Exact expiration schedules and assessments are append-only local evidence.
+  The single desktop authority reassesses at startup and every minute.
+- The Options Desk shows the newest action, ordered by assessment time—not file
+  name. Missing schedule evidence blocks only the exact account and appears as
+  setup-needed guidance.
+- Automatic close uses one deterministic full-close request and exists only
+  when the exact policy binds retained automatic-close and do-not-exercise
+  certification. No such real provider evidence exists in this worktree yet.
+
 ## 2026-08-26 Automatic Options Entry Timeout Handoff
 
 - A single-instance background supervisor checks frozen automatic-entry

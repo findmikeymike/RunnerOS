@@ -189,16 +189,27 @@ const OptionsControlCenterPage: React.FC = () => {
             <div className="mt-5 grid gap-2">
               {sources.filter((source) => source.route.state !== 'archived').map((source) => {
                 const account = connections.find((item) => item.connection.connection_id === source.route.connection_id)
+                const custody = source.expiration_assessments?.[0]
                 return (
-                  <div key={source.route.route_id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/[0.07] bg-[#0b0f13] px-4 py-3">
-                    <div className="flex items-center gap-3">
+                  <div key={source.route.route_id} className="rounded-xl border border-white/[0.07] bg-[#0b0f13] px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-400/[0.09] text-violet-200"><Radio className="h-4 w-4" /></div>
                       <div><div className="text-sm font-medium">{source.route.display_name}</div><div className="mt-1 text-xs text-[#75808d]">{account?.connection.account_label ?? 'Missing account'} · max {source.policy.max_contracts_per_order} contract · ${source.policy.max_debit_per_trade}</div></div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`rounded-full px-2.5 py-1 text-[10px] ${source.automatic_authority_active ? 'bg-emerald-400/[0.09] text-emerald-200' : 'bg-amber-300/[0.08] text-amber-100'}`}>{source.automatic_authority_active ? 'Running' : 'Setup saved · automation off'}</span>
                       <button type="button" onClick={async () => { if (window.confirm(`Remove ${source.route.display_name} from options monitoring?`)) { await window.electronAPI.archiveOptionsAutomationSource(source.route.route_id); await load() } }} className="rounded-lg p-2 text-[#68727e] hover:bg-rose-400/[0.08] hover:text-rose-300" aria-label={`Remove ${source.route.display_name}`}><Trash2 className="h-4 w-4" /></button>
-                    </div>
+                    </div></div>
+                    {custody && custody.state !== 'monitoring' && custody.state !== 'resolved-flat' && (
+                      <div className={`mt-3 rounded-lg px-3 py-2 text-xs leading-5 ${custody.state === 'custody-halted' ? 'bg-rose-400/[0.08] text-rose-100' : 'bg-amber-300/[0.07] text-amber-100'}`}>
+                        <span className="font-semibold">Expiration action: </span>{custody.detail}
+                      </div>
+                    )}
+                    {!custody && source.custody_issue && (
+                      <div className="mt-3 rounded-lg bg-amber-300/[0.07] px-3 py-2 text-xs leading-5 text-amber-100">
+                        <span className="font-semibold">Expiration protection needs setup: </span>{source.custody_issue.replace(/^Expiration custody is safely blocked:\s*/, '')}
+                      </div>
+                    )}
                   </div>
                 )
               })}

@@ -64,6 +64,14 @@ The workbench can request engine health, run the known fixture, and display tota
 
 ## Recently Completed
 
+- Added durable expiration custody supervision for automatic options positions.
+  Exact broker/account/contract schedules and timestamped assessments are
+  retained and shown on the Discord source. The app escalates close and
+  do-not-exercise deadlines in plain language. Automatic close is impossible
+  unless the exact policy checksum matches retained autopilot certification for
+  both close and do-not-exercise behavior; otherwise the operator is warned and
+  that account stays blocked.
+
 - Added automatic working-order timeout custody for Discord options entries.
   When the frozen entry window ends, the single desktop authority cancels only
   the unfilled remainder with one immutable request ID. A confirmed fill stays

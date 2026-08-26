@@ -86,11 +86,14 @@ import {
   OptionsPositionManager,
   FileOptionsAutomationStore,
   FileOptionsAutopilotAuthorityStore,
+  FileOptionsAutopilotCertificationStore,
   FileOptionsAutomationReceiptStore,
   FileOptionsAutomationPlanStore,
   OptionsAutomaticEntryCoordinator,
   FileDiscordOptionsTradeManager,
   OptionsWorkingOrderSupervisor,
+  FileOptionsExpirationCustodyStore,
+  OptionsExpirationCustodySupervisor,
   type DiscoTraderIntentRoute,
   type ExecutionAdapter,
   type TradovateUserSyncGap,
@@ -482,6 +485,8 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   const optionsManualAuthorityStore = optionsEvidenceRoot ? new FileOptionsManualAuthorityStore(optionsEvidenceRoot, options.now) : undefined
   const optionsAutomationStore = optionsEvidenceRoot ? new FileOptionsAutomationStore(optionsEvidenceRoot) : undefined
   const optionsAutopilotAuthorityStore = optionsEvidenceRoot ? new FileOptionsAutopilotAuthorityStore(optionsEvidenceRoot, options.now) : undefined
+  const optionsAutopilotCertificationStore = optionsEvidenceRoot ? new FileOptionsAutopilotCertificationStore(optionsEvidenceRoot) : undefined
+  const optionsExpirationCustodyStore = optionsEvidenceRoot ? new FileOptionsExpirationCustodyStore(optionsEvidenceRoot) : undefined
   const optionsAutomationReceiptStore = optionsEvidenceRoot ? new FileOptionsAutomationReceiptStore(optionsEvidenceRoot) : undefined
   const optionsAutomationPlanStore = optionsEvidenceRoot ? new FileOptionsAutomationPlanStore(optionsEvidenceRoot) : undefined
   const optionsAuthorityRecoveryReady = optionsManualAuthorityStore && optionsAutopilotAuthorityStore
@@ -510,7 +515,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     await Promise.all([optionsAuthorityRecoveryReady, optionsCertificationRecoveryReady])
     const statuses = await optionsConnectionService!.list()
     return Promise.all(statuses.map(async (status) => {
-      const [allEvidence, eligible, application, authority, manualOrders, manualReservations, managementRecords] = await Promise.all([
+      const [allEvidence, eligible, application, authority, manualOrders, manualReservations, managementRecords, expirationAssessments] = await Promise.all([
         optionsCertificationStore!.list(status.connection.connection_id),
         optionsCertificationStore!.getEligible(status.connection, options.now()),
         optionsCertificationApplicationStore!.getActive(status.connection, options.now()),
@@ -528,6 +533,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         optionsEvidenceRoot
           ? new FileOptionsManagementStore(path.join(optionsEvidenceRoot, 'manual-execution', status.connection.connection_id, 'management')).listRecords()
           : Promise.resolve([]),
+        optionsExpirationCustodyStore ? optionsExpirationCustodyStore.listAssessments() : Promise.resolve([]),
       ])
       return {
         ...status,
@@ -571,6 +577,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         })),
         pending_manual_reviews: manualReservations.filter((reservation) => reservation.state === 'prepared').length,
         management_records: managementRecords,
+        expiration_assessments: expirationAssessments.filter((item) => (
+          manualOrders.some((candidate) => candidate.intent_id === item.entry_intent_id)
+        )),
         ...(optionsManualRecoveryErrors.get(status.connection.connection_id)
           ? { manual_recovery_issue: optionsManualRecoveryErrors.get(status.connection.connection_id)! }
           : {}),
@@ -642,9 +651,12 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         assertConnectionReady: (connectionId) => {
           const timeoutIssue = [...optionsAutomaticRecoveryErrors.entries()]
             .find(([key]) => key.startsWith(`timeout:${connectionId}:`))?.[1]
+          const expirationIssue = [...optionsAutomaticRecoveryErrors.entries()]
+            .find(([key]) => key.startsWith(`expiration:${connectionId}:`))?.[1]
           const issue = optionsAutomaticRecoveryErrors.get('runtime')
             ?? optionsAutomaticRecoveryErrors.get(connectionId)
             ?? timeoutIssue
+            ?? expirationIssue
           if (issue) throw new Error(issue)
         },
         resolveExecution: async (connection) => {
@@ -667,6 +679,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
           && Boolean(await optionsAutopilotAuthorityStore.getActive(route, policy, connection, options.now()))
         ),
         options.now,
+        () => optionsExpirationCustodyStore?.listAssessments() ?? Promise.resolve([]),
       )
     : undefined
   const optionsAutomaticManagementRuntime = async (connectionId: string) => {
@@ -707,6 +720,40 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         },
         onReceiptSuccess: (receipt) => {
           if (receipt.connection_id) optionsAutomaticRecoveryErrors.delete(`timeout:${receipt.connection_id}:${receipt.receipt_id}`)
+        },
+      })
+    : undefined
+  const optionsExpirationSupervisor = optionsExpirationCustodyStore && optionsAutomationPlanStore
+    && optionsAutopilotCertificationStore
+    ? new OptionsExpirationCustodySupervisor({
+        store: optionsExpirationCustodyStore,
+        plans: async () => {
+          const activeIntentIds = new Set((await optionsAutomationReceiptStore!.list())
+            .filter((receipt) => receipt.execution_intent_id
+              && (receipt.state === 'working' || receipt.state === 'active' || receipt.state === 'halted'))
+            .map((receipt) => receipt.execution_intent_id!))
+          return (await optionsAutomationPlanStore.list())
+            .filter((plan) => activeIntentIds.has(plan.decision.decision_id))
+        },
+        getRecord: async (connectionId, intentId) => {
+          const runtime = await optionsAutomaticManagementRuntime(connectionId)
+          return runtime.executions.getRecord(intentId)
+        },
+        closePosition: async (connectionId, input) => {
+          const runtime = await optionsAutomaticManagementRuntime(connectionId)
+          return runtime.positionManager.closePosition(input)
+        },
+        certification: async (connectionId) => {
+          const connection = await optionsConnectionById(connectionId)
+          return optionsAutopilotCertificationStore.getEligible(connection, options.now())
+        },
+        now: options.now,
+        onError: (connectionId, intentId, error) => {
+          optionsAutomaticRecoveryErrors.set(`expiration:${connectionId}:${intentId}`,
+            `Expiration custody is safely blocked: ${error instanceof Error ? error.message : 'Unknown custody failure'}`)
+        },
+        onSuccess: (connectionId, intentId) => {
+          optionsAutomaticRecoveryErrors.delete(`expiration:${connectionId}:${intentId}`)
         },
       })
     : undefined
@@ -846,6 +893,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         await optionsAutomaticCoordinator.recoverPending()
         await optionsDiscordTradeManager?.recoverPending()
         await optionsWorkingOrderSupervisor?.sweep()
+        await optionsExpirationSupervisor?.sweep()
       })()
     : Promise.resolve()
   void optionsAutomaticExecutionRecoveryReady.catch(() => undefined)
@@ -863,6 +911,20 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       }, 5_000)
     : undefined
   optionsWorkingOrderTimer?.unref()
+  const optionsExpirationTimer = optionsExpirationSupervisor && options.optionsSingleInstanceAuthority === true
+    ? setInterval(() => {
+        void optionsAutomaticExecutionRecoveryReady.then(async () => {
+          try {
+            await optionsExpirationSupervisor.sweep()
+            optionsAutomaticRecoveryErrors.delete('runtime-expiration-store')
+          } catch (error) {
+            optionsAutomaticRecoveryErrors.set('runtime-expiration-store',
+              `Expiration custody storage is safely blocked: ${error instanceof Error ? error.message : 'Unknown custody failure'}`)
+          }
+        }).catch(() => undefined)
+      }, 60_000)
+    : undefined
+  optionsExpirationTimer?.unref()
   const assertOptionsManualRecovery = (connectionId: string) => {
     const issue = optionsManualRecoveryErrors.get(connectionId)
     if (issue) throw new Error(issue)
@@ -1532,7 +1594,11 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             ? {
                 listOptionsAutomationSources: async () => {
                   await optionsAutomaticExecutionRecoveryReady
-                  return optionsAutomationService.list()
+                  return (await optionsAutomationService.list()).map((source) => ({
+                    ...source,
+                    custody_issue: [...optionsAutomaticRecoveryErrors.entries()]
+                      .find(([key]) => key.startsWith(`expiration:${source.route.connection_id}:`))?.[1],
+                  }))
                 },
                 saveOptionsAutomationSource: (input) => withOptionsMutation(async () => {
                   await optionsAutomaticExecutionRecoveryReady
@@ -1675,6 +1741,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             }
             const runtimeIssue = optionsAutomaticRecoveryErrors.get('runtime')
               ?? optionsAutomaticRecoveryErrors.get('runtime-timeout-store')
+              ?? optionsAutomaticRecoveryErrors.get('runtime-expiration-store')
             if (runtimeIssue) throw new Error(runtimeIssue)
             const payload = discoTraderPushPayloadSchema.parse(input)
             if (payload.kind !== 'options_entry' || !payload.options_entry) {
@@ -1823,6 +1890,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     dispose: async () => {
       unsubscribeAlert?.()
       if (optionsWorkingOrderTimer) clearInterval(optionsWorkingOrderTimer)
+      if (optionsExpirationTimer) clearInterval(optionsExpirationTimer)
       await discordManagementReady
       userSyncStopped = true
       if (userSyncRefreshTimer) clearTimeout(userSyncRefreshTimer)

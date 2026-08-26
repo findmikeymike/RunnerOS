@@ -9,6 +9,7 @@ import {
   type OptionsAutomationRoute,
   type OptionsConnection,
   type OptionsEntryPolicy,
+  type OptionsExpirationAssessment,
 } from '@trade-god/contracts'
 import {
   FileOptionsAutomationReceiptStore,
@@ -36,6 +37,8 @@ export type OptionsAutomationSourceStatus = {
   policy: OptionsEntryPolicy
   recent_receipts: OptionsAutomationReceipt[]
   automatic_authority_active: boolean
+  expiration_assessments: OptionsExpirationAssessment[]
+  custody_issue?: string
 }
 
 export class OptionsAutomationService {
@@ -45,18 +48,26 @@ export class OptionsAutomationService {
     private readonly resolveConnection: (connectionId: string) => Promise<OptionsConnection>,
     private readonly authorityActive: (route: OptionsAutomationRoute, policy: OptionsEntryPolicy, connection: OptionsConnection) => Promise<boolean>,
     private readonly now: () => string = () => new Date().toISOString(),
+    private readonly listExpirationAssessments: () => Promise<OptionsExpirationAssessment[]> = async () => [],
   ) {}
 
   async list(): Promise<OptionsAutomationSourceStatus[]> {
     const receipts = await this.receipts.list()
+    const assessments = await this.listExpirationAssessments()
     return Promise.all((await this.store.listRoutes()).map(async (route) => {
       const policy = await this.store.getPolicy(route.policy_id, route.policy_revision)
       const connection = await this.resolveConnection(route.connection_id)
+      const routeReceipts = receipts.filter((receipt) => receipt.route_id === route.route_id)
+      const intentIds = new Set(routeReceipts.flatMap((receipt) => receipt.execution_intent_id ? [receipt.execution_intent_id] : []))
       return {
         route,
         policy,
-        recent_receipts: receipts.filter((receipt) => receipt.route_id === route.route_id).slice(-20).reverse(),
+        recent_receipts: routeReceipts.slice(-20).reverse(),
         automatic_authority_active: await this.authorityActive(route, policy, connection),
+        expiration_assessments: assessments.filter((item) => intentIds.has(item.entry_intent_id))
+          .sort((left, right) => right.assessed_at.localeCompare(left.assessed_at)
+            || right.assessment_id.localeCompare(left.assessment_id))
+          .slice(0, 20),
       }
     }))
   }
@@ -119,7 +130,7 @@ export class OptionsAutomationService {
     }
     const route = optionsAutomationRouteSchema.parse({ ...routeBody, content_checksum: sha256(routeBody) })
     await this.store.saveRoute(route)
-    return { route, policy, recent_receipts: [], automatic_authority_active: false }
+    return { route, policy, recent_receipts: [], automatic_authority_active: false, expiration_assessments: [] }
   }
 
   async archive(routeId: string): Promise<OptionsAutomationRoute> {
