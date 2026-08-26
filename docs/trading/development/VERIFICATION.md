@@ -7,6 +7,21 @@ source_of_truth: true
 
 # Verification System
 
+## 2026-08-26 Options Autopilot Slice 10 — Exact Discord Follow-ups
+
+- Added one durable options follow-up manager behind the shared Discord family
+  resolver. It freezes exact automatic-entry lineage, serializes each message,
+  cancels working entry remainder before exit, and uses deterministic provider
+  request IDs for restart-safe full and whole-contract partial closes.
+- Edited, stale, future-dated, unsupported, ambiguous, non-integral, and
+  cancel-unknown instructions stop before close mutation. Futures/options
+  cross-family ambiguity is rejected before either handler runs.
+- Verification: 32 focused options-management, family-resolution, position,
+  and Electron runtime tests passed with 134 expectations; repository typecheck
+  and diff check passed. Rival reproduced edited/stale live-close defects; both
+  were fixed with direct zero-mutation regressions.
+- Not proven: real IBKR/Webull close/cancel behavior or unattended operation.
+
 ## 2026-08-26 Options Autopilot Slice 9 — Signed Intake and Source UI
 
 - Extended the existing HMAC-authenticated DiscoTrader payload with immutable

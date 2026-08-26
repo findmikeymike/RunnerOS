@@ -7,6 +7,7 @@ import {
   sha256Schema,
   utcTimestampSchema,
 } from './common.ts'
+import { discordManagementMessageSchema } from './discord-management.ts'
 
 export const DISCORD_OPTIONS_SIGNAL_SCHEMA_VERSION = 'discord-options-signal@1' as const
 export const OPTION_CONTRACT_IDENTITY_SCHEMA_VERSION = 'option-contract-identity@1' as const
@@ -30,6 +31,7 @@ export const OPTIONS_MANUAL_ORDER_SOURCE_SCHEMA_VERSION = 'options-manual-order-
 export const OPTIONS_MANUAL_ORDER_REVIEW_SCHEMA_VERSION = 'options-manual-order-review@1' as const
 export const OPTIONS_MANAGEMENT_COMMAND_SCHEMA_VERSION = 'options-management-command@1' as const
 export const OPTIONS_MANAGEMENT_RECORD_SCHEMA_VERSION = 'options-management-record@1' as const
+export const OPTIONS_DISCORD_FOLLOWUP_RECEIPT_SCHEMA_VERSION = 'options-discord-followup-receipt@1' as const
 export const OPTIONS_EXPIRATION_SCHEDULE_SCHEMA_VERSION = 'options-expiration-schedule@1' as const
 export const OPTIONS_EXPIRATION_ASSESSMENT_SCHEMA_VERSION = 'options-expiration-assessment@1' as const
 export const OPTIONS_AUTOMATION_ROUTE_SCHEMA_VERSION = 'options-automation-route@1' as const
@@ -1181,6 +1183,94 @@ export const optionsManagementRecordSchema = z.object({
   }
 })
 
+export const optionsDiscordFollowupResolutionStrategySchema = z.enum([
+  'reply-entry',
+  'reply-followup',
+  'single-thread-trade',
+  'single-channel-trade',
+])
+
+export const optionsDiscordFollowupLogicalActionSchema = z.discriminatedUnion('operation', [
+  z.object({
+    operation: z.literal('cancel-entry'),
+    reason: z.literal('signal-exit'),
+    source_phrase: z.string().trim().min(1).max(500),
+  }).strict(),
+  z.object({
+    operation: z.literal('close-position'),
+    quantity: z.union([z.literal('all'), positiveIntegerSchema]).nullable(),
+    fraction: z.object({ numerator: positiveIntegerSchema, denominator: positiveIntegerSchema }).strict().nullable(),
+    source_phrase: z.string().trim().min(1).max(500),
+  }).strict().superRefine((value, context) => {
+    if ((value.quantity === null) === (value.fraction === null)) {
+      context.addIssue({ code: 'custom', path: ['quantity'], message: 'Close action requires one exact quantity or fraction' })
+    }
+    if (value.fraction && value.fraction.numerator >= value.fraction.denominator) {
+      context.addIssue({ code: 'custom', path: ['fraction'], message: 'Close fraction must be a proper fraction' })
+    }
+  }),
+])
+
+export const optionsDiscordFollowupActionReceiptSchema = z.object({
+  index: z.number().int().nonnegative().max(20),
+  logical_action: optionsDiscordFollowupLogicalActionSchema,
+  status: z.enum(['pending', 'executing', 'completed', 'failed']),
+  management_id: identifierSchema.optional(),
+  management_record_checksum: sha256Schema.optional(),
+  completed_at: utcTimestampSchema.optional(),
+  evidence: z.array(z.string().trim().min(1).max(500)).max(50).optional(),
+  error: z.string().trim().min(1).max(1_000).optional(),
+}).strict().superRefine((action, context) => {
+  if (action.status === 'completed' && !action.completed_at) {
+    context.addIssue({ code: 'custom', path: ['completed_at'], message: 'Completed follow-up actions require a completion timestamp' })
+  }
+  if (action.status === 'completed' && !action.evidence?.length) {
+    context.addIssue({ code: 'custom', path: ['evidence'], message: 'Completed follow-up actions require durable evidence' })
+  }
+  if ((action.status === 'executing' || action.status === 'completed') && !action.management_id
+    && !(action.logical_action.operation === 'close-position' && action.logical_action.quantity === 'all' && action.status === 'completed')) {
+    context.addIssue({ code: 'custom', path: ['management_id'], message: 'Issued follow-up actions require their exact durable management identity unless no close was needed' })
+  }
+  if (action.status === 'completed' && action.management_id && !action.management_record_checksum) {
+    context.addIssue({ code: 'custom', path: ['management_record_checksum'], message: 'Completed follow-up actions require the latest durable management checksum' })
+  }
+  if (action.status === 'failed' && !action.error) {
+    context.addIssue({ code: 'custom', path: ['error'], message: 'Failed follow-up actions require an error' })
+  }
+})
+
+export const optionsDiscordFollowupReceiptSchema = z.object({
+  followup_receipt_schema_version: z.literal(OPTIONS_DISCORD_FOLLOWUP_RECEIPT_SCHEMA_VERSION),
+  receipt_id: identifierSchema,
+  source_message: discordManagementMessageSchema,
+  resolution_strategy: optionsDiscordFollowupResolutionStrategySchema.optional(),
+  candidate_intent_ids: z.array(identifierSchema).max(100),
+  resolved_intent_id: identifierSchema.optional(),
+  status: z.enum(['blocked', 'prepared', 'executing', 'completed', 'failed']),
+  actions: z.array(optionsDiscordFollowupActionReceiptSchema).max(20),
+  evidence: z.array(z.string().trim().min(1).max(500)).max(100),
+  error: z.string().trim().min(1).max(1_000).optional(),
+  created_at: utcTimestampSchema,
+  updated_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((receipt, context) => {
+  if ((receipt.status === 'prepared' || receipt.status === 'executing' || receipt.status === 'completed') && !receipt.resolved_intent_id) {
+    context.addIssue({ code: 'custom', path: ['resolved_intent_id'], message: 'Actionable options follow-up receipts require a resolved intent' })
+  }
+  if ((receipt.status === 'blocked' || receipt.status === 'failed') && !receipt.error) {
+    context.addIssue({ code: 'custom', path: ['error'], message: 'Blocked and failed follow-up receipts require an error' })
+  }
+  if (receipt.status === 'completed' && receipt.actions.some((action) => action.status !== 'completed')) {
+    context.addIssue({ code: 'custom', path: ['actions'], message: 'A completed options follow-up receipt requires every action to be completed' })
+  }
+  if (Date.parse(receipt.updated_at) < Date.parse(receipt.created_at)) {
+    context.addIssue({ code: 'custom', path: ['updated_at'], message: 'Follow-up receipt chronology is invalid' })
+  }
+  if (receipt.actions.some((action, index) => action.index !== index)) {
+    context.addIssue({ code: 'custom', path: ['actions'], message: 'Follow-up action indices must be unique and sequential' })
+  }
+})
+
 export const optionsExpirationScheduleSchema = z.object({
   schedule_schema_version: z.literal(OPTIONS_EXPIRATION_SCHEDULE_SCHEMA_VERSION),
   schedule_id: identifierSchema,
@@ -1423,6 +1513,10 @@ export type OptionsCertificationEvidence = z.infer<typeof optionsCertificationEv
 export type OptionsCertificationApplication = z.infer<typeof optionsCertificationApplicationSchema>
 export type OptionsManualPaperAuthority = z.infer<typeof optionsManualPaperAuthoritySchema>
 export type OptionsAuthorityRevocation = z.infer<typeof optionsAuthorityRevocationSchema>
+export type OptionsDiscordFollowupResolutionStrategy = z.infer<typeof optionsDiscordFollowupResolutionStrategySchema>
+export type OptionsDiscordFollowupLogicalAction = z.infer<typeof optionsDiscordFollowupLogicalActionSchema>
+export type OptionsDiscordFollowupActionReceipt = z.infer<typeof optionsDiscordFollowupActionReceiptSchema>
+export type OptionsDiscordFollowupReceipt = z.infer<typeof optionsDiscordFollowupReceiptSchema>
 export type OptionsManualOrderSource = z.infer<typeof optionsManualOrderSourceSchema>
 export type OptionsManualOrderReview = z.infer<typeof optionsManualOrderReviewSchema>
 export type OptionsAutomationRoute = z.infer<typeof optionsAutomationRouteSchema>

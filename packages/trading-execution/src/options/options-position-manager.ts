@@ -71,7 +71,7 @@ export class OptionsPositionManager {
     intent_id: string
     request_id: string
     reason: ManagementReason
-    quantity: number | 'all'
+    quantity: number | 'all' | { numerator: number; denominator: number }
     minimum_credit: string
   }): Promise<OptionsManagementRecord> {
     const entry = await this.executions.getRecord(input.intent_id)
@@ -90,7 +90,11 @@ export class OptionsPositionManager {
       this.assertNoUnownedActiveOrders(snapshot, new Set())
       const open = this.exactOpenQuantity(current, snapshot)
       if (open <= 0) throw new Error('The exact options lineage has no open long position to close.')
-      const quantity = input.quantity === 'all' ? open : input.quantity
+      const quantity = input.quantity === 'all'
+        ? open
+        : typeof input.quantity === 'number'
+          ? input.quantity
+          : exactFractionQuantity(open, input.quantity.numerator, input.quantity.denominator)
       if (!Number.isSafeInteger(quantity) || quantity <= 0 || quantity > open) throw new Error('Close quantity must be a positive whole contract within the exact open position.')
       const contract = optionContractIdentitySchema.parse(await this.adapter.resolveContract(parseCanonicalContract(current.canonical_contract_id)))
       if (contract.canonical_id !== current.canonical_contract_id || contract.provider_instrument_id !== entryCommand.provider_instrument_id) {
@@ -366,6 +370,22 @@ export class OptionsPositionManager {
     }
     return optionsReservationReleaseProofSchema.parse({ ...unsigned, content_checksum: sha256(unsigned) })
   }
+}
+
+function exactFractionQuantity(open: number, numerator: number, denominator: number): number {
+  if (!Number.isSafeInteger(numerator) || !Number.isSafeInteger(denominator)
+    || numerator <= 0 || denominator <= numerator) {
+    throw new Error('Partial close fraction must be a positive proper whole-number ratio.')
+  }
+  const product = open * numerator
+  if (!Number.isSafeInteger(product) || product % denominator !== 0) {
+    throw new Error('Partial close does not resolve to a whole number of owned contracts.')
+  }
+  const quantity = product / denominator
+  if (quantity <= 0 || quantity >= open) {
+    throw new Error('Partial close must leave at least one exact owned contract open.')
+  }
+  return quantity
 }
 
 const isActiveOrder = (order: OptionsProviderOrder): boolean => order.status === 'working' || order.status === 'partially-filled'

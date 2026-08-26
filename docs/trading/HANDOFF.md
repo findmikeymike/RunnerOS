@@ -7,6 +7,18 @@ source_of_truth: false
 
 # Trade God Handoff
 
+## 2026-08-26 Exact Discord Options Follow-up Handoff
+
+- The existing signed management webhook now jointly resolves futures,
+  Mirror, and options families; cross-family ambiguity produces zero mutation.
+- Automatic options entries accept only exact full or whole-contract partial
+  exits. The app cancels the unfilled entry remainder before closing owned long
+  contracts and resumes the same durable request after a crash.
+- Edited, stale, future-dated, ambiguous, unsupported stop, non-integral, and
+  uncertain-cancel instructions are blocked. Manual options orders are outside
+  Discord follow-up resolution.
+- This is locally verified custody logic, not real IBKR/Webull lifecycle proof.
+
 ## 2026-08-26 Options Signed Intake and Source Setup Handoff
 
 - The existing authenticated DiscoTrader receiver now accepts immutable

@@ -11,6 +11,7 @@ export const DISCORD_MANAGEMENT_FAMILY_RECEIPT_SCHEMA_VERSION = 'discord-managem
 export const discordManagementFamilyTargetSchema = z.discriminatedUnion('family', [
   z.object({ family: z.literal('single'), intent_id: identifierSchema }).strict(),
   z.object({ family: z.literal('mirror'), mirror_execution_id: identifierSchema }).strict(),
+  z.object({ family: z.literal('options'), intent_id: identifierSchema }).strict(),
 ])
 
 export const discordManagementFamilyReceiptSchema = z.object({

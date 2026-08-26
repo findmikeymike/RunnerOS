@@ -7,6 +7,7 @@ import type {
   DiscordManagementMessage,
   DiscordManagementReceipt,
   MirrorManagementReceipt,
+  OptionsDiscordFollowupReceipt,
 } from '@trade-god/contracts'
 import {
   FileDiscordManagementFamilyResolver,
@@ -53,6 +54,9 @@ const singleResult = {
 const mirrorResult = {
   receipt_id: 'mirror-receipt', status: 'completed',
 } as unknown as MirrorManagementReceipt
+const optionsResult = {
+  receipt_id: 'options-receipt', status: 'completed',
+} as unknown as OptionsDiscordFollowupReceipt
 
 describe('Discord management family resolver', () => {
   test('blocks cross-family ambiguity before either manager mutates', async () => {
@@ -71,6 +75,18 @@ describe('Discord management family resolver', () => {
     expect(result.status).toBe('blocked')
     expect(single.ingestCount).toBe(0)
     expect(mirror.ingestCount).toBe(0)
+  })
+
+  test('evaluates options with futures families and blocks before cross-asset mutation', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'management-family-'))
+    roots.push(root)
+    const single = new FakeHandler({ family: 'single', candidates: ['future-one'], resolved: 'future-one', strategy: 'reply-entry' }, singleResult)
+    const mirror = new FakeHandler({ family: 'mirror', candidates: [] }, mirrorResult)
+    const options = new FakeHandler({ family: 'options', candidates: ['option-one'], resolved: 'option-one', strategy: 'reply-entry' }, optionsResult)
+    const resolver = new FileDiscordManagementFamilyResolver({ directory: root, single, mirror, options, now: () => NOW })
+
+    expect((await resolver.ingestMessage(message())).status).toBe('blocked')
+    expect(single.ingestCount + mirror.ingestCount + options.ingestCount).toBe(0)
   })
 
   test('freezes one family before dispatch and reuses it after candidate drift', async () => {

@@ -64,6 +64,15 @@ The workbench can request engine health, run the known fixture, and display tota
 
 ## Recently Completed
 
+- Added exact Discord follow-up custody for automatic options trades. The
+  shared signed management receiver now arbitrates futures, Mirror, and options
+  families together before any mutation. Options exits resolve only by exact
+  entry/follow-up reply or one active trade from the same trader and channel,
+  persist the action before provider I/O, cancel any entry remainder first,
+  and then close all or an exact whole-contract amount. Edited, stale,
+  future-dated, ambiguous, stop-move, non-integral, and uncertain-cancel cases
+  fail closed. Manual options orders are never inferred as Discord lineage.
+
 - Wired the first end-to-end automatic options intake boundary. One signed
   DiscoTrader webhook can now carry immutable single-leg option evidence,
   resolve one exact Discord source to one exact paper/sandbox account and

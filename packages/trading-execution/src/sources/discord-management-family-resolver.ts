@@ -12,13 +12,14 @@ import {
   type DiscordManagementReceipt,
   type DiscordManagementResolutionStrategy,
   type MirrorManagementReceipt,
+  type OptionsDiscordFollowupReceipt,
 } from '@trade-god/contracts'
 
 import { computeDiscordManagementMessageChecksum, sha256 } from '../canonical.ts'
 import { ExecutionGatewayError } from '../errors.ts'
 
 export interface DiscordManagementFamilyProbe {
-  family: 'single' | 'mirror'
+  family: 'single' | 'mirror' | 'options'
   candidates: string[]
   resolved?: string
   strategy?: DiscordManagementResolutionStrategy
@@ -39,6 +40,7 @@ export interface DiscordManagementFamilyHandler<T> {
 export type DiscordManagementDispatchResult =
   | DiscordManagementReceipt
   | MirrorManagementReceipt
+  | OptionsDiscordFollowupReceipt
   | DiscordManagementFamilyReceipt
 
 export class FileDiscordManagementFamilyResolver {
@@ -48,6 +50,7 @@ export class FileDiscordManagementFamilyResolver {
     directory: string
     single: DiscordManagementFamilyHandler<DiscordManagementReceipt>
     mirror: DiscordManagementFamilyHandler<MirrorManagementReceipt>
+    options?: DiscordManagementFamilyHandler<OptionsDiscordFollowupReceipt>
     now?: () => string
   }) {}
 
@@ -98,12 +101,13 @@ export class FileDiscordManagementFamilyResolver {
     message: DiscordManagementMessage,
     existing?: DiscordManagementFamilyReceipt,
   ): Promise<DiscordManagementDispatchResult> {
-      const [single, mirror] = await Promise.all([
+      const [single, mirror, options] = await Promise.all([
         this.options.single.probe(message),
         this.options.mirror.probe(message),
+        this.options.options?.probe(message) ?? Promise.resolve<DiscordManagementFamilyProbe>({ family: 'options', candidates: [] }),
       ])
-      const candidates = [...targets(single), ...targets(mirror)]
-      const familiesWithCandidates = [single, mirror].filter((probe) => probe.candidates.length > 0)
+      const candidates = [...targets(single), ...targets(mirror), ...targets(options)]
+      const familiesWithCandidates = [single, mirror, options].filter((probe) => probe.candidates.length > 0)
       if (familiesWithCandidates.length > 1) {
         return this.create({
           source_message: message,
@@ -120,7 +124,7 @@ export class FileDiscordManagementFamilyResolver {
           source_message: message,
           status: retryable ? 'deferred' : 'blocked', candidates,
           evidence: ['No gateway mutation was attempted.'],
-          error: selected?.error ?? single.error ?? mirror.error ?? 'No trade family matches this message.',
+          error: selected?.error ?? single.error ?? mirror.error ?? options.error ?? 'No trade family matches this message.',
         }, existing)
       }
       const target = targetFor(selected.family, selected.resolved)
@@ -136,7 +140,7 @@ export class FileDiscordManagementFamilyResolver {
   private async dispatch(
     target: DiscordManagementFamilyTarget,
     message: DiscordManagementMessage,
-  ): Promise<DiscordManagementReceipt | MirrorManagementReceipt> {
+  ): Promise<DiscordManagementReceipt | MirrorManagementReceipt | OptionsDiscordFollowupReceipt> {
     const receipt = await this.readIfPresent(message.message_id)
     if (
       !receipt?.resolution_strategy
@@ -145,17 +149,18 @@ export class FileDiscordManagementFamilyResolver {
     ) {
       throw new ExecutionGatewayError('RECORD_INTEGRITY_FAILURE', 'Frozen family target or strategy is unavailable.')
     }
-    return target.family === 'single'
-      ? this.options.single.ingestResolvedMessage(
+    if (target.family === 'single') return this.options.single.ingestResolvedMessage(
           message,
           target.intent_id,
           receipt.resolution_strategy,
         )
-      : this.options.mirror.ingestResolvedMessage(
+    if (target.family === 'mirror') return this.options.mirror.ingestResolvedMessage(
           message,
           target.mirror_execution_id,
           receipt.resolution_strategy,
         )
+    if (!this.options.options) throw new ExecutionGatewayError('CAPABILITY_UNAVAILABLE', 'Options management is unavailable.')
+    return this.options.options.ingestResolvedMessage(message, target.intent_id, receipt.resolution_strategy)
   }
 
   private async create(
@@ -249,7 +254,7 @@ const targets = (probe: DiscordManagementFamilyProbe): DiscordManagementFamilyTa
 )
 
 const targetFor = (family: DiscordManagementFamilyProbe['family'], id: string): DiscordManagementFamilyTarget => (
-  family === 'single' ? { family, intent_id: id } : { family, mirror_execution_id: id }
+  family === 'mirror' ? { family, mirror_execution_id: id } : { family, intent_id: id }
 )
 
 const uniqueTargets = (targetsInput: DiscordManagementFamilyTarget[]): DiscordManagementFamilyTarget[] => {

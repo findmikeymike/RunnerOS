@@ -89,6 +89,7 @@ import {
   FileOptionsAutomationReceiptStore,
   FileOptionsAutomationPlanStore,
   OptionsAutomaticEntryCoordinator,
+  FileDiscordOptionsTradeManager,
   type DiscoTraderIntentRoute,
   type ExecutionAdapter,
   type TradovateUserSyncGap,
@@ -659,6 +660,25 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         options.now,
       )
     : undefined
+  const optionsAutomaticManagementRuntime = async (connectionId: string) => {
+    const runtime = await optionsAutomaticRuntime(connectionId)
+    const root = path.join(optionsAutomaticExecutionRoot!, connectionId)
+    const managementStore = new FileOptionsManagementStore(path.join(root, 'management'))
+    return {
+      ...runtime,
+      managementStore,
+      positionManager: new OptionsPositionManager(runtime.executions, managementStore, runtime.reservations, runtime.adapter, options.now),
+    }
+  }
+  const optionsDiscordTradeManager = optionsAutomaticExecutionRoot && optionsAutomationReceiptStore && optionsAutomationPlanStore
+    ? new FileDiscordOptionsTradeManager({
+        directory: path.join(optionsAutomaticExecutionRoot, 'discord-management'),
+        automationReceipts: optionsAutomationReceiptStore,
+        automationPlans: optionsAutomationPlanStore,
+        resolveRuntime: optionsAutomaticManagementRuntime,
+        now: options.now,
+      })
+    : undefined
   const revokeOptionsAutopilotForConnection = async (connectionId: string, reason: 'operator' | 'route-change' | 'account-change' | 'credential-change') => {
     if (!optionsAutomationStore || !optionsAutopilotAuthorityStore) return
     for (const route of await optionsAutomationStore.listRoutes()) {
@@ -764,14 +784,27 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   const optionsAutomaticExecutionRecoveryReady = optionsAutomaticExecutionRoot && optionsAutomaticCoordinator
     ? (async () => {
         if (options.optionsSingleInstanceAuthority !== true) {
-          optionsAutomaticRecoveryErrors.set('runtime', 'Automatic options entry requires Trade God desktop single-instance authority.')
+          let pendingRecovery = (await optionsAutomationReceiptStore!.list()).some((receipt) => receipt.state === 'prepared')
+          for (const status of await optionsConnectionService!.list()) {
+            const root = path.join(optionsAutomaticExecutionRoot, status.connection.connection_id)
+            const records = await new FileOptionsExecutionStore(path.join(root, 'execution')).listRecords()
+            const reservations = await new FileOptionsDebitReservationStore(path.join(root, 'risk'), options.now, executionProcessInstanceId).list()
+            const management = await new FileOptionsManagementStore(path.join(root, 'management')).listRecords()
+            pendingRecovery ||= records.some((record) => !['not-sent', 'canceled-flat', 'closed-flat'].includes(record.state))
+              || reservations.some((reservation) => reservation.state !== 'released')
+              || management.some((record) => !['entry-canceled', 'position-open', 'close-canceled', 'partial-close-canceled', 'closed-flat'].includes(record.state))
+          }
+          if (pendingRecovery) {
+            optionsAutomaticRecoveryErrors.set('runtime', 'Automatic options entry recovery requires Trade God desktop single-instance authority.')
+          }
           return
         }
         const statuses = await optionsConnectionService!.list()
         for (const status of statuses) {
           try {
-            const runtime = await optionsAutomaticRuntime(status.connection.connection_id)
+            const runtime = await optionsAutomaticManagementRuntime(status.connection.connection_id)
             await runtime.reservations.recoverStaleLocks()
+            await runtime.positionManager.recoverAll()
             await runtime.gateway.recoverNonTerminal()
             optionsAutomaticRecoveryErrors.delete(status.connection.connection_id)
           } catch (error) {
@@ -780,6 +813,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
           }
         }
         await optionsAutomaticCoordinator.recoverPending()
+        await optionsDiscordTradeManager?.recoverPending()
       })()
     : Promise.resolve()
   void optionsAutomaticExecutionRecoveryReady.catch(() => undefined)
@@ -1054,6 +1088,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       directory: path.join(options.executionDirectory, 'discord-management-families'),
       single: discordTradeManager,
       mirror: mirrorDiscordTradeManager,
+      ...(optionsDiscordTradeManager ? { options: optionsDiscordTradeManager } : {}),
       now: options.now,
     }) : undefined
   let executionRecoveryError: unknown
@@ -1088,6 +1123,8 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     ? executionSupervisionReady.then(async () => {
         if (executionRecoveryError) throw executionRecoveryError
         if (paperActivationRecoveryError) throw paperActivationRecoveryError
+        await optionsAutomaticExecutionRecoveryReady
+        if (optionsAutomaticRecoveryErrors.size > 0) throw new Error([...optionsAutomaticRecoveryErrors.values()][0])
         await discordTradeManager.recoverPending()
         await mirrorDiscordTradeManager.recoverPending()
         await discordManagementFamilyResolver.recoverPending()
