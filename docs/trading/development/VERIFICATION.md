@@ -7,6 +7,25 @@ source_of_truth: true
 
 # Verification System
 
+## 2026-08-26 Options Autopilot Slice 7A — Exact Position Custody Core
+
+- Added durable, checksummed management commands and mutable recovery records
+  for exact entry cancellation and long-option sell-to-close.
+- An exit cannot overtake a working entry: the owned remainder must first be
+  canceled and reconciled. Full or whole-contract partial closes require one
+  exact owned long position, no foreign working option orders, a fresh realtime
+  bid at or above the operator floor, and a deterministic client order ID.
+- Unknown cancels/closes are never resent. Restart adopts only exact provider
+  lineage. Debit capacity releases only after the account is flat with zero
+  working option orders; canceled exits are terminally distinguished from live
+  exits.
+- Verification: 16 focused contract/gateway/management tests passed with 73
+  expectations; repository typecheck and diff check passed. Rival review found
+  and closed sell-to-close preview/debit semantics and canceled-exit state bugs,
+  then returned clean.
+- Not proven: a real broker close/cancel lifecycle, Discord follow-up routing,
+  UI controls, or provider-specific expiration custody.
+
 ## 2026-08-26 Options Autopilot Slice 6D — Confirmed Manual Paper Order
 
 - Added an exact-account manual order coordinator around the options gateway.

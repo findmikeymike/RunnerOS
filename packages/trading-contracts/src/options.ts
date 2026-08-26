@@ -28,6 +28,8 @@ export const OPTIONS_MANUAL_PAPER_AUTHORITY_SCHEMA_VERSION = 'options-manual-pap
 export const OPTIONS_AUTHORITY_REVOCATION_SCHEMA_VERSION = 'options-authority-revocation@1' as const
 export const OPTIONS_MANUAL_ORDER_SOURCE_SCHEMA_VERSION = 'options-manual-order-source@1' as const
 export const OPTIONS_MANUAL_ORDER_REVIEW_SCHEMA_VERSION = 'options-manual-order-review@1' as const
+export const OPTIONS_MANAGEMENT_COMMAND_SCHEMA_VERSION = 'options-management-command@1' as const
+export const OPTIONS_MANAGEMENT_RECORD_SCHEMA_VERSION = 'options-management-record@1' as const
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD').refine((value) => {
   const parsed = new Date(`${value}T00:00:00.000Z`)
@@ -833,7 +835,7 @@ export const optionsExecutionRecordSchema = z.object({
   account_id: identifierSchema,
   canonical_contract_id: identifierSchema,
   provider_client_order_id: identifierSchema,
-  state: z.enum(['prepared', 'submitting', 'working', 'partially-filled', 'open-position', 'not-sent', 'canceled-flat', 'submit-unknown', 'halted']),
+  state: z.enum(['prepared', 'submitting', 'working', 'partially-filled', 'open-position', 'not-sent', 'canceled-flat', 'closed-flat', 'submit-unknown', 'halted']),
   provider_order_id: identifierSchema.nullable(),
   requested_quantity: positiveIntegerSchema,
   filled_quantity: nonnegativeIntegerSchema,
@@ -866,7 +868,7 @@ export const optionsExecutionRecordSchema = z.object({
   if (value.state === 'open-position' && value.open_quantity <= 0) {
     context.addIssue({ code: 'custom', path: ['open_quantity'], message: 'Open position requires owned quantity' })
   }
-  if (value.state === 'canceled-flat' && value.open_quantity !== 0) {
+  if ((value.state === 'canceled-flat' || value.state === 'closed-flat') && value.open_quantity !== 0) {
     context.addIssue({ code: 'custom', path: ['open_quantity'], message: 'Flat terminal state cannot retain exposure' })
   }
   if (value.state === 'canceled-flat' && value.filled_quantity !== 0) {
@@ -897,6 +899,74 @@ export const optionsExecutionRecordSchema = z.object({
   if (value.reconciled_at !== null
     && (value.submitted_at === null || Date.parse(value.reconciled_at) < Date.parse(value.submitted_at))) {
     context.addIssue({ code: 'custom', path: ['reconciled_at'], message: 'Reconciliation cannot predate submission' })
+  }
+})
+
+export const optionsManagementCommandSchema = z.object({
+  command_schema_version: z.literal(OPTIONS_MANAGEMENT_COMMAND_SCHEMA_VERSION),
+  command_id: identifierSchema,
+  entry_intent_id: identifierSchema,
+  entry_record_checksum: sha256Schema,
+  entry_command_checksum: sha256Schema,
+  reservation_id: identifierSchema,
+  reservation_checksum: sha256Schema,
+  connection_id: identifierSchema,
+  account_id: identifierSchema,
+  canonical_contract_id: identifierSchema,
+  provider_instrument_id: identifierSchema,
+  action: z.enum(['cancel-entry', 'close-position']),
+  reason: z.enum(['operator', 'signal-no-fill', 'signal-exit', 'expiration-custody']),
+  expected_entry_order_id: identifierSchema,
+  expected_open_quantity: nonnegativeIntegerSchema,
+  close_quantity: positiveIntegerSchema.nullable(),
+  limit_price: positiveDecimalStringSchema.nullable(),
+  provider_client_order_id: identifierSchema.nullable(),
+  prepared_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  const closing = value.action === 'close-position'
+  if (closing !== (value.close_quantity !== null && value.limit_price !== null && value.provider_client_order_id !== null)) {
+    context.addIssue({ code: 'custom', path: ['close_quantity'], message: 'Close commands require one exact quantity, limit, and provider client ID' })
+  }
+  if (closing && (value.expected_open_quantity <= 0 || value.close_quantity! > value.expected_open_quantity)) {
+    context.addIssue({ code: 'custom', path: ['close_quantity'], message: 'Close quantity cannot exceed exact owned exposure' })
+  }
+})
+
+export const optionsManagementRecordSchema = z.object({
+  record_schema_version: z.literal(OPTIONS_MANAGEMENT_RECORD_SCHEMA_VERSION),
+  management_id: identifierSchema,
+  command_id: identifierSchema,
+  command_checksum: sha256Schema,
+  entry_intent_id: identifierSchema,
+  connection_id: identifierSchema,
+  account_id: identifierSchema,
+  canonical_contract_id: identifierSchema,
+  state: z.enum(['prepared', 'cancel-unknown', 'entry-canceled', 'position-open', 'close-unknown', 'close-working', 'close-canceled', 'partially-closed', 'partial-close-canceled', 'closed-flat', 'halted']),
+  provider_close_order_id: identifierSchema.nullable(),
+  provider_client_order_id: identifierSchema.nullable(),
+  before_open_quantity: nonnegativeIntegerSchema,
+  requested_close_quantity: nonnegativeIntegerSchema,
+  closed_quantity: nonnegativeIntegerSchema,
+  remaining_open_quantity: nonnegativeIntegerSchema,
+  failure_code: identifierSchema.nullable(),
+  evidence: z.array(z.string().min(1)),
+  created_at: utcTimestampSchema,
+  updated_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (value.closed_quantity > value.requested_close_quantity
+    || value.remaining_open_quantity + value.closed_quantity !== value.before_open_quantity) {
+    context.addIssue({ code: 'custom', path: ['closed_quantity'], message: 'Management quantities do not conserve exact owned exposure' })
+  }
+  if (value.state === 'closed-flat' && value.remaining_open_quantity !== 0) {
+    context.addIssue({ code: 'custom', path: ['remaining_open_quantity'], message: 'Closed-flat management cannot retain exposure' })
+  }
+  if ((value.state === 'cancel-unknown' || value.state === 'close-unknown' || value.state === 'halted') && value.failure_code === null) {
+    context.addIssue({ code: 'custom', path: ['failure_code'], message: 'Unknown or halted management requires a failure code' })
+  }
+  if (Date.parse(value.updated_at) < Date.parse(value.created_at)) {
+    context.addIssue({ code: 'custom', path: ['updated_at'], message: 'Management chronology is invalid' })
   }
 })
 
@@ -1046,3 +1116,5 @@ export type OptionsManualPaperAuthority = z.infer<typeof optionsManualPaperAutho
 export type OptionsAuthorityRevocation = z.infer<typeof optionsAuthorityRevocationSchema>
 export type OptionsManualOrderSource = z.infer<typeof optionsManualOrderSourceSchema>
 export type OptionsManualOrderReview = z.infer<typeof optionsManualOrderReviewSchema>
+export type OptionsManagementCommand = z.infer<typeof optionsManagementCommandSchema>
+export type OptionsManagementRecord = z.infer<typeof optionsManagementRecordSchema>
