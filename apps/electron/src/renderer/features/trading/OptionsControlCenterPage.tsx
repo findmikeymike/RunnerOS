@@ -8,6 +8,7 @@ import {
   LoaderCircle,
   LockKeyhole,
   Plus,
+  Radio,
   RefreshCw,
   ShieldCheck,
   Trash2,
@@ -17,6 +18,7 @@ import {
 import type { OptionsProvider } from '@trade-god/contracts'
 
 type ConnectionStatus = Awaited<ReturnType<typeof window.electronAPI.listOptionsConnections>>[number]
+type AutomationSource = Awaited<ReturnType<typeof window.electronAPI.listOptionsAutomationSources>>[number]
 
 const providerCopy: Record<OptionsProvider, {
   name: string
@@ -37,6 +39,7 @@ const providerCopy: Record<OptionsProvider, {
 
 const OptionsControlCenterPage: React.FC = () => {
   const [connections, setConnections] = useState<ConnectionStatus[]>([])
+  const [sources, setSources] = useState<AutomationSource[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogProvider, setDialogProvider] = useState<OptionsProvider | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -45,11 +48,17 @@ const OptionsControlCenterPage: React.FC = () => {
   const [certificationConnection, setCertificationConnection] = useState<ConnectionStatus | null>(null)
   const [orderConnection, setOrderConnection] = useState<ConnectionStatus | null>(null)
   const [closePosition, setClosePosition] = useState<{ status: ConnectionStatus; intentId: string } | null>(null)
+  const [sourceDialogOpen, setSourceDialogOpen] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      setConnections(await window.electronAPI.listOptionsConnections())
+      const [nextConnections, nextSources] = await Promise.all([
+        window.electronAPI.listOptionsConnections(),
+        window.electronAPI.listOptionsAutomationSources(),
+      ])
+      setConnections(nextConnections)
+      setSources(nextSources)
       setError(null)
     } catch (cause) {
       setError(readableError(cause))
@@ -153,10 +162,48 @@ const OptionsControlCenterPage: React.FC = () => {
           </div>
         )}
 
-        <section className="mt-5 grid gap-3 md:grid-cols-3">
+        <section className="mt-5 grid gap-3 md:grid-cols-4">
           <SummaryCard label="Accounts" value={String(connections.length)} detail="Paper and sandbox only" />
           <SummaryCard label="Verified" value={String(verified)} detail="Exact account confirmed" tone={verified > 0 ? 'positive' : 'neutral'} />
+          <SummaryCard label="Discord sources" value={String(sources.filter((source) => source.route.state !== 'archived').length)} detail="One trader → one account" />
           <SummaryCard label="Next step" value={nextStep} detail="Trade God stays locked until every check passes" accent />
+        </section>
+
+        <section className="mt-5 rounded-2xl border border-white/[0.08] bg-[#101419] p-5 md:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-semibold">Discord sources</h2>
+              <p className="mt-1 text-xs leading-5 text-[#7f8996]">Choose who Trade God watches and the exact paper account that receives their signals.</p>
+            </div>
+            <button type="button" onClick={() => setSourceDialogOpen(true)} disabled={connections.length === 0} className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-xs font-semibold text-black hover:bg-[#e7e9ec] disabled:cursor-not-allowed disabled:opacity-40">
+              <Plus className="h-3.5 w-3.5" /> Add Discord source
+            </button>
+          </div>
+          {sources.filter((source) => source.route.state !== 'archived').length === 0 ? (
+            <div className="mt-5 flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed border-white/[0.1] bg-black/10 px-6 text-center">
+              <Radio className="h-5 w-5 text-violet-200" />
+              <h3 className="mt-3 text-sm font-medium">No Discord traders connected</h3>
+              <p className="mt-1 max-w-lg text-xs leading-5 text-[#737e8b]">Connect a paper account first, then assign one trader and channel to it. New sources remain off until the full automatic safety test is passed.</p>
+            </div>
+          ) : (
+            <div className="mt-5 grid gap-2">
+              {sources.filter((source) => source.route.state !== 'archived').map((source) => {
+                const account = connections.find((item) => item.connection.connection_id === source.route.connection_id)
+                return (
+                  <div key={source.route.route_id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/[0.07] bg-[#0b0f13] px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-400/[0.09] text-violet-200"><Radio className="h-4 w-4" /></div>
+                      <div><div className="text-sm font-medium">{source.route.display_name}</div><div className="mt-1 text-xs text-[#75808d]">{account?.connection.account_label ?? 'Missing account'} · max {source.policy.max_contracts_per_order} contract · ${source.policy.max_debit_per_trade}</div></div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`rounded-full px-2.5 py-1 text-[10px] ${source.automatic_authority_active ? 'bg-emerald-400/[0.09] text-emerald-200' : 'bg-amber-300/[0.08] text-amber-100'}`}>{source.automatic_authority_active ? 'Running' : 'Setup saved · automation off'}</span>
+                      <button type="button" onClick={async () => { if (window.confirm(`Remove ${source.route.display_name} from options monitoring?`)) { await window.electronAPI.archiveOptionsAutomationSource(source.route.route_id); await load() } }} className="rounded-lg p-2 text-[#68727e] hover:bg-rose-400/[0.08] hover:text-rose-300" aria-label={`Remove ${source.route.display_name}`}><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </section>
 
         <section className="mt-5 rounded-2xl border border-white/[0.08] bg-[#101419] p-5 md:p-6">
@@ -249,6 +296,61 @@ const OptionsControlCenterPage: React.FC = () => {
           onCompleted={async () => { setClosePosition(null); await load() }}
         />
       )}
+      {sourceDialogOpen && (
+        <DiscordSourceDialog connections={connections} onClose={() => setSourceDialogOpen(false)} onSaved={async () => { setSourceDialogOpen(false); await load() }} />
+      )}
+    </div>
+  )
+}
+
+const DiscordSourceDialog: React.FC<{
+  connections: ConnectionStatus[]
+  onClose(): void
+  onSaved(): Promise<void>
+}> = ({ connections, onClose, onSaved }) => {
+  const [name, setName] = useState('Options trader')
+  const [channelUrl, setChannelUrl] = useState('')
+  const [authorId, setAuthorId] = useState('')
+  const [connectionId, setConnectionId] = useState(connections[0]?.connection.connection_id ?? '')
+  const [maxDebit, setMaxDebit] = useState('150')
+  const [contracts, setContracts] = useState('1')
+  const [spreadAbs, setSpreadAbs] = useState('0.10')
+  const [spreadPct, setSpreadPct] = useState('10')
+  const [chaseAbs, setChaseAbs] = useState('0.10')
+  const [chasePct, setChasePct] = useState('8')
+  const [advanced, setAdvanced] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const canSave = name.trim() && channelUrl.trim() && authorId.trim() && connectionId && Number(contracts) > 0 && Number(maxDebit) > 0
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault(); if (!canSave) return
+    setBusy(true); setError(null)
+    try {
+      await window.electronAPI.saveOptionsAutomationSource({
+        display_name: name.trim(), channel_url: channelUrl.trim(), author_id: authorId.trim(), connection_id: connectionId,
+        max_spread_abs: spreadAbs.trim(), max_spread_pct: spreadPct.trim(), max_chase_abs: chaseAbs.trim(), max_chase_pct: chasePct.trim(),
+        max_contracts_per_order: Number(contracts), max_debit_per_trade: maxDebit.trim(),
+      })
+      await onSaved()
+    } catch (cause) { setError(readableError(cause)) } finally { setBusy(false) }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Add Discord source">
+      <form onSubmit={save} className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/[0.1] bg-[#12161b] p-6 shadow-modal-small">
+        <div className="flex items-start justify-between gap-4"><div><div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300">Signal source</div><h2 className="mt-1 text-xl font-semibold">Connect a Discord trader</h2><p className="mt-2 text-xs leading-5 text-[#8993a0]">This saves the route only. Automatic orders stay off.</p></div><button type="button" onClick={onClose} aria-label="Close" className="p-2 text-[#75808d] hover:text-white"><X className="h-4 w-4" /></button></div>
+        <div className="mt-6 grid gap-4">
+          <Field label="Nickname" value={name} onChange={setName} placeholder="SPY calls" />
+          <Field label="Discord channel link" value={channelUrl} onChange={setChannelUrl} placeholder="https://discord.com/channels/server/channel" />
+          <Field label="Trader's Discord user ID" value={authorId} onChange={setAuthorId} placeholder="Paste user ID" />
+          <label className="grid gap-1.5 text-xs text-[#aab2bc]">Paper account<select value={connectionId} onChange={(event) => setConnectionId(event.target.value)} className="rounded-lg border border-white/[0.1] bg-black/20 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-300/40">{connections.map((item) => <option key={item.connection.connection_id} value={item.connection.connection_id}>{item.connection.account_label}</option>)}</select></label>
+          <div className="grid grid-cols-2 gap-3"><Field label="Max contracts" value={contracts} onChange={setContracts} placeholder="1" /><Field label="Max cost per trade" value={maxDebit} onChange={setMaxDebit} placeholder="150" /></div>
+        </div>
+        <button type="button" onClick={() => setAdvanced((value) => !value)} className="mt-5 flex w-full items-center justify-between rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-2.5 text-left text-xs text-[#9ba4af] hover:bg-white/[0.045]">Price protection <ChevronDown className={`h-4 w-4 transition-transform ${advanced ? 'rotate-180' : ''}`} /></button>
+        {advanced && <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl bg-black/20 p-3"><Field label="Max spread ($)" value={spreadAbs} onChange={setSpreadAbs} placeholder="0.10" /><Field label="Max spread (%)" value={spreadPct} onChange={setSpreadPct} placeholder="10" /><Field label="Max chase ($)" value={chaseAbs} onChange={setChaseAbs} placeholder="0.10" /><Field label="Max chase (%)" value={chasePct} onChange={setChasePct} placeholder="8" /></div>}
+        <p className="mt-4 rounded-lg bg-violet-400/[0.06] px-3 py-3 text-xs leading-5 text-violet-100/80">Trade God will skip old, wide, ambiguous, same-day, or over-budget signals. It never falls back to another account.</p>
+        {error && <p className="mt-4 rounded-lg border border-rose-400/20 bg-rose-400/[0.06] px-3 py-2.5 text-xs text-rose-100">{error}</p>}
+        <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-xs text-[#9ba4af] hover:bg-white/[0.05]">Cancel</button><button type="submit" disabled={!canSave || busy} className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-xs font-semibold text-black disabled:opacity-40">{busy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5" />} Save source</button></div>
+      </form>
     </div>
   )
 }

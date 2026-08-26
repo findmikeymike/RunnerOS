@@ -64,6 +64,18 @@ The workbench can request engine health, run the known fixture, and display tota
 
 ## Recently Completed
 
+- Wired the first end-to-end automatic options intake boundary. One signed
+  DiscoTrader webhook can now carry immutable single-leg option evidence,
+  resolve one exact Discord source to one exact paper/sandbox account and
+  policy, obtain provider fees before the final decision, reserve debit, and
+  persist the frozen plan and receipt before gateway delivery. Duplicate
+  delivery and restart resume the same provider client order; missing or
+  changed authority releases only never-sent capacity after fresh flat proof.
+  The Options Desk now lets an operator add and archive these Discord sources
+  in plain language. Saved sources remain draft and automation remains off
+  until the separate real-provider autopilot certification and activation gate
+  exists.
+
 - Added a separate automatic-options certification and authority ledger. Manual
   paper certification cannot satisfy it. Autopilot evidence must retain every
   exact routing, bounded-entry, duplicate, cancellation, partial-fill, close,

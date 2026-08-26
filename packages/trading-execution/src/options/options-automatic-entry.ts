@@ -144,11 +144,12 @@ export class OptionsAutomaticEntryCoordinator {
     authorities: Pick<FileOptionsAutopilotAuthorityStore, 'getActive'>
     receipts: FileOptionsAutomationReceiptStore
     plans: FileOptionsAutomationPlanStore
-    reservations: FileOptionsDebitReservationStore
-    gateway: Pick<OptionsExecutionGateway, 'execute'>
-    adapter: OptionsProviderAdapter
+    resolveExecution(connection: OptionsConnection): Promise<{
+      gateway: Pick<OptionsExecutionGateway, 'execute'>
+      adapter: OptionsProviderAdapter
+      reservations: FileOptionsDebitReservationStore
+    }>
     resolveConnection(connectionId: string): Promise<OptionsConnection>
-    estimatedFeePerContract(connection: OptionsConnection): Promise<string>
     now?: () => string
   }) {}
 
@@ -214,12 +215,23 @@ export class OptionsAutomaticEntryCoordinator {
       reason_codes: ['OPTIONS_AUTOPILOT_LOCKED'], detail: 'This exact Discord route is not certified and activated for automatic paper orders.',
     }))
     this.assertExactAuthority(route, policy, connection, authority)
-    const contract = await this.options.adapter.resolveContract({ underlying: parsed.signal.underlying, expiration: parsed.signal.expiration,
+    const { adapter, reservations } = await this.options.resolveExecution(connection)
+    const contract = await adapter.resolveContract({ underlying: parsed.signal.underlying, expiration: parsed.signal.expiration,
       strike: parsed.signal.strike, right: parsed.signal.right })
-    const quote = await this.options.adapter.quote(contract.canonical_id)
-    const decision = decideOptionsEntry({ signal: parsed.signal, contract, quote, policy, route_checksum: route.content_checksum,
-      account_checksum: connection.content_checksum, decision_at: quote.decision_at,
-      estimated_fee_per_contract: await this.options.estimatedFeePerContract(connection) })
+    const quote = await adapter.quote(contract.canonical_id)
+    let decision = decideOptionsEntry({ signal: parsed.signal, contract, quote, policy, route_checksum: route.content_checksum,
+      account_checksum: connection.content_checksum, decision_at: quote.decision_at, estimated_fee_per_contract: '0' })
+    if (decision.action === 'marketable_limit' || decision.action === 'passive_limit') {
+      const preview = await adapter.preview({
+        account_id: connection.account_ref, canonical_contract_id: contract.canonical_id,
+        provider_instrument_id: contract.provider_instrument_id, action: 'BUY_TO_OPEN', order_type: 'limit',
+        limit_price: decision.limit_price!, quantity: decision.planned_quantity, time_in_force: 'day', regular_hours_only: true,
+        client_order_id: `options-fee-preview-${sha256(decision.content_checksum).slice(0, 32)}`,
+      })
+      const feePerContract = FixedDecimal.from(preview.estimated_fees).divideInteger(decision.planned_quantity).toCanonicalString(4)
+      decision = decideOptionsEntry({ signal: parsed.signal, contract, quote, policy, route_checksum: route.content_checksum,
+        account_checksum: connection.content_checksum, decision_at: quote.decision_at, estimated_fee_per_contract: feePerContract })
+    }
     if (decision.action !== 'marketable_limit' && decision.action !== 'passive_limit') {
       return this.options.receipts.save(this.baseReceipt(input, now(), rawChecksum, {
         signal_checksum: parsed.signal.content_checksum, route_id: route.route_id, route_checksum: route.content_checksum,
@@ -229,9 +241,9 @@ export class OptionsAutomaticEntryCoordinator {
         detail: decision.action === 'skip' ? 'The signal was valid but did not pass your price and liquidity rules.' : 'The signal was blocked by exact safety rules.',
       }))
     }
-    const snapshot = await this.options.adapter.snapshotAccount(connection.account_ref)
+    const snapshot = await adapter.snapshotAccount(connection.account_ref)
     const reservationId = `options-reservation:${sha256({ decision: decision.content_checksum, authority: authority.content_checksum }).slice(0, 32)}`
-    const reservation = await this.options.reservations.admit({
+    const reservation = await reservations.admit({
       reservation_id: reservationId, intent_id: decision.decision_id, connection_id: connection.connection_id,
       account_id: connection.account_ref, source_id: parsed.signal.signal_id, policy_id: policy.policy_id,
       policy_checksum: policy.content_checksum, mandate_id: authority.authority_id, mandate_checksum: authority.content_checksum,
@@ -284,7 +296,8 @@ export class OptionsAutomaticEntryCoordinator {
         detail: 'Automatic paper authority changed before gateway delivery. No new order was sent.', updated_at: updatedAt,
       })
     }
-    const execution = await this.options.gateway.execute(this.executionInput(plan.signal, plan.route, plan.connection,
+    const { gateway } = await this.options.resolveExecution(plan.connection)
+    const execution = await gateway.execute(this.executionInput(plan.signal, plan.route, plan.connection,
       plan.policy, plan.authority, plan.contract, plan.quote, plan.decision, plan.reservation.reservation_id))
     return this.options.receipts.update(receipt.receipt_id, receipt.content_checksum, {
       execution_intent_id: execution.intent_id, state: receiptState(execution), reason_codes: ['GATEWAY_RECONCILED'],
@@ -304,11 +317,12 @@ export class OptionsAutomaticEntryCoordinator {
   }
 
   private async releasePreparedReservation(plan: OptionsAutomationPlan): Promise<void> {
-    const snapshot = await this.options.adapter.snapshotAccount(plan.connection.account_ref)
+    const { adapter, reservations } = await this.options.resolveExecution(plan.connection)
+    const snapshot = await adapter.snapshotAccount(plan.connection.account_ref)
     if (snapshot.account_id !== plan.connection.account_ref || snapshot.positions.length > 0 || snapshot.orders.length > 0) {
       throw new Error('Automatic authority changed, but exact flat provider truth was unavailable; debit capacity remains contained.')
     }
-    const current = await this.options.reservations.get(plan.reservation.reservation_id)
+    const current = await reservations.get(plan.reservation.reservation_id)
     if (current.state === 'released') return
     if (current.state !== 'prepared' || current.content_checksum !== plan.reservation.content_checksum) {
       throw new Error('Automatic authority changed after provider delivery began; debit capacity remains contained.')
@@ -323,7 +337,7 @@ export class OptionsAutomaticEntryCoordinator {
       provider_order_ids: [], open_position_quantity: 0 as const, working_order_count: 0 as const,
       delivery_state: 'not-sent' as const, proven_at: provenAt,
     }
-    await this.options.reservations.release(optionsReservationReleaseProofSchema.parse({ ...body, content_checksum: sha256(body) }))
+    await reservations.release(optionsReservationReleaseProofSchema.parse({ ...body, content_checksum: sha256(body) }))
   }
 
   private assertExactAuthority(route: OptionsAutomationRoute, policy: OptionsEntryPolicy, connection: OptionsConnection, authority: OptionsAutopilotAuthority): void {

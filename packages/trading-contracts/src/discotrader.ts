@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { identifierSchema, utcTimestampSchema } from './common.ts'
 import { discordManagementMessageSchema } from './discord-management.ts'
+import { discordOptionsEntryInputSchema } from './options.ts'
 
 export const LEGACY_DISCOTRADER_INTENT_SOURCE_SCHEMA_VERSION = 'discotrader-intent-source@1'
 export const DISCOTRADER_INTENT_SOURCE_SCHEMA_VERSION = 'discotrader-intent-source@2'
@@ -117,6 +118,7 @@ export const discoTraderTicketSchema = z.object({
 export const discoTraderPushPayloadSchema = z.object({
   kind: z.enum([
     'ticket',
+    'options_entry',
     'management',
     'filled',
     'reconcile_halt',
@@ -127,6 +129,7 @@ export const discoTraderPushPayloadSchema = z.object({
   severity: z.enum(['info', 'action_required', 'urgent']),
   summary: z.string().trim().min(1).max(2_000),
   ticket: discoTraderTicketSchema.optional(),
+  options_entry: discordOptionsEntryInputSchema.optional(),
   management: discordManagementMessageSchema.optional(),
   detail: z.unknown().optional(),
   at: utcTimestampSchema,
@@ -143,6 +146,13 @@ export const discoTraderPushPayloadSchema = z.object({
       code: 'custom',
       path: ['management'],
       message: 'Management pushes require an immutable Discord management message',
+    })
+  }
+  if (payload.kind === 'options_entry' && !payload.options_entry) {
+    context.addIssue({
+      code: 'custom',
+      path: ['options_entry'],
+      message: 'Options entry pushes require immutable Discord message evidence',
     })
   }
 })

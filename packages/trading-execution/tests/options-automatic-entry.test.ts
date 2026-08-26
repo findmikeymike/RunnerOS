@@ -96,8 +96,9 @@ async function fixture(root: string, active = true) {
     automation: { resolve: async (identity) => identity.guild_id === route.guild_id && identity.channel_id === route.channel_id
       && identity.thread_id === route.thread_id && identity.author_id === route.author_id ? route : undefined,
       getPolicy: async () => policy },
-    authorities: { getActive: async () => active ? authority : undefined }, receipts, plans, reservations, gateway, adapter: provider,
-    resolveConnection: async () => connection, estimatedFeePerContract: async () => '0.65', now: () => now,
+    authorities: { getActive: async () => active ? authority : undefined }, receipts, plans,
+    resolveExecution: async () => ({ gateway, adapter: provider, reservations }),
+    resolveConnection: async () => connection, now: () => now,
   })
   return { provider, coordinator, receipts, plans, gateway, reservations, route, policy, authority, connection }
 }
@@ -150,9 +151,8 @@ describe('options automatic entry coordinator', () => {
     const interrupted = new OptionsAutomaticEntryCoordinator({
       automation: { resolve: async () => setup.route, getPolicy: async () => setup.policy },
       authorities: { getActive: async () => setup.authority }, receipts: setup.receipts, plans: setup.plans,
-      reservations: setup.reservations, gateway: { execute: async () => { throw new Error('simulated process interruption') } },
-      adapter: setup.provider, resolveConnection: async () => setup.connection,
-      estimatedFeePerContract: async () => '0.65', now: () => now,
+      resolveExecution: async () => ({ gateway: { execute: async () => { throw new Error('simulated process interruption') } }, adapter: setup.provider, reservations: setup.reservations }),
+      resolveConnection: async () => setup.connection, now: () => now,
     })
     await expect(interrupted.ingest(message())).rejects.toThrow('simulated process interruption')
     expect(await setup.receipts.getByMessage(message())).toMatchObject({ state: 'prepared' })
@@ -169,16 +169,15 @@ describe('options automatic entry coordinator', () => {
     const interrupted = new OptionsAutomaticEntryCoordinator({
       automation: { resolve: async () => setup.route, getPolicy: async () => setup.policy },
       authorities: { getActive: async () => setup.authority }, receipts: setup.receipts, plans: setup.plans,
-      reservations: setup.reservations, gateway: { execute: async () => { throw new Error('simulated process interruption') } },
-      adapter: setup.provider, resolveConnection: async () => setup.connection,
-      estimatedFeePerContract: async () => '0.65', now: () => now,
+      resolveExecution: async () => ({ gateway: { execute: async () => { throw new Error('simulated process interruption') } }, adapter: setup.provider, reservations: setup.reservations }),
+      resolveConnection: async () => setup.connection, now: () => now,
     })
     await expect(interrupted.ingest(message())).rejects.toThrow('simulated process interruption')
     const revoked = new OptionsAutomaticEntryCoordinator({
       automation: { resolve: async () => setup.route, getPolicy: async () => setup.policy },
       authorities: { getActive: async () => undefined }, receipts: setup.receipts, plans: setup.plans,
-      reservations: setup.reservations, gateway: setup.gateway, adapter: setup.provider,
-      resolveConnection: async () => setup.connection, estimatedFeePerContract: async () => '0.65', now: () => now,
+      resolveExecution: async () => ({ gateway: setup.gateway, adapter: setup.provider, reservations: setup.reservations }),
+      resolveConnection: async () => setup.connection, now: () => now,
     })
     expect(await revoked.ingest(message())).toMatchObject({ state: 'halted', reason_codes: ['OPTIONS_AUTOPILOT_LOCKED'] })
     expect((await setup.reservations.list())[0]).toMatchObject({ state: 'released', open_quantity: 0 })

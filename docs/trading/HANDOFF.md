@@ -7,6 +7,22 @@ source_of_truth: false
 
 # Trade God Handoff
 
+## 2026-08-26 Options Signed Intake and Source Setup Handoff
+
+- The existing authenticated DiscoTrader receiver now accepts immutable
+  single-leg options entry evidence; there is no second webhook or execution
+  authority.
+- Entry resolves an exact Discord server/channel/thread/trader route to one
+  exact paper/sandbox account. The final price/debit decision includes the
+  provider preview fee, then the app durably stores the reservation, frozen
+  plan, and receipt before one idempotent gateway delivery.
+- Startup recovery requires Trade God desktop single-instance authority.
+  Account removal is refused while any non-archived Discord source still
+  points to it.
+- Options Desk exposes a simple Add Discord Source flow with advanced price
+  limits folded away. New sources are drafts; no real broker automation is
+  unlocked by saving one.
+
 ## 2026-08-26 Options Autopilot Authority Handoff
 
 - Automatic options entry has its own certification contract; the current

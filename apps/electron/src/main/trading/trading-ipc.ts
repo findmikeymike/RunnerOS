@@ -30,6 +30,7 @@ import type {
 } from './trading-connection-service.ts'
 import type { TradingSignalRoute } from './trading-signal-route-store.ts'
 import type { OptionsConnectionStatus, SaveOptionsConnectionInput, StartOptionsCertificationInput } from './options-connection-service.ts'
+import type { OptionsAutomationSourceStatus, SaveOptionsAutomationSourceInput } from './options-automation-service.ts'
 
 export const TRADE_GOD_IPC = {
   HEALTH: 'trade-god:health',
@@ -80,6 +81,9 @@ export const TRADE_GOD_IPC = {
   CANCEL_OPTIONS_MANUAL_ORDER: 'trade-god:options:manual-order:cancel',
   CANCEL_OPTIONS_WORKING_ENTRY: 'trade-god:options:position:cancel-entry',
   CLOSE_OPTIONS_POSITION: 'trade-god:options:position:close',
+  LIST_OPTIONS_AUTOMATION_SOURCES: 'trade-god:options:automation:list',
+  SAVE_OPTIONS_AUTOMATION_SOURCE: 'trade-god:options:automation:save',
+  ARCHIVE_OPTIONS_AUTOMATION_SOURCE: 'trade-god:options:automation:archive',
 } as const
 
 export interface TradingIpcManager {
@@ -152,6 +156,9 @@ export interface TradingIpcManager {
   cancelOptionsManualOrder?(connectionId: string, reviewId: string): Promise<void>
   cancelOptionsWorkingEntry?(connectionId: string, intentId: string, operatorConfirmed: true): Promise<OptionsManagementRecord>
   closeOptionsPosition?(connectionId: string, intentId: string, minimumCredit: string, operatorConfirmed: true): Promise<OptionsManagementRecord>
+  listOptionsAutomationSources?(): Promise<OptionsAutomationSourceStatus[]>
+  saveOptionsAutomationSource?(input: SaveOptionsAutomationSourceInput): Promise<OptionsAutomationSourceStatus>
+  archiveOptionsAutomationSource?(routeId: string): Promise<void>
   resolveTradingConnection?(connectionId: string): Promise<TradingConnection>
   stop(): Promise<void>
 }
@@ -418,6 +425,19 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     if (operatorConfirmed !== true || typeof minimumCredit !== 'string' || !minimumCredit.trim()) throw new Error('Closing a paper position requires an exact minimum credit and confirmation.')
     return manager.closeOptionsPosition(String(connectionId), String(intentId), minimumCredit.trim(), true)
   })
+  ipcMain.handle(TRADE_GOD_IPC.LIST_OPTIONS_AUTOMATION_SOURCES, () => {
+    if (!manager.listOptionsAutomationSources) throw new Error('Options Discord sources are unavailable.')
+    return manager.listOptionsAutomationSources()
+  })
+  ipcMain.handle(TRADE_GOD_IPC.SAVE_OPTIONS_AUTOMATION_SOURCE, (_event, input: unknown) => {
+    if (!manager.saveOptionsAutomationSource) throw new Error('Options Discord sources are unavailable.')
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Options Discord source is invalid.')
+    return manager.saveOptionsAutomationSource(input as SaveOptionsAutomationSourceInput)
+  })
+  ipcMain.handle(TRADE_GOD_IPC.ARCHIVE_OPTIONS_AUTOMATION_SOURCE, (_event, routeId: unknown) => {
+    if (!manager.archiveOptionsAutomationSource) throw new Error('Options Discord sources are unavailable.')
+    return manager.archiveOptionsAutomationSource(String(routeId))
+  })
 
   let disposed = false
   return async () => {
@@ -470,6 +490,9 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.CANCEL_OPTIONS_MANUAL_ORDER)
     ipcMain.removeHandler(TRADE_GOD_IPC.CANCEL_OPTIONS_WORKING_ENTRY)
     ipcMain.removeHandler(TRADE_GOD_IPC.CLOSE_OPTIONS_POSITION)
+    ipcMain.removeHandler(TRADE_GOD_IPC.LIST_OPTIONS_AUTOMATION_SOURCES)
+    ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_OPTIONS_AUTOMATION_SOURCE)
+    ipcMain.removeHandler(TRADE_GOD_IPC.ARCHIVE_OPTIONS_AUTOMATION_SOURCE)
     await manager.stop()
   }
 }

@@ -945,6 +945,23 @@ app.whenReady().then(async () => {
                 }
               }
               if (delivery.slug === 'discotrader') {
+                if ((delivery.body as { kind?: unknown })?.kind === 'options_entry') {
+                  if (!tradeGodRuntime?.ingestOptionsEntryPush) {
+                    return { handled: true, status: 503, body: { error: 'options_entry_unavailable' } }
+                  }
+                  try {
+                    const receipt = await tradeGodRuntime.ingestOptionsEntryPush(delivery.body)
+                    return {
+                      handled: true,
+                      status: 202,
+                      body: { ok: true, receipt_id: receipt.receipt_id, state: receipt.state, reason_codes: receipt.reason_codes },
+                    }
+                  } catch (error) {
+                    const isPayloadError = error instanceof Error && error.name === 'ZodError'
+                    mainLog.warn('[trade-god] Options entry push rejected:', error)
+                    return { handled: true, status: isPayloadError ? 422 : 503, body: { error: isPayloadError ? 'invalid_options_entry' : 'options_entry_unavailable' } }
+                  }
+                }
                 if (!tradeGodRuntime?.ingestDiscoTraderTicketPush) {
                   return {
                     handled: true,

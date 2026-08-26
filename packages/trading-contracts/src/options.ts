@@ -52,6 +52,22 @@ const nonnegativeIntegerSchema = z.number().int().nonnegative()
 
 export const optionsProviderSchema = z.enum(['ibkr', 'webull'])
 
+export const discordOptionsEntryInputSchema = z.object({
+  guild_id: identifierSchema,
+  channel_id: identifierSchema,
+  thread_id: identifierSchema.nullable(),
+  message_id: identifierSchema,
+  author_id: identifierSchema,
+  reply_to_message_id: identifierSchema.nullable(),
+  posted_at: utcTimestampSchema,
+  received_at: utcTimestampSchema,
+  raw_text: z.string().trim().min(1).max(20_000),
+}).strict().superRefine((value, context) => {
+  if (Date.parse(value.received_at) < Date.parse(value.posted_at)) {
+    context.addIssue({ code: 'custom', path: ['received_at'], message: 'Options signal receipt cannot precede posting' })
+  }
+})
+
 export const optionsConnectionSchema = z.object({
   connection_schema_version: z.literal(OPTIONS_CONNECTION_SCHEMA_VERSION),
   connection_id: identifierSchema,
@@ -1387,6 +1403,7 @@ export const optionsAutomationPlanSchema = z.object({
 })
 
 export type DiscordOptionsSignal = z.infer<typeof discordOptionsSignalSchema>
+export type DiscordOptionsEntryInput = z.infer<typeof discordOptionsEntryInputSchema>
 export type OptionContractIdentity = z.infer<typeof optionContractIdentitySchema>
 export type OptionQuoteSnapshot = z.infer<typeof optionQuoteSnapshotSchema>
 export type OptionsEntryPolicy = z.infer<typeof optionsEntryPolicySchema>

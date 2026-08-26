@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
+  discoTraderPushPayloadSchema,
   DISCORD_OPTIONS_SIGNAL_SCHEMA_VERSION,
   OPTION_CONTRACT_IDENTITY_SCHEMA_VERSION,
   OPTION_QUOTE_SNAPSHOT_SCHEMA_VERSION,
@@ -161,6 +162,17 @@ const policy = {
 } as const
 
 describe('options contracts', () => {
+  test('accepts one signed options entry envelope and rejects missing message evidence', () => {
+    const optionsEntry = {
+      guild_id: 'guild-one', channel_id: 'channel-one', thread_id: null, message_id: 'message-one', author_id: 'trader-one',
+      reply_to_message_id: null, posted_at: '2026-08-26T14:59:50.000Z', received_at: '2026-08-26T14:59:51.000Z',
+      raw_text: 'BUY SPY 2026-09-18 650C @ 1.25',
+    }
+    expect(discoTraderPushPayloadSchema.parse({ kind: 'options_entry', severity: 'info', summary: 'Options entry',
+      options_entry: optionsEntry, at: optionsEntry.received_at }).options_entry).toEqual(optionsEntry)
+    expect(() => discoTraderPushPayloadSchema.parse({ kind: 'options_entry', severity: 'info', summary: 'Missing',
+      at: optionsEntry.received_at })).toThrow()
+  })
   test('accepts exact single-leg Discord evidence and rejects impossible chronology', () => {
     expect(discordOptionsSignalSchema.parse(signal).underlying).toBe('SPY')
     expect(discordOptionsSignalSchema.safeParse({

@@ -7,6 +7,24 @@ source_of_truth: true
 
 # Verification System
 
+## 2026-08-26 Options Autopilot Slice 9 — Signed Intake and Source UI
+
+- Extended the existing HMAC-authenticated DiscoTrader payload with immutable
+  options-entry evidence and routed it to the options gateway without adding a
+  second execution endpoint.
+- Added durable frozen plans and receipts, exact route/account/policy/authority
+  checks, provider-fee-bound final decisions, debit admission, duplicate
+  idempotency, and restart recovery. Non-authoritative processes cannot recover
+  or accept automatic entries.
+- Added main-process source setup plus IPC/preload and a plain-language Options
+  Desk source modal. Account deletion is blocked until assigned sources are
+  archived.
+- Verification: 21 focused contract/coordinator/service/IPC/preload tests and
+  15 runtime tests passed; repository typecheck, focused Options page lint,
+  production renderer build, and diff check passed.
+- Not proven: real IBKR/Webull automatic paper entry, automatic lifecycle
+  certification, Discord follow-up exits, or unattended expiration custody.
+
 ## 2026-08-26 Options Autopilot Slice 8B — Certification and Authority Lock
 
 - Added a distinct automatic-paper certification artifact with an exact

@@ -2,23 +2,15 @@ import { createHash } from 'node:crypto'
 
 import {
   DISCORD_OPTIONS_SIGNAL_SCHEMA_VERSION,
+  discordOptionsEntryInputSchema,
   discordOptionsSignalSchema,
+  type DiscordOptionsEntryInput,
   type DiscordOptionsSignal,
 } from '@trade-god/contracts'
 
 import { sha256 } from '../canonical.ts'
 
-export type DiscordOptionsEntryInput = {
-  guild_id: string
-  channel_id: string
-  message_id: string
-  author_id: string
-  thread_id: string | null
-  reply_to_message_id: string | null
-  posted_at: string
-  received_at: string
-  raw_text: string
-}
+export type { DiscordOptionsEntryInput } from '@trade-god/contracts'
 
 export type DiscordOptionsEntryParseResult =
   | { status: 'parsed'; signal: DiscordOptionsSignal }
@@ -35,6 +27,7 @@ const nonActionable = /\?|^(?:should|could|would|can|do)\b|\b(?:if|when|unless|m
 const exactEntry = /\b(?:buy\s+to\s+open|buy|bto)\s+(?:(\d{1,4})\s+)?([A-Z][A-Z0-9.]{0,14})\s+(\d{4}-\d{2}-\d{2})\s+(\d+(?:\.\d+)?)\s*(C|P|CALL|PUT)\b[\s\S]*?(?:@|\bAT\b|\bFOR\b)\s*\$?(\d+(?:\.\d+)?)(?:\s*-\s*\$?(\d+(?:\.\d+)?))?/i
 
 export function parseDiscordOptionsEntry(input: DiscordOptionsEntryInput): DiscordOptionsEntryParseResult {
+  input = discordOptionsEntryInputSchema.parse(input)
   if (!Number.isFinite(Date.parse(input.posted_at))
     || !Number.isFinite(Date.parse(input.received_at))
     || Date.parse(input.received_at) < Date.parse(input.posted_at)

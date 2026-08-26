@@ -10,6 +10,7 @@ import {
   type TradeAlert,
   type TradeAlertIngestionStatus,
   type TradeAlertWebhookSetup,
+  type OptionsAutomationReceipt,
 } from '@trade-god/contracts'
 
 import { OrderFlowSidecarManager } from './order-flow-sidecar-manager.ts'
@@ -41,6 +42,7 @@ import {
 } from './trading-connection-service.ts'
 import { createTradovatePaperRuntime } from './tradovate-paper-runtime.ts'
 import { OptionsConnectionService, ReadOnlyOptionsProviderVerifier } from './options-connection-service.ts'
+import { OptionsAutomationService } from './options-automation-service.ts'
 import { PaperActivationService } from './paper-activation-service.ts'
 import {
   TradingSignalRouteStore,
@@ -82,6 +84,11 @@ import {
   FileOptionsManualOrderCoordinator,
   FileOptionsManagementStore,
   OptionsPositionManager,
+  FileOptionsAutomationStore,
+  FileOptionsAutopilotAuthorityStore,
+  FileOptionsAutomationReceiptStore,
+  FileOptionsAutomationPlanStore,
+  OptionsAutomaticEntryCoordinator,
   type DiscoTraderIntentRoute,
   type ExecutionAdapter,
   type TradovateUserSyncGap,
@@ -333,6 +340,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   orderFlowSpecialistPipeline?: OrderFlowSpecialistPipeline
   alertLedger?: TradeAlertLedger
   ingestDiscoTraderTicketPush?: (input: unknown) => Promise<ExecutionRecord | MirrorExecutionPreview>
+  ingestOptionsEntryPush?: (input: unknown) => Promise<OptionsAutomationReceipt>
   ingestDiscordManagementPush?: (input: unknown) => Promise<DiscordManagementDispatchResult>
   emergencyHalt: () => Promise<void>
   setSpecialistModel: (model: SpecialistModel) => void
@@ -470,11 +478,18 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   const optionsCertificationStore = optionsEvidenceRoot ? new FileOptionsCertificationStore(optionsEvidenceRoot) : undefined
   const optionsCertificationApplicationStore = optionsEvidenceRoot ? new FileOptionsCertificationApplicationStore(optionsEvidenceRoot, options.now) : undefined
   const optionsManualAuthorityStore = optionsEvidenceRoot ? new FileOptionsManualAuthorityStore(optionsEvidenceRoot, options.now) : undefined
-  const optionsAuthorityRecoveryReady = optionsManualAuthorityStore
+  const optionsAutomationStore = optionsEvidenceRoot ? new FileOptionsAutomationStore(optionsEvidenceRoot) : undefined
+  const optionsAutopilotAuthorityStore = optionsEvidenceRoot ? new FileOptionsAutopilotAuthorityStore(optionsEvidenceRoot, options.now) : undefined
+  const optionsAutomationReceiptStore = optionsEvidenceRoot ? new FileOptionsAutomationReceiptStore(optionsEvidenceRoot) : undefined
+  const optionsAutomationPlanStore = optionsEvidenceRoot ? new FileOptionsAutomationPlanStore(optionsEvidenceRoot) : undefined
+  const optionsAuthorityRecoveryReady = optionsManualAuthorityStore && optionsAutopilotAuthorityStore
     ? options.optionsSingleInstanceAuthority === true
-      ? optionsManualAuthorityStore.recoverStaleLocks(true)
-      : Promise.resolve(0)
-    : Promise.resolve(0)
+      ? Promise.all([
+          optionsManualAuthorityStore.recoverStaleLocks(true),
+          optionsAutopilotAuthorityStore.recoverStaleLocks(true),
+        ])
+      : Promise.resolve([0, 0])
+    : Promise.resolve([0, 0])
   // Attach immediately so a startup filesystem failure cannot become an
   // unhandled rejection before the first Options-page call awaits the gate.
   void optionsAuthorityRecoveryReady.catch(() => undefined)
@@ -487,6 +502,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       )
     : undefined
   const optionsManualRecoveryErrors = new Map<string, string>()
+  const optionsAutomaticRecoveryErrors = new Map<string, string>()
 
   const listOptionsConnectionStatuses = async () => {
     await Promise.all([optionsAuthorityRecoveryReady, optionsCertificationRecoveryReady])
@@ -601,6 +617,58 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         })
     return { connection, adapter }
   }
+  const optionsAutomaticExecutionRoot = optionsEvidenceRoot ? path.join(optionsEvidenceRoot, 'automatic-execution') : undefined
+  const optionsAutomaticRuntime = async (connectionId: string) => {
+    if (!optionsAutomaticExecutionRoot) throw new Error('Automatic options execution storage is unavailable.')
+    const resolved = await optionsProviderAdapter(connectionId)
+    const root = path.join(optionsAutomaticExecutionRoot, connectionId)
+    const reservations = new FileOptionsDebitReservationStore(path.join(root, 'risk'), options.now, executionProcessInstanceId)
+    const executions = new FileOptionsExecutionStore(path.join(root, 'execution'))
+    return {
+      ...resolved, reservations, executions,
+      gateway: new OptionsExecutionGateway(executions, reservations, resolved.adapter, options.now),
+    }
+  }
+  const optionsAutomaticCoordinator = optionsAutomaticExecutionRoot && optionsAutomationStore
+    && optionsAutopilotAuthorityStore && optionsAutomationReceiptStore && optionsAutomationPlanStore
+    ? new OptionsAutomaticEntryCoordinator({
+        automation: optionsAutomationStore,
+        authorities: optionsAutopilotAuthorityStore,
+        receipts: optionsAutomationReceiptStore,
+        plans: optionsAutomationPlanStore,
+        resolveConnection: optionsConnectionById,
+        resolveExecution: async (connection) => {
+          const resolved = await optionsAutomaticRuntime(connection.connection_id)
+          if (resolved.connection.content_checksum !== connection.content_checksum) {
+            throw new Error('Options account changed before automatic gateway delivery.')
+          }
+          return resolved
+        },
+        now: options.now,
+      })
+    : undefined
+  const optionsAutomationService = optionsAutomationStore && optionsAutomationReceiptStore && optionsAutopilotAuthorityStore
+    ? new OptionsAutomationService(
+        optionsAutomationStore,
+        optionsAutomationReceiptStore,
+        optionsConnectionById,
+        async (route, policy, connection) => (
+          options.optionsSingleInstanceAuthority === true
+          && Boolean(await optionsAutopilotAuthorityStore.getActive(route, policy, connection, options.now()))
+        ),
+        options.now,
+      )
+    : undefined
+  const revokeOptionsAutopilotForConnection = async (connectionId: string, reason: 'operator' | 'route-change' | 'account-change' | 'credential-change') => {
+    if (!optionsAutomationStore || !optionsAutopilotAuthorityStore) return
+    for (const route of await optionsAutomationStore.listRoutes()) {
+      if (route.connection_id !== connectionId || route.state === 'archived') continue
+      const policy = await optionsAutomationStore.getPolicy(route.policy_id, route.policy_revision)
+      const connection = await optionsConnectionById(connectionId)
+      const authority = await optionsAutopilotAuthorityStore.getActive(route, policy, connection, options.now())
+      if (authority) await optionsAutopilotAuthorityStore.revoke(authority, reason)
+    }
+  }
   const optionsManualExecutionRoot = optionsEvidenceRoot ? path.join(optionsEvidenceRoot, 'manual-execution') : undefined
   const optionsManualCoordinator = async (connectionId: string) => {
     if (!optionsManualExecutionRoot) throw new Error('Options paper-order storage is unavailable.')
@@ -630,6 +698,17 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     if (records.some((record) => record.state !== 'not-sent' && record.state !== 'canceled-flat' && record.state !== 'closed-flat')
       || reservations.some((reservation) => reservation.state !== 'released')) {
       throw new Error('Cancel or fully resolve this account’s paper option order before changing or removing it.')
+    }
+    if (optionsAutomaticExecutionRoot) {
+      const automaticRoot = path.join(optionsAutomaticExecutionRoot, connectionId)
+      const automaticRecords = await new FileOptionsExecutionStore(path.join(automaticRoot, 'execution')).listRecords()
+      const automaticReservations = await new FileOptionsDebitReservationStore(
+        path.join(automaticRoot, 'risk'), options.now, executionProcessInstanceId,
+      ).list()
+      if (automaticRecords.some((record) => record.state !== 'not-sent' && record.state !== 'canceled-flat' && record.state !== 'closed-flat')
+        || automaticReservations.some((reservation) => reservation.state !== 'released')) {
+        throw new Error('Resolve this account’s automatic paper option order before changing or removing it.')
+      }
     }
   }
   const optionsCertificationCoordinator = optionsEvidenceRoot
@@ -682,6 +761,28 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       })()
     : Promise.resolve()
   void optionsManualExecutionRecoveryReady.catch(() => undefined)
+  const optionsAutomaticExecutionRecoveryReady = optionsAutomaticExecutionRoot && optionsAutomaticCoordinator
+    ? (async () => {
+        if (options.optionsSingleInstanceAuthority !== true) {
+          optionsAutomaticRecoveryErrors.set('runtime', 'Automatic options entry requires Trade God desktop single-instance authority.')
+          return
+        }
+        const statuses = await optionsConnectionService!.list()
+        for (const status of statuses) {
+          try {
+            const runtime = await optionsAutomaticRuntime(status.connection.connection_id)
+            await runtime.reservations.recoverStaleLocks()
+            await runtime.gateway.recoverNonTerminal()
+            optionsAutomaticRecoveryErrors.delete(status.connection.connection_id)
+          } catch (error) {
+            optionsAutomaticRecoveryErrors.set(status.connection.connection_id,
+              `Automatic options recovery is safely blocked: ${error instanceof Error ? error.message : 'Unknown recovery failure'}`)
+          }
+        }
+        await optionsAutomaticCoordinator.recoverPending()
+      })()
+    : Promise.resolve()
+  void optionsAutomaticExecutionRecoveryReady.catch(() => undefined)
   const assertOptionsManualRecovery = (connectionId: string) => {
     const issue = optionsManualRecoveryErrors.get(connectionId)
     if (issue) throw new Error(issue)
@@ -1202,6 +1303,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             await optionsCertificationRecoveryReady
             if (input.connection_id) {
               await assertOptionsConnectionMutable(input.connection_id)
+              await revokeOptionsAutopilotForConnection(input.connection_id, 'credential-change')
               await optionsManualAuthorityStore!.revokeForConnection(input.connection_id, 'credential-change')
             }
             return optionsConnectionService.save(input)
@@ -1209,12 +1311,18 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
           verifyOptionsConnection: (connectionId) => withOptionsMutation(async () => {
             await optionsCertificationRecoveryReady
             await assertOptionsConnectionMutable(connectionId)
+            await revokeOptionsAutopilotForConnection(connectionId, 'account-change')
             await optionsManualAuthorityStore!.revokeForConnection(connectionId, 'account-change')
             return optionsConnectionService.verify(connectionId)
           }),
           removeOptionsConnection: (connectionId) => withOptionsMutation(async () => {
             await optionsCertificationRecoveryReady
             await assertOptionsConnectionMutable(connectionId)
+            if (optionsAutomationStore && (await optionsAutomationStore.listRoutes())
+              .some((route) => route.connection_id === connectionId && route.state !== 'archived')) {
+              throw new Error('Remove this account from every Discord source before deleting it.')
+            }
+            await revokeOptionsAutopilotForConnection(connectionId, 'operator')
             await optionsManualAuthorityStore!.revokeForConnection(connectionId, 'operator')
             return optionsConnectionService.remove(connectionId)
           }),
@@ -1337,6 +1445,32 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
               minimum_credit: minimumCredit,
             })
           }),
+          ...(optionsAutomationService
+            ? {
+                listOptionsAutomationSources: async () => {
+                  await optionsAutomaticExecutionRecoveryReady
+                  return optionsAutomationService.list()
+                },
+                saveOptionsAutomationSource: (input) => withOptionsMutation(async () => {
+                  await optionsAutomaticExecutionRecoveryReady
+                  const connection = await freshOptionsConnectionById(input.connection_id)
+                  if (input.route_id) {
+                    const current = await optionsAutomationStore!.getRoute(input.route_id)
+                    if (current.connection_id !== connection.connection_id) {
+                      await assertOptionsConnectionMutable(current.connection_id)
+                    }
+                    await revokeOptionsAutopilotForConnection(current.connection_id, 'route-change')
+                  }
+                  return optionsAutomationService.save(input)
+                }),
+                archiveOptionsAutomationSource: (routeId) => withOptionsMutation(async () => {
+                  await optionsAutomaticExecutionRecoveryReady
+                  const route = await optionsAutomationStore!.getRoute(routeId)
+                  await revokeOptionsAutopilotForConnection(route.connection_id, 'operator')
+                  await optionsAutomationService.archive(routeId)
+                }),
+              }
+            : {}),
         }
       : {}),
     ...(executionGateway
@@ -1449,6 +1583,24 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     ...(orderFlowSpecialist ? { orderFlowSpecialist } : {}),
     ...(orderFlowSpecialistPipeline ? { orderFlowSpecialistPipeline } : {}),
     ...(alertLedger ? { alertLedger } : {}),
+    ...(optionsAutomaticCoordinator
+      ? {
+          ingestOptionsEntryPush: async (input: unknown) => {
+            await optionsAutomaticExecutionRecoveryReady
+            if (options.optionsSingleInstanceAuthority !== true) {
+              throw new Error('Automatic options entry requires Trade God desktop single-instance authority.')
+            }
+            if (optionsAutomaticRecoveryErrors.size > 0) {
+              throw new Error([...optionsAutomaticRecoveryErrors.values()][0])
+            }
+            const payload = discoTraderPushPayloadSchema.parse(input)
+            if (payload.kind !== 'options_entry' || !payload.options_entry) {
+              throw new Error('Only a signed immutable options entry can enter the options gateway.')
+            }
+            return optionsAutomaticCoordinator.ingest(payload.options_entry)
+          },
+        }
+      : {}),
     ...(discordTradeManager && discordManagementFamilyResolver
       ? {
           ingestDiscoTraderTicketPush: async (input: unknown) => {

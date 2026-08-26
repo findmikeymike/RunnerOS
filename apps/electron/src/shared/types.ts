@@ -509,6 +509,9 @@ export interface ElectronAPI {
   cancelOptionsManualOrder(connectionId: string, reviewId: string): Promise<void>
   cancelOptionsWorkingEntry(connectionId: string, intentId: string, operatorConfirmed: true): Promise<import('@trade-god/contracts').OptionsManagementRecord>
   closeOptionsPosition(connectionId: string, intentId: string, minimumCredit: string, operatorConfirmed: true): Promise<import('@trade-god/contracts').OptionsManagementRecord>
+  listOptionsAutomationSources(): Promise<import('../main/trading/options-automation-service').OptionsAutomationSourceStatus[]>
+  saveOptionsAutomationSource(input: import('../main/trading/options-automation-service').SaveOptionsAutomationSourceInput): Promise<import('../main/trading/options-automation-service').OptionsAutomationSourceStatus>
+  archiveOptionsAutomationSource(routeId: string): Promise<void>
 
   // Session management
   getSessions(): Promise<Session[]>

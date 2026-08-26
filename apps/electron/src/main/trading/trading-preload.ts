@@ -30,6 +30,7 @@ import type {
 } from './trading-connection-service.ts'
 import type { TradingSignalRoute } from './trading-signal-route-store.ts'
 import type { OptionsConnectionStatus, SaveOptionsConnectionInput, StartOptionsCertificationInput } from './options-connection-service.ts'
+import type { OptionsAutomationSourceStatus, SaveOptionsAutomationSourceInput } from './options-automation-service.ts'
 
 type Invoke = (channel: string, ...args: unknown[]) => Promise<unknown>
 type Subscribe = (channel: string, callback: (payload: unknown) => void) => () => void
@@ -105,6 +106,9 @@ export interface TradingPreloadApi {
   cancelOptionsManualOrder(connectionId: string, reviewId: string): Promise<void>
   cancelOptionsWorkingEntry(connectionId: string, intentId: string, operatorConfirmed: true): Promise<OptionsManagementRecord>
   closeOptionsPosition(connectionId: string, intentId: string, minimumCredit: string, operatorConfirmed: true): Promise<OptionsManagementRecord>
+  listOptionsAutomationSources(): Promise<OptionsAutomationSourceStatus[]>
+  saveOptionsAutomationSource(input: SaveOptionsAutomationSourceInput): Promise<OptionsAutomationSourceStatus>
+  archiveOptionsAutomationSource(routeId: string): Promise<void>
 }
 
 export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): TradingPreloadApi {
@@ -257,6 +261,15 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
     ),
     closeOptionsPosition: (connectionId, intentId, minimumCredit, operatorConfirmed) => (
       invoke(TRADE_GOD_IPC.CLOSE_OPTIONS_POSITION, connectionId, intentId, minimumCredit, operatorConfirmed) as Promise<OptionsManagementRecord>
+    ),
+    listOptionsAutomationSources: () => (
+      invoke(TRADE_GOD_IPC.LIST_OPTIONS_AUTOMATION_SOURCES) as Promise<OptionsAutomationSourceStatus[]>
+    ),
+    saveOptionsAutomationSource: (input) => (
+      invoke(TRADE_GOD_IPC.SAVE_OPTIONS_AUTOMATION_SOURCE, input) as Promise<OptionsAutomationSourceStatus>
+    ),
+    archiveOptionsAutomationSource: (routeId) => (
+      invoke(TRADE_GOD_IPC.ARCHIVE_OPTIONS_AUTOMATION_SOURCE, routeId) as Promise<void>
     ),
     onTradeGodAlert: (callback) => subscribe
       ? subscribe(TRADE_GOD_IPC.ALERT_RECEIVED, (payload) => callback(payload as TradeAlert))
