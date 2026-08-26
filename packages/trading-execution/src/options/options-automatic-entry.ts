@@ -150,6 +150,7 @@ export class OptionsAutomaticEntryCoordinator {
       reservations: FileOptionsDebitReservationStore
     }>
     resolveConnection(connectionId: string): Promise<OptionsConnection>
+    assertConnectionReady?: (connectionId: string) => void | Promise<void>
     now?: () => string
   }) {}
 
@@ -206,6 +207,7 @@ export class OptionsAutomaticEntryCoordinator {
       signal_checksum: parsed.signal.content_checksum, state: 'blocked', reason_codes: ['OPTIONS_ROUTE_MISSING'],
       detail: 'No exact options account route is assigned to this Discord trader and channel.',
     }))
+    await this.options.assertConnectionReady?.(route.connection_id)
     const policy = await this.options.automation.getPolicy(route.policy_id, route.policy_revision)
     const connection = await this.options.resolveConnection(route.connection_id)
     const authority = await this.options.authorities.getActive(route, policy, connection, now())

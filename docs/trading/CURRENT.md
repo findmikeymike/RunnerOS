@@ -64,6 +64,13 @@ The workbench can request engine health, run the known fixture, and display tota
 
 ## Recently Completed
 
+- Added automatic working-order timeout custody for Discord options entries.
+  When the frozen entry window ends, the single desktop authority cancels only
+  the unfilled remainder with one immutable request ID. A confirmed fill stays
+  open and tracked; unknown cancellation remains halted for reconciliation.
+  Per-account failures do not starve other accounts or silently disable their
+  timeout checks.
+
 - Added exact Discord follow-up custody for automatic options trades. The
   shared signed management receiver now arbitrates futures, Mirror, and options
   families together before any mutation. Options exits resolve only by exact

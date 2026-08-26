@@ -90,6 +90,7 @@ import {
   FileOptionsAutomationPlanStore,
   OptionsAutomaticEntryCoordinator,
   FileDiscordOptionsTradeManager,
+  OptionsWorkingOrderSupervisor,
   type DiscoTraderIntentRoute,
   type ExecutionAdapter,
   type TradovateUserSyncGap,
@@ -638,6 +639,14 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         receipts: optionsAutomationReceiptStore,
         plans: optionsAutomationPlanStore,
         resolveConnection: optionsConnectionById,
+        assertConnectionReady: (connectionId) => {
+          const timeoutIssue = [...optionsAutomaticRecoveryErrors.entries()]
+            .find(([key]) => key.startsWith(`timeout:${connectionId}:`))?.[1]
+          const issue = optionsAutomaticRecoveryErrors.get('runtime')
+            ?? optionsAutomaticRecoveryErrors.get(connectionId)
+            ?? timeoutIssue
+          if (issue) throw new Error(issue)
+        },
         resolveExecution: async (connection) => {
           const resolved = await optionsAutomaticRuntime(connection.connection_id)
           if (resolved.connection.content_checksum !== connection.content_checksum) {
@@ -677,6 +686,28 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         automationPlans: optionsAutomationPlanStore,
         resolveRuntime: optionsAutomaticManagementRuntime,
         now: options.now,
+      })
+    : undefined
+  const optionsWorkingOrderSupervisor = optionsAutomationReceiptStore && optionsAutomationPlanStore
+    ? new OptionsWorkingOrderSupervisor({
+        receipts: optionsAutomationReceiptStore,
+        plans: optionsAutomationPlanStore,
+        resolveRuntime: async (connectionId) => {
+          const runtime = await optionsAutomaticManagementRuntime(connectionId)
+          return {
+            getRecord: (intentId) => runtime.executions.getRecord(intentId),
+            cancelWorkingEntry: (input) => runtime.positionManager.cancelWorkingEntry(input),
+          }
+        },
+        now: options.now,
+        onReceiptError: (receipt, error) => {
+          const key = receipt.connection_id ? `timeout:${receipt.connection_id}:${receipt.receipt_id}` : 'runtime'
+          optionsAutomaticRecoveryErrors.set(key,
+            `Automatic options timeout custody is safely blocked: ${error instanceof Error ? error.message : 'Unknown timeout failure'}`)
+        },
+        onReceiptSuccess: (receipt) => {
+          if (receipt.connection_id) optionsAutomaticRecoveryErrors.delete(`timeout:${receipt.connection_id}:${receipt.receipt_id}`)
+        },
       })
     : undefined
   const revokeOptionsAutopilotForConnection = async (connectionId: string, reason: 'operator' | 'route-change' | 'account-change' | 'credential-change') => {
@@ -814,9 +845,24 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         }
         await optionsAutomaticCoordinator.recoverPending()
         await optionsDiscordTradeManager?.recoverPending()
+        await optionsWorkingOrderSupervisor?.sweep()
       })()
     : Promise.resolve()
   void optionsAutomaticExecutionRecoveryReady.catch(() => undefined)
+  const optionsWorkingOrderTimer = optionsWorkingOrderSupervisor && options.optionsSingleInstanceAuthority === true
+    ? setInterval(() => {
+        void optionsAutomaticExecutionRecoveryReady.then(async () => {
+          try {
+            await optionsWorkingOrderSupervisor.sweep()
+            optionsAutomaticRecoveryErrors.delete('runtime-timeout-store')
+          } catch (error) {
+            optionsAutomaticRecoveryErrors.set('runtime-timeout-store',
+              `Automatic options timeout custody is safely blocked: ${error instanceof Error ? error.message : 'Unknown timeout failure'}`)
+          }
+        }).catch(() => undefined)
+      }, 5_000)
+    : undefined
+  optionsWorkingOrderTimer?.unref()
   const assertOptionsManualRecovery = (connectionId: string) => {
     const issue = optionsManualRecoveryErrors.get(connectionId)
     if (issue) throw new Error(issue)
@@ -1627,9 +1673,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             if (options.optionsSingleInstanceAuthority !== true) {
               throw new Error('Automatic options entry requires Trade God desktop single-instance authority.')
             }
-            if (optionsAutomaticRecoveryErrors.size > 0) {
-              throw new Error([...optionsAutomaticRecoveryErrors.values()][0])
-            }
+            const runtimeIssue = optionsAutomaticRecoveryErrors.get('runtime')
+              ?? optionsAutomaticRecoveryErrors.get('runtime-timeout-store')
+            if (runtimeIssue) throw new Error(runtimeIssue)
             const payload = discoTraderPushPayloadSchema.parse(input)
             if (payload.kind !== 'options_entry' || !payload.options_entry) {
               throw new Error('Only a signed immutable options entry can enter the options gateway.')
@@ -1776,6 +1822,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     setSpecialistModel: (model) => { specialistModel = model },
     dispose: async () => {
       unsubscribeAlert?.()
+      if (optionsWorkingOrderTimer) clearInterval(optionsWorkingOrderTimer)
       await discordManagementReady
       userSyncStopped = true
       if (userSyncRefreshTimer) clearTimeout(userSyncRefreshTimer)

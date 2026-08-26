@@ -20,8 +20,11 @@ import {
   FileOptionsAutomationReceiptStore,
   FileOptionsDebitReservationStore,
   FileOptionsExecutionStore,
+  FileOptionsManagementStore,
   OptionsAutomaticEntryCoordinator,
   OptionsExecutionGateway,
+  OptionsPositionManager,
+  OptionsWorkingOrderSupervisor,
   sha256,
 } from '../src/index.ts'
 
@@ -100,7 +103,7 @@ async function fixture(root: string, active = true) {
     resolveExecution: async () => ({ gateway, adapter: provider, reservations }),
     resolveConnection: async () => connection, now: () => now,
   })
-  return { provider, coordinator, receipts, plans, gateway, reservations, route, policy, authority, connection }
+  return { provider, coordinator, receipts, plans, gateway, reservations, executions, route, policy, authority, connection }
 }
 
 const message = (rawText = 'BUY SPY 2026-09-18 650C @ 1.25') => ({
@@ -182,5 +185,110 @@ describe('options automatic entry coordinator', () => {
     expect(await revoked.ingest(message())).toMatchObject({ state: 'halted', reason_codes: ['OPTIONS_AUTOPILOT_LOCKED'] })
     expect((await setup.reservations.list())[0]).toMatchObject({ state: 'released', open_quantity: 0 })
     expect(setup.provider.mutationCount).toBe(0)
+  })
+
+  test('cancels an unfilled automatic order once its frozen entry window expires', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'options-automatic-entry-')); roots.push(root)
+    const setup = await fixture(root)
+    const receipt = await setup.coordinator.ingest(message())
+    const manager = new OptionsPositionManager(setup.executions, new FileOptionsManagementStore(path.join(root, 'management')),
+      setup.reservations, setup.provider, () => '2026-08-26T15:00:12.000Z')
+    const supervisor = new OptionsWorkingOrderSupervisor({
+      receipts: setup.receipts,
+      plans: setup.plans,
+      resolveRuntime: async () => ({
+        getRecord: (intentId) => setup.executions.getRecord(intentId),
+        cancelWorkingEntry: (input) => manager.cancelWorkingEntry(input),
+      }),
+      now: () => '2026-08-26T15:00:12.000Z',
+    })
+    expect(receipt.state).toBe('working')
+    expect(await supervisor.sweep()).toBe(1)
+    expect(await setup.receipts.getByMessage(message())).toMatchObject({
+      state: 'flat', reason_codes: ['OPTIONS_WORKING_ORDER_WINDOW_CLOSED'],
+    })
+    expect(await setup.executions.getRecord(receipt.execution_intent_id!)).toMatchObject({ state: 'canceled-flat', open_quantity: 0 })
+    expect(setup.provider.mutationCount).toBe(2)
+    expect(await supervisor.sweep()).toBe(0)
+    expect(setup.provider.mutationCount).toBe(2)
+  })
+
+  test('preserves a confirmed fill when the entry window closes', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'options-automatic-entry-')); roots.push(root)
+    const setup = await fixture(root)
+    const receipt = await setup.coordinator.ingest(message())
+    const record = await setup.executions.getRecord(receipt.execution_intent_id!)
+    await setup.provider.fill(record.provider_order_id!, 1, '1.25')
+    const manager = new OptionsPositionManager(setup.executions, new FileOptionsManagementStore(path.join(root, 'management')),
+      setup.reservations, setup.provider, () => '2026-08-26T15:00:12.000Z')
+    const supervisor = new OptionsWorkingOrderSupervisor({
+      receipts: setup.receipts,
+      plans: setup.plans,
+      resolveRuntime: async () => ({
+        getRecord: (intentId) => setup.executions.getRecord(intentId),
+        cancelWorkingEntry: (input) => manager.cancelWorkingEntry(input),
+      }),
+      now: () => '2026-08-26T15:00:12.000Z',
+    })
+    expect(await supervisor.sweep()).toBe(1)
+    expect(await setup.receipts.getByMessage(message())).toMatchObject({ state: 'active' })
+    expect(await setup.executions.getRecord(record.intent_id)).toMatchObject({ state: 'open-position', open_quantity: 1 })
+    expect((await setup.provider.snapshotAccount(setup.connection.account_ref)).positions[0]).toMatchObject({ quantity: 1 })
+  })
+
+  test('reuses one immutable timeout cancellation request while provider truth is unknown', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'options-automatic-entry-')); roots.push(root)
+    const setup = await fixture(root)
+    const receipt = await setup.coordinator.ingest(message())
+    const requests: string[] = []
+    const supervisor = new OptionsWorkingOrderSupervisor({
+      receipts: setup.receipts,
+      plans: setup.plans,
+      resolveRuntime: async () => ({
+        getRecord: (intentId) => setup.executions.getRecord(intentId),
+        cancelWorkingEntry: async (input) => {
+          requests.push(input.request_id)
+          return { state: 'cancel-unknown' } as any
+        },
+      }),
+      now: () => '2026-08-26T15:00:12.000Z',
+    })
+    expect(await supervisor.sweep()).toBe(1)
+    expect(await setup.receipts.getByMessage(message())).toMatchObject({
+      state: 'halted', reason_codes: ['OPTIONS_WORKING_ORDER_TIMEOUT_CANCEL_UNKNOWN'],
+    })
+    expect(await supervisor.sweep()).toBe(1)
+    expect(requests).toHaveLength(2)
+    expect(requests[1]).toBe(requests[0])
+    expect(receipt.execution_intent_id).toBeTruthy()
+  })
+
+  test('isolates a bad expired receipt and still handles the next account candidate', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'options-automatic-entry-')); roots.push(root)
+    const setup = await fixture(root)
+    const good = await setup.coordinator.ingest(message())
+    const bad = { ...good, receipt_id: 'missing-plan-receipt', connection_id: 'broken-account' }
+    const plans = await setup.plans.list()
+    const updated: string[] = []
+    const failures: string[] = []
+    const supervisor = new OptionsWorkingOrderSupervisor({
+      receipts: {
+        list: async () => [bad, good],
+        update: async (receiptId, _checksum, changes) => {
+          updated.push(receiptId)
+          return { ...good, ...changes } as typeof good
+        },
+      },
+      plans: { list: async () => plans },
+      resolveRuntime: async () => ({
+        getRecord: (intentId) => setup.executions.getRecord(intentId),
+        cancelWorkingEntry: async () => ({ state: 'entry-canceled' }) as any,
+      }),
+      now: () => '2026-08-26T15:00:12.000Z',
+      onReceiptError: (receipt) => { failures.push(receipt.receipt_id) },
+    })
+    expect(await supervisor.sweep()).toBe(1)
+    expect(failures).toEqual(['missing-plan-receipt'])
+    expect(updated).toEqual([good.receipt_id])
   })
 })

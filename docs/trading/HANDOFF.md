@@ -7,6 +7,15 @@ source_of_truth: false
 
 # Trade God Handoff
 
+## 2026-08-26 Automatic Options Entry Timeout Handoff
+
+- A single-instance background supervisor checks frozen automatic-entry
+  windows every five seconds and once during startup recovery.
+- It never reprices. It cancels only the exact unfilled entry remainder; a
+  confirmed fill remains open and moves into normal position custody.
+- Cancellation-unknown reuses one immutable request and stays halted until
+  provider reconciliation. Failures are isolated to the exact account.
+
 ## 2026-08-26 Exact Discord Options Follow-up Handoff
 
 - The existing signed management webhook now jointly resolves futures,

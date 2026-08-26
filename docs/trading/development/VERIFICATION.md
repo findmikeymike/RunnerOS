@@ -7,6 +7,19 @@ source_of_truth: true
 
 # Verification System
 
+## 2026-08-26 Options Autopilot Slice 11 — Working-Order Timeout
+
+- Added startup and five-second custody sweeps for expired automatic entry
+  windows. The supervisor uses the frozen decision/plan, exact account and
+  contract lineage, and one deterministic cancellation request; it never
+  reprices or closes a confirmed fill.
+- Secondary/non-single-instance runtimes cannot arm the timer. Receipt failures
+  are isolated to the exact account so later expired orders are still checked.
+- Verification: 25 focused automatic-entry and Electron runtime tests passed
+  with 123 expectations; repository typecheck and diff check passed. Rival
+  found and closed secondary-process cancellation and cross-account starvation.
+- Not proven: real provider cancellation timing or unattended process soak.
+
 ## 2026-08-26 Options Autopilot Slice 10 — Exact Discord Follow-ups
 
 - Added one durable options follow-up manager behind the shared Discord family
