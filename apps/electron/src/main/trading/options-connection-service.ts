@@ -10,6 +10,7 @@ import {
   type OptionsConnection,
   type OptionsProvider,
   type OptionsProviderReadProof,
+  type OptionsManualPaperAuthority,
 } from '@trade-god/contracts'
 import { canonicalJson, sha256 } from '@trade-god/execution'
 
@@ -38,6 +39,13 @@ export interface OptionsConnectionStatus {
   provider_read_proof?: OptionsProviderReadProof
   provider_read_verified: boolean
   provider_read_fresh: boolean
+  certification: {
+    state: 'not-run' | 'blocked' | 'eligible'
+    certification_id?: string
+    expires_at?: string
+    allowed_contract_id?: string
+  }
+  manual_authority?: Pick<OptionsManualPaperAuthority, 'authority_id' | 'allowed_contract_id' | 'max_debit_per_order' | 'valid_until'>
 }
 
 export interface OptionsProviderReadVerifier {
@@ -329,6 +337,7 @@ export class OptionsConnectionService {
       ...(proofMatches ? { provider_read_proof: proof } : {}),
       provider_read_verified: proofMatches,
       provider_read_fresh: proofMatches && Date.parse(proof!.expires_at) > Date.parse(this.now()),
+      certification: { state: 'not-run' },
     }
   }
 

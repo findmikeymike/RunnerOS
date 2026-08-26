@@ -93,6 +93,8 @@ export interface TradingPreloadApi {
   saveOptionsConnection(input: SaveOptionsConnectionInput): Promise<OptionsConnectionStatus>
   verifyOptionsConnection(connectionId: string): Promise<OptionsConnectionStatus>
   removeOptionsConnection(connectionId: string): Promise<boolean>
+  activateOptionsManualAuthority(connectionId: string, maxDebit: string, validUntil: string, operatorConfirmed: true): Promise<OptionsConnectionStatus>
+  revokeOptionsManualAuthority(connectionId: string): Promise<OptionsConnectionStatus>
 }
 
 export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): TradingPreloadApi {
@@ -218,6 +220,12 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
     ),
     removeOptionsConnection: (connectionId) => (
       invoke(TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION, connectionId) as Promise<boolean>
+    ),
+    activateOptionsManualAuthority: (connectionId, maxDebit, validUntil, operatorConfirmed) => (
+      invoke(TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY, connectionId, maxDebit, validUntil, operatorConfirmed) as Promise<OptionsConnectionStatus>
+    ),
+    revokeOptionsManualAuthority: (connectionId) => (
+      invoke(TRADE_GOD_IPC.REVOKE_OPTIONS_MANUAL_AUTHORITY, connectionId) as Promise<OptionsConnectionStatus>
     ),
     onTradeGodAlert: (callback) => subscribe
       ? subscribe(TRADE_GOD_IPC.ALERT_RECEIVED, (payload) => callback(payload as TradeAlert))

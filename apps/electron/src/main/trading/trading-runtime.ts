@@ -70,6 +70,8 @@ import {
   sha256,
   PaperExecutionCoordinator,
   ExecutionReconciliationSupervisor,
+  FileOptionsCertificationStore,
+  FileOptionsManualAuthorityStore,
   type DiscoTraderIntentRoute,
   type ExecutionAdapter,
   type TradovateUserSyncGap,
@@ -122,6 +124,7 @@ interface RuntimeOptions extends ResolveLaunchOptions {
   executionDirectory?: string
   executionAdapters?: ExecutionAdapter[]
   enableTradovatePaperAdapter?: boolean
+  optionsSingleInstanceAuthority?: boolean
   discoTraderConnectionId?: string
   discoTraderIntentValidityMs?: number
   credentialVault?: TradingCredentialVault
@@ -451,14 +454,71 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
           : undefined,
       )
     : undefined
-  const optionsConnectionService = options.connectionDirectory && options.credentialVault
+  const optionsEvidenceRoot = options.connectionDirectory ? path.join(options.connectionDirectory, 'options') : undefined
+  const optionsCertificationStore = optionsEvidenceRoot ? new FileOptionsCertificationStore(optionsEvidenceRoot) : undefined
+  const optionsManualAuthorityStore = optionsEvidenceRoot ? new FileOptionsManualAuthorityStore(optionsEvidenceRoot, options.now) : undefined
+  const optionsAuthorityRecoveryReady = optionsManualAuthorityStore
+    ? options.optionsSingleInstanceAuthority === true
+      ? optionsManualAuthorityStore.recoverStaleLocks(true)
+      : Promise.resolve(0)
+    : Promise.resolve(0)
+  // Attach immediately so a startup filesystem failure cannot become an
+  // unhandled rejection before the first Options-page call awaits the gate.
+  void optionsAuthorityRecoveryReady.catch(() => undefined)
+  const optionsConnectionService = optionsEvidenceRoot && options.credentialVault
     ? new OptionsConnectionService(
-        path.join(options.connectionDirectory, 'options'),
+        optionsEvidenceRoot,
         options.credentialVault,
         new ReadOnlyOptionsProviderVerifier(undefined, options.now),
         options.now,
       )
     : undefined
+
+  const listOptionsConnectionStatuses = async () => {
+    await optionsAuthorityRecoveryReady
+    const statuses = await optionsConnectionService!.list()
+    return Promise.all(statuses.map(async (status) => {
+      const [allEvidence, eligible, authority] = await Promise.all([
+        optionsCertificationStore!.list(status.connection.connection_id),
+        optionsCertificationStore!.getEligible(status.connection, options.now()),
+        optionsManualAuthorityStore!.getActive(status.connection, options.now()),
+      ])
+      return {
+        ...status,
+        certification: eligible
+          ? {
+              state: 'eligible' as const,
+              certification_id: eligible.certification_id,
+              expires_at: eligible.expires_at,
+              allowed_contract_id: eligible.allowed_contract_id,
+            }
+          : { state: allEvidence.length > 0 ? 'blocked' as const : 'not-run' as const },
+        ...(authority
+          ? {
+              manual_authority: {
+                authority_id: authority.authority_id,
+                allowed_contract_id: authority.allowed_contract_id,
+                max_debit_per_order: authority.max_debit_per_order,
+                valid_until: authority.valid_until,
+              },
+            }
+          : {}),
+      }
+    }))
+  }
+  let optionsMutationQueue: Promise<void> = Promise.resolve()
+  const withOptionsMutation = async <T>(operation: () => Promise<T>): Promise<T> => {
+    const previous = optionsMutationQueue
+    let release!: () => void
+    optionsMutationQueue = new Promise<void>((resolve) => { release = resolve })
+    await previous
+    try { return await operation() } finally { release() }
+  }
+  const optionsConnectionById = async (connectionId: string) => {
+    const status = (await optionsConnectionService!.list()).find((candidate) => candidate.connection.connection_id === connectionId)
+    if (!status) throw new Error('Options account was not found.')
+    return status.connection
+  }
   const executionGateway = executionStore && tradingConnectionStore
     ? new ExecutionGateway({
         store: executionStore,
@@ -970,10 +1030,42 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       : {}),
     ...(optionsConnectionService
       ? {
-          listOptionsConnections: () => optionsConnectionService.list(),
-          saveOptionsConnection: (input) => optionsConnectionService.save(input),
-          verifyOptionsConnection: (connectionId) => optionsConnectionService.verify(connectionId),
-          removeOptionsConnection: (connectionId) => optionsConnectionService.remove(connectionId),
+          listOptionsConnections: () => listOptionsConnectionStatuses(),
+          saveOptionsConnection: (input) => withOptionsMutation(async () => {
+            if (input.connection_id) await optionsManualAuthorityStore!.revokeForConnection(input.connection_id, 'credential-change')
+            return optionsConnectionService.save(input)
+          }),
+          verifyOptionsConnection: (connectionId) => withOptionsMutation(async () => {
+            await optionsManualAuthorityStore!.revokeForConnection(connectionId, 'account-change')
+            return optionsConnectionService.verify(connectionId)
+          }),
+          removeOptionsConnection: (connectionId) => withOptionsMutation(async () => {
+            await optionsManualAuthorityStore!.revokeForConnection(connectionId, 'operator')
+            return optionsConnectionService.remove(connectionId)
+          }),
+          activateOptionsManualAuthority: (connectionId, maxDebit, validUntil, operatorConfirmed) => withOptionsMutation(async () => {
+            await optionsAuthorityRecoveryReady
+            const connection = await optionsConnectionById(connectionId)
+            const certification = await optionsCertificationStore!.getEligible(connection, options.now())
+            if (!certification) throw new Error('This account has no current retained paper safety certification.')
+            await optionsManualAuthorityStore!.activate({
+              connection,
+              certification_id: certification.certification_id,
+              max_debit_per_order: maxDebit,
+              valid_until: validUntil,
+              operator_confirmed: operatorConfirmed,
+            })
+            const status = (await listOptionsConnectionStatuses()).find((candidate) => candidate.connection.connection_id === connectionId)
+            if (!status) throw new Error('Options account disappeared after manual paper activation.')
+            return status
+          }),
+          revokeOptionsManualAuthority: (connectionId) => withOptionsMutation(async () => {
+            await optionsAuthorityRecoveryReady
+            await optionsManualAuthorityStore!.revokeForConnection(connectionId, 'operator')
+            const status = (await listOptionsConnectionStatuses()).find((candidate) => candidate.connection.connection_id === connectionId)
+            if (!status) throw new Error('Options account was not found after manual paper lock.')
+            return status
+          }),
         }
       : {}),
     ...(executionGateway

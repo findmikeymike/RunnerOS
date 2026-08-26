@@ -580,6 +580,7 @@ app.whenReady().then(async () => {
           connectionDirectory: join(app.getPath('userData'), 'trade-god', 'connections'),
           executionDirectory: join(app.getPath('userData'), 'trade-god', 'execution'),
           enableTradovatePaperAdapter: true,
+          optionsSingleInstanceAuthority: true,
           ...(process.env.TRADE_GOD_DISCOTRADER_CONNECTION_ID
             ? { discoTraderConnectionId: process.env.TRADE_GOD_DISCOTRADER_CONNECTION_ID }
             : {}),

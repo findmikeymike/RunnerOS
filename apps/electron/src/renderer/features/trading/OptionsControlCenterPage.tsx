@@ -41,6 +41,7 @@ const OptionsControlCenterPage: React.FC = () => {
   const [dialogProvider, setDialogProvider] = useState<OptionsProvider | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [authorityConnection, setAuthorityConnection] = useState<ConnectionStatus | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -58,13 +59,16 @@ const OptionsControlCenterPage: React.FC = () => {
 
   const verified = connections.filter((item) => item.provider_read_fresh).length
   const liveData = connections.filter((item) => item.provider_read_fresh && item.provider_read_proof?.option_quotes_realtime).length
+  const certified = connections.filter((item) => item.certification.state === 'eligible').length
   const nextStep = connections.length === 0
     ? 'Connect a paper account'
     : verified === 0
       ? 'Verify your saved account'
       : liveData === 0
         ? 'Check live options data'
-        : 'Ready for paper certification'
+        : certified === 0
+          ? 'Run the guided paper test'
+          : 'Manual paper testing is available'
 
   const verify = async (connectionId: string) => {
     setBusyId(connectionId)
@@ -90,6 +94,15 @@ const OptionsControlCenterPage: React.FC = () => {
     } finally {
       setBusyId(null)
     }
+  }
+
+  const revokeAuthority = async (connectionId: string) => {
+    if (!window.confirm('Lock manual paper orders for this account now?')) return
+    setBusyId(connectionId)
+    try {
+      await window.electronAPI.revokeOptionsManualAuthority(connectionId)
+      await load()
+    } catch (cause) { setError(readableError(cause)) } finally { setBusyId(null) }
   }
 
   return (
@@ -156,6 +169,8 @@ const OptionsControlCenterPage: React.FC = () => {
                     busy={busyId === status.connection.connection_id}
                     onVerify={() => void verify(status.connection.connection_id)}
                     onRemove={() => void remove(status.connection.connection_id)}
+                    onActivate={() => setAuthorityConnection(status)}
+                    onRevoke={() => void revokeAuthority(status.connection.connection_id)}
                   />
                 ))}
               </div>
@@ -175,6 +190,13 @@ const OptionsControlCenterPage: React.FC = () => {
           provider={dialogProvider}
           onClose={() => setDialogProvider(null)}
           onSaved={async () => { setDialogProvider(null); await load() }}
+        />
+      )}
+      {authorityConnection && (
+        <ManualPaperDialog
+          status={authorityConnection}
+          onClose={() => setAuthorityConnection(null)}
+          onActivated={async () => { setAuthorityConnection(null); await load() }}
         />
       )}
     </div>
@@ -271,7 +293,9 @@ const AccountCard: React.FC<{
   busy: boolean
   onVerify(): void
   onRemove(): void
-}> = ({ status, busy, onVerify, onRemove }) => {
+  onActivate(): void
+  onRevoke(): void
+}> = ({ status, busy, onVerify, onRemove, onActivate, onRevoke }) => {
   const { connection, provider_read_proof: proof } = status
   const connected = status.provider_read_fresh
   const provider = providerCopy[connection.provider]
@@ -298,18 +322,73 @@ const AccountCard: React.FC<{
             {busy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
             {connected ? 'Check again' : 'Verify account'}
           </button>
+          {status.manual_authority ? (
+            <button type="button" onClick={onRevoke} disabled={busy} className="rounded-lg border border-rose-300/20 bg-rose-300/[0.06] px-3 py-2 text-xs text-rose-100 hover:bg-rose-300/[0.1] disabled:opacity-40">Lock now</button>
+          ) : status.certification.state === 'eligible' ? (
+            <button type="button" onClick={onActivate} disabled={busy} className="rounded-lg bg-violet-200 px-3 py-2 text-xs font-semibold text-black hover:bg-violet-100 disabled:opacity-40">Enable manual paper</button>
+          ) : null}
           <button type="button" onClick={onRemove} disabled={busy} aria-label={`Remove ${connection.account_label}`} className="rounded-lg p-2 text-[#68727e] hover:bg-rose-400/[0.08] hover:text-rose-300"><Trash2 className="h-4 w-4" /></button>
         </div>
       </div>
       {proof && (
-        <div className="mt-4 grid grid-cols-2 gap-2 border-t border-white/[0.07] pt-4 sm:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-2 border-t border-white/[0.07] pt-4 sm:grid-cols-5">
           <SmallFact label="Positions" value={String(proof.position_count)} />
           <SmallFact label="Open orders" value={String(proof.open_order_count)} />
           <SmallFact label="Options data" value={proof.option_quotes_realtime ? 'Live' : 'Not proven'} warn={!proof.option_quotes_realtime} />
-          <SmallFact label="Trading" value="Locked" />
+          <SmallFact
+            label="Safety test"
+            value={status.certification.state === 'eligible' ? 'Passed' : status.certification.state === 'blocked' ? 'Needs attention' : 'Not run'}
+            warn={status.certification.state !== 'eligible'}
+          />
+          <SmallFact label="Trading" value={status.manual_authority ? 'Manual paper only' : 'Locked'} />
         </div>
       )}
     </article>
+  )
+}
+
+const ManualPaperDialog: React.FC<{ status: ConnectionStatus; onClose(): void; onActivated(): Promise<void> }> = ({ status, onClose, onActivated }) => {
+  const [maxDebit, setMaxDebit] = useState('100')
+  const [confirmed, setConfirmed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const activate = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!confirmed || !maxDebit.trim()) return
+    setBusy(true); setError(null)
+    try {
+      const certificationExpiry = status.certification.expires_at
+        ? Date.parse(status.certification.expires_at)
+        : Number.NaN
+      const validUntilMs = Math.min(
+        Date.now() + 30 * 60 * 1000,
+        Number.isFinite(certificationExpiry) ? certificationExpiry - 1_000 : Number.POSITIVE_INFINITY,
+      )
+      if (!Number.isFinite(validUntilMs) || validUntilMs <= Date.now()) {
+        throw new Error('The paper safety test has expired. Run it again before enabling manual orders.')
+      }
+      const validUntil = new Date(validUntilMs).toISOString()
+      await window.electronAPI.activateOptionsManualAuthority(status.connection.connection_id, maxDebit.trim(), validUntil, true)
+      await onActivated()
+    } catch (cause) { setError(readableError(cause)) } finally { setBusy(false) }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Enable manual paper testing">
+      <form onSubmit={activate} className="w-full max-w-md rounded-2xl border border-white/[0.1] bg-[#12161b] p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div><div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300">30-minute access</div><h2 className="mt-1 text-lg font-semibold">Enable manual paper testing</h2></div>
+          <button type="button" onClick={onClose} aria-label="Close" className="p-2 text-[#75808d] hover:text-white"><X className="h-4 w-4" /></button>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-[#8993a0]">Only the certified contract on {status.connection.account_label} is allowed. Discord automation stays off.</p>
+        <div className="mt-5"><Field label="Maximum debit per order" value={maxDebit} onChange={setMaxDebit} placeholder="100" /></div>
+        <label className="mt-4 flex items-start gap-3 rounded-xl border border-white/[0.08] bg-black/20 p-3 text-xs leading-5 text-[#aab2bc]">
+          <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-1" />
+          I understand every order still requires my confirmation and uses this paper/sandbox account only.
+        </label>
+        {error && <p className="mt-3 text-xs text-rose-200">{error}</p>}
+        <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} className="px-4 py-2 text-xs text-[#9ba4af]">Cancel</button><button disabled={!confirmed || busy} className="rounded-lg bg-white px-4 py-2 text-xs font-semibold text-black disabled:opacity-40">{busy ? 'Enabling…' : 'Enable for 30 minutes'}</button></div>
+      </form>
+    </div>
   )
 }
 

@@ -656,6 +656,26 @@ Never collapse these into “done.”
 - Not yet proven: provider lifecycle evidence, runtime/UI activation, a manual
   provider submit, or automatic Discord authority. With no retained real broker
   certification, no authority can be created on this installation.
+
+## Options Autopilot Slice 5D — Manual Paper Controls — 2026-08-26
+
+- The Options page now shows retained safety-test state separately from account
+  verification and trading authority. A passed test can unlock one exact
+  certified contract for at most 30 minutes and no more than the retained test
+  debit; Discord automation remains off.
+- Activation and locking are main-process operations. The renderer cannot supply
+  certification evidence, extend authority beyond certification expiry, or
+  bypass explicit operator confirmation. Credential replacement, re-verification,
+  and account removal revoke existing authority first.
+- Options account, certification, and authority mutations share one serialized
+  runtime boundary; a missing account after a mutation fails closed. IPC and
+  preload expose only the two bounded actions: `Enable manual paper` and
+  `Lock now`.
+- Verification: 28 focused runtime/service/authority/IPC/preload/channel tests
+  passed with 1,853 expectations; repository-wide typecheck and the production
+  renderer build passed; diff check passed.
+- Not yet proven: a real retained provider certification, a real IBKR/Webull
+  paper order, order management, expiry custody, or automatic Discord authority.
 # Multi-account connections and Discord routes — 2026-07-31
 
 - Multiple prop firms/accounts can coexist; connection identity remains exact

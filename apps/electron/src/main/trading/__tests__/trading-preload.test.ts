@@ -59,6 +59,14 @@ test('preload adapter invokes only the local Trade God channels', async () => {
     .toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.revokeTradeGodStandingAuthorization('connection-1') as any)
     .toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.listOptionsConnections() as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.saveOptionsConnection({ provider: 'ibkr' } as any) as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.verifyOptionsConnection('options-one') as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.removeOptionsConnection('options-one') as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.activateOptionsManualAuthority(
+    'options-one', '100', '2026-08-26T01:30:00.000Z', true,
+  ) as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.revokeOptionsManualAuthority('options-one') as any).toEqual({ artifact_id: 'artifact-preload' })
   api.onTradeGodAlert((payload) => { subscribedPayload = payload })
   expect(subscribedChannel).toBe(TRADE_GOD_IPC.ALERT_RECEIVED)
   expect(subscribedPayload).toEqual({ id: 'tv-preload' })
@@ -94,5 +102,11 @@ test('preload adapter invokes only the local Trade God channels', async () => {
     { channel: TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS, args: [] },
     { channel: TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION, args: [{ authorization_id: 'mandate-1' }] },
     { channel: TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION, args: ['connection-1'] },
+    { channel: TRADE_GOD_IPC.LIST_OPTIONS_CONNECTIONS, args: [] },
+    { channel: TRADE_GOD_IPC.SAVE_OPTIONS_CONNECTION, args: [{ provider: 'ibkr' }] },
+    { channel: TRADE_GOD_IPC.VERIFY_OPTIONS_CONNECTION, args: ['options-one'] },
+    { channel: TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION, args: ['options-one'] },
+    { channel: TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY, args: ['options-one', '100', '2026-08-26T01:30:00.000Z', true] },
+    { channel: TRADE_GOD_IPC.REVOKE_OPTIONS_MANUAL_AUTHORITY, args: ['options-one'] },
   ])
 })

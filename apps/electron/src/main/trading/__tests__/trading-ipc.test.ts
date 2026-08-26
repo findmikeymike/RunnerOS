@@ -105,6 +105,14 @@ describe('Trade God IPC registration', () => {
       saveOptionsConnection: async () => { calls.push('options:save'); return { connection: { connection_id: 'options-one' } } as any },
       verifyOptionsConnection: async (id) => { calls.push(`options:verify:${id}`); return { provider_read_verified: true } as any },
       removeOptionsConnection: async (id) => { calls.push(`options:remove:${id}`); return true },
+      activateOptionsManualAuthority: async (id, debit, validUntil, confirmed) => {
+        calls.push(`options:authority:activate:${id}:${debit}:${validUntil}:${confirmed}`)
+        return { connection: { connection_id: id }, manual_authority: { max_debit_per_order: debit } } as any
+      },
+      revokeOptionsManualAuthority: async (id) => {
+        calls.push(`options:authority:revoke:${id}`)
+        return { connection: { connection_id: id } } as any
+      },
       stop: async () => { calls.push('stop') },
     }
 
@@ -149,6 +157,8 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.SAVE_OPTIONS_CONNECTION,
       TRADE_GOD_IPC.VERIFY_OPTIONS_CONNECTION,
       TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION,
+      TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY,
+      TRADE_GOD_IPC.REVOKE_OPTIONS_MANUAL_AUTHORITY,
     ])
     expect(await ipc.handlers.get(TRADE_GOD_IPC.HEALTH)!({})).toEqual({ state: 'ready' })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.ANALYZE_FIXTURE)!({}, { timeoutMs: 500 })).toEqual({ artifact_id: 'artifact-ipc' })
@@ -216,6 +226,11 @@ describe('Trade God IPC registration', () => {
     expect(await ipc.handlers.get(TRADE_GOD_IPC.VERIFY_OPTIONS_CONNECTION)!({}, 'options-one'))
       .toEqual({ provider_read_verified: true })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION)!({}, 'options-one')).toBe(true)
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY)!(
+      {}, 'options-one', '100', '2026-08-26T01:30:00.000Z', true,
+    )).toMatchObject({ manual_authority: { max_debit_per_order: '100' } })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.REVOKE_OPTIONS_MANUAL_AUTHORITY)!({}, 'options-one'))
+      .toMatchObject({ connection: { connection_id: 'options-one' } })
     expect(calls).toEqual([
       'health',
       'analyze:500',
@@ -250,6 +265,8 @@ describe('Trade God IPC registration', () => {
       'options:save',
       'options:verify:options-one',
       'options:remove:options-one',
+      'options:authority:activate:options-one:100:2026-08-26T01:30:00.000Z:true',
+      'options:authority:revoke:options-one',
     ])
   })
 
@@ -322,6 +339,8 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.SAVE_OPTIONS_CONNECTION,
       TRADE_GOD_IPC.VERIFY_OPTIONS_CONNECTION,
       TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION,
+      TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY,
+      TRADE_GOD_IPC.REVOKE_OPTIONS_MANUAL_AUTHORITY,
     ])
     expect(stops).toBe(1)
   })
