@@ -1,11 +1,33 @@
 ---
 status: active
 owner: team
-last_verified: 2026-08-10
+last_verified: 2026-08-26
 source_of_truth: true
 ---
 
 # Verification System
+
+## 2026-08-26 Options Autopilot Slice 1 — Contracts and Simulator
+
+- Red-green proof: the focused suites first failed on the absent options
+  contracts and simulator exports, then passed after implementation.
+- Options-focused result: 14 passed, 0 failed, 53 expectations.
+- Complete contract package: 65 passed, 0 failed, 162 expectations.
+- Complete execution package: 190 passed, 0 failed, 609 expectations.
+- `bun run typecheck:all`: passed.
+- `git diff --check`: passed.
+- Proven: versioned single-leg Discord evidence; exact standard option identity;
+  quote chronology/mode integrity; paper-only entry-policy bounds; fee-inclusive
+  decision, reservation, preview, intent, and receipt economics; six-place
+  fixed-point arithmetic; exact tick rounding; and an idempotent deterministic
+  fake provider covering contract ambiguity, preview, submit, partial fill,
+  cancel, account truth, and client-order divergence.
+- Rival fixes closed immutable Discord lineage omissions, zero/crossed quote
+  acceptance, unsafe spread/0DTE policy modes, contradictory economic totals,
+  nonpositive/off-tick simulator mutation, and incomplete receipt evidence.
+- Not proven: Discord parsing, live contract resolution, IBKR/Webull connection,
+  provider authentication, provider preview/order transport, durable gateway
+  recovery, UI, real Electron runtime, or any broker order.
 
 ## 2026-08-10 Automatic Paper Mandate Coordinator
 

@@ -1,0 +1,558 @@
+import { z } from 'zod'
+
+import {
+  decimalStringSchema,
+  identifierSchema,
+  positiveDecimalStringSchema,
+  sha256Schema,
+  utcTimestampSchema,
+} from './common.ts'
+
+export const DISCORD_OPTIONS_SIGNAL_SCHEMA_VERSION = 'discord-options-signal@1' as const
+export const OPTION_CONTRACT_IDENTITY_SCHEMA_VERSION = 'option-contract-identity@1' as const
+export const OPTION_QUOTE_SNAPSHOT_SCHEMA_VERSION = 'option-quote-snapshot@1' as const
+export const OPTIONS_ENTRY_POLICY_SCHEMA_VERSION = 'options-entry-policy@1' as const
+export const OPTIONS_DEBIT_RESERVATION_SCHEMA_VERSION = 'options-debit-reservation@1' as const
+export const OPTIONS_ENTRY_DECISION_SCHEMA_VERSION = 'options-entry-decision@1' as const
+export const OPTIONS_PROVIDER_PREVIEW_SCHEMA_VERSION = 'options-provider-preview@1' as const
+export const OPTIONS_ORDER_INTENT_SCHEMA_VERSION = 'options-order-intent@1' as const
+export const OPTIONS_EXECUTION_RECEIPT_SCHEMA_VERSION = 'options-execution-receipt@1' as const
+
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
+const clockSchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, 'Expected HH:mm')
+const nonnegativeDecimalStringSchema = decimalStringSchema.refine((value) => !value.startsWith('-'), {
+  message: 'Expected a nonnegative decimal string',
+})
+const positiveIntegerSchema = z.number().int().positive()
+const nonnegativeIntegerSchema = z.number().int().nonnegative()
+
+function decimalParts(value: string): { coefficient: bigint; scale: number } {
+  const negative = value.startsWith('-')
+  const unsigned = negative ? value.slice(1) : value
+  const [whole = '0', fraction = ''] = unsigned.split('.')
+  const coefficient = BigInt(`${whole}${fraction}` || '0') * (negative ? -1n : 1n)
+  return { coefficient, scale: fraction.length }
+}
+
+function compareDecimals(left: string, right: string): number {
+  const a = decimalParts(left)
+  const b = decimalParts(right)
+  const scale = Math.max(a.scale, b.scale)
+  const scaledA = a.coefficient * (10n ** BigInt(scale - a.scale))
+  const scaledB = b.coefficient * (10n ** BigInt(scale - b.scale))
+  return scaledA < scaledB ? -1 : scaledA > scaledB ? 1 : 0
+}
+
+function addDecimals(left: string, right: string): string {
+  const a = decimalParts(left)
+  const b = decimalParts(right)
+  const scale = Math.max(a.scale, b.scale)
+  const coefficient = (a.coefficient * (10n ** BigInt(scale - a.scale)))
+    + (b.coefficient * (10n ** BigInt(scale - b.scale)))
+  const negative = coefficient < 0n
+  const absolute = negative ? -coefficient : coefficient
+  if (scale === 0) return `${negative ? '-' : ''}${absolute}`
+  const digits = absolute.toString().padStart(scale + 1, '0')
+  return normalizeDecimal(`${negative ? '-' : ''}${digits.slice(0, -scale)}.${digits.slice(-scale)}`)
+}
+
+function multiplyDecimalByInteger(value: string, multiplier: number): string {
+  const parts = decimalParts(value)
+  const coefficient = parts.coefficient * BigInt(multiplier)
+  const negative = coefficient < 0n
+  const absolute = negative ? -coefficient : coefficient
+  if (parts.scale === 0) return `${negative ? '-' : ''}${absolute}`
+  const digits = absolute.toString().padStart(parts.scale + 1, '0')
+  return normalizeDecimal(`${negative ? '-' : ''}${digits.slice(0, -parts.scale)}.${digits.slice(-parts.scale)}`)
+}
+
+function expectedDebit(price: string, quantity: number, fees: string): string {
+  return addDecimals(multiplyDecimalByInteger(price, quantity * 100), fees)
+}
+
+function normalizeDecimal(value: string): string {
+  return value.replace(/\.0+$/, '').replace(/(\.\d*?[1-9])0+$/, '$1')
+}
+
+const referencePremiumSchema = z.object({
+  low: positiveDecimalStringSchema,
+  high: positiveDecimalStringSchema,
+}).strict().superRefine((value, context) => {
+  if (compareDecimals(value.high, value.low) < 0) {
+    context.addIssue({ code: 'custom', path: ['high'], message: 'Premium high must be at least the low' })
+  }
+})
+
+export const discordOptionsSignalSchema = z.object({
+  signal_schema_version: z.literal(DISCORD_OPTIONS_SIGNAL_SCHEMA_VERSION),
+  signal_id: identifierSchema,
+  provenance: z.object({
+    guild_id: identifierSchema,
+    channel_id: identifierSchema,
+    message_id: identifierSchema,
+    author_id: identifierSchema,
+    thread_id: identifierSchema.nullable(),
+    reply_to_message_id: identifierSchema.nullable(),
+    posted_at: utcTimestampSchema,
+    received_at: utcTimestampSchema,
+    content_sha256: sha256Schema,
+  }).strict(),
+  raw_text: z.string().min(1).max(10_000),
+  action: z.literal('buy_to_open'),
+  strategy: z.literal('single-leg'),
+  underlying: z.string().regex(/^[A-Z][A-Z0-9.]{0,14}$/),
+  expiration: dateSchema,
+  strike: positiveDecimalStringSchema,
+  right: z.enum(['call', 'put']),
+  reference_entry: positiveDecimalStringSchema,
+  reference_kind: z.enum(['single_price', 'trader_fill', 'entry_range']),
+  reference_range: referencePremiumSchema.optional(),
+  source_quantity: positiveIntegerSchema.optional(),
+  trader_label: z.string().min(1).max(160).optional(),
+  source_stop: positiveDecimalStringSchema.optional(),
+  source_target: positiveDecimalStringSchema.optional(),
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (Date.parse(value.provenance.received_at) < Date.parse(value.provenance.posted_at)) {
+    context.addIssue({ code: 'custom', path: ['provenance', 'received_at'], message: 'Receipt cannot precede posting' })
+  }
+  if (value.reference_kind === 'entry_range' && value.reference_range === undefined) {
+    context.addIssue({ code: 'custom', path: ['reference_range'], message: 'Entry-range evidence requires exact bounds' })
+  }
+  if (value.reference_kind !== 'entry_range' && value.reference_range !== undefined) {
+    context.addIssue({ code: 'custom', path: ['reference_range'], message: 'Only entry-range evidence can carry bounds' })
+  }
+  if (value.reference_range && compareDecimals(value.reference_entry, value.reference_range.high) !== 0) {
+    context.addIssue({ code: 'custom', path: ['reference_entry'], message: 'Entry-range reference must equal its high bound' })
+  }
+})
+
+export const optionContractIdentitySchema = z.object({
+  contract_schema_version: z.literal(OPTION_CONTRACT_IDENTITY_SCHEMA_VERSION),
+  canonical_id: identifierSchema,
+  underlying: z.string().regex(/^[A-Z][A-Z0-9.]{0,14}$/),
+  expiration: dateSchema,
+  strike: positiveDecimalStringSchema,
+  right: z.enum(['call', 'put']),
+  currency: z.literal('USD'),
+  asset_class: z.enum(['US_EQUITY_OPTION', 'US_ETF_OPTION']),
+  multiplier: z.literal(100),
+  standard_deliverable: z.literal(true),
+  provider: identifierSchema,
+  provider_instrument_id: identifierSchema,
+  provider_symbol: z.string().min(1).max(160),
+  listing_eligible: z.boolean(),
+  smart_routing_eligible: z.boolean(),
+  minimum_tick: positiveDecimalStringSchema,
+  increment_bands: z.array(z.object({
+    minimum_price: nonnegativeDecimalStringSchema,
+    increment: positiveDecimalStringSchema,
+  }).strict()).min(1),
+  resolved_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  const rightCode = value.right === 'call' ? 'C' : 'P'
+  const expectedId = `USOPT:${value.underlying}:${value.expiration}:${rightCode}:${normalizeDecimal(value.strike)}`
+  if (value.canonical_id !== expectedId) {
+    context.addIssue({ code: 'custom', path: ['canonical_id'], message: 'Canonical contract ID does not match its economics' })
+  }
+  if (compareDecimals(value.increment_bands[0]!.minimum_price, '0') !== 0) {
+    context.addIssue({ code: 'custom', path: ['increment_bands', 0, 'minimum_price'], message: 'Increment bands must begin at zero' })
+  }
+  for (let index = 1; index < value.increment_bands.length; index += 1) {
+    if (compareDecimals(value.increment_bands[index]!.minimum_price, value.increment_bands[index - 1]!.minimum_price) <= 0) {
+      context.addIssue({ code: 'custom', path: ['increment_bands', index, 'minimum_price'], message: 'Increment bands must be strictly increasing' })
+    }
+  }
+})
+
+export const optionQuoteSnapshotSchema = z.object({
+  quote_schema_version: z.literal(OPTION_QUOTE_SNAPSHOT_SCHEMA_VERSION),
+  quote_id: identifierSchema,
+  connection_id: identifierSchema,
+  account_id: identifierSchema,
+  canonical_contract_id: identifierSchema,
+  provider_instrument_id: identifierSchema,
+  environment: z.enum(['paper', 'live']),
+  market_data_mode: z.enum(['realtime', 'delayed', 'indicative']),
+  bid: positiveDecimalStringSchema,
+  ask: positiveDecimalStringSchema,
+  bid_size: nonnegativeIntegerSchema,
+  ask_size: nonnegativeIntegerSchema,
+  provider_timestamp: utcTimestampSchema,
+  received_at: utcTimestampSchema,
+  decision_at: utcTimestampSchema,
+  quote_age_ms: nonnegativeIntegerSchema,
+  delayed: z.boolean(),
+  indicative: z.boolean(),
+  halted: z.boolean(),
+  minimum_tick: positiveDecimalStringSchema,
+  provenance: z.string().min(1).max(240),
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (compareDecimals(value.bid, value.ask) > 0) {
+    context.addIssue({ code: 'custom', path: ['ask'], message: 'Ask cannot be below bid' })
+  }
+  if (Date.parse(value.received_at) < Date.parse(value.provider_timestamp)) {
+    context.addIssue({ code: 'custom', path: ['received_at'], message: 'Receipt cannot precede provider timestamp' })
+  }
+  if (Date.parse(value.decision_at) < Date.parse(value.received_at)) {
+    context.addIssue({ code: 'custom', path: ['decision_at'], message: 'Decision cannot precede receipt' })
+  }
+  const trustedAge = Date.parse(value.decision_at) - Date.parse(value.received_at)
+  if (trustedAge !== value.quote_age_ms) {
+    context.addIssue({ code: 'custom', path: ['quote_age_ms'], message: 'Quote age must match trusted receive-to-decision time' })
+  }
+  if ((value.market_data_mode === 'delayed') !== value.delayed) {
+    context.addIssue({ code: 'custom', path: ['delayed'], message: 'Delayed flag must match market-data mode' })
+  }
+  if ((value.market_data_mode === 'indicative') !== value.indicative) {
+    context.addIssue({ code: 'custom', path: ['indicative'], message: 'Indicative flag must match market-data mode' })
+  }
+})
+
+export const optionsEntryPolicySchema = z.object({
+  policy_schema_version: z.literal(OPTIONS_ENTRY_POLICY_SCHEMA_VERSION),
+  policy_id: identifierSchema,
+  revision: positiveIntegerSchema,
+  max_signal_age_ms: positiveIntegerSchema,
+  max_ingest_delay_ms: positiveIntegerSchema,
+  regular_session_only: z.literal(true),
+  entry_window: z.object({ earliest: clockSchema, latest: clockSchema, timezone: z.literal('America/New_York') }).strict(),
+  allowed_weekdays: z.array(z.number().int().min(1).max(5)).min(1),
+  min_days_to_expiration: positiveIntegerSchema,
+  max_days_to_expiration: positiveIntegerSchema,
+  max_quote_age_ms: positiveIntegerSchema,
+  min_bid_size: nonnegativeIntegerSchema,
+  min_ask_size: nonnegativeIntegerSchema,
+  max_spread_abs: positiveDecimalStringSchema,
+  max_spread_pct: positiveDecimalStringSchema,
+  spread_gate_mode: z.literal('both'),
+  max_chase_abs: nonnegativeDecimalStringSchema,
+  max_chase_pct: nonnegativeDecimalStringSchema,
+  max_favorable_retrace_pct: nonnegativeDecimalStringSchema,
+  tight_spread_action: z.enum(['marketable_limit', 'skip']),
+  wide_spread_action: z.enum(['passive_limit', 'skip']),
+  passive_limit_offset_abs: nonnegativeDecimalStringSchema,
+  working_order_ttl_ms: positiveIntegerSchema,
+  max_reprice_attempts: nonnegativeIntegerSchema,
+  reprice_interval_ms: positiveIntegerSchema,
+  cancel_at_signal_expiry: z.boolean(),
+  sizing: z.discriminatedUnion('mode', [
+    z.object({ mode: z.literal('fixed_contracts'), fixed_contracts: positiveIntegerSchema }).strict(),
+    z.object({ mode: z.literal('max_debit_budget'), max_debit_budget: positiveDecimalStringSchema }).strict(),
+  ]),
+  max_contracts_per_order: positiveIntegerSchema,
+  max_debit_per_trade: positiveDecimalStringSchema,
+  max_aggregate_open_debit: positiveDecimalStringSchema,
+  max_daily_debit_initiated: positiveDecimalStringSchema,
+  max_open_positions: z.literal(1),
+  max_active_positions_per_source: z.literal(1),
+  source_quantity_behavior: z.enum(['ignore', 'use_with_cap']),
+  duplicate_contract_policy: z.literal('block'),
+  expiration_custody: z.object({
+    provider_calendar_checksum: sha256Schema,
+    account_exercise_setting_checksum: sha256Schema,
+    no_new_entry_minutes_before_close: positiveIntegerSchema,
+    automatic_close_start_minutes_before_close: positiveIntegerSchema,
+    operator_escalation_minutes_before_close: positiveIntegerSchema,
+    do_not_exercise_mode: z.enum(['provider-supported', 'manual-required']),
+    custody_certification_checksum: sha256Schema,
+  }).strict(),
+  environment: z.literal('paper'),
+  adapter_id: identifierSchema,
+  required_certification: identifierSchema,
+  certification_checksum: sha256Schema,
+  connection_id: identifierSchema,
+  account_id: identifierSchema,
+  source_route_id: identifierSchema,
+  global_halt_required: z.literal(true),
+  account_halt_required: z.literal(true),
+  source_halt_required: z.literal(true),
+  mandate_expires_at: utcTimestampSchema,
+  created_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (value.min_days_to_expiration > value.max_days_to_expiration) {
+    context.addIssue({ code: 'custom', path: ['max_days_to_expiration'], message: 'Maximum DTE must not be below minimum DTE' })
+  }
+  if (Date.parse(value.mandate_expires_at) <= Date.parse(value.created_at)) {
+    context.addIssue({ code: 'custom', path: ['mandate_expires_at'], message: 'Mandate must expire after creation' })
+  }
+  if (value.entry_window.earliest >= value.entry_window.latest) {
+    context.addIssue({ code: 'custom', path: ['entry_window', 'latest'], message: 'Entry window must end after it begins' })
+  }
+  if (new Set(value.allowed_weekdays).size !== value.allowed_weekdays.length) {
+    context.addIssue({ code: 'custom', path: ['allowed_weekdays'], message: 'Allowed weekdays must be unique' })
+  }
+  if (value.sizing.mode === 'fixed_contracts' && value.sizing.fixed_contracts > value.max_contracts_per_order) {
+    context.addIssue({ code: 'custom', path: ['sizing', 'fixed_contracts'], message: 'Fixed quantity cannot exceed the order cap' })
+  }
+  if (value.sizing.mode === 'max_debit_budget' && compareDecimals(value.sizing.max_debit_budget, value.max_debit_per_trade) > 0) {
+    context.addIssue({ code: 'custom', path: ['sizing', 'max_debit_budget'], message: 'Sizing budget cannot exceed the per-trade debit cap' })
+  }
+  const custody = value.expiration_custody
+  if (!(custody.no_new_entry_minutes_before_close > custody.automatic_close_start_minutes_before_close
+    && custody.automatic_close_start_minutes_before_close > custody.operator_escalation_minutes_before_close)) {
+    context.addIssue({ code: 'custom', path: ['expiration_custody'], message: 'Expiration deadlines must progress toward market close' })
+  }
+})
+
+export const optionsEntryDecisionSchema = z.object({
+  decision_schema_version: z.literal(OPTIONS_ENTRY_DECISION_SCHEMA_VERSION),
+  decision_id: identifierSchema,
+  signal_checksum: sha256Schema,
+  route_checksum: sha256Schema,
+  account_checksum: sha256Schema,
+  contract_checksum: sha256Schema,
+  quote_checksum: sha256Schema,
+  policy_checksum: sha256Schema,
+  source_reference_price: positiveDecimalStringSchema,
+  bid: nonnegativeDecimalStringSchema,
+  ask: nonnegativeDecimalStringSchema,
+  midpoint: nonnegativeDecimalStringSchema,
+  spread_abs: nonnegativeDecimalStringSchema,
+  spread_pct: nonnegativeDecimalStringSchema,
+  unfavorable_drift_abs: nonnegativeDecimalStringSchema,
+  unfavorable_drift_pct: nonnegativeDecimalStringSchema,
+  favorable_retrace_pct: nonnegativeDecimalStringSchema,
+  absolute_chase_cap: positiveDecimalStringSchema,
+  percentage_chase_cap: positiveDecimalStringSchema,
+  effective_chase_cap: positiveDecimalStringSchema,
+  action: z.enum(['marketable_limit', 'passive_limit', 'skip', 'block']),
+  limit_price: positiveDecimalStringSchema.optional(),
+  planned_quantity: positiveIntegerSchema,
+  maximum_debit: positiveDecimalStringSchema,
+  reason_codes: z.array(identifierSchema).min(1),
+  decided_at: utcTimestampSchema,
+  valid_until: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if ((value.action === 'marketable_limit' || value.action === 'passive_limit') && value.limit_price === undefined) {
+    context.addIssue({ code: 'custom', path: ['limit_price'], message: 'Entry decisions require an exact limit price' })
+  }
+  if ((value.action === 'skip' || value.action === 'block') && value.limit_price !== undefined) {
+    context.addIssue({ code: 'custom', path: ['limit_price'], message: 'Non-entry decisions cannot carry a limit price' })
+  }
+  if (Date.parse(value.valid_until) <= Date.parse(value.decided_at)) {
+    context.addIssue({ code: 'custom', path: ['valid_until'], message: 'Decision validity must extend past decision time' })
+  }
+})
+
+export const optionsDebitReservationSchema = z.object({
+  reservation_schema_version: z.literal(OPTIONS_DEBIT_RESERVATION_SCHEMA_VERSION),
+  reservation_id: identifierSchema,
+  intent_id: identifierSchema,
+  connection_id: identifierSchema,
+  account_id: identifierSchema,
+  source_id: identifierSchema,
+  policy_id: identifierSchema,
+  policy_checksum: sha256Schema,
+  mandate_id: identifierSchema,
+  mandate_checksum: sha256Schema,
+  canonical_contract_id: identifierSchema,
+  contract_checksum: sha256Schema,
+  reserved_contracts: positiveIntegerSchema,
+  limit_price: positiveDecimalStringSchema,
+  multiplier: z.literal(100),
+  estimated_fees: nonnegativeDecimalStringSchema,
+  worst_case_debit: positiveDecimalStringSchema,
+  account_capacity_snapshot_checksum: sha256Schema,
+  active_reservation_set_checksum: sha256Schema,
+  state: z.enum(['prepared', 'working', 'partially-filled', 'submit-unknown', 'open-position', 'releasing', 'released', 'halted']),
+  filled_quantity: nonnegativeIntegerSchema,
+  open_quantity: nonnegativeIntegerSchema,
+  created_at: utcTimestampSchema,
+  updated_at: utcTimestampSchema,
+  expires_at: utcTimestampSchema,
+  execution_record_checksum: sha256Schema.nullable(),
+  terminal_proof_at: utcTimestampSchema.nullable(),
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (value.filled_quantity > value.reserved_contracts || value.open_quantity > value.reserved_contracts) {
+    context.addIssue({ code: 'custom', path: ['filled_quantity'], message: 'Reservation quantities cannot exceed the reserved contracts' })
+  }
+  if (compareDecimals(value.worst_case_debit, expectedDebit(value.limit_price, value.reserved_contracts, value.estimated_fees)) !== 0) {
+    context.addIssue({ code: 'custom', path: ['worst_case_debit'], message: 'Worst-case debit does not match price, multiplier, quantity, and fees' })
+  }
+  if (Date.parse(value.updated_at) < Date.parse(value.created_at) || Date.parse(value.expires_at) <= Date.parse(value.created_at)) {
+    context.addIssue({ code: 'custom', path: ['updated_at'], message: 'Reservation chronology is invalid' })
+  }
+})
+
+export const optionsProviderPreviewSchema = z.object({
+  preview_schema_version: z.literal(OPTIONS_PROVIDER_PREVIEW_SCHEMA_VERSION),
+  preview_id: identifierSchema,
+  provider_request_id: identifierSchema,
+  provider_response_id: identifierSchema,
+  adapter_id: identifierSchema,
+  adapter_version: z.string().min(1),
+  provider_contract_version: z.string().min(1),
+  environment: z.literal('paper'),
+  credential_generation: positiveIntegerSchema,
+  connection_id: identifierSchema,
+  account_id: identifierSchema,
+  canonical_contract_id: identifierSchema,
+  route_checksum: sha256Schema,
+  decision_checksum: sha256Schema,
+  reservation_checksum: sha256Schema,
+  mandate_checksum: sha256Schema,
+  side: z.literal('buy'),
+  position_intent: z.literal('BUY_TO_OPEN'),
+  order_type: z.literal('limit'),
+  limit_price: positiveDecimalStringSchema,
+  quantity: positiveIntegerSchema,
+  time_in_force: z.literal('day'),
+  provider_request_checksum: sha256Schema,
+  estimated_debit: positiveDecimalStringSchema,
+  estimated_fees: nonnegativeDecimalStringSchema,
+  buying_power_impact: positiveDecimalStringSchema,
+  warnings: z.array(z.string().min(1)),
+  rejects: z.array(z.string().min(1)),
+  option_permission: z.enum(['approved', 'denied', 'unknown']),
+  provider_timestamp: utcTimestampSchema,
+  received_at: utcTimestampSchema,
+  max_age_ms: positiveIntegerSchema,
+  result: z.enum(['approved', 'rejected', 'unknown']),
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (value.result === 'approved' && (value.rejects.length > 0 || value.option_permission !== 'approved')) {
+    context.addIssue({ code: 'custom', path: ['result'], message: 'Approved previews cannot contain rejects or missing permission' })
+  }
+  if (compareDecimals(value.buying_power_impact, addDecimals(value.estimated_debit, value.estimated_fees)) !== 0) {
+    context.addIssue({ code: 'custom', path: ['buying_power_impact'], message: 'Buying-power impact must equal estimated debit plus fees' })
+  }
+})
+
+export const optionsOrderIntentSchema = z.object({
+  intent_schema_version: z.literal(OPTIONS_ORDER_INTENT_SCHEMA_VERSION),
+  intent_id: identifierSchema,
+  source_id: identifierSchema,
+  source_checksum: sha256Schema,
+  decision_checksum: sha256Schema,
+  connection_id: identifierSchema,
+  account_id: identifierSchema,
+  canonical_contract_id: identifierSchema,
+  contract_checksum: sha256Schema,
+  provider_instrument_id: identifierSchema,
+  action: z.literal('BUY_TO_OPEN'),
+  order_type: z.literal('limit'),
+  limit_price: positiveDecimalStringSchema,
+  quantity: positiveIntegerSchema,
+  time_in_force: z.literal('day'),
+  regular_hours_only: z.literal(true),
+  planned_maximum_debit: positiveDecimalStringSchema,
+  estimated_fees: nonnegativeDecimalStringSchema,
+  policy_checksum: sha256Schema,
+  mandate_checksum: sha256Schema,
+  reservation_id: identifierSchema,
+  reservation_checksum: sha256Schema,
+  preview_checksum: sha256Schema,
+  valid_until: utcTimestampSchema,
+  provider_client_order_id: identifierSchema,
+  idempotency_checksum: sha256Schema,
+  created_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (Date.parse(value.valid_until) <= Date.parse(value.created_at)) {
+    context.addIssue({ code: 'custom', path: ['valid_until'], message: 'Intent must remain valid after creation' })
+  }
+  if (compareDecimals(value.planned_maximum_debit, expectedDebit(value.limit_price, value.quantity, value.estimated_fees)) !== 0) {
+    context.addIssue({ code: 'custom', path: ['planned_maximum_debit'], message: 'Planned debit does not match limit, quantity, multiplier, and fees' })
+  }
+})
+
+const optionsFillSchema = z.object({
+  fill_id: identifierSchema,
+  quantity: positiveIntegerSchema,
+  price: positiveDecimalStringSchema,
+  fee: nonnegativeDecimalStringSchema,
+  filled_at: utcTimestampSchema,
+}).strict()
+
+export const optionsExecutionReceiptSchema = z.object({
+  receipt_schema_version: z.literal(OPTIONS_EXECUTION_RECEIPT_SCHEMA_VERSION),
+  receipt_id: identifierSchema,
+  intent_id: identifierSchema,
+  source_checksum: sha256Schema,
+  contract_checksum: sha256Schema,
+  quote_checksum: sha256Schema,
+  decision_checksum: sha256Schema,
+  intent_checksum: sha256Schema,
+  command_checksum: sha256Schema,
+  adapter_checksum: sha256Schema,
+  preview_checksum: sha256Schema.nullable(),
+  reservation_id: identifierSchema,
+  reservation_checksum: sha256Schema,
+  reservation_state: z.enum(['prepared', 'working', 'partially-filled', 'submit-unknown', 'open-position', 'releasing', 'released', 'halted']),
+  provider_order_id: identifierSchema,
+  provider_client_order_id: identifierSchema,
+  submitted_at: utcTimestampSchema,
+  acknowledged_at: utcTimestampSchema.optional(),
+  filled_at: utcTimestampSchema.optional(),
+  canceled_at: utcTimestampSchema.nullable(),
+  reconciled_at: utcTimestampSchema,
+  requested_quantity: positiveIntegerSchema,
+  cumulative_fill_quantity: nonnegativeIntegerSchema,
+  remaining_quantity: nonnegativeIntegerSchema,
+  fills: z.array(optionsFillSchema),
+  average_fill_price: positiveDecimalStringSchema.optional(),
+  actual_debit: nonnegativeDecimalStringSchema,
+  final_order_status: z.enum(['working', 'partially-filled', 'filled', 'canceled', 'partially-filled-canceled', 'rejected', 'unknown']),
+  owned_position_quantity: nonnegativeIntegerSchema,
+  recovery_evidence: z.array(z.string().min(1)),
+  preview_unavailable_reason: z.string().min(1).nullable(),
+  failure_code: identifierSchema.nullable(),
+  result: z.enum(['working', 'active', 'flat', 'rejected', 'halted']),
+  created_at: utcTimestampSchema,
+  updated_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  const fillQuantity = value.fills.reduce((sum, fill) => sum + fill.quantity, 0)
+  if (fillQuantity !== value.cumulative_fill_quantity) {
+    context.addIssue({ code: 'custom', path: ['fills'], message: 'Fill quantities must equal cumulative fill quantity' })
+  }
+  if (value.cumulative_fill_quantity + value.remaining_quantity !== value.requested_quantity) {
+    context.addIssue({ code: 'custom', path: ['remaining_quantity'], message: 'Filled and remaining quantities must equal requested quantity' })
+  }
+  if (value.cumulative_fill_quantity > 0 && value.average_fill_price === undefined) {
+    context.addIssue({ code: 'custom', path: ['average_fill_price'], message: 'Filled receipts require an average fill price' })
+  }
+  if ((value.preview_checksum === null) === (value.preview_unavailable_reason === null)) {
+    context.addIssue({ code: 'custom', path: ['preview_checksum'], message: 'Receipt requires either preview evidence or one unavailable reason' })
+  }
+  if (value.final_order_status === 'filled' && value.remaining_quantity !== 0) {
+    context.addIssue({ code: 'custom', path: ['remaining_quantity'], message: 'Filled orders cannot have remaining quantity' })
+  }
+  const actualDebit = value.fills.reduce(
+    (sum, fill) => addDecimals(sum, expectedDebit(fill.price, fill.quantity, fill.fee)),
+    '0',
+  )
+  if (compareDecimals(value.actual_debit, actualDebit) !== 0) {
+    context.addIssue({ code: 'custom', path: ['actual_debit'], message: 'Actual debit must equal exact fills plus fees' })
+  }
+  for (const [index, fill] of value.fills.entries()) {
+    if (Date.parse(fill.filled_at) < Date.parse(value.submitted_at)) {
+      context.addIssue({ code: 'custom', path: ['fills', index, 'filled_at'], message: 'A fill cannot precede submission' })
+    }
+  }
+  if (value.filled_at && Date.parse(value.filled_at) < Date.parse(value.submitted_at)) {
+    context.addIssue({ code: 'custom', path: ['filled_at'], message: 'Filled time cannot precede submission' })
+  }
+  if ((value.final_order_status === 'canceled' || value.final_order_status === 'partially-filled-canceled') && value.canceled_at === null) {
+    context.addIssue({ code: 'custom', path: ['canceled_at'], message: 'Canceled orders require a cancellation timestamp' })
+  }
+  if (Date.parse(value.updated_at) < Date.parse(value.created_at) || Date.parse(value.reconciled_at) < Date.parse(value.submitted_at)) {
+    context.addIssue({ code: 'custom', path: ['updated_at'], message: 'Receipt chronology is invalid' })
+  }
+})
+
+export type DiscordOptionsSignal = z.infer<typeof discordOptionsSignalSchema>
+export type OptionContractIdentity = z.infer<typeof optionContractIdentitySchema>
+export type OptionQuoteSnapshot = z.infer<typeof optionQuoteSnapshotSchema>
+export type OptionsEntryPolicy = z.infer<typeof optionsEntryPolicySchema>
+export type OptionsEntryDecision = z.infer<typeof optionsEntryDecisionSchema>
+export type OptionsDebitReservation = z.infer<typeof optionsDebitReservationSchema>
+export type OptionsProviderPreview = z.infer<typeof optionsProviderPreviewSchema>
+export type OptionsOrderIntent = z.infer<typeof optionsOrderIntentSchema>
+export type OptionsExecutionReceipt = z.infer<typeof optionsExecutionReceiptSchema>
