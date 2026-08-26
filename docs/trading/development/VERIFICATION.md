@@ -577,6 +577,22 @@ Never collapse these into “done.”
   Runtime screenshots verified the empty account page and IBKR connection modal.
 - Not yet proven: a real IBKR/Webull credential login, live options contract or
   quote access, provider paper order lifecycle, or unattended execution.
+
+## Options Autopilot Slice 5A — Restricted Certification Authority — 2026-08-26
+
+- A dedicated options certification runner is now separate from Discord,
+  routes, standing mandates, agents, and the normal execution gateway.
+- Its immutable evidence binds the exact account, credential generation,
+  adapter/provider contract, one allowed contract, client-order prefix, maximum
+  test debit, every required scenario, mutation count, and final flat proof.
+- Eligibility is derived rather than trusted: every scenario must pass, at
+  least four controlled provider mutations must be evidenced, and final truth
+  must prove zero position and zero working orders. Malformed, expired, or
+  over-$1,000 sessions fail before the runner can act.
+- Verification: 12 focused certification/options-contract tests passed;
+  repository-wide typecheck and diff check passed.
+- Not yet proven: a provider-specific runner, any real broker mutation, or
+  installation of manual-paper authority.
 # Multi-account connections and Discord routes — 2026-07-31
 
 - Multiple prop firms/accounts can coexist; connection identity remains exact

@@ -22,6 +22,7 @@ export const OPTIONS_EXECUTION_COMMAND_SCHEMA_VERSION = 'options-execution-comma
 export const OPTIONS_EXECUTION_RECORD_SCHEMA_VERSION = 'options-execution-record@1' as const
 export const OPTIONS_CONNECTION_SCHEMA_VERSION = 'options-connection@1' as const
 export const OPTIONS_PROVIDER_READ_PROOF_SCHEMA_VERSION = 'options-provider-read-proof@1' as const
+export const OPTIONS_CERTIFICATION_EVIDENCE_SCHEMA_VERSION = 'options-certification-evidence@1' as const
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD').refine((value) => {
   const parsed = new Date(`${value}T00:00:00.000Z`)
@@ -108,6 +109,72 @@ export const optionsProviderReadProofSchema = z.object({
 }).strict().superRefine((value, context) => {
   if (Date.parse(value.expires_at) <= Date.parse(value.verified_at)) {
     context.addIssue({ code: 'custom', path: ['expires_at'], message: 'Read proof must expire after verification' })
+  }
+})
+
+export const optionsCertificationScenarioSchema = z.enum([
+  'exact-account-environment',
+  'exact-standard-contract',
+  'fresh-realtime-option-quote',
+  'bounded-preview',
+  'one-contract-limit-entry',
+  'duplicate-submit-suppressed',
+  'cancel-working-order-proved',
+  'full-close-no-short-proved',
+  'restart-reconciliation-proved',
+  'unknown-submit-contained',
+  'final-flat-zero-orders',
+])
+
+export const optionsCertificationEvidenceSchema = z.object({
+  certification_schema_version: z.literal(OPTIONS_CERTIFICATION_EVIDENCE_SCHEMA_VERSION),
+  certification_id: identifierSchema,
+  connection_id: identifierSchema,
+  connection_checksum: sha256Schema,
+  credential_generation: sha256Schema,
+  provider: optionsProviderSchema,
+  environment: z.enum(['paper', 'sandbox']),
+  account_ref: z.string().min(1).max(120),
+  adapter_id: identifierSchema,
+  adapter_version: z.string().regex(/^\d+\.\d+\.\d+$/),
+  provider_contract_version: identifierSchema,
+  max_test_debit: positiveDecimalStringSchema,
+  client_order_prefix: z.string().regex(/^tgcert-[a-z0-9-]{1,16}$/),
+  allowed_contract_id: identifierSchema,
+  allowed_provider_instrument_id: identifierSchema,
+  started_at: utcTimestampSchema,
+  completed_at: utcTimestampSchema,
+  expires_at: utcTimestampSchema,
+  scenarios: z.array(z.object({
+    scenario: optionsCertificationScenarioSchema,
+    status: z.enum(['pass', 'fail', 'blocked']),
+    evidence_checksum: sha256Schema,
+    detail: z.string().min(1).max(300),
+    observed_at: utcTimestampSchema,
+  }).strict()).length(optionsCertificationScenarioSchema.options.length),
+  mutation_count: nonnegativeIntegerSchema,
+  final_position_quantity: nonnegativeIntegerSchema,
+  final_working_order_count: nonnegativeIntegerSchema,
+  final_truth_evidence_checksum: sha256Schema,
+  eligible_level: z.enum(['options-sandbox-entry-certified']).nullable(),
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (!(Date.parse(value.started_at) <= Date.parse(value.completed_at)
+    && Date.parse(value.completed_at) < Date.parse(value.expires_at))) {
+    context.addIssue({ code: 'custom', path: ['completed_at'], message: 'Certification chronology is invalid' })
+  }
+  const expected = new Set(optionsCertificationScenarioSchema.options)
+  for (const result of value.scenarios) {
+    if (!expected.delete(result.scenario)) {
+      context.addIssue({ code: 'custom', path: ['scenarios'], message: 'Certification scenarios must be exact and unique' })
+    }
+  }
+  const eligible = value.scenarios.every((result) => result.status === 'pass')
+    && value.final_position_quantity === 0
+    && value.final_working_order_count === 0
+    && value.mutation_count >= 4
+  if ((value.eligible_level !== null) !== eligible) {
+    context.addIssue({ code: 'custom', path: ['eligible_level'], message: 'Certification eligibility overstates retained evidence' })
   }
 })
 
@@ -836,3 +903,5 @@ export type OptionsExecutionRecord = z.infer<typeof optionsExecutionRecordSchema
 export type OptionsProvider = z.infer<typeof optionsProviderSchema>
 export type OptionsConnection = z.infer<typeof optionsConnectionSchema>
 export type OptionsProviderReadProof = z.infer<typeof optionsProviderReadProofSchema>
+export type OptionsCertificationScenario = z.infer<typeof optionsCertificationScenarioSchema>
+export type OptionsCertificationEvidence = z.infer<typeof optionsCertificationEvidenceSchema>
