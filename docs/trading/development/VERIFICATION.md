@@ -519,6 +519,24 @@ Use exact claims:
 - “Safe for paper/live” requires the corresponding safety gate.
 
 Never collapse these into “done.”
+
+## Options Autopilot Slice 3A — Durable Debit Reservations — 2026-08-26
+
+- Account capacity is admitted under a cross-process account lock before any
+  provider delivery. Aggregate debit, daily initiated debit, open-position
+  count, and duplicate-contract ownership fail closed.
+- Full debit remains reserved through working, partial-fill, unknown, and
+  halted states. Capacity releases only from a checksum-bound exact flat/not-
+  sent proof persisted before the release transition.
+- Restart checks reject tampered, duplicated, or misnamed reservation/proof
+  evidence and repair crashed locks only under app single-instance startup
+  authority.
+- Verification: 12 focused options contract/store tests, 65 complete trading-
+  contract tests, 210 complete trading-execution tests, repository-wide
+  typecheck, and diff check passed.
+- Not yet proven: gateway/provider preview, provider submission or
+  reconciliation, broker paper execution, or live UI. Those remain later
+  slices.
 # Multi-account connections and Discord routes — 2026-07-31
 
 - Multiple prop firms/accounts can coexist; connection identity remains exact

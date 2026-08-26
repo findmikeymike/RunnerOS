@@ -262,18 +262,29 @@ describe('options contracts', () => {
       worst_case_debit: '130.65',
       account_capacity_snapshot_checksum: checksumB,
       active_reservation_set_checksum: checksum,
+      admission_request_checksum: checksumB,
       state: 'prepared',
       filled_quantity: 0,
       open_quantity: 0,
       created_at: now,
       updated_at: now,
       expires_at: '2026-08-26T15:00:30.000Z',
+      initiated_at: null,
       execution_record_checksum: null,
       terminal_proof_at: null,
+      terminal_proof_checksum: null,
       content_checksum: checksumB,
     }
     expect(optionsDebitReservationSchema.parse(reservation).state).toBe('prepared')
     expect(optionsDebitReservationSchema.safeParse({ ...reservation, worst_case_debit: '1' }).success).toBe(false)
+    expect(optionsDebitReservationSchema.safeParse({
+      ...reservation,
+      state: 'released',
+      filled_quantity: 1,
+      open_quantity: 1,
+      terminal_proof_at: now,
+      terminal_proof_checksum: checksum,
+    }).success).toBe(false)
 
     const preview = {
       preview_schema_version: OPTIONS_PROVIDER_PREVIEW_SCHEMA_VERSION,

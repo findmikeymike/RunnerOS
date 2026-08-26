@@ -17,6 +17,7 @@ export const OPTIONS_ENTRY_DECISION_SCHEMA_VERSION = 'options-entry-decision@1' 
 export const OPTIONS_PROVIDER_PREVIEW_SCHEMA_VERSION = 'options-provider-preview@1' as const
 export const OPTIONS_ORDER_INTENT_SCHEMA_VERSION = 'options-order-intent@1' as const
 export const OPTIONS_EXECUTION_RECEIPT_SCHEMA_VERSION = 'options-execution-receipt@1' as const
+export const OPTIONS_RESERVATION_RELEASE_PROOF_SCHEMA_VERSION = 'options-reservation-release-proof@1' as const
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD').refine((value) => {
   const parsed = new Date(`${value}T00:00:00.000Z`)
@@ -366,24 +367,89 @@ export const optionsDebitReservationSchema = z.object({
   worst_case_debit: positiveDecimalStringSchema,
   account_capacity_snapshot_checksum: sha256Schema,
   active_reservation_set_checksum: sha256Schema,
-  state: z.enum(['prepared', 'working', 'partially-filled', 'submit-unknown', 'open-position', 'releasing', 'released', 'halted']),
+  admission_request_checksum: sha256Schema,
+  state: z.enum(['prepared', 'submitting', 'working', 'partially-filled', 'submit-unknown', 'open-position', 'releasing', 'released', 'halted']),
   filled_quantity: nonnegativeIntegerSchema,
   open_quantity: nonnegativeIntegerSchema,
   created_at: utcTimestampSchema,
   updated_at: utcTimestampSchema,
   expires_at: utcTimestampSchema,
+  initiated_at: utcTimestampSchema.nullable(),
   execution_record_checksum: sha256Schema.nullable(),
   terminal_proof_at: utcTimestampSchema.nullable(),
+  terminal_proof_checksum: sha256Schema.nullable(),
   content_checksum: sha256Schema,
 }).strict().superRefine((value, context) => {
   if (value.filled_quantity > value.reserved_contracts || value.open_quantity > value.reserved_contracts) {
     context.addIssue({ code: 'custom', path: ['filled_quantity'], message: 'Reservation quantities cannot exceed the reserved contracts' })
+  }
+  if (value.open_quantity > value.filled_quantity) {
+    context.addIssue({ code: 'custom', path: ['open_quantity'], message: 'Open quantity cannot exceed confirmed fills' })
+  }
+  if (value.state === 'prepared'
+    && (value.filled_quantity !== 0
+      || value.open_quantity !== 0
+      || value.initiated_at !== null
+      || value.execution_record_checksum !== null)) {
+    context.addIssue({ code: 'custom', path: ['filled_quantity'], message: 'Prepared reservations cannot claim provider delivery or exposure' })
+  }
+  if (value.state === 'partially-filled' && (value.filled_quantity <= 0 || value.filled_quantity >= value.reserved_contracts)) {
+    context.addIssue({ code: 'custom', path: ['filled_quantity'], message: 'Partial-fill state requires a strict partial quantity' })
+  }
+  if (value.state === 'open-position' && value.open_quantity <= 0) {
+    context.addIssue({ code: 'custom', path: ['open_quantity'], message: 'Open-position state requires owned open quantity' })
   }
   if (compareDecimals(value.worst_case_debit, expectedDebit(value.limit_price, value.reserved_contracts, value.estimated_fees)) !== 0) {
     context.addIssue({ code: 'custom', path: ['worst_case_debit'], message: 'Worst-case debit does not match price, multiplier, quantity, and fees' })
   }
   if (Date.parse(value.updated_at) < Date.parse(value.created_at) || Date.parse(value.expires_at) <= Date.parse(value.created_at)) {
     context.addIssue({ code: 'custom', path: ['updated_at'], message: 'Reservation chronology is invalid' })
+  }
+  if (value.initiated_at !== null
+    && (Date.parse(value.initiated_at) < Date.parse(value.created_at)
+      || Date.parse(value.initiated_at) > Date.parse(value.updated_at))) {
+    context.addIssue({ code: 'custom', path: ['initiated_at'], message: 'Initiation time must fall within the reservation history' })
+  }
+  if (value.state !== 'prepared'
+    && value.state !== 'released'
+    && (value.initiated_at === null || value.execution_record_checksum === null)) {
+    context.addIssue({ code: 'custom', path: ['initiated_at'], message: 'Provider-delivery states require initiation and execution evidence' })
+  }
+  if ((value.terminal_proof_at === null) !== (value.terminal_proof_checksum === null)) {
+    context.addIssue({ code: 'custom', path: ['terminal_proof_at'], message: 'Terminal proof time and checksum must appear together' })
+  }
+  if (value.state === 'released' && value.terminal_proof_checksum === null) {
+    context.addIssue({ code: 'custom', path: ['terminal_proof_checksum'], message: 'Released capacity requires exact terminal proof' })
+  }
+  if (value.state === 'released' && value.open_quantity !== 0) {
+    context.addIssue({ code: 'custom', path: ['open_quantity'], message: 'Released capacity cannot retain open exposure' })
+  }
+  if (value.state !== 'released' && value.terminal_proof_checksum !== null) {
+    context.addIssue({ code: 'custom', path: ['terminal_proof_checksum'], message: 'Terminal release proof belongs only to released capacity' })
+  }
+})
+
+export const optionsReservationReleaseProofSchema = z.object({
+  proof_schema_version: z.literal(OPTIONS_RESERVATION_RELEASE_PROOF_SCHEMA_VERSION),
+  proof_id: identifierSchema,
+  reservation_id: identifierSchema,
+  reservation_checksum: sha256Schema,
+  connection_id: identifierSchema,
+  account_id: identifierSchema,
+  canonical_contract_id: identifierSchema,
+  provider_snapshot_checksum: sha256Schema,
+  provider_order_ids: z.array(identifierSchema),
+  open_position_quantity: z.literal(0),
+  working_order_count: z.literal(0),
+  delivery_state: z.enum(['not-sent', 'terminal-flat']),
+  proven_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (new Set(value.provider_order_ids).size !== value.provider_order_ids.length) {
+    context.addIssue({ code: 'custom', path: ['provider_order_ids'], message: 'Provider order IDs must be unique' })
+  }
+  if (value.delivery_state === 'not-sent' && value.provider_order_ids.length > 0) {
+    context.addIssue({ code: 'custom', path: ['provider_order_ids'], message: 'A not-sent proof cannot identify provider orders' })
   }
 })
 
@@ -491,7 +557,7 @@ export const optionsExecutionReceiptSchema = z.object({
   preview_checksum: sha256Schema.nullable(),
   reservation_id: identifierSchema,
   reservation_checksum: sha256Schema,
-  reservation_state: z.enum(['prepared', 'working', 'partially-filled', 'submit-unknown', 'open-position', 'releasing', 'released', 'halted']),
+  reservation_state: z.enum(['prepared', 'submitting', 'working', 'partially-filled', 'submit-unknown', 'open-position', 'releasing', 'released', 'halted']),
   provider_order_id: identifierSchema,
   provider_client_order_id: identifierSchema,
   submitted_at: utcTimestampSchema,
@@ -563,3 +629,4 @@ export type OptionsDebitReservation = z.infer<typeof optionsDebitReservationSche
 export type OptionsProviderPreview = z.infer<typeof optionsProviderPreviewSchema>
 export type OptionsOrderIntent = z.infer<typeof optionsOrderIntentSchema>
 export type OptionsExecutionReceipt = z.infer<typeof optionsExecutionReceiptSchema>
+export type OptionsReservationReleaseProof = z.infer<typeof optionsReservationReleaseProofSchema>
