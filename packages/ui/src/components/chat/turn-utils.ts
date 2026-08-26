@@ -52,6 +52,46 @@ function parseMessageAgentToolResult(message: Message): ActivityItem['agentMessa
   }
 }
 
+/**
+ * Background delegation can produce a final assistant reply containing only
+ * machine-facing handoff metadata. The lifecycle card already communicates
+ * that state, so rendering the echo as prose adds noise and leaks opaque IDs.
+ *
+ * Keep this intentionally narrow: the response must reference a receipt from
+ * this same turn and contain nothing except known handoff fields.
+ */
+function isBackgroundAgentMetadataEcho(textValue: string | undefined, receiptIds: Set<string>): boolean {
+  const text = textValue?.trim()
+  if (!text) return false
+  const normalizedText = text.replace(/`/g, '')
+  if (receiptIds.size === 0) return false
+
+  const echoedReceiptId = normalizedText.match(/\breceiptId:\s*([^\s,;|]+)/i)?.[1]
+  if (!echoedReceiptId || !receiptIds.has(echoedReceiptId)) return false
+
+  const remainder = normalizedText
+    .replace(/\breceiptId:\s*[^\s,;|]+/gi, '')
+    .replace(/\bchildSessionId:\s*[^\s,;|]+/gi, '')
+    .replace(/\bstatus:\s*(?:running|succeeded|failed|cancelled|timed-out|completed)\b/gi, '')
+    .replace(/[\s,;|]+/g, '')
+
+  return remainder.length === 0
+}
+
+function removeBackgroundAgentMetadataEchoes(messages: Message[]): Message[] {
+  const receiptIds = new Set(
+    messages
+      .map(message => message.agentMessage?.receiptId ?? parseMessageAgentToolResult(message)?.receiptId)
+      .filter((receiptId): receiptId is string => Boolean(receiptId))
+  )
+  if (receiptIds.size === 0) return messages
+
+  return messages.filter(message => (
+    message.role !== 'assistant'
+    || !isBackgroundAgentMetadataEcho(message.content, receiptIds)
+  ))
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -364,7 +404,9 @@ function extractTodosFromActivities(activities: ActivityItem[]): TodoItem[] | un
 export function groupMessagesByTurn(messages: Message[]): Turn[] {
   // Hidden system-generated messages wake the model but never become transcript
   // turns in desktop or viewer UIs.
-  const visibleMessages = compactPassiveAgentNotices(messages.filter(message => !message.hidden))
+  const visibleMessages = compactPassiveAgentNotices(
+    removeBackgroundAgentMetadataEchoes(messages.filter(message => !message.hidden))
+  )
   // Sort by timestamp for correct chronological order
   // This ensures correct turn grouping even if messages are added out of order during streaming
   const sortedMessages = [...visibleMessages].sort((a, b) => a.timestamp - b.timestamp)
