@@ -42,6 +42,31 @@ export class FixedDecimal {
     return new FixedDecimal(this.units * BigInt(value), this.displayScale)
   }
 
+  multiply(value: string | FixedDecimal, displayScale = INTERNAL_SCALE): FixedDecimal {
+    if (!Number.isInteger(displayScale) || displayScale < 0 || displayScale > INTERNAL_SCALE) {
+      throw new Error('Display precision must be between 0 and 6')
+    }
+    const other = FixedDecimal.from(value)
+    return new FixedDecimal((this.units * other.units) / INTERNAL_FACTOR, displayScale)
+  }
+
+  divide(value: string | FixedDecimal, displayScale = INTERNAL_SCALE): FixedDecimal {
+    if (!Number.isInteger(displayScale) || displayScale < 0 || displayScale > INTERNAL_SCALE) {
+      throw new Error('Display precision must be between 0 and 6')
+    }
+    const other = FixedDecimal.from(value)
+    if (other.units === 0n) throw new Error('Divisor must be nonzero')
+    return new FixedDecimal((this.units * INTERNAL_FACTOR) / other.units, displayScale)
+  }
+
+  divideInteger(value: number, displayScale = INTERNAL_SCALE): FixedDecimal {
+    if (!Number.isSafeInteger(value) || value === 0) throw new Error('Divisor must be a nonzero safe integer')
+    if (!Number.isInteger(displayScale) || displayScale < 0 || displayScale > INTERNAL_SCALE) {
+      throw new Error('Display precision must be between 0 and 6')
+    }
+    return new FixedDecimal(this.units / BigInt(value), displayScale)
+  }
+
   compare(value: string | FixedDecimal): number {
     const other = FixedDecimal.from(value)
     return this.units < other.units ? -1 : this.units > other.units ? 1 : 0
@@ -66,5 +91,18 @@ export class FixedDecimal {
       .padStart(INTERNAL_SCALE, '0')
       .slice(0, this.displayScale)
     return `${negative ? '-' : ''}${whole}.${fraction}`
+  }
+
+  toCanonicalString(minimumScale = 0): string {
+    if (!Number.isInteger(minimumScale) || minimumScale < 0 || minimumScale > INTERNAL_SCALE) {
+      throw new Error('Minimum scale must be between 0 and 6')
+    }
+    const rendered = this.toString()
+    if (!rendered.includes('.')) return minimumScale === 0 ? rendered : `${rendered}.${'0'.repeat(minimumScale)}`
+    const [whole, fraction = ''] = rendered.split('.')
+    let kept = fraction
+    while (kept.length > minimumScale && kept.endsWith('0')) kept = kept.slice(0, -1)
+    if (kept.length < minimumScale) kept = kept.padEnd(minimumScale, '0')
+    return kept.length === 0 ? whole! : `${whole}.${kept}`
   }
 }

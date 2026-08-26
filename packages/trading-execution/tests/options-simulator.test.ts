@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   FixedDecimal,
   FakeOptionsProvider,
+  resolveExactOptionContract,
 } from '../src/index.ts'
 
 describe('fixed option-premium arithmetic', () => {
@@ -15,6 +16,7 @@ describe('fixed option-premium arithmetic', () => {
   test('rejects excess precision and nonpositive ticks', () => {
     expect(() => FixedDecimal.from('1.1234567')).toThrow('precision')
     expect(() => FixedDecimal.from('1.2').roundDownToTick('0')).toThrow('positive')
+    expect(FixedDecimal.from('3').toCanonicalString(2)).toBe('3.00')
   })
 })
 
@@ -43,6 +45,20 @@ describe('fake options provider', () => {
     await expect(fake.resolveContract({
       underlying: 'SPY', expiration: '2026-09-18', strike: '650', right: 'call',
     })).rejects.toMatchObject({ code: 'OPTIONS_CONTRACT_AMBIGUOUS' })
+  })
+
+  test('refuses a resolver response that substitutes a different contract', async () => {
+    const fake = provider()
+    const exact = fake.contracts[0]!
+    await expect(resolveExactOptionContract({
+      resolveContract: async () => ({
+        ...exact,
+        canonical_id: 'USOPT:SPY:2026-09-18:P:650',
+        right: 'put',
+      }),
+    }, {
+      underlying: 'SPY', expiration: '2026-09-18', strike: '650', right: 'call',
+    })).rejects.toMatchObject({ code: 'OPTIONS_PROVIDER_DIVERGENCE' })
   })
 
   test('previews, submits once by client ID, fills, cancels, and exposes exact account truth', async () => {

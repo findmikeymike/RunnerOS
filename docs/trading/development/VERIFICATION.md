@@ -7,6 +7,29 @@ source_of_truth: true
 
 # Verification System
 
+## 2026-08-26 Options Autopilot Slice 2 — Parser, Resolver, Policy
+
+- Red-green proof: parser and policy suites first failed on missing exports,
+  then passed after pure brokerless implementation.
+- Options-focused result: 28 passed, 0 failed, 94 expectations.
+- Complete contract package: 65 passed, 0 failed, 164 expectations.
+- Complete execution package: 204 passed, 0 failed, 648 expectations.
+- `bun run typecheck:all`: passed.
+- `git diff --check`: passed.
+- Proven: exact long-call/put parsing with raw Discord lineage; explicit range
+  ceilings; source quantity retained only as evidence; multi-leg, short,
+  conditional, conversational, contradictory, incomplete, and invalid-calendar
+  refusal; exact resolver response comparison; deterministic session/DTE,
+  freshness, quote, spread, drift, size, fee, debit, and policy gates; bounded
+  marketable/passive limits; and provider price-band tick enforcement.
+- Rival fixes closed runtime artifact revalidation, invalid dates, duplicate
+  contract/price interpretations, account-size timing, off-tick quote behavior,
+  provider-versus-adapter identity coupling, future-resolved evidence, and
+  integer-premium formatting.
+- Not proven: durable route/source storage, account reservations, provider
+  preview or submission, IBKR/Webull connectivity, renderer UI, Electron
+  runtime, or any broker mutation.
+
 ## 2026-08-26 Options Autopilot Slice 1 — Contracts and Simulator
 
 - Red-green proof: the focused suites first failed on the absent options

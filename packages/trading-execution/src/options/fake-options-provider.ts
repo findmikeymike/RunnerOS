@@ -8,6 +8,7 @@ import {
 } from '@trade-god/contracts'
 
 import { FixedDecimal } from './fixed-decimal.ts'
+import { isOptionPriceOnTick } from './option-tick.ts'
 
 const CHECKSUM_A = 'a'.repeat(64)
 const CHECKSUM_B = 'b'.repeat(64)
@@ -266,7 +267,7 @@ export class FakeOptionsProvider {
     if (!contract || contract.provider_instrument_id !== request.provider_instrument_id) {
       throw new FakeOptionsProviderError('OPTIONS_CONTRACT_NOT_FOUND', 'Order does not identify an exact known contract')
     }
-    if (FixedDecimal.from(request.limit_price).roundDownToTick(contract.minimum_tick).compare(request.limit_price) !== 0) {
+    if (!isOptionPriceOnTick(contract, request.limit_price)) {
       throw new FakeOptionsProviderError('OPTIONS_PROVIDER_DIVERGENCE', 'Limit price is not on the provider tick')
     }
   }

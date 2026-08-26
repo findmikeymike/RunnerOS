@@ -18,7 +18,10 @@ export const OPTIONS_PROVIDER_PREVIEW_SCHEMA_VERSION = 'options-provider-preview
 export const OPTIONS_ORDER_INTENT_SCHEMA_VERSION = 'options-order-intent@1' as const
 export const OPTIONS_EXECUTION_RECEIPT_SCHEMA_VERSION = 'options-execution-receipt@1' as const
 
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD').refine((value) => {
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+}, 'Expected a real calendar date')
 const clockSchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, 'Expected HH:mm')
 const nonnegativeDecimalStringSchema = decimalStringSchema.refine((value) => !value.startsWith('-'), {
   message: 'Expected a nonnegative decimal string',
@@ -159,6 +162,9 @@ export const optionContractIdentitySchema = z.object({
   if (compareDecimals(value.increment_bands[0]!.minimum_price, '0') !== 0) {
     context.addIssue({ code: 'custom', path: ['increment_bands', 0, 'minimum_price'], message: 'Increment bands must begin at zero' })
   }
+  if (compareDecimals(value.increment_bands[0]!.increment, value.minimum_tick) !== 0) {
+    context.addIssue({ code: 'custom', path: ['minimum_tick'], message: 'Minimum tick must match the first increment band' })
+  }
   for (let index = 1; index < value.increment_bands.length; index += 1) {
     if (compareDecimals(value.increment_bands[index]!.minimum_price, value.increment_bands[index - 1]!.minimum_price) <= 0) {
       context.addIssue({ code: 'custom', path: ['increment_bands', index, 'minimum_price'], message: 'Increment bands must be strictly increasing' })
@@ -260,6 +266,7 @@ export const optionsEntryPolicySchema = z.object({
     custody_certification_checksum: sha256Schema,
   }).strict(),
   environment: z.literal('paper'),
+  provider_slug: identifierSchema,
   adapter_id: identifierSchema,
   required_certification: identifierSchema,
   certification_checksum: sha256Schema,

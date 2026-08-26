@@ -145,7 +145,8 @@ const policy = {
     custody_certification_checksum: checksum,
   },
   environment: 'paper',
-  adapter_id: 'fake-options',
+  provider_slug: 'fake-options',
+  adapter_id: 'fake-options-adapter',
   required_certification: 'options-sandbox-entry-certified',
   certification_checksum: checksum,
   connection_id: 'connection-options-paper',
@@ -166,6 +167,7 @@ describe('options contracts', () => {
       ...signal,
       provenance: { ...signal.provenance, received_at: '2026-08-26T14:59:59.000Z' },
     }).success).toBe(false)
+    expect(discordOptionsSignalSchema.safeParse({ ...signal, expiration: '2026-02-30' }).success).toBe(false)
   })
 
   test('rejects premium ranges whose high is below the low', () => {
@@ -180,6 +182,7 @@ describe('options contracts', () => {
     expect(optionContractIdentitySchema.safeParse({ ...contract, multiplier: 10 }).success).toBe(false)
     expect(optionContractIdentitySchema.safeParse({ ...contract, standard_deliverable: false }).success).toBe(false)
     expect(optionContractIdentitySchema.safeParse({ ...contract, canonical_id: 'USOPT:SPY:2026-09-18:P:650' }).success).toBe(false)
+    expect(optionContractIdentitySchema.safeParse({ ...contract, minimum_tick: '0.05' }).success).toBe(false)
   })
 
   test('accepts a fresh realtime quote and rejects crossed or delayed evidence', () => {
