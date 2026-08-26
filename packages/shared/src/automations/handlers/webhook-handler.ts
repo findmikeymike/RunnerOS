@@ -30,6 +30,10 @@ export interface WebhookHandlerOptions {
   onWebhookResults?: (results: WebhookActionResult[]) => void;
   /** Called when a webhook execution fails */
   onError?: (event: AutomationEvent, error: Error) => void;
+  /** Fail-closed Team runner gate for deferred external retries. */
+  canRunBackgroundWork: () => boolean;
+  /** Shared-folder mode blocks arbitrary outbound effects without receiver-enforced idempotency. */
+  canExecuteExternalEffects: () => boolean;
 }
 
 /** A webhook action paired with the matcher that triggered it */
@@ -115,7 +119,10 @@ export class WebhookHandler implements AutomationHandler {
   constructor(options: WebhookHandlerOptions, configProvider: AutomationsConfigProvider) {
     this.options = options;
     this.configProvider = configProvider;
-    this.retryScheduler = new RetryScheduler({ workspaceRootPath: options.workspaceRootPath });
+    this.retryScheduler = new RetryScheduler({
+      workspaceRootPath: options.workspaceRootPath,
+      canRunBackgroundWork: () => options.canRunBackgroundWork() && options.canExecuteExternalEffects(),
+    });
   }
 
   /**
@@ -170,7 +177,17 @@ export class WebhookHandler implements AutomationHandler {
       const task = webhookTasks[i]!;
       const resolvedUrl = expandEnvVars(task.action.url, env);
 
-      if (!this.rateLimiter.allow(resolvedUrl)) {
+      if (!this.options.canExecuteExternalEffects()) {
+        results[i] = {
+          type: 'webhook',
+          url: resolvedUrl,
+          statusCode: 0,
+          success: false,
+          error: 'Automatic outbound webhooks are disabled in Shared Folder Team Mode until the receiver enforces idempotency.',
+          durationMs: 0,
+          attempts: 0,
+        };
+      } else if (!this.rateLimiter.allow(resolvedUrl)) {
         log.debug(`[WebhookHandler] Rate-limited: ${redactUrl(resolvedUrl)}`);
         results[i] = {
           type: 'webhook',

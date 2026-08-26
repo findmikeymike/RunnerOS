@@ -192,7 +192,28 @@ export const CHANNEL_MAP = {
   // Workspace Settings
   getWorkspaceSettings: invoke(RPC_CHANNELS.workspace.SETTINGS_GET),
   updateWorkspaceSetting: invoke(RPC_CHANNELS.workspace.SETTINGS_UPDATE),
+  getWorkspaceTeamStatus: invoke(RPC_CHANNELS.workspace.TEAM_STATUS_GET),
+  enableWorkspaceTeamMode: invoke(RPC_CHANNELS.workspace.TEAM_ENABLE_IN_PLACE),
+  joinWorkspaceTeam: invoke(RPC_CHANNELS.workspace.TEAM_JOIN),
+  moveWorkspaceToSharedFolder: invoke(RPC_CHANNELS.workspace.TEAM_MOVE_TO_SHARED_FOLDER),
+  setWorkspaceTeamRunner: invoke(RPC_CHANNELS.workspace.TEAM_SET_RUNNER),
+  rotateWorkspaceOwnerRecoveryCode: invoke(RPC_CHANNELS.workspace.TEAM_OWNER_RECOVERY_ROTATE),
+  recoverWorkspaceOwner: invoke(RPC_CHANNELS.workspace.TEAM_OWNER_RECOVERY_RECOVER),
+  approveWorkspaceOwnerRecovery: invoke(RPC_CHANNELS.workspace.TEAM_OWNER_RECOVERY_APPROVE),
+  getWorkspaceTeamPathOverrides: invoke(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDES_GET),
+  setWorkspaceTeamPathOverride: invoke(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDE_SET),
+  clearWorkspaceTeamPathOverride: invoke(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDE_CLEAR),
+  listRecordConflicts: invoke(RPC_CHANNELS.records.LIST_CONFLICTS),
+  scanRecordProviderConflicts: invoke(RPC_CHANNELS.records.SCAN_PROVIDER_CONFLICTS),
+  detectRecordClobbers: invoke(RPC_CHANNELS.records.DETECT_CLOBBERS),
   getSelfEditTarget: invoke(RPC_CHANNELS.workspace.SELF_EDIT_TARGET_GET),
+
+  // Community records
+  getCommunity: invoke(RPC_CHANNELS.community.GET),
+  addCommunityContact: invoke(RPC_CHANNELS.community.ADD_CONTACT),
+  importCommunityCsv: invoke(RPC_CHANNELS.community.IMPORT_CSV),
+  createCommunityEmailJob: invoke(RPC_CHANNELS.community.CREATE_EMAIL_JOB),
+  suppressCommunityContact: invoke(RPC_CHANNELS.community.SUPPRESS),
 
   // Folder dialog
   openFolderDialog: invoke(RPC_CHANNELS.dialog.OPEN_FOLDER),
@@ -435,6 +456,7 @@ export const CHANNEL_MAP = {
   getHqRecommendationDetail: invoke(RPC_CHANNELS.hqState.GET_RECOMMENDATION_DETAIL),
   setHqRecommendationUsefulness: invoke(RPC_CHANNELS.hqState.SET_RECOMMENDATION_USEFULNESS),
   refreshHqState: invoke(RPC_CHANNELS.hqState.REFRESH),
+  onWorkspaceSyncChanged: listener(RPC_CHANNELS.workspaceSync.CHANGED),
   getScheduledWork: invoke(RPC_CHANNELS.scheduledWork.GET),
   mutateScheduledWork: invoke(RPC_CHANNELS.scheduledWork.MUTATE),
   scheduleCampaignWork: invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN),

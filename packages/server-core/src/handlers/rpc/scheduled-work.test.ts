@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import * as actualConfig from '@craft-agent/shared/config'
 import * as actualWorkspaceContext from '@craft-agent/shared/workspace-context'
 import * as actualAgentDefinitions from '@craft-agent/shared/agent-definitions'
+import * as actualWorkspaces from '@craft-agent/shared/workspaces'
 import {
   CAMPAIGN_CALENDAR_CONTEXT_SLUG,
   createCampaignCalendarItem,
@@ -28,6 +29,7 @@ let contextDocs = new Map<string, LoadedContextDoc>()
 let upsertCalls: string[] = []
 let failOnSlug: string | null = null
 let activeAgentSlugs = ['content-genius']
+const assertTeamPermission = mock((_rootPath: string, _action: string) => ({ allowed: true }))
 
 mock.module('@craft-agent/shared/config', () => ({
   ...actualConfig,
@@ -75,6 +77,11 @@ mock.module('@craft-agent/shared/agent-definitions', () => ({
   loadGlobalAgent: (slug: string) => slug === 'content-genius'
     ? { slug, metadata: { name: 'Content Genius', description: 'Writes campaign content.' }, systemPrompt: 'Write.', path: '/tmp/content-genius', source: 'global' }
     : actualAgentDefinitions.loadGlobalAgent(slug),
+}))
+
+mock.module('@craft-agent/shared/workspaces', () => ({
+  ...actualWorkspaces,
+  assertTeamPermission,
 }))
 
 function ctx(): RequestContext {
@@ -292,6 +299,7 @@ beforeEach(() => {
   upsertCalls = []
   failOnSlug = null
   activeAgentSlugs = ['content-genius']
+  assertTeamPermission.mockClear()
 })
 
 describe('scheduled-work RPC handler', () => {
@@ -310,6 +318,7 @@ describe('scheduled-work RPC handler', () => {
     expect(pushCalls[0]).toMatchObject({ channel: RPC_CHANNELS.workspaceContext.CHANGED })
     expect(pushCalls[0]?.args[0]).toBe(workspace.id)
     expect((pushCalls[0]?.args[1] as LoadedContextDoc[]).map((doc) => doc.slug)).toEqual([SCHEDULED_WORK_CONTEXT_SLUG, 'hq-state-of-play'])
+    expect(assertTeamPermission).toHaveBeenCalledWith(workspaceRoot, 'files.write')
 
     const getResult = await invoke(RPC_CHANNELS.scheduledWork.GET, workspace.id)
     expect(getResult).toMatchObject({
@@ -465,6 +474,7 @@ describe('scheduled-work RPC handler', () => {
 
     const approved = await invoke(RPC_CHANNELS.scheduledWork.APPROVE_CAMPAIGN_SOCIAL, workspace.id, { orderId: order.id, calendarItemId: item.id, expectedUpdatedAt: order.updatedAt })
     expect(approved).toMatchObject({ order: { socialApproval: { actionId: 'act_social-order-1', actionDigest } } })
+    expect(assertTeamPermission).toHaveBeenCalledWith(workspaceRoot, 'social.publish.approve')
   })
 
   test('scheduleCampaign rejects client-supplied terminal history in a new shell', async () => {

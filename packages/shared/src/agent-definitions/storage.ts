@@ -379,25 +379,17 @@ export function setAgentActive(workspaceRootPath: string, slug: string, active: 
 
 /**
  * Load the agents that are currently activated in a workspace.
- * Skips slugs whose AGENT.md no longer exists in the global library
- * (silent self-heal — a deleted-from-library agent is treated as inactive).
+ * Skips slugs whose AGENT.md does not exist on this machine. The shared
+ * activation manifest is never rewritten during reads: another teammate may
+ * have a custom agent installed that is not present locally.
  */
 export function loadActivatedAgents(workspaceRootPath: string, options?: AgentStorageOptions): LoadedAgent[] {
   const manifest = readActivatedAgents(workspaceRootPath);
   const out: LoadedAgent[] = [];
-  const retained: string[] = [];
   for (const slug of manifest.active) {
     const agent = loadGlobalAgent(slug, options);
     if (agent) {
       out.push(agent);
-      retained.push(slug);
-    }
-  }
-  if (retained.length !== manifest.active.length) {
-    try {
-      writeActivatedAgents(workspaceRootPath, retained);
-    } catch {
-      // Loading must stay best-effort; stale entries will be skipped again later.
     }
   }
   return out;

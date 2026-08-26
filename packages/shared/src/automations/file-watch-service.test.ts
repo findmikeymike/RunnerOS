@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync, unlinkSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { FileWatchService, globToRegex } from './file-watch-service.ts';
+import { FileWatchService, globToRegex, isIgnoredFileWatchPath } from './file-watch-service.ts';
 import type { AutomationMatcher } from './types.ts';
 import type { FileWatchPayload } from './event-bus.ts';
 
@@ -42,6 +42,16 @@ describe('globToRegex', () => {
 
   test('throws on malformed character class ranges', () => {
     expect(() => globToRegex('[z-a].txt')).toThrow();
+  });
+});
+
+describe('file-watch provider noise filtering', () => {
+  test('ignores sync placeholders, temporary files, and provider conflict copies', () => {
+    expect(isIgnoredFileWatchPath('records/fan (conflicted copy).json')).toBe(true);
+    expect(isIgnoredFileWatchPath('assets/photo.jpg.icloud')).toBe(true);
+    expect(isIgnoredFileWatchPath('docs/._brief.md')).toBe(true);
+    expect(isIgnoredFileWatchPath('.craft-migrating-123/config.json')).toBe(true);
+    expect(isIgnoredFileWatchPath('docs/brief.md')).toBe(false);
   });
 });
 

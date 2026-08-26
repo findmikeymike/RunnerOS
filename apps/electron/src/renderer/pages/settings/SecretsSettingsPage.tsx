@@ -10,6 +10,7 @@ import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { LoadedSource, UserSecretSummary, ZeroStatus } from '../../../shared/types'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { navigate, routes } from '@/lib/navigate'
+import { PRODUCT_NAME } from '@/lib/product-identity'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -764,6 +765,8 @@ export default function SecretsSettingsPage() {
   const [expandedServiceId, setExpandedServiceId] = React.useState<string | null>(null)
   const [zeroAction, setZeroAction] = React.useState<string | null>(null)
   const [zeroImportOpen, setZeroImportOpen] = React.useState(false)
+  const [canManageSecrets, setCanManageSecrets] = React.useState<boolean | null>(null)
+  const [accessMessage, setAccessMessage] = React.useState('Only the workspace Owner can view or change saved keys and connected service credentials.')
 
   const services = React.useMemo(
     () => SERVICES.filter((service) => service.group === selectedGroup),
@@ -780,15 +783,35 @@ export default function SecretsSettingsPage() {
 
   const load = React.useCallback(async () => {
     setLoading(true)
+    setCanManageSecrets(null)
+    setSecrets([])
+    setZero(null)
+    setSources([])
     try {
+      if (!activeWorkspaceId) {
+        setAccessMessage('Select an active workspace to manage saved keys and connected service credentials.')
+        setCanManageSecrets(false)
+        return
+      }
+      const teamStatus = await window.electronAPI.getWorkspaceTeamStatus(activeWorkspaceId)
+      const canManage = teamStatus.currentRole === 'owner'
+      setAccessMessage('Only the workspace Owner can view or change saved keys and connected service credentials.')
+      setCanManageSecrets(canManage)
+      if (!canManage) return
       const [secretRows, zeroStatus, sourceRows] = await Promise.all([
-        window.electronAPI.listSecrets(),
-        window.electronAPI.getZeroStatus(),
-        activeWorkspaceId ? window.electronAPI.getSources(activeWorkspaceId).catch(() => [] as LoadedSource[]) : Promise.resolve([] as LoadedSource[]),
+        window.electronAPI.listSecrets(activeWorkspaceId),
+        window.electronAPI.getZeroStatus(activeWorkspaceId),
+        window.electronAPI.getSources(activeWorkspaceId).catch(() => [] as LoadedSource[]),
       ])
       setSecrets(secretRows)
       setZero(zeroStatus)
       setSources(sourceRows)
+    } catch (error) {
+      setAccessMessage('Owner access could not be verified, so keys and connected services remain hidden.')
+      setCanManageSecrets(false)
+      toast.error('Could not load keys and services', {
+        description: error instanceof Error ? error.message : String(error),
+      })
     } finally {
       setLoading(false)
     }
@@ -821,15 +844,30 @@ export default function SecretsSettingsPage() {
   }, [])
 
   const remove = async (secretName: string) => {
-    await window.electronAPI.deleteSecret(secretName)
-    toast.success('Secret deleted')
-    await load()
+    if (!activeWorkspaceId) {
+      toast.error('Select an active workspace before deleting secrets')
+      return
+    }
+    try {
+      const result = await window.electronAPI.deleteSecret(secretName, activeWorkspaceId)
+      if (!result.success) {
+        toast.error(result.error || 'Could not delete secret')
+        return
+      }
+      toast.success('Secret deleted')
+      await load()
+    } catch (error) {
+      toast.error('Could not delete secret', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
   const installZero = async () => {
+    if (!activeWorkspaceId) return
     setInstalling(true)
     try {
-      const result = await window.electronAPI.installZero()
+      const result = await window.electronAPI.installZero(activeWorkspaceId)
       if (!result.success) {
         toast.error(result.error || 'Zero install failed')
         return
@@ -842,9 +880,10 @@ export default function SecretsSettingsPage() {
   }
 
   const initZero = async () => {
+    if (!activeWorkspaceId) return
     setZeroAction('init')
     try {
-      const result = await window.electronAPI.initZero()
+      const result = await window.electronAPI.initZero(activeWorkspaceId)
       if (!result.success) {
         toast.error(result.error || 'Zero init failed')
         return
@@ -857,9 +896,10 @@ export default function SecretsSettingsPage() {
   }
 
   const fundZero = async () => {
+    if (!activeWorkspaceId) return
     setZeroAction('fund')
     try {
-      const result = await window.electronAPI.fundZero()
+      const result = await window.electronAPI.fundZero(activeWorkspaceId)
       if (!result.success) {
         toast.error(result.error || 'Could not create Zero funding link')
         return
@@ -877,9 +917,10 @@ export default function SecretsSettingsPage() {
   }
 
   const claimZeroWelcome = async () => {
+    if (!activeWorkspaceId) return
     setZeroAction('welcome')
     try {
-      const result = await window.electronAPI.claimZeroWelcome()
+      const result = await window.electronAPI.claimZeroWelcome(activeWorkspaceId)
       if (!result.success) {
         toast.error(result.error || 'Could not claim Zero welcome bonus')
         return
@@ -924,7 +965,11 @@ export default function SecretsSettingsPage() {
           }
           await window.electronAPI.saveSourceCredentials(activeWorkspaceId, preset.sourceSlug, value)
         } else if (preset.storage === 'env') {
-          const result = await window.electronAPI.saveSecret(preset.name, value)
+          if (!activeWorkspaceId) {
+            toast.error('Select an active workspace before saving secrets')
+            return
+          }
+          const result = await window.electronAPI.saveSecret(preset.name, value, activeWorkspaceId)
           if (!result.success) {
             toast.error(result.error || `Could not save ${preset.label}`)
             return
@@ -940,12 +985,20 @@ export default function SecretsSettingsPage() {
       setExpandedServiceId(null)
       toast.success(`${service.title} saved`)
       await load()
+    } catch (error) {
+      toast.error(`Could not save ${service.title}`, {
+        description: error instanceof Error ? error.message : String(error),
+      })
     } finally {
       setBusyServiceId(null)
     }
   }
 
   const testService = async (service: SecretService) => {
+    if (!activeWorkspaceId) {
+      toast.error('Select an active workspace before testing this connection')
+      return
+    }
     const missing = missingRequiredPresets(service, savedByName, sourceBySlug, draftValues)
     if (missing.length > 0) {
       toast.error(`${service.title} is missing ${missing[0]!.label}`)
@@ -985,7 +1038,7 @@ export default function SecretsSettingsPage() {
     if (service.id === 'genius') {
       setBusyServiceId(service.id)
       try {
-        const result = await window.electronAPI.testGeniusAccessToken(draftValues.GENIUS_ACCESS_TOKEN?.trim())
+        const result = await window.electronAPI.testGeniusAccessToken(activeWorkspaceId, draftValues.GENIUS_ACCESS_TOKEN?.trim())
         if (!result.success) {
           toast.error(result.error || 'Genius token test failed')
           return
@@ -999,6 +1052,24 @@ export default function SecretsSettingsPage() {
     toast.success(`${service.title} setup looks ready`)
   }
 
+  if (canManageSecrets !== true) {
+    return (
+      <div className="flex h-full flex-col">
+        <PanelHeader />
+        <div className="mx-auto flex w-full max-w-2xl flex-1 items-center px-6 py-10">
+          <SettingsCard className="w-full">
+            <div className="p-6">
+              <h1 className="text-lg font-semibold text-white">{canManageSecrets === null ? 'Checking access…' : 'Owner access required'}</h1>
+              <p className="mt-2 text-sm leading-6 text-white/48">
+                {canManageSecrets === null ? 'Keys and connected services stay hidden until access is verified.' : accessMessage}
+              </p>
+            </div>
+          </SettingsCard>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full flex-col">
       <PanelHeader />
@@ -1009,7 +1080,7 @@ export default function SecretsSettingsPage() {
               <div>
                 <h1 className="text-2xl font-semibold text-white">Keys and services</h1>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-white/48">
-                  Choose a category, connect the service, then save and test the setup. Keys are stored in RunnerOS encrypted credential storage.
+                  Choose a category, connect the service, then save and test the setup. Keys are stored in {PRODUCT_NAME} encrypted credential storage.
                 </p>
               </div>
               <Button variant="outline" size="sm" onClick={load} disabled={loading}>

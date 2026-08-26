@@ -70,6 +70,7 @@ describe('AgentMessageService', () => {
       parentSessionId: 'parent',
       callerAgentSlug: 'researcher',
       parentPermissionMode: 'ask',
+      automatedAncestry: true,
     }, {
       agentSlug: 'reviewer',
       task: 'Review this.',
@@ -81,6 +82,7 @@ describe('AgentMessageService', () => {
     expect(result.status).toBe('succeeded');
     expect(result.childSessionId).toBe('child-1');
     expect(created[0]).toMatchObject({ hidden: true, permissionMode: 'safe', labels: ['agent-message-depth:1'] });
+    expect(created[0]).toMatchObject({ launchReceipt: { automatedAncestry: true } });
     expect(created[0]).toMatchObject({
       launchReceipt: {
         injected: {

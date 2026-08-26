@@ -190,6 +190,12 @@ export interface CoreBackendConfig {
   /** Saved Agent skills applied implicitly to every turn in this session. */
   agentSkillSlugs?: string[];
 
+  /** Fail-closed external operator policy supplied by the host runtime. */
+  teamAutomationPolicy?: {
+    enabled: boolean;
+    automatedAncestry: boolean;
+  };
+
   /** Workspace-level automation system for user-defined automations (automations.json) */
   automationSystem?: AutomationSystem;
 

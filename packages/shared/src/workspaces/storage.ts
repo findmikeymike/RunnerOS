@@ -30,7 +30,9 @@ import type {
   CreateWorkspaceInput,
   LoadedWorkspace,
   WorkspaceSummary,
+  WorkspaceStorageConfig,
 } from './types.ts';
+import { WORKSPACE_FORMAT_VERSION } from './types.ts';
 
 const CONFIG_DIR = RUNTIME_IDENTITY.dataRoot;
 const DEFAULT_WORKSPACES_DIR = RUNTIME_IDENTITY.workspacesRoot;
@@ -77,6 +79,10 @@ export function getWorkspaceSourcesPath(rootPath: string): string {
  * @param rootPath - Absolute path to workspace root folder
  */
 export function getWorkspaceSessionsPath(rootPath: string): string {
+  const config = loadWorkspaceConfig(rootPath);
+  if (config?.storage?.mode === 'shared-folder') {
+    return join(process.env.CRAFT_CONFIG_DIR || CONFIG_DIR, 'team', config.id, 'private-sessions');
+  }
   return join(rootPath, 'sessions');
 }
 
@@ -155,13 +161,22 @@ export function loadWorkspaceConfig(rootPath: string): WorkspaceConfig | null {
   }
 }
 
+export interface SaveWorkspaceConfigOptions {
+  allowMovedTombstoneWrite?: boolean;
+}
+
 /**
  * Save workspace config.json to a workspace folder
  * @param rootPath - Absolute path to workspace root folder
  */
-export function saveWorkspaceConfig(rootPath: string, config: WorkspaceConfig): void {
+export function saveWorkspaceConfig(rootPath: string, config: WorkspaceConfig, options: SaveWorkspaceConfigOptions = {}): void {
   if (!existsSync(rootPath)) {
     mkdirSync(rootPath, { recursive: true });
+  }
+
+  const existing = loadWorkspaceConfig(rootPath);
+  if (existing?.movedTo?.path && !options.allowMovedTombstoneWrite) {
+    throw new Error(`Workspace moved to ${existing.movedTo.path}`);
   }
 
   // Convert paths to portable form for cross-machine compatibility
@@ -333,9 +348,11 @@ export function createWorkspaceAtPath(
   };
 
   const config: WorkspaceConfig = {
+    formatVersion: WORKSPACE_FORMAT_VERSION,
     id: `ws_${randomUUID().slice(0, 8)}`,
     name,
     slug,
+    storage: { mode: 'solo', portabilityVersion: 1 } satisfies WorkspaceStorageConfig,
     defaults: workspaceDefaults,
     localMcpServers: globalDefaults.workspaceDefaults.localMcpServers,
     createdAt: now,

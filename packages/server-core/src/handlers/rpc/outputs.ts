@@ -158,6 +158,8 @@ export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): 
   server.handle(
     RPC_CHANNELS.outputs.DELETE,
     async (_ctx, workspaceId: string, outputId: string): Promise<boolean> => {
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces');
+      assertTeamPermission(resolveRootPath(workspaceId), 'files.write');
       return serviceFor(server).delete(workspaceId, outputId);
     },
   );
@@ -182,6 +184,8 @@ export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): 
     RPC_CHANNELS.outputs.GET_VISUAL_BOARD,
     async (_ctx, workspaceId: string, sessionId: string): Promise<{ output: OutputManifest; board: VisualBoardSnapshot }> => {
       assertLocalWorkspace(workspaceId, 'Get visual board');
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces');
+      assertTeamPermission(resolveRootPath(workspaceId), 'files.write');
       return serviceFor(server).getOrCreateVisualBoard(workspaceId, sessionId);
     },
   );
@@ -195,6 +199,8 @@ export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): 
       snapshot: VisualBoardSnapshot,
     ): Promise<{ output: OutputManifest; board: VisualBoardSnapshot }> => {
       assertLocalWorkspace(workspaceId, 'Save visual board');
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces');
+      assertTeamPermission(resolveRootPath(workspaceId), 'files.write');
       return serviceFor(server).saveVisualBoard(workspaceId, sessionId, snapshot);
     },
   );
@@ -208,6 +214,8 @@ export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): 
       input: VisualSurfaceEventInput,
     ): Promise<ApplyVisualSurfaceEventResult> => {
       assertLocalWorkspace(workspaceId, 'Apply visual surface event');
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces');
+      assertTeamPermission(resolveRootPath(workspaceId), 'files.write');
       return serviceFor(server).applyVisualSurfaceEvent(workspaceId, sessionId, input, 'user');
     },
   );
@@ -224,6 +232,8 @@ export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): 
     RPC_CHANNELS.outputs.RECORD_VISUAL_CAPTURE,
     async (_ctx, input: Parameters<OutputService['recordVisualCapture']>[0]): Promise<ReturnType<OutputService['recordVisualCapture']>> => {
       assertLocalWorkspace(input.workspaceId, 'Record visual capture');
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces');
+      assertTeamPermission(resolveRootPath(input.workspaceId), 'files.write');
       return serviceFor(server).recordVisualCapture(input);
     },
   );
@@ -260,6 +270,8 @@ export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): 
     RPC_CHANNELS.outputs.WRITE_ASSET_TEXT,
     async (_ctx, workspaceId: string, outputId: string, assetId: string, content: string): Promise<boolean> => {
       assertLocalWorkspace(workspaceId, 'Write output asset');
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces');
+      assertTeamPermission(resolveRootPath(workspaceId), 'files.write');
       if (typeof content !== 'string') throw new Error('Output asset content must be a string.');
       const service = serviceFor(server);
       const output = service.get(workspaceId, outputId);

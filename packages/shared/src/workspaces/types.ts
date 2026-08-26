@@ -28,10 +28,105 @@ export interface LocalMcpConfig {
   enabled: boolean;
 }
 
+export const WORKSPACE_FORMAT_VERSION = 1;
+
+export type WorkspaceStorageMode = 'solo' | 'shared-folder' | 'git';
+
+export type SharedFolderProvider =
+  | 'google-drive'
+  | 'dropbox'
+  | 'icloud-drive'
+  | 'onedrive'
+  | 'syncthing'
+  | 'generic-folder';
+
+export interface SoloWorkspaceStorageConfig {
+  mode: 'solo';
+  portabilityVersion: 1;
+}
+
+export interface SharedFolderWorkspaceStorageConfig {
+  mode: 'shared-folder';
+  portabilityVersion: 1;
+  provider: SharedFolderProvider;
+  providerLabel?: string;
+  sharedRootId: string;
+  enabledAt: string;
+  movedFrom?: string;
+  vaultPolicy: 'copy-into-workspace' | 'allow-external-with-overrides';
+  pathPolicy: 'relative-required';
+}
+
+export interface GitWorkspaceStorageConfig {
+  mode: 'git';
+  portabilityVersion: 1;
+  remoteUrl?: string;
+  branch?: string;
+  vaultPolicy: 'git-lfs' | 'external-media-folder' | 'text-only';
+  pathPolicy: 'relative-required';
+}
+
+export type WorkspaceStorageConfig =
+  | SoloWorkspaceStorageConfig
+  | SharedFolderWorkspaceStorageConfig
+  | GitWorkspaceStorageConfig;
+
+export interface WorkspaceTeamRunnerHandover {
+  from?: string;
+  to: string;
+  initiatedAt: string;
+  revision: number;
+  runnerEpoch?: number;
+}
+
+export type WorkspaceTeamRole = 'owner' | 'editor';
+
+export interface WorkspaceTeamMember {
+  memberId: string;
+  displayName: string;
+  role: WorkspaceTeamRole;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface WorkspaceOwnerRecoveryConfig {
+  generationId: string;
+  verifierHash?: string;
+  createdAt: string;
+  state: 'armed' | 'claiming' | 'contested' | 'spent';
+  winningClaimId?: string;
+}
+
+export interface WorkspaceTeamConfig {
+  enabled: boolean;
+  teamId: string;
+  revision: number;
+  members?: WorkspaceTeamMember[];
+  /** SHA-256 of a high-entropy, one-time Owner recovery code. */
+  ownerRecoveryHash?: string;
+  ownerRecoveryCreatedAt?: string;
+  ownerRecovery?: WorkspaceOwnerRecoveryConfig;
+  runnerMachineId?: string;
+  runnerEpoch?: number;
+  runnerHandover?: WorkspaceTeamRunnerHandover;
+  automationsPolicy: 'runner-only' | 'manual-only';
+  backgroundTriggersEnabled: boolean;
+  runnerMissedTickPolicy?: 'skip' | 'run-once';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkspaceMovedToTombstone {
+  path: string;
+  migrationId: string;
+  movedAt: string;
+}
+
 /**
  * Workspace configuration (stored in config.json)
  */
 export interface WorkspaceConfig {
+  formatVersion?: number;
   id: string;
   name: string;
   slug: string; // Folder name (URL-safe)
@@ -63,6 +158,21 @@ export interface WorkspaceConfig {
    * developer settings when present.
    */
   developer?: DeveloperConfig;
+
+  /**
+   * Local-first storage mode metadata. Missing means legacy solo workspace.
+   */
+  storage?: WorkspaceStorageConfig;
+
+  /**
+   * Team-mode metadata. Generated mirror lives at team/config.json.
+   */
+  team?: WorkspaceTeamConfig;
+
+  /**
+   * Tombstone left behind at an old workspace path after moving to shared storage.
+   */
+  movedTo?: WorkspaceMovedToTombstone;
 
   createdAt: number;
   updatedAt: number;

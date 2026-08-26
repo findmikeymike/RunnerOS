@@ -26,6 +26,7 @@ import {
   SettingsCard,
 } from '@/components/settings'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
+import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
 import { getDocUrl } from '@craft-agent/shared/docs/doc-links'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import { productDataPath } from '@/lib/product-identity'
@@ -200,6 +201,12 @@ export default function PermissionsSettingsPage() {
 
     return unsubscribe
   }, [])
+
+  const refreshWorkspacePermissions = React.useCallback(async () => {
+    if (!activeWorkspaceId) return
+    setCustomConfig(await window.electronAPI.getWorkspacePermissionsConfig(activeWorkspaceId))
+  }, [activeWorkspaceId])
+  useWorkspaceSyncRefresh(activeWorkspaceId, ['permissions'], refreshWorkspacePermissions)
 
   return (
     <div className="h-full flex flex-col">

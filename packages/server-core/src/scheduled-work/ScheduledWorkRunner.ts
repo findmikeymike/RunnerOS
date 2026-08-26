@@ -27,6 +27,9 @@ const START_GRACE_MS = 24 * 60 * 60 * 1000
 const SOCIAL_PREP_WINDOW_MS = 30 * 60 * 1000
 
 export interface ScheduledWorkRunnerDeps {
+  canRunBackgroundWork(workspaceRootPath: string): boolean
+  getBackgroundFenceToken?(workspaceRootPath: string): string | null
+  canExecuteSocialAutomatically?(workspaceRootPath: string): boolean
   withLock<T>(workspaceRootPath: string, fn: () => Promise<T> | T): Promise<T>
   executeAgentTask(input: {
     workOrderId: string
@@ -92,11 +95,23 @@ export class ScheduledWorkRunner {
 
   constructor(private readonly deps: ScheduledWorkRunnerDeps) {}
 
+  private canContinue(workspaceRootPath: string, capturedFence: string | null): boolean {
+    if (!this.deps.canRunBackgroundWork(workspaceRootPath)) return false
+    return !this.deps.getBackgroundFenceToken || this.deps.getBackgroundFenceToken(workspaceRootPath) === capturedFence
+  }
+
   async scanWorkspace(
     workspaceId: string,
     workspaceRootPath: string,
     now = this.deps.now?.() ?? new Date(),
   ): Promise<ScheduledWorkRunnerResult> {
+    if (!this.deps.canRunBackgroundWork(workspaceRootPath)) {
+      return { scanned: 0, started: 0, blocked: 0, completed: 0, failed: 0 }
+    }
+    const capturedFence = this.deps.getBackgroundFenceToken?.(workspaceRootPath) ?? null
+    if (this.deps.getBackgroundFenceToken && !capturedFence) {
+      return { scanned: 0, started: 0, blocked: 0, completed: 0, failed: 0 }
+    }
     if (this.inFlight.has(workspaceRootPath)) {
       return { scanned: 0, started: 0, blocked: 0, completed: 0, failed: 0 }
     }
@@ -126,6 +141,7 @@ export class ScheduledWorkRunner {
           if (!current.socialAction) {
             if (!this.deps.prepareSocial) continue
             try {
+              if (!this.canContinue(workspaceRootPath, capturedFence)) continue
               const preview = await this.deps.prepareSocial({ workspaceId, workspaceRootPath, order: current })
               const persisted = await this.updateOrder(workspaceId, workspaceRootPath, current.id, (order, nowIso) => order.status === 'needs-approval' && order.execution.type === 'social-publish'
                 ? { ...order, socialAction: preview, socialApproval: undefined, attention: undefined, updatedAt: nowIso }
@@ -158,10 +174,20 @@ export class ScheduledWorkRunner {
           }
           const profileKey = `${current.execution.platform}/${current.execution.profileId}`
           if (this.activeSocialProfiles.has(profileKey) || !this.deps.executeSocial) continue
+          if (this.deps.canExecuteSocialAutomatically && !this.deps.canExecuteSocialAutomatically(workspaceRootPath)) {
+            const persisted = await this.updateOrder(workspaceId, workspaceRootPath, current.id, (order, nowIso) => ({
+              ...order,
+              status: 'needs-attention',
+              attention: this.buildAttention('idempotency-unavailable', 'Automatic browser publishing is disabled in Shared Folder Team Mode because the destination cannot enforce an idempotency key. Publish manually or use an idempotent provider adapter.'),
+              updatedAt: nowIso,
+            }))
+            if (persisted.updated) result.blocked += 1
+            continue
+          }
           const claimed = await this.claimSocialRunning(workspaceId, workspaceRootPath, current.id)
           if (!claimed.order || claimed.order.execution.type !== 'social-publish' || !claimed.order.socialAction || !claimed.order.socialApproval) continue
           this.activeSocialProfiles.add(profileKey)
-          void this.runSocial(workspaceId, workspaceRootPath, claimed.order)
+          void this.runSocial(workspaceId, workspaceRootPath, claimed.order, capturedFence)
             .catch((error) => this.deps.log?.error?.(`[ScheduledWork] ${errorMessage(error)}`))
             .finally(() => this.activeSocialProfiles.delete(profileKey))
           result.started += 1
@@ -216,7 +242,7 @@ export class ScheduledWorkRunner {
           const claimed = await this.claimRunning(workspaceId, workspaceRootPath, orderId)
           if (!claimed.order) continue
           if (claimed.order.execution.type === 'workflow-run') {
-            const started = await this.startWorkflow(workspaceId, workspaceRootPath, claimed.order)
+            const started = await this.startWorkflow(workspaceId, workspaceRootPath, claimed.order, capturedFence)
             if (started === 'started') result.started += 1
             if (started === 'failed') result.failed += 1
             continue
@@ -224,7 +250,7 @@ export class ScheduledWorkRunner {
           if (claimed.order.execution.type === 'agent-task') {
             const activeKey = activeAgentRunKey(workspaceRootPath, claimed.order.id)
             this.activeAgentRuns.add(activeKey)
-            void this.runAgentTask(workspaceId, workspaceRootPath, claimed.order)
+            void this.runAgentTask(workspaceId, workspaceRootPath, claimed.order, capturedFence)
               .catch((error) => this.deps.log?.error?.(`[ScheduledWork] ${errorMessage(error)}`))
               .finally(() => this.activeAgentRuns.delete(activeKey))
             result.started += 1
@@ -294,11 +320,13 @@ export class ScheduledWorkRunner {
     workspaceId: string,
     workspaceRootPath: string,
     order: ScheduledWorkOrder,
+    capturedFence: string | null,
   ): Promise<'done' | 'failed'> {
     let sessionId = currentSessionId(order)
     try {
       const execution = order.execution
       if (execution.type !== 'agent-task') return 'failed'
+      if (!this.canContinue(workspaceRootPath, capturedFence)) throw new Error('Team runner fence changed before scheduled agent execution.')
       const started = await this.deps.executeAgentTask({
         workOrderId: order.id,
         workspace: { id: workspaceId, rootPath: workspaceRootPath },
@@ -421,9 +449,10 @@ export class ScheduledWorkRunner {
     return persisted.updated ? 'done' : 'running'
   }
 
-  private async runSocial(workspaceId: string, workspaceRootPath: string, order: ScheduledWorkOrder): Promise<void> {
+  private async runSocial(workspaceId: string, workspaceRootPath: string, order: ScheduledWorkOrder, capturedFence: string | null): Promise<void> {
     try {
       if (!this.deps.executeSocial || order.execution.type !== 'social-publish' || !order.socialAction || !order.socialApproval) return
+      if (!this.canContinue(workspaceRootPath, capturedFence)) throw new Error('Team runner fence changed before social execution.')
       const result = await this.deps.executeSocial({ workspaceId, workspaceRootPath, order, preview: order.socialAction, approval: order.socialApproval })
       const nowIso = (this.deps.now?.() ?? new Date()).toISOString()
       const receipt: CampaignExternalExecutionReceipt = {
@@ -457,10 +486,12 @@ export class ScheduledWorkRunner {
     workspaceId: string,
     workspaceRootPath: string,
     order: ScheduledWorkOrder,
+    capturedFence: string | null,
   ): Promise<'started' | 'failed'> {
     try {
       const execution = order.execution
       if (execution.type !== 'workflow-run') return 'failed'
+      if (!this.canContinue(workspaceRootPath, capturedFence)) throw new Error('Team runner fence changed before workflow execution.')
       const { runId } = await this.deps.startWorkflow({
         workOrderId: order.id,
         workspace: { id: workspaceId, rootPath: workspaceRootPath },

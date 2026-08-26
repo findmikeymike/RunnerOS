@@ -17,6 +17,7 @@ import {
   type NotificationEntry,
   type NotificationsState,
 } from '@/atoms/notifications'
+import { useWorkspaceSyncRefresh } from './useWorkspaceSyncRefresh'
 
 const NULL_WORKSPACE_KEY = '__no_workspace__'
 const loadedWorkspaceKeys = new Set<string>()
@@ -72,7 +73,7 @@ export function usePulseNotifications(
   const workspaceKey = getWorkspaceKey(workspaceId)
   const [state, setState] = useAtom(notificationsStateAtomFamily(workspaceKey))
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (authoritative = false) => {
     const existing = inFlightRefreshes.get(workspaceKey)
     if (existing) return existing
     const api = getApi()
@@ -87,10 +88,12 @@ export function usePulseNotifications(
         setState((prev) => {
           const byId = new Map<string, NotificationEntry>()
           for (const entry of entries) byId.set(entry.id, entry)
-          for (const entry of prev.entries) {
-            const listed = byId.get(entry.id)
-            if (!listed || (entry.createdAt ?? '') > (listed.createdAt ?? '')) {
-              byId.set(entry.id, entry)
+          if (!authoritative) {
+            for (const entry of prev.entries) {
+              const listed = byId.get(entry.id)
+              if (!listed || (entry.createdAt ?? '') > (listed.createdAt ?? '')) {
+                byId.set(entry.id, entry)
+              }
             }
           }
           return {
@@ -114,6 +117,7 @@ export function usePulseNotifications(
     inFlightRefreshes.set(workspaceKey, run)
     return run
   }, [setState, workspaceId, workspaceKey])
+  useWorkspaceSyncRefresh(workspaceId, ['notifications'], () => refresh(true))
 
   useEffect(() => {
     setStateByWorkspaceKey.set(workspaceKey, setState)

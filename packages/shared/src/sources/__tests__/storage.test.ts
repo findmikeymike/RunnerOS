@@ -49,6 +49,8 @@ const {
   getSourcesBySlugs,
   isSourceUsable,
   loadSourceConfig,
+  createSource,
+  saveSourceConfig,
   markLoadedSourceAuthenticated,
   markLoadedSourceNeedsReauth,
   writeGlobalSourcesManifest,
@@ -209,6 +211,43 @@ describe('workspace local source paths', () => {
     expect(sources[0].config.local?.path).toContain(join('tools', 'lyrics-transcriber'));
     expect(sources[0].guide.raw).toContain('transcript.json');
     expect(sources[0].guide.raw).toContain('review_required');
+  });
+
+  test('saveSourceConfig stores workspace-local absolute paths relative to the workspace root', () => {
+    const ws = makeWorkspace();
+    const toolPath = join(ws, 'tools', 'local-cli');
+    const config: FolderSourceConfig = {
+      id: 'local-cli_test',
+      name: 'Local CLI',
+      slug: 'local-cli',
+      enabled: true,
+      provider: 'custom',
+      type: 'local',
+      local: { path: toolPath, format: 'cli-tool' },
+    };
+
+    saveSourceConfig(ws, config);
+
+    const stored = JSON.parse(readFileSync(join(ws, 'sources', 'local-cli', 'config.json'), 'utf-8')) as FolderSourceConfig;
+    expect(stored.local?.path).toBe('tools/local-cli');
+    expect(loadSourceConfig(ws, 'local-cli')?.local?.path).toBe(toolPath);
+  });
+
+  test('createSource returns the normalized portable local path it persisted', async () => {
+    const ws = makeWorkspace();
+    const toolPath = join(ws, 'tools', 'local-cli');
+
+    const created = await createSource(ws, {
+      name: 'Local CLI',
+      provider: 'custom',
+      type: 'local',
+      icon: '🛠️',
+      local: { path: toolPath, format: 'cli-tool' },
+    });
+    const stored = JSON.parse(readFileSync(join(ws, 'sources', 'local-cli', 'config.json'), 'utf-8')) as FolderSourceConfig;
+
+    expect(created.local?.path).toBe('tools/local-cli');
+    expect(stored.local?.path).toBe('tools/local-cli');
   });
 });
 

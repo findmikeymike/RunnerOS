@@ -16,6 +16,7 @@ import { appendFile, readFile, writeFile } from 'fs/promises';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'path';
 import { createLogger } from '../utils/debug.ts';
+import { loadWorkspaceConfig } from '../workspaces/storage.ts';
 import {
   AUTOMATIONS_HISTORY_FILE,
   AUTOMATION_HISTORY_MAX_RUNS_PER_MATCHER,
@@ -47,6 +48,26 @@ function withMutex<T>(key: string, fn: () => Promise<T>): Promise<T> {
  */
 const appendCounters = new Map<string, number>();
 
+function sanitizeSharedHistoryEntry(entry: Record<string, unknown>): Record<string, unknown> {
+  const webhook = entry.webhook && typeof entry.webhook === 'object'
+    ? entry.webhook as Record<string, unknown>
+    : undefined;
+  let safeWebhook: Record<string, unknown> | undefined;
+  if (webhook) {
+    let url = '[redacted]';
+    if (typeof webhook.url === 'string') {
+      try {
+        const parsed = new URL(webhook.url);
+        url = `${parsed.protocol}//${parsed.host}/[redacted]`;
+      } catch { /* keep redacted */ }
+    }
+    const { responseBody: _responseBody, error: _webhookError, ...metadata } = webhook;
+    safeWebhook = { ...metadata, url };
+  }
+  const { prompt: _prompt, error: _error, ...safe } = entry;
+  return { ...safe, ...(safeWebhook ? { webhook: safeWebhook } : {}), sharedRedacted: true };
+}
+
 /**
  * Append a history entry to the JSONL file.
  * Triggers compaction when appends since startup reach the global cap.
@@ -59,9 +80,12 @@ export async function appendAutomationHistoryEntry(
   entry: Record<string, unknown>,
 ): Promise<void> {
   const historyPath = join(workspaceRootPath, AUTOMATIONS_HISTORY_FILE);
+  const storedEntry = loadWorkspaceConfig(workspaceRootPath)?.storage?.mode === 'shared-folder'
+    ? sanitizeSharedHistoryEntry(entry)
+    : entry;
 
   await withMutex(workspaceRootPath, async () => {
-    await appendFile(historyPath, JSON.stringify(entry) + '\n', 'utf-8');
+    await appendFile(historyPath, JSON.stringify(storedEntry) + '\n', 'utf-8');
 
     const count = (appendCounters.get(workspaceRootPath) ?? 0) + 1;
     appendCounters.set(workspaceRootPath, count);

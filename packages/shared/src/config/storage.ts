@@ -363,7 +363,12 @@ export function loadStoredConfig(): StoredConfig | null {
     for (const workspace of config.workspaces) {
       if (!isValidWorkspace(workspace.rootPath)) {
         try {
-          createWorkspaceAtPath(workspace.rootPath, workspace.name);
+          const canInitializeWorkspace = !existsSync(workspace.rootPath) || readdirSync(workspace.rootPath).length === 0;
+          if (canInitializeWorkspace) {
+            createWorkspaceAtPath(workspace.rootPath, workspace.name);
+          } else {
+            debug('[config] Refusing to auto-create config.json in non-empty workspace folder', workspace.rootPath);
+          }
         } catch (wsError) {
           debug('[config] Failed to create workspace at', workspace.rootPath, ':', wsError instanceof Error ? wsError.message : wsError);
         }
@@ -783,6 +788,18 @@ export function updateWorkspaceArtistScope(
   }
   workspace.artistWorkspaceScope = artistWorkspaceScope;
   saveConfig(config);
+}
+
+export function updateWorkspaceRootPath(workspaceId: string, rootPath: string): Workspace {
+  const config = loadStoredConfig();
+  if (!config) throw new Error('No config found');
+  const ws = config.workspaces.find(w => w.id === workspaceId);
+  if (!ws) throw new Error('Workspace not found');
+  ws.rootPath = rootPath;
+  ws.slug = extractWorkspaceSlugFromPath(rootPath, '');
+  ws.lastAccessedAt = Date.now();
+  saveConfig(config);
+  return ws;
 }
 
 export function setActiveWorkspace(workspaceId: string): void {

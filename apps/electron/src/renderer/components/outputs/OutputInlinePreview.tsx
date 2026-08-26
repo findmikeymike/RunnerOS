@@ -12,6 +12,7 @@ import { parseDelimitedTablePreview } from './table-preview'
 import { buildRunnerOutputAssetUrl } from '@craft-agent/shared/outputs/web-preview'
 import type { OutputAssetDTO, OutputManifestDTO, OutputPreviewMode } from '@/hooks/useOutputs'
 import { findVideoProjectAsset, formatDuration, summarizeVideoProject } from './video-project-output'
+import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
 
 const OutputModelPreview = React.lazy(() => import('./OutputModelPreview').then((module) => ({ default: module.OutputModelPreview })))
 const OutputExcalidrawPreview = React.lazy(() => import('./OutputExcalidrawPreview').then((module) => ({ default: module.OutputExcalidrawPreview })))
@@ -59,6 +60,8 @@ export function OutputInlinePreview({
   const [content, setContent] = React.useState<string | null>(shouldReadAssetText ? null : inlineText)
   const [dataUrl, setDataUrl] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+  const [syncRevision, setSyncRevision] = React.useState(0)
+  useWorkspaceSyncRefresh(workspaceId, ['outputs'], () => setSyncRevision((current) => current + 1))
   const electronAPI = window.electronAPI as OutputsElectronAPI
   const hasStaticPreview = Boolean(
     (mode === 'image' || mode === 'video' || mode === 'audio') && dataUrl
@@ -71,7 +74,7 @@ export function OutputInlinePreview({
     setContent(shouldReadAssetText ? null : inlineText)
     setDataUrl(null)
     setError(null)
-  }, [assetId, inlineText, manifest.id, mode, shouldReadAssetText])
+  }, [assetId, inlineText, manifest.id, mode, shouldReadAssetText, syncRevision])
 
   React.useEffect(() => {
     if (!assetId || !shouldReadAssetData) return
@@ -88,7 +91,7 @@ export function OutputInlinePreview({
       if (mounted) setError(err instanceof Error ? err.message : String(err))
     })
     return () => { mounted = false }
-  }, [assetId, electronAPI, manifest.id, shouldReadAssetData, workspaceId])
+  }, [assetId, electronAPI, manifest.id, shouldReadAssetData, syncRevision, workspaceId])
 
   React.useEffect(() => {
     if (!assetId || !shouldReadAssetText) return
@@ -104,7 +107,7 @@ export function OutputInlinePreview({
       if (mounted) setError(err instanceof Error ? err.message : String(err))
     })
     return () => { mounted = false }
-  }, [assetId, electronAPI, manifest.id, shouldReadAssetText, workspaceId])
+  }, [assetId, electronAPI, manifest.id, shouldReadAssetText, syncRevision, workspaceId])
 
   React.useEffect(() => {
     if (webPreviewTarget) return
@@ -148,7 +151,7 @@ export function OutputInlinePreview({
       <div className="h-full min-h-0 w-full overflow-hidden">
         <OutputWebPreview
           target={webPreviewTarget}
-          refreshKey={`${manifest.updatedAt}:${previewAsset?.id ?? ''}:${previewAsset?.path ?? ''}`}
+          refreshKey={`${manifest.updatedAt}:${previewAsset?.id ?? ''}:${previewAsset?.path ?? ''}:${syncRevision}`}
           className="h-full min-h-0"
           onPreviewSettled={onPreviewSettled}
         />
@@ -199,6 +202,7 @@ export function OutputInlinePreview({
     return (
       <React.Suspense fallback={<EmptyPreview className={className}><span>Loading model viewer...</span></EmptyPreview>}>
         <OutputModelPreview
+          key={syncRevision}
           url={buildRunnerOutputAssetUrl(workspaceId, manifest.id, previewAsset.path)}
           label={previewAsset.label ?? manifest.title}
           className={className}
@@ -212,6 +216,7 @@ export function OutputInlinePreview({
     return (
       <div className={className ?? 'h-full min-h-[420px] w-full overflow-hidden rounded-md bg-black'}>
         <iframe
+          key={syncRevision}
           src={buildRunnerOutputAssetUrl(workspaceId, manifest.id, previewAsset.path)}
           title={previewAsset.label ?? manifest.title}
           className="h-full min-h-[420px] w-full border-0 bg-black"

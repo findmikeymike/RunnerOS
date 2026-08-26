@@ -99,6 +99,7 @@ async function getExpectedChannels(): Promise<Set<string>> {
     auth,
     automations,
     agentDefinitions,
+    community,
     files,
     labels,
     llm,
@@ -127,10 +128,12 @@ async function getExpectedChannels(): Promise<Set<string>> {
     missionAssets,
     deepResearch,
     videoStudio,
+    scheduledWork,
   ] = await Promise.all([
     import('@craft-agent/server-core/handlers/rpc/auth'),
     import('@craft-agent/server-core/handlers/rpc/automations'),
     import('@craft-agent/server-core/handlers/rpc/agent-definitions'),
+    import('@craft-agent/server-core/handlers/rpc/community'),
     import('@craft-agent/server-core/handlers/rpc/files'),
     import('@craft-agent/server-core/handlers/rpc/labels'),
     import('@craft-agent/server-core/handlers/rpc/llm-connections'),
@@ -159,6 +162,7 @@ async function getExpectedChannels(): Promise<Set<string>> {
     import('@craft-agent/server-core/handlers/rpc/mission-assets'),
     import('@craft-agent/server-core/handlers/rpc/deep-research'),
     import('@craft-agent/server-core/handlers/rpc/video-studio'),
+    import('@craft-agent/server-core/handlers/rpc/scheduled-work'),
   ])
 
   // GUI handler channels (remain in electron)
@@ -173,6 +177,7 @@ async function getExpectedChannels(): Promise<Set<string>> {
     ...auth.HANDLED_CHANNELS,
     ...automations.HANDLED_CHANNELS,
     ...agentDefinitions.HANDLED_CHANNELS,
+    ...community.HANDLED_CHANNELS,
     ...files.HANDLED_CHANNELS,
     ...labels.HANDLED_CHANNELS,
     ...llm.HANDLED_CHANNELS,
@@ -201,6 +206,7 @@ async function getExpectedChannels(): Promise<Set<string>> {
     ...missionAssets.HANDLED_CHANNELS,
     ...deepResearch.HANDLED_CHANNELS,
     ...videoStudio.HANDLED_CHANNELS,
+    ...scheduledWork.HANDLED_CHANNELS,
     ...browser.HANDLED_CHANNELS,
     ...guiSystem.GUI_HANDLED_CHANNELS,
     ...guiWorkspace.GUI_HANDLED_CHANNELS,

@@ -95,6 +95,8 @@ export interface SessionTokenUsage {
 export interface SessionLaunchReceipt {
   createdAt: number;
   origin: 'manual' | 'agent' | 'concierge' | 'workflow' | 'deep-research' | 'automation' | 'branch' | 'spawned-session';
+  /** Immutable ancestry marker for sessions descended from background execution. */
+  automatedAncestry?: boolean;
   summary?: string;
   agent?: {
     slug: string;

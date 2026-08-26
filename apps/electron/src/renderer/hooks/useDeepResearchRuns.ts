@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react'
 import { useAtom } from 'jotai'
 import { deepResearchRunsStateAtomFamily, type DeepResearchRunsState } from '@/atoms/deep-research-runs'
+import { useWorkspaceSyncRefresh } from './useWorkspaceSyncRefresh'
 import type { DeepResearchRunDTO, ReviseDeepResearchPlanInput, StartDeepResearchRunInput } from '../../shared/types'
 
 export interface UseDeepResearchRunsResult {
@@ -60,6 +61,8 @@ export function useDeepResearchRuns(workspaceId: string | null | undefined): Use
     inFlightRefreshes.set(workspaceKey, run)
     return run
   }, [setState, workspaceId, workspaceKey])
+
+  useWorkspaceSyncRefresh(workspaceId, ['deep-research', 'agent-messages'], refresh)
 
   useEffect(() => {
     setStateByWorkspaceKey.set(workspaceKey, setState)

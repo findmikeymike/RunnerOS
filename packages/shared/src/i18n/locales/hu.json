@@ -944,6 +944,8 @@
   "settings.shortcuts.title": "Billentyűparancsok",
   "settings.socialAccounts.description": "Instagram, TikTok, X, YouTube",
   "settings.socialAccounts.title": "Social Accounts",
+  "settings.team.description": "Shared workspace identity and runner",
+  "settings.team.title": "Team",
   "settings.tools.builtInBrowser": "Beépített böngésző",
   "settings.tools.builtInBrowserDesc": "Tiltsd le, ha külső böngészőeszközöket használsz, például Playwright, Puppeteer vagy böngésző MCP szervereket.",
   "settings.tools.title": "Eszközök",

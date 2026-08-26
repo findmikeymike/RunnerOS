@@ -262,9 +262,9 @@ Never put these in a shared workspace:
 
 ### 4.5 One Writer for Background Work
 
-Background automations must have exactly one runner machine in Shared Folder mode.
+Background automations designate one runner machine in Shared Folder mode. Handoffs are epoch-fenced and require old-runner acknowledgement; folder sync alone cannot prove global exclusivity during a partition.
 
-Manual user-triggered actions can happen from any machine. Scheduled/background work must not.
+Manual user-triggered actions can happen from any machine. Scheduled/background work must not run on a non-runner. External effects also require receiver/provider-enforced idempotency; otherwise they remain manual.
 
 ### 4.6 High-Churn Data Must Be Entity Files
 
@@ -523,6 +523,8 @@ Private machine state owns:
 - Local cache and sync-health observations.
 
 Private state must never be required for another teammate to open the workspace.
+
+Shared record recovery does not depend on this private undo cache. Each write also creates an immutable operation and removable payload capsule under `team/record-ops/` and `team/record-payloads/`; canonical record JSON is a rebuildable projection.
 
 ---
 
@@ -1327,23 +1329,20 @@ Rules:
 - If claim expires, runner can reclaim.
 - Non-runner never claims.
 
-Honesty note: claim files travel over sync too, so claims **reduce** duplicate execution but cannot eliminate it under sync lag. The handover gate (14.5) is the primary mechanism. Every side-effectful job (email send, ESP campaign creation, export) additionally carries an `idempotencyKey`; transport adapters check for an existing draft/campaign with that key before creating — so even a double execution cannot double-send.
+Honesty note: claim files travel over sync too, so claims **reduce** duplicate execution but cannot eliminate it under a partition. Every automatic external effect therefore requires a destination that enforces a stable idempotency key. Browser posting and arbitrary outbound webhooks are blocked in Shared Folder mode until such an adapter or an online claim authority exists.
 
 ### 14.5 Runner Handover Protocol (exact)
 
-`WorkspaceTeamConfig.revision` increments on every team-config change; every machine's heartbeat reports `observedTeamRevision` (see 8). Handover from machine A to machine B:
+`WorkspaceTeamConfig.revision` increments on every team-config change and `runnerEpoch` increments on every runner change. Every machine heartbeat reports both observed values. Handover from machine A to machine B:
 
 1. User on B clicks "Make this machine runner".
-2. B writes team config: `runnerMachineId = B`, `revision = r+1`, `runnerHandover = { from: A, to: B, initiatedAt }`.
+2. B writes team config: `runnerMachineId = B`, `revision = r+1`, `runnerEpoch = e+1`, `runnerHandover = { from: A, to: B, initiatedAt, revision, runnerEpoch }`.
 3. B enters **PENDING**: it is named runner but does NOT execute background work yet.
-4. B activates when ANY of:
-   a. A's heartbeat shows `observedTeamRevision >= r+1` (A saw the change and stopped), or
-   b. A's `lastSeenAt` is stale (>15 minutes), or
-   c. the grace window expires — default **10 minutes**, chosen to exceed realistic provider sync lag.
+4. B activates only when A's heartbeat shows `observedTeamRevision >= r+1` and `observedRunnerEpoch >= e+1` (A saw the change and stopped).
 5. A, on loading revision `r+1`: stops background execution immediately, lets in-flight claims expire, updates its heartbeat.
 6. On activation, B clears `runnerHandover`.
 
-The dual-runner window is bounded by min(sync lag, grace window), and side effects inside that window are defused by job idempotency keys (14.4). The same protocol covers replacing a dead runner — path (b) is the takeover path.
+There is no timer-based stale takeover because it can create split brain. Replacing a dead runner requires an explicit future coordination/force-recovery design; automatic external effects remain blocked without enforceable deduplication.
 
 ### 14.6 Missed-Tick Catch-Up
 
@@ -1535,6 +1534,8 @@ interface CommunityEmailJobRecord extends SharedEntityMeta {
 }
 ```
 
+Current implementation note: Phase 6 stores the cadence fields but does not enforce fatigue yet. `fatigued` remains inert until Phase 7 adds approval/send state and a real `lastBroadcastAt` source; the cadence gate belongs in approval, not draft creation.
+
 ### 15.5 Gmail Boundary
 
 Gmail is useful for:
@@ -1593,7 +1594,7 @@ No send to the fan list without ALL of:
 - audience preview with final counts.
 - **consent gate**: marketing purposes (`announcement`, `newsletter`) may include only `opted-in` contacts by default. `unknown` is excluded; including unknowns requires an explicit per-job override with a written justification recorded on the job. `personal-outreach` may target unknowns — it is individual mail, not bulk.
 - suppression check (recorded via `suppressionCheckedAt`; a suppressed contact can NEVER be included, overrides or not).
-- **cadence check**: if the list was broadcast within `minDaysBetweenBroadcasts`, the job is marked `fatigued` and approval requires an explicit override (the fatigue guard from the 04 spec).
+- **cadence check**: if the list was broadcast within `minDaysBetweenBroadcasts`, the job is marked `fatigued` and approval requires an explicit override (the fatigue guard from the 04 spec). This is intentionally deferred until the email transport approval phase, where `lastBroadcastAt` is authoritative.
 - compliance checklist (15.8).
 - human approval.
 - selected, connected transport (else status `needs-provider`).
@@ -1918,8 +1919,8 @@ Tests:
 - In solo mode, SchedulerTick runs.
 - In shared mode on non-runner, SchedulerTick does not run.
 - On runner, SchedulerTick runs and writes pulse log.
-- Handover under simulated sync lag (fake-sync harness): old runner stops before new runner activates, or the bounded overlap produces no duplicate side effects (idempotency-key check).
-- Stale-runner takeover activates after the grace window.
+- Handover under simulated sync lag (fake-sync harness): new runner stays pending until the old runner observes both revision and epoch.
+- Missing/stale old-runner heartbeat never activates takeover on a timer.
 - Runner wake after missed ticks: `skip` runs nothing, `run-once` runs exactly one catch-up execution.
 - stale runner is surfaced.
 
@@ -2048,4 +2049,3 @@ Build in this order:
 8. Gmail draft-only email jobs with idempotency keys, the consent gate, and the cadence guard.
 
 That gives the product a real team foundation before attempting advanced ESP, Git automation, or hosted multi-user.
-
