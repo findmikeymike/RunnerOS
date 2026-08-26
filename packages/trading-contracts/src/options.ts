@@ -35,6 +35,7 @@ export const OPTIONS_EXPIRATION_ASSESSMENT_SCHEMA_VERSION = 'options-expiration-
 export const OPTIONS_AUTOMATION_ROUTE_SCHEMA_VERSION = 'options-automation-route@1' as const
 export const OPTIONS_AUTOPILOT_AUTHORITY_SCHEMA_VERSION = 'options-autopilot-authority@1' as const
 export const OPTIONS_AUTOPILOT_REVOCATION_SCHEMA_VERSION = 'options-autopilot-revocation@1' as const
+export const OPTIONS_AUTOPILOT_CERTIFICATION_SCHEMA_VERSION = 'options-autopilot-certification@1' as const
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD').refine((value) => {
   const parsed = new Date(`${value}T00:00:00.000Z`)
@@ -360,6 +361,75 @@ export const optionsAutopilotRevocationSchema = z.object({
   revoked_at: utcTimestampSchema,
   content_checksum: sha256Schema,
 }).strict()
+
+export const optionsAutopilotCertificationScenarioSchema = z.enum([
+  'exact-source-route-proved',
+  'bounded-entry-proved',
+  'duplicate-entry-suppressed',
+  'working-entry-cancel-proved',
+  'partial-fill-contained',
+  'full-close-no-short-proved',
+  'management-restart-proved',
+  'stale-followup-suppressed',
+  'expiration-close-proved',
+  'do-not-exercise-proved',
+  'unknown-submit-contained',
+  'fifty-clean-lifecycles-proved',
+  'final-flat-zero-orders',
+])
+
+export const optionsAutopilotCertificationEvidenceSchema = z.object({
+  certification_schema_version: z.literal(OPTIONS_AUTOPILOT_CERTIFICATION_SCHEMA_VERSION),
+  certification_id: identifierSchema,
+  connection_id: identifierSchema,
+  connection_checksum: sha256Schema,
+  credential_generation: sha256Schema,
+  provider: optionsProviderSchema,
+  environment: z.enum(['paper', 'sandbox']),
+  account_id: z.string().min(1).max(120),
+  adapter_id: identifierSchema,
+  adapter_version: z.string().regex(/^\d+\.\d+\.\d+$/),
+  provider_contract_version: identifierSchema,
+  base_certification_id: identifierSchema,
+  base_certification_checksum: sha256Schema,
+  base_application_id: identifierSchema,
+  base_application_checksum: sha256Schema,
+  started_at: utcTimestampSchema,
+  completed_at: utcTimestampSchema,
+  expires_at: utcTimestampSchema,
+  scenarios: z.array(z.object({
+    scenario: optionsAutopilotCertificationScenarioSchema,
+    status: z.enum(['pass', 'fail', 'blocked']),
+    evidence_checksum: sha256Schema,
+    detail: z.string().min(1).max(300),
+    observed_at: utcTimestampSchema,
+  }).strict()).length(optionsAutopilotCertificationScenarioSchema.options.length),
+  completed_lifecycle_count: nonnegativeIntegerSchema,
+  provider_automatic_close_certified: z.boolean(),
+  provider_do_not_exercise_certified: z.boolean(),
+  final_position_quantity: nonnegativeIntegerSchema,
+  final_working_order_count: nonnegativeIntegerSchema,
+  eligible_level: z.literal('options-paper-autopilot-certified').nullable(),
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (!(Date.parse(value.started_at) <= Date.parse(value.completed_at)
+    && Date.parse(value.completed_at) < Date.parse(value.expires_at))) {
+    context.addIssue({ code: 'custom', path: ['completed_at'], message: 'Autopilot certification chronology is invalid' })
+  }
+  const expected = new Set(optionsAutopilotCertificationScenarioSchema.options)
+  for (const result of value.scenarios) {
+    if (!expected.delete(result.scenario)) context.addIssue({ code: 'custom', path: ['scenarios'], message: 'Autopilot scenarios must be exact and unique' })
+  }
+  const eligible = value.scenarios.every((result) => result.status === 'pass')
+    && value.completed_lifecycle_count >= 50
+    && value.provider_automatic_close_certified
+    && value.provider_do_not_exercise_certified
+    && value.final_position_quantity === 0
+    && value.final_working_order_count === 0
+  if ((value.eligible_level !== null) !== eligible) {
+    context.addIssue({ code: 'custom', path: ['eligible_level'], message: 'Autopilot eligibility overstates retained provider evidence' })
+  }
+})
 
 function decimalParts(value: string): { coefficient: bigint; scale: number } {
   const negative = value.startsWith('-')
@@ -1252,6 +1322,8 @@ export type OptionsManualOrderReview = z.infer<typeof optionsManualOrderReviewSc
 export type OptionsAutomationRoute = z.infer<typeof optionsAutomationRouteSchema>
 export type OptionsAutopilotAuthority = z.infer<typeof optionsAutopilotAuthoritySchema>
 export type OptionsAutopilotRevocation = z.infer<typeof optionsAutopilotRevocationSchema>
+export type OptionsAutopilotCertificationScenario = z.infer<typeof optionsAutopilotCertificationScenarioSchema>
+export type OptionsAutopilotCertificationEvidence = z.infer<typeof optionsAutopilotCertificationEvidenceSchema>
 export type OptionsManagementCommand = z.infer<typeof optionsManagementCommandSchema>
 export type OptionsManagementRecord = z.infer<typeof optionsManagementRecordSchema>
 export type OptionsExpirationSchedule = z.infer<typeof optionsExpirationScheduleSchema>

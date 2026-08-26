@@ -64,6 +64,15 @@ The workbench can request engine health, run the known fixture, and display tota
 
 ## Recently Completed
 
+- Added a separate automatic-options certification and authority ledger. Manual
+  paper certification cannot satisfy it. Autopilot evidence must retain every
+  exact routing, bounded-entry, duplicate, cancellation, partial-fill, close,
+  restart, stale-follow-up, unknown-submit, expiration-close, do-not-exercise,
+  final-flat scenario plus at least 50 clean provider lifecycles. Authority is
+  short-lived, binds one exact route revision/policy/account/credential/adapter,
+  and is serialized across the full route lineage so overlapping activations or
+  revision changes cannot create two live authorities.
+
 - Added the inert automatic-options routing boundary. An exact Discord server,
   channel/thread, and trader identity can now be bound to one exact broker
   account and one immutable policy revision. Route revisions are append-only;

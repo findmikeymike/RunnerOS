@@ -7,6 +7,24 @@ source_of_truth: true
 
 # Verification System
 
+## 2026-08-26 Options Autopilot Slice 8B — Certification and Authority Lock
+
+- Added a distinct automatic-paper certification artifact with an exact
+  13-scenario matrix, at least 50 completed lifecycles, certified expiration
+  close and do-not-exercise behavior, and final flat/zero-order truth.
+- Added append-only automatic authority and revocation stores. Authority binds
+  the exact route/policy/account/credential/adapter/base application/autopilot
+  certification and expires inside both policy and certification limits.
+- A hashed per-route lock serializes activation and revocation. Whole-lineage
+  admission prevents a new route revision from overlapping an older authority;
+  startup lock repair requires desktop single-instance authority.
+- Verification: 13 focused contract, route, certification, authority,
+  concurrency, and revision tests passed with 54 expectations; repository
+  typecheck and diff check passed. Rival found and closed revision-overlap and
+  concurrent-activation flaws, then returned clean.
+- Not proven: any real provider autopilot certification evidence or automatic
+  runtime/UI activation.
+
 ## 2026-08-26 Options Autopilot Slice 8A — Inert Exact-Source Routing
 
 - Added strict contracts for append-only Discord options routes, automatic

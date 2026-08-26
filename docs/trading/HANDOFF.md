@@ -7,6 +7,20 @@ source_of_truth: false
 
 # Trade God Handoff
 
+## 2026-08-26 Options Autopilot Authority Handoff
+
+- Automatic options entry has its own certification contract; the current
+  manual paper safety test cannot unlock it.
+- Eligibility requires 50 clean paper lifecycles, exact entry/management/crash
+  containment, certified expiration close and do-not-exercise behavior, and
+  final flat/zero-order proof.
+- A short-lived authority binds the exact route revision, policy, account,
+  credential generation, adapter, base applied safety test, and autopilot
+  certification. Activation/revocation is serialized for the whole route
+  lineage.
+- No runtime or UI path can create this evidence yet, so automatic entry remains
+  unavailable by construction.
+
 ## 2026-08-26 Options Automatic Routing Foundation Handoff
 
 - The durable route model binds one exact Discord guild/channel/thread/trader
