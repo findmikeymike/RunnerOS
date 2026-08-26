@@ -27,6 +27,7 @@ Living priority queue: [TO DO](./TO-DO.md).
 
 ## Product Backlog
 
+- [Artist OS V2 Feature Ideas](./artist-os-v2-feature-ideas.md) - prioritized career infrastructure for rights and revenue, cross-platform career intelligence, verified external opportunities, owned-fan conversion, sync pitching, and optional live booking.
 - [Connected Accounts + Credential Vault](./connected-accounts-credential-vault.md) - shared Settings control plane for OAuth/API credentials and browser sessions across Ads, Social, Gmail, commerce, and future tools.
 - [Multi-World Artist Spaces](./multi-world-artist-spaces.md) - future multi-artist/client/side-project architecture after the single-world system is proven.
 - [Future External Triggers](./future-external-triggers.md) - candidate automation triggers including email, Slack/Discord/Teams, MCP inbound, Shortcuts, browser extension, Git, calendar, RSS, database, cloud storage, and more.

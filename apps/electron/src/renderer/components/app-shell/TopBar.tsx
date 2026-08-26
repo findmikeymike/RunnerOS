@@ -40,7 +40,7 @@ import { useEffect, useRef, useState } from "react"
 import { BrowserTabStrip } from "../browser/BrowserTabStrip"
 import { BellMenu } from "../notifications/BellMenu"
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
-import { PRODUCT_NAME } from "@/lib/product-identity"
+import { PRODUCT_NAME, RENDERER_PRODUCT_VARIANT } from "@/lib/product-identity"
 
 // --- Menu rendering (moved from AppMenu) ---
 
@@ -158,6 +158,10 @@ interface TopBarProps {
   onToggleFocusMode: () => void
   onAddSessionPanel: () => void
   onAddBrowserPanel: () => void
+  workspaceNavigation?: React.ReactNode
+  showSidebarButton?: boolean
+  showProductMenu?: boolean
+  showHistoryButtons?: boolean
   /** When true, hides controls that don't apply in compact/mobile layout */
   isCompact?: boolean
 }
@@ -183,6 +187,10 @@ export function TopBar({
   onToggleFocusMode,
   onAddSessionPanel,
   onAddBrowserPanel,
+  workspaceNavigation,
+  showSidebarButton = true,
+  showProductMenu = true,
+  showHistoryButtons = true,
   isCompact,
 }: TopBarProps) {
   const { t } = useTranslation()
@@ -239,18 +247,52 @@ export function TopBar({
     toggleSidebar: onToggleSidebar,
   }
 
+  const usesPersistentArtistChrome = RENDERER_PRODUCT_VARIANT === 'artist-os'
   const menuLeftPadding = isMac ? 86 : 12
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 h-[48px] z-panel titlebar-drag-region bg-transparent"
+      className={cn(
+        "fixed top-0 left-0 right-0 h-[48px] z-panel titlebar-drag-region",
+        usesPersistentArtistChrome
+          ? "border-b border-white/10 bg-black text-white shadow-bottom-border-thin"
+          : "bg-transparent",
+      )}
     >
+      {isMac && usesPersistentArtistChrome && (
+        <div
+          className="titlebar-no-drag pointer-events-auto absolute left-[18px] top-0 z-[90] flex h-full items-center gap-2"
+          data-testid="persistent-mac-window-controls"
+        >
+          <button
+            type="button"
+            title="Close"
+            aria-label="Close window"
+            onClick={() => { void window.electronAPI.closeWindow() }}
+            className="h-3 w-3 rounded-full border border-black/20 bg-[#ff5f57]"
+          />
+          <button
+            type="button"
+            title="Minimize"
+            aria-label="Minimize window"
+            onClick={() => { void window.electronAPI.menuMinimize() }}
+            className="h-3 w-3 rounded-full border border-black/20 bg-[#febc2e]"
+          />
+          <button
+            type="button"
+            title="Zoom"
+            aria-label="Zoom window"
+            onClick={() => { void window.electronAPI.menuMaximize() }}
+            className="h-3 w-3 rounded-full border border-black/20 bg-[#28c840]"
+          />
+        </div>
+      )}
       <div className="flex h-full w-full items-center justify-between gap-2">
       {/* === LEFT: Sidebar + Menu + Navigation + Workspace === */}
       {/* Keep this container draggable. Only individual interactive controls should use titlebar-no-drag. */}
       <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-0.5" style={{ paddingLeft: menuLeftPadding }}>
         <div className="flex items-center gap-0.5">
-        {!isCompact && (
+        {!isCompact && showSidebarButton && (
         <Tooltip>
           <TooltipTrigger asChild>
             <TopBarButton onClick={onToggleSidebar} aria-label={t("menu.toggleSidebar")}>
@@ -262,7 +304,7 @@ export function TopBar({
         )}
 
         {/* Product Menu */}
-        <DropdownMenu>
+        {showProductMenu && <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <TopBarButton aria-label={`${PRODUCT_NAME} menu`}>
               <Icons.Plus className="h-4 w-4 text-accent" strokeWidth={1.75} />
@@ -371,11 +413,13 @@ export function TopBar({
               {quitHotkey && <DropdownMenuShortcut className="pl-6">{quitHotkey}</DropdownMenuShortcut>}
             </StyledDropdownMenuItem>
           </StyledDropdownMenuContent>
-        </DropdownMenu>
+        </DropdownMenu>}
         </div>
 
+        {workspaceNavigation}
+
         {/* Back / Forward */}
-        <div className={cn("ml-1 flex min-w-0 items-center gap-1", isCompact ? "flex-1" : "w-auto")}>
+        {showHistoryButtons && <div className={cn("ml-1 flex min-w-0 items-center gap-1", isCompact ? "flex-1" : "w-auto")}>
           <Tooltip>
             <TooltipTrigger asChild>
               <TopBarButton onClick={onBack} disabled={!canGoBack} aria-label={t("common.back")}>
@@ -393,7 +437,7 @@ export function TopBar({
             </TooltipTrigger>
             <TooltipContent side="bottom">{t("common.forward")} {goForwardHotkey}</TooltipContent>
           </Tooltip>
-        </div>
+        </div>}
       </div>
 
       {/* === RIGHT: Browser strip + add + help === */}

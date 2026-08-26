@@ -194,10 +194,21 @@ export class WindowManager {
       }
     })
 
+    const keepArtistTrafficLightsStable = () => {
+      if (!isMac || RUNTIME_IDENTITY.variant !== 'artist-os' || window.isDestroyed()) return
+      // Artist OS renders persistent, clickable controls in the header. Hiding
+      // the native set prevents macOS from dimming, moving, or covering them.
+      window.setWindowButtonVisibility(false)
+    }
+
     // Show window when first paint is ready (faster perceived startup)
     window.once('ready-to-show', () => {
+      keepArtistTrafficLightsStable()
       window.show()
+      keepArtistTrafficLightsStable()
     })
+    window.on('show', keepArtistTrafficLightsStable)
+    window.on('restore', keepArtistTrafficLightsStable)
 
     // Open external links in default browser
     window.webContents.setWindowOpenHandler((details) => {
@@ -346,9 +357,11 @@ export class WindowManager {
 
     // Handle focus/blur to broadcast window focus state
     window.on('focus', () => {
+      keepArtistTrafficLightsStable()
       this.pushToWindow(window, RPC_CHANNELS.window.FOCUS_STATE, true)
     })
     window.on('blur', () => {
+      keepArtistTrafficLightsStable()
       this.pushToWindow(window, RPC_CHANNELS.window.FOCUS_STATE, false)
     })
 
@@ -660,21 +673,20 @@ export class WindowManager {
     return null
   }
 
-  /**
-   * Show or hide macOS traffic light buttons (close/minimize/maximize).
-   * Used to hide them when fullscreen overlays are open to prevent accidental clicks.
-   * No-op on non-macOS platforms.
-   */
+  /** Show or hide macOS traffic light buttons (close/minimize/maximize). */
   setTrafficLightsVisible(webContentsId: number, visible: boolean): void {
     if (process.platform !== 'darwin') return
 
     const managed = this.windows.get(webContentsId)
     if (managed && !managed.window.isDestroyed()) {
-      managed.window.setWindowButtonVisibility(visible)
+      // Artist OS owns persistent renderer controls; keep native controls hidden
+      // so focus and overlay transitions cannot make the visible set disappear.
+      const shouldShow = RUNTIME_IDENTITY.variant === 'artist-os' ? false : visible
+      managed.window.setWindowButtonVisibility(shouldShow)
       // Re-apply custom traffic light position after showing buttons
       // setWindowButtonVisibility can reset position to default, so we need
       // to restore the custom position using the modern setWindowButtonPosition API
-      if (visible) {
+      if (shouldShow) {
         managed.window.setWindowButtonPosition({ x: 18, y: 19 })
       }
     }

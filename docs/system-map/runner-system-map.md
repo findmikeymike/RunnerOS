@@ -421,7 +421,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 #### Record Doctor (`record-doctor`)
 
-- Description: Submit a song for premium producer vetting, feedback, or enhancement by sending a clean approval-gated packet to mikeymikemusic@gmail.com.
+- Description: Have your song reviewed by a Grammy-winning, multi-platinum producer and songwriter for an unbiased, credible expert perspective before release.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`, `lab-workers-default-visible`
 - Skills: `record-doctor-handoff`, `artist-comms-strategist`

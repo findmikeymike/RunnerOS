@@ -28,6 +28,7 @@ import {
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { getDocUrl } from '@craft-agent/shared/docs/doc-links'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
+import { productDataPath } from '@/lib/product-identity'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -267,7 +268,9 @@ export default function PermissionsSettingsPage() {
                         <div className="p-8 text-center text-white/38">
                           <p className="text-sm">{t("settings.permissions.noDefaultPermissions")}</p>
                           <p className="text-xs mt-1 text-white/28">
-                            {t("settings.permissions.noDefaultPermissionsDesc")}
+                            {t("settings.permissions.noDefaultPermissionsDesc", {
+                              path: productDataPath('permissions/default.json'),
+                            })}
                           </p>
                         </div>
                       )}

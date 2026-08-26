@@ -69,6 +69,7 @@ import { useTransportConnectionState } from '@/hooks/useTransportConnectionState
 import { useStaleSessionRecovery } from '@/hooks/useStaleSessionRecovery'
 import { TransportConnectionBanner, shouldShowTransportConnectionBanner } from '@/components/app-shell/TransportConnectionBanner'
 import { getFileManagerName } from '@/lib/platform'
+import { RENDERER_PRODUCT_VARIANT } from '@/lib/product-identity'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
 
@@ -1836,11 +1837,66 @@ export default function App() {
     },
     // Platform-specific file manager name for UI labels
     fileManagerName: getFileManagerName(),
-    // Hide/show macOS traffic lights when fullscreen overlays are open
+    // Artist OS keeps native window controls visible even while app overlays are open.
     onSetTrafficLightsVisible: (visible: boolean) => {
-      window.electronAPI.setTrafficLightsVisible(visible)
+      window.electronAPI.setTrafficLightsVisible(
+        RENDERER_PRODUCT_VARIANT === 'artist-os' ? true : visible,
+      )
     },
   }), [handleOpenFile, handleOpenUrl, linkInterceptor.openFileExternal])
+
+  useEffect(() => {
+    if (RENDERER_PRODUCT_VARIANT === 'artist-os') {
+      void window.electronAPI.setTrafficLightsVisible(true)
+    }
+  }, [])
+
+  // Radix modal layers temporarily set `body { pointer-events: none }` while
+  // they are open. If a layer is interrupted during a workspace switch or
+  // renderer refresh, that inline lock can survive after the layer is gone and
+  // make the whole Artist OS shell ignore mouse input. Recover only when no
+  // live modal/menu/popover remains; active overlays keep their normal lock.
+  useEffect(() => {
+    if (RENDERER_PRODUCT_VARIANT !== 'artist-os') return
+
+    const activeBlockingLayerSelector = [
+      '[role="dialog"]',
+      '[role="alertdialog"]',
+      '[role="menu"][data-state="open"]',
+      '[role="listbox"][data-state="open"]',
+      '[data-radix-popper-content-wrapper] [data-state="open"]',
+    ].join(',')
+
+    let recoveryFrame: number | null = null
+    const recoverStalePointerLock = () => {
+      if (recoveryFrame !== null) cancelAnimationFrame(recoveryFrame)
+      recoveryFrame = requestAnimationFrame(() => {
+        recoveryFrame = null
+        if (
+          document.body.style.pointerEvents === 'none'
+          && !document.querySelector(activeBlockingLayerSelector)
+        ) {
+          document.body.style.removeProperty('pointer-events')
+        }
+      })
+    }
+
+    recoverStalePointerLock()
+    const observer = new MutationObserver(recoverStalePointerLock)
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['style'],
+      childList: true,
+      subtree: true,
+    })
+    window.addEventListener('focus', recoverStalePointerLock)
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('focus', recoverStalePointerLock)
+      if (recoveryFrame !== null) cancelAnimationFrame(recoveryFrame)
+    }
+  }, [])
 
   // Loading state - show splash screen
   if (appState === 'loading') {

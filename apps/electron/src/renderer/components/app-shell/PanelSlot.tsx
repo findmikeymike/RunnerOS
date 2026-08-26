@@ -40,6 +40,8 @@ interface PanelSlotProps {
   sash?: React.ReactNode
   /** Compact (mobile) mode — shows back button in panel header */
   isCompact?: boolean
+  /** Render against the app window instead of inside a floating rounded panel. */
+  edgeToEdge?: boolean
 }
 
 export function PanelSlot({
@@ -52,6 +54,7 @@ export function PanelSlot({
   proportion,
   sash,
   isCompact,
+  edgeToEdge = false,
 }: PanelSlotProps) {
   const { t } = useTranslation()
   const closePanel = useSetAtom(closePanelAtom)
@@ -123,7 +126,11 @@ export function PanelSlot({
         data-compact={isCompact || undefined}
         className={cn(
           'h-full overflow-hidden relative @container/panel',
-          !isOnly && isFocusedPanel ? 'shadow-panel-focused z-[1]' : 'shadow-middle z-0',
+          edgeToEdge
+            ? 'z-0'
+            : !isOnly && isFocusedPanel
+              ? 'shadow-panel-focused z-[1]'
+              : 'shadow-middle z-0',
           'runneros-glass-panel-strong',
         )}
         style={{
@@ -138,10 +145,10 @@ export function PanelSlot({
             : {}
           ),
           // Corner radii: edge corners (touching window boundary) vs interior corners
-          borderTopLeftRadius: RADIUS_INNER,
-          borderBottomLeftRadius: isAtLeftEdge ? RADIUS_EDGE : RADIUS_INNER,
-          borderTopRightRadius: RADIUS_INNER,
-          borderBottomRightRadius: isAtRightEdge ? RADIUS_EDGE : RADIUS_INNER,
+          borderTopLeftRadius: edgeToEdge ? 0 : RADIUS_INNER,
+          borderBottomLeftRadius: edgeToEdge ? 0 : isAtLeftEdge ? RADIUS_EDGE : RADIUS_INNER,
+          borderTopRightRadius: edgeToEdge ? 0 : RADIUS_INNER,
+          borderBottomRightRadius: edgeToEdge ? 0 : isAtRightEdge ? RADIUS_EDGE : RADIUS_INNER,
           ...(isOnly && !isCompact && isFullWidthRoute
             ? {
                 flexGrow: 1,

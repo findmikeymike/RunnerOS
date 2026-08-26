@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-05
+last_verified: 2026-08-25
 source_of_truth: true
 ---
 
@@ -41,8 +41,13 @@ When active, a Lab workspace gets:
 - Song Pad with editable Rough Pad, embedded Remember This area, and editable song structure sections.
 - Lab active workers are workspace-scoped. Current Lab manifests should show only `reverse-magic`, `legendary-writer`, and `record-doctor`; future Lab specialists should be added through activation and role routing, not forced global defaults.
 - Campaign detection excludes Lab so HQ project cards do not mistake Lab for the current release.
-- Workspace rail anchors Artist HQ first, then Campaign spaces, then Lab spaces.
-- Workspace rail add menu offers `New Campaign` and `New Creative Lab` with prefilled creation names.
+- Artist OS workspace navigation lives in the top header: Artist HQ first, Campaign spaces next, then the add-workspace control.
+- When Creative Lab exists, a divider separates its dedicated Lab button from HQ and Campaign workspaces.
+- The header add menu offers `New Campaign` plus `Add Creative Lab` only while no Lab exists.
+- `Add Creative Lab` creates and opens the single Lab directly; it does not show the generic workspace type/location form.
+- Once created, the Lab remains available from the header and a second Lab is rejected by storage.
+- The sidebar toggle is anchored at the lower-left, outside the workspace hierarchy, and remains available while the sidebar is closed.
+- Artist OS keeps the native macOS close, minimize, and zoom controls visible when app overlays open.
 
 ## Current Code
 
@@ -59,8 +64,6 @@ When active, a Lab workspace gets:
 
 ## Next Gaps
 
-- Add explicit persisted workspace type instead of name inference.
-- Replace prefilled-name workspace typing with explicit `campaign` / `lab` metadata when workspace type persistence exists.
 - Replace placeholder song cards with real saved song docs.
 - Replace placeholder Stories Worth Writing About with a research/trend source.
 - Add Lab-scoped context templates for lyrics, references, concepts, and song notes.

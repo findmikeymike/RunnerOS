@@ -21,6 +21,8 @@ source_of_truth: true
 - Verified Claude Sonnet background completion after the parent turn, compact parent status, child-session opening, interruption, same-session resume, and renderer reload. Internal receipt/session plumbing and delegation protocol are now hidden from the normal transcript while remaining durably stored for runtime use.
 - Closed two additional runtime gates: existing DeepSeek/Pi chat plus terminal-tool execution is verified, and Claude Sonnet recovered correctly after Explore mode blocked a Write without creating the requested file.
 - Integrated Creative Lab as an explicit persisted Artist OS workspace purpose with isolated routing, scoped tools, user-controlled starter workers, canonical song/project persistence, honest live UI, and recoverable pending edits.
+- Made Creative Lab a single Artist OS-owned space: one click creates and opens it under the Artist OS root, the add action disappears afterward, and storage rejects duplicate Labs. Product-aware UI paths no longer expose `.craft-agent` in Artist OS.
+- Consolidated Artist OS workspace switching into the top header in the order HQ, Campaigns, add workspace, then a separated Creative Lab; moved the sidebar toggle to the lower-left and kept native macOS window controls visible across app overlays.
 - Added bounded Prosody integration with packaged resources, first-use progress, explicit offline/runtime errors, and a still-usable Song Pad when rhyme tooling is unavailable.
 - Preserved the original dirty Artist OS and Lab source worktrees; integration work is isolated to `codex/lab-integration-hardening`.
 

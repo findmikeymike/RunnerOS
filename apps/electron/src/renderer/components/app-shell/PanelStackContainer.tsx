@@ -52,6 +52,8 @@ interface PanelStackContainerProps {
   /** Compact mode: single-panel, list/content toggle (mobile or narrow window) */
   isCompact?: boolean
   isResizing?: boolean
+  /** Remove floating-panel gutters so the product surface becomes the window canvas. */
+  edgeToEdge?: boolean
 }
 
 export function PanelStackContainer({
@@ -63,6 +65,7 @@ export function PanelStackContainer({
   isRightSidebarVisible,
   isCompact = false,
   isResizing,
+  edgeToEdge = false,
 }: PanelStackContainerProps) {
   const panelStack = useAtomValue(panelStackAtom)
   const focusedPanelId = useAtomValue(focusedPanelIdAtom)
@@ -97,9 +100,9 @@ export function PanelStackContainer({
       : null
   const isLeftEdge = !hasSidebar && !hasNavigator
   const shouldCenterSinglePanel = !isCompact && visiblePanels.length === 1 && !hasNavigator && !hasSidebar
-  const stackGap = hasSidebar && !hasNavigator ? 24 : PANEL_GAP
-  const topBreathingRoom = hasSidebar ? 18 : 0
-  const bottomBreathingRoom = 2
+  const stackGap = edgeToEdge ? PANEL_GAP : hasSidebar && !hasNavigator ? 24 : PANEL_GAP
+  const topBreathingRoom = edgeToEdge ? 0 : hasSidebar ? 18 : 0
+  const bottomBreathingRoom = edgeToEdge ? 0 : 2
 
   // Auto-scroll to newly pushed content panel
   useEffect(() => {
@@ -140,13 +143,13 @@ export function PanelStackContainer({
         overflowX: 'auto',
         overflowY: 'hidden',
         // Extra vertical space for box-shadows (collapsed back with negative margin)
-        paddingBottom: PANEL_STACK_VERTICAL_OVERFLOW + bottomBreathingRoom,
-        paddingTop: PANEL_STACK_VERTICAL_OVERFLOW + topBreathingRoom,
-        marginTop: -PANEL_STACK_VERTICAL_OVERFLOW + topBreathingRoom,
+        paddingBottom: edgeToEdge ? 0 : PANEL_STACK_VERTICAL_OVERFLOW + bottomBreathingRoom,
+        paddingTop: edgeToEdge ? 0 : PANEL_STACK_VERTICAL_OVERFLOW + topBreathingRoom,
+        marginTop: edgeToEdge ? 0 : -PANEL_STACK_VERTICAL_OVERFLOW + topBreathingRoom,
         // Extend to window bottom so scrollbar sits at the very edge
         marginBottom: -bottomBreathingRoom,
         // Keep the rightmost panel off the window edge while leaving room for shadows.
-        paddingRight: isCompact ? PANEL_EDGE_INSET : PANEL_TRAILING_INSET,
+        paddingRight: edgeToEdge ? 0 : isCompact ? PANEL_EDGE_INSET : PANEL_TRAILING_INSET,
       }}
     >
       {/* Inner flex container — flex-grow: 1 fills viewport, content can overflow for scroll.
@@ -155,7 +158,7 @@ export function PanelStackContainer({
       <motion.div
         className="relative z-[1] flex h-full"
         initial={false}
-        animate={{ paddingLeft: !hasSidebar ? PANEL_EDGE_INSET : 0 }}
+        animate={{ paddingLeft: edgeToEdge ? 0 : !hasSidebar ? PANEL_EDGE_INSET : 0 }}
         transition={transition}
         style={{
           gap: stackGap,
@@ -226,6 +229,7 @@ export function PanelStackContainer({
               isAtRightEdge={index === visiblePanels.length - 1 && !isRightSidebarVisible && !showInlineVisualSidecar}
               proportion={entry.proportion}
               isCompact={isCompact}
+              edgeToEdge={edgeToEdge}
               sash={index > 0 ? (
                 <PanelResizeSash
                   leftIndex={index - 1}

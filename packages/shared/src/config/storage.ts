@@ -825,6 +825,16 @@ export async function switchWorkspaceAtomic(workspaceId: string): Promise<{ work
  * Add a workspace to the global config.
  * @param workspace - Workspace data (must include rootPath)
  */
+export function findConflictingLabWorkspace(
+  workspaces: readonly Workspace[],
+  requestedRootPath: string,
+): Workspace | undefined {
+  return workspaces.find(existing => (
+    existing.artistWorkspaceScope === 'lab'
+    && existing.rootPath !== requestedRootPath
+  ));
+}
+
 export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt' | 'slug'>): Workspace {
   const config = loadStoredConfig();
   if (!config) {
@@ -832,6 +842,10 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt' | 'sl
   }
 
   const slug = extractWorkspaceSlugFromPath(workspace.rootPath, '');
+
+  if (workspace.artistWorkspaceScope === 'lab' && findConflictingLabWorkspace(config.workspaces, workspace.rootPath)) {
+    throw new Error('Artist OS supports one Creative Lab. Open the existing Creative Lab instead.');
+  }
 
   // Check if workspace with same rootPath already exists
   const existing = config.workspaces.find(w => w.rootPath === workspace.rootPath);

@@ -5,6 +5,7 @@ import { useAtomValue, useStore } from "jotai"
 import { motion, AnimatePresence } from "motion/react"
 import {
   Archive,
+  ChevronLeft,
   ChevronRight,
   ChevronDown,
   MoreHorizontal,
@@ -45,6 +46,7 @@ import { WorkspaceRail } from "./WorkspaceRail"
 import { McpIcon } from "../icons/McpIcon"
 import { cn } from "@/lib/utils"
 import { isMac } from "@/lib/platform"
+import { RENDERER_PRODUCT_VARIANT } from "@/lib/product-identity"
 import { Button } from "@/components/ui/button"
 import { HeaderIconButton } from "@/components/ui/HeaderIconButton"
 import { Separator } from "@/components/ui/separator"
@@ -574,8 +576,9 @@ function AppShellContent({
   const isAutoCompact = shellWidth > 0 && shellWidth < MOBILE_THRESHOLD
 
   const effectiveSidebarAndNavigatorHidden = isSidebarAndNavigatorHidden || isAutoCompact
-  const usesWorkspaceRail = !effectiveSidebarAndNavigatorHidden && !isAutoCompact
-  const effectiveSidebarWidth = usesWorkspaceRail ? 150 : sidebarWidth
+  const usesWorkspaceHeader = RENDERER_PRODUCT_VARIANT === 'artist-os'
+  const usesWorkspaceRail = !usesWorkspaceHeader && !effectiveSidebarAndNavigatorHidden && !isAutoCompact
+  const effectiveSidebarWidth = usesWorkspaceHeader || usesWorkspaceRail ? 150 : sidebarWidth
 
   // What's New overlay
   const [showWhatsNew, setShowWhatsNew] = React.useState(false)
@@ -2638,9 +2641,9 @@ function AppShellContent({
         },
         {
           id: "nav:chat",
-          title: "Chat",
+          title: "Command",
           label: String(workspaceSessionMetas.length),
-          icon: MessageSquare,
+          icon: Sparkles,
           variant: workChatActive ? "default" : "ghost",
           onClick: handleWorkChatClick,
           onToggle: handleChatHistoryToggle,
@@ -2745,9 +2748,9 @@ function AppShellContent({
       },
       {
         id: "nav:work-chat",
-        title: "Chat",
+        title: "Command",
         label: String(workspaceSessionMetas.length),
-        icon: MessageSquare,
+        icon: Sparkles,
         variant: workChatActive ? "default" : "ghost",
         onClick: handleWorkChatClick,
         onToggle: handleChatHistoryToggle,
@@ -2929,15 +2932,51 @@ function AppShellContent({
           onToggleFocusMode={() => setIsSidebarAndNavigatorHidden(prev => !prev)}
           onAddSessionPanel={() => handleNewChat(true)}
           onAddBrowserPanel={() => { void handleNewBrowserWindow() }}
+          workspaceNavigation={usesWorkspaceHeader && !isAutoCompact ? (
+            <WorkspaceRail
+              workspaces={workspaces}
+              activeWorkspaceId={activeWorkspaceId}
+              onSelect={onSelectWorkspace}
+              onWorkspaceCreated={() => onRefreshWorkspaces?.()}
+              workspaceUnreadMap={workspaceUnreadMap}
+              orientation="horizontal"
+            />
+          ) : undefined}
+          showSidebarButton={!usesWorkspaceHeader}
+          showProductMenu={!usesWorkspaceHeader}
+          showHistoryButtons={!usesWorkspaceHeader}
           isCompact={isAutoCompact}
         />
+      {usesWorkspaceHeader && !effectiveSidebarAndNavigatorHidden && !isAutoCompact && !isSidebarVisible && (
+        <button
+          data-testid="sidebar-toggle-open"
+          type="button"
+          title={t("menu.toggleSidebar")}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation()
+            handleToggleSidebar()
+          }}
+          aria-label={t("menu.toggleSidebar")}
+          className="titlebar-no-drag pointer-events-auto fixed bottom-3 left-2 z-[100] flex h-6 w-6 items-center justify-center rounded-md text-white/28 transition-colors hover:bg-white/[0.04] hover:text-white/65"
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      )}
       {/* === OUTER LAYOUT: Unified Panel Stack | Right Sidebar === */}
       <div
         ref={shellRef}
         className="runneros-glass-shell flex items-stretch relative"
-        style={{ height: '100%', paddingTop: 48, paddingRight: PANEL_EDGE_INSET, paddingBottom: 64, paddingLeft: 0, gap: 0 }}
+        style={{
+          height: '100%',
+          paddingTop: 48,
+          paddingRight: usesWorkspaceHeader ? 0 : PANEL_EDGE_INSET,
+          paddingBottom: usesWorkspaceHeader ? 0 : 64,
+          paddingLeft: 0,
+          gap: 0,
+        }}
       >
-        {!effectiveSidebarAndNavigatorHidden && !isAutoCompact && (
+        {!usesWorkspaceHeader && !effectiveSidebarAndNavigatorHidden && !isAutoCompact && (
           <WorkspaceRail
             workspaces={workspaces}
             activeWorkspaceId={activeWorkspaceId}
@@ -2948,6 +2987,7 @@ function AppShellContent({
         )}
         <div className="flex min-w-0 flex-1">
           <PanelStackContainer
+            edgeToEdge={usesWorkspaceHeader}
             sidebarSlot={
             <div
               ref={sidebarRef}
@@ -2957,12 +2997,31 @@ function AppShellContent({
               tabIndex={sidebarFocused ? 0 : -1}
               onKeyDown={handleSidebarKeyDown}
             >
+            {usesWorkspaceHeader && !effectiveSidebarAndNavigatorHidden && !isAutoCompact && isSidebarVisible && (
+              <button
+                data-testid="sidebar-toggle-close"
+                type="button"
+                title={t("menu.toggleSidebar")}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  handleToggleSidebar()
+                }}
+                aria-label={t("menu.toggleSidebar")}
+                className="titlebar-no-drag pointer-events-auto absolute bottom-3 right-2 z-[80] flex h-6 w-6 items-center justify-center rounded-md text-white/28 transition-colors hover:bg-white/[0.04] hover:text-white/65"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+            )}
             <div className="flex h-full flex-col select-none">
               {/* Sidebar Top Section */}
               <div className="flex-1 flex flex-col min-h-0">
                 {/* Primary Nav */}
                 {/* pb-4 provides clearance so the last item scrolls above the mask-fade-bottom gradient */}
-                <div className="flex-1 w-full overflow-y-auto overflow-x-hidden min-h-0 mask-fade-bottom pt-[18px] pb-4">
+                <div className={cn(
+                  "flex-1 w-full overflow-y-auto overflow-x-hidden min-h-0 mask-fade-bottom",
+                  usesWorkspaceHeader ? "px-3 pb-10 pt-3" : "pt-[18px] pb-4",
+                )}>
                 <LeftSidebar
                   isCollapsed={false}
                   getItemProps={getSidebarItemProps}
@@ -3717,10 +3776,10 @@ function AppShellContent({
             isCompact={isAutoCompact}
             isResizing={!!isResizing}
           />
-        </div>
+      </div>
 
         {/* Sidebar Resize Handle (absolute, hidden in focused mode) */}
-        {!effectiveSidebarAndNavigatorHidden && !usesWorkspaceRail && (
+        {!effectiveSidebarAndNavigatorHidden && !usesWorkspaceRail && !usesWorkspaceHeader && (
         <div
           ref={resizeHandleRef}
           onMouseDown={(e) => { e.preventDefault(); setIsResizing('sidebar') }}

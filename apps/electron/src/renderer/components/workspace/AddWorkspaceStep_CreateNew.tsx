@@ -9,7 +9,7 @@ import { AddWorkspaceContainer, AddWorkspaceStepHeader, AddWorkspaceSecondaryBut
 import { AddWorkspace_RadioOption } from "./AddWorkspace_RadioOption"
 import { useDirectoryPicker } from "@/hooks/useDirectoryPicker"
 import { ServerDirectoryBrowser } from "@/components/ServerDirectoryBrowser"
-import { PRODUCT_DATA_DIR_NAME } from "@/lib/product-identity"
+import { PRODUCT_NAME } from "@/lib/product-identity"
 
 type LocationOption = 'default' | 'custom'
 type WorkspacePurpose = 'general' | 'campaign' | 'lab'
@@ -19,6 +19,7 @@ interface AddWorkspaceStep_CreateNewProps {
   onCreate: (folderPath: string, name: string, purpose: WorkspacePurpose) => Promise<void>
   isCreating: boolean
   initialName?: string
+  initialPurpose?: WorkspacePurpose
 }
 
 /**
@@ -26,32 +27,27 @@ interface AddWorkspaceStep_CreateNewProps {
  *
  * Fields:
  * - Workspace name (required)
- * - Location: Default (~/.craft-agent/workspaces/) or Custom
+ * - Location: Default product workspace folder or Custom
  */
 export function AddWorkspaceStep_CreateNew({
   onBack,
   onCreate,
   isCreating,
   initialName = '',
+  initialPurpose,
 }: AddWorkspaceStep_CreateNewProps) {
   const { t } = useTranslation()
   const [name, setName] = useState(initialName)
-  const [purpose, setPurpose] = useState<WorkspacePurpose>('general')
+  const [purpose, setPurpose] = useState<WorkspacePurpose>(initialPurpose ?? 'general')
   const [locationOption, setLocationOption] = useState<LocationOption>('default')
   const [customPath, setCustomPath] = useState<string | null>(null)
-  const [homeDir, setHomeDir] = useState('')
+  const [defaultWorkspacePath, setDefaultWorkspacePath] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isValidating, setIsValidating] = useState(false)
 
-  // Get home directory on mount
-  useEffect(() => {
-    window.electronAPI.getHomeDir().then(setHomeDir)
-  }, [])
-
   const slug = slugify(name)
-  const defaultBasePath = homeDir ? `${homeDir}/${PRODUCT_DATA_DIR_NAME}/workspaces` : null
   const finalPath = locationOption === 'default'
-    ? (defaultBasePath && slug ? `${defaultBasePath}/${slug}` : null)
+    ? defaultWorkspacePath
     : customPath && slug
       ? `${customPath}/${slug}`
       : null
@@ -60,6 +56,7 @@ export function AddWorkspaceStep_CreateNew({
   useEffect(() => {
     if (!slug) {
       setError(null)
+      setDefaultWorkspacePath(null)
       return
     }
 
@@ -67,6 +64,7 @@ export function AddWorkspaceStep_CreateNew({
       setIsValidating(true)
       try {
         const result = await window.electronAPI.checkWorkspaceSlug(slug)
+        setDefaultWorkspacePath(result.path)
         if (result.exists) {
           setError(`A workspace named "${slug}" already exists`)
         } else {
@@ -74,6 +72,8 @@ export function AddWorkspaceStep_CreateNew({
         }
       } catch (err) {
         console.error('Failed to validate workspace slug:', err)
+        setDefaultWorkspacePath(null)
+        setError('Unable to verify the workspace location')
       } finally {
         setIsValidating(false)
       }
@@ -145,35 +145,37 @@ export function AddWorkspaceStep_CreateNew({
           )}
         </div>
 
-        <div className="space-y-3">
-          <label className="block text-sm font-medium text-foreground">
-            Workspace type
-          </label>
-          <AddWorkspace_RadioOption
-            name="purpose"
-            checked={purpose === 'general'}
-            onChange={() => setPurpose('general')}
-            disabled={isCreating}
-            title="General workspace"
-            subtitle="A neutral space for operations, trading, or other projects."
-          />
-          <AddWorkspace_RadioOption
-            name="purpose"
-            checked={purpose === 'lab'}
-            onChange={() => setPurpose('lab')}
-            disabled={isCreating}
-            title="Creative Lab"
-            subtitle="Songwriting, hooks, references, and creative experiments."
-          />
-          <AddWorkspace_RadioOption
-            name="purpose"
-            checked={purpose === 'campaign'}
-            onChange={() => setPurpose('campaign')}
-            disabled={isCreating}
-            title="Artist campaign"
-            subtitle="A specific release, rollout, single, album, or tour."
-          />
-        </div>
+        {!initialPurpose && (
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-foreground">
+              Workspace type
+            </label>
+            <AddWorkspace_RadioOption
+              name="purpose"
+              checked={purpose === 'general'}
+              onChange={() => setPurpose('general')}
+              disabled={isCreating}
+              title="General workspace"
+              subtitle="A neutral space for operations, trading, or other projects."
+            />
+            <AddWorkspace_RadioOption
+              name="purpose"
+              checked={purpose === 'lab'}
+              onChange={() => setPurpose('lab')}
+              disabled={isCreating}
+              title="Creative Lab"
+              subtitle="Songwriting, hooks, references, and creative experiments."
+            />
+            <AddWorkspace_RadioOption
+              name="purpose"
+              checked={purpose === 'campaign'}
+              onChange={() => setPurpose('campaign')}
+              disabled={isCreating}
+              title="Artist campaign"
+              subtitle="A specific release, rollout, single, album, or tour."
+            />
+          </div>
+        )}
 
         {/* Location selection */}
         <div className="space-y-3">
@@ -188,7 +190,7 @@ export function AddWorkspaceStep_CreateNew({
             onChange={() => setLocationOption('default')}
             disabled={isCreating}
             title={t("workspace.defaultLocation")}
-            subtitle={t("workspace.underDefaultFolder")}
+            subtitle={t("workspace.underDefaultFolder", { folder: PRODUCT_NAME })}
           />
 
           {/* Custom location option */}

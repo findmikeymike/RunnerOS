@@ -1427,7 +1427,7 @@ Memory rule: save durable station-campaign preferences and collaboration pattern
     slug: 'record-doctor',
     metadata: {
       name: 'Record Doctor',
-      description: 'Submit a song for premium producer vetting, feedback, or enhancement by sending a clean approval-gated packet to mikeymikemusic@gmail.com.',
+      description: 'Have your song reviewed by a Grammy-winning, multi-platinum producer and songwriter for an unbiased, credible expert perspective before release.',
       avatar: 'RD',
       permissionMode: 'ask',
       thinkingLevel: 'high',

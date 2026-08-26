@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { assignMissingArtistWorkspaceScopes, inferModelSelectionMode, repairLegacyInferredArtistWorkspaceScopes, shouldMigratePiOpenAiProvider, shouldRepairPiApiKeyCodexProvider } from '../storage'
+import { assignMissingArtistWorkspaceScopes, findConflictingLabWorkspace, inferModelSelectionMode, repairLegacyInferredArtistWorkspaceScopes, shouldMigratePiOpenAiProvider, shouldRepairPiApiKeyCodexProvider } from '../storage'
 import type { Workspace } from '@craft-agent/core/types'
 import type { StoredConfig } from '../storage'
 
@@ -67,6 +67,21 @@ describe('assignMissingArtistWorkspaceScopes', () => {
     expect(repairLegacyInferredArtistWorkspaceScopes(config)).toBe(true)
     expect(config.workspaces[0]?.artistWorkspaceScope).toBe('lab')
     expect(repairLegacyInferredArtistWorkspaceScopes(config)).toBe(false)
+  })
+})
+
+describe('findConflictingLabWorkspace', () => {
+  const workspaces = [
+    { id: 'hq', name: 'Artist HQ', slug: 'artist-hq', rootPath: '/tmp/hq', createdAt: 1, artistWorkspaceScope: 'hq' as const },
+    { id: 'lab', name: 'Creative Lab', slug: 'creative-lab', rootPath: '/tmp/creative-lab', createdAt: 2, artistWorkspaceScope: 'lab' as const },
+  ] as Workspace[]
+
+  it('finds the existing Lab when a different Lab root is requested', () => {
+    expect(findConflictingLabWorkspace(workspaces, '/tmp/creative-lab-2')?.id).toBe('lab')
+  })
+
+  it('allows the existing Lab root to be reopened without creating a duplicate', () => {
+    expect(findConflictingLabWorkspace(workspaces, '/tmp/creative-lab')).toBeUndefined()
   })
 })
 

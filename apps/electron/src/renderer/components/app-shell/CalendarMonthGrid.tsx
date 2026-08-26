@@ -75,7 +75,7 @@ export function CalendarMonthGrid({
   }, [dayActions.length, dayMetaByDate, onSelectDate])
 
   return (
-    <div className="rounded-[16px] border border-white/[0.05] bg-black/20 p-2.5">
+    <div className="flex min-h-0 flex-1 flex-col rounded-[16px] border border-white/[0.05] bg-black/20 p-2.5">
       <div className="mb-2 flex items-center justify-between">
         <button
           type="button"
@@ -101,6 +101,8 @@ export function CalendarMonthGrid({
             {day}
           </div>
         ))}
+      </div>
+      <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-1">
         {days.map((day) => {
           const key = toDateKey(day)
           const meta = dayMetaByDate.get(key)

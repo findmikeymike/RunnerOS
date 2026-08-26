@@ -3340,6 +3340,15 @@ export class SessionManager implements ISessionManager {
               sessionLog.info('[agent-definitions] Removed Content Director persona/tool conflicts')
             }
           }
+          const recordDoctorAgent = STARTER_AGENTS.find(agent => agent.slug === 'record-doctor')
+          if (recordDoctorAgent && replaceBuiltInAgentMetadata('record-doctor', {
+            description: {
+              from: 'Submit a song for premium producer vetting, feedback, or enhancement by sending a clean approval-gated packet to mikeymikemusic@gmail.com.',
+              to: recordDoctorAgent.metadata.description,
+            },
+          }).updated) {
+            sessionLog.info('[agent-definitions] Updated Record Doctor public description')
+          }
           const printAgent = STARTER_AGENTS.find(agent => agent.slug === 'print-agent')
           if (printAgent) {
             const printMetadataUpdated = [

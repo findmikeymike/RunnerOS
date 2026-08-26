@@ -14,6 +14,7 @@ import type { Workspace } from "../../../shared/types"
 import { toast } from "sonner"
 
 type CreationStep = 'choice' | 'create' | 'open' | 'remote'
+type WorkspacePurpose = 'general' | 'campaign' | 'lab'
 
 interface WorkspaceCreationScreenProps {
   /** Callback when a workspace is created successfully */
@@ -23,6 +24,7 @@ interface WorkspaceCreationScreenProps {
   className?: string
   initialStep?: Extract<CreationStep, 'choice' | 'create' | 'open'>
   initialName?: string
+  initialPurpose?: WorkspacePurpose
   /** When set, skip choice step and open ConnectRemote in reconnect mode */
   reconnectWorkspace?: Workspace
   /** Reconnect an existing remote workspace and resolve only on real success. */
@@ -43,6 +45,7 @@ export function WorkspaceCreationScreen({
   className,
   initialStep = 'choice',
   initialName,
+  initialPurpose,
   reconnectWorkspace,
   onReconnectWorkspace,
 }: WorkspaceCreationScreenProps) {
@@ -121,6 +124,7 @@ export function WorkspaceCreationScreen({
             onCreate={(folderPath, name, purpose) => handleCreateWorkspace(folderPath, name, undefined, purpose)}
             isCreating={isCreating}
             initialName={initialName}
+            initialPurpose={initialPurpose}
           />
         )
 

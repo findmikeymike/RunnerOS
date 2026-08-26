@@ -50,7 +50,11 @@ Creative Lab is represented by the explicit workspace purpose `lab` within the A
 
 Required behavior:
 
-- New Lab workspaces persist `purpose: "lab"` at creation.
+- Artist OS owns exactly one Creative Lab.
+- `Add Creative Lab` creates that Lab immediately at the Artist OS default workspace root with no generic type or location form.
+- Once the Lab exists, the add action disappears and the existing Lab remains available in the top workspace header after a visual divider.
+- Backend creation rejects any second Lab, including stale or concurrent UI requests.
+- The Lab persists `purpose: "lab"` at creation.
 - Existing campaign and HQ workspaces retain their current purposes.
 - UI routing, worker defaults, tool availability, and Lab navigation read the same persisted purpose.
 - Legacy workspaces may be recognized by the old name/slug rule once, then upgraded to explicit purpose without relocating their files.
@@ -148,6 +152,9 @@ Seed/demo songs must never be written into a real user workspace automatically. 
 ### Lab navigation
 
 - Lab appears only for explicit Lab workspaces.
+- Artist OS orders the top workspace header as HQ, Campaign workspaces, add workspace, divider, then Creative Lab.
+- Sidebar visibility is a separate lower-left control and must not compete with workspace switching.
+- Native macOS window controls remain visible while Artist OS overlays are open.
 - HQ and campaign navigation remain unchanged.
 - Shared shell changes preserve current Artist OS header, chat, background-worker, approvals, and runtime-isolation behavior.
 
@@ -281,7 +288,7 @@ Preferred release direction: prepackage the small required Python dependencies o
 
 ### Manual smoke
 
-1. Create a new Lab workspace and rename it; Lab identity survives.
+1. Click `Add Creative Lab`; confirm it creates and opens the one Lab directly under the Artist OS root, the add action disappears, a second Lab cannot be created, and Lab identity survives rename/restart.
 2. Create a song, edit every pad area, reload, and restart; content survives.
 3. Add songs to a project/sequence, reorder, reload; order survives.
 4. Activate and deactivate a worker, restart; the choice survives.
@@ -300,4 +307,3 @@ The branch is ready only when:
 - an independent code review reports no critical or important integration blocker;
 - remaining manual or packaged-platform checks are listed honestly as external smoke gates;
 - the diff is split into reviewable commits and contains no unrelated worktree changes.
-

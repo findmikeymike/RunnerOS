@@ -737,6 +737,7 @@ export function replaceBuiltInAgentMetadata(
     'spotify-analyst',
     'trypost-agent',
     'content-director',
+    'record-doctor',
   ]);
   if (!builtIns.has(slug)) return { updated: false };
 

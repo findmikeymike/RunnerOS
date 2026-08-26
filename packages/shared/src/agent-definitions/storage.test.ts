@@ -1096,6 +1096,8 @@ body
 
     expect(recordDoctor).toBeDefined()
     expect(recordDoctor?.metadata.name).toBe('Record Doctor')
+    expect(recordDoctor?.metadata.description).toBe('Have your song reviewed by a Grammy-winning, multi-platinum producer and songwriter for an unbiased, credible expert perspective before release.')
+    expect(recordDoctor?.metadata.description).not.toContain('@')
     expect(recordDoctor?.metadata.permissionMode).toBe('ask')
     expect(recordDoctor?.metadata.skills).toContain('record-doctor-handoff')
     expect(recordDoctor?.metadata.skills).toContain('artist-comms-strategist')
@@ -1112,6 +1114,24 @@ body
     expect(recordDoctor?.systemPrompt).toContain('POST /users/me/drafts')
     expect(recordDoctor?.systemPrompt).toContain('POST /users/me/drafts/send')
     expect(recordDoctor?.systemPrompt).toContain('Never mention internal app names')
+  })
+
+  test('built-in migration removes the email from Record Doctor public copy without changing its private handoff prompt', () => {
+    const recordDoctor = STARTER_AGENTS.find((agent) => agent.slug === 'record-doctor')!
+    const oldDescription = 'Submit a song for premium producer vetting, feedback, or enhancement by sending a clean approval-gated packet to mikeymikemusic@gmail.com.'
+    writeGlobalAgent({
+      ...recordDoctor,
+      metadata: { ...recordDoctor.metadata, description: oldDescription },
+    }, { globalAgentsDir })
+
+    expect(replaceBuiltInAgentMetadata('record-doctor', {
+      description: { from: oldDescription, to: recordDoctor.metadata.description },
+    }, { globalAgentsDir }).updated).toBe(true)
+
+    const migrated = loadGlobalAgent('record-doctor', { globalAgentsDir })!
+    expect(migrated.metadata.description).toBe(recordDoctor.metadata.description)
+    expect(migrated.metadata.description).not.toContain('@')
+    expect(migrated.systemPrompt).toContain('mikeymikemusic@gmail.com')
   })
 
   test('starter library includes Reverse Magic as a Lab lyric worker', () => {
