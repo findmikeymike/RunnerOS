@@ -184,6 +184,22 @@ export class IbkrOptionsAdapter implements OptionsProviderAdapter {
     return exact
   }
 
+  async submitCertificationUnknown(request: OptionsProviderOrderRequest): Promise<void> {
+    this.assertRequest(request)
+    if (await this.getOrderByClientId(request.account_id, request.client_order_id)) {
+      throw new Error('IBKR unknown-submit probe requires one fresh reserved client order ID.')
+    }
+    const response = await this.post(`/iserver/account/${encodeURIComponent(request.account_id)}/orders`, [ibkrOrder(request)])
+    const rows = Array.isArray(response) ? response : [response]
+    const first = object(rows[0])
+    if (typeof first.id === 'string' && Array.isArray(first.message)) {
+      throw new Error('IBKR unknown-submit probe reached a broker confirmation and was not accepted.')
+    }
+    if (!text(first.order_id)) throw new Error('IBKR unknown-submit probe has no provider acceptance evidence.')
+    // Intentionally return before order readback. The restricted certification
+    // runner must recover solely by the reserved client order ID.
+  }
+
   async cancelOrder(accountId: string, providerOrderId: string, clientOrderId: string): Promise<OptionsProviderOrder> {
     if (accountId !== this.config.account_id || !providerOrderId || !clientOrderId) {
       throw new Error('IBKR cancel does not identify the exact configured paper order.')

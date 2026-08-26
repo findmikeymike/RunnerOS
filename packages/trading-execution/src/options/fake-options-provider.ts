@@ -223,6 +223,10 @@ export class FakeOptionsProvider {
     return cloneOrder(order)
   }
 
+  async submitCertificationUnknown(request: FakeOptionsOrderRequest): Promise<void> {
+    await this.submit(request)
+  }
+
   async getOrderByClientId(accountId: string, clientOrderId: string): Promise<FakeOptionsOrder | null> {
     const existing = this.clientOrders.get(clientOrderId)
     if (!existing) return null

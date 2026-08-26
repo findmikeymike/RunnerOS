@@ -22,7 +22,7 @@ export const OPTIONS_EXECUTION_COMMAND_SCHEMA_VERSION = 'options-execution-comma
 export const OPTIONS_EXECUTION_RECORD_SCHEMA_VERSION = 'options-execution-record@1' as const
 export const OPTIONS_CONNECTION_SCHEMA_VERSION = 'options-connection@1' as const
 export const OPTIONS_PROVIDER_READ_PROOF_SCHEMA_VERSION = 'options-provider-read-proof@1' as const
-export const OPTIONS_CERTIFICATION_EVIDENCE_SCHEMA_VERSION = 'options-certification-evidence@1' as const
+export const OPTIONS_CERTIFICATION_EVIDENCE_SCHEMA_VERSION = 'options-certification-evidence@2' as const
 export const OPTIONS_MANUAL_PAPER_AUTHORITY_SCHEMA_VERSION = 'options-manual-paper-authority@1' as const
 export const OPTIONS_AUTHORITY_REVOCATION_SCHEMA_VERSION = 'options-authority-revocation@1' as const
 
@@ -131,6 +131,8 @@ export const optionsCertificationScenarioSchema = z.enum([
 export const optionsCertificationEvidenceSchema = z.object({
   certification_schema_version: z.literal(OPTIONS_CERTIFICATION_EVIDENCE_SCHEMA_VERSION),
   certification_id: identifierSchema,
+  certification_session_id: identifierSchema,
+  journal_head_checksum: sha256Schema,
   connection_id: identifierSchema,
   connection_checksum: sha256Schema,
   credential_generation: sha256Schema,

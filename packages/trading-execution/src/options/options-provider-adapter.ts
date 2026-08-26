@@ -55,6 +55,7 @@ export interface OptionsProviderAdapter {
     buying_power_impact: string
   }>
   submit(request: OptionsProviderOrderRequest): Promise<OptionsProviderOrder>
+  submitCertificationUnknown(request: OptionsProviderOrderRequest): Promise<void>
   cancelOrder(accountId: string, providerOrderId: string, clientOrderId: string): Promise<OptionsProviderOrder>
   getOrderByClientId(accountId: string, clientOrderId: string): Promise<OptionsProviderOrder | null>
   snapshotAccount(accountId: string): Promise<OptionsProviderAccountSnapshot>

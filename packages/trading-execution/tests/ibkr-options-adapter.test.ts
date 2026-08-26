@@ -139,6 +139,23 @@ describe('IbkrOptionsAdapter', () => {
     await expect(adapter.submit({ ...request('tgcert-close-blocked'), action: 'SELL_TO_CLOSE', limit_price: '1.27' }))
       .rejects.toThrow('asset-class evidence')
   })
+
+  it('supports a restricted after-accept unknown-submit probe without normal readback', async () => {
+    let orderReads = 0
+    let submits = 0
+    const adapter = await preparedAdapter(async (input, init) => {
+      const url = new URL(input)
+      if (url.pathname.endsWith('/account/orders')) {
+        orderReads += 1
+        return response({ orders: [] })
+      }
+      if (init?.method === 'POST') submits += 1
+      return response([{ order_id: '4500', order_status: 'Submitted' }])
+    })
+    await adapter.submitCertificationUnknown(request('tgcert-unknown'))
+    expect(orderReads).toBe(1)
+    expect(submits).toBe(1)
+  })
 })
 
 const response = (value: unknown) => ({ ok: true, status: 200, json: async () => value })

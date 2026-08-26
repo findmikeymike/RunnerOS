@@ -12,6 +12,7 @@ import {
 import {
   FileOptionsManualAuthorityStore,
   FileOptionsCertificationStore,
+  FileOptionsCertificationJournal,
   runRestrictedOptionsCertification,
   sha256,
   type RestrictedOptionsCertificationRunner,
@@ -26,7 +27,7 @@ describe('manual options paper authority', () => {
     roots.push(root)
     const store = new FileOptionsManualAuthorityStore(root, () => '2026-08-26T12:05:00.000Z')
     const current = connection()
-    const certification = await certified(current)
+    const certification = await certified(current, root)
     await new FileOptionsCertificationStore(root).save(certification)
     const authority = await store.activate({
       connection: current,
@@ -47,12 +48,12 @@ describe('manual options paper authority', () => {
     roots.push(root)
     const store = new FileOptionsManualAuthorityStore(root, () => '2026-08-26T12:05:00.000Z')
     const current = connection()
-    const certification = await certified(current)
+    const certification = await certified(current, root)
     await new FileOptionsCertificationStore(root).save(certification)
     const { content_checksum: _oldChecksum, ...oldUnsigned } = current
     const driftUnsigned = { ...oldUnsigned, credential_generation: 'b'.repeat(64) }
     const drifted = optionsConnectionSchema.parse({ ...driftUnsigned, content_checksum: sha256(driftUnsigned) })
-    await expect(store.activate({ connection: drifted, certification_id: certification.certification_id, max_debit_per_order: '100', valid_until: '2026-08-26T13:00:00.000Z', operator_confirmed: true })).rejects.toThrow('exact current')
+    await expect(store.activate({ connection: drifted, certification_id: certification.certification_id, max_debit_per_order: '100', valid_until: '2026-08-26T13:00:00.000Z', operator_confirmed: true })).rejects.toThrow('Retained options certification was not found')
     await expect(store.activate({ connection: current, certification_id: certification.certification_id, max_debit_per_order: '151', valid_until: '2026-08-26T13:00:00.000Z', operator_confirmed: true })).rejects.toThrow('certified test debit')
     const input = { connection: current, certification_id: certification.certification_id, max_debit_per_order: '100', valid_until: '2026-08-26T13:00:00.000Z', operator_confirmed: true as const }
     await store.activate(input)
@@ -84,16 +85,27 @@ const connection = (): OptionsConnection => {
   return optionsConnectionSchema.parse({ ...unsigned, content_checksum: sha256(unsigned) })
 }
 
-const certified = (current: OptionsConnection) => runRestrictedOptionsCertification({
-  connection: current,
-  max_test_debit: '150',
-  expires_at: '2026-08-27T12:00:00.000Z',
-}, runner(), () => '2026-08-26T12:00:00.000Z')
+const certified = async (current: OptionsConnection, root: string) => {
+  const journal = new FileOptionsCertificationJournal(root, 'options-cert-session-authority', current.connection_id)
+  const finalFlat = await journal.append('final-flat-zero-orders', 'completed', { flat: true }, '2026-08-26T12:00:00.000Z')
+  const evidence = await runRestrictedOptionsCertification({
+    connection: current,
+    max_test_debit: '150',
+    expires_at: '2026-08-27T12:00:00.000Z',
+  }, runner(finalFlat.content_checksum), () => '2026-08-26T12:00:00.000Z')
+  await journal.append('session', 'completed', {
+    certification_id: evidence.certification_id,
+    certification_checksum: evidence.content_checksum,
+  }, '2026-08-26T12:00:01.000Z')
+  return evidence
+}
 
-const runner = (): RestrictedOptionsCertificationRunner => ({
+const runner = (journalHeadChecksum: string): RestrictedOptionsCertificationRunner => ({
+  certification_session_id: 'options-cert-session-authority',
   connection_id: 'ibkr-options-one', account_ref: 'DU1234567', provider: 'ibkr', environment: 'paper',
   adapter_id: 'ibkr-options-api', adapter_version: '1.0.0', provider_contract_version: 'ibkr-web-api-options-paper-2026-08-26',
   allowed_contract_id: 'USOPT:SPY:2026-09-18:C:650', allowed_provider_instrument_id: '123456789', client_order_prefix: 'tgcert-test',
   runScenario: async (scenario) => ({ status: 'pass', detail: `Proved ${scenario}.`, evidence: { scenario } }),
   finalTruth: async () => ({ position_quantity: 0, working_order_count: 0, mutation_count: 4, evidence: { flat: true } }),
+  journalHeadChecksum: async () => journalHeadChecksum,
 })

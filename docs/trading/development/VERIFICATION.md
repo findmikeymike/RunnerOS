@@ -695,6 +695,30 @@ Never collapse these into “done.”
   expectations; repository-wide typecheck and diff check passed.
 - Not yet proven: real provider fills/cancels/closes, a retained certification
   session, runtime attachment, or any Discord-driven provider mutation.
+
+## Options Autopilot Slice 6B — Restricted Provider Certification — 2026-08-26
+
+- A confirmed, short-lived paper test now exercises one exact account and one
+  exact standard option through quote, preview, passive order, duplicate
+  suppression, cancellation, filled entry, filled close, restart adoption,
+  after-accept uncertainty containment, and final flat proof.
+- Every provider observation and mutation is written to a checksum-chained,
+  append-only session journal before certification evidence can be retained.
+  Evidence must reference the exact final-flat event and its completion receipt.
+- Interrupted sessions recover only under the desktop single-instance startup
+  boundary. Known orders are adopted by deterministic client ID, working orders
+  are canceled, a lone test position is closed, and the interrupted run can
+  never grant certification.
+- New entries stop at session expiry; protective cancel/close remains available
+  to contain an already-started test. Per-account locks have explicit stale-lock
+  startup recovery and cannot be cleared by a normal run.
+- Verification: 41 focused contract, certification, authority, adapter, and
+  simulator tests passed with 132 expectations; repository-wide typecheck and
+  diff check passed. Independent rival review found no remaining High or Medium
+  defect after fixes.
+- Not yet proven: a live IBKR/Webull provider certification, trusted application
+  of that certification in the desktop, or an operator-confirmed real paper
+  order. Webull mutation remains intentionally blocked.
 # Multi-account connections and Discord routes — 2026-07-31
 
 - Multiple prop firms/accounts can coexist; connection identity remains exact

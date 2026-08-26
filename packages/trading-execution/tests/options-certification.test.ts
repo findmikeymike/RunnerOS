@@ -12,6 +12,7 @@ import {
 
 import {
   FileOptionsCertificationStore,
+  FileOptionsCertificationJournal,
   runRestrictedOptionsCertification,
   sha256,
   type RestrictedOptionsCertificationRunner,
@@ -44,7 +45,8 @@ const connection = (): OptionsConnection => {
   return optionsConnectionSchema.parse({ ...unsigned, content_checksum: sha256(unsigned) })
 }
 
-const runner = (blocked?: OptionsCertificationScenario): RestrictedOptionsCertificationRunner => ({
+const runner = (blocked?: OptionsCertificationScenario, journalHead = 'b'.repeat(64)): RestrictedOptionsCertificationRunner => ({
+  certification_session_id: 'options-cert-session-test',
   connection_id: 'ibkr-options-one',
   account_ref: 'DU1234567',
   provider: 'ibkr',
@@ -61,6 +63,7 @@ const runner = (blocked?: OptionsCertificationScenario): RestrictedOptionsCertif
     evidence: { scenario, exact: true },
   }),
   finalTruth: async () => ({ position_quantity: 0, working_order_count: 0, mutation_count: 4, evidence: { flat: true } }),
+  journalHeadChecksum: async () => journalHead,
 })
 
 describe('restricted options certification', () => {
@@ -116,11 +119,17 @@ describe('restricted options certification', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'options-certification-'))
     roots.push(root)
     const store = new FileOptionsCertificationStore(root)
+    const journal = new FileOptionsCertificationJournal(root, 'options-cert-session-test', connection().connection_id)
+    const finalFlat = await journal.append('final-flat-zero-orders', 'completed', { flat: true }, '2026-08-26T12:00:00.000Z')
     const evidence = await runRestrictedOptionsCertification({
       connection: connection(),
       max_test_debit: '150',
       expires_at: '2026-08-27T12:00:00.000Z',
-    }, runner(), () => '2026-08-26T12:00:00.000Z')
+    }, runner(undefined, finalFlat.content_checksum), () => '2026-08-26T12:00:00.000Z')
+    await journal.append('session', 'completed', {
+      certification_id: evidence.certification_id,
+      certification_checksum: evidence.content_checksum,
+    }, '2026-08-26T12:00:01.000Z')
     await store.save(evidence)
     expect((await store.getEligible(connection(), '2026-08-26T12:01:00.000Z'))?.certification_id).toBe(evidence.certification_id)
 
@@ -129,6 +138,17 @@ describe('restricted options certification', () => {
     tampered.max_test_debit = '9999'
     await writeFile(file, JSON.stringify(tampered))
     await expect(store.list(evidence.connection_id)).rejects.toThrow('checksum')
+  })
+
+  it('refuses to retain evidence without its exact completed provider journal', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'options-certification-'))
+    roots.push(root)
+    const evidence = await runRestrictedOptionsCertification({
+      connection: connection(),
+      max_test_debit: '150',
+      expires_at: '2026-08-27T12:00:00.000Z',
+    }, runner(), () => '2026-08-26T12:00:00.000Z')
+    await expect(new FileOptionsCertificationStore(root).save(evidence)).rejects.toThrow('exact completed provider journal')
   })
 
   it('refuses a runner for a different account before any scenario runs', async () => {

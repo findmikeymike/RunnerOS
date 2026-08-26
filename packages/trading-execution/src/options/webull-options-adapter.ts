@@ -157,6 +157,10 @@ export class WebullOptionsAdapter implements OptionsProviderAdapter {
     throw new Error('Webull sandbox submission is blocked until retained certification proves long-open position semantics.')
   }
 
+  async submitCertificationUnknown(_request: OptionsProviderOrderRequest): Promise<void> {
+    throw new Error('Webull sandbox unknown-submit mutation is blocked until sequenced order truth is certified.')
+  }
+
   async cancelOrder(_accountId: string, _providerOrderId: string, _clientOrderId: string): Promise<OptionsProviderOrder> {
     throw new Error('Webull sandbox cancellation is blocked until sequenced order truth is attached and certified.')
   }

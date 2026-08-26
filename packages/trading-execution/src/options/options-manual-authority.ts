@@ -41,11 +41,11 @@ export class FileOptionsManualAuthorityStore {
 
   async activate(input: ActivateManualPaperAuthorityInput): Promise<OptionsManualPaperAuthority> {
     const connection = verifyConnection(input.connection)
-    const certification = (await this.certifications.list(connection.connection_id)).find((candidate) => candidate.certification_id === input.certification_id)
-    if (!certification) throw new Error('Retained options certification was not found.')
+    const timestamp = this.now()
+    const certification = await this.certifications.getEligible(connection, timestamp)
+    if (certification?.certification_id !== input.certification_id) throw new Error('Retained options certification was not found.')
     if (input.operator_confirmed !== true) throw new Error('Manual paper authority requires explicit operator confirmation.')
     this.assertCertification(connection, certification)
-    const timestamp = this.now()
     if (Date.parse(certification.expires_at) <= Date.parse(timestamp)) throw new Error('Options certification is expired.')
     if (Date.parse(input.valid_until) <= Date.parse(timestamp) || Date.parse(input.valid_until) > Date.parse(certification.expires_at)) {
       throw new Error('Manual paper authority must expire before its certification.')
