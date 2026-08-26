@@ -38,7 +38,7 @@ export interface OptionsProviderAdapter {
     adapter_id: string
     adapter_version: string
     provider_contract_version: string
-    environment: 'paper'
+    environment: 'paper' | 'sandbox'
     credential_generation: string
     preview_supported: true
   }

@@ -613,6 +613,27 @@ Never collapse these into “done.”
 - Not yet proven: real IBKR authentication, live contract/tick response shape,
   OPRA entitlement, broker warning configuration, paper mutation, lifecycle
   certification, runtime attachment, or execution authority.
+
+## Options Autopilot Slice 5B2 — Inert Webull Sandbox Adapter — 2026-08-26
+
+- Options execution evidence now distinguishes `paper` from `sandbox`; live
+  options evidence is rejected. The Webull adapter is exported for isolated
+  read/preview work only and is not composed into the desktop runtime.
+- Signed requests are fixed to Webull's official sandbox host. The adapter
+  requires one exact active US option, an explicit constant tick rule, OPRA
+  realtime non-display bid/ask/size evidence, one contract, LIMIT/DAY, and a
+  provider-compliant client order ID. Delayed sandbox quotes are rejected.
+- The current official one-leg preview body is modeled exactly. Submission is
+  deliberately blocked because the documented body has generic BUY semantics,
+  and Webull's delayed open-order list cannot independently prove current flat
+  account truth. No fake position-intent field or false reconciliation claim is
+  used.
+- Verification: 25 focused Webull/IBKR/gateway/certification/contract tests
+  passed; repository-wide typecheck and diff check passed.
+- Not yet proven: real Webull credentials, exact live contract/quote fixtures,
+  OPRA subscription, long-open sandbox semantics, sequenced order-event
+  reconciliation, any provider mutation, lifecycle certification, runtime
+  attachment, or execution authority.
 # Multi-account connections and Discord routes — 2026-07-31
 
 - Multiple prop firms/accounts can coexist; connection identity remains exact

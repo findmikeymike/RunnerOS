@@ -187,6 +187,8 @@ describe('options contracts', () => {
 
   test('accepts a fresh realtime quote and rejects crossed or delayed evidence', () => {
     expect(optionQuoteSnapshotSchema.parse(quote).ask_size).toBe(22)
+    expect(optionQuoteSnapshotSchema.safeParse({ ...quote, environment: 'sandbox' }).success).toBe(true)
+    expect(optionQuoteSnapshotSchema.safeParse({ ...quote, environment: 'live' }).success).toBe(false)
     expect(optionQuoteSnapshotSchema.safeParse({ ...quote, bid: '1.31' }).success).toBe(false)
     expect(optionQuoteSnapshotSchema.safeParse({ ...quote, bid: '0' }).success).toBe(false)
     expect(optionQuoteSnapshotSchema.safeParse({ ...quote, market_data_mode: 'delayed', delayed: true }).success).toBe(true)
