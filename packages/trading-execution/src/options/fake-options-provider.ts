@@ -10,41 +10,19 @@ import {
 import { FixedDecimal } from './fixed-decimal.ts'
 import { isOptionPriceOnTick } from './option-tick.ts'
 import { sha256 } from '../canonical.ts'
+import type {
+  OptionsProviderAccountSnapshot,
+  OptionsProviderOrder,
+  OptionsProviderOrderRequest,
+  OptionsProviderOrderStatus,
+} from './options-provider-adapter.ts'
 
 const FIXTURE_NOW = '2026-08-26T15:00:00.000Z'
 
-export type FakeOptionsOrderRequest = {
-  account_id: string
-  canonical_contract_id: string
-  provider_instrument_id: string
-  action: 'BUY_TO_OPEN'
-  order_type: 'limit'
-  limit_price: string
-  quantity: number
-  time_in_force: 'day'
-  regular_hours_only: true
-  client_order_id: string
-}
-
-export type FakeOptionsOrderStatus =
-  | 'working'
-  | 'partially-filled'
-  | 'filled'
-  | 'canceled'
-  | 'partially-filled-canceled'
-
-export type FakeOptionsOrder = FakeOptionsOrderRequest & {
-  provider_order_id: string
-  status: FakeOptionsOrderStatus
-  filled_quantity: number
-  average_fill_price?: string
-}
-
-export type FakeOptionsAccountSnapshot = {
-  account_id: string
-  positions: Array<{ canonical_contract_id: string; quantity: number; average_price: string }>
-  orders: FakeOptionsOrder[]
-}
+export type FakeOptionsOrderRequest = OptionsProviderOrderRequest
+export type FakeOptionsOrderStatus = OptionsProviderOrderStatus
+export type FakeOptionsOrder = OptionsProviderOrder
+export type FakeOptionsAccountSnapshot = OptionsProviderAccountSnapshot
 
 export class FakeOptionsProviderError extends Error {
   constructor(
@@ -81,7 +59,7 @@ export class FakeOptionsProvider {
     adapter_version: '1.0.0',
     provider_contract_version: 'fake-options@1',
     environment: 'paper' as const,
-    credential_generation: 1,
+    credential_generation: 'f'.repeat(64),
     preview_supported: true as const,
   }
   readonly contracts: OptionContractIdentity[] = []

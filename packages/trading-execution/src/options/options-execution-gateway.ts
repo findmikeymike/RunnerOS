@@ -30,35 +30,17 @@ import {
 
 import { sha256 } from '../canonical.ts'
 import type {
-  FakeOptionsAccountSnapshot,
-  FakeOptionsOrder,
-  FakeOptionsOrderRequest,
-} from './fake-options-provider.ts'
+  OptionsProviderAccountSnapshot,
+  OptionsProviderOrder,
+  OptionsProviderOrderRequest,
+} from './options-provider-adapter.ts'
 import { FileOptionsExecutionStore, OptionsExecutionStoreError } from './options-execution-store.ts'
 import {
   FileOptionsDebitReservationStore,
   type OptionsReservationAccountTransaction,
 } from './options-reservation-store.ts'
 
-export type OptionsExecutionAdapter = {
-  readonly descriptor: {
-    adapter_id: string
-    adapter_version: string
-    provider_contract_version: string
-    environment: 'paper'
-    credential_generation: number
-    preview_supported: true
-  }
-  quote(canonicalContractId: string): Promise<OptionQuoteSnapshot>
-  preview(request: FakeOptionsOrderRequest): Promise<{
-    estimated_debit: string
-    estimated_fees: string
-    buying_power_impact: string
-  }>
-  submit(request: FakeOptionsOrderRequest): Promise<FakeOptionsOrder>
-  getOrderByClientId(accountId: string, clientOrderId: string): Promise<FakeOptionsOrder | null>
-  snapshotAccount(accountId: string): Promise<FakeOptionsAccountSnapshot>
-}
+export type OptionsExecutionAdapter = import('./options-provider-adapter.ts').OptionsProviderAdapter
 
 export type ExecuteOptionsEntryInput = {
   signal: DiscordOptionsSignal
@@ -264,8 +246,8 @@ export class OptionsExecutionGateway {
   private async applyOrderTruth(
     currentRecord: OptionsExecutionRecord,
     currentReservation: OptionsDebitReservation,
-    order: FakeOptionsOrder,
-    snapshot: FakeOptionsAccountSnapshot,
+    order: OptionsProviderOrder,
+    snapshot: OptionsProviderAccountSnapshot,
     transaction: OptionsReservationAccountTransaction,
   ): Promise<OptionsExecutionRecord> {
     const command = await this.executions.getCommand(currentRecord.command_id)
@@ -384,7 +366,7 @@ export class OptionsExecutionGateway {
     }
   }
 
-  private assertPreflightFlat(snapshot: FakeOptionsAccountSnapshot, accountId: string, canonicalContractId: string): void {
+  private assertPreflightFlat(snapshot: OptionsProviderAccountSnapshot, accountId: string, canonicalContractId: string): void {
     const working = snapshot.orders.filter((order) => order.status === 'working' || order.status === 'partially-filled')
     if (snapshot.account_id !== accountId || snapshot.positions.length > 0 || working.length > 0
       || snapshot.positions.some((position) => position.canonical_contract_id === canonicalContractId)) {
@@ -400,7 +382,7 @@ export class OptionsExecutionGateway {
     }
   }
 
-  private assertOwnedTruth(record: OptionsExecutionRecord, order: FakeOptionsOrder, snapshot: FakeOptionsAccountSnapshot): void {
+  private assertOwnedTruth(record: OptionsExecutionRecord, order: OptionsProviderOrder, snapshot: OptionsProviderAccountSnapshot): void {
     const exactOrders = snapshot.orders.filter((candidate) => candidate.client_order_id === record.provider_client_order_id)
     if (order.account_id !== record.account_id
       || order.canonical_contract_id !== record.canonical_contract_id
@@ -426,7 +408,7 @@ export class OptionsExecutionGateway {
   private providerRequest(
     evidence: ReturnType<OptionsExecutionGateway['validateInput']>,
     reservation: OptionsDebitReservation,
-  ): FakeOptionsOrderRequest {
+  ): OptionsProviderOrderRequest {
     return {
       account_id: reservation.account_id,
       canonical_contract_id: reservation.canonical_contract_id,
@@ -444,7 +426,7 @@ export class OptionsExecutionGateway {
   private buildPreview(
     evidence: ReturnType<OptionsExecutionGateway['validateInput']>,
     reservation: OptionsDebitReservation,
-    request: FakeOptionsOrderRequest,
+    request: OptionsProviderOrderRequest,
     response: Awaited<ReturnType<OptionsExecutionAdapter['preview']>>,
   ): OptionsProviderPreview {
     if (response.buying_power_impact !== reservation.worst_case_debit
@@ -493,7 +475,7 @@ export class OptionsExecutionGateway {
     evidence: ReturnType<OptionsExecutionGateway['validateInput']>,
     reservation: OptionsDebitReservation,
     preview: OptionsProviderPreview,
-    request: FakeOptionsOrderRequest,
+    request: OptionsProviderOrderRequest,
   ): OptionsOrderIntent {
     const unsigned = {
       intent_schema_version: OPTIONS_ORDER_INTENT_SCHEMA_VERSION,
@@ -532,7 +514,7 @@ export class OptionsExecutionGateway {
     reservation: OptionsDebitReservation,
     preview: OptionsProviderPreview,
     intent: OptionsOrderIntent,
-    request: FakeOptionsOrderRequest,
+    request: OptionsProviderOrderRequest,
   ): OptionsExecutionCommand {
     const descriptor = this.adapter.descriptor
     const unsigned = {
@@ -646,7 +628,7 @@ export class OptionsExecutionGateway {
 
   private releaseProof(
     reservation: OptionsDebitReservation,
-    snapshot: FakeOptionsAccountSnapshot,
+    snapshot: OptionsProviderAccountSnapshot,
     providerOrderIds: string[],
     deliveryState: 'not-sent' | 'terminal-flat',
   ): OptionsReservationReleaseProof {

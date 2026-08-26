@@ -295,7 +295,7 @@ describe('options contracts', () => {
       adapter_version: '1.0.0',
       provider_contract_version: 'fake-options@1',
       environment: 'paper',
-      credential_generation: 1,
+      credential_generation: 'f'.repeat(64),
       connection_id: policy.connection_id,
       account_id: policy.account_id,
       canonical_contract_id: contract.canonical_id,

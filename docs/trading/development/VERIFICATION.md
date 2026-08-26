@@ -593,6 +593,26 @@ Never collapse these into “done.”
   repository-wide typecheck and diff check passed.
 - Not yet proven: a provider-specific runner, any real broker mutation, or
   installation of manual-paper authority.
+
+## Options Autopilot Slice 5B1 — Inert IBKR Paper Adapter — 2026-08-26
+
+- A provider-neutral options adapter boundary now exists, but the normal
+  options gateway remains restricted to the fake provider. The IBKR adapter is
+  exported for isolated certification work only and is not composed into the
+  desktop runtime.
+- The adapter resolves one exact standard SMART/USD/multiplier-100 contract,
+  requires realtime option quote evidence and the configured DU paper account,
+  enforces one on-tick BUY-to-open LIMIT/DAY/RTH contract, and uses the official
+  IBKR what-if and order endpoints.
+- Broker warning replies are never auto-confirmed. A successful submission is
+  not trusted from its acknowledgment: the adapter immediately re-reads the
+  exact client-order ID and refuses incomplete, mismatched, or unsupported
+  order truth.
+- Verification: 22 focused adapter/gateway/certification/contract tests passed;
+  repository-wide typecheck and diff check passed.
+- Not yet proven: real IBKR authentication, live contract/tick response shape,
+  OPRA entitlement, broker warning configuration, paper mutation, lifecycle
+  certification, runtime attachment, or execution authority.
 # Multi-account connections and Discord routes — 2026-07-31
 
 - Multiple prop firms/accounts can coexist; connection identity remains exact
