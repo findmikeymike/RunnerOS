@@ -7,6 +7,26 @@ source_of_truth: true
 
 # Verification System
 
+## 2026-08-26 Options Autopilot — End-to-End Local Closure
+
+- Completed the signed Discord-to-options paper/sandbox control plane: exact
+  source routing, deterministic price/debit admission, crash-safe entry,
+  working-order timeout, exact follow-up custody, expiration supervision,
+  retained certification evidence, and reviewed Start/Pause authority.
+- Hardened final replay and parsing edges: newer accepted follow-ups supersede
+  older pending work; exact no-fill cancellation is supported; negated,
+  conditional, tentative, edited, stale, future-dated, and ambiguous messages
+  produce zero provider mutation. Retired certification/authority artifacts are
+  ignored while malformed current artifacts fail closed.
+- Final verification: 314 relevant contract, execution, runtime, IPC, preload,
+  and connection tests passed with 1,097 expectations. Repository-wide
+  typecheck, focused Options Desk lint, diff check, and Electron main, preload,
+  and renderer production builds passed. The holistic rival review returned
+  clean after the reproduced findings were fixed.
+- External gate remains honest: a clean install cannot start autopilot until a
+  real IBKR paper or Webull sandbox run supplies retained provider evidence,
+  including 50 clean lifecycles and required custody proofs.
+
 ## 2026-08-26 Options Autopilot Slice 12 — Expiration Custody Supervisor
 
 - Added append-only exact schedule/assessment storage, startup and one-minute
@@ -82,8 +102,13 @@ source_of_truth: true
   concurrency, and revision tests passed with 54 expectations; repository
   typecheck and diff check passed. Rival found and closed revision-overlap and
   concurrent-activation flaws, then returned clean.
-- Not proven: any real provider autopilot certification evidence or automatic
-  runtime/UI activation.
+- Proven locally: retained autopilot journal/summary binding, reviewed
+  activation/revocation, signed intake, deterministic entry/follow-up recovery,
+  working-order timeout, and expiration supervision through fake/provider
+  contract tests.
+- Not proven externally: any real provider autopilot certification evidence,
+  50 real clean lifecycles, real expiration close/do-not-exercise behavior, or
+  an activated automatic IBKR/Webull paper session.
 
 ## 2026-08-26 Options Autopilot Slice 8A — Inert Exact-Source Routing
 

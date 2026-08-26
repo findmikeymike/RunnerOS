@@ -27,7 +27,11 @@ const nonActionable = /\?|^(?:should|could|would|can|do)\b|\b(?:if|when|unless|m
 const exactEntry = /\b(?:buy\s+to\s+open|buy|bto)\s+(?:(\d{1,4})\s+)?([A-Z][A-Z0-9.]{0,14})\s+(\d{4}-\d{2}-\d{2})\s+(\d+(?:\.\d+)?)\s*(C|P|CALL|PUT)\b[\s\S]*?(?:@|\bAT\b|\bFOR\b)\s*\$?(\d+(?:\.\d+)?)(?:\s*-\s*\$?(\d+(?:\.\d+)?))?/i
 
 export function parseDiscordOptionsEntry(input: DiscordOptionsEntryInput): DiscordOptionsEntryParseResult {
-  input = discordOptionsEntryInputSchema.parse(input)
+  const parsedInput = discordOptionsEntryInputSchema.safeParse(input)
+  if (!parsedInput.success) {
+    return { status: 'blocked', code: 'OPTIONS_SIGNAL_INTEGRITY', detail: 'Discord evidence chronology or content is invalid.' }
+  }
+  input = parsedInput.data
   if (!Number.isFinite(Date.parse(input.posted_at))
     || !Number.isFinite(Date.parse(input.received_at))
     || Date.parse(input.received_at) < Date.parse(input.posted_at)

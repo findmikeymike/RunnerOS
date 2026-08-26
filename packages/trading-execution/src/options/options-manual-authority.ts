@@ -188,7 +188,8 @@ export class FileOptionsManualAuthorityStore {
   }
 
   private listAuthorities(connectionId: string): Promise<OptionsManualPaperAuthority[]> {
-    return this.listDirectory(this.activationsDirectory, connectionId, verifyAuthority, (value) => `${value.authority_id}.json`)
+    return this.listDirectory(this.activationsDirectory, connectionId, verifyAuthority, (value) => `${value.authority_id}.json`,
+      { field: 'authority_schema_version', value: OPTIONS_MANUAL_PAPER_AUTHORITY_SCHEMA_VERSION })
   }
 
   private listRevocations(connectionId: string): Promise<OptionsAuthorityRevocation[]> {
@@ -200,6 +201,7 @@ export class FileOptionsManualAuthorityStore {
     connectionId: string,
     verify: (value: unknown) => T,
     filename: (value: T) => string,
+    currentVersion?: { field: string; value: string },
   ): Promise<T[]> {
     const target = path.join(directory, connectionId)
     let names: string[]
@@ -207,11 +209,15 @@ export class FileOptionsManualAuthorityStore {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
       throw error
     }
-    return Promise.all(names.filter((name) => name.endsWith('.json')).sort().map(async (name) => {
-      const value = verify(JSON.parse(await readFile(path.join(target, name), 'utf8')))
+    const current: T[] = []
+    for (const name of names.filter((candidate) => candidate.endsWith('.json')).sort()) {
+      const raw = JSON.parse(await readFile(path.join(target, name), 'utf8')) as Record<string, unknown>
+      if (currentVersion && raw[currentVersion.field] !== currentVersion.value) continue
+      const value = verify(raw)
       if (value.connection_id !== connectionId || filename(value) !== name) throw new Error('Options authority file identity is invalid.')
-      return value
-    }))
+      current.push(value)
+    }
+    return current
   }
 
   private async writeImmutable(directory: string, connectionId: string, filename: string, value: unknown): Promise<void> {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -67,6 +67,16 @@ const runner = (blocked?: OptionsCertificationScenario, journalHead = 'b'.repeat
 })
 
 describe('restricted options certification', () => {
+  it('ignores retired stored evidence but rejects malformed current evidence', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'options-certification-')); roots.push(root)
+    const directory = path.join(root, 'options-certifications', 'options-connection-one'); await mkdir(directory, { recursive: true })
+    await writeFile(path.join(directory, 'retired.json'), JSON.stringify({ certification_schema_version: 'options-certification-evidence@1' }))
+    const store = new FileOptionsCertificationStore(root)
+    expect(await store.list('options-connection-one')).toEqual([])
+    await writeFile(path.join(directory, 'current.json'), JSON.stringify({ certification_schema_version: 'options-certification-evidence@2' }))
+    await expect(store.list('options-connection-one')).rejects.toThrow()
+  })
+
   it('grants manual paper eligibility only after every exact scenario and final flat truth', async () => {
     const evidence = await runRestrictedOptionsCertification({
       connection: connection(),

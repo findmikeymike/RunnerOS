@@ -24,6 +24,9 @@ type OptionsManagementRuntime = {
   positionManager: OptionsPositionManager
 }
 
+type OptionsParsedAction = ReturnType<typeof parseDiscordManagementText>['actions'][number]
+  | { operation: 'cancel-entry'; source_phrase: string }
+
 export class FileDiscordOptionsTradeManager {
   private queue: Promise<void> = Promise.resolve()
   private readonly maxMessageAgeMs: number
@@ -43,10 +46,10 @@ export class FileDiscordOptionsTradeManager {
     this.assertMessage(message)
     const policyError = this.messagePolicyError(message)
     if (policyError) return { family: 'options', candidates: [], error: policyError }
-    const parsed = parseDiscordManagementText(message.raw_text)
+    const parsed = parseOptionsManagementText(message.raw_text)
     if (parsed.error || parsed.actions.length !== 1
-      || !['flatten', 'partial-close'].includes(parsed.actions[0]!.operation)) {
-      return { family: 'options', candidates: [], error: parsed.error ?? 'Options follow-ups support only full or exact partial closes.' }
+      || !['flatten', 'partial-close', 'cancel-entry'].includes(parsed.actions[0]!.operation)) {
+      return { family: 'options', candidates: [], error: parsed.error ?? 'Options follow-ups support canceling an unfilled entry or closing owned contracts.' }
     }
     const candidates = await this.candidates(message)
     const reply = message.reply_to_message_id
@@ -104,15 +107,21 @@ export class FileDiscordOptionsTradeManager {
         || existing.resolved_intent_id !== expectedTargetId || existing.resolution_strategy !== strategy) {
         throw new Error('Frozen options follow-up identity conflicts with replayed evidence.')
       }
-      return existing.status === 'prepared' || existing.status === 'executing' ? this.execute(existing) : existing
+      if (existing.status === 'prepared' || existing.status === 'executing') {
+        if (await this.hasNewerAccepted(existing)) {
+          return this.update(existing, { status: 'failed', error: 'A newer options follow-up superseded this instruction.', updated_at: this.now() })
+        }
+        return this.execute(existing)
+      }
+      return existing
     }
     const policyError = this.messagePolicyError(message)
     if (policyError) return this.blocked(message, [], policyError)
     const probe = await this.probe(message)
     if (!probe.candidates.includes(expectedTargetId)) throw new Error('Frozen options family target is no longer in the exact candidate set.')
-    const parsed = parseDiscordManagementText(message.raw_text)
+    const parsed = parseOptionsManagementText(message.raw_text)
     const instruction = parsed.actions[0]
-    if (!instruction || !['flatten', 'partial-close'].includes(instruction.operation)) {
+    if (!instruction || !['flatten', 'partial-close', 'cancel-entry'].includes(instruction.operation)) {
       return this.blocked(message, probe.candidates, parsed.error ?? 'Options follow-up action is unsupported.')
     }
     const target = (await this.candidates(message)).find((candidate) => candidate.intentId === expectedTargetId)
@@ -136,6 +145,9 @@ export class FileDiscordOptionsTradeManager {
   }
 
   private async execute(receipt: OptionsDiscordFollowupReceipt): Promise<OptionsDiscordFollowupReceipt> {
+    if (await this.hasNewerAccepted(receipt)) {
+      return this.update(receipt, { status: 'failed', error: 'A newer options follow-up superseded this instruction.', updated_at: this.now() })
+    }
     const plan = (await this.options.automationPlans.list()).find((item) => item.decision.decision_id === receipt.resolved_intent_id)
     if (!plan) throw new Error('Options follow-up has no frozen automatic entry plan.')
     const runtime = await this.options.resolveRuntime(plan.connection.connection_id)
@@ -183,10 +195,11 @@ export class FileDiscordOptionsTradeManager {
     return this.update(current, { status: 'completed', error: undefined, updated_at: this.now() })
   }
 
-  private actions(action: ReturnType<typeof parseDiscordManagementText>['actions'][number]): OptionsDiscordFollowupActionReceipt[] {
+  private actions(action: OptionsParsedAction): OptionsDiscordFollowupActionReceipt[] {
     const cancel: OptionsDiscordFollowupActionReceipt = {
       index: 0, logical_action: { operation: 'cancel-entry', reason: 'signal-exit', source_phrase: action.source_phrase }, status: 'pending',
     }
+    if (action.operation === 'cancel-entry') return [cancel]
     if (action.operation === 'flatten') return [cancel, {
       index: 1, logical_action: { operation: 'close-position', quantity: 'all', fraction: null, source_phrase: action.source_phrase }, status: 'pending',
     }]
@@ -197,6 +210,13 @@ export class FileDiscordOptionsTradeManager {
       logical_action: { operation: 'close-position', quantity: action.quantity ?? null, fraction: ratio, source_phrase: action.source_phrase },
       status: 'pending',
     }]
+  }
+
+  private async hasNewerAccepted(receipt: OptionsDiscordFollowupReceipt): Promise<boolean> {
+    return (await this.list()).some((candidate) => candidate.receipt_id !== receipt.receipt_id
+      && candidate.resolved_intent_id === receipt.resolved_intent_id
+      && Date.parse(candidate.source_message.posted_at) > Date.parse(receipt.source_message.posted_at)
+      && candidate.status !== 'blocked')
   }
 
   private async candidates(message: DiscordManagementMessage): Promise<Array<{ intentId: string; entryMessageId: string }>> {
@@ -310,6 +330,19 @@ export class FileDiscordOptionsTradeManager {
     this.queue = result.then(() => undefined, () => undefined)
     return result
   }
+}
+
+function parseOptionsManagementText(rawText: string): { actions: OptionsParsedAction[]; error?: string } {
+  const parsed = parseDiscordManagementText(rawText)
+  if (parsed.error && parsed.error !== 'Message has no supported trade-management instruction.') return parsed
+  const normalized = rawText.toLowerCase().replace(/[’]/g, "'").replace(/\s+/g, ' ')
+  if (/\b(?:do not|don't|dont|never|cannot|can't|cant|won't|wont|shouldn't|shouldnt)\s+(?:cancel|pull)\b/.test(normalized)) {
+    return { actions: [], error: 'Negated cancel instructions are not executable.' }
+  }
+  const cancel = /\b(?:no\s+fill|not\s+filled|did(?:n't|\s+not)\s+fill|cancel(?:\s+(?:it|the\s+order|order|entry))?|pull(?:\s+(?:it|the\s+order|order))?)\b/i.exec(rawText)
+  if (!cancel) return parsed
+  if (parsed.actions.length > 0) return { actions: [], error: 'Canceling an entry cannot be combined with a close or stop instruction.' }
+  return { actions: [{ operation: 'cancel-entry', source_phrase: cancel[0] }] }
 }
 
 const manageable = (record: OptionsExecutionRecord): boolean => ['working', 'partially-filled', 'open-position'].includes(record.state)

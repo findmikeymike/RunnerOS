@@ -96,9 +96,22 @@ The workbench can request engine health, run the known fixture, and display tota
   delivery and restart resume the same provider client order; missing or
   changed authority releases only never-sent capacity after fresh flat proof.
   The Options Desk now lets an operator add and archive these Discord sources
-  in plain language. Saved sources remain draft and automation remains off
-  until the separate real-provider autopilot certification and activation gate
-  exists.
+  in plain language. Saved sources remain off until retained real-provider
+  autopilot certification is available and the operator completes the exact
+  review-and-start flow.
+
+- Added checksum-bound automatic activation and pause controls. Review binds
+  one Discord source, account, policy limits, applied base safety test,
+  autopilot certification, custody evidence, and real certification expiry.
+  Only the desktop single-instance authority may commit it; changing evidence
+  or route state forces a new review.
+
+- Added the restricted autopilot evidence collector. It retains canonical
+  provider evidence for all 13 scenarios, every unique clean lifecycle,
+  expiration calendar/account settings, and final flat/zero-order truth in an
+  append-only journal. Eligibility replays the journal against the summary and
+  requires at least 50 clean lifecycles. No real IBKR/Webull run has produced
+  this evidence yet.
 
 - Added a separate automatic-options certification and authority ledger. Manual
   paper certification cannot satisfy it. Autopilot evidence must retain every

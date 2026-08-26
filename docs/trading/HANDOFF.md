@@ -7,6 +7,19 @@ source_of_truth: false
 
 # Trade God Handoff
 
+## 2026-08-26 Options Autopilot End-to-End Handoff
+
+- The local control plane is complete from signed Discord source through exact
+  IBKR paper/Webull sandbox routing, deterministic admission, crash-safe entry,
+  follow-up cancellation/exit custody, timeout, expiration supervision, and a
+  reviewed Start/Pause boundary.
+- Automatic trading is deliberately unavailable on a clean install. It unlocks
+  only after the exact account retains real provider certification evidence,
+  50 clean paper lifecycles, custody proof, and a short-lived operator review.
+- Final local closure: 314 relevant tests passed with 1,097 expectations;
+  repository typecheck, focused Options Desk lint, diff check, and all Electron
+  production builds passed. Final holistic rival review is clean.
+
 ## 2026-08-26 Automatic Options Expiration Custody Handoff
 
 - Exact expiration schedules and assessments are append-only local evidence.
@@ -66,8 +79,10 @@ source_of_truth: false
   credential generation, adapter, base applied safety test, and autopilot
   certification. Activation/revocation is serialized for the whole route
   lineage.
-- No runtime or UI path can create this evidence yet, so automatic entry remains
-  unavailable by construction.
+- A restricted retained-evidence collector and reviewed activation UI now
+  exist. The collector cannot invent broker proof: no real IBKR/Webull run has
+  supplied the required 50 clean lifecycles and custody evidence, so automatic
+  entry remains unavailable on a clean install.
 
 ## 2026-08-26 Options Automatic Routing Foundation Handoff
 
@@ -78,8 +93,11 @@ source_of_truth: false
   `options-paper-autopilot-certified` evidence before automatic entry can exist.
 - Duplicate live source assignments are refused before persistence. An archived
   source may be deliberately assigned to a new route lineage.
-- This is local configuration proof only. It is not wired to Discord intake or
-  provider orders yet.
+- Signed Discord intake, exact route resolution, debit admission, frozen plans,
+  idempotent provider delivery, follow-up cancellation/close, timeout, and
+  expiration supervision are wired. Provider mutation still requires exact
+  retained autopilot certification plus a short-lived operator activation;
+  neither is present on a clean install.
 
 ## 2026-08-26 Options Position and Expiration Custody Handoff
 

@@ -177,13 +177,17 @@ export class FileOptionsCertificationStore {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
       throw error
     }
-    return Promise.all(names.filter((name) => name.endsWith('.json')).sort().map(async (name) => {
-      const evidence = verifyEvidence(JSON.parse(await readFile(path.join(directory, name), 'utf8')))
+    const current: OptionsCertificationEvidence[] = []
+    for (const name of names.filter((candidate) => candidate.endsWith('.json')).sort()) {
+      const raw = JSON.parse(await readFile(path.join(directory, name), 'utf8')) as Record<string, unknown>
+      if (raw.certification_schema_version !== OPTIONS_CERTIFICATION_EVIDENCE_SCHEMA_VERSION) continue
+      const evidence = verifyEvidence(raw)
       if (name !== `${evidence.certification_id}.json` || evidence.connection_id !== connectionId) {
         throw new Error('Options certification filename does not match its identity.')
       }
-      return evidence
-    }))
+      current.push(evidence)
+    }
+    return current
   }
 
   async getEligible(connection: OptionsConnection, now: string): Promise<OptionsCertificationEvidence | undefined> {

@@ -23,6 +23,16 @@ const roots: string[] = []
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))))
 
 describe('manual options paper authority', () => {
+  it('ignores retired authority versions but rejects malformed current authority', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'options-authority-')); roots.push(root)
+    const directory = path.join(root, 'options-authorities', 'activations', 'options-connection-one'); await mkdir(directory, { recursive: true })
+    await writeFile(path.join(directory, 'retired.json'), JSON.stringify({ authority_schema_version: 'options-manual-paper-authority@1' }))
+    const store = new FileOptionsManualAuthorityStore(root)
+    expect(await store.revokeForConnection('options-connection-one', 'operator')).toBe(0)
+    await writeFile(path.join(directory, 'current.json'), JSON.stringify({ authority_schema_version: 'options-manual-paper-authority@2' }))
+    await expect(store.revokeForConnection('options-connection-one', 'operator')).rejects.toThrow()
+  })
+
   it('activates one exact short-lived certified account and revokes append-only', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'options-authority-'))
     roots.push(root)

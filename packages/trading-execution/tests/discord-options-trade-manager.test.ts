@@ -10,6 +10,7 @@ afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recur
 const now = '2026-08-26T15:01:00.000Z'
 
 function fixture(root: string, openQuantity = 2, cancelState: 'position-open' | 'cancel-unknown' = 'position-open') {
+  let currentCancelState = cancelState
   let record = { intent_id: 'options-intent-one', state: 'open-position', open_quantity: openQuantity }
   const calls: Array<{ action: string; request: string; quantity?: unknown }> = []
   const automationReceipt = {
@@ -29,7 +30,7 @@ function fixture(root: string, openQuantity = 2, cancelState: 'position-open' | 
       positionManager: {
         cancelWorkingEntry: async (input: { request_id: string }) => {
           calls.push({ action: 'cancel', request: input.request_id })
-          return { management_id: `cancel-${input.request_id}`, content_checksum: sha256(input), state: cancelState }
+          return { management_id: `cancel-${input.request_id}`, content_checksum: sha256(input), state: currentCancelState }
         },
         closePosition: async (input: { request_id: string; quantity: any }) => {
           calls.push({ action: 'close', request: input.request_id, quantity: input.quantity })
@@ -50,7 +51,7 @@ function fixture(root: string, openQuantity = 2, cancelState: 'position-open' | 
     }),
     now: () => now,
   })
-  return { manager, calls, getRecord: () => record }
+  return { manager, calls, getRecord: () => record, setCancelState: (state: 'position-open' | 'cancel-unknown') => { currentCancelState = state } }
 }
 
 function message(rawText: string, id = 'followup-one', postedAt = '2026-08-26T15:00:30.000Z', isEdit = false) {
@@ -92,6 +93,37 @@ describe('Discord options trade manager', () => {
     const setup = fixture(root, 2, 'cancel-unknown')
     expect(await setup.manager.ingestMessage(message('all out'))).toMatchObject({ status: 'executing' })
     expect(setup.calls.map((call) => call.action)).toEqual(['cancel'])
+  })
+
+  test('cancels an explicitly unfilled entry without inventing a close', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'discord-options-followup-')); roots.push(root)
+    const setup = fixture(root)
+    expect(await setup.manager.ingestMessage(message('no fill, cancel it'))).toMatchObject({ status: 'completed' })
+    expect(setup.calls.map((call) => call.action)).toEqual(['cancel'])
+    expect(setup.getRecord().open_quantity).toBe(2)
+  })
+
+  test.each(["don't cancel it", 'maybe cancel it', 'if no fill cancel it'])(
+    'blocks ambiguous cancel text: %s',
+    async (text) => {
+      const root = await mkdtemp(path.join(os.tmpdir(), 'discord-options-followup-')); roots.push(root)
+      const setup = fixture(root)
+      expect(await setup.manager.ingestMessage(message(text))).toMatchObject({ status: 'blocked' })
+      expect(setup.calls).toEqual([])
+    },
+  )
+
+  test('never resumes an older pending instruction after a newer follow-up was accepted', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'discord-options-followup-')); roots.push(root)
+    const setup = fixture(root, 4, 'cancel-unknown')
+    expect(await setup.manager.ingestMessage(message('all out', 'older-followup', '2026-08-26T15:00:10.000Z'))).toMatchObject({ status: 'executing' })
+    setup.setCancelState('position-open')
+    expect(await setup.manager.ingestMessage(message('taking half', 'newer-followup', '2026-08-26T15:00:30.000Z'))).toMatchObject({ status: 'completed' })
+    expect(setup.getRecord().open_quantity).toBe(2)
+    const recovered = await setup.manager.recoverPending()
+    expect(recovered).toEqual([expect.objectContaining({ status: 'failed', error: 'A newer options follow-up superseded this instruction.' })])
+    expect(setup.calls.filter((call) => call.action === 'close')).toHaveLength(1)
+    expect(setup.getRecord().open_quantity).toBe(2)
   })
 
   test('blocks edited follow-ups before any provider mutation', async () => {
