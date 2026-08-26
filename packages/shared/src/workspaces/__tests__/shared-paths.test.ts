@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
@@ -152,5 +152,38 @@ describe('shared workspace path refs', () => {
     const readiness = inspectSharedPathRef(workspace, ref);
     expect(readiness.status).toBe('placeholder');
     expect(readiness.absolutePath).toBe(expectedPath);
+  });
+
+  it('rejects workspace refs that traverse a symbolic link outside the workspace', () => {
+    const workspace = makeDir('shared-path-symlink-workspace-');
+    const outside = makeDir('shared-path-symlink-outside-');
+    writeFileSync(join(outside, 'secret.txt'), 'do-not-share', 'utf-8');
+    symlinkSync(outside, join(workspace, 'linked-assets'), 'dir');
+    const escapedPath = join(workspace, 'linked-assets', 'secret.txt');
+
+    expect(() => createWorkspaceRelativePathRef(workspace, escapedPath)).toThrow('symbolic links');
+
+    const forgedRef = {
+      version: 1 as const,
+      kind: 'workspace' as const,
+      path: 'linked-assets/secret.txt',
+    };
+    expect(() => resolveSharedPathRef(workspace, forgedRef)).toThrow('symbolic links');
+    const readiness = inspectSharedPathRef(workspace, forgedRef);
+    expect(readiness.status).toBe('unreadable');
+    expect(readiness.absolutePath).toBe('');
+    expect(readiness.reason).toContain('symbolic links');
+  });
+
+  it('refuses to copy vault objects through a symbolic-link destination', () => {
+    const workspace = makeDir('shared-path-vault-workspace-');
+    const outside = makeDir('shared-path-vault-outside-');
+    const sourceRoot = makeDir('shared-path-vault-source-');
+    const source = join(sourceRoot, 'master.wav');
+    writeFileSync(source, 'audio-data', 'utf-8');
+    symlinkSync(outside, join(workspace, 'vault'), 'dir');
+
+    expect(() => copyFileIntoWorkspaceVault(workspace, source)).toThrow('symbolic links');
+    expect(existsSync(join(outside, 'objects'))).toBe(false);
   });
 });

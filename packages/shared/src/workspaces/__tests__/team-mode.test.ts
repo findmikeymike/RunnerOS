@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadWorkspaceConfig } from '../storage.ts';
@@ -94,6 +94,31 @@ describe('team mode metadata', () => {
 
     expect(() => markWorkspaceAsSharedFolder(root)).toThrow('credential-bearing files are present');
     expect(loadWorkspaceConfig(root)?.storage?.mode).not.toBe('shared-folder');
+  });
+
+  it('refuses in-place sharing when an innocently named file is a symbolic link', () => {
+    const root = makeWorkspaceRoot();
+    const outside = makeWorkspaceRoot();
+    writeWorkspace(root);
+    writeWorkspace(outside);
+    writeFileSync(join(outside, 'private.txt'), 'do-not-sync', 'utf-8');
+    symlinkSync(join(outside, 'private.txt'), join(root, 'reference.txt'));
+
+    expect(() => markWorkspaceAsSharedFolder(root)).toThrow('symbolic links could escape the workspace');
+    expect(loadWorkspaceConfig(root)?.storage?.mode).not.toBe('shared-folder');
+  });
+
+  it('refuses in-place sharing when private sessions contain symbolic links', () => {
+    const root = makeWorkspaceRoot();
+    const outside = makeWorkspaceRoot();
+    writeWorkspace(root);
+    writeWorkspace(outside);
+    mkdirSync(join(root, 'sessions'), { recursive: true });
+    writeFileSync(join(outside, 'private.txt'), 'do-not-copy', 'utf-8');
+    symlinkSync(join(outside, 'private.txt'), join(root, 'sessions', 'linked.txt'));
+
+    expect(() => markWorkspaceAsSharedFolder(root)).toThrow('symbolic links could escape the workspace');
+    expect(existsSync(join(root, 'sessions', 'linked.txt'))).toBe(true);
   });
 
   it('loads legacy workspaces with no storage field unchanged', () => {

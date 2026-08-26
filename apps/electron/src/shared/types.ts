@@ -667,15 +667,15 @@ export interface ElectronAPI {
 
   // Credential health check (startup validation)
   getCredentialHealth(): Promise<CredentialHealthStatus>
-  listSecrets(): Promise<UserSecretSummary[]>
+  listSecrets(workspaceId: string): Promise<UserSecretSummary[]>
   saveSecret(name: string, value: string, workspaceId: string): Promise<{ success: boolean; error?: string }>
   deleteSecret(name: string, workspaceId: string): Promise<{ success: boolean; error?: string }>
   onSecretsChanged(callback: () => void): () => void
-  getZeroStatus(): Promise<ZeroStatus>
-  installZero(): Promise<{ success: boolean; error?: string }>
-  initZero(): Promise<{ success: boolean; output?: string; error?: string }>
-  fundZero(amount?: string): Promise<{ success: boolean; fundingUrl?: string; output?: string; error?: string }>
-  claimZeroWelcome(): Promise<{ success: boolean; output?: string; error?: string }>
+  getZeroStatus(workspaceId: string): Promise<ZeroStatus>
+  installZero(workspaceId: string): Promise<{ success: boolean; error?: string }>
+  initZero(workspaceId: string): Promise<{ success: boolean; output?: string; error?: string }>
+  fundZero(workspaceId: string, amount?: string): Promise<{ success: boolean; fundingUrl?: string; output?: string; error?: string }>
+  claimZeroWelcome(workspaceId: string): Promise<{ success: boolean; output?: string; error?: string }>
 
   // Onboarding
   getAuthState(): Promise<AuthState>

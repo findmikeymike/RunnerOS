@@ -32,6 +32,7 @@ mock.module('@craft-agent/shared/workspaces', () => ({
 }))
 
 const {
+  assertGlobalSecretVaultPermission,
   assertGlobalSourceCredentialPermission,
   assertSessionFilesWritePermission,
   assertWorkspaceSecretsUpdatePermission,
@@ -89,6 +90,24 @@ describe('assertWorkspaceSecretsUpdatePermission', () => {
 
     expect(() => assertWorkspaceSecretsUpdatePermission('origin', 'Remote workspace credentials update'))
       .toThrow('Remote workspace credentials update requires secrets.update in workspace origin')
+  })
+})
+
+describe('assertGlobalSecretVaultPermission', () => {
+  it('requires secrets.update in every registered workspace because the vault is global', () => {
+    assertGlobalSecretVaultPermission('origin', 'Global secret vault access')
+
+    expect(assertTeamPermission).toHaveBeenCalledTimes(3)
+    expect(assertTeamPermission).toHaveBeenNthCalledWith(1, '/origin', 'secrets.update')
+    expect(assertTeamPermission).toHaveBeenNthCalledWith(2, '/active', 'secrets.update')
+    expect(assertTeamPermission).toHaveBeenNthCalledWith(3, '/inactive', 'secrets.update')
+  })
+
+  it('blocks a solo-workspace switch when another registered workspace denies owner access', () => {
+    deniedRootPath = '/active'
+
+    expect(() => assertGlobalSecretVaultPermission('origin', 'Global secret vault access'))
+      .toThrow('requires secrets.update in workspace active')
   })
 })
 

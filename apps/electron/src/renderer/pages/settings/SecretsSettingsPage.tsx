@@ -713,6 +713,8 @@ export default function SecretsSettingsPage() {
   const [expandedServiceId, setExpandedServiceId] = React.useState<string | null>(null)
   const [zeroAction, setZeroAction] = React.useState<string | null>(null)
   const [zeroImportOpen, setZeroImportOpen] = React.useState(false)
+  const [canManageSecrets, setCanManageSecrets] = React.useState<boolean | null>(null)
+  const [accessMessage, setAccessMessage] = React.useState('Only the workspace Owner can view or change saved keys and connected service credentials.')
 
   const services = React.useMemo(
     () => SERVICES.filter((service) => service.group === selectedGroup),
@@ -729,15 +731,35 @@ export default function SecretsSettingsPage() {
 
   const load = React.useCallback(async () => {
     setLoading(true)
+    setCanManageSecrets(null)
+    setSecrets([])
+    setZero(null)
+    setSources([])
     try {
+      if (!activeWorkspaceId) {
+        setAccessMessage('Select an active workspace to manage saved keys and connected service credentials.')
+        setCanManageSecrets(false)
+        return
+      }
+      const teamStatus = await window.electronAPI.getWorkspaceTeamStatus(activeWorkspaceId)
+      const canManage = teamStatus.currentRole === 'owner'
+      setAccessMessage('Only the workspace Owner can view or change saved keys and connected service credentials.')
+      setCanManageSecrets(canManage)
+      if (!canManage) return
       const [secretRows, zeroStatus, sourceRows] = await Promise.all([
-        window.electronAPI.listSecrets(),
-        window.electronAPI.getZeroStatus(),
-        activeWorkspaceId ? window.electronAPI.getSources(activeWorkspaceId).catch(() => [] as LoadedSource[]) : Promise.resolve([] as LoadedSource[]),
+        window.electronAPI.listSecrets(activeWorkspaceId),
+        window.electronAPI.getZeroStatus(activeWorkspaceId),
+        window.electronAPI.getSources(activeWorkspaceId).catch(() => [] as LoadedSource[]),
       ])
       setSecrets(secretRows)
       setZero(zeroStatus)
       setSources(sourceRows)
+    } catch (error) {
+      setAccessMessage('Owner access could not be verified, so keys and connected services remain hidden.')
+      setCanManageSecrets(false)
+      toast.error('Could not load keys and services', {
+        description: error instanceof Error ? error.message : String(error),
+      })
     } finally {
       setLoading(false)
     }
@@ -790,9 +812,10 @@ export default function SecretsSettingsPage() {
   }
 
   const installZero = async () => {
+    if (!activeWorkspaceId) return
     setInstalling(true)
     try {
-      const result = await window.electronAPI.installZero()
+      const result = await window.electronAPI.installZero(activeWorkspaceId)
       if (!result.success) {
         toast.error(result.error || 'Zero install failed')
         return
@@ -805,9 +828,10 @@ export default function SecretsSettingsPage() {
   }
 
   const initZero = async () => {
+    if (!activeWorkspaceId) return
     setZeroAction('init')
     try {
-      const result = await window.electronAPI.initZero()
+      const result = await window.electronAPI.initZero(activeWorkspaceId)
       if (!result.success) {
         toast.error(result.error || 'Zero init failed')
         return
@@ -820,9 +844,10 @@ export default function SecretsSettingsPage() {
   }
 
   const fundZero = async () => {
+    if (!activeWorkspaceId) return
     setZeroAction('fund')
     try {
-      const result = await window.electronAPI.fundZero()
+      const result = await window.electronAPI.fundZero(activeWorkspaceId)
       if (!result.success) {
         toast.error(result.error || 'Could not create Zero funding link')
         return
@@ -840,9 +865,10 @@ export default function SecretsSettingsPage() {
   }
 
   const claimZeroWelcome = async () => {
+    if (!activeWorkspaceId) return
     setZeroAction('welcome')
     try {
-      const result = await window.electronAPI.claimZeroWelcome()
+      const result = await window.electronAPI.claimZeroWelcome(activeWorkspaceId)
       if (!result.success) {
         toast.error(result.error || 'Could not claim Zero welcome bonus')
         return
@@ -931,6 +957,24 @@ export default function SecretsSettingsPage() {
       return
     }
     toast.success(`${service.title} setup looks ready`)
+  }
+
+  if (canManageSecrets !== true) {
+    return (
+      <div className="flex h-full flex-col">
+        <PanelHeader />
+        <div className="mx-auto flex w-full max-w-2xl flex-1 items-center px-6 py-10">
+          <SettingsCard className="w-full">
+            <div className="p-6">
+              <h1 className="text-lg font-semibold text-white">{canManageSecrets === null ? 'Checking access…' : 'Owner access required'}</h1>
+              <p className="mt-2 text-sm leading-6 text-white/48">
+                {canManageSecrets === null ? 'Keys and connected services stay hidden until access is verified.' : accessMessage}
+              </p>
+            </div>
+          </SettingsCard>
+        </div>
+      </div>
+    )
   }
 
   return (

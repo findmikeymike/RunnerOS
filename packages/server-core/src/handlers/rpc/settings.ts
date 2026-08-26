@@ -13,7 +13,7 @@ import type { HandlerDeps } from '../handler-deps'
 import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
 import { isValidWorkingDirectory } from '../../utils/path-validation'
 import type { SharedFolderProvider } from '@craft-agent/shared/workspaces'
-import { assertSessionFilesWritePermission } from './team-permission-helpers'
+import { assertGlobalSecretVaultPermission, assertSessionFilesWritePermission } from './team-permission-helpers'
 
 const execFileAsync = promisify(execFile)
 const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
@@ -59,10 +59,12 @@ async function assertSecretWorkspaceOwner(workspaceId?: string): Promise<{ succe
   if (!workspaceId) {
     return { success: false, error: 'Select an active workspace before changing secrets.' }
   }
-  const workspace = getWorkspaceOrThrow(workspaceId)
-  const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
-  assertTeamPermission(workspace.rootPath, 'secrets.update')
-  return null
+  try {
+    assertGlobalSecretVaultPermission(workspaceId, 'Global secret vault access')
+    return null
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
+  }
 }
 
 async function getZeroCliStatus() {
@@ -163,7 +165,9 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     deps.platform.logger.warn(`Failed to load stored secrets into environment: ${error instanceof Error ? error.message : String(error)}`)
   })
 
-  server.handle(RPC_CHANNELS.secrets.LIST, async () => {
+  server.handle(RPC_CHANNELS.secrets.LIST, async (_ctx, workspaceId?: string) => {
+    const workspaceError = await assertSecretWorkspaceOwner(workspaceId)
+    if (workspaceError) throw new Error(workspaceError.error)
     return getCredentialManager().listUserSecrets()
   })
 
@@ -193,12 +197,16 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     return { success }
   })
 
-  server.handle(RPC_CHANNELS.secrets.ZERO_STATUS, async () => {
+  server.handle(RPC_CHANNELS.secrets.ZERO_STATUS, async (_ctx, workspaceId?: string) => {
+    const workspaceError = await assertSecretWorkspaceOwner(workspaceId)
+    if (workspaceError) throw new Error(workspaceError.error)
     await applyStoredSecretsToProcessEnv()
     return getZeroCliStatus()
   })
 
-  server.handle(RPC_CHANNELS.secrets.INSTALL_ZERO, async () => {
+  server.handle(RPC_CHANNELS.secrets.INSTALL_ZERO, async (_ctx, workspaceId?: string) => {
+    const workspaceError = await assertSecretWorkspaceOwner(workspaceId)
+    if (workspaceError) return workspaceError
     try {
       const npmPath = await commandExists('npm')
       if (!npmPath) {
@@ -211,7 +219,9 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     }
   })
 
-  server.handle(RPC_CHANNELS.secrets.INIT_ZERO, async () => {
+  server.handle(RPC_CHANNELS.secrets.INIT_ZERO, async (_ctx, workspaceId?: string) => {
+    const workspaceError = await assertSecretWorkspaceOwner(workspaceId)
+    if (workspaceError) return workspaceError
     try {
       const zeroPath = await commandExists('zero')
       if (!zeroPath) return { success: false, error: 'Zero CLI is not installed.' }
@@ -223,7 +233,9 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     }
   })
 
-  server.handle(RPC_CHANNELS.secrets.FUND_ZERO, async (_ctx, amount?: string) => {
+  server.handle(RPC_CHANNELS.secrets.FUND_ZERO, async (_ctx, workspaceId?: string, amount?: string) => {
+    const workspaceError = await assertSecretWorkspaceOwner(workspaceId)
+    if (workspaceError) return workspaceError
     try {
       await applyStoredSecretsToProcessEnv()
       const zeroPath = await commandExists('zero')
@@ -240,7 +252,9 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     }
   })
 
-  server.handle(RPC_CHANNELS.secrets.CLAIM_ZERO_WELCOME, async () => {
+  server.handle(RPC_CHANNELS.secrets.CLAIM_ZERO_WELCOME, async (_ctx, workspaceId?: string) => {
+    const workspaceError = await assertSecretWorkspaceOwner(workspaceId)
+    if (workspaceError) return workspaceError
     try {
       await applyStoredSecretsToProcessEnv()
       const zeroPath = await commandExists('zero')

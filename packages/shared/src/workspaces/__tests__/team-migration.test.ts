@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { getWorkspaceSessionsPath, loadWorkspaceConfig, saveWorkspaceConfig } from '../storage.ts';
@@ -138,6 +138,23 @@ describe('team shared-folder migration', () => {
     expect(() => moveWorkspaceToSharedFolder(source, destinationParent)).toThrow('Workspace contains files that should not be synced.');
     expect(existsSync(join(destinationParent, basename(source)))).toBe(false);
     expect(existsSync(join(source, 'config.json'))).toBe(true);
+  });
+
+  it('blocks symbolic links instead of silently dropping them during migration', () => {
+    const source = makeDir('team-migrate-symlink-source-');
+    const destinationParent = makeDir('team-migrate-symlink-dest-');
+    const outside = makeDir('team-migrate-symlink-outside-');
+    writeWorkspace(source);
+    writeFileSync(join(outside, 'private.txt'), 'do-not-sync', 'utf-8');
+    symlinkSync(join(outside, 'private.txt'), join(source, 'reference.txt'));
+
+    const preflight = preflightSharedFolderMigration(source, destinationParent);
+    expect(preflight.ok).toBe(false);
+    expect(preflight.blockedFiles).toEqual(['reference.txt']);
+    expect(preflight.reason).toContain('symbolic links');
+    expect(() => moveWorkspaceToSharedFolder(source, destinationParent)).toThrow('symbolic links');
+    expect(existsSync(join(destinationParent, basename(source)))).toBe(false);
+    expect(existsSync(join(source, 'reference.txt'))).toBe(true);
   });
 
   it('blocks credential caches and keeps sessions private during shared-folder migration', () => {

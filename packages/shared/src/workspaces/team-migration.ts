@@ -1,6 +1,5 @@
 import {
   closeSync,
-  copyFileSync,
   existsSync,
   fsyncSync,
   lstatSync,
@@ -29,6 +28,7 @@ import {
   saveWorkspaceConfig,
 } from './storage.ts';
 import { WORKSPACE_FORMAT_VERSION, type SharedFolderProvider, type WorkspaceConfig } from './types.ts';
+import { verifiedCopyFileSync } from './verified-copy.ts';
 
 export const TEAM_MIGRATIONS_DIR = 'team/migrations';
 export const LOCAL_TEAM_MIGRATIONS_DIR = 'team-migrations';
@@ -339,7 +339,9 @@ function collectWorkspaceFiles(rootPath: string): string[] {
       const relativePath = relativeDir ? join(relativeDir, entry) : entry;
       const absolutePath = join(rootPath, relativePath);
       const stat = lstatSync(absolutePath);
-      if (stat.isSymbolicLink()) continue;
+      if (stat.isSymbolicLink()) {
+        throw new Error(`Workspace changed during migration; symbolic link found: ${relativePath}`);
+      }
       if (stat.isDirectory()) {
         visit(relativePath);
       } else if (stat.isFile()) {
@@ -349,6 +351,25 @@ function collectWorkspaceFiles(rootPath: string): string[] {
   };
   visit('');
   return files;
+}
+
+function findWorkspaceSymbolicLinks(rootPath: string): string[] {
+  const links: string[] = [];
+  const visit = (relativeDir: string) => {
+    const absoluteDir = join(rootPath, relativeDir);
+    for (const entry of readdirSync(absoluteDir).sort((a, b) => a.localeCompare(b))) {
+      if (entry === 'node_modules' || entry === '.git') continue;
+      const relativePath = relativeDir ? join(relativeDir, entry) : entry;
+      const stat = lstatSync(join(rootPath, relativePath));
+      if (stat.isSymbolicLink()) {
+        links.push(relativePath);
+      } else if (stat.isDirectory()) {
+        visit(relativePath);
+      }
+    }
+  };
+  visit('');
+  return links;
 }
 
 function isEnvExampleFile(name: string): boolean {
@@ -427,6 +448,18 @@ export function preflightSharedFolderMigration(
     if (existsSync(finalRootPath)) {
       return { ok: false, sourceRootPath, destinationParentPath, finalRootPath, blockedFiles: [], warnings, reason: 'Destination already contains a workspace folder with this name.' };
     }
+    const symbolicLinks = findWorkspaceSymbolicLinks(sourceRootPath);
+    if (symbolicLinks.length > 0) {
+      return {
+        ok: false,
+        sourceRootPath,
+        destinationParentPath,
+        finalRootPath,
+        blockedFiles: symbolicLinks,
+        warnings,
+        reason: 'Workspace contains symbolic links. Replace them with real files or folders before moving to Team Mode.',
+      };
+    }
     const blockedFiles = findBlockedSecretFiles(sourceRootPath);
     if (blockedFiles.length > 0) {
       return { ok: false, sourceRootPath, destinationParentPath, finalRootPath, blockedFiles, warnings, reason: 'Workspace contains files that should not be synced.' };
@@ -450,26 +483,35 @@ function copyWorkspaceFilesConfigLast(sourceRootPath: string, tempRootPath: stri
     if (relativePath === 'config.json') continue;
     if (!shouldCopyWorkspaceFile(relativePath)) continue;
     const destPath = join(tempRootPath, relativePath);
-    mkdirSync(dirname(destPath), { recursive: true });
-    copyFileSync(join(sourceRootPath, relativePath), destPath);
+    verifiedCopyFileSync(join(sourceRootPath, relativePath), destPath, {
+      sourceRootPath,
+      destinationRootPath: tempRootPath,
+    });
   }
 }
 
 function copyDirectoryContents(sourceDir: string, destinationDir: string): void {
   if (!existsSync(sourceDir)) return;
-  mkdirSync(destinationDir, { recursive: true });
-  for (const entry of readdirSync(sourceDir)) {
-    const sourcePath = join(sourceDir, entry);
-    const destinationPath = join(destinationDir, entry);
-    const stat = lstatSync(sourcePath);
-    if (stat.isSymbolicLink()) continue;
-    if (stat.isDirectory()) {
-      copyDirectoryContents(sourcePath, destinationPath);
-    } else if (stat.isFile()) {
-      mkdirSync(dirname(destinationPath), { recursive: true });
-      copyFileSync(sourcePath, destinationPath);
+  const copyDir = (currentSourceDir: string, currentDestinationDir: string): void => {
+    mkdirSync(currentDestinationDir, { recursive: true });
+    for (const entry of readdirSync(currentSourceDir)) {
+      const sourcePath = join(currentSourceDir, entry);
+      const destinationPath = join(currentDestinationDir, entry);
+      const stat = lstatSync(sourcePath);
+      if (stat.isSymbolicLink()) {
+        throw new Error(`Workspace changed during migration; symbolic link found: ${sourcePath}`);
+      }
+      if (stat.isDirectory()) {
+        copyDir(sourcePath, destinationPath);
+      } else if (stat.isFile()) {
+        verifiedCopyFileSync(sourcePath, destinationPath, {
+          sourceRootPath: sourceDir,
+          destinationRootPath: destinationDir,
+        });
+      }
     }
-  }
+  };
+  copyDir(sourceDir, destinationDir);
 }
 
 function getPrivateSessionStageDir(journal: TeamMigrationJournal): string {

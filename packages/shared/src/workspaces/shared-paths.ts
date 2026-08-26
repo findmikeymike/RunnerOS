@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import {
-  copyFileSync,
   existsSync,
   closeSync,
   mkdirSync,
@@ -8,11 +7,13 @@ import {
   readSync,
   readFileSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { getPrivateTeamDir } from './team-mode.ts';
+import { assertPathWithinRealRoot, verifiedCopyFileSync } from './verified-copy.ts';
 
 export const WORKSPACE_VAULT_OBJECTS_DIR = 'vault/objects';
 export const SHARED_PATH_OVERRIDES_FILE = 'path-overrides.json';
@@ -118,6 +119,7 @@ export function createWorkspaceRelativePathRef(
   if (!isPathInside(workspaceRootPath, absolutePath)) {
     throw new Error('Path is outside the workspace. Copy it into the vault or store it as an external path.');
   }
+  assertPathWithinRealRoot(workspaceRootPath, absolutePath);
   return {
     version: 1,
     kind: 'workspace',
@@ -157,9 +159,21 @@ export function copyFileIntoWorkspaceVault(
   const sha256 = hashFile(source);
   const objectName = `${sha256}-${safeObjectName(basename(source))}`;
   const relativePath = assertSafeRelativePath(join(WORKSPACE_VAULT_OBJECTS_DIR, sha256.slice(0, 2), objectName));
-  const destination = resolve(workspaceRootPath, relativePath);
+  const destination = assertPathWithinRealRoot(workspaceRootPath, resolve(workspaceRootPath, relativePath));
   mkdirSync(dirname(destination), { recursive: true });
-  if (!existsSync(destination)) copyFileSync(source, destination);
+  assertPathWithinRealRoot(workspaceRootPath, destination);
+  if (existsSync(destination)) {
+    const existing = statSync(destination);
+    if (!existing.isFile() || hashFile(destination) !== sha256) {
+      throw new Error('Workspace vault object exists but does not match its content hash.');
+    }
+  } else {
+    verifiedCopyFileSync(source, destination, { destinationRootPath: workspaceRootPath });
+    if (hashFile(destination) !== sha256) {
+      unlinkSync(destination);
+      throw new Error('Source changed while it was being copied into the workspace vault.');
+    }
+  }
 
   return {
     version: 1,
@@ -185,7 +199,7 @@ export function resolveSharedPathRef(
     return expandPortablePath(override, options);
   }
   if (!ref.path) throw new Error('Workspace shared path ref is missing path.');
-  return resolve(workspaceRootPath, assertSafeRelativePath(ref.path));
+  return assertPathWithinRealRoot(workspaceRootPath, resolve(workspaceRootPath, assertSafeRelativePath(ref.path)));
 }
 
 function createExternalRefId(absolutePath: string): string {
@@ -268,7 +282,16 @@ export function inspectSharedPathRef(
         : undefined,
     };
   }
-  const absolutePath = resolveSharedPathRef(workspaceRootPath, ref, options);
+  let absolutePath: string;
+  try {
+    absolutePath = resolveSharedPathRef(workspaceRootPath, ref, options);
+  } catch (error) {
+    return {
+      status: 'unreadable',
+      absolutePath: '',
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
   const cloudPlaceholder = join(dirname(absolutePath), `.${basename(absolutePath)}.icloud`);
   if (!existsSync(absolutePath)) {
     return existsSync(cloudPlaceholder)

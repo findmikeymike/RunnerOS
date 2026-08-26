@@ -261,10 +261,31 @@ function findInPlaceSecretFiles(root: string, relativeDir = ''): string[] {
   return blocked.sort();
 }
 
+function findInPlaceSymbolicLinks(root: string, relativeDir = ''): string[] {
+  const dir = join(root, relativeDir);
+  if (!existsSync(dir)) return [];
+  const links: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const relativePath = join(relativeDir, entry.name);
+    if (entry.isSymbolicLink()) {
+      links.push(relativePath);
+    } else if (entry.isDirectory()) {
+      links.push(...findInPlaceSymbolicLinks(root, relativePath));
+    }
+  }
+  return links.sort();
+}
+
 function quarantineInPlacePrivateArtifacts(workspaceRootPath: string, workspaceId: string): void {
-  const blocked = findInPlaceSecretFiles(workspaceRootPath);
+  const blocked = [...new Set([
+    ...findInPlaceSecretFiles(workspaceRootPath),
+    ...findInPlaceSymbolicLinks(workspaceRootPath),
+  ])].sort();
   if (blocked.length > 0) {
-    throw new Error(`Team Mode cannot share this folder while credential-bearing files are present: ${blocked.join(', ')}`);
+    throw new Error(
+      `Team Mode cannot share this folder while credential-bearing files are present ` +
+      `or symbolic links could escape the workspace: ${blocked.join(', ')}`,
+    );
   }
 
   const sourceSessions = join(workspaceRootPath, 'sessions');

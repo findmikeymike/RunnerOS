@@ -21,6 +21,21 @@ export function assertWorkspaceSecretsUpdatePermission(workspaceId: string, cont
   return workspace
 }
 
+/**
+ * User secrets and Zero wallet state are machine-global, so access cannot be
+ * authorized against only the caller-selected workspace. Require owner-level
+ * secret permission in every registered workspace that can consume the vault.
+ */
+export function assertGlobalSecretVaultPermission(originWorkspaceId: string, context: string): void {
+  const originWorkspace = assertWorkspaceSecretsUpdatePermission(originWorkspaceId, context)
+  const checkedRootPaths = new Set<string>([originWorkspace.rootPath])
+  for (const workspace of getWorkspaces()) {
+    if (checkedRootPaths.has(workspace.rootPath)) continue
+    checkedRootPaths.add(workspace.rootPath)
+    assertPermissionForWorkspace(workspace, 'secrets.update', context)
+  }
+}
+
 export async function assertSessionFilesWritePermission(
   sessionManager: { getSession(sessionId: string): Promise<SessionWorkspaceRef | null> },
   sessionId: string,
