@@ -155,4 +155,29 @@ describe('fake options provider', () => {
     await fake.fill(order.provider_order_id, 1, '1.31')
     expect((await fake.snapshotAccount('account-options-paper')).positions[0]?.average_price).toBe('1.30')
   })
+
+  test('models a long option close without inventing a negative position', async () => {
+    const fake = provider()
+    await expect(fake.submit({
+      account_id: 'account-options-paper', canonical_contract_id: 'USOPT:SPY:2026-09-18:C:650',
+      provider_instrument_id: 'fake-spy-20260918-c-650', action: 'SELL_TO_CLOSE', order_type: 'limit',
+      limit_price: '1.27', quantity: 1, time_in_force: 'day', regular_hours_only: true,
+      client_order_id: 'tg-options-illegal-short',
+    })).rejects.toMatchObject({ code: 'OPTIONS_PROVIDER_DIVERGENCE' })
+    const entry = await fake.submit({
+      account_id: 'account-options-paper', canonical_contract_id: 'USOPT:SPY:2026-09-18:C:650',
+      provider_instrument_id: 'fake-spy-20260918-c-650', action: 'BUY_TO_OPEN', order_type: 'limit',
+      limit_price: '1.30', quantity: 1, time_in_force: 'day', regular_hours_only: true,
+      client_order_id: 'tg-options-close-entry',
+    })
+    await fake.fill(entry.provider_order_id, 1, '1.29')
+    const close = await fake.submit({
+      ...entry,
+      action: 'SELL_TO_CLOSE',
+      limit_price: '1.27',
+      client_order_id: 'tg-options-close-exit',
+    })
+    await fake.fill(close.provider_order_id, 1, '1.27')
+    expect((await fake.snapshotAccount('account-options-paper')).positions).toEqual([])
+  })
 })

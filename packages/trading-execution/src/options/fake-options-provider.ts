@@ -192,6 +192,14 @@ export class FakeOptionsProvider {
       }
       return cloneOrder(this.orders.get(existing.providerOrderId)!)
     }
+    if (request.action === 'SELL_TO_CLOSE') {
+      const snapshot = await this.snapshotAccount(request.account_id)
+      const position = snapshot.positions.find((item) => item.canonical_contract_id === request.canonical_contract_id)
+      const working = snapshot.orders.filter((item) => item.status === 'working' || item.status === 'partially-filled')
+      if (!position || position.quantity < request.quantity || snapshot.positions.length !== 1 || working.length !== 0) {
+        throw new FakeOptionsProviderError('OPTIONS_PROVIDER_DIVERGENCE', 'Sell-to-close exceeds one exact unencumbered long option position')
+      }
+    }
     if (this.submitFailure === 'before-send') {
       this.submitFailure = null
       throw new FakeOptionsProviderError('OPTIONS_PROVIDER_DIVERGENCE', 'Injected failure before provider acceptance')
@@ -257,22 +265,38 @@ export class FakeOptionsProvider {
     return cloneOrder(order)
   }
 
+  async cancelOrder(accountId: string, providerOrderId: string, clientOrderId: string): Promise<FakeOptionsOrder> {
+    const order = this.requireOrder(providerOrderId)
+    if (order.account_id !== accountId || order.client_order_id !== clientOrderId) {
+      throw new FakeOptionsProviderError('OPTIONS_PROVIDER_DIVERGENCE', 'Cancel target does not match the exact fake order')
+    }
+    return this.cancel(providerOrderId)
+  }
+
   async snapshotAccount(accountId: string): Promise<FakeOptionsAccountSnapshot> {
     const accountOrders = [...this.orders.values()].filter((order) => order.account_id === accountId)
-    const positions = new Map<string, { quantity: number; debit: FixedDecimal }>()
+    const positions = new Map<string, { quantity: number; entryQuantity: number; entryDebit: FixedDecimal }>()
     for (const order of accountOrders) {
       if (order.filled_quantity === 0 || order.average_fill_price === undefined) continue
-      const current = positions.get(order.canonical_contract_id) ?? { quantity: 0, debit: FixedDecimal.from('0') }
-      current.quantity += order.filled_quantity
-      current.debit = current.debit.add(FixedDecimal.from(order.average_fill_price).multiplyInteger(order.filled_quantity))
+      const current = positions.get(order.canonical_contract_id) ?? {
+        quantity: 0,
+        entryQuantity: 0,
+        entryDebit: FixedDecimal.from('0'),
+      }
+      const direction = order.action === 'BUY_TO_OPEN' ? 1 : -1
+      current.quantity += direction * order.filled_quantity
+      if (order.action === 'BUY_TO_OPEN') {
+        current.entryQuantity += order.filled_quantity
+        current.entryDebit = current.entryDebit.add(FixedDecimal.from(order.average_fill_price).multiplyInteger(order.filled_quantity))
+      }
       positions.set(order.canonical_contract_id, current)
     }
     return {
       account_id: accountId,
-      positions: [...positions.entries()].map(([canonical_contract_id, position]) => ({
+      positions: [...positions.entries()].filter(([, position]) => position.quantity !== 0).map(([canonical_contract_id, position]) => ({
         canonical_contract_id,
         quantity: position.quantity,
-        average_price: divideExact(position.debit, position.quantity, 6),
+        average_price: divideExact(position.entryDebit, position.entryQuantity, 6),
       })),
       orders: accountOrders.map(cloneOrder),
     }

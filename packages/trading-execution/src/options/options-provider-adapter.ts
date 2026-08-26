@@ -4,7 +4,7 @@ export type OptionsProviderOrderRequest = {
   account_id: string
   canonical_contract_id: string
   provider_instrument_id: string
-  action: 'BUY_TO_OPEN'
+  action: 'BUY_TO_OPEN' | 'SELL_TO_CLOSE'
   order_type: 'limit'
   limit_price: string
   quantity: number
@@ -55,6 +55,7 @@ export interface OptionsProviderAdapter {
     buying_power_impact: string
   }>
   submit(request: OptionsProviderOrderRequest): Promise<OptionsProviderOrder>
+  cancelOrder(accountId: string, providerOrderId: string, clientOrderId: string): Promise<OptionsProviderOrder>
   getOrderByClientId(accountId: string, clientOrderId: string): Promise<OptionsProviderOrder | null>
   snapshotAccount(accountId: string): Promise<OptionsProviderAccountSnapshot>
 }

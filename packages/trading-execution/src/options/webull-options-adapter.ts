@@ -157,6 +157,10 @@ export class WebullOptionsAdapter implements OptionsProviderAdapter {
     throw new Error('Webull sandbox submission is blocked until retained certification proves long-open position semantics.')
   }
 
+  async cancelOrder(_accountId: string, _providerOrderId: string, _clientOrderId: string): Promise<OptionsProviderOrder> {
+    throw new Error('Webull sandbox cancellation is blocked until sequenced order truth is attached and certified.')
+  }
+
   async getOrderByClientId(accountId: string, clientOrderId: string): Promise<OptionsProviderOrder | null> {
     if (accountId !== this.config.account_id) throw new Error('Webull order account does not match the configured sandbox account.')
     const response = await this.get('/trading/orders/get', { account_id: accountId, client_order_id: clientOrderId })

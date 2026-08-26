@@ -75,6 +75,76 @@ describe('IbkrOptionsAdapter', () => {
     await expect(adapter.submit(request('tgcert-ibkr-3'))).rejects.toThrow('truth is incomplete')
     await expect(adapter.preview({ ...request('tgcert-ibkr-4'), limit_price: '1.305' })).rejects.toThrow('exceeds the certified')
   })
+
+  it('suppresses duplicate delivery and proves an exact cancellation', async () => {
+    let orderReads = 0
+    let submits = 0
+    let cancels = 0
+    const adapter = await preparedAdapter(async (input, init) => {
+      const url = new URL(input)
+      if (url.pathname.endsWith('/account/orders')) {
+        orderReads += 1
+        if (orderReads === 1) return response({ orders: [] })
+        const canceled = orderReads >= 5
+        return response({ orders: [ibkrOrderRow('tgcert-idem', 4490, canceled ? 'Cancelled' : 'Submitted')] })
+      }
+      if (init?.method === 'DELETE') { cancels += 1; return response({ order_id: '4490' }) }
+      submits += 1
+      return response([{ order_id: '4490', order_status: 'Submitted' }])
+    })
+    const placed = await adapter.submit(request('tgcert-idem'))
+    const duplicate = await adapter.submit(request('tgcert-idem'))
+    expect(duplicate.provider_order_id).toBe(placed.provider_order_id)
+    expect(submits).toBe(1)
+    expect(await adapter.cancelOrder('DU1234567', '4490', 'tgcert-idem')).toMatchObject({ status: 'canceled' })
+    expect(cancels).toBe(1)
+  })
+
+  it('allows a sell-to-close only against one exact unencumbered long position', async () => {
+    let orderReads = 0
+    const bodies: unknown[] = []
+    const adapter = await preparedAdapter(async (input, init) => {
+      const url = new URL(input)
+      if (init?.body) bodies.push(JSON.parse(String(init.body)))
+      if (url.pathname.includes('/portfolio/') && url.pathname.endsWith('/positions/0')) {
+        return response([{ conid: 999001, assetClass: 'OPT', position: 1, avgCost: 130 }])
+      }
+      if (url.pathname.endsWith('/account/orders')) {
+        orderReads += 1
+        if (orderReads <= 2) return response({ orders: [] })
+        return response({ orders: [{ ...ibkrOrderRow('tgcert-close', 4492, 'Filled'), side: 'SELL', filledQuantity: 1, avgPrice: 1.27 }] })
+      }
+      return response([{ order_id: '4492', order_status: 'Submitted' }])
+    })
+    const close = { ...request('tgcert-close'), action: 'SELL_TO_CLOSE' as const, limit_price: '1.27' }
+    expect(await adapter.submit(close)).toMatchObject({ action: 'SELL_TO_CLOSE', status: 'filled' })
+    expect(bodies).toContainEqual([{ conid: 999001, side: 'SELL', orderType: 'LMT', price: 1.27, quantity: 1, tif: 'DAY', outsideRTH: false, cOID: 'tgcert-close', referrer: 'TradeGodOptions' }])
+  })
+
+  it('blocks close when a working order has ambiguous asset-class evidence', async () => {
+    let orderReads = 0
+    const adapter = await preparedAdapter(async (input) => {
+      const url = new URL(input)
+      if (url.pathname.includes('/portfolio/') && url.pathname.endsWith('/positions/0')) {
+        return response([{ conid: 999001, assetClass: 'OPT', position: 1, avgCost: 130 }])
+      }
+      if (url.pathname.endsWith('/account/orders')) {
+        orderReads += 1
+        return response(orderReads === 1
+          ? { orders: [] }
+          : { orders: [{ conid: 123, order_ref: 'manual-unknown', orderId: 7, side: 'BUY', orderType: 'LMT', price: 1, totalSize: 1, filledQuantity: 0, tif: 'DAY', status: 'Submitted' }] })
+      }
+      return response([])
+    })
+    await expect(adapter.submit({ ...request('tgcert-close-blocked'), action: 'SELL_TO_CLOSE', limit_price: '1.27' }))
+      .rejects.toThrow('asset-class evidence')
+  })
+})
+
+const response = (value: unknown) => ({ ok: true, status: 200, json: async () => value })
+const ibkrOrderRow = (clientOrderId: string, orderId: number, status: string) => ({
+  conid: 999001, order_ref: clientOrderId, orderId, side: 'BUY', orderType: 'LMT', price: 1.3,
+  totalSize: 1, filledQuantity: 0, tif: 'DAY', status,
 })
 
 const request = (clientOrderId: string) => ({

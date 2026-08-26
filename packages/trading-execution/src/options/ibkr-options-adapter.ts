@@ -156,6 +156,19 @@ export class IbkrOptionsAdapter implements OptionsProviderAdapter {
 
   async submit(request: OptionsProviderOrderRequest): Promise<OptionsProviderOrder> {
     this.assertRequest(request)
+    const existing = await this.getOrderByClientId(request.account_id, request.client_order_id)
+    if (existing) {
+      this.assertExactOrder(existing, request)
+      return existing
+    }
+    if (request.action === 'SELL_TO_CLOSE') {
+      const snapshot = await this.snapshotAccount(request.account_id)
+      const position = snapshot.positions.find((item) => item.canonical_contract_id === request.canonical_contract_id)
+      const working = snapshot.orders.filter((item) => item.status === 'working' || item.status === 'partially-filled')
+      if (position?.quantity !== request.quantity || snapshot.positions.length !== 1 || working.length !== 0) {
+        throw new Error('IBKR close request does not match one exact unencumbered long option position.')
+      }
+    }
     const response = await this.post(`/iserver/account/${encodeURIComponent(request.account_id)}/orders`, [ibkrOrder(request)])
     const rows = Array.isArray(response) ? response : [response]
     const first = object(rows[0])
@@ -167,6 +180,23 @@ export class IbkrOptionsAdapter implements OptionsProviderAdapter {
     const exact = await this.getOrderByClientId(request.account_id, request.client_order_id)
     if (!exact || exact.provider_order_id !== providerOrderId) {
       throw new Error('IBKR accepted the order but exact provider truth is not yet available.')
+    }
+    return exact
+  }
+
+  async cancelOrder(accountId: string, providerOrderId: string, clientOrderId: string): Promise<OptionsProviderOrder> {
+    if (accountId !== this.config.account_id || !providerOrderId || !clientOrderId) {
+      throw new Error('IBKR cancel does not identify the exact configured paper order.')
+    }
+    const prior = await this.getOrderByClientId(accountId, clientOrderId)
+    if (!prior || prior.provider_order_id !== providerOrderId) throw new Error('IBKR cancel target is not exact.')
+    if (prior.status === 'canceled' || prior.status === 'partially-filled-canceled') return prior
+    if (prior.status !== 'working' && prior.status !== 'partially-filled') throw new Error('IBKR order is not cancelable.')
+    await this.request('DELETE', `/iserver/account/${encodeURIComponent(accountId)}/order/${encodeURIComponent(providerOrderId)}`)
+    const exact = await this.getOrderByClientId(accountId, clientOrderId)
+    if (!exact || exact.provider_order_id !== providerOrderId
+      || (exact.status !== 'canceled' && exact.status !== 'partially-filled-canceled')) {
+      throw new Error('IBKR cancel outcome is unknown until exact provider truth is available.')
     }
     return exact
   }
@@ -194,9 +224,20 @@ export class IbkrOptionsAdapter implements OptionsProviderAdapter {
         average_price: decimal(row.avgCost) ?? '0',
       }
     }).filter((position) => position.quantity !== 0)
-    const orders = asObjects(object(ordersRaw).orders).filter((row) => text(row.secType) === 'OPT').map((row) => (
-      this.normalizeOrder(row, accountId, text(row.order_ref) ?? text(row.cOID) ?? `unowned-${String(row.orderId)}`)
-    ))
+    const orders = asObjects(object(ordersRaw).orders).flatMap((row) => {
+      const securityType = text(row.secType)?.toUpperCase()
+      const conid = text(row.conid)
+      const knownOption = conid !== undefined
+        && [...this.contracts.values()].some((item) => item.provider_instrument_id === conid)
+      if (securityType && securityType !== 'OPT') return []
+      if (!securityType && !knownOption) {
+        if (ibkrStatusAppearsWorking(text(row.status ?? row.order_status))) {
+          throw new Error('IBKR working order omitted asset-class evidence; close preflight is blocked.')
+        }
+        return []
+      }
+      return [this.normalizeOrder(row, accountId, text(row.order_ref) ?? text(row.cOID) ?? `unowned-${String(row.orderId)}`)]
+    })
     return { account_id: accountId, positions, orders }
   }
 
@@ -210,7 +251,7 @@ export class IbkrOptionsAdapter implements OptionsProviderAdapter {
     const side = text(row.side)?.toUpperCase()
     const orderType = text(row.orderType ?? row.order_type)?.toUpperCase()
     const tif = text(row.tif)?.toUpperCase()
-    if (!limitPrice || !providerOrderId || side !== 'BUY' || orderType !== 'LMT' || tif !== 'DAY') {
+    if (!limitPrice || !providerOrderId || (side !== 'BUY' && side !== 'SELL') || orderType !== 'LMT' || tif !== 'DAY') {
       throw new Error('IBKR order truth is incomplete or outside the certified long-call/put scope.')
     }
     const averageFillPrice = filled > 0 ? decimal(row.avgPrice ?? row.avg_fill_price) : undefined
@@ -219,7 +260,7 @@ export class IbkrOptionsAdapter implements OptionsProviderAdapter {
       account_id: accountId,
       canonical_contract_id: contract?.canonical_id ?? `UNOWNED:${conid}`,
       provider_instrument_id: conid,
-      action: 'BUY_TO_OPEN', order_type: 'limit',
+      action: side === 'BUY' ? 'BUY_TO_OPEN' : 'SELL_TO_CLOSE', order_type: 'limit',
       limit_price: limitPrice,
       quantity, time_in_force: 'day', regular_hours_only: true,
       client_order_id: clientOrderId,
@@ -234,11 +275,26 @@ export class IbkrOptionsAdapter implements OptionsProviderAdapter {
     const contract = this.contracts.get(request.canonical_contract_id)
     if (request.account_id !== this.config.account_id || !contract
       || contract.provider_instrument_id !== request.provider_instrument_id
-      || request.action !== 'BUY_TO_OPEN' || request.order_type !== 'limit' || request.time_in_force !== 'day'
+      || (request.action !== 'BUY_TO_OPEN' && request.action !== 'SELL_TO_CLOSE') || request.order_type !== 'limit' || request.time_in_force !== 'day'
       || request.regular_hours_only !== true || request.quantity !== 1
       || !/^tg(?:opt|cert)-[a-z0-9-]+$/i.test(request.client_order_id) || request.client_order_id.length > 32
       || !isOptionPriceOnTick(contract, request.limit_price)) {
       throw new Error('IBKR request exceeds the certified single-leg paper scope.')
+    }
+  }
+
+  private assertExactOrder(order: OptionsProviderOrder, request: OptionsProviderOrderRequest): void {
+    if (order.account_id !== request.account_id
+      || order.canonical_contract_id !== request.canonical_contract_id
+      || order.provider_instrument_id !== request.provider_instrument_id
+      || order.action !== request.action
+      || order.order_type !== request.order_type
+      || FixedDecimal.from(order.limit_price).compare(request.limit_price) !== 0
+      || order.quantity !== request.quantity
+      || order.time_in_force !== request.time_in_force
+      || order.regular_hours_only !== request.regular_hours_only
+      || order.client_order_id !== request.client_order_id) {
+      throw new Error('IBKR client order ID was reused with different economics.')
     }
   }
 
@@ -266,7 +322,7 @@ export class IbkrOptionsAdapter implements OptionsProviderAdapter {
 }
 
 const ibkrOrder = (request: OptionsProviderOrderRequest) => ({
-  conid: Number(request.provider_instrument_id), side: 'BUY', orderType: 'LMT', price: Number(request.limit_price),
+  conid: Number(request.provider_instrument_id), side: request.action === 'BUY_TO_OPEN' ? 'BUY' : 'SELL', orderType: 'LMT', price: Number(request.limit_price),
   quantity: request.quantity, tif: 'DAY', outsideRTH: false, cOID: request.client_order_id, referrer: 'TradeGodOptions',
 })
 const ibkrMonth = (date: string): string => `${['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][Number(date.slice(5, 7)) - 1]}${date.slice(2, 4)}`
@@ -294,4 +350,8 @@ const normalizeIbkrStatus = (status?: string, filled = 0, quantity = 1): Options
   if (filled > 0) return 'partially-filled'
   if (['submitted', 'presubmitted', 'pending submit', 'working'].some((value) => normalized.includes(value))) return 'working'
   throw new Error(`IBKR returned an unsupported order status: ${status ?? 'missing'}.`)
+}
+const ibkrStatusAppearsWorking = (status?: string): boolean => {
+  const normalized = status?.toLowerCase() ?? ''
+  return ['submitted', 'presubmitted', 'pending submit', 'working', 'pending cancel'].some((value) => normalized.includes(value))
 }

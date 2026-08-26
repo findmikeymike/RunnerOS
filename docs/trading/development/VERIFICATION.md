@@ -676,6 +676,25 @@ Never collapse these into “done.”
   renderer build passed; diff check passed.
 - Not yet proven: a real retained provider certification, a real IBKR/Webull
   paper order, order management, expiry custody, or automatic Discord authority.
+
+## Options Autopilot Slice 6A — Provider Lifecycle Primitives — 2026-08-26
+
+- The provider-neutral options adapter now distinguishes `BUY_TO_OPEN` from
+  `SELL_TO_CLOSE` and requires an exact cancel operation. IBKR delivery first
+  checks the immutable client-order ID, refuses economic collisions, and never
+  sends a duplicate order for an already-known request.
+- IBKR cancellation binds account, provider order ID, and client order ID, then
+  requires an exact canceled provider readback. A successful HTTP response alone
+  is not treated as cancellation proof.
+- IBKR sell-to-close is permitted only against one exact unencumbered long paper
+  position with no working option orders. The fake provider enforces the same
+  no-short invariant for deterministic certification tests.
+- Webull submission and cancellation remain explicitly blocked until its
+  sandbox proves long-open intent and sequenced current order truth.
+- Verification: 26 focused adapter/simulator/gateway tests passed with 79
+  expectations; repository-wide typecheck and diff check passed.
+- Not yet proven: real provider fills/cancels/closes, a retained certification
+  session, runtime attachment, or any Discord-driven provider mutation.
 # Multi-account connections and Discord routes — 2026-07-31
 
 - Multiple prop firms/accounts can coexist; connection identity remains exact
