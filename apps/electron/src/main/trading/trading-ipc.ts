@@ -26,6 +26,7 @@ import type {
   TradingConnectionStatus,
 } from './trading-connection-service.ts'
 import type { TradingSignalRoute } from './trading-signal-route-store.ts'
+import type { OptionsConnectionStatus, SaveOptionsConnectionInput } from './options-connection-service.ts'
 
 export const TRADE_GOD_IPC = {
   HEALTH: 'trade-god:health',
@@ -63,6 +64,10 @@ export const TRADE_GOD_IPC = {
   LIST_STANDING_AUTHORIZATIONS: 'trade-god:execution:authorizations:list',
   SAVE_STANDING_AUTHORIZATION: 'trade-god:execution:authorizations:save',
   REVOKE_STANDING_AUTHORIZATION: 'trade-god:execution:authorizations:revoke',
+  LIST_OPTIONS_CONNECTIONS: 'trade-god:options:connections:list',
+  SAVE_OPTIONS_CONNECTION: 'trade-god:options:connections:save',
+  VERIFY_OPTIONS_CONNECTION: 'trade-god:options:connections:verify',
+  REMOVE_OPTIONS_CONNECTION: 'trade-god:options:connections:remove',
 } as const
 
 export interface TradingIpcManager {
@@ -122,6 +127,10 @@ export interface TradingIpcManager {
   listStandingAuthorizations?(): Promise<ExecutionAuthorization[]>
   saveStandingAuthorization?(authorization: ExecutionAuthorization): Promise<ExecutionAuthorization>
   revokeStandingAuthorization?(connectionId: string): Promise<boolean>
+  listOptionsConnections?(): Promise<OptionsConnectionStatus[]>
+  saveOptionsConnection?(input: SaveOptionsConnectionInput): Promise<OptionsConnectionStatus>
+  verifyOptionsConnection?(connectionId: string): Promise<OptionsConnectionStatus>
+  removeOptionsConnection?(connectionId: string): Promise<boolean>
   resolveTradingConnection?(connectionId: string): Promise<TradingConnection>
   stop(): Promise<void>
 }
@@ -316,6 +325,25 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     if (!manager.revokeStandingAuthorization) throw new Error('Standing paper mandates are unavailable.')
     return manager.revokeStandingAuthorization(String(connectionId))
   })
+  ipcMain.handle(TRADE_GOD_IPC.LIST_OPTIONS_CONNECTIONS, () => {
+    if (!manager.listOptionsConnections) throw new Error('Options accounts are unavailable.')
+    return manager.listOptionsConnections()
+  })
+  ipcMain.handle(TRADE_GOD_IPC.SAVE_OPTIONS_CONNECTION, (_event, input: unknown) => {
+    if (!manager.saveOptionsConnection) throw new Error('Options account setup is unavailable.')
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Options account payload is invalid.')
+    return manager.saveOptionsConnection(input as SaveOptionsConnectionInput)
+  })
+  ipcMain.handle(TRADE_GOD_IPC.VERIFY_OPTIONS_CONNECTION, (_event, connectionId: unknown) => {
+    if (!manager.verifyOptionsConnection) throw new Error('Options account verification is unavailable.')
+    if (typeof connectionId !== 'string' || !connectionId.trim()) throw new Error('Options account id is invalid.')
+    return manager.verifyOptionsConnection(connectionId)
+  })
+  ipcMain.handle(TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION, (_event, connectionId: unknown) => {
+    if (!manager.removeOptionsConnection) throw new Error('Options account removal is unavailable.')
+    if (typeof connectionId !== 'string' || !connectionId.trim()) throw new Error('Options account id is invalid.')
+    return manager.removeOptionsConnection(connectionId)
+  })
 
   let disposed = false
   return async () => {
@@ -355,6 +383,10 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS)
     ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION)
     ipcMain.removeHandler(TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION)
+    ipcMain.removeHandler(TRADE_GOD_IPC.LIST_OPTIONS_CONNECTIONS)
+    ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_OPTIONS_CONNECTION)
+    ipcMain.removeHandler(TRADE_GOD_IPC.VERIFY_OPTIONS_CONNECTION)
+    ipcMain.removeHandler(TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION)
     await manager.stop()
   }
 }

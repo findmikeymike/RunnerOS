@@ -101,6 +101,10 @@ describe('Trade God IPC registration', () => {
         calls.push(`paper-activation:commit:${reviewId}:${reviewChecksum}`)
         return { status: 'released' } as any
       },
+      listOptionsConnections: async () => { calls.push('options:list'); return [] },
+      saveOptionsConnection: async () => { calls.push('options:save'); return { connection: { connection_id: 'options-one' } } as any },
+      verifyOptionsConnection: async (id) => { calls.push(`options:verify:${id}`); return { provider_read_verified: true } as any },
+      removeOptionsConnection: async (id) => { calls.push(`options:remove:${id}`); return true },
       stop: async () => { calls.push('stop') },
     }
 
@@ -141,6 +145,10 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS,
       TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION,
       TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION,
+      TRADE_GOD_IPC.LIST_OPTIONS_CONNECTIONS,
+      TRADE_GOD_IPC.SAVE_OPTIONS_CONNECTION,
+      TRADE_GOD_IPC.VERIFY_OPTIONS_CONNECTION,
+      TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION,
     ])
     expect(await ipc.handlers.get(TRADE_GOD_IPC.HEALTH)!({})).toEqual({ state: 'ready' })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.ANALYZE_FIXTURE)!({}, { timeoutMs: 500 })).toEqual({ artifact_id: 'artifact-ipc' })
@@ -202,6 +210,12 @@ describe('Trade God IPC registration', () => {
       .toEqual({ review_id: 'review-1' })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.COMMIT_PAPER_ACTIVATION)!({}, 'review-1', 'a'.repeat(64)))
       .toEqual({ status: 'released' })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.LIST_OPTIONS_CONNECTIONS)!({})).toEqual([])
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.SAVE_OPTIONS_CONNECTION)!({}, { provider: 'ibkr' }))
+      .toMatchObject({ connection: { connection_id: 'options-one' } })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.VERIFY_OPTIONS_CONNECTION)!({}, 'options-one'))
+      .toEqual({ provider_read_verified: true })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION)!({}, 'options-one')).toBe(true)
     expect(calls).toEqual([
       'health',
       'analyze:500',
@@ -232,6 +246,10 @@ describe('Trade God IPC registration', () => {
       'execution-control:set:true',
       'paper-activation:prepare',
       `paper-activation:commit:review-1:${'a'.repeat(64)}`,
+      'options:list',
+      'options:save',
+      'options:verify:options-one',
+      'options:remove:options-one',
     ])
   })
 
@@ -300,6 +318,10 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS,
       TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION,
       TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION,
+      TRADE_GOD_IPC.LIST_OPTIONS_CONNECTIONS,
+      TRADE_GOD_IPC.SAVE_OPTIONS_CONNECTION,
+      TRADE_GOD_IPC.VERIFY_OPTIONS_CONNECTION,
+      TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION,
     ])
     expect(stops).toBe(1)
   })

@@ -26,6 +26,7 @@ import type {
   TradingConnectionStatus,
 } from './trading-connection-service.ts'
 import type { TradingSignalRoute } from './trading-signal-route-store.ts'
+import type { OptionsConnectionStatus, SaveOptionsConnectionInput } from './options-connection-service.ts'
 
 type Invoke = (channel: string, ...args: unknown[]) => Promise<unknown>
 type Subscribe = (channel: string, callback: (payload: unknown) => void) => () => void
@@ -88,6 +89,10 @@ export interface TradingPreloadApi {
   listTradeGodStandingAuthorizations(): Promise<ExecutionAuthorization[]>
   saveTradeGodStandingAuthorization(authorization: ExecutionAuthorization): Promise<ExecutionAuthorization>
   revokeTradeGodStandingAuthorization(connectionId: string): Promise<boolean>
+  listOptionsConnections(): Promise<OptionsConnectionStatus[]>
+  saveOptionsConnection(input: SaveOptionsConnectionInput): Promise<OptionsConnectionStatus>
+  verifyOptionsConnection(connectionId: string): Promise<OptionsConnectionStatus>
+  removeOptionsConnection(connectionId: string): Promise<boolean>
 }
 
 export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): TradingPreloadApi {
@@ -201,6 +206,18 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
     ),
     revokeTradeGodStandingAuthorization: (connectionId) => (
       invoke(TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION, connectionId) as Promise<boolean>
+    ),
+    listOptionsConnections: () => (
+      invoke(TRADE_GOD_IPC.LIST_OPTIONS_CONNECTIONS) as Promise<OptionsConnectionStatus[]>
+    ),
+    saveOptionsConnection: (input) => (
+      invoke(TRADE_GOD_IPC.SAVE_OPTIONS_CONNECTION, input) as Promise<OptionsConnectionStatus>
+    ),
+    verifyOptionsConnection: (connectionId) => (
+      invoke(TRADE_GOD_IPC.VERIFY_OPTIONS_CONNECTION, connectionId) as Promise<OptionsConnectionStatus>
+    ),
+    removeOptionsConnection: (connectionId) => (
+      invoke(TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION, connectionId) as Promise<boolean>
     ),
     onTradeGodAlert: (callback) => subscribe
       ? subscribe(TRADE_GOD_IPC.ALERT_RECEIVED, (payload) => callback(payload as TradeAlert))

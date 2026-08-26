@@ -63,6 +63,10 @@ type ApiToChannelMapKeys = Exclude<
   | 'listTradeGodStandingAuthorizations' // direct local paper-mandate IPC
   | 'saveTradeGodStandingAuthorization' // direct local paper-mandate IPC
   | 'revokeTradeGodStandingAuthorization' // direct local paper-mandate IPC
+  | 'listOptionsConnections' // direct local options account IPC
+  | 'saveOptionsConnection' // direct local options account IPC
+  | 'verifyOptionsConnection' // direct local read-only options provider IPC
+  | 'removeOptionsConnection' // direct local options account IPC
   | 'onTradeGodAlert' // direct local Trade God alert listener
 > | BrowserPaneKeys
 type ChannelMapKeys = keyof typeof CHANNEL_MAP & string

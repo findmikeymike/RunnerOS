@@ -496,6 +496,10 @@ export interface ElectronAPI {
   listTradeGodStandingAuthorizations(): Promise<import('@trade-god/contracts').ExecutionAuthorization[]>
   saveTradeGodStandingAuthorization(authorization: import('@trade-god/contracts').ExecutionAuthorization): Promise<import('@trade-god/contracts').ExecutionAuthorization>
   revokeTradeGodStandingAuthorization(connectionId: string): Promise<boolean>
+  listOptionsConnections(): Promise<import('../main/trading/options-connection-service').OptionsConnectionStatus[]>
+  saveOptionsConnection(input: import('../main/trading/options-connection-service').SaveOptionsConnectionInput): Promise<import('../main/trading/options-connection-service').OptionsConnectionStatus>
+  verifyOptionsConnection(connectionId: string): Promise<import('../main/trading/options-connection-service').OptionsConnectionStatus>
+  removeOptionsConnection(connectionId: string): Promise<boolean>
 
   // Session management
   getSessions(): Promise<Session[]>

@@ -556,6 +556,27 @@ Never collapse these into “done.”
   typecheck and diff check passed.
 - Not yet proven: any IBKR/Webull order mutation, credential/session handling,
   real provider preview semantics, cancellation/expiry management, or live UI.
+
+## Options Autopilot Slice 4 — Read-only Account Setup — 2026-08-26
+
+- Trade God now has a dedicated Options Desk with guided IBKR paper and Webull
+  sandbox setup. Credentials are accepted only in the modal, stored in the
+  encrypted Trade God vault, and never returned to the renderer.
+- Main-process verification is restricted to fixed official HTTPS hosts and
+  read-only account, balance, position, and open-order requests. It requires the
+  exact configured account ID. No order endpoint or provider execution adapter
+  is attached in this slice.
+- Verification evidence is immutable and checksum-bound to the exact account,
+  credential generation, adapter version, and provider contract. Replacing a
+  credential invalidates the active proof while retaining its audit history.
+- The UI truthfully reports `Read-only · no orders`. Options contract lookup,
+  quote entitlement, realtime data, certification, and execution remain
+  unproven and visibly locked.
+- Verification: 17 focused contract/service/IPC/preload/channel tests passed;
+  repository-wide typecheck, renderer production build, and diff check passed.
+  Runtime screenshots verified the empty account page and IBKR connection modal.
+- Not yet proven: a real IBKR/Webull credential login, live options contract or
+  quote access, provider paper order lifecycle, or unattended execution.
 # Multi-account connections and Discord routes — 2026-07-31
 
 - Multiple prop firms/accounts can coexist; connection identity remains exact

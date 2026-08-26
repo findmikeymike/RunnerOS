@@ -40,6 +40,7 @@ import {
   type TradingCredentialVault,
 } from './trading-connection-service.ts'
 import { createTradovatePaperRuntime } from './tradovate-paper-runtime.ts'
+import { OptionsConnectionService, ReadOnlyOptionsProviderVerifier } from './options-connection-service.ts'
 import { PaperActivationService } from './paper-activation-service.ts'
 import {
   TradingSignalRouteStore,
@@ -448,6 +449,14 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         tradovatePaperRuntime
           ? { verify: (connection) => tradovatePaperRuntime!.verifyReadOnly(connection) }
           : undefined,
+      )
+    : undefined
+  const optionsConnectionService = options.connectionDirectory && options.credentialVault
+    ? new OptionsConnectionService(
+        path.join(options.connectionDirectory, 'options'),
+        options.credentialVault,
+        new ReadOnlyOptionsProviderVerifier(undefined, options.now),
+        options.now,
       )
     : undefined
   const executionGateway = executionStore && tradingConnectionStore
@@ -957,6 +966,14 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             await options.credentialVault!.setSecret(DISCOTRADER_WEBHOOK_SECRET_REF, secret)
             return { configured: true as const }
           },
+        }
+      : {}),
+    ...(optionsConnectionService
+      ? {
+          listOptionsConnections: () => optionsConnectionService.list(),
+          saveOptionsConnection: (input) => optionsConnectionService.save(input),
+          verifyOptionsConnection: (connectionId) => optionsConnectionService.verify(connectionId),
+          removeOptionsConnection: (connectionId) => optionsConnectionService.remove(connectionId),
         }
       : {}),
     ...(executionGateway

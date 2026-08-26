@@ -40,6 +40,7 @@ import {
   ChartNoAxesCombined,
   WalletCards,
   Wrench,
+  CircleDollarSign,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -2135,7 +2136,7 @@ function AppShellContent({
   const [tradeGodView, setTradeGodView] = useState<TradeGodView>(() => {
     if (typeof window === 'undefined') return 'overview'
     const stored = window.sessionStorage.getItem(TRADE_GOD_VIEW_STORAGE_KEY)
-    return stored === 'trades' || stored === 'signals' || stored === 'discotrader' || stored === 'accounts' || stored === 'order-flow'
+    return stored === 'trades' || stored === 'signals' || stored === 'discotrader' || stored === 'options' || stored === 'accounts' || stored === 'order-flow'
       ? stored
       : 'overview'
   })
@@ -2157,6 +2158,7 @@ function AppShellContent({
       result.push({ id: 'nav:trade-god-trades', type: 'nav', action: () => openTradeGodView('trades') })
       result.push({ id: 'nav:trade-god-signals', type: 'nav', action: () => openTradeGodView('signals') })
       result.push({ id: 'nav:trade-god-discotrader', type: 'nav', action: () => openTradeGodView('discotrader') })
+      result.push({ id: 'nav:trade-god-options', type: 'nav', action: () => openTradeGodView('options') })
       result.push({ id: 'nav:trade-god-accounts', type: 'nav', action: () => openTradeGodView('accounts') })
       result.push({ id: 'nav:work', type: 'nav', action: () => toggleMainNavGroup('work') })
       if (workExpanded) {
@@ -2489,6 +2491,13 @@ function AppShellContent({
           icon: Bot,
           variant: isTradeGodNavigation(navState) && tradeGodView === 'discotrader' ? "default" : "ghost",
           onClick: () => openTradeGodView('discotrader'),
+        },
+        {
+          id: "nav:trade-god-options",
+          title: "Options",
+          icon: CircleDollarSign,
+          variant: isTradeGodNavigation(navState) && tradeGodView === 'options' ? "default" : "ghost",
+          onClick: () => openTradeGodView('options'),
         },
         {
           id: "nav:trade-god-accounts",

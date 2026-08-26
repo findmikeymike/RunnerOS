@@ -20,6 +20,8 @@ export const OPTIONS_EXECUTION_RECEIPT_SCHEMA_VERSION = 'options-execution-recei
 export const OPTIONS_RESERVATION_RELEASE_PROOF_SCHEMA_VERSION = 'options-reservation-release-proof@1' as const
 export const OPTIONS_EXECUTION_COMMAND_SCHEMA_VERSION = 'options-execution-command@1' as const
 export const OPTIONS_EXECUTION_RECORD_SCHEMA_VERSION = 'options-execution-record@1' as const
+export const OPTIONS_CONNECTION_SCHEMA_VERSION = 'options-connection@1' as const
+export const OPTIONS_PROVIDER_READ_PROOF_SCHEMA_VERSION = 'options-provider-read-proof@1' as const
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD').refine((value) => {
   const parsed = new Date(`${value}T00:00:00.000Z`)
@@ -31,6 +33,83 @@ const nonnegativeDecimalStringSchema = decimalStringSchema.refine((value) => !va
 })
 const positiveIntegerSchema = z.number().int().positive()
 const nonnegativeIntegerSchema = z.number().int().nonnegative()
+
+export const optionsProviderSchema = z.enum(['ibkr', 'webull'])
+
+export const optionsConnectionSchema = z.object({
+  connection_schema_version: z.literal(OPTIONS_CONNECTION_SCHEMA_VERSION),
+  connection_id: identifierSchema,
+  provider: optionsProviderSchema,
+  environment: z.enum(['paper', 'sandbox']),
+  auth_profile: z.enum(['ibkr-oauth-access-token', 'webull-individual-hmac']),
+  adapter_id: identifierSchema,
+  adapter_version: z.string().regex(/^\d+\.\d+\.\d+$/),
+  provider_contract_version: identifierSchema,
+  account_ref: z.string().min(1).max(120),
+  account_label: z.string().min(1).max(160),
+  endpoint: z.string().url().refine((value) => value.startsWith('https://'), 'Provider endpoint must use HTTPS'),
+  credential_ref: identifierSchema,
+  credential_generation: sha256Schema,
+  state: z.enum(['credentials-saved', 'read-only-verified', 'blocked']),
+  read_only: z.literal(true),
+  execution_enabled: z.literal(false),
+  created_at: utcTimestampSchema,
+  updated_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (value.provider === 'ibkr' && value.auth_profile !== 'ibkr-oauth-access-token') {
+    context.addIssue({ code: 'custom', path: ['auth_profile'], message: 'IBKR requires its OAuth access-token profile' })
+  }
+  if (value.provider === 'webull' && value.auth_profile !== 'webull-individual-hmac') {
+    context.addIssue({ code: 'custom', path: ['auth_profile'], message: 'Webull requires its Individual HMAC profile' })
+  }
+  if (value.provider === 'ibkr' && value.environment !== 'paper') {
+    context.addIssue({ code: 'custom', path: ['environment'], message: 'Initial IBKR options enrollment is paper-only' })
+  }
+  if (value.provider === 'webull' && value.environment !== 'sandbox') {
+    context.addIssue({ code: 'custom', path: ['environment'], message: 'Initial Webull options enrollment is sandbox-only' })
+  }
+  if (Date.parse(value.updated_at) < Date.parse(value.created_at)) {
+    context.addIssue({ code: 'custom', path: ['updated_at'], message: 'Connection update cannot precede creation' })
+  }
+})
+
+export const optionsProviderReadProofSchema = z.object({
+  proof_schema_version: z.literal(OPTIONS_PROVIDER_READ_PROOF_SCHEMA_VERSION),
+  proof_id: identifierSchema,
+  connection_id: identifierSchema,
+  connection_checksum: sha256Schema,
+  credential_generation: sha256Schema,
+  adapter_id: identifierSchema,
+  adapter_version: z.string().regex(/^\d+\.\d+\.\d+$/),
+  provider_contract_version: identifierSchema,
+  provider: optionsProviderSchema,
+  environment: z.enum(['paper', 'sandbox']),
+  account_ref: z.string().min(1).max(120),
+  account_label: z.string().min(1).max(160),
+  authenticated: z.literal(true),
+  account_matched: z.literal(true),
+  balances_readable: z.literal(true),
+  positions_readable: z.literal(true),
+  open_orders_readable: z.literal(true),
+  option_contracts_readable: z.boolean(),
+  option_quotes_readable: z.boolean(),
+  option_quotes_realtime: z.boolean(),
+  position_count: nonnegativeIntegerSchema,
+  open_order_count: nonnegativeIntegerSchema,
+  currency: z.string().min(3).max(8),
+  net_liquidation: nonnegativeDecimalStringSchema.optional(),
+  buying_power: nonnegativeDecimalStringSchema.optional(),
+  provider_timestamp: utcTimestampSchema.optional(),
+  verified_at: utcTimestampSchema,
+  expires_at: utcTimestampSchema,
+  safe_evidence: z.array(z.string().min(1).max(240)).min(1).max(30),
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (Date.parse(value.expires_at) <= Date.parse(value.verified_at)) {
+    context.addIssue({ code: 'custom', path: ['expires_at'], message: 'Read proof must expire after verification' })
+  }
+})
 
 function decimalParts(value: string): { coefficient: bigint; scale: number } {
   const negative = value.startsWith('-')
@@ -754,3 +833,6 @@ export type OptionsExecutionReceipt = z.infer<typeof optionsExecutionReceiptSche
 export type OptionsReservationReleaseProof = z.infer<typeof optionsReservationReleaseProofSchema>
 export type OptionsExecutionCommand = z.infer<typeof optionsExecutionCommandSchema>
 export type OptionsExecutionRecord = z.infer<typeof optionsExecutionRecordSchema>
+export type OptionsProvider = z.infer<typeof optionsProviderSchema>
+export type OptionsConnection = z.infer<typeof optionsConnectionSchema>
+export type OptionsProviderReadProof = z.infer<typeof optionsProviderReadProofSchema>
