@@ -504,6 +504,11 @@ export interface ElectronAPI {
   applyOptionsCertification(connectionId: string, certificationId: string, operatorConfirmed: true): Promise<import('../main/trading/options-connection-service').OptionsConnectionStatus>
   activateOptionsManualAuthority(connectionId: string, maxDebit: string, validUntil: string, operatorConfirmed: true): Promise<import('../main/trading/options-connection-service').OptionsConnectionStatus>
   revokeOptionsManualAuthority(connectionId: string): Promise<import('../main/trading/options-connection-service').OptionsConnectionStatus>
+  prepareOptionsManualOrder(input: { connection_id: string; max_premium: string; operator_confirmed: true }): Promise<import('@trade-god/contracts').OptionsManualOrderReview>
+  commitOptionsManualOrder(connectionId: string, reviewId: string, reviewChecksum: string, operatorConfirmed: true): Promise<import('@trade-god/contracts').OptionsExecutionRecord>
+  cancelOptionsManualOrder(connectionId: string, reviewId: string): Promise<void>
+  cancelOptionsWorkingEntry(connectionId: string, intentId: string, operatorConfirmed: true): Promise<import('@trade-god/contracts').OptionsManagementRecord>
+  closeOptionsPosition(connectionId: string, intentId: string, minimumCredit: string, operatorConfirmed: true): Promise<import('@trade-god/contracts').OptionsManagementRecord>
 
   // Session management
   getSessions(): Promise<Session[]>

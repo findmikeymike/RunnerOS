@@ -8,6 +8,8 @@ import {
   optionContractIdentitySchema,
   optionQuoteSnapshotSchema,
   optionsDebitReservationSchema,
+  optionsAutomationRouteSchema,
+  optionsAutopilotAuthoritySchema,
   optionsEntryDecisionSchema,
   optionsEntryPolicySchema,
   optionsExecutionCommandSchema,
@@ -21,6 +23,8 @@ import {
   type OptionContractIdentity,
   type OptionQuoteSnapshot,
   type OptionsDebitReservation,
+  type OptionsAutomationRoute,
+  type OptionsAutopilotAuthority,
   type OptionsEntryDecision,
   type OptionsEntryPolicy,
   type OptionsExecutionCommand,
@@ -59,6 +63,8 @@ export type ExecuteOptionsEntryInput = {
   route_checksum: string
   account_checksum: string
   manual_authority?: OptionsManualPaperAuthority
+  autopilot_authority?: OptionsAutopilotAuthority
+  automation_route?: OptionsAutomationRoute
 }
 
 export class OptionsExecutionGatewayError extends Error {
@@ -391,9 +397,8 @@ export class OptionsExecutionGateway {
       || policy.environment !== this.adapter.descriptor.environment) {
       throw new OptionsExecutionGatewayError('OPTIONS_EXECUTION_INTEGRITY', 'Policy does not bind the installed paper adapter.')
     }
-    const fakeOnly = this.adapter.descriptor.adapter_id === 'fake-options'
-      && this.adapter.descriptor.provider_contract_version === 'fake-options@1'
-    if (!fakeOnly) this.assertManualAuthority(input, signal, contract, decision, policy)
+    if ('source_kind' in signal) this.assertManualAuthority(input, signal, contract, decision, policy)
+    else this.assertAutopilotAuthority(input, signal, decision, policy)
     if (Date.parse(this.now()) >= Date.parse(decision.valid_until)) {
       throw new OptionsExecutionGatewayError('OPTIONS_ORDER_EXPIRED', 'The options decision already expired.')
     }
@@ -492,6 +497,55 @@ export class OptionsExecutionGateway {
       || source.canonical_contract_id !== authority.allowed_contract_id
       || source.valid_until !== decision.valid_until) {
       throw new OptionsExecutionGatewayError('OPTIONS_EXECUTION_INTEGRITY', 'Manual paper authority does not bind this exact order.')
+    }
+  }
+
+  private assertAutopilotAuthority(
+    input: ExecuteOptionsEntryInput,
+    source: DiscordOptionsSignal,
+    decision: OptionsEntryDecision,
+    policy: OptionsEntryPolicy,
+  ): void {
+    if (!input.autopilot_authority) {
+      throw new OptionsExecutionGatewayError('OPTIONS_EXECUTION_INTEGRITY', 'Discord options entry requires exact autopilot authority.')
+    }
+    if (!input.automation_route) {
+      throw new OptionsExecutionGatewayError('OPTIONS_EXECUTION_INTEGRITY', 'Discord options entry requires its exact automation route.')
+    }
+    const authority = optionsAutopilotAuthoritySchema.parse(input.autopilot_authority)
+    const route = optionsAutomationRouteSchema.parse(input.automation_route)
+    assertChecksum(authority)
+    assertChecksum(route)
+    const descriptor = this.adapter.descriptor
+    if (authority.mode !== 'automatic-paper'
+      || authority.certification_level !== 'options-paper-autopilot-certified'
+      || authority.authority_id !== input.mandate_id
+      || authority.content_checksum !== input.mandate_checksum
+      || authority.route_id !== policy.source_route_id
+      || authority.route_checksum !== input.route_checksum
+      || route.route_id !== authority.route_id
+      || route.content_checksum !== authority.route_checksum
+      || route.guild_id !== source.provenance.guild_id
+      || route.channel_id !== source.provenance.channel_id
+      || route.thread_id !== source.provenance.thread_id
+      || route.author_id !== source.provenance.author_id
+      || authority.policy_id !== policy.policy_id
+      || authority.policy_revision !== policy.revision
+      || authority.policy_checksum !== policy.content_checksum
+      || authority.connection_id !== policy.connection_id
+      || authority.account_id !== policy.account_id
+      || authority.provider !== policy.provider_slug
+      || authority.connection_checksum !== input.account_checksum
+      || authority.adapter_id !== descriptor.adapter_id
+      || authority.adapter_version !== descriptor.adapter_version
+      || authority.provider_contract_version !== descriptor.provider_contract_version
+      || authority.credential_generation !== descriptor.credential_generation
+      || authority.environment !== descriptor.environment
+      || Date.parse(this.now()) < Date.parse(authority.valid_from)
+      || Date.parse(this.now()) >= Date.parse(authority.valid_until)
+      || Date.parse(this.now()) >= Date.parse(authority.certification_expires_at)
+      || decision.signal_checksum !== source.content_checksum) {
+      throw new OptionsExecutionGatewayError('OPTIONS_EXECUTION_INTEGRITY', 'Autopilot authority does not bind this exact Discord options order.')
     }
   }
 

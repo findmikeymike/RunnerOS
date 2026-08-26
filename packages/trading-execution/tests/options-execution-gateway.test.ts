@@ -5,8 +5,13 @@ import path from 'node:path'
 
 import {
   DISCORD_OPTIONS_SIGNAL_SCHEMA_VERSION,
+  OPTIONS_AUTOPILOT_AUTHORITY_SCHEMA_VERSION,
+  OPTIONS_AUTOMATION_ROUTE_SCHEMA_VERSION,
   OPTIONS_ENTRY_POLICY_SCHEMA_VERSION,
   type DiscordOptionsSignal,
+  type OptionContractIdentity,
+  type OptionsAutopilotAuthority,
+  type OptionsAutomationRoute,
   type OptionsEntryPolicy,
 } from '@trade-god/contracts'
 
@@ -28,6 +33,9 @@ function checksummed<T extends Record<string, unknown>>(body: T): T & { content_
 }
 
 async function fixture(root: string, provider = FakeOptionsProvider.paperFixture()) {
+  const original = provider.contracts[0]!
+  const { content_checksum: _contractChecksum, ...contractBody } = original
+  provider.contracts[0] = checksummed({ ...contractBody, provider: 'ibkr' }) as OptionContractIdentity
   const contract = provider.contracts[0]!
   const quote = await provider.quote(contract.canonical_id)
   const signal = checksummed({
@@ -65,15 +73,39 @@ async function fixture(root: string, provider = FakeOptionsProvider.paperFixture
       operator_escalation_minutes_before_close: 30, do_not_exercise_mode: 'provider-supported' as const,
       custody_certification_checksum: checksum,
     },
-    environment: 'paper' as const, provider_slug: 'fake-options', adapter_id: 'fake-options',
-    required_certification: 'options-sandbox-entry-certified', certification_checksum: checksum,
+    environment: 'paper' as const, provider_slug: 'ibkr', adapter_id: 'fake-options',
+    required_certification: 'options-paper-autopilot-certified', certification_checksum: checksum,
     connection_id: 'connection-options-paper', account_id: 'account-options-paper',
     source_route_id: 'route-options-paper', global_halt_required: true as const,
     account_halt_required: true as const, source_halt_required: true as const,
     mandate_expires_at: '2026-08-26T17:00:00.000Z', created_at: '2026-08-26T14:00:00.000Z',
   }) as OptionsEntryPolicy
+  const route = checksummed({
+    route_schema_version: OPTIONS_AUTOMATION_ROUTE_SCHEMA_VERSION, route_id: policy.source_route_id, revision: 1,
+    display_name: 'Options gateway route', guild_id: signal.provenance.guild_id,
+    channel_id: signal.provenance.channel_id, thread_id: signal.provenance.thread_id, author_id: signal.provenance.author_id,
+    connection_id: policy.connection_id, connection_checksum: checksumB, account_id: policy.account_id,
+    provider: 'ibkr' as const, environment: 'paper' as const, policy_id: policy.policy_id,
+    policy_revision: policy.revision, policy_checksum: policy.content_checksum,
+    required_certification: 'options-paper-autopilot-certified' as const, state: 'paused' as const,
+    created_at: '2026-08-26T14:00:00.000Z', updated_at: '2026-08-26T14:00:00.000Z',
+  }) as OptionsAutomationRoute
+  const authority = checksummed({
+    authority_schema_version: OPTIONS_AUTOPILOT_AUTHORITY_SCHEMA_VERSION, authority_id: 'mandate-options-paper',
+    route_id: policy.source_route_id, route_revision: 1, route_checksum: route.content_checksum,
+    policy_id: policy.policy_id, policy_revision: policy.revision, policy_checksum: policy.content_checksum,
+    connection_id: policy.connection_id, connection_checksum: checksumB,
+    credential_generation: provider.descriptor.credential_generation, provider: 'ibkr' as const,
+    environment: 'paper' as const, account_id: policy.account_id, adapter_id: provider.descriptor.adapter_id,
+    adapter_version: provider.descriptor.adapter_version, provider_contract_version: provider.descriptor.provider_contract_version,
+    certification_id: 'autopilot-cert-one', certification_checksum: checksum,
+    certification_level: 'options-paper-autopilot-certified' as const, certification_expires_at: '2026-08-26T17:00:00.000Z',
+    certification_application_id: 'autopilot-app-one', certification_application_checksum: checksumB,
+    mode: 'automatic-paper' as const, valid_from: '2026-08-26T14:00:00.000Z', valid_until: '2026-08-26T17:00:00.000Z',
+    operator_confirmed_at: '2026-08-26T14:00:00.000Z', created_at: '2026-08-26T14:00:00.000Z',
+  }) as OptionsAutopilotAuthority
   const decision = decideOptionsEntry({
-    signal, contract, quote, policy, route_checksum: checksum, account_checksum: checksumB,
+    signal, contract, quote, policy, route_checksum: route.content_checksum, account_checksum: checksumB,
     decision_at: quote.decision_at, estimated_fee_per_contract: '0.65',
   })
   const reservations = new FileOptionsDebitReservationStore(path.join(root, 'reservations'), () => now, 'app-instance-options')
@@ -81,7 +113,7 @@ async function fixture(root: string, provider = FakeOptionsProvider.paperFixture
     reservation_id: 'reservation-options-gateway-1', intent_id: decision.decision_id,
     connection_id: policy.connection_id, account_id: policy.account_id, source_id: signal.signal_id,
     policy_id: policy.policy_id, policy_checksum: policy.content_checksum,
-    mandate_id: 'mandate-options-paper', mandate_checksum: checksum,
+    mandate_id: authority.authority_id, mandate_checksum: authority.content_checksum,
     canonical_contract_id: contract.canonical_id, contract_checksum: contract.content_checksum,
     reserved_contracts: decision.planned_quantity, limit_price: decision.limit_price!, multiplier: 100,
     estimated_fees: '0.65', worst_case_debit: decision.maximum_debit,
@@ -97,7 +129,7 @@ async function fixture(root: string, provider = FakeOptionsProvider.paperFixture
   const input = {
     signal, contract, quote, decision, policy, reservation_id: reservation.reservation_id,
     mandate_id: reservation.mandate_id, mandate_checksum: reservation.mandate_checksum,
-    route_checksum: checksum, account_checksum: checksumB,
+    route_checksum: route.content_checksum, account_checksum: checksumB, autopilot_authority: authority, automation_route: route,
   }
   return { provider, reservations, executions, gateway, input, reservation }
 }

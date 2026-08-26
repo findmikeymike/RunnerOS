@@ -36,6 +36,8 @@ export const OPTIONS_AUTOMATION_ROUTE_SCHEMA_VERSION = 'options-automation-route
 export const OPTIONS_AUTOPILOT_AUTHORITY_SCHEMA_VERSION = 'options-autopilot-authority@1' as const
 export const OPTIONS_AUTOPILOT_REVOCATION_SCHEMA_VERSION = 'options-autopilot-revocation@1' as const
 export const OPTIONS_AUTOPILOT_CERTIFICATION_SCHEMA_VERSION = 'options-autopilot-certification@1' as const
+export const OPTIONS_AUTOMATION_RECEIPT_SCHEMA_VERSION = 'options-automation-receipt@1' as const
+export const OPTIONS_AUTOMATION_PLAN_SCHEMA_VERSION = 'options-automation-plan@1' as const
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD').refine((value) => {
   const parsed = new Date(`${value}T00:00:00.000Z`)
@@ -428,6 +430,45 @@ export const optionsAutopilotCertificationEvidenceSchema = z.object({
     && value.final_working_order_count === 0
   if ((value.eligible_level !== null) !== eligible) {
     context.addIssue({ code: 'custom', path: ['eligible_level'], message: 'Autopilot eligibility overstates retained provider evidence' })
+  }
+})
+
+export const optionsAutomationReceiptSchema = z.object({
+  receipt_schema_version: z.literal(OPTIONS_AUTOMATION_RECEIPT_SCHEMA_VERSION),
+  receipt_id: identifierSchema,
+  guild_id: identifierSchema,
+  channel_id: identifierSchema,
+  thread_id: identifierSchema.nullable(),
+  message_id: identifierSchema,
+  author_id: identifierSchema,
+  raw_content_checksum: sha256Schema,
+  signal_checksum: sha256Schema.nullable(),
+  route_id: identifierSchema.nullable(),
+  route_checksum: sha256Schema.nullable(),
+  connection_id: identifierSchema.nullable(),
+  policy_checksum: sha256Schema.nullable(),
+  authority_checksum: sha256Schema.nullable(),
+  decision_checksum: sha256Schema.nullable(),
+  reservation_id: identifierSchema.nullable(),
+  execution_intent_id: identifierSchema.nullable(),
+  state: z.enum(['blocked', 'skipped', 'prepared', 'working', 'active', 'flat', 'halted']),
+  reason_codes: z.array(identifierSchema).min(1),
+  detail: z.string().min(1).max(500),
+  posted_at: utcTimestampSchema,
+  received_at: utcTimestampSchema,
+  created_at: utcTimestampSchema,
+  updated_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (!(Date.parse(value.posted_at) <= Date.parse(value.received_at)
+    && Date.parse(value.received_at) <= Date.parse(value.created_at)
+    && Date.parse(value.created_at) <= Date.parse(value.updated_at))) {
+    context.addIssue({ code: 'custom', path: ['updated_at'], message: 'Options automation receipt chronology is invalid' })
+  }
+  if ((value.state === 'prepared' || value.state === 'working' || value.state === 'active' || value.state === 'flat')
+    && (!value.signal_checksum || !value.route_id || !value.route_checksum || !value.connection_id
+      || !value.policy_checksum || !value.authority_checksum || !value.decision_checksum || !value.reservation_id)) {
+    context.addIssue({ code: 'custom', path: ['state'], message: 'Executable automation receipts require complete frozen authority lineage' })
   }
 })
 
@@ -1297,6 +1338,54 @@ export const optionsExecutionReceiptSchema = z.object({
   }
 })
 
+export const optionsAutomationPlanSchema = z.object({
+  plan_schema_version: z.literal(OPTIONS_AUTOMATION_PLAN_SCHEMA_VERSION),
+  plan_id: identifierSchema,
+  receipt_id: identifierSchema,
+  raw_content_checksum: sha256Schema,
+  signal: discordOptionsSignalSchema,
+  route: optionsAutomationRouteSchema,
+  connection: optionsConnectionSchema,
+  policy: optionsEntryPolicySchema,
+  authority: optionsAutopilotAuthoritySchema,
+  contract: optionContractIdentitySchema,
+  quote: optionQuoteSnapshotSchema,
+  decision: optionsEntryDecisionSchema,
+  reservation: optionsDebitReservationSchema,
+  created_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (value.plan_id !== value.receipt_id
+    || value.signal.provenance.content_sha256 !== value.raw_content_checksum
+    || value.signal.provenance.guild_id !== value.route.guild_id
+    || value.signal.provenance.channel_id !== value.route.channel_id
+    || value.signal.provenance.thread_id !== value.route.thread_id
+    || value.signal.provenance.author_id !== value.route.author_id
+    || value.route.connection_id !== value.connection.connection_id
+    || value.route.connection_checksum !== value.connection.content_checksum
+    || value.route.policy_id !== value.policy.policy_id
+    || value.route.policy_revision !== value.policy.revision
+    || value.route.policy_checksum !== value.policy.content_checksum
+    || value.authority.route_checksum !== value.route.content_checksum
+    || value.authority.policy_checksum !== value.policy.content_checksum
+    || value.authority.connection_checksum !== value.connection.content_checksum
+    || value.decision.signal_checksum !== value.signal.content_checksum
+    || value.decision.contract_checksum !== value.contract.content_checksum
+    || value.decision.quote_checksum !== value.quote.content_checksum
+    || value.decision.policy_checksum !== value.policy.content_checksum
+    || value.decision.route_checksum !== value.route.content_checksum
+    || value.decision.account_checksum !== value.connection.content_checksum
+    || value.reservation.intent_id !== value.decision.decision_id
+    || value.reservation.contract_checksum !== value.contract.content_checksum
+    || value.reservation.policy_checksum !== value.policy.content_checksum
+    || value.reservation.mandate_checksum !== value.authority.content_checksum) {
+    context.addIssue({ code: 'custom', path: ['content_checksum'], message: 'Automation plan lineage is not exact' })
+  }
+  if (value.decision.action !== 'marketable_limit' && value.decision.action !== 'passive_limit') {
+    context.addIssue({ code: 'custom', path: ['decision', 'action'], message: 'Automation plans require an executable decision' })
+  }
+})
+
 export type DiscordOptionsSignal = z.infer<typeof discordOptionsSignalSchema>
 export type OptionContractIdentity = z.infer<typeof optionContractIdentitySchema>
 export type OptionQuoteSnapshot = z.infer<typeof optionQuoteSnapshotSchema>
@@ -1324,6 +1413,8 @@ export type OptionsAutopilotAuthority = z.infer<typeof optionsAutopilotAuthority
 export type OptionsAutopilotRevocation = z.infer<typeof optionsAutopilotRevocationSchema>
 export type OptionsAutopilotCertificationScenario = z.infer<typeof optionsAutopilotCertificationScenarioSchema>
 export type OptionsAutopilotCertificationEvidence = z.infer<typeof optionsAutopilotCertificationEvidenceSchema>
+export type OptionsAutomationReceipt = z.infer<typeof optionsAutomationReceiptSchema>
+export type OptionsAutomationPlan = z.infer<typeof optionsAutomationPlanSchema>
 export type OptionsManagementCommand = z.infer<typeof optionsManagementCommandSchema>
 export type OptionsManagementRecord = z.infer<typeof optionsManagementRecordSchema>
 export type OptionsExpirationSchedule = z.infer<typeof optionsExpirationScheduleSchema>
