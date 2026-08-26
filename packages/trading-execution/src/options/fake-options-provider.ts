@@ -9,9 +9,8 @@ import {
 
 import { FixedDecimal } from './fixed-decimal.ts'
 import { isOptionPriceOnTick } from './option-tick.ts'
+import { sha256 } from '../canonical.ts'
 
-const CHECKSUM_A = 'a'.repeat(64)
-const CHECKSUM_B = 'b'.repeat(64)
 const FIXTURE_NOW = '2026-08-26T15:00:00.000Z'
 
 export type FakeOptionsOrderRequest = {
@@ -19,8 +18,11 @@ export type FakeOptionsOrderRequest = {
   canonical_contract_id: string
   provider_instrument_id: string
   action: 'BUY_TO_OPEN'
+  order_type: 'limit'
   limit_price: string
   quantity: number
+  time_in_force: 'day'
+  regular_hours_only: true
   client_order_id: string
 }
 
@@ -60,8 +62,11 @@ function requestFingerprint(request: FakeOptionsOrderRequest): string {
     request.canonical_contract_id,
     request.provider_instrument_id,
     request.action,
+    request.order_type,
     request.limit_price,
     request.quantity,
+    request.time_in_force,
+    request.regular_hours_only,
     request.client_order_id,
   ])
 }
@@ -71,17 +76,27 @@ function cloneOrder(order: FakeOptionsOrder): FakeOptionsOrder {
 }
 
 export class FakeOptionsProvider {
+  readonly descriptor = {
+    adapter_id: 'fake-options',
+    adapter_version: '1.0.0',
+    provider_contract_version: 'fake-options@1',
+    environment: 'paper' as const,
+    credential_generation: 1,
+    preview_supported: true as const,
+  }
   readonly contracts: OptionContractIdentity[] = []
   mutationCount = 0
+  previewCount = 0
 
   private readonly quotes = new Map<string, OptionQuoteSnapshot>()
   private readonly orders = new Map<string, FakeOptionsOrder>()
   private readonly clientOrders = new Map<string, { fingerprint: string; providerOrderId: string }>()
   private orderSequence = 0
+  private submitFailure: 'before-send' | 'after-accept' | null = null
 
   static paperFixture(): FakeOptionsProvider {
     const provider = new FakeOptionsProvider()
-    const contract = optionContractIdentitySchema.parse({
+    const contractBody = {
       contract_schema_version: OPTION_CONTRACT_IDENTITY_SCHEMA_VERSION,
       canonical_id: 'USOPT:SPY:2026-09-18:C:650',
       underlying: 'SPY',
@@ -100,10 +115,10 @@ export class FakeOptionsProvider {
       minimum_tick: '0.01',
       increment_bands: [{ minimum_price: '0', increment: '0.01' }],
       resolved_at: FIXTURE_NOW,
-      content_checksum: CHECKSUM_A,
-    })
+    }
+    const contract = optionContractIdentitySchema.parse({ ...contractBody, content_checksum: sha256(contractBody) })
     provider.addContract(contract)
-    provider.quotes.set(contract.canonical_id, optionQuoteSnapshotSchema.parse({
+    const quoteBody = {
       quote_schema_version: OPTION_QUOTE_SNAPSHOT_SCHEMA_VERSION,
       quote_id: 'fake-quote-spy-1',
       connection_id: 'connection-options-paper',
@@ -125,7 +140,10 @@ export class FakeOptionsProvider {
       halted: false,
       minimum_tick: '0.01',
       provenance: 'fake-options:fixture-v1',
-      content_checksum: CHECKSUM_B,
+    }
+    provider.quotes.set(contract.canonical_id, optionQuoteSnapshotSchema.parse({
+      ...quoteBody,
+      content_checksum: sha256(quoteBody),
     }))
     return provider
   }
@@ -161,12 +179,22 @@ export class FakeOptionsProvider {
     return { ...quote }
   }
 
+  setQuote(quote: OptionQuoteSnapshot): void {
+    const verified = optionQuoteSnapshotSchema.parse(quote)
+    this.quotes.set(verified.canonical_contract_id, verified)
+  }
+
+  failNextSubmit(mode: 'before-send' | 'after-accept'): void {
+    this.submitFailure = mode
+  }
+
   async preview(request: FakeOptionsOrderRequest): Promise<{
     estimated_debit: string
     estimated_fees: string
     buying_power_impact: string
   }> {
     this.assertRequestContract(request)
+    this.previewCount += 1
     const estimatedDebit = FixedDecimal.from(request.limit_price).multiplyInteger(100).multiplyInteger(request.quantity)
     const estimatedFees = FixedDecimal.from('0.65').multiplyInteger(request.quantity)
     return {
@@ -186,6 +214,10 @@ export class FakeOptionsProvider {
       }
       return cloneOrder(this.orders.get(existing.providerOrderId)!)
     }
+    if (this.submitFailure === 'before-send') {
+      this.submitFailure = null
+      throw new FakeOptionsProviderError('OPTIONS_PROVIDER_DIVERGENCE', 'Injected failure before provider acceptance')
+    }
 
     this.orderSequence += 1
     const providerOrderId = `fake-options-order-${this.orderSequence}`
@@ -198,6 +230,18 @@ export class FakeOptionsProvider {
     this.orders.set(providerOrderId, order)
     this.clientOrders.set(request.client_order_id, { fingerprint, providerOrderId })
     this.mutationCount += 1
+    if (this.submitFailure === 'after-accept') {
+      this.submitFailure = null
+      throw new FakeOptionsProviderError('OPTIONS_PROVIDER_DIVERGENCE', 'Injected unknown outcome after provider acceptance')
+    }
+    return cloneOrder(order)
+  }
+
+  async getOrderByClientId(accountId: string, clientOrderId: string): Promise<FakeOptionsOrder | null> {
+    const existing = this.clientOrders.get(clientOrderId)
+    if (!existing) return null
+    const order = this.orders.get(existing.providerOrderId)
+    if (!order || order.account_id !== accountId) return null
     return cloneOrder(order)
   }
 

@@ -537,6 +537,25 @@ Never collapse these into “done.”
 - Not yet proven: gateway/provider preview, provider submission or
   reconciliation, broker paper execution, or live UI. Those remain later
   slices.
+
+## Options Autopilot Slice 3B — Preview and Execution Journal — 2026-08-26
+
+- The gateway is intentionally restricted to `fake-options@1`; structurally
+  compatible real adapters are refused in this slice.
+- Preview, immutable intent, exact provider request, command, and mutable
+  execution record persist before one provider submit. The request checksum
+  includes account, contract, instrument, buy-to-open action, LIMIT price,
+  quantity, DAY time-in-force, regular-hours flag, and client order ID.
+- Provider/account/quote/reservation truth is revalidated across preview. Replay
+  requires the identical source/route/account/contract/policy/mandate evidence.
+- Unknown-after-send never resubmits. Startup exact-client-ID reconciliation
+  either adopts the one provider order/open position or releases capacity only
+  after exact flat/no-send proof.
+- Verification: 27 focused options gateway/ledger/simulator/contract tests and
+  281 complete trading contract/execution tests passed. Repository-wide
+  typecheck and diff check passed.
+- Not yet proven: any IBKR/Webull order mutation, credential/session handling,
+  real provider preview semantics, cancellation/expiry management, or live UI.
 # Multi-account connections and Discord routes — 2026-07-31
 
 - Multiple prop firms/accounts can coexist; connection identity remains exact

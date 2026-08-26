@@ -68,8 +68,11 @@ describe('fake options provider', () => {
       canonical_contract_id: 'USOPT:SPY:2026-09-18:C:650',
       provider_instrument_id: 'fake-spy-20260918-c-650',
       action: 'BUY_TO_OPEN' as const,
+      order_type: 'limit' as const,
       limit_price: '1.30',
       quantity: 2,
+      time_in_force: 'day' as const,
+      regular_hours_only: true as const,
       client_order_id: 'tg-options-order-1',
     }
     expect((await fake.preview(request)).buying_power_impact).toBe('261.30')
@@ -96,8 +99,11 @@ describe('fake options provider', () => {
       canonical_contract_id: 'USOPT:SPY:2026-09-18:C:650',
       provider_instrument_id: 'fake-spy-20260918-c-650',
       action: 'BUY_TO_OPEN' as const,
+      order_type: 'limit' as const,
       limit_price: '1.30',
       quantity: 1,
+      time_in_force: 'day' as const,
+      regular_hours_only: true as const,
       client_order_id: 'tg-options-order-1',
     }
     await fake.submit(request)
@@ -113,8 +119,11 @@ describe('fake options provider', () => {
       canonical_contract_id: 'USOPT:SPY:2026-09-18:C:650',
       provider_instrument_id: 'fake-spy-20260918-c-650',
       action: 'BUY_TO_OPEN' as const,
+      order_type: 'limit' as const,
       limit_price: '0',
       quantity: 1,
+      time_in_force: 'day' as const,
+      regular_hours_only: true as const,
       client_order_id: 'tg-options-invalid-price',
     }
     await expect(fake.submit(request)).rejects.toMatchObject({ code: 'OPTIONS_PROVIDER_DIVERGENCE' })
@@ -135,8 +144,11 @@ describe('fake options provider', () => {
       canonical_contract_id: 'USOPT:SPY:2026-09-18:C:650',
       provider_instrument_id: 'fake-spy-20260918-c-650',
       action: 'BUY_TO_OPEN',
+      order_type: 'limit',
       limit_price: '1.30',
       quantity: 2,
+      time_in_force: 'day',
+      regular_hours_only: true,
       client_order_id: 'tg-options-weighted-fill',
     })
     await fake.fill(order.provider_order_id, 1, '1.29')
