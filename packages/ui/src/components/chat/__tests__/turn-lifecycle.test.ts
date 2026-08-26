@@ -409,6 +409,82 @@ describe('message_agent activity metadata', () => {
       status: 'succeeded',
     })
   })
+
+  it('hides a metadata-only assistant echo after background delegation', () => {
+    resetCounters()
+    const messages: Message[] = [
+      createUserMessage('Ask a specialist'),
+      {
+        id: 'tool-agent',
+        role: 'tool',
+        content: '',
+        timestamp: Date.now() + 200,
+        toolName: 'message_agent',
+        toolUseId: 'tu-agent',
+        toolInput: { agentSlug: 'critic' },
+        toolStatus: 'completed',
+        toolResult: 'receiptId: receipt-123\nchildSessionId: child-456',
+        turnId: 'turn-agent',
+      },
+      {
+        id: 'assistant-agent',
+        role: 'assistant',
+        content: 'receiptId: `receipt-123`\nstatus: running',
+        timestamp: Date.now() + 300,
+        isStreaming: false,
+        turnId: 'turn-agent',
+      },
+      {
+        id: 'agent-started',
+        role: 'info',
+        content: 'Background agent "critic" started.',
+        timestamp: Date.now() + 250,
+        displayIntent: 'agent-message-passive',
+        agentMessage: {
+          receiptId: 'receipt-123',
+          childSessionId: 'child-456',
+          targetAgentSlug: 'critic',
+          status: 'running',
+        },
+      },
+    ]
+
+    const turn = getLastAssistantTurn(groupMessagesByTurn(messages))
+
+    expect(turn?.activities[0]?.agentMessage?.receiptId).toBe('receipt-123')
+    expect(turn?.response).toBeUndefined()
+  })
+
+  it('keeps meaningful assistant text that mentions a delegation receipt', () => {
+    resetCounters()
+    const messages: Message[] = [
+      createUserMessage('Ask a specialist'),
+      {
+        id: 'tool-agent',
+        role: 'tool',
+        content: '',
+        timestamp: Date.now() + 200,
+        toolName: 'message_agent',
+        toolUseId: 'tu-agent',
+        toolInput: { agentSlug: 'critic' },
+        toolStatus: 'completed',
+        toolResult: 'receiptId: receipt-123\nchildSessionId: child-456',
+        turnId: 'turn-agent',
+      },
+      {
+        id: 'assistant-agent',
+        role: 'assistant',
+        content: 'The critic is running. You can keep working while receiptId: receipt-123 completes.',
+        timestamp: Date.now() + 300,
+        isStreaming: false,
+        turnId: 'turn-agent',
+      },
+    ]
+
+    const turn = getLastAssistantTurn(groupMessagesByTurn(messages))
+
+    expect(turn?.response?.text).toContain('The critic is running')
+  })
 })
 
 describe('hidden messages', () => {
