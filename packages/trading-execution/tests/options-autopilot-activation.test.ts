@@ -10,7 +10,7 @@ import {
   type OptionsCertificationApplication, type OptionsConnection, type OptionsEntryPolicy,
 } from '@trade-god/contracts'
 import {
-  FileOptionsAutomationStore, OptionsAutopilotActivationService, FileOptionsAutopilotAuthorityStore,
+  FileOptionsAutomationStore, OptionsAutopilotActivationService, FileOptionsAutopilotAuthorityStore, FileOptionsAutopilotCertificationJournal,
   FileOptionsAutopilotCertificationStore, sha256,
 } from '../src/index.ts'
 import type { FileOptionsCertificationApplicationStore } from '../src/options/options-certification-application.ts'
@@ -31,18 +31,35 @@ const application = (connection: OptionsConnection): OptionsCertificationApplica
   certification_expires_at: '2026-08-27T14:00:00.000Z', provider: connection.provider, environment: connection.environment,
   account_ref: connection.account_ref, adapter_id: connection.adapter_id, adapter_version: connection.adapter_version,
   provider_contract_version: connection.provider_contract_version, applied_at: '2026-08-26T14:01:00.000Z', operator_confirmed: true as const }) as OptionsCertificationApplication
-const certification = (connection: OptionsConnection, app: OptionsCertificationApplication): OptionsAutopilotCertificationEvidence => sum({
+const certification = async (root: string, connection: OptionsConnection, app: OptionsCertificationApplication): Promise<OptionsAutopilotCertificationEvidence> => {
+  const journal = new FileOptionsAutopilotCertificationJournal(root, 'auto-session-one', connection.connection_id)
+  await journal.append('session', { connection_checksum: connection.content_checksum, application_checksum: app.content_checksum,
+    expires_at: '2026-08-27T14:00:00.000Z' }, '2026-08-26T14:20:00.000Z')
+  for (const scenario of optionsAutopilotCertificationScenarioSchema.options) await journal.append('scenario', {
+    scenario, status: 'pass', detail: `Proved ${scenario}`, evidence: { scenario },
+  }, '2026-08-26T14:20:00.000Z')
+  for (let index = 0; index < 50; index += 1) await journal.append('lifecycle', {
+    lifecycle_id: `lifecycle-${index + 1}`, completed_at: '2026-08-26T14:20:00.000Z', evidence: index + 1,
+  }, '2026-08-26T14:20:00.000Z')
+  await journal.append('custody', { provider_automatic_close_certified: true, provider_do_not_exercise_certified: true,
+    provider_calendar_evidence: 'calendar', account_exercise_setting_evidence: 'settings', custody_certification_evidence: 'custody' }, '2026-08-26T14:20:00.000Z')
+  await journal.append('final-truth', { position_quantity: 0, working_order_count: 0 }, '2026-08-26T14:20:00.000Z')
+  return sum({
   certification_schema_version: OPTIONS_AUTOPILOT_CERTIFICATION_SCHEMA_VERSION, certification_id: 'auto-cert-one', connection_id: connection.connection_id,
+  certification_session_id: 'auto-session-one', journal_head_checksum: await journal.headChecksum(),
   connection_checksum: connection.content_checksum, credential_generation: connection.credential_generation, provider: connection.provider,
   environment: connection.environment, account_id: connection.account_ref, adapter_id: connection.adapter_id, adapter_version: connection.adapter_version,
   provider_contract_version: connection.provider_contract_version, base_certification_id: app.certification_id,
   base_certification_checksum: app.certification_checksum, base_application_id: app.application_id, base_application_checksum: app.content_checksum,
   started_at: '2026-08-26T14:02:00.000Z', completed_at: '2026-08-26T14:20:00.000Z', expires_at: '2026-08-27T14:00:00.000Z',
   scenarios: optionsAutopilotCertificationScenarioSchema.options.map((scenario) => ({ scenario, status: 'pass' as const,
-    evidence_checksum: sha256(scenario), detail: `Proved ${scenario}`, observed_at: '2026-08-26T14:20:00.000Z' })),
+    evidence_checksum: sha256({ scenario }), detail: `Proved ${scenario}`, observed_at: '2026-08-26T14:20:00.000Z' })),
   completed_lifecycle_count: 50, provider_automatic_close_certified: true, provider_do_not_exercise_certified: true,
+  lifecycle_evidence: Array.from({ length: 50 }, (_, index) => ({ lifecycle_id: `lifecycle-${index + 1}`,
+    evidence_checksum: sha256(index + 1), completed_at: '2026-08-26T14:20:00.000Z' })),
   provider_calendar_checksum: sha256('calendar'), account_exercise_setting_checksum: sha256('settings'), custody_certification_checksum: sha256('custody'),
   final_position_quantity: 0, final_working_order_count: 0, eligible_level: 'options-paper-autopilot-certified' as const }) as OptionsAutopilotCertificationEvidence
+}
 const policy = (): OptionsEntryPolicy => sum({ policy_schema_version: OPTIONS_ENTRY_POLICY_SCHEMA_VERSION, policy_id: 'policy-one', revision: 1,
   max_signal_age_ms: 30000, max_ingest_delay_ms: 5000, regular_session_only: true as const,
   entry_window: { earliest: '09:35', latest: '15:30', timezone: 'America/New_York' as const }, allowed_weekdays: [1,2,3,4,5],
@@ -70,7 +87,7 @@ const route = (connection: OptionsConnection, rules: OptionsEntryPolicy): Option
 describe('options autopilot activation review', () => {
   test('binds custody evidence, requires the exact review, and retries after route persistence', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'options-auto-activation-')); roots.push(root)
-    const connection = account(); const app = application(connection); const cert = certification(connection, app)
+    const connection = account(); const app = application(connection); const cert = await certification(root, connection, app)
     const automation = new FileOptionsAutomationStore(root); const rules = policy(); const source = route(connection, rules)
     await automation.savePolicy(rules); await automation.saveRoute(source)
     const certifications = new FileOptionsAutopilotCertificationStore(root); await certifications.save(cert)
@@ -89,7 +106,7 @@ describe('options autopilot activation review', () => {
 
   test('refuses expired reviews and changed account evidence without mutating the route', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'options-auto-activation-')); roots.push(root)
-    const connection = account(); const app = application(connection); const cert = certification(connection, app)
+    const connection = account(); const app = application(connection); const cert = await certification(root, connection, app)
     const automation = new FileOptionsAutomationStore(root); const rules = policy(); const source = route(connection, rules)
     await automation.savePolicy(rules); await automation.saveRoute(source)
     const certifications = new FileOptionsAutopilotCertificationStore(root); await certifications.save(cert)

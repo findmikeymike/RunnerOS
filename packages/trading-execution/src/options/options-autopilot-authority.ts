@@ -4,6 +4,7 @@ import path from 'node:path'
 
 import {
   OPTIONS_AUTOPILOT_AUTHORITY_SCHEMA_VERSION,
+  OPTIONS_AUTOPILOT_CERTIFICATION_SCHEMA_VERSION,
   OPTIONS_AUTOPILOT_REVOCATION_SCHEMA_VERSION,
   optionsAutopilotAuthoritySchema,
   optionsAutopilotCertificationEvidenceSchema,
@@ -22,20 +23,24 @@ import {
 } from '@trade-god/contracts'
 
 import { canonicalJson, sha256 } from '../canonical.ts'
+import { FileOptionsAutopilotCertificationJournal } from './options-autopilot-certification.ts'
 
 export class FileOptionsAutopilotCertificationStore {
   private readonly directory: string
-  constructor(root: string) { this.directory = path.join(root, 'options-automation', 'certifications') }
+  constructor(private readonly root: string) { this.directory = path.join(root, 'options-automation', 'certifications') }
 
   async save(input: OptionsAutopilotCertificationEvidence): Promise<OptionsAutopilotCertificationEvidence> {
     const evidence = verify(input, optionsAutopilotCertificationEvidenceSchema, 'Options autopilot certification')
+    if (!await this.hasExactJournal(evidence)) {
+      throw new Error('Options autopilot certification is missing its exact retained provider journal.')
+    }
     await writeImmutable(this.directory, `${sha256(evidence.certification_id)}.json`, evidence)
     return evidence
   }
 
   async getEligible(connection: OptionsConnection, at: string): Promise<OptionsAutopilotCertificationEvidence | undefined> {
     const exact = verify(connection, optionsConnectionSchema, 'Options connection')
-    const candidates = await listVerified(this.directory, optionsAutopilotCertificationEvidenceSchema, 'Options autopilot certification')
+    const candidates = await this.listCurrentEvidence()
     const eligible = candidates.filter((evidence) => evidence.eligible_level === 'options-paper-autopilot-certified'
       && evidence.connection_id === exact.connection_id
       && evidence.connection_checksum === exact.content_checksum
@@ -47,9 +52,74 @@ export class FileOptionsAutopilotCertificationStore {
       && evidence.adapter_version === exact.adapter_version
       && evidence.provider_contract_version === exact.provider_contract_version
       && Date.parse(evidence.expires_at) > Date.parse(at))
-    if (eligible.length > 1) throw new Error('Multiple active options autopilot certifications violate exact authority.')
-    return eligible[0]
+    const journalBound = []
+    for (const evidence of eligible) {
+      if (await this.hasExactJournal(evidence)) journalBound.push(evidence)
+    }
+    if (journalBound.length > 1) throw new Error('Multiple active options autopilot certifications violate exact authority.')
+    return journalBound[0]
   }
+
+  private async hasExactJournal(evidence: OptionsAutopilotCertificationEvidence): Promise<boolean> {
+    try {
+      const journal = new FileOptionsAutopilotCertificationJournal(this.root, evidence.certification_session_id, evidence.connection_id)
+      const events = await journal.list()
+      const expectedKinds = ['session',
+        ...Array.from({ length: evidence.scenarios.length }, () => 'scenario'),
+        ...Array.from({ length: evidence.completed_lifecycle_count }, () => 'lifecycle'),
+        'custody', 'final-truth']
+      if (!(events.at(-1)?.content_checksum === evidence.journal_head_checksum
+        && events.length === expectedKinds.length
+        && events.every((event, index) => event.kind === expectedKinds[index]))) return false
+      const session = asRecord(events[0]?.evidence_payload)
+      if (session.connection_checksum !== evidence.connection_checksum
+        || session.application_checksum !== evidence.base_application_checksum
+        || session.expires_at !== evidence.expires_at) return false
+      let cursor = 1
+      for (const scenario of evidence.scenarios) {
+        const payload = asRecord(events[cursor]?.evidence_payload); cursor += 1
+        if (payload.scenario !== scenario.scenario || payload.status !== scenario.status || payload.detail !== scenario.detail
+          || sha256(payload.evidence) !== scenario.evidence_checksum
+          || events[cursor - 1]?.observed_at !== scenario.observed_at) return false
+      }
+      for (const lifecycle of evidence.lifecycle_evidence) {
+        const payload = asRecord(events[cursor]?.evidence_payload); cursor += 1
+        if (payload.lifecycle_id !== lifecycle.lifecycle_id || payload.completed_at !== lifecycle.completed_at
+          || sha256(payload.evidence) !== lifecycle.evidence_checksum) return false
+      }
+      const custody = asRecord(events[cursor]?.evidence_payload); cursor += 1
+      if (custody.provider_automatic_close_certified !== evidence.provider_automatic_close_certified
+        || custody.provider_do_not_exercise_certified !== evidence.provider_do_not_exercise_certified
+        || sha256(custody.provider_calendar_evidence) !== evidence.provider_calendar_checksum
+        || sha256(custody.account_exercise_setting_evidence) !== evidence.account_exercise_setting_checksum
+        || sha256(custody.custody_certification_evidence) !== evidence.custody_certification_checksum) return false
+      const finalTruth = asRecord(events[cursor]?.evidence_payload)
+      return finalTruth.position_quantity === evidence.final_position_quantity
+        && finalTruth.working_order_count === evidence.final_working_order_count
+    } catch { return false }
+  }
+
+  private async listCurrentEvidence(): Promise<OptionsAutopilotCertificationEvidence[]> {
+    let names: string[]
+    try { names = (await readdir(this.directory)).filter((name) => name.endsWith('.json')).sort() } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw error
+    }
+    const evidence: OptionsAutopilotCertificationEvidence[] = []
+    for (const name of names) {
+      const raw = JSON.parse(await readFile(path.join(this.directory, name), 'utf8')) as Record<string, unknown>
+      if (raw.certification_schema_version !== OPTIONS_AUTOPILOT_CERTIFICATION_SCHEMA_VERSION) continue
+      const exact = verify(raw, optionsAutopilotCertificationEvidenceSchema, 'Options autopilot certification')
+      if (name !== `${sha256(exact.certification_id)}.json`) throw new Error('Options autopilot certification filename identity is invalid.')
+      evidence.push(exact)
+    }
+    return evidence
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Certification journal payload is invalid.')
+  return value as Record<string, unknown>
 }
 
 export class FileOptionsAutopilotAuthorityStore {

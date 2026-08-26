@@ -37,7 +37,7 @@ export const OPTIONS_EXPIRATION_ASSESSMENT_SCHEMA_VERSION = 'options-expiration-
 export const OPTIONS_AUTOMATION_ROUTE_SCHEMA_VERSION = 'options-automation-route@1' as const
 export const OPTIONS_AUTOPILOT_AUTHORITY_SCHEMA_VERSION = 'options-autopilot-authority@1' as const
 export const OPTIONS_AUTOPILOT_REVOCATION_SCHEMA_VERSION = 'options-autopilot-revocation@1' as const
-export const OPTIONS_AUTOPILOT_CERTIFICATION_SCHEMA_VERSION = 'options-autopilot-certification@1' as const
+export const OPTIONS_AUTOPILOT_CERTIFICATION_SCHEMA_VERSION = 'options-autopilot-certification@2' as const
 export const OPTIONS_AUTOMATION_RECEIPT_SCHEMA_VERSION = 'options-automation-receipt@1' as const
 export const OPTIONS_AUTOMATION_PLAN_SCHEMA_VERSION = 'options-automation-plan@1' as const
 
@@ -401,6 +401,8 @@ export const optionsAutopilotCertificationScenarioSchema = z.enum([
 export const optionsAutopilotCertificationEvidenceSchema = z.object({
   certification_schema_version: z.literal(OPTIONS_AUTOPILOT_CERTIFICATION_SCHEMA_VERSION),
   certification_id: identifierSchema,
+  certification_session_id: identifierSchema,
+  journal_head_checksum: sha256Schema,
   connection_id: identifierSchema,
   connection_checksum: sha256Schema,
   credential_generation: sha256Schema,
@@ -425,6 +427,11 @@ export const optionsAutopilotCertificationEvidenceSchema = z.object({
     observed_at: utcTimestampSchema,
   }).strict()).length(optionsAutopilotCertificationScenarioSchema.options.length),
   completed_lifecycle_count: nonnegativeIntegerSchema,
+  lifecycle_evidence: z.array(z.object({
+    lifecycle_id: identifierSchema,
+    evidence_checksum: sha256Schema,
+    completed_at: utcTimestampSchema,
+  }).strict()),
   provider_automatic_close_certified: z.boolean(),
   provider_do_not_exercise_certified: z.boolean(),
   provider_calendar_checksum: sha256Schema,
@@ -449,6 +456,11 @@ export const optionsAutopilotCertificationEvidenceSchema = z.object({
     && value.provider_do_not_exercise_certified
     && value.final_position_quantity === 0
     && value.final_working_order_count === 0
+  const lifecycleIds = new Set(value.lifecycle_evidence.map((item) => item.lifecycle_id))
+  if (lifecycleIds.size !== value.lifecycle_evidence.length
+    || value.lifecycle_evidence.length !== value.completed_lifecycle_count) {
+    context.addIssue({ code: 'custom', path: ['lifecycle_evidence'], message: 'Every clean lifecycle requires one unique retained proof' })
+  }
   if ((value.eligible_level !== null) !== eligible) {
     context.addIssue({ code: 'custom', path: ['eligible_level'], message: 'Autopilot eligibility overstates retained provider evidence' })
   }
