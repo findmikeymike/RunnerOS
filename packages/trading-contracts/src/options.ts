@@ -26,6 +26,8 @@ export const OPTIONS_CERTIFICATION_EVIDENCE_SCHEMA_VERSION = 'options-certificat
 export const OPTIONS_CERTIFICATION_APPLICATION_SCHEMA_VERSION = 'options-certification-application@1' as const
 export const OPTIONS_MANUAL_PAPER_AUTHORITY_SCHEMA_VERSION = 'options-manual-paper-authority@2' as const
 export const OPTIONS_AUTHORITY_REVOCATION_SCHEMA_VERSION = 'options-authority-revocation@1' as const
+export const OPTIONS_MANUAL_ORDER_SOURCE_SCHEMA_VERSION = 'options-manual-order-source@1' as const
+export const OPTIONS_MANUAL_ORDER_REVIEW_SCHEMA_VERSION = 'options-manual-order-review@1' as const
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD').refine((value) => {
   const parsed = new Date(`${value}T00:00:00.000Z`)
@@ -253,6 +255,25 @@ export const optionsAuthorityRevocationSchema = z.object({
   revoked_at: utcTimestampSchema,
   content_checksum: sha256Schema,
 }).strict()
+
+export const optionsManualOrderSourceSchema = z.object({
+  source_schema_version: z.literal(OPTIONS_MANUAL_ORDER_SOURCE_SCHEMA_VERSION),
+  source_id: identifierSchema,
+  source_kind: z.literal('manual-operator'),
+  connection_id: identifierSchema,
+  account_id: identifierSchema,
+  authority_id: identifierSchema,
+  authority_checksum: sha256Schema,
+  canonical_contract_id: identifierSchema,
+  operator_max_premium: positiveDecimalStringSchema,
+  created_at: utcTimestampSchema,
+  valid_until: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (Date.parse(value.valid_until) <= Date.parse(value.created_at)) {
+    context.addIssue({ code: 'custom', path: ['valid_until'], message: 'Manual order source must expire after creation' })
+  }
+})
 
 function decimalParts(value: string): { coefficient: bigint; scale: number } {
   const negative = value.startsWith('-')
@@ -879,6 +900,45 @@ export const optionsExecutionRecordSchema = z.object({
   }
 })
 
+export const optionsManualOrderReviewSchema = z.object({
+  review_schema_version: z.literal(OPTIONS_MANUAL_ORDER_REVIEW_SCHEMA_VERSION),
+  review_id: identifierSchema,
+  source: optionsManualOrderSourceSchema,
+  connection_checksum: sha256Schema,
+  authority_id: identifierSchema,
+  authority_checksum: sha256Schema,
+  contract: optionContractIdentitySchema,
+  quote: optionQuoteSnapshotSchema,
+  policy: optionsEntryPolicySchema,
+  decision: optionsEntryDecisionSchema,
+  reservation: optionsDebitReservationSchema,
+  preview: optionsProviderPreviewSchema,
+  prepared_at: utcTimestampSchema,
+  expires_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (Date.parse(value.expires_at) <= Date.parse(value.prepared_at)
+    || value.expires_at !== value.source.valid_until
+    || value.expires_at !== value.decision.valid_until
+    || value.expires_at !== value.reservation.expires_at) {
+    context.addIssue({ code: 'custom', path: ['expires_at'], message: 'Manual review expiry must bind all entry evidence' })
+  }
+  if (value.source.authority_id !== value.authority_id
+    || value.source.authority_checksum !== value.authority_checksum
+    || value.source.connection_id !== value.policy.connection_id
+    || value.source.account_id !== value.policy.account_id
+    || value.source.canonical_contract_id !== value.contract.canonical_id
+    || value.decision.signal_checksum !== value.source.content_checksum
+    || value.decision.contract_checksum !== value.contract.content_checksum
+    || value.decision.quote_checksum !== value.quote.content_checksum
+    || value.decision.policy_checksum !== value.policy.content_checksum
+    || value.reservation.intent_id !== value.decision.decision_id
+    || value.preview.decision_checksum !== value.decision.content_checksum
+    || value.preview.reservation_checksum !== value.reservation.content_checksum) {
+    context.addIssue({ code: 'custom', path: ['review_id'], message: 'Manual review evidence is not one exact order' })
+  }
+})
+
 const optionsFillSchema = z.object({
   fill_id: identifierSchema,
   quantity: positiveIntegerSchema,
@@ -984,3 +1044,5 @@ export type OptionsCertificationEvidence = z.infer<typeof optionsCertificationEv
 export type OptionsCertificationApplication = z.infer<typeof optionsCertificationApplicationSchema>
 export type OptionsManualPaperAuthority = z.infer<typeof optionsManualPaperAuthoritySchema>
 export type OptionsAuthorityRevocation = z.infer<typeof optionsAuthorityRevocationSchema>
+export type OptionsManualOrderSource = z.infer<typeof optionsManualOrderSourceSchema>
+export type OptionsManualOrderReview = z.infer<typeof optionsManualOrderReviewSchema>

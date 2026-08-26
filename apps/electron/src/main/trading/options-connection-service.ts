@@ -11,6 +11,7 @@ import {
   type OptionsProvider,
   type OptionsProviderReadProof,
   type OptionsManualPaperAuthority,
+  type OptionsExecutionRecord,
 } from '@trade-god/contracts'
 import { canonicalJson, sha256 } from '@trade-god/execution'
 
@@ -54,6 +55,10 @@ export interface OptionsConnectionStatus {
     allowed_contract_id?: string
   }
   manual_authority?: Pick<OptionsManualPaperAuthority, 'authority_id' | 'allowed_contract_id' | 'max_debit_per_order' | 'valid_until'>
+  manual_orders?: Array<Pick<OptionsExecutionRecord,
+    'record_id' | 'intent_id' | 'canonical_contract_id' | 'state' | 'requested_quantity' | 'filled_quantity' | 'open_quantity' | 'average_fill_price' | 'created_at' | 'updated_at' | 'provider_order_id'>>
+  manual_recovery_issue?: string
+  pending_manual_reviews?: number
 }
 
 export interface OptionsProviderReadVerifier {

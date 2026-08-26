@@ -121,6 +121,17 @@ describe('Trade God IPC registration', () => {
         calls.push(`options:authority:revoke:${id}`)
         return { connection: { connection_id: id } } as any
       },
+      prepareOptionsManualOrder: async (input) => {
+        calls.push(`options:order:prepare:${input.connection_id}:${input.max_premium}`)
+        return { review_id: 'options-review-one', content_checksum: 'a'.repeat(64) } as any
+      },
+      commitOptionsManualOrder: async (connectionId, reviewId) => {
+        calls.push(`options:order:commit:${connectionId}:${reviewId}`)
+        return { record_id: 'options-record-one', state: 'working' } as any
+      },
+      cancelOptionsManualOrder: async (connectionId, reviewId) => {
+        calls.push(`options:order:cancel:${connectionId}:${reviewId}`)
+      },
       stop: async () => { calls.push('stop') },
     }
 
@@ -169,6 +180,9 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.APPLY_OPTIONS_CERTIFICATION,
       TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY,
       TRADE_GOD_IPC.REVOKE_OPTIONS_MANUAL_AUTHORITY,
+      TRADE_GOD_IPC.PREPARE_OPTIONS_MANUAL_ORDER,
+      TRADE_GOD_IPC.COMMIT_OPTIONS_MANUAL_ORDER,
+      TRADE_GOD_IPC.CANCEL_OPTIONS_MANUAL_ORDER,
     ])
     expect(await ipc.handlers.get(TRADE_GOD_IPC.HEALTH)!({})).toEqual({ state: 'ready' })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.ANALYZE_FIXTURE)!({}, { timeoutMs: 500 })).toEqual({ artifact_id: 'artifact-ipc' })
@@ -247,6 +261,12 @@ describe('Trade God IPC registration', () => {
     )).toMatchObject({ manual_authority: { max_debit_per_order: '100' } })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.REVOKE_OPTIONS_MANUAL_AUTHORITY)!({}, 'options-one'))
       .toMatchObject({ connection: { connection_id: 'options-one' } })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.PREPARE_OPTIONS_MANUAL_ORDER)!({}, {
+      connection_id: 'options-one', max_premium: '1.35', operator_confirmed: true,
+    })).toMatchObject({ review_id: 'options-review-one' })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.COMMIT_OPTIONS_MANUAL_ORDER)!({}, 'options-one', 'options-review-one', 'a'.repeat(64), true))
+      .toMatchObject({ state: 'working' })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.CANCEL_OPTIONS_MANUAL_ORDER)!({}, 'options-one', 'options-review-one')).toBeUndefined()
     expect(calls).toEqual([
       'health',
       'analyze:500',
@@ -285,6 +305,9 @@ describe('Trade God IPC registration', () => {
       'options:certification:apply:options-one:options-cert-one:true',
       'options:authority:activate:options-one:100:2026-08-26T01:30:00.000Z:true',
       'options:authority:revoke:options-one',
+      'options:order:prepare:options-one:1.35',
+      'options:order:commit:options-one:options-review-one',
+      'options:order:cancel:options-one:options-review-one',
     ])
   })
 
@@ -361,6 +384,9 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.APPLY_OPTIONS_CERTIFICATION,
       TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY,
       TRADE_GOD_IPC.REVOKE_OPTIONS_MANUAL_AUTHORITY,
+      TRADE_GOD_IPC.PREPARE_OPTIONS_MANUAL_ORDER,
+      TRADE_GOD_IPC.COMMIT_OPTIONS_MANUAL_ORDER,
+      TRADE_GOD_IPC.CANCEL_OPTIONS_MANUAL_ORDER,
     ])
     expect(stops).toBe(1)
   })

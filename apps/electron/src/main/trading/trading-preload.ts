@@ -15,6 +15,8 @@ import type {
   MirrorGroup,
   PaperActivationEvent,
   PaperActivationReview,
+  OptionsManualOrderReview,
+  OptionsExecutionRecord,
 } from '@trade-god/contracts'
 import type { SaveMirrorGroupInput, TradovateUserSyncHealth } from '@trade-god/execution'
 
@@ -97,6 +99,9 @@ export interface TradingPreloadApi {
   applyOptionsCertification(connectionId: string, certificationId: string, operatorConfirmed: true): Promise<OptionsConnectionStatus>
   activateOptionsManualAuthority(connectionId: string, maxDebit: string, validUntil: string, operatorConfirmed: true): Promise<OptionsConnectionStatus>
   revokeOptionsManualAuthority(connectionId: string): Promise<OptionsConnectionStatus>
+  prepareOptionsManualOrder(input: { connection_id: string; max_premium: string; operator_confirmed: true }): Promise<OptionsManualOrderReview>
+  commitOptionsManualOrder(connectionId: string, reviewId: string, reviewChecksum: string, operatorConfirmed: true): Promise<OptionsExecutionRecord>
+  cancelOptionsManualOrder(connectionId: string, reviewId: string): Promise<void>
 }
 
 export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): TradingPreloadApi {
@@ -234,6 +239,15 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
     ),
     revokeOptionsManualAuthority: (connectionId) => (
       invoke(TRADE_GOD_IPC.REVOKE_OPTIONS_MANUAL_AUTHORITY, connectionId) as Promise<OptionsConnectionStatus>
+    ),
+    prepareOptionsManualOrder: (input) => (
+      invoke(TRADE_GOD_IPC.PREPARE_OPTIONS_MANUAL_ORDER, input) as Promise<OptionsManualOrderReview>
+    ),
+    commitOptionsManualOrder: (connectionId, reviewId, reviewChecksum, operatorConfirmed) => (
+      invoke(TRADE_GOD_IPC.COMMIT_OPTIONS_MANUAL_ORDER, connectionId, reviewId, reviewChecksum, operatorConfirmed) as Promise<OptionsExecutionRecord>
+    ),
+    cancelOptionsManualOrder: (connectionId, reviewId) => (
+      invoke(TRADE_GOD_IPC.CANCEL_OPTIONS_MANUAL_ORDER, connectionId, reviewId) as Promise<void>
     ),
     onTradeGodAlert: (callback) => subscribe
       ? subscribe(TRADE_GOD_IPC.ALERT_RECEIVED, (payload) => callback(payload as TradeAlert))

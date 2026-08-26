@@ -76,6 +76,10 @@ import {
   IbkrOptionsAdapter,
   WebullOptionsAdapter,
   FileOptionsManualAuthorityStore,
+  FileOptionsDebitReservationStore,
+  FileOptionsExecutionStore,
+  OptionsExecutionGateway,
+  FileOptionsManualOrderCoordinator,
   type DiscoTraderIntentRoute,
   type ExecutionAdapter,
   type TradovateUserSyncGap,
@@ -480,16 +484,27 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         options.now,
       )
     : undefined
+  const optionsManualRecoveryErrors = new Map<string, string>()
 
   const listOptionsConnectionStatuses = async () => {
     await Promise.all([optionsAuthorityRecoveryReady, optionsCertificationRecoveryReady])
     const statuses = await optionsConnectionService!.list()
     return Promise.all(statuses.map(async (status) => {
-      const [allEvidence, eligible, application, authority] = await Promise.all([
+      const [allEvidence, eligible, application, authority, manualOrders, manualReservations] = await Promise.all([
         optionsCertificationStore!.list(status.connection.connection_id),
         optionsCertificationStore!.getEligible(status.connection, options.now()),
         optionsCertificationApplicationStore!.getActive(status.connection, options.now()),
         optionsManualAuthorityStore!.getActive(status.connection, options.now()),
+        optionsEvidenceRoot
+          ? new FileOptionsExecutionStore(path.join(optionsEvidenceRoot, 'manual-execution', status.connection.connection_id, 'execution')).listRecords()
+          : Promise.resolve([]),
+        optionsEvidenceRoot
+          ? new FileOptionsDebitReservationStore(
+              path.join(optionsEvidenceRoot, 'manual-execution', status.connection.connection_id, 'risk'),
+              options.now,
+              executionProcessInstanceId,
+            ).list(status.connection.account_ref)
+          : Promise.resolve([]),
       ])
       return {
         ...status,
@@ -517,6 +532,23 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
                 valid_until: authority.valid_until,
               },
             }
+          : {}),
+        manual_orders: manualOrders.map((record) => ({
+          record_id: record.record_id,
+          intent_id: record.intent_id,
+          canonical_contract_id: record.canonical_contract_id,
+          state: record.state,
+          requested_quantity: record.requested_quantity,
+          filled_quantity: record.filled_quantity,
+          open_quantity: record.open_quantity,
+          average_fill_price: record.average_fill_price,
+          created_at: record.created_at,
+          updated_at: record.updated_at,
+          provider_order_id: record.provider_order_id,
+        })),
+        pending_manual_reviews: manualReservations.filter((reservation) => reservation.state === 'prepared').length,
+        ...(optionsManualRecoveryErrors.get(status.connection.connection_id)
+          ? { manual_recovery_issue: optionsManualRecoveryErrors.get(status.connection.connection_id)! }
           : {}),
       }
     }))
@@ -563,6 +595,35 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         })
     return { connection, adapter }
   }
+  const optionsManualExecutionRoot = optionsEvidenceRoot ? path.join(optionsEvidenceRoot, 'manual-execution') : undefined
+  const optionsManualCoordinator = async (connectionId: string) => {
+    if (!optionsManualExecutionRoot) throw new Error('Options paper-order storage is unavailable.')
+    const { connection, adapter } = await optionsProviderAdapter(connectionId)
+    const root = path.join(optionsManualExecutionRoot, connectionId)
+    const reservations = new FileOptionsDebitReservationStore(
+      path.join(root, 'risk'),
+      options.now,
+      executionProcessInstanceId,
+    )
+    const executions = new FileOptionsExecutionStore(path.join(root, 'execution'))
+    const gateway = new OptionsExecutionGateway(executions, reservations, adapter, options.now)
+    const coordinator = new FileOptionsManualOrderCoordinator(root, reservations, gateway, adapter, options.now)
+    return { connection, adapter, reservations, executions, gateway, coordinator }
+  }
+  const assertOptionsConnectionMutable = async (connectionId: string) => {
+    await optionsManualExecutionRecoveryReady
+    assertOptionsManualRecovery(connectionId)
+    if (!optionsManualExecutionRoot) return
+    const root = path.join(optionsManualExecutionRoot, connectionId)
+    const records = await new FileOptionsExecutionStore(path.join(root, 'execution')).listRecords()
+    const reservations = await new FileOptionsDebitReservationStore(
+      path.join(root, 'risk'), options.now, executionProcessInstanceId,
+    ).list()
+    if (records.some((record) => record.state !== 'not-sent' && record.state !== 'canceled-flat')
+      || reservations.some((reservation) => reservation.state !== 'released')) {
+      throw new Error('Cancel or fully resolve this account’s paper option order before changing or removing it.')
+    }
+  }
   const optionsCertificationCoordinator = optionsEvidenceRoot
     ? new FileProviderOptionsCertificationCoordinator(optionsEvidenceRoot, options.now)
     : undefined
@@ -579,6 +640,40 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       })()
     : Promise.resolve()
   void optionsCertificationRecoveryReady.catch(() => undefined)
+  const optionsManualExecutionRecoveryReady = optionsManualExecutionRoot
+    ? (async () => {
+      const statuses = await optionsConnectionService!.list()
+      for (const status of statuses) {
+        try {
+          const root = path.join(optionsManualExecutionRoot, status.connection.connection_id)
+          const reservations = new FileOptionsDebitReservationStore(path.join(root, 'risk'), options.now, executionProcessInstanceId)
+          const executions = new FileOptionsExecutionStore(path.join(root, 'execution'))
+          if (options.optionsSingleInstanceAuthority === true) await reservations.recoverStaleLocks()
+          const hasNonTerminal = (await executions.listRecords()).some((record) => record.state !== 'not-sent' && record.state !== 'canceled-flat')
+          const preparedReservations = (await reservations.list(status.connection.account_ref)).filter((reservation) => reservation.state === 'prepared')
+          if (!hasNonTerminal && preparedReservations.length === 0) continue
+          if (options.optionsSingleInstanceAuthority !== true) {
+            throw new Error('Options paper-order recovery requires desktop single-instance authority.')
+          }
+          const runtime = await optionsManualCoordinator(status.connection.connection_id)
+          for (const reservation of preparedReservations) await runtime.gateway.releasePrepared(reservation.reservation_id)
+          await runtime.gateway.recoverNonTerminal()
+          optionsManualRecoveryErrors.delete(status.connection.connection_id)
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : 'Unknown recovery failure'
+          optionsManualRecoveryErrors.set(
+            status.connection.connection_id,
+            `Paper-order recovery is safely blocked: ${detail}`,
+          )
+        }
+        }
+      })()
+    : Promise.resolve()
+  void optionsManualExecutionRecoveryReady.catch(() => undefined)
+  const assertOptionsManualRecovery = (connectionId: string) => {
+    const issue = optionsManualRecoveryErrors.get(connectionId)
+    if (issue) throw new Error(issue)
+  }
   const executionGateway = executionStore && tradingConnectionStore
     ? new ExecutionGateway({
         store: executionStore,
@@ -1093,16 +1188,21 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
           listOptionsConnections: () => listOptionsConnectionStatuses(),
           saveOptionsConnection: (input) => withOptionsMutation(async () => {
             await optionsCertificationRecoveryReady
-            if (input.connection_id) await optionsManualAuthorityStore!.revokeForConnection(input.connection_id, 'credential-change')
+            if (input.connection_id) {
+              await assertOptionsConnectionMutable(input.connection_id)
+              await optionsManualAuthorityStore!.revokeForConnection(input.connection_id, 'credential-change')
+            }
             return optionsConnectionService.save(input)
           }),
           verifyOptionsConnection: (connectionId) => withOptionsMutation(async () => {
             await optionsCertificationRecoveryReady
+            await assertOptionsConnectionMutable(connectionId)
             await optionsManualAuthorityStore!.revokeForConnection(connectionId, 'account-change')
             return optionsConnectionService.verify(connectionId)
           }),
           removeOptionsConnection: (connectionId) => withOptionsMutation(async () => {
             await optionsCertificationRecoveryReady
+            await assertOptionsConnectionMutable(connectionId)
             await optionsManualAuthorityStore!.revokeForConnection(connectionId, 'operator')
             return optionsConnectionService.remove(connectionId)
           }),
@@ -1163,6 +1263,43 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             const status = (await listOptionsConnectionStatuses()).find((candidate) => candidate.connection.connection_id === connectionId)
             if (!status) throw new Error('Options account was not found after manual paper lock.')
             return status
+          }),
+          prepareOptionsManualOrder: (input) => withOptionsMutation(async () => {
+            await Promise.all([optionsAuthorityRecoveryReady, optionsCertificationRecoveryReady, optionsManualExecutionRecoveryReady])
+            assertOptionsManualRecovery(input.connection_id)
+            const connection = await freshOptionsConnectionById(input.connection_id)
+            const authority = await optionsManualAuthorityStore!.getActive(connection, options.now())
+            if (!authority) throw new Error('Grant short-lived manual paper access before reviewing an order.')
+            const runtime = await optionsManualCoordinator(connection.connection_id)
+            if (runtime.connection.content_checksum !== connection.content_checksum) throw new Error('Options account changed before order review.')
+            return runtime.coordinator.prepare({
+              connection,
+              authority,
+              operator_max_premium: input.max_premium,
+              operator_confirmed: input.operator_confirmed,
+            })
+          }),
+          commitOptionsManualOrder: (connectionId, reviewId, reviewChecksum, operatorConfirmed) => withOptionsMutation(async () => {
+            await Promise.all([optionsAuthorityRecoveryReady, optionsCertificationRecoveryReady, optionsManualExecutionRecoveryReady])
+            assertOptionsManualRecovery(connectionId)
+            const connection = await freshOptionsConnectionById(connectionId)
+            const authority = await optionsManualAuthorityStore!.getActive(connection, options.now())
+            if (!authority) throw new Error('Manual paper access expired or was locked before confirmation.')
+            const runtime = await optionsManualCoordinator(connection.connection_id)
+            if (runtime.connection.content_checksum !== connection.content_checksum) throw new Error('Options account changed before order confirmation.')
+            return runtime.coordinator.commit({
+              review_id: reviewId,
+              review_checksum: reviewChecksum,
+              connection,
+              authority,
+              operator_confirmed: operatorConfirmed,
+            })
+          }),
+          cancelOptionsManualOrder: (connectionId, reviewId) => withOptionsMutation(async () => {
+            await optionsManualExecutionRecoveryReady
+            assertOptionsManualRecovery(connectionId)
+            const runtime = await optionsManualCoordinator(connectionId)
+            await runtime.coordinator.cancel(reviewId)
           }),
         }
       : {}),

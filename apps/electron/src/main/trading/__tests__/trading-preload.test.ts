@@ -73,6 +73,10 @@ test('preload adapter invokes only the local Trade God channels', async () => {
     'options-one', '100', '2026-08-26T01:30:00.000Z', true,
   ) as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.revokeOptionsManualAuthority('options-one') as any).toEqual({ artifact_id: 'artifact-preload' })
+  const manualOrderInput = { connection_id: 'options-one', max_premium: '1.35', operator_confirmed: true as const }
+  expect(await api.prepareOptionsManualOrder(manualOrderInput) as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.commitOptionsManualOrder('options-one', 'options-review-one', 'a'.repeat(64), true) as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.cancelOptionsManualOrder('options-one', 'options-review-one') as any).toEqual({ artifact_id: 'artifact-preload' })
   api.onTradeGodAlert((payload) => { subscribedPayload = payload })
   expect(subscribedChannel).toBe(TRADE_GOD_IPC.ALERT_RECEIVED)
   expect(subscribedPayload).toEqual({ id: 'tv-preload' })
@@ -116,5 +120,8 @@ test('preload adapter invokes only the local Trade God channels', async () => {
     { channel: TRADE_GOD_IPC.APPLY_OPTIONS_CERTIFICATION, args: ['options-one', 'options-cert-one', true] },
     { channel: TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY, args: ['options-one', '100', '2026-08-26T01:30:00.000Z', true] },
     { channel: TRADE_GOD_IPC.REVOKE_OPTIONS_MANUAL_AUTHORITY, args: ['options-one'] },
+    { channel: TRADE_GOD_IPC.PREPARE_OPTIONS_MANUAL_ORDER, args: [manualOrderInput] },
+    { channel: TRADE_GOD_IPC.COMMIT_OPTIONS_MANUAL_ORDER, args: ['options-one', 'options-review-one', 'a'.repeat(64), true] },
+    { channel: TRADE_GOD_IPC.CANCEL_OPTIONS_MANUAL_ORDER, args: ['options-one', 'options-review-one'] },
   ])
 })

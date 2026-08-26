@@ -1,11 +1,26 @@
 ---
 status: active
 owner: team
-last_verified: 2026-08-12
+last_verified: 2026-08-26
 source_of_truth: false
 ---
 
 # Trade God Handoff
+
+## 2026-08-26 Options Manual Paper Order Handoff
+
+- Options Desk now supports one explicitly reviewed IBKR paper order after the
+  exact account's safety test is passed, applied, and granted short-lived manual
+  permission.
+- The operator chooses the tested contract and a maximum premium, then reviews
+  the live quote, limit, fees, and maximum debit before a second confirmation.
+- The runtime freezes the review for 30 seconds, reserves debit durably, submits
+  one DAY marketable-limit order for one contract, and reconciles uncertain
+  outcomes without a duplicate send.
+- Startup recovery is per account and visible in the UI. Account or credential
+  changes are blocked while an order or reservation remains unresolved.
+- This is locally verified code, not live broker proof. No real IBKR order has
+  been placed in this worktree, and Webull submission remains disabled.
 
 ## 2026-08-12 Trading UI Handoff
 

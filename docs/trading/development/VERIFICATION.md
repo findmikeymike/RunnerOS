@@ -7,6 +7,32 @@ source_of_truth: true
 
 # Verification System
 
+## 2026-08-26 Options Autopilot Slice 6D — Confirmed Manual Paper Order
+
+- Added an exact-account manual order coordinator around the options gateway.
+  It requires a current applied certification and manual authority, resolves
+  only the tested canonical contract, requires a fresh realtime quote, binds an
+  operator maximum premium, reserves fee-inclusive debit, and persists a
+  30-second checksummed review before provider mutation.
+- Commit rechecks account, credential generation, adapter/version/provider
+  contract, contract economics, authority, quote economics, and review expiry.
+  It submits exactly one contract as a DAY marketable-limit order. Deterministic
+  provider lineage makes duplicate confirmation and restart recovery
+  idempotent; an unknown submit is reconciled rather than resent.
+- Startup repairs stale reservation locks, recovers nonterminal records per
+  account, and releases abandoned prepared reviews only after a fresh flat and
+  zero-working-order proof. Recovery failures remain account-scoped, visible,
+  and block mutation.
+- The Options Desk exposes a plain-language two-step modal and recent paper
+  order status. Closing the modal cannot hide a failed reservation release.
+- Verification: 43 focused tests passed with 276 expectations; repository-wide
+  typecheck, focused Options page lint, diff check, and production renderer
+  artifact check passed. Rival review returned clean after crash-recovery and
+  recovery-visibility fixes.
+- Not proven: live IBKR/Webull credentials, real quote entitlement, a provider
+  paper submit/restart lifecycle, or options management/expiration custody.
+  Webull submit remains intentionally blocked.
+
 ## 2026-08-26 Options Autopilot Slice 2 — Parser, Resolver, Policy
 
 - Red-green proof: parser and policy suites first failed on missing exports,

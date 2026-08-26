@@ -12,6 +12,8 @@ import {
   optionsEntryPolicySchema,
   optionsExecutionCommandSchema,
   optionsExecutionRecordSchema,
+  optionsManualOrderSourceSchema,
+  optionsManualPaperAuthoritySchema,
   optionsOrderIntentSchema,
   optionsProviderPreviewSchema,
   optionsReservationReleaseProofSchema,
@@ -23,6 +25,8 @@ import {
   type OptionsEntryPolicy,
   type OptionsExecutionCommand,
   type OptionsExecutionRecord,
+  type OptionsManualOrderSource,
+  type OptionsManualPaperAuthority,
   type OptionsOrderIntent,
   type OptionsProviderPreview,
   type OptionsReservationReleaseProof,
@@ -39,11 +43,12 @@ import {
   FileOptionsDebitReservationStore,
   type OptionsReservationAccountTransaction,
 } from './options-reservation-store.ts'
+import { FixedDecimal } from './fixed-decimal.ts'
 
 export type OptionsExecutionAdapter = import('./options-provider-adapter.ts').OptionsProviderAdapter
 
 export type ExecuteOptionsEntryInput = {
-  signal: DiscordOptionsSignal
+  signal: DiscordOptionsSignal | OptionsManualOrderSource
   contract: OptionContractIdentity
   quote: OptionQuoteSnapshot
   decision: OptionsEntryDecision
@@ -53,6 +58,7 @@ export type ExecuteOptionsEntryInput = {
   mandate_checksum: string
   route_checksum: string
   account_checksum: string
+  manual_authority?: OptionsManualPaperAuthority
 }
 
 export class OptionsExecutionGatewayError extends Error {
@@ -101,12 +107,56 @@ export class OptionsExecutionGateway {
     )
   }
 
+  async preview(input: ExecuteOptionsEntryInput): Promise<OptionsProviderPreview> {
+    const evidence = this.validateInput(input)
+    return this.reservations.withAccountTransaction(
+      evidence.policy.account_id,
+      `options-review:${evidence.decision.decision_id}`,
+      async (transaction) => {
+        const reservation = await transaction.get(evidence.input.reservation_id)
+        this.assertReservation(evidence, reservation)
+        if (await transaction.activeSetChecksum() !== reservation.active_reservation_set_checksum) {
+          throw new OptionsExecutionGatewayError('OPTIONS_PREVIEW_STALE_OR_DRIFTED', 'Account reservations changed before review.')
+        }
+        const snapshot = await this.adapter.snapshotAccount(reservation.account_id)
+        this.assertPreflightFlat(snapshot, reservation.account_id, reservation.canonical_contract_id)
+        if (sha256(snapshot) !== reservation.account_capacity_snapshot_checksum) {
+          throw new OptionsExecutionGatewayError('OPTIONS_PREVIEW_STALE_OR_DRIFTED', 'Provider account truth changed before review.')
+        }
+        this.assertQuote(await this.adapter.quote(reservation.canonical_contract_id), evidence.quote)
+        const request = this.providerRequest(evidence, reservation)
+        const response = await this.adapter.preview(request)
+        const preview = this.buildPreview(evidence, reservation, request, response)
+        await this.executions.savePreview(preview)
+        return preview
+      },
+    )
+  }
+
   async reconcile(intentId: string): Promise<OptionsExecutionRecord> {
     const record = await this.executions.getRecord(intentId)
     return this.reservations.withAccountTransaction(
       record.account_id,
       `options-reconcile:${intentId}`,
       (transaction) => this.reconcileLocked(record, transaction),
+    )
+  }
+
+  async releasePrepared(reservationId: string): Promise<void> {
+    const reservation = await this.reservations.get(reservationId)
+    await this.reservations.withAccountTransaction(
+      reservation.account_id,
+      `options-review-release:${reservationId}`,
+      async (transaction) => {
+        const current = await transaction.get(reservationId)
+        if (current.state === 'released') return
+        if (current.state !== 'prepared') {
+          throw new OptionsExecutionGatewayError('OPTIONS_EXECUTION_INTEGRITY', 'Only an unsubmitted review reservation can be released.')
+        }
+        const snapshot = await this.adapter.snapshotAccount(current.account_id)
+        this.assertPreflightFlat(snapshot, current.account_id, current.canonical_contract_id)
+        await transaction.release(this.releaseProof(current, snapshot, [], 'not-sent'))
+      },
     )
   }
 
@@ -218,6 +268,12 @@ export class OptionsExecutionGateway {
     if (record.state === 'canceled-flat' || record.state === 'not-sent') return record
     const command = await this.executions.getCommand(record.command_id)
     this.assertCommandRecord(command, record)
+    const resolved = await this.adapter.resolveContract(parseCanonicalContract(record.canonical_contract_id))
+    assertChecksum(resolved)
+    if (resolved.canonical_id !== record.canonical_contract_id
+      || resolved.provider_instrument_id !== command.provider_instrument_id) {
+      throw new OptionsExecutionGatewayError('OPTIONS_PROVIDER_DIVERGENCE', 'Provider no longer resolves the exact owned option contract.')
+    }
     const reservation = await transaction.get(record.reservation_id)
     const order = await this.adapter.getOrderByClientId(record.account_id, record.provider_client_order_id)
     const snapshot = await this.adapter.snapshotAccount(record.account_id)
@@ -305,7 +361,9 @@ export class OptionsExecutionGateway {
   }
 
   private validateInput(input: ExecuteOptionsEntryInput) {
-    const signal = discordOptionsSignalSchema.parse(input.signal)
+    const signal = 'source_kind' in input.signal
+      ? optionsManualOrderSourceSchema.parse(input.signal)
+      : discordOptionsSignalSchema.parse(input.signal)
     const contract = optionContractIdentitySchema.parse(input.contract)
     const quote = optionQuoteSnapshotSchema.parse(input.quote)
     const decision = optionsEntryDecisionSchema.parse(input.decision)
@@ -332,10 +390,9 @@ export class OptionsExecutionGateway {
       || policy.environment !== this.adapter.descriptor.environment) {
       throw new OptionsExecutionGatewayError('OPTIONS_EXECUTION_INTEGRITY', 'Policy does not bind the installed paper adapter.')
     }
-    if (this.adapter.descriptor.adapter_id !== 'fake-options'
-      || this.adapter.descriptor.provider_contract_version !== 'fake-options@1') {
-      throw new OptionsExecutionGatewayError('OPTIONS_EXECUTION_INTEGRITY', 'This rollout slice permits only the inert fake options provider.')
-    }
+    const fakeOnly = this.adapter.descriptor.adapter_id === 'fake-options'
+      && this.adapter.descriptor.provider_contract_version === 'fake-options@1'
+    if (!fakeOnly) this.assertManualAuthority(input, signal, contract, decision, policy)
     if (Date.parse(this.now()) >= Date.parse(decision.valid_until)) {
       throw new OptionsExecutionGatewayError('OPTIONS_ORDER_EXPIRED', 'The options decision already expired.')
     }
@@ -351,7 +408,7 @@ export class OptionsExecutionGateway {
       || reservation.intent_id !== evidence.decision.decision_id
       || reservation.connection_id !== evidence.policy.connection_id
       || reservation.account_id !== evidence.policy.account_id
-      || reservation.source_id !== evidence.signal.signal_id
+      || reservation.source_id !== sourceId(evidence.signal)
       || reservation.policy_id !== evidence.policy.policy_id
       || reservation.policy_checksum !== evidence.policy.content_checksum
       || reservation.mandate_id !== evidence.input.mandate_id
@@ -377,8 +434,63 @@ export class OptionsExecutionGateway {
   private assertQuote(actual: OptionQuoteSnapshot, expected: OptionQuoteSnapshot): void {
     const verified = optionQuoteSnapshotSchema.parse(actual)
     assertChecksum(verified)
-    if (verified.content_checksum !== expected.content_checksum) {
+    if (verified.connection_id !== expected.connection_id
+      || verified.account_id !== expected.account_id
+      || verified.canonical_contract_id !== expected.canonical_contract_id
+      || verified.provider_instrument_id !== expected.provider_instrument_id
+      || verified.environment !== expected.environment
+      || verified.market_data_mode !== 'realtime'
+      || verified.bid !== expected.bid
+      || verified.ask !== expected.ask
+      || verified.bid_size !== expected.bid_size
+      || verified.ask_size !== expected.ask_size
+      || verified.minimum_tick !== expected.minimum_tick
+      || verified.delayed
+      || verified.indicative
+      || verified.halted
+      || Date.parse(this.now()) - Date.parse(verified.received_at) > 1_000) {
       throw new OptionsExecutionGatewayError('OPTIONS_PREVIEW_STALE_OR_DRIFTED', 'Quote changed across preview admission.')
+    }
+  }
+
+  private assertManualAuthority(
+    input: ExecuteOptionsEntryInput,
+    source: DiscordOptionsSignal | OptionsManualOrderSource,
+    contract: OptionContractIdentity,
+    decision: OptionsEntryDecision,
+    policy: OptionsEntryPolicy,
+  ): void {
+    if (!('source_kind' in source) || source.source_kind !== 'manual-operator' || !input.manual_authority) {
+      throw new OptionsExecutionGatewayError('OPTIONS_EXECUTION_INTEGRITY', 'A real paper adapter requires exact manual operator authority.')
+    }
+    const authority = optionsManualPaperAuthoritySchema.parse(input.manual_authority)
+    assertChecksum(authority)
+    const descriptor = this.adapter.descriptor
+    if (authority.mode !== 'manual-confirmed-paper'
+      || authority.authority_id !== input.mandate_id
+      || authority.content_checksum !== input.mandate_checksum
+      || authority.connection_id !== policy.connection_id
+      || authority.account_ref !== policy.account_id
+      || authority.connection_checksum !== input.account_checksum
+      || authority.allowed_contract_id !== contract.canonical_id
+      || authority.allowed_provider_instrument_id !== contract.provider_instrument_id
+      || authority.max_contracts_per_order !== 1
+      || decision.planned_quantity !== 1
+      || FixedDecimal.from(decision.maximum_debit).compare(authority.max_debit_per_order) > 0
+      || authority.adapter_id !== descriptor.adapter_id
+      || authority.adapter_version !== descriptor.adapter_version
+      || authority.provider_contract_version !== descriptor.provider_contract_version
+      || authority.credential_generation !== descriptor.credential_generation
+      || authority.environment !== descriptor.environment
+      || Date.parse(this.now()) < Date.parse(authority.valid_from)
+      || Date.parse(this.now()) >= Date.parse(authority.valid_until)
+      || source.authority_id !== authority.authority_id
+      || source.authority_checksum !== authority.content_checksum
+      || source.connection_id !== authority.connection_id
+      || source.account_id !== authority.account_ref
+      || source.canonical_contract_id !== authority.allowed_contract_id
+      || source.valid_until !== decision.valid_until) {
+      throw new OptionsExecutionGatewayError('OPTIONS_EXECUTION_INTEGRITY', 'Manual paper authority does not bind this exact order.')
     }
   }
 
@@ -438,8 +550,8 @@ export class OptionsExecutionGateway {
     const unsigned = {
       preview_schema_version: OPTIONS_PROVIDER_PREVIEW_SCHEMA_VERSION,
       preview_id: `options-preview:${sha256({ request, timestamp }).slice(0, 32)}`,
-      provider_request_id: `fake-preview-request:${requestChecksum.slice(0, 24)}`,
-      provider_response_id: `fake-preview-response:${sha256(response).slice(0, 24)}`,
+      provider_request_id: `options-preview-request:${requestChecksum.slice(0, 24)}`,
+      provider_response_id: `options-preview-response:${sha256(response).slice(0, 24)}`,
       adapter_id: this.adapter.descriptor.adapter_id,
       adapter_version: this.adapter.descriptor.adapter_version,
       provider_contract_version: this.adapter.descriptor.provider_contract_version,
@@ -480,7 +592,7 @@ export class OptionsExecutionGateway {
     const unsigned = {
       intent_schema_version: OPTIONS_ORDER_INTENT_SCHEMA_VERSION,
       intent_id: evidence.decision.decision_id,
-      source_id: evidence.signal.signal_id,
+      source_id: sourceId(evidence.signal),
       source_checksum: evidence.signal.content_checksum,
       decision_checksum: evidence.decision.content_checksum,
       connection_id: reservation.connection_id,
@@ -656,6 +768,16 @@ function assertChecksum(value: { content_checksum: string }): void {
   if (sha256(unsigned) !== value.content_checksum) {
     throw new OptionsExecutionGatewayError('OPTIONS_EXECUTION_INTEGRITY', 'Options evidence checksum is invalid.')
   }
+}
+
+function sourceId(source: DiscordOptionsSignal | OptionsManualOrderSource): string {
+  return 'source_kind' in source ? source.source_id : source.signal_id
+}
+
+function parseCanonicalContract(canonicalId: string): { underlying: string; expiration: string; right: 'call' | 'put'; strike: string } {
+  const match = /^USOPT:([A-Z][A-Z0-9.]{0,14}):(\d{4}-\d{2}-\d{2}):([CP]):(.+)$/.exec(canonicalId)
+  if (!match) throw new OptionsExecutionGatewayError('OPTIONS_EXECUTION_INTEGRITY', 'Canonical option contract identity is invalid.')
+  return { underlying: match[1]!, expiration: match[2]!, right: match[3] === 'C' ? 'call' : 'put', strike: match[4]! }
 }
 
 function safeError(error: unknown): string {

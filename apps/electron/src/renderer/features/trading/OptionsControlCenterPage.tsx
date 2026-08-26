@@ -43,6 +43,7 @@ const OptionsControlCenterPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [authorityConnection, setAuthorityConnection] = useState<ConnectionStatus | null>(null)
   const [certificationConnection, setCertificationConnection] = useState<ConnectionStatus | null>(null)
+  const [orderConnection, setOrderConnection] = useState<ConnectionStatus | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -185,6 +186,7 @@ const OptionsControlCenterPage: React.FC = () => {
                     onApply={() => void applyCertification(status)}
                     onStartCertification={() => setCertificationConnection(status)}
                     onRevoke={() => void revokeAuthority(status.connection.connection_id)}
+                    onOrder={() => setOrderConnection(status)}
                   />
                 ))}
               </div>
@@ -218,6 +220,13 @@ const OptionsControlCenterPage: React.FC = () => {
           status={certificationConnection}
           onClose={() => setCertificationConnection(null)}
           onCompleted={async () => { setCertificationConnection(null); await load() }}
+        />
+      )}
+      {orderConnection && (
+        <ManualOrderDialog
+          status={orderConnection}
+          onClose={() => setOrderConnection(null)}
+          onCompleted={async () => { setOrderConnection(null); await load() }}
         />
       )}
     </div>
@@ -265,7 +274,7 @@ const ConnectAccountDialog: React.FC<{
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`Connect ${copy.name}`}>
-      <form onSubmit={save} className="w-full max-w-lg rounded-2xl border border-white/[0.1] bg-[#12161b] p-6 shadow-2xl shadow-black/60">
+      <form onSubmit={save} className="w-full max-w-lg rounded-2xl border border-white/[0.1] bg-[#12161b] p-6 shadow-modal-small">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300">Paper setup</div>
@@ -318,7 +327,8 @@ const AccountCard: React.FC<{
   onApply(): void
   onStartCertification(): void
   onRevoke(): void
-}> = ({ status, busy, onVerify, onRemove, onActivate, onApply, onStartCertification, onRevoke }) => {
+  onOrder(): void
+}> = ({ status, busy, onVerify, onRemove, onActivate, onApply, onStartCertification, onRevoke, onOrder }) => {
   const { connection, provider_read_proof: proof } = status
   const connected = status.provider_read_fresh
   const provider = providerCopy[connection.provider]
@@ -346,7 +356,10 @@ const AccountCard: React.FC<{
             {connected ? 'Check again' : 'Verify account'}
           </button>
           {status.manual_authority ? (
-            <button type="button" onClick={onRevoke} disabled={busy} className="rounded-lg border border-rose-300/20 bg-rose-300/[0.06] px-3 py-2 text-xs text-rose-100 hover:bg-rose-300/[0.1] disabled:opacity-40">Lock now</button>
+            <>
+              <button type="button" onClick={onOrder} disabled={busy || !connected} className="rounded-lg bg-violet-200 px-3 py-2 text-xs font-semibold text-black hover:bg-violet-100 disabled:opacity-40">Create paper order</button>
+              <button type="button" onClick={onRevoke} disabled={busy} className="rounded-lg border border-rose-300/20 bg-rose-300/[0.06] px-3 py-2 text-xs text-rose-100 hover:bg-rose-300/[0.1] disabled:opacity-40">Lock</button>
+            </>
           ) : status.certification.state === 'applied' ? (
             <button type="button" onClick={onActivate} disabled={busy || !connected} title={!connected ? 'Verify this account again first' : undefined} className="rounded-lg bg-violet-200 px-3 py-2 text-xs font-semibold text-black hover:bg-violet-100 disabled:opacity-40">Grant manual access</button>
           ) : status.certification.state === 'passed' ? (
@@ -368,6 +381,30 @@ const AccountCard: React.FC<{
             warn={status.certification.state !== 'applied'}
           />
           <SmallFact label="Manual access" value={status.manual_authority ? 'Permission active' : 'Locked'} />
+        </div>
+      )}
+      {status.manual_recovery_issue && (
+        <div className="mt-4 rounded-xl border border-rose-300/20 bg-rose-300/[0.06] p-3 text-xs leading-5 text-rose-100">
+          <div className="font-semibold">Paper orders are safely paused</div>
+          <div className="mt-1 text-rose-100/75">{status.manual_recovery_issue} Check the broker account, then restart Trade God to retry recovery.</div>
+        </div>
+      )}
+      {!status.manual_recovery_issue && (status.pending_manual_reviews ?? 0) > 0 && (
+        <div className="mt-4 rounded-xl border border-amber-300/15 bg-amber-300/[0.05] p-3 text-xs text-amber-100">
+          An unfinished order review is being held safely. Open the order flow or restart Trade God to clear it after a flat-account check.
+        </div>
+      )}
+      {(status.manual_orders?.length ?? 0) > 0 && (
+        <div className="mt-4 border-t border-white/[0.07] pt-4">
+          <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[#697481]">Paper orders</div>
+          <div className="mt-2 grid gap-2">
+            {status.manual_orders!.slice(-3).reverse().map((order) => (
+              <div key={order.record_id} className="flex items-center justify-between rounded-lg bg-black/20 px-3 py-2 text-xs">
+                <span className="text-[#c9cfd6]">{order.canonical_contract_id.replace('USOPT:', '').replaceAll(':', ' ')}</span>
+                <span className={order.state === 'submit-unknown' || order.state === 'halted' ? 'text-rose-200' : 'text-emerald-200'}>{order.state.replaceAll('-', ' ')}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </article>
@@ -403,7 +440,7 @@ const CertificationDialog: React.FC<{ status: ConnectionStatus; onClose(): void;
   }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Run paper safety test">
-      <form onSubmit={run} className="w-full max-w-lg rounded-2xl border border-white/[0.1] bg-[#12161b] p-6 shadow-2xl">
+      <form onSubmit={run} className="w-full max-w-lg rounded-2xl border border-white/[0.1] bg-[#12161b] p-6 shadow-modal-small">
         <div className="flex items-start justify-between gap-4">
           <div><div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300">Guided broker test</div><h2 className="mt-1 text-lg font-semibold">Test one paper option</h2></div>
           <button type="button" onClick={onClose} aria-label="Close" className="p-2 text-[#75808d] hover:text-white"><X className="h-4 w-4" /></button>
@@ -454,7 +491,7 @@ const ManualPaperDialog: React.FC<{ status: ConnectionStatus; onClose(): void; o
   }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Enable manual paper testing">
-      <form onSubmit={activate} className="w-full max-w-md rounded-2xl border border-white/[0.1] bg-[#12161b] p-6 shadow-2xl">
+      <form onSubmit={activate} className="w-full max-w-md rounded-2xl border border-white/[0.1] bg-[#12161b] p-6 shadow-modal-small">
         <div className="flex items-start justify-between gap-4">
           <div><div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300">30-minute permission</div><h2 className="mt-1 text-lg font-semibold">Grant manual paper access</h2></div>
           <button type="button" onClick={onClose} aria-label="Close" className="p-2 text-[#75808d] hover:text-white"><X className="h-4 w-4" /></button>
@@ -467,6 +504,102 @@ const ManualPaperDialog: React.FC<{ status: ConnectionStatus; onClose(): void; o
         </label>
         {error && <p className="mt-3 text-xs text-rose-200">{error}</p>}
         <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} className="px-4 py-2 text-xs text-[#9ba4af]">Cancel</button><button disabled={!confirmed || busy} className="rounded-lg bg-white px-4 py-2 text-xs font-semibold text-black disabled:opacity-40">{busy ? 'Granting…' : 'Grant for 30 minutes'}</button></div>
+      </form>
+    </div>
+  )
+}
+
+const ManualOrderDialog: React.FC<{ status: ConnectionStatus; onClose(): void; onCompleted(): Promise<void> }> = ({ status, onClose, onCompleted }) => {
+  type Review = Awaited<ReturnType<typeof window.electronAPI.prepareOptionsManualOrder>>
+  const [maxPremium, setMaxPremium] = useState('')
+  const [reviewConfirmed, setReviewConfirmed] = useState(false)
+  const [finalConfirmed, setFinalConfirmed] = useState(false)
+  const [review, setReview] = useState<Review | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const connectionId = status.connection.connection_id
+
+  const close = async () => {
+    if (review) {
+      setBusy(true); setError(null)
+      try {
+        await window.electronAPI.cancelOptionsManualOrder(connectionId, review.review_id)
+      } catch (cause) {
+        setError(`Trade God could not safely release this review yet. Keep this window open and retry: ${readableError(cause)}`)
+        setBusy(false)
+        return
+      }
+    }
+    onClose()
+  }
+  const prepare = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!reviewConfirmed || !maxPremium.trim()) return
+    setBusy(true); setError(null)
+    try {
+      setReview(await window.electronAPI.prepareOptionsManualOrder({
+        connection_id: connectionId,
+        max_premium: maxPremium.trim(),
+        operator_confirmed: true,
+      }))
+    } catch (cause) { setError(readableError(cause)) } finally { setBusy(false) }
+  }
+  const commit = async () => {
+    if (!review || !finalConfirmed) return
+    setBusy(true); setError(null)
+    try {
+      await window.electronAPI.commitOptionsManualOrder(connectionId, review.review_id, review.content_checksum, true)
+      setReview(null)
+      await onCompleted()
+    } catch (cause) { setError(readableError(cause)) } finally { setBusy(false) }
+  }
+  const contractLabel = review?.contract
+    ? `${review.contract.underlying} ${review.contract.expiration} $${review.contract.strike} ${review.contract.right}`
+    : status.manual_authority?.allowed_contract_id.replace('USOPT:', '').replaceAll(':', ' ')
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Create paper option order">
+      <form onSubmit={prepare} className="w-full max-w-lg rounded-2xl border border-white/[0.1] bg-[#12161b] p-6 shadow-modal-small">
+        <div className="flex items-start justify-between gap-4">
+          <div><div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300">Manual paper order</div><h2 className="mt-1 text-lg font-semibold">Buy one tested contract</h2></div>
+          <button type="button" onClick={() => void close()} disabled={busy} aria-label="Close" className="p-2 text-[#75808d] hover:text-white"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="mt-4 rounded-xl border border-white/[0.08] bg-black/20 p-4">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-[#697481]">Contract</div>
+          <div className="mt-1 text-sm font-medium text-white">{contractLabel}</div>
+          <div className="mt-1 text-xs text-[#7f8996]">{status.connection.account_label} · 1 contract · paper only</div>
+        </div>
+
+        {!review ? (
+          <>
+            <div className="mt-5"><Field label="Most you will pay per share" value={maxPremium} onChange={setMaxPremium} placeholder="Example: 1.35" /></div>
+            <p className="mt-2 text-[11px] leading-5 text-[#77818e]">Options are quoted per share. A $1.35 limit is up to $135 plus the broker’s estimated fee.</p>
+            <label className="mt-4 flex items-start gap-3 rounded-xl border border-white/[0.08] bg-black/20 p-3 text-xs leading-5 text-[#aab2bc]">
+              <input type="checkbox" checked={reviewConfirmed} onChange={(event) => setReviewConfirmed(event.target.checked)} className="mt-1" />
+              Check the live paper quote and show me the exact order before anything is sent.
+            </label>
+            {error && <p className="mt-3 text-xs text-rose-200">{error}</p>}
+            <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => void close()} disabled={busy} className="px-4 py-2 text-xs text-[#9ba4af]">Cancel</button><button disabled={!reviewConfirmed || !maxPremium.trim() || busy} className="rounded-lg bg-white px-4 py-2 text-xs font-semibold text-black disabled:opacity-40">{busy ? 'Checking live quote…' : 'Review order'}</button></div>
+          </>
+        ) : (
+          <>
+            <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <SmallFact label="Live bid" value={`$${review.quote.bid}`} />
+              <SmallFact label="Live ask" value={`$${review.quote.ask}`} />
+              <SmallFact label="Your limit" value={`$${review.decision.limit_price}`} />
+              <SmallFact label="Maximum debit" value={`$${review.decision.maximum_debit}`} />
+            </div>
+            <div className="mt-4 rounded-xl border border-emerald-300/15 bg-emerald-300/[0.05] p-3 text-xs leading-5 text-emerald-100">
+              Trade God will send one DAY limit order. It will never pay above ${review.decision.limit_price}. This review expires in about 30 seconds.
+            </div>
+            <label className="mt-4 flex items-start gap-3 rounded-xl border border-amber-300/15 bg-amber-300/[0.05] p-3 text-xs leading-5 text-[#c8c0aa]">
+              <input type="checkbox" checked={finalConfirmed} onChange={(event) => setFinalConfirmed(event.target.checked)} className="mt-1" />
+              Place this exact one-contract order in {status.connection.account_label} now.
+            </label>
+            {error && <p className="mt-3 text-xs text-rose-200">{error}</p>}
+            <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => void close()} disabled={busy} className="px-4 py-2 text-xs text-[#9ba4af]">Cancel</button><button type="button" onClick={() => void commit()} disabled={!finalConfirmed || busy} className="rounded-lg bg-violet-200 px-4 py-2 text-xs font-semibold text-black disabled:opacity-40">{busy ? 'Placing paper order…' : 'Place paper order'}</button></div>
+          </>
+        )}
       </form>
     </div>
   )

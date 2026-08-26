@@ -16,6 +16,8 @@ import type {
   MirrorGroup,
   PaperActivationEvent,
   PaperActivationReview,
+  OptionsManualOrderReview,
+  OptionsExecutionRecord,
 } from '@trade-god/contracts'
 import type { SaveMirrorGroupInput, TradovateUserSyncHealth } from '@trade-god/execution'
 
@@ -72,6 +74,9 @@ export const TRADE_GOD_IPC = {
   APPLY_OPTIONS_CERTIFICATION: 'trade-god:options:certification:apply',
   ACTIVATE_OPTIONS_MANUAL_AUTHORITY: 'trade-god:options:manual-authority:activate',
   REVOKE_OPTIONS_MANUAL_AUTHORITY: 'trade-god:options:manual-authority:revoke',
+  PREPARE_OPTIONS_MANUAL_ORDER: 'trade-god:options:manual-order:prepare',
+  COMMIT_OPTIONS_MANUAL_ORDER: 'trade-god:options:manual-order:commit',
+  CANCEL_OPTIONS_MANUAL_ORDER: 'trade-god:options:manual-order:cancel',
 } as const
 
 export interface TradingIpcManager {
@@ -139,6 +144,9 @@ export interface TradingIpcManager {
   applyOptionsCertification?(connectionId: string, certificationId: string, operatorConfirmed: true): Promise<OptionsConnectionStatus>
   activateOptionsManualAuthority?(connectionId: string, maxDebit: string, validUntil: string, operatorConfirmed: true): Promise<OptionsConnectionStatus>
   revokeOptionsManualAuthority?(connectionId: string): Promise<OptionsConnectionStatus>
+  prepareOptionsManualOrder?(input: { connection_id: string; max_premium: string; operator_confirmed: true }): Promise<OptionsManualOrderReview>
+  commitOptionsManualOrder?(connectionId: string, reviewId: string, reviewChecksum: string, operatorConfirmed: true): Promise<OptionsExecutionRecord>
+  cancelOptionsManualOrder?(connectionId: string, reviewId: string): Promise<void>
   resolveTradingConnection?(connectionId: string): Promise<TradingConnection>
   stop(): Promise<void>
 }
@@ -377,6 +385,24 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     if (typeof connectionId !== 'string' || !connectionId.trim()) throw new Error('Options account id is invalid.')
     return manager.revokeOptionsManualAuthority(connectionId)
   })
+  ipcMain.handle(TRADE_GOD_IPC.PREPARE_OPTIONS_MANUAL_ORDER, (_event, input: unknown) => {
+    if (!manager.prepareOptionsManualOrder) throw new Error('Manual options paper orders are unavailable.')
+    const value = input as { connection_id?: unknown; max_premium?: unknown; operator_confirmed?: unknown }
+    if (typeof value?.connection_id !== 'string' || typeof value.max_premium !== 'string' || value.operator_confirmed !== true) {
+      throw new Error('Manual options review input is invalid.')
+    }
+    return manager.prepareOptionsManualOrder({ connection_id: value.connection_id, max_premium: value.max_premium, operator_confirmed: true })
+  })
+  ipcMain.handle(TRADE_GOD_IPC.COMMIT_OPTIONS_MANUAL_ORDER, (_event, connectionId: unknown, reviewId: unknown, reviewChecksum: unknown, operatorConfirmed: unknown) => {
+    if (!manager.commitOptionsManualOrder) throw new Error('Manual options paper orders are unavailable.')
+    if (typeof connectionId !== 'string' || typeof reviewId !== 'string' || typeof reviewChecksum !== 'string' || operatorConfirmed !== true) throw new Error('Manual options confirmation is invalid.')
+    return manager.commitOptionsManualOrder(connectionId, reviewId, reviewChecksum, true)
+  })
+  ipcMain.handle(TRADE_GOD_IPC.CANCEL_OPTIONS_MANUAL_ORDER, (_event, connectionId: unknown, reviewId: unknown) => {
+    if (!manager.cancelOptionsManualOrder) throw new Error('Manual options paper orders are unavailable.')
+    if (typeof connectionId !== 'string' || typeof reviewId !== 'string') throw new Error('Manual options review ID is invalid.')
+    return manager.cancelOptionsManualOrder(connectionId, reviewId)
+  })
 
   let disposed = false
   return async () => {
@@ -424,6 +450,9 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.APPLY_OPTIONS_CERTIFICATION)
     ipcMain.removeHandler(TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY)
     ipcMain.removeHandler(TRADE_GOD_IPC.REVOKE_OPTIONS_MANUAL_AUTHORITY)
+    ipcMain.removeHandler(TRADE_GOD_IPC.PREPARE_OPTIONS_MANUAL_ORDER)
+    ipcMain.removeHandler(TRADE_GOD_IPC.COMMIT_OPTIONS_MANUAL_ORDER)
+    ipcMain.removeHandler(TRADE_GOD_IPC.CANCEL_OPTIONS_MANUAL_ORDER)
     await manager.stop()
   }
 }

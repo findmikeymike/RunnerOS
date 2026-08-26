@@ -1,7 +1,7 @@
 ---
 status: active
 owner: team
-last_verified: 2026-08-12
+last_verified: 2026-08-26
 source_of_truth: true
 ---
 
@@ -9,7 +9,7 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-08-12
+- Date: 2026-08-26
 - Stage: adversarial safety closure before real-provider paper connectivity
 - Current goal: complete the P0 gates in `audits/discord-signal-system-readiness-2026-08-10.md`, then smoke one exact Tradovate paper lifecycle
 - Overall state: signed Discord entry and management receivers, exact account-or-Mirror-Group routing, durable source replay binding, startup recovery, isolated trading sessions, encrypted webhook credentials, persistent halt controls, and a read-only Trade Desk are implemented and verified locally. Unmapped or stale sources fail closed; early exact follow-ups defer; stale management cannot regress newer stops; uncertain submits quarantine the connection; all provider-account mutations including restart reconciliation are serialized; gateway-owned futures economics independently recompute planned stop-distance loss; expired/root contracts cannot execute; and exact Tradovate contract/modify/close truth is required. Per-account automatic paper authority is an explicit, durable, expiring mandate with exact contracts and hard risk/quantity limits. One explicit paper-only Tradovate adapter is composed in the desktop from a structured encrypted-vault credential, CAS-rotated token session, exact installed-descriptor registry, and exact-account user-sync feed. Provider events are hints only: they invalidate freshness and wake full REST reconciliation; malformed, disconnected, or wrong-account evidence latches the account halt. REST freshness proves every account position and working order belongs to reconciled Trade God lineage. The UI can retain a checksum-bound read-only provider proof, apply only trusted lifecycle evidence, explicitly enable paper execution behind halts, create a bounded mandate, and run one final reviewed release. Release also requires the exact account feed to be subscribed. That release re-proves every account flat under all provider locks, cancels old queued Discord entries, rechecks the exact mandate and review expiry, persists an append-only journal, and atomically clears only the reviewed halts. Credential/account/certification/enablement changes disarm execution, revoke the mandate, and re-latch halts. The adapter remains inert on a clean install because no real Tradovate lifecycle certification exists; the official API does not document a reduce-only partial-close primitive, and the project refuses to claim that capability without demo evidence. Mirror Group Stage 0/1 provides immutable revisions, lossless route migration, exact per-member sizing previews, and configuration UI. Stage 2 provides fake-provider-only child artifacts, account admission, aggregate planning-risk reservations, atomic ownership sets, exact dispatch grants, bounded fan-out, and crash/partial-outcome recovery. The dormant group-follow-up foundation adds joint family resolution, frozen child action matrices, truthful partial rollup, recovery, and provider-flat-proof release. Group tickets still stop at preview receipts. Browser execution remains interface-only, and no real provider is certified. Trade God is not yet an autonomous trade copier.
@@ -63,6 +63,18 @@ source_of_truth: true
 The workbench can request engine health, run the known fixture, and display total volume, buy/sell volume, delta, POC, quality, trace ID, checksums, producer identity, and failures.
 
 ## Recently Completed
+
+- Added the first operator-confirmed options paper-order flow. After an exact
+  IBKR paper account passes and applies the guided safety test, the operator can
+  select only that tested contract, enter a maximum premium, review a fresh
+  realtime quote plus fee-inclusive maximum debit, and give a second explicit
+  confirmation. The main process freezes a 30-second checksummed review,
+  reserves the debit, and permits exactly one DAY marketable-limit order for one
+  contract. Account, credential, adapter, contract, authority, price, and debit
+  drift fail closed; ambiguous submits reconcile by deterministic lineage and
+  are never blindly retried. Startup recovers nonterminal orders and safely
+  releases abandoned review-only reservations after proving the account flat.
+  Webull order submission remains blocked pending provider-specific evidence.
 
 - Reframed the desktop shell as a trading product. Trade pages now use the full
   canvas instead of the agent-session navigator. Primary navigation is
