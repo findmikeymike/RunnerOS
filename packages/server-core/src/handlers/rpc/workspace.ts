@@ -1,12 +1,16 @@
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, updateWorkspaceRemoteServer } from '@craft-agent/shared/config'
+import { getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace } from '@craft-agent/shared/config'
 import { perf } from '@craft-agent/shared/utils'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
-import { isValidWorkspaceRootPath } from '../../utils/path-validation'
-import { getDefaultWorkspacesDir } from '@craft-agent/shared/workspaces'
+import { resolveContainedWorkspacePath } from '../../utils/path-validation'
+import {
+  ensureDefaultWorkspacesDir,
+  generateUniqueWorkspacePath,
+  getDefaultWorkspacesDir,
+} from '@craft-agent/shared/workspaces'
 
 export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.workspaces.GET,
@@ -43,16 +47,17 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     return sessionManager.getWorkspaces()
   })
 
-  // Create a new workspace at a folder path (Obsidian-style: folder IS the workspace)
-  server.handle(RPC_CHANNELS.workspaces.CREATE, async (_ctx, folderPath: string, name: string, remoteServer?: { url: string; token: string; remoteWorkspaceId: string }) => {
-    const rootPath = folderPath.trim()
-    const validation = isValidWorkspaceRootPath(rootPath)
-    if (!validation.valid) {
-      throw new Error(validation.reason!)
-    }
-
+  // Trade God owns every workspace path. The renderer supplies identity only;
+  // it cannot register an arbitrary local folder as executable app state.
+  server.handle(RPC_CHANNELS.workspaces.CREATE, async (_ctx, name: string) => {
+    const trimmedName = name?.trim()
+    if (!trimmedName) throw new Error('Workspace name is required')
+    ensureDefaultWorkspacesDir()
+    const rootPath = generateUniqueWorkspacePath(trimmedName, getDefaultWorkspacesDir())
     const rootExistedBeforeAdd = existsSync(rootPath)
-    const workspace = addWorkspace({ name, rootPath, ...(remoteServer && { remoteServer }) })
+    mkdirSync(rootPath, { recursive: false })
+
+    const workspace = addWorkspace({ name: trimmedName, rootPath })
     // Make it active
     setActiveWorkspace(workspace.id)
     // Auto-activate starter workflows only for app-created roots. Existing
@@ -67,7 +72,7 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     } catch (err) {
       deps.platform.logger.warn?.(`[workflows] Failed to auto-activate starters in new workspace: ${(err as Error).message}`)
     }
-    deps.platform.logger.info(`Created workspace "${name}" at ${rootPath}${remoteServer ? ` (remote: ${remoteServer.url})` : ''}`)
+    deps.platform.logger.info(`Created workspace "${trimmedName}" at ${rootPath}`)
     return workspace
   })
 
@@ -80,10 +85,8 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   })
 
   // Update remote server config for an existing workspace (reconnect flow)
-  server.handle(RPC_CHANNELS.workspaces.UPDATE_REMOTE, async (_ctx, workspaceId: string, remoteServer: { url: string; token: string; remoteWorkspaceId: string }) => {
-    updateWorkspaceRemoteServer(workspaceId, remoteServer)
-    deps.platform.logger.info(`Updated remote server for workspace ${workspaceId}: ${remoteServer.url}`)
-    return { success: true }
+  server.handle(RPC_CHANNELS.workspaces.UPDATE_REMOTE, async () => {
+    throw new Error('Trade God does not connect to Runner Server workspaces')
   })
 
   // Get workspace ID for the calling window
@@ -165,16 +168,12 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     if (!workspace) throw new Error('Workspace not found')
 
     const { readFileSync, existsSync } = await import('fs')
-    const { join, normalize } = await import('path')
+    const { join } = await import('path')
 
     // Security: validate path
     // - Must not contain .. (path traversal)
     // - Must be a valid image extension
     const ALLOWED_EXTENSIONS = ['.svg', '.png', '.jpg', '.jpeg', '.webp', '.ico', '.gif']
-
-    if (relativePath.includes('..')) {
-      throw new Error('Invalid path: directory traversal not allowed')
-    }
 
     const ext = relativePath.toLowerCase().slice(relativePath.lastIndexOf('.'))
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
@@ -182,12 +181,7 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     }
 
     // Resolve path relative to workspace root
-    const absolutePath = normalize(join(workspace.rootPath, relativePath))
-
-    // Double-check the resolved path is still within workspace
-    if (!absolutePath.startsWith(workspace.rootPath)) {
-      throw new Error('Invalid path: outside workspace directory')
-    }
+    const absolutePath = resolveContainedWorkspacePath(workspace.rootPath, relativePath)
 
     if (!existsSync(absolutePath)) {
       return null  // Missing optional files - silent fallback to default icons
@@ -221,14 +215,10 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     if (!workspace) throw new Error('Workspace not found')
 
     const { writeFileSync, existsSync, unlinkSync, readdirSync } = await import('fs')
-    const { join, normalize, basename } = await import('path')
+    const { join, basename } = await import('path')
 
     // Security: validate path
     const ALLOWED_EXTENSIONS = ['.svg', '.png', '.jpg', '.jpeg', '.webp', '.gif']
-
-    if (relativePath.includes('..')) {
-      throw new Error('Invalid path: directory traversal not allowed')
-    }
 
     const ext = relativePath.toLowerCase().slice(relativePath.lastIndexOf('.'))
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
@@ -236,12 +226,7 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     }
 
     // Resolve path relative to workspace root
-    const absolutePath = normalize(join(workspace.rootPath, relativePath))
-
-    // Double-check the resolved path is still within workspace
-    if (!absolutePath.startsWith(workspace.rootPath)) {
-      throw new Error('Invalid path: outside workspace directory')
-    }
+    const absolutePath = resolveContainedWorkspacePath(workspace.rootPath, relativePath)
 
     // If this is an icon file (icon.*), delete any existing icon files with different extensions
     const fileName = basename(relativePath)

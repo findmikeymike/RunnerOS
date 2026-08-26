@@ -1,6 +1,6 @@
 # Bundled Resources
 
-This folder contains assets that are bundled with the Electron app and synced to the user's `~/.craft-agent/` directory on every launch.
+This folder contains assets that are bundled with the Electron app and synced to the user's `~/.trade-god/` directory on every launch.
 
 ## How It Works
 
@@ -13,11 +13,11 @@ This folder contains assets that are bundled with the Electron app and synced to
 
 | Folder/File | Synced To | Sync Behavior |
 |-------------|-----------|---------------|
-| `docs/` | `~/.craft-agent/docs/` | Always overwrite on launch |
-| `themes/` | `~/.craft-agent/themes/` | Always overwrite on launch |
-| `permissions/` | `~/.craft-agent/permissions/` | Always overwrite on launch |
-| `tool-icons/` | `~/.craft-agent/tool-icons/` | Always overwrite on launch |
-| `config-defaults.json` | `~/.craft-agent/config-defaults.json` | Always overwrite on launch |
+| `docs/` | `~/.trade-god/docs/` | Always overwrite on launch |
+| `themes/` | `~/.trade-god/themes/` | Always overwrite on launch |
+| `permissions/` | `~/.trade-god/permissions/` | Always overwrite on launch |
+| `tool-icons/` | `~/.trade-god/tool-icons/` | Always overwrite on launch |
+| `config-defaults.json` | `~/.trade-god/config-defaults.json` | Always overwrite on launch |
 
 ## Why Sync on Every Launch?
 

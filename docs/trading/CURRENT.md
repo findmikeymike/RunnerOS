@@ -157,7 +157,12 @@ The workbench can request engine health, run the known fixture, and display tota
   previously duplicated live vault/key were moved to a recoverable quarantine,
   so Trade God must enroll fresh credentials. Artist OS data and the
   disabled social-replies automation remain untouched in `~/.craft-agent`.
-  New local and remote-connected workspaces also default to the isolated root.
+  Packaged startup now forces that root, rejects inherited/dedicated path
+  overrides, thin-client fallback, external workspace registry paths, and
+  symlink escapes before main-runtime import. Logout, privileged audit logs,
+  config validation, generated prompts, and bundled docs all resolve through
+  the Trade God root. New workspaces are created locally inside that root;
+  arbitrary folders and remote Runner workspaces are refused.
   Trade God auto-update is fail-closed until it has its own release feed, and
   the live DiscoTrader management webhook now targets the isolated `9201` port.
 - Added a dedicated DiscoTrader Control Center to the Futures sidebar. It

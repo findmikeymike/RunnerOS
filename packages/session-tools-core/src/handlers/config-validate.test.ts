@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdtempSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { handleConfigValidate } from './config-validate.ts';
@@ -53,5 +53,37 @@ describe('config-validate automations target', () => {
   it('returns no-config message when automations.json does not exist', async () => {
     const result = await handleConfigValidate(createCtx(tempDir), { target: 'automations' });
     expect(result.content[0]?.text).toContain('No automations.json');
+  });
+});
+
+describe('config-validate product root isolation', () => {
+  let tempDir: string;
+  let originalConfigDir: string | undefined;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'config-validate-product-root-test-'));
+    originalConfigDir = process.env.CRAFT_CONFIG_DIR;
+  });
+
+  afterEach(() => {
+    if (originalConfigDir === undefined) delete process.env.CRAFT_CONFIG_DIR;
+    else process.env.CRAFT_CONFIG_DIR = originalConfigDir;
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('validates the configured Trade God root instead of sibling Runner data', async () => {
+    const tradeGodRoot = join(tempDir, '.trade-god');
+    const runnerRoot = join(tempDir, '.craft-agent');
+    const workspaceRoot = join(tradeGodRoot, 'workspaces', 'trading');
+    mkdirSync(tradeGodRoot, { recursive: true });
+    mkdirSync(runnerRoot, { recursive: true });
+    mkdirSync(workspaceRoot, { recursive: true });
+    writeFileSync(join(tradeGodRoot, 'config.json'), JSON.stringify({ workspaces: [] }));
+    writeFileSync(join(runnerRoot, 'config.json'), JSON.stringify({ wrong: true }));
+    process.env.CRAFT_CONFIG_DIR = tradeGodRoot;
+
+    const result = await handleConfigValidate(createCtx(workspaceRoot), { target: 'config' });
+
+    expect(result.content[0]?.text).toContain('Validation passed');
   });
 });

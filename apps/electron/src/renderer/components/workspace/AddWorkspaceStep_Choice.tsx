@@ -1,12 +1,10 @@
 import { useTranslation } from "react-i18next"
-import { FolderPlus, FolderOpen, Cloud } from "lucide-react"
+import { FolderPlus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AddWorkspaceContainer, AddWorkspaceStepHeader } from "./primitives"
 
 interface AddWorkspaceStep_ChoiceProps {
   onCreateNew: () => void
-  onOpenFolder: () => void
-  onConnectRemote: () => void
 }
 
 interface ChoiceCardProps {
@@ -50,14 +48,10 @@ function ChoiceCard({ icon, title, description, onClick, variant = 'secondary' }
 /**
  * AddWorkspaceStep_Choice - Initial step to choose creation method
  *
- * Two options:
- * 1. Create new workspace - Creates a fresh workspace folder
- * 2. Open folder as workspace - Use an existing folder
+ * Trade God creates only app-owned local workspaces.
  */
 export function AddWorkspaceStep_Choice({
   onCreateNew,
-  onOpenFolder,
-  onConnectRemote,
 }: AddWorkspaceStep_ChoiceProps) {
   const { t } = useTranslation()
   return (
@@ -77,19 +71,6 @@ export function AddWorkspaceStep_Choice({
           variant="primary"
         />
 
-        <ChoiceCard
-          icon={<FolderOpen className="h-5 w-5" />}
-          title={t("workspace.openFolder")}
-          description={t("workspace.openFolderDesc")}
-          onClick={onOpenFolder}
-        />
-
-        <ChoiceCard
-          icon={<Cloud className="h-5 w-5" />}
-          title={t("workspace.connectRemote")}
-          description={t("workspace.connectRemoteDesc")}
-          onClick={onConnectRemote}
-        />
       </div>
     </AddWorkspaceContainer>
   )

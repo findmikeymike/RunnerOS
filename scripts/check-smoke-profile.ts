@@ -53,4 +53,4 @@ if (filled.length === 0) {
 }
 
 console.log('');
-console.log('Keys should be added through the app UI. App-entered credentials persist outside the repo in ~/.craft-agent/credentials.enc.');
+console.log('Keys should be added through the app UI. App-entered credentials persist outside the repo in ~/.trade-god/credentials.enc.');

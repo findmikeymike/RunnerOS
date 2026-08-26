@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { ArrowLeft, CheckCircle, XCircle, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { slugify } from "@/lib/slugify"
 import { Input } from "../ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
 import { AddWorkspaceContainer, AddWorkspaceStepHeader, AddWorkspacePrimaryButton, AddWorkspaceSecondaryButton } from "./primitives"
@@ -11,7 +10,7 @@ const CREATE_NEW_VALUE = '__create_new__'
 
 interface AddWorkspaceStep_ConnectRemoteProps {
   onBack: () => void
-  onCreate: (folderPath: string, name: string, remoteServer: { url: string; token: string; remoteWorkspaceId: string }) => Promise<void>
+  onCreate: (name: string, remoteServer: { url: string; token: string; remoteWorkspaceId: string }) => Promise<void>
   isCreating: boolean
   /** Pre-fill the server URL (for reconnect flow) */
   initialUrl?: string
@@ -27,27 +26,6 @@ interface AddWorkspaceStep_ConnectRemoteProps {
  * Resolve a unique local workspace slug by appending suffixes if needed.
  * Tries: baseName → baseName-remote → baseName-2 → baseName-3 → ...
  */
-async function resolveUniqueSlug(baseName: string): Promise<{ slug: string; path: string }> {
-  const baseSlug = slugify(baseName)
-  if (!baseSlug) return { slug: 'remote', path: '' }
-
-  let slug = baseSlug
-  let attempt = 0
-
-  while (true) {
-    const result = await window.electronAPI.checkWorkspaceSlug(slug)
-    if (!result.exists) {
-      return { slug, path: result.path }
-    }
-    attempt++
-    slug = attempt === 1 ? `${baseSlug}-remote` : `${baseSlug}-${attempt}`
-    if (attempt > 20) {
-      // Safety valve — shouldn't happen in practice
-      return { slug: `${baseSlug}-${Date.now()}`, path: result.path.replace(baseSlug, `${baseSlug}-${Date.now()}`) }
-    }
-  }
-}
-
 /**
  * AddWorkspaceStep_ConnectRemote - Connect to a remote Runner Server
  *
@@ -68,7 +46,6 @@ export function AddWorkspaceStep_ConnectRemote({
   const isReconnectMode = !!reconnectWorkspace
   const [serverUrl, setServerUrl] = useState(initialUrl ?? '')
   const [token, setToken] = useState(initialToken ?? '')
-  const [homeDir, setHomeDir] = useState('')
   const [testState, setTestState] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle')
   const [testError, setTestError] = useState<string | null>(null)
   const [remoteWorkspaces, setRemoteWorkspaces] = useState<Array<{ id: string; name: string }>>([])
@@ -76,10 +53,6 @@ export function AddWorkspaceStep_ConnectRemote({
   const [newWorkspaceName, setNewWorkspaceName] = useState('')
   const [serverVersion, setServerVersion] = useState<string | null>(null)
   const selectPortalRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    window.electronAPI.getHomeDir().then(setHomeDir)
-  }, [])
 
   const isCreateNew = selectedValue === CREATE_NEW_VALUE
   const selectedWorkspace = !isCreateNew ? remoteWorkspaces.find(w => w.id === selectedValue) : null
@@ -145,9 +118,6 @@ export function AddWorkspaceStep_ConnectRemote({
       }
     }
 
-    if (!homeDir) return
-    const defaultBasePath = `${homeDir}/.trade-god/workspaces`
-
     if (isCreateNew || isFreshServer) {
       // Create new workspace on remote server via direct RPC, then connect locally
       const name = newWorkspaceName.trim()
@@ -158,9 +128,7 @@ export function AddWorkspaceStep_ConnectRemote({
           serverUrl, token, 'server:createWorkspace', name
         ) as { id: string; name: string }
 
-        const { slug, path } = await resolveUniqueSlug(name)
-        const finalPath = path || `${defaultBasePath}/${slug}`
-        await onCreate(finalPath, name, { url: serverUrl, token, remoteWorkspaceId: created.id })
+        await onCreate(name, { url: serverUrl, token, remoteWorkspaceId: created.id })
       } catch (err) {
         setTestState('error')
         setTestError(err instanceof Error ? err.message : 'Failed to create workspace on remote server')
@@ -168,11 +136,9 @@ export function AddWorkspaceStep_ConnectRemote({
       }
     } else if (selectedWorkspace) {
       // Connect to existing workspace — auto-resolve local slug
-      const { slug, path } = await resolveUniqueSlug(selectedWorkspace.name)
-      const finalPath = path || `${defaultBasePath}/${slug}`
-      await onCreate(finalPath, selectedWorkspace.name, { url: serverUrl, token, remoteWorkspaceId: selectedWorkspace.id })
+      await onCreate(selectedWorkspace.name, { url: serverUrl, token, remoteWorkspaceId: selectedWorkspace.id })
     }
-  }, [serverUrl, token, homeDir, isCreateNew, isFreshServer, newWorkspaceName, selectedWorkspace, onCreate, isReconnectMode, onUpdate, reconnectWorkspace])
+  }, [serverUrl, token, isCreateNew, isFreshServer, newWorkspaceName, selectedWorkspace, onCreate, isReconnectMode, onUpdate, reconnectWorkspace])
 
   const canConnect = testState === 'ok' && !isCreating && (
     isReconnectMode ? true :

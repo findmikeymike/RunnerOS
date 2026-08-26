@@ -35,7 +35,7 @@ export async function handleConfigValidate(
   args: ConfigValidateArgs
 ): Promise<ToolResult> {
   const { target, sourceSlug } = args;
-  const craftAgentRoot = join(homedir(), '.craft-agent');
+  const productRoot = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.trade-god');
 
   // If full validators available (Claude), use them
   if (ctx.validators) {
@@ -85,7 +85,7 @@ export async function handleConfigValidate(
   switch (target) {
     case 'config': {
       const result = validateJsonFileHasFields(
-        join(craftAgentRoot, 'config.json'),
+        join(productRoot, 'config.json'),
         ['workspaces']
       );
       return successResponse(formatValidationResult(result));
@@ -138,7 +138,7 @@ export async function handleConfigValidate(
 
     case 'preferences': {
       const result = validateJsonFileHasFields(
-        join(craftAgentRoot, 'preferences.json'),
+        join(productRoot, 'preferences.json'),
         []
       );
       return successResponse(formatValidationResult(result));
@@ -165,7 +165,7 @@ export async function handleConfigValidate(
 
     case 'tool-icons': {
       const result = validateJsonFileHasFields(
-        join(craftAgentRoot, 'tool-icons', 'tool-icons.json'),
+        join(productRoot, 'tool-icons', 'tool-icons.json'),
         ['version', 'tools']
       );
       return successResponse(formatValidationResult(result));
@@ -173,11 +173,11 @@ export async function handleConfigValidate(
 
     case 'all': {
       const configResult = validateJsonFileHasFields(
-        join(craftAgentRoot, 'config.json'),
+        join(productRoot, 'config.json'),
         ['workspaces']
       );
       const prefsResult = validateJsonFileHasFields(
-        join(craftAgentRoot, 'preferences.json'),
+        join(productRoot, 'preferences.json'),
         []
       );
       const merged = mergeResults(configResult, prefsResult);

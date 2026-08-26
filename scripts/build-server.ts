@@ -751,6 +751,7 @@ ENV CRAFT_UV=/app/resources/bin/uv
 ENV CRAFT_SCRIPTS=/app/resources/scripts
 ENV CRAFT_RPC_HOST=0.0.0.0
 ENV CRAFT_RPC_PORT=9100
+ENV CRAFT_CONFIG_DIR=/root/.trade-god
 ENV PATH="/app/resources/bin:/app/vendor/bun:\${PATH}"
 
 EXPOSE 9100
@@ -772,13 +773,13 @@ services:
       # - CRAFT_RPC_TLS_CERT=/certs/cert.pem
       # - CRAFT_RPC_TLS_KEY=/certs/key.pem
     volumes:
-      - craft-data:/root/.craft-agent
+      - trade-god-data:/root/.trade-god
       # TLS — mount cert directory
       # - ./certs:/certs:ro
     restart: unless-stopped
 
 volumes:
-  craft-data:
+  trade-god-data:
 `;
   writeFileSync(join(outputDir, 'docker-compose.yml'), dockerCompose);
 }

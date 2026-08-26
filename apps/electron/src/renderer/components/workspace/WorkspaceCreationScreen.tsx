@@ -8,12 +8,11 @@ import { cn } from "@/lib/utils"
 import { overlayTransitionIn } from "@/lib/animations"
 import { AddWorkspaceStep_Choice } from "./AddWorkspaceStep_Choice"
 import { AddWorkspaceStep_CreateNew } from "./AddWorkspaceStep_CreateNew"
-import { AddWorkspaceStep_OpenFolder } from "./AddWorkspaceStep_OpenFolder"
 import { AddWorkspaceStep_ConnectRemote } from "./AddWorkspaceStep_ConnectRemote"
 import type { Workspace } from "../../../shared/types"
 import { toast } from "sonner"
 
-type CreationStep = 'choice' | 'create' | 'open' | 'remote'
+type CreationStep = 'choice' | 'create' | 'remote'
 
 interface WorkspaceCreationScreenProps {
   /** Callback when a workspace is created successfully */
@@ -21,7 +20,7 @@ interface WorkspaceCreationScreenProps {
   /** Callback when the screen is dismissed */
   onClose: () => void
   className?: string
-  initialStep?: Extract<CreationStep, 'choice' | 'create' | 'open'>
+  initialStep?: Extract<CreationStep, 'choice' | 'create'>
   /** When set, skip choice step and open ConnectRemote in reconnect mode */
   reconnectWorkspace?: Workspace
   /** Reconnect an existing remote workspace and resolve only on real success. */
@@ -68,10 +67,10 @@ export function WorkspaceCreationScreen({
     }
   }, [isCreating, onClose])
 
-  const handleCreateWorkspace = useCallback(async (folderPath: string, name: string, remoteServer?: { url: string; token: string; remoteWorkspaceId: string }) => {
+  const handleCreateWorkspace = useCallback(async (name: string) => {
     setIsCreating(true)
     try {
-      const workspace = await window.electronAPI.createWorkspace(folderPath, name, remoteServer)
+      const workspace = await window.electronAPI.createWorkspace(name)
       onWorkspaceCreated(workspace)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -102,23 +101,12 @@ export function WorkspaceCreationScreen({
         return (
           <AddWorkspaceStep_Choice
             onCreateNew={() => setStep('create')}
-            onOpenFolder={() => setStep('open')}
-            onConnectRemote={() => setStep('remote')}
           />
         )
 
       case 'create':
         return (
           <AddWorkspaceStep_CreateNew
-            onBack={() => setStep('choice')}
-            onCreate={handleCreateWorkspace}
-            isCreating={isCreating}
-          />
-        )
-
-      case 'open':
-        return (
-          <AddWorkspaceStep_OpenFolder
             onBack={() => setStep('choice')}
             onCreate={handleCreateWorkspace}
             isCreating={isCreating}

@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence } from "motion/react"
-import { Cloud, CloudOff, FolderOpen, FolderPlus, Home } from "lucide-react"
+import { Cloud, CloudOff, FolderPlus, Home } from "lucide-react"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@craft-agent/ui"
 import {
   DropdownMenu,
@@ -40,7 +40,7 @@ export function WorkspaceRail({
 }: WorkspaceRailProps) {
   const { t } = useTranslation()
   const [showCreationScreen, setShowCreationScreen] = useState(false)
-  const [creationStep, setCreationStep] = useState<'choice' | 'create' | 'open'>('choice')
+  const [creationStep, setCreationStep] = useState<'choice' | 'create'>('choice')
   const [reconnectTarget, setReconnectTarget] = useState<Workspace | null>(null)
   const [remoteHealthMap, setRemoteHealthMap] = useState<Map<string, 'ok' | 'error' | 'checking'>>(new Map())
   const healthCheckAbort = useRef<AbortController | null>(null)
@@ -104,14 +104,13 @@ export function WorkspaceRail({
     return remoteHealthMap.get(workspaceId) === 'error'
   }, [activeWorkspaceId, connectionState, isRemote, remoteHealthMap])
 
-  const openWorkspaceCreation = (step: 'choice' | 'create' | 'open') => {
+  const openWorkspaceCreation = (step: 'choice' | 'create') => {
     setCreationStep(step)
     setShowCreationScreen(true)
     setFullscreenOverlayOpen(true)
   }
 
   const handleNewWorkspace = () => openWorkspaceCreation('create')
-  const handleOpenWorkspace = () => openWorkspaceCreation('open')
 
   const handleCloseCreationScreen = useCallback(() => {
     setShowCreationScreen(false)
@@ -250,10 +249,6 @@ export function WorkspaceRail({
             <StyledDropdownMenuItem onClick={handleNewWorkspace}>
               <FolderPlus className="h-3.5 w-3.5" />
               {t("workspace.createNew")}
-            </StyledDropdownMenuItem>
-            <StyledDropdownMenuItem onClick={handleOpenWorkspace}>
-              <FolderOpen className="h-3.5 w-3.5" />
-              {t("workspace.openFolder")}
             </StyledDropdownMenuItem>
           </StyledDropdownMenuContent>
         </DropdownMenu>

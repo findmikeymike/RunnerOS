@@ -1,7 +1,7 @@
 import { unlink } from 'fs/promises'
 import { join } from 'path'
-import { homedir } from 'os'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { CONFIG_DIR } from '@craft-agent/shared/config/paths'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -13,6 +13,10 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.auth.SHOW_DELETE_SESSION_CONFIRMATION,
   RPC_CHANNELS.credentials.HEALTH_CHECK,
 ] as const
+
+export const resolveLogoutConfigPath = (configDir = CONFIG_DIR): string => (
+  join(configDir, 'config.json')
+)
 
 export function registerAuthHandlers(server: RpcServer, deps: HandlerDeps): void {
   // Show logout confirmation dialog (routed to client)
@@ -59,7 +63,7 @@ export function registerAuthHandlers(server: RpcServer, deps: HandlerDeps): void
       }
 
       // Delete the config file
-      const configPath = join(homedir(), '.craft-agent', 'config.json')
+      const configPath = resolveLogoutConfigPath()
       await unlink(configPath).catch(() => {
         // Ignore if file doesn't exist
       })

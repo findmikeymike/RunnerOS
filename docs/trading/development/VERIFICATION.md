@@ -56,6 +56,15 @@ source_of_truth: true
   `credentials.enc` and `credentials.key` were moved to
   `~/.trade-god/isolated-vault-quarantine/2026-08-11T04-02-12-935Z/`. Artist OS
   files remain in place; Trade God now requires fresh credential enrollment.
+- Runtime containment closure: packaged identity is fixed to `~/.trade-god`,
+  `tradegod://`, loopback port `9201`, and its own Electron profile. Startup
+  rejects Runner roots, external or remote Runner workspaces, unreadable registry
+  evidence, and config/workspace symlink escapes before importing main. New
+  workspace RPCs accept identity only and atomically reserve an app-owned path.
+  Logout, privileged-audit, config-validation, prompt, help, and server-volume
+  paths are product-owned. The focused containment suite passed, the live
+  registry passed the boundary probe, `typecheck:all` passed, and main/renderer
+  builds completed. This does not prove a packaged installer launch.
 - Not proven: installed packaged app, real Discord entry delivery after rebuild,
   Tradovate credential/token exchange, paper provider order lifecycle,
   multi-target execution, Mirror Groups, live browser DOM automation, crash

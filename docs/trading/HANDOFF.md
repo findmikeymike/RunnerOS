@@ -99,6 +99,10 @@ New workspace flows stay under `~/.trade-god/workspaces`. Auto-update is
 disabled until a dedicated Trade God release feed exists, preventing RunnerOS
 or Artist OS packages from crossing the product boundary. The live DiscoTrader
 management webhook is configured for Trade God's isolated port `9201`.
+Startup refuses external or remote Runner workspaces and filesystem symlink
+escapes before the main runtime loads. Workspace creation accepts a name, not a
+renderer-selected filesystem path. Product logout, privileged audits, config
+validation, agent prompts, and bundled help no longer address `~/.craft-agent`.
 Migration remains a deliberate one-time operation (`bun run
 trade-god:migrate-data`), not an automatic read from Artist OS on every clean
 Trade God install. It is already complete on this machine.

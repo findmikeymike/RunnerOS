@@ -1,5 +1,5 @@
-import { statSync, type Stats } from 'fs'
-import { dirname, win32 as pathWin32 } from 'path'
+import { existsSync, lstatSync, realpathSync, statSync, type Stats } from 'fs'
+import { dirname, isAbsolute, relative, resolve, sep, win32 as pathWin32 } from 'path'
 
 export interface PathValidationResult {
   valid: boolean
@@ -7,6 +7,47 @@ export interface PathValidationResult {
 }
 
 type StatLike = (path: string) => Stats
+
+export function resolveContainedWorkspacePath(rootPath: string, childPath: string): string {
+  if (!childPath.trim() || isAbsolute(childPath) || childPath.includes('\0')) {
+    throw new Error('Invalid path: expected a relative workspace path')
+  }
+
+  const root = resolve(rootPath)
+  const candidate = resolve(root, childPath)
+  const relativePath = relative(root, candidate)
+  if (
+    relativePath === ''
+    || relativePath === '..'
+    || relativePath.startsWith(`..${sep}`)
+    || isAbsolute(relativePath)
+  ) {
+    throw new Error('Invalid path: outside workspace directory')
+  }
+
+  if (existsSync(root) && lstatSync(root).isSymbolicLink()) {
+    throw new Error('Invalid path: workspace root cannot be a symbolic link')
+  }
+
+  let cursor = root
+  for (const segment of relativePath.split(sep)) {
+    cursor = resolve(cursor, segment)
+    if (existsSync(cursor) && lstatSync(cursor).isSymbolicLink()) {
+      throw new Error('Invalid path: symbolic links are not allowed in workspace file paths')
+    }
+  }
+
+  if (existsSync(root) && existsSync(candidate)) {
+    const realRoot = realpathSync(root)
+    const realCandidate = realpathSync(candidate)
+    const realRelative = relative(realRoot, realCandidate)
+    if (realRelative === '..' || realRelative.startsWith(`..${sep}`) || isAbsolute(realRelative)) {
+      throw new Error('Invalid path: resolved file escapes the workspace directory')
+    }
+  }
+
+  return candidate
+}
 
 function isAbsolutePathForPlatform(path: string, platform: NodeJS.Platform): boolean {
   if (platform === 'win32') {

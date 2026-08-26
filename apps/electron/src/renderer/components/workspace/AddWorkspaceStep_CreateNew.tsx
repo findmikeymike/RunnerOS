@@ -4,17 +4,11 @@ import { ArrowLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { slugify } from "@/lib/slugify"
 import { Input } from "../ui/input"
-import { Button } from "../ui/button"
-import { AddWorkspaceContainer, AddWorkspaceStepHeader, AddWorkspaceSecondaryButton, AddWorkspacePrimaryButton } from "./primitives"
-import { AddWorkspace_RadioOption } from "./AddWorkspace_RadioOption"
-import { useDirectoryPicker } from "@/hooks/useDirectoryPicker"
-import { ServerDirectoryBrowser } from "@/components/ServerDirectoryBrowser"
-
-type LocationOption = 'default' | 'custom'
+import { AddWorkspaceContainer, AddWorkspaceStepHeader, AddWorkspacePrimaryButton } from "./primitives"
 
 interface AddWorkspaceStep_CreateNewProps {
   onBack: () => void
-  onCreate: (folderPath: string, name: string) => Promise<void>
+  onCreate: (name: string) => Promise<void>
   isCreating: boolean
 }
 
@@ -23,7 +17,7 @@ interface AddWorkspaceStep_CreateNewProps {
  *
  * Fields:
  * - Workspace name (required)
- * - Location: Default (~/.trade-god/workspaces/) or Custom
+ * The backend always creates it inside Trade God's private workspace root.
  */
 export function AddWorkspaceStep_CreateNew({
   onBack,
@@ -32,24 +26,10 @@ export function AddWorkspaceStep_CreateNew({
 }: AddWorkspaceStep_CreateNewProps) {
   const { t } = useTranslation()
   const [name, setName] = useState('')
-  const [locationOption, setLocationOption] = useState<LocationOption>('default')
-  const [customPath, setCustomPath] = useState<string | null>(null)
-  const [homeDir, setHomeDir] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isValidating, setIsValidating] = useState(false)
 
-  // Get home directory on mount
-  useEffect(() => {
-    window.electronAPI.getHomeDir().then(setHomeDir)
-  }, [])
-
   const slug = slugify(name)
-  const defaultBasePath = homeDir ? `${homeDir}/.trade-god/workspaces` : null
-  const finalPath = locationOption === 'default'
-    ? (defaultBasePath && slug ? `${defaultBasePath}/${slug}` : null)
-    : customPath && slug
-      ? `${customPath}/${slug}`
-      : null
 
   // Validate slug uniqueness when name changes
   useEffect(() => {
@@ -79,24 +59,12 @@ export function AddWorkspaceStep_CreateNew({
     return () => clearTimeout(timeout)
   }, [slug])
 
-  const handleFolderSelected = useCallback((path: string) => {
-    setCustomPath(path)
-  }, [])
-
-  const {
-    pickDirectory,
-    showServerBrowser,
-    serverBrowserMode,
-    cancelServerBrowser,
-    confirmServerBrowser,
-  } = useDirectoryPicker(handleFolderSelected)
-
   const handleCreate = useCallback(async () => {
-    if (!name.trim() || !finalPath || error) return
-    await onCreate(finalPath, name.trim())
-  }, [name, finalPath, error, onCreate])
+    if (!name.trim() || error) return
+    await onCreate(name.trim())
+  }, [name, error, onCreate])
 
-  const canCreate = name.trim() && finalPath && !error && !isValidating && !isCreating
+  const canCreate = name.trim() && !error && !isValidating && !isCreating
 
   return (
     <AddWorkspaceContainer>
@@ -140,43 +108,9 @@ export function AddWorkspaceStep_CreateNew({
           )}
         </div>
 
-        {/* Location selection */}
-        <div className="space-y-3">
-          <label className="block text-sm font-medium text-foreground mb-2.5">
-            {t("workspace.locationLabel")}
-          </label>
-
-          {/* Default location option */}
-          <AddWorkspace_RadioOption
-            name="location"
-            checked={locationOption === 'default'}
-            onChange={() => setLocationOption('default')}
-            disabled={isCreating}
-            title={t("workspace.defaultLocation")}
-            subtitle={t("workspace.underDefaultFolder")}
-          />
-
-          {/* Custom location option */}
-          <AddWorkspace_RadioOption
-            name="location"
-            checked={locationOption === 'custom'}
-            onChange={() => setLocationOption('custom')}
-            disabled={isCreating}
-            title={t("workspace.chooseLocation")}
-            subtitle={customPath || t("workspace.pickLocation")}
-            action={locationOption === 'custom' ? (
-              <AddWorkspaceSecondaryButton
-                onClick={(e) => {
-                  e.preventDefault()
-                  pickDirectory()
-                }}
-                disabled={isCreating}
-              >
-                {t("common.browse")}
-              </AddWorkspaceSecondaryButton>
-            ) : undefined}
-          />
-        </div>
+        <p className="text-xs text-muted-foreground">
+          Trade God stores this workspace privately. No folder access is required.
+        </p>
 
         {/* Create button */}
         <AddWorkspacePrimaryButton
@@ -188,12 +122,6 @@ export function AddWorkspaceStep_CreateNew({
           {t("common.create")}
         </AddWorkspacePrimaryButton>
       </div>
-      <ServerDirectoryBrowser
-        open={showServerBrowser}
-        mode={serverBrowserMode}
-        onSelect={confirmServerBrowser}
-        onCancel={cancelServerBrowser}
-      />
     </AddWorkspaceContainer>
   )
 }

@@ -10,10 +10,13 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const TOOL_ICONS_DIR = path.join(process.env.HOME!, '.craft-agent/tool-icons')
+const TOOL_ICONS_DIR = path.join(
+  process.env.CRAFT_CONFIG_DIR || path.join(process.env.HOME!, '.trade-god'),
+  'tool-icons',
+)
 const SOURCES_DIR = path.join(
   process.env.HOME!,
-  '.craft-agent/workspaces/046a02d0-6521-98eb-8756-95ec4bb8c41f/sources'
+  '.trade-god/workspaces/046a02d0-6521-98eb-8756-95ec4bb8c41f/sources'
 )
 const OUTPUT_FILE = path.join(__dirname, 'sample-icons.ts')
 
@@ -113,7 +116,7 @@ function generateIconsFile() {
  * DO NOT EDIT MANUALLY
  */
 
-// Native tool icons (from ~/.craft-agent/tool-icons/)
+// Native tool icons (from the current product-owned config root)
 export const nativeToolIcons = {
 ${Object.entries(nativeIcons)
   .map(([name, data]) => `  ${name}: '${data}',`)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import type { Stats } from 'fs'
@@ -7,6 +7,7 @@ import {
   validatePathFormat,
   isValidWorkingDirectory,
   isValidWorkspaceRootPath,
+  resolveContainedWorkspacePath,
 } from './path-validation'
 
 function directoryStats(): Stats {
@@ -140,5 +141,33 @@ describe('isValidWorkspaceRootPath', () => {
       valid: false,
       reason: 'Parent path is not a directory: C:\\workspaces',
     })
+  })
+})
+
+describe('resolveContainedWorkspacePath', () => {
+  it('resolves a normal child beneath the workspace root', () => {
+    expect(resolveContainedWorkspacePath('/product/workspaces/trading', 'icon.png'))
+      .toBe('/product/workspaces/trading/icon.png')
+  })
+
+  it('rejects absolute paths, traversal, and sibling-prefix escapes', () => {
+    const root = '/product/workspaces/trading'
+    expect(() => resolveContainedWorkspacePath(root, '/tmp/icon.png')).toThrow()
+    expect(() => resolveContainedWorkspacePath(root, '../trading-evil/icon.png')).toThrow()
+    expect(() => resolveContainedWorkspacePath(root, '../../.craft-agent/icon.png')).toThrow()
+  })
+
+  it('rejects a symlink created beneath the workspace after startup', () => {
+    const sandbox = mkdtempSync(join(tmpdir(), 'trade-god-workspace-path-'))
+    const root = join(sandbox, 'workspaces', 'trading')
+    const outside = join(sandbox, 'outside')
+    mkdirSync(root, { recursive: true })
+    mkdirSync(outside, { recursive: true })
+    symlinkSync(outside, join(root, 'escape'))
+    try {
+      expect(() => resolveContainedWorkspacePath(root, 'escape/icon.png')).toThrow('symbolic')
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true })
+    }
   })
 })
