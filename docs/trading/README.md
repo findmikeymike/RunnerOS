@@ -54,6 +54,15 @@ This is the routing table for humans and agents. Read only what the current job 
 - `integrations/TRADING-CONNECTIONS-AND-SIGNAL-ROUTES.md` — multi-prop account,
   saved browser login, and exact Discord-to-account routing contract.
 
+## Draft Design Specifications
+
+- `specs/execution/discord-single-leg-options-autopilot.md` — proposed Options
+  Automation module for exact Discord-routed, single-leg long call/put paper
+  execution through independently certified IBKR or Webull adapters, with
+  deterministic contract resolution, quote quality, price-drift, debit
+  reservations, recovery, expiration custody, and follow-up controls. No options
+  broker adapter or execution authority is implemented by this draft.
+
 ## Supporting Vision Library
 
 These project-local documents are deep reference material:
