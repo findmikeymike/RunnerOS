@@ -26,7 +26,7 @@ import type {
   TradingConnectionStatus,
 } from './trading-connection-service.ts'
 import type { TradingSignalRoute } from './trading-signal-route-store.ts'
-import type { OptionsConnectionStatus, SaveOptionsConnectionInput } from './options-connection-service.ts'
+import type { OptionsConnectionStatus, SaveOptionsConnectionInput, StartOptionsCertificationInput } from './options-connection-service.ts'
 
 export const TRADE_GOD_IPC = {
   HEALTH: 'trade-god:health',
@@ -68,6 +68,7 @@ export const TRADE_GOD_IPC = {
   SAVE_OPTIONS_CONNECTION: 'trade-god:options:connections:save',
   VERIFY_OPTIONS_CONNECTION: 'trade-god:options:connections:verify',
   REMOVE_OPTIONS_CONNECTION: 'trade-god:options:connections:remove',
+  START_OPTIONS_CERTIFICATION: 'trade-god:options:certification:start',
   APPLY_OPTIONS_CERTIFICATION: 'trade-god:options:certification:apply',
   ACTIVATE_OPTIONS_MANUAL_AUTHORITY: 'trade-god:options:manual-authority:activate',
   REVOKE_OPTIONS_MANUAL_AUTHORITY: 'trade-god:options:manual-authority:revoke',
@@ -134,6 +135,7 @@ export interface TradingIpcManager {
   saveOptionsConnection?(input: SaveOptionsConnectionInput): Promise<OptionsConnectionStatus>
   verifyOptionsConnection?(connectionId: string): Promise<OptionsConnectionStatus>
   removeOptionsConnection?(connectionId: string): Promise<boolean>
+  startOptionsCertification?(input: StartOptionsCertificationInput): Promise<OptionsConnectionStatus>
   applyOptionsCertification?(connectionId: string, certificationId: string, operatorConfirmed: true): Promise<OptionsConnectionStatus>
   activateOptionsManualAuthority?(connectionId: string, maxDebit: string, validUntil: string, operatorConfirmed: true): Promise<OptionsConnectionStatus>
   revokeOptionsManualAuthority?(connectionId: string): Promise<OptionsConnectionStatus>
@@ -350,6 +352,11 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     if (typeof connectionId !== 'string' || !connectionId.trim()) throw new Error('Options account id is invalid.')
     return manager.removeOptionsConnection(connectionId)
   })
+  ipcMain.handle(TRADE_GOD_IPC.START_OPTIONS_CERTIFICATION, (_event, input: unknown) => {
+    if (!manager.startOptionsCertification) throw new Error('Options paper safety test is unavailable.')
+    if (!isStartOptionsCertificationInput(input)) throw new Error('Options paper safety-test payload is invalid.')
+    return manager.startOptionsCertification(input)
+  })
   ipcMain.handle(TRADE_GOD_IPC.APPLY_OPTIONS_CERTIFICATION, (_event, connectionId: unknown, certificationId: unknown, operatorConfirmed: unknown) => {
     if (!manager.applyOptionsCertification) throw new Error('Options safety-test application is unavailable.')
     if (typeof connectionId !== 'string' || !connectionId.trim() || typeof certificationId !== 'string' || !certificationId.trim() || operatorConfirmed !== true) {
@@ -413,9 +420,25 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_OPTIONS_CONNECTION)
     ipcMain.removeHandler(TRADE_GOD_IPC.VERIFY_OPTIONS_CONNECTION)
     ipcMain.removeHandler(TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION)
+    ipcMain.removeHandler(TRADE_GOD_IPC.START_OPTIONS_CERTIFICATION)
     ipcMain.removeHandler(TRADE_GOD_IPC.APPLY_OPTIONS_CERTIFICATION)
     ipcMain.removeHandler(TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY)
     ipcMain.removeHandler(TRADE_GOD_IPC.REVOKE_OPTIONS_MANUAL_AUTHORITY)
     await manager.stop()
   }
+}
+
+const isStartOptionsCertificationInput = (input: unknown): input is StartOptionsCertificationInput => {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return false
+  const value = input as Record<string, unknown>
+  const contract = value.contract
+  return typeof value.connection_id === 'string' && Boolean(value.connection_id.trim())
+    && typeof value.max_test_debit === 'string' && Boolean(value.max_test_debit.trim())
+    && typeof value.expires_at === 'string' && !Number.isNaN(Date.parse(value.expires_at))
+    && value.operator_confirmed === true
+    && Boolean(contract) && typeof contract === 'object' && !Array.isArray(contract)
+    && typeof (contract as Record<string, unknown>).underlying === 'string'
+    && typeof (contract as Record<string, unknown>).expiration === 'string'
+    && typeof (contract as Record<string, unknown>).strike === 'string'
+    && ((contract as Record<string, unknown>).right === 'call' || (contract as Record<string, unknown>).right === 'put')
 }

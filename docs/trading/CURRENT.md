@@ -101,7 +101,7 @@ The workbench can request engine health, run the known fixture, and display tota
 
 - Split options paper readiness into two separate trusted states. A restricted
   provider certification can now be `passed` without being usable; the operator
-  must explicitly `Apply safety test` for that exact account, credential
+  can run the guided paper test in Options Desk, then must explicitly `Apply safety test` for that exact account, credential
   generation, adapter, and current retained certification before manual paper
   controls unlock. Runtime status, IPC/preload, and the Options page now expose
   that distinction, and manual authority fails closed if the applied record no

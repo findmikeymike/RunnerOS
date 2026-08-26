@@ -26,7 +26,7 @@ import type {
   TradingConnectionStatus,
 } from './trading-connection-service.ts'
 import type { TradingSignalRoute } from './trading-signal-route-store.ts'
-import type { OptionsConnectionStatus, SaveOptionsConnectionInput } from './options-connection-service.ts'
+import type { OptionsConnectionStatus, SaveOptionsConnectionInput, StartOptionsCertificationInput } from './options-connection-service.ts'
 
 type Invoke = (channel: string, ...args: unknown[]) => Promise<unknown>
 type Subscribe = (channel: string, callback: (payload: unknown) => void) => () => void
@@ -93,6 +93,7 @@ export interface TradingPreloadApi {
   saveOptionsConnection(input: SaveOptionsConnectionInput): Promise<OptionsConnectionStatus>
   verifyOptionsConnection(connectionId: string): Promise<OptionsConnectionStatus>
   removeOptionsConnection(connectionId: string): Promise<boolean>
+  startOptionsCertification(input: StartOptionsCertificationInput): Promise<OptionsConnectionStatus>
   applyOptionsCertification(connectionId: string, certificationId: string, operatorConfirmed: true): Promise<OptionsConnectionStatus>
   activateOptionsManualAuthority(connectionId: string, maxDebit: string, validUntil: string, operatorConfirmed: true): Promise<OptionsConnectionStatus>
   revokeOptionsManualAuthority(connectionId: string): Promise<OptionsConnectionStatus>
@@ -221,6 +222,9 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
     ),
     removeOptionsConnection: (connectionId) => (
       invoke(TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION, connectionId) as Promise<boolean>
+    ),
+    startOptionsCertification: (input) => (
+      invoke(TRADE_GOD_IPC.START_OPTIONS_CERTIFICATION, input) as Promise<OptionsConnectionStatus>
     ),
     applyOptionsCertification: (connectionId, certificationId, operatorConfirmed) => (
       invoke(TRADE_GOD_IPC.APPLY_OPTIONS_CERTIFICATION, connectionId, certificationId, operatorConfirmed) as Promise<OptionsConnectionStatus>

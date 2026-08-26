@@ -63,6 +63,11 @@ test('preload adapter invokes only the local Trade God channels', async () => {
   expect(await api.saveOptionsConnection({ provider: 'ibkr' } as any) as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.verifyOptionsConnection('options-one') as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.removeOptionsConnection('options-one') as any).toEqual({ artifact_id: 'artifact-preload' })
+  const optionsCertificationInput = {
+    connection_id: 'options-one', max_test_debit: '150', expires_at: '2026-08-26T01:15:00.000Z',
+    contract: { underlying: 'SPY', expiration: '2026-09-18', strike: '650', right: 'call' as const }, operator_confirmed: true as const,
+  }
+  expect(await api.startOptionsCertification(optionsCertificationInput) as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.applyOptionsCertification('options-one', 'options-cert-one', true) as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.activateOptionsManualAuthority(
     'options-one', '100', '2026-08-26T01:30:00.000Z', true,
@@ -107,6 +112,7 @@ test('preload adapter invokes only the local Trade God channels', async () => {
     { channel: TRADE_GOD_IPC.SAVE_OPTIONS_CONNECTION, args: [{ provider: 'ibkr' }] },
     { channel: TRADE_GOD_IPC.VERIFY_OPTIONS_CONNECTION, args: ['options-one'] },
     { channel: TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION, args: ['options-one'] },
+    { channel: TRADE_GOD_IPC.START_OPTIONS_CERTIFICATION, args: [optionsCertificationInput] },
     { channel: TRADE_GOD_IPC.APPLY_OPTIONS_CERTIFICATION, args: ['options-one', 'options-cert-one', true] },
     { channel: TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY, args: ['options-one', '100', '2026-08-26T01:30:00.000Z', true] },
     { channel: TRADE_GOD_IPC.REVOKE_OPTIONS_MANUAL_AUTHORITY, args: ['options-one'] },

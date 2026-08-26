@@ -33,6 +33,14 @@ export interface SaveOptionsConnectionInput {
   credential: string
 }
 
+export interface StartOptionsCertificationInput {
+  connection_id: string
+  max_test_debit: string
+  expires_at: string
+  contract: { underlying: string; expiration: string; strike: string; right: 'call' | 'put' }
+  operator_confirmed: true
+}
+
 export interface OptionsConnectionStatus {
   connection: OptionsConnection
   credential_configured: boolean
@@ -235,6 +243,13 @@ export class OptionsConnectionService {
 
   async list(): Promise<OptionsConnectionStatus[]> {
     return Promise.all((await this.store.list()).map((connection) => this.status(connection)))
+  }
+
+  async resolveMainProcessCredential(connectionId: string): Promise<{ connection: OptionsConnection; credential: Record<string, string> }> {
+    const connection = await this.store.get(connectionId)
+    const raw = await this.vault.getSecret(credentialName(connectionId))
+    if (!raw) throw new Error('Saved provider credentials are missing.')
+    return { connection, credential: parseCredential(connection.provider, raw) }
   }
 
   async save(input: SaveOptionsConnectionInput): Promise<OptionsConnectionStatus> {

@@ -564,6 +564,7 @@ test('runtime keeps passed options certification locked until the exact test is 
   await new FileOptionsCertificationStore(optionsRoot).save(certification)
 
   const ipc = new FakeIpcMain()
+  let certificationAdapterCreations = 0
   const runtime = createTradeGodRuntime({
     ipcMain: ipc,
     rootCandidates: [repoRoot],
@@ -572,6 +573,10 @@ test('runtime keeps passed options certification locked until the exact test is 
     connectionDirectory,
     executionDirectory,
     credentialVault: vault,
+    optionsProviderAdapterFactory: () => {
+      certificationAdapterCreations += 1
+      throw new Error('Provider adapter must not be created for a stale account read.')
+    },
     alertPort: -1,
   })
 
@@ -597,6 +602,15 @@ test('runtime keeps passed options certification locked until the exact test is 
         certification_id: certification.certification_id,
       },
     })
+    runtimeNow = '2026-08-26T12:11:00.000Z'
+    await expect(ipc.handlers.get(TRADE_GOD_IPC.START_OPTIONS_CERTIFICATION)!({}, {
+      connection_id: verified.connection.connection_id,
+      max_test_debit: '150',
+      expires_at: '2026-08-26T12:20:00.000Z',
+      contract: { underlying: 'SPY', expiration: '2026-09-18', strike: '650', right: 'call' },
+      operator_confirmed: true,
+    })).rejects.toThrow('Verify this broker account again')
+    expect(certificationAdapterCreations).toBe(0)
   } finally {
     await runtime.dispose()
     rmSync(connectionDirectory, { recursive: true, force: true })

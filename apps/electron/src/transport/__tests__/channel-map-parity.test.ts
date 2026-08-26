@@ -67,6 +67,7 @@ type ApiToChannelMapKeys = Exclude<
   | 'saveOptionsConnection' // direct local options account IPC
   | 'verifyOptionsConnection' // direct local read-only options provider IPC
   | 'removeOptionsConnection' // direct local options account IPC
+  | 'startOptionsCertification' // direct local restricted provider certification IPC
   | 'applyOptionsCertification' // direct local trusted options certification IPC
   | 'activateOptionsManualAuthority' // direct local certified options authority IPC
   | 'revokeOptionsManualAuthority' // direct local options authority IPC

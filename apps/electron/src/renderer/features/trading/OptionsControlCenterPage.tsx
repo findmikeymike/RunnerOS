@@ -42,6 +42,7 @@ const OptionsControlCenterPage: React.FC = () => {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [authorityConnection, setAuthorityConnection] = useState<ConnectionStatus | null>(null)
+  const [certificationConnection, setCertificationConnection] = useState<ConnectionStatus | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -58,16 +59,13 @@ const OptionsControlCenterPage: React.FC = () => {
   useEffect(() => { void load() }, [load])
 
   const verified = connections.filter((item) => item.provider_read_fresh).length
-  const liveData = connections.filter((item) => item.provider_read_fresh && item.provider_read_proof?.option_quotes_realtime).length
   const certified = connections.filter((item) => item.certification.state === 'applied').length
   const passed = connections.filter((item) => item.certification.state === 'passed').length
   const nextStep = connections.length === 0
     ? 'Connect a paper account'
     : verified === 0
       ? 'Verify your saved account'
-      : liveData === 0
-        ? 'Check live options data'
-        : passed > 0
+      : passed > 0
           ? 'Apply the passed safety test'
           : certified === 0
           ? 'Run the guided paper test'
@@ -133,7 +131,7 @@ const OptionsControlCenterPage: React.FC = () => {
             </p>
           </div>
           <div className="rounded-full border border-emerald-400/20 bg-emerald-400/[0.07] px-3 py-1.5 text-xs text-emerald-200">
-            Read-only · no orders
+            Paper only · locked by default
           </div>
         </header>
 
@@ -185,6 +183,7 @@ const OptionsControlCenterPage: React.FC = () => {
                     onRemove={() => void remove(status.connection.connection_id)}
                     onActivate={() => setAuthorityConnection(status)}
                     onApply={() => void applyCertification(status)}
+                    onStartCertification={() => setCertificationConnection(status)}
                     onRevoke={() => void revokeAuthority(status.connection.connection_id)}
                   />
                 ))}
@@ -212,6 +211,13 @@ const OptionsControlCenterPage: React.FC = () => {
           status={authorityConnection}
           onClose={() => setAuthorityConnection(null)}
           onActivated={async () => { setAuthorityConnection(null); await load() }}
+        />
+      )}
+      {certificationConnection && (
+        <CertificationDialog
+          status={certificationConnection}
+          onClose={() => setCertificationConnection(null)}
+          onCompleted={async () => { setCertificationConnection(null); await load() }}
         />
       )}
     </div>
@@ -310,8 +316,9 @@ const AccountCard: React.FC<{
   onRemove(): void
   onActivate(): void
   onApply(): void
+  onStartCertification(): void
   onRevoke(): void
-}> = ({ status, busy, onVerify, onRemove, onActivate, onApply, onRevoke }) => {
+}> = ({ status, busy, onVerify, onRemove, onActivate, onApply, onStartCertification, onRevoke }) => {
   const { connection, provider_read_proof: proof } = status
   const connected = status.provider_read_fresh
   const provider = providerCopy[connection.provider]
@@ -341,10 +348,12 @@ const AccountCard: React.FC<{
           {status.manual_authority ? (
             <button type="button" onClick={onRevoke} disabled={busy} className="rounded-lg border border-rose-300/20 bg-rose-300/[0.06] px-3 py-2 text-xs text-rose-100 hover:bg-rose-300/[0.1] disabled:opacity-40">Lock now</button>
           ) : status.certification.state === 'applied' ? (
-            <button type="button" onClick={onActivate} disabled={busy} className="rounded-lg bg-violet-200 px-3 py-2 text-xs font-semibold text-black hover:bg-violet-100 disabled:opacity-40">Enable manual paper</button>
+            <button type="button" onClick={onActivate} disabled={busy || !connected} title={!connected ? 'Verify this account again first' : undefined} className="rounded-lg bg-violet-200 px-3 py-2 text-xs font-semibold text-black hover:bg-violet-100 disabled:opacity-40">Grant manual access</button>
           ) : status.certification.state === 'passed' ? (
-            <button type="button" onClick={onApply} disabled={busy} className="rounded-lg bg-emerald-200 px-3 py-2 text-xs font-semibold text-black hover:bg-emerald-100 disabled:opacity-40">Apply safety test</button>
-          ) : null}
+            <button type="button" onClick={onApply} disabled={busy || !connected} title={!connected ? 'Verify this account again first' : undefined} className="rounded-lg bg-emerald-200 px-3 py-2 text-xs font-semibold text-black hover:bg-emerald-100 disabled:opacity-40">Apply safety test</button>
+          ) : (
+            <button type="button" onClick={onStartCertification} disabled={busy || !connected} title={!connected ? 'Verify this account again first' : undefined} className="rounded-lg bg-violet-200 px-3 py-2 text-xs font-semibold text-black hover:bg-violet-100 disabled:opacity-40">Run paper test</button>
+          )}
           <button type="button" onClick={onRemove} disabled={busy} aria-label={`Remove ${connection.account_label}`} className="rounded-lg p-2 text-[#68727e] hover:bg-rose-400/[0.08] hover:text-rose-300"><Trash2 className="h-4 w-4" /></button>
         </div>
       </div>
@@ -352,16 +361,69 @@ const AccountCard: React.FC<{
         <div className="mt-4 grid grid-cols-2 gap-2 border-t border-white/[0.07] pt-4 sm:grid-cols-5">
           <SmallFact label="Positions" value={String(proof.position_count)} />
           <SmallFact label="Open orders" value={String(proof.open_order_count)} />
-          <SmallFact label="Options data" value={proof.option_quotes_realtime ? 'Live' : 'Not proven'} warn={!proof.option_quotes_realtime} />
+          <SmallFact label="Options data" value={status.certification.state === 'passed' || status.certification.state === 'applied' ? 'Proved in test' : 'Checked in paper test'} warn={status.certification.state === 'not-run'} />
           <SmallFact
             label="Safety test"
             value={status.certification.state === 'applied' ? 'Applied' : status.certification.state === 'passed' ? 'Passed · apply next' : status.certification.state === 'blocked' ? 'Needs attention' : 'Not run'}
             warn={status.certification.state !== 'applied'}
           />
-          <SmallFact label="Trading" value={status.manual_authority ? 'Manual paper only' : 'Locked'} />
+          <SmallFact label="Manual access" value={status.manual_authority ? 'Permission active' : 'Locked'} />
         </div>
       )}
     </article>
+  )
+}
+
+const CertificationDialog: React.FC<{ status: ConnectionStatus; onClose(): void; onCompleted(): Promise<void> }> = ({ status, onClose, onCompleted }) => {
+  const [underlying, setUnderlying] = useState('SPY')
+  const [expiration, setExpiration] = useState(() => {
+    const value = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000)
+    return value.toISOString().slice(0, 10)
+  })
+  const [strike, setStrike] = useState('')
+  const [right, setRight] = useState<'call' | 'put'>('call')
+  const [maxDebit, setMaxDebit] = useState('150')
+  const [confirmed, setConfirmed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const run = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!confirmed || !underlying.trim() || !expiration || !strike.trim() || !maxDebit.trim()) return
+    setBusy(true); setError(null)
+    try {
+      await window.electronAPI.startOptionsCertification({
+        connection_id: status.connection.connection_id,
+        max_test_debit: maxDebit.trim(),
+        expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        contract: { underlying: underlying.trim().toUpperCase(), expiration, strike: strike.trim(), right },
+        operator_confirmed: true,
+      })
+      await onCompleted()
+    } catch (cause) { setError(readableError(cause)) } finally { setBusy(false) }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Run paper safety test">
+      <form onSubmit={run} className="w-full max-w-lg rounded-2xl border border-white/[0.1] bg-[#12161b] p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div><div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300">Guided broker test</div><h2 className="mt-1 text-lg font-semibold">Test one paper option</h2></div>
+          <button type="button" onClick={onClose} aria-label="Close" className="p-2 text-[#75808d] hover:text-white"><X className="h-4 w-4" /></button>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-[#8993a0]">Trade God will place, cancel, buy, and sell one contract in your paper account, then prove the account is flat. Nothing here can use real money.</p>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <Field label="Ticker" value={underlying} onChange={setUnderlying} placeholder="SPY" />
+          <Field label="Expiration" value={expiration} onChange={setExpiration} placeholder="YYYY-MM-DD" />
+          <Field label="Strike" value={strike} onChange={setStrike} placeholder="650" />
+          <label className="grid gap-1.5 text-xs font-medium text-[#b7bec7]"><span>Type</span><select value={right} onChange={(event) => setRight(event.target.value as 'call' | 'put')} className="h-10 rounded-lg border border-white/[0.1] bg-[#090c10] px-3 text-sm text-white outline-none"><option value="call">Call</option><option value="put">Put</option></select></label>
+        </div>
+        <div className="mt-3"><Field label="Maximum test debit" value={maxDebit} onChange={setMaxDebit} placeholder="150" /></div>
+        <label className="mt-4 flex items-start gap-3 rounded-xl border border-amber-300/15 bg-amber-300/[0.05] p-3 text-xs leading-5 text-[#c8c0aa]">
+          <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-1" />
+          I understand this runs a real order lifecycle in {status.connection.account_label}, which is a paper/sandbox account only.
+        </label>
+        {error && <p className="mt-3 text-xs text-rose-200">{error}</p>}
+        <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="px-4 py-2 text-xs text-[#9ba4af]">Cancel</button><button disabled={!confirmed || busy || !strike.trim()} className="rounded-lg bg-white px-4 py-2 text-xs font-semibold text-black disabled:opacity-40">{busy ? 'Running test…' : 'Run paper test'}</button></div>
+      </form>
+    </div>
   )
 }
 
@@ -394,17 +456,17 @@ const ManualPaperDialog: React.FC<{ status: ConnectionStatus; onClose(): void; o
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Enable manual paper testing">
       <form onSubmit={activate} className="w-full max-w-md rounded-2xl border border-white/[0.1] bg-[#12161b] p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
-          <div><div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300">30-minute access</div><h2 className="mt-1 text-lg font-semibold">Enable manual paper testing</h2></div>
+          <div><div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300">30-minute permission</div><h2 className="mt-1 text-lg font-semibold">Grant manual paper access</h2></div>
           <button type="button" onClick={onClose} aria-label="Close" className="p-2 text-[#75808d] hover:text-white"><X className="h-4 w-4" /></button>
         </div>
-        <p className="mt-3 text-xs leading-5 text-[#8993a0]">Only the certified contract on {status.connection.account_label} is allowed. Discord automation stays off.</p>
+        <p className="mt-3 text-xs leading-5 text-[#8993a0]">This records permission for the exact tested contract on {status.connection.account_label}. Discord automation stays off. An order still needs a separate review and confirmation.</p>
         <div className="mt-5"><Field label="Maximum debit per order" value={maxDebit} onChange={setMaxDebit} placeholder="100" /></div>
         <label className="mt-4 flex items-start gap-3 rounded-xl border border-white/[0.08] bg-black/20 p-3 text-xs leading-5 text-[#aab2bc]">
           <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-1" />
           I understand every order still requires my confirmation and uses this paper/sandbox account only.
         </label>
         {error && <p className="mt-3 text-xs text-rose-200">{error}</p>}
-        <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} className="px-4 py-2 text-xs text-[#9ba4af]">Cancel</button><button disabled={!confirmed || busy} className="rounded-lg bg-white px-4 py-2 text-xs font-semibold text-black disabled:opacity-40">{busy ? 'Enabling…' : 'Enable for 30 minutes'}</button></div>
+        <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} className="px-4 py-2 text-xs text-[#9ba4af]">Cancel</button><button disabled={!confirmed || busy} className="rounded-lg bg-white px-4 py-2 text-xs font-semibold text-black disabled:opacity-40">{busy ? 'Granting…' : 'Grant for 30 minutes'}</button></div>
       </form>
     </div>
   )

@@ -733,12 +733,23 @@ Never collapse these into “done.”
 - Main-process status now distinguishes `passed` from `applied`, IPC/preload
   expose one bounded apply action, and runtime activation refuses to unlock
   manual paper trading until that apply step succeeds.
-- Verification: 33 focused execution and Electron tests passed with 1,849
-  expectations, including a runtime proof that `passed` stays locked and flips
-  to `applied` only after the trusted action. `bun run typecheck:all` and
-  `git diff --check` passed.
+- The Options Desk now starts the restricted test through a plain-language
+  confirmation modal. Provider credentials remain main-process only. Startup
+  finds and contains interrupted sessions before any account mutation is
+  available, and a fresh broker-account read is required before test, apply, or
+  manual permission changes.
+- The summary no longer claims the preliminary account read proves live option
+  quotes. Exact realtime quote entitlement is proved inside the guided broker
+  test. Until the separate manual order ticket is wired, the UI honestly labels
+  the next state as permission rather than executable trading.
+- Verification: 28 focused runner, connection, runtime, IPC, and preload tests
+  passed with 206 expectations; repository-wide typecheck and production
+  renderer build passed. Rival findings for the missing guided-test action,
+  stale verification gate, impossible quote-readiness state, and overstated
+  manual execution copy were fixed.
 - Not yet proven: a live provider certification run, operator UI smoke of the
-  apply flow, or any real IBKR/Webull paper mutation.
+  guided test/apply flow, or a separate confirmed manual order ticket. Webull
+  mutation remains blocked by design.
 
 # Multi-account connections and Discord routes — 2026-07-31
 

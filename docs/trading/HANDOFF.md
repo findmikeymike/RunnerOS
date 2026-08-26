@@ -31,7 +31,8 @@ Start with `audits/discord-signal-system-readiness-2026-08-10.md`.
   position/order counts, but grants no certification or execution authority.
 - Passed options provider certification is now still one step short of manual
   paper authority. The operator must explicitly apply the exact current retained
-  safety test for that account before `Enable manual paper` becomes valid.
+  guided safety test for that account, apply the result, then grant short-lived
+  manual permission. A separate manual order ticket is still the next slice.
 - Trusted UI actions can apply retained certification evidence and explicitly
   enable a paper account, but both keep persistent halts active. The final
   release is a checksum-bound review that re-proves all accounts flat under

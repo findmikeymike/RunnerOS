@@ -224,6 +224,32 @@ export class FileProviderOptionsCertificationCoordinator {
     return recovered
   }
 
+  async incompleteConnectionIds(): Promise<string[]> {
+    const sessionsDirectory = path.join(this.root, 'options-certification-sessions')
+    let sessionIds: string[]
+    try { sessionIds = (await readdir(sessionsDirectory)).filter((name) => name.startsWith('options-cert-session-')).sort() } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw error
+    }
+    const connectionIds = new Set<string>()
+    for (const sessionId of sessionIds) {
+      const firstFile = path.join(sessionsDirectory, sessionId, '0001.json')
+      let first: Record<string, unknown>
+      try { first = record(JSON.parse(await readFile(firstFile, 'utf8'))) } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
+        throw error
+      }
+      const connectionId = typeof first.connection_id === 'string' ? first.connection_id : ''
+      if (!connectionId) throw new Error('Interrupted certification has no exact connection identity.')
+      const journal = new FileOptionsCertificationJournal(this.root, sessionId, connectionId)
+      const events = await journal.list()
+      if (!events.some((event) => event.scenario === 'session' && (event.phase === 'completed' || event.phase === 'failed'))) {
+        connectionIds.add(connectionId)
+      }
+    }
+    return [...connectionIds].sort()
+  }
+
   private async recoverJournal(
     journal: FileOptionsCertificationJournal,
     events: JournalEvent[],

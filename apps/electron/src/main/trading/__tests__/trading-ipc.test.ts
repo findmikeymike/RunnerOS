@@ -105,6 +105,10 @@ describe('Trade God IPC registration', () => {
       saveOptionsConnection: async () => { calls.push('options:save'); return { connection: { connection_id: 'options-one' } } as any },
       verifyOptionsConnection: async (id) => { calls.push(`options:verify:${id}`); return { provider_read_verified: true } as any },
       removeOptionsConnection: async (id) => { calls.push(`options:remove:${id}`); return true },
+      startOptionsCertification: async (input) => {
+        calls.push(`options:certification:start:${input.connection_id}:${input.contract.underlying}`)
+        return { connection: { connection_id: input.connection_id }, certification: { state: 'passed' } } as any
+      },
       applyOptionsCertification: async (id, certificationId, confirmed) => {
         calls.push(`options:certification:apply:${id}:${certificationId}:${confirmed}`)
         return { connection: { connection_id: id }, certification: { state: 'applied' } } as any
@@ -161,6 +165,7 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.SAVE_OPTIONS_CONNECTION,
       TRADE_GOD_IPC.VERIFY_OPTIONS_CONNECTION,
       TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION,
+      TRADE_GOD_IPC.START_OPTIONS_CERTIFICATION,
       TRADE_GOD_IPC.APPLY_OPTIONS_CERTIFICATION,
       TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY,
       TRADE_GOD_IPC.REVOKE_OPTIONS_MANUAL_AUTHORITY,
@@ -231,6 +236,10 @@ describe('Trade God IPC registration', () => {
     expect(await ipc.handlers.get(TRADE_GOD_IPC.VERIFY_OPTIONS_CONNECTION)!({}, 'options-one'))
       .toEqual({ provider_read_verified: true })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION)!({}, 'options-one')).toBe(true)
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.START_OPTIONS_CERTIFICATION)!({}, {
+      connection_id: 'options-one', max_test_debit: '150', expires_at: '2026-08-26T01:15:00.000Z',
+      contract: { underlying: 'SPY', expiration: '2026-09-18', strike: '650', right: 'call' }, operator_confirmed: true,
+    })).toMatchObject({ certification: { state: 'passed' } })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.APPLY_OPTIONS_CERTIFICATION)!({}, 'options-one', 'options-cert-one', true))
       .toMatchObject({ certification: { state: 'applied' } })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY)!(
@@ -272,6 +281,7 @@ describe('Trade God IPC registration', () => {
       'options:save',
       'options:verify:options-one',
       'options:remove:options-one',
+      'options:certification:start:options-one:SPY',
       'options:certification:apply:options-one:options-cert-one:true',
       'options:authority:activate:options-one:100:2026-08-26T01:30:00.000Z:true',
       'options:authority:revoke:options-one',
@@ -347,6 +357,7 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.SAVE_OPTIONS_CONNECTION,
       TRADE_GOD_IPC.VERIFY_OPTIONS_CONNECTION,
       TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION,
+      TRADE_GOD_IPC.START_OPTIONS_CERTIFICATION,
       TRADE_GOD_IPC.APPLY_OPTIONS_CERTIFICATION,
       TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY,
       TRADE_GOD_IPC.REVOKE_OPTIONS_MANUAL_AUTHORITY,

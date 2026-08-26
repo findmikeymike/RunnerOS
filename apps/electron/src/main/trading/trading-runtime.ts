@@ -72,12 +72,16 @@ import {
   ExecutionReconciliationSupervisor,
   FileOptionsCertificationStore,
   FileOptionsCertificationApplicationStore,
+  FileProviderOptionsCertificationCoordinator,
+  IbkrOptionsAdapter,
+  WebullOptionsAdapter,
   FileOptionsManualAuthorityStore,
   type DiscoTraderIntentRoute,
   type ExecutionAdapter,
   type TradovateUserSyncGap,
   type DiscordManagementDispatchResult,
   type SaveMirrorGroupInput,
+  type OptionsProviderAdapter,
 } from '@trade-god/execution'
 
 import type {
@@ -126,6 +130,7 @@ interface RuntimeOptions extends ResolveLaunchOptions {
   executionAdapters?: ExecutionAdapter[]
   enableTradovatePaperAdapter?: boolean
   optionsSingleInstanceAuthority?: boolean
+  optionsProviderAdapterFactory?: (connection: import('@trade-god/contracts').OptionsConnection, credential: Record<string, string>) => OptionsProviderAdapter
   discoTraderConnectionId?: string
   discoTraderIntentValidityMs?: number
   credentialVault?: TradingCredentialVault
@@ -477,7 +482,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     : undefined
 
   const listOptionsConnectionStatuses = async () => {
-    await optionsAuthorityRecoveryReady
+    await Promise.all([optionsAuthorityRecoveryReady, optionsCertificationRecoveryReady])
     const statuses = await optionsConnectionService!.list()
     return Promise.all(statuses.map(async (status) => {
       const [allEvidence, eligible, application, authority] = await Promise.all([
@@ -529,6 +534,51 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     if (!status) throw new Error('Options account was not found.')
     return status.connection
   }
+  const freshOptionsConnectionById = async (connectionId: string) => {
+    const status = (await optionsConnectionService!.list()).find((candidate) => candidate.connection.connection_id === connectionId)
+    if (!status) throw new Error('Options account was not found.')
+    if (!status.provider_read_fresh) throw new Error('Verify this broker account again before changing paper-trading access.')
+    return status.connection
+  }
+  const optionsProviderAdapter = async (connectionId: string): Promise<{ connection: Awaited<ReturnType<typeof optionsConnectionById>>; adapter: OptionsProviderAdapter }> => {
+    const { connection, credential } = await optionsConnectionService!.resolveMainProcessCredential(connectionId)
+    const adapter = options.optionsProviderAdapterFactory
+      ? options.optionsProviderAdapterFactory(connection, credential)
+      : connection.provider === 'ibkr'
+      ? new IbkrOptionsAdapter({
+          connection_id: connection.connection_id,
+          account_id: connection.account_ref,
+          access_token: credential.access_token!,
+          credential_generation: connection.credential_generation,
+          now: options.now,
+        })
+      : new WebullOptionsAdapter({
+          connection_id: connection.connection_id,
+          account_id: connection.account_ref,
+          app_key: credential.app_key!,
+          app_secret: credential.app_secret!,
+          ...(credential.access_token ? { access_token: credential.access_token } : {}),
+          credential_generation: connection.credential_generation,
+          now: options.now,
+        })
+    return { connection, adapter }
+  }
+  const optionsCertificationCoordinator = optionsEvidenceRoot
+    ? new FileProviderOptionsCertificationCoordinator(optionsEvidenceRoot, options.now)
+    : undefined
+  const optionsCertificationRecoveryReady = optionsCertificationCoordinator
+    ? (async () => {
+        const connectionIds = await optionsCertificationCoordinator.incompleteConnectionIds()
+        if (connectionIds.length > 0 && options.optionsSingleInstanceAuthority !== true) {
+          throw new Error('Interrupted options safety tests require desktop single-instance recovery authority.')
+        }
+        for (const connectionId of connectionIds) {
+          const { connection, adapter } = await optionsProviderAdapter(connectionId)
+          await optionsCertificationCoordinator.recoverIncompleteSessions(connection, adapter, true)
+        }
+      })()
+    : Promise.resolve()
+  void optionsCertificationRecoveryReady.catch(() => undefined)
   const executionGateway = executionStore && tradingConnectionStore
     ? new ExecutionGateway({
         store: executionStore,
@@ -1042,21 +1092,24 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       ? {
           listOptionsConnections: () => listOptionsConnectionStatuses(),
           saveOptionsConnection: (input) => withOptionsMutation(async () => {
+            await optionsCertificationRecoveryReady
             if (input.connection_id) await optionsManualAuthorityStore!.revokeForConnection(input.connection_id, 'credential-change')
             return optionsConnectionService.save(input)
           }),
           verifyOptionsConnection: (connectionId) => withOptionsMutation(async () => {
+            await optionsCertificationRecoveryReady
             await optionsManualAuthorityStore!.revokeForConnection(connectionId, 'account-change')
             return optionsConnectionService.verify(connectionId)
           }),
           removeOptionsConnection: (connectionId) => withOptionsMutation(async () => {
+            await optionsCertificationRecoveryReady
             await optionsManualAuthorityStore!.revokeForConnection(connectionId, 'operator')
             return optionsConnectionService.remove(connectionId)
           }),
           applyOptionsCertification: (connectionId, certificationId, operatorConfirmed) => withOptionsMutation(async () => {
-            await optionsAuthorityRecoveryReady
+            await Promise.all([optionsAuthorityRecoveryReady, optionsCertificationRecoveryReady])
             await optionsManualAuthorityStore!.revokeForConnection(connectionId, 'account-change')
-            const connection = await optionsConnectionById(connectionId)
+            const connection = await freshOptionsConnectionById(connectionId)
             await optionsCertificationApplicationStore!.apply({
               connection,
               certification_id: certificationId,
@@ -1066,9 +1119,27 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             if (!status) throw new Error('Options account disappeared after applying its safety test.')
             return status
           }),
+          startOptionsCertification: (input) => withOptionsMutation(async () => {
+            await Promise.all([optionsAuthorityRecoveryReady, optionsCertificationRecoveryReady])
+            const current = await freshOptionsConnectionById(input.connection_id)
+            await optionsManualAuthorityStore!.revokeForConnection(current.connection_id, 'account-change')
+            const { connection, adapter } = await optionsProviderAdapter(current.connection_id)
+            if (connection.content_checksum !== current.content_checksum) throw new Error('Options account changed before the safety test started.')
+            await optionsCertificationCoordinator!.recoverIncompleteSessions(connection, adapter, options.optionsSingleInstanceAuthority === true)
+            await optionsCertificationCoordinator!.run({
+              connection,
+              max_test_debit: input.max_test_debit,
+              expires_at: input.expires_at,
+              contract: input.contract,
+              operator_confirmed: input.operator_confirmed,
+            }, adapter)
+            const status = (await listOptionsConnectionStatuses()).find((candidate) => candidate.connection.connection_id === connection.connection_id)
+            if (!status) throw new Error('Options account disappeared after its safety test.')
+            return status
+          }),
           activateOptionsManualAuthority: (connectionId, maxDebit, validUntil, operatorConfirmed) => withOptionsMutation(async () => {
-            await optionsAuthorityRecoveryReady
-            const connection = await optionsConnectionById(connectionId)
+            await Promise.all([optionsAuthorityRecoveryReady, optionsCertificationRecoveryReady])
+            const connection = await freshOptionsConnectionById(connectionId)
             const certification = await optionsCertificationStore!.getEligible(connection, options.now())
             if (!certification) throw new Error('This account has no current retained paper safety certification.')
             const application = await optionsCertificationApplicationStore!.getActive(connection, options.now())
@@ -1087,7 +1158,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             return status
           }),
           revokeOptionsManualAuthority: (connectionId) => withOptionsMutation(async () => {
-            await optionsAuthorityRecoveryReady
+            await Promise.all([optionsAuthorityRecoveryReady, optionsCertificationRecoveryReady])
             await optionsManualAuthorityStore!.revokeForConnection(connectionId, 'operator')
             const status = (await listOptionsConnectionStatuses()).find((candidate) => candidate.connection.connection_id === connectionId)
             if (!status) throw new Error('Options account was not found after manual paper lock.')
