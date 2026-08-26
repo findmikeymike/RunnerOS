@@ -40,7 +40,7 @@ export interface OptionsConnectionStatus {
   provider_read_verified: boolean
   provider_read_fresh: boolean
   certification: {
-    state: 'not-run' | 'blocked' | 'eligible'
+    state: 'not-run' | 'blocked' | 'passed' | 'applied'
     certification_id?: string
     expires_at?: string
     allowed_contract_id?: string

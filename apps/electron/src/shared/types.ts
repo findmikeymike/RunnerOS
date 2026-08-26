@@ -500,6 +500,7 @@ export interface ElectronAPI {
   saveOptionsConnection(input: import('../main/trading/options-connection-service').SaveOptionsConnectionInput): Promise<import('../main/trading/options-connection-service').OptionsConnectionStatus>
   verifyOptionsConnection(connectionId: string): Promise<import('../main/trading/options-connection-service').OptionsConnectionStatus>
   removeOptionsConnection(connectionId: string): Promise<boolean>
+  applyOptionsCertification(connectionId: string, certificationId: string, operatorConfirmed: true): Promise<import('../main/trading/options-connection-service').OptionsConnectionStatus>
   activateOptionsManualAuthority(connectionId: string, maxDebit: string, validUntil: string, operatorConfirmed: true): Promise<import('../main/trading/options-connection-service').OptionsConnectionStatus>
   revokeOptionsManualAuthority(connectionId: string): Promise<import('../main/trading/options-connection-service').OptionsConnectionStatus>
 

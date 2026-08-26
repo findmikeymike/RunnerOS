@@ -23,7 +23,8 @@ export const OPTIONS_EXECUTION_RECORD_SCHEMA_VERSION = 'options-execution-record
 export const OPTIONS_CONNECTION_SCHEMA_VERSION = 'options-connection@1' as const
 export const OPTIONS_PROVIDER_READ_PROOF_SCHEMA_VERSION = 'options-provider-read-proof@1' as const
 export const OPTIONS_CERTIFICATION_EVIDENCE_SCHEMA_VERSION = 'options-certification-evidence@2' as const
-export const OPTIONS_MANUAL_PAPER_AUTHORITY_SCHEMA_VERSION = 'options-manual-paper-authority@1' as const
+export const OPTIONS_CERTIFICATION_APPLICATION_SCHEMA_VERSION = 'options-certification-application@1' as const
+export const OPTIONS_MANUAL_PAPER_AUTHORITY_SCHEMA_VERSION = 'options-manual-paper-authority@2' as const
 export const OPTIONS_AUTHORITY_REVOCATION_SCHEMA_VERSION = 'options-authority-revocation@1' as const
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD').refine((value) => {
@@ -182,6 +183,30 @@ export const optionsCertificationEvidenceSchema = z.object({
   }
 })
 
+export const optionsCertificationApplicationSchema = z.object({
+  application_schema_version: z.literal(OPTIONS_CERTIFICATION_APPLICATION_SCHEMA_VERSION),
+  application_id: identifierSchema,
+  connection_id: identifierSchema,
+  connection_checksum: sha256Schema,
+  credential_generation: sha256Schema,
+  certification_id: identifierSchema,
+  certification_checksum: sha256Schema,
+  certification_expires_at: utcTimestampSchema,
+  provider: optionsProviderSchema,
+  environment: z.enum(['paper', 'sandbox']),
+  account_ref: z.string().min(1).max(120),
+  adapter_id: identifierSchema,
+  adapter_version: z.string().regex(/^\d+\.\d+\.\d+$/),
+  provider_contract_version: identifierSchema,
+  applied_at: utcTimestampSchema,
+  operator_confirmed: z.literal(true),
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (Date.parse(value.certification_expires_at) <= Date.parse(value.applied_at)) {
+    context.addIssue({ code: 'custom', path: ['certification_expires_at'], message: 'Applied certification is already expired' })
+  }
+})
+
 export const optionsManualPaperAuthoritySchema = z.object({
   authority_schema_version: z.literal(OPTIONS_MANUAL_PAPER_AUTHORITY_SCHEMA_VERSION),
   authority_id: identifierSchema,
@@ -191,6 +216,8 @@ export const optionsManualPaperAuthoritySchema = z.object({
   certification_id: identifierSchema,
   certification_checksum: sha256Schema,
   certification_expires_at: utcTimestampSchema,
+  certification_application_id: identifierSchema,
+  certification_application_checksum: sha256Schema,
   provider: optionsProviderSchema,
   environment: z.enum(['paper', 'sandbox']),
   account_ref: z.string().min(1).max(120),
@@ -954,5 +981,6 @@ export type OptionsConnection = z.infer<typeof optionsConnectionSchema>
 export type OptionsProviderReadProof = z.infer<typeof optionsProviderReadProofSchema>
 export type OptionsCertificationScenario = z.infer<typeof optionsCertificationScenarioSchema>
 export type OptionsCertificationEvidence = z.infer<typeof optionsCertificationEvidenceSchema>
+export type OptionsCertificationApplication = z.infer<typeof optionsCertificationApplicationSchema>
 export type OptionsManualPaperAuthority = z.infer<typeof optionsManualPaperAuthoritySchema>
 export type OptionsAuthorityRevocation = z.infer<typeof optionsAuthorityRevocationSchema>

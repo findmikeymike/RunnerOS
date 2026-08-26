@@ -719,6 +719,27 @@ Never collapse these into “done.”
 - Not yet proven: a live IBKR/Webull provider certification, trusted application
   of that certification in the desktop, or an operator-confirmed real paper
   order. Webull mutation remains intentionally blocked.
+
+## Options Autopilot Slice 6C — Trusted Certification Application — 2026-08-26
+
+- Passing the restricted paper test no longer makes an account execution-ready
+  by itself. The desktop now exposes a separate trusted `Apply safety test`
+  action that binds the latest eligible certification to the exact current
+  account, credential generation, adapter, provider contract, and expiry window.
+- Manual paper authority now requires that applied certification record in
+  addition to the retained certification evidence. A merely passed test remains
+  visibly locked. If credentials drift, the retained test changes, or the
+  applied record expires, runtime treats the account as not applied.
+- Main-process status now distinguishes `passed` from `applied`, IPC/preload
+  expose one bounded apply action, and runtime activation refuses to unlock
+  manual paper trading until that apply step succeeds.
+- Verification: 33 focused execution and Electron tests passed with 1,849
+  expectations, including a runtime proof that `passed` stays locked and flips
+  to `applied` only after the trusted action. `bun run typecheck:all` and
+  `git diff --check` passed.
+- Not yet proven: a live provider certification run, operator UI smoke of the
+  apply flow, or any real IBKR/Webull paper mutation.
+
 # Multi-account connections and Discord routes — 2026-07-31
 
 - Multiple prop firms/accounts can coexist; connection identity remains exact

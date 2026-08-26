@@ -93,6 +93,7 @@ export interface TradingPreloadApi {
   saveOptionsConnection(input: SaveOptionsConnectionInput): Promise<OptionsConnectionStatus>
   verifyOptionsConnection(connectionId: string): Promise<OptionsConnectionStatus>
   removeOptionsConnection(connectionId: string): Promise<boolean>
+  applyOptionsCertification(connectionId: string, certificationId: string, operatorConfirmed: true): Promise<OptionsConnectionStatus>
   activateOptionsManualAuthority(connectionId: string, maxDebit: string, validUntil: string, operatorConfirmed: true): Promise<OptionsConnectionStatus>
   revokeOptionsManualAuthority(connectionId: string): Promise<OptionsConnectionStatus>
 }
@@ -220,6 +221,9 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
     ),
     removeOptionsConnection: (connectionId) => (
       invoke(TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION, connectionId) as Promise<boolean>
+    ),
+    applyOptionsCertification: (connectionId, certificationId, operatorConfirmed) => (
+      invoke(TRADE_GOD_IPC.APPLY_OPTIONS_CERTIFICATION, connectionId, certificationId, operatorConfirmed) as Promise<OptionsConnectionStatus>
     ),
     activateOptionsManualAuthority: (connectionId, maxDebit, validUntil, operatorConfirmed) => (
       invoke(TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY, connectionId, maxDebit, validUntil, operatorConfirmed) as Promise<OptionsConnectionStatus>

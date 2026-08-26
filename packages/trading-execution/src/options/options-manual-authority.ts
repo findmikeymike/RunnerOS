@@ -17,6 +17,7 @@ import {
 import { canonicalJson, sha256 } from '../canonical.ts'
 import { FixedDecimal } from './fixed-decimal.ts'
 import { FileOptionsCertificationStore } from './options-certification.ts'
+import { FileOptionsCertificationApplicationStore } from './options-certification-application.ts'
 
 export interface ActivateManualPaperAuthorityInput {
   connection: OptionsConnection
@@ -31,12 +32,14 @@ export class FileOptionsManualAuthorityStore {
   private readonly revocationsDirectory: string
   private readonly locksDirectory: string
   private readonly certifications: FileOptionsCertificationStore
+  private readonly applications: FileOptionsCertificationApplicationStore
 
   constructor(private readonly root: string, private readonly now: () => string = () => new Date().toISOString()) {
     this.activationsDirectory = path.join(root, 'options-authorities', 'activations')
     this.revocationsDirectory = path.join(root, 'options-authorities', 'revocations')
     this.locksDirectory = path.join(root, 'options-authorities', 'locks')
     this.certifications = new FileOptionsCertificationStore(root)
+    this.applications = new FileOptionsCertificationApplicationStore(root, now)
   }
 
   async activate(input: ActivateManualPaperAuthorityInput): Promise<OptionsManualPaperAuthority> {
@@ -44,6 +47,11 @@ export class FileOptionsManualAuthorityStore {
     const timestamp = this.now()
     const certification = await this.certifications.getEligible(connection, timestamp)
     if (certification?.certification_id !== input.certification_id) throw new Error('Retained options certification was not found.')
+    const application = await this.applications.getActive(connection, timestamp)
+    if (!application || application.certification_id !== certification.certification_id
+      || application.certification_checksum !== certification.content_checksum) {
+      throw new Error('The exact paper safety test has not been applied to this account.')
+    }
     if (input.operator_confirmed !== true) throw new Error('Manual paper authority requires explicit operator confirmation.')
     this.assertCertification(connection, certification)
     if (Date.parse(certification.expires_at) <= Date.parse(timestamp)) throw new Error('Options certification is expired.')
@@ -65,6 +73,8 @@ export class FileOptionsManualAuthorityStore {
       certification_id: certification.certification_id,
       certification_checksum: certification.content_checksum,
       certification_expires_at: certification.expires_at,
+      certification_application_id: application.application_id,
+      certification_application_checksum: application.content_checksum,
       provider: connection.provider,
       environment: connection.environment,
       account_ref: connection.account_ref,
@@ -113,15 +123,19 @@ export class FileOptionsManualAuthorityStore {
 
   async getActive(connection: OptionsConnection, at = this.now()): Promise<OptionsManualPaperAuthority | undefined> {
     const verifiedConnection = verifyConnection(connection)
-    const [authorities, revocations] = await Promise.all([
+    const [authorities, revocations, application] = await Promise.all([
       this.listAuthorities(verifiedConnection.connection_id),
       this.listRevocations(verifiedConnection.connection_id),
+      this.applications.getActive(verifiedConnection, at),
     ])
+    if (!application) return undefined
     const revoked = new Set(revocations.map((item) => item.authority_id))
     const active = authorities.filter((authority) => (
       !revoked.has(authority.authority_id)
       && authority.connection_checksum === verifiedConnection.content_checksum
       && authority.credential_generation === verifiedConnection.credential_generation
+      && authority.certification_application_id === application.application_id
+      && authority.certification_application_checksum === application.content_checksum
       && authority.provider === verifiedConnection.provider
       && authority.environment === verifiedConnection.environment
       && authority.account_ref === verifiedConnection.account_ref

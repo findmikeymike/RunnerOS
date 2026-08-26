@@ -29,6 +29,9 @@ Start with `audits/discord-signal-system-readiness-2026-08-10.md`.
 - The account UI can run a trusted read-only provider verification. Its
   append-only proof confirms exact account/environment/tradability and safe
   position/order counts, but grants no certification or execution authority.
+- Passed options provider certification is now still one step short of manual
+  paper authority. The operator must explicitly apply the exact current retained
+  safety test for that account before `Enable manual paper` becomes valid.
 - Trusted UI actions can apply retained certification evidence and explicitly
   enable a paper account, but both keep persistent halts active. The final
   release is a checksum-bound review that re-proves all accounts flat under

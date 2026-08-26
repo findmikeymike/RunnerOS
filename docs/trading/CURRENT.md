@@ -99,6 +99,14 @@ The workbench can request engine health, run the known fixture, and display tota
   install still cannot pass this gate until real provider lifecycle evidence is
   produced; no synthetic evidence or weakened certification is accepted.
 
+- Split options paper readiness into two separate trusted states. A restricted
+  provider certification can now be `passed` without being usable; the operator
+  must explicitly `Apply safety test` for that exact account, credential
+  generation, adapter, and current retained certification before manual paper
+  controls unlock. Runtime status, IPC/preload, and the Options page now expose
+  that distinction, and manual authority fails closed if the applied record no
+  longer matches the exact current retained test.
+
 - Implemented the dormant Mirror management foundation. One durable family
   resolver evaluates standalone and Mirror lineage together before dispatch;
   cross-family ambiguity produces zero mutation and deferred exact replies can

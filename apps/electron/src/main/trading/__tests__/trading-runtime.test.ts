@@ -6,18 +6,29 @@ import path from 'node:path'
 import {
   CANONICAL_ORDER_FLOW_CONFIGURATION,
   EXECUTION_AUTHORIZATION_SCHEMA_VERSION,
+  OPTIONS_CONNECTION_SCHEMA_VERSION,
+  OPTIONS_PROVIDER_READ_PROOF_SCHEMA_VERSION,
   TRADING_CONNECTION_SCHEMA_VERSION,
+  optionsConnectionSchema,
+  optionsProviderReadProofSchema,
+  type OptionsConnection,
   type TradingConnection,
 } from '@trade-god/contracts'
 import {
   buildDiscordManagementMessage,
   FileExecutionStore,
   FileMirrorGroupStore,
+  FileOptionsCertificationJournal,
+  FileOptionsCertificationStore,
   FileTradingConnectionStore,
+  runRestrictedOptionsCertification,
+  sha256,
+  type RestrictedOptionsCertificationRunner,
 } from '@trade-god/execution'
 import { loadEsDemoFixture } from '@trade-god/testkit'
 
 import { TRADE_GOD_IPC } from '../trading-ipc.ts'
+import { OptionsConnectionService, type OptionsProviderReadVerifier } from '../options-connection-service.ts'
 import {
   createTradeGodRuntime,
   haltAfterTradovateUserSyncGap,
@@ -521,6 +532,78 @@ test('fails clearly when no sidecar entrypoint exists', () => {
     .toThrow('Market Data sidecar runtime was not found')
 })
 
+test('runtime keeps passed options certification locked until the exact test is explicitly applied', async () => {
+  let runtimeNow = '2026-08-26T12:00:00.000Z'
+  const connectionDirectory = mkdtempSync(path.join(tmpdir(), 'trade-god-options-runtime-'))
+  const executionDirectory = mkdtempSync(path.join(tmpdir(), 'trade-god-options-execution-'))
+  const vaultValues = new Map<string, string>()
+  const vault = {
+    getSecret: async (name: string) => vaultValues.get(name) ?? null,
+    setSecret: async (name: string, value: string) => { vaultValues.set(name, value) },
+    compareAndSetSecret: async (name: string, expected: string | null, value: string) => {
+      const current = vaultValues.get(name) ?? null
+      if (current !== expected) return false
+      vaultValues.set(name, value)
+      return true
+    },
+    deleteSecret: async (name: string) => vaultValues.delete(name),
+  }
+  const verifier: OptionsProviderReadVerifier = {
+    verify: async (connection) => optionsReadProof(connection, runtimeNow),
+  }
+  const optionsRoot = path.join(connectionDirectory, 'options')
+  const service = new OptionsConnectionService(optionsRoot, vault, verifier, () => runtimeNow)
+  const saved = await service.save({
+    provider: 'ibkr',
+    account_ref: 'DU1234567',
+    account_label: 'IBKR Paper',
+    credential: JSON.stringify({ access_token: 'secret-access-token-value-1234' }),
+  })
+  const verified = await service.verify(saved.connection.connection_id)
+  const certification = await retainEligibleOptionsCertification(optionsRoot, verified.connection)
+  await new FileOptionsCertificationStore(optionsRoot).save(certification)
+
+  const ipc = new FakeIpcMain()
+  const runtime = createTradeGodRuntime({
+    ipcMain: ipc,
+    rootCandidates: [repoRoot],
+    runtimeExecutable: process.execPath,
+    now: () => runtimeNow,
+    connectionDirectory,
+    executionDirectory,
+    credentialVault: vault,
+    alertPort: -1,
+  })
+
+  try {
+    const beforeApply = await ipc.handlers.get(TRADE_GOD_IPC.LIST_OPTIONS_CONNECTIONS)!({})
+    expect(beforeApply).toHaveLength(1)
+    expect(beforeApply[0]).toMatchObject({
+      connection: { connection_id: verified.connection.connection_id },
+      certification: {
+        state: 'passed',
+        certification_id: certification.certification_id,
+      },
+    })
+    await expect(ipc.handlers.get(TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY)!({
+    }, verified.connection.connection_id, '150', '2026-08-26T12:20:00.000Z', true))
+      .rejects.toThrow('Apply the current paper safety test before enabling manual orders.')
+
+    const applied = await ipc.handlers.get(TRADE_GOD_IPC.APPLY_OPTIONS_CERTIFICATION)!({
+    }, verified.connection.connection_id, certification.certification_id, true)
+    expect(applied).toMatchObject({
+      certification: {
+        state: 'applied',
+        certification_id: certification.certification_id,
+      },
+    })
+  } finally {
+    await runtime.dispose()
+    rmSync(connectionDirectory, { recursive: true, force: true })
+    rmSync(executionDirectory, { recursive: true, force: true })
+  }
+})
+
 test('resolves only explicit futures month/year symbols to canonical expiry', () => {
   expect(resolveFuturesContractIdentity('ESU6', '2026-08-10T00:00:00.000Z')).toEqual({
     root: 'ES', symbol: 'ESU6', expiry: '2026-09', active: true,
@@ -759,6 +842,70 @@ test('route coordinator validates Mirror Group targets and protects current grou
   })).rejects.toThrow('active Mirror Group revisions')
   expect(removeConnectionCalled).toBe(false)
 })
+
+const retainEligibleOptionsCertification = async (root: string, connection: OptionsConnection) => {
+  const sessionId = 'options-cert-session-runtime'
+  const journal = new FileOptionsCertificationJournal(root, sessionId, connection.connection_id)
+  const finalFlat = await journal.append('final-flat-zero-orders', 'completed', { flat: true }, '2026-08-26T12:00:01.000Z')
+  const runner: RestrictedOptionsCertificationRunner = {
+    certification_session_id: sessionId,
+    connection_id: connection.connection_id,
+    account_ref: connection.account_ref,
+    provider: connection.provider,
+    environment: connection.environment,
+    adapter_id: connection.adapter_id,
+    adapter_version: connection.adapter_version,
+    provider_contract_version: connection.provider_contract_version,
+    allowed_contract_id: 'USOPT:SPY:2026-09-18:C:650',
+    allowed_provider_instrument_id: '123456789',
+    client_order_prefix: 'tgcert-runtime',
+    runScenario: async (scenario) => ({ status: 'pass', detail: scenario, evidence: { scenario } }),
+    finalTruth: async () => ({ position_quantity: 0, working_order_count: 0, mutation_count: 4, evidence: { flat: true } }),
+    journalHeadChecksum: async () => finalFlat.content_checksum,
+  }
+  const evidence = await runRestrictedOptionsCertification({
+    connection,
+    max_test_debit: '150',
+    expires_at: '2026-08-26T12:30:00.000Z',
+  }, runner, () => '2026-08-26T12:00:02.000Z')
+  await journal.append('session', 'completed', {
+    certification_id: evidence.certification_id,
+    certification_checksum: evidence.content_checksum,
+  }, '2026-08-26T12:00:03.000Z')
+  return evidence
+}
+
+const optionsReadProof = (connection: OptionsConnection, verifiedAt: string) => {
+  const unsigned = {
+    proof_schema_version: OPTIONS_PROVIDER_READ_PROOF_SCHEMA_VERSION,
+    proof_id: 'proof-options-runtime',
+    connection_id: connection.connection_id,
+    connection_checksum: connection.content_checksum,
+    credential_generation: connection.credential_generation,
+    adapter_id: connection.adapter_id,
+    adapter_version: connection.adapter_version,
+    provider_contract_version: connection.provider_contract_version,
+    provider: connection.provider,
+    environment: connection.environment,
+    account_ref: connection.account_ref,
+    account_label: connection.account_label,
+    authenticated: true,
+    account_matched: true,
+    balances_readable: true,
+    positions_readable: true,
+    open_orders_readable: true,
+    option_contracts_readable: false,
+    option_quotes_readable: false,
+    option_quotes_realtime: false,
+    position_count: 0,
+    open_order_count: 0,
+    currency: 'USD',
+    verified_at: verifiedAt,
+    expires_at: new Date(Date.parse(verifiedAt) + 10 * 60 * 1000).toISOString(),
+    safe_evidence: ['Exact paper account matched'],
+  }
+  return optionsProviderReadProofSchema.parse({ ...unsigned, content_checksum: sha256(unsigned) })
+}
 
 test('route coordinator rejects enabled inactive and all archived Mirror Group routes', async () => {
   let groupState: 'draft' | 'archived' = 'draft'

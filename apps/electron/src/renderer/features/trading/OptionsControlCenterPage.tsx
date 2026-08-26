@@ -59,14 +59,17 @@ const OptionsControlCenterPage: React.FC = () => {
 
   const verified = connections.filter((item) => item.provider_read_fresh).length
   const liveData = connections.filter((item) => item.provider_read_fresh && item.provider_read_proof?.option_quotes_realtime).length
-  const certified = connections.filter((item) => item.certification.state === 'eligible').length
+  const certified = connections.filter((item) => item.certification.state === 'applied').length
+  const passed = connections.filter((item) => item.certification.state === 'passed').length
   const nextStep = connections.length === 0
     ? 'Connect a paper account'
     : verified === 0
       ? 'Verify your saved account'
       : liveData === 0
         ? 'Check live options data'
-        : certified === 0
+        : passed > 0
+          ? 'Apply the passed safety test'
+          : certified === 0
           ? 'Run the guided paper test'
           : 'Manual paper testing is available'
 
@@ -101,6 +104,17 @@ const OptionsControlCenterPage: React.FC = () => {
     setBusyId(connectionId)
     try {
       await window.electronAPI.revokeOptionsManualAuthority(connectionId)
+      await load()
+    } catch (cause) { setError(readableError(cause)) } finally { setBusyId(null) }
+  }
+
+  const applyCertification = async (status: ConnectionStatus) => {
+    if (!status.certification.certification_id) return
+    if (!window.confirm(`Apply this passed paper safety test to ${status.connection.account_label}? This does not place orders or enable Discord automation.`)) return
+    setBusyId(status.connection.connection_id)
+    setError(null)
+    try {
+      await window.electronAPI.applyOptionsCertification(status.connection.connection_id, status.certification.certification_id, true)
       await load()
     } catch (cause) { setError(readableError(cause)) } finally { setBusyId(null) }
   }
@@ -170,6 +184,7 @@ const OptionsControlCenterPage: React.FC = () => {
                     onVerify={() => void verify(status.connection.connection_id)}
                     onRemove={() => void remove(status.connection.connection_id)}
                     onActivate={() => setAuthorityConnection(status)}
+                    onApply={() => void applyCertification(status)}
                     onRevoke={() => void revokeAuthority(status.connection.connection_id)}
                   />
                 ))}
@@ -294,8 +309,9 @@ const AccountCard: React.FC<{
   onVerify(): void
   onRemove(): void
   onActivate(): void
+  onApply(): void
   onRevoke(): void
-}> = ({ status, busy, onVerify, onRemove, onActivate, onRevoke }) => {
+}> = ({ status, busy, onVerify, onRemove, onActivate, onApply, onRevoke }) => {
   const { connection, provider_read_proof: proof } = status
   const connected = status.provider_read_fresh
   const provider = providerCopy[connection.provider]
@@ -324,8 +340,10 @@ const AccountCard: React.FC<{
           </button>
           {status.manual_authority ? (
             <button type="button" onClick={onRevoke} disabled={busy} className="rounded-lg border border-rose-300/20 bg-rose-300/[0.06] px-3 py-2 text-xs text-rose-100 hover:bg-rose-300/[0.1] disabled:opacity-40">Lock now</button>
-          ) : status.certification.state === 'eligible' ? (
+          ) : status.certification.state === 'applied' ? (
             <button type="button" onClick={onActivate} disabled={busy} className="rounded-lg bg-violet-200 px-3 py-2 text-xs font-semibold text-black hover:bg-violet-100 disabled:opacity-40">Enable manual paper</button>
+          ) : status.certification.state === 'passed' ? (
+            <button type="button" onClick={onApply} disabled={busy} className="rounded-lg bg-emerald-200 px-3 py-2 text-xs font-semibold text-black hover:bg-emerald-100 disabled:opacity-40">Apply safety test</button>
           ) : null}
           <button type="button" onClick={onRemove} disabled={busy} aria-label={`Remove ${connection.account_label}`} className="rounded-lg p-2 text-[#68727e] hover:bg-rose-400/[0.08] hover:text-rose-300"><Trash2 className="h-4 w-4" /></button>
         </div>
@@ -337,8 +355,8 @@ const AccountCard: React.FC<{
           <SmallFact label="Options data" value={proof.option_quotes_realtime ? 'Live' : 'Not proven'} warn={!proof.option_quotes_realtime} />
           <SmallFact
             label="Safety test"
-            value={status.certification.state === 'eligible' ? 'Passed' : status.certification.state === 'blocked' ? 'Needs attention' : 'Not run'}
-            warn={status.certification.state !== 'eligible'}
+            value={status.certification.state === 'applied' ? 'Applied' : status.certification.state === 'passed' ? 'Passed · apply next' : status.certification.state === 'blocked' ? 'Needs attention' : 'Not run'}
+            warn={status.certification.state !== 'applied'}
           />
           <SmallFact label="Trading" value={status.manual_authority ? 'Manual paper only' : 'Locked'} />
         </div>

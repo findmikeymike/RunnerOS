@@ -71,6 +71,7 @@ import {
   PaperExecutionCoordinator,
   ExecutionReconciliationSupervisor,
   FileOptionsCertificationStore,
+  FileOptionsCertificationApplicationStore,
   FileOptionsManualAuthorityStore,
   type DiscoTraderIntentRoute,
   type ExecutionAdapter,
@@ -456,6 +457,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     : undefined
   const optionsEvidenceRoot = options.connectionDirectory ? path.join(options.connectionDirectory, 'options') : undefined
   const optionsCertificationStore = optionsEvidenceRoot ? new FileOptionsCertificationStore(optionsEvidenceRoot) : undefined
+  const optionsCertificationApplicationStore = optionsEvidenceRoot ? new FileOptionsCertificationApplicationStore(optionsEvidenceRoot, options.now) : undefined
   const optionsManualAuthorityStore = optionsEvidenceRoot ? new FileOptionsManualAuthorityStore(optionsEvidenceRoot, options.now) : undefined
   const optionsAuthorityRecoveryReady = optionsManualAuthorityStore
     ? options.optionsSingleInstanceAuthority === true
@@ -478,21 +480,29 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     await optionsAuthorityRecoveryReady
     const statuses = await optionsConnectionService!.list()
     return Promise.all(statuses.map(async (status) => {
-      const [allEvidence, eligible, authority] = await Promise.all([
+      const [allEvidence, eligible, application, authority] = await Promise.all([
         optionsCertificationStore!.list(status.connection.connection_id),
         optionsCertificationStore!.getEligible(status.connection, options.now()),
+        optionsCertificationApplicationStore!.getActive(status.connection, options.now()),
         optionsManualAuthorityStore!.getActive(status.connection, options.now()),
       ])
       return {
         ...status,
-        certification: eligible
+        certification: eligible && application
           ? {
-              state: 'eligible' as const,
+              state: 'applied' as const,
               certification_id: eligible.certification_id,
               expires_at: eligible.expires_at,
               allowed_contract_id: eligible.allowed_contract_id,
             }
-          : { state: allEvidence.length > 0 ? 'blocked' as const : 'not-run' as const },
+          : eligible
+            ? {
+                state: 'passed' as const,
+                certification_id: eligible.certification_id,
+                expires_at: eligible.expires_at,
+                allowed_contract_id: eligible.allowed_contract_id,
+              }
+            : { state: allEvidence.length > 0 ? 'blocked' as const : 'not-run' as const },
         ...(authority
           ? {
               manual_authority: {
@@ -1043,11 +1053,28 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             await optionsManualAuthorityStore!.revokeForConnection(connectionId, 'operator')
             return optionsConnectionService.remove(connectionId)
           }),
+          applyOptionsCertification: (connectionId, certificationId, operatorConfirmed) => withOptionsMutation(async () => {
+            await optionsAuthorityRecoveryReady
+            await optionsManualAuthorityStore!.revokeForConnection(connectionId, 'account-change')
+            const connection = await optionsConnectionById(connectionId)
+            await optionsCertificationApplicationStore!.apply({
+              connection,
+              certification_id: certificationId,
+              operator_confirmed: operatorConfirmed,
+            })
+            const status = (await listOptionsConnectionStatuses()).find((candidate) => candidate.connection.connection_id === connectionId)
+            if (!status) throw new Error('Options account disappeared after applying its safety test.')
+            return status
+          }),
           activateOptionsManualAuthority: (connectionId, maxDebit, validUntil, operatorConfirmed) => withOptionsMutation(async () => {
             await optionsAuthorityRecoveryReady
             const connection = await optionsConnectionById(connectionId)
             const certification = await optionsCertificationStore!.getEligible(connection, options.now())
             if (!certification) throw new Error('This account has no current retained paper safety certification.')
+            const application = await optionsCertificationApplicationStore!.getActive(connection, options.now())
+            if (!application || application.certification_id !== certification.certification_id) {
+              throw new Error('Apply the current paper safety test before enabling manual orders.')
+            }
             await optionsManualAuthorityStore!.activate({
               connection,
               certification_id: certification.certification_id,

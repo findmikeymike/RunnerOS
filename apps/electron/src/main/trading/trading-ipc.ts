@@ -68,6 +68,7 @@ export const TRADE_GOD_IPC = {
   SAVE_OPTIONS_CONNECTION: 'trade-god:options:connections:save',
   VERIFY_OPTIONS_CONNECTION: 'trade-god:options:connections:verify',
   REMOVE_OPTIONS_CONNECTION: 'trade-god:options:connections:remove',
+  APPLY_OPTIONS_CERTIFICATION: 'trade-god:options:certification:apply',
   ACTIVATE_OPTIONS_MANUAL_AUTHORITY: 'trade-god:options:manual-authority:activate',
   REVOKE_OPTIONS_MANUAL_AUTHORITY: 'trade-god:options:manual-authority:revoke',
 } as const
@@ -133,6 +134,7 @@ export interface TradingIpcManager {
   saveOptionsConnection?(input: SaveOptionsConnectionInput): Promise<OptionsConnectionStatus>
   verifyOptionsConnection?(connectionId: string): Promise<OptionsConnectionStatus>
   removeOptionsConnection?(connectionId: string): Promise<boolean>
+  applyOptionsCertification?(connectionId: string, certificationId: string, operatorConfirmed: true): Promise<OptionsConnectionStatus>
   activateOptionsManualAuthority?(connectionId: string, maxDebit: string, validUntil: string, operatorConfirmed: true): Promise<OptionsConnectionStatus>
   revokeOptionsManualAuthority?(connectionId: string): Promise<OptionsConnectionStatus>
   resolveTradingConnection?(connectionId: string): Promise<TradingConnection>
@@ -348,6 +350,13 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     if (typeof connectionId !== 'string' || !connectionId.trim()) throw new Error('Options account id is invalid.')
     return manager.removeOptionsConnection(connectionId)
   })
+  ipcMain.handle(TRADE_GOD_IPC.APPLY_OPTIONS_CERTIFICATION, (_event, connectionId: unknown, certificationId: unknown, operatorConfirmed: unknown) => {
+    if (!manager.applyOptionsCertification) throw new Error('Options safety-test application is unavailable.')
+    if (typeof connectionId !== 'string' || !connectionId.trim() || typeof certificationId !== 'string' || !certificationId.trim() || operatorConfirmed !== true) {
+      throw new Error('Options safety-test application payload is invalid.')
+    }
+    return manager.applyOptionsCertification(connectionId, certificationId, true)
+  })
   ipcMain.handle(TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY, (_event, connectionId: unknown, maxDebit: unknown, validUntil: unknown, operatorConfirmed: unknown) => {
     if (!manager.activateOptionsManualAuthority) throw new Error('Options manual paper authority is unavailable.')
     if (typeof connectionId !== 'string' || !connectionId.trim() || typeof maxDebit !== 'string' || !maxDebit.trim()
@@ -404,6 +413,7 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_OPTIONS_CONNECTION)
     ipcMain.removeHandler(TRADE_GOD_IPC.VERIFY_OPTIONS_CONNECTION)
     ipcMain.removeHandler(TRADE_GOD_IPC.REMOVE_OPTIONS_CONNECTION)
+    ipcMain.removeHandler(TRADE_GOD_IPC.APPLY_OPTIONS_CERTIFICATION)
     ipcMain.removeHandler(TRADE_GOD_IPC.ACTIVATE_OPTIONS_MANUAL_AUTHORITY)
     ipcMain.removeHandler(TRADE_GOD_IPC.REVOKE_OPTIONS_MANUAL_AUTHORITY)
     await manager.stop()

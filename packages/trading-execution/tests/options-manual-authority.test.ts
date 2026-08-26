@@ -13,6 +13,7 @@ import {
   FileOptionsManualAuthorityStore,
   FileOptionsCertificationStore,
   FileOptionsCertificationJournal,
+  FileOptionsCertificationApplicationStore,
   runRestrictedOptionsCertification,
   sha256,
   type RestrictedOptionsCertificationRunner,
@@ -29,6 +30,7 @@ describe('manual options paper authority', () => {
     const current = connection()
     const certification = await certified(current, root)
     await new FileOptionsCertificationStore(root).save(certification)
+    await new FileOptionsCertificationApplicationStore(root, () => '2026-08-26T12:04:00.000Z').apply({ connection: current, certification_id: certification.certification_id, operator_confirmed: true })
     const authority = await store.activate({
       connection: current,
       certification_id: certification.certification_id,
@@ -50,6 +52,7 @@ describe('manual options paper authority', () => {
     const current = connection()
     const certification = await certified(current, root)
     await new FileOptionsCertificationStore(root).save(certification)
+    await new FileOptionsCertificationApplicationStore(root, () => '2026-08-26T12:04:00.000Z').apply({ connection: current, certification_id: certification.certification_id, operator_confirmed: true })
     const { content_checksum: _oldChecksum, ...oldUnsigned } = current
     const driftUnsigned = { ...oldUnsigned, credential_generation: 'b'.repeat(64) }
     const drifted = optionsConnectionSchema.parse({ ...driftUnsigned, content_checksum: sha256(driftUnsigned) })
