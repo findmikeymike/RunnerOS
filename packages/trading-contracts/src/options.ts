@@ -723,6 +723,11 @@ export const optionsEntryPolicySchema = z.object({
   sizing: z.discriminatedUnion('mode', [
     z.object({ mode: z.literal('fixed_contracts'), fixed_contracts: positiveIntegerSchema }).strict(),
     z.object({ mode: z.literal('max_debit_budget'), max_debit_budget: positiveDecimalStringSchema }).strict(),
+    z.object({
+      mode: z.literal('debit_range'),
+      min_debit_budget: positiveDecimalStringSchema,
+      max_debit_budget: positiveDecimalStringSchema,
+    }).strict(),
   ]),
   max_contracts_per_order: positiveIntegerSchema,
   max_debit_per_trade: positiveDecimalStringSchema,
@@ -773,6 +778,14 @@ export const optionsEntryPolicySchema = z.object({
   }
   if (value.sizing.mode === 'max_debit_budget' && compareDecimals(value.sizing.max_debit_budget, value.max_debit_per_trade) > 0) {
     context.addIssue({ code: 'custom', path: ['sizing', 'max_debit_budget'], message: 'Sizing budget cannot exceed the per-trade debit cap' })
+  }
+  if (value.sizing.mode === 'debit_range') {
+    if (compareDecimals(value.sizing.min_debit_budget, value.sizing.max_debit_budget) > 0) {
+      context.addIssue({ code: 'custom', path: ['sizing', 'min_debit_budget'], message: 'Minimum sizing budget cannot exceed the maximum' })
+    }
+    if (compareDecimals(value.sizing.max_debit_budget, value.max_debit_per_trade) > 0) {
+      context.addIssue({ code: 'custom', path: ['sizing', 'max_debit_budget'], message: 'Sizing budget cannot exceed the per-trade debit cap' })
+    }
   }
   const custody = value.expiration_custody
   if (!(custody.no_new_entry_minutes_before_close > custody.automatic_close_start_minutes_before_close

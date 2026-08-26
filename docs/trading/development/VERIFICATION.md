@@ -7,6 +7,23 @@ source_of_truth: true
 
 # Verification System
 
+## 2026-08-26 Options Autopilot — Debit-Range Sizing
+
+- Discord sources now use a plain minimum/maximum total-spend range instead of
+  a fixed contract count. The deterministic policy selects the largest whole
+  quantity whose live limit-price debit plus estimated fees stays inside the
+  range and beneath the hard contract cap.
+- Marketable sizing also respects current ask size. If no positive whole
+  quantity reaches the minimum without crossing the maximum, the signal is
+  skipped with zero provider mutation. Existing fixed-quantity policies remain
+  readable and unchanged; newly saved policies use debit-range sizing.
+- Proof includes the requested `$1.70` example: `$300–$400` selects 2 contracts
+  at `$341.30`; 3 would exceed the cap. A `$0.30` contract selects 13 at
+  `$398.45`, or 10 at `$306.50` when only 10 are shown at the ask.
+- Verification: 316 relevant tests passed with 1,102 expectations; repository
+  typecheck, focused Options Desk lint, diff check, and renderer production
+  build passed.
+
 ## 2026-08-26 Options Autopilot — End-to-End Local Closure
 
 - Completed the signed Discord-to-options paper/sandbox control plane: exact

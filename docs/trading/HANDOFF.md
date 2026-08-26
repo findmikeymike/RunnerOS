@@ -7,6 +7,16 @@ source_of_truth: false
 
 # Trade God Handoff
 
+## 2026-08-26 Options Debit-Range Sizing Handoff
+
+- New Discord options sources ask for `Spend at least` and `Spend no more than`.
+  Contract quantity is deterministic from the live order limit × 100 plus
+  estimated fees, never an agent guess.
+- The app chooses the largest whole quantity inside the range, bounded by a
+  folded-away hard contract cap and current ask size for marketable entries.
+  No exact fit means no trade. Existing fixed-size source policies are retained
+  as-is; archive and re-add an existing source to adopt range sizing.
+
 ## 2026-08-26 Options Autopilot End-to-End Handoff
 
 - The local control plane is complete from signed Discord source through exact

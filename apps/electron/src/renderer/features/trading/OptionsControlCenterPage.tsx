@@ -15,7 +15,7 @@ import {
   X,
 } from 'lucide-react'
 
-import type { OptionsProvider } from '@trade-god/contracts'
+import type { OptionsEntryPolicy, OptionsProvider } from '@trade-god/contracts'
 
 type ConnectionStatus = Awaited<ReturnType<typeof window.electronAPI.listOptionsConnections>>[number]
 type AutomationSource = Awaited<ReturnType<typeof window.electronAPI.listOptionsAutomationSources>>[number]
@@ -195,7 +195,7 @@ const OptionsControlCenterPage: React.FC = () => {
                   <div key={source.route.route_id} className="rounded-xl border border-white/[0.07] bg-[#0b0f13] px-4 py-3">
                     <div className="flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-400/[0.09] text-violet-200"><Radio className="h-4 w-4" /></div>
-                      <div><div className="text-sm font-medium">{source.route.display_name}</div><div className="mt-1 text-xs text-[#75808d]">{account?.connection.account_label ?? 'Missing account'} · max {source.policy.max_contracts_per_order} contract · ${source.policy.max_debit_per_trade}</div></div>
+                      <div><div className="text-sm font-medium">{source.route.display_name}</div><div className="mt-1 text-xs text-[#75808d]">{account?.connection.account_label ?? 'Missing account'} · {sizingSummary(source.policy)}</div></div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`rounded-full px-2.5 py-1 text-[10px] ${source.automatic_authority_active ? 'bg-emerald-400/[0.09] text-emerald-200' : 'bg-amber-300/[0.08] text-amber-100'}`}>{source.automatic_authority_active ? 'Running' : 'Setup saved · automation off'}</span>
@@ -360,7 +360,7 @@ const AutopilotActivationDialog: React.FC<{
         <div className="flex items-start justify-between gap-4"><div><div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300">Automatic paper trading</div><h2 className="mt-1 text-lg font-semibold">Review before starting</h2></div><button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="p-2 text-[#75808d] hover:text-white"><X className="h-4 w-4" /></button></div>
         <div className="mt-4 rounded-xl border border-white/[0.08] bg-black/20 p-4">
           <div className="text-sm font-medium text-white">{source.route.display_name} → {account?.connection.account_label ?? source.route.account_id}</div>
-          <div className="mt-2 grid grid-cols-2 gap-3"><SmallFact label="Per signal" value={`Up to ${source.policy.max_contracts_per_order} contract`} /><SmallFact label="Maximum cost" value={`$${source.policy.max_debit_per_trade}`} /><SmallFact label="Spread limit" value={`$${source.policy.max_spread_abs} and ${source.policy.max_spread_pct}%`} /><SmallFact label="Price chase limit" value={`$${source.policy.max_chase_abs} and ${source.policy.max_chase_pct}%`} /></div>
+          <div className="mt-2 grid grid-cols-2 gap-3"><SmallFact label="Target spend" value={sizingSummary(source.policy)} /><SmallFact label="Safety cap" value={`${source.policy.max_contracts_per_order} contracts`} /><SmallFact label="Spread limit" value={`$${source.policy.max_spread_abs} and ${source.policy.max_spread_pct}%`} /><SmallFact label="Price chase limit" value={`$${source.policy.max_chase_abs} and ${source.policy.max_chase_pct}%`} /></div>
         </div>
         <div className="mt-4 rounded-xl border border-amber-300/15 bg-amber-300/[0.05] p-3 text-xs leading-5 text-[#d1c8ae]">Trade God can buy only single calls or puts in this paper account. It skips late, stale, wide-spread, overpriced, ambiguous, or uncertified signals. Working orders time out automatically.</div>
         {!review ? (
@@ -383,8 +383,9 @@ const DiscordSourceDialog: React.FC<{
   const [channelUrl, setChannelUrl] = useState('')
   const [authorId, setAuthorId] = useState('')
   const [connectionId, setConnectionId] = useState(connections[0]?.connection.connection_id ?? '')
-  const [maxDebit, setMaxDebit] = useState('150')
-  const [contracts, setContracts] = useState('1')
+  const [minDebit, setMinDebit] = useState('300')
+  const [maxDebit, setMaxDebit] = useState('400')
+  const [contracts, setContracts] = useState('20')
   const [spreadAbs, setSpreadAbs] = useState('0.10')
   const [spreadPct, setSpreadPct] = useState('10')
   const [chaseAbs, setChaseAbs] = useState('0.10')
@@ -392,7 +393,9 @@ const DiscordSourceDialog: React.FC<{
   const [advanced, setAdvanced] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const canSave = name.trim() && channelUrl.trim() && authorId.trim() && connectionId && Number(contracts) > 0 && Number(maxDebit) > 0
+  const canSave = name.trim() && channelUrl.trim() && authorId.trim() && connectionId
+    && Number.isInteger(Number(contracts)) && Number(contracts) > 0
+    && Number(minDebit) > 0 && Number(maxDebit) >= Number(minDebit)
   const save = async (event: React.FormEvent) => {
     event.preventDefault(); if (!canSave) return
     setBusy(true); setError(null)
@@ -400,7 +403,7 @@ const DiscordSourceDialog: React.FC<{
       await window.electronAPI.saveOptionsAutomationSource({
         display_name: name.trim(), channel_url: channelUrl.trim(), author_id: authorId.trim(), connection_id: connectionId,
         max_spread_abs: spreadAbs.trim(), max_spread_pct: spreadPct.trim(), max_chase_abs: chaseAbs.trim(), max_chase_pct: chasePct.trim(),
-        max_contracts_per_order: Number(contracts), max_debit_per_trade: maxDebit.trim(),
+        min_debit_per_trade: minDebit.trim(), max_contracts_per_order: Number(contracts), max_debit_per_trade: maxDebit.trim(),
       })
       await onSaved()
     } catch (cause) { setError(readableError(cause)) } finally { setBusy(false) }
@@ -414,10 +417,11 @@ const DiscordSourceDialog: React.FC<{
           <Field label="Discord channel link" value={channelUrl} onChange={setChannelUrl} placeholder="https://discord.com/channels/server/channel" />
           <Field label="Trader's Discord user ID" value={authorId} onChange={setAuthorId} placeholder="Paste user ID" />
           <label className="grid gap-1.5 text-xs text-[#aab2bc]">Paper account<select value={connectionId} onChange={(event) => setConnectionId(event.target.value)} className="rounded-lg border border-white/[0.1] bg-black/20 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-300/40">{connections.map((item) => <option key={item.connection.connection_id} value={item.connection.connection_id}>{item.connection.account_label}</option>)}</select></label>
-          <div className="grid grid-cols-2 gap-3"><Field label="Max contracts" value={contracts} onChange={setContracts} placeholder="1" /><Field label="Max cost per trade" value={maxDebit} onChange={setMaxDebit} placeholder="150" /></div>
+          <div className="grid grid-cols-2 gap-3"><Field label="Spend at least" value={minDebit} onChange={setMinDebit} placeholder="300" /><Field label="Spend no more than" value={maxDebit} onChange={setMaxDebit} placeholder="400" /></div>
+          <p className="-mt-2 text-xs leading-5 text-[#75808d]">Trade God chooses the largest whole-contract quantity inside this range using the live order price and estimated fees. If none fits, it skips.</p>
         </div>
         <button type="button" onClick={() => setAdvanced((value) => !value)} className="mt-5 flex w-full items-center justify-between rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-2.5 text-left text-xs text-[#9ba4af] hover:bg-white/[0.045]">Price protection <ChevronDown className={`h-4 w-4 transition-transform ${advanced ? 'rotate-180' : ''}`} /></button>
-        {advanced && <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl bg-black/20 p-3"><Field label="Max spread ($)" value={spreadAbs} onChange={setSpreadAbs} placeholder="0.10" /><Field label="Max spread (%)" value={spreadPct} onChange={setSpreadPct} placeholder="10" /><Field label="Max chase ($)" value={chaseAbs} onChange={setChaseAbs} placeholder="0.10" /><Field label="Max chase (%)" value={chasePct} onChange={setChasePct} placeholder="8" /></div>}
+        {advanced && <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl bg-black/20 p-3"><Field label="Hard contract cap" value={contracts} onChange={setContracts} placeholder="20" /><div /><Field label="Max spread ($)" value={spreadAbs} onChange={setSpreadAbs} placeholder="0.10" /><Field label="Max spread (%)" value={spreadPct} onChange={setSpreadPct} placeholder="10" /><Field label="Max chase ($)" value={chaseAbs} onChange={setChaseAbs} placeholder="0.10" /><Field label="Max chase (%)" value={chasePct} onChange={setChasePct} placeholder="8" /></div>}
         <p className="mt-4 rounded-lg bg-violet-400/[0.06] px-3 py-3 text-xs leading-5 text-violet-100/80">Trade God will skip old, wide, ambiguous, same-day, or over-budget signals. It never falls back to another account.</p>
         {error && <p className="mt-4 rounded-lg border border-rose-400/20 bg-rose-400/[0.06] px-3 py-2.5 text-xs text-rose-100">{error}</p>}
         <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-xs text-[#9ba4af] hover:bg-white/[0.05]">Cancel</button><button type="submit" disabled={!canSave || busy} className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-xs font-semibold text-black disabled:opacity-40">{busy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5" />} Save source</button></div>
@@ -895,6 +899,12 @@ const readableError = (cause: unknown): string => {
   const message = cause instanceof Error ? cause.message : String(cause)
   return message.replace(/^Error invoking remote method '[^']+': Error:\s*/i, '').replace(/^Error:\s*/i, '')
 }
+
+const sizingSummary = (policy: OptionsEntryPolicy): string => policy.sizing.mode === 'debit_range'
+  ? `$${policy.sizing.min_debit_budget}–$${policy.sizing.max_debit_budget} total`
+  : policy.sizing.mode === 'fixed_contracts'
+    ? `${policy.sizing.fixed_contracts} contract${policy.sizing.fixed_contracts === 1 ? '' : 's'}`
+    : `Up to $${policy.sizing.max_debit_budget}`
 
 const plainOrderState = (state: string): string => ({
   working: 'Waiting to fill',

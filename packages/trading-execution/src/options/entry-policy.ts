@@ -144,19 +144,29 @@ export function decideOptionsEntry(input: DecideOptionsEntryInput): OptionsEntry
   const feePerContract = FixedDecimal.from(input.estimated_fee_per_contract)
   if (feePerContract.compare('0') < 0) throw new Error('OPTIONS_RISK_LIMIT: fee estimate cannot be negative')
 
-  if (policy.sizing.mode === 'max_debit_budget') {
+  const actionable = action === 'marketable_limit' || action === 'passive_limit'
+  if (actionable && (policy.sizing.mode === 'max_debit_budget' || policy.sizing.mode === 'debit_range')) {
+    const quantityCap = policy.sizing.mode === 'debit_range' && action === 'marketable_limit'
+      ? Math.min(quantity, quote.ask_size)
+      : quantity
     quantity = quantityForBudget(
       provisionalLimit,
       feePerContract,
       policy.sizing.max_debit_budget,
-      quantity,
+      quantityCap,
     )
+    if (quantity > 0 && policy.sizing.mode === 'debit_range') {
+      const selectedDebit = provisionalLimit.multiplyInteger(100).add(feePerContract).multiplyInteger(quantity)
+      if (selectedDebit.compare(policy.sizing.min_debit_budget) < 0) quantity = 0
+    }
     if (quantity === 0) {
-      action = 'block'
+      action = policy.sizing.mode === 'debit_range' ? 'skip' : 'block'
       limit = undefined
-      reasons = ['OPTIONS_RISK_LIMIT']
+      reasons = [policy.sizing.mode === 'debit_range' ? 'OPTIONS_DEBIT_RANGE_NO_FIT' : 'OPTIONS_RISK_LIMIT']
       quantity = 1
     }
+  } else if (policy.sizing.mode === 'debit_range') {
+    quantity = 1
   }
 
   if (action === 'marketable_limit' && quote.ask_size < quantity) {
@@ -167,7 +177,8 @@ export function decideOptionsEntry(input: DecideOptionsEntryInput): OptionsEntry
 
   const fees = feePerContract.multiplyInteger(quantity)
   const maximumDebit = provisionalLimit.multiplyInteger(100).multiplyInteger(quantity).add(fees)
-  if (maximumDebit.compare(policy.max_debit_per_trade) > 0) {
+  if ((action === 'marketable_limit' || action === 'passive_limit')
+    && maximumDebit.compare(policy.max_debit_per_trade) > 0) {
     action = 'block'
     limit = undefined
     reasons = ['OPTIONS_RISK_LIMIT']

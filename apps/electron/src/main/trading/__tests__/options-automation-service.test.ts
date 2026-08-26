@@ -32,10 +32,13 @@ describe('options automation service', () => {
     const saved = await service.save({
       display_name: 'SPY calls', channel_url: 'https://discord.com/channels/guild-one/channel-one/message-one',
       author_id: 'trader-one', connection_id: account.connection_id, max_spread_abs: '0.10', max_spread_pct: '10',
-      max_chase_abs: '0.10', max_chase_pct: '8', max_contracts_per_order: 1, max_debit_per_trade: '150',
+      max_chase_abs: '0.10', max_chase_pct: '8', min_debit_per_trade: '100', max_contracts_per_order: 10, max_debit_per_trade: '150',
     })
     expect(saved.route).toMatchObject({ state: 'draft', guild_id: 'guild-one', channel_id: 'channel-one', author_id: 'trader-one' })
-    expect(saved.policy).toMatchObject({ max_contracts_per_order: 1, max_debit_per_trade: '150', wide_spread_action: 'skip' })
+    expect(saved.policy).toMatchObject({
+      sizing: { mode: 'debit_range', min_debit_budget: '100', max_debit_budget: '150' },
+      max_contracts_per_order: 10, max_debit_per_trade: '150', wide_spread_action: 'skip',
+    })
     expect((await service.list())[0]).toMatchObject({ automatic_authority_active: false })
   })
 
@@ -46,7 +49,7 @@ describe('options automation service', () => {
       async () => account, async () => false, () => now)
     const input = { display_name: 'SPY calls', channel_url: 'https://discord.com/channels/guild-one/channel-one',
       author_id: 'trader-one', connection_id: account.connection_id, max_spread_abs: '0.10', max_spread_pct: '10',
-      max_chase_abs: '0.10', max_chase_pct: '8', max_contracts_per_order: 1, max_debit_per_trade: '150' }
+      max_chase_abs: '0.10', max_chase_pct: '8', min_debit_per_trade: '100', max_contracts_per_order: 10, max_debit_per_trade: '150' }
     const saved = await service.save(input)
     await expect(service.save({ ...input, route_id: saved.route.route_id, author_id: 'other-trader' })).rejects.toThrow('cannot be edited')
     expect(await service.archive(saved.route.route_id)).toMatchObject({ state: 'archived', revision: 2 })

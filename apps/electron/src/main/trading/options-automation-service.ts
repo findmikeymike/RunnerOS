@@ -28,6 +28,7 @@ export type SaveOptionsAutomationSourceInput = {
   max_spread_pct: string
   max_chase_abs: string
   max_chase_pct: string
+  min_debit_per_trade: string
   max_contracts_per_order: number
   max_debit_per_trade: string
 }
@@ -106,7 +107,11 @@ export class OptionsAutomationService {
       max_favorable_retrace_pct: '20', tight_spread_action: 'marketable_limit' as const,
       wide_spread_action: 'skip' as const, passive_limit_offset_abs: '0.01', working_order_ttl_ms: 15_000,
       max_reprice_attempts: 0, reprice_interval_ms: 1_000, cancel_at_signal_expiry: true,
-      sizing: { mode: 'fixed_contracts' as const, fixed_contracts: input.max_contracts_per_order },
+      sizing: {
+        mode: 'debit_range' as const,
+        min_debit_budget: input.min_debit_per_trade,
+        max_debit_budget: input.max_debit_per_trade,
+      },
       max_contracts_per_order: input.max_contracts_per_order, max_debit_per_trade: input.max_debit_per_trade,
       max_aggregate_open_debit: input.max_debit_per_trade, max_daily_debit_initiated: input.max_debit_per_trade,
       max_open_positions: 1 as const, max_active_positions_per_source: 1 as const,

@@ -194,4 +194,51 @@ describe('deterministic options entry policy', () => {
       quote: quote({ ask_size: 1 }),
     })).toMatchObject({ action: 'block', reason_codes: ['OPTIONS_QUOTE_UNAVAILABLE'] })
   })
+
+  test('chooses the largest whole-contract quantity inside an exact debit range', () => {
+    const rangePolicy: OptionsEntryPolicy = {
+      ...policy,
+      sizing: { mode: 'debit_range', min_debit_budget: '300', max_debit_budget: '400' },
+      max_contracts_per_order: 20,
+      max_debit_per_trade: '400',
+    }
+    expect(decide({
+      policy: rangePolicy,
+      signal: { ...signal, reference_entry: '1.70' },
+      quote: quote({ bid: '1.68', ask: '1.70', bid_size: 20, ask_size: 20 }),
+    })).toMatchObject({ action: 'marketable_limit', planned_quantity: 2, maximum_debit: '341.30' })
+
+    expect(decide({
+      policy: rangePolicy,
+      signal: { ...signal, reference_entry: '0.30' },
+      quote: quote({ bid: '0.29', ask: '0.30', bid_size: 20, ask_size: 20 }),
+    })).toMatchObject({ action: 'marketable_limit', planned_quantity: 13, maximum_debit: '398.45' })
+
+    expect(decide({
+      policy: rangePolicy,
+      signal: { ...signal, reference_entry: '0.30' },
+      quote: quote({ bid: '0.29', ask: '0.30', bid_size: 20, ask_size: 10 }),
+    })).toMatchObject({ action: 'marketable_limit', planned_quantity: 10, maximum_debit: '306.50' })
+  })
+
+  test('skips sizing when no whole-contract quantity lands inside the debit range', () => {
+    expect(decide({
+      policy: {
+        ...policy,
+        sizing: { mode: 'debit_range', min_debit_budget: '350', max_debit_budget: '400' },
+        max_contracts_per_order: 20,
+        max_debit_per_trade: '400',
+      },
+      signal: { ...signal, reference_entry: '1.70' },
+      quote: quote({ bid: '1.68', ask: '1.70', bid_size: 20, ask_size: 20 }),
+    })).toMatchObject({ action: 'skip', reason_codes: ['OPTIONS_DEBIT_RANGE_NO_FIT'] })
+    expect(() => decide({
+      policy: {
+        ...policy,
+        sizing: { mode: 'debit_range', min_debit_budget: '401', max_debit_budget: '400' },
+        max_contracts_per_order: 20,
+        max_debit_per_trade: '400',
+      },
+    })).toThrow('Minimum sizing budget cannot exceed the maximum')
+  })
 })
