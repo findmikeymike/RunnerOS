@@ -77,6 +77,8 @@ test('preload adapter invokes only the local Trade God channels', async () => {
   expect(await api.prepareOptionsManualOrder(manualOrderInput) as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.commitOptionsManualOrder('options-one', 'options-review-one', 'a'.repeat(64), true) as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.cancelOptionsManualOrder('options-one', 'options-review-one') as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.cancelOptionsWorkingEntry('options-one', 'intent-one', true) as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.closeOptionsPosition('options-one', 'intent-one', '1.00', true) as any).toEqual({ artifact_id: 'artifact-preload' })
   api.onTradeGodAlert((payload) => { subscribedPayload = payload })
   expect(subscribedChannel).toBe(TRADE_GOD_IPC.ALERT_RECEIVED)
   expect(subscribedPayload).toEqual({ id: 'tv-preload' })
@@ -123,5 +125,7 @@ test('preload adapter invokes only the local Trade God channels', async () => {
     { channel: TRADE_GOD_IPC.PREPARE_OPTIONS_MANUAL_ORDER, args: [manualOrderInput] },
     { channel: TRADE_GOD_IPC.COMMIT_OPTIONS_MANUAL_ORDER, args: ['options-one', 'options-review-one', 'a'.repeat(64), true] },
     { channel: TRADE_GOD_IPC.CANCEL_OPTIONS_MANUAL_ORDER, args: ['options-one', 'options-review-one'] },
+    { channel: TRADE_GOD_IPC.CANCEL_OPTIONS_WORKING_ENTRY, args: ['options-one', 'intent-one', true] },
+    { channel: TRADE_GOD_IPC.CLOSE_OPTIONS_POSITION, args: ['options-one', 'intent-one', '1.00', true] },
   ])
 })

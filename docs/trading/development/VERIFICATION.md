@@ -7,6 +7,27 @@ source_of_truth: true
 
 # Verification System
 
+## 2026-08-26 Options Autopilot Slice 7B — Runtime and Expiration Custody
+
+- Wired exact entry cancellation and full-position close through Electron
+  runtime, IPC, preload, and Options Desk. Both actions are risk-reducing,
+  require explicit confirmation, and stay available without granting new-entry
+  authority.
+- Startup now audits every management receipt before normal options gateway
+  recovery. The terminal-receipt crash regression proves it repairs a stale
+  entry ledger and debit reservation without another provider send.
+- Added checksum-bound provider-neutral expiration schedules and assessments
+  for automatic-close start, operator escalation, broker order cutoff, regular
+  close, exercise cutoff, and do-not-exercise policy. Automatic action remains
+  unavailable unless both close and do-not-exercise behaviors are certified.
+- Verification: 32 focused gateway, management, expiration, runtime, IPC, and
+  preload tests passed with 221 expectations; repository typecheck, focused
+  Options page lint, production renderer build, and diff check passed. Rival
+  re-review returned clean.
+- Not proven: real IBKR/Webull cancel/close behavior, retained broker expiration
+  calendar evidence, provider exercise/do-not-exercise control, or unattended
+  expiration operation.
+
 ## 2026-08-26 Options Autopilot Slice 7A — Exact Position Custody Core
 
 - Added durable, checksummed management commands and mutable recovery records

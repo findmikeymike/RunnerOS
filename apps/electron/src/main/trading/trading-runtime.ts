@@ -80,6 +80,8 @@ import {
   FileOptionsExecutionStore,
   OptionsExecutionGateway,
   FileOptionsManualOrderCoordinator,
+  FileOptionsManagementStore,
+  OptionsPositionManager,
   type DiscoTraderIntentRoute,
   type ExecutionAdapter,
   type TradovateUserSyncGap,
@@ -490,7 +492,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     await Promise.all([optionsAuthorityRecoveryReady, optionsCertificationRecoveryReady])
     const statuses = await optionsConnectionService!.list()
     return Promise.all(statuses.map(async (status) => {
-      const [allEvidence, eligible, application, authority, manualOrders, manualReservations] = await Promise.all([
+      const [allEvidence, eligible, application, authority, manualOrders, manualReservations, managementRecords] = await Promise.all([
         optionsCertificationStore!.list(status.connection.connection_id),
         optionsCertificationStore!.getEligible(status.connection, options.now()),
         optionsCertificationApplicationStore!.getActive(status.connection, options.now()),
@@ -504,6 +506,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
               options.now,
               executionProcessInstanceId,
             ).list(status.connection.account_ref)
+          : Promise.resolve([]),
+        optionsEvidenceRoot
+          ? new FileOptionsManagementStore(path.join(optionsEvidenceRoot, 'manual-execution', status.connection.connection_id, 'management')).listRecords()
           : Promise.resolve([]),
       ])
       return {
@@ -547,6 +552,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
           provider_order_id: record.provider_order_id,
         })),
         pending_manual_reviews: manualReservations.filter((reservation) => reservation.state === 'prepared').length,
+        management_records: managementRecords,
         ...(optionsManualRecoveryErrors.get(status.connection.connection_id)
           ? { manual_recovery_issue: optionsManualRecoveryErrors.get(status.connection.connection_id)! }
           : {}),
@@ -608,7 +614,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     const executions = new FileOptionsExecutionStore(path.join(root, 'execution'))
     const gateway = new OptionsExecutionGateway(executions, reservations, adapter, options.now)
     const coordinator = new FileOptionsManualOrderCoordinator(root, reservations, gateway, adapter, options.now)
-    return { connection, adapter, reservations, executions, gateway, coordinator }
+    const managementStore = new FileOptionsManagementStore(path.join(root, 'management'))
+    const positionManager = new OptionsPositionManager(executions, managementStore, reservations, adapter, options.now)
+    return { connection, adapter, reservations, executions, gateway, coordinator, managementStore, positionManager }
   }
   const assertOptionsConnectionMutable = async (connectionId: string) => {
     await optionsManualExecutionRecoveryReady
@@ -619,7 +627,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     const reservations = await new FileOptionsDebitReservationStore(
       path.join(root, 'risk'), options.now, executionProcessInstanceId,
     ).list()
-    if (records.some((record) => record.state !== 'not-sent' && record.state !== 'canceled-flat')
+    if (records.some((record) => record.state !== 'not-sent' && record.state !== 'canceled-flat' && record.state !== 'closed-flat')
       || reservations.some((reservation) => reservation.state !== 'released')) {
       throw new Error('Cancel or fully resolve this account’s paper option order before changing or removing it.')
     }
@@ -649,15 +657,19 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
           const reservations = new FileOptionsDebitReservationStore(path.join(root, 'risk'), options.now, executionProcessInstanceId)
           const executions = new FileOptionsExecutionStore(path.join(root, 'execution'))
           if (options.optionsSingleInstanceAuthority === true) await reservations.recoverStaleLocks()
-          const hasNonTerminal = (await executions.listRecords()).some((record) => record.state !== 'not-sent' && record.state !== 'canceled-flat')
+          const hasNonTerminal = (await executions.listRecords()).some((record) => record.state !== 'not-sent' && record.state !== 'canceled-flat' && record.state !== 'closed-flat')
+          const managementStore = new FileOptionsManagementStore(path.join(root, 'management'))
+          const hasManagement = (await managementStore.listRecords()).some((record) => !['entry-canceled', 'position-open', 'close-canceled', 'partial-close-canceled', 'closed-flat'].includes(record.state))
           const preparedReservations = (await reservations.list(status.connection.account_ref)).filter((reservation) => reservation.state === 'prepared')
-          if (!hasNonTerminal && preparedReservations.length === 0) continue
+          if (!hasNonTerminal && !hasManagement && preparedReservations.length === 0) continue
           if (options.optionsSingleInstanceAuthority !== true) {
             throw new Error('Options paper-order recovery requires desktop single-instance authority.')
           }
           const runtime = await optionsManualCoordinator(status.connection.connection_id)
           for (const reservation of preparedReservations) await runtime.gateway.releasePrepared(reservation.reservation_id)
-          await runtime.gateway.recoverNonTerminal()
+          await runtime.positionManager.recoverAll()
+          const managedIntentIds = new Set((await runtime.managementStore.listRecords()).map((record) => record.entry_intent_id))
+          await runtime.gateway.recoverNonTerminal(managedIntentIds)
           optionsManualRecoveryErrors.delete(status.connection.connection_id)
         } catch (error) {
           const detail = error instanceof Error ? error.message : 'Unknown recovery failure'
@@ -1300,6 +1312,30 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             assertOptionsManualRecovery(connectionId)
             const runtime = await optionsManualCoordinator(connectionId)
             await runtime.coordinator.cancel(reviewId)
+          }),
+          cancelOptionsWorkingEntry: (connectionId, intentId, operatorConfirmed) => withOptionsMutation(async () => {
+            if (operatorConfirmed !== true) throw new Error('Canceling a paper entry requires explicit confirmation.')
+            await optionsManualExecutionRecoveryReady
+            assertOptionsManualRecovery(connectionId)
+            const runtime = await optionsManualCoordinator(connectionId)
+            return runtime.positionManager.cancelWorkingEntry({
+              intent_id: intentId,
+              request_id: `operator-cancel-${randomUUID()}`,
+              reason: 'operator',
+            })
+          }),
+          closeOptionsPosition: (connectionId, intentId, minimumCredit, operatorConfirmed) => withOptionsMutation(async () => {
+            if (operatorConfirmed !== true) throw new Error('Closing a paper position requires explicit confirmation.')
+            await optionsManualExecutionRecoveryReady
+            assertOptionsManualRecovery(connectionId)
+            const runtime = await optionsManualCoordinator(connectionId)
+            return runtime.positionManager.closePosition({
+              intent_id: intentId,
+              request_id: `operator-close-${randomUUID()}`,
+              reason: 'operator',
+              quantity: 'all',
+              minimum_credit: minimumCredit,
+            })
           }),
         }
       : {}),

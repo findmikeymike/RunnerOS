@@ -156,6 +156,17 @@ export class OptionsPositionManager {
     return count
   }
 
+  /** Startup-only: audit every receipt because a terminal receipt may have
+   * persisted before its entry ledger or debit reservation was repaired. */
+  async recoverAll(): Promise<number> {
+    let count = 0
+    for (const record of await this.management.listRecords()) {
+      await this.reconcile(record.management_id)
+      count += 1
+    }
+    return count
+  }
+
   private async reconcileLocked(record: OptionsManagementRecord, transaction: OptionsReservationAccountTransaction): Promise<OptionsManagementRecord> {
     const current = await this.management.getRecord(record.management_id)
     const command = await this.management.getCommand(current.command_id)
@@ -196,22 +207,22 @@ export class OptionsPositionManager {
       reconciled_at: this.now(), updated_at: this.now(), failure_code: null,
       recovery_evidence: [...entry.recovery_evidence, `Entry cancellation reconciled as ${order.status}.`],
     })
-    const next = await this.management.updateRecord(record.management_id, record.content_checksum, {
+    const reservation = await transaction.get(command.reservation_id)
+    if (open === 0) {
+      this.assertFlatForRelease(snapshot)
+      if (reservation.state !== 'released') await transaction.release(this.releaseProof(reservation, snapshot))
+    } else {
+      if (reservation.state === 'released') throw new Error('Released debit capacity conflicts with an open options position.')
+      await transaction.updateDeliveryState({ reservation_id: reservation.reservation_id, expected_checksum: reservation.content_checksum,
+        state: 'open-position', execution_record_checksum: nextEntry.content_checksum,
+        filled_quantity: order.filled_quantity, open_quantity: open })
+    }
+    return this.management.updateRecord(record.management_id, record.content_checksum, {
       state: open === 0 ? 'entry-canceled' : 'position-open', failure_code: null,
       before_open_quantity: open, requested_close_quantity: 0, closed_quantity: 0,
       remaining_open_quantity: open, updated_at: this.now(),
       evidence: [...record.evidence, `Entry order ${order.provider_order_id} is ${order.status}.`],
     })
-    const reservation = await transaction.get(command.reservation_id)
-    if (open === 0) {
-      this.assertFlatForRelease(snapshot)
-      await transaction.release(this.releaseProof(reservation, snapshot))
-    } else {
-      await transaction.updateDeliveryState({ reservation_id: reservation.reservation_id, expected_checksum: reservation.content_checksum,
-        state: 'open-position', execution_record_checksum: nextEntry.content_checksum,
-        filled_quantity: order.filled_quantity, open_quantity: open })
-    }
-    return next
   }
 
   private async applyCloseTruth(record: OptionsManagementRecord, command: OptionsManagementCommand, order: OptionsProviderOrder, snapshot: OptionsProviderAccountSnapshot, transaction: OptionsReservationAccountTransaction): Promise<OptionsManagementRecord> {
@@ -235,27 +246,27 @@ export class OptionsPositionManager {
           : order.filled_quantity > 0
             ? 'partially-closed'
             : 'close-working'
-    const next = await this.management.updateRecord(record.management_id, record.content_checksum, {
-      state, provider_close_order_id: order.provider_order_id, provider_client_order_id: order.client_order_id,
-      closed_quantity: order.filled_quantity, remaining_open_quantity: open, failure_code: null,
-      updated_at: this.now(), evidence: [...record.evidence, `Close order ${order.provider_order_id} reconciled as ${order.status}.`],
-    })
     const entry = await this.executions.getRecord(command.entry_intent_id)
     const nextEntry = await this.executions.updateRecord(entry.intent_id, entry.content_checksum, {
       state: open === 0 ? 'closed-flat' : 'open-position', open_quantity: open,
       reconciled_at: this.now(), updated_at: this.now(), failure_code: null,
-      recovery_evidence: [...entry.recovery_evidence, `Management ${next.management_id} left ${open} contract(s) open.`],
+      recovery_evidence: [...entry.recovery_evidence, `Management ${record.management_id} left ${open} contract(s) open.`],
     })
     const reservation = await transaction.get(command.reservation_id)
     if (state === 'closed-flat') {
       this.assertFlatForRelease(snapshot)
-      await transaction.release(this.releaseProof(reservation, snapshot))
+      if (reservation.state !== 'released') await transaction.release(this.releaseProof(reservation, snapshot))
     } else {
+      if (reservation.state === 'released') throw new Error('Released debit capacity conflicts with an open options position.')
       await transaction.updateDeliveryState({ reservation_id: reservation.reservation_id, expected_checksum: reservation.content_checksum,
         state: 'open-position', execution_record_checksum: nextEntry.content_checksum,
         filled_quantity: entry.filled_quantity, open_quantity: open })
     }
-    return next
+    return this.management.updateRecord(record.management_id, record.content_checksum, {
+      state, provider_close_order_id: order.provider_order_id, provider_client_order_id: order.client_order_id,
+      closed_quantity: order.filled_quantity, remaining_open_quantity: open, failure_code: null,
+      updated_at: this.now(), evidence: [...record.evidence, `Close order ${order.provider_order_id} reconciled as ${order.status}.`],
+    })
   }
 
   private buildCommand(input: {

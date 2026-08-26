@@ -160,10 +160,11 @@ export class OptionsExecutionGateway {
     )
   }
 
-  async recoverNonTerminal(): Promise<number> {
+  async recoverNonTerminal(skipIntentIds: ReadonlySet<string> = new Set()): Promise<number> {
     let recovered = 0
     for (const record of await this.executions.listRecords()) {
       if (record.state === 'canceled-flat' || record.state === 'not-sent') continue
+      if (skipIntentIds.has(record.intent_id)) continue
       await this.reconcile(record.intent_id)
       recovered += 1
     }

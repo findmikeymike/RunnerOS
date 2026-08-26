@@ -183,6 +183,8 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.PREPARE_OPTIONS_MANUAL_ORDER,
       TRADE_GOD_IPC.COMMIT_OPTIONS_MANUAL_ORDER,
       TRADE_GOD_IPC.CANCEL_OPTIONS_MANUAL_ORDER,
+      TRADE_GOD_IPC.CANCEL_OPTIONS_WORKING_ENTRY,
+      TRADE_GOD_IPC.CLOSE_OPTIONS_POSITION,
     ])
     expect(await ipc.handlers.get(TRADE_GOD_IPC.HEALTH)!({})).toEqual({ state: 'ready' })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.ANALYZE_FIXTURE)!({}, { timeoutMs: 500 })).toEqual({ artifact_id: 'artifact-ipc' })
@@ -387,6 +389,8 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.PREPARE_OPTIONS_MANUAL_ORDER,
       TRADE_GOD_IPC.COMMIT_OPTIONS_MANUAL_ORDER,
       TRADE_GOD_IPC.CANCEL_OPTIONS_MANUAL_ORDER,
+      TRADE_GOD_IPC.CANCEL_OPTIONS_WORKING_ENTRY,
+      TRADE_GOD_IPC.CLOSE_OPTIONS_POSITION,
     ])
     expect(stops).toBe(1)
   })

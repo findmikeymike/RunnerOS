@@ -18,6 +18,7 @@ import type {
   PaperActivationReview,
   OptionsManualOrderReview,
   OptionsExecutionRecord,
+  OptionsManagementRecord,
 } from '@trade-god/contracts'
 import type { SaveMirrorGroupInput, TradovateUserSyncHealth } from '@trade-god/execution'
 
@@ -77,6 +78,8 @@ export const TRADE_GOD_IPC = {
   PREPARE_OPTIONS_MANUAL_ORDER: 'trade-god:options:manual-order:prepare',
   COMMIT_OPTIONS_MANUAL_ORDER: 'trade-god:options:manual-order:commit',
   CANCEL_OPTIONS_MANUAL_ORDER: 'trade-god:options:manual-order:cancel',
+  CANCEL_OPTIONS_WORKING_ENTRY: 'trade-god:options:position:cancel-entry',
+  CLOSE_OPTIONS_POSITION: 'trade-god:options:position:close',
 } as const
 
 export interface TradingIpcManager {
@@ -147,6 +150,8 @@ export interface TradingIpcManager {
   prepareOptionsManualOrder?(input: { connection_id: string; max_premium: string; operator_confirmed: true }): Promise<OptionsManualOrderReview>
   commitOptionsManualOrder?(connectionId: string, reviewId: string, reviewChecksum: string, operatorConfirmed: true): Promise<OptionsExecutionRecord>
   cancelOptionsManualOrder?(connectionId: string, reviewId: string): Promise<void>
+  cancelOptionsWorkingEntry?(connectionId: string, intentId: string, operatorConfirmed: true): Promise<OptionsManagementRecord>
+  closeOptionsPosition?(connectionId: string, intentId: string, minimumCredit: string, operatorConfirmed: true): Promise<OptionsManagementRecord>
   resolveTradingConnection?(connectionId: string): Promise<TradingConnection>
   stop(): Promise<void>
 }
@@ -403,6 +408,16 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     if (typeof connectionId !== 'string' || typeof reviewId !== 'string') throw new Error('Manual options review ID is invalid.')
     return manager.cancelOptionsManualOrder(connectionId, reviewId)
   })
+  ipcMain.handle(TRADE_GOD_IPC.CANCEL_OPTIONS_WORKING_ENTRY, (_event, connectionId: unknown, intentId: unknown, operatorConfirmed: unknown) => {
+    if (!manager.cancelOptionsWorkingEntry) throw new Error('Options position custody is unavailable.')
+    if (operatorConfirmed !== true) throw new Error('Canceling a paper entry requires explicit confirmation.')
+    return manager.cancelOptionsWorkingEntry(String(connectionId), String(intentId), true)
+  })
+  ipcMain.handle(TRADE_GOD_IPC.CLOSE_OPTIONS_POSITION, (_event, connectionId: unknown, intentId: unknown, minimumCredit: unknown, operatorConfirmed: unknown) => {
+    if (!manager.closeOptionsPosition) throw new Error('Options position custody is unavailable.')
+    if (operatorConfirmed !== true || typeof minimumCredit !== 'string' || !minimumCredit.trim()) throw new Error('Closing a paper position requires an exact minimum credit and confirmation.')
+    return manager.closeOptionsPosition(String(connectionId), String(intentId), minimumCredit.trim(), true)
+  })
 
   let disposed = false
   return async () => {
@@ -453,6 +468,8 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.PREPARE_OPTIONS_MANUAL_ORDER)
     ipcMain.removeHandler(TRADE_GOD_IPC.COMMIT_OPTIONS_MANUAL_ORDER)
     ipcMain.removeHandler(TRADE_GOD_IPC.CANCEL_OPTIONS_MANUAL_ORDER)
+    ipcMain.removeHandler(TRADE_GOD_IPC.CANCEL_OPTIONS_WORKING_ENTRY)
+    ipcMain.removeHandler(TRADE_GOD_IPC.CLOSE_OPTIONS_POSITION)
     await manager.stop()
   }
 }

@@ -64,6 +64,21 @@ The workbench can request engine health, run the known fixture, and display tota
 
 ## Recently Completed
 
+- Added operator-facing custody for options paper orders. Options Desk can now
+  cancel the exact owned working entry or close the exact owned long position
+  at a confirmed minimum credit. Every action requires explicit confirmation,
+  persists its command before provider I/O, uses deterministic order lineage,
+  and refuses blind retries. Startup audits every management receipt—including
+  receipts that already look terminal—then repairs the entry ledger and debit
+  reservation before intake. Debit capacity releases only after fresh proof of
+  a flat account with zero working option orders.
+- Added the provider-neutral expiration custody schedule and assessment model.
+  It freezes exact close/escalation/cutoff times and the broker calendar/account
+  policy evidence they came from. Automatic expiration handling remains locked
+  because neither current provider has retained, certified automatic-close and
+  do-not-exercise evidence; the UI therefore tells the operator to close before
+  the broker cutoff instead of claiming unattended protection.
+
 - Added the first operator-confirmed options paper-order flow. After an exact
   IBKR paper account passes and applies the guided safety test, the operator can
   select only that tested contract, enter a maximum premium, review a fresh

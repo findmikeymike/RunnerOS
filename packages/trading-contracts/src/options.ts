@@ -30,6 +30,8 @@ export const OPTIONS_MANUAL_ORDER_SOURCE_SCHEMA_VERSION = 'options-manual-order-
 export const OPTIONS_MANUAL_ORDER_REVIEW_SCHEMA_VERSION = 'options-manual-order-review@1' as const
 export const OPTIONS_MANAGEMENT_COMMAND_SCHEMA_VERSION = 'options-management-command@1' as const
 export const OPTIONS_MANAGEMENT_RECORD_SCHEMA_VERSION = 'options-management-record@1' as const
+export const OPTIONS_EXPIRATION_SCHEDULE_SCHEMA_VERSION = 'options-expiration-schedule@1' as const
+export const OPTIONS_EXPIRATION_ASSESSMENT_SCHEMA_VERSION = 'options-expiration-assessment@1' as const
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD').refine((value) => {
   const parsed = new Date(`${value}T00:00:00.000Z`)
@@ -970,6 +972,55 @@ export const optionsManagementRecordSchema = z.object({
   }
 })
 
+export const optionsExpirationScheduleSchema = z.object({
+  schedule_schema_version: z.literal(OPTIONS_EXPIRATION_SCHEDULE_SCHEMA_VERSION),
+  schedule_id: identifierSchema,
+  provider: optionsProviderSchema,
+  environment: z.enum(['paper', 'sandbox']),
+  connection_id: identifierSchema,
+  account_id: identifierSchema,
+  canonical_contract_id: identifierSchema,
+  expiration: dateSchema,
+  provider_calendar_checksum: sha256Schema,
+  account_exercise_setting_checksum: sha256Schema,
+  automatic_close_start_at: utcTimestampSchema,
+  operator_escalation_at: utcTimestampSchema,
+  broker_order_cutoff_at: utcTimestampSchema,
+  regular_close_at: utcTimestampSchema,
+  exercise_instruction_cutoff_at: utcTimestampSchema,
+  do_not_exercise_mode: z.enum(['provider-supported', 'manual-required']),
+  source: z.string().min(1).max(240),
+  captured_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  const times = [value.automatic_close_start_at, value.operator_escalation_at, value.broker_order_cutoff_at, value.regular_close_at, value.exercise_instruction_cutoff_at].map(Date.parse)
+  if (!(times[0]! < times[1]! && times[1]! <= times[2]! && times[2]! <= times[3]! && times[3]! <= times[4]!)) {
+    context.addIssue({ code: 'custom', path: ['automatic_close_start_at'], message: 'Expiration custody deadlines are not in safe order' })
+  }
+  if (!value.regular_close_at.startsWith(`${value.expiration}T`)) {
+    context.addIssue({ code: 'custom', path: ['regular_close_at'], message: 'Regular close must occur on the exact expiration date' })
+  }
+})
+
+export const optionsExpirationAssessmentSchema = z.object({
+  assessment_schema_version: z.literal(OPTIONS_EXPIRATION_ASSESSMENT_SCHEMA_VERSION),
+  assessment_id: identifierSchema,
+  entry_intent_id: identifierSchema,
+  entry_record_checksum: sha256Schema,
+  schedule_checksum: sha256Schema,
+  open_quantity: nonnegativeIntegerSchema,
+  state: z.enum(['monitoring', 'close-due', 'operator-escalation', 'manual-do-not-exercise-required', 'provider-do-not-exercise-required', 'resolved-flat', 'custody-halted']),
+  next_deadline_at: utcTimestampSchema.nullable(),
+  automatic_close_allowed: z.boolean(),
+  operator_action_required: z.boolean(),
+  assessed_at: utcTimestampSchema,
+  detail: z.string().min(1).max(300),
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (value.state === 'resolved-flat' && value.open_quantity !== 0) context.addIssue({ code: 'custom', path: ['open_quantity'], message: 'Resolved custody must be flat' })
+  if (value.automatic_close_allowed && value.state !== 'close-due') context.addIssue({ code: 'custom', path: ['automatic_close_allowed'], message: 'Automatic close authority exists only during the certified close window' })
+})
+
 export const optionsManualOrderReviewSchema = z.object({
   review_schema_version: z.literal(OPTIONS_MANUAL_ORDER_REVIEW_SCHEMA_VERSION),
   review_id: identifierSchema,
@@ -1118,3 +1169,5 @@ export type OptionsManualOrderSource = z.infer<typeof optionsManualOrderSourceSc
 export type OptionsManualOrderReview = z.infer<typeof optionsManualOrderReviewSchema>
 export type OptionsManagementCommand = z.infer<typeof optionsManagementCommandSchema>
 export type OptionsManagementRecord = z.infer<typeof optionsManagementRecordSchema>
+export type OptionsExpirationSchedule = z.infer<typeof optionsExpirationScheduleSchema>
+export type OptionsExpirationAssessment = z.infer<typeof optionsExpirationAssessmentSchema>

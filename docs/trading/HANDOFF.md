@@ -7,6 +7,23 @@ source_of_truth: false
 
 # Trade God Handoff
 
+## 2026-08-26 Options Position and Expiration Custody Handoff
+
+- Options Desk now shows exact working entries and open long positions, with
+  explicit `Cancel entry` and `Close position` controls.
+- Close requires an operator minimum acceptable credit and a second explicit
+  confirmation. It closes only the complete exact owned position in this UI
+  slice; it never infers a partial exit.
+- Startup audits every management receipt before normal order recovery. A crash
+  between a broker result, the position ledger, and debit release is repaired
+  rather than skipped or resent.
+- The expiration planner freezes broker deadlines and do-not-exercise policy,
+  but unattended expiration action remains disabled until exact provider
+  behavior is retained and certified. The operator must close manually before
+  the displayed broker cutoff.
+- Local verification is clean. No real IBKR/Webull cancel, close, expiration,
+  exercise, or do-not-exercise lifecycle has been run in this worktree.
+
 ## 2026-08-26 Options Manual Paper Order Handoff
 
 - Options Desk now supports one explicitly reviewed IBKR paper order after the

@@ -61,7 +61,7 @@ async function fixture(root: string) {
   const manager = new OptionsPositionManager(executions, management, reservations, provider, () => nowValue)
   const review = await coordinator.prepare({ connection: account, authority: permission, operator_max_premium: '1.35', operator_confirmed: true })
   const entry = await coordinator.commit({ review_id: review.review_id, review_checksum: review.content_checksum, connection: account, authority: permission, operator_confirmed: true })
-  return { provider, reservations, executions, gateway, manager, entry }
+  return { provider, reservations, executions, management, gateway, manager, entry }
 }
 
 describe('options position manager', () => {
@@ -119,6 +119,29 @@ describe('options position manager', () => {
       const canceled = await setup.manager.reconcile(working.management_id)
       expect(canceled).toMatchObject({ state: 'close-canceled', closed_quantity: 0, remaining_open_quantity: 1 })
       expect(await setup.manager.recoverNonTerminal()).toBe(0)
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
+  test('startup audit repairs a terminal receipt whose entry and reservation writes were interrupted', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'options-management-'))
+    try {
+      const setup = await fixture(root)
+      await setup.provider.fill(setup.entry.provider_order_id!, 1, '1.29')
+      await setup.gateway.reconcile(setup.entry.intent_id)
+      const working = await setup.manager.closePosition({ intent_id: setup.entry.intent_id, request_id: 'crash-close', reason: 'operator', quantity: 'all', minimum_credit: '1.00' })
+      await setup.provider.fill(working.provider_close_order_id!, 1, '1.27')
+
+      const interrupted = await setup.management.getRecord(working.management_id)
+      await setup.management.updateRecord(interrupted.management_id, interrupted.content_checksum, {
+        state: 'closed-flat', closed_quantity: 1, remaining_open_quantity: 0,
+        updated_at: nowValue, evidence: [...interrupted.evidence, 'Simulated crash after terminal receipt write.'],
+      })
+      expect((await setup.executions.getRecord(setup.entry.intent_id)).state).toBe('open-position')
+      expect((await setup.reservations.list())[0]!.state).toBe('open-position')
+
+      expect(await setup.manager.recoverAll()).toBe(1)
+      expect((await setup.executions.getRecord(setup.entry.intent_id)).state).toBe('closed-flat')
+      expect((await setup.reservations.list())[0]!.state).toBe('released')
     } finally { await rm(root, { recursive: true, force: true }) }
   })
 })

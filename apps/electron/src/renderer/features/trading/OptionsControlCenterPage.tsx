@@ -44,6 +44,7 @@ const OptionsControlCenterPage: React.FC = () => {
   const [authorityConnection, setAuthorityConnection] = useState<ConnectionStatus | null>(null)
   const [certificationConnection, setCertificationConnection] = useState<ConnectionStatus | null>(null)
   const [orderConnection, setOrderConnection] = useState<ConnectionStatus | null>(null)
+  const [closePosition, setClosePosition] = useState<{ status: ConnectionStatus; intentId: string } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -118,6 +119,15 @@ const OptionsControlCenterPage: React.FC = () => {
     } catch (cause) { setError(readableError(cause)) } finally { setBusyId(null) }
   }
 
+  const cancelEntry = async (status: ConnectionStatus, intentId: string) => {
+    if (!window.confirm(`Cancel this working paper order in ${status.connection.account_label}? Any exact partial fill remains safely tracked.`)) return
+    setBusyId(status.connection.connection_id); setError(null)
+    try {
+      await window.electronAPI.cancelOptionsWorkingEntry(status.connection.connection_id, intentId, true)
+      await load()
+    } catch (cause) { setError(readableError(cause)) } finally { setBusyId(null) }
+  }
+
   return (
     <div className="h-full overflow-y-auto bg-[#080b0e] text-[#edf0f3]">
       <div className="mx-auto w-full max-w-[1320px] px-5 py-6 md:px-8 md:py-8">
@@ -187,6 +197,8 @@ const OptionsControlCenterPage: React.FC = () => {
                     onStartCertification={() => setCertificationConnection(status)}
                     onRevoke={() => void revokeAuthority(status.connection.connection_id)}
                     onOrder={() => setOrderConnection(status)}
+                    onCancelEntry={(intentId) => void cancelEntry(status, intentId)}
+                    onClosePosition={(intentId) => setClosePosition({ status, intentId })}
                   />
                 ))}
               </div>
@@ -227,6 +239,14 @@ const OptionsControlCenterPage: React.FC = () => {
           status={orderConnection}
           onClose={() => setOrderConnection(null)}
           onCompleted={async () => { setOrderConnection(null); await load() }}
+        />
+      )}
+      {closePosition && (
+        <ClosePositionDialog
+          status={closePosition.status}
+          intentId={closePosition.intentId}
+          onClose={() => setClosePosition(null)}
+          onCompleted={async () => { setClosePosition(null); await load() }}
         />
       )}
     </div>
@@ -328,7 +348,9 @@ const AccountCard: React.FC<{
   onStartCertification(): void
   onRevoke(): void
   onOrder(): void
-}> = ({ status, busy, onVerify, onRemove, onActivate, onApply, onStartCertification, onRevoke, onOrder }) => {
+  onCancelEntry(intentId: string): void
+  onClosePosition(intentId: string): void
+}> = ({ status, busy, onVerify, onRemove, onActivate, onApply, onStartCertification, onRevoke, onOrder, onCancelEntry, onClosePosition }) => {
   const { connection, provider_read_proof: proof } = status
   const connected = status.provider_read_fresh
   const provider = providerCopy[connection.provider]
@@ -399,9 +421,21 @@ const AccountCard: React.FC<{
           <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[#697481]">Paper orders</div>
           <div className="mt-2 grid gap-2">
             {status.manual_orders!.slice(-3).reverse().map((order) => (
-              <div key={order.record_id} className="flex items-center justify-between rounded-lg bg-black/20 px-3 py-2 text-xs">
-                <span className="text-[#c9cfd6]">{order.canonical_contract_id.replace('USOPT:', '').replaceAll(':', ' ')}</span>
-                <span className={order.state === 'submit-unknown' || order.state === 'halted' ? 'text-rose-200' : 'text-emerald-200'}>{order.state.replaceAll('-', ' ')}</span>
+              <div key={order.record_id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-black/20 px-3 py-2 text-xs">
+                <div>
+                  <div className="text-[#c9cfd6]">{order.canonical_contract_id.replace('USOPT:', '').replaceAll(':', ' ')}</div>
+                  <div className="mt-1 text-[10px] text-[#707b87]">{plainOrderState(order.state)} · {order.open_quantity} open</div>
+                  {order.open_quantity > 0 && <div className="mt-1 text-[10px] text-amber-200/80">Expires {contractExpiration(order.canonical_contract_id)} · close manually before broker cutoff</div>}
+                </div>
+                <div className="flex items-center gap-2">
+                  {(order.state === 'working' || order.state === 'partially-filled') && (
+                    <button type="button" onClick={() => onCancelEntry(order.intent_id)} disabled={busy} className="rounded-lg border border-amber-200/20 px-2.5 py-1.5 text-[10px] text-amber-100 hover:bg-amber-200/[0.06] disabled:opacity-40">Cancel entry</button>
+                  )}
+                  {order.open_quantity > 0 && order.state === 'open-position' && !hasActiveManagement(status, order.intent_id) && (
+                    <button type="button" onClick={() => onClosePosition(order.intent_id)} disabled={busy} className="rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-semibold text-black hover:bg-[#e7e9ec] disabled:opacity-40">Close position</button>
+                  )}
+                  <span className={order.state === 'submit-unknown' || order.state === 'halted' ? 'text-rose-200' : 'text-emerald-200'}>{plainOrderState(order.state)}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -605,6 +639,50 @@ const ManualOrderDialog: React.FC<{ status: ConnectionStatus; onClose(): void; o
   )
 }
 
+const ClosePositionDialog: React.FC<{
+  status: ConnectionStatus
+  intentId: string
+  onClose(): void
+  onCompleted(): Promise<void>
+}> = ({ status, intentId, onClose, onCompleted }) => {
+  const order = status.manual_orders?.find((candidate) => candidate.intent_id === intentId)
+  const [minimumCredit, setMinimumCredit] = useState('0.01')
+  const [confirmed, setConfirmed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!confirmed || !minimumCredit.trim()) return
+    setBusy(true); setError(null)
+    try {
+      await window.electronAPI.closeOptionsPosition(status.connection.connection_id, intentId, minimumCredit.trim(), true)
+      await onCompleted()
+    } catch (cause) { setError(readableError(cause)) } finally { setBusy(false) }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Close paper option position">
+      <form onSubmit={submit} className="w-full max-w-md rounded-2xl border border-white/[0.1] bg-[#12161b] p-6 shadow-modal-small">
+        <div className="flex items-start justify-between gap-4">
+          <div><div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200">Risk-reducing action</div><h2 className="mt-1 text-lg font-semibold">Close this paper position</h2></div>
+          <button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="p-2 text-[#75808d] hover:text-white"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="mt-4 rounded-xl border border-white/[0.08] bg-black/20 p-4 text-xs">
+          <div className="font-medium text-white">{order?.canonical_contract_id.replace('USOPT:', '').replaceAll(':', ' ')}</div>
+          <div className="mt-1 text-[#7f8996]">{order?.open_quantity ?? 0} contract · {status.connection.account_label}</div>
+        </div>
+        <div className="mt-5"><Field label="Minimum price you will accept per share" value={minimumCredit} onChange={setMinimumCredit} placeholder="Example: 1.00" /></div>
+        <p className="mt-2 text-[11px] leading-5 text-[#77818e]">Trade God checks a fresh live bid and sends one DAY sell-to-close limit. It cannot sell more than the exact owned quantity.</p>
+        <label className="mt-4 flex items-start gap-3 rounded-xl border border-amber-300/15 bg-amber-300/[0.05] p-3 text-xs leading-5 text-[#c8c0aa]">
+          <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-1" />
+          Close the full exact paper position now. A working entry remainder must already be canceled.
+        </label>
+        {error && <p className="mt-3 text-xs text-rose-200">{error}</p>}
+        <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="px-4 py-2 text-xs text-[#9ba4af]">Keep position</button><button disabled={!confirmed || !minimumCredit.trim() || busy} className="rounded-lg bg-white px-4 py-2 text-xs font-semibold text-black disabled:opacity-40">{busy ? 'Checking live bid…' : 'Close paper position'}</button></div>
+      </form>
+    </div>
+  )
+}
+
 const Field: React.FC<{ label: string; value: string; onChange(value: string): void; placeholder: string; secret?: boolean; optional?: boolean }> = ({ label, value, onChange, placeholder, secret, optional }) => (
   <label className="grid gap-1.5 text-xs font-medium text-[#b7bec7]">
     <span>{label}{optional && <span className="ml-1 font-normal text-[#69737f]">optional</span>}</span>
@@ -643,6 +721,30 @@ const SmallFact: React.FC<{ label: string; value: string; warn?: boolean }> = ({
 const readableError = (cause: unknown): string => {
   const message = cause instanceof Error ? cause.message : String(cause)
   return message.replace(/^Error invoking remote method '[^']+': Error:\s*/i, '').replace(/^Error:\s*/i, '')
+}
+
+const plainOrderState = (state: string): string => ({
+  working: 'Waiting to fill',
+  'partially-filled': 'Partially filled',
+  'open-position': 'Position open',
+  'canceled-flat': 'Canceled · no position',
+  'closed-flat': 'Closed',
+  'submit-unknown': 'Broker confirmation needed',
+  halted: 'Safely paused',
+  prepared: 'Prepared',
+  submitting: 'Sending',
+  'not-sent': 'Not sent',
+}[state] ?? state.replaceAll('-', ' '))
+
+const hasActiveManagement = (status: ConnectionStatus, intentId: string): boolean => (
+  (status.management_records ?? []).some((record) => record.entry_intent_id === intentId
+    && ['prepared', 'cancel-unknown', 'close-unknown', 'close-working', 'partially-closed', 'halted'].includes(record.state))
+)
+
+const contractExpiration = (canonicalId: string): string => {
+  const match = /^USOPT:[^:]+:(\d{4}-\d{2}-\d{2}):/.exec(canonicalId)
+  if (!match) return 'unknown date'
+  return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${match[1]}T12:00:00.000Z`))
 }
 
 export default OptionsControlCenterPage

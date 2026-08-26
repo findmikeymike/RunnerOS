@@ -12,6 +12,7 @@ import {
   type OptionsProviderReadProof,
   type OptionsManualPaperAuthority,
   type OptionsExecutionRecord,
+  type OptionsManagementRecord,
 } from '@trade-god/contracts'
 import { canonicalJson, sha256 } from '@trade-god/execution'
 
@@ -59,6 +60,7 @@ export interface OptionsConnectionStatus {
     'record_id' | 'intent_id' | 'canonical_contract_id' | 'state' | 'requested_quantity' | 'filled_quantity' | 'open_quantity' | 'average_fill_price' | 'created_at' | 'updated_at' | 'provider_order_id'>>
   manual_recovery_issue?: string
   pending_manual_reviews?: number
+  management_records?: OptionsManagementRecord[]
 }
 
 export interface OptionsProviderReadVerifier {
