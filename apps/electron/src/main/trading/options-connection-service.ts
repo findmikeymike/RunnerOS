@@ -18,11 +18,11 @@ import type { TradingCredentialVault } from './trading-connection-service.ts'
 const IBKR_ENDPOINT = 'https://api.ibkr.com/v1/api'
 const WEBULL_ENDPOINT = 'https://api.sandbox.webull.com'
 const PROOF_TTL_MS = 10 * 60 * 1000
-const ADAPTER_VERSION = '0.1.0'
+const ADAPTER_VERSION = '1.0.0'
 
 const providerContract = (provider: OptionsProvider): { adapterId: string; contractVersion: string } => provider === 'ibkr'
-  ? { adapterId: 'ibkr-options-read', contractVersion: 'ibkr-web-api-read-2026-08-26' }
-  : { adapterId: 'webull-options-read', contractVersion: 'webull-trading-api-v2-read-2026-08-26' }
+  ? { adapterId: 'ibkr-options-api', contractVersion: 'ibkr-web-api-options-paper-2026-08-26' }
+  : { adapterId: 'webull-options-api', contractVersion: 'webull-trading-api-options-sandbox-2026-08-26' }
 
 export interface SaveOptionsConnectionInput {
   connection_id?: string

@@ -198,7 +198,7 @@ describe('ReadOnlyOptionsProviderVerifier', () => {
 })
 
 const connectionFor = (provider: 'ibkr' | 'webull', accountRef: string): OptionsConnection => {
-  const adapterId = provider === 'ibkr' ? 'ibkr-options-read' : 'webull-options-read'
+  const adapterId = provider === 'ibkr' ? 'ibkr-options-api' : 'webull-options-api'
   return seal({
     connection_schema_version: 'options-connection@1',
     connection_id: `${provider}-one`,
@@ -206,8 +206,8 @@ const connectionFor = (provider: 'ibkr' | 'webull', accountRef: string): Options
     environment: provider === 'ibkr' ? 'paper' : 'sandbox',
     auth_profile: provider === 'ibkr' ? 'ibkr-oauth-access-token' : 'webull-individual-hmac',
     adapter_id: adapterId,
-    adapter_version: '0.1.0',
-    provider_contract_version: provider === 'ibkr' ? 'ibkr-web-api-read-2026-08-26' : 'webull-trading-api-v2-read-2026-08-26',
+    adapter_version: '1.0.0',
+    provider_contract_version: provider === 'ibkr' ? 'ibkr-web-api-options-paper-2026-08-26' : 'webull-trading-api-options-sandbox-2026-08-26',
     account_ref: accountRef,
     account_label: `${provider} test`,
     endpoint: provider === 'ibkr' ? 'https://api.ibkr.com/v1/api' : 'https://api.sandbox.webull.com',

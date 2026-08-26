@@ -648,6 +648,9 @@ Never collapse these into “done.”
   revocation is append-only and idempotent.
 - Account authority mutations use a cross-process fail-closed lock. Crashed-lock
   repair requires explicit desktop single-instance startup authority.
+- Saved account metadata now uses the same exact adapter/version/provider-
+  contract identity as the installed IBKR/Webull adapter; read-only evidence
+  cannot masquerade as a different execution adapter during certification.
 - Verification: 15 focused authority/certification/contract tests passed; diff
   check passed.
 - Not yet proven: provider lifecycle evidence, runtime/UI activation, a manual

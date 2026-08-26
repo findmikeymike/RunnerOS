@@ -75,8 +75,8 @@ const connection = (): OptionsConnection => {
   const unsigned = {
     connection_schema_version: OPTIONS_CONNECTION_SCHEMA_VERSION,
     connection_id: 'ibkr-options-one', provider: 'ibkr' as const, environment: 'paper' as const,
-    auth_profile: 'ibkr-oauth-access-token' as const, adapter_id: 'ibkr-options-read', adapter_version: '0.1.0',
-    provider_contract_version: 'ibkr-web-api-read-2026-08-26', account_ref: 'DU1234567', account_label: 'IBKR Paper',
+    auth_profile: 'ibkr-oauth-access-token' as const, adapter_id: 'ibkr-options-api', adapter_version: '1.0.0',
+    provider_contract_version: 'ibkr-web-api-options-paper-2026-08-26', account_ref: 'DU1234567', account_label: 'IBKR Paper',
     endpoint: 'https://api.ibkr.com/v1/api', credential_ref: 'vault-options-ibkr-options-one', credential_generation: 'a'.repeat(64),
     state: 'read-only-verified' as const, read_only: true as const, execution_enabled: false as const,
     created_at: '2026-08-26T12:00:00.000Z', updated_at: '2026-08-26T12:00:00.000Z',
@@ -92,7 +92,7 @@ const certified = (current: OptionsConnection) => runRestrictedOptionsCertificat
 
 const runner = (): RestrictedOptionsCertificationRunner => ({
   connection_id: 'ibkr-options-one', account_ref: 'DU1234567', provider: 'ibkr', environment: 'paper',
-  adapter_id: 'ibkr-options-read', adapter_version: '0.1.0', provider_contract_version: 'ibkr-web-api-read-2026-08-26',
+  adapter_id: 'ibkr-options-api', adapter_version: '1.0.0', provider_contract_version: 'ibkr-web-api-options-paper-2026-08-26',
   allowed_contract_id: 'USOPT:SPY:2026-09-18:C:650', allowed_provider_instrument_id: '123456789', client_order_prefix: 'tgcert-test',
   runScenario: async (scenario) => ({ status: 'pass', detail: `Proved ${scenario}.`, evidence: { scenario } }),
   finalTruth: async () => ({ position_quantity: 0, working_order_count: 0, mutation_count: 4, evidence: { flat: true } }),
