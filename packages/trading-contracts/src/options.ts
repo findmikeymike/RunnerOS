@@ -23,6 +23,8 @@ export const OPTIONS_EXECUTION_RECORD_SCHEMA_VERSION = 'options-execution-record
 export const OPTIONS_CONNECTION_SCHEMA_VERSION = 'options-connection@1' as const
 export const OPTIONS_PROVIDER_READ_PROOF_SCHEMA_VERSION = 'options-provider-read-proof@1' as const
 export const OPTIONS_CERTIFICATION_EVIDENCE_SCHEMA_VERSION = 'options-certification-evidence@1' as const
+export const OPTIONS_MANUAL_PAPER_AUTHORITY_SCHEMA_VERSION = 'options-manual-paper-authority@1' as const
+export const OPTIONS_AUTHORITY_REVOCATION_SCHEMA_VERSION = 'options-authority-revocation@1' as const
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD').refine((value) => {
   const parsed = new Date(`${value}T00:00:00.000Z`)
@@ -177,6 +179,51 @@ export const optionsCertificationEvidenceSchema = z.object({
     context.addIssue({ code: 'custom', path: ['eligible_level'], message: 'Certification eligibility overstates retained evidence' })
   }
 })
+
+export const optionsManualPaperAuthoritySchema = z.object({
+  authority_schema_version: z.literal(OPTIONS_MANUAL_PAPER_AUTHORITY_SCHEMA_VERSION),
+  authority_id: identifierSchema,
+  connection_id: identifierSchema,
+  connection_checksum: sha256Schema,
+  credential_generation: sha256Schema,
+  certification_id: identifierSchema,
+  certification_checksum: sha256Schema,
+  certification_expires_at: utcTimestampSchema,
+  provider: optionsProviderSchema,
+  environment: z.enum(['paper', 'sandbox']),
+  account_ref: z.string().min(1).max(120),
+  adapter_id: identifierSchema,
+  adapter_version: z.string().regex(/^\d+\.\d+\.\d+$/),
+  provider_contract_version: identifierSchema,
+  allowed_contract_id: identifierSchema,
+  allowed_provider_instrument_id: identifierSchema,
+  mode: z.literal('manual-confirmed-paper'),
+  max_contracts_per_order: z.literal(1),
+  max_debit_per_order: positiveDecimalStringSchema,
+  valid_from: utcTimestampSchema,
+  valid_until: utcTimestampSchema,
+  operator_confirmed_at: utcTimestampSchema,
+  created_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (!(value.valid_from === value.created_at
+    && value.operator_confirmed_at === value.created_at
+    && Date.parse(value.valid_until) > Date.parse(value.valid_from)
+    && Date.parse(value.valid_until) <= Date.parse(value.certification_expires_at))) {
+    context.addIssue({ code: 'custom', path: ['valid_until'], message: 'Manual paper authority chronology exceeds its certification' })
+  }
+})
+
+export const optionsAuthorityRevocationSchema = z.object({
+  revocation_schema_version: z.literal(OPTIONS_AUTHORITY_REVOCATION_SCHEMA_VERSION),
+  revocation_id: identifierSchema,
+  authority_id: identifierSchema,
+  authority_checksum: sha256Schema,
+  connection_id: identifierSchema,
+  reason: z.enum(['operator', 'account-change', 'credential-change', 'certification-expired', 'integrity-failure']),
+  revoked_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict()
 
 function decimalParts(value: string): { coefficient: bigint; scale: number } {
   const negative = value.startsWith('-')
@@ -905,3 +952,5 @@ export type OptionsConnection = z.infer<typeof optionsConnectionSchema>
 export type OptionsProviderReadProof = z.infer<typeof optionsProviderReadProofSchema>
 export type OptionsCertificationScenario = z.infer<typeof optionsCertificationScenarioSchema>
 export type OptionsCertificationEvidence = z.infer<typeof optionsCertificationEvidenceSchema>
+export type OptionsManualPaperAuthority = z.infer<typeof optionsManualPaperAuthoritySchema>
+export type OptionsAuthorityRevocation = z.infer<typeof optionsAuthorityRevocationSchema>

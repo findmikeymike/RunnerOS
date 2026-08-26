@@ -634,6 +634,25 @@ Never collapse these into “done.”
   OPRA subscription, long-open sandbox semantics, sequenced order-event
   reconciliation, any provider mutation, lifecycle certification, runtime
   attachment, or execution authority.
+
+## Options Autopilot Slice 5C — Manual Paper Authority Boundary — 2026-08-26
+
+- Manual paper authority is a separate append-only artifact. It binds one exact
+  current connection checksum, credential generation, retained certification,
+  provider environment, adapter/version/provider contract, and certified option
+  contract. It permits one contract per order and expires no later than its
+  certification.
+- Activation loads certification from Trade God's immutable evidence store; a
+  renderer/caller cannot supply or self-certify evidence. Debit authority cannot
+  exceed the certified test debit, duplicate active authority fails closed, and
+  revocation is append-only and idempotent.
+- Account authority mutations use a cross-process fail-closed lock. Crashed-lock
+  repair requires explicit desktop single-instance startup authority.
+- Verification: 15 focused authority/certification/contract tests passed; diff
+  check passed.
+- Not yet proven: provider lifecycle evidence, runtime/UI activation, a manual
+  provider submit, or automatic Discord authority. With no retained real broker
+  certification, no authority can be created on this installation.
 # Multi-account connections and Discord routes — 2026-07-31
 
 - Multiple prop firms/accounts can coexist; connection identity remains exact
