@@ -79,6 +79,9 @@ type ApiToChannelMapKeys = Exclude<
   | 'listOptionsAutomationSources' // direct local options source IPC
   | 'saveOptionsAutomationSource' // direct local options source IPC
   | 'archiveOptionsAutomationSource' // direct local options source IPC
+  | 'prepareOptionsAutopilotActivation' // direct local reviewed options activation IPC
+  | 'commitOptionsAutopilotActivation' // direct local reviewed options activation IPC
+  | 'revokeOptionsAutopilot' // direct local options automation halt IPC
   | 'onTradeGodAlert' // direct local Trade God alert listener
 > | BrowserPaneKeys
 type ChannelMapKeys = keyof typeof CHANNEL_MAP & string

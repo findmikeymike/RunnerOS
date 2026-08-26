@@ -512,6 +512,9 @@ export interface ElectronAPI {
   listOptionsAutomationSources(): Promise<import('../main/trading/options-automation-service').OptionsAutomationSourceStatus[]>
   saveOptionsAutomationSource(input: import('../main/trading/options-automation-service').SaveOptionsAutomationSourceInput): Promise<import('../main/trading/options-automation-service').OptionsAutomationSourceStatus>
   archiveOptionsAutomationSource(routeId: string): Promise<void>
+  prepareOptionsAutopilotActivation(routeId: string, validUntil: string): Promise<import('@trade-god/execution').OptionsAutopilotActivationReview>
+  commitOptionsAutopilotActivation(reviewId: string, reviewChecksum: string, operatorConfirmed: true): Promise<import('@trade-god/contracts').OptionsAutopilotAuthority>
+  revokeOptionsAutopilot(routeId: string): Promise<void>
 
   // Session management
   getSessions(): Promise<Session[]>

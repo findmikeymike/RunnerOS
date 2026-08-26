@@ -18,8 +18,9 @@ import type {
   OptionsManualOrderReview,
   OptionsExecutionRecord,
   OptionsManagementRecord,
+  OptionsAutopilotAuthority,
 } from '@trade-god/contracts'
-import type { SaveMirrorGroupInput, TradovateUserSyncHealth } from '@trade-god/execution'
+import type { OptionsAutopilotActivationReview, SaveMirrorGroupInput, TradovateUserSyncHealth } from '@trade-god/execution'
 
 import { TRADE_GOD_IPC } from './trading-ipc.ts'
 import type { InterpretFixtureInput } from './order-flow-specialist-pipeline.ts'
@@ -109,6 +110,9 @@ export interface TradingPreloadApi {
   listOptionsAutomationSources(): Promise<OptionsAutomationSourceStatus[]>
   saveOptionsAutomationSource(input: SaveOptionsAutomationSourceInput): Promise<OptionsAutomationSourceStatus>
   archiveOptionsAutomationSource(routeId: string): Promise<void>
+  prepareOptionsAutopilotActivation(routeId: string, validUntil: string): Promise<OptionsAutopilotActivationReview>
+  commitOptionsAutopilotActivation(reviewId: string, reviewChecksum: string, operatorConfirmed: true): Promise<OptionsAutopilotAuthority>
+  revokeOptionsAutopilot(routeId: string): Promise<void>
 }
 
 export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): TradingPreloadApi {
@@ -271,6 +275,13 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
     archiveOptionsAutomationSource: (routeId) => (
       invoke(TRADE_GOD_IPC.ARCHIVE_OPTIONS_AUTOMATION_SOURCE, routeId) as Promise<void>
     ),
+    prepareOptionsAutopilotActivation: (routeId, validUntil) => (
+      invoke(TRADE_GOD_IPC.PREPARE_OPTIONS_AUTOPILOT_ACTIVATION, routeId, validUntil) as Promise<OptionsAutopilotActivationReview>
+    ),
+    commitOptionsAutopilotActivation: (reviewId, reviewChecksum, operatorConfirmed) => (
+      invoke(TRADE_GOD_IPC.COMMIT_OPTIONS_AUTOPILOT_ACTIVATION, reviewId, reviewChecksum, operatorConfirmed) as Promise<OptionsAutopilotAuthority>
+    ),
+    revokeOptionsAutopilot: (routeId) => invoke(TRADE_GOD_IPC.REVOKE_OPTIONS_AUTOPILOT, routeId) as Promise<void>,
     onTradeGodAlert: (callback) => subscribe
       ? subscribe(TRADE_GOD_IPC.ALERT_RECEIVED, (payload) => callback(payload as TradeAlert))
       : () => {},

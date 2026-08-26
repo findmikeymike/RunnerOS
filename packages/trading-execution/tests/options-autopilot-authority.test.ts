@@ -55,6 +55,8 @@ const certification = (account: OptionsConnection, app: OptionsCertificationAppl
       scenario, status: 'pass' as const, evidence_checksum: sha256({ scenario }), detail: `Proved ${scenario}.`, observed_at: '2026-08-26T14:20:00.000Z',
     })),
     completed_lifecycle_count: lifecycles, provider_automatic_close_certified: true, provider_do_not_exercise_certified: true,
+    provider_calendar_checksum: sha256('calendar'), account_exercise_setting_checksum: sha256('exercise-setting'),
+    custody_certification_checksum: sha256('custody'),
     final_position_quantity: 0, final_working_order_count: 0,
     eligible_level: eligible ? 'options-paper-autopilot-certified' as const : null,
   }) as OptionsAutopilotCertificationEvidence

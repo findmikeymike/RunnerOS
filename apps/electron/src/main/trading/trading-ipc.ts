@@ -19,8 +19,9 @@ import type {
   OptionsManualOrderReview,
   OptionsExecutionRecord,
   OptionsManagementRecord,
+  OptionsAutopilotAuthority,
 } from '@trade-god/contracts'
-import type { SaveMirrorGroupInput, TradovateUserSyncHealth } from '@trade-god/execution'
+import type { OptionsAutopilotActivationReview, SaveMirrorGroupInput, TradovateUserSyncHealth } from '@trade-god/execution'
 
 import type { InterpretFixtureInput } from './order-flow-specialist-pipeline.ts'
 import type { SyntheticChartFixtureInput } from './synthetic-chart-fixture.ts'
@@ -84,6 +85,9 @@ export const TRADE_GOD_IPC = {
   LIST_OPTIONS_AUTOMATION_SOURCES: 'trade-god:options:automation:list',
   SAVE_OPTIONS_AUTOMATION_SOURCE: 'trade-god:options:automation:save',
   ARCHIVE_OPTIONS_AUTOMATION_SOURCE: 'trade-god:options:automation:archive',
+  PREPARE_OPTIONS_AUTOPILOT_ACTIVATION: 'trade-god:options:automation:activation:prepare',
+  COMMIT_OPTIONS_AUTOPILOT_ACTIVATION: 'trade-god:options:automation:activation:commit',
+  REVOKE_OPTIONS_AUTOPILOT: 'trade-god:options:automation:activation:revoke',
 } as const
 
 export interface TradingIpcManager {
@@ -159,6 +163,9 @@ export interface TradingIpcManager {
   listOptionsAutomationSources?(): Promise<OptionsAutomationSourceStatus[]>
   saveOptionsAutomationSource?(input: SaveOptionsAutomationSourceInput): Promise<OptionsAutomationSourceStatus>
   archiveOptionsAutomationSource?(routeId: string): Promise<void>
+  prepareOptionsAutopilotActivation?(routeId: string, validUntil: string): Promise<OptionsAutopilotActivationReview>
+  commitOptionsAutopilotActivation?(reviewId: string, reviewChecksum: string, operatorConfirmed: true): Promise<OptionsAutopilotAuthority>
+  revokeOptionsAutopilot?(routeId: string): Promise<void>
   resolveTradingConnection?(connectionId: string): Promise<TradingConnection>
   stop(): Promise<void>
 }
@@ -438,6 +445,20 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     if (!manager.archiveOptionsAutomationSource) throw new Error('Options Discord sources are unavailable.')
     return manager.archiveOptionsAutomationSource(String(routeId))
   })
+  ipcMain.handle(TRADE_GOD_IPC.PREPARE_OPTIONS_AUTOPILOT_ACTIVATION, (_event, routeId: unknown, validUntil: unknown) => {
+    if (!manager.prepareOptionsAutopilotActivation) throw new Error('Automatic options activation is unavailable.')
+    if (typeof validUntil !== 'string') throw new Error('Automation end time is required.')
+    return manager.prepareOptionsAutopilotActivation(String(routeId), validUntil)
+  })
+  ipcMain.handle(TRADE_GOD_IPC.COMMIT_OPTIONS_AUTOPILOT_ACTIVATION, (_event, reviewId: unknown, reviewChecksum: unknown, confirmed: unknown) => {
+    if (!manager.commitOptionsAutopilotActivation) throw new Error('Automatic options activation is unavailable.')
+    if (confirmed !== true) throw new Error('Starting automatic paper trading requires explicit confirmation.')
+    return manager.commitOptionsAutopilotActivation(String(reviewId), String(reviewChecksum), true)
+  })
+  ipcMain.handle(TRADE_GOD_IPC.REVOKE_OPTIONS_AUTOPILOT, (_event, routeId: unknown) => {
+    if (!manager.revokeOptionsAutopilot) throw new Error('Automatic options controls are unavailable.')
+    return manager.revokeOptionsAutopilot(String(routeId))
+  })
 
   let disposed = false
   return async () => {
@@ -493,6 +514,9 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.LIST_OPTIONS_AUTOMATION_SOURCES)
     ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_OPTIONS_AUTOMATION_SOURCE)
     ipcMain.removeHandler(TRADE_GOD_IPC.ARCHIVE_OPTIONS_AUTOMATION_SOURCE)
+    ipcMain.removeHandler(TRADE_GOD_IPC.PREPARE_OPTIONS_AUTOPILOT_ACTIVATION)
+    ipcMain.removeHandler(TRADE_GOD_IPC.COMMIT_OPTIONS_AUTOPILOT_ACTIVATION)
+    ipcMain.removeHandler(TRADE_GOD_IPC.REVOKE_OPTIONS_AUTOPILOT)
     await manager.stop()
   }
 }

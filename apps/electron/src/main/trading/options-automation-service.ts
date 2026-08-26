@@ -37,6 +37,9 @@ export type OptionsAutomationSourceStatus = {
   policy: OptionsEntryPolicy
   recent_receipts: OptionsAutomationReceipt[]
   automatic_authority_active: boolean
+  activation_ready: boolean
+  activation_issue?: string
+  activation_expires_at?: string
   expiration_assessments: OptionsExpirationAssessment[]
   custody_issue?: string
 }
@@ -49,6 +52,7 @@ export class OptionsAutomationService {
     private readonly authorityActive: (route: OptionsAutomationRoute, policy: OptionsEntryPolicy, connection: OptionsConnection) => Promise<boolean>,
     private readonly now: () => string = () => new Date().toISOString(),
     private readonly listExpirationAssessments: () => Promise<OptionsExpirationAssessment[]> = async () => [],
+    private readonly activationReadiness: (connection: OptionsConnection) => Promise<{ ready: boolean; issue?: string; expires_at?: string }> = async () => ({ ready: false, issue: 'Automatic safety test not completed.' }),
   ) {}
 
   async list(): Promise<OptionsAutomationSourceStatus[]> {
@@ -59,11 +63,15 @@ export class OptionsAutomationService {
       const connection = await this.resolveConnection(route.connection_id)
       const routeReceipts = receipts.filter((receipt) => receipt.route_id === route.route_id)
       const intentIds = new Set(routeReceipts.flatMap((receipt) => receipt.execution_intent_id ? [receipt.execution_intent_id] : []))
+      const readiness = await this.activationReadiness(connection)
       return {
         route,
         policy,
         recent_receipts: routeReceipts.slice(-20).reverse(),
         automatic_authority_active: await this.authorityActive(route, policy, connection),
+        activation_ready: readiness.ready,
+        activation_issue: readiness.issue,
+        activation_expires_at: readiness.expires_at,
         expiration_assessments: assessments.filter((item) => intentIds.has(item.entry_intent_id))
           .sort((left, right) => right.assessed_at.localeCompare(left.assessed_at)
             || right.assessment_id.localeCompare(left.assessment_id))
@@ -130,7 +138,8 @@ export class OptionsAutomationService {
     }
     const route = optionsAutomationRouteSchema.parse({ ...routeBody, content_checksum: sha256(routeBody) })
     await this.store.saveRoute(route)
-    return { route, policy, recent_receipts: [], automatic_authority_active: false, expiration_assessments: [] }
+    return { route, policy, recent_receipts: [], automatic_authority_active: false, activation_ready: false,
+      activation_issue: 'Automatic safety test not completed.', expiration_assessments: [] }
   }
 
   async archive(routeId: string): Promise<OptionsAutomationRoute> {

@@ -49,6 +49,7 @@ const OptionsControlCenterPage: React.FC = () => {
   const [orderConnection, setOrderConnection] = useState<ConnectionStatus | null>(null)
   const [closePosition, setClosePosition] = useState<{ status: ConnectionStatus; intentId: string } | null>(null)
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false)
+  const [activationSource, setActivationSource] = useState<AutomationSource | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -198,8 +199,16 @@ const OptionsControlCenterPage: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`rounded-full px-2.5 py-1 text-[10px] ${source.automatic_authority_active ? 'bg-emerald-400/[0.09] text-emerald-200' : 'bg-amber-300/[0.08] text-amber-100'}`}>{source.automatic_authority_active ? 'Running' : 'Setup saved · automation off'}</span>
+                      {source.automatic_authority_active ? (
+                        <button type="button" onClick={async () => { if (window.confirm(`Pause automatic paper trading for ${source.route.display_name}?`)) { await window.electronAPI.revokeOptionsAutopilot(source.route.route_id); await load() } }} className="rounded-lg border border-white/[0.09] px-3 py-1.5 text-[11px] text-[#c7ced6] hover:bg-white/[0.05]">Pause</button>
+                      ) : (
+                        <button type="button" disabled={!source.activation_ready} onClick={() => setActivationSource(source)} className="rounded-lg bg-violet-200 px-3 py-1.5 text-[11px] font-semibold text-black disabled:cursor-not-allowed disabled:bg-white/[0.05] disabled:text-[#68727e]">{source.activation_ready ? 'Review & start' : 'Safety test needed'}</button>
+                      )}
                       <button type="button" onClick={async () => { if (window.confirm(`Remove ${source.route.display_name} from options monitoring?`)) { await window.electronAPI.archiveOptionsAutomationSource(source.route.route_id); await load() } }} className="rounded-lg p-2 text-[#68727e] hover:bg-rose-400/[0.08] hover:text-rose-300" aria-label={`Remove ${source.route.display_name}`}><Trash2 className="h-4 w-4" /></button>
                     </div></div>
+                    {!source.automatic_authority_active && source.activation_issue && (
+                      <div className="mt-2 text-[11px] text-[#75808d]">{source.activation_issue}</div>
+                    )}
                     {custody && custody.state !== 'monitoring' && custody.state !== 'resolved-flat' && (
                       <div className={`mt-3 rounded-lg px-3 py-2 text-xs leading-5 ${custody.state === 'custody-halted' ? 'bg-rose-400/[0.08] text-rose-100' : 'bg-amber-300/[0.07] text-amber-100'}`}>
                         <span className="font-semibold">Expiration action: </span>{custody.detail}
@@ -310,6 +319,57 @@ const OptionsControlCenterPage: React.FC = () => {
       {sourceDialogOpen && (
         <DiscordSourceDialog connections={connections} onClose={() => setSourceDialogOpen(false)} onSaved={async () => { setSourceDialogOpen(false); await load() }} />
       )}
+      {activationSource && (
+        <AutopilotActivationDialog source={activationSource} account={connections.find((item) => item.connection.connection_id === activationSource.route.connection_id)}
+          onClose={() => setActivationSource(null)} onActivated={async () => { setActivationSource(null); await load() }} />
+      )}
+    </div>
+  )
+}
+
+const AutopilotActivationDialog: React.FC<{
+  source: AutomationSource
+  account?: ConnectionStatus
+  onClose(): void
+  onActivated(): Promise<void>
+}> = ({ source, account, onClose, onActivated }) => {
+  type Review = Awaited<ReturnType<typeof window.electronAPI.prepareOptionsAutopilotActivation>>
+  const [review, setReview] = useState<Review | null>(null)
+  const [confirmed, setConfirmed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const certificationExpiry = source.activation_expires_at ? Date.parse(source.activation_expires_at) : Number.NaN
+  const validUntil = new Date(Math.min(Date.now() + 8 * 60 * 60_000,
+    Number.isFinite(certificationExpiry) ? certificationExpiry : Date.now() + 8 * 60 * 60_000)).toISOString()
+  const prepare = async () => {
+    setBusy(true); setError(null)
+    try { setReview(await window.electronAPI.prepareOptionsAutopilotActivation(source.route.route_id, validUntil)) }
+    catch (cause) { setError(readableError(cause)) } finally { setBusy(false) }
+  }
+  const commit = async () => {
+    if (!review || !confirmed) return
+    setBusy(true); setError(null)
+    try {
+      await window.electronAPI.commitOptionsAutopilotActivation(review.review_id, review.content_checksum, true)
+      await onActivated()
+    } catch (cause) { setError(readableError(cause)) } finally { setBusy(false) }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Start automatic paper trading">
+      <div className="w-full max-w-lg rounded-2xl border border-white/[0.1] bg-[#12161b] p-6 shadow-modal-small">
+        <div className="flex items-start justify-between gap-4"><div><div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300">Automatic paper trading</div><h2 className="mt-1 text-lg font-semibold">Review before starting</h2></div><button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="p-2 text-[#75808d] hover:text-white"><X className="h-4 w-4" /></button></div>
+        <div className="mt-4 rounded-xl border border-white/[0.08] bg-black/20 p-4">
+          <div className="text-sm font-medium text-white">{source.route.display_name} → {account?.connection.account_label ?? source.route.account_id}</div>
+          <div className="mt-2 grid grid-cols-2 gap-3"><SmallFact label="Per signal" value={`Up to ${source.policy.max_contracts_per_order} contract`} /><SmallFact label="Maximum cost" value={`$${source.policy.max_debit_per_trade}`} /><SmallFact label="Spread limit" value={`$${source.policy.max_spread_abs} and ${source.policy.max_spread_pct}%`} /><SmallFact label="Price chase limit" value={`$${source.policy.max_chase_abs} and ${source.policy.max_chase_pct}%`} /></div>
+        </div>
+        <div className="mt-4 rounded-xl border border-amber-300/15 bg-amber-300/[0.05] p-3 text-xs leading-5 text-[#d1c8ae]">Trade God can buy only single calls or puts in this paper account. It skips late, stale, wide-spread, overpriced, ambiguous, or uncertified signals. Working orders time out automatically.</div>
+        {!review ? (
+          <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} className="px-4 py-2 text-xs text-[#9ba4af]">Cancel</button><button type="button" onClick={() => void prepare()} disabled={busy} className="rounded-lg bg-white px-4 py-2 text-xs font-semibold text-black disabled:opacity-40">{busy ? 'Checking safety evidence…' : 'Check and continue'}</button></div>
+        ) : (
+          <><label className="mt-4 flex items-start gap-3 rounded-xl border border-emerald-300/15 bg-emerald-300/[0.05] p-3 text-xs leading-5 text-emerald-100"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-1" />Start this exact Discord source on this exact paper account until {new Date(validUntil).toLocaleString()}. I can pause it at any time.</label><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} className="px-4 py-2 text-xs text-[#9ba4af]">Cancel</button><button type="button" onClick={() => void commit()} disabled={!confirmed || busy} className="rounded-lg bg-violet-200 px-4 py-2 text-xs font-semibold text-black disabled:opacity-40">{busy ? 'Starting…' : 'Start paper automation'}</button></div></>
+        )}
+        {error && <p className="mt-3 text-xs text-rose-200">{error}</p>}
+      </div>
     </div>
   )
 }

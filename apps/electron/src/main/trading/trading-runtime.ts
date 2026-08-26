@@ -87,6 +87,7 @@ import {
   FileOptionsAutomationStore,
   FileOptionsAutopilotAuthorityStore,
   FileOptionsAutopilotCertificationStore,
+  OptionsAutopilotActivationService,
   FileOptionsAutomationReceiptStore,
   FileOptionsAutomationPlanStore,
   OptionsAutomaticEntryCoordinator,
@@ -680,6 +681,29 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         ),
         options.now,
         () => optionsExpirationCustodyStore?.listAssessments() ?? Promise.resolve([]),
+        async (connection) => {
+          if (options.optionsSingleInstanceAuthority !== true) {
+            return { ready: false, issue: 'Close the other Trade God window before starting automation.' }
+          }
+          const [certification, application] = await Promise.all([
+            optionsAutopilotCertificationStore?.getEligible(connection, options.now()),
+            optionsCertificationApplicationStore?.getActive(connection, options.now()),
+          ])
+          if (!application) return { ready: false, issue: 'Apply the account safety test first.' }
+          if (!certification) return { ready: false, issue: 'Automatic safety test not completed.' }
+          if (certification.base_application_id !== application.application_id
+            || certification.base_application_checksum !== application.content_checksum) {
+            return { ready: false, issue: 'Automatic safety test no longer matches this account.' }
+          }
+          return { ready: true, expires_at: certification.expires_at }
+        },
+      )
+    : undefined
+  const optionsAutopilotActivationService = optionsEvidenceRoot && optionsAutomationStore
+    && optionsAutopilotAuthorityStore && optionsAutopilotCertificationStore && optionsCertificationApplicationStore
+    ? new OptionsAutopilotActivationService(
+        optionsEvidenceRoot, optionsAutomationStore, optionsAutopilotAuthorityStore,
+        optionsAutopilotCertificationStore, optionsCertificationApplicationStore, optionsConnectionById, options.now,
       )
     : undefined
   const optionsAutomaticManagementRuntime = async (connectionId: string) => {
@@ -1618,6 +1642,29 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
                   await revokeOptionsAutopilotForConnection(route.connection_id, 'operator')
                   await optionsAutomationService.archive(routeId)
                 }),
+                ...(optionsAutopilotActivationService
+                  ? {
+                      prepareOptionsAutopilotActivation: (routeId, validUntil) => withOptionsMutation(async () => {
+                        await optionsAutomaticExecutionRecoveryReady
+                        if (options.optionsSingleInstanceAuthority !== true) throw new Error('This Trade God instance does not own automatic execution.')
+                        return optionsAutopilotActivationService.prepare(routeId, validUntil)
+                      }),
+                      commitOptionsAutopilotActivation: (reviewId, reviewChecksum, operatorConfirmed) => withOptionsMutation(async () => {
+                        await optionsAutomaticExecutionRecoveryReady
+                        if (options.optionsSingleInstanceAuthority !== true) throw new Error('This Trade God instance does not own automatic execution.')
+                        return optionsAutopilotActivationService.commit(reviewId, reviewChecksum, operatorConfirmed)
+                      }),
+                      revokeOptionsAutopilot: (routeId) => withOptionsMutation(async () => {
+                        await optionsAutomaticExecutionRecoveryReady
+                        if (options.optionsSingleInstanceAuthority !== true) throw new Error('This Trade God instance does not own automatic execution.')
+                        const route = await optionsAutomationStore!.getRoute(routeId)
+                        const policy = await optionsAutomationStore!.getPolicy(route.policy_id, route.policy_revision)
+                        const connection = await optionsConnectionById(route.connection_id)
+                        const authority = await optionsAutopilotAuthorityStore!.getActive(route, policy, connection, options.now())
+                        if (authority) await optionsAutopilotAuthorityStore!.revoke(authority, 'operator')
+                      }),
+                    }
+                  : {}),
               }
             : {}),
         }
