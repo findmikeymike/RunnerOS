@@ -32,6 +32,9 @@ export const OPTIONS_MANAGEMENT_COMMAND_SCHEMA_VERSION = 'options-management-com
 export const OPTIONS_MANAGEMENT_RECORD_SCHEMA_VERSION = 'options-management-record@1' as const
 export const OPTIONS_EXPIRATION_SCHEDULE_SCHEMA_VERSION = 'options-expiration-schedule@1' as const
 export const OPTIONS_EXPIRATION_ASSESSMENT_SCHEMA_VERSION = 'options-expiration-assessment@1' as const
+export const OPTIONS_AUTOMATION_ROUTE_SCHEMA_VERSION = 'options-automation-route@1' as const
+export const OPTIONS_AUTOPILOT_AUTHORITY_SCHEMA_VERSION = 'options-autopilot-authority@1' as const
+export const OPTIONS_AUTOPILOT_REVOCATION_SCHEMA_VERSION = 'options-autopilot-revocation@1' as const
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD').refine((value) => {
   const parsed = new Date(`${value}T00:00:00.000Z`)
@@ -278,6 +281,85 @@ export const optionsManualOrderSourceSchema = z.object({
     context.addIssue({ code: 'custom', path: ['valid_until'], message: 'Manual order source must expire after creation' })
   }
 })
+
+export const optionsAutomationRouteSchema = z.object({
+  route_schema_version: z.literal(OPTIONS_AUTOMATION_ROUTE_SCHEMA_VERSION),
+  route_id: identifierSchema,
+  revision: positiveIntegerSchema,
+  display_name: z.string().trim().min(1).max(160),
+  guild_id: identifierSchema,
+  channel_id: identifierSchema,
+  thread_id: identifierSchema.nullable(),
+  author_id: identifierSchema,
+  connection_id: identifierSchema,
+  connection_checksum: sha256Schema,
+  account_id: z.string().min(1).max(120),
+  provider: optionsProviderSchema,
+  environment: z.enum(['paper', 'sandbox']),
+  policy_id: identifierSchema,
+  policy_revision: positiveIntegerSchema,
+  policy_checksum: sha256Schema,
+  required_certification: z.literal('options-paper-autopilot-certified'),
+  state: z.enum(['draft', 'paused', 'archived']),
+  created_at: utcTimestampSchema,
+  updated_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (Date.parse(value.updated_at) < Date.parse(value.created_at)) {
+    context.addIssue({ code: 'custom', path: ['updated_at'], message: 'Route update cannot precede creation' })
+  }
+})
+
+export const optionsAutopilotAuthoritySchema = z.object({
+  authority_schema_version: z.literal(OPTIONS_AUTOPILOT_AUTHORITY_SCHEMA_VERSION),
+  authority_id: identifierSchema,
+  route_id: identifierSchema,
+  route_revision: positiveIntegerSchema,
+  route_checksum: sha256Schema,
+  policy_id: identifierSchema,
+  policy_revision: positiveIntegerSchema,
+  policy_checksum: sha256Schema,
+  connection_id: identifierSchema,
+  connection_checksum: sha256Schema,
+  credential_generation: sha256Schema,
+  provider: optionsProviderSchema,
+  environment: z.enum(['paper', 'sandbox']),
+  account_id: z.string().min(1).max(120),
+  adapter_id: identifierSchema,
+  adapter_version: z.string().regex(/^\d+\.\d+\.\d+$/),
+  provider_contract_version: identifierSchema,
+  certification_id: identifierSchema,
+  certification_checksum: sha256Schema,
+  certification_level: z.literal('options-paper-autopilot-certified'),
+  certification_expires_at: utcTimestampSchema,
+  certification_application_id: identifierSchema,
+  certification_application_checksum: sha256Schema,
+  mode: z.literal('automatic-paper'),
+  valid_from: utcTimestampSchema,
+  valid_until: utcTimestampSchema,
+  operator_confirmed_at: utcTimestampSchema,
+  created_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((value, context) => {
+  if (!(value.valid_from === value.created_at
+    && value.operator_confirmed_at === value.created_at
+    && Date.parse(value.valid_until) > Date.parse(value.valid_from)
+    && Date.parse(value.valid_until) <= Date.parse(value.certification_expires_at))) {
+    context.addIssue({ code: 'custom', path: ['valid_until'], message: 'Autopilot authority must stay inside its exact certification window' })
+  }
+})
+
+export const optionsAutopilotRevocationSchema = z.object({
+  revocation_schema_version: z.literal(OPTIONS_AUTOPILOT_REVOCATION_SCHEMA_VERSION),
+  revocation_id: identifierSchema,
+  authority_id: identifierSchema,
+  authority_checksum: sha256Schema,
+  route_id: identifierSchema,
+  connection_id: identifierSchema,
+  reason: z.enum(['operator', 'route-change', 'policy-change', 'account-change', 'credential-change', 'certification-expired', 'integrity-failure']),
+  revoked_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict()
 
 function decimalParts(value: string): { coefficient: bigint; scale: number } {
   const negative = value.startsWith('-')
@@ -1167,6 +1249,9 @@ export type OptionsManualPaperAuthority = z.infer<typeof optionsManualPaperAutho
 export type OptionsAuthorityRevocation = z.infer<typeof optionsAuthorityRevocationSchema>
 export type OptionsManualOrderSource = z.infer<typeof optionsManualOrderSourceSchema>
 export type OptionsManualOrderReview = z.infer<typeof optionsManualOrderReviewSchema>
+export type OptionsAutomationRoute = z.infer<typeof optionsAutomationRouteSchema>
+export type OptionsAutopilotAuthority = z.infer<typeof optionsAutopilotAuthoritySchema>
+export type OptionsAutopilotRevocation = z.infer<typeof optionsAutopilotRevocationSchema>
 export type OptionsManagementCommand = z.infer<typeof optionsManagementCommandSchema>
 export type OptionsManagementRecord = z.infer<typeof optionsManagementRecordSchema>
 export type OptionsExpirationSchedule = z.infer<typeof optionsExpirationScheduleSchema>

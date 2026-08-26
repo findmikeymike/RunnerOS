@@ -64,6 +64,15 @@ The workbench can request engine health, run the known fixture, and display tota
 
 ## Recently Completed
 
+- Added the inert automatic-options routing boundary. An exact Discord server,
+  channel/thread, and trader identity can now be bound to one exact broker
+  account and one immutable policy revision. Route revisions are append-only;
+  duplicate live source assignments are rejected before disk write. Saved
+  routes have only draft, paused, or archived states and grant no order
+  authority. The separate automatic authority contract requires the unavailable
+  `options-paper-autopilot-certified` level, so this configuration cannot bypass
+  the real-provider gate.
+
 - Added operator-facing custody for options paper orders. Options Desk can now
   cancel the exact owned working entry or close the exact owned long position
   at a confirmed minimum credit. Every action requires explicit confirmation,

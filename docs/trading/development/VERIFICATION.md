@@ -7,6 +7,22 @@ source_of_truth: true
 
 # Verification System
 
+## 2026-08-26 Options Autopilot Slice 8A — Inert Exact-Source Routing
+
+- Added strict contracts for append-only Discord options routes, automatic
+  paper authority, and authority revocation. Route configuration and execution
+  authority are separate boundaries.
+- The file store persists checksum-verified policies and route revisions,
+  freezes Discord identity, binds exact account/provider/policy evidence, hashes
+  all filesystem names, rejects skipped revisions, and refuses duplicate live
+  source assignments before write.
+- Verification: 10 focused contract/store tests passed with 47 expectations;
+  repository typecheck and diff check passed. Rival found the original
+  write-then-detect duplicate route flaw; the write boundary was fixed and the
+  re-review returned clean.
+- Not proven: Discord webhook intake, automatic provider entry, real autopilot
+  certification, or UI source setup.
+
 ## 2026-08-26 Options Autopilot Slice 7B — Runtime and Expiration Custody
 
 - Wired exact entry cancellation and full-position close through Electron

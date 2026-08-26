@@ -7,6 +7,18 @@ source_of_truth: false
 
 # Trade God Handoff
 
+## 2026-08-26 Options Automatic Routing Foundation Handoff
+
+- The durable route model binds one exact Discord guild/channel/thread/trader
+  identity to one exact options account and one immutable policy revision.
+- Route configuration is inert: routes can only be draft, paused, or archived.
+  A separate expiring authority requires exact
+  `options-paper-autopilot-certified` evidence before automatic entry can exist.
+- Duplicate live source assignments are refused before persistence. An archived
+  source may be deliberately assigned to a new route lineage.
+- This is local configuration proof only. It is not wired to Discord intake or
+  provider orders yet.
+
 ## 2026-08-26 Options Position and Expiration Custody Handoff
 
 - Options Desk now shows exact working entries and open long positions, with
