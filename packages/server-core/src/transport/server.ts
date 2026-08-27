@@ -112,6 +112,8 @@ export interface WsRpcServerOptions {
    * Must use Node.js HTTP callback signature (IncomingMessage, ServerResponse).
    */
   httpHandler?: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void
+  /** Authorize immediately before a registered handler executes. */
+  authorizeRequest?: (context: RequestContext, channel: string) => Promise<void> | void
 }
 
 const transportLog = createLogger('ws-rpc-server')
@@ -147,6 +149,7 @@ export class WsRpcServer implements RpcServer {
   private readonly onClientConnected: WsRpcServerOptions['onClientConnected']
   private readonly onClientDisconnected: WsRpcServerOptions['onClientDisconnected']
   private readonly httpHandler: WsRpcServerOptions['httpHandler']
+  private readonly authorizeRequest: WsRpcServerOptions['authorizeRequest']
 
   constructor(opts?: WsRpcServerOptions) {
     this.host = opts?.host ?? '127.0.0.1'
@@ -162,6 +165,7 @@ export class WsRpcServer implements RpcServer {
     this.onClientConnected = opts?.onClientConnected
     this.onClientDisconnected = opts?.onClientDisconnected
     this.httpHandler = opts?.httpHandler
+    this.authorizeRequest = opts?.authorizeRequest
   }
 
   /** The actual port the server is listening on (available after listen()). */
@@ -662,6 +666,7 @@ export class WsRpcServer implements RpcServer {
     }
 
     try {
+      await this.authorizeRequest?.(ctx, channel)
       const result = await Promise.race([
         handler(ctx, ...(args ?? [])),
         new Promise<never>((_, reject) =>

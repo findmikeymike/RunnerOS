@@ -77,6 +77,7 @@ import { join, delimiter } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
+import { assertProductLicensedChannel, getDesktopLicensing, initializeDesktopLicensing } from './licensing/runtime'
 import { registerAllRpcHandlers } from './handlers/index'
 import { registerCoreRpcHandlers, cleanupSessionFileWatchForClient } from '@craft-agent/server-core/handlers/rpc'
 import type { PlatformServices } from '../runtime/platform'
@@ -394,6 +395,10 @@ app.whenReady().then(async () => {
   // Export packaged state as env var so logger.ts (and headless Bun) don't need 'electron'
   process.env.CRAFT_IS_PACKAGED = app.isPackaged ? 'true' : 'false'
 
+  if (RUNTIME_IDENTITY.variant === 'artist-os') {
+    await initializeDesktopLicensing()
+  }
+
   // Register bundled assets root so all seeding functions can find their files
   // (docs, permissions, themes, tool-icons resolve via getBundledAssetsDir)
   setBundledAssetsRoot(__dirname)
@@ -488,6 +493,14 @@ app.whenReady().then(async () => {
     // Initialize browser pane manager (always — even in headless, for deps wiring)
     browserPaneManager = new BrowserPaneManager()
     browserPaneManager.setWindowManager(windowManager)
+    if (RUNTIME_IDENTITY.variant === 'artist-os') {
+      browserPaneManager.setPaidExecutionAuthorizer(() => assertProductLicensedChannel('browser-pane:navigate'))
+      getDesktopLicensing().subscribe((snapshot) => {
+        if (!snapshot.authorized && snapshot.state !== 'ACTIVATING' && snapshot.state !== 'SERVICE_UNAVAILABLE') {
+          browserPaneManager?.suspendPaidExecution()
+        }
+      })
+    }
     browserPaneManager.registerToolbarIpc()
 
     // Build real PlatformServices from Electron APIs
@@ -659,6 +672,7 @@ app.whenReady().then(async () => {
         bundledAssetsRoot: __dirname,
         serverId: 'local',
         serverVersion: app.getVersion(),
+        authorizeRequest: (_context, channel) => assertProductLicensedChannel(channel),
         platformFactory: () => platform,
         applyPlatformToSubsystems: (p) => {
           setFetcherPlatform(p)
@@ -682,6 +696,14 @@ app.whenReady().then(async () => {
         },
         createSessionManager: () => {
           const sm = new SessionManager()
+          if (RUNTIME_IDENTITY.variant === 'artist-os') {
+            sm.setPaidExecutionAuthorizer(() => getDesktopLicensing().isPaidExecutionAuthorized())
+            getDesktopLicensing().subscribe((snapshot) => {
+              if (!snapshot.authorized && snapshot.state !== 'ACTIVATING' && snapshot.state !== 'SERVICE_UNAVAILABLE') {
+                void sm.suspendPaidExecution()
+              }
+            })
+          }
           sm.setCampaignExternalJobPreparer((input) => prepareCampaignSocialJob(input, {
             runSocialJson,
             resolveMediaPath: resolveCampaignSocialMediaPath,
@@ -899,12 +921,14 @@ app.whenReady().then(async () => {
 
       // Remove workspace from config (cleanup stale entries)
       ipcMain.handle('workspace:remove', async (_event, workspaceId: string) => {
+        assertProductLicensedChannel('workspace:remove')
         const { removeWorkspace: remove } = await import('@craft-agent/shared/config')
         return remove(workspaceId)
       })
 
       // Cross-server RPC — invoke a channel on an arbitrary remote server
       ipcMain.handle('server:invokeOnServer', async (_event, url: string, token: string, channel: string, ...args: unknown[]) => {
+        assertProductLicensedChannel(channel)
         const { connectToRemote } = await import('./handlers/workspace')
         const { client, error } = await connectToRemote(url, token)
         if (!client) throw new Error(error ?? 'Connection failed')
@@ -918,6 +942,7 @@ app.whenReady().then(async () => {
       // Transfer session to another workspace — orchestrated in main process
       // so large bundles can be moved directly between owning servers.
       ipcMain.handle('session:transferToRemoteWorkspace', async (_event, sessionId: string, targetWorkspaceId: string, sessionIndex?: number, sessionCount?: number) => {
+        assertProductLicensedChannel('session:transferToRemoteWorkspace')
         const idx = sessionIndex ?? 0
         const count = sessionCount ?? 1
         const { getWorkspaceByNameOrId } = await import('@craft-agent/shared/config')

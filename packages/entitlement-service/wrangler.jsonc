@@ -1,0 +1,38 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "artistos-entitlement-test",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-08-22",
+  "workers_dev": true,
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "vars": {
+    "ARTIST_OS_LICENSE_ENVIRONMENT": "test"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "artistos-entitlement-test",
+      "database_id": "c92e3d2f-9e2d-47e6-924a-4efa7214a6c1",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "env": {
+    "production": {
+      "name": "artistos-entitlement-production",
+      "workers_dev": false,
+      "routes": [{ "pattern": "license.artistos.app", "custom_domain": true }],
+      "observability": { "enabled": true, "head_sampling_rate": 0.1 },
+      "vars": {
+        "ARTIST_OS_LICENSE_ENVIRONMENT": "production"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "artistos-entitlement-production",
+          "database_id": "56c9b6b5-0994-4c75-afbf-938459437213",
+          "migrations_dir": "migrations"
+        }
+      ]
+    }
+  }
+}

@@ -1800,6 +1800,7 @@ export class SessionManager implements ISessionManager {
   private scheduledWorkRunner?: ScheduledWorkRunner
   private scheduledSocialPreparer?: ScheduledSocialPreparer
   private scheduledSocialExecutor?: ScheduledSocialExecutor
+  private paidExecutionAuthorizer: () => boolean = () => RUNTIME_IDENTITY.variant !== 'artist-os'
   private campaignExternalJobPreparer?: CampaignExternalJobPreparer
   /** Deep Research runner — bootstrapped during `initialize()`. */
   private deepResearchRunner!: DeepResearchRunner
@@ -1830,6 +1831,26 @@ export class SessionManager implements ISessionManager {
 
   setEventSink(sink: EventSink): void {
     this.eventSink = sink
+  }
+
+  setPaidExecutionAuthorizer(authorize: () => boolean): void {
+    this.paidExecutionAuthorizer = authorize
+  }
+
+  private isPaidExecutionAuthorized(): boolean {
+    return this.paidExecutionAuthorizer() === true
+  }
+
+  private assertPaidExecutionAuthorized(): void {
+    if (this.isPaidExecutionAuthorized()) return
+    const error = new Error('LICENSE_REQUIRED')
+    ;(error as Error & { code?: string }).code = 'LICENSE_REQUIRED'
+    throw error
+  }
+
+  async suspendPaidExecution(): Promise<void> {
+    const active = [...this.sessions.values()].filter((managed) => managed.isProcessing)
+    await Promise.all(active.map((managed) => this.cancelProcessing(managed.id, true)))
   }
 
   setBrowserPaneManager(bpm: IBrowserPaneManager): void {
@@ -2205,6 +2226,7 @@ export class SessionManager implements ISessionManager {
         enableScheduler: true,
         runSchedulerCatchUpOnStart: false,
         onPromptsReady: async (prompts) => {
+          if (!this.isPaidExecutionAuthorized()) return
           // Execute prompt automations by creating new sessions
           const settled = await Promise.allSettled(
             prompts.map((pending) =>
@@ -2249,6 +2271,7 @@ export class SessionManager implements ISessionManager {
           scheduleHqStateContextRefresh(workspaceRootPath)
         },
         onWorkReady: async (pendingWork) => {
+          if (!this.isPaidExecutionAuthorized()) return
           for (const pending of pendingWork) {
             try {
               const queued = await queueAutomationWork(workspaceId, workspaceRootPath, pending, {
@@ -2317,6 +2340,7 @@ export class SessionManager implements ISessionManager {
   private attachPulseDispatch(automationSystem: AutomationSystem, workspaceId: string, workspaceRootPath: string): void {
     automationSystem.eventBus.onAny(async (event, payload) => {
       if (event !== 'SchedulerTick') return
+      if (!this.isPaidExecutionAuthorized()) return
       const matchers = automationSystem.getMatchersForEvent('SchedulerTick')
       for (const matcher of matchers) {
         const pulseAction = matcher.actions.find((a) => (a as { type?: string }).type === 'pulse') as PulseAction | undefined
@@ -2435,6 +2459,7 @@ export class SessionManager implements ISessionManager {
   private attachCampaignScheduledJobsDispatch(automationSystem: AutomationSystem, workspaceId: string, workspaceRootPath: string): void {
     automationSystem.eventBus.onAny(async (event) => {
       if (event !== 'SchedulerTick') return
+      if (!this.isPaidExecutionAuthorized()) return
       try {
         const scheduledWorkResult = await this.getScheduledWorkRunner().scanWorkspace(workspaceId, workspaceRootPath)
         if (scheduledWorkResult.scanned > 0) {
@@ -9112,6 +9137,7 @@ user a clickable link to where the thing now lives.`
      */
     onAck?: (messageId: string) => void,
   ): Promise<void> {
+    this.assertPaidExecutionAuthorized()
     const releaseAdmissionLock = await this.acquireSendMessageAdmissionLock(sessionId)
     let admissionLockReleased = false
     const releaseAdmissionLockOnce = () => {

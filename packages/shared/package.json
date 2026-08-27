@@ -68,6 +68,7 @@
     "./labels/auto": "./src/labels/auto/index.ts",
     "./labels/storage": "./src/labels/storage.ts",
     "./labels/crud": "./src/labels/crud.ts",
+    "./licensing": "./src/licensing/index.ts",
     "./views": "./src/views/index.ts",
     "./views/storage": "./src/views/storage.ts",
     "./visual-surfaces": "./src/visual-surfaces/index.ts",

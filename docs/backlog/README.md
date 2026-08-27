@@ -13,6 +13,7 @@ Living priority queue: [TO DO](./TO-DO.md).
 
 ## Release Gates
 
+- [Artist OS Lemon Squeezy Licensing](../licensing/artist-os-lemon-squeezy-release-plan.md) - implemented two-tier licensing foundation plus the exact external configuration, enforcement, deployment, and purchase-smoke gates required before taking money.
 - [External Integration Live Verification](./external-integration-live-verification.md) - real-account/API smoke queue for commerce, ads, Social Publisher, research, visual tools, Canvas, and Secrets. This is the main end-to-end proof list.
 - [Google OAuth Production App](./google-oauth-production-app.md) - Runner-owned verified OAuth app so users can connect Gmail, Calendar, and Drive without creating a Google Cloud project.
 - [Tool Licensing + Packaging Audit](./tool-licensing-packaging-audit.md) - commercial-license, binary, model, checksum, provenance, and clean-machine packaging gate.

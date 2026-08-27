@@ -324,6 +324,15 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   private popupParentByWebContentsId = new Map<number, string>()
   private windowManager: WindowManager | null = null
   private sessionPathResolver: ((sessionId: string) => string | null) | null = null
+  private authorizePaidExecution: (() => void) | null = null
+
+  setPaidExecutionAuthorizer(authorize: () => void): void {
+    this.authorizePaidExecution = authorize
+  }
+
+  suspendPaidExecution(): void {
+    for (const instance of this.instances.values()) this.stop(instance.id)
+  }
 
   setWindowManager(windowManager: WindowManager): void {
     this.windowManager = windowManager
@@ -2220,21 +2229,25 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     }
 
     ipcMain.handle(TOOLBAR_CHANNELS.NAVIGATE, async (_event, instanceId: string, url: string) => {
+      this.authorizePaidExecution?.()
       const inst = findInstance(instanceId)
       if (inst) await this.navigate(inst.id, url)
     })
 
     ipcMain.handle(TOOLBAR_CHANNELS.GO_BACK, async (_event, instanceId: string) => {
+      this.authorizePaidExecution?.()
       const inst = findInstance(instanceId)
       if (inst) await this.goBack(inst.id)
     })
 
     ipcMain.handle(TOOLBAR_CHANNELS.GO_FORWARD, async (_event, instanceId: string) => {
+      this.authorizePaidExecution?.()
       const inst = findInstance(instanceId)
       if (inst) await this.goForward(inst.id)
     })
 
     ipcMain.handle(TOOLBAR_CHANNELS.RELOAD, async (_event, instanceId: string) => {
+      this.authorizePaidExecution?.()
       const inst = findInstance(instanceId)
       if (inst) this.reload(inst.id)
     })

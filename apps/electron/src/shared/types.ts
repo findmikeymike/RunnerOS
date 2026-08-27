@@ -24,6 +24,12 @@ import type {
 
 // Mode types from dedicated subpath export (avoids pulling in SDK)
 import type { PermissionMode } from '@craft-agent/shared/agent/modes';
+import type {
+  ArtistOSActivateInputV1,
+  ArtistOSLicenseCommandResultV1,
+  ArtistOSLicenseLinkKind,
+  ArtistOSLicenseSnapshotV1,
+} from '@craft-agent/shared/licensing';
 export type { PermissionMode };
 export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
 
@@ -549,6 +555,13 @@ export interface ElectronAPI {
   getServerStatus(): Promise<import('@craft-agent/shared/config/server-config').ServerStatus>
 
   // App lifecycle
+  getLicenseState(): Promise<ArtistOSLicenseSnapshotV1>
+  activateLicense(input: ArtistOSActivateInputV1): Promise<ArtistOSLicenseCommandResultV1>
+  refreshLicense(): Promise<ArtistOSLicenseCommandResultV1>
+  deactivateLicense(): Promise<ArtistOSLicenseCommandResultV1>
+  openLicenseLink(kind: ArtistOSLicenseLinkKind): Promise<void>
+  onLicenseStateChanged(callback: (snapshot: ArtistOSLicenseSnapshotV1) => void): () => void
+  onLicenseRequired(callback: () => void): () => void
   relaunchApp(): Promise<void>
   removeWorkspace(workspaceId: string): Promise<boolean>
   invokeOnServer(url: string, token: string, channel: string, ...args: any[]): Promise<any>

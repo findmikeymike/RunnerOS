@@ -36,6 +36,7 @@ import type { ConfirmDialogSpec, FileDialogSpec } from '@craft-agent/server-core
 import type { RpcClient } from '@craft-agent/server-core/transport'
 import type { RemoteServerConfig } from '@craft-agent/core/types'
 import type { ElectronAPI } from '../shared/types'
+import type { ArtistOSActivateInputV1, ArtistOSLicenseSnapshotV1 } from '@craft-agent/shared/licensing'
 
 // ---------------------------------------------------------------------------
 // Client interface — common surface for both RoutedClient and WsRpcClient
@@ -46,6 +47,20 @@ interface TransportClient extends RpcClient {
   getConnectionState(): TransportConnectionState
   onConnectionStateChanged(callback: (state: TransportConnectionState) => void): () => void
   reconnectNow(): void
+}
+
+class LicensedTransportClient implements TransportClient {
+  constructor(private readonly inner: TransportClient) {}
+  async invoke(channel: string, ...args: any[]): Promise<any> {
+    await ipcRenderer.invoke('__license:authorize-channel', channel)
+    return await this.inner.invoke(channel, ...args)
+  }
+  on(channel: string, callback: (...args: any[]) => void): () => void { return this.inner.on(channel, callback) }
+  handleCapability(channel: string, handler: (...args: any[]) => Promise<any> | any): void { this.inner.handleCapability(channel, handler) }
+  isChannelAvailable(channel: string): boolean { return this.inner.isChannelAvailable(channel) }
+  getConnectionState(): TransportConnectionState { return this.inner.getConnectionState() }
+  onConnectionStateChanged(callback: (state: TransportConnectionState) => void): () => void { return this.inner.onConnectionStateChanged(callback) }
+  reconnectNow(): void { this.inner.reconnectNow() }
 }
 
 // ---------------------------------------------------------------------------
@@ -195,7 +210,10 @@ client.handleCapability(CLIENT_OPEN_FILE_DIALOG, async (spec: FileDialogSpec) =>
 // Build ElectronAPI proxy
 // ---------------------------------------------------------------------------
 
-const api = buildClientApi(client, CHANNEL_MAP, (ch) => client.isChannelAvailable(ch))
+const authorizedClient: TransportClient = productVariant === 'artist-os'
+  ? new LicensedTransportClient(client)
+  : client
+const api = buildClientApi(authorizedClient, CHANNEL_MAP, (ch) => authorizedClient.isChannelAvailable(ch))
 
 ;(api as any).getRuntimeEnvironment = (): 'electron' | 'web' => 'electron'
 
@@ -427,6 +445,21 @@ client.onConnectionStateChanged((state) => {
 }
 
 // App lifecycle — direct IPC (not WS RPC) since it restarts the server itself
+;(api as ElectronAPI).getLicenseState = () => ipcRenderer.invoke('__license:get-state')
+;(api as ElectronAPI).activateLicense = (input: ArtistOSActivateInputV1) => ipcRenderer.invoke('__license:activate', input)
+;(api as ElectronAPI).refreshLicense = () => ipcRenderer.invoke('__license:refresh')
+;(api as ElectronAPI).deactivateLicense = () => ipcRenderer.invoke('__license:deactivate')
+;(api as ElectronAPI).openLicenseLink = (kind) => ipcRenderer.invoke('__license:open-link', kind)
+;(api as ElectronAPI).onLicenseStateChanged = (callback: (snapshot: ArtistOSLicenseSnapshotV1) => void) => {
+  const handler = (_event: Electron.IpcRendererEvent, snapshot: ArtistOSLicenseSnapshotV1) => callback(snapshot)
+  ipcRenderer.on('__license:state-changed', handler)
+  return () => ipcRenderer.removeListener('__license:state-changed', handler)
+}
+;(api as ElectronAPI).onLicenseRequired = (callback: () => void) => {
+  const handler = () => callback()
+  ipcRenderer.on('__license:required', handler)
+  return () => ipcRenderer.removeListener('__license:required', handler)
+}
 ;(api as ElectronAPI).relaunchApp = () => ipcRenderer.invoke('app:relaunch')
 ;(api as ElectronAPI).removeWorkspace = (workspaceId: string) => ipcRenderer.invoke('workspace:remove', workspaceId)
 ;(api as ElectronAPI).invokeOnServer = (url: string, token: string, channel: string, ...args: any[]) =>

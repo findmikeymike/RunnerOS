@@ -20,7 +20,8 @@
     "./handlers/rpc/*": "./src/handlers/rpc/*.ts",
     "./sessions": "./src/sessions/index.ts",
     "./webui": "./src/webui/index.ts",
-    "./triggers": "./src/triggers/index.ts"
+    "./triggers": "./src/triggers/index.ts",
+    "./licensing": "./src/licensing/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

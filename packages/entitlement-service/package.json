@@ -1,0 +1,29 @@
+{
+  "name": "@artistos/entitlement-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "dev": "wrangler dev --persist-to=.wrangler/state",
+    "deploy:check": "bun scripts/deploy.ts test --check",
+    "deploy:check:production": "bun scripts/deploy.ts production --check",
+    "deploy:test": "bun scripts/deploy.ts test",
+    "deploy:production": "bun scripts/deploy.ts production"
+  },
+  "dependencies": {
+    "@craft-agent/shared": "workspace:*",
+    "jose": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@cloudflare/workers-types": "5.20260821.1",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.2",
+    "wrangler": "^4.33.1"
+  }
+}

@@ -1,0 +1,81 @@
+name: Deploy Entitlement Service
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target entitlement environment
+        required: true
+        type: choice
+        options:
+          - test
+          - production
+      mode:
+        description: Run a dry preflight or publish
+        required: true
+        type: choice
+        options:
+          - check
+          - deploy
+        default: check
+
+permissions:
+  contents: read
+
+concurrency:
+  group: entitlement-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-entitlement:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    timeout-minutes: 20
+
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      ARTIST_OS_ENTITLEMENT_D1_DATABASE_ID_TEST: ${{ vars.ARTIST_OS_ENTITLEMENT_D1_DATABASE_ID_TEST }}
+      ARTIST_OS_ENTITLEMENT_D1_DATABASE_ID_PRODUCTION: ${{ vars.ARTIST_OS_ENTITLEMENT_D1_DATABASE_ID_PRODUCTION }}
+      ARTIST_OS_ENTITLEMENT_READY_URL_TEST: ${{ vars.ARTIST_OS_ENTITLEMENT_READY_URL_TEST }}
+      ARTIST_OS_ENTITLEMENT_READY_URL_PRODUCTION: ${{ vars.ARTIST_OS_ENTITLEMENT_READY_URL_PRODUCTION }}
+      LEMON_STORE_ID: ${{ vars.LEMON_STORE_ID }}
+      LEMON_PRODUCT_ID: ${{ vars.LEMON_PRODUCT_ID }}
+      LEMON_VARIANT_ID_BASIC_V1: ${{ vars.LEMON_VARIANT_ID_BASIC_V1 }}
+      LEMON_VARIANT_ID_PREMIUM_V1: ${{ vars.LEMON_VARIANT_ID_PREMIUM_V1 }}
+      LEMON_API_KEY: ${{ secrets.LEMON_API_KEY }}
+      LEMON_WEBHOOK_SECRET: ${{ secrets.LEMON_WEBHOOK_SECRET }}
+      ARTIST_OS_ENTITLEMENT_KEY_ID_CURRENT: ${{ secrets.ARTIST_OS_ENTITLEMENT_KEY_ID_CURRENT }}
+      ARTIST_OS_ENTITLEMENT_SIGNING_KEY_CURRENT: ${{ secrets.ARTIST_OS_ENTITLEMENT_SIGNING_KEY_CURRENT }}
+      ARTIST_OS_ENTITLEMENT_VERIFICATION_KEYS_JSON: ${{ secrets.ARTIST_OS_ENTITLEMENT_VERIFICATION_KEYS_JSON }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify deploy contract
+        run: bun test packages/entitlement-service/src/wrangler-contract.test.ts
+
+      - name: Dry-run test authority
+        if: ${{ github.event.inputs.mode == 'check' && github.event.inputs.environment == 'test' }}
+        run: bun run --cwd packages/entitlement-service deploy:check
+
+      - name: Dry-run production authority
+        if: ${{ github.event.inputs.mode == 'check' && github.event.inputs.environment == 'production' }}
+        run: bun run --cwd packages/entitlement-service deploy:check:production
+
+      - name: Deploy test entitlement service
+        if: ${{ github.event.inputs.mode == 'deploy' && github.event.inputs.environment == 'test' }}
+        run: bun run --cwd packages/entitlement-service deploy:test
+
+      - name: Deploy production entitlement service
+        if: ${{ github.event.inputs.mode == 'deploy' && github.event.inputs.environment == 'production' }}
+        run: bun run --cwd packages/entitlement-service deploy:production

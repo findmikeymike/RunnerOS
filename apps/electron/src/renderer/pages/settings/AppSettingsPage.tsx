@@ -21,6 +21,8 @@ import { Spinner } from '@craft-agent/ui'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { NetworkProxySettings } from '../../../shared/types'
 import electronPackage from '../../../../package.json'
+import { LicensePanel } from '@/components/licensing/LicensePanel'
+import { PRODUCT_NAME, RENDERER_PRODUCT_VARIANT } from '@/lib/product-identity'
 
 import {
   SettingsSection,
@@ -36,7 +38,9 @@ export const meta: DetailsPageMeta = {
   slug: 'app',
 }
 
-const RUNNEROS_UPDATES_URL = 'https://github.com/findmikeymike/RunnerOS/releases'
+const UPDATES_URL = RENDERER_PRODUCT_VARIANT === 'artist-os'
+  ? 'https://artistos.app/updates'
+  : 'https://github.com/findmikeymike/RunnerOS/releases'
 const quietButtonClass = 'inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-white/[0.065] bg-white/[0.035] px-2.5 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.055] hover:text-white/76'
 
 // ============================================
@@ -134,7 +138,7 @@ export default function AppSettingsPage() {
 
   useEffect(() => {
     loadSettings()
-  }, [])
+  }, [loadSettings])
 
   const handleNotificationsEnabledChange = useCallback(async (enabled: boolean) => {
     setNotificationsEnabled(enabled)
@@ -193,6 +197,13 @@ export default function AppSettingsPage() {
         <ScrollArea className="h-full">
           <div className="px-6 pt-10 pb-8 max-w-[1600px] mx-auto">
             <div className="space-y-6">
+              {RENDERER_PRODUCT_VARIANT === 'artist-os' && (
+                <SettingsSection title="License">
+                  <SettingsCard>
+                    <div className="p-4"><LicensePanel /></div>
+                  </SettingsCard>
+                </SettingsSection>
+              )}
               {/* Notifications */}
               <SettingsSection title={t("settings.notifications.title")}>
                 <SettingsCard>
@@ -311,10 +322,10 @@ export default function AppSettingsPage() {
                     action={
                       <button
                         type="button"
-                        onClick={() => window.electronAPI.openUrl(RUNNEROS_UPDATES_URL)}
+                        onClick={() => window.electronAPI.openUrl(UPDATES_URL)}
                         className={quietButtonClass}
                       >
-                        {t("settings.about.openRunnerUpdates")}
+                        Open {PRODUCT_NAME} updates
                       </button>
                     }
                   />

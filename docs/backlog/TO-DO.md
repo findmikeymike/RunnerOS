@@ -19,6 +19,10 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 
 ## NOW
 
+### Artist OS Distribution
+
+- [ ] **Finish Lemon Squeezy launch configuration.** The isolated entitlement service, signed offline licenses, protected desktop storage, activation UI, CI deploy workflow, and tests are implemented on `codex/artist-os-licensing`. Premium v1 is set at $299 USD one-time with BYOK, three Mac activations, v1 updates, and optional paid future-major upgrades; Basic can remain explicitly disabled for launch. Remaining: define and enforce any future Basic tier before selling it, create/configure the Premium Lemon variant, provision Cloudflare D1/domain/signing secrets, generate the public keyring, deploy, and prove test purchases/refunds/seat recovery on clean Macs. Source: [Artist OS Lemon Squeezy Licensing](../licensing/artist-os-lemon-squeezy-release-plan.md).
+
 ### Social Publishing Providers
 
 - [ ] **Finish TryPost end to end.** Built-in MCP source, hardened agent contract, media-aware validation, migration, and tests are implemented. Remaining: real credentials, account discovery, media/draft/preview/schedule/publish smoke, provider receipt proof, failure recovery, and UI connection-state verification.

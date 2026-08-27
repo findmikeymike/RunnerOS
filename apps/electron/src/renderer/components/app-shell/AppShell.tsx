@@ -138,6 +138,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { PanelHeader } from "./PanelHeader"
 import { SendToWorkspaceDialog } from "./SendToWorkspaceDialog"
 import { MessagingDialogHost } from "@/components/messaging/MessagingDialogHost"
+import { LicenseDialogHost } from "@/components/licensing/LicenseDialogHost"
 import { SessionProjectDialogHost } from "./SessionProjectDialogHost"
 import { sessionProjectDialogAtom } from "@/atoms/session-project-dialog"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
@@ -4071,6 +4072,7 @@ function AppShellContent({
           Mounted here so they survive context-menu / dropdown close. */}
       <MessagingDialogHost />
       <SessionProjectDialogHost onLabelsChange={handleSessionLabelsChange} />
+      {RENDERER_PRODUCT_VARIANT === 'artist-os' && <LicenseDialogHost />}
 
     </AppShellProvider>
   )

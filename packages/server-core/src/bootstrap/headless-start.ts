@@ -6,6 +6,7 @@ import { OAuthFlowStore } from '@craft-agent/shared/auth'
 import { ensureConfigDir, loadStoredConfig, saveConfig } from '@craft-agent/shared/config'
 import { CONFIG_DIR } from '@craft-agent/shared/config/paths'
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
+import { isArtistOSPaidChannel } from '@craft-agent/shared/licensing'
 import { setBundledAssetsRoot } from '@craft-agent/shared/utils'
 import { WsRpcServer, type WsRpcTlsOptions } from '../transport/server'
 import type { EventSink, RpcServer } from '../transport/types'
@@ -50,6 +51,7 @@ export interface ServerBootstrapOptions<TSessionManager, THandlerDeps> {
    * When provided, the WsRpcServer serves HTTP (e.g. WebUI) on the same port.
    */
   httpHandler?: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void
+  authorizeRequest?: (context: import('../transport/types').RequestContext, channel: string) => Promise<void> | void
 }
 
 export interface ServerHandlerContext {
@@ -344,6 +346,12 @@ export async function bootstrapServer<TSessionManager, THandlerDeps>(
     serverVersion: options.serverVersion,
     tls: options.tls,
     httpHandler: options.httpHandler,
+    authorizeRequest: options.authorizeRequest ?? ((_context, channel) => {
+      if (RUNTIME_IDENTITY.variant !== 'artist-os' || !isArtistOSPaidChannel(channel)) return
+      const error = new Error('LICENSE_REQUIRED')
+      ;(error as Error & { code?: string }).code = 'LICENSE_REQUIRED'
+      throw error
+    }),
     onClientConnected: options.onClientConnected,
     onClientDisconnected: (clientId) => {
       options.cleanupClientResources?.(clientId)
