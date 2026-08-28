@@ -6,7 +6,7 @@
   "provider": "printing-press-clis",
   "type": "local",
   "icon": "📣",
-  "tagline": "Local Bash-operated social media CLI harness for Instagram, TikTok, X, and YouTube",
+  "tagline": "Local browser harness for Instagram, TikTok, X, YouTube, and Spotify for Artists analytics",
   "local": {
     "path": "tools/printing-press-social",
     "format": "cli-tool"

@@ -637,8 +637,19 @@ export interface BrowserInstanceInfo {
   ownerType: 'session' | 'manual'
   ownerSessionId: string | null
   isVisible: boolean
+  presentation?: 'window' | 'sidecar'
+  /** Renderer webContents that currently owns the native sidecar views. */
+  sidecarHostWebContentsId?: number | null
   agentControlActive: boolean
   themeColor: string | null
+}
+
+/** Bounds for docking a native browser surface inside an app window. */
+export interface BrowserPaneBounds {
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 export interface DeepLinkNavigation {

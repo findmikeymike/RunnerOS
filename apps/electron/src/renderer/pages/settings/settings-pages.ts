@@ -18,6 +18,8 @@ import AppSettingsPage from './AppSettingsPage'
 import AiSettingsPage from './AiSettingsPage'
 import SecretsSettingsPage from './SecretsSettingsPage'
 import SocialAccountsSettingsPage from './SocialAccountsSettingsPage'
+import SpotifySettingsPage from './SpotifySettingsPage'
+import AdAccountsSettingsPage from './AdAccountsSettingsPage'
 import AppearanceSettingsPage from './AppearanceSettingsPage'
 import InputSettingsPage from './InputSettingsPage'
 import WorkspaceSettingsPage from './WorkspaceSettingsPage'
@@ -39,6 +41,8 @@ export const SETTINGS_PAGE_COMPONENTS: Record<SettingsSubpage, ComponentType> = 
   ai: AiSettingsPage,
   secrets: SecretsSettingsPage,
   'social-accounts': SocialAccountsSettingsPage,
+  spotify: SpotifySettingsPage,
+  'ad-accounts': AdAccountsSettingsPage,
   appearance: AppearanceSettingsPage,
   input: InputSettingsPage,
   workspace: WorkspaceSettingsPage,

@@ -3,6 +3,7 @@ import { Bot, CalendarDays, CheckCircle2, ExternalLink, FileText, Pencil, Receip
 import { toast } from 'sonner'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../../shared/routes'
+import type { SettingsSubpage } from '../../../shared/settings-registry'
 import {
   SCHEDULED_WORK_CONTEXT_SLUG,
   parseScheduledWorkDocResult,
@@ -508,7 +509,7 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
             })
             setComposerOpen(true)
           }}
-          onOpenSocialSettings={() => navigate(routes.view.settings('social-accounts'))}
+          onOpenSocialSettings={(subpage) => navigate(routes.view.settings(subpage))}
           onOpenComposer={(type) => {
             setComposerPrefill(type ? { mode: 'event', suggestedType: type } : { mode: 'job' })
             setComposerOpen(true)
@@ -584,7 +585,7 @@ function CampaignCalendarSurface({
   onResolveProducedOutput: (order: ScheduledWorkOrder, outputId: string) => Promise<void>
   onApproveSocial: (order: ScheduledWorkOrder) => Promise<void>
   onQueueReplacement: (order: ScheduledWorkOrder) => void
-  onOpenSocialSettings: () => void
+  onOpenSocialSettings: (subpage: ConnectionSettingsSubpage) => void
   onOpenComposer: (type?: ScheduledWorkComposerEntry['suggestedType']) => void
 }) {
   const [detailItemId, setDetailItemId] = React.useState<string | null>(null)
@@ -821,7 +822,7 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
   onResolveProducedOutput: (order: ScheduledWorkOrder, outputId: string) => Promise<void>
   onApproveSocial: (order: ScheduledWorkOrder) => Promise<void>
   onQueueReplacement: (order: ScheduledWorkOrder) => void
-  onOpenSocialSettings: () => void
+  onOpenSocialSettings: (subpage: ConnectionSettingsSubpage) => void
 }) {
   const latestRun = work.runs.at(-1)
   const agentResult = work.result?.type === 'agent-task' ? work.result : undefined
@@ -833,6 +834,12 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
   const [decisionError, setDecisionError] = React.useState<string | null>(null)
   const expectedCalendarStatus = work.reviewDecision?.decision === 'approved' ? 'done' : work.reviewDecision ? 'failed' : undefined
   const needsCalendarRepair = Boolean(expectedCalendarStatus && calendarStatus !== expectedCalendarStatus)
+  const connectionSettingsTarget = connectionSettingsSubpageForWork(work)
+  const connectionSettingsLabel = connectionSettingsTarget === 'spotify'
+    ? 'Open Spotify Settings'
+    : connectionSettingsTarget === 'ad-accounts'
+      ? 'Open Ad Accounts'
+      : 'Open Social Accounts'
   const decide = async (decision: 'approved' | 'changes-requested', decisionNotes = notes) => {
     if (decision === 'changes-requested' && !decisionNotes.trim()) {
       setDecisionError('Explain what needs to change.')
@@ -862,7 +869,7 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
       {work.status === 'needs-attention' && work.attention?.reason !== 'produced-output-ambiguous' && work.attention?.reason !== 'produced-output-missing' && work.attention?.reason !== 'execution-uncertain' ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
           <button type="button" onClick={() => onQueueReplacement(work)} className="h-7 rounded-[5px] border border-white/[0.08] px-2.5 text-[10px] font-medium text-white/58">Queue replacement</button>
-          {work.attention?.reason === 'profile-login-required' ? <button type="button" onClick={onOpenSocialSettings} className="h-7 rounded-[5px] border border-yellow-200/15 px-2.5 text-[10px] font-medium text-yellow-100/65">Open Social Accounts</button> : null}
+          {work.attention?.reason === 'profile-login-required' ? <button type="button" onClick={() => onOpenSocialSettings(connectionSettingsTarget)} className="h-7 rounded-[5px] border border-yellow-200/15 px-2.5 text-[10px] font-medium text-yellow-100/65">{connectionSettingsLabel}</button> : null}
         </div>
       ) : null}
       {(work.attention?.reason === 'produced-output-missing' || work.attention?.reason === 'produced-output-ambiguous') && producedOutputIds.length > 0 ? (
@@ -941,6 +948,16 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
       ) : null}
     </div>
   )
+}
+
+type ConnectionSettingsSubpage = Extract<SettingsSubpage, 'social-accounts' | 'spotify' | 'ad-accounts'>
+
+export function connectionSettingsSubpageForWork(work: ScheduledWorkOrder): ConnectionSettingsSubpage {
+  if (work.execution.type === 'social-publish' && work.execution.platform === 'spotify') return 'spotify'
+  if (work.socialAction?.platform === 'spotify') return 'spotify'
+  if (work.execution.type === 'agent-task' && /^spotify-/.test(work.execution.agentSlug)) return 'spotify'
+  if (work.execution.type === 'agent-task' && work.execution.agentSlug === 'ads-agent') return 'ad-accounts'
+  return 'social-accounts'
 }
 
 function WorkAction({ label, onClick }: { label: string; onClick: () => void }) {

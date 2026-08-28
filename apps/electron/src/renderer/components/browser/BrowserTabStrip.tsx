@@ -22,9 +22,15 @@ import {
 import {
   activeBrowserInstanceIdAtom,
   browserInstancesAtom,
+  clearBrowserAutoOpenDismissalAtom,
+  closeBrowserSidecarAtom,
+  dismissBrowserSidecarAtom,
+  dismissedAgentBrowserIdsAtom,
+  openBrowserSidecarAtom,
   setBrowserInstancesAtom,
   updateBrowserInstanceAtom,
   removeBrowserInstanceAtom,
+  shouldAutoOpenAgentBrowser,
 } from '@/atoms/browser-pane'
 import { BrowserTabBadge } from './BrowserTabBadge'
 import type { BrowserInstanceInfo } from '../../../shared/types'
@@ -49,8 +55,15 @@ export function BrowserTabStrip({
   const updateInstance = useSetAtom(updateBrowserInstanceAtom)
   const removeInstance = useSetAtom(removeBrowserInstanceAtom)
   const [activeInstanceId, setActiveInstanceId] = useAtom(activeBrowserInstanceIdAtom)
+  const openBrowserSidecar = useSetAtom(openBrowserSidecarAtom)
+  const closeBrowserSidecar = useSetAtom(closeBrowserSidecarAtom)
+  const dismissBrowserSidecar = useSetAtom(dismissBrowserSidecarAtom)
+  const clearAutoOpenDismissal = useSetAtom(clearBrowserAutoOpenDismissalAtom)
+  const dismissedAgentBrowserIds = useAtomValue(dismissedAgentBrowserIdsAtom)
   const effectiveInstances = instancesOverride ?? instances
   const instancesRef = useRef(effectiveInstances)
+  const agentControlStateRef = useRef(new Map<string, boolean>())
+  const dismissedAgentBrowserIdsRef = useRef(dismissedAgentBrowserIds)
   const removeReconcileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const orderedInstances = useMemo(() => {
@@ -74,7 +87,16 @@ export function BrowserTabStrip({
 
   useEffect(() => {
     instancesRef.current = effectiveInstances
+    for (const instance of effectiveInstances) {
+      if (!agentControlStateRef.current.has(instance.id)) {
+        agentControlStateRef.current.set(instance.id, instance.agentControlActive)
+      }
+    }
   }, [effectiveInstances])
+
+  useEffect(() => {
+    dismissedAgentBrowserIdsRef.current = dismissedAgentBrowserIds
+  }, [dismissedAgentBrowserIds])
 
   useEffect(() => {
     if (instancesOverride) return
@@ -88,6 +110,7 @@ export function BrowserTabStrip({
 
     browserPaneApi.list()
       .then((items) => {
+        agentControlStateRef.current = new Map(items.map((item) => [item.id, item.agentControlActive]))
         setInstances(items)
         if (items.length === 0) {
           setActiveInstanceId(null)
@@ -109,16 +132,25 @@ export function BrowserTabStrip({
     if (!browserPaneApi || !window.electronAPI.isChannelAvailable('browser-pane:list')) return
 
     const cleanupState = browserPaneApi.onStateChanged((info: BrowserInstanceInfo) => {
+      const wasActive = agentControlStateRef.current.get(info.id) ?? false
+      agentControlStateRef.current.set(info.id, info.agentControlActive)
       updateInstance(info)
+      if (!info.agentControlActive) {
+        clearAutoOpenDismissal(info.id)
+      } else if (shouldAutoOpenAgentBrowser(wasActive, info, activeSessionId, dismissedAgentBrowserIdsRef.current)) {
+        openBrowserSidecar(info.id)
+      }
     })
 
     const cleanupRemoved = browserPaneApi.onRemoved((id: string) => {
       removeInstance(id)
+      agentControlStateRef.current.delete(id)
       setActiveInstanceId((prev) => {
         if (prev !== id) return prev
         const remaining = instancesRef.current.filter((item) => item.id !== id)
         return remaining[0]?.id ?? null
       })
+      if (activeInstanceId === id) closeBrowserSidecar()
 
       if (removeReconcileTimerRef.current) {
         clearTimeout(removeReconcileTimerRef.current)
@@ -153,7 +185,7 @@ export function BrowserTabStrip({
         removeReconcileTimerRef.current = null
       }
     }
-  }, [instancesOverride, updateInstance, removeInstance, setActiveInstanceId, setInstances])
+  }, [activeInstanceId, activeSessionId, clearAutoOpenDismissal, closeBrowserSidecar, instancesOverride, openBrowserSidecar, updateInstance, removeInstance, setActiveInstanceId, setInstances])
 
   useEffect(() => {
     if (orderedInstances.length === 0) {
@@ -166,19 +198,17 @@ export function BrowserTabStrip({
   }, [orderedInstances, activeInstanceId, setActiveInstanceId])
 
   const focusBrowserWindow = useCallback((instance: BrowserInstanceInfo) => {
-    setActiveInstanceId(instance.id)
+    openBrowserSidecar(instance.id)
     if (instancesOverride) return
+  }, [instancesOverride, openBrowserSidecar])
 
-    const browserPaneApi = window.electronAPI?.browserPane
-    if (!browserPaneApi) {
-      console.warn('[BrowserTabStrip] browserPane API unavailable for focus action')
-      return
-    }
-
-    void browserPaneApi.focus(instance.id).catch((error) => {
-      console.warn(`[BrowserTabStrip] Failed to focus browser window ${instance.id}:`, error)
+  const popOutBrowserWindow = useCallback((instance: BrowserInstanceInfo) => {
+    if (instancesOverride) return
+    if (activeInstanceId === instance.id) dismissBrowserSidecar()
+    void window.electronAPI.browserPane.popOut(instance.id).catch((error) => {
+      console.warn(`[BrowserTabStrip] Failed to pop out browser ${instance.id}:`, error)
     })
-  }, [instancesOverride, setActiveInstanceId])
+  }, [activeInstanceId, dismissBrowserSidecar, instancesOverride])
 
   const openSessionUsingWindow = useCallback((instance: BrowserInstanceInfo) => {
     const sessionId = instance.boundSessionId ?? instance.ownerSessionId
@@ -221,7 +251,15 @@ export function BrowserTabStrip({
           onSelect={() => focusBrowserWindow(instance)}
         >
           <Icons.Monitor className="h-3.5 w-3.5" />
-          Show Browser Window
+          Open in Sidecar
+        </StyledDropdownMenuItem>
+
+        <StyledDropdownMenuItem
+          disabled={!canUseLiveWindowActions}
+          onSelect={() => popOutBrowserWindow(instance)}
+        >
+          <Icons.ExternalLink className="h-3.5 w-3.5" />
+          Pop Out Browser
         </StyledDropdownMenuItem>
 
         <StyledDropdownMenuItem
@@ -244,7 +282,7 @@ export function BrowserTabStrip({
         </StyledDropdownMenuItem>
       </>
     )
-  }, [instancesOverride, focusBrowserWindow, openSessionUsingWindow, terminateBrowserWindow])
+  }, [instancesOverride, focusBrowserWindow, openSessionUsingWindow, popOutBrowserWindow, terminateBrowserWindow])
 
   if (orderedInstances.length === 0) return null
 

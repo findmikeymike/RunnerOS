@@ -141,7 +141,7 @@ export function VisualBoardSurface({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#050505]">
+    <div className="dark flex h-full min-h-0 flex-col overflow-hidden bg-[#050505] text-foreground">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 bg-[#050505] px-3 py-2">
         <Button type="button" size="sm" variant="secondary" className="h-8" onClick={addNote}>
           <Plus className="h-3.5 w-3.5" />

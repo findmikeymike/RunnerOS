@@ -50,6 +50,8 @@ Recommended flow:
 browser_tool({ command: "--help" })
 browser_tool({ command: "open" })
 browser_tool({ command: "open --foreground" })
+browser_tool({ command: "accounts" })
+browser_tool({ command: "account meta-ads artist-main" })
 browser_tool({ command: "navigate https://example.com" })
 browser_tool({ command: "snapshot" })
 browser_tool({ command: "find login button" })
@@ -113,6 +115,15 @@ Use backslash escaping when needed:
 Create or reuse the session browser window.
 - Default: opens in background
 - `--foreground` / `-f`: focuses in foreground
+
+### `profile <platform> <profile> [--foreground|-f]`
+Attach the session to one saved social-account browser login, such as `profile spotify spotify-main`. All following browser commands target that isolated account profile. Use this instead of `open` after resolving an exact `platform/profile` through Printing Press Social.
+
+### `accounts`
+List configured Meta and Google dashboard accounts from Settings > Ad Accounts. This exposes routing metadata only, never cookies or credentials.
+
+### `account <provider> <profile> [--foreground|-f]`
+Attach the session to the exact isolated Meta or Google dashboard login, such as `account meta-ads artist-main`. Use this instead of a generic browser for configured ad accounts.
 
 ### `snapshot`
 Returns an accessibility tree with refs and element metadata.

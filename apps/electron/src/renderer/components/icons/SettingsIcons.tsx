@@ -192,6 +192,31 @@ export const SocialAccountsIcon = ({ className }: IconProps) => (
   </svg>
 )
 
+export const AdAccountsIcon = ({ className }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="8" />
+    <path d="M15 8.5h-4.2a2.3 2.3 0 0 0 0 4.6h2.4a2.3 2.3 0 0 1 0 4.6H9" />
+    <path d="M12 6.5v12" />
+  </svg>
+)
+
+/** Spotify account icon */
+export const SpotifySettingsIcon = ({ className }: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2ZM7.14071 8.52739C7.04198 8.00669 7.38398 7.50455 7.90468 7.40582C11.3063 6.7609 15.0471 7.15154 17.8174 8.48301C18.2954 8.71275 18.4966 9.28648 18.2669 9.76447C18.0371 10.2425 17.4634 10.4437 16.9854 10.2139C14.6014 9.06827 11.3181 8.72289 8.26228 9.30297C7.74158 9.4017 7.23944 9.04809 7.14071 8.52739ZM7.52806 11.6224C7.43414 11.1789 7.71745 10.7432 8.16093 10.6493C11.0274 10.0422 14.3378 10.3871 16.7034 11.5269C17.112 11.7237 17.2836 12.2145 17.0868 12.6231C16.89 13.0317 16.3992 13.2033 15.9906 13.0065C13.9831 12.0392 11.0928 11.7318 8.50116 12.2807C8.05767 12.3746 7.62198 12.0659 7.52806 11.6224ZM8.0317 14.4709C7.95731 14.099 8.19846 13.7372 8.57036 13.6628C10.8836 13.2 13.5975 13.4799 15.4363 14.3908C15.7762 14.5592 15.9153 14.9713 15.7469 15.3112C15.5785 15.6511 15.1664 15.7902 14.8265 15.6218C13.2823 14.8568 10.9177 14.6029 8.8398 15.0185C8.46789 15.0929 8.10609 14.8428 8.0317 14.4709Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
 /** User icon for preferences */
 export const PreferencesIcon = ({ className }: IconProps) => (
   <svg
@@ -218,6 +243,8 @@ export const SETTINGS_ICONS: Record<SettingsSubpage, React.ComponentType<IconPro
   ai: AiSettingsIcon,
   secrets: PreferencesIcon,
   'social-accounts': SocialAccountsIcon,
+  spotify: SpotifySettingsIcon,
+  'ad-accounts': AdAccountsIcon,
   appearance: AppearanceIcon,
   input: InputIcon,
   workspace: WorkspaceIcon,

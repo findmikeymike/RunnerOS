@@ -23,7 +23,7 @@ Profile JSON commands:
 
 ```bash
 social profile add <platform> --profile <profile> --handle <handle> --account-url <url> --json
-social profile list --json
+social catalog --json
 social profile status <platform> --profile <profile> --live --json
 social profile update <platform> --profile <profile> --handle <handle> --account-url <url> --json
 social profile delete <platform> --profile <profile> --json

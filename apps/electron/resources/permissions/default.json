@@ -1,5 +1,5 @@
 {
-  "version": "2026-07-30T00:00:00Z",
+  "version": "2026-08-27T00:00:00Z",
   "allowedBashPatterns": [
     {
       "pattern": "^ls\\b",
@@ -152,6 +152,30 @@
     {
       "pattern": "^node\\s+src/social\\.mjs\\s+doctor\\s+(?:--live\\s+)?--json$",
       "comment": "Check bundled Printing Press Social CLI install and profile readiness from the tool directory"
+    },
+    {
+      "pattern": "^cd\\s+(?:tools/printing-press-social|\"[^\"]*printing-press-social\")\\s+&&\\s+node\\s+src/social\\.mjs\\s+profile\\s+status\\s+spotify\\s+--profile\\s+[A-Za-z0-9_-]+\\s+--live\\s+--json$",
+      "comment": "Check the configured Spotify for Artists browser profile without changing account state"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+profile\\s+status\\s+spotify\\s+--profile\\s+[A-Za-z0-9_-]+\\s+--live\\s+--json$",
+      "comment": "Check the configured Spotify for Artists browser profile from the tool directory"
+    },
+    {
+      "pattern": "^cd\\s+(?:tools/printing-press-social|\"[^\"]*printing-press-social\")\\s+&&\\s+node\\s+src/social\\.mjs\\s+snapshot\\s+spotify\\s+--profile\\s+[A-Za-z0-9_-]+\\s+--json$",
+      "comment": "Build a read-only Spotify for Artists browser snapshot plan"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+snapshot\\s+spotify\\s+--profile\\s+[A-Za-z0-9_-]+\\s+--json$",
+      "comment": "Build a read-only Spotify for Artists browser snapshot plan from the tool directory"
+    },
+    {
+      "pattern": "^cd\\s+(?:tools/printing-press-social|\"[^\"]*printing-press-social\")\\s+&&\\s+node\\s+src/social\\.mjs\\s+snapshot\\s+spotify\\s+--profile\\s+[A-Za-z0-9_-]+\\s+--capture-file\\s+(?:\"[^\"]+\"|'[^']+'|[^\\s;&|`]+)\\s+--workspace\\s+(?:\"[^\"]+\"|'[^']+'|[^\\s;&|`]+)\\s+--json$",
+      "comment": "Normalize a captured read-only Spotify for Artists snapshot into the workspace"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+snapshot\\s+spotify\\s+--profile\\s+[A-Za-z0-9_-]+\\s+--capture-file\\s+(?:\"[^\"]+\"|'[^']+'|[^\\s;&|`]+)\\s+--workspace\\s+(?:\"[^\"]+\"|'[^']+'|[^\\s;&|`]+)\\s+--json$",
+      "comment": "Normalize a captured read-only Spotify for Artists snapshot from the tool directory"
     },
     {
       "pattern": "^node\\s+src/social\\.mjs\\s+assets\\s+--asset-root\\s+.+?(?:\\s+--platform\\s+(instagram|tiktok|x|youtube))?\\s+--json$",

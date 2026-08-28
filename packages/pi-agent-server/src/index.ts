@@ -24,7 +24,7 @@ import { homedir } from 'node:os';
 import {
   createAgentSession,
   SessionManager as PiSessionManager,
-  AuthStorage as PiAuthStorage,
+  ModelRuntime as PiModelRuntime,
   ModelRegistry as PiModelRegistry,
   createReadToolDefinition,
   createBashToolDefinition,
@@ -38,13 +38,16 @@ import type {
   AgentSession,
   AgentSessionEvent,
   AgentToolResult,
-  AuthCredential,
   CreateAgentSessionOptions,
   ToolDefinition,
 } from '@earendil-works/pi-coding-agent';
 
 // Pi AI types
-import type { TextContent as PiTextContent } from '@earendil-works/pi-ai';
+import { InMemoryCredentialStore } from '@earendil-works/pi-ai';
+import type { Credential, TextContent as PiTextContent } from '@earendil-works/pi-ai';
+import { registerPiBundledOAuthFlows } from './bundled-oauth.ts';
+
+registerPiBundledOAuthFlows();
 
 // Model resolution (extracted for testability + custom-endpoint precedence)
 import { resolvePiModel, isDeniedMiniModelId, isModelNotFoundError } from './model-resolution.ts';
@@ -210,7 +213,8 @@ type OutboundMessage =
 
 let piSession: AgentSession | null = null;
 let piModelRegistry: PiModelRegistry | null = null;
-let moduleAuthStorage: PiAuthStorage | null = null;
+let moduleAuthStorage: InMemoryCredentialStore | null = null;
+let moduleModelRuntime: PiModelRuntime | null = null;
 let unsubscribeEvents: (() => void) | null = null;
 
 // Init config (set on 'init' message)
@@ -442,30 +446,39 @@ function registerCustomEndpointModels(
  * and a model registry backed by it. Used by both the main session and
  * ephemeral queryLlm sessions.
  */
-function createAuthenticatedRegistry(): {
-  authStorage: PiAuthStorage;
+async function createAuthenticatedRegistry(): Promise<{
+  authStorage: InMemoryCredentialStore;
+  modelRuntime: PiModelRuntime;
   modelRegistry: PiModelRegistry;
-} {
+}> {
   // Reuse module-level authStorage if already created (allows token_update to mutate it).
   // Only create a new one on first call or after re-init.
   if (!moduleAuthStorage) {
-    moduleAuthStorage = PiAuthStorage.inMemory();
+    moduleAuthStorage = new InMemoryCredentialStore();
   }
   const authStorage = moduleAuthStorage;
   if (initConfig?.piAuth) {
     const { provider, credential } = initConfig.piAuth;
-    // Pi SDK 0.70.0's AuthCredential union (ApiKeyCredential | OAuthCredential) doesn't
-    // include 'iam' as a first-class member, but the auth storage accepts it at runtime
-    // — the Bedrock provider module reads AWS env directly; this `set` keeps Pi SDK's
+    // Pi SDK's Credential union doesn't include IAM as a first-class member, but
+    // Bedrock reads AWS env directly; this stored marker keeps the runtime's
     // internal provider-tracking consistent regardless of credential shape.
-    authStorage.set(provider, credential as unknown as AuthCredential);
+    await authStorage.modify(provider, async () => credential as unknown as Credential);
     debugLog(`Injected ${credential.type} credential for provider: ${provider}`);
   } else if (initConfig?.apiKey) {
-    authStorage.set('anthropic', { type: 'api_key', key: initConfig.apiKey });
+    await authStorage.modify('anthropic', async () => ({ type: 'api_key', key: initConfig!.apiKey }));
     debugLog('Injected API key into auth storage (legacy fallback)');
   }
 
-  const modelRegistry = PiModelRegistry.inMemory(authStorage);
+  if (!moduleModelRuntime) {
+    moduleModelRuntime = await PiModelRuntime.create({
+      credentials: authStorage,
+      modelsPath: null,
+      allowModelNetwork: false,
+      refreshOnCreate: false,
+    });
+  }
+  const modelRuntime = moduleModelRuntime;
+  const modelRegistry = new PiModelRegistry(modelRuntime);
 
   // Register custom endpoint models dynamically via Pi SDK's registerProvider API.
   // This makes arbitrary OpenAI/Anthropic-compatible endpoints work through the Pi SDK
@@ -483,7 +496,7 @@ function createAuthenticatedRegistry(): {
     debugLog('Custom endpoint without protocol config — models may not resolve. Set customEndpoint.api for proper routing.');
   }
 
-  return { authStorage, modelRegistry };
+  return { authStorage, modelRuntime, modelRegistry };
 }
 
 async function ensureSession(): Promise<AgentSession> {
@@ -492,7 +505,7 @@ async function ensureSession(): Promise<AgentSession> {
 
   const cwd = resolvedCwd();
 
-  const { authStorage, modelRegistry } = createAuthenticatedRegistry();
+  const { modelRuntime, modelRegistry } = await createAuthenticatedRegistry();
   // Store at module scope for set_model handler
   piModelRegistry = modelRegistry;
 
@@ -545,8 +558,7 @@ async function ensureSession(): Promise<AgentSession> {
   // Build session options
   const sessionOptions: CreateAgentSessionOptions = {
     cwd,
-    authStorage,
-    modelRegistry,
+    modelRuntime,
     customTools: wrappedAll,
     tools: toolAllowlist,
   };
@@ -864,7 +876,7 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
   let model = request.model ?? initConfig.miniModel ?? getDefaultSummarizationModel();
 
   // Create authenticated registry upfront — used by both the provider guard and the ephemeral session.
-  const { authStorage, modelRegistry } = createAuthenticatedRegistry();
+  const { modelRuntime, modelRegistry } = await createAuthenticatedRegistry();
 
   const piAuthProvider = initConfig.piAuth?.provider;
 
@@ -908,8 +920,7 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
     // Create minimal ephemeral session
     const ephemeralOptions: CreateAgentSessionOptions = {
       cwd: resolvedCwd(),
-      authStorage,
-      modelRegistry,
+      modelRuntime,
       tools: [],
       sessionManager: PiSessionManager.inMemory(),
       model: piModel,
@@ -968,7 +979,7 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
             .join('');
         }
       }
-      if (event.type === 'agent_settled') {
+      if (event.type === 'agent_end') {
         completionResolve();
       }
     });
@@ -1187,6 +1198,7 @@ async function handleInit(msg: Extract<InboundMessage, { type: 'init' }>): Promi
     piSession.dispose();
     piSession = null;
     moduleAuthStorage = null; // Reset so createAuthenticatedRegistry() creates fresh storage
+    moduleModelRuntime = null;
     debugLog('Cleaned up existing session for re-init');
   }
 
@@ -1306,16 +1318,14 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
           code: 'prompt_overflow_recovery_failed',
         });
         send({ type: 'event', event: { type: 'agent_end', messages: [], willRetry: false } });
-        send({ type: 'event', event: { type: 'agent_settled' } });
         return;
       }
     }
 
     debugLog(`Prompt failed: ${errorMsg}`);
     send({ type: 'error', message: errorMsg, code: 'prompt_error' });
-    // Send the full terminal lifecycle so the main process unblocks only once settled.
+    // Send synthetic agent_end so the main process event queue unblocks
     send({ type: 'event', event: { type: 'agent_end', messages: [], willRetry: false } });
-    send({ type: 'event', event: { type: 'agent_settled' } });
   }
 }
 
@@ -1624,8 +1634,8 @@ async function processMessage(msg: InboundMessage): Promise<void> {
     case 'token_update':
       if (moduleAuthStorage) {
         const { provider, credential } = msg.piAuth;
-        // See ambient comment at the initial `authStorage.set` call — same shape reason.
-        moduleAuthStorage.set(provider, credential as unknown as AuthCredential);
+        // See ambient comment at the initial credential write — same shape reason.
+        await moduleAuthStorage.modify(provider, async () => credential as unknown as Credential);
         if (initConfig) {
           initConfig.piAuth = msg.piAuth;
         }

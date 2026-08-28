@@ -44,6 +44,9 @@ export function getBrowserToolHelp(): string {
     'Usage:',
     '  --help',
     '  open [--foreground|-f]                         open browser (background by default)',
+    '  profile <platform> <profile> [--foreground|-f] use a saved social-account browser login',
+    '  accounts                                            list saved paid-ad dashboard accounts',
+    '  account <provider> <profile> [--foreground|-f]     use a saved paid-ad dashboard login',
     '  navigate <url>',
     '  snapshot',
     '  find <query>                                   search elements by keyword (matches role, name, value)',
@@ -737,6 +740,63 @@ async function executeSingleCommand(args: {
     }
 
     return { output: lines.join('\n'), appendReleaseHint: true };
+  }
+
+  if (cmd === 'profile') {
+    const platform = parts[1]?.toLowerCase()
+    const profile = parts[2]
+    if (!platform || !profile || profile.startsWith('-')) {
+      throw new Error('Usage: profile <platform> <profile> [--foreground|-f]')
+    }
+
+    const foreground = parts.includes('--foreground') || parts.includes('-f')
+    const result = await fns.openSocialProfile(platform, profile, { background: !foreground })
+    return {
+      output: [
+        `Using saved social browser profile ${result.platform}/${result.profile}`,
+        `Window: ${result.instanceId}`,
+        `Mode: ${foreground ? 'foreground' : 'background'}`,
+        'All following browser commands in this session now target this saved login.',
+      ].join('\n'),
+      appendReleaseHint: true,
+    }
+  }
+
+  if (cmd === 'accounts') {
+    const accounts = await fns.listAdProfiles()
+    if (accounts.length === 0) {
+      return {
+        output: 'No paid-ad dashboard accounts are configured. Open Settings > Ad Accounts.',
+        appendReleaseHint: false,
+      }
+    }
+    return {
+      output: [
+        'Configured paid-ad dashboard accounts:',
+        ...accounts.map((account) => `- ${account.provider}/${account.profile} · ${account.label}${account.accountId ? ` · account ${account.accountId}` : ''}`),
+      ].join('\n'),
+      appendReleaseHint: false,
+    }
+  }
+
+  if (cmd === 'account') {
+    const provider = parts[1]?.toLowerCase()
+    const profile = parts[2]
+    if (!provider || !profile || profile.startsWith('-')) {
+      throw new Error('Usage: account <provider> <profile> [--foreground|-f]')
+    }
+
+    const foreground = parts.includes('--foreground') || parts.includes('-f')
+    const result = await fns.openAdProfile(provider, profile, { background: !foreground })
+    return {
+      output: [
+        `Using saved paid-ad dashboard account ${result.provider}/${result.profile}`,
+        `Window: ${result.instanceId}`,
+        `Mode: ${foreground ? 'foreground' : 'background'}`,
+        'All following browser commands in this session now target this saved login.',
+      ].join('\n'),
+      appendReleaseHint: true,
+    }
   }
 
   if (cmd === 'navigate') {

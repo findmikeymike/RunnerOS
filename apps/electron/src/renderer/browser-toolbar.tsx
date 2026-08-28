@@ -187,7 +187,7 @@ function BrowserToolbarApp() {
               <DropdownMenuTrigger asChild>
                 <HeaderIconButton
                   icon={<X className="h-3.5 w-3.5" />}
-                  aria-label="Browser window options"
+                  aria-label="Browser options"
                   className={themeColor ? '' : 'bg-background shadow-minimal hover:bg-foreground/5'}
                   style={themeColor ? { color: 'var(--tb-fg)' } : undefined}
                 />
@@ -203,11 +203,11 @@ function BrowserToolbarApp() {
               >
                 <StyledDropdownMenuItem onSelect={handleHideWindow}>
                   <EyeOff className="h-3.5 w-3.5" />
-                  Hide Window
+                  Hide Browser
                 </StyledDropdownMenuItem>
                 <StyledDropdownMenuItem variant="destructive" onSelect={handleCloseWindowEntirely}>
                   <XCircle className="h-3.5 w-3.5" />
-                  Close Window Entirely
+                  Close Browser Entirely
                 </StyledDropdownMenuItem>
               </StyledDropdownMenuContent>
             </DropdownMenu>

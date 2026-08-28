@@ -216,6 +216,7 @@ const authorizedClient: TransportClient = productVariant === 'artist-os'
 const api = buildClientApi(authorizedClient, CHANNEL_MAP, (ch) => authorizedClient.isChannelAvailable(ch))
 
 ;(api as any).getRuntimeEnvironment = (): 'electron' | 'web' => 'electron'
+;(api as any).webContentsId = webContentsId
 
 // ---------------------------------------------------------------------------
 // Transport connection state logging (for remote connections)

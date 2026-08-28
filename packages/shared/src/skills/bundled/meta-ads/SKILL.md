@@ -7,6 +7,8 @@ description: Operate Meta Ads safely through RunnerOS' Meta Ads source when conn
 
 Use this skill when the user asks for Meta Ads reporting, campaign diagnostics, audience/ad set review, creative fatigue checks, account discovery, budget review, or Meta campaign setup help.
 
+For browser dashboard work, run `browser_tool accounts`, then attach the exact saved login from Settings > Ad Accounts with `browser_tool account meta-ads <profile>`. Do not use a generic browser session for a configured account.
+
 ## Source And Local Route
 
 Prefer the `meta-ads` source when it is connected and eligible for the requested read-only account work.

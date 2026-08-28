@@ -24,6 +24,71 @@ export const browserInstanceCountAtom = atom<number>(
 /** Currently active browser instance ID (selected/focused by user interactions) */
 export const activeBrowserInstanceIdAtom = atom<string | null>(null)
 
+/** Whether the selected controlled browser is docked beside the current work. */
+export const browserSidecarOpenAtom = atom(false)
+
+/** Agent-controlled browsers the user explicitly dismissed during the current run. */
+export const dismissedAgentBrowserIdsAtom = atom<Set<string>>(new Set<string>())
+
+/** Select a browser and reveal the shared right-side work surface. */
+export const openBrowserSidecarAtom = atom(
+  null,
+  (get, set, instanceId: string) => {
+    const dismissedIds = new Set(get(dismissedAgentBrowserIdsAtom))
+    dismissedIds.delete(instanceId)
+    set(dismissedAgentBrowserIdsAtom, dismissedIds)
+    set(activeBrowserInstanceIdAtom, instanceId)
+    set(browserSidecarOpenAtom, true)
+  },
+)
+
+/** Hide the browser surface without destroying its login session. */
+export const closeBrowserSidecarAtom = atom(
+  null,
+  (_get, set) => {
+    set(browserSidecarOpenAtom, false)
+  },
+)
+
+/** Respect an explicit user close until that browser's current agent run ends. */
+export const dismissBrowserSidecarAtom = atom(
+  null,
+  (get, set) => {
+    const activeId = get(activeBrowserInstanceIdAtom)
+    const activeInstance = activeId ? get(browserInstancesMapAtom).get(activeId) : null
+    if (activeId && activeInstance?.agentControlActive) {
+      const dismissedIds = new Set(get(dismissedAgentBrowserIdsAtom))
+      dismissedIds.add(activeId)
+      set(dismissedAgentBrowserIdsAtom, dismissedIds)
+    }
+    set(browserSidecarOpenAtom, false)
+  },
+)
+
+export const clearBrowserAutoOpenDismissalAtom = atom(
+  null,
+  (get, set, instanceId: string) => {
+    const dismissedIds = get(dismissedAgentBrowserIdsAtom)
+    if (!dismissedIds.has(instanceId)) return
+    const next = new Set(dismissedIds)
+    next.delete(instanceId)
+    set(dismissedAgentBrowserIdsAtom, next)
+  },
+)
+
+export function shouldAutoOpenAgentBrowser(
+  wasActive: boolean,
+  info: BrowserInstanceInfo,
+  activeSessionId: string | null | undefined,
+  dismissedIds: ReadonlySet<string>,
+): boolean {
+  return !wasActive
+    && info.agentControlActive
+    && !!info.boundSessionId
+    && info.boundSessionId === activeSessionId
+    && !dismissedIds.has(info.id)
+}
+
 /** Tombstones for instances removed from renderer state (guards against late out-of-order updates) */
 export const removedBrowserInstanceIdsAtom = atom<Set<string>>(new Set<string>())
 
@@ -60,6 +125,10 @@ export const removeBrowserInstanceAtom = atom(
     const removedIds = new Set(get(removedBrowserInstanceIdsAtom))
     removedIds.add(id)
     set(removedBrowserInstanceIdsAtom, removedIds)
+
+    const dismissedIds = new Set(get(dismissedAgentBrowserIdsAtom))
+    dismissedIds.delete(id)
+    set(dismissedAgentBrowserIdsAtom, dismissedIds)
   }
 )
 
@@ -78,5 +147,11 @@ export const setBrowserInstancesAtom = atom(
       removedIds.delete(info.id)
     }
     set(removedBrowserInstanceIdsAtom, removedIds)
+
+    const liveIds = new Set(instances.map((info) => info.id))
+    const dismissedIds = new Set(
+      Array.from(get(dismissedAgentBrowserIdsAtom)).filter((id) => liveIds.has(id)),
+    )
+    set(dismissedAgentBrowserIdsAtom, dismissedIds)
   }
 )

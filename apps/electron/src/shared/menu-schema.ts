@@ -235,6 +235,8 @@ const SETTINGS_ICONS: Record<SettingsSubpage, string> = {
   ai: 'Sparkles',
   secrets: 'KeyRound',
   'social-accounts': 'Share2',
+  spotify: 'Music2',
+  'ad-accounts': 'BadgeDollarSign',
   appearance: 'Palette',
   input: 'Keyboard',
   workspace: 'Building2',

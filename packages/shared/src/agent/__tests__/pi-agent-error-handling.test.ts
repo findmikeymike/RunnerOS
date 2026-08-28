@@ -21,7 +21,7 @@ function createConfig(): BackendConfig {
 }
 
 describe('PiAgent subprocess error handling', () => {
-  it('completes the event queue only after agent_settled', () => {
+  it('completes the event queue when Pi 0.84 emits agent_end', () => {
     const agent = new PiAgent(createConfig())
     let completionCount = 0
     ;(agent as any).eventQueue.complete = () => {
@@ -32,14 +32,8 @@ describe('PiAgent subprocess error handling', () => {
       type: 'event',
       event: { type: 'agent_end', messages: [], willRetry: false },
     }))
-    expect(completionCount).toBe(0)
 
-    ;(agent as any).handleLine(JSON.stringify({
-      type: 'event',
-      event: { type: 'agent_settled' },
-    }))
     expect(completionCount).toBe(1)
-
     agent.destroy()
   })
 

@@ -88,7 +88,7 @@ function isBareBedrockClaudeModel(modelId: string): boolean {
  */
 export function getPiModelsForAuthProvider(piAuthProvider: string): ModelDefinition[] {
   try {
-    const models = getModels(piAuthProvider as KnownProvider);
+    const models = getModels(piAuthProvider as Parameters<typeof getModels>[0]);
     if (models.length > 0) {
       return models
         .filter(m => !isExcludedPiModel(m.id))
@@ -111,7 +111,7 @@ export function getAllPiModels(): ModelDefinition[] {
   const allModels: ModelDefinition[] = [];
   for (const provider of getProviders()) {
     try {
-      const models = getModels(provider);
+      const models = getModels(provider as Parameters<typeof getModels>[0]);
       allModels.push(...models
         .filter(m => !isExcludedPiModel(m.id))
         .map(piModelToDefinition)

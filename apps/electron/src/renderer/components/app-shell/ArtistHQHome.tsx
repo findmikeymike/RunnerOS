@@ -47,7 +47,7 @@ import {
 import { parseAutomationsConfig, type AutomationListItem } from '@/components/automations/types'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
-import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
+import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { ScheduledWorkComposer, type ScheduledWorkComposerEntry } from '@/components/calendar/ScheduledWorkComposer'
 import { StateOfPlayHistory, StateOfPlayOutcomeFeedback, StateOfPlayRefreshButton } from './StateOfPlayControls'
 import { buildCampaignSchedulePlanFromComposer, buildHqSchedulePlanFromComposer, type ScheduledWorkComposerDraft } from '@/lib/scheduled-work-composer'
@@ -1332,7 +1332,7 @@ export function ArtistHQHome({
 
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
-      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
+      <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
         <section className="relative min-h-[230px] overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A]">
           {tab === 'home' && bannerImageDataUrl ? (
             <>
@@ -1591,7 +1591,7 @@ export function ArtistHQHome({
         )}
 
         {tab === 'calendar' && (
-          <HQCard>
+          <HQCard className="flex min-h-[430px] flex-1 flex-col">
             {!calendarResult.ok ? (
               <div className="mb-4 rounded-[14px] border border-red-400/20 bg-red-500/10 p-3 text-xs leading-5 text-red-100/80">
                 {calendarResult.error} Saving is paused so existing calendar context is not overwritten.
@@ -2130,11 +2130,21 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
 
       <Drawer direction="right" open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DrawerContent className="inset-y-0 right-0 left-auto mt-0 h-full !w-full rounded-none border-l border-white/[0.08] bg-[#070708] sm:!max-w-[720px]">
-          <DrawerHeader className="border-b border-white/[0.06] px-5 py-4 text-left">
+          <DrawerHeader className="relative border-b border-white/[0.06] px-5 py-4 pr-16 text-left">
             <DrawerTitle className="text-base font-semibold text-white/88">State of Play</DrawerTitle>
             <DrawerDescription className="text-xs text-white/38">Signals, route readiness, goals, and system evidence.</DrawerDescription>
+            <DrawerClose asChild>
+              <button
+                type="button"
+                aria-label="Close State of Play details"
+                title="Close"
+                className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.025] text-white/45 transition-colors hover:bg-white/[0.07] hover:text-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/55"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </DrawerClose>
           </DrawerHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
             <StateOfPlayDetailPanel {...props} />
           </div>
         </DrawerContent>
@@ -2214,19 +2224,19 @@ function StateOfPlayDetailPanel({
   const canLaunchRoute = actionState.canLaunch
 
   return (
-    <HQCard>
-      <div className="mb-4 flex flex-col gap-3 border-b border-white/[0.04] pb-3 md:flex-row md:items-start md:justify-between">
+    <HQCard className="min-w-0 p-4 sm:p-5">
+      <div className="mb-4 flex min-w-0 flex-col gap-3 border-b border-white/[0.04] pb-4">
         <div className="min-w-0">
           <div className="mb-2 flex items-center gap-2">
             <Sparkles className="h-3.5 w-3.5 text-orange-200/70" />
             <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">State of Play</span>
           </div>
-          <h2 className="line-clamp-2 text-xl font-medium tracking-tight text-white/88 md:text-2xl">
+          <h2 className="text-xl font-medium leading-tight tracking-tight text-white/88 sm:text-2xl">
             {state.nextMove.title}
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-white/48">{state.nextMove.why}</p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2 md:justify-end">
+        <div className="flex min-w-0 flex-wrap gap-2">
           <StateOfPlayRefreshButton busy={refreshBusy} onRefresh={onRefresh} />
           {state.nextMove.worker ? <Pill label={`@${state.nextMove.worker}`} /> : null}
           {state.nextMove.action ? <Pill label={state.nextMove.action} /> : null}
@@ -2236,7 +2246,7 @@ function StateOfPlayDetailPanel({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.35fr_0.8fr]">
+      <div className="grid min-w-0 grid-cols-1 gap-3">
         <div className="space-y-2">
           <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Attention</div>
           {attention.length > 0 ? (
@@ -3351,7 +3361,7 @@ function ArtistCalendarView({
   })
 
   return (
-    <div>
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="mb-3 flex justify-end gap-1.5">
         <button
           type="button"

@@ -1,9 +1,11 @@
 import * as React from 'react'
+import { useSetAtom } from 'jotai'
 import { Copy, ExternalLink, Globe2, PanelRightOpen, RefreshCw } from 'lucide-react'
 import { RUNNER_OUTPUT_SCHEME } from '@craft-agent/shared/outputs/web-preview'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { WebPreviewTarget } from './web-preview'
+import { openBrowserSidecarAtom } from '@/atoms/browser-pane'
 
 const WEB_PREVIEW_LOAD_TIMEOUT_MS = 8000
 
@@ -15,6 +17,7 @@ interface OutputWebPreviewProps {
 }
 
 export function OutputWebPreview({ target, refreshKey, className, onPreviewSettled }: OutputWebPreviewProps) {
+  const openBrowserSidecar = useSetAtom(openBrowserSidecarAtom)
   const [frameKey, setFrameKey] = React.useState(0)
   const [isLoading, setIsLoading] = React.useState(true)
   const [loadError, setLoadError] = React.useState<string | null>(null)
@@ -58,9 +61,9 @@ export function OutputWebPreview({ target, refreshKey, className, onPreviewSettl
       return
     }
     try {
-      const instanceId = await browserPane.create({ show: true })
+      const instanceId = await browserPane.create({ show: false })
       await browserPane.navigate(instanceId, target.url)
-      await browserPane.focus(instanceId)
+      openBrowserSidecar(instanceId)
     } catch (error) {
       console.error('[OutputWebPreview] Failed to open preview in browser pane:', error)
       if (!isGeneratedOutputUrl) {
@@ -69,7 +72,7 @@ export function OutputWebPreview({ target, refreshKey, className, onPreviewSettl
       }
       setLoadError('Could not open generated output in Browser Pane.')
     }
-  }, [isGeneratedOutputUrl, target.url])
+  }, [isGeneratedOutputUrl, openBrowserSidecar, target.url])
 
   const statusText = loadError
     ? 'Preview error'

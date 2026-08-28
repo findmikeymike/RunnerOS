@@ -72,7 +72,6 @@ import { ANTHROPIC_MODELS, getModelShortName, getModelDisplayName, getModelConte
 import {
   resolveEffectiveConnectionSlug,
   isCompatProvider,
-  isLocalConnection,
   modelSupportsImages,
   setModelSupportsImages,
   type LlmConnection,
@@ -93,6 +92,7 @@ import { ToolbarStatusSlot } from './ToolbarStatusSlot'
 import { buildPlanApprovalMessage } from '../plan-approval-message'
 import { shouldHandleScopedInputEvent } from './input-event-guards'
 import { clearPendingFocusForSession, consumePendingFocusForSession } from './focus-input-events'
+import { groupConnectedModelProviders } from './model-provider-groups'
 import {
   getRecentWorkingDirs,
   addRecentWorkingDir,
@@ -377,28 +377,12 @@ export function FreeFormInput({
     return getConfiguredModelLabel(model)
   }, [availableModels, currentModel, connectionDefaultModel])
 
-  // Group connections by provider type for hierarchical dropdown
-  // Each provider (Anthropic, Pi) can have multiple connections (API Key, OAuth, etc.)
-  const connectionsByProvider = React.useMemo(() => {
-    const groups: Record<string, typeof llmConnections> = {
-      'Anthropic': [],
-      'Local': [],
-      'Runner Backend': [],
-    }
-    for (const conn of llmConnections) {
-      const provider = conn.providerType || 'anthropic'
-      // Group by SDK: only 'anthropic' uses Claude Agent SDK
-      if (provider === 'anthropic') {
-        groups['Anthropic'].push(conn)
-      } else if (provider === 'pi_compat' && isLocalConnection(conn)) {
-        groups['Local'].push(conn)
-      } else if (provider === 'pi' || provider === 'pi_compat') {
-        groups['Runner Backend'].push(conn)
-      }
-    }
-    // Return only non-empty groups
-    return Object.entries(groups).filter(([, conns]) => conns.length > 0)
-  }, [llmConnections])
+  // Artist-facing provider families. The transport route remains attached to
+  // every model option so switching Claude → Codex → DeepSeek is still exact.
+  const connectedModelProviders = React.useMemo(
+    () => groupConnectedModelProviders(llmConnections),
+    [llmConnections],
+  )
 
   // Find current connection details for display
   const currentConnectionDetails = React.useMemo(() => {
@@ -2104,76 +2088,59 @@ export function FreeFormInput({
                   <Check className="h-3 w-3 text-foreground shrink-0 ml-3" />
                 </StyledDropdownMenuItem>
               ) : pickerMode === 'switcher' ? (
-                /* Hierarchical view: Provider → Connection → Models */
-                connectionsByProvider.map(([providerName, connections], index) => (
-                  <React.Fragment key={providerName}>
-                    {/* Provider group label */}
-                    <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide select-none">
-                      {providerName}
-                    </div>
-                    {connections.map((conn) => {
-                      const isCurrentConnection = effectiveConnection === conn.slug
-                      const isAuthenticated = conn.isAuthenticated
-                      return (
-                        <DropdownMenuSub key={conn.slug}>
-                          <StyledDropdownMenuSubTrigger
-                            disabled={!isAuthenticated || isProcessing}
-                            className={cn(
-                              "flex items-center justify-between px-2 py-2 rounded-lg",
-                              isCurrentConnection && "bg-foreground/5"
-                            )}
-                          >
-                            <div className="text-left flex-1">
-                              <div className="font-medium text-sm flex items-center gap-1.5">
-                                <ConnectionIcon connection={conn} size={14} />
-                                {conn.name}
-                                {isCurrentConnection && <Check className="h-3 w-3 text-foreground" />}
-                              </div>
-                              {!isAuthenticated && (
-                                <div className="text-xs text-muted-foreground">{t('settings.ai.notAuthenticated')}</div>
-                              )}
-                            </div>
-                          </StyledDropdownMenuSubTrigger>
-                          {isAuthenticated && (
-                            <StyledDropdownMenuSubContent className="min-w-[220px]">
-                              {/* Show models for this connection - use provider-specific models as fallback */}
-                              {(conn.models || ANTHROPIC_MODELS).map((model) => {
-                                const modelId = typeof model === 'string' ? model : model.id
-                                const modelName = getConfiguredModelLabel(model, true)
-                                const isSelectedModel = isCurrentConnection && currentModel === modelId
-                                return (
-                                  <StyledDropdownMenuItem
-                                    key={modelId}
-                                    disabled={isProcessing}
-                                    onSelect={() => {
-                                      if (isProcessing) return
-                                      // Pre-message sessions can update the connection directly.
-                                      // Started sessions persist connection through onModelChange below.
-                                      if (isEmptySession && !isCurrentConnection && onConnectionChange) {
-                                        onConnectionChange(conn.slug)
-                                      }
-                                      // Always pass connection with model for proper persistence
-                                      onModelChange(modelId, conn.slug)
-                                    }}
-                                    className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
-                                  >
-                                    <div className="font-medium text-sm">{modelName}</div>
-                                    {isSelectedModel && (
-                                      <Check className="h-3 w-3 text-foreground shrink-0 ml-3" />
-                                    )}
-                                  </StyledDropdownMenuItem>
-                                )
-                              })}
-                            </StyledDropdownMenuSubContent>
-                          )}
-                        </DropdownMenuSub>
-                      )
-                    })}
-                    {index < connectionsByProvider.length - 1 && (
-                      <StyledDropdownMenuSeparator className="my-1" />
-                    )}
-                  </React.Fragment>
-                ))
+                /* Artist-facing hierarchy: Claude/Codex/DeepSeek → models. */
+                connectedModelProviders.map((providerGroup) => {
+                  const groupIsCurrent = providerGroup.connections.some(conn => conn.slug === effectiveConnection)
+                  return (
+                    <DropdownMenuSub key={providerGroup.id}>
+                      <StyledDropdownMenuSubTrigger
+                        disabled={isProcessing}
+                        className={cn(
+                          'flex items-center justify-between rounded-lg px-2 py-2',
+                          groupIsCurrent && 'bg-foreground/5',
+                        )}
+                      >
+                        <div className="flex min-w-0 items-center gap-2 text-left">
+                          <ConnectionIcon connection={providerGroup.connections[0]} size={15} />
+                          <span className="truncate text-sm font-medium">{providerGroup.label}</span>
+                          {groupIsCurrent && <Check className="h-3 w-3 shrink-0 text-foreground" />}
+                        </div>
+                      </StyledDropdownMenuSubTrigger>
+                      <StyledDropdownMenuSubContent className="min-w-[240px] max-h-[min(440px,70vh)] overflow-y-auto">
+                        {providerGroup.connections.flatMap((conn) => {
+                          const isCurrentConnection = effectiveConnection === conn.slug
+                          return (conn.models || ANTHROPIC_MODELS).map((model) => {
+                            const modelId = typeof model === 'string' ? model : model.id
+                            const modelName = getConfiguredModelLabel(model, true)
+                            const isSelectedModel = isCurrentConnection && currentModel === modelId
+                            return (
+                              <StyledDropdownMenuItem
+                                key={`${conn.slug}:${modelId}`}
+                                disabled={isProcessing}
+                                onSelect={() => {
+                                  if (isProcessing) return
+                                  if (isEmptySession && !isCurrentConnection && onConnectionChange) {
+                                    onConnectionChange(conn.slug)
+                                  }
+                                  onModelChange(modelId, conn.slug)
+                                }}
+                                className="flex cursor-pointer items-center justify-between rounded-lg px-2 py-2"
+                              >
+                                <div className="min-w-0 text-left">
+                                  <div className="truncate text-sm font-medium">{modelName}</div>
+                                  {providerGroup.connections.length > 1 && (
+                                    <div className="truncate text-[11px] text-muted-foreground">{conn.name}</div>
+                                  )}
+                                </div>
+                                {isSelectedModel && <Check className="ml-3 h-3 w-3 shrink-0 text-foreground" />}
+                              </StyledDropdownMenuItem>
+                            )
+                          })
+                        })}
+                      </StyledDropdownMenuSubContent>
+                    </DropdownMenuSub>
+                  )
+                })
               ) : (
                 /* Flat model list (single connection or session started) */
                 <>

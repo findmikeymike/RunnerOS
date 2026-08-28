@@ -26637,7 +26637,9 @@ cd tools/google-ads && node bin/google-ads.mjs doctor --agent
 cd tools/google-ads && node bin/google-ads.mjs auth status --agent
 \`\`\`
 
-If auth is missing, tell the user to open Tools → Google Ads → Connect Google Ads. RunnerOS stores Google OAuth, developer token, and optional login customer ID for future app launches.
+If API auth is missing, tell the user to open Settings → Services → Google Ads. RunnerOS stores Google OAuth, developer token, and optional login customer ID for future app launches.
+
+For browser dashboard fallback, run \`browser_tool accounts\`, then attach the exact saved login from Settings > Ad Accounts with \`browser_tool account google-ads <profile>\`. Do not use a generic browser session for a configured account.
 
 ## Read-Only Commands
 
@@ -29376,6 +29378,8 @@ description: Operate Meta Ads safely through RunnerOS' Meta Ads source when conn
 
 Use this skill when the user asks for Meta Ads reporting, campaign diagnostics, audience/ad set review, creative fatigue checks, account discovery, budget review, or Meta campaign setup help.
 
+For browser dashboard work, run \`browser_tool accounts\`, then attach the exact saved login from Settings > Ad Accounts with \`browser_tool account meta-ads <profile>\`. Do not use a generic browser session for a configured account.
+
 ## Source And Local Route
 
 Prefer the \`meta-ads\` source when it is connected and eligible for the requested read-only account work.
@@ -30391,10 +30395,11 @@ Use this skill to keep paid-ads work useful when APIs are unavailable while stil
    - Meta Ads: use \`ads-operator --platform meta\` as the local browser/export/setup operator. Use \`meta-ads\` only when authenticated and eligible.
    - Spotify Ads: use browser mode for Spotify Ads Manager / Spotify Ad Studio in V1. Spotify Ads API is optional later and must not block work.
 2. If structured access is missing, blocked, expired, or incomplete, switch to browser dashboard/export mode.
-3. For Spotify audience strategy, use Spotify for Artists browser intel when the user is logged in: top cities, listener demographics, source/playlist signal, song performance, and audience trend clues. Do not confuse Spotify for Artists with Spotify Ads Manager.
-4. If browser automation is blocked, ask the user for an export/screenshot and give exact platform, account, date range, table, columns, and file type.
-5. Use screenshots as visual evidence only. Use API/export data for numbers when available.
-6. Use Computer Use only when normal browser automation cannot inspect or operate the page and the user has enabled it.
+3. Before Meta or Google browser work, run \`browser_tool accounts\`, resolve one exact saved dashboard account, and attach it with \`browser_tool account <meta-ads|google-ads> <profile>\`. These logins live in Settings > Ad Accounts. Never use a generic browser session when a configured account exists.
+4. For Spotify audience strategy, use Spotify for Artists browser intel when the user is logged in: top cities, listener demographics, source/playlist signal, song performance, and audience trend clues. Do not confuse Spotify for Artists with Spotify Ads Manager.
+5. If browser automation is blocked, ask the user for an export/screenshot and give exact platform, account, date range, table, columns, and file type.
+6. Use screenshots as visual evidence only. Use API/export data for numbers when available.
+7. Use Computer Use only when normal browser automation cannot inspect or operate the page and the user has enabled it.
 
 ## Ads Operator
 
@@ -30454,6 +30459,7 @@ For Google Ads:
 For Spotify Ads:
 
 - V1 path is browser-guided Spotify Ads Manager / Spotify Ad Studio, not API-first.
+- Configure Spotify Ads Manager under Settings > Spotify, then attach the exact \`spotify/<profile>\` saved login before opening the dashboard.
 - Use Spotify for Artists only for audience and song intel, not campaign creation. It can inform cities, age/gender if visible, listener growth, top songs, playlist/source signal, and campaign geography.
 - In Spotify Ads Manager, inspect or draft campaigns, ad sets, ads, targeting, budget, placements/formats, and reporting only when the user is logged in.
 - Before campaign setup, identify campaign objective, song/landing URL, creative assets, audio/video format, territories, budget, dates, audience/artist targeting, and CTA.
@@ -39615,7 +39621,7 @@ Use this skill on the weekly Spotify heartbeat, or when the user wants a fresh r
 
 ## Prerequisites
 
-- The Spotify account is connected in Settings → Social Accounts as platform \`spotify\` (one login covers Spotify for Artists and the web player).
+- The Spotify account is connected in Settings → Spotify (one saved account covers Spotify for Artists and the web player).
 - Run \`social\` commands (\`node src/social.mjs ...\`) from the Printing Press Social source path.
 
 ## Workflow
@@ -39672,7 +39678,7 @@ Any metric not visible on the page is \`null\`, and the snapshot is marked \`par
 
 ## Failure Handling
 
-- Session not connected / not logged in / wrong account → stop and point the user to Settings → Social Accounts. Do not fabricate.
+- Session not connected / not logged in / wrong account → stop and point the user to Settings → Spotify. Do not fabricate.
 - Spotify for Artists page did not load a value → capture it as \`null\`, mark \`partial\`.
 - Login expired → stop, report, do not retry blindly.
 - No prior snapshot → snapshot still writes; the brief reports "no prior snapshot, no delta."

@@ -25,7 +25,9 @@ cd tools/google-ads && node bin/google-ads.mjs doctor --agent
 cd tools/google-ads && node bin/google-ads.mjs auth status --agent
 ```
 
-If auth is missing, tell the user to open Tools → Google Ads → Connect Google Ads. RunnerOS stores Google OAuth, developer token, and optional login customer ID for future app launches.
+If API auth is missing, tell the user to open Settings → Services → Google Ads. RunnerOS stores Google OAuth, developer token, and optional login customer ID for future app launches.
+
+For browser dashboard fallback, run `browser_tool accounts`, then attach the exact saved login from Settings > Ad Accounts with `browser_tool account google-ads <profile>`. Do not use a generic browser session for a configured account.
 
 ## Read-Only Commands
 

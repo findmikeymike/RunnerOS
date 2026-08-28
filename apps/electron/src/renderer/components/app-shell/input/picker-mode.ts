@@ -22,5 +22,9 @@ export function derivePickerMode(input: PickerModeInput): PickerMode {
   if (input.connectionUnavailable) return 'unavailable'
   if (input.connectionCount > 1) return 'switcher'
   if (input.connectionDefaultModel != null) return 'locked-single'
+  // Even one multi-model provider uses the provider-first switcher. This keeps
+  // long model catalogs out of the root menu and makes the hierarchy stable as
+  // people connect Claude, Codex, DeepSeek, or additional providers later.
+  if (input.connectionCount > 0) return 'switcher'
   return 'flat'
 }

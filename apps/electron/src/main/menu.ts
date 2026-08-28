@@ -149,8 +149,9 @@ export async function rebuildMenu(): Promise<void> {
               click: (_menuItem: Electron.MenuItem, window: Electron.BaseWindow | undefined) => {
                 const browserWindow = window instanceof BrowserWindow ? window : BrowserWindow.getFocusedWindow()
                 if (!browserWindow) return
+                const appDocumentUrl = browserWindow.webContents.getURL()
                 const views = browserWindow.getBrowserViews()
-                if (views.length > 0) {
+                if ((!appDocumentUrl || appDocumentUrl === 'about:blank') && views.length > 0) {
                   views[0].webContents.reload()
                 } else {
                   browserWindow.webContents.reload()
@@ -163,8 +164,9 @@ export async function rebuildMenu(): Promise<void> {
               click: (_menuItem: Electron.MenuItem, window: Electron.BaseWindow | undefined) => {
                 const browserWindow = window instanceof BrowserWindow ? window : BrowserWindow.getFocusedWindow()
                 if (!browserWindow) return
+                const appDocumentUrl = browserWindow.webContents.getURL()
                 const views = browserWindow.getBrowserViews()
-                if (views.length > 0) {
+                if ((!appDocumentUrl || appDocumentUrl === 'about:blank') && views.length > 0) {
                   views[0].webContents.reloadIgnoringCache()
                 } else {
                   browserWindow.webContents.reloadIgnoringCache()

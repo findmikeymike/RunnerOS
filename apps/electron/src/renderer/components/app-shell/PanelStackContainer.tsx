@@ -16,7 +16,7 @@
  * The right sidebar stays OUTSIDE this container.
  */
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useCallback, useMemo, useState } from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { motion } from 'motion/react'
 import { cn } from '@/lib/utils'
@@ -26,8 +26,25 @@ import {
   resolveVisualSurfacePresentationAtom,
   visualSurfacePresentationModeAtom,
 } from '@/atoms/visual-surfaces'
+import {
+  activeBrowserInstanceIdAtom,
+  browserInstancesAtom,
+  browserSidecarOpenAtom,
+  closeBrowserSidecarAtom,
+  dismissBrowserSidecarAtom,
+} from '@/atoms/browser-pane'
 import { useContainerWidth } from '@/hooks/useContainerWidth'
 import { VisualSurfacePanel } from '@/components/visual-surfaces/VisualSurfacePanel'
+import {
+  clampVisualSidecarWidth,
+  readVisualSidecarWidthPreference,
+  serializeVisualSidecarWidthPreference,
+  VISUAL_SIDECAR_DEFAULT_WIDTH,
+  VISUAL_SIDECAR_MAX_WIDTH,
+  VISUAL_SIDECAR_MIN_CHAT_WIDTH,
+  VISUAL_SIDECAR_MIN_WIDTH,
+} from '@/components/visual-surfaces/VisualSidecarResizeHandle'
+import { BrowserSidecarPanel } from '@/components/browser/BrowserSidecarPanel'
 import { PanelSlot } from './PanelSlot'
 import { PanelResizeSash } from './PanelResizeSash'
 import {
@@ -73,6 +90,12 @@ export function PanelStackContainer({
   const activeVisualSurface = useAtomValue(activeVisualSurfaceAtom)
   const visualPresentationMode = useAtomValue(visualSurfacePresentationModeAtom)
   const resolveVisualPresentation = useSetAtom(resolveVisualSurfacePresentationAtom)
+  const browserInstances = useAtomValue(browserInstancesAtom)
+  const activeBrowserInstanceId = useAtomValue(activeBrowserInstanceIdAtom)
+  const setActiveBrowserInstanceId = useSetAtom(activeBrowserInstanceIdAtom)
+  const browserSidecarOpen = useAtomValue(browserSidecarOpenAtom)
+  const closeBrowserSidecar = useSetAtom(closeBrowserSidecarAtom)
+  const dismissBrowserSidecar = useSetAtom(dismissBrowserSidecarAtom)
 
   const contentPanels = panelStack
 
@@ -89,6 +112,8 @@ export function PanelStackContainer({
   const scrollRef = useRef<HTMLDivElement>(null)
   const containerWidth = useContainerWidth(scrollRef)
   const prevCountRef = useRef(contentPanels.length)
+  const visualPreferenceWriteRef = useRef(Promise.resolve())
+  const [visualSidecarWidth, setVisualSidecarWidth] = useState(VISUAL_SIDECAR_DEFAULT_WIDTH)
 
   const hasSidebar = sidebarWidth > 0
   // In compact mode, hide navigator when content is selected (show list OR content, not both)
@@ -98,6 +123,9 @@ export function PanelStackContainer({
     activeVisualSurface && (!activeVisualSurface.sessionId || activeVisualSurface.sessionId === focusedSessionId)
       ? activeVisualSurface
       : null
+  const activeBrowserInstance = browserSidecarOpen
+    ? browserInstances.find((instance) => instance.id === activeBrowserInstanceId) ?? null
+    : null
   const isLeftEdge = !hasSidebar && !hasNavigator
   const shouldCenterSinglePanel = !isCompact && visiblePanels.length === 1 && !hasNavigator && !hasSidebar
   const stackGap = edgeToEdge ? PANEL_GAP : hasSidebar && !hasNavigator ? 24 : PANEL_GAP
@@ -117,14 +145,39 @@ export function PanelStackContainer({
     prevCountRef.current = contentPanels.length
   }, [contentPanels.length, isCompact])
 
+  useEffect(() => {
+    let cancelled = false
+    window.electronAPI.readPreferences().then(({ content }) => {
+      if (!cancelled) setVisualSidecarWidth(readVisualSidecarWidthPreference(content))
+    }).catch(() => {
+      // Keep the default width when preferences are unavailable.
+    })
+    return () => { cancelled = true }
+  }, [])
+
   const transition = (isResizing || isCompact) ? { duration: 0 } : PANEL_SPRING
-  const canUseSidecar =
-    !!visibleVisualSurface &&
+  const canUseInlineSidecar =
     !isCompact &&
     !isMultiPanel &&
-    containerWidth >= 1280 &&
+    containerWidth >= 1100
+  const inlineVisualGapCount = 1 + Number(hasSidebar) + Number(hasNavigator)
+  const inlineVisualMaxWidth = useMemo(() => {
+    const available = containerWidth
+      - sidebarWidth
+      - navigatorWidth
+      - (inlineVisualGapCount * stackGap)
+      - VISUAL_SIDECAR_MIN_CHAT_WIDTH
+    return Math.min(VISUAL_SIDECAR_MAX_WIDTH, Math.max(0, available))
+  }, [containerWidth, inlineVisualGapCount, navigatorWidth, sidebarWidth, stackGap])
+  const canUseInlineVisualSidecar = canUseInlineSidecar && inlineVisualMaxWidth >= VISUAL_SIDECAR_MIN_WIDTH
+  const effectiveVisualSidecarWidth = clampVisualSidecarWidth(visualSidecarWidth, inlineVisualMaxWidth)
+  const showInlineBrowserSidecar = !!activeBrowserInstance && canUseInlineSidecar
+  const showOverlayBrowserSidecar = !!activeBrowserInstance && !canUseInlineSidecar
+  const showInlineVisualSidecar =
+    !activeBrowserInstance &&
+    !!visibleVisualSurface &&
+    canUseInlineVisualSidecar &&
     visualPresentationMode !== 'rollup'
-  const showInlineVisualSidecar = canUseSidecar
   const resolvedVisualPresentation = visibleVisualSurface
     ? showInlineVisualSidecar
       ? 'sidecar'
@@ -134,6 +187,28 @@ export function PanelStackContainer({
   useEffect(() => {
     resolveVisualPresentation(resolvedVisualPresentation)
   }, [resolveVisualPresentation, resolvedVisualPresentation])
+
+  const hideBrowserSidecar = useCallback(() => {
+    closeBrowserSidecar()
+  }, [closeBrowserSidecar])
+
+  const showCanvasSidecar = useCallback(() => {
+    dismissBrowserSidecar()
+  }, [dismissBrowserSidecar])
+
+  const resizeVisualSidecar = useCallback((width: number) => {
+    setVisualSidecarWidth(clampVisualSidecarWidth(width, inlineVisualMaxWidth))
+  }, [inlineVisualMaxWidth])
+
+  const persistVisualSidecarWidth = useCallback((width: number) => {
+    const nextWidth = clampVisualSidecarWidth(width, inlineVisualMaxWidth)
+    visualPreferenceWriteRef.current = visualPreferenceWriteRef.current.then(async () => {
+      const { content } = await window.electronAPI.readPreferences()
+      await window.electronAPI.writePreferences(serializeVisualSidecarWidthPreference(content, nextWidth))
+    }).catch((err) => {
+      console.warn('[PanelStackContainer] failed to persist canvas width:', err)
+    })
+  }, [inlineVisualMaxWidth])
 
   return (
     <div
@@ -226,7 +301,7 @@ export function PanelStackContainer({
               isFocusedPanel={isMultiPanel ? entry.id === focusedPanelId : true}
               isSidebarAndNavigatorHidden={isSidebarAndNavigatorHidden}
               isAtLeftEdge={index === 0 && isLeftEdge}
-              isAtRightEdge={index === visiblePanels.length - 1 && !isRightSidebarVisible && !showInlineVisualSidecar}
+              isAtRightEdge={index === visiblePanels.length - 1 && !isRightSidebarVisible && !showInlineVisualSidecar && !showInlineBrowserSidecar}
               proportion={entry.proportion}
               isCompact={isCompact}
               edgeToEdge={edgeToEdge}
@@ -239,7 +314,39 @@ export function PanelStackContainer({
             />
           ))
         )}
-        {showInlineVisualSidecar ? <VisualSurfacePanel presentation="inline" /> : null}
+        {showInlineVisualSidecar ? (
+          <VisualSurfacePanel
+            presentation="inline"
+            inlineWidth={effectiveVisualSidecarWidth}
+            inlineMaxWidth={inlineVisualMaxWidth}
+            onInlineWidthChange={resizeVisualSidecar}
+            onInlineWidthCommit={persistVisualSidecarWidth}
+          />
+        ) : null}
+        {showInlineBrowserSidecar && activeBrowserInstance ? (
+          <BrowserSidecarPanel
+            activeInstance={activeBrowserInstance}
+            instances={browserInstances}
+            presentation="inline"
+            hasCanvas={!!visibleVisualSurface}
+            onSelectInstance={setActiveBrowserInstanceId}
+            onShowCanvas={showCanvasSidecar}
+            onClose={hideBrowserSidecar}
+            onDismiss={dismissBrowserSidecar}
+          />
+        ) : null}
+        {showOverlayBrowserSidecar && activeBrowserInstance ? (
+          <BrowserSidecarPanel
+            activeInstance={activeBrowserInstance}
+            instances={browserInstances}
+            presentation="overlay"
+            hasCanvas={!!visibleVisualSurface}
+            onSelectInstance={setActiveBrowserInstanceId}
+            onShowCanvas={showCanvasSidecar}
+            onClose={hideBrowserSidecar}
+            onDismiss={dismissBrowserSidecar}
+          />
+        ) : null}
       </motion.div>
     </div>
   )

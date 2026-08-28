@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { Archive, Layers, Loader2, Maximize2, PanelRight, PanelTopOpen } from 'lucide-react'
+import { Archive, Globe2, Layers, Loader2, Maximize2, PanelRight, PanelTopOpen } from 'lucide-react'
 import { VISUAL_BOARD_TAG } from '@craft-agent/shared/visual-board'
 import { Button } from '@/components/ui/button'
 import { isAdOutput } from '@/lib/output-finals-actions'
@@ -12,12 +12,18 @@ import {
   openOutputVisualSurfaceAtom,
   visualSidecarAtom,
 } from '@/atoms/visual-surfaces'
+import { browserInstancesAtom, openBrowserSidecarAtom } from '@/atoms/browser-pane'
 import { renderVisualSurfaceAdapter, type VisualSurfaceAdapterContext } from './VisualSurfaceAdapters'
+import { VisualSidecarResizeHandle } from './VisualSidecarResizeHandle'
 import { toast } from 'sonner'
 import type { VaultKindHint } from '@craft-agent/shared/artist-vault'
 
 interface VisualSurfacePanelProps {
   presentation: 'inline' | 'overlay' | 'rollup'
+  inlineWidth?: number
+  inlineMaxWidth?: number
+  onInlineWidthChange?: (width: number) => void
+  onInlineWidthCommit?: (width: number) => void
 }
 
 type ImageOutputVaultKindHint = Extract<VaultKindHint, 'cover-art' | 'artist-photo' | 'face-reference'>
@@ -28,11 +34,19 @@ const IMAGE_OUTPUT_VAULT_KIND_OPTIONS: Array<{ value: ImageOutputVaultKindHint; 
   { value: 'face-reference', label: 'Face Reference' },
 ]
 
-export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
+export function VisualSurfacePanel({
+  presentation,
+  inlineWidth,
+  inlineMaxWidth,
+  onInlineWidthChange,
+  onInlineWidthCommit,
+}: VisualSurfacePanelProps) {
   const { activeSurface, isCollapsed, focusedAt } = useAtomValue(visualSidecarAtom)
   const focusSidecar = useSetAtom(focusVisualSidecarAtom)
   const openOutputVisualSurface = useSetAtom(openOutputVisualSurfaceAtom)
   const openDemoVisualSurface = useSetAtom(openDemoVisualSurfaceAtom)
+  const browserInstances = useAtomValue(browserInstancesAtom)
+  const openBrowserSidecar = useSetAtom(openBrowserSidecarAtom)
   const focusPulseKey = focusedAt ?? 0
   const { outputs, getOutput } = useOutputs(activeSurface?.workspaceId)
   const sessionOutputs = React.useMemo(
@@ -312,14 +326,23 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
       data-visual-sidecar="open"
       data-visual-sidecar-mode={presentation}
       className={cn(
-        'z-[7] flex min-h-0 animate-in fade-in-0 duration-150',
+        'dark z-[7] flex min-h-0 animate-in text-foreground fade-in-0 duration-150',
         presentation === 'inline'
-          ? 'h-full w-[clamp(420px,30vw,560px)] shrink-0'
+          ? 'relative h-full shrink-0'
           : presentation === 'rollup'
             ? 'relative min-h-0 w-full flex-1 shrink overflow-hidden'
           : 'absolute bottom-[150px] right-2 top-[56px] h-auto w-[min(430px,calc(100%_-_16px))] shrink-0',
       )}
+      style={presentation === 'inline' && inlineWidth ? { width: inlineWidth } : undefined}
     >
+      {presentation === 'inline' && inlineWidth && inlineMaxWidth && onInlineWidthChange && onInlineWidthCommit ? (
+        <VisualSidecarResizeHandle
+          width={inlineWidth}
+          maxWidth={inlineMaxWidth}
+          onWidthChange={onInlineWidthChange}
+          onWidthCommit={onInlineWidthCommit}
+        />
+      ) : null}
       <div
         className={cn(
           'flex h-full min-h-0 w-full flex-col overflow-hidden',
@@ -336,6 +359,20 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium leading-5">Canvas</div>
             </div>
+            {browserInstances.length > 0 ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1.5 px-2 text-xs"
+                onClick={() => openBrowserSidecar(
+                  browserInstances.find((instance) => instance.agentControlActive)?.id ?? browserInstances[0].id,
+                )}
+              >
+                <Globe2 className="size-3.5" />
+                Browser
+              </Button>
+            ) : null}
           </header>
         )}
 
@@ -344,7 +381,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
           presentation === 'rollup' ? 'gap-2 px-0 pb-3 pt-0' : 'gap-3 p-3',
         )}>
           <div className={cn(
-            'relative min-h-[220px] flex-1 overflow-hidden bg-[#050505]',
+            'dark relative min-h-[220px] flex-1 overflow-hidden bg-[#050505] text-foreground',
             presentation === 'rollup'
               ? 'min-h-0 rounded-t-none rounded-b-md border-x border-b border-border/45'
               : 'rounded-lg border border-border/60',

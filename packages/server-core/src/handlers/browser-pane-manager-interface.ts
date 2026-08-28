@@ -163,6 +163,22 @@ export interface IBrowserPaneManager {
   /** Create a browser instance for a session (optionally shown) */
   createForSession(sessionId: string, options?: { show?: boolean }): string
 
+  /** Switch a session to an isolated, persistent social-account browser profile. */
+  useSocialProfileForSession(
+    sessionId: string,
+    platform: string,
+    profile: string,
+    options?: { show?: boolean },
+  ): string
+
+  /** Switch a session to an isolated, persistent paid-ad dashboard account. */
+  useAdProfileForSession(
+    sessionId: string,
+    provider: string,
+    profile: string,
+    options?: { show?: boolean },
+  ): string
+
   /** Get instance info by ID */
   getInstance(id: string): BrowserInstanceSnapshot | undefined
 

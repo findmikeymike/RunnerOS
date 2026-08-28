@@ -21,11 +21,12 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 - Doctor: `node src/social.mjs doctor --json`
 - Live doctor: `node src/social.mjs doctor --live --json`
 - Add profile: `node src/social.mjs profile add <platform> --profile <profile> --handle <handle> --account-url <url> --json`
-- List profiles: `node src/social.mjs profile list --json`
+- List agent-safe profiles and their saved browser IDs: `node src/social.mjs catalog --json`
 - Profile status: `node src/social.mjs profile status <platform> --profile <profile> --live --json`
 - Update profile: `node src/social.mjs profile update <platform> --profile <profile> --handle <handle> --account-url <url> --json`
 - Delete profile metadata: `node src/social.mjs profile delete <platform> --profile <profile> --json`
 - With default `runner-cdp`, profile login/status live checks return a delegated browser plan for RunnerOS native browser tools instead of driving the browser inside the CLI process.
+- Attach that exact saved login with `browser_tool profile <platform> <profile>` before using browser snapshot/navigation commands. Do not use plain `browser_tool open` and do not pass an unsupported `--partition` flag.
 - Runner browser tools can complete delegated readiness checks by passing non-secret observed identity back with `node src/social.mjs profile status <platform> --profile <profile> --live --verification-result <json-file> --json`.
 - Profile status JSON includes UI-ready fields: `profileStatus`, `severity`, `message`, `nextAction`, `lastCheckedAt`, and redacted `evidence`.
 - Instagram dry-run post: `node src/social.mjs post instagram --profile <profile> --text "<caption>" --media <image> --dry-run --json`
@@ -40,6 +41,9 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 - YouTube dry-run video: `node src/social.mjs post youtube --profile <profile> --post-type video --text "<title>" --media <video> --visibility public --dry-run --json`
 - YouTube dry-run Short: `node src/social.mjs post youtube --profile <profile> --post-type short --text "<title>" --media <video> --visibility public --dry-run --json`
 - YouTube dry-run reply: `node src/social.mjs comment youtube --profile <profile> --url "<video-url>" --reply-to "<comment-id-or-permalink>" --text "<reply>" --dry-run --json`
+- Spotify for Artists login check: `node src/social.mjs profile status spotify --profile <profile> --live --json`
+- Spotify for Artists snapshot plan: `node src/social.mjs snapshot spotify --profile <profile> --json`
+- Spotify for Artists snapshot normalization: `node src/social.mjs snapshot spotify --profile <profile> --capture-file <capture.json> --workspace "$CRAFT_WORKSPACE_PATH" --json`
 - Spotify bounded track discovery: `node src/social.mjs playlist spotify discover --profile <profile> --theme "<theme>" --seed "<artist-or-track>" --mode growth --workspace "$CRAFT_WORKSPACE_PATH" --json`
 - Spotify playlist dry-run: `node src/social.mjs playlist spotify create --profile <profile> --name "<name>" --tracks "spotify:track:..." --visibility private --dry-run --json`
 - Approved handoff: `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`

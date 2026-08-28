@@ -469,6 +469,7 @@ import type {
   SelfEditTargetInfo,
   PermissionModeState,
   BrowserInstanceInfo,
+  BrowserPaneBounds,
   DeepLinkNavigation,
   TestAutomationPayload,
   TestAutomationResult,
@@ -519,6 +520,8 @@ export interface ProsodyLookupResult {
 }
 
 export interface ElectronAPI {
+  /** Stable identity for this renderer window, used to arbitrate native sidecar ownership. */
+  readonly webContentsId: number
   // Session management
   getSessions(): Promise<Session[]>
   getUnreadSummary(): Promise<UnreadSummary>
@@ -945,8 +948,15 @@ export interface ElectronAPI {
   addSocialAccount(input: SocialAccountInput): Promise<SocialAccountCommandResult>
   updateSocialAccount(input: SocialAccountInput): Promise<SocialAccountCommandResult>
   deleteSocialAccount(input: SocialAccountDeleteInput): Promise<SocialAccountCommandResult>
-  loginSocialAccount(input: SocialAccountProfileRef): Promise<SocialAccountCommandResult>
+  loginSocialAccount(input: SocialAccountLoginInput): Promise<SocialAccountCommandResult>
   getSocialAccountStatus(input: SocialAccountStatusInput): Promise<SocialAccountProfileStatus>
+
+  // Persistent ad-dashboard browser accounts
+  listAdBrowserAccounts(): Promise<AdBrowserAccountStatus[]>
+  saveAdBrowserAccount(input: AdBrowserAccountInput): Promise<AdBrowserAccountCommandResult>
+  deleteAdBrowserAccount(input: AdBrowserAccountRef): Promise<AdBrowserAccountCommandResult>
+  loginAdBrowserAccount(input: AdBrowserAccountRef): Promise<AdBrowserAccountCommandResult>
+  getAdBrowserAccountStatus(input: AdBrowserAccountRef): Promise<AdBrowserAccountStatus>
 
   refreshBadge(): Promise<void>
   setDockIconWithBadge(dataUrl: string): Promise<void>
@@ -999,6 +1009,10 @@ export interface ElectronAPI {
     reload(id: string): Promise<void>
     stop(id: string): Promise<void>
     focus(id: string): Promise<void>
+    dock(id: string, bounds: BrowserPaneBounds): Promise<void>
+    updateDockBounds(id: string, bounds: BrowserPaneBounds): Promise<void>
+    hideSidecar(id: string): Promise<void>
+    popOut(id: string): Promise<void>
     emptyStateLaunch(payload: BrowserEmptyStateLaunchPayload): Promise<BrowserEmptyStateLaunchResult>
     onStateChanged(callback: (info: BrowserInstanceInfo) => void): () => void
     onRemoved(callback: (id: string) => void): () => void
@@ -1327,6 +1341,12 @@ export interface SocialAccountProfileRef {
   profile: string
 }
 
+export type SpotifyLoginSurface = 'artists' | 'web-player' | 'ads-manager'
+
+export interface SocialAccountLoginInput extends SocialAccountProfileRef {
+  spotifySurface?: SpotifyLoginSurface
+}
+
 export interface SocialAccountInput extends SocialAccountProfileRef {
   accountGroup?: string
   handle?: string
@@ -1341,6 +1361,7 @@ export interface SocialAccountStatusInput extends SocialAccountProfileRef {
 
 export interface SocialAccountProfileStatus extends SocialAccountProfileRef {
   id: string
+  browserInstanceId?: string
   accountHandle: string | null
   accountUrl: string | null
   accountGroup: string | null
@@ -1360,6 +1381,19 @@ export interface SocialAccountProfileStatus extends SocialAccountProfileRef {
   evidence: Record<string, unknown> | null
   live: Record<string, unknown> | null
   error: string | null
+  spotifyCapabilities?: {
+    artists: SpotifyCapabilityStatus
+    webPlayer: SpotifyCapabilityStatus
+    adsManager: SpotifyCapabilityStatus
+  }
+}
+
+export interface SpotifyCapabilityStatus {
+  ready: boolean
+  status: 'ready' | 'login_needed' | 'identity_unverified' | 'wrong_account'
+  label: string
+  message: string
+  accountUrl?: string | null
 }
 
 export interface SocialAccountsDoctorResult {
@@ -1396,6 +1430,45 @@ export interface SocialAccountCommandResult {
   code?: string
   message?: string
   error?: string
+}
+
+export type AdBrowserProvider = 'meta-ads' | 'google-ads'
+
+export interface AdBrowserAccountRef {
+  provider: AdBrowserProvider
+  profile: string
+}
+
+export interface AdBrowserAccountInput extends AdBrowserAccountRef {
+  label?: string
+  accountId?: string | null
+}
+
+export interface AdBrowserAccountStatus extends AdBrowserAccountRef {
+  label: string
+  accountId: string | null
+  status: 'ready' | 'login_needed' | 'identity_unverified' | 'wrong_account' | 'not_checked'
+  ready: boolean
+  loggedIn: boolean | null
+  matchesExpected: boolean | null
+  message: string
+  lastCheckedAt: string | null
+  browserInstanceId?: string
+  browserPartition?: string
+  observedAccountId?: string | null
+  evidence?: {
+    url: string
+    title: string
+  } | null
+}
+
+export interface AdBrowserAccountCommandResult {
+  ok: boolean
+  account?: AdBrowserAccountStatus
+  deleted?: boolean
+  browserInstanceId?: string
+  browserPartition?: string
+  message?: string
 }
 
 /** Event payloads broadcast from the WhatsApp subprocess to the UI. */

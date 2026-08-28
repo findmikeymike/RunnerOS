@@ -72,7 +72,12 @@ function normalizeVisibleIdentity(identity = {}) {
 function resolveMatchesExpected(profile, data, visibleIdentity) {
   const expectedHandle = normalizeHandle(profile.accountHandle);
   const expectedUrl = normalizeUrl(profile.accountUrl);
-  if (!expectedHandle && !expectedUrl) return false;
+  if (!expectedHandle && !expectedUrl) {
+    // Spotify for Artists is authenticated through a private browser route, not
+    // a public social handle. An owned /c surface is therefore the identity
+    // proof for browser-only Spotify profiles.
+    return profile.platform === 'spotify' && isSpotifyForArtistsWorkspaceUrl(visibleIdentity.url);
+  }
 
   const visibleHandle = normalizeHandle(visibleIdentity.handle);
   if (expectedHandle && visibleHandle && expectedHandle === visibleHandle) return true;
@@ -87,6 +92,18 @@ function resolveMatchesExpected(profile, data, visibleIdentity) {
   if (expectedUrl && rawTextHasUrl(rawText, expectedUrl)) return true;
 
   return false;
+}
+
+function isSpotifyForArtistsWorkspaceUrl(value) {
+  if (!value) return false;
+  try {
+    const url = new URL(String(value));
+    return url.protocol === 'https:'
+      && url.hostname === 'artists.spotify.com'
+      && /^\/c(?:[/?#]|$)/i.test(url.pathname);
+  } catch {
+    return false;
+  }
 }
 
 function normalizeHandle(value) {

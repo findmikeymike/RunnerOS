@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, existsSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, existsSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -57,6 +57,47 @@ test('profile status reports login_needed before any session', () => {
   const status = JSON.parse(run(['profile', 'status', 'spotify', '--profile', 'artist01', '--json'], env));
   assert.equal(status.ok, true);
   assert.equal(status.profileStatus, 'login_needed');
+});
+
+test('browser-only Spotify profile verifies from an authenticated Spotify for Artists workspace', () => {
+  const env = home();
+  run(['profile', 'add', 'spotify', '--profile', 'browser-only', '--json'], env);
+  mkdirSync(path.join(env.SOCIAL_HOME, 'sessions', 'spotify', 'browser-only'), { recursive: true });
+
+  const verification = JSON.stringify({
+    platform: 'spotify',
+    profile: 'browser-only',
+    loggedIn: true,
+    visibleIdentity: { url: 'https://artists.spotify.com/c/roster' },
+  });
+  const status = JSON.parse(run([
+    'profile', 'status', 'spotify', '--profile', 'browser-only',
+    '--live', '--verification-json', verification, '--json',
+  ], env));
+
+  assert.equal(status.ready, true);
+  assert.equal(status.profileStatus, 'verified');
+  assert.equal(status.matchesExpected, true);
+});
+
+test('browser-only Spotify profile does not accept a generic Spotify consumer session', () => {
+  const env = home();
+  run(['profile', 'add', 'spotify', '--profile', 'browser-only', '--json'], env);
+  mkdirSync(path.join(env.SOCIAL_HOME, 'sessions', 'spotify', 'browser-only'), { recursive: true });
+
+  const verification = JSON.stringify({
+    platform: 'spotify',
+    profile: 'browser-only',
+    loggedIn: true,
+    visibleIdentity: { url: 'https://open.spotify.com/collection/playlists' },
+  });
+  const status = JSON.parse(run([
+    'profile', 'status', 'spotify', '--profile', 'browser-only',
+    '--live', '--verification-json', verification, '--json',
+  ], env));
+
+  assert.equal(status.ready, false);
+  assert.equal(status.profileStatus, 'wrong_account');
 });
 
 test('snapshot without capture returns a browser plan + capture contract', () => {

@@ -569,6 +569,9 @@ Use the browser as an **alternative/fallback** path when source setup is fragile
 - \`browser_tool evaluate <expression>\` — execute JavaScript
 - \`browser_tool windows\` — list browser windows and ownership
 - \`browser_tool focus [windowId]\` — focus existing browser window (no new window)
+- \`browser_tool profile <platform> <profile>\` — attach the exact saved social-account browser login; use this instead of \`open\` for configured social profiles
+- \`browser_tool accounts\` — list saved Meta and Google dashboard accounts
+- \`browser_tool account <provider> <profile>\` — attach the exact saved paid-ad dashboard login; use this instead of \`open\` for configured ad accounts
 - \`browser_tool close\` — close and destroy the browser window when done
 - \`browser_tool hide\` — hide the window (preserves state, \`open\` re-shows instantly)
 - \`browser_tool release\` — dismiss agent overlay only (user keeps browsing)

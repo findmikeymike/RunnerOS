@@ -426,7 +426,7 @@ function buildSocialProfileCatalogContext(activeSources: LoadedSource[]): string
   if (profiles.length === 0) {
     return [
       'Social profile catalog (non-secret): no saved profiles found.',
-      'To add one, use Settings > Social Accounts or `node src/social.mjs profile add <platform> --profile <name> --handle <handle> --json` from `tools/printing-press-social`.',
+      'To add one, use Settings > Social Accounts (or Settings > Spotify for Spotify) or `node src/social.mjs profile add <platform> --profile <name> --handle <handle> --json` from `tools/printing-press-social`.',
     ].join('\n');
   }
 

@@ -19,6 +19,7 @@ import {
   ensureBuiltInAgentMetadataSlugs,
   ensureBuiltInAgentSkills,
   ensureBuiltInAgentSkillsForSlug,
+  dedupeBuiltInAgentPromptText,
   replaceBuiltInAgentMetadata,
   replaceBuiltInAgentPromptPattern,
   replaceBuiltInAgentPromptText,
@@ -28,6 +29,7 @@ import { STARTER_AGENTS } from './starter-templates.ts'
 import { DEFAULT_ACTIVATED_AGENT_SLUGS, LAB_DEFAULT_ACTIVATED_AGENT_SLUGS, initialAgentSlugsForWorkspace } from './defaults.ts'
 import { SOCIAL_PUBLISHER_SLUG } from './types.ts'
 import { BUNDLED_STARTER_SKILLS, STARTER_SKILLS } from '../skills/index.ts'
+import * as publicAgentDefinitions from './index.ts'
 
 function tmpWorkspace(): string {
   return mkdtempSync(join(tmpdir(), 'craft-agent-defs-test-'))
@@ -38,6 +40,10 @@ function tmpGlobalAgentsDir(): string {
 }
 
 describe('isValidAgentSlug', () => {
+  test('exports prompt deduplication through the public agent-definitions API', () => {
+    expect(typeof publicAgentDefinitions.dedupeBuiltInAgentPromptText).toBe('function')
+  })
+
   test('accepts standard slugs', () => {
     expect(isValidAgentSlug('research')).toBe(true)
     expect(isValidAgentSlug('writer-2')).toBe(true)
@@ -674,6 +680,9 @@ body
     expect(spotifyPlaylistCreator?.metadata.permissionMode).toBe('ask')
     expect(spotifyPlaylistCreator?.systemPrompt).toContain('Strategy and deterministic plan')
     expect(spotifyPlaylistCreator?.systemPrompt).toContain('playlist spotify discover')
+    expect(spotifyPlaylistCreator?.systemPrompt).toContain('browser_tool profile spotify <id>')
+    expect(spotifyPlaylistCreator?.systemPrompt).toContain('Settings > Spotify')
+    expect(spotifyPlaylistCreator?.systemPrompt).toContain('open.spotify.com')
     expect(spotifyPlaylistCreator?.systemPrompt).toContain('cached 25-track shortlist')
     expect(spotifyPlaylistCreator?.systemPrompt).toContain('approval digest')
     expect(spotifyPlaylistCreator?.systemPrompt).toContain('playlist spotify receipt')
@@ -685,14 +694,48 @@ body
 
     expect(spotifyAnalyst).toBeDefined()
     expect(spotifyAnalyst?.metadata.name).toBe('Spotify Analyst')
+    expect(spotifyAnalyst?.metadata.greeting).toContain('Settings > Spotify')
+    expect(spotifyAnalyst?.metadata.greeting).not.toContain('Settings > Social Accounts')
     expect(spotifyAnalyst?.metadata.skills).toContain('spotify-analytics-snapshot')
     expect(spotifyAnalyst?.metadata.skills).toContain('spotify-anomaly-watch')
     expect(spotifyAnalyst?.metadata.skills).not.toContain('spotify-playlist-curator')
     expect(spotifyAnalyst?.metadata.sources).toContain('printing-press-social')
     expect(spotifyAnalyst?.metadata.tags).toContain('analytics')
     expect(spotifyAnalyst?.systemPrompt).toContain('snapshot spotify')
+    expect(spotifyAnalyst?.systemPrompt).toContain('browser_tool profile spotify <id>')
+    expect(spotifyAnalyst?.systemPrompt).toContain('confirm the saved Spotify Web Player account identity first')
+    expect(spotifyAnalyst?.systemPrompt).not.toContain('Open the exact returned browser partition')
+    expect(spotifyAnalyst?.systemPrompt).toContain('Never claim that no Spotify source is connected before running the catalog and live profile-status checks')
     expect(spotifyAnalyst?.systemPrompt).toContain('same data source and reporting window')
     expect(spotifyAnalyst?.systemPrompt).toContain('artist-spotify-snapshot')
+  })
+
+  test('Ad Runner uses the same exact saved Spotify profile for browser work', () => {
+    const adRunner = STARTER_AGENTS.find((agent) => agent.slug === 'ads-agent')
+
+    expect(adRunner?.metadata.sources).toContain('printing-press-social')
+    expect(adRunner?.systemPrompt).toContain('browser_tool profile spotify <id>')
+    expect(adRunner?.systemPrompt).toContain('Never use a generic browser session for a configured Spotify account')
+  })
+
+  test('built-in migrations can update Spotify Analyst saved-profile routing', () => {
+    writeGlobalAgent({
+      slug: 'spotify-analyst',
+      metadata: {
+        name: 'Spotify Analyst',
+        description: 'Spotify intelligence.',
+      },
+      systemPrompt: 'old saved-profile routing',
+    }, { globalAgentsDir })
+
+    expect(replaceBuiltInAgentPromptText(
+      'spotify-analyst',
+      'old saved-profile routing',
+      'browser_tool profile spotify <id>',
+      { globalAgentsDir },
+    ).updated).toBe(true)
+    expect(loadGlobalAgent('spotify-analyst', { globalAgentsDir })?.systemPrompt)
+      .toContain('browser_tool profile spotify <id>')
   })
 
   test('starter library includes the YouTube Research Agent as read-only', () => {
@@ -1535,6 +1578,56 @@ body
     expect(loadGlobalAgent('concierge', { globalAgentsDir })!.systemPrompt).toBe('Before\nnew shipped paragraph\nAfter')
     expect(replaceBuiltInAgentPromptText('writer', 'old shipped paragraph', 'new shipped paragraph', { globalAgentsDir }).updated).toBe(false)
     expect(loadGlobalAgent('writer', { globalAgentsDir })!.systemPrompt).toBe('old shipped paragraph')
+  })
+
+  test('replaceBuiltInAgentPromptText is idempotent when the replacement contains the old text', () => {
+    writeGlobalAgent(
+      {
+        slug: 'spotify-playlist-creator',
+        metadata: { name: 'Spotify Playlist Creator', description: 'Creates playlists.' },
+        systemPrompt: 'Before\nbase instruction\nAfter',
+      },
+      { globalAgentsDir },
+    )
+
+    const replacement = 'new prerequisite\nbase instruction'
+    expect(replaceBuiltInAgentPromptText(
+      'spotify-playlist-creator',
+      'base instruction',
+      replacement,
+      { globalAgentsDir },
+    ).updated).toBe(true)
+    expect(replaceBuiltInAgentPromptText(
+      'spotify-playlist-creator',
+      'base instruction',
+      replacement,
+      { globalAgentsDir },
+    ).updated).toBe(false)
+    expect(loadGlobalAgent('spotify-playlist-creator', { globalAgentsDir })!.systemPrompt).toBe(
+      'Before\nnew prerequisite\nbase instruction\nAfter',
+    )
+  })
+
+  test('dedupeBuiltInAgentPromptText removes repeated shipped fragments and preserves custom text', () => {
+    const repeated = '- bounded Spotify discovery'
+    writeGlobalAgent(
+      {
+        slug: 'spotify-playlist-creator',
+        metadata: { name: 'Spotify Playlist Creator', description: 'Creates playlists.' },
+        systemPrompt: ['CUSTOM PREFIX', repeated, repeated, repeated, 'CUSTOM SUFFIX'].join('\n'),
+      },
+      { globalAgentsDir },
+    )
+
+    expect(dedupeBuiltInAgentPromptText(
+      'spotify-playlist-creator',
+      repeated,
+      { globalAgentsDir },
+    ).updated).toBe(true)
+    const migrated = loadGlobalAgent('spotify-playlist-creator', { globalAgentsDir })!.systemPrompt
+    expect(migrated.match(/bounded Spotify discovery/g)).toHaveLength(1)
+    expect(migrated).toContain('CUSTOM PREFIX')
+    expect(migrated).toContain('CUSTOM SUFFIX')
   })
 
   test('replaceBuiltInAgentPromptText can patch Lyric Video prompt guidance', () => {

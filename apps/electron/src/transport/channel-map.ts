@@ -179,6 +179,11 @@ export const CHANNEL_MAP = {
   deleteSocialAccount: invoke(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_DELETE),
   loginSocialAccount: invoke(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_LOGIN),
   getSocialAccountStatus: invoke(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_STATUS),
+  listAdBrowserAccounts: invoke(RPC_CHANNELS.settings.AD_BROWSER_ACCOUNTS_LIST),
+  saveAdBrowserAccount: invoke(RPC_CHANNELS.settings.AD_BROWSER_ACCOUNTS_SAVE),
+  deleteAdBrowserAccount: invoke(RPC_CHANNELS.settings.AD_BROWSER_ACCOUNTS_DELETE),
+  loginAdBrowserAccount: invoke(RPC_CHANNELS.settings.AD_BROWSER_ACCOUNTS_LOGIN),
+  getAdBrowserAccountStatus: invoke(RPC_CHANNELS.settings.AD_BROWSER_ACCOUNTS_STATUS),
 
   // Pi provider discovery
   getPiApiKeyProviders: invoke(RPC_CHANNELS.pi.GET_API_KEY_PROVIDERS),
@@ -409,6 +414,10 @@ export const CHANNEL_MAP = {
   'browserPane.reload': invoke(RPC_CHANNELS.browserPane.RELOAD),
   'browserPane.stop': invoke(RPC_CHANNELS.browserPane.STOP),
   'browserPane.focus': invoke(RPC_CHANNELS.browserPane.FOCUS),
+  'browserPane.dock': invoke(RPC_CHANNELS.browserPane.DOCK),
+  'browserPane.updateDockBounds': invoke(RPC_CHANNELS.browserPane.UPDATE_DOCK_BOUNDS),
+  'browserPane.hideSidecar': invoke(RPC_CHANNELS.browserPane.HIDE_SIDECAR),
+  'browserPane.popOut': invoke(RPC_CHANNELS.browserPane.POP_OUT),
   'browserPane.emptyStateLaunch': invoke(RPC_CHANNELS.browserPane.LAUNCH),
   'browserPane.onStateChanged': listener(RPC_CHANNELS.browserPane.STATE_CHANGED),
   'browserPane.onRemoved': listener(RPC_CHANNELS.browserPane.REMOVED),

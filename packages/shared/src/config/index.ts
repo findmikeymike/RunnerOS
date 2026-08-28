@@ -5,6 +5,7 @@ export * from './models.ts';
 export * from './models-pi.ts';
 export * from './model-fetcher.ts';
 export * from './preferences.ts';
+export * from './ad-browser-accounts.ts';
 export * from './storage.ts';
 export * from './self-edit.ts';
 export * from './theme.ts';

@@ -9,7 +9,7 @@ Use this skill on the weekly Spotify heartbeat, or when the user wants a fresh r
 
 ## Prerequisites
 
-- The Spotify account is connected in Settings → Social Accounts as platform `spotify` (one login covers Spotify for Artists and the web player).
+- The Spotify account is connected in Settings → Spotify (one saved account covers Spotify for Artists and the web player).
 - Run `social` commands (`node src/social.mjs ...`) from the Printing Press Social source path.
 
 ## Workflow
@@ -66,7 +66,7 @@ Any metric not visible on the page is `null`, and the snapshot is marked `partia
 
 ## Failure Handling
 
-- Session not connected / not logged in / wrong account → stop and point the user to Settings → Social Accounts. Do not fabricate.
+- Session not connected / not logged in / wrong account → stop and point the user to Settings → Spotify. Do not fabricate.
 - Spotify for Artists page did not load a value → capture it as `null`, mark `partial`.
 - Login expired → stop, report, do not retry blindly.
 - No prior snapshot → snapshot still writes; the brief reports "no prior snapshot, no delta."

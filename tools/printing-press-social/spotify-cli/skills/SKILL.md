@@ -13,7 +13,7 @@ There is no Spotify API path. Every action runs through the account's verified b
 
 ## Setup
 
-1. Connect a Spotify account in Settings → Social Accounts (platform: `spotify`). Set the handle to the artist name and the account URL to the public artist page (`https://open.spotify.com/artist/<id>`).
+1. Connect a saved account in Settings → Spotify. Give it a short local name such as `spotify-main`; Artist OS verifies Spotify for Artists and Web Player access separately under that one account.
 2. Log in once at Spotify for Artists in that session — the same session covers the web player.
 3. Verify before any work: `node src/social.mjs profile status spotify --profile <id> --live --json`.
 

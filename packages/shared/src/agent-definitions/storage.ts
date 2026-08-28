@@ -772,10 +772,15 @@ export function replaceBuiltInAgentPromptText(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'social-publisher', 'industry-hunter', 'college-radio-agent', 'outreach-agent', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent', 'art-director', 'video-director', 'spotify-playlist-creator', 'trypost-agent', 'content-director', 'print-agent']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'social-publisher', 'industry-hunter', 'college-radio-agent', 'outreach-agent', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent', 'art-director', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'trypost-agent', 'content-director', 'print-agent']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
-  if (!loaded || !loaded.systemPrompt.includes(oldText)) return { updated: false };
+  if (
+    !loaded
+    || oldText === newText
+    || !loaded.systemPrompt.includes(oldText)
+    || (newText.length > 0 && loaded.systemPrompt.includes(newText))
+  ) return { updated: false };
 
   try {
     writeBuiltInAgentMigration(
@@ -783,6 +788,48 @@ export function replaceBuiltInAgentPromptText(
         slug,
         metadata: loaded.metadata,
         systemPrompt: loaded.systemPrompt.replace(oldText, newText),
+      },
+      options,
+    );
+    return { updated: true };
+  } catch {
+    return { updated: false };
+  }
+}
+
+/**
+ * Remove accidental duplicate shipped prompt fragments while leaving all
+ * surrounding user-authored text untouched. The first occurrence is retained.
+ */
+export function dedupeBuiltInAgentPromptText(
+  slug: string,
+  exactText: string,
+  options?: AgentStorageOptions,
+): { updated: boolean } {
+  const builtIns = new Set(['spotify-playlist-creator', 'ads-agent', 'ads-strategist']);
+  if (!builtIns.has(slug) || !exactText) return { updated: false };
+
+  const loaded = loadGlobalAgent(slug, options);
+  if (!loaded) return { updated: false };
+
+  const first = loaded.systemPrompt.indexOf(exactText);
+  if (first < 0 || loaded.systemPrompt.indexOf(exactText, first + exactText.length) < 0) {
+    return { updated: false };
+  }
+
+  const prefix = loaded.systemPrompt.slice(0, first + exactText.length);
+  const suffix = loaded.systemPrompt
+    .slice(first + exactText.length)
+    .split(exactText)
+    .join('')
+    .replace(/\n{3,}/g, '\n\n');
+
+  try {
+    writeBuiltInAgentMigration(
+      {
+        slug,
+        metadata: loaded.metadata,
+        systemPrompt: `${prefix}${suffix}`,
       },
       options,
     );

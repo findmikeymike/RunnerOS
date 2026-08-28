@@ -14,6 +14,15 @@ describe('models-pi filtering', () => {
     expect(ids.some(id => id.startsWith('pi/gpt-4'))).toBe(false);
   });
 
+  it('surfaces the current GPT 5.6 family for OpenAI API-key and ChatGPT subscription connections', () => {
+    for (const provider of ['openai', 'openai-codex']) {
+      const ids = getPiModelsForAuthProvider(provider).map(model => model.id);
+      expect(ids).toContain('pi/gpt-5.6-luna');
+      expect(ids).toContain('pi/gpt-5.6-sol');
+      expect(ids).toContain('pi/gpt-5.6-terra');
+    }
+  });
+
   it('includes DeepSeek in the Pi API key provider list with a human-readable label', () => {
     const providers = getPiApiKeyProviders();
     expect(providers.some(provider => provider.key === 'deepseek' && provider.label === 'DeepSeek')).toBe(true);

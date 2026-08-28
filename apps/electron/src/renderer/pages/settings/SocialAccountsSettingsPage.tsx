@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useSetAtom } from 'jotai'
 import { CheckCircle2, ChevronDown, ChevronRight, Copy, Loader2, LogIn, Plus, RefreshCcw, Save, ShieldCheck, Trash2, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
@@ -13,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { SettingsCard, SettingsCardContent, SettingsSection } from '@/components/settings'
+import { openBrowserSidecarAtom, setBrowserInstancesAtom } from '@/atoms/browser-pane'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type {
   SocialAccountCommandResult,
@@ -31,7 +33,6 @@ const PLATFORMS: Array<{ id: SocialPlatform; label: string }> = [
   { id: 'tiktok', label: 'TikTok' },
   { id: 'x', label: 'X' },
   { id: 'youtube', label: 'YouTube' },
-  { id: 'spotify', label: 'Spotify' },
 ]
 
 type Draft = {
@@ -51,6 +52,8 @@ const EMPTY_DRAFT: Draft = {
 }
 
 export default function SocialAccountsSettingsPage() {
+  const openBrowserSidecar = useSetAtom(openBrowserSidecarAtom)
+  const setBrowserInstances = useSetAtom(setBrowserInstancesAtom)
   const [doctor, setDoctor] = React.useState<SocialAccountsDoctorResult | null>(null)
   const [draft, setDraft] = React.useState<Draft>(EMPTY_DRAFT)
   const [editingRef, setEditingRef] = React.useState<{ platform: SocialPlatform; profile: string } | null>(null)
@@ -63,7 +66,9 @@ export default function SocialAccountsSettingsPage() {
   const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(() => new Set())
 
   const profiles = React.useMemo(
-    () => doctor?.platforms.flatMap((platform) => platform.profiles) ?? [],
+    () => doctor?.platforms
+      .flatMap((platform) => platform.profiles)
+      .filter((profile) => profile.platform !== 'spotify') ?? [],
     [doctor],
   )
 
@@ -229,11 +234,20 @@ export default function SocialAccountsSettingsPage() {
   const login = async (profile: SocialAccountProfileStatus) => {
     setBusy(`${profile.platform}:${profile.profile}:login`)
     try {
-      const result = await window.electronAPI.loginSocialAccount({ platform: profile.platform, profile: profile.profile })
+      const result = await window.electronAPI.loginSocialAccount({
+        platform: profile.platform,
+        profile: profile.profile,
+      })
       setLoginPlan(result)
+      if (result.browserInstanceId) {
+        const instances = await window.electronAPI.browserPane.list()
+        setBrowserInstances(instances)
+        openBrowserSidecar(result.browserInstanceId)
+      }
       await load()
-      toast.success(result.browserInstanceId ? 'Login browser opened' : 'Login handoff prepared')
-      void pollVerification(profile, 24)
+      toast.success(result.browserInstanceId
+        ? 'Login browser opened. Sign in, then click Verify Login.'
+        : 'Login handoff prepared')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not start login')
     } finally {
@@ -250,6 +264,11 @@ export default function SocialAccountsSettingsPage() {
         live: true,
       }) as SocialAccountProfileStatus
       patchProfileStatus(result)
+      if (!options.quiet && result.browserInstanceId) {
+        const instances = await window.electronAPI.browserPane.list()
+        setBrowserInstances(instances)
+        openBrowserSidecar(result.browserInstanceId)
+      }
       if (!options.quiet) {
         if (result.ready) toast.success('Social login verified')
         else toast.warning(result.message || 'Login still needs verification')
@@ -263,21 +282,6 @@ export default function SocialAccountsSettingsPage() {
     }
   }
 
-  const pollVerification = async (profile: SocialAccountProfileStatus, attempts: number) => {
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 5000))
-      const result = await verify(profile, { quiet: true })
-      if (result?.ready) {
-        toast.success('Social login verified')
-        return
-      }
-      if (result?.profileStatus === 'wrong_account') {
-        toast.error(result.message || 'Logged into the wrong account')
-        return
-      }
-    }
-  }
-
   return (
     <div className="flex h-full flex-col">
       <PanelHeader />
@@ -285,9 +289,16 @@ export default function SocialAccountsSettingsPage() {
         <div className="space-y-6 p-6">
           <SettingsSection
             title="Social Accounts"
-            description="Create an account set for each persona or brand, then add platform accounts beneath it."
+            description="Create an account set for each persona or brand, then add platform accounts beneath it. Spotify has its own tab under Connections."
             action={
-              <Button type="button" size="sm" variant="secondary" onClick={load} disabled={busy === 'load'}>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="border border-white/10 bg-white/[0.05] text-white/72 hover:bg-white/[0.09] hover:text-white"
+                onClick={load}
+                disabled={busy === 'load'}
+              >
                 {busy === 'load' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
                 Refresh
               </Button>
@@ -297,7 +308,11 @@ export default function SocialAccountsSettingsPage() {
               <SettingsCardContent>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                   <Field label="New Account Set" value={newGroupName} placeholder="Music Fan Page" onChange={setNewGroupName} />
-                  <Button type="button" onClick={addAccountSet} className="sm:w-auto">
+                  <Button
+                    type="button"
+                    onClick={addAccountSet}
+                    className="bg-white text-black hover:bg-white/90 sm:w-auto"
+                  >
                     <Plus className="h-4 w-4" />
                     Add Set
                   </Button>
@@ -362,7 +377,13 @@ export default function SocialAccountsSettingsPage() {
                             />
                           ) : null}
                           {!editingThisGroup && (
-                            <Button type="button" size="sm" variant="secondary" onClick={() => openEditor(group.name)}>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              className="border border-white/10 bg-white/[0.05] text-white/78 hover:bg-white/[0.09] hover:text-white"
+                              onClick={() => openEditor(group.name)}
+                            >
                               <Plus className="h-3.5 w-3.5" />
                               Add Another Platform Account
                             </Button>
@@ -435,18 +456,29 @@ function AccountEditor({
           value={draft.profile}
           placeholder="theinstaban"
           disabled={editing}
-          hint="Agent uses this as instagram/theinstaban."
+          hint={`Agent uses this as ${draft.platform}/theinstaban.`}
           onChange={(profile) => onDraftChange({ profile })}
         />
         <Field label="Handle" value={draft.handle} placeholder="@yourhandle" onChange={(handle) => onDraftChange({ handle })} />
         <Field label="Account URL" value={draft.accountUrl} placeholder="https://instagram.com/yourhandle" onChange={(accountUrl) => onDraftChange({ accountUrl })} />
         <div className="flex items-end gap-2">
-          <Button type="button" onClick={onSave} disabled={busy} className="w-full">
+          <Button
+            type="button"
+            onClick={onSave}
+            disabled={busy}
+            className="w-full bg-white text-black hover:bg-white/90 disabled:text-black/55"
+          >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : editing ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
             Save
           </Button>
           {editing && (
-            <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-white/12 bg-white/[0.04] text-white/78 hover:bg-white/[0.08] hover:text-white"
+              onClick={onCancel}
+              disabled={busy}
+            >
               Cancel
             </Button>
           )}
@@ -500,7 +532,7 @@ function DeleteProfileDialog({
   const agentRef = profile ? `${profile.platform}/${profile.profile}` : ''
   return (
     <Dialog open={Boolean(profile)} onOpenChange={(open) => { if (!open && !busy) onCancel() }}>
-      <DialogContent className="sm:max-w-[420px]">
+      <DialogContent className="dark border-white/10 bg-[#111] text-white sm:max-w-[420px]">
         <DialogHeader>
           <DialogTitle>Delete social profile?</DialogTitle>
           <DialogDescription>
@@ -508,8 +540,22 @@ function DeleteProfileDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>Cancel</Button>
-          <Button type="button" variant="destructive" onClick={onConfirm} disabled={busy}>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-white/12 bg-white/[0.04] text-white/78 hover:bg-white/[0.08] hover:text-white"
+            onClick={onCancel}
+            disabled={busy}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            className="bg-red-500 text-white hover:bg-red-400"
+            onClick={onConfirm}
+            disabled={busy}
+          >
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
             Delete
           </Button>
@@ -534,7 +580,9 @@ function ProfileRow({
   onLogin: () => void
   onVerify: () => void
 }) {
-  const statusBusy = busy?.startsWith(`${profile.platform}:${profile.profile}:`)
+  const statusBusy = Boolean(busy?.startsWith(`${profile.platform}:${profile.profile}:`))
+  const loginBusy = busy === `${profile.platform}:${profile.profile}:login`
+  const verifyBusy = busy === `${profile.platform}:${profile.profile}:verify`
   const agentRef = `${profile.platform}/${profile.profile}`
   const copyAgentRef = async () => {
     try {
@@ -566,24 +614,61 @@ function ProfileRow({
         </div>
         <div className="flex flex-col gap-2 xl:items-end">
           <div className="flex flex-wrap gap-2 xl:flex-nowrap xl:justify-end">
-            <Button type="button" size="sm" variant="secondary" onClick={onLogin} disabled={statusBusy}>
-              {statusBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
-              Open Login
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={onLogin}
+              disabled={statusBusy}
+              className="border border-white/15 bg-white text-black hover:bg-white/90 disabled:text-black/50"
+            >
+              {loginBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
+              {`Open ${platformLabel(profile.platform)} Login`}
             </Button>
-            <Button type="button" size="sm" variant="secondary" onClick={onVerify} disabled={statusBusy}>
-              {busy === `${profile.platform}:${profile.profile}:verify` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="border border-amber-300/25 bg-amber-400/10 text-amber-100 hover:bg-amber-400/16 hover:text-amber-50"
+              onClick={onVerify}
+              disabled={statusBusy}
+            >
+              {verifyBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
               Verify Login
             </Button>
           </div>
           <div className="flex flex-wrap gap-2 xl:justify-end">
-            <Button type="button" size="sm" variant="ghost" onClick={copyAgentRef} aria-label="Copy agent reference">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="border border-white/10 bg-white/[0.04] text-white/68 hover:bg-white/[0.08] hover:text-white"
+              onClick={copyAgentRef}
+              aria-label="Copy agent reference"
+            >
               <Copy className="h-3.5 w-3.5" />
+              Copy Ref
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={onEdit}>
-              Edit
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="border-white/12 bg-white/[0.04] text-white/78 hover:bg-white/[0.08] hover:text-white"
+              onClick={onEdit}
+            >
+              Edit Details
             </Button>
-            <Button type="button" size="sm" variant="ghost" onClick={onDelete} disabled={statusBusy} aria-label="Delete social profile">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="border border-red-300/15 bg-red-400/[0.06] text-red-200/75 hover:bg-red-400/12 hover:text-red-100"
+              onClick={onDelete}
+              disabled={statusBusy}
+              aria-label="Delete social profile"
+            >
               <Trash2 className="h-3.5 w-3.5" />
+              Delete
             </Button>
           </div>
         </div>
@@ -611,6 +696,7 @@ function platformLabel(platform: SocialPlatform) {
 
 function statusLabel(status: string | null) {
   if (status === 'login_needed') return 'Login needed'
+  if (status === 'identity_unverified') return 'Verify account'
   if (status === 'session_exists_unverified') return 'Verify'
   if (status === 'wrong_account') return 'Wrong account'
   if (status === 'verification_failed') return 'Failed'

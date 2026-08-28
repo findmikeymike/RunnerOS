@@ -124,6 +124,20 @@ export interface BrowserPaneFns {
   /** Runtime authorization hook. Called once per parsed browser_tool command. */
   authorizeCommand?: (command: string, args: string[]) => void | Promise<void>;
   openPanel: (options?: { background?: boolean }) => Promise<{ instanceId: string }>;
+  /** Bind this agent session to one configured social account's persistent browser partition. */
+  openSocialProfile: (
+    platform: string,
+    profile: string,
+    options?: { background?: boolean },
+  ) => Promise<{ instanceId: string; platform: string; profile: string }>;
+  /** List configured persistent paid-ad dashboard accounts without exposing cookies or credentials. */
+  listAdProfiles: () => Promise<Array<{ provider: string; profile: string; label: string; accountId: string | null }>>;
+  /** Bind this agent session to one configured paid-ad dashboard account. */
+  openAdProfile: (
+    provider: string,
+    profile: string,
+    options?: { background?: boolean },
+  ) => Promise<{ instanceId: string; provider: string; profile: string }>;
   navigate: (url: string) => Promise<{ url: string; title: string }>;
   snapshot: () => Promise<{ url: string; title: string; nodes: Array<{ ref: string; role: string; name: string; value?: string; description?: string; focused?: boolean; checked?: boolean; disabled?: boolean }> }>;
   click: (ref: string, options?: { waitFor?: 'none' | 'navigation' | 'network-idle'; timeoutMs?: number }) => Promise<void>;
@@ -223,6 +237,9 @@ Examples:
 - \`key k meta\`
 - \`downloads wait 15000\`
 - \`focus [windowId]\` — focus existing browser window (no new window)
+- \`profile <platform> <profile> [--foreground]\` — use a saved social-account browser login
+- \`accounts\` — list configured paid-ad dashboard accounts
+- \`account <provider> <profile> [--foreground]\` — use a saved paid-ad dashboard login
 - \`windows\` — list current browser windows and ownership state
 - \`release [windowId|all]\` — dismiss the agent control overlay when done
 - \`close [windowId]\` — close and destroy the browser window

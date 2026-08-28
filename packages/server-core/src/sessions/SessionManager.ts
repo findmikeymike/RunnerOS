@@ -20,7 +20,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars } from '@craft-agent/shared/config'
+import { assertAdBrowserProvider, getAdBrowserAccount, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, listAdBrowserAccounts, resetManagedAnthropicAuthEnvVars } from '@craft-agent/shared/config'
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
@@ -3570,7 +3570,7 @@ export class SessionManager implements ISessionManager {
           sessionLog.warn('[skills] Workspace→global mirror skipped:', err as Error)
         }
         try {
-          const { CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, ensureBuiltInAgentMetadataSlugs, ensureBuiltInAgentSkills, ensureBuiltInAgentSkillsForSlug, replaceBuiltInAgentMetadata, replaceBuiltInAgentPromptPattern, replaceBuiltInAgentPromptText } = await import('@craft-agent/shared/agent-definitions')
+          const { CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, dedupeBuiltInAgentPromptText, ensureBuiltInAgentMetadataSlugs, ensureBuiltInAgentSkills, ensureBuiltInAgentSkillsForSlug, replaceBuiltInAgentMetadata, replaceBuiltInAgentPromptPattern, replaceBuiltInAgentPromptText } = await import('@craft-agent/shared/agent-definitions')
           const { CONCIERGE_SYSTEM_SKILL_SLUGS, CREATOR_SYSTEM_SKILL_SLUGS } = await import('@craft-agent/shared/skills/system')
           const { updated } = ensureBuiltInAgentSkills(CREATOR_SYSTEM_SKILL_SLUGS)
           if (updated > 0) {
@@ -3700,6 +3700,13 @@ Default report shape:`,
           }
           const spotifyPlaylistCreator = STARTER_AGENTS.find(agent => agent.slug === 'spotify-playlist-creator')
           if (spotifyPlaylistCreator) {
+            const legacyDiscoveryLine = '- When the user has not supplied enough real tracks, run bounded `playlist spotify discover`, follow its capped browser plan, and give the model only its cached 25-track shortlist.'
+            if (dedupeBuiltInAgentPromptText(
+              'spotify-playlist-creator',
+              legacyDiscoveryLine,
+            ).updated) {
+              sessionLog.info('[agent-definitions] Removed duplicate Spotify Playlist Creator discovery guidance')
+            }
             if (ensureBuiltInAgentMetadataSlugs('spotify-playlist-creator', {
               skills: spotifyPlaylistCreator.metadata.skills,
               sources: spotifyPlaylistCreator.metadata.sources,
@@ -3732,12 +3739,35 @@ Default report shape:`,
             ).updated) {
               sessionLog.info('[agent-definitions] Updated Spotify Playlist Creator execution path')
             }
-            if (replaceBuiltInAgentPromptText(
-              'spotify-playlist-creator',
-              '- Read `spotify-playlist-curator` and use its planner to validate real Spotify track IDs, place a credible anchor in slot 1, the strongest artist song in slot 2, space the artist\'s unique tracks at roughly 10-25%, and sequence deterministically. Supply BPM/energy/key when reliable data exists; label third-party values directional.',
-              '- When the user has not supplied enough real tracks, run bounded `playlist spotify discover`, follow its capped browser plan, and give the model only its cached 25-track shortlist.\n- Read `spotify-playlist-curator` and use its planner to validate real Spotify track IDs, place a credible anchor in slot 1, the strongest artist song in slot 2, space the artist\'s unique tracks at roughly 10-25%, and sequence deterministically. Supply BPM/energy/key when reliable data exists; label third-party values directional.',
-            ).updated) {
-              sessionLog.info('[agent-definitions] Added bounded Spotify track discovery')
+            const spotifyPlaylistProfileRoutingUpdated = [
+              replaceBuiltInAgentPromptText(
+                'spotify-playlist-creator',
+                '- When the user has not supplied enough real tracks, run `node src/social.mjs playlist spotify discover --profile <id> --theme "<theme>" --seed "<artist-or-track>" --mode tight|growth|deep --workspace "$CRAFT_WORKSPACE_PATH" --json`. Follow its bounded browser plan, save one compact capture, then rerun with `--capture-file`. Use the cached 25-track shortlist; do not browse or reason over every raw candidate.',
+                '- Resolve the configured account once with `cd tools/printing-press-social && node src/social.mjs catalog --json`, then attach its exact saved login with `browser_tool profile spotify <id>` before any browser work. Never use plain `browser_tool open` or an invented partition flag for Spotify.\n- When the user has not supplied enough real tracks, run `node src/social.mjs playlist spotify discover --profile <id> --theme "<theme>" --seed "<artist-or-track>" --mode tight|growth|deep --workspace "$CRAFT_WORKSPACE_PATH" --json`. Follow its bounded browser plan in the attached session at `open.spotify.com`, save one compact capture, then rerun with `--capture-file`. Use the cached 25-track shortlist; do not browse or reason over every raw candidate.',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                'spotify-playlist-creator',
+                legacyDiscoveryLine,
+                '',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                'spotify-playlist-creator',
+                '- The Spotify profile must exist in Settings > Social Accounts. Run `node src/social.mjs catalog --json` from the Printing Press Social source path and resolve the exact `spotify/<profile>`.',
+                '- The Spotify profile must exist in Settings > Spotify and show Spotify Web Player ready. Reuse the same `browser_tool profile spotify <id>` session used for discovery; it is the account-approved route to `open.spotify.com`.',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                'spotify-playlist-creator',
+                '- The Spotify profile must exist in Settings > Social Accounts and show Spotify Web Player ready. Reuse the same `browser_tool profile spotify <id>` session used for discovery; it is the account-approved route to `open.spotify.com`.',
+                '- The Spotify profile must exist in Settings > Spotify and show Spotify Web Player ready. Reuse the same `browser_tool profile spotify <id>` session used for discovery; it is the account-approved route to `open.spotify.com`.',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                'spotify-playlist-creator',
+                '- A `RUNNER_CDP_DELEGATED` response is a guarded browser handoff, not completion. Use the returned browser partition, verify the visible account, perform only the approved steps, and capture the resulting playlist URL.',
+                '- A `RUNNER_CDP_DELEGATED` response is a guarded browser handoff, not completion. Confirm its browser plan names the same saved profile already attached, verify the visible account, perform only the approved steps, and capture the resulting playlist URL.',
+              ).updated,
+            ].some(Boolean)
+            if (spotifyPlaylistProfileRoutingUpdated) {
+              sessionLog.info('[agent-definitions] Bound Spotify Playlist Creator to the saved Spotify Web Player profile')
             }
           }
           const spotifyAnalyst = STARTER_AGENTS.find(agent => agent.slug === 'spotify-analyst')
@@ -3768,6 +3798,14 @@ Default report shape:`,
             }).updated) {
               sessionLog.info('[agent-definitions] Updated Spotify Analyst browser product contract')
             }
+            if (replaceBuiltInAgentMetadata('spotify-analyst', {
+              greeting: {
+                from: 'Connect Spotify once in Settings > Social Accounts. Then I can capture a Spotify for Artists snapshot, watch anomalies, and explain what changed.',
+                to: spotifyAnalyst.metadata.greeting,
+              },
+            }).updated) {
+              sessionLog.info('[agent-definitions] Moved Spotify Analyst setup guidance to Spotify settings')
+            }
             if (replaceBuiltInAgentPromptPattern(
               'spotify-analyst',
               /^You are Spotify Analyst,[\s\S]*api-snapshot\.ts[\s\S]*$/,
@@ -3775,9 +3813,48 @@ Default report shape:`,
             ).updated) {
               sessionLog.info('[agent-definitions] Replaced Spotify Analyst dev-only API prompt')
             }
+            if (replaceBuiltInAgentPromptPattern(
+              'spotify-analyst',
+              /- Verify before every read: `node src\/social\.mjs profile status spotify --profile <id> --live --json`\. Stop on missing login or account mismatch\.(?!\n- Never claim that no Spotify source is connected)/,
+              '- Verify before every read: `node src/social.mjs profile status spotify --profile <id> --live --json`. Stop on missing login or account mismatch.\n- Never claim that no Spotify source is connected before running the catalog and live profile-status checks. Never redirect the user to the public Spotify API or ask for an export while the browser route is available.',
+            ).updated) {
+              sessionLog.info('[agent-definitions] Hardened Spotify Analyst browser-first routing')
+            }
+            const spotifySavedProfileRoutingUpdated = [
+              replaceBuiltInAgentPromptText(
+                'spotify-analyst',
+                '- Use Artist HQ Profile first, then resolve the exact `spotify/<profile>` with `node src/social.mjs catalog --json` from the Printing Press Social source path.',
+                '- Use Artist HQ Profile first. From the RunnerOS repository, run exactly `cd tools/printing-press-social && node src/social.mjs catalog --json` once to resolve the configured `spotify/<profile>`. Do not search the source tree or read directories.\n- Attach the saved login with `browser_tool profile spotify <id>` before any browser snapshot, navigation, or evaluation. Never use plain `browser_tool open` for Spotify work and never invent or pass a partition flag.',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                'spotify-analyst',
+                '- Verify before every read: `node src/social.mjs profile status spotify --profile <id> --live --json`. Stop on missing login or account mismatch.',
+                '- Verify before every read: from `tools/printing-press-social`, run `node src/social.mjs profile status spotify --profile <id> --live --json`, inspect the attached browser, then return the documented non-secret verification result if requested. Stop only when the attached saved profile visibly requires login or shows the wrong account.',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                'spotify-analyst',
+                '- Verify before every read: from `tools/printing-press-social`, run `node src/social.mjs profile status spotify --profile <id> --live --json`, inspect the attached browser, then return the documented non-secret verification result if requested. Stop only when the attached saved profile visibly requires login or shows the wrong account.',
+                '- Verify before every read: from `tools/printing-press-social`, run `node src/social.mjs profile status spotify --profile <id> --live --json`. In the same attached profile, confirm the saved Spotify Web Player account identity first, then confirm Spotify for Artists access before reading analytics. Return the documented non-secret verification result if requested. Stop only when the saved profile visibly requires login, cannot verify its account identity, or shows the wrong account.',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                'spotify-analyst',
+                '2. Open the exact returned browser partition. Read only visible values: snapshot date/window, streams, listeners, followers, saves, cities/countries, top tracks, and source-of-streams.',
+                '2. Confirm the browser plan names the same profile already attached with `browser_tool profile spotify <id>`. Read only visible values: snapshot date/window, streams, listeners, followers, saves, cities/countries, top tracks, and source-of-streams.',
+              ).updated,
+            ].some(Boolean)
+            if (spotifySavedProfileRoutingUpdated) {
+              sessionLog.info('[agent-definitions] Bound Spotify Analyst to saved social browser profiles')
+            }
           }
           const socialPublisherAgent = STARTER_AGENTS.find(agent => agent.slug === SOCIAL_PUBLISHER_SLUG)
           if (socialPublisherAgent) {
+            if (replaceBuiltInAgentPromptText(
+              SOCIAL_PUBLISHER_SLUG,
+              '7. Use `browser_tool open`, `navigate`, `snapshot`, `find`, `click`, `fill`, `paste`, `upload`, `wait`, and `screenshot` to complete the platform UI flow.',
+              '7. Attach the selected saved login first with `browser_tool profile <platform> <profile>`, then use `navigate`, `snapshot`, `find`, `click`, `fill`, `paste`, `upload`, `wait`, and `screenshot` to complete the platform UI flow. Never use plain `browser_tool open` for a saved social account.',
+            ).updated) {
+              sessionLog.info('[agent-definitions] Bound Social Publisher to saved social browser profiles')
+            }
             const metadataUpdated = [
               ensureBuiltInAgentMetadataSlugs(SOCIAL_PUBLISHER_SLUG, {
                 skills: socialPublisherAgent.metadata.skills,
@@ -4111,6 +4188,23 @@ Default report shape:`,
           if (artDirectorMetadataUpdated || artDirectorFaceRefPromptUpdated) {
             sessionLog.info('[agent-definitions] Updated Art Director face-reference guidance and metadata')
           }
+          const adsPromptDuplicatesRemoved = [
+            dedupeBuiltInAgentPromptText(
+              'ads-agent',
+              '   - For Spotify Ads, use browser dashboard mode for Spotify Ads Manager / Spotify Ad Studio in V1. Use Spotify for Artists browser intel for audience/city/song signals when available. Spotify Ads API is optional later and must not block work.',
+            ).updated,
+            dedupeBuiltInAgentPromptText(
+              'ads-agent',
+              ' For Spotify exports/screenshots, summarize carefully and state confidence until a Spotify normalizer exists.',
+            ).updated,
+            dedupeBuiltInAgentPromptText(
+              'ads-strategist',
+              ', including Spotify Ads when useful',
+            ).updated,
+          ].some(Boolean)
+          if (adsPromptDuplicatesRemoved) {
+            sessionLog.info('[agent-definitions] Removed duplicate Spotify Ads prompt guidance')
+          }
           const adsAgentPromptUpdated = adsAgent
             ? [
                 replaceBuiltInAgentPromptText(
@@ -4132,6 +4226,11 @@ Default report shape:`,
                   'ads-agent',
                   '3. Do not block the user when Meta/Google API access is missing. Move to browser dashboard/export mode: guide or use `browser_tool` to inspect the logged-in dashboard, set the reporting date range, export CSV/XLSX where available, and analyze the export before relying on screenshots.',
                   '3. Do not block the user when Meta/Google API access or Spotify Ads API access is missing. Move to browser dashboard/export mode: guide or use `browser_tool` to inspect the logged-in dashboard, set the reporting date range, export CSV/XLSX where available, and analyze the export before relying on screenshots.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '3. Do not block the user when Meta/Google API access or Spotify Ads API access is missing. Move to browser dashboard/export mode: guide or use `browser_tool` to inspect the logged-in dashboard, set the reporting date range, export CSV/XLSX where available, and analyze the export before relying on screenshots.',
+                  '3. Do not block the user when Meta/Google API access or Spotify Ads API access is missing. Move to browser dashboard/export mode. For Meta or Google, run `browser_tool accounts`, resolve the exact configured account, then attach it with `browser_tool account <meta-ads|google-ads> <profile>` before navigation. For Spotify Ads, attach the exact saved Spotify profile. Set the reporting date range, export CSV/XLSX where available, and analyze the export before relying on screenshots.',
                 ).updated,
                 replaceBuiltInAgentPromptText(
                   'ads-agent',
@@ -4197,6 +4296,16 @@ Default report shape:`,
                   'ads-agent',
                   '- If Google Ads API is not configured or lacks a developer token, offer browser dashboard/export mode for reads and draft setup.\n- Do not assume a separate Meta API CLI is bundled. The V1 local Meta path is `ads-operator --platform meta` plus browser/export/setup guidance.',
                   '- If Google Ads API is not configured or lacks a developer token, offer browser dashboard/export mode for reads and draft setup.\n- Spotify Ads V1 uses browser-guided Spotify Ads Manager / Spotify Ad Studio. Spotify for Artists can inform targeting but does not create ad campaigns. If Spotify login/session is missing, ask the user to log in or provide screenshots/exports.\n- Do not assume a separate Meta API CLI is bundled. The V1 local Meta path is `ads-operator --platform meta` plus browser/export/setup guidance.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '- Spotify Ads V1 uses browser-guided Spotify Ads Manager / Spotify Ad Studio. Spotify for Artists can inform targeting but does not create ad campaigns. If Spotify login/session is missing, ask the user to log in or provide screenshots/exports.',
+                  '- Spotify Ads V1 uses browser-guided Spotify Ads Manager / Spotify Ad Studio. Resolve the configured Spotify account with `cd tools/printing-press-social && node src/social.mjs catalog --json`, then attach its exact saved session with `browser_tool profile spotify <id>` before opening any Spotify dashboard. Spotify for Artists can inform targeting but does not create ad campaigns. Never use a generic browser session for a configured Spotify account.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '- If Google Ads API is not configured or lacks a developer token, offer browser dashboard/export mode for reads and draft setup.\n- Spotify Ads V1 uses browser-guided Spotify Ads Manager / Spotify Ad Studio. Resolve the configured Spotify account with `cd tools/printing-press-social && node src/social.mjs catalog --json`, then attach its exact saved session with `browser_tool profile spotify <id>` before opening any Spotify dashboard. Spotify for Artists can inform targeting but does not create ad campaigns. Never use a generic browser session for a configured Spotify account.',
+                  '- If Google Ads API is not configured or lacks a developer token, offer browser dashboard/export mode for reads and draft setup.\n- Meta and Google dashboard sessions are configured in Settings > Ad Accounts. Run `browser_tool accounts` and attach the exact account with `browser_tool account <provider> <profile>`; never use a generic browser session for a configured ad account.\n- Spotify Ads V1 uses browser-guided Spotify Ads Manager / Spotify Ad Studio. Resolve the configured Spotify account with `cd tools/printing-press-social && node src/social.mjs catalog --json`, then attach its exact saved session with `browser_tool profile spotify <id>` before opening any Spotify dashboard. Spotify for Artists can inform targeting but does not create ad campaigns. Never use a generic browser session for a configured Spotify account.',
                 ).updated,
               ].some(Boolean)
             : false
@@ -4377,7 +4486,10 @@ user a clickable link to where the thing now lives.`
             sessionLog.info('[agent-definitions] Updated Concierge creator-skill guidance')
           }
         } catch (err) {
-          sessionLog.warn('[agent-definitions] Built-in skill bundle skipped:', err as Error)
+          const detail = err instanceof Error
+            ? (err.stack ?? `${err.name}: ${err.message}`)
+            : String(err)
+          sessionLog.warn(`[agent-definitions] Built-in skill bundle skipped: ${detail}`)
         }
       } catch (err) {
         sessionLog.warn('[agent-definitions] Library seed skipped:', err as Error)
@@ -6136,6 +6248,31 @@ user a clickable link to where the thing now lives.`
               const info = bpm.getInstance(instanceId)
               sessionLog.info(`[browser-pane] route decision: browser_open session=${sid} instance=${instanceId} background=${options?.background ?? false} ownerType=${info?.ownerType ?? 'unknown'} ownerSessionId=${info?.ownerSessionId ?? 'none'} visible=${info?.isVisible ?? false}`)
               return { instanceId }
+            },
+            openSocialProfile: async (platform, profile, options) => {
+              const instanceId = bpm.useSocialProfileForSession(sid, platform, profile, {
+                show: options?.background === false,
+              })
+              sessionLog.info(`[browser-pane] route decision: browser_profile session=${sid} platform=${platform} profile=${profile} instance=${instanceId} background=${options?.background ?? true}`)
+              return { instanceId, platform: platform.toLowerCase(), profile }
+            },
+            listAdProfiles: async () => listAdBrowserAccounts().map((account) => ({
+              provider: account.provider,
+              profile: account.profile,
+              label: account.label,
+              accountId: account.accountId,
+            })),
+            openAdProfile: async (provider, profile, options) => {
+              const normalizedProvider = assertAdBrowserProvider(provider)
+              const account = getAdBrowserAccount(normalizedProvider, profile)
+              if (!account) {
+                throw new Error(`Saved paid-ad dashboard account ${provider}/${profile} is not configured. Open Settings > Ad Accounts.`)
+              }
+              const instanceId = bpm.useAdProfileForSession(sid, account.provider, account.profile, {
+                show: options?.background === false,
+              })
+              sessionLog.info(`[browser-pane] route decision: browser_ad_account session=${sid} provider=${account.provider} profile=${account.profile} instance=${instanceId} background=${options?.background ?? true}`)
+              return { instanceId, provider: account.provider, profile: account.profile }
             },
             navigate: (url) => {
               const instanceId = resolveSessionBrowserInstance('browser_navigate')

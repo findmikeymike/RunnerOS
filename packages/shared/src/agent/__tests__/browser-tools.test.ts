@@ -15,6 +15,19 @@ import { createBrowserTools, type BrowserPaneFns } from '../browser-tools'
 function createMockFns(): BrowserPaneFns {
   return {
     openPanel: async () => ({ instanceId: 'browser-test-1' }),
+    openSocialProfile: async (platform, profile) => ({
+      instanceId: `social-${platform}-${profile}`,
+      platform,
+      profile,
+    }),
+    listAdProfiles: async () => ([
+      { provider: 'meta-ads', profile: 'artist-main', label: 'Main Meta', accountId: '123456' },
+    ]),
+    openAdProfile: async (provider, profile) => ({
+      instanceId: `ads-${provider}-${profile}`,
+      provider,
+      profile,
+    }),
     navigate: async (url: string) => ({ url: `https://${url}`, title: 'Test Page' }),
     snapshot: async () => ({
       url: 'https://example.com',
@@ -139,6 +152,9 @@ describe('createBrowserTools', () => {
       expect(result.content[0].text).toContain('paste <text>')
       expect(result.content[0].text).toContain('screenshot [--annotated|-a]')
       expect(result.content[0].text).toContain('focus [windowId]')
+      expect(result.content[0].text).toContain('profile <platform> <profile>')
+      expect(result.content[0].text).toContain('accounts')
+      expect(result.content[0].text).toContain('account <provider> <profile>')
       expect(result.content[0].text).toContain('windows')
       expect(result.content[0].text).toContain('Array mode (JSON array input, no batch splitting/tokenization):')
       expect(result.content[0].text).not.toContain('When you are done using the browser')
@@ -179,6 +195,40 @@ describe('createBrowserTools', () => {
       expect(openOptions).toEqual({ background: true })
       expect(result.content[0].text).toContain('Opened in-app browser window in background')
       expect(result.content[0].text).toContain('browser-test-1')
+    })
+
+    it('binds the exact saved social browser profile instead of opening a generic session', async () => {
+      let received: { platform: string; profile: string; background?: boolean } | undefined
+      mockFns.openSocialProfile = async (platform, profile, options) => {
+        received = { platform, profile, background: options?.background }
+        return { instanceId: 'social-spotify-spotify-main', platform, profile }
+      }
+
+      const result = await executeTool(tools, 'browser_tool', {
+        command: 'profile spotify spotify-main',
+      })
+
+      expect(received).toEqual({ platform: 'spotify', profile: 'spotify-main', background: true })
+      expect(result.content[0].text).toContain('Using saved social browser profile spotify/spotify-main')
+      expect(result.content[0].text).toContain('social-spotify-spotify-main')
+    })
+
+    it('lists and binds the exact saved paid-ad dashboard account', async () => {
+      let received: { provider: string; profile: string; background?: boolean } | undefined
+      mockFns.openAdProfile = async (provider, profile, options) => {
+        received = { provider, profile, background: options?.background }
+        return { instanceId: 'ads-meta-ads-artist-main', provider, profile }
+      }
+
+      const listed = await executeTool(tools, 'browser_tool', { command: 'accounts' })
+      expect(listed.content[0].text).toContain('meta-ads/artist-main')
+      expect(listed.content[0].text).toContain('123456')
+
+      const opened = await executeTool(tools, 'browser_tool', {
+        command: 'account meta-ads artist-main',
+      })
+      expect(received).toEqual({ provider: 'meta-ads', profile: 'artist-main', background: true })
+      expect(opened.content[0].text).toContain('Using saved paid-ad dashboard account meta-ads/artist-main')
     })
 
     it('routes open command with --foreground flag and reports settled visibility', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { buildAgentCreateSessionOptions, sendAgentDraft } from './run-agent'
+import { buildAgentCreateSessionOptions, ensureAgentDeclaredSkillsEnabled, sendAgentDraft } from './run-agent'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { AgentDefinitionDTO, LoadedSource } from '../../shared/types'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
@@ -190,5 +190,69 @@ describe('sendAgentDraft', () => {
     expect(
       sendAgentDraft(async () => false, 'session-1', 'Start the work', 'Test Agent'),
     ).rejects.toThrow('first message failed to send')
+  })
+})
+
+describe('ensureAgentDeclaredSkillsEnabled', () => {
+  test('activates installed declared skills before a direct agent launch', async () => {
+    const activeSkill = { slug: 'already-active' }
+    const spotifySkills = [
+      { slug: 'spotify-growth-intake' },
+      { slug: 'spotify-analytics-snapshot' },
+      { slug: 'spotify-anomaly-watch' },
+    ]
+    const enabled: string[] = []
+    const refreshed = [activeSkill, ...spotifySkills] as any
+
+    const result = await ensureAgentDeclaredSkillsEnabled({
+      agent: {
+        ...makeAgent(),
+        slug: 'spotify-analyst',
+        metadata: {
+          name: 'Spotify Analyst',
+          description: 'For tests.',
+          skills: ['already-active', ...spotifySkills.map((skill) => skill.slug)],
+        },
+      },
+      workspaceId: 'workspace-1',
+      activeSkills: [activeSkill] as any,
+      listGlobalSkills: async () => spotifySkills as any,
+      setGlobalSkillEnabled: async (_workspaceId, slug, enabledFlag) => {
+        if (enabledFlag) enabled.push(slug)
+        return enabled
+      },
+      getSkills: async () => refreshed,
+    })
+
+    expect(enabled).toEqual(spotifySkills.map((skill) => skill.slug))
+    expect(result).toBe(refreshed)
+  })
+
+  test('does not activate unavailable declared skills', async () => {
+    let reloaded = false
+
+    const result = await ensureAgentDeclaredSkillsEnabled({
+      agent: {
+        ...makeAgent(),
+        metadata: {
+          name: 'Test Agent',
+          description: 'For tests.',
+          skills: ['not-installed'],
+        },
+      },
+      workspaceId: 'workspace-1',
+      activeSkills: [],
+      listGlobalSkills: async () => [],
+      setGlobalSkillEnabled: async () => {
+        throw new Error('should not enable')
+      },
+      getSkills: async () => {
+        reloaded = true
+        return []
+      },
+    })
+
+    expect(result).toEqual([])
+    expect(reloaded).toBe(false)
   })
 })

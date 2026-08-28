@@ -8,9 +8,12 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test'
 
 const createdWindows: any[] = []
+let nextWebContentsId = 1
 let toolbarLoadFailuresRemaining = 0
 const mockShellOpenExternal = mock(async () => {})
 const mockIpcMainHandle = mock(() => {})
+const mockClearStorageData = mock(async () => {})
+const mockClearCache = mock(async () => {})
 const mockSessionFromPartition = mock((_partition: string) => ({
   protocol: { handle: () => {} },
   setPermissionCheckHandler: mock(() => {}),
@@ -21,17 +24,23 @@ const mockSessionFromPartition = mock((_partition: string) => ({
     onErrorOccurred: mock((_cb: any) => {}),
   },
   on: mock((_event: string, _cb: any) => {}),
+  clearStorageData: mockClearStorageData,
+  clearCache: mockClearCache,
 }))
 
 function createMockWebContents() {
   const listeners: Record<string, Function[]> = {}
   let currentUrl = 'about:blank'
   return {
+    id: nextWebContentsId++,
     userAgent: 'Mock Chrome Electron/99.0.0',
     session: {},
     on: (event: string, cb: Function) => {
       if (!listeners[event]) listeners[event] = []
       listeners[event].push(cb)
+    },
+    off: (event: string, cb: Function) => {
+      listeners[event] = (listeners[event] || []).filter(fn => fn !== cb)
     },
     loadURL: mock(async (url: string) => {
       currentUrl = url
@@ -80,6 +89,7 @@ function createMockWebContents() {
       on: mock(() => {}),
     },
     _listeners: listeners,
+    _listenerCount: (event: string) => (listeners[event] || []).length,
     _emit: (event: string, ...args: any[]) => {
       for (const cb of listeners[event] || []) cb({}, ...args)
     },
@@ -106,6 +116,7 @@ function createMockWindow(opts?: { width?: number; height?: number; minWidth?: n
   let contentHeight = opts?.height ?? 900
   const minWidth = opts?.minWidth ?? 0
   const minHeight = opts?.minHeight ?? 0
+  const browserViews: any[] = []
 
   const win = {
     _opts: opts,
@@ -122,6 +133,10 @@ function createMockWindow(opts?: { width?: number; height?: number; minWidth?: n
       if (!listeners[event]) listeners[event] = []
       listeners[event].push(wrapped)
     },
+    off: (event: string, cb: Function) => {
+      listeners[event] = (listeners[event] || []).filter(fn => fn !== cb)
+    },
+    _listenerCount: (event: string) => (listeners[event] || []).length,
     _emit: (event: string, ...args: any[]) => {
       for (const cb of listeners[event] || []) cb(...args)
     },
@@ -139,7 +154,14 @@ function createMockWindow(opts?: { width?: number; height?: number; minWidth?: n
       win._emit('closed')
     }),
     setBrowserView: mock((_view: any) => {}),
-    addBrowserView: mock((_view: any) => {}),
+    addBrowserView: mock((view: any) => {
+      if (!browserViews.includes(view)) browserViews.push(view)
+    }),
+    removeBrowserView: mock((view: any) => {
+      const index = browserViews.indexOf(view)
+      if (index >= 0) browserViews.splice(index, 1)
+    }),
+    getBrowserViews: mock(() => [...browserViews]),
     setTopBrowserView: mock((_view: any) => {}),
     getContentSize: mock(() => [contentWidth, contentHeight]),
     setContentSize: mock((width: number, height: number) => {
@@ -252,10 +274,13 @@ describe('BrowserPaneManager', () => {
 
   beforeEach(() => {
     createdWindows.length = 0
+    nextWebContentsId = 1
     toolbarLoadFailuresRemaining = 0
     mockShellOpenExternal.mockClear()
     mockIpcMainHandle.mockClear()
     mockSessionFromPartition.mockClear()
+    mockClearStorageData.mockClear()
+    mockClearCache.mockClear()
     manager = new BrowserPaneManager()
   })
 
@@ -274,6 +299,173 @@ describe('BrowserPaneManager', () => {
     expect(first).toBe('same-id')
     expect(second).toBe('same-id')
     expect(manager.listInstances()).toHaveLength(1)
+  })
+
+  it('docks the existing controlled views into an app window without recreating the instance', () => {
+    manager.createInstance('dock-1')
+    const instance = (manager as any).instances.get('dock-1')
+    const host = createMockWindow({ width: 1000, height: 760 })
+
+    manager.dock('dock-1', host as any, { x: 520, y: 80, width: 460, height: 650 })
+
+    expect(instance.window.removeBrowserView).toHaveBeenCalledTimes(3)
+    expect(host.addBrowserView).toHaveBeenCalledTimes(3)
+    expect(instance.pageView.setBounds).toHaveBeenLastCalledWith({ x: 520, y: 128, width: 460, height: 602 })
+    expect(instance.toolbarView.setBounds).toHaveBeenLastCalledWith({ x: 520, y: 80, width: 460, height: 48 })
+    expect(manager.listInstances()[0]).toMatchObject({
+      id: 'dock-1',
+      presentation: 'sidecar',
+      sidecarHostWebContentsId: host.webContents.id,
+      isVisible: true,
+    })
+  })
+
+  it('parks the previous sidecar browser when another instance is selected', () => {
+    manager.createInstance('dock-a')
+    manager.createInstance('dock-b')
+    const first = (manager as any).instances.get('dock-a')
+    const host = createMockWindow({ width: 1000, height: 760 })
+
+    manager.dock('dock-a', host as any, { x: 520, y: 80, width: 460, height: 650 })
+    manager.dock('dock-b', host as any, { x: 500, y: 70, width: 480, height: 670 })
+
+    expect(first.attachedHost).toBe(first.window)
+    expect(first.window.addBrowserView).toHaveBeenCalledTimes(6)
+    expect(manager.listInstances().find((item) => item.id === 'dock-a')).toMatchObject({ presentation: 'window', isVisible: false })
+    expect(manager.listInstances().find((item) => item.id === 'dock-b')).toMatchObject({ presentation: 'sidecar', isVisible: true })
+  })
+
+  it('clamps sidecar bounds and rejects updates from another window', () => {
+    manager.createInstance('dock-bounds')
+    const instance = (manager as any).instances.get('dock-bounds')
+    const host = createMockWindow({ width: 900, height: 700 })
+    const otherHost = createMockWindow({ width: 900, height: 700 })
+
+    manager.dock('dock-bounds', host as any, { x: 850, y: 650, width: 500, height: 500 })
+    expect(instance.toolbarView.setBounds).toHaveBeenLastCalledWith({ x: 580, y: 460, width: 320, height: 48 })
+    expect(() => manager.updateDockBounds('dock-bounds', otherHost as any, { x: 0, y: 0, width: 400, height: 500 }))
+      .toThrow('owning window')
+  })
+
+  it('pops a docked browser back into its parking window', () => {
+    manager.createInstance('dock-pop')
+    const instance = (manager as any).instances.get('dock-pop')
+    const host = createMockWindow({ width: 1000, height: 760 })
+    manager.dock('dock-pop', host as any, { x: 520, y: 80, width: 460, height: 650 })
+
+    manager.popOut('dock-pop', host as any)
+
+    expect(instance.attachedHost).toBe(instance.window)
+    expect(instance.window.show).toHaveBeenCalled()
+    expect(instance.window.focus).toHaveBeenCalled()
+    expect(manager.listInstances()[0]).toMatchObject({ presentation: 'window', isVisible: true })
+  })
+
+  it('parks a docked browser when its Artist OS host closes', () => {
+    manager.createInstance('dock-host-close')
+    const instance = (manager as any).instances.get('dock-host-close')
+    const host = createMockWindow({ width: 1000, height: 760 })
+    manager.dock('dock-host-close', host as any, { x: 520, y: 80, width: 460, height: 650 })
+
+    host._emit('closed')
+
+    expect(instance.attachedHost).toBe(instance.window)
+    expect(host.removeBrowserView).toHaveBeenCalledTimes(3)
+    expect(manager.listInstances()[0]).toMatchObject({ presentation: 'window', isVisible: false })
+  })
+
+  it('parks a docked browser before its Artist OS renderer reloads or crashes', () => {
+    manager.createInstance('dock-host-lifecycle')
+    const instance = (manager as any).instances.get('dock-host-lifecycle')
+    const host = createMockWindow({ width: 1000, height: 760 })
+    manager.dock('dock-host-lifecycle', host as any, { x: 520, y: 80, width: 460, height: 650 })
+
+    host.webContents._emit('did-start-navigation', 'https://artist-os.local/frame', false, false)
+    expect(instance.sidecarHost).toBe(host)
+
+    host.webContents._emit('did-start-navigation', 'https://artist-os.local/', false, true)
+    expect(instance.attachedHost).toBe(instance.window)
+    expect(manager.listInstances()[0]).toMatchObject({
+      presentation: 'window',
+      sidecarHostWebContentsId: null,
+      isVisible: false,
+    })
+
+    manager.dock('dock-host-lifecycle', host as any, { x: 520, y: 80, width: 460, height: 650 })
+    host.webContents._emit('render-process-gone', {}, { reason: 'crashed' })
+    expect(instance.attachedHost).toBe(instance.window)
+    expect(manager.listInstances()[0]).toMatchObject({ presentation: 'window', isVisible: false })
+  })
+
+  it('does not leak host lifecycle listeners across repeated dock and hide cycles', () => {
+    manager.createInstance('dock-listeners')
+    const host = createMockWindow({ width: 1000, height: 760 })
+
+    for (let index = 0; index < 3; index += 1) {
+      manager.dock('dock-listeners', host as any, { x: 520, y: 80, width: 460, height: 650 })
+      expect(host._listenerCount('closed')).toBe(1)
+      expect(host.webContents._listenerCount('render-process-gone')).toBe(1)
+      expect(host.webContents._listenerCount('did-start-navigation')).toBe(1)
+
+      manager.hideSidecar('dock-listeners', host as any)
+      expect(host._listenerCount('closed')).toBe(0)
+      expect(host.webContents._listenerCount('render-process-gone')).toBe(0)
+      expect(host.webContents._listenerCount('did-start-navigation')).toBe(0)
+    }
+  })
+
+  it('removes lifecycle listeners from the previous owner when reparenting to another window', () => {
+    manager.createInstance('dock-reparent')
+    const firstHost = createMockWindow({ width: 1000, height: 760 })
+    const secondHost = createMockWindow({ width: 1000, height: 760 })
+
+    manager.dock('dock-reparent', firstHost as any, { x: 520, y: 80, width: 460, height: 650 })
+    manager.dock('dock-reparent', secondHost as any, { x: 520, y: 80, width: 460, height: 650 })
+
+    expect(firstHost._listenerCount('closed')).toBe(0)
+    expect(firstHost.webContents._listenerCount('render-process-gone')).toBe(0)
+    expect(secondHost._listenerCount('closed')).toBe(1)
+    expect(manager.listInstances()[0]?.sidecarHostWebContentsId).toBe(secondHost.webContents.id)
+  })
+
+  it('removes native browser hit surfaces from the app window when the sidecar closes', () => {
+    manager.createInstance('dock-hide')
+    const host = createMockWindow({ width: 1000, height: 760 })
+    manager.dock('dock-hide', host as any, { x: 520, y: 80, width: 460, height: 650 })
+
+    manager.hideSidecar('dock-hide', host as any)
+
+    expect(host.removeBrowserView).toHaveBeenCalledTimes(3)
+    expect(manager.listInstances()[0]).toMatchObject({ presentation: 'window', isVisible: false })
+  })
+
+  it('keeps the agent interaction overlay inside sidecar bounds', async () => {
+    manager.createInstance('dock-agent')
+    manager.bindSession('dock-agent', 'dock-agent-session')
+    const instance = (manager as any).instances.get('dock-agent')
+    const host = createMockWindow({ width: 1000, height: 760 })
+    manager.dock('dock-agent', host as any, { x: 520, y: 80, width: 460, height: 650 })
+    await Bun.sleep(0)
+
+    manager.setAgentControl('dock-agent-session', { displayName: 'Social Publisher' })
+
+    expect(instance.nativeOverlayView.setBounds).toHaveBeenLastCalledWith({ x: 520, y: 128, width: 460, height: 602 })
+  })
+
+  it('parents OAuth popups to the active sidecar host', () => {
+    manager.createInstance('dock-popup')
+    const instance = (manager as any).instances.get('dock-popup')
+    const host = createMockWindow({ width: 1000, height: 760 })
+    manager.dock('dock-popup', host as any, { x: 520, y: 80, width: 460, height: 650 })
+    const openHandler = instance.pageView.webContents.setWindowOpenHandler.mock.calls[0][0]
+
+    const result = openHandler({
+      url: 'https://accounts.google.com/o/oauth2/v2/auth',
+      disposition: 'new-popup',
+      frameName: 'oauth-popup',
+    })
+
+    expect(result.overrideBrowserWindowOptions?.parent).toBe(host)
   })
 
   it('allows http(s) popups with shared browser partition', () => {
@@ -443,6 +635,65 @@ describe('BrowserPaneManager', () => {
     expect(id).not.toBe('social-window')
     expect(manager.listInstances()).toHaveLength(2)
     expect(manager.listInstances().find((info) => info.id === 'social-window')?.ownerType).toBe('manual')
+  })
+
+  it('switches a session from the generic browser to the exact saved social profile partition', () => {
+    const genericId = manager.createForSession('sess-spotify')
+
+    const socialId = manager.useSocialProfileForSession('sess-spotify', 'spotify', 'spotify-main')
+
+    expect(socialId).toBe('social-spotify-spotify-main')
+    expect(manager.listInstances().find((info) => info.id === genericId)?.boundSessionId).toBeNull()
+    expect(manager.listInstances().find((info) => info.id === socialId)?.boundSessionId).toBe('sess-spotify')
+    expect((manager as any).instances.get(socialId).partition).toBe('persist:social-spotify-spotify-main')
+  })
+
+  it('refuses to steal a saved social profile locked to another session', () => {
+    manager.useSocialProfileForSession('sess-owner', 'spotify', 'spotify-main')
+
+    expect(() => manager.useSocialProfileForSession('sess-other', 'spotify', 'spotify-main')).toThrow(
+      'locked to another session',
+    )
+  })
+
+  it('switches a session to the exact isolated paid-ad account partition', () => {
+    const genericId = manager.createForSession('sess-meta')
+
+    const adId = manager.useAdProfileForSession('sess-meta', 'meta-ads', 'artist-main')
+
+    expect(adId).toBe('ads-meta-ads-artist-main')
+    expect(manager.listInstances().find((info) => info.id === genericId)?.boundSessionId).toBeNull()
+    expect(manager.listInstances().find((info) => info.id === adId)?.boundSessionId).toBe('sess-meta')
+    expect((manager as any).instances.get(adId).partition).toBe('persist:ads-meta-ads-artist-main')
+  })
+
+  it('refuses to steal a paid-ad account locked to another session', () => {
+    manager.useAdProfileForSession('sess-owner', 'google-ads', 'artist-main')
+
+    expect(() => manager.useAdProfileForSession('sess-other', 'google-ads', 'artist-main')).toThrow(
+      'locked to another session',
+    )
+  })
+
+  it('rejects invalid paid-ad account routing input', () => {
+    expect(() => manager.useAdProfileForSession('sess-1', 'spotify-ads', 'main')).toThrow('Unsupported ad provider')
+    expect(() => manager.useAdProfileForSession('sess-1', 'meta-ads', '../main')).toThrow('Account name must be a short slug')
+  })
+
+  it('forgets a paid-ad profile by destroying its instance and clearing its partition', async () => {
+    manager.useAdProfileForSession('sess-meta', 'meta-ads', 'artist-main')
+
+    await manager.forgetAdProfile('meta-ads', 'artist-main')
+
+    expect(manager.listInstances().find((info) => info.id === 'ads-meta-ads-artist-main')).toBeUndefined()
+    expect(mockSessionFromPartition).toHaveBeenLastCalledWith('persist:ads-meta-ads-artist-main')
+    expect(mockClearStorageData).toHaveBeenCalledTimes(1)
+    expect(mockClearCache).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects invalid social profile routing input', () => {
+    expect(() => manager.useSocialProfileForSession('sess-1', 'mail', 'main')).toThrow('Unsupported social platform')
+    expect(() => manager.useSocialProfileForSession('sess-1', 'spotify', '../main')).toThrow('Profile must be a short slug')
   })
 
   it('creates custom-partition instances for isolated browser state', () => {

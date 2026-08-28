@@ -7,6 +7,38 @@ import { resolveAgentReferences, hasMissingReferences, describeMissingReferences
 import { composeAgentSystemPrompt } from '@/lib/compose-agent-prompt'
 import type { AgentDefinitionDTO, ContextDocDTO, CreateSessionOptions, Session, LoadedSkill, LoadedSource } from '../../shared/types'
 
+export async function ensureAgentDeclaredSkillsEnabled(params: {
+  agent: AgentDefinitionDTO
+  workspaceId: string
+  activeSkills: LoadedSkill[]
+  listGlobalSkills?: (workspaceId: string) => Promise<LoadedSkill[]>
+  setGlobalSkillEnabled?: (workspaceId: string, skillSlug: string, enabled: boolean) => Promise<string[]>
+  getSkills?: (workspaceId: string) => Promise<LoadedSkill[]>
+}): Promise<LoadedSkill[]> {
+  const declaredSkillSlugs = params.agent.metadata.skills ?? []
+  if (declaredSkillSlugs.length === 0) return params.activeSkills
+
+  const activeSlugs = new Set(params.activeSkills.map((skill) => skill.slug))
+  const missingSlugs = declaredSkillSlugs.filter((slug) => !activeSlugs.has(slug))
+  if (missingSlugs.length === 0) return params.activeSkills
+
+  const listGlobalSkills = params.listGlobalSkills ?? window.electronAPI.listGlobalSkills
+  const setGlobalSkillEnabled = params.setGlobalSkillEnabled ?? window.electronAPI.setGlobalSkillEnabled
+  const getSkills = params.getSkills ?? window.electronAPI.getSkills
+  const globalSkills = await listGlobalSkills(params.workspaceId)
+  const installedGlobalSlugs = new Set(globalSkills.map((skill) => skill.slug))
+  const installedMissingSlugs = missingSlugs.filter((slug) => installedGlobalSlugs.has(slug))
+  if (installedMissingSlugs.length === 0) return params.activeSkills
+
+  // Write sequentially because each update reads and rewrites the workspace's
+  // enabled-global-skills manifest. Parallel writes could lose a sibling slug.
+  for (const slug of installedMissingSlugs) {
+    await setGlobalSkillEnabled(params.workspaceId, slug, true)
+  }
+
+  return getSkills(params.workspaceId)
+}
+
 export function buildAgentCreateSessionOptions(
   agent: AgentDefinitionDTO,
   /**
@@ -182,6 +214,19 @@ export async function openAgentSessionComposer(params: {
     message: string,
   ) => boolean | void | Promise<boolean | void>
 }): Promise<Session> {
+  let launchSkills = params.skills
+  if (launchSkills) {
+    try {
+      launchSkills = await ensureAgentDeclaredSkillsEnabled({
+        agent: params.agent,
+        workspaceId: params.workspaceId,
+        activeSkills: launchSkills,
+      })
+    } catch (error) {
+      console.error(`[Agents] Failed to activate declared skills for ${params.agent.slug}:`, error)
+    }
+  }
+
   const contextDocs = params.contextDocs
     ?? await window.electronAPI.listWorkspaceContextDocsForAgent(params.workspaceId, params.agent.slug)
   const [userMemoryEntries, agentMemoryEntries] = await Promise.all([
@@ -192,8 +237,8 @@ export async function openAgentSessionComposer(params: {
   // Surface a one-off toast if the agent declares slugs that don't resolve in
   // this workspace. The session still spawns without them; the warning is so
   // the user knows why output may be reduced.
-  if (params.skills && params.sources) {
-    const resolution = resolveAgentReferences(params.agent, params.skills, params.sources)
+  if (launchSkills && params.sources) {
+    const resolution = resolveAgentReferences(params.agent, launchSkills, params.sources)
     if (hasMissingReferences(resolution)) {
       const summary = describeMissingReferences(resolution)
       toast.warning(`${params.agent.metadata.name}: ${summary}`, {
@@ -205,8 +250,8 @@ export async function openAgentSessionComposer(params: {
   // When live skills/sources are available, pass them through so the session
   // gets a composed system prompt (persona body + bundle footer) and any
   // missing slugs are dropped from agentSkillSlugs/enabledSourceSlugs.
-  const context = params.skills && params.sources
-    ? { skills: params.skills, sources: params.sources, contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries }
+  const context = launchSkills && params.sources
+    ? { skills: launchSkills, sources: params.sources, contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries }
     : contextDocs.length > 0 || userMemoryEntries.length > 0 || agentMemoryEntries.length > 0 || (params.agentCatalog?.length ?? 0) > 0
       ? { skills: [], sources: [], contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries }
       : undefined

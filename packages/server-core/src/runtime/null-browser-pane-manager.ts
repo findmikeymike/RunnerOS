@@ -43,6 +43,18 @@ export class NullBrowserPaneManager implements IBrowserPaneManager {
 
   // -- Instance management --
   createForSession(_sessionId: string, _options?: { show?: boolean }): string { return unavailable('createForSession') }
+  useSocialProfileForSession(
+    _sessionId: string,
+    _platform: string,
+    _profile: string,
+    _options?: { show?: boolean },
+  ): string { return unavailable('useSocialProfileForSession') }
+  useAdProfileForSession(
+    _sessionId: string,
+    _provider: string,
+    _profile: string,
+    _options?: { show?: boolean },
+  ): string { return unavailable('useAdProfileForSession') }
   getInstance(_id: string): BrowserInstanceSnapshot | undefined { return undefined }
   listInstances(): BrowserInstanceInfo[] { return [] }
   focusBoundForSession(_sessionId: string): string { return unavailable('focusBoundForSession') }

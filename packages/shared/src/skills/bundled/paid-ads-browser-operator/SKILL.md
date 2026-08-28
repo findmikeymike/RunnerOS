@@ -14,10 +14,11 @@ Use this skill to keep paid-ads work useful when APIs are unavailable while stil
    - Meta Ads: use `ads-operator --platform meta` as the local browser/export/setup operator. Use `meta-ads` only when authenticated and eligible.
    - Spotify Ads: use browser mode for Spotify Ads Manager / Spotify Ad Studio in V1. Spotify Ads API is optional later and must not block work.
 2. If structured access is missing, blocked, expired, or incomplete, switch to browser dashboard/export mode.
-3. For Spotify audience strategy, use Spotify for Artists browser intel when the user is logged in: top cities, listener demographics, source/playlist signal, song performance, and audience trend clues. Do not confuse Spotify for Artists with Spotify Ads Manager.
-4. If browser automation is blocked, ask the user for an export/screenshot and give exact platform, account, date range, table, columns, and file type.
-5. Use screenshots as visual evidence only. Use API/export data for numbers when available.
-6. Use Computer Use only when normal browser automation cannot inspect or operate the page and the user has enabled it.
+3. Before Meta or Google browser work, run `browser_tool accounts`, resolve one exact saved dashboard account, and attach it with `browser_tool account <meta-ads|google-ads> <profile>`. These logins live in Settings > Ad Accounts. Never use a generic browser session when a configured account exists.
+4. For Spotify audience strategy, use Spotify for Artists browser intel when the user is logged in: top cities, listener demographics, source/playlist signal, song performance, and audience trend clues. Do not confuse Spotify for Artists with Spotify Ads Manager.
+5. If browser automation is blocked, ask the user for an export/screenshot and give exact platform, account, date range, table, columns, and file type.
+6. Use screenshots as visual evidence only. Use API/export data for numbers when available.
+7. Use Computer Use only when normal browser automation cannot inspect or operate the page and the user has enabled it.
 
 ## Ads Operator
 
@@ -77,6 +78,7 @@ For Google Ads:
 For Spotify Ads:
 
 - V1 path is browser-guided Spotify Ads Manager / Spotify Ad Studio, not API-first.
+- Configure Spotify Ads Manager under Settings > Spotify, then attach the exact `spotify/<profile>` saved login before opening the dashboard.
 - Use Spotify for Artists only for audience and song intel, not campaign creation. It can inform cities, age/gender if visible, listener growth, top songs, playlist/source signal, and campaign geography.
 - In Spotify Ads Manager, inspect or draft campaigns, ad sets, ads, targeting, budget, placements/formats, and reporting only when the user is logged in.
 - Before campaign setup, identify campaign objective, song/landing URL, creative assets, audio/video format, territories, budget, dates, audience/artist targeting, and CTA.

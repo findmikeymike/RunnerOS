@@ -39,6 +39,8 @@ export const SETTINGS_PAGES = [
   { id: 'ai' as const, labelKey: 'settings.ai.title', descriptionKey: 'settings.ai.description' },
   { id: 'secrets' as const, labelKey: 'settings.secrets.title', descriptionKey: 'settings.secrets.description' },
   { id: 'social-accounts' as const, labelKey: 'settings.socialAccounts.title', descriptionKey: 'settings.socialAccounts.description' },
+  { id: 'spotify' as const, labelKey: 'settings.spotify.title', descriptionKey: 'settings.spotify.description' },
+  { id: 'ad-accounts' as const, labelKey: 'settings.adAccounts.title', descriptionKey: 'settings.adAccounts.description' },
   { id: 'appearance' as const, labelKey: 'settings.appearance.title', descriptionKey: 'settings.appearance.description' },
   { id: 'input' as const, labelKey: 'settings.input.title', descriptionKey: 'settings.input.description' },
   { id: 'workspace' as const, labelKey: 'settings.workspace.title', descriptionKey: 'settings.workspace.description' },

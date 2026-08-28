@@ -491,6 +491,9 @@ describe('loadAllSources', () => {
     expect(found!.tier).toBe('project');
     expect(found!.config.type).toBe('local');
     expect(found!.config.local?.format).toBe('cli-tool');
+    expect(found!.config.tagline).toContain('Spotify for Artists');
+    expect(found!.guide?.raw).toContain('snapshot spotify');
+    expect(found!.guide?.raw).toContain('profile status spotify');
     expect(found!.guide?.raw).toContain('execute --action-file');
   });
 
@@ -514,6 +517,9 @@ describe('loadAllSources', () => {
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs registry --json', patterns).allowed).toBe(true);
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs doctor --json', patterns).allowed).toBe(true);
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs catalog --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs profile status spotify --profile artist-main --live --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs snapshot spotify --profile artist-main --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs snapshot spotify --profile artist-main --capture-file /tmp/spotify-capture.json --workspace /tmp/artist-workspace --json', patterns).allowed).toBe(true);
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs assets --asset-root assets --platform instagram --json', patterns).allowed).toBe(true);
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs assets --asset-root "/tmp/my assets" --platform instagram --json', patterns).allowed).toBe(true);
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs content --content-root content --json', patterns).allowed).toBe(true);

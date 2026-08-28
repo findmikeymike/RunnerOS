@@ -13,6 +13,9 @@ const BROWSER_TOOL_OVERLAY_EXCLUDED_COMMANDS = new Set([
   '-h',
   'help',
   'open',
+  'profile',
+  'accounts',
+  'account',
   'release',
   'close',
   'hide',
@@ -40,4 +43,3 @@ export function shouldActivateBrowserOverlay(toolName: string, toolInput: unknow
 
   return !BROWSER_TOOL_OVERLAY_EXCLUDED_COMMANDS.has(verb)
 }
-

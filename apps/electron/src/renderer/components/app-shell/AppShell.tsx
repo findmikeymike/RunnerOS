@@ -161,6 +161,7 @@ import { findArtistHQWorkspace, isArtistHQWorkspace as getIsArtistHQWorkspace, i
 import { getArtistHqNavActiveState, isConciergeSessionLike, isReusableConciergeSession } from "@/lib/artist-hq-nav-state"
 import { openAgentSessionComposer } from "@/lib/run-agent"
 import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
+import { openBrowserSidecarAtom } from "@/atoms/browser-pane"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -550,6 +551,7 @@ function AppShellContent({
   } = contextValue
 
   const { t } = useTranslation()
+  const openBrowserSidecar = useSetAtom(openBrowserSidecarAtom)
 
   const [isSidebarVisible, setIsSidebarVisible] = React.useState(() => {
     return storage.get(storage.KEYS.sidebarVisible, !defaultCollapsed)
@@ -2078,19 +2080,19 @@ function AppShellContent({
     setTimeout(() => focusZone('chat', { intent: 'programmatic' }), 50)
   }, [activeWorkspace, focusZone])
 
-  // Create a brand new dedicated browser window and focus it.
-  // Intentionally unbound: this action should always create a NEW window.
+  // Create a fresh controlled browser and reveal it in the shared work sidecar.
+  // It remains unbound so this action always creates a distinct browser surface.
   const handleNewBrowserWindow = useCallback(async () => {
     try {
       const instanceId = await window.electronAPI.browserPane.create({
-        show: true,
+        show: false,
       })
-      await window.electronAPI.browserPane.focus(instanceId)
+      openBrowserSidecar(instanceId)
     } catch (error) {
       console.error('[Chat] Failed to create browser window:', error)
       toast.error(t('toast.failedToCreateBrowser'))
     }
-  }, [t])
+  }, [openBrowserSidecar, t])
 
   // Delete Source - simplified since agents system is removed
   const handleDeleteSource = useCallback(async (sourceSlug: string) => {

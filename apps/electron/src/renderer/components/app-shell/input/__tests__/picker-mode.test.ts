@@ -63,13 +63,23 @@ describe('derivePickerMode', () => {
     ).toBe('switcher')
   })
 
-  test('empty session with one multi-model connection falls through to flat picker', () => {
+  test('one multi-model connection still uses the provider-first switcher', () => {
     expect(
       derivePickerMode(input({
         connectionDefaultModel: null,
         isEmptySession: true,
         connectionCount: 1,
       })),
+    ).toBe('switcher')
+  })
+
+  test('flat mode remains the no-connection safety fallback', () => {
+    expect(
+      derivePickerMode(input({
+        connectionDefaultModel: null,
+        connectionCount: 0,
+      })),
     ).toBe('flat')
   })
+
 })

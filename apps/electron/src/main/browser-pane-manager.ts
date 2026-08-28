@@ -1,15 +1,16 @@
 /**
  * BrowserPaneManager
  *
- * Owns browser instances as dedicated BrowserWindow objects.
- * Each instance maps 1:1 to a full native window with default shared
- * session state, optional isolated partitions, and CDP automation support.
+ * Owns controlled browser instances and their native presentation hosts.
+ * Each instance keeps one parking/pop-out BrowserWindow while its existing
+ * BrowserViews can be docked into an Artist OS window without recreating the
+ * page, partition, cookies, or CDP connection.
  */
 
 import { join, parse as parsePath } from 'path'
 import { existsSync, mkdirSync } from 'fs'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
-import { BrowserView, BrowserWindow, app, ipcMain, nativeTheme, session, shell, type Session as ElectronSession } from 'electron'
+import { BrowserView, BrowserWindow, app, ipcMain, nativeTheme, session, shell, type Event as ElectronEvent, type Session as ElectronSession } from 'electron'
 import { mainLog } from './logger'
 import type { WindowManager } from './window-manager'
 import { BrowserCDP, type AccessibilitySnapshot, type ElementGeometry } from './browser-cdp'
@@ -17,6 +18,7 @@ import {
   type BrowserEmptyStateLaunchPayload,
   type BrowserEmptyStateLaunchResult,
   type BrowserInstanceInfo,
+  type BrowserPaneBounds,
 } from '../shared/types'
 import { DEFAULT_THEME, loadAppTheme } from '@craft-agent/shared/config'
 import { getBrowserLiveFxCornerRadii } from '../shared/browser-live-fx'
@@ -116,6 +118,9 @@ const TOOLBAR_CHANNELS = {
   THEME_COLOR: 'browser-toolbar:theme-color',
 } as const
 const SESSION_PARTITION = BROWSER_PANE_SESSION_PARTITION
+const SOCIAL_BROWSER_PLATFORMS = new Set(['instagram', 'tiktok', 'x', 'youtube', 'spotify'])
+const AD_BROWSER_PROVIDERS = new Set(['meta-ads', 'google-ads'])
+const SOCIAL_BROWSER_PROFILE_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/i
 
 interface AgentControlState {
   active: boolean
@@ -133,6 +138,10 @@ interface BrowserInstance {
   id: string
   partition: string
   window: BrowserWindow
+  attachedHost: BrowserWindow
+  sidecarHost: BrowserWindow | null
+  sidecarBounds: BrowserPaneBounds | null
+  sidecarHostCleanup: (() => void) | null
   toolbarView: BrowserView
   pageView: BrowserView
   nativeOverlayView: BrowserView
@@ -322,6 +331,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   private lastNetworkActivityByWebContentsId = new Map<number, number>()
   private popupWindowsByParentInstanceId = new Map<string, Set<BrowserWindow>>()
   private popupParentByWebContentsId = new Map<number, string>()
+  private dockedInstanceByHostWebContentsId = new Map<number, string>()
   private windowManager: WindowManager | null = null
   private sessionPathResolver: ((sessionId: string) => string | null) | null = null
   private authorizePaidExecution: (() => void) | null = null
@@ -441,6 +451,10 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       id: instanceId,
       partition,
       window,
+      attachedHost: window,
+      sidecarHost: null,
+      sidecarBounds: null,
+      sidecarHostCleanup: null,
       toolbarView,
       pageView,
       nativeOverlayView,
@@ -519,6 +533,10 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     if (!instance) {
       mainLog.info(`[browser-pane] destroy requested for missing instance id=${id}`)
       return
+    }
+
+    if (instance.sidecarHost) {
+      this.parkInstance(instance, false, 'destroy')
     }
 
     const destroyedBefore = instance.window.isDestroyed()
@@ -753,9 +771,178 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     instance.pageView.webContents.stop()
   }
 
+  dock(id: string, hostWindow: BrowserWindow, bounds: BrowserPaneBounds): void {
+    const instance = this.requireAliveInstance(id)
+    if (hostWindow.isDestroyed()) throw new Error('Browser sidecar host window was closed')
+    if (hostWindow === instance.window) throw new Error('Browser sidecar requires an Artist OS host window')
+
+    const normalizedBounds = this.normalizeSidecarBounds(hostWindow, bounds)
+    const hostWebContentsId = hostWindow.webContents.id
+    const alreadyDockedId = this.dockedInstanceByHostWebContentsId.get(hostWebContentsId)
+    if (alreadyDockedId && alreadyDockedId !== id) {
+      const previous = this.instances.get(alreadyDockedId)
+      if (previous) this.parkInstance(previous, false, 'sidecar-switch')
+    }
+
+    if (instance.sidecarHost && instance.sidecarHost !== hostWindow) {
+      // Reparent synchronously without broadcasting an intermediate hidden state.
+      // The previous renderer should react only to the final ownership update.
+      this.parkInstance(instance, false, 'sidecar-reparent', false)
+    }
+
+    if (instance.attachedHost !== hostWindow) {
+      this.forceCloseToolbarMenu(instance, 'sidecar-dock')
+      this.detachViews(instance, instance.attachedHost)
+      this.attachViews(instance, hostWindow)
+      instance.attachedHost = hostWindow
+    }
+
+    instance.sidecarHost = hostWindow
+    instance.sidecarBounds = normalizedBounds
+    instance.pendingShowOnReady = false
+    instance.pendingShowToken += 1
+    instance.window.hide()
+    instance.isVisible = true
+    this.dockedInstanceByHostWebContentsId.set(hostWebContentsId, id)
+    this.registerSidecarHostLifecycle(instance, hostWindow)
+    this.layoutAllViews(instance)
+    this.emitStateChange(instance)
+  }
+
+  updateDockBounds(id: string, hostWindow: BrowserWindow, bounds: BrowserPaneBounds): void {
+    const instance = this.requireAliveInstance(id)
+    if (instance.sidecarHost !== hostWindow) {
+      throw new Error('Browser sidecar bounds can only be changed by its owning window')
+    }
+    instance.sidecarBounds = this.normalizeSidecarBounds(hostWindow, bounds)
+    this.layoutAllViews(instance)
+  }
+
+  hideSidecar(id: string, hostWindow?: BrowserWindow): void {
+    const instance = this.instances.get(id)
+    if (!instance?.sidecarHost) return
+    if (hostWindow && instance.sidecarHost !== hostWindow) {
+      throw new Error('Browser sidecar can only be hidden by its owning window')
+    }
+    this.parkInstance(instance, false, 'sidecar-hide')
+  }
+
+  popOut(id: string, hostWindow?: BrowserWindow): void {
+    const instance = this.requireAliveInstance(id)
+    if (instance.sidecarHost && hostWindow && instance.sidecarHost !== hostWindow) {
+      throw new Error('Browser sidecar can only be popped out by its owning window')
+    }
+    if (instance.sidecarHost) {
+      this.parkInstance(instance, true, 'sidecar-pop-out')
+      return
+    }
+    this.focus(id)
+  }
+
+  private normalizeSidecarBounds(hostWindow: BrowserWindow, bounds: BrowserPaneBounds): BrowserPaneBounds {
+    const [hostWidth, hostHeight] = hostWindow.getContentSize()
+    const minimumWidth = Math.min(320, hostWidth)
+    const minimumHeight = Math.min(240, hostHeight)
+    const x = Math.max(0, Math.min(Math.floor(Number(bounds.x) || 0), Math.max(0, hostWidth - minimumWidth)))
+    const y = Math.max(0, Math.min(Math.floor(Number(bounds.y) || 0), Math.max(0, hostHeight - minimumHeight)))
+    const width = Math.max(minimumWidth, Math.min(Math.floor(Number(bounds.width) || minimumWidth), Math.max(minimumWidth, hostWidth - x)))
+    const height = Math.max(minimumHeight, Math.min(Math.floor(Number(bounds.height) || minimumHeight), Math.max(minimumHeight, hostHeight - y)))
+    return { x, y, width, height }
+  }
+
+  private detachViews(instance: BrowserInstance, hostWindow: BrowserWindow): void {
+    if (hostWindow.isDestroyed()) return
+    for (const view of [instance.toolbarView, instance.nativeOverlayView, instance.pageView]) {
+      try {
+        hostWindow.removeBrowserView(view)
+      } catch (error) {
+        mainLog.warn(`[browser-pane] failed to detach view id=${instance.id}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+  }
+
+  private attachViews(instance: BrowserInstance, hostWindow: BrowserWindow): void {
+    if (hostWindow.isDestroyed()) return
+    hostWindow.addBrowserView(instance.pageView)
+    hostWindow.addBrowserView(instance.nativeOverlayView)
+    hostWindow.addBrowserView(instance.toolbarView)
+    hostWindow.setTopBrowserView(instance.toolbarView)
+  }
+
+  private registerSidecarHostLifecycle(instance: BrowserInstance, hostWindow: BrowserWindow): void {
+    instance.sidecarHostCleanup?.()
+
+    const parkIfOwned = (reason: string): void => {
+      if (instance.sidecarHost === hostWindow && this.instances.has(instance.id)) {
+        this.parkInstance(instance, false, reason)
+      }
+    }
+    const onClosed = (): void => parkIfOwned('host-closed')
+    const onRendererGone = (): void => parkIfOwned('host-renderer-gone')
+    const onNavigation = (
+      _event: ElectronEvent,
+      _url: string,
+      _isInPlace: boolean,
+      isMainFrame: boolean,
+    ): void => {
+      if (isMainFrame) parkIfOwned('host-navigation')
+    }
+
+    hostWindow.on('closed', onClosed)
+    hostWindow.webContents.on('render-process-gone', onRendererGone)
+    hostWindow.webContents.on('did-start-navigation', onNavigation)
+    instance.sidecarHostCleanup = () => {
+      hostWindow.off('closed', onClosed)
+      hostWindow.webContents.off('render-process-gone', onRendererGone)
+      hostWindow.webContents.off('did-start-navigation', onNavigation)
+      instance.sidecarHostCleanup = null
+    }
+  }
+
+  private parkInstance(instance: BrowserInstance, showWindow: boolean, reason: string, emitState = true): void {
+    instance.sidecarHostCleanup?.()
+    const sidecarHost = instance.sidecarHost
+    if (sidecarHost) {
+      this.dockedInstanceByHostWebContentsId.delete(sidecarHost.webContents.id)
+      this.detachViews(instance, sidecarHost)
+    }
+
+    if (!instance.window.isDestroyed() && instance.attachedHost !== instance.window) {
+      this.attachViews(instance, instance.window)
+      instance.attachedHost = instance.window
+    }
+
+    instance.sidecarHost = null
+    instance.sidecarBounds = null
+    this.layoutAllViews(instance)
+
+    if (showWindow && !instance.window.isDestroyed()) {
+      if (instance.window.isMinimized()) instance.window.restore()
+      instance.window.show()
+      instance.window.focus()
+      instance.isVisible = true
+    } else {
+      instance.window.hide()
+      instance.isVisible = false
+    }
+
+    mainLog.info(`[browser-pane] parked instance id=${instance.id} reason=${reason} show=${showWindow}`)
+    if (emitState) this.emitStateChange(instance)
+  }
+
   focus(id: string): void {
     const instance = this.instances.get(id)
     if (!instance) return
+
+    if (instance.sidecarHost && !instance.sidecarHost.isDestroyed()) {
+      instance.sidecarHost.show()
+      instance.sidecarHost.focus()
+      instance.pageView.webContents.focus()
+      instance.isVisible = true
+      this.interactedCallback?.(instance.id)
+      this.emitStateChange(instance)
+      return
+    }
 
     const win = instance.window
     if (win.isDestroyed()) return
@@ -781,6 +968,11 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   hide(id: string): void {
     const instance = this.instances.get(id)
     if (!instance) return
+
+    if (instance.sidecarHost) {
+      this.parkInstance(instance, false, 'hide')
+      return
+    }
 
     const win = instance.window
     if (win.isDestroyed()) return
@@ -1565,6 +1757,13 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   windowResize(id: string, width: number, height: number): { width: number; height: number } {
     const instance = this.requireAliveInstance(id)
 
+    if (instance.sidecarBounds) {
+      return {
+        width: instance.sidecarBounds.width,
+        height: Math.max(0, instance.sidecarBounds.height - TOOLBAR_HEIGHT),
+      }
+    }
+
     const requestedViewportWidth = Math.max(320, Math.floor(width))
     const requestedViewportHeight = Math.max(240, Math.floor(height))
     instance.window.setContentSize(requestedViewportWidth, requestedViewportHeight + TOOLBAR_HEIGHT)
@@ -1751,6 +1950,110 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     })
   }
 
+  useSocialProfileForSession(
+    sessionId: string,
+    platform: string,
+    profile: string,
+    options?: { show?: boolean },
+  ): string {
+    const normalizedPlatform = platform.trim().toLowerCase()
+    const normalizedProfile = profile.trim()
+    if (!SOCIAL_BROWSER_PLATFORMS.has(normalizedPlatform)) {
+      throw new Error(`Unsupported social platform: ${normalizedPlatform || '(missing)'}`)
+    }
+    if (!SOCIAL_BROWSER_PROFILE_RE.test(normalizedProfile)) {
+      throw new Error('Profile must be a short slug using letters, numbers, dashes, or underscores')
+    }
+
+    const instanceId = `social-${normalizedPlatform}-${normalizedProfile}`
+    const partition = `persist:social-${normalizedPlatform}-${normalizedProfile}`
+    const existing = this.instances.get(instanceId)
+    if (existing?.boundSessionId && existing.boundSessionId !== sessionId) {
+      throw new Error(`Saved social browser profile ${normalizedPlatform}/${normalizedProfile} is locked to another session`)
+    }
+    if (existing && existing.partition !== partition) {
+      throw new Error(`Saved social browser profile ${normalizedPlatform}/${normalizedProfile} has an invalid partition`)
+    }
+
+    // A session must have one canonical browser target. Release any generic
+    // browser first so snapshot/click/evaluate cannot drift off this account.
+    this.unbindAllForSession(sessionId)
+
+    if (!existing) {
+      this.createInstance(instanceId, {
+        show: options?.show ?? false,
+        ownerType: 'session',
+        ownerSessionId: sessionId,
+        partition,
+      })
+    } else {
+      this.bindSession(instanceId, sessionId)
+      if (options?.show) this.focus(instanceId)
+    }
+
+    mainLog.info(`[browser-pane] Bound saved social profile ${normalizedPlatform}/${normalizedProfile} to session ${sessionId} instance=${instanceId}`)
+    return instanceId
+  }
+
+  useAdProfileForSession(
+    sessionId: string,
+    provider: string,
+    profile: string,
+    options?: { show?: boolean },
+  ): string {
+    const normalizedProvider = provider.trim().toLowerCase()
+    const normalizedProfile = profile.trim()
+    if (!AD_BROWSER_PROVIDERS.has(normalizedProvider)) {
+      throw new Error(`Unsupported ad provider: ${normalizedProvider || '(missing)'}`)
+    }
+    if (!SOCIAL_BROWSER_PROFILE_RE.test(normalizedProfile)) {
+      throw new Error('Account name must be a short slug using letters, numbers, dashes, or underscores')
+    }
+
+    const instanceId = `ads-${normalizedProvider}-${normalizedProfile}`
+    const partition = `persist:ads-${normalizedProvider}-${normalizedProfile}`
+    const existing = this.instances.get(instanceId)
+    if (existing?.boundSessionId && existing.boundSessionId !== sessionId) {
+      throw new Error(`Saved ad browser account ${normalizedProvider}/${normalizedProfile} is locked to another session`)
+    }
+    if (existing && existing.partition !== partition) {
+      throw new Error(`Saved ad browser account ${normalizedProvider}/${normalizedProfile} has an invalid partition`)
+    }
+
+    this.unbindAllForSession(sessionId)
+    if (!existing) {
+      this.createInstance(instanceId, {
+        show: options?.show ?? false,
+        ownerType: 'session',
+        ownerSessionId: sessionId,
+        partition,
+      })
+    } else {
+      this.bindSession(instanceId, sessionId)
+      if (options?.show) this.focus(instanceId)
+    }
+
+    mainLog.info(`[browser-pane] Bound saved ad account ${normalizedProvider}/${normalizedProfile} to session ${sessionId} instance=${instanceId}`)
+    return instanceId
+  }
+
+  async forgetAdProfile(provider: string, profile: string): Promise<void> {
+    const normalizedProvider = provider.trim().toLowerCase()
+    const normalizedProfile = profile.trim()
+    if (!AD_BROWSER_PROVIDERS.has(normalizedProvider)) {
+      throw new Error(`Unsupported ad provider: ${normalizedProvider || '(missing)'}`)
+    }
+    if (!SOCIAL_BROWSER_PROFILE_RE.test(normalizedProfile)) {
+      throw new Error('Account name must be a short slug using letters, numbers, dashes, or underscores')
+    }
+    const instanceId = `ads-${normalizedProvider}-${normalizedProfile}`
+    const partition = `persist:ads-${normalizedProvider}-${normalizedProfile}`
+    if (this.instances.has(instanceId)) this.destroyInstance(instanceId)
+    const persistentSession = session.fromPartition(partition)
+    await persistentSession.clearStorageData()
+    await persistentSession.clearCache()
+  }
+
   focusBoundForSession(sessionId: string): string {
     const id = this.createForSession(sessionId, { show: true })
     this.focus(id)
@@ -1895,16 +2198,25 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   private getToolbarEffectiveHeight(instance: BrowserInstance): number {
     if (!instance.toolbarMenuOpen) return TOOLBAR_HEIGHT
 
-    const [, contentHeight] = instance.window.getContentSize()
-    return Math.max(TOOLBAR_HEIGHT, contentHeight)
+    return Math.max(TOOLBAR_HEIGHT, this.getPresentationRect(instance).height)
+  }
+
+  private getPresentationHost(instance: BrowserInstance): BrowserWindow {
+    return instance.sidecarHost ?? instance.window
+  }
+
+  private getPresentationRect(instance: BrowserInstance): BrowserPaneBounds {
+    if (instance.sidecarBounds) return instance.sidecarBounds
+    const [width, height] = instance.window.getContentSize()
+    return { x: 0, y: 0, width, height }
   }
 
   private layoutToolbarView(instance: BrowserInstance): void {
-    const [width] = instance.window.getContentSize()
+    const { x, y, width } = this.getPresentationRect(instance)
     const toolbarHeight = this.getToolbarEffectiveHeight(instance)
 
-    instance.toolbarView.setBounds({ x: 0, y: 0, width, height: toolbarHeight })
-    instance.toolbarView.setAutoResize({ width: true, height: false })
+    instance.toolbarView.setBounds({ x, y, width, height: toolbarHeight })
+    instance.toolbarView.setAutoResize({ width: !instance.sidecarHost, height: false })
   }
 
   private updateNativeOverlayState(instance: BrowserInstance): void {
@@ -1913,19 +2225,20 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     const menuActive = !!instance.toolbarMenuOverlayActive
     const shouldShow = agentActive || menuActive
 
-    if (!shouldShow || !instance.nativeOverlayReady || instance.window.isDestroyed()) {
+    const hostWindow = this.getPresentationHost(instance)
+    if (!shouldShow || !instance.nativeOverlayReady || hostWindow.isDestroyed()) {
       instance.nativeOverlayView.setBounds({ x: 0, y: 0, width: 0, height: 0 })
-      if (!instance.window.isDestroyed()) {
-        instance.window.setTopBrowserView(instance.toolbarView)
+      if (!hostWindow.isDestroyed()) {
+        hostWindow.setTopBrowserView(instance.toolbarView)
       }
       return
     }
 
-    const [width, height] = instance.window.getContentSize()
+    const { x, y, width, height } = this.getPresentationRect(instance)
     const overlayHeight = Math.max(100, height - TOOLBAR_HEIGHT)
-    instance.nativeOverlayView.setBounds({ x: 0, y: TOOLBAR_HEIGHT, width, height: overlayHeight })
-    instance.nativeOverlayView.setAutoResize({ width: true, height: true })
-    instance.window.setTopBrowserView(instance.toolbarView)
+    instance.nativeOverlayView.setBounds({ x, y: y + TOOLBAR_HEIGHT, width, height: overlayHeight })
+    instance.nativeOverlayView.setAutoResize({ width: !instance.sidecarHost, height: !instance.sidecarHost })
+    hostWindow.setTopBrowserView(instance.toolbarView)
 
     if (agentActive) {
       const label = this.getAgentControlLabel(control)
@@ -2012,6 +2325,15 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       }
     }
 
+    if (instance.sidecarHost) {
+      const sidecarHost = instance.sidecarHost
+      runFinalizeCleanup('sidecarHostCleanup', () => instance.sidecarHostCleanup?.())
+      this.dockedInstanceByHostWebContentsId.delete(sidecarHost.webContents.id)
+      runFinalizeCleanup('detachSidecarViews', () => this.detachViews(instance, sidecarHost))
+      instance.sidecarHost = null
+      instance.sidecarBounds = null
+    }
+
     runFinalizeCleanup('closePopupsForParent', () => this.closePopupsForParent(instance.id, 'parent_destroy'))
     runFinalizeCleanup('applyAgentControlLock', () => this.applyAgentControlLock(instance, false))
     runFinalizeCleanup('updateNativeOverlayState', () => this.updateNativeOverlayState(instance))
@@ -2022,17 +2344,18 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   private layoutPageView(instance: BrowserInstance): void {
-    const [width, height] = instance.window.getContentSize()
-    instance.pageView.setBounds({ x: 0, y: TOOLBAR_HEIGHT, width, height: Math.max(100, height - TOOLBAR_HEIGHT) })
-    instance.pageView.setAutoResize({ width: true, height: true })
+    const { x, y, width, height } = this.getPresentationRect(instance)
+    instance.pageView.setBounds({ x, y: y + TOOLBAR_HEIGHT, width, height: Math.max(100, height - TOOLBAR_HEIGHT) })
+    instance.pageView.setAutoResize({ width: !instance.sidecarHost, height: !instance.sidecarHost })
     this.updateNativeOverlayState(instance)
   }
 
   private layoutAllViews(instance: BrowserInstance): void {
     this.layoutToolbarView(instance)
     this.layoutPageView(instance)
-    if (!instance.window.isDestroyed()) {
-      instance.window.setTopBrowserView(instance.toolbarView)
+    const hostWindow = this.getPresentationHost(instance)
+    if (!hostWindow.isDestroyed()) {
+      hostWindow.setTopBrowserView(instance.toolbarView)
     }
   }
 
@@ -2301,6 +2624,13 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     instance.toolbarReady = true
     mainLog.info(`[browser-pane] toolbar ready id=${instance.id} reason=${reason}`)
+
+    if (instance.sidecarHost) {
+      instance.pendingShowOnReady = false
+      instance.showOnCreate = false
+      this.layoutAllViews(instance)
+      return
+    }
 
     const shouldShowNow = instance.showOnCreate || instance.pendingShowOnReady
     if (!shouldShowNow) return
@@ -2860,7 +3190,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     })
 
     instance.window.on('resize', () => {
-      this.layoutAllViews(instance)
+      if (!instance.sidecarHost) this.layoutAllViews(instance)
     })
 
     toolbarWc.on('did-finish-load', () => {
@@ -3081,7 +3411,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
           minHeight: 520,
           show: true,
           autoHideMenuBar: true,
-          parent: instance.window,
+          parent: this.getPresentationHost(instance),
           modal: false,
           webPreferences: {
             partition: instance.partition,
@@ -3103,6 +3433,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     })
 
     instance.window.on('show', () => {
+      if (instance.sidecarHost) return
       instance.isVisible = true
       this.emitStateChange(instance)
       this.reapplyAgentControlVisual(instance)
@@ -3114,6 +3445,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     })
 
     instance.window.on('hide', () => {
+      if (instance.sidecarHost) return
       instance.isVisible = false
       this.emitStateChange(instance)
       this.updateNativeOverlayState(instance)
@@ -3137,6 +3469,8 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       ownerType: instance.ownerType,
       ownerSessionId: instance.ownerSessionId,
       isVisible: instance.isVisible,
+      presentation: instance.sidecarHost ? 'sidecar' : 'window',
+      sidecarHostWebContentsId: instance.sidecarHost?.webContents.id ?? null,
       agentControlActive: !!instance.agentControl?.active,
       themeColor: instance.themeColor,
     }

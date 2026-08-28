@@ -11,7 +11,7 @@ describe('Team Mode automated browser guard', () => {
   })
 
   it('allows read-only browser inspection for automation sessions', () => {
-    for (const command of ['open', 'navigate', 'snapshot', 'find', 'screenshot', 'network']) {
+    for (const command of ['open', 'profile', 'accounts', 'account', 'navigate', 'snapshot', 'find', 'screenshot', 'network']) {
       expect(() => assertAutomatedTeamBrowserCommandAllowed({
         teamModeEnabled: true,
         launchOrigin: 'automation',

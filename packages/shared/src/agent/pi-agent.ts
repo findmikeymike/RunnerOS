@@ -47,6 +47,7 @@ import { getCoAuthorPreference } from '../config/preferences.ts';
 
 // Credential manager for token storage
 import { getCredentialManager } from '../credentials/manager.ts';
+import { toPiTransportCredential } from './pi-auth-credential.ts';
 
 // ChatGPT OAuth token refresh (shared with CodexAgent)
 import { refreshChatGptTokens } from '../auth/chatgpt-oauth.ts';
@@ -553,10 +554,8 @@ export class PiAgent extends BaseAgent {
    * Returns a provider-aware credential object for the subprocess,
    * or null if no piAuthProvider is configured (falls back to legacy getApiKey).
    *
-   * OAuth tokens from Craft (Claude Max, ChatGPT Plus, Copilot) are passed as
-   * api_key type because they function as bearer tokens that the Pi SDK's provider
-   * modules use directly. The OAuth exchange happens on the Craft side; by the time
-   * it reaches Pi, it's just an access token.
+   * Subscription providers supported natively by Pi retain their complete OAuth
+   * credential. Other OAuth access tokens continue to use bearer/API-key transport.
    */
   private async getPiAuth(): Promise<{
     provider: string;
@@ -575,27 +574,10 @@ export class PiAgent extends BaseAgent {
       if (this.config.authType === 'oauth') {
         const oauth = await credentialManager.getLlmOAuth(slug);
         if (oauth?.accessToken) {
-          // Copilot: pass full OAuth credential so the Pi SDK can derive the
-          // correct API endpoint from the Copilot token's proxy-ep field.
-          // The refresh token is the GitHub access token used to obtain fresh
-          // Copilot tokens when they expire (~1 hour).
-          if (piAuthProvider === 'github-copilot' && oauth.refreshToken) {
-            this.debug(`Retrieved Copilot OAuth credential for Pi provider: ${piAuthProvider}`);
-            return {
-              provider: piAuthProvider,
-              credential: {
-                type: 'oauth',
-                access: oauth.accessToken,
-                refresh: oauth.refreshToken,
-                expires: oauth.expiresAt ?? 0,
-              },
-            };
-          }
-          // Other OAuth providers: pass as api_key (bearer token)
-          this.debug(`Retrieved OAuth access token for Pi provider: ${piAuthProvider}`);
+          this.debug(`Retrieved OAuth credential for Pi provider: ${piAuthProvider}`);
           return {
             provider: piAuthProvider,
-            credential: { type: 'api_key', key: oauth.accessToken },
+            credential: toPiTransportCredential(piAuthProvider, oauth),
           };
         }
       } else if (this.config.authType === 'iam_credentials') {
@@ -716,8 +698,13 @@ export class PiAgent extends BaseAgent {
       try {
         if (piAuthProvider === 'github-copilot') {
           // Copilot: refresh the short-lived Copilot token using the GitHub access token
-          const { refreshGitHubCopilotToken } = await import('@earendil-works/pi-ai/oauth');
-          const newCreds = await refreshGitHubCopilotToken(stored.refreshToken);
+          const { githubCopilotProvider } = await import('@earendil-works/pi-ai/providers/github-copilot');
+          const copilotOAuth = githubCopilotProvider().auth.oauth;
+          if (!copilotOAuth) throw new Error('GitHub Copilot OAuth is unavailable');
+          const newCreds = await copilotOAuth.refresh(
+            { type: 'oauth', access: stored.accessToken || '', refresh: stored.refreshToken, expires: stored.expiresAt || 0 },
+            AbortSignal.timeout(30_000),
+          );
           await credentialManager.setLlmOAuth(slug, {
             accessToken: newCreds.access,
             refreshToken: newCreds.refresh,
@@ -1000,7 +987,7 @@ export class PiAgent extends BaseAgent {
           });
         }
 
-        // Note: The subprocess should follow this with a synthetic agent_settled event
+        // Note: The subprocess should follow this with a synthetic agent_end event
         // which will call eventQueue.complete(). If it doesn't, handleSubprocessExit()
         // will complete the queue when the process exits.
         break;
@@ -1085,8 +1072,8 @@ export class PiAgent extends BaseAgent {
       this.eventQueue.enqueue(agentEvent);
     }
 
-    // Pi is only terminal once retry, compaction, and queued continuation work settles.
-    if (eventType === 'agent_settled') {
+    // Pi 0.84 emits agent_end when the turn is complete.
+    if (eventType === 'agent_end') {
       this.eventQueue.complete();
     }
   }

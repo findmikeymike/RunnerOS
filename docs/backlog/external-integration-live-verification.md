@@ -1,7 +1,7 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-07-30
+last_verified: 2026-08-27
 source_of_truth: true
 ---
 
@@ -90,7 +90,11 @@ The product must remain unpublished throughout this smoke.
 
 ### Google Ads
 
-- [ ] Connect through the intended RunnerOS Google Ads UI path.
+- [ ] Add the exact dashboard identity through Settings -> Connections -> Ad Accounts, open its isolated sidecar, log in, and verify the discovered customer ID.
+- [ ] Restart RunnerOS and confirm the saved Google Ads login remains isolated and usable.
+- [ ] Run `browser_tool accounts`, then attach the exact profile with `browser_tool account google-ads <profile>`; confirm a generic browser is not used.
+- [ ] With one login that manages multiple client accounts, confirm separate saved profiles cannot silently cross account IDs.
+- [ ] Connect API/OAuth through the intended RunnerOS Services path when structured reporting is required.
 - [ ] Confirm OAuth token, developer token, and optional login customer ID persist after restart.
 - [ ] Run `node tools/google-ads/bin/google-ads.mjs doctor --agent`.
 - [ ] Run account discovery and one GAQL read query.
@@ -99,7 +103,11 @@ The product must remain unpublished throughout this smoke.
 
 ### Meta Ads
 
-- [ ] Connect Meta OAuth through the normal source flow.
+- [ ] Add the exact dashboard identity through Settings -> Connections -> Ad Accounts, open its isolated sidecar, log in, and verify the discovered `act` account ID.
+- [ ] Restart RunnerOS and confirm the saved Meta Ads login remains isolated and usable.
+- [ ] Run `browser_tool accounts`, then attach the exact profile with `browser_tool account meta-ads <profile>`; confirm a generic browser is not used.
+- [ ] With one login that manages multiple client accounts, confirm separate saved profiles cannot silently cross account IDs.
+- [ ] Connect Meta OAuth through the normal source flow when structured API access is desired.
 - [ ] Confirm token persistence after restart.
 - [ ] Run account/campaign/ad set read-only smoke.
 - [ ] Verify beta/access-denied states are clear and actionable.
@@ -190,7 +198,7 @@ account/comment for the live write in step 3.
 
 ### Spotify Analyst / Playlist Creator
 
-- [ ] Connect a real Spotify browser profile through Settings -> Social Accounts and confirm live status.
+- [ ] Connect a real Spotify browser profile through Settings -> Spotify and confirm Artist Analytics, Web Player, and Spotify Ads Manager status independently.
 - [ ] Capture and normalize one Spotify for Artists analytics snapshot, then verify the saved snapshot and `artist-spotify-snapshot` context payload.
 - [ ] Capture a second compatible reporting window and confirm delta/anomaly analysis skips unavailable metrics instead of treating them as zero.
 - [ ] Dry-run, approve, and create one private test playlist; confirm exact account/track bindings, idempotency, and the durable receipt.

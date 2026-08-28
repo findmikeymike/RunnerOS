@@ -30,6 +30,11 @@ export interface MemoryPreferences {
   sidecarMode?: MemorySidecarMode;
 }
 
+export interface LayoutPreferences {
+  /** Width of the adjustable chat/canvas sidecar in pixels. */
+  visualSidecarWidth?: number;
+}
+
 export interface UserPreferences {
   name?: string;
   timezone?: string;
@@ -41,6 +46,7 @@ export interface UserPreferences {
   diffViewer?: DiffViewerPreferences;
   // Memory OS behavior preferences
   memory?: MemoryPreferences;
+  layout?: LayoutPreferences;
   // Whether to include Co-Authored-By trailer on git commits (default: true)
   includeCoAuthoredBy?: boolean;
   // When the preferences were last updated
@@ -82,6 +88,9 @@ export function updatePreferences(updates: Partial<UserPreferences>): UserPrefer
     memory: updates.memory
       ? { ...current.memory, ...updates.memory }
       : current.memory,
+    layout: updates.layout
+      ? { ...current.layout, ...updates.layout }
+      : current.layout,
   };
   savePreferences(updated);
   return updated;

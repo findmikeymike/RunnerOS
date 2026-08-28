@@ -1,4 +1,9 @@
-import { RPC_CHANNELS, type BrowserPaneCreateOptions, type BrowserEmptyStateLaunchPayload } from '../../shared/types'
+import {
+  RPC_CHANNELS,
+  type BrowserPaneBounds,
+  type BrowserPaneCreateOptions,
+  type BrowserEmptyStateLaunchPayload,
+} from '../../shared/types'
 import type { BrowserScreenshotOptions } from '../browser-pane-manager'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
@@ -13,6 +18,10 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.browserPane.RELOAD,
   RPC_CHANNELS.browserPane.STOP,
   RPC_CHANNELS.browserPane.FOCUS,
+  RPC_CHANNELS.browserPane.DOCK,
+  RPC_CHANNELS.browserPane.UPDATE_DOCK_BOUNDS,
+  RPC_CHANNELS.browserPane.HIDE_SIDECAR,
+  RPC_CHANNELS.browserPane.POP_OUT,
   RPC_CHANNELS.browserPane.LAUNCH,
   RPC_CHANNELS.browserPane.SNAPSHOT,
   RPC_CHANNELS.browserPane.CLICK,
@@ -84,6 +93,30 @@ export function registerBrowserHandlers(server: RpcServer, deps: HandlerDeps): v
 
   server.handle(RPC_CHANNELS.browserPane.FOCUS, (_ctx, id: string) => {
     browserPaneManager.focus(id)
+  })
+
+  server.handle(RPC_CHANNELS.browserPane.DOCK, (ctx, id: string, bounds: BrowserPaneBounds) => {
+    const hostWindow = deps.windowManager?.getWindowByWebContentsId(ctx.webContentsId!)
+    if (!hostWindow) throw new Error('Browser sidecar host window not found')
+    browserPaneManager.dock(id, hostWindow, bounds)
+  })
+
+  server.handle(RPC_CHANNELS.browserPane.UPDATE_DOCK_BOUNDS, (ctx, id: string, bounds: BrowserPaneBounds) => {
+    const hostWindow = deps.windowManager?.getWindowByWebContentsId(ctx.webContentsId!)
+    if (!hostWindow) throw new Error('Browser sidecar host window not found')
+    browserPaneManager.updateDockBounds(id, hostWindow, bounds)
+  })
+
+  server.handle(RPC_CHANNELS.browserPane.HIDE_SIDECAR, (ctx, id: string) => {
+    const hostWindow = deps.windowManager?.getWindowByWebContentsId(ctx.webContentsId!)
+    if (!hostWindow) throw new Error('Browser sidecar host window not found')
+    browserPaneManager.hideSidecar(id, hostWindow)
+  })
+
+  server.handle(RPC_CHANNELS.browserPane.POP_OUT, (ctx, id: string) => {
+    const hostWindow = deps.windowManager?.getWindowByWebContentsId(ctx.webContentsId!)
+    if (!hostWindow) throw new Error('Browser sidecar host window not found')
+    browserPaneManager.popOut(id, hostWindow)
   })
 
   server.handle(RPC_CHANNELS.browserPane.LAUNCH, async (ctx, payload: BrowserEmptyStateLaunchPayload) => {
