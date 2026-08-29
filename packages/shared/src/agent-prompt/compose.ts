@@ -31,6 +31,13 @@
  * own concrete types.
  */
 import { buildCanvasGuidanceSection } from '../agent-definitions/canvas-guidance.ts';
+import { CONCIERGE_SLUG } from '../agent-definitions/types.ts';
+import {
+  HQ_STATE_CONTEXT_SLUG,
+  MANAGER_BRIEF_MAX_CHARS,
+  parseHqStateOfPlay,
+  renderManagerBriefPromptSection,
+} from '../hq-state/index.ts';
 import { buildMemorySectionsText } from '../memory/render.ts';
 import type { MemoryEntry } from '../memory/types.ts';
 import { buildSharedIntelPromptSection, isSharedIntelContextSlug } from '../shared-intel/index.ts';
@@ -69,6 +76,7 @@ export interface AgentCatalogEntry {
 
 /** Minimum an agent must expose to have a prompt composed for it. */
 export interface PromptAgent {
+  slug?: string;
   systemPrompt?: string;
   metadata: {
     skills?: string[];
@@ -103,7 +111,7 @@ export interface AgentPromptMemoryOptions {
  *
  * Slugs the agent declares but that are missing from `skills` / `sources` are
  * dropped silently. `contextDocs` must already be filtered by routing — see
- * `loadActiveContextDocsForAgent`, which also applies the Concierge override.
+ * `loadPromptContextDocsForAgent`, which applies authorization and delivery mode.
  */
 export function composeAgentSystemPrompt(
   agent: PromptAgent,
@@ -114,6 +122,9 @@ export function composeAgentSystemPrompt(
   memory: AgentPromptMemoryOptions = {},
 ): string {
   const body = (agent.systemPrompt ?? '').trimEnd();
+  const managerBriefSection = agent.slug?.trim().toLowerCase() === CONCIERGE_SLUG
+    ? buildManagerBriefPromptSectionFromDocs(contextDocs)
+    : '';
   const contextSection = buildWorkspaceContextSection(contextDocs);
   const sharedIntelSection = buildSharedIntelPromptSection(contextDocs);
   const memorySection = buildMemorySection(
@@ -125,6 +136,7 @@ export function composeAgentSystemPrompt(
   const footer = buildAgentBundleFooter(agent, skills, sources);
 
   const parts: string[] = [body];
+  if (managerBriefSection) parts.push(managerBriefSection);
   if (contextSection) parts.push(contextSection);
   if (sharedIntelSection) parts.push(sharedIntelSection);
   if (memorySection) parts.push(memorySection);
@@ -163,6 +175,7 @@ export function buildWorkspaceContextSection(docs: PromptContextDoc[]): string {
     (doc) =>
       doc.metadata.enabled !== false
       && !isSharedIntelContextSlug(doc.slug)
+      && doc.slug !== HQ_STATE_CONTEXT_SLUG
       && doc.body.trim().length > 0,
   );
   if (usable.length === 0) return '';
@@ -171,6 +184,20 @@ export function buildWorkspaceContextSection(docs: PromptContextDoc[]): string {
     return `## ${heading}\n\n${doc.body.trim()}`;
   });
   return `${WORKSPACE_CONTEXT_HEADER}\n\n${blocks.join('\n\n')}`;
+}
+
+/** Converts the one derived HQ document into one bounded HNIC-only prompt section. */
+export function buildManagerBriefPromptSectionFromDocs(docs: PromptContextDoc[]): string {
+  const stateDoc = docs.find((doc) => doc.slug === HQ_STATE_CONTEXT_SLUG && doc.metadata.enabled !== false);
+  if (!stateDoc) return '';
+  const state = parseHqStateOfPlay(stateDoc.body);
+  if (state?.version !== 2) return '';
+  try {
+    const rendered = renderManagerBriefPromptSection(state.managerBrief);
+    return rendered.length <= MANAGER_BRIEF_MAX_CHARS ? rendered : '';
+  } catch {
+    return '';
+  }
 }
 
 /**

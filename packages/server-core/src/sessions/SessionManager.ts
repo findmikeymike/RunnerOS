@@ -131,7 +131,7 @@ import {
 import { listDeepResearchRuns, readDeepResearchRun, profileDeepResearchSource } from '@craft-agent/shared/deep-research'
 import { createLabSong, loadLabSongs, saveLabLyrics } from '@craft-agent/shared/lab'
 import { OutputService } from '../outputs/OutputService'
-import { scheduleHqStateContextRefresh } from '../hq-state/refresh'
+import { refreshHqStateContextDocBestEffort, scheduleHqStateContextRefresh } from '../hq-state/refresh'
 import { publishLatestSpotifySnapshotContext } from '../pulses/spotify-snapshot-publisher'
 import { recoverInterruptedWorkspaceMigrations } from '../workspaces/workspace-migration-recovery'
 import {
@@ -2467,9 +2467,12 @@ export class SessionManager implements ISessionManager {
     const strict = options.referenceMode !== 'lenient'
     const ws = getWorkspaceByNameOrId(workspaceId)
     if (!ws) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { loadActiveContextDocsForAgent } = await import('@craft-agent/shared/workspace-context')
+    const { loadPromptContextDocsForAgent } = await import('@craft-agent/shared/workspace-context')
     const agent = loadGlobalAgent(agentSlug)
     if (!agent) throw new Error(`Agent not found: ${agentSlug}`)
+    if (agent.slug === CONCIERGE_SLUG && ws.artistWorkspaceScope === 'hq') {
+      refreshHqStateContextDocBestEffort(ws.rootPath)
+    }
     const declaredSkillSlugs = agent.metadata.skills ?? []
     const skills = ensureDeclaredGlobalSkillsEnabledForAgent(ws.rootPath, declaredSkillSlugs, loadAllSkills(ws.rootPath))
     const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
@@ -2503,7 +2506,7 @@ export class SessionManager implements ISessionManager {
     }
     const usableSources = sources.filter(isSourceUsable)
     const resolvedSourceSlugs = usableSources.map((s) => s.config.slug)
-    const contextDocs = loadActiveContextDocsForAgent(ws.rootPath, agent.slug)
+    const contextDocs = loadPromptContextDocsForAgent(ws.rootPath, agent.slug)
     const [userMemoryEntries, agentMemoryEntries] = await Promise.all([
       loadUserMemoryEntries(),
       loadAgentMemoryEntries(agent.slug),

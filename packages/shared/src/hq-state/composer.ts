@@ -2,22 +2,27 @@ import type { ArtistCalendar } from '../artist-context/calendar.ts';
 import type { ArtistNetwork } from '../artist-context/network.ts';
 import type { ArtistProfile } from '../artist-context/profile.ts';
 import type { ArtistSpotifySnapshot } from '../artist-context/spotify.ts';
+import { CONCIERGE_SLUG } from '../agent-definitions/types.ts';
 import type { CommunitySummaryDoc } from '../community/types.ts';
 import { ARTIST_VAULT_CONTEXT_SLUG, type VaultManifest } from '../artist-vault/types.ts';
 import { isSharedIntelContextSlug, parseSharedIntelNote } from '../shared-intel/index.ts';
 import type { ContextDocMetadata, LoadedContextDoc } from '../workspace-context/types.ts';
 import { hqIntentFingerprint, hqSemanticIntentId } from './intent.ts';
+import { buildManagerBrief } from './manager-brief.ts';
 import {
   HQ_SOURCE_CONTEXT_SLUGS,
   HQ_STATE_CONTEXT_FENCE,
   HQ_STATE_CONTEXT_SLUG,
   type BuiltHqStateContextDoc,
+  type BuildHqStateInput,
   type HqStateAction,
   type HqStateAttentionItem,
   type HqStateGoalProgress,
   type HqStateEntityRef,
   type HqStateNextMove,
   type HqStateOfPlay,
+  type HqStateOfPlayV1,
+  type HqStateOfPlayV2,
   type HqOperationalItem,
   type HqOperationalSnapshot,
   type HqStateRouteHint,
@@ -77,12 +82,13 @@ export function hqStateContextMetadata(): ContextDocMetadata {
   return {
     name: 'HQ State of Play',
     description: 'Generated operating brief for Artist HQ: next move, attention items, momentum, gaps, and goals.',
-    routing: { mode: 'broadcast' },
+    routing: { mode: 'targeted', agents: [CONCIERGE_SLUG] },
     enabled: true,
+    delivery: 'always',
   };
 }
 
-export function buildHqStateContextDoc(args: { docs: LoadedContextDoc[]; now?: Date; operational?: HqOperationalSnapshot }): BuiltHqStateContextDoc {
+export function buildHqStateContextDoc(args: BuildHqStateInput): BuiltHqStateContextDoc {
   const state = buildHqStateOfPlay(args);
   return {
     slug: HQ_STATE_CONTEXT_SLUG,
@@ -92,7 +98,7 @@ export function buildHqStateContextDoc(args: { docs: LoadedContextDoc[]; now?: D
   };
 }
 
-export function buildHqStateOfPlay(args: { docs: LoadedContextDoc[]; now?: Date; operational?: HqOperationalSnapshot }): HqStateOfPlay {
+export function buildHqStateOfPlay(args: BuildHqStateInput): HqStateOfPlayV2 {
   const now = args.now ?? new Date();
   const docs = args.docs.filter((doc) => doc.slug !== HQ_STATE_CONTEXT_SLUG && doc.metadata.enabled !== false);
   const docBySlug = new Map(docs.map((doc) => [doc.slug, doc]));
@@ -123,7 +129,7 @@ export function buildHqStateOfPlay(args: { docs: LoadedContextDoc[]; now?: Date;
   const goalProgress = buildGoalProgress(input);
   const artistName = clean(input.profile?.artistName) ?? 'Artist HQ';
 
-  return {
+  const stateV1: HqStateOfPlayV1 = {
     version: 1,
     generatedAt: now.toISOString(),
     sources: buildSources(input),
@@ -135,6 +141,22 @@ export function buildHqStateOfPlay(args: { docs: LoadedContextDoc[]; now?: Date;
     momentum,
     missing,
     goalProgress,
+  };
+  return {
+    ...stateV1,
+    version: 2,
+    managerBrief: buildManagerBrief({
+      workspaceId: args.workspaceId,
+      docs,
+      relatedCampaigns: args.relatedCampaigns,
+      operational: args.operational,
+      operatingState: {
+        nextMove,
+        attention,
+        blockers: missing,
+      },
+      now,
+    }),
   };
 }
 
@@ -177,9 +199,8 @@ export function parseHqStateOfPlay(body: string): HqStateOfPlay | null {
   if (!json) return null;
   try {
     const parsed = JSON.parse(json) as Partial<HqStateOfPlay>;
-    if (parsed.version !== 1 || !parsed.generatedAt || !parsed.headline || !parsed.nextMove) return null;
-    return {
-      version: 1,
+    if ((parsed.version !== 1 && parsed.version !== 2) || !parsed.generatedAt || !parsed.headline || !parsed.nextMove) return null;
+    const common: Omit<HqStateOfPlayV1, 'version'> = {
       generatedAt: String(parsed.generatedAt),
       sources: isPlainObject(parsed.sources) ? parsed.sources as Record<string, string> : {},
       sourceHealth: Array.isArray(parsed.sourceHealth) ? parsed.sourceHealth : [],
@@ -195,9 +216,21 @@ export function parseHqStateOfPlay(body: string): HqStateOfPlay | null {
       missing: Array.isArray(parsed.missing) ? parsed.missing.map(String) : [],
       goalProgress: Array.isArray(parsed.goalProgress) ? parsed.goalProgress.map(normalizeGoalProgress).filter(Boolean) as HqStateGoalProgress[] : [],
     };
+    if (parsed.version === 1) return { version: 1, ...common };
+    const managerBrief = normalizeManagerBrief((parsed as Partial<HqStateOfPlayV2>).managerBrief);
+    return managerBrief ? { version: 2, ...common, managerBrief } : null;
   } catch {
     return null;
   }
+}
+
+function normalizeManagerBrief(value: unknown): HqStateOfPlayV2['managerBrief'] | null {
+  if (!isPlainObject(value) || value.version !== 1) return null;
+  if (!clean(value.workspaceId) || !clean(value.revision) || !clean(value.generatedAt)) return null;
+  if (!isPlainObject(value.identity) || !isPlainObject(value.growth) || !isPlainObject(value.operatingState)) return null;
+  if (!Array.isArray(value.trajectory) || !Array.isArray(value.intelligence) || !Array.isArray(value.sourceHealth)) return null;
+  if (!isPlainObject(value.budget) || value.budget.maxChars !== 8000 || typeof value.budget.actualChars !== 'number') return null;
+  return value as unknown as HqStateOfPlayV2['managerBrief'];
 }
 
 function normalizeRecentOutcome(value: unknown): HqStateOfPlay['recentOutcome'] {

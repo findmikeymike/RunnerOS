@@ -44,6 +44,9 @@ describe('HQ state refresh', () => {
 
     expect(refreshed.slug).toBe(HQ_STATE_CONTEXT_SLUG)
     expect(loaded?.metadata.name).toBe('HQ State of Play')
+    expect(loaded?.metadata.routing).toEqual({ mode: 'targeted', agents: ['concierge'] })
+    expect(loaded?.metadata.delivery).toBe('always')
+    expect(state?.version).toBe(2)
     expect(state?.sources['artist-profile']).toBe('2026-07-04T00:00:00.000Z')
     expect(state?.nextMove.title).toBeTruthy()
     expect(state?.nextMove.recommendationId).toMatch(/^sop_[a-f0-9]{20}$/)
@@ -61,8 +64,9 @@ describe('HQ state refresh', () => {
       slug: HQ_STATE_CONTEXT_SLUG,
       metadata: {
         name: 'HQ State of Play',
-        routing: { mode: 'targeted', agents: ['concierge'] },
+        routing: { mode: 'broadcast' },
         enabled: false,
+        delivery: 'on-demand',
       },
       body: 'disabled for now',
     })
@@ -77,7 +81,8 @@ describe('HQ state refresh', () => {
 
     expect(loaded?.metadata.enabled).toBe(false)
     expect(loaded?.metadata.routing).toEqual({ mode: 'targeted', agents: ['concierge'] })
-    expect(parseHqStateOfPlay(loaded?.body ?? '')?.version).toBe(1)
+    expect(loaded?.metadata.delivery).toBe('always')
+    expect(parseHqStateOfPlay(loaded?.body ?? '')?.version).toBe(2)
   })
 
   test('best-effort refresh swallows invalid workspace failures', () => {
@@ -133,6 +138,8 @@ describe('HQ state refresh', () => {
     expect(refreshed.nextMove.recommendationId).not.toBe(dismissedId)
     expect(refreshed.nextMove.recommendationStatus).toBe('proposed')
     expect(refreshed.alternatives.every((move) => move.recommendationId !== dismissedId)).toBe(true)
+    expect(refreshed.version === 2 ? refreshed.managerBrief.operatingState.nextMove?.title : undefined)
+      .toBe(refreshed.nextMove.title)
   })
 
   test('projects a resolved recommendation for feedback after promoting the next move', () => {

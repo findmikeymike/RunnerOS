@@ -3,13 +3,25 @@ import { renderSharedIntelBody, type SharedIntelNote } from '../shared-intel/ind
 import type { ContextDocMetadata, LoadedContextDoc } from '../workspace-context/types.ts';
 import {
   buildHqStateContextDoc,
-  buildHqStateOfPlay,
+  buildHqStateOfPlay as buildHqStateOfPlayBase,
   HQ_STATE_CONTEXT_SLUG,
   parseHqStateOfPlay,
   serializeHqStateOfPlay,
+  type BuildHqStateInput,
 } from './index.ts';
 
 const now = new Date('2026-07-04T12:00:00.000Z');
+
+function buildHqStateOfPlay(
+  args: Omit<BuildHqStateInput, 'workspaceId' | 'relatedCampaigns'>
+    & Partial<Pick<BuildHqStateInput, 'workspaceId' | 'relatedCampaigns'>>,
+) {
+  return buildHqStateOfPlayBase({
+    workspaceId: 'artist-hq',
+    relatedCampaigns: [],
+    ...args,
+  });
+}
 
 describe('HQ State of Play composer', () => {
   test('points first at profile completion when identity context is thin', () => {
@@ -157,14 +169,31 @@ describe('HQ State of Play composer', () => {
   });
 
   test('round-trips generated context body', () => {
-    const built = buildHqStateContextDoc({ now, docs: [profileDoc()] });
+    const built = buildHqStateContextDoc({
+      workspaceId: 'artist-hq',
+      relatedCampaigns: [],
+      now,
+      docs: [profileDoc()],
+    });
     const parsed = parseHqStateOfPlay(built.body);
 
     expect(built.slug).toBe(HQ_STATE_CONTEXT_SLUG);
-    expect(built.metadata.routing).toEqual({ mode: 'broadcast' });
-    expect(parsed?.version).toBe(1);
+    expect(built.metadata.routing).toEqual({ mode: 'targeted', agents: ['concierge'] });
+    expect(built.metadata.delivery).toBe('always');
+    expect(parsed?.version).toBe(2);
     expect(parsed?.nextMove.title).toBeTruthy();
     expect(parsed?.nextMove.route?.prompt).toContain(parsed?.nextMove.title ?? '');
+  });
+
+  test('continues to parse persisted v1 State of Play documents', () => {
+    const current = buildHqStateOfPlay({ now, docs: [profileDoc()] });
+    const { managerBrief: _managerBrief, ...legacyFields } = current;
+    const legacy = { ...legacyFields, version: 1 as const };
+
+    const parsed = parseHqStateOfPlay(serializeHqStateOfPlay(legacy));
+
+    expect(parsed?.version).toBe(1);
+    expect(parsed?.nextMove.title).toBe(current.nextMove.title);
   });
 
   test('ignores disabled source docs when composing state', () => {

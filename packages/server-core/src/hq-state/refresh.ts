@@ -1,4 +1,5 @@
 import {
+  buildManagerBrief,
   buildHqStateContextDoc,
   HQ_STATE_CONTEXT_SLUG,
   serializeHqStateOfPlay,
@@ -8,9 +9,10 @@ import {
   upsertContextDoc,
   type LoadedContextDoc,
 } from '@craft-agent/shared/workspace-context'
-import { buildHqOperationalSnapshot } from './operational'
 import { persistHqRecommendations, reconcileHqRecommendationOutcomes } from './recommendations'
 import { readHqRecommendationOutcomes, readHqRecommendationStore } from '@craft-agent/shared/hq-state/recommendation-storage'
+import { getWorkspaces } from '@craft-agent/shared/config'
+import { buildHqStateInput, findArtistHqWorkspace } from './snapshot'
 
 const scheduledRefreshes = new Map<string, ReturnType<typeof setTimeout>>()
 const REFRESH_DEBOUNCE_MS = 100
@@ -21,14 +23,28 @@ export function shouldRefreshHqStateForContextSlug(slug: string): boolean {
 
 export function refreshHqStateContextDoc(workspaceRootPath: string): LoadedContextDoc {
   const docs = loadAllContextDocs(workspaceRootPath)
-  const operational = buildHqOperationalSnapshot(workspaceRootPath)
+  const input = buildHqStateInput(workspaceRootPath)
   reconcileHqRecommendationOutcomes(workspaceRootPath)
-  const built = buildHqStateContextDoc({ docs, operational })
+  const built = buildHqStateContextDoc(input)
   applyRecentOutcome(built.state, workspaceRootPath)
-  const recommendations = persistHqRecommendations(workspaceRootPath, built.state, operational.scope)
+  const recommendations = persistHqRecommendations(
+    workspaceRootPath,
+    built.state,
+    input.operational?.scope ?? { type: 'hq' },
+  )
   applyRecommendationState(built.state.nextMove, recommendations[0])
   built.state.alternatives.forEach((move, index) => applyRecommendationState(move, recommendations[index + 1]))
   promoteActiveRecommendation(built.state)
+  if (built.state.version === 2) {
+    built.state.managerBrief = buildManagerBrief({
+      ...input,
+      operatingState: {
+        nextMove: built.state.nextMove,
+        attention: built.state.attention,
+        blockers: built.state.missing,
+      },
+    })
+  }
   built.body = serializeHqStateOfPlay(built.state)
   const existing = docs.find((doc) => doc.slug === HQ_STATE_CONTEXT_SLUG)
   return upsertContextDoc(workspaceRootPath, {
@@ -36,12 +52,21 @@ export function refreshHqStateContextDoc(workspaceRootPath: string): LoadedConte
     metadata: existing
       ? {
           ...built.metadata,
-          routing: existing.metadata.routing,
           enabled: existing.metadata.enabled,
         }
       : built.metadata,
     body: built.body,
   })
+}
+
+/** Refresh the one Artist HQ brief after a change in either HQ or a campaign workspace. */
+export function refreshArtistHqStateForWorkspaceBestEffort(changedRootPath: string): LoadedContextDoc | null {
+  const targetRootPath = resolveHqRefreshRoot(changedRootPath)
+  if (!targetRootPath) {
+    console.warn('[hq-state] Failed to refresh State of Play context doc: no Artist HQ workspace is configured')
+    return null
+  }
+  return refreshHqStateContextDocBestEffort(targetRootPath)
 }
 
 function applyRecentOutcome(state: import('@craft-agent/shared/hq-state').HqStateOfPlay, workspaceRootPath: string): void {
@@ -91,19 +116,30 @@ export function refreshHqStateContextDocBestEffort(workspaceRootPath: string): L
 }
 
 export function scheduleHqStateContextRefresh(workspaceRootPath: string): void {
-  const pending = scheduledRefreshes.get(workspaceRootPath)
+  const targetRootPath = resolveHqRefreshRoot(workspaceRootPath)
+  if (!targetRootPath) return
+  const pending = scheduledRefreshes.get(targetRootPath)
   if (pending) clearTimeout(pending)
   const timer = setTimeout(() => {
-    scheduledRefreshes.delete(workspaceRootPath)
-    refreshHqStateContextDocBestEffort(workspaceRootPath)
+    scheduledRefreshes.delete(targetRootPath)
+    refreshHqStateContextDocBestEffort(targetRootPath)
   }, REFRESH_DEBOUNCE_MS)
   timer.unref?.()
-  scheduledRefreshes.set(workspaceRootPath, timer)
+  scheduledRefreshes.set(targetRootPath, timer)
 }
 
 export function cancelScheduledHqStateContextRefresh(workspaceRootPath: string): void {
-  const pending = scheduledRefreshes.get(workspaceRootPath)
+  const targetRootPath = resolveHqRefreshRoot(workspaceRootPath) ?? workspaceRootPath
+  const pending = scheduledRefreshes.get(targetRootPath)
   if (!pending) return
   clearTimeout(pending)
-  scheduledRefreshes.delete(workspaceRootPath)
+  scheduledRefreshes.delete(targetRootPath)
+}
+
+function resolveHqRefreshRoot(changedRootPath: string): string | null {
+  const changedWorkspace = getWorkspaces().find((workspace) => workspace.rootPath === changedRootPath)
+  if (!changedWorkspace) return changedRootPath
+  const hq = findArtistHqWorkspace()
+  if (hq) return hq.rootPath
+  return changedWorkspace.artistWorkspaceScope === 'hq' ? changedRootPath : null
 }

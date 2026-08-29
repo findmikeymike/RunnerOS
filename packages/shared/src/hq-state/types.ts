@@ -237,7 +237,7 @@ export interface BuildManagerBriefInput {
   now?: Date;
 }
 
-export interface HqStateOfPlay {
+export interface HqStateOfPlayV1 {
   version: 1;
   generatedAt: string;
   sources: Record<string, string>;
@@ -253,6 +253,21 @@ export interface HqStateOfPlay {
   };
   missing: string[];
   goalProgress: HqStateGoalProgress[];
+}
+
+export interface HqStateOfPlayV2 extends Omit<HqStateOfPlayV1, 'version'> {
+  version: 2;
+  managerBrief: ManagerBriefV1;
+}
+
+export type HqStateOfPlay = HqStateOfPlayV1 | HqStateOfPlayV2;
+
+export interface BuildHqStateInput {
+  workspaceId: string;
+  docs: LoadedContextDoc[];
+  relatedCampaigns: ManagerCampaignSnapshot[];
+  operational?: HqOperationalSnapshot;
+  now?: Date;
 }
 
 export interface HqStateRecentOutcome {

@@ -4,7 +4,7 @@ import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { loadGlobalAgent, readActivatedAgents } from '@craft-agent/shared/agent-definitions'
 import { loadGlobalWorkflow, readActivatedWorkflows } from '@craft-agent/shared/workflows'
 import { listOutputManifests, readOutputFinalsRegistry } from '@craft-agent/shared/outputs'
-import { refreshHqStateContextDocBestEffort } from '../../hq-state/refresh'
+import { refreshArtistHqStateForWorkspaceBestEffort } from '../../hq-state/refresh'
 import { loadArtistVaultManifest } from '@craft-agent/shared/artist-vault'
 import {
   ARTIST_CALENDAR_CONTEXT_SLUG,
@@ -87,7 +87,7 @@ function resolveRootPath(workspaceId: string): string {
 }
 
 function broadcastChanged(deps: HandlerDeps, workspaceId: string, rootPath: string): void {
-  refreshHqStateContextDocBestEffort(rootPath)
+  refreshArtistHqStateForWorkspaceBestEffort(rootPath)
   const wsServerLike = (deps as unknown as { wsServer?: { push?: (...args: unknown[]) => void } })
   wsServerLike.wsServer?.push?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, loadAllContextDocs(rootPath))
 }

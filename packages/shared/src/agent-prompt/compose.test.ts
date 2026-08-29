@@ -12,6 +12,7 @@ import {
   type PromptAgent,
   type PromptContextDoc,
 } from './compose.ts';
+import { buildHqStateContextDoc } from '../hq-state/index.ts';
 
 const agent = (overrides: Partial<PromptAgent['metadata']> = {}, systemPrompt = 'Persona.'): PromptAgent => ({
   systemPrompt,
@@ -32,6 +33,32 @@ const skill = (slug: string, name: string, description?: string) => ({
 const source = (slug: string, name: string, tagline?: string) => ({
   config: { slug, name, ...(tagline ? { tagline } : {}) },
 });
+
+function hqStateDoc(): PromptContextDoc {
+  const built = buildHqStateContextDoc({
+    workspaceId: 'artist-hq',
+    relatedCampaigns: [],
+    now: new Date('2026-08-29T12:00:00.000Z'),
+    docs: [{
+      slug: 'artist-profile',
+      metadata: { name: 'Artist Profile', routing: { mode: 'broadcast' }, enabled: true },
+      body: [
+        '```json',
+        JSON.stringify({
+          version: 1,
+          artistName: 'Mikey Mike',
+          sound: 'raw soul over strange pop',
+          audience: 'cinematic underdog listeners',
+          updatedAt: '2026-08-29T00:00:00.000Z',
+        }),
+        '```',
+      ].join('\n'),
+      path: '/tmp/context/artist-profile',
+      workspaceRootPath: '/tmp',
+    }],
+  });
+  return doc(built.slug, built.metadata.name, built.body);
+}
 
 describe('composeAgentSystemPrompt', () => {
   test('a bare agent composes to its persona plus canvas guidance', () => {
@@ -79,6 +106,32 @@ describe('composeAgentSystemPrompt', () => {
     expect(result).toContain('\n\n---\n\n');
     expect(result).not.toContain('---\n\n\n\n---');
   });
+
+  test('injects exactly one bounded Manager Brief for HNIC without raw State of Play JSON', () => {
+    const result = composeAgentSystemPrompt(
+      { ...agent(), slug: 'concierge' },
+      [],
+      [],
+      [hqStateDoc()],
+    );
+    expect(result.match(/## Manager Brief/g)).toHaveLength(1);
+    expect(result).toContain('Artist: Mikey Mike');
+    expect(result).not.toContain('json hq-state-of-play');
+    expect(result).not.toContain('generated Artist HQ operating brief');
+    const managerSection = result.slice(result.indexOf('## Manager Brief'));
+    expect(managerSection.length).toBeLessThanOrEqual(8000);
+  });
+
+  test('does not inject the Manager Brief or raw State of Play for other agents', () => {
+    const result = composeAgentSystemPrompt(
+      { ...agent(), slug: 'spotify-analyst' },
+      [],
+      [],
+      [hqStateDoc()],
+    );
+    expect(result).not.toContain('## Manager Brief');
+    expect(result).not.toContain('json hq-state-of-play');
+  });
 });
 
 describe('buildWorkspaceContextSection', () => {
@@ -88,11 +141,13 @@ describe('buildWorkspaceContextSection', () => {
       doc('draft', 'Draft', 'Hidden.', false),
       doc('blank', 'Blank', '   '),
       doc('shared-intel-1', 'Intel', 'Routed separately.'),
+      hqStateDoc(),
     ]);
     expect(section).toContain('## Goals');
     expect(section).not.toContain('Hidden.');
     expect(section).not.toContain('## Blank');
     expect(section).not.toContain('Routed separately.');
+    expect(section).not.toContain('json hq-state-of-play');
   });
 
   test('falls back to the slug when a doc has no name', () => {

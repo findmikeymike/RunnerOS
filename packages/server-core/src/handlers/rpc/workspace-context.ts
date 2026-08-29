@@ -6,17 +6,19 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import {
   loadAllContextDocs,
   loadContextDoc,
-  loadActiveContextDocsForAgent,
+  loadPromptContextDocsForAgent,
   upsertContextDoc,
   deleteContextDoc,
   type UpsertContextDocInput,
   type LoadedContextDoc,
 } from '@craft-agent/shared/workspace-context'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
 import {
+  refreshArtistHqStateForWorkspaceBestEffort,
   refreshHqStateContextDocBestEffort,
   shouldRefreshHqStateForContextSlug,
 } from '../../hq-state/refresh'
@@ -79,7 +81,10 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
   server.handle(RPC_CHANNELS.workspaceContext.LIST_FOR_AGENT, async (_ctx, workspaceId: string, agentSlug: string | null): Promise<LoadedContextDoc[]> => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) return []
-    return loadActiveContextDocsForAgent(workspace.rootPath, agentSlug)
+    if (agentSlug?.trim().toLowerCase() === CONCIERGE_SLUG && workspace.artistWorkspaceScope === 'hq') {
+      refreshHqStateContextDocBestEffort(workspace.rootPath)
+    }
+    return loadPromptContextDocsForAgent(workspace.rootPath, agentSlug)
   })
 
   server.handle(RPC_CHANNELS.workspaceContext.UPSERT, async (_ctx, workspaceId: string, payload: UpsertContextDocPayload): Promise<LoadedContextDoc> => {
@@ -97,7 +102,7 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
         body: payload.body,
       })
       if (shouldRefreshHqStateForContextSlug(payload.slug)) {
-        refreshHqStateContextDocBestEffort(rootPath)
+        refreshArtistHqStateForWorkspaceBestEffort(rootPath)
       }
       broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
       return loaded
@@ -112,7 +117,7 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
       const ok = deleteContextDoc(rootPath, slug)
       if (ok) {
         if (shouldRefreshHqStateForContextSlug(slug)) {
-          refreshHqStateContextDocBestEffort(rootPath)
+          refreshArtistHqStateForWorkspaceBestEffort(rootPath)
         }
         broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
       }
