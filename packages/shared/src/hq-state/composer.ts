@@ -1,4 +1,5 @@
 import type { ArtistProfile } from '../artist-context/profile.ts';
+import type { ArtistSpotifySnapshot } from '../artist-context/spotify.ts';
 import { ARTIST_VAULT_CONTEXT_SLUG, type VaultManifest } from '../artist-vault/types.ts';
 import { isSharedIntelContextSlug, parseSharedIntelNote } from '../shared-intel/index.ts';
 import type { ContextDocMetadata, LoadedContextDoc } from '../workspace-context/types.ts';
@@ -27,24 +28,8 @@ import {
  */
 type ArtistProfileDoc = Partial<ArtistProfile>;
 
-interface SpotifySnapshotDoc {
-  snapshotDate?: string;
-  windowDays?: number;
-  metrics?: {
-    streams?: number;
-    listeners?: number;
-    followers?: number;
-    popularity?: number;
-  };
-  geo?: {
-    topCities?: Array<{ city?: string; country?: string; listeners?: number }>;
-  };
-  tracks?: Array<{ name?: string; streams?: number; saves?: number; playlistAdds?: number }>;
-  playlistsDriving?: Array<{ name?: string; listeners?: number }>;
-  partial?: boolean;
-  errors?: string[];
-  updatedAt?: string;
-}
+/** Read view of the Spotify snapshot doc. See ArtistProfileDoc for why this is derived. */
+type SpotifySnapshotDoc = Partial<ArtistSpotifySnapshot>;
 
 interface NetworkDoc {
   people?: Array<{

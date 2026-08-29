@@ -48,3 +48,20 @@ export function toFiniteNumber(value: unknown): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
   return value;
 }
+
+/** Finite and >= 0. For counts that cannot meaningfully go negative. */
+export function toNonNegativeNumber(value: unknown): number | undefined {
+  const number = toFiniteNumber(value);
+  return number !== undefined && number >= 0 ? number : undefined;
+}
+
+/** Finite, integral, and > 0. For window sizes and similar. */
+export function toPositiveInteger(value: unknown): number | undefined {
+  const number = toFiniteNumber(value);
+  return number !== undefined && Number.isInteger(number) && number > 0 ? number : undefined;
+}
+
+/** Calendar-date shape check (YYYY-MM-DD). Does not validate the date itself. */
+export function isIsoDateString(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
