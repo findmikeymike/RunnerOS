@@ -34,6 +34,7 @@ export function CalendarMonthGrid({
   onChangeMonth,
   onDayAction,
   onSelectItem,
+  compact = false,
 }: {
   visibleMonth: Date
   selectedDate: string
@@ -43,6 +44,7 @@ export function CalendarMonthGrid({
   onChangeMonth: (month: Date) => void
   onDayAction?: (date: string, actionId: string) => void
   onSelectItem?: (date: string, itemId: string) => void
+  compact?: boolean
 }) {
   const [menu, setMenu] = React.useState<{ date: string; x: number; y: number } | null>(null)
   const days = React.useMemo(() => buildMonthDays(visibleMonth), [visibleMonth])
@@ -75,21 +77,21 @@ export function CalendarMonthGrid({
   }, [dayActions.length, dayMetaByDate, onSelectDate])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col rounded-[16px] border border-white/[0.05] bg-black/20 p-2.5">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="mb-2 flex items-center justify-between">
         <button
           type="button"
           onClick={() => onChangeMonth(addMonths(visibleMonth, -1))}
-          className="rounded-full border border-white/[0.06] p-2 text-white/45 hover:bg-white/[0.04] hover:text-white/75"
+          className="rounded-full border border-white/[0.12] p-2 text-white/65 hover:bg-white/[0.08] hover:text-white"
           aria-label="Previous month"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <div className="text-sm font-semibold text-white/78">{monthLabel}</div>
+        <div className="text-sm font-semibold text-white/88">{monthLabel}</div>
         <button
           type="button"
           onClick={() => onChangeMonth(addMonths(visibleMonth, 1))}
-          className="rounded-full border border-white/[0.06] p-2 text-white/45 hover:bg-white/[0.04] hover:text-white/75"
+          className="rounded-full border border-white/[0.12] p-2 text-white/65 hover:bg-white/[0.08] hover:text-white"
           aria-label="Next month"
         >
           <ChevronRight className="h-4 w-4" />
@@ -97,7 +99,7 @@ export function CalendarMonthGrid({
       </div>
       <div className="grid grid-cols-7 gap-1">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-          <div key={day} className="py-1 text-center text-[9px] font-semibold uppercase tracking-[0.14em] text-white/28">
+          <div key={day} className="py-1 text-center text-[9px] font-semibold uppercase tracking-[0.14em] text-white/55">
             {day}
           </div>
         ))}
@@ -133,14 +135,23 @@ export function CalendarMonthGrid({
               }}
               aria-haspopup={dayActions.length > 0 || items.length > 0 ? 'menu' : undefined}
               className={cn(
-                'flex min-h-[56px] flex-col rounded-[10px] border p-1.5 text-left transition-colors',
+                'flex flex-col rounded-[10px] border p-1.5 text-left transition-colors',
+                compact ? 'min-h-[48px]' : 'min-h-[56px]',
                 isSelected
-                  ? 'border-orange-400/40 bg-orange-500/12'
-                  : 'border-white/[0.045] bg-white/[0.015] hover:bg-white/[0.035]',
-                !isCurrentMonth && 'opacity-35',
+                  ? 'border-[#f97316]/60 bg-[#0F0F10] hover:bg-[#12110F]'
+                  : isCurrentMonth
+                    ? 'border-white/[0.06] bg-[#0F0F10] hover:bg-[#121314]'
+                    : 'border-white/[0.025] bg-[#090A0B] hover:bg-[#0C0D0E]',
               )}
             >
-              <span className={cn('text-xs font-medium', isToday ? 'text-orange-200' : 'text-white/65')}>
+              <span className={cn(
+                'text-[13px] font-medium',
+                isSelected || isToday
+                  ? 'text-[#f97316]'
+                  : isCurrentMonth
+                    ? 'text-white/82'
+                    : 'text-white/28',
+              )}>
                 {day.getDate()}
               </span>
               {highlights.length > 0 ? (
@@ -149,7 +160,7 @@ export function CalendarMonthGrid({
                     <div
                       key={highlight.id}
                       title={highlight.label}
-                      className={cn('max-w-full truncate rounded-[3px] bg-emerald-400/18 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-200 ring-1 ring-emerald-300/20', highlight.className)}
+                      className={cn('max-w-full truncate rounded-[3px] bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700 ring-1 ring-emerald-300/60', highlight.className)}
                     >
                       {highlight.label}
                     </div>

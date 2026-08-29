@@ -617,7 +617,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="flex min-h-full w-full flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
         <section className="relative min-h-[230px] overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A]">
-          <div className="absolute -left-[20%] -top-[40%] h-[600px] w-[600px] rounded-full bg-orange-600/10 blur-[120px]" />
+          <div className="absolute -left-[20%] -top-[40%] h-[760px] w-[760px] rounded-full bg-red-600/10 blur-[160px]" />
           <div className="absolute -bottom-[40%] -right-[10%] h-[600px] w-[600px] rounded-full bg-indigo-600/5 blur-[120px]" />
 
           <div className="relative z-10 flex min-h-[230px] flex-col justify-between p-6 lg:p-8">
@@ -848,7 +848,7 @@ function ReleaseBoardTile({
     <button
       type="button"
       onClick={onClick}
-      className="group rounded-xl px-2 py-2 text-left transition-colors hover:bg-white/[0.025]"
+      className="group rounded-xl border border-white/[0.055] bg-[#171819] px-3 py-3 text-left transition-colors hover:border-white/[0.085] hover:bg-[#1d1f20]"
     >
       <div className="flex min-h-[68px] flex-col justify-between">
         <div>

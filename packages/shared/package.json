@@ -18,6 +18,7 @@
     "./agent": "./src/agent/index.ts",
     "./agent/modes": "./src/agent/mode-types.ts",
     "./agent/mode-types": "./src/agent/mode-types.ts",
+    "./agenda": "./src/agenda/index.ts",
     "./agent/thinking-levels": "./src/agent/thinking-levels.ts",
     "./auth": "./src/auth/index.ts",
     "./auth/callback-page": "./src/auth/callback-page.ts",

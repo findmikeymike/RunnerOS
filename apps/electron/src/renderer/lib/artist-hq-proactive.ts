@@ -1,4 +1,4 @@
-import type { HqOperationalSourceHealth, HqRecommendationStatus, HqStateRouteHint } from '@craft-agent/shared/hq-state'
+import type { HqOperationalSourceHealth, HqRecommendationStatus, HqStateAttentionItem, HqStateRouteHint } from '@craft-agent/shared/hq-state'
 import type { AgentDefinitionDTO, ContextDocDTO } from '../../shared/types'
 
 const PROACTIVE_HQ_MODE_STORAGE_PREFIX = 'artist-hq:proactive-mode'
@@ -46,6 +46,10 @@ export function resolveHqRecommendationActionState(
 
 export function unhealthyHqSources(sources: HqOperationalSourceHealth[]): HqOperationalSourceHealth[] {
   return sources.filter((source) => source.status !== 'fresh')
+}
+
+export function userFacingHqAttention(items: HqStateAttentionItem[]): HqStateAttentionItem[] {
+  return items.filter((item) => item.kind !== 'source-health')
 }
 
 export function proactiveHqModeStorageKey(workspaceId: string): string {

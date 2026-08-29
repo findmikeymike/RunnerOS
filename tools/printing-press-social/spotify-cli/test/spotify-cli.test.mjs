@@ -108,6 +108,7 @@ test('snapshot without capture returns a browser plan + capture contract', () =>
   assert.ok(result.browserPlan.steps.length > 0);
   assert.equal(result.browserPlan.browserSession.partition, 'persist:social-spotify-artist01');
   assert.ok(result.capture.fields.streams);
+  assert.ok(result.capture.fields.dailyStreams);
 });
 
 test('snapshot normalizes captured numbers and never fabricates missing ones', () => {
@@ -120,6 +121,10 @@ test('snapshot normalizes captured numbers and never fabricates missing ones', (
     listeners: 3400,
     followers: 800,
     saves: null,
+    dailyStreams: [
+      { date: '2026-07-07', streams: 420 },
+      { date: '2026-07-08', streams: 510 },
+    ],
     topCities: [{ city: 'London', listeners: 900 }],
     topTracks: [{ name: 'Night Drive', streams: 5000 }],
     sources: { playlists: 40 },
@@ -129,6 +134,10 @@ test('snapshot normalizes captured numbers and never fabricates missing ones', (
   assert.equal(result.snapshot.dataSource, 'spotify-for-artists-browser');
   assert.equal(result.snapshot.metrics.streams, 12000);
   assert.equal(result.snapshot.metrics.saves, null);
+  assert.deepEqual(result.snapshot.dailyStreams, [
+    { date: '2026-07-07', streams: 420 },
+    { date: '2026-07-08', streams: 510 },
+  ]);
   assert.equal(result.snapshot.partial, true);
   assert.match(result.snapshot.errors.join(' '), /saves/);
   assert.equal(result.snapshot.geo.topCities[0].city, 'London');

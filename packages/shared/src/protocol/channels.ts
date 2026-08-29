@@ -313,6 +313,11 @@ export const RPC_CHANNELS = {
     SCAN_PROVIDER_CONFLICTS: 'records:conflicts:scanProvider',
     DETECT_CLOBBERS: 'records:clobbers:detect',
   },
+  agenda: {
+    GET_TASK_THREAD: 'agenda:taskThread:get',
+    ADD_TASK_COMMENT: 'agenda:taskThread:addComment',
+    DELETE_TASK_THREAD: 'agenda:taskThread:delete',
+  },
   community: {
     GET: 'community:get',
     ADD_CONTACT: 'community:addContact',

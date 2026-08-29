@@ -68,7 +68,7 @@ import { LabWorkspaceHome } from './LabWorkspaceHome'
 import { LabSongsPage } from './LabSongsPage'
 import { LabSongPadPage } from './LabSongPadPage'
 import { LabSequencePage } from './LabSequencePage'
-import { AgendaPage } from './AgendaPage'
+import { AgendaPage, type AgendaTaskDraft } from './AgendaPage'
 import { AGENDA_LABEL } from './agenda-utils'
 import { CommunityPage } from './CommunityPage'
 import { VaultPage } from './VaultPage'
@@ -120,6 +120,7 @@ export function MainContentPanel({
     workspaces,
     onSessionStatusChange,
     onArchiveSession,
+    onDeleteSession,
     onSessionLabelsChange,
     sessionStatuses,
     labels,
@@ -128,6 +129,7 @@ export function MainContentPanel({
     onDuplicateAutomation,
     onDeleteAutomation,
     onSelectWorkspace,
+    onCreateSession,
     enabledSources,
     skills,
   } = useAppShellContext()
@@ -165,6 +167,18 @@ export function MainContentPanel({
     if (!primaryCampaignWorkspace) return
     await handleOpenCampaignWorkspace(primaryCampaignWorkspace.id)
   }, [handleOpenCampaignWorkspace, primaryCampaignWorkspace])
+  const handleCreateAgendaTask = useCallback(async ({ title, details, status, personId }: AgendaTaskDraft) => {
+    if (!activeWorkspaceId) throw new Error('No active workspace')
+    const labels = [AGENDA_LABEL, ...(personId ? [`person::${personId}`] : [])]
+    const session = await onCreateSession(activeWorkspaceId, {
+      name: title,
+      labels,
+      sessionStatus: status,
+    })
+    if (details.trim()) await window.electronAPI.setSessionNotes(session.id, details)
+    return session.id
+  }, [activeWorkspaceId, onCreateSession])
+  const handleDeleteAgendaTask = useCallback((sessionId: string) => onDeleteSession(sessionId), [onDeleteSession])
 
   // Session multi-select state
   const isMultiSelectActive = useIsMultiSelectActive()
@@ -482,13 +496,9 @@ export function MainContentPanel({
       <Panel variant="grow" className={className}>
         <AgendaPage
           sessions={workspaceSessions}
-          onOpenSession={(sessionId) => {
-            if (window.location.hash.startsWith('#artist-hq/')) {
-              window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
-            }
-            navigate(routes.view.allSessions(sessionId))
-          }}
-          onNewTask={() => navigate(routes.action.newSession({ name: 'New task', label: AGENDA_LABEL, status: 'todo' }))}
+          onCreateTask={handleCreateAgendaTask}
+          onDeleteTask={handleDeleteAgendaTask}
+          workspaceId={activeWorkspaceId || undefined}
           networkWorkspaceId={artistHQWorkspace?.id || activeWorkspaceId || ''}
         />
       </Panel>
@@ -654,6 +664,9 @@ export function MainContentPanel({
             campaignWorkspaces={campaignWorkspaces}
             onOpenPrimaryCampaignWorkspace={primaryCampaignWorkspace ? handleOpenPrimaryCampaignWorkspace : undefined}
             onOpenCampaignWorkspace={handleOpenCampaignWorkspace}
+            agendaSessions={workspaceSessions}
+            onCreateAgendaTask={handleCreateAgendaTask}
+            onDeleteAgendaTask={handleDeleteAgendaTask}
           />
         </Panel>
       )
@@ -680,6 +693,9 @@ export function MainContentPanel({
             campaignWorkspaces={campaignWorkspaces}
             onOpenPrimaryCampaignWorkspace={primaryCampaignWorkspace ? handleOpenPrimaryCampaignWorkspace : undefined}
             onOpenCampaignWorkspace={handleOpenCampaignWorkspace}
+            agendaSessions={workspaceSessions}
+            onCreateAgendaTask={handleCreateAgendaTask}
+            onDeleteAgendaTask={handleDeleteAgendaTask}
           />
         </Panel>
       )

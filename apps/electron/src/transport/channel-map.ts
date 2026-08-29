@@ -211,6 +211,9 @@ export const CHANNEL_MAP = {
   listRecordConflicts: invoke(RPC_CHANNELS.records.LIST_CONFLICTS),
   scanRecordProviderConflicts: invoke(RPC_CHANNELS.records.SCAN_PROVIDER_CONFLICTS),
   detectRecordClobbers: invoke(RPC_CHANNELS.records.DETECT_CLOBBERS),
+  getAgendaTaskThread: invoke(RPC_CHANNELS.agenda.GET_TASK_THREAD),
+  addAgendaTaskComment: invoke(RPC_CHANNELS.agenda.ADD_TASK_COMMENT),
+  deleteAgendaTaskThread: invoke(RPC_CHANNELS.agenda.DELETE_TASK_THREAD),
   getSelfEditTarget: invoke(RPC_CHANNELS.workspace.SELF_EDIT_TARGET_GET),
 
   // Community records

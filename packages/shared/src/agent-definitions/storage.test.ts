@@ -549,7 +549,7 @@ body
   test('starter library includes the social publisher as the Finals-aware posting front door', () => {
     const socialPublisher = STARTER_AGENTS.find((agent) => agent.slug === SOCIAL_PUBLISHER_SLUG)
 
-    expect(socialPublisher?.metadata.skills).toEqual(['social-publishing'])
+    expect(socialPublisher?.metadata.skills).toEqual(['social-publishing', 'instagram-growth-snapshot'])
     expect(socialPublisher?.metadata.sources).toEqual(['printing-press-social'])
     expect(socialPublisher?.metadata.optionalSources).toEqual(['postiz', 'trypost'])
     expect(socialPublisher?.systemPrompt).toContain('browser_tool')
@@ -703,6 +703,9 @@ body
     expect(spotifyAnalyst?.metadata.tags).toContain('analytics')
     expect(spotifyAnalyst?.systemPrompt).toContain('snapshot spotify')
     expect(spotifyAnalyst?.systemPrompt).toContain('browser_tool profile spotify <id>')
+    expect(spotifyAnalyst?.systemPrompt).toContain('absolute Local path shown in that source context')
+    expect(spotifyAnalyst?.systemPrompt).toContain('Never assume another RunnerOS checkout')
+    expect(spotifyAnalyst?.systemPrompt).not.toContain('From the RunnerOS repository')
     expect(spotifyAnalyst?.systemPrompt).toContain('confirm the saved Spotify Web Player account identity first')
     expect(spotifyAnalyst?.systemPrompt).not.toContain('Open the exact returned browser partition')
     expect(spotifyAnalyst?.systemPrompt).toContain('Never claim that no Spotify source is connected before running the catalog and live profile-status checks')
@@ -1141,6 +1144,7 @@ body
     expect(recordDoctor?.metadata.name).toBe('Record Doctor')
     expect(recordDoctor?.metadata.description).toBe('Have your song reviewed by a Grammy-winning, multi-platinum producer and songwriter for an unbiased, credible expert perspective before release.')
     expect(recordDoctor?.metadata.description).not.toContain('@')
+    expect(recordDoctor?.metadata.outputs).not.toContain('@')
     expect(recordDoctor?.metadata.permissionMode).toBe('ask')
     expect(recordDoctor?.metadata.skills).toContain('record-doctor-handoff')
     expect(recordDoctor?.metadata.skills).toContain('artist-comms-strategist')
@@ -1148,6 +1152,10 @@ body
     expect(recordDoctor?.metadata.tags).toContain('producer')
     expect(recordDoctor?.metadata.tags).toContain('song-review')
     expect(recordDoctor?.systemPrompt).toContain('mikeymikemusic@gmail.com')
+    expect(recordDoctor?.systemPrompt).toContain('Recipient privacy is absolute')
+    expect(recordDoctor?.systemPrompt).toContain('Never reveal, repeat, spell, quote, display, or refer to the address in chat')
+    expect(recordDoctor?.systemPrompt).toContain('Use the actual address only inside the Gmail draft/send operation')
+    expect(recordDoctor?.systemPrompt).toContain('Destination: Record Doctor review inbox')
     expect(recordDoctor?.systemPrompt).toContain('artist-profile')
     expect(recordDoctor?.systemPrompt).toContain('artist-voice')
     expect(recordDoctor?.systemPrompt).toContain('artist-branding')
@@ -1159,22 +1167,35 @@ body
     expect(recordDoctor?.systemPrompt).toContain('Never mention internal app names')
   })
 
-  test('built-in migration removes the email from Record Doctor public copy without changing its private handoff prompt', () => {
+  test('built-in migration keeps the private delivery address internal while hardening user-facing copy', () => {
     const recordDoctor = STARTER_AGENTS.find((agent) => agent.slug === 'record-doctor')!
     const oldDescription = 'Submit a song for premium producer vetting, feedback, or enhancement by sending a clean approval-gated packet to mikeymikemusic@gmail.com.'
+    const oldOutputs = 'A Record Doctor submission packet, producer email draft to mikeymikemusic@gmail.com, approval checklist, Gmail draft/send receipt when connected, or manual copy-paste packet.'
+    const oldJob = 'Your job is to prepare a clean producer-review submission for mikeymikemusic@gmail.com. You help the artist submit a song for vetting, feedback, production enhancement, mix/arrangement notes, hit-potential review, or release-readiness feedback. You do not quote pricing, negotiate terms, promise outcomes, or imply the producer has accepted the work.'
+    const privacyPolicy = `${oldJob}\n\nRecipient privacy is absolute:\n- The fixed email address is private delivery configuration, not user-facing information.\n- Never reveal, repeat, spell, quote, display, or refer to the address in chat, reasoning, status text, approval summaries, packets, draft previews, outputs, or tool narration.\n- In every user-facing surface, call the destination only "the Record Doctor review inbox" or "the producer review inbox." Never say "I'll send this to" followed by an address.\n- Use the actual address only inside the Gmail draft/send operation where the recipient field is technically required. Do not expose it before or after the operation.`
     writeGlobalAgent({
       ...recordDoctor,
-      metadata: { ...recordDoctor.metadata, description: oldDescription },
+      metadata: { ...recordDoctor.metadata, description: oldDescription, outputs: oldOutputs },
+      systemPrompt: oldJob,
     }, { globalAgentsDir })
 
     expect(replaceBuiltInAgentMetadata('record-doctor', {
       description: { from: oldDescription, to: recordDoctor.metadata.description },
+      outputs: { from: oldOutputs, to: recordDoctor.metadata.outputs },
     }, { globalAgentsDir }).updated).toBe(true)
+    expect(replaceBuiltInAgentPromptText(
+      'record-doctor',
+      oldJob,
+      privacyPolicy,
+      { globalAgentsDir },
+    ).updated).toBe(true)
 
     const migrated = loadGlobalAgent('record-doctor', { globalAgentsDir })!
     expect(migrated.metadata.description).toBe(recordDoctor.metadata.description)
     expect(migrated.metadata.description).not.toContain('@')
+    expect(migrated.metadata.outputs).not.toContain('@')
     expect(migrated.systemPrompt).toContain('mikeymikemusic@gmail.com')
+    expect(migrated.systemPrompt).toContain('Recipient privacy is absolute')
   })
 
   test('starter library includes Reverse Magic as a Lab lyric worker', () => {

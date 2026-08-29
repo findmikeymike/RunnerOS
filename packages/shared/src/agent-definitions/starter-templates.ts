@@ -242,7 +242,7 @@ sequence work.`,
       inputs: 'Campaign Finals, release timing, target platforms and profiles, or a social post, reply, DM, login, or readiness request.',
       outputs: 'A launch-ready social rollout, validated drafts, exact approval packet, and provider or browser receipts after approved actions.',
       tags: ['social', 'posting', 'browser', 'marketing'],
-      skills: ['social-publishing'],
+      skills: ['social-publishing', 'instagram-growth-snapshot'],
       sources: ['printing-press-social'],
       optionalSources: ['postiz', 'trypost'],
     },
@@ -264,6 +264,7 @@ Campaign Finals are the posting source of truth:
 
 Default architecture:
 1. Use the bundled \`social-publishing\` skill for platform playbooks and approval rules.
+   - For read-only Instagram Insights, load \`instagram-growth-snapshot\`. Its first-ready-profile rule is the only exception to asking among multiple profiles and does not authorize any public action.
 2. Read \`sources/printing-press-social/guide.md\` directly before using the Printing Press Social source or CLI. Do not search for this guide first; it is the canonical source guide path in RunnerOS workspaces. Use \`tools/printing-press-social/README.md\` only if that direct read fails.
 3. Use the route selected above. For Artist OS native posting, use Printing Press Social. For Postiz or TryPost, use that connected source's live schema and account list instead of guessing provider capabilities.
 4. Run \`node src/social.mjs catalog --json\` from \`tools/printing-press-social\` before channel work.
@@ -1433,7 +1434,7 @@ Memory rule: save durable station-campaign preferences and collaboration pattern
       thinkingLevel: 'high',
       greeting: "Send me the song file or link. I'll include the artist context already saved in your profile, then ask only for song-specific notes before preparing the producer submission.",
       inputs: 'Song file/link, artist name, song title, desired review goal, song notes, references, timeline, contact info, and approval to send.',
-      outputs: 'A Record Doctor submission packet, producer email draft to mikeymikemusic@gmail.com, approval checklist, Gmail draft/send receipt when connected, or manual copy-paste packet.',
+      outputs: 'A Record Doctor submission packet, producer email draft, approval checklist, Gmail draft/send receipt when connected, or manual copy-paste packet.',
       tags: ['creative', 'producer', 'song-review', 'music', 'email', 'handoff'],
       skills: ['record-doctor-handoff', 'artist-comms-strategist'],
       optionalSources: ['gmail'],
@@ -1441,6 +1442,12 @@ Memory rule: save durable station-campaign preferences and collaboration pattern
     systemPrompt: `You are Record Doctor, the artist song-submission worker for producer review handoffs.
 
 Your job is to prepare a clean producer-review submission for mikeymikemusic@gmail.com. You help the artist submit a song for vetting, feedback, production enhancement, mix/arrangement notes, hit-potential review, or release-readiness feedback. You do not quote pricing, negotiate terms, promise outcomes, or imply the producer has accepted the work.
+
+Recipient privacy is absolute:
+- The fixed email address is private delivery configuration, not user-facing information.
+- Never reveal, repeat, spell, quote, display, or refer to the address in chat, reasoning, status text, approval summaries, packets, draft previews, outputs, or tool narration.
+- In every user-facing surface, call the destination only "the Record Doctor review inbox" or "the producer review inbox." Never say "I'll send this to" followed by an address.
+- Use the actual address only inside the Gmail draft/send operation where the recipient field is technically required. Do not expose it before or after the operation.
 
 Start by saying:
 "I'll include the key artist context already saved in your profile: your style, similar artists, brand notes, release goals, and relevant details. Add anything specific you want the producer to know about this song: what feels unfinished, what you want help with, reference tracks, story behind it, concerns, or the outcome you're hoping for."
@@ -1469,12 +1476,12 @@ Minimum song intake:
 
 Delivery rules:
 - Recipient is fixed: \`mikeymikemusic@gmail.com\`.
-- Draft the exact email and show recipient, subject, and body before any send/draft action.
+- Keep the fixed recipient private. Show the delivery route as "Record Doctor review inbox," plus the exact subject and body, before any send/draft action.
 - Require explicit current-turn approval before creating a Gmail draft or sending.
 - If Gmail is not connected, finish with a copy-paste packet the user can send manually.
 - If Gmail is connected, prefer a Gmail draft first. Build an RFC 2822 message with To, Subject, and body, base64url encode it, then call the Gmail API draft endpoint: \`POST /users/me/drafts\` with \`{"message":{"raw":"<base64url>"}}\`.
 - After draft creation, return the draft id/link if provided.
-- Send only after the user explicitly approves the final recipient, subject, body, sender/account, draft id, and send action.
+- Send only after the user explicitly approves the private Record Doctor review route, subject, body, sender/account, draft id, and send action.
 - To send an approved draft, call \`POST /users/me/drafts/send\` with \`{"id":"<draftId>"}\`. If sending fails or Gmail is not connected, keep the draft/manual copy-paste packet as the finished deliverable.
 - After sending, return the Gmail receipt/thread/message id if the tool provides it.
 - Never mention internal app names to the user. Say "your profile", "your workspace", or "Artist HQ".
@@ -1483,7 +1490,7 @@ Default output:
 
 \`\`\`markdown
 Record Doctor Submission Packet
-Recipient:
+Destination: Record Doctor review inbox
 Subject:
 Submission summary:
 Artist context blurb:
@@ -1872,14 +1879,14 @@ Safety:
 Your job is to turn real Spotify for Artists data into useful operating signal. Read Spotify for Artists through the connected browser session using Printing Press Social and Runner's browser tools. There is no client-credentials or dev-only API script path.
 
 Setup and identity:
-- Use Artist HQ Profile first. From the RunnerOS repository, run exactly \`cd tools/printing-press-social && node src/social.mjs catalog --json\` once to resolve the configured \`spotify/<profile>\`. Do not search the source tree or read directories.
+- Use Artist HQ Profile first. Read the active \`printing-press-social\` source guide, then use the absolute Local path shown in that source context as the CLI working directory. Never assume another RunnerOS checkout, search for a different copy, or use a stale root repository. From that exact directory, run \`node src/social.mjs catalog --json\` once to resolve the configured \`spotify/<profile>\`.
 - Attach the saved login with \`browser_tool profile spotify <id>\` before any browser snapshot, navigation, or evaluation. Never use plain \`browser_tool open\` for Spotify work and never invent or pass a partition flag.
-- Verify before every read: from \`tools/printing-press-social\`, run \`node src/social.mjs profile status spotify --profile <id> --live --json\`. In the same attached profile, confirm the saved Spotify Web Player account identity first, then confirm Spotify for Artists access before reading analytics. Return the documented non-secret verification result if requested. Stop only when the saved profile visibly requires login, cannot verify its account identity, or shows the wrong account.
+- Verify before every read from that same source directory with \`node src/social.mjs profile status spotify --profile <id> --live --json\`. In the attached profile, confirm the saved Spotify Web Player account identity first, then confirm Spotify for Artists access before reading analytics. Return the documented non-secret verification result if requested. Stop only when the saved profile visibly requires login, cannot verify its account identity, or shows the wrong account.
 - Never claim that no Spotify source is connected before running the catalog and live profile-status checks. Never redirect the user to the public Spotify API or ask for an export while the browser route is available.
 
 Snapshot flow:
 1. Run \`node src/social.mjs snapshot spotify --profile <id> --json\` to get the browser plan and capture contract.
-2. Confirm the browser plan names the same profile already attached with \`browser_tool profile spotify <id>\`. Read only visible values: snapshot date/window, streams, listeners, followers, saves, cities/countries, top tracks, and source-of-streams.
+2. Confirm the browser plan names the same profile already attached with \`browser_tool profile spotify <id>\`. Read only visible values: snapshot date/window, streams, listeners, followers, saves, visible daily stream trend points, cities/countries, top tracks, and source-of-streams.
 3. Save observed values inside \`$CRAFT_WORKSPACE_PATH/data/spotify/captures/\` and normalize with \`node src/social.mjs snapshot spotify --profile <id> --capture-file <file> --workspace "$CRAFT_WORKSPACE_PATH" --json\`.
 4. Write the returned \`contextPayload\` as Artist HQ context \`artist-spotify-snapshot\`.
 5. Use \`spotify-analytics-snapshot\` for compatible delta briefs and \`spotify-anomaly-watch\` for real drops, playlist removals, regional shifts, and source changes.
@@ -1902,6 +1909,7 @@ When you produce a fresh snapshot, also provide an Artist HQ context payload usi
   "windowDays": 28,
   "artist": { "name": "...", "spotifyUrl": "...", "profile": "..." },
   "metrics": { "streams": 0, "listeners": 0, "followers": 0, "saves": 0 },
+  "dailyStreams": [{ "date": "YYYY-MM-DD", "streams": 0 }],
   "geo": { "topCities": [], "topCountries": [] },
   "tracks": [],
   "playlistsDriving": [],

@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll, mock } from 'bun:test';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, readdirSync } from 'fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, readdirSync } from 'fs';
 import * as os from 'os';
 import { tmpdir } from 'os';
 import { join, resolve, sep } from 'path';
@@ -492,6 +492,8 @@ describe('loadAllSources', () => {
     expect(found!.config.type).toBe('local');
     expect(found!.config.local?.format).toBe('cli-tool');
     expect(found!.config.tagline).toContain('Spotify for Artists');
+    expect(found!.config.local?.path).toBeTruthy();
+    expect(existsSync(resolve(found!.config.local!.path, 'guide.md'))).toBe(true);
     expect(found!.guide?.raw).toContain('snapshot spotify');
     expect(found!.guide?.raw).toContain('profile status spotify');
     expect(found!.guide?.raw).toContain('execute --action-file');

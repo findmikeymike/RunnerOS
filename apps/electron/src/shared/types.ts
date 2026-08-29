@@ -36,6 +36,7 @@ export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
 import type { SharedFolderProvider, SharedPathOverrides, TeamModeStatus } from '@craft-agent/shared/workspaces';
 import type { TeamSharedFolderMigrationResult } from '@craft-agent/shared/workspaces';
 import type { SharedRecordClobberIssue, SharedRecordConflict } from '@craft-agent/shared/records';
+import type { AddAgendaTaskCommentInput, AgendaTaskThread } from '@craft-agent/shared/agenda';
 import type {
   CommunityContactRecord,
   CommunityEmailJobRecord,
@@ -786,6 +787,9 @@ export interface ElectronAPI {
   listRecordConflicts(workspaceId: string): Promise<SharedRecordConflict[]>
   scanRecordProviderConflicts(workspaceId: string): Promise<SharedRecordConflict[]>
   detectRecordClobbers(workspaceId: string): Promise<SharedRecordClobberIssue[]>
+  getAgendaTaskThread(workspaceId: string, taskId: string): Promise<AgendaTaskThread | null>
+  addAgendaTaskComment(workspaceId: string, taskId: string, input: AddAgendaTaskCommentInput): Promise<AgendaTaskThread>
+  deleteAgendaTaskThread(workspaceId: string, taskId: string): Promise<void>
   getSelfEditTarget(workspaceId: string): Promise<SelfEditTargetInfo>
   getCommunity(workspaceId: string): Promise<CommunityState>
   addCommunityContact(workspaceId: string, input: UpsertCommunityContactInput): Promise<CommunityState>

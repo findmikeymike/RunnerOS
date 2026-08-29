@@ -2,6 +2,7 @@ import type { ProviderDriver, DriverTestConnectionArgs } from '../driver-types.t
 import type { ModelDefinition } from '../../../../config/models.ts';
 import { getAllPiModels, getPiModelsForAuthProvider } from '../../../../config/models-pi.ts';
 import { getPiProviderBaseUrl } from '../../../../config/models-pi.ts';
+import { fetchOpenRouterModelDefinitions, OPENROUTER_API_BASE_URL } from '../../../../config/openrouter-models.ts';
 
 // ── Copilot model types ────────────────────────────────────────────────
 type RawCopilotModel = {
@@ -231,28 +232,35 @@ async function testAnthropicCompatible(
 
 export const piDriver: ProviderDriver = {
   provider: 'pi',
-  buildRuntime: ({ context, providerOptions, resolvedPaths }) => ({
-    paths: {
-      piServer: resolvedPaths.piServerPath,
-      interceptor: resolvedPaths.interceptorBundlePath,
-      node: resolvedPaths.nodeRuntimePath,
-    },
-    piAuthProvider: providerOptions?.piAuthProvider || context.connection?.piAuthProvider,
-    baseUrl: context.connection?.baseUrl,
-    customEndpoint: context.connection?.customEndpoint,
-    customModels: context.connection?.models?.map(m => {
-      if (typeof m === 'string') return m;
-      const hasSupportsImages = 'supportsImages' in m && typeof m.supportsImages === 'boolean'
-      if (m.contextWindow || hasSupportsImages) {
-        return {
-          id: m.id,
-          ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
-          ...(hasSupportsImages ? { supportsImages: m.supportsImages } : {}),
+  buildRuntime: ({ context, providerOptions, resolvedPaths }) => {
+    const piAuthProvider = providerOptions?.piAuthProvider || context.connection?.piAuthProvider;
+    const isOpenRouter = piAuthProvider === 'openrouter';
+    return {
+      paths: {
+        piServer: resolvedPaths.piServerPath,
+        interceptor: resolvedPaths.interceptorBundlePath,
+        node: resolvedPaths.nodeRuntimePath,
+      },
+      piAuthProvider,
+      baseUrl: context.connection?.baseUrl || (isOpenRouter ? OPENROUTER_API_BASE_URL : undefined),
+      // OpenRouter adds models faster than the bundled Pi catalog. Register the
+      // connection's selected models dynamically so a freshly listed model is
+      // usable immediately instead of merely appearing in the picker.
+      customEndpoint: context.connection?.customEndpoint || (isOpenRouter ? { api: 'openai-completions' } : undefined),
+      customModels: context.connection?.models?.map(m => {
+        if (typeof m === 'string') return m;
+        const hasSupportsImages = 'supportsImages' in m && typeof m.supportsImages === 'boolean'
+        if (m.contextWindow || hasSupportsImages) {
+          return {
+            id: m.id,
+            ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
+            ...(hasSupportsImages ? { supportsImages: m.supportsImages } : {}),
+          }
         }
-      }
-      return m.id;
-    }),
-  }),
+        return m.id;
+      }),
+    };
+  },
   fetchModels: async ({ connection, credentials, timeoutMs }) => {
     // Copilot OAuth: fetch models directly from the Copilot API via HTTP.
     // Uses the GitHub OAuth token (our refreshToken) to exchange for a
@@ -261,6 +269,10 @@ export const piDriver: ProviderDriver = {
     if (connection.piAuthProvider === 'github-copilot' && copilotGitHubToken) {
       const models = await fetchCopilotModels(copilotGitHubToken, timeoutMs);
       return { models };
+    }
+
+    if (connection.piAuthProvider === 'openrouter') {
+      return { models: await fetchOpenRouterModelDefinitions({ timeoutMs }) };
     }
 
     // All other Pi providers: use static Pi SDK model registry

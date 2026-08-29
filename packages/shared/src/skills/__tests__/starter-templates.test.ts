@@ -211,7 +211,11 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(skill).toBeDefined();
     const parsed = matter(getSkillMd(skill!));
     expect(parsed.data.name).toBe('Record Doctor Handoff');
+    expect(parsed.data.description).not.toContain('@');
     expect(parsed.content).toContain('mikeymikemusic@gmail.com');
+    expect(parsed.content).toContain('private delivery configuration');
+    expect(parsed.content).toContain('Never reveal, repeat, spell');
+    expect(parsed.content).toContain('Destination: Record Doctor review inbox');
     expect(parsed.content).toContain('Artist HQ context');
     expect(parsed.content).toContain('Gmail is optional');
     expect(parsed.content).toContain('explicit current-turn approval');

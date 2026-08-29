@@ -27328,6 +27328,266 @@ If a full HyperFrames installation is available, the reference files are in:
     ],
   },
   {
+    slug: "instagram-growth-snapshot",
+    files: [
+      {
+        path: "scripts/normalize-snapshot.test.ts",
+        content: `import { describe, expect, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { normalizeInstagramCapture } from './normalize-snapshot'
+
+const script = path.join(import.meta.dir, 'normalize-snapshot.ts')
+
+describe('Instagram snapshot normalizer', () => {
+  test('preserves signed follower movement and marks missing metrics partial', () => {
+    const snapshot = normalizeInstagramCapture({
+      snapshotDate: '2026-08-28',
+      windowDays: 14,
+      profile: { profile: 'main', handle: '@artist' },
+      metrics: { followers: 1000, followerDelta: -9, accountsReached: 250 },
+    }, new Date('2026-08-28T12:00:00.000Z'))
+
+    expect(snapshot.metrics.followerDelta).toBe(-9)
+    expect(snapshot.metrics.interactions).toBeNull()
+    expect(snapshot.partial).toBe(true)
+    expect(snapshot.errors.join(' ')).toContain('interactions')
+  })
+
+  test('requires an exact profile and capture date', () => {
+    expect(() => normalizeInstagramCapture({ profile: {}, metrics: {} })).toThrow()
+  })
+
+  test('writes inside the workspace once and refuses overwrite or path escape', () => {
+    const workspace = mkdtempSync(path.join(tmpdir(), 'instagram-snapshot-'))
+    const captureDir = path.join(workspace, 'data/instagram/captures')
+    mkdirSync(captureDir, { recursive: true })
+    const capture = path.join(captureDir, '2026-08-28.json')
+    writeFileSync(capture, JSON.stringify({
+      snapshotDate: '2026-08-28',
+      windowDays: 14,
+      profile: { profile: 'main' },
+      metrics: { followers: 1000, followerDelta: 8 },
+    }))
+
+    const args = [process.execPath, script, '--capture', capture, '--workspace', workspace]
+    expect(Bun.spawnSync(args).exitCode).toBe(0)
+    expect(Bun.spawnSync(args).exitCode).not.toBe(0)
+    expect(Bun.spawnSync([...args, '--out', '../escaped.json']).exitCode).not.toBe(0)
+  })
+})
+`,
+      },
+      {
+        path: "scripts/normalize-snapshot.ts",
+        content: `#!/usr/bin/env npx tsx
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
+
+type CliOptions = { capture: string; workspace: string; out?: string }
+
+export interface NormalizedInstagramSnapshot {
+  version: 1
+  dataSource: 'instagram-insights-browser'
+  snapshotDate: string
+  windowDays: number | null
+  profile: { profile: string; handle: string | null; accountUrl: string | null }
+  metrics: Record<'followers' | 'followerDelta' | 'accountsReached' | 'accountsEngaged' | 'interactions' | 'profileVisits' | 'likes' | 'comments', number | null>
+  partial: boolean
+  errors: string[]
+  updatedAt: string
+}
+
+const metricNames = ['followers', 'followerDelta', 'accountsReached', 'accountsEngaged', 'interactions', 'profileVisits', 'likes', 'comments'] as const
+
+export function normalizeInstagramCapture(input: unknown, now = new Date()): NormalizedInstagramSnapshot {
+  const root = record(input)
+  const profile = record(root.profile)
+  const metrics = record(root.metrics)
+  const snapshotDate = string(root.snapshotDate)
+  const profileId = string(profile.profile)
+  if (!snapshotDate || !/^\\d{4}-\\d{2}-\\d{2}$/.test(snapshotDate)) throw new Error('capture snapshotDate must use YYYY-MM-DD')
+  if (!profileId) throw new Error('capture profile.profile is required')
+
+  const errors = Array.isArray(root.errors) ? root.errors.filter((value): value is string => typeof value === 'string' && Boolean(value.trim())) : []
+  const normalizedMetrics = Object.fromEntries(metricNames.map((name) => [name, metric(metrics[name], name === 'followerDelta')])) as NormalizedInstagramSnapshot['metrics']
+  const missing = metricNames.filter((name) => normalizedMetrics[name] === null)
+  if (missing.length) errors.push(\`Metrics not visible: \${missing.join(', ')}.\`)
+
+  return {
+    version: 1,
+    dataSource: 'instagram-insights-browser',
+    snapshotDate,
+    windowDays: positiveInteger(root.windowDays),
+    profile: {
+      profile: profileId,
+      handle: string(profile.handle),
+      accountUrl: string(profile.accountUrl),
+    },
+    metrics: normalizedMetrics,
+    partial: root.partial === true || missing.length > 0 || positiveInteger(root.windowDays) === null,
+    errors: [...new Set(errors)],
+    updatedAt: now.toISOString(),
+  }
+}
+
+async function main(): Promise<void> {
+  const options = parseArgs(process.argv.slice(2))
+  const workspace = path.resolve(options.workspace)
+  const capture = insideWorkspace(workspace, options.capture)
+  const parsed = JSON.parse(await fs.readFile(capture, 'utf8')) as unknown
+  const snapshot = normalizeInstagramCapture(parsed)
+  const output = insideWorkspace(workspace, options.out ?? \`data/instagram/snapshots/\${snapshot.snapshotDate}-insights.json\`)
+  await fs.mkdir(path.dirname(output), { recursive: true })
+  await fs.writeFile(output, \`\${JSON.stringify(snapshot, null, 2)}\\n\`, { flag: 'wx' })
+  console.log(JSON.stringify({
+    ok: true,
+    outPath: output,
+    snapshot,
+    contextPayload: { slug: 'artist-instagram-snapshot', body: snapshot },
+  }, null, 2))
+}
+
+function parseArgs(argv: string[]): CliOptions {
+  const options: Partial<CliOptions> = {}
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    const next = () => {
+      const value = argv[++index]
+      if (!value) throw new Error(\`Missing value for \${arg}\`)
+      return value
+    }
+    if (arg === '--capture') options.capture = next()
+    else if (arg === '--workspace') options.workspace = next()
+    else if (arg === '--out') options.out = next()
+    else throw new Error(\`Unknown argument: \${arg}\`)
+  }
+  if (!options.capture || !options.workspace) throw new Error('Usage: normalize-snapshot.ts --capture <path> --workspace <path> [--out <path>]')
+  return options as CliOptions
+}
+
+function insideWorkspace(workspace: string, candidate: string): string {
+  const resolved = path.resolve(workspace, candidate)
+  const relative = path.relative(workspace, resolved)
+  if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('path must stay inside the workspace')
+  return resolved
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function string(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function metric(value: unknown, signed: boolean): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  if (!signed && value < 0) return null
+  return value
+}
+
+function positiveInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
+}
+
+if (import.meta.main) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exit(1)
+  })
+}
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: instagram-growth-snapshot
+description: "Use when reading a connected Instagram professional account's Insights, capturing a dated 14-day growth snapshot, comparing growth or decline, or refreshing Artist HQ Social Pulse. Read-only; not for posting, comment replies, or DMs."
+metadata:
+  version: 1.0.0
+  last_verified: 2026-08-28
+---
+
+# Instagram Growth Snapshot
+
+Use this skill for manual or weekly read-only Instagram Insights checks. One Social Publisher run handles the full job. Do not create one worker per metric or per post.
+
+## Default Profile Rule
+
+1. Read \`sources/printing-press-social/guide.md\` directly.
+2. From \`tools/printing-press-social\`, run \`node src/social.mjs catalog --live --json\`.
+3. If the user named an exact Instagram profile, use it.
+4. Otherwise, select the **first returned Instagram profile whose \`ready\` value is true**, preserving catalog order. This deterministic default applies only to this read-only snapshot skill.
+5. Never select a logged-out, unverified, wrong-account, or missing session. If no Instagram profile is ready, stop and point to Settings → Instagram.
+
+## Capture
+
+1. Attach the exact saved session with \`browser_tool profile instagram <profile>\`; never use a generic browser session.
+2. Verify the visible Instagram identity against the saved handle or account URL before reading data.
+3. Open the professional dashboard / Insights page.
+4. Select the last 14 completed days when Instagram offers a custom range. If it does not, use the nearest visible supported range and record its real \`windowDays\`; never label a different range as 14 days.
+5. Capture only values visibly reported by Instagram:
+   - current followers
+   - follower growth or decline for the selected period
+   - accounts reached
+   - accounts engaged
+   - content interactions
+   - profile visits
+   - aggregate likes and comments, when visible
+6. Do not scan individual posts when aggregate Insights are available. If aggregate likes/comments are unavailable and a post-level fallback is genuinely useful, inspect only posts published inside the reporting window, mark the snapshot partial, and state the limitation.
+7. Save the raw observed JSON under \`$CRAFT_WORKSPACE_PATH/data/instagram/captures/<YYYY-MM-DD>.json\`.
+
+Use this raw capture shape. Missing values are \`null\`, never zero:
+
+\`\`\`json
+{
+  "snapshotDate": "2026-08-28",
+  "windowDays": 14,
+  "profile": { "profile": "main", "handle": "@artist", "accountUrl": "https://instagram.com/artist" },
+  "metrics": {
+    "followers": 4200,
+    "followerDelta": 37,
+    "accountsReached": 1800,
+    "accountsEngaged": 240,
+    "interactions": 390,
+    "profileVisits": 120,
+    "likes": 330,
+    "comments": 60
+  },
+  "partial": false,
+  "errors": []
+}
+\`\`\`
+
+## Finalize
+
+Normalize the capture into an immutable snapshot:
+
+\`\`\`bash
+"\${CRAFT_BUN:-bun}" "\${CRAFT_GLOBAL_SKILLS_DIR:-$HOME/.agents/skills}/instagram-growth-snapshot/scripts/normalize-snapshot.ts" \\
+  --capture "$CRAFT_WORKSPACE_PATH/data/instagram/captures/<YYYY-MM-DD>.json" \\
+  --workspace "$CRAFT_WORKSPACE_PATH"
+\`\`\`
+
+The script writes \`data/instagram/snapshots/<YYYY-MM-DD>-insights.json\` and returns a \`contextPayload\`. Write that payload to Workspace Context slug \`artist-instagram-snapshot\` so Artist HQ Social Pulse updates immediately.
+
+Finish with a short private note: reporting window, follower growth/decline, reach, interactions, and any missing data.
+
+## Failure Rules
+
+- This job is read-only and needs no approval.
+- Never publish, reply, DM, follow, edit, or change account settings.
+- Never record passwords, cookies, tokens, recovery codes, or 2FA secrets.
+- Never fabricate hidden or unavailable metrics.
+- Never overwrite a past snapshot. Same-date reruns must stop or use a later capture date after confirming the data is actually newer.
+- If the visible account does not match the saved profile, stop without reading analytics.
+`,
+      },
+    ],
+  },
+  {
     slug: "lead-magnets",
     files: [
       {
@@ -32028,7 +32288,7 @@ A prompt edit that breaks a fixture without an owner-signed update fails CI.
         path: "SKILL.md",
         content: `---
 name: Record Doctor Handoff
-description: Prepare a premium producer-review submission packet and approval-gated email to mikeymikemusic@gmail.com using Artist HQ context and song-specific notes.
+description: Prepare a premium producer-review submission packet and approval-gated private delivery using Artist HQ context and song-specific notes.
 tags: [artist, producer, song-review, email, handoff, music]
 ---
 
@@ -32036,13 +32296,20 @@ tags: [artist, producer, song-review, email, handoff, music]
 
 Use this skill when an artist wants a song vetted, reviewed, enhanced, or assessed for release readiness by the producer contact.
 
-## Recipient
+## Private Recipient
 
 Always prepare the producer email for:
 
 \`mikeymikemusic@gmail.com\`
 
 Do not ask the user for the recipient unless they explicitly want to override it.
+
+This address is private delivery configuration. Never reveal, repeat, spell,
+quote, display, or refer to it in chat, reasoning, status text, approval
+summaries, packets, draft previews, outputs, or tool narration. In every
+user-facing surface, call it only "the Record Doctor review inbox" or "the
+producer review inbox." Use the actual address only inside the Gmail
+draft/send operation where the recipient field is technically required.
 
 ## Intake
 
@@ -32097,11 +32364,11 @@ If Gmail is unavailable, return a copy-paste email packet and tell the user it i
 If Gmail is connected:
 
 1. Draft the exact email first.
-2. Show the recipient, subject, and body to the user.
+2. Show the private delivery route as "Record Doctor review inbox," plus the subject and body. Never show the address.
 3. Require explicit current-turn approval before creating or sending anything.
 4. Prefer creating a Gmail draft before sending. Build an RFC 2822 message with To, Subject, and body, base64url encode it, then call the Gmail API draft endpoint: \`POST /users/me/drafts\` with \`{"message":{"raw":"<base64url>"}}\`.
 5. After draft creation, return the draft id/link if provided.
-6. Send only after the user explicitly approves the final recipient, subject, body, sender/account, draft id, and send action.
+6. Send only after the user explicitly approves the private Record Doctor review route, subject, body, sender/account, draft id, and send action.
 7. To send an approved draft, call \`POST /users/me/drafts/send\` with \`{"id":"<draftId>"}\`.
 8. If sending fails or Gmail is unavailable, keep the draft/manual copy-paste packet as the finished deliverable.
 9. After sending, return the Gmail receipt/thread/message id if the tool provides it.
@@ -32111,7 +32378,7 @@ If Gmail is connected:
 \`\`\`markdown
 Record Doctor Submission Packet
 
-Recipient:
+Destination: Record Doctor review inbox
 Subject:
 
 Submission summary:
@@ -32128,7 +32395,7 @@ Artist context blurb:
 Producer email draft:
 
 Approval checklist:
-- Recipient confirmed
+- Private Record Doctor review route confirmed
 - Song file/link included
 - Artist context included
 - User notes included
@@ -38955,7 +39222,7 @@ Explain this model when the user is setting up social publishing or seems confus
 - Resolve account sets with \`node src/social.mjs catalog --json\`. If the user says "post to MikeyReal on IG and TikTok", use the catalog \`platforms\` map to resolve \`instagram/<profile>\` and \`tiktok/<profile>\`.
 - If the requested platform is missing from an account set, stop and say exactly which platform is missing.
 - Users should log in once per profile. The saved browser session keeps cookies/login state so they do not retype passwords every run.
-- If multiple profiles exist for a platform, never guess. Ask the user which \`platform/profile\` to use unless they already named it.
+- If multiple profiles exist for a platform, never guess. Ask the user which \`platform/profile\` to use unless they already named it. Narrow exception: the read-only \`instagram-growth-snapshot\` skill intentionally selects the first ready Instagram profile in catalog order when the user does not name one.
 - If the user names a handle or account URL instead of a profile ID, match it against \`catalog --json\`; ask if more than one profile matches.
 - Passwords, recovery codes, tokens, cookies, and 2FA secrets must never be written into Workspace Context, memory, source guides, or chat prompts.
 - Workspace Context should store only non-secret defaults: profile IDs, handles, account URLs, tone, posting defaults, and account notes.
@@ -39638,7 +39905,7 @@ node src/social.mjs profile status spotify --profile <id> --live --json
 node src/social.mjs snapshot spotify --profile <id> --json
 \`\`\`
 
-3. Run the returned \`browserPlan\` against the verified Spotify for Artists session with RunnerOS browser tools. Read only what is visible: streams, listeners, followers, saves, the reporting window, top cities/countries, top tracks, and source-of-streams. Save the observed values as JSON under \`$CRAFT_WORKSPACE_PATH/data/spotify/captures/\`.
+3. Run the returned \`browserPlan\` against the verified Spotify for Artists session with RunnerOS browser tools. Read only what is visible: streams, listeners, followers, saves, the reporting window, visible daily stream trend points, top cities/countries, top tracks, and source-of-streams. Save the observed values as JSON under \`$CRAFT_WORKSPACE_PATH/data/spotify/captures/\`.
 
 4. Normalize and save the captured numbers:
 
@@ -39663,6 +39930,7 @@ The default output is \`data/spotify/snapshots/<YYYY-MM-DD>-s4a.json\` inside th
   "windowDays": 28,
   "artist": { "name": "...", "spotifyUrl": "...", "profile": "..." },
   "metrics": { "streams": 0, "listeners": 0, "followers": 0, "saves": 0 },
+  "dailyStreams": [{ "date": "YYYY-MM-DD", "streams": 0 }],
   "geo": { "topCities": [], "topCountries": [] },
   "tracks": [{ "name": "...", "streams": 0, "spotifyUrl": "..." }],
   "sources": {},

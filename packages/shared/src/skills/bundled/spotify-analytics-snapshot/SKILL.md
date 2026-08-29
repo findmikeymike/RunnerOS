@@ -26,7 +26,7 @@ node src/social.mjs profile status spotify --profile <id> --live --json
 node src/social.mjs snapshot spotify --profile <id> --json
 ```
 
-3. Run the returned `browserPlan` against the verified Spotify for Artists session with RunnerOS browser tools. Read only what is visible: streams, listeners, followers, saves, the reporting window, top cities/countries, top tracks, and source-of-streams. Save the observed values as JSON under `$CRAFT_WORKSPACE_PATH/data/spotify/captures/`.
+3. Run the returned `browserPlan` against the verified Spotify for Artists session with RunnerOS browser tools. Read only what is visible: streams, listeners, followers, saves, the reporting window, visible daily stream trend points, top cities/countries, top tracks, and source-of-streams. Save the observed values as JSON under `$CRAFT_WORKSPACE_PATH/data/spotify/captures/`.
 
 4. Normalize and save the captured numbers:
 
@@ -51,6 +51,7 @@ The default output is `data/spotify/snapshots/<YYYY-MM-DD>-s4a.json` inside the 
   "windowDays": 28,
   "artist": { "name": "...", "spotifyUrl": "...", "profile": "..." },
   "metrics": { "streams": 0, "listeners": 0, "followers": 0, "saves": 0 },
+  "dailyStreams": [{ "date": "YYYY-MM-DD", "streams": 0 }],
   "geo": { "topCities": [], "topCountries": [] },
   "tracks": [{ "name": "...", "streams": 0, "spotifyUrl": "..." }],
   "sources": {},

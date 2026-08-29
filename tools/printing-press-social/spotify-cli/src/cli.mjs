@@ -301,7 +301,7 @@ async function handleSnapshot(flags) {
           `open Spotify for Artists (${S4A_HOME})`,
           'verify visible account matches profile',
           'open the Audience/Home overview for the selected date range',
-          'read streams, listeners, followers, saves, and the date range window',
+          'read streams, listeners, followers, saves, the date range window, and visible daily stream trend points',
           'open Audience > Where they listen for top cities and top countries',
           'open Music > Songs for top tracks (streams per track)',
           'open the source-of-streams breakdown if available',
@@ -355,6 +355,7 @@ function snapshotCaptureContract(flags) {
       listeners: 'integer|null',
       followers: 'integer|null',
       saves: 'integer|null',
+      dailyStreams: '[{ date: YYYY-MM-DD, streams: integer }] for visible points in the selected reporting window',
       topCities: '[{ city: string, country?: string, listeners?: number }]',
       topCountries: '[{ country: string, listeners?: number }]',
       topTracks: '[{ name: string, streams?: number, spotifyUrl?: string }]',
@@ -394,6 +395,7 @@ function normalizeSnapshot(captured, { profile }) {
   const topCountries = normalizeCountryList(captured.topCountries, errors);
   const tracks = normalizeTrackList(captured.topTracks, errors);
   const sources = normalizeSources(captured.sources, errors);
+  const dailyStreams = normalizeDailyStreams(captured.dailyStreams, errors);
 
   return {
     version: 1,
@@ -406,6 +408,7 @@ function normalizeSnapshot(captured, { profile }) {
       profile: profile.id,
     },
     metrics,
+    dailyStreams,
     geo: {
       topCities,
       topCountries,
@@ -417,6 +420,30 @@ function normalizeSnapshot(captured, { profile }) {
     capturedAt: typeof captured.capturedAt === 'string' ? captured.capturedAt : null,
     updatedAt: new Date().toISOString(),
   };
+}
+
+function normalizeDailyStreams(value, errors) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) {
+    errors.push('Daily streams capture was not an array and was ignored.');
+    return [];
+  }
+  const byDate = new Map();
+  value.forEach((item, index) => {
+    if (!isPlainObject(item) || !isIsoDate(cleanString(item.date) || '')) {
+      errors.push(`Invalid dailyStreams[${index}] entry was ignored.`);
+      return;
+    }
+    const streams = nonnegativeIntegerOrNull(item.streams);
+    if (streams === null) {
+      errors.push(`Invalid dailyStreams[${index}].streams was ignored.`);
+      return;
+    }
+    byDate.set(item.date.trim(), streams);
+  });
+  return [...byDate.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([date, streams]) => ({ date, streams }));
 }
 
 function normalizeCityList(value, errors) {

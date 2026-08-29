@@ -1695,11 +1695,6 @@ function AppShellContent({
     setSessionsNavExpanded((expanded) => !expanded)
   }, [])
 
-  const handleAgendaNavClick = useCallback(() => {
-    setSessionsNavExpanded(false)
-    navigate(routes.view.agenda())
-  }, [])
-
   const handleSessionsNavClick = useCallback(() => {
     setSessionsNavExpanded((expanded) => !expanded)
     if (!isSessionsNavigation(navState)) navigate(routes.view.allSessions())
@@ -2165,7 +2160,6 @@ function AppShellContent({
   const labSessionsActive = isLabWorkspace
     && isSessionsNavigation(navState)
     && !workChatActive
-  const planExpanded = expandedMainNavGroups.has('plan')
   const peopleExpanded = expandedMainNavGroups.has('people')
   const workExpanded = expandedMainNavGroups.has('work')
   const brainExpanded = expandedMainNavGroups.has('brain')
@@ -2217,11 +2211,7 @@ function AppShellContent({
 
     result.push({ id: 'nav:hq', type: 'nav', action: () => handleArtistHQNavClick('home') })
     result.push({ id: 'nav:work-chat', type: 'nav', action: handleWorkChatClick })
-    result.push({ id: 'nav:plan', type: 'nav', action: () => toggleMainNavGroup('plan') })
-    if (planExpanded) {
-      result.push({ id: 'nav:calendar', type: 'nav', action: () => handleArtistHQNavClick('calendar') })
-      result.push({ id: 'nav:agenda', type: 'nav', action: handleAgendaNavClick })
-    }
+    result.push({ id: 'nav:plan', type: 'nav', action: () => handleArtistHQNavClick('calendar') })
     result.push({ id: 'nav:people', type: 'nav', action: () => toggleMainNavGroup('people') })
     if (peopleExpanded) {
       result.push({ id: 'nav:network', type: 'nav', action: () => handleArtistHQNavClick('network') })
@@ -2243,7 +2233,7 @@ function AppShellContent({
     }
 
     return result
-  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, isArtistHQWorkspace, isLabWorkspace, navigate, peopleExpanded, planExpanded, toggleMainNavGroup, vaultActive, workExpanded])
+  }, [brainExpanded, handleAgentsClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, isArtistHQWorkspace, isLabWorkspace, navigate, peopleExpanded, toggleMainNavGroup, vaultActive, workExpanded])
 
   const sidebarProjectGroups = React.useMemo(() => {
     const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
@@ -2669,26 +2659,7 @@ function AppShellContent({
         title: "Plan",
         icon: Calendar,
         variant: planActive ? "default" : "ghost",
-        expandable: true,
-        expanded: planExpanded,
-        onToggle: () => toggleMainNavGroup('plan'),
-        onClick: () => toggleMainNavGroup('plan'),
-        items: [
-          {
-            id: "nav:calendar",
-            title: "Calendar",
-            icon: Calendar,
-            variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/calendar' ? "default" : "ghost",
-            onClick: () => handleArtistHQNavClick('calendar'),
-          },
-          {
-            id: "nav:agenda",
-            title: "Agenda",
-            icon: MessageSquare,
-            variant: isAgendaNavigation(navState) ? "default" : "ghost",
-            onClick: handleAgendaNavClick,
-          },
-        ],
+        onClick: () => handleArtistHQNavClick('calendar'),
       },
       {
         id: "nav:people",
@@ -2809,7 +2780,7 @@ function AppShellContent({
         ],
       },
     ]
-  }, [artistHqHash, automations.length, brainActive, brainExpanded, campaignActive, campaignCalendarActive, campaignHomeActive, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleChatHistoryToggle, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, isLabWorkspace, labHomeActive, labPadActive, labSequenceActive, labSessionsActive, labSongsActive, navigate, navState, openAddAutomation, peopleActive, peopleExpanded, planActive, planExpanded, sessionsNavExpanded, t, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
+  }, [artistHqHash, automations.length, brainActive, brainExpanded, campaignActive, campaignCalendarActive, campaignHomeActive, handleAgentsClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleChatHistoryToggle, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, isLabWorkspace, labHomeActive, labPadActive, labSequenceActive, labSessionsActive, labSongsActive, navigate, navState, openAddAutomation, peopleActive, peopleExpanded, planActive, sessionsNavExpanded, t, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
 
   const sidebarSessionHistory = React.useMemo(() => {
     if (!sessionsNavExpanded || !workChatActive) return null
@@ -3023,7 +2994,7 @@ function AppShellContent({
                 {/* pb-4 provides clearance so the last item scrolls above the mask-fade-bottom gradient */}
                 <div className={cn(
                   "flex-1 w-full overflow-y-auto overflow-x-hidden min-h-0 mask-fade-bottom",
-                  usesWorkspaceHeader ? "px-3 pb-10 pt-3" : "pt-[18px] pb-4",
+                  usesWorkspaceHeader ? "px-3 pb-10 pt-10" : "pt-[18px] pb-4",
                 )}>
                 <LeftSidebar
                   isCollapsed={false}

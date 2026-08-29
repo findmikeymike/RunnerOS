@@ -3,6 +3,22 @@ import { validateAutomationsConfig } from '@craft-agent/shared/automations'
 import { AUTOMATION_TEMPLATES } from './templates'
 
 describe('automation templates', () => {
+  test('weekly Instagram snapshot is disabled, read-only, and uses Social Publisher', () => {
+    const template = AUTOMATION_TEMPLATES.find((item) => item.id === 'scheduled-instagram-growth-snapshot')
+
+    expect(template?.matcher).toMatchObject({
+      cron: '20 9 * * 1',
+      permissionMode: 'safe',
+      enabled: false,
+    })
+    const actions = template?.matcher.actions as Array<Record<string, unknown>>
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toMatchObject({ type: 'prompt', agentSlug: 'social-publisher' })
+    expect(String(actions[0]?.prompt)).toContain('first ready Instagram profile')
+    expect(String(actions[0]?.prompt)).toContain('artist-instagram-snapshot')
+    expect(validateAutomationsConfig({ automations: { SchedulerTick: [template?.matcher] } }).valid).toBe(true)
+  })
+
   test('daily social replies is a disabled exact-agent scheduled template', () => {
     const template = AUTOMATION_TEMPLATES.find((item) => item.id === 'scheduled-social-comment-replies')
 

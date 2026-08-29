@@ -46,7 +46,7 @@ Explain this model when the user is setting up social publishing or seems confus
 - Resolve account sets with `node src/social.mjs catalog --json`. If the user says "post to MikeyReal on IG and TikTok", use the catalog `platforms` map to resolve `instagram/<profile>` and `tiktok/<profile>`.
 - If the requested platform is missing from an account set, stop and say exactly which platform is missing.
 - Users should log in once per profile. The saved browser session keeps cookies/login state so they do not retype passwords every run.
-- If multiple profiles exist for a platform, never guess. Ask the user which `platform/profile` to use unless they already named it.
+- If multiple profiles exist for a platform, never guess. Ask the user which `platform/profile` to use unless they already named it. Narrow exception: the read-only `instagram-growth-snapshot` skill intentionally selects the first ready Instagram profile in catalog order when the user does not name one.
 - If the user names a handle or account URL instead of a profile ID, match it against `catalog --json`; ask if more than one profile matches.
 - Passwords, recovery codes, tokens, cookies, and 2FA secrets must never be written into Workspace Context, memory, source guides, or chat prompts.
 - Workspace Context should store only non-secret defaults: profile IDs, handles, account URLs, tone, posting defaults, and account notes.

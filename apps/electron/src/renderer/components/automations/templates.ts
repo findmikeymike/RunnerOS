@@ -37,6 +37,35 @@ export interface AutomationTemplate {
 export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   // ----- SchedulerTick -----
   {
+    id: 'scheduled-instagram-growth-snapshot',
+    category: 'scheduled',
+    title: 'Weekly Instagram growth snapshot',
+    description: 'Read the first ready Instagram account’s Insights 20 minutes after the weekly Spotify Pulse.',
+    glyph: '◎',
+    event: 'SchedulerTick',
+    matcher: {
+      name: 'Weekly Instagram Growth Snapshot',
+      cron: '20 9 * * 1',
+      timezone: 'America/Chicago',
+      permissionMode: 'safe',
+      enabled: false,
+      labels: ['instagram', 'insights', 'artist-hq', 'scheduled'],
+      actions: [
+        {
+          type: 'prompt',
+          agentSlug: 'social-publisher',
+          thinkingLevel: 'high',
+          prompt: `Run the read-only Instagram Growth Snapshot for this Artist HQ workspace.
+
+Load the instagram-growth-snapshot skill. If no exact Instagram profile was named, select the first ready Instagram profile returned by the live Printing Press Social catalog, preserving catalog order. Verify the visible account, read its Insights for the last 14 completed days or the nearest visible supported range, save an immutable snapshot, and update Workspace Context slug artist-instagram-snapshot.
+
+Do not publish, reply, DM, follow, or change account settings. Never fabricate missing metrics. Keep the final note short: profile, actual reporting window, follower growth or decline, reach, interactions, and blockers.`,
+        },
+      ],
+    },
+    setupHint: 'Disabled by default. Connect and verify Instagram in Settings, then enable it from Social Pulse or Automations.',
+  },
+  {
     id: 'scheduled-social-comment-replies',
     category: 'scheduled',
     title: 'Daily social comment replies',

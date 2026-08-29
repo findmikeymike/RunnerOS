@@ -8,6 +8,7 @@ import {
   resolveHqRouteReadiness,
   selectHqRouteContextDocs,
   unhealthyHqSources,
+  userFacingHqAttention,
 } from './artist-hq-proactive'
 
 describe('artist HQ proactive helpers', () => {
@@ -88,6 +89,17 @@ describe('artist HQ proactive helpers', () => {
       { source: 'scheduled-work', status: 'degraded', checkedAt: '2026-07-11T00:00:00.000Z', itemCount: 0 },
       { source: 'workflow-runs', status: 'unavailable', checkedAt: '2026-07-11T00:00:00.000Z', itemCount: 0 },
     ]).map((source) => source.source)).toEqual(['scheduled-work', 'workflow-runs'])
+  })
+
+  test('keeps internal source-health diagnostics out of the artist-facing action list', () => {
+    expect(userFacingHqAttention([
+      { kind: 'source-health', text: 'Outputs are stale.', source: 'operational:outputs' },
+      { kind: 'vault', text: 'Add the final master.', source: 'artist-vault' },
+      { kind: 'approval', text: 'Approve the press release.', source: 'approvals' },
+    ])).toEqual([
+      { kind: 'vault', text: 'Add the final master.', source: 'artist-vault' },
+      { kind: 'approval', text: 'Approve the press release.', source: 'approvals' },
+    ])
   })
 })
 

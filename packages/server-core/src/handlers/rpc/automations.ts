@@ -23,6 +23,49 @@ function withConfigMutex<T>(workspaceRoot: string, fn: () => Promise<T>): Promis
   return next
 }
 
+export interface PromptAutomationLaunch {
+  started: Promise<{ sessionId: string }>
+  completion: Promise<{ sessionId: string }>
+}
+
+/**
+ * Start a prompt automation without making the calling RPC wait for the full
+ * model turn. The start promise resolves as soon as the durable session exists;
+ * completion remains available for history and error reporting.
+ */
+export function beginPromptAutomation(
+  execute: (onSessionCreated: (sessionId: string) => void) => Promise<{ sessionId: string }>,
+): PromptAutomationLaunch {
+  let startedSettled = false
+  let resolveStarted!: (result: { sessionId: string }) => void
+  let rejectStarted!: (error: unknown) => void
+  const started = new Promise<{ sessionId: string }>((resolve, reject) => {
+    resolveStarted = resolve
+    rejectStarted = reject
+  })
+
+  const completion = Promise.resolve().then(() => execute((sessionId) => {
+    if (startedSettled) return
+    startedSettled = true
+    resolveStarted({ sessionId })
+  }))
+
+  void completion.then(
+    (result) => {
+      if (startedSettled) return
+      startedSettled = true
+      resolveStarted(result)
+    },
+    (error) => {
+      if (startedSettled) return
+      startedSettled = true
+      rejectStarted(error)
+    },
+  )
+
+  return { started, completion }
+}
+
 export function uniqueWebhookSlug(base: string, matchers: Record<string, unknown>[], duplicate = false): string {
   const existing = new Set(matchers.flatMap((matcher) => typeof matcher.slug === 'string' ? [matcher.slug] : []))
   if (!duplicate && !existing.has(base)) return base
@@ -219,19 +262,23 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
       const references = parsePromptReferences(action.prompt)
 
       try {
-        const { sessionId } = await deps.sessionManager.executePromptAutomation({
-          workspaceId: payload.workspaceId,
-          workspaceRootPath: workspace.rootPath,
-          prompt: action.prompt,
-          labels: payload.labels,
-          permissionMode: payload.permissionMode,
-          mentions: references.mentions,
-          agentSlug: action.agentSlug,
-          llmConnection: action.llmConnection,
-          model: action.model,
-          thinkingLevel: action.thinkingLevel,
-          automationName: payload.automationName,
-        })
+        const launch = beginPromptAutomation((onSessionCreated) => (
+          deps.sessionManager.executePromptAutomation({
+            workspaceId: payload.workspaceId,
+            workspaceRootPath: workspace.rootPath,
+            prompt: action.prompt,
+            labels: payload.labels,
+            permissionMode: payload.permissionMode,
+            mentions: references.mentions,
+            agentSlug: action.agentSlug,
+            llmConnection: action.llmConnection,
+            model: action.model,
+            thinkingLevel: action.thinkingLevel,
+            automationName: payload.automationName,
+            onSessionCreated,
+          })
+        ))
+        const { sessionId } = await launch.started
         results.push({
           type: 'prompt',
           success: true,
@@ -239,15 +286,30 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
           duration: Date.now() - start,
         })
 
-        // Write history entry for test runs
-        if (payload.automationId) {
-          const entry = createPromptHistoryEntry({ matcherId: payload.automationId, ok: true, sessionId, prompt: action.prompt })
-          try {
-            await appendAutomationHistoryEntry(workspace.rootPath, entry)
-          } catch (e) {
-            log.warn('[Automations] Failed to write history:', e)
-          }
-        }
+        // The RPC reports a durable start immediately. The model turn continues
+        // in the background and records its real outcome when available.
+        void launch.completion.then(
+          async () => {
+            if (!payload.automationId) return
+            const entry = createPromptHistoryEntry({ matcherId: payload.automationId, ok: true, sessionId, prompt: action.prompt })
+            try {
+              await appendAutomationHistoryEntry(workspace.rootPath, entry)
+            } catch (error) {
+              log.warn('[Automations] Failed to write history:', error)
+            }
+          },
+          async (error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error)
+            log.error(`[Automations] Prompt test session ${sessionId} failed after launch:`, error)
+            if (!payload.automationId) return
+            const entry = createPromptHistoryEntry({ matcherId: payload.automationId, ok: false, error: message, prompt: action.prompt })
+            try {
+              await appendAutomationHistoryEntry(workspace.rootPath, entry)
+            } catch (historyError) {
+              log.warn('[Automations] Failed to write history:', historyError)
+            }
+          },
+        )
       } catch (err: unknown) {
         results.push({
           type: 'prompt',

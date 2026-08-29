@@ -1,15 +1,16 @@
 import * as React from 'react'
 import {
   Bot,
+  CalendarClock,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Circle,
   ExternalLink,
   FileText,
   FolderKanban,
   ImagePlus,
+  Info,
   MessageSquareText,
   Music2,
   Pencil,
@@ -27,29 +28,31 @@ import {
 } from 'lucide-react'
 import { useAtomValue } from 'jotai'
 import { toast } from 'sonner'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { useAgents } from '@/hooks/useAgents'
 import { useOutputs, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
-import { collectFinalRows, FinalsWidget } from '@/components/outputs/FinalsWidget'
 import { skillsAtom } from '@/atoms/skills'
 import { sourcesAtom } from '@/atoms/sources'
 import { sessionMetaMapAtom } from '@/atoms/sessions'
+import type { SessionMeta } from '@/atoms/sessions'
 import {
   dedupeAgentsBySlug,
   proactiveHqModeStorageKey,
   resolveHqRecommendationActionState,
   resolveHqRouteReadiness,
-  unhealthyHqSources,
+  userFacingHqAttention,
 } from '@/lib/artist-hq-proactive'
 import { parseAutomationsConfig, type AutomationListItem } from '@/components/automations/types'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { ScheduledWorkComposer, type ScheduledWorkComposerEntry } from '@/components/calendar/ScheduledWorkComposer'
-import { StateOfPlayHistory, StateOfPlayOutcomeFeedback, StateOfPlayRefreshButton } from './StateOfPlayControls'
+import { StateOfPlayRefreshButton } from './StateOfPlayControls'
+import { AgendaPage, type AgendaTaskDraft } from './AgendaPage'
 import { buildCampaignSchedulePlanFromComposer, buildHqSchedulePlanFromComposer, type ScheduledWorkComposerDraft } from '@/lib/scheduled-work-composer'
 import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult, type ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import {
@@ -64,7 +67,6 @@ import {
   parseHqStateOfPlay,
   type HqStateOfPlay,
   type HqStateAttentionItem,
-  type HqRecommendationDetail,
   type HqStateEntityRef,
   type HqStateRouteHint,
 } from '@craft-agent/shared/hq-state'
@@ -118,11 +120,20 @@ import {
 import {
   ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG,
   buildArtistSpotifyStreamHistory,
+  calculateArtistSpotifyGrowth,
   parseArtistSpotifySnapshotDocResult,
   parseArtistSpotifySnapshotJsonResult,
   type ArtistSpotifyHistoryPoint,
   type ArtistSpotifySnapshot,
 } from '@/lib/artist-spotify'
+import {
+  ARTIST_INSTAGRAM_SNAPSHOT_CONTEXT_SLUG,
+  buildArtistInstagramGrowthHistory,
+  parseArtistInstagramSnapshotDocResult,
+  parseArtistInstagramSnapshotJsonResult,
+  type ArtistInstagramGrowthPoint,
+  type ArtistInstagramSnapshot,
+} from '@/lib/artist-instagram'
 import {
   ARTIST_INTEL_CONFIG_CONTEXT_SLUG,
   ARTIST_INTEL_REPORT_CONTEXT_SLUG,
@@ -142,6 +153,7 @@ import {
   type ArtistIntelSource,
   YOUTUBE_INTELLIGENCE_AGENT_SLUG,
 } from '@/lib/artist-intel'
+import type { SocialAccountsDoctorResult } from '../../../shared/types'
 import {
   buildHqProjectColumns,
   buildHqThisWeekItems,
@@ -150,7 +162,6 @@ import {
   shouldRefreshHqStateOnOpen,
   type HqCampaignSummary,
   type HqHomeProjectColumn,
-  type HqHomeTimelineItem,
   type HqHomeWorkerItem,
 } from '@/lib/artist-hq-home-feed'
 
@@ -162,6 +173,9 @@ interface ArtistHQHomeProps {
   campaignWorkspaces?: HqCampaignSummary[]
   onOpenPrimaryCampaignWorkspace?: () => void
   onOpenCampaignWorkspace?: (workspaceId: string) => void
+  agendaSessions?: SessionMeta[]
+  onCreateAgendaTask?: (task: AgendaTaskDraft) => Promise<string>
+  onDeleteAgendaTask?: (sessionId: string) => Promise<boolean>
 }
 
 type ArtistHQTab = 'home' | 'profile' | 'voice' | 'calendar' | 'network' | 'research' | 'branding'
@@ -187,9 +201,12 @@ type BrandingDraft = Omit<ArtistBranding, 'version' | 'updatedAt'>
 type VoiceDraft = Omit<ArtistVoice, 'version' | 'updatedAt'>
 
 const HQ_HASH_PREFIX = '#artist-hq/'
+const SHOW_HQ_BANNER_FILTER = false
 const todayKey = toDateKey(new Date())
 const SPOTIFY_SYNC_AUTOMATION_NAME = 'Weekly Spotify Snapshot'
 const SPOTIFY_SYNC_CRON = '0 9 * * 1'
+const INSTAGRAM_SYNC_AUTOMATION_NAME = 'Weekly Instagram Growth Snapshot'
+const INSTAGRAM_SYNC_CRON = '20 9 * * 1'
 const INTEL_SYNC_AUTOMATION_NAME = 'Weekly YouTube Intel Pulse'
 const INTEL_SYNC_CRON = '0 10 * * 1'
 const YOUTUBE_RESEARCH_AGENT_SLUG = 'youtube-research-agent'
@@ -264,6 +281,9 @@ export function ArtistHQHome({
   campaignWorkspaces = [],
   onOpenPrimaryCampaignWorkspace,
   onOpenCampaignWorkspace,
+  agendaSessions = [],
+  onCreateAgendaTask,
+  onDeleteAgendaTask,
 }: ArtistHQHomeProps) {
   const {
     activeAgents: shellActiveAgents = [],
@@ -294,12 +314,16 @@ export function ArtistHQHome({
   const [automations, setAutomations] = React.useState<AutomationListItem[]>([])
   const [spotifySyncBusy, setSpotifySyncBusy] = React.useState(false)
   const [spotifyHistory, setSpotifyHistory] = React.useState<ArtistSpotifyHistoryPoint[]>([])
+  const [instagramSyncBusy, setInstagramSyncBusy] = React.useState(false)
+  const [instagramHistory, setInstagramHistory] = React.useState<ArtistInstagramGrowthPoint[]>([])
+  const [socialAccounts, setSocialAccounts] = React.useState<SocialAccountsDoctorResult | null>(null)
+  const [socialAccountsBusy, setSocialAccountsBusy] = React.useState(false)
+  const [socialAccountsError, setSocialAccountsError] = React.useState<string | null>(null)
   const [googleCalendarBusy, setGoogleCalendarBusy] = React.useState(false)
   const [googleCalendarConnected, setGoogleCalendarConnected] = React.useState(false)
   const [bannerImageDataUrl, setBannerImageDataUrl] = React.useState<string | null>(null)
   const [bannerImageBusy, setBannerImageBusy] = React.useState(false)
   const [proactiveMode, setProactiveMode] = React.useState(() => readBooleanLocalStorage(proactiveHqModeStorageKey(workspaceId), false))
-  const [homeDetailsOpen, setHomeDetailsOpen] = React.useState(() => readBooleanLocalStorage(hqHomeDetailsStorageKey(workspaceId), false))
   const [homeUtilitiesOpen, setHomeUtilitiesOpen] = React.useState(() => readBooleanLocalStorage(hqHomeUtilitiesStorageKey(workspaceId), false))
   const [hqRouteBusy, setHqRouteBusy] = React.useState(false)
   const [hqRefreshBusy, setHqRefreshBusy] = React.useState(false)
@@ -343,6 +367,16 @@ export function ArtistHQHome({
     [docs],
   )
   const spotifySyncActive = Boolean(spotifySyncAutomation?.enabled)
+  const instagramResult = React.useMemo(
+    () => parseArtistInstagramSnapshotDocResult(docs.find((doc) => doc.slug === ARTIST_INSTAGRAM_SNAPSHOT_CONTEXT_SLUG)),
+    [docs],
+  )
+  const instagramSnapshot = instagramResult.ok ? instagramResult.snapshot : null
+  const instagramSyncAutomation = React.useMemo(
+    () => automations.find(isInstagramSyncAutomation) ?? null,
+    [automations],
+  )
+  const instagramSyncActive = Boolean(instagramSyncAutomation?.enabled)
   const intelSyncAutomation = React.useMemo(
     () => automations.find(isIntelSyncAutomation) ?? null,
     [automations],
@@ -386,6 +420,11 @@ export function ArtistHQHome({
       .find((agent) => agent.slug === 'spotify-analyst'),
     [allAgents, shellActiveAgents, workspaceActiveAgents],
   )
+  const socialPublisher = React.useMemo(
+    () => [...shellActiveAgents, ...workspaceActiveAgents, ...allAgents]
+      .find((agent) => agent.slug === 'social-publisher'),
+    [allAgents, shellActiveAgents, workspaceActiveAgents],
+  )
   const availableAgents = React.useMemo(
     () => dedupeAgentsBySlug([...shellActiveAgents, ...workspaceActiveAgents, ...allAgents]),
     [allAgents, shellActiveAgents, workspaceActiveAgents],
@@ -418,10 +457,6 @@ export function ArtistHQHome({
     () => buildHqProjectColumns(campaignWorkspaces, scheduledWorkResult.work.items),
     [campaignWorkspaces, scheduledWorkResult.work.items],
   )
-  const hqFinalRows = React.useMemo(
-    () => collectFinalRows(outputs, 'hq'),
-    [outputs],
-  )
   const selectedDateEvents = React.useMemo(
     () => activeCalendarEvents.filter((event) => event.date === selectedDate),
     [activeCalendarEvents, selectedDate],
@@ -447,13 +482,21 @@ export function ArtistHQHome({
     writeBooleanLocalStorage(proactiveHqModeStorageKey(workspaceId), proactiveMode)
   }, [proactiveMode, workspaceId])
 
-  React.useEffect(() => {
-    setHomeDetailsOpen(readBooleanLocalStorage(hqHomeDetailsStorageKey(workspaceId), false))
-  }, [workspaceId])
+  const refreshSocialPulse = React.useCallback(async () => {
+    setSocialAccountsBusy(true)
+    setSocialAccountsError(null)
+    try {
+      setSocialAccounts(await window.electronAPI.listSocialAccounts())
+    } catch (error) {
+      setSocialAccountsError(error instanceof Error ? error.message : 'Could not load social accounts')
+    } finally {
+      setSocialAccountsBusy(false)
+    }
+  }, [])
 
   React.useEffect(() => {
-    writeBooleanLocalStorage(hqHomeDetailsStorageKey(workspaceId), homeDetailsOpen)
-  }, [homeDetailsOpen, workspaceId])
+    void refreshSocialPulse()
+  }, [refreshSocialPulse])
 
   React.useEffect(() => {
     setHomeUtilitiesOpen(readBooleanLocalStorage(hqHomeUtilitiesStorageKey(workspaceId), false))
@@ -500,6 +543,44 @@ export function ArtistHQHome({
       cancelled = true
     }
   }, [spotifySnapshot, workspaceRootPath])
+
+  React.useEffect(() => {
+    let cancelled = false
+    if (!workspaceRootPath) {
+      setInstagramHistory([])
+      return
+    }
+
+    const snapshotsPath = `${workspaceRootPath}/data/instagram/snapshots`
+    void window.electronAPI.searchFiles(snapshotsPath, '.json')
+      .then(async (files) => {
+        const snapshotFiles = files
+          .filter((file) => file.type === 'file' && /^\d{4}-\d{2}-\d{2}-insights\.json$/.test(file.name))
+          .sort((left, right) => left.name.localeCompare(right.name))
+          .slice(-24)
+        const parsed = await Promise.all(snapshotFiles.map(async (file) => {
+          try {
+            const result = parseArtistInstagramSnapshotJsonResult(await window.electronAPI.readFile(file.path))
+            return result.ok ? result.snapshot : null
+          } catch {
+            return null
+          }
+        }))
+        if (cancelled) return
+        const snapshots = parsed.filter((snapshot): snapshot is ArtistInstagramSnapshot => Boolean(snapshot))
+        if (instagramSnapshot) snapshots.push(instagramSnapshot)
+        setInstagramHistory(buildArtistInstagramGrowthHistory(snapshots))
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setInstagramHistory(instagramSnapshot ? buildArtistInstagramGrowthHistory([instagramSnapshot]) : [])
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [instagramSnapshot, workspaceRootPath])
 
   const refreshGoogleCalendarStatus = React.useCallback(async () => {
     try {
@@ -668,6 +749,17 @@ export function ArtistHQHome({
       'safe',
     ).then(refreshAutomations).catch(() => undefined)
   }, [refreshAutomations, spotifySyncAutomation, workspaceId])
+
+  React.useEffect(() => {
+    if (!instagramSyncAutomation || instagramSyncAutomation.permissionMode === 'safe') return
+    void window.electronAPI.setAutomationEnabled(
+      workspaceId,
+      instagramSyncAutomation.event,
+      instagramSyncAutomation.matcherIndex,
+      instagramSyncAutomation.enabled,
+      'safe',
+    ).then(refreshAutomations).catch(() => undefined)
+  }, [instagramSyncAutomation, refreshAutomations, workspaceId])
 
   const saveNetwork = React.useCallback(
     async (nextNetwork: ArtistNetwork) => {
@@ -845,28 +937,27 @@ export function ArtistHQHome({
     }
     setIntelBusy(true)
     try {
-      const nextEnabled = !intelConfig.enabled
+      const nextScheduled = !intelSyncActive
       await saveIntelConfig({
         ...intelConfig,
-        enabled: nextEnabled,
+        enabled: nextScheduled,
+        cadence: nextScheduled ? 'weekly' : intelConfig.cadence,
       })
-      if (intelSyncAutomation && nextEnabled && isLegacyIntelSyncAutomation(intelSyncAutomation)) {
+      if (intelSyncAutomation && nextScheduled && isLegacyIntelSyncAutomation(intelSyncAutomation)) {
         await window.electronAPI.deleteAutomation(workspaceId, intelSyncAutomation.event, intelSyncAutomation.matcherIndex)
-        if (intelConfig.cadence === 'weekly') {
-          await window.electronAPI.createAutomationFromTemplate(
-            workspaceId,
-            'SchedulerTick',
-            createIntelSyncMatcher(workspaceName || 'Artist HQ'),
-          )
-        }
+        await window.electronAPI.createAutomationFromTemplate(
+          workspaceId,
+          'SchedulerTick',
+          createIntelSyncMatcher(workspaceName || 'Artist HQ'),
+        )
       } else if (intelSyncAutomation) {
         await window.electronAPI.setAutomationEnabled(
           workspaceId,
           intelSyncAutomation.event,
           intelSyncAutomation.matcherIndex,
-          nextEnabled && intelConfig.cadence === 'weekly',
+          nextScheduled,
         )
-      } else if (nextEnabled && intelConfig.cadence === 'weekly') {
+      } else if (nextScheduled) {
         await window.electronAPI.createAutomationFromTemplate(
           workspaceId,
           'SchedulerTick',
@@ -874,13 +965,13 @@ export function ArtistHQHome({
         )
       }
       await refreshAutomations()
-      toast.success(nextEnabled ? 'Intel Pulse activated' : 'Intel Pulse paused')
+      toast.success(nextScheduled ? 'Weekly Intel auto-run enabled' : 'Weekly Intel auto-run paused')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setIntelBusy(false)
     }
-  }, [intelConfig, intelConfigResult, intelSyncAutomation, refreshAutomations, saveIntelConfig, workspaceId, workspaceName])
+  }, [intelConfig, intelConfigResult, intelSyncActive, intelSyncAutomation, refreshAutomations, saveIntelConfig, workspaceId, workspaceName])
 
   const runIntelPulse = React.useCallback(async () => {
     if (!workspaceId || !intelConfigResult.ok) return
@@ -1061,6 +1152,64 @@ export function ArtistHQHome({
       setSpotifySyncBusy(false)
     }
   }, [spotifyAnalyst, workspaceId])
+
+  const toggleInstagramSync = React.useCallback(async () => {
+    setInstagramSyncBusy(true)
+    try {
+      if (instagramSyncAutomation) {
+        await window.electronAPI.setAutomationEnabled(
+          workspaceId,
+          instagramSyncAutomation.event,
+          instagramSyncAutomation.matcherIndex,
+          !instagramSyncAutomation.enabled,
+          'safe',
+        )
+        toast.success(instagramSyncAutomation.enabled ? 'Instagram sync paused' : 'Instagram sync enabled')
+      } else {
+        await window.electronAPI.createAutomationFromTemplate(
+          workspaceId,
+          'SchedulerTick',
+          createInstagramSyncMatcher(),
+        )
+        toast.success('Weekly Instagram sync enabled')
+      }
+      await refreshAutomations()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setInstagramSyncBusy(false)
+    }
+  }, [instagramSyncAutomation, refreshAutomations, workspaceId])
+
+  const runInstagramPulse = React.useCallback(async () => {
+    if (!socialPublisher) {
+      toast.error('Social Publisher is not active in this workspace')
+      return
+    }
+    setInstagramSyncBusy(true)
+    try {
+      const result = await window.electronAPI.testAutomation({
+        workspaceId,
+        automationName: 'Manual Instagram Growth Snapshot',
+        actions: [{
+          type: 'prompt',
+          agentSlug: 'social-publisher',
+          prompt: createInstagramSyncPrompt(),
+        }],
+        permissionMode: 'safe',
+        labels: ['instagram', 'insights', 'artist-hq', 'manual'],
+      })
+      const action = result.actions.find((candidate) => candidate.type === 'prompt')
+      if (!action?.success) throw new Error(action?.stderr || 'Instagram snapshot did not start.')
+      toast.success('Instagram Pulse started')
+    } catch (error) {
+      toast.error('Failed to start Instagram Pulse', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setInstagramSyncBusy(false)
+    }
+  }, [socialPublisher, workspaceId])
 
   const submitCalendarWork = React.useCallback(async (draft: ScheduledWorkComposerDraft) => {
     if (draft.type === 'event') {
@@ -1275,8 +1424,8 @@ export function ArtistHQHome({
         return {
           title: 'Calendar',
           description: 'Schedule, events, and important dates for the artist.',
-          orb1: 'bg-indigo-600/10',
-          orb2: 'bg-purple-500/5',
+          orb1: 'bg-orange-600/10',
+          orb2: 'bg-orange-500/5',
           icon: <CalendarDays className="h-3.5 w-3.5 text-white/58" />,
           label: 'Schedule',
         }
@@ -1319,9 +1468,9 @@ export function ArtistHQHome({
       default:
         return {
           title: artistName,
-          description: 'Global career context, signals, calendar, network, and research. Campaign workspaces pull from here.',
-          orb1: 'bg-orange-600/10',
-          orb2: 'bg-cyan-500/5',
+          description: 'Global career context, planning, and work',
+          orb1: 'bg-transparent',
+          orb2: 'bg-transparent',
           icon: <Sparkles className="h-3.5 w-3.5 text-white/58" />,
           label: 'Artist HQ',
         }
@@ -1329,11 +1478,21 @@ export function ArtistHQHome({
   }
 
   const headerProps = getHeaderProps()
+  const usesCompactSectionHeader = tab === 'network'
 
   return (
-    <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
-      <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
-        <section className="relative min-h-[230px] overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A]">
+    <div className={cn('h-full bg-[#050505] text-foreground', tab === 'calendar' ? 'overflow-hidden' : 'overflow-y-auto')}>
+      <div className={cn('mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5', tab === 'calendar' ? 'h-full min-h-0' : 'min-h-full')}>
+        {tab !== 'calendar' ? (
+        <section
+          className={cn(
+            'relative overflow-hidden rounded-[24px] border border-white/[0.05]',
+            usesCompactSectionHeader ? 'min-h-[230px]' : 'min-h-[250px]',
+            tab === 'home'
+              ? 'bg-[radial-gradient(circle_at_100%_50%,rgba(249,115,22,0.26),transparent_48%),#050505]'
+              : 'bg-[#0A0A0A]',
+          )}
+        >
           {tab === 'home' && bannerImageDataUrl ? (
             <>
               <img
@@ -1341,16 +1500,23 @@ export function ArtistHQHome({
                 alt=""
                 className="absolute inset-0 h-full w-full object-cover"
               />
-              <div className="absolute inset-0 bg-black/55" />
-              <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/55 to-transparent" />
+              {SHOW_HQ_BANNER_FILTER ? (
+                <>
+                  <div className="absolute inset-0 bg-black/55" />
+                  <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/55 to-transparent" />
+                </>
+              ) : null}
             </>
           ) : (
             <>
-              <div className={cn('absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full blur-[110px]', headerProps.orb1)} />
+              <div className={cn('absolute -left-[18%] -top-[50%] h-[700px] w-[700px] rounded-full blur-[150px]', headerProps.orb1)} />
               <div className={cn('absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full blur-[120px]', headerProps.orb2)} />
             </>
           )}
-          <div className="relative z-10 flex min-h-[230px] flex-col justify-between p-6 lg:p-8">
+          <div className={cn(
+            'relative z-10 flex flex-col justify-between p-6 lg:p-8',
+            usesCompactSectionHeader ? 'min-h-[230px]' : 'min-h-[250px]',
+          )}>
             <div className="flex items-start justify-between gap-4">
               <div className="inline-flex items-center gap-2.5 rounded-full border border-white/[0.08] bg-black/25 px-3 py-1.5 pr-4 backdrop-blur-md">
                 {headerProps.icon}
@@ -1397,9 +1563,69 @@ export function ArtistHQHome({
             </div>
           ) : null}
         </section>
+        ) : null}
 
         {tab === 'home' && (
           <>
+            <HQCard className="overflow-hidden p-0">
+              <div id="hq-home-details" className="grid grid-cols-1 divide-y divide-white/[0.055] lg:grid-cols-3 lg:divide-x lg:divide-y-0">
+                <SpotifyPulseCard
+                  snapshot={spotifySnapshot}
+                  history={spotifyHistory}
+                  publicApi={spotifyIsPublicApi}
+                  active={spotifySyncActive}
+                  busy={spotifySyncBusy}
+                  runDisabled={!spotifyAnalyst}
+                  error={spotifyResult.ok ? null : spotifyResult.error}
+                  onToggle={toggleSpotifySync}
+                  onRun={runSpotifyPulse}
+                />
+
+                <SocialPulseCard
+                  doctor={socialAccounts}
+                  snapshot={instagramSnapshot}
+                  history={instagramHistory}
+                  active={instagramSyncActive}
+                  busy={socialAccountsBusy || instagramSyncBusy}
+                  runDisabled={!socialPublisher}
+                  error={socialAccountsError || (instagramResult.ok ? null : instagramResult.error)}
+                  onRun={runInstagramPulse}
+                  onToggle={toggleInstagramSync}
+                  onManage={() => navigate(routes.view.settings('social-accounts'))}
+                />
+
+                <IntelPulseCard
+                  config={intelConfig}
+                  report={intelReport}
+                  configError={intelConfigResult.ok ? null : intelConfigResult.error}
+                  reportError={intelReportResult.ok ? null : intelReportResult.error}
+                  busy={intelBusy}
+                  agentReady={Boolean(youtubeIntelligenceAgent)}
+                  scheduled={intelSyncActive}
+                  onToggle={toggleIntelPulse}
+                  onRun={runIntelPulse}
+                  onEdit={() => setIntelConfigOpen(true)}
+                />
+              </div>
+            </HQCard>
+
+            <HQCard className="p-0">
+              <div className="flex items-center justify-between gap-3 px-4 py-3">
+                <SectionTitle icon={FolderKanban} title="Projects" meta="global" compact />
+              </div>
+              <div className="px-4 pb-4 pt-1">
+                <ProjectBoard
+                  columns={projectColumns}
+                  onOpenCampaignWorkspace={onOpenCampaignWorkspace ?? (
+                    primaryCampaignWorkspaceId && onOpenPrimaryCampaignWorkspace
+                      ? () => onOpenPrimaryCampaignWorkspace()
+                      : undefined
+                  )}
+                  onOpenScheduledWork={() => { window.location.hash = '#artist-hq/calendar' }}
+                />
+              </div>
+            </HQCard>
+
             <StateOfPlayPanel
               state={hqState}
               workspaceId={workspaceId}
@@ -1414,99 +1640,27 @@ export function ArtistHQHome({
               onRefresh={refreshHqState}
             />
 
-            <section className="rounded-[12px] border border-white/[0.05] bg-[#090A0C]">
-              <button
-                type="button"
-                onClick={() => setHomeDetailsOpen((open) => !open)}
-                aria-expanded={homeDetailsOpen}
-                aria-controls="hq-home-details"
-                className="flex h-11 w-full items-center justify-between gap-3 px-4 text-left text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.025] hover:text-white/75"
-              >
-                <span>More details</span>
-                <span className="flex items-center gap-2 text-[9px] uppercase tracking-[0.14em] text-white/28">
-                  Spotify, intel, finals
-                  <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', homeDetailsOpen && 'rotate-180')} />
-                </span>
-              </button>
-              {homeDetailsOpen ? (
-                <div id="hq-home-details" className="grid grid-cols-1 items-start gap-3 border-t border-white/[0.05] p-3 lg:grid-cols-3">
-                  <SpotifyPulseCard
-                    snapshot={spotifySnapshot}
-                    history={spotifyHistory}
-                    publicApi={spotifyIsPublicApi}
-                    active={spotifySyncActive}
-                    busy={spotifySyncBusy}
-                    runDisabled={!spotifyAnalyst}
-                    error={spotifyResult.ok ? null : spotifyResult.error}
-                    onToggle={toggleSpotifySync}
-                    onRun={runSpotifyPulse}
-                  />
-
-                  <IntelPulseCard
-                    config={intelConfig}
-                    report={intelReport}
-                    configError={intelConfigResult.ok ? null : intelConfigResult.error}
-                    reportError={intelReportResult.ok ? null : intelReportResult.error}
-                    busy={intelBusy}
-                    agentReady={Boolean(youtubeIntelligenceAgent)}
-                    scheduled={intelSyncActive}
-                    onToggle={toggleIntelPulse}
-                    onRun={runIntelPulse}
-                    onEdit={() => setIntelConfigOpen(true)}
-                  />
-
-                  <FinalsWidget
-                    title="Artist Kit / Finals"
-                    outputs={outputs}
-                    scope="hq"
-                    loading={outputsLoading}
-                    onOpenOutput={(outputId) => navigate(routes.view.output(outputId))}
-                  />
-                </div>
-              ) : null}
-            </section>
-
-            <HomeWeekOverviewCard
-              thisWeekItems={thisWeekItems}
-              attentionItems={hqState?.attention ?? []}
-              finals={hqFinalRows}
-              finalsLoading={outputsLoading}
-              onOpenFinal={(outputId) => navigate(routes.view.output(outputId))}
-            />
-
-            <HQCard className="p-0">
-              <div className="flex items-center justify-between gap-3 px-4 py-3">
-                <SectionTitle icon={FolderKanban} title="Projects" meta="global" compact />
-              </div>
-              <div className="border-t border-white/[0.045] px-4 pb-4 pt-3">
-                <ProjectBoard
-                  columns={projectColumns}
-                  onOpenCampaignWorkspace={onOpenCampaignWorkspace ?? (
-                    primaryCampaignWorkspaceId && onOpenPrimaryCampaignWorkspace
-                      ? () => onOpenPrimaryCampaignWorkspace()
-                      : undefined
-                  )}
-                  onOpenScheduledWork={() => { window.location.hash = '#artist-hq/calendar' }}
-                />
-              </div>
-            </HQCard>
-
-            <section className="rounded-[12px] border border-white/[0.05] bg-[#090A0C]">
-              <button
-                type="button"
-                onClick={() => setHomeUtilitiesOpen((open) => !open)}
-                aria-expanded={homeUtilitiesOpen}
-                aria-controls="hq-home-utilities"
-                className="flex h-11 w-full items-center justify-between gap-3 px-4 text-left text-xs font-medium text-white/48 transition-colors hover:bg-white/[0.025] hover:text-white/72"
-              >
-                <span>Workers &amp; signals</span>
-                <span className="flex items-center gap-2 text-[9px] uppercase tracking-[0.14em] text-white/28">
-                  {workerItems.length} active
-                  <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', homeUtilitiesOpen && 'rotate-180')} />
-                </span>
-              </button>
+            <section>
+              <HQCard className="p-0">
+                <button
+                  type="button"
+                  onClick={() => setHomeUtilitiesOpen((open) => !open)}
+                  aria-expanded={homeUtilitiesOpen}
+                  aria-controls="hq-home-utilities"
+                  className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-white/[0.015]"
+                >
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#f97316]" />
+                    <span className="truncate text-sm font-medium tracking-tight text-white/88">Workers &amp; signals</span>
+                  </span>
+                  <span className="flex items-center gap-2 text-[9px] uppercase tracking-[0.14em] text-white/48">
+                    {workerItems.length} active
+                    <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', homeUtilitiesOpen && 'rotate-180')} />
+                  </span>
+                </button>
+              </HQCard>
               {homeUtilitiesOpen ? (
-                <div id="hq-home-utilities" className="grid grid-cols-1 gap-3 border-t border-white/[0.05] p-3 xl:grid-cols-[1.2fr_0.8fr]">
+                <div id="hq-home-utilities" className="grid grid-cols-1 gap-3 pt-1 xl:grid-cols-[1.2fr_0.8fr]">
                   <WorkersSummaryCard workerItems={workerItems} />
                   <PulseSummaryCard
                     spotifyValue={spotifyIsPublicApi
@@ -1523,7 +1677,6 @@ export function ArtistHQHome({
                     onToggleIntel={toggleIntelPulse}
                     onRunIntel={runIntelPulse}
                     intelRunDisabled={!youtubeIntelligenceAgent || intelConfig.sources.length === 0 || intelReport.status === 'queued'}
-                    onShowDetails={() => setHomeDetailsOpen(true)}
                   />
                 </div>
               ) : null}
@@ -1591,7 +1744,36 @@ export function ArtistHQHome({
         )}
 
         {tab === 'calendar' && (
-          <HQCard className="flex min-h-[430px] flex-1 flex-col">
+          <>
+          <header className="relative min-h-[118px] overflow-hidden rounded-[22px] border border-blue-300/[0.08] bg-[linear-gradient(105deg,#07090D_0%,#0A1020_58%,#102A55_100%)]">
+            <div className="absolute -right-16 -top-28 h-72 w-72 rounded-full bg-blue-500/20 blur-[90px]" />
+            <div className="relative z-10 flex min-h-[118px] items-center justify-between gap-5 px-6 py-5">
+              <div>
+                <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-blue-200/48">Artist HQ</p>
+                <h1 className="mt-1 text-[30px] font-medium tracking-tight text-white/92">Plan</h1>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={connectGoogleCalendar}
+                  disabled={googleCalendarBusy}
+                  className="h-7 rounded-[6px] border border-white/[0.10] bg-black/15 px-2.5 text-[9px] font-medium text-white/62 transition-colors hover:bg-white/[0.06] hover:text-white/82 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {googleCalendarConnected ? 'Reconnect Google' : 'Connect Google'}
+                </button>
+                <button
+                  type="button"
+                  onClick={syncGoogleCalendar}
+                  disabled={!calendarResult.ok || !scheduledWorkResult.ok || googleCalendarBusy}
+                  className="inline-flex h-7 items-center gap-1.5 rounded-[6px] bg-white/90 px-2.5 text-[9px] font-medium text-black transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <RefreshCw className={cn('h-3 w-3', googleCalendarBusy && 'animate-spin')} />
+                  Sync
+                </button>
+              </div>
+            </div>
+          </header>
+          <HQCard className="flex min-h-0 flex-1 flex-col overflow-hidden border-white/[0.08] bg-[#0C0D0E] p-3">
             {!calendarResult.ok ? (
               <div className="mb-4 rounded-[14px] border border-red-400/20 bg-red-500/10 p-3 text-xs leading-5 text-red-100/80">
                 {calendarResult.error} Saving is paused so existing calendar context is not overwritten.
@@ -1602,32 +1784,31 @@ export function ArtistHQHome({
                 {scheduledWorkResult.error} Queueing is paused so existing scheduled work is not overwritten.
               </div>
             ) : null}
-            <ArtistCalendarView
-              events={activeCalendarEvents}
-              selectedDate={selectedDate}
-              visibleMonth={visibleMonth}
-              disabled={!calendarResult.ok || !scheduledWorkResult.ok}
-              googleConnected={googleCalendarConnected}
-              googleBusy={googleCalendarBusy}
-              onSelectDate={setSelectedDate}
-              onChangeMonth={setVisibleMonth}
-              editingEventId={calendarEditId}
-              editDraft={calendarEditDraft}
-              onChangeEditDraft={setCalendarEditDraft}
-              onEditEvent={openCalendarEventEdit}
-              onCancelEditEvent={cancelCalendarEventEdit}
-              onSaveEditEvent={saveCalendarEventEdit}
-              onDeleteEvent={deleteCalendarEvent}
-              onConnectGoogle={connectGoogleCalendar}
-              onSyncGoogle={syncGoogleCalendar}
-              onQueueHqWork={(type) => {
-                setCalendarComposerType(type)
-                setCalendarComposerTarget('hq')
-              }}
-              selectedDateEvents={selectedDateEvents}
-              workById={scheduledWorkById}
-              workspaceId={workspaceId}
-            />
+            <div className="flex h-[400px] shrink-0 flex-col">
+              <ArtistCalendarView
+                compact
+                events={activeCalendarEvents}
+                selectedDate={selectedDate}
+                visibleMonth={visibleMonth}
+                disabled={!calendarResult.ok || !scheduledWorkResult.ok}
+                onSelectDate={setSelectedDate}
+                onChangeMonth={setVisibleMonth}
+                editingEventId={calendarEditId}
+                editDraft={calendarEditDraft}
+                onChangeEditDraft={setCalendarEditDraft}
+                onEditEvent={openCalendarEventEdit}
+                onCancelEditEvent={cancelCalendarEventEdit}
+                onSaveEditEvent={saveCalendarEventEdit}
+                onDeleteEvent={deleteCalendarEvent}
+                onQueueHqWork={(type) => {
+                  setCalendarComposerType(type)
+                  setCalendarComposerTarget('hq')
+                }}
+                selectedDateEvents={selectedDateEvents}
+                workById={scheduledWorkById}
+                workspaceId={workspaceId}
+              />
+            </div>
             <ScheduledWorkComposer
               open={calendarComposerTarget !== null}
               entry={calendarComposerEntry}
@@ -1637,7 +1818,20 @@ export function ArtistHQHome({
               allowedTypes={calendarComposerTarget === 'hq' ? ['event', 'agent-task', 'workflow-run'] : undefined}
               allowFollowUps={calendarComposerTarget !== 'hq'}
             />
+            {onCreateAgendaTask && onDeleteAgendaTask ? (
+              <div id="plan-kanban" className="-mx-3 mt-4 min-h-[140px] flex-1 border-t border-white/[0.055] px-3 pt-3">
+                <AgendaPage
+                  embedded
+                  sessions={agendaSessions}
+                  onCreateTask={onCreateAgendaTask}
+                  onDeleteTask={onDeleteAgendaTask}
+                  workspaceId={workspaceId}
+                  networkWorkspaceId={workspaceId}
+                />
+              </div>
+            ) : null}
           </HQCard>
+          </>
         )}
 
         {tab === 'network' && (
@@ -1824,7 +2018,7 @@ export function ArtistHQHome({
 
 function HQCard({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <section className={cn('rounded-2xl border border-white/[0.04] bg-[#0A0A0A] p-4 shadow-minimal', className)}>
+    <section className={cn('rounded-2xl border border-white/[0.025] bg-[#0C0D0E] p-4', className)}>
       {children}
     </section>
   )
@@ -1842,12 +2036,79 @@ function SectionTitle({
   compact?: boolean
 }) {
   return (
-    <div className={cn('flex items-center justify-between gap-3', compact ? '' : 'mb-3 border-b border-white/[0.04] pb-2.5')}>
+    <div className={cn('flex items-center justify-between gap-3', compact ? '' : 'mb-3 pb-1')}>
       <div className="flex items-center gap-2">
-        <Icon className="h-3 w-3 text-white/40" />
-        <h3 className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/60">{title}</h3>
+        <Icon className="h-3 w-3 text-white/58" />
+        <h3 className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/76">{title}</h3>
       </div>
-      {meta ? <span className="text-[8px] font-medium uppercase tracking-widest text-white/30">{meta}</span> : null}
+      {meta ? <span className="text-[8px] font-medium uppercase tracking-widest text-white/48">{meta}</span> : null}
+    </div>
+  )
+}
+
+function PulseRunControls({
+  active,
+  busy,
+  runDisabled = false,
+  manualLabel,
+  weeklyLabel,
+  activeClassName,
+  onRun,
+  onToggle,
+}: {
+  active: boolean
+  busy: boolean
+  runDisabled?: boolean
+  manualLabel: string
+  weeklyLabel: string
+  activeClassName: string
+  onRun: () => void
+  onToggle: () => void
+}) {
+  const weeklyTooltip = active
+    ? `${weeklyLabel} is on — click to pause`
+    : `${weeklyLabel} is off — click to enable`
+
+  return (
+    <div className="flex shrink-0 items-center gap-1" aria-label="Pulse run controls">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={busy || runDisabled}
+            title={manualLabel}
+            aria-label={manualLabel}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.09] bg-white/[0.035] text-white/58 transition-colors hover:border-white/[0.14] hover:bg-white/[0.08] hover:text-white/90 disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <Play className="h-3 w-3 fill-current" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>{manualLabel}</TooltipContent>
+      </Tooltip>
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onToggle}
+            disabled={busy}
+            title={weeklyTooltip}
+            aria-label={weeklyTooltip}
+            aria-pressed={active}
+            className={cn(
+              'inline-flex h-6 w-6 items-center justify-center rounded-[6px] border transition-colors',
+              active
+                ? activeClassName
+                : 'border-white/[0.07] bg-white/[0.015] text-white/28 hover:bg-white/[0.05] hover:text-white/60',
+              busy && 'cursor-wait opacity-55',
+            )}
+          >
+            <CalendarClock className="h-3 w-3" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>{weeklyTooltip}</TooltipContent>
+      </Tooltip>
     </div>
   )
 }
@@ -1885,72 +2146,60 @@ function SpotifyPulseCard({
       : snapshot?.dataSource === 'manual'
         ? 'Manual'
         : 'No snapshot'
+  const growth = calculateArtistSpotifyGrowth(history)
+  const streamsPerListener = typeof snapshot?.metrics.streams === 'number'
+    && typeof snapshot.metrics.listeners === 'number'
+    && snapshot.metrics.listeners > 0
+    ? (snapshot.metrics.streams / snapshot.metrics.listeners).toFixed(1)
+    : '--'
 
   return (
-    <HQCard className="overflow-hidden p-0">
-      <div className="flex items-center justify-between gap-3 border-b border-white/[0.05] px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1ED760]/10">
-            <Music2 className="h-3 w-3 text-[#1ED760]" />
-          </span>
-          <div>
+    <section className="min-w-0 overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-3">
+        <div className="min-w-0">
             <h3 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/65">Spotify Pulse</h3>
-            <p className="mt-0.5 text-[9px] text-white/28">{sourceLabel}</p>
-          </div>
+            <p className="mt-0.5 text-[9px] text-white/48">{sourceLabel}</p>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <button
-            type="button"
-            onClick={onRun}
-            disabled={busy || runDisabled}
-            title="Run Spotify Pulse now"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.07] bg-white/[0.025] text-white/42 transition-colors hover:bg-white/[0.06] hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-35"
-            aria-label="Run Spotify Pulse now"
-          >
-            <Play className="h-3 w-3 fill-current" />
-          </button>
-          <button
-            type="button"
-            onClick={onToggle}
-            disabled={busy}
-            title={active ? 'Pause weekly Spotify sync' : 'Enable weekly Spotify sync'}
-            className={cn(
-              'inline-flex h-7 w-7 items-center justify-center rounded-[7px] border transition-colors',
-              active
-                ? 'border-[#1ED760]/30 bg-[#1ED760]/10 text-[#1ED760]'
-                : 'border-white/[0.07] bg-white/[0.02] text-white/35 hover:text-white/65',
-              busy && 'cursor-wait opacity-60',
-            )}
-            aria-label={active ? 'Pause weekly Spotify sync' : 'Enable weekly Spotify sync'}
-          >
-            <RefreshCw className={cn('h-3.5 w-3.5', busy && 'animate-spin')} />
-          </button>
-        </div>
+        <PulseRunControls
+          active={active}
+          busy={busy}
+          runDisabled={runDisabled}
+          manualLabel="Run Spotify Pulse now — manual"
+          weeklyLabel="Weekly Spotify auto-run"
+          activeClassName="border-[#f97316]/40 bg-[#f97316]/14 text-[#f97316]"
+          onRun={onRun}
+          onToggle={onToggle}
+        />
       </div>
 
       <div className="p-4">
-        <div className="flex h-[160px] flex-col rounded-[14px] border border-[#1ED760]/10 bg-[linear-gradient(135deg,rgba(30,215,96,0.09),rgba(30,215,96,0.015)_58%,transparent)] p-4">
+        <div className="flex h-[184px] flex-col rounded-[14px] border border-[#f97316]/35 bg-[#0F0F10] p-4">
           <div className="flex items-end justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-[9px] font-medium uppercase tracking-[0.15em] text-[#8DEFB0]/55">{headlineLabel}</p>
-              <p className="mt-1.5 truncate text-[28px] font-medium leading-none tracking-[-0.04em] text-white/90">
-                {formatMetric(headlineValue)}
+              <p className="text-[9px] font-medium uppercase tracking-[0.15em] text-[#f97316]">
+                {headlineLabel}{!publicApi && snapshot?.windowDays ? ` · ${snapshot.windowDays} days` : ''}
               </p>
+              <div className="mt-1.5 flex flex-wrap items-end gap-2">
+                <p className="truncate text-[28px] font-medium leading-none tracking-[-0.04em] text-white/90">
+                  {formatMetric(headlineValue)}
+                </p>
+                {!publicApi ? <SpotifyGrowthBadge growth={growth} /> : null}
+              </div>
             </div>
             <p className="shrink-0 text-right text-[10px] leading-4 text-white/34">
               {snapshot ? formatShortDate(snapshot.snapshotDate) : 'Awaiting data'}
             </p>
           </div>
           {popularity !== null ? (
-            <SignalProgress value={popularity} tone="bg-[#1ED760]" label={`${Math.round(popularity)} of 100`} />
+            <SignalProgress value={popularity} tone="bg-[#f97316]" label={`${Math.round(popularity)} of 100`} />
           ) : (
-            <SpotifyPerformanceChart history={history} />
+            <SpotifyPerformanceChart snapshot={snapshot} history={history} />
           )}
         </div>
 
-        <div className="mt-3 grid grid-cols-3 divide-x divide-white/[0.05] rounded-[12px] border border-white/[0.045] bg-white/[0.015] py-3">
+        <div className="mt-3 grid grid-cols-3 gap-2 rounded-[12px] bg-black/20 py-3">
           <SignalStat label="Listeners" value={formatMetric(snapshot?.metrics.listeners)} />
-          <SignalStat label="Followers" value={formatMetric(snapshot?.metrics.followers)} />
+          <SignalStat label="Streams / listener" value={streamsPerListener} />
           <SignalStat
             label={publicApi ? 'Top genre' : 'Top city'}
             value={publicApi
@@ -1961,34 +2210,106 @@ function SpotifyPulseCard({
 
         {error ? <p className="mt-2 text-xs leading-5 text-red-100/65">{error}</p> : null}
       </div>
-    </HQCard>
+    </section>
   )
 }
 
-function SpotifyPerformanceChart({ history }: { history: ArtistSpotifyHistoryPoint[] }) {
-  const values = history.map((point) => point.streams)
-  const max = Math.max(1, ...values)
-
+function SpotifyGrowthBadge({ growth }: { growth: ReturnType<typeof calculateArtistSpotifyGrowth> }) {
+  if (!growth || typeof growth.streamsPercent !== 'number') {
+    return <span className="mb-0.5 text-[9px] text-white/30">Baseline · next run shows growth</span>
+  }
+  const positive = growth.streamsPercent > 0
+  const negative = growth.streamsPercent < 0
   return (
-    <div className="mt-auto">
-      <div className="flex h-12 items-end gap-1.5" aria-label={history.length > 0 ? 'Historical Spotify streams' : 'No Spotify stream history yet'}>
-        {history.length > 0 ? history.map((point) => (
-          <span
-            key={point.date}
-            title={`${formatShortDate(point.date)}: ${formatMetric(point.streams)} streams`}
-            className="min-w-0 flex-1 rounded-t-[3px] bg-[#1ED760]/55"
-            style={{ height: `${Math.max(14, (point.streams / max) * 100)}%` }}
-          />
-        )) : (
-          <span className="mb-1 text-[9px] text-white/28">Run twice to build a trend</span>
-        )}
-      </div>
-      {history.length > 0 ? (
-        <div className="mt-2 flex items-center justify-between text-[9px] text-white/24">
-          <span>{formatShortDate(history[0]!.date)}</span>
-          <span>{history.length} snapshot{history.length === 1 ? '' : 's'}</span>
+    <span
+      title={`Compared with ${formatShortDate(growth.comparisonDate)}`}
+      className={cn(
+        'mb-0.5 rounded-full border px-2 py-0.5 text-[9px] font-medium tabular-nums',
+        positive && 'border-[#f97316]/30 bg-[#f97316]/10 text-[#f97316]',
+        negative && 'border-[#f97316]/20 bg-[#f97316]/[0.07] text-[#f97316]/80',
+        !positive && !negative && 'border-white/[0.07] bg-white/[0.03] text-white/42',
+      )}
+    >
+      {positive ? '↑' : negative ? '↓' : '—'} {Math.abs(growth.streamsPercent).toFixed(1)}% vs {formatShortDate(growth.comparisonDate)}
+    </span>
+  )
+}
+
+function SpotifyPerformanceChart({
+  snapshot,
+  history,
+}: {
+  snapshot: ArtistSpotifySnapshot | null
+  history: ArtistSpotifyHistoryPoint[]
+}) {
+  const daily = snapshot?.dailyStreams ?? []
+  const trend = daily.length >= 2
+    ? daily
+    : history.length >= 2
+      ? history
+      : []
+  const chartLabel = daily.length >= 2
+    ? 'Daily streams'
+    : `Rolling ${snapshot?.windowDays ?? 28}-day streams`
+
+  if (trend.length >= 2) {
+    const width = 320
+    const height = 58
+    const values = trend.map((point) => point.streams)
+    const min = Math.min(...values)
+    const max = Math.max(...values)
+    const range = Math.max(1, max - min)
+    const points = trend.map((point, index) => ({
+      x: (index / (trend.length - 1)) * width,
+      y: height - 4 - ((point.streams - min) / range) * (height - 12),
+    }))
+    const line = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')
+    const area = `${line} L ${width} ${height} L 0 ${height} Z`
+
+    return (
+      <div className="mt-auto pt-4">
+        <svg viewBox={`0 0 ${width} ${height}`} className="h-[58px] w-full overflow-visible" role="img" aria-label={`${chartLabel} trend`}>
+          <defs>
+            <linearGradient id="spotify-pulse-area" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#f97316" stopOpacity="0.34" />
+              <stop offset="100%" stopColor="#f97316" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d={area} fill="url(#spotify-pulse-area)" />
+          <path d={line} fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx={points.at(-1)!.x} cy={points.at(-1)!.y} r="3" fill="#f97316" />
+        </svg>
+        <div className="mt-1 flex items-center justify-between text-[9px] text-white/27">
+          <span>{formatShortDate(trend[0]!.date)}</span>
+          <span>{chartLabel}</span>
+          <span>{formatShortDate(trend.at(-1)!.date)}</span>
         </div>
-      ) : null}
+      </div>
+    )
+  }
+
+  const tracks = (snapshot?.tracks ?? [])
+    .filter((track): track is typeof track & { streams: number } => typeof track.streams === 'number')
+    .sort((left, right) => right.streams - left.streams)
+    .slice(0, 3)
+  const maxTrackStreams = Math.max(1, ...tracks.map((track) => track.streams))
+
+  return tracks.length > 0 ? (
+    <div className="mt-auto space-y-1.5 pt-4" aria-label="Top tracks this period">
+      {tracks.map((track) => (
+        <div key={`${track.id ?? track.name}-${track.streams}`} className="grid grid-cols-[minmax(0,1fr)_48px] items-center gap-2">
+          <div className="relative h-5 overflow-hidden rounded-[5px] bg-white/[0.035]">
+            <span className="absolute inset-y-0 left-0 rounded-[5px] bg-[#f97316]/95" style={{ width: `${Math.max(8, (track.streams / maxTrackStreams) * 100)}%` }} />
+            <span className="relative block truncate px-2 pt-[3px] text-[9px] text-white/58">{track.name}</span>
+          </div>
+          <span className="text-right text-[9px] tabular-nums text-white/38">{formatMetric(track.streams)}</span>
+        </div>
+      ))}
+      <p className="pt-0.5 text-[8px] uppercase tracking-[0.12em] text-white/22">Top tracks · current period</p>
+    </div>
+  ) : (
+    <div className="mt-auto pt-5 text-[9px] leading-4 text-white/28">
+      Baseline captured. The next comparable run unlocks the growth chart.
     </div>
   )
 }
@@ -1996,8 +2317,8 @@ function SpotifyPerformanceChart({ history }: { history: ArtistSpotifyHistoryPoi
 function SignalStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 px-3 first:pl-3 last:pr-3">
-      <p className="text-[8px] font-medium uppercase tracking-[0.13em] text-white/28">{label}</p>
-      <p title={value} className="mt-1.5 truncate text-[13px] font-medium text-white/72">{value}</p>
+      <p className="text-[8px] font-medium uppercase tracking-[0.13em] text-white/48">{label}</p>
+      <p title={value} className="mt-1.5 truncate text-[13px] font-medium text-white/82">{value}</p>
     </div>
   )
 }
@@ -2058,7 +2379,7 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-3.5 w-3.5 text-orange-200/65" />
+              <Sparkles className="h-3.5 w-3.5 text-[#f97316]/80" />
               <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/42">State of Play</span>
             </div>
             <p className="mt-1.5 text-sm font-medium text-white/72">No HQ brief generated yet</p>
@@ -2070,7 +2391,7 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
               checked={proactiveMode}
               onCheckedChange={onToggleProactiveMode}
               aria-label={proactiveMode ? 'Disable proactive HQ mode' : 'Enable proactive HQ mode'}
-              className="data-[state=checked]:bg-orange-300"
+              className="data-[state=checked]:bg-[#f97316]"
             />
           </div>
         </div>
@@ -2078,61 +2399,43 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
     )
   }
 
-  const route = state.nextMove.route
-  const recommendationStatus = state.nextMove.recommendationStatus ?? 'proposed'
-  const routeReadiness = resolveHqRouteReadiness(route, availableAgentSlugs, proactiveMode)
-  const actionState = resolveHqRecommendationActionState(recommendationStatus, routeReadiness, proactiveMode, routeBusy)
-
   return (
     <>
-      <HQCard className="border-orange-300/[0.12] bg-[#0D0D0E] p-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-orange-300" />
-              <span className="text-[9px] font-semibold uppercase tracking-[0.17em] text-orange-100/60">Recommended next move</span>
-              {state.attention.length > 0 ? (
-                <span className="text-[9px] text-white/28">{state.attention.length} signal{state.attention.length === 1 ? '' : 's'}</span>
-              ) : null}
-            </div>
-            <h2 className="mt-2 truncate text-lg font-semibold tracking-tight text-white/88">{state.nextMove.title}</h2>
-            <p className="mt-1 line-clamp-1 text-xs leading-5 text-white/42">{state.nextMove.why}</p>
+      <HQCard className="px-4 py-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#f97316]" />
+            <h2 className="truncate text-sm font-medium tracking-tight text-white/88">{state.nextMove.title}</h2>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Why this is recommended"
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white/38 transition-colors hover:bg-white/[0.05] hover:text-white/75"
+                >
+                  <Info className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[320px] text-xs leading-5">
+                {state.nextMove.why}
+              </TooltipContent>
+            </Tooltip>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <StateOfPlayRefreshButton busy={refreshBusy} onRefresh={onRefresh} />
-            <button
-              type="button"
-              onClick={() => setDetailsOpen(true)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-[8px] border border-white/[0.07] bg-white/[0.02] px-3 text-xs font-medium text-white/55 transition-colors hover:bg-white/[0.05] hover:text-white/78"
-            >
-              Details
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-            {route ? (
-              <button
-                type="button"
-                onClick={() => onLaunchRoute(route, state.nextMove.recommendationId)}
-                disabled={!actionState.canLaunch || routeBusy}
-                className={cn(
-                  'h-9 rounded-[8px] border px-4 text-xs font-semibold transition-colors',
-                  actionState.canLaunch
-                    ? 'border-orange-300/25 bg-orange-300/12 text-orange-50 hover:bg-orange-300/18'
-                    : 'cursor-not-allowed border-white/[0.05] bg-white/[0.018] text-white/28',
-                  routeBusy && 'cursor-wait opacity-65',
-                )}
-              >
-                {actionState.label}
-              </button>
-            ) : null}
-          </div>
+          <button
+            type="button"
+            onClick={() => setDetailsOpen(true)}
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-[8px] px-2.5 text-xs font-medium text-white/58 transition-colors hover:bg-black/20 hover:text-white/85"
+          >
+            Details
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
         </div>
       </HQCard>
 
       <Drawer direction="right" open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DrawerContent className="inset-y-0 right-0 left-auto mt-0 h-full !w-full rounded-none border-l border-white/[0.08] bg-[#070708] sm:!max-w-[720px]">
+        <DrawerContent className="inset-y-0 right-0 left-auto mt-0 h-full !w-full rounded-none border-l border-white/[0.08] bg-[#070708] sm:!max-w-[560px]">
           <DrawerHeader className="relative border-b border-white/[0.06] px-5 py-4 pr-16 text-left">
-            <DrawerTitle className="text-base font-semibold text-white/88">State of Play</DrawerTitle>
-            <DrawerDescription className="text-xs text-white/38">Signals, route readiness, goals, and system evidence.</DrawerDescription>
+            <DrawerTitle className="text-sm font-semibold text-white/78">Next move</DrawerTitle>
             <DrawerClose asChild>
               <button
                 type="button"
@@ -2144,7 +2447,7 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
               </button>
             </DrawerClose>
           </DrawerHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
             <StateOfPlayDetailPanel {...props} />
           </div>
         </DrawerContent>
@@ -2155,68 +2458,27 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
 
 function StateOfPlayDetailPanel({
   state,
-  workspaceId,
   proactiveMode,
   routeBusy,
-  refreshBusy,
   availableAgentSlugs,
+  refreshBusy,
   onToggleProactiveMode,
   onLaunchRoute,
   onOpenEntity,
   onTransitionRecommendation,
   onRefresh,
 }: StateOfPlayPanelProps) {
-  const recommendationId = state?.nextMove.recommendationId
-  const recommendationStatusRevision = state?.nextMove.recommendationStatus ?? ''
-  const [detail, setDetail] = React.useState<HqRecommendationDetail | null>(null)
-  const [historyOpen, setHistoryOpen] = React.useState(false)
-
-  React.useEffect(() => {
-    setDetail(null)
-    setHistoryOpen(false)
-  }, [recommendationId, workspaceId])
-
-  React.useEffect(() => {
-    if (!recommendationId) return
-    let cancelled = false
-    window.electronAPI.getHqRecommendationDetail(workspaceId, recommendationId)
-      .then((value) => { if (!cancelled) setDetail(value) })
-      .catch(() => undefined)
-    return () => { cancelled = true }
-  }, [recommendationId, recommendationStatusRevision, workspaceId])
-
   if (!state) {
     return (
-      <HQCard>
-        <div className="mb-3 flex items-center justify-between gap-3 border-b border-white/[0.04] pb-2.5">
-          <div className="flex min-w-0 items-center gap-2">
-            <Sparkles className="h-3 w-3 text-white/40" />
-            <h3 className="truncate text-[9px] font-medium uppercase tracking-[0.15em] text-white/60">State of Play</h3>
-          </div>
-          <div className="flex items-center gap-2">
-            <StateOfPlayRefreshButton busy={refreshBusy} onRefresh={onRefresh} size="md" />
-            <Switch
-              checked={proactiveMode}
-              onCheckedChange={onToggleProactiveMode}
-              aria-label={proactiveMode ? 'Disable proactive HQ mode' : 'Enable proactive HQ mode'}
-              className="data-[state=checked]:bg-orange-300"
-            />
-          </div>
-        </div>
-        <EmptyLine
-          title="No HQ brief generated yet"
-          detail="Save artist context, share intel, sync calendar, or update Vault to generate the operating brief."
-        />
-      </HQCard>
+      <EmptyLine
+        title="No recommendation yet"
+        detail="Add artist context or sync a source to generate one."
+      />
     )
   }
 
-  const attention = state.attention.slice(0, 3)
-  const alternatives = state.alternatives.slice(0, 3)
-  const missing = state.missing.slice(0, 5)
-  const unhealthySources = unhealthyHqSources(state.sourceHealth)
-  const recentOutcome = state.recentOutcome
-  const generatedLabel = formatShortDate(state.generatedAt)
+  const attention = userFacingHqAttention(state.attention).slice(0, 3)
+  const missing = state.missing.slice(0, 3)
   const route = state.nextMove.route
   const recommendationStatus = state.nextMove.recommendationStatus ?? 'proposed'
   const routeReadiness = resolveHqRouteReadiness(route, availableAgentSlugs, proactiveMode)
@@ -2224,254 +2486,103 @@ function StateOfPlayDetailPanel({
   const canLaunchRoute = actionState.canLaunch
 
   return (
-    <HQCard className="min-w-0 p-4 sm:p-5">
-      <div className="mb-4 flex min-w-0 flex-col gap-3 border-b border-white/[0.04] pb-4">
-        <div className="min-w-0">
-          <div className="mb-2 flex items-center gap-2">
-            <Sparkles className="h-3.5 w-3.5 text-orange-200/70" />
-            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">State of Play</span>
-          </div>
-          <h2 className="text-xl font-medium leading-tight tracking-tight text-white/88 sm:text-2xl">
-            {state.nextMove.title}
-          </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/48">{state.nextMove.why}</p>
-        </div>
-        <div className="flex min-w-0 flex-wrap gap-2">
+    <div className="mx-auto flex w-full max-w-[500px] flex-col">
+      <section>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-100/55">Recommended next</p>
           <StateOfPlayRefreshButton busy={refreshBusy} onRefresh={onRefresh} />
-          {state.nextMove.worker ? <Pill label={`@${state.nextMove.worker}`} /> : null}
-          {state.nextMove.action ? <Pill label={state.nextMove.action} /> : null}
-          {route ? <Pill label={canLaunchRoute ? `${route.confidence} route` : 'review needed'} muted={!canLaunchRoute} /> : null}
-          {state.nextMove.recommendationStatus ? <Pill label={state.nextMove.recommendationStatus} muted={state.nextMove.recommendationStatus !== 'proposed'} /> : null}
-          <Pill label={generatedLabel} muted />
         </div>
-      </div>
+        <h2 className="mt-2 text-xl font-semibold leading-tight tracking-tight text-white/90">
+          {state.nextMove.title}
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-white/48">{state.nextMove.why}</p>
+      </section>
 
-      <div className="grid min-w-0 grid-cols-1 gap-3">
-        <div className="space-y-2">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Attention</div>
-          {attention.length > 0 ? (
-            attention.map((item) => (
-              <div key={`${item.kind}-${item.source}-${item.text}`} className="rounded-[13px] border border-white/[0.045] bg-white/[0.018] p-3">
-                <div className="flex items-start gap-2">
-                  <Circle className="mt-1.5 h-1.5 w-1.5 shrink-0 fill-orange-300 text-orange-300" />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium leading-5 text-white/74">{item.text}</div>
-                    <div className="mt-1 text-[10px] uppercase tracking-[0.12em] text-white/28">{item.kind} / {item.source}</div>
-                  </div>
-                </div>
+      {attention.length > 0 ? (
+        <section className="mt-6 border-t border-white/[0.06] pt-5">
+          <h3 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">Needs attention</h3>
+          <div className="mt-2 divide-y divide-white/[0.055]">
+            {attention.map((item) => (
+              <div key={`${item.kind}-${item.source}-${item.text}`} className="flex items-start gap-2.5 py-3">
+                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-300" />
+                <p className="text-sm leading-6 text-white/70">{item.text}</p>
               </div>
-            ))
-          ) : (
-            <EmptyLine title="No urgent attention items" detail="The generated brief did not flag immediate risks." />
-          )}
-          {alternatives.length > 0 ? (
-            <div className="pt-2">
-              <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Also Consider</div>
-              <div className="space-y-1.5">
-                {alternatives.map((move) => {
-                  const content = (
-                    <>
-                      <span className="min-w-0 flex-1 truncate text-left text-xs text-white/62">{move.title}</span>
-                      {move.recommendationStatus ? <span className="text-[9px] uppercase tracking-[0.12em] text-white/28">{move.recommendationStatus}</span> : null}
-                    </>
-                  )
-                  return move.entityRef ? (
-                    <button
-                      key={move.recommendationId ?? move.title}
-                      type="button"
-                      onClick={() => onOpenEntity(move.entityRef!)}
-                      className="flex h-9 w-full items-center gap-2 rounded-[10px] border border-white/[0.045] bg-white/[0.018] px-3 transition-colors hover:bg-white/[0.045]"
-                    >
-                      {content}
-                      <ExternalLink className="h-3 w-3 shrink-0 text-white/28" />
-                    </button>
-                  ) : (
-                    <div key={move.recommendationId ?? move.title} className="flex h-9 items-center gap-2 rounded-[10px] border border-white/[0.045] bg-white/[0.018] px-3">
-                      {content}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          ) : null}
-        </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
-        <div className="space-y-3">
-          {route ? (
-            <div className="rounded-[14px] border border-white/[0.045] bg-black/20 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Proactive</div>
-                <Switch
-                  checked={proactiveMode}
-                  onCheckedChange={onToggleProactiveMode}
-                  aria-label={proactiveMode ? 'Disable proactive HQ mode' : 'Enable proactive HQ mode'}
-                  className="data-[state=checked]:bg-orange-300"
-                />
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Pill label={route.target === 'agent' && route.agentSlug ? `@${route.agentSlug}` : 'manual'} muted={!routeReadiness.agentAvailable && route.target === 'agent'} />
-                <Pill label={route.confidence} muted={route.confidence !== 'high'} />
-                <Pill label={`${route.contextDocSlugs.length} docs`} muted />
-              </div>
-              <p className="mt-3 line-clamp-3 text-xs leading-5 text-white/44">
-                {routeReadiness.blockedReason ?? route.prompt}
-              </p>
-              {state.nextMove.entityRef ? (
-                <button
-                  type="button"
-                  onClick={() => onOpenEntity(state.nextMove.entityRef!)}
-                  className="mt-3 inline-flex h-8 w-full items-center justify-center gap-2 rounded-[10px] border border-white/[0.08] bg-white/[0.035] px-3 text-xs font-medium text-white/72 transition-colors hover:bg-white/[0.07]"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Open item
-                </button>
-              ) : null}
+      {missing.length > 0 ? (
+        <p className="mt-4 text-xs leading-5 text-white/34">
+          Still needed: {missing.join(', ')}{state.missing.length > missing.length ? ', and more' : ''}.
+        </p>
+      ) : null}
+
+      {route ? (
+        <section className="mt-6 border-t border-white/[0.06] pt-5">
+          <button
+            type="button"
+            onClick={() => onLaunchRoute(route, state.nextMove.recommendationId)}
+            disabled={!canLaunchRoute || routeBusy}
+            className={cn(
+              'inline-flex h-10 w-full items-center justify-center rounded-[10px] border px-4 text-sm font-semibold transition-colors',
+              canLaunchRoute
+                ? 'border-orange-300/25 bg-orange-300/12 text-orange-50 hover:bg-orange-300/18'
+                : 'cursor-not-allowed border-white/[0.06] bg-white/[0.02] text-white/30',
+              routeBusy && 'cursor-wait opacity-65',
+            )}
+          >
+            {actionState.label}
+          </button>
+
+          <div className="mt-3 flex items-center justify-center gap-4">
+            {state.nextMove.entityRef ? (
               <button
                 type="button"
-                onClick={() => route ? onLaunchRoute(route, state.nextMove.recommendationId) : undefined}
-                disabled={!canLaunchRoute || routeBusy}
-                className={cn(
-                  'mt-3 inline-flex h-8 w-full items-center justify-center rounded-[10px] border px-3 text-xs font-medium transition-colors',
-                  canLaunchRoute
-                    ? 'border-orange-300/25 bg-orange-300/10 text-orange-100/82 hover:bg-orange-300/16'
-                    : 'cursor-not-allowed border-white/[0.055] bg-white/[0.018] text-white/28',
-                  routeBusy && 'cursor-wait opacity-70',
-                )}
+                onClick={() => onOpenEntity(state.nextMove.entityRef!)}
+                className="inline-flex items-center gap-1.5 text-xs text-white/42 transition-colors hover:text-white/70"
               >
-                {actionState.label}
+                <ExternalLink className="h-3 w-3" />
+                Open item
               </button>
-              {state.nextMove.recommendationId && actionState.canDefer ? (
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onTransitionRecommendation(state.nextMove.recommendationId!, 'snoozed')}
-                    disabled={routeBusy}
-                    className="h-8 rounded-[10px] border border-white/[0.06] bg-white/[0.02] text-xs text-white/48 transition-colors hover:bg-white/[0.05] hover:text-white/70 disabled:opacity-40"
-                  >
-                    Snooze 7 days
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onTransitionRecommendation(state.nextMove.recommendationId!, 'dismissed')}
-                    disabled={routeBusy}
-                    className="h-8 rounded-[10px] border border-white/[0.06] bg-white/[0.02] text-xs text-white/48 transition-colors hover:bg-white/[0.05] hover:text-white/70 disabled:opacity-40"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              ) : null}
-              {detail ? (
-                <div className="mt-2 border-t border-white/[0.05] pt-2">
-                  <StateOfPlayHistory events={detail.events} open={historyOpen} onToggle={() => setHistoryOpen((open) => !open)} formatDate={formatShortDate} />
-                  {actionState.canRate ? (
-                    <StateOfPlayOutcomeFeedback
-                      selected={detail.outcome?.userUsefulness}
-                      onRate={async (usefulness) => {
-                            try {
-                              const outcome = await window.electronAPI.setHqRecommendationUsefulness(workspaceId, { recommendationId: detail.candidate.id, usefulness })
-                              setDetail((current) => current ? { ...current, outcome } : current)
-                            } catch (error) {
-                              toast.error('Could not save recommendation feedback', { description: error instanceof Error ? error.message : String(error) })
-                            }
-                      }}
-                    />
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          <div className="rounded-[14px] border border-white/[0.045] bg-black/20 p-3">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Gaps</div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {missing.length > 0 ? (
-                missing.map((item) => <Pill key={item} label={item} muted />)
-              ) : (
-                <span className="text-xs leading-5 text-white/42">No blocking context gaps.</span>
-              )}
-            </div>
-            {state.momentum.up.length > 0 ? (
-              <div className="mt-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/30">Momentum</div>
-                <p className="mt-2 line-clamp-3 text-xs leading-5 text-white/44">{state.momentum.up.join(' ')}</p>
-              </div>
             ) : null}
-            <div className="mt-4 border-t border-white/[0.05] pt-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/30">Goals</div>
+            {state.nextMove.recommendationId && actionState.canDefer ? (
+              <>
                 <button
                   type="button"
-                  onClick={() => navigate(routes.view.workspaceContext())}
-                  className="text-[10px] font-medium text-white/36 transition-colors hover:text-white/65"
+                  onClick={() => onTransitionRecommendation(state.nextMove.recommendationId!, 'snoozed')}
+                  disabled={routeBusy}
+                  className="text-xs text-white/36 transition-colors hover:text-white/65 disabled:opacity-40"
                 >
-                  Manage
+                  Later
                 </button>
-              </div>
-              {state.goalProgress.length > 0 ? (
-                <div className="mt-2 space-y-2">
-                  {state.goalProgress.slice(0, 3).map((goal) => (
-                    <button
-                      key={`${goal.goal}:${goal.status}`}
-                      type="button"
-                      onClick={() => navigate(routes.view.workspaceContext())}
-                      className="flex w-full items-center justify-between gap-3 rounded-[10px] border border-white/[0.04] bg-white/[0.015] px-2.5 py-2 text-left hover:bg-white/[0.04]"
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-xs text-white/58">{goal.goal}</span>
-                        <span className="mt-0.5 block truncate text-[10px] text-white/28">{goal.note}</span>
-                      </span>
-                      <span className="shrink-0 text-[9px] uppercase tracking-[0.12em] text-white/28">{goal.status}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
                 <button
                   type="button"
-                  onClick={() => navigate(routes.view.workspaceContext())}
-                  className="mt-2 w-full rounded-[10px] border border-dashed border-white/[0.06] px-3 py-2.5 text-left text-xs text-white/38 hover:bg-white/[0.035]"
+                  onClick={() => onTransitionRecommendation(state.nextMove.recommendationId!, 'dismissed')}
+                  disabled={routeBusy}
+                  className="text-xs text-white/36 transition-colors hover:text-white/65 disabled:opacity-40"
                 >
-                  Add an HQ goal to sharpen recommendations.
+                  Dismiss
                 </button>
-              )}
-            </div>
-            <div className="mt-4 border-t border-white/[0.05] pt-3">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/30">System Evidence</div>
-              {unhealthySources.length > 0 ? (
-                <div className="mt-2 space-y-2">
-                  {unhealthySources.map((source) => (
-                    <div key={source.source} className="text-xs leading-5 text-orange-100/62">
-                      <span className="font-medium capitalize">{source.source.replaceAll('-', ' ')}</span>
-                      <span className="text-white/38"> / {source.message ?? source.status}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-2 text-xs text-white/40">Operational sources are healthy.</p>
-              )}
-            </div>
-            {recentOutcome ? (
-              <div className="mt-4 border-t border-white/[0.05] pt-3">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/30">Recent Outcome</div>
-                <p className="mt-2 truncate text-xs text-white/58">{recentOutcome.title}</p>
-                <StateOfPlayOutcomeFeedback
-                  selected={recentOutcome.userUsefulness}
-                  onRate={async (usefulness) => {
-                        try {
-                          await window.electronAPI.setHqRecommendationUsefulness(workspaceId, {
-                            recommendationId: recentOutcome.recommendationId,
-                            usefulness,
-                          })
-                        } catch (error) {
-                          toast.error('Could not save recommendation feedback', { description: error instanceof Error ? error.message : String(error) })
-                        }
-                  }}
-                />
-              </div>
+              </>
             ) : null}
           </div>
-        </div>
-      </div>
-    </HQCard>
+
+          <div className="mt-6 flex items-center justify-between border-t border-white/[0.05] pt-4">
+            <div>
+              <p className="text-xs font-medium text-white/60">Proactive mode</p>
+              <p className="mt-0.5 text-[11px] text-white/30">Prepare approved work automatically</p>
+            </div>
+            <Switch
+              checked={proactiveMode}
+              onCheckedChange={onToggleProactiveMode}
+              aria-label={proactiveMode ? 'Disable proactive HQ mode' : 'Enable proactive HQ mode'}
+              className="data-[state=checked]:bg-orange-300"
+            />
+          </div>
+        </section>
+      ) : null}
+    </div>
   )
 }
 
@@ -2489,19 +2600,6 @@ function openHqStateEntity(entity: HqStateEntityRef): void {
     return
   }
   window.location.hash = '#artist-hq/calendar'
-}
-
-function Pill({ label, muted }: { label: string; muted?: boolean }) {
-  return (
-    <span className={cn(
-      'inline-flex max-w-full items-center rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em]',
-      muted
-        ? 'border-white/[0.055] bg-white/[0.018] text-white/34'
-        : 'border-orange-300/18 bg-orange-300/8 text-orange-100/76',
-    )}>
-      <span className="truncate">{label}</span>
-    </span>
-  )
 }
 
 function IntelActivityChart({ runs }: { runs: ArtistIntelRun[] }) {
@@ -2538,9 +2636,9 @@ function IntelActivityChart({ runs }: { runs: ArtistIntelRun[] }) {
               className={cn(
                 'min-w-0 flex-1 rounded-t-[3px]',
                 run.status === 'ready'
-                  ? 'bg-orange-300/70'
+                  ? 'bg-[#f97316]/90'
                   : run.status === 'failed'
-                    ? 'bg-red-300/60'
+                    ? 'bg-[#f97316]/35'
                     : 'bg-white/20',
               )}
               style={{ height: `${height}%` }}
@@ -2593,16 +2691,11 @@ function IntelPulseCard({
         : config.enabled ? scheduled ? 'Scheduled' : 'Manual' : 'Off'
 
   return (
-    <HQCard className="overflow-hidden p-0">
-      <div className="flex items-center justify-between gap-3 border-b border-white/[0.05] px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-orange-300/10">
-            <Radio className="h-3 w-3 text-orange-200/75" />
-          </span>
-          <div>
+    <section className="min-w-0 overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-3">
+        <div className="min-w-0">
             <h3 className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-white/65">Intel Pulse</h3>
-            <p className="mt-0.5 text-[9px] text-white/28">{statusLabel}</p>
-          </div>
+            <p className="mt-0.5 text-[9px] text-white/48">{statusLabel}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {report.outputId || report.sessionId ? (
@@ -2627,40 +2720,24 @@ function IntelPulseCard({
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
           </button>
-          <button
-            type="button"
-            onClick={onRun}
-            disabled={busy || running || !agentReady || config.sources.length === 0}
-            title="Run Intel Pulse now"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.07] bg-white/[0.025] text-white/42 transition-colors hover:bg-white/[0.06] hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-35"
-            aria-label="Run Intel Pulse now"
-          >
-            <Play className="h-3 w-3 fill-current" />
-          </button>
-          <button
-            type="button"
-            onClick={onToggle}
-            disabled={busy}
-            title={config.enabled ? 'Pause Intel Pulse' : 'Activate Intel Pulse'}
-            className={cn(
-              'inline-flex h-7 w-7 items-center justify-center rounded-[7px] border transition-colors',
-              config.enabled
-                ? 'border-orange-300/30 bg-orange-300/10 text-orange-200/80'
-                : 'border-white/[0.07] bg-white/[0.02] text-white/28 hover:text-white/60',
-              busy && 'cursor-wait opacity-60',
-            )}
-            aria-label={config.enabled ? 'Pause Intel Pulse' : 'Activate Intel Pulse'}
-          >
-            <RefreshCw className={cn('h-3.5 w-3.5', busy && 'animate-spin')} />
-          </button>
+          <PulseRunControls
+            active={scheduled}
+            busy={busy}
+            runDisabled={running || !agentReady || config.sources.length === 0}
+            manualLabel="Run Intel Pulse now — manual"
+            weeklyLabel="Weekly Intel auto-run"
+            activeClassName="border-[#f97316]/40 bg-[#f97316]/14 text-[#f97316]"
+            onRun={onRun}
+            onToggle={onToggle}
+          />
         </div>
       </div>
 
       <div className="p-4">
-        <div className="flex h-[160px] flex-col rounded-[14px] border border-orange-300/10 bg-[linear-gradient(135deg,rgba(251,146,60,0.08),rgba(251,146,60,0.012)_58%,transparent)] p-4">
+        <div className="flex h-[184px] flex-col rounded-[14px] border border-[#f97316]/35 bg-[#0F0F10] p-4">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <p className="text-[9px] font-medium uppercase tracking-[0.15em] text-orange-200/48">Research captured</p>
+              <p className="text-[9px] font-medium uppercase tracking-[0.15em] text-[#f97316]">Research captured</p>
               <p className="mt-1.5 text-[28px] font-medium leading-none tracking-[-0.04em] text-white/90">
                 {formatMetric(nuggetCount ?? videoCount)}
               </p>
@@ -2674,7 +2751,7 @@ function IntelPulseCard({
           <IntelActivityChart runs={report.runs} />
         </div>
 
-        <div className="mt-3 grid grid-cols-3 divide-x divide-white/[0.05] rounded-[12px] border border-white/[0.045] bg-white/[0.015] py-3">
+        <div className="mt-3 grid grid-cols-3 gap-2 rounded-[12px] bg-black/20 py-3">
           <SignalStat label="Channels" value={String(config.sources.length)} />
           <SignalStat label="Videos" value={formatMetric(videoCount)} />
           <SignalStat label="Nuggets" value={formatMetric(nuggetCount)} />
@@ -2684,8 +2761,142 @@ function IntelPulseCard({
           <p className="mt-2 text-xs leading-5 text-red-100/65">{configError || reportError}</p>
         ) : null}
       </div>
-    </HQCard>
+    </section>
   )
+}
+
+function SocialPulseCard({
+  doctor,
+  snapshot,
+  history,
+  active,
+  busy,
+  runDisabled,
+  error,
+  onRun,
+  onToggle,
+  onManage,
+}: {
+  doctor: SocialAccountsDoctorResult | null
+  snapshot: ArtistInstagramSnapshot | null
+  history: ArtistInstagramGrowthPoint[]
+  active: boolean
+  busy: boolean
+  runDisabled: boolean
+  error: string | null
+  onRun: () => void
+  onToggle: () => void
+  onManage: () => void
+}) {
+  const instagramProfiles = doctor?.platforms.find((entry) => entry.platform === 'instagram')?.profiles ?? []
+  const readyInstagramProfiles = instagramProfiles.filter((profile) => profile.ready).length
+  const statusLabel = busy
+    ? 'Checking'
+    : snapshot
+      ? `${snapshot.profile.handle ?? snapshot.profile.profile} · ${snapshot.windowDays ? `${snapshot.windowDays} days` : 'Insights'}`
+      : readyInstagramProfiles > 0
+        ? 'Instagram ready'
+        : 'Instagram setup needed'
+  const followerDelta = snapshot?.metrics.followerDelta
+
+  return (
+    <section className="min-w-0 overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-3">
+        <div className="min-w-0">
+            <h3 className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-white/65">Social Pulse</h3>
+            <p className="mt-0.5 text-[9px] text-white/48">{statusLabel}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onManage}
+            title="Manage social accounts"
+            aria-label="Manage social accounts"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.07] bg-white/[0.02] text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/65"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+          </button>
+          <PulseRunControls
+            active={active}
+            busy={busy}
+            runDisabled={runDisabled}
+            manualLabel="Run Instagram Insights now — manual"
+            weeklyLabel="Weekly Instagram Insights auto-run"
+            activeClassName="border-[#f97316]/40 bg-[#f97316]/14 text-[#f97316]"
+            onRun={onRun}
+            onToggle={onToggle}
+          />
+        </div>
+      </div>
+
+      <div className="p-4">
+        <div className="flex h-[184px] flex-col rounded-[14px] border border-[#f97316]/35 bg-[#0F0F10] p-4">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-[9px] font-medium uppercase tracking-[0.15em] text-[#f97316]">
+                Follower change
+              </p>
+              <p className="mt-1.5 text-[28px] font-medium leading-none tracking-[-0.04em] text-white/90">
+                {formatSignedMetric(followerDelta)}
+              </p>
+            </div>
+            <p className="text-right text-[10px] leading-4 text-white/34">
+              {snapshot ? formatShortDate(snapshot.snapshotDate) : 'Awaiting data'}
+            </p>
+          </div>
+
+          <InstagramGrowthChart history={history} />
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-2 rounded-[12px] bg-black/20 py-3">
+          <SignalStat label="Followers" value={formatMetric(snapshot?.metrics.followers)} />
+          <SignalStat label="Reach" value={formatMetric(snapshot?.metrics.accountsReached)} />
+          <SignalStat label="Interactions" value={formatMetric(snapshot?.metrics.interactions)} />
+        </div>
+
+        {error ? <p className="mt-2 text-xs leading-5 text-red-100/65">{error}</p> : null}
+      </div>
+    </section>
+  )
+}
+
+function InstagramGrowthChart({ history }: { history: ArtistInstagramGrowthPoint[] }) {
+  const maxMagnitude = Math.max(1, ...history.map((point) => Math.abs(point.followerDelta)))
+  return (
+    <div className="relative mt-auto h-14" aria-label={history.length > 0 ? 'Instagram follower growth history' : 'No Instagram growth history yet'}>
+      <span className="absolute inset-x-0 top-1/2 h-px bg-white/[0.08]" />
+      {history.length > 0 ? (
+        <div className="absolute inset-0 flex gap-1.5">
+          {history.map((point) => {
+            const height = Math.max(8, (Math.abs(point.followerDelta) / maxMagnitude) * 46)
+            return (
+              <div key={point.date} className="relative min-w-0 flex-1">
+                <span
+                  title={`${formatShortDate(point.date)}: ${formatSignedMetric(point.followerDelta)} followers`}
+                  className={cn(
+                    'absolute left-0 right-0 rounded-[3px]',
+                    point.followerDelta > 0
+                      ? 'bottom-1/2 bg-[#f97316]/90'
+                      : point.followerDelta < 0
+                        ? 'top-1/2 bg-[#f97316]/40'
+                        : 'top-1/2 -translate-y-1/2 bg-white/30',
+                  )}
+                  style={{ height: point.followerDelta === 0 ? '2px' : `${height}%` }}
+                />
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <span className="absolute bottom-1 left-0 text-[9px] text-white/28">Run once to capture a baseline</span>
+      )}
+    </div>
+  )
+}
+
+function formatSignedMetric(value: number | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
+  return `${value > 0 ? '+' : ''}${value.toLocaleString()}`
 }
 
 function IntelConfigDialog({
@@ -2702,12 +2913,16 @@ function IntelConfigDialog({
   const [sources, setSources] = React.useState<ArtistIntelSource[]>(config.sources)
   const [sinceDays, setSinceDays] = React.useState(config.sinceDays)
   const [cadence, setCadence] = React.useState(config.cadence)
+  const [expandedSourceId, setExpandedSourceId] = React.useState<string | null>(null)
+  const [saving, setSaving] = React.useState(false)
 
   React.useEffect(() => {
     if (!open) return
     setSources(config.sources)
     setSinceDays(config.sinceDays)
     setCadence(config.cadence)
+    setExpandedSourceId(null)
+    setSaving(false)
   }, [config, open])
 
   const updateSource = React.useCallback((id: string, patch: Partial<ArtistIntelSource>) => {
@@ -2720,13 +2935,15 @@ function IntelConfigDialog({
       ...current,
       { id, name: '', url: '', priority: 'medium', notes: '' },
     ])
+    setExpandedSourceId(id)
   }, [])
 
   const removeSource = React.useCallback((id: string) => {
     setSources((current) => current.filter((source) => source.id !== id))
+    setExpandedSourceId((current) => current === id ? null : current)
   }, [])
 
-  const save = React.useCallback(() => {
+  const save = React.useCallback(async () => {
     const nextSources = sources
       .map((source) => ({
         ...source,
@@ -2742,100 +2959,167 @@ function IntelConfigDialog({
       })
       return
     }
-    void onSave({
-      ...config,
-      cadence,
-      sources: nextSources,
-      sinceDays,
-      maxPerChannel: 1,
-      updatedAt: new Date().toISOString(),
-    })
+    setSaving(true)
+    try {
+      await onSave({
+        ...config,
+        cadence,
+        sources: nextSources,
+        sinceDays,
+        maxPerChannel: 1,
+        updatedAt: new Date().toISOString(),
+      })
+    } finally {
+      setSaving(false)
+    }
   }, [cadence, config, onSave, sinceDays, sources])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[760px] border-white/[0.08] bg-[#080808] text-white shadow-2xl">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-medium">Intel channels</DialogTitle>
-          <DialogDescription className="text-white/42">
-            Pick the YouTube channels this HQ should watch.
-          </DialogDescription>
+      <DialogContent className="flex max-h-[calc(100vh-2rem)] w-[min(720px,calc(100vw-2rem))] max-w-[720px] flex-col gap-0 overflow-hidden border-white/[0.1] bg-[#111315] p-0 text-white shadow-2xl">
+        <DialogHeader className="shrink-0 border-b border-white/[0.07] bg-[linear-gradient(110deg,rgba(251,146,60,0.10),rgba(124,58,237,0.04)_48%,transparent)] px-5 py-5 pr-14">
+          <DialogTitle className="text-xl font-medium tracking-[-0.02em]">Intel channels</DialogTitle>
+          <DialogDescription className="text-white/46">Choose the YouTube channels Artist HQ watches each week.</DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
-          <div className="grid gap-2 sm:grid-cols-2">
+
+        <div className="grid shrink-0 gap-3 border-b border-white/[0.06] bg-[#14171A] px-5 py-4 sm:grid-cols-2">
             <label className="block space-y-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">Cadence</span>
+              <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-orange-200/55">Cadence</span>
               <select
                 value={cadence}
                 onChange={(event) => setCadence(event.target.value as ArtistIntelConfig['cadence'])}
-                className="h-9 w-full rounded-[10px] border border-white/[0.08] bg-white/[0.025] px-3 text-sm text-white/80 outline-none focus:border-orange-400/45"
+                className="h-10 w-full rounded-[10px] border border-white/[0.09] bg-[#202429] px-3 text-sm text-white/82 outline-none focus:border-orange-400/45"
               >
                 <option value="weekly">Weekly</option>
                 <option value="manual">Manual</option>
               </select>
             </label>
             <label className="block space-y-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">Scan days</span>
+              <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-violet-200/55">Lookback</span>
               <input
                 type="number"
                 min={1}
                 max={30}
                 value={sinceDays}
                 onChange={(event) => setSinceDays(Number(event.target.value))}
-                className="h-9 w-full rounded-[10px] border border-white/[0.08] bg-white/[0.025] px-3 text-sm text-white/80 outline-none focus:border-orange-400/45"
+                className="h-10 w-full rounded-[10px] border border-white/[0.09] bg-[#202429] px-3 text-sm text-white/82 outline-none focus:border-violet-400/45"
               />
             </label>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto bg-[#0E1012] px-5 py-4">
+          <div className="mb-2 flex items-center justify-between gap-3 px-1">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.17em] text-white/34">Channels</p>
+            <p className="text-[10px] text-white/28">{sources.length} watched</p>
           </div>
-          <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
-            {sources.map((source) => (
-              <div key={source.id} className="rounded-[14px] border border-white/[0.055] bg-white/[0.018] p-3">
-                <div className="grid gap-2 md:grid-cols-[1fr_1.35fr_120px_34px]">
-                  <Input value={source.name} onChange={(name) => updateSource(source.id, { name })} placeholder="Channel name" />
-                  <Input value={source.url} onChange={(url) => updateSource(source.id, { url })} placeholder="https://www.youtube.com/@channel" />
-                  <select
-                    value={source.priority}
-                    onChange={(event) => updateSource(source.id, { priority: event.target.value as ArtistIntelSource['priority'] })}
-                    className="h-9 rounded-[10px] border border-white/[0.06] bg-black/30 px-3 text-xs text-white/75 outline-none"
-                  >
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                  </select>
+          <div className="space-y-2">
+            {sources.map((source, index) => {
+              const expanded = expandedSourceId === source.id
+              return (
+                <div
+                  key={source.id}
+                  className={cn(
+                    'overflow-hidden rounded-[13px] border transition-colors',
+                    expanded ? 'border-orange-300/20 bg-[#1B1E22]' : 'border-white/[0.065] bg-[#171A1D] hover:border-white/[0.12]',
+                  )}
+                >
                   <button
                     type="button"
-                    onClick={() => removeSource(source.id)}
-                    className="inline-flex h-9 items-center justify-center rounded-[10px] border border-white/[0.07] text-white/35 hover:bg-white/[0.04] hover:text-white/70"
-                    aria-label={`Remove ${source.name || 'channel'}`}
+                    onClick={() => setExpandedSourceId((current) => current === source.id ? null : source.id)}
+                    aria-expanded={expanded}
+                    className="flex min-h-12 w-full items-center gap-3 px-3.5 py-2.5 text-left"
                   >
-                    <X className="h-3.5 w-3.5" />
+                    <span className={cn(
+                      'flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border text-[10px] font-semibold',
+                      expanded ? 'border-orange-300/25 bg-orange-300/10 text-orange-200' : 'border-white/[0.07] bg-white/[0.035] text-white/42',
+                    )}>
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-white/86">
+                      {source.name.trim() || 'Untitled channel'}
+                    </span>
+                    <span className={cn(
+                      'rounded-full border px-2 py-1 text-[8px] font-semibold uppercase tracking-[0.12em]',
+                      source.priority === 'high'
+                        ? 'border-orange-300/18 bg-orange-300/[0.07] text-orange-200/65'
+                        : source.priority === 'medium'
+                          ? 'border-violet-300/18 bg-violet-300/[0.07] text-violet-200/60'
+                          : 'border-white/[0.07] bg-white/[0.025] text-white/38',
+                    )}>
+                      {source.priority}
+                    </span>
+                    <ChevronDown className={cn('h-4 w-4 shrink-0 text-white/30 transition-transform', expanded && 'rotate-180 text-orange-200/60')} />
                   </button>
+
+                  {expanded ? (
+                    <div className="border-t border-white/[0.06] bg-[#14171A] px-3.5 pb-3.5 pt-3">
+                      <div className="grid gap-3 md:grid-cols-[1fr_1.55fr_110px]">
+                        <label className="space-y-1.5">
+                          <span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-white/32">Channel name</span>
+                          <Input value={source.name} onChange={(name) => updateSource(source.id, { name })} placeholder="Channel name" />
+                        </label>
+                        <label className="space-y-1.5">
+                          <span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-white/32">YouTube URL</span>
+                          <Input value={source.url} onChange={(url) => updateSource(source.id, { url })} placeholder="https://www.youtube.com/@channel" />
+                        </label>
+                        <label className="space-y-1.5">
+                          <span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-white/32">Priority</span>
+                          <select
+                            value={source.priority}
+                            onChange={(event) => updateSource(source.id, { priority: event.target.value as ArtistIntelSource['priority'] })}
+                            className="h-9 w-full rounded-[10px] border border-white/[0.08] bg-[#202429] px-3 text-xs text-white/78 outline-none focus:border-orange-400/40"
+                          >
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label className="mt-3 block space-y-1.5">
+                        <span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-white/32">Why it matters</span>
+                        <textarea
+                          value={source.notes ?? ''}
+                          onChange={(event) => updateSource(source.id, { notes: event.target.value })}
+                          placeholder="What should the Intel agent learn from this channel?"
+                          className="min-h-[72px] w-full resize-y rounded-[10px] border border-white/[0.08] bg-[#202429] px-3 py-2.5 text-xs leading-5 text-white/75 outline-none placeholder:text-white/28 focus:border-orange-400/35"
+                        />
+                      </label>
+                      <div className="mt-3 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => removeSource(source.id)}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-[8px] px-2.5 text-[10px] font-medium text-red-200/45 transition-colors hover:bg-red-400/[0.07] hover:text-red-200/75"
+                          aria-label={`Remove ${source.name || 'channel'}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Remove channel
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
-                <textarea
-                  value={source.notes ?? ''}
-                  onChange={(event) => updateSource(source.id, { notes: event.target.value })}
-                  placeholder="Why this channel matters..."
-                  className="mt-2 min-h-[58px] w-full rounded-[10px] border border-white/[0.06] bg-black/25 px-3 py-2 text-xs leading-5 text-white/75 outline-none placeholder:text-white/28 focus:border-white/16"
-                />
-              </div>
-            ))}
+              )
+            })}
           </div>
-          <div className="flex items-center justify-between gap-3 pt-1">
+        </div>
+
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-white/[0.08] bg-[#171A1D] px-5 py-3.5 shadow-[0_-12px_30px_rgba(0,0,0,0.28)]">
             <button
               type="button"
               onClick={addSource}
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] px-4 text-xs font-medium text-white/62 hover:bg-white/[0.04]"
+              className="inline-flex h-9 items-center gap-2 rounded-[9px] border border-white/[0.09] bg-white/[0.025] px-3.5 text-xs font-medium text-white/62 hover:bg-white/[0.06]"
             >
               <Plus className="h-3.5 w-3.5" />
               Add channel
             </button>
             <button
               type="button"
-              onClick={save}
-              className="h-9 rounded-full bg-white px-5 text-xs font-semibold text-black"
+              onClick={() => void save()}
+              disabled={saving}
+              className="h-9 min-w-[92px] rounded-[9px] bg-orange-300 px-5 text-xs font-semibold text-[#1A1008] transition-colors hover:bg-orange-200 disabled:cursor-wait disabled:opacity-60"
             >
-              Save
+              {saving ? 'Saving…' : 'Save changes'}
             </button>
-          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -2851,93 +3135,6 @@ function formatShortDate(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date)
-}
-
-function HomeWeekOverviewCard({
-  thisWeekItems,
-  attentionItems,
-  finals,
-  finalsLoading,
-  onOpenFinal,
-}: {
-  thisWeekItems: HqHomeTimelineItem[]
-  attentionItems: HqStateAttentionItem[]
-  finals: ReturnType<typeof collectFinalRows>
-  finalsLoading: boolean
-  onOpenFinal: (outputId: string) => void
-}) {
-  const nextItem = thisWeekItems[0]
-  const attention = attentionItems[0]
-  const latestFinal = finals[0]
-
-  return (
-    <HQCard className="p-0">
-      <div className="flex h-11 items-center justify-between gap-3 px-4">
-        <SectionTitle icon={CalendarDays} title="This Week" meta={`${thisWeekItems.length} scheduled`} compact />
-        <button
-          type="button"
-          onClick={() => { window.location.hash = '#artist-hq/calendar' }}
-          className="text-[10px] font-medium text-white/32 transition-colors hover:text-white/65"
-        >
-          Calendar
-        </button>
-      </div>
-      <div className="grid grid-cols-1 divide-y divide-white/[0.05] border-t border-white/[0.05] md:grid-cols-3 md:divide-x md:divide-y-0">
-        <button
-          type="button"
-          onClick={() => { window.location.hash = '#artist-hq/calendar' }}
-          className="min-w-0 px-4 py-3 text-left transition-colors hover:bg-white/[0.025]"
-        >
-          <WeekSummaryHeading label="Next up" value={thisWeekItems.length} tone="bg-white/30" />
-          <p className="mt-2 truncate text-xs font-medium text-white/66">{nextItem?.title ?? 'Nothing scheduled'}</p>
-          <p className="mt-1 truncate text-[9px] uppercase tracking-[0.11em] text-white/25">{nextItem?.when ?? 'Calendar clear'}</p>
-        </button>
-        <div className="min-w-0 px-4 py-3">
-          <WeekSummaryHeading
-            label="Needs attention"
-            value={attentionItems.length}
-            tone={attentionItems.length > 0 ? 'bg-amber-300' : 'bg-emerald-300'}
-          />
-          <p className="mt-2 truncate text-xs font-medium text-white/66">{attention?.text ?? 'Nothing urgent'}</p>
-          <p className="mt-1 truncate text-[9px] uppercase tracking-[0.11em] text-white/25">{attention?.source ?? 'All clear'}</p>
-        </div>
-        <button
-          type="button"
-          disabled={!latestFinal}
-          onClick={() => latestFinal && onOpenFinal(latestFinal.output.id)}
-          className="min-w-0 px-4 py-3 text-left transition-colors hover:bg-white/[0.025] disabled:cursor-default"
-        >
-          <WeekSummaryHeading label="Finals" value={finals.length} tone="bg-orange-300" />
-          <p className="mt-2 truncate text-xs font-medium text-white/66">
-            {finalsLoading ? 'Loading finals' : latestFinal?.output.title ?? 'No finals yet'}
-          </p>
-          <p className="mt-1 truncate text-[9px] uppercase tracking-[0.11em] text-white/25">
-            {latestFinal ? latestFinal.final.slot.replaceAll('-', ' ') : 'Ready output appears here'}
-          </p>
-        </button>
-      </div>
-    </HQCard>
-  )
-}
-
-function WeekSummaryHeading({
-  label,
-  value,
-  tone,
-}: {
-  label: string
-  value: number
-  tone: string
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="flex min-w-0 items-center gap-2">
-        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', tone)} />
-        <span className="truncate text-[9px] font-medium uppercase tracking-[0.14em] text-white/32">{label}</span>
-      </span>
-      <span className="text-sm font-semibold tabular-nums text-white/72">{value}</span>
-    </div>
-  )
 }
 
 function WorkersSummaryCard({ workerItems }: { workerItems: HqHomeWorkerItem[] }) {
@@ -2994,7 +3191,6 @@ function PulseSummaryCard({
   onToggleSpotify,
   onToggleIntel,
   onRunIntel,
-  onShowDetails,
 }: {
   spotifyValue: string
   spotifyMeta: string
@@ -3008,15 +3204,11 @@ function PulseSummaryCard({
   onToggleSpotify: () => void
   onToggleIntel: () => void
   onRunIntel: () => void
-  onShowDetails: () => void
 }) {
   return (
     <HQCard className="p-0">
-      <div className="flex items-center justify-between border-b border-white/[0.045] px-4 py-3">
+      <div className="border-b border-white/[0.045] px-4 py-3">
         <SectionTitle icon={Radio} title="Signals" meta="weekly" compact />
-        <button type="button" onClick={onShowDetails} className="text-[10px] font-medium text-white/34 transition-colors hover:text-white/65">
-          Details
-        </button>
       </div>
       <div className="divide-y divide-white/[0.045]">
         <PulseSummaryRow
@@ -3297,12 +3489,11 @@ const HQ_DAY_ACTIONS: CalendarDayAction[] = [
 ]
 
 function ArtistCalendarView({
+  compact,
   events,
   selectedDate,
   visibleMonth,
   disabled,
-  googleConnected,
-  googleBusy,
   selectedDateEvents,
   workById,
   workspaceId,
@@ -3315,16 +3506,13 @@ function ArtistCalendarView({
   onCancelEditEvent,
   onSaveEditEvent,
   onDeleteEvent,
-  onConnectGoogle,
-  onSyncGoogle,
   onQueueHqWork,
 }: {
+  compact?: boolean
   events: ArtistCalendarEvent[]
   selectedDate: string
   visibleMonth: Date
   disabled?: boolean
-  googleConnected?: boolean
-  googleBusy?: boolean
   selectedDateEvents: ArtistCalendarEvent[]
   workById: Map<string, ScheduledWorkOrder>
   workspaceId: string
@@ -3337,8 +3525,6 @@ function ArtistCalendarView({
   onCancelEditEvent: () => void
   onSaveEditEvent: (eventId: string) => void
   onDeleteEvent: (eventId: string) => void
-  onConnectGoogle: () => void
-  onSyncGoogle: () => void
   onQueueHqWork: (type?: ScheduledWorkComposerEntry['suggestedType']) => void
 }) {
   const [detailEventId, setDetailEventId] = React.useState<string | null>(null)
@@ -3362,26 +3548,8 @@ function ArtistCalendarView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="mb-3 flex justify-end gap-1.5">
-        <button
-          type="button"
-          onClick={onConnectGoogle}
-          disabled={googleBusy}
-          className="h-8 rounded-[6px] border border-white/[0.07] px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/55 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {googleConnected ? 'Reconnect Google' : 'Connect Google'}
-        </button>
-        <button
-          type="button"
-          onClick={onSyncGoogle}
-          disabled={disabled || googleBusy}
-          className="inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-white/90 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <RefreshCw className={cn('h-3.5 w-3.5', googleBusy && 'animate-spin')} />
-          Sync
-        </button>
-      </div>
       <CalendarMonthGrid
+        compact={compact}
         visibleMonth={visibleMonth}
         selectedDate={selectedDate}
         dayMetaByDate={dayMetaByDate}
@@ -3545,8 +3713,8 @@ function ProjectBoard({
               )}
             >
               {column.label}
-              <span className={cn('tabular-nums', active ? 'text-orange-200/70' : 'text-white/24')}>{column.cards.length}</span>
-              {active ? <span className="absolute inset-x-2 bottom-0 h-px bg-orange-300" /> : null}
+              <span className={cn('tabular-nums', active ? 'text-[#f97316]/85' : 'text-white/24')}>{column.cards.length}</span>
+              {active ? <span className="absolute inset-x-2 bottom-0 h-px bg-[#f97316]" /> : null}
             </button>
           )
         })}
@@ -3862,10 +4030,6 @@ function isResearchOutput(output: OutputSummaryDTO): boolean {
     || /\b(research|report|intel|analysis|spotify|youtube|trend)\b/.test(text)
 }
 
-function hqHomeDetailsStorageKey(workspaceId: string): string {
-  return `runneros:hq-home:${workspaceId}:details-open`
-}
-
 function hqHomeUtilitiesStorageKey(workspaceId: string): string {
   return `runneros:hq-home:${workspaceId}:utilities-open`
 }
@@ -3905,7 +4069,7 @@ function writeBooleanLocalStorage(key: string, value: boolean): void {
 function createSpotifySyncPrompt(): string {
   return `Run the Spotify snapshot for this Artist HQ workspace.
 
-Use Artist Profile first, then resolve the exact connected Spotify profile with Printing Press Social. Verify the live account, request the bounded Spotify for Artists snapshot browser plan, capture only visible values, and normalize the capture through \`snapshot spotify\` into this workspace.
+Use Artist Profile first, then use @printing-press-social from its injected absolute Local path to resolve the exact connected Spotify profile. Do not search for or use another RunnerOS checkout. Verify the live account, request the bounded Spotify for Artists snapshot browser plan, capture only visible values, and normalize the capture through \`snapshot spotify\` into this workspace.
 
 If the Spotify browser profile is missing, logged out, or points at the wrong account, stop with that exact setup issue. Do not ask for Spotify client credentials and do not fabricate unavailable metrics.
 
@@ -3931,6 +4095,33 @@ function createSpotifySyncMatcher(): Record<string, unknown> {
   }
 }
 
+function createInstagramSyncPrompt(): string {
+  return `Run the read-only Instagram Growth Snapshot for this Artist HQ workspace.
+
+Load the instagram-growth-snapshot skill. If no exact Instagram profile was named, select the first ready Instagram profile returned by the live Printing Press Social catalog, preserving catalog order. Attach that saved browser session, verify the visible account identity, and read Instagram Insights for the last 14 completed days or the nearest visible supported range.
+
+Save an immutable snapshot under data/instagram/snapshots and write its context payload to Workspace Context slug ${ARTIST_INSTAGRAM_SNAPSHOT_CONTEXT_SLUG} so Social Pulse updates.
+
+Do not publish, reply, DM, follow, or change account settings. Never fabricate unavailable metrics. Keep the final note short: profile, actual reporting window, follower growth or decline, reach, interactions, and blockers.`
+}
+
+function createInstagramSyncMatcher(): Record<string, unknown> {
+  return {
+    name: INSTAGRAM_SYNC_AUTOMATION_NAME,
+    cron: INSTAGRAM_SYNC_CRON,
+    timezone: getLocalTimezone(),
+    permissionMode: 'safe',
+    labels: ['instagram', 'insights', 'artist-hq', 'scheduled'],
+    actions: [
+      {
+        type: 'prompt',
+        agentSlug: 'social-publisher',
+        prompt: createInstagramSyncPrompt(),
+      },
+    ],
+  }
+}
+
 function createIntelSyncMatcher(workspaceName: string): Record<string, unknown> {
   return {
     name: INTEL_SYNC_AUTOMATION_NAME,
@@ -3951,6 +4142,16 @@ function isSpotifySyncAutomation(automation: AutomationListItem): boolean {
     action.type === 'prompt'
     && action.agentSlug === 'spotify-analyst'
     && /artist-spotify-snapshot|weekly spotify/i.test(action.prompt)
+  ))
+}
+
+function isInstagramSyncAutomation(automation: AutomationListItem): boolean {
+  if (automation.event !== 'SchedulerTick') return false
+  if (automation.name === INSTAGRAM_SYNC_AUTOMATION_NAME) return true
+  return automation.actions.some((action) => (
+    action.type === 'prompt'
+    && action.agentSlug === 'social-publisher'
+    && /artist-instagram-snapshot|instagram growth snapshot/i.test(action.prompt)
   ))
 }
 

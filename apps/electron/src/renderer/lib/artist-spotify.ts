@@ -23,6 +23,7 @@ export interface ArtistSpotifySnapshot {
     saveRate?: number
     skipRate?: number
   }
+  dailyStreams?: Array<{ date: string; streams: number }>
   geo?: {
     topCities?: Array<{ city: string; country?: string; listeners?: number }>
   }
@@ -44,6 +45,15 @@ export type ArtistSpotifySnapshotParseResult =
 export interface ArtistSpotifyHistoryPoint {
   date: string
   streams: number
+  listeners?: number
+}
+
+export interface ArtistSpotifyGrowth {
+  comparisonDate: string
+  streamsDelta: number
+  streamsPercent?: number
+  listenersDelta?: number
+  listenersPercent?: number
 }
 
 export function artistSpotifySnapshotMetadata(): ContextDocMetadata {
@@ -93,6 +103,7 @@ export function parseArtistSpotifySnapshotJsonResult(body: string): ArtistSpotif
           saveRate: toNumber(parsed.metrics.saveRate),
           skipRate: toNumber(parsed.metrics.skipRate),
         },
+        dailyStreams: normalizeDailyStreams(parsed.dailyStreams),
         dataSource: normalizeDataSource(parsed.dataSource),
         geo: normalizeGeo(parsed.geo),
         tracks: normalizeTracks(parsed.tracks),
@@ -127,9 +138,29 @@ export function buildArtistSpotifyStreamHistory(
     byDate.set(snapshot.snapshotDate, {
       date: snapshot.snapshotDate,
       streams: snapshot.metrics.streams!,
+      listeners: snapshot.metrics.listeners,
     })
   }
   return [...byDate.values()].slice(-Math.max(1, limit))
+}
+
+export function calculateArtistSpotifyGrowth(history: ArtistSpotifyHistoryPoint[]): ArtistSpotifyGrowth | null {
+  if (history.length < 2) return null
+  const previous = history.at(-2)!
+  const current = history.at(-1)!
+  return {
+    comparisonDate: previous.date,
+    streamsDelta: current.streams - previous.streams,
+    streamsPercent: previous.streams > 0
+      ? ((current.streams - previous.streams) / previous.streams) * 100
+      : undefined,
+    listenersDelta: typeof current.listeners === 'number' && typeof previous.listeners === 'number'
+      ? current.listeners - previous.listeners
+      : undefined,
+    listenersPercent: typeof current.listeners === 'number' && typeof previous.listeners === 'number' && previous.listeners > 0
+      ? ((current.listeners - previous.listeners) / previous.listeners) * 100
+      : undefined,
+  }
 }
 
 export function serializeArtistSpotifySnapshotBody(snapshot: Omit<ArtistSpotifySnapshot, 'version' | 'updatedAt'> | ArtistSpotifySnapshot): string {
@@ -216,4 +247,21 @@ function normalizePlaylists(value: unknown): ArtistSpotifySnapshot['playlistsDri
         addedDate: clean(candidate.addedDate) ?? null,
       }
     })
+}
+
+function normalizeDailyStreams(value: unknown): ArtistSpotifySnapshot['dailyStreams'] {
+  if (!Array.isArray(value)) return undefined
+  const byDate = new Map<string, number>()
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const candidate = item as { date?: unknown; streams?: unknown }
+    const date = clean(candidate.date)
+    const streams = toNumber(candidate.streams)
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || streams === undefined || streams < 0) continue
+    byDate.set(date, streams)
+  }
+  const points = [...byDate.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([date, streams]) => ({ date, streams }))
+  return points.length > 0 ? points : undefined
 }

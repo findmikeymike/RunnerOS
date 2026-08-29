@@ -4,6 +4,7 @@ import type { HandlerDeps } from '../handler-deps'
 import { registerAuthHandlers } from './auth'
 import { registerAutomationsHandlers } from './automations'
 import { registerAgentDefinitionsHandlers } from './agent-definitions'
+import { registerAgendaHandlers } from './agenda'
 import { registerCommunityHandlers } from './community'
 import { registerWorkspaceContextHandlers } from './workspace-context'
 import { registerHqStateHandlers } from './hq-state'
@@ -50,6 +51,7 @@ export function registerCoreRpcHandlers(
   registerAuthHandlers(server, deps)
   registerAutomationsHandlers(server, deps)
   registerAgentDefinitionsHandlers(server, deps)
+  registerAgendaHandlers(server, deps)
   registerCommunityHandlers(server, deps)
   registerWorkspaceContextHandlers(server, deps)
   registerHqStateHandlers(server, deps)

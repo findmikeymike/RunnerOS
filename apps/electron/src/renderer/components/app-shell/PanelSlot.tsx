@@ -23,6 +23,7 @@ import { useAppShellContext, AppShellProvider } from '@/context/AppShellContext'
 import { PanelHeaderCenterButton } from '@/components/ui/PanelHeaderCenterButton'
 import { MainContentPanel } from './MainContentPanel'
 import { PANEL_MIN_WIDTH, RADIUS_EDGE, RADIUS_INNER } from './panel-constants'
+import { RENDERER_PRODUCT_VARIANT } from '@/lib/product-identity'
 
 interface PanelSlotProps {
   entry: PanelStackEntry
@@ -132,6 +133,7 @@ export function PanelSlot({
               ? 'shadow-panel-focused z-[1]'
               : 'shadow-middle z-0',
           'runneros-glass-panel-strong',
+          RENDERER_PRODUCT_VARIANT === 'artist-os' && 'artist-os-main-canvas',
         )}
         style={{
           // In multi-panel, unfocused panels override --background so all

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { ContextDocDTO } from '../../shared/types'
 import {
   buildArtistSpotifyStreamHistory,
+  calculateArtistSpotifyGrowth,
   parseArtistSpotifySnapshotDocResult,
   parseArtistSpotifySnapshotJsonResult,
 } from './artist-spotify'
@@ -60,6 +61,11 @@ describe('parseArtistSpotifySnapshotDocResult', () => {
       windowDays: null,
       artist: { name: 'Test Artist' },
       metrics: { streams: 900, saves: 12 },
+      dailyStreams: [
+        { date: '2026-07-29', streams: 31 },
+        { date: 'bad-date', streams: 500 },
+        { date: '2026-07-30', streams: 42 },
+      ],
       partial: true,
       errors: ['Reporting window unavailable.'],
     }))
@@ -69,6 +75,10 @@ describe('parseArtistSpotifySnapshotDocResult', () => {
     expect(result.snapshot?.dataSource).toBe('spotify-for-artists-browser')
     expect(result.snapshot?.windowDays).toBeUndefined()
     expect(result.snapshot?.metrics.saves).toBe(12)
+    expect(result.snapshot?.dailyStreams).toEqual([
+      { date: '2026-07-29', streams: 31 },
+      { date: '2026-07-30', streams: 42 },
+    ])
   })
 
   test('builds a dated stream trend from only comparable historical snapshots', () => {
@@ -83,7 +93,7 @@ describe('parseArtistSpotifySnapshotDocResult', () => {
       dataSource,
       windowDays,
       artist: {},
-      metrics: { streams },
+      metrics: { streams, listeners: Math.round(streams / 2) },
       updatedAt: `${snapshotDate}T12:00:00.000Z`,
     })
 
@@ -93,9 +103,23 @@ describe('parseArtistSpotifySnapshotDocResult', () => {
       snapshot('2026-07-15', 999, 'spotify-web-api', 0),
       snapshot('2026-07-22', 180),
     ])).toEqual([
-      { date: '2026-07-01', streams: 100 },
-      { date: '2026-07-08', streams: 140 },
-      { date: '2026-07-22', streams: 180 },
+      { date: '2026-07-01', streams: 100, listeners: 50 },
+      { date: '2026-07-08', streams: 140, listeners: 70 },
+      { date: '2026-07-22', streams: 180, listeners: 90 },
     ])
+  })
+
+  test('calculates growth against the prior comparable snapshot', () => {
+    expect(calculateArtistSpotifyGrowth([
+      { date: '2026-07-01', streams: 100, listeners: 40 },
+      { date: '2026-07-08', streams: 125, listeners: 50 },
+    ])).toEqual({
+      comparisonDate: '2026-07-01',
+      streamsDelta: 25,
+      streamsPercent: 25,
+      listenersDelta: 10,
+      listenersPercent: 25,
+    })
+    expect(calculateArtistSpotifyGrowth([{ date: '2026-07-01', streams: 100 }])).toBeNull()
   })
 })

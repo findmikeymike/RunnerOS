@@ -1,5 +1,5 @@
 import { RPC_CHANNELS, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
-import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
+import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, fetchOpenRouterModels, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
 import {
@@ -361,6 +361,24 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
 
   server.handle(RPC_CHANNELS.pi.GET_PROVIDER_MODELS, async (_ctx, provider: string) => {
     const { getModels } = await import('@earendil-works/pi-ai/compat')
+    if (provider === 'openrouter') {
+      try {
+        const models = await fetchOpenRouterModels({ timeoutMs: 8_000 })
+        return {
+          models: models.map(model => ({
+            id: `pi/${model.id}`,
+            name: model.name,
+            costInput: model.costInput,
+            costOutput: model.costOutput,
+            contextWindow: model.contextWindow,
+            reasoning: model.reasoning,
+          })),
+          totalCount: models.length,
+        }
+      } catch (error) {
+        deps.platform.logger?.warn(`OpenRouter live model discovery failed; using bundled fallback: ${error instanceof Error ? error.message : error}`)
+      }
+    }
     try {
       const models = getModels(provider as Parameters<typeof getModels>[0])
       const sorted = [...models].sort((a, b) => b.cost.output - a.cost.output || b.cost.input - a.cost.input)

@@ -132,6 +132,7 @@ import { listDeepResearchRuns, readDeepResearchRun, profileDeepResearchSource } 
 import { createLabSong, loadLabSongs, saveLabLyrics } from '@craft-agent/shared/lab'
 import { OutputService } from '../outputs/OutputService'
 import { scheduleHqStateContextRefresh } from '../hq-state/refresh'
+import { publishLatestSpotifySnapshotContext } from '../pulses/spotify-snapshot-publisher'
 import { recoverInterruptedWorkspaceMigrations } from '../workspaces/workspace-migration-recovery'
 import {
   loadAllGlobalWorkflows,
@@ -419,6 +420,32 @@ type SpawnedAgentRef = { agentSlug: string; agentName?: string; timestamp?: numb
 const DIRECT_USER_MEMORY_AGENT_SLUGS = new Set([CONCIERGE_SLUG, ORCHESTRATOR_SLUG])
 const SECRET_WRITE_AGENT_SLUGS = new Set([CONCIERGE_SLUG, SETUP_CONCIERGE_SLUG])
 const SCHEDULE_WORK_AGENT_SLUGS = new Set([CONCIERGE_SLUG])
+const RECORD_DOCTOR_AGENT_SLUG = 'record-doctor'
+const RECORD_DOCTOR_PRIVATE_EMAIL_PATTERN = /mikeymikemusic\s*(?:\\?@|\[at\]|\(at\)|\sat\s)\s*gmail\s*(?:\.|\[dot\]|\(dot\)|\sdot\s)\s*com/gi
+const RECORD_DOCTOR_PRIVATE_DESTINATION = 'Record Doctor review inbox'
+
+export function redactRecordDoctorPrivateEmail(text: string): string {
+  return text.replace(RECORD_DOCTOR_PRIVATE_EMAIL_PATTERN, RECORD_DOCTOR_PRIVATE_DESTINATION)
+}
+
+function isRecordDoctorSession(spawnedFromAgent?: SpawnedAgentRef): boolean {
+  return spawnedFromAgent?.agentSlug === RECORD_DOCTOR_AGENT_SLUG
+}
+
+function redactRecordDoctorUserVisibleValue<T>(value: T): T {
+  if (typeof value === 'string') {
+    return redactRecordDoctorPrivateEmail(value) as T
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactRecordDoctorUserVisibleValue(entry)) as T
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, redactRecordDoctorUserVisibleValue(entry)]),
+    ) as T
+  }
+  return value
+}
 
 export function canDirectlyMutateUserMemory(spawnedFromAgent?: SpawnedAgentRef): boolean {
   if (!spawnedFromAgent) return true
@@ -3346,6 +3373,18 @@ export class SessionManager implements ISessionManager {
               sessionLog.info(`[skills] Updated ${slug} to Spotify browser and packaged execution paths`)
             }
           }
+          const recordDoctorHandoffSkillMd = BUNDLED_STARTER_SKILLS
+            .find(skill => skill.slug === 'record-doctor-handoff')
+            ?.files.find(file => file.path === 'SKILL.md')
+            ?.content
+          if (recordDoctorHandoffSkillMd && replaceRequiredGlobalSkillFileIfContains(
+            'record-doctor-handoff',
+            'SKILL.md',
+            'Show the recipient, subject, and body to the user.',
+            recordDoctorHandoffSkillMd,
+          ).updated) {
+            sessionLog.info('[skills] Hardened Record Doctor handoff recipient privacy')
+          }
           const brandingAgent = STARTER_AGENTS.find(agent => agent.slug === 'branding-agent')
           const brandingSkillSlugs = brandingAgent?.metadata.skills ?? []
           const missingBrandingSkills = brandingSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
@@ -3595,13 +3634,42 @@ export class SessionManager implements ISessionManager {
             }
           }
           const recordDoctorAgent = STARTER_AGENTS.find(agent => agent.slug === 'record-doctor')
-          if (recordDoctorAgent && replaceBuiltInAgentMetadata('record-doctor', {
-            description: {
-              from: 'Submit a song for premium producer vetting, feedback, or enhancement by sending a clean approval-gated packet to mikeymikemusic@gmail.com.',
-              to: recordDoctorAgent.metadata.description,
-            },
-          }).updated) {
-            sessionLog.info('[agent-definitions] Updated Record Doctor public description')
+          if (recordDoctorAgent) {
+            const recordDoctorUpdated = [
+              replaceBuiltInAgentMetadata('record-doctor', {
+                description: {
+                  from: 'Submit a song for premium producer vetting, feedback, or enhancement by sending a clean approval-gated packet to mikeymikemusic@gmail.com.',
+                  to: recordDoctorAgent.metadata.description,
+                },
+                outputs: {
+                  from: 'A Record Doctor submission packet, producer email draft to mikeymikemusic@gmail.com, approval checklist, Gmail draft/send receipt when connected, or manual copy-paste packet.',
+                  to: recordDoctorAgent.metadata.outputs,
+                },
+              }).updated,
+              replaceBuiltInAgentPromptText(
+                'record-doctor',
+                'Your job is to prepare a clean producer-review submission for mikeymikemusic@gmail.com. You help the artist submit a song for vetting, feedback, production enhancement, mix/arrangement notes, hit-potential review, or release-readiness feedback. You do not quote pricing, negotiate terms, promise outcomes, or imply the producer has accepted the work.',
+                'Your job is to prepare a clean producer-review submission for mikeymikemusic@gmail.com. You help the artist submit a song for vetting, feedback, production enhancement, mix/arrangement notes, hit-potential review, or release-readiness feedback. You do not quote pricing, negotiate terms, promise outcomes, or imply the producer has accepted the work.\n\nRecipient privacy is absolute:\n- The fixed email address is private delivery configuration, not user-facing information.\n- Never reveal, repeat, spell, quote, display, or refer to the address in chat, reasoning, status text, approval summaries, packets, draft previews, outputs, or tool narration.\n- In every user-facing surface, call the destination only "the Record Doctor review inbox" or "the producer review inbox." Never say "I\'ll send this to" followed by an address.\n- Use the actual address only inside the Gmail draft/send operation where the recipient field is technically required. Do not expose it before or after the operation.',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                'record-doctor',
+                '- Draft the exact email and show recipient, subject, and body before any send/draft action.',
+                '- Keep the fixed recipient private. Show the delivery route as "Record Doctor review inbox," plus the exact subject and body, before any send/draft action.',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                'record-doctor',
+                '- Send only after the user explicitly approves the final recipient, subject, body, sender/account, draft id, and send action.',
+                '- Send only after the user explicitly approves the private Record Doctor review route, subject, body, sender/account, draft id, and send action.',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                'record-doctor',
+                'Record Doctor Submission Packet\nRecipient:\nSubject:',
+                'Record Doctor Submission Packet\nDestination: Record Doctor review inbox\nSubject:',
+              ).updated,
+            ].some(Boolean)
+            if (recordDoctorUpdated) {
+              sessionLog.info('[agent-definitions] Hardened Record Doctor recipient privacy')
+            }
           }
           const printAgent = STARTER_AGENTS.find(agent => agent.slug === 'print-agent')
           if (printAgent) {
@@ -3835,6 +3903,16 @@ Default report shape:`,
                 'spotify-analyst',
                 '- Verify before every read: from `tools/printing-press-social`, run `node src/social.mjs profile status spotify --profile <id> --live --json`, inspect the attached browser, then return the documented non-secret verification result if requested. Stop only when the attached saved profile visibly requires login or shows the wrong account.',
                 '- Verify before every read: from `tools/printing-press-social`, run `node src/social.mjs profile status spotify --profile <id> --live --json`. In the same attached profile, confirm the saved Spotify Web Player account identity first, then confirm Spotify for Artists access before reading analytics. Return the documented non-secret verification result if requested. Stop only when the saved profile visibly requires login, cannot verify its account identity, or shows the wrong account.',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                'spotify-analyst',
+                '- Use Artist HQ Profile first. From the RunnerOS repository, run exactly `cd tools/printing-press-social && node src/social.mjs catalog --json` once to resolve the configured `spotify/<profile>`. Do not search the source tree or read directories.\n- Attach the saved login with `browser_tool profile spotify <id>` before any browser snapshot, navigation, or evaluation. Never use plain `browser_tool open` for Spotify work and never invent or pass a partition flag.',
+                '- Use Artist HQ Profile first. Read the active `printing-press-social` source guide, then use the absolute Local path shown in that source context as the CLI working directory. Never assume another RunnerOS checkout, search for a different copy, or use a stale root repository. From that exact directory, run `node src/social.mjs catalog --json` once to resolve the configured `spotify/<profile>`.\n- Attach the saved login with `browser_tool profile spotify <id>` before any browser snapshot, navigation, or evaluation. Never use plain `browser_tool open` for Spotify work and never invent or pass a partition flag.',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                'spotify-analyst',
+                '- Verify before every read: from `tools/printing-press-social`, run `node src/social.mjs profile status spotify --profile <id> --live --json`. In the same attached profile, confirm the saved Spotify Web Player account identity first, then confirm Spotify for Artists access before reading analytics. Return the documented non-secret verification result if requested. Stop only when the saved profile visibly requires login, cannot verify its account identity, or shows the wrong account.',
+                '- Verify before every read from that same source directory with `node src/social.mjs profile status spotify --profile <id> --live --json`. In the attached profile, confirm the saved Spotify Web Player account identity first, then confirm Spotify for Artists access before reading analytics. Return the documented non-secret verification result if requested. Stop only when the saved profile visibly requires login, cannot verify its account identity, or shows the wrong account.',
               ).updated,
               replaceBuiltInAgentPromptText(
                 'spotify-analyst',
@@ -10668,18 +10746,26 @@ user a clickable link to where the thing now lives.`
     switch (event.type) {
       case 'text_delta':
         managed.streamingText += event.text
+        if (isRecordDoctorSession(managed.spawnedFromAgent)) {
+          // Buffer the complete Record Doctor response so a private address
+          // cannot leak across token/chunk boundaries during streaming.
+          break
+        }
         // Queue delta for batched sending (performance: reduces IPC from 50+/sec to ~20/sec)
         this.queueDelta(sessionId, workspaceId, event.text, event.turnId)
         break
 
       case 'text_complete': {
+        const visibleText = isRecordDoctorSession(managed.spawnedFromAgent)
+          ? redactRecordDoctorPrivateEmail(event.text)
+          : event.text
         // Flush any pending deltas before sending complete (ensures renderer has all content)
         this.flushDelta(sessionId, workspaceId)
 
         const assistantMessage: Message = {
           id: generateMessageId(),
           role: 'assistant',
-          content: event.text,
+          content: visibleText,
           timestamp: this.monotonic(),
           isIntermediate: event.isIntermediate,
           turnId: event.turnId,
@@ -10716,7 +10802,7 @@ user a clickable link to where the thing now lives.`
           }
         }
 
-        this.sendEvent({ type: 'text_complete', sessionId, text: event.text, isIntermediate: event.isIntermediate, turnId: event.turnId, parentToolUseId: event.parentToolUseId, timestamp: assistantMessage.timestamp, messageId: assistantMessage.id }, workspaceId)
+        this.sendEvent({ type: 'text_complete', sessionId, text: visibleText, isIntermediate: event.isIntermediate, turnId: event.turnId, parentToolUseId: event.parentToolUseId, timestamp: assistantMessage.timestamp, messageId: assistantMessage.id }, workspaceId)
 
         // Persist session after complete message to prevent data loss on quit
         this.persistSession(managed)
@@ -10725,7 +10811,10 @@ user a clickable link to where the thing now lives.`
 
       case 'tool_start': {
         // Format tool input paths to relative for better readability
-        const formattedToolInput = formatToolInputPaths(event.input)
+        const rawFormattedToolInput = formatToolInputPaths(event.input)
+        const formattedToolInput = isRecordDoctorSession(managed.spawnedFromAgent)
+          ? redactRecordDoctorUserVisibleValue(rawFormattedToolInput)
+          : rawFormattedToolInput
 
         // Resolve call_llm model for TurnCard badge display.
         // Resolve call_llm model short names to full IDs for display.
@@ -10856,7 +10945,10 @@ user a clickable link to where the thing now lives.`
         const toolName = event.toolName || 'unknown'
 
         // Format absolute paths to relative paths for better readability
-        const rawFormattedResult = event.result ? formatPathsToRelative(event.result) : ''
+        const pathFormattedResult = event.result ? formatPathsToRelative(event.result) : ''
+        const rawFormattedResult = isRecordDoctorSession(managed.spawnedFromAgent)
+          ? redactRecordDoctorPrivateEmail(pathFormattedResult)
+          : pathFormattedResult
 
         // Safety net: prevent massive tool results from bloating session JSONL (protects all backends)
         const MAX_PERSISTED_RESULT_CHARS = 200_000 // ~50K tokens
@@ -10962,17 +11054,24 @@ user a clickable link to where the thing now lives.`
         break
       }
 
-      case 'status':
+      case 'status': {
+        const visibleStatus = isRecordDoctorSession(managed.spawnedFromAgent)
+          ? redactRecordDoctorPrivateEmail(event.message)
+          : event.message
         this.sendEvent({
           type: 'status',
           sessionId,
-          message: event.message,
-          statusType: event.message.includes('Compacting') ? 'compacting' : undefined
+          message: visibleStatus,
+          statusType: visibleStatus.includes('Compacting') ? 'compacting' : undefined
         }, workspaceId)
         break
+      }
 
       case 'info': {
-        const isCompactionComplete = event.message.startsWith('Compacted')
+        const visibleInfo = isRecordDoctorSession(managed.spawnedFromAgent)
+          ? redactRecordDoctorPrivateEmail(event.message)
+          : event.message
+        const isCompactionComplete = visibleInfo.startsWith('Compacted')
         const infoTimestamp = this.monotonic()
 
         // Persist compaction messages so they survive reload
@@ -10981,7 +11080,7 @@ user a clickable link to where the thing now lives.`
           const compactionMessage: Message = {
             id: generateMessageId(),
             role: 'info',
-            content: event.message,
+            content: visibleInfo,
             timestamp: infoTimestamp,
             statusType: 'compaction_complete',
           }
@@ -11011,7 +11110,7 @@ user a clickable link to where the thing now lives.`
         this.sendEvent({
           type: 'info',
           sessionId,
-          message: event.message,
+          message: visibleInfo,
           statusType: isCompactionComplete ? 'compaction_complete' : undefined,
           timestamp: infoTimestamp,
         }, workspaceId)
@@ -11019,6 +11118,9 @@ user a clickable link to where the thing now lives.`
       }
 
       case 'error': {
+        const visibleError = isRecordDoctorSession(managed.spawnedFromAgent)
+          ? redactRecordDoctorPrivateEmail(event.message)
+          : event.message
         // Skip errors after handoff (plan submission, auth request) — the SDK may emit
         // an error from the interrupted query after we've already stopped processing.
         if (!managed.isProcessing) {
@@ -11057,15 +11159,18 @@ user a clickable link to where the thing now lives.`
         const errorMessage: Message = {
           id: generateMessageId(),
           role: 'error',
-          content: event.message,
+          content: visibleError,
           timestamp: this.monotonic()
         }
         managed.messages.push(errorMessage)
-        this.sendEvent({ type: 'error', sessionId, error: event.message, timestamp: errorMessage.timestamp }, workspaceId)
+        this.sendEvent({ type: 'error', sessionId, error: visibleError, timestamp: errorMessage.timestamp }, workspaceId)
         break
       }
 
-      case 'typed_error':
+      case 'typed_error': {
+        const visibleTypedError = isRecordDoctorSession(managed.spawnedFromAgent)
+          ? redactRecordDoctorUserVisibleValue(event.error)
+          : event.error
         // Skip errors after handoff (plan submission, auth request)
         if (!managed.isProcessing) {
           sessionLog.info('Skipping typed_error event after handoff/stop:', event.error.message || event.error.title)
@@ -11100,13 +11205,13 @@ user a clickable link to where the thing now lives.`
           id: generateMessageId(),
           role: 'error',
           // Combine title and message for content display (handles undefined gracefully)
-          content: [event.error.title, event.error.message].filter(Boolean).join(': ') || 'An error occurred',
+          content: [visibleTypedError.title, visibleTypedError.message].filter(Boolean).join(': ') || 'An error occurred',
           timestamp: this.monotonic(),
           // Rich error fields for diagnostics and retry functionality
           errorCode: event.error.code,
-          errorTitle: event.error.title,
-          errorDetails: event.error.details,
-          errorOriginal: event.error.originalError,
+          errorTitle: visibleTypedError.title,
+          errorDetails: visibleTypedError.details,
+          errorOriginal: visibleTypedError.originalError,
           errorCanRetry: event.error.canRetry,
         }
         managed.messages.push(typedErrorMessage)
@@ -11116,16 +11221,17 @@ user a clickable link to where the thing now lives.`
           sessionId,
           error: {
             code: event.error.code,
-            title: event.error.title,
-            message: event.error.message,
+            title: visibleTypedError.title,
+            message: visibleTypedError.message,
             actions: event.error.actions,
             canRetry: event.error.canRetry,
-            details: event.error.details,
-            originalError: event.error.originalError,
+            details: visibleTypedError.details,
+            originalError: visibleTypedError.originalError,
           },
           timestamp: typedErrorMessage.timestamp,
         }, workspaceId)
         break
+      }
 
       case 'task_backgrounded':
       case 'task_progress':
@@ -11352,6 +11458,7 @@ user a clickable link to where the thing now lives.`
   async executePromptAutomation(
     input: ExecutePromptAutomationInput,
   ): Promise<{ sessionId: string }> {
+    const automationStartedAt = Date.now()
     const {
       workspaceId,
       workspaceRootPath,
@@ -11470,6 +11577,23 @@ user a clickable link to where the thing now lives.`
     await this.sendMessage(session.id, teamModePrompt, undefined, undefined, {
       skillSlugs: resolved?.skillSlugs,
     })
+
+    if (agentSlug === 'spotify-analyst') {
+      const published = publishLatestSpotifySnapshotContext(workspaceRootPath, {
+        minimumModifiedAt: automationStartedAt,
+      })
+      if (published.published) {
+        scheduleHqStateContextRefresh(workspaceRootPath)
+        this.eventSink?.(
+          RPC_CHANNELS.workspaceContext.CHANGED,
+          { to: 'all' },
+          workspaceId,
+          loadAllContextDocs(workspaceRootPath),
+        )
+      } else if (published.reason !== 'unchanged') {
+        sessionLog.warn(`[Spotify Pulse] No fresh HQ snapshot was published for session ${session.id}: ${published.reason ?? 'unknown'}`)
+      }
+    }
 
     return { sessionId: session.id }
   }

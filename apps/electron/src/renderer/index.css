@@ -856,6 +856,15 @@ html[data-font="inter"] {
     background: transparent;
   }
 
+  /* Artist OS uses one continuous black canvas behind every main route. */
+  .artist-os-main-canvas {
+    background: #050505;
+  }
+
+  .artist-os-main-canvas .bg-\[\#050505\] {
+    background-color: transparent;
+  }
+
   .runneros-page-wrap {
     width: 100%;
     max-width: 1600px;

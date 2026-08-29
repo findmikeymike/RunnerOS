@@ -1989,6 +1989,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     } else {
       this.bindSession(instanceId, sessionId)
       if (options?.show) this.focus(instanceId)
+      else this.hide(instanceId)
     }
 
     mainLog.info(`[browser-pane] Bound saved social profile ${normalizedPlatform}/${normalizedProfile} to session ${sessionId} instance=${instanceId}`)
@@ -2031,6 +2032,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     } else {
       this.bindSession(instanceId, sessionId)
       if (options?.show) this.focus(instanceId)
+      else this.hide(instanceId)
     }
 
     mainLog.info(`[browser-pane] Bound saved ad account ${normalizedProvider}/${normalizedProfile} to session ${sessionId} instance=${instanceId}`)

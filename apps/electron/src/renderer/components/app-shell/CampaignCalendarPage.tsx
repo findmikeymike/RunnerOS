@@ -447,8 +447,8 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
         <section className="relative overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] p-6 lg:p-8">
-          <div className="absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full bg-indigo-600/10 blur-[110px]" />
-          <div className="absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full bg-purple-500/5 blur-[120px]" />
+          <div className="absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full bg-orange-600/10 blur-[110px]" />
+          <div className="absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full bg-orange-500/5 blur-[120px]" />
           <div className="relative z-10">
             <div className="flex items-start justify-between gap-4">
               <div className="inline-flex items-center gap-2.5 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 pr-4">
@@ -618,7 +618,7 @@ function CampaignCalendarSurface({
   })
 
   return (
-    <section className="flex min-h-[430px] flex-1 flex-col rounded-2xl border border-white/[0.04] bg-[#0A0A0A] p-5 shadow-minimal">
+    <section className="flex min-h-[430px] flex-1 flex-col rounded-2xl border border-white/[0.08] bg-[#0C0D0E] p-5 shadow-minimal">
       {parseError ? (
         <div className="mb-3 rounded-xl border border-red-300/15 bg-red-500/10 p-3 text-xs text-red-100/70">
           {parseError}

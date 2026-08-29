@@ -656,6 +656,16 @@ describe('BrowserPaneManager', () => {
     )
   })
 
+  it('hides a reused saved social profile for a background agent run', () => {
+    manager.useSocialProfileForSession('sess-first', 'spotify', 'spotify-main', { show: true })
+    manager.unbindAllForSession('sess-first')
+
+    manager.useSocialProfileForSession('sess-background', 'spotify', 'spotify-main', { show: false })
+
+    expect(createdWindows[0].hide).toHaveBeenCalled()
+    expect(manager.listInstances()[0]?.isVisible).toBe(false)
+  })
+
   it('switches a session to the exact isolated paid-ad account partition', () => {
     const genericId = manager.createForSession('sess-meta')
 
