@@ -35,6 +35,29 @@ export interface CommunitySuppressionRecord extends SharedEntityMeta {
   effectiveAt: string;
 }
 
+/**
+ * Body of the generated `artist-community` context doc.
+ *
+ * This is the only community shape agents and the HQ State of Play composer
+ * see -- full fan records stay in records/community and are read only for
+ * approved jobs. Typed here, at the producer, so consumers derive from it
+ * instead of restating it: the composer previously carried its own copy of the
+ * pre-v2 shape and silently stopped seeing community data when this became v2.
+ */
+export interface CommunitySummaryDoc {
+  version: 2;
+  summary: {
+    totalContacts: number;
+    segments: Array<{ id: string; label: string; count: number }>;
+    lastBroadcastAt?: string;
+    suppressedCount: number;
+    /** Email jobs that exist but have not been sent yet. */
+    draftBroadcasts: number;
+  };
+  recentBroadcasts: Array<{ id: string; title: string; completedAt?: string }>;
+  warnings: string[];
+}
+
 export type EmailJobStatus =
   | 'draft'
   | 'needs-provider'

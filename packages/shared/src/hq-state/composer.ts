@@ -1,4 +1,5 @@
 import type { ArtistCalendar } from '../artist-context/calendar.ts';
+import type { CommunitySummaryDoc } from '../community/types.ts';
 import type { ArtistNetwork } from '../artist-context/network.ts';
 import type { ArtistProfile } from '../artist-context/profile.ts';
 import type { ArtistSpotifySnapshot } from '../artist-context/spotify.ts';
@@ -37,11 +38,17 @@ type SpotifySnapshotDoc = Partial<ArtistSpotifySnapshot>;
 type NetworkDoc = Partial<ArtistNetwork>;
 type CalendarDoc = Partial<ArtistCalendar>;
 
-interface CommunityDoc {
-  contacts?: Array<{ segment?: string; city?: string; lastContacted?: string }>;
-  emailJobs?: Array<{ title?: string; status?: string; createdAt?: string; updatedAt?: string }>;
-  updatedAt?: string;
-}
+/**
+ * Read view of the community doc. The generated body is v2 (a summary, with
+ * fan records kept out of agent context); the inline v1 fields are still
+ * accepted for workspaces that have not run the community migration yet.
+ */
+type CommunityDoc = Partial<CommunitySummaryDoc> & {
+  /** v1 only, pre-migration. */
+  contacts?: unknown[];
+  /** v1 only, pre-migration. */
+  emailJobs?: Array<{ status?: string }>;
+};
 
 interface HqInputState {
   docs: LoadedContextDoc[];
@@ -759,9 +766,21 @@ function personScore(person: NonNullable<NetworkDoc['people']>[number], now: Dat
 }
 
 function summarizeCommunity(community: CommunityDoc | null): { contacts: number; unsentDrafts: number; sentJobs: number } {
-  const jobs = community?.emailJobs ?? [];
+  if (!community) return { contacts: 0, unsentDrafts: 0, sentJobs: 0 };
+
+  // v2: the generated summary. `recentBroadcasts` holds sent jobs only.
+  if (community.summary) {
+    return {
+      contacts: community.summary.totalContacts ?? 0,
+      unsentDrafts: community.summary.draftBroadcasts ?? 0,
+      sentJobs: community.recentBroadcasts?.length ?? 0,
+    };
+  }
+
+  // v1: inline records, before the community migration ran.
+  const jobs = community.emailJobs ?? [];
   return {
-    contacts: community?.contacts?.length ?? 0,
+    contacts: community.contacts?.length ?? 0,
     unsentDrafts: jobs.filter((job) => job.status !== 'sent').length,
     sentJobs: jobs.filter((job) => job.status === 'sent').length,
   };

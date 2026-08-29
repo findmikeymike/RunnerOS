@@ -354,6 +354,75 @@ describe('HQ State of Play composer', () => {
     });
     expect(parseHqStateOfPlay(serializeHqStateOfPlay(state))?.nextMove.entityRef).toEqual(state.nextMove.entityRef);
   });
+
+  /**
+   * The generated community doc became a v2 summary while this composer still
+   * read the v1 inline `contacts`/`emailJobs` arrays, so every community signal
+   * silently went to zero. Both shapes must be understood: v2 is what is written
+   * today, v1 survives in workspaces that have not run the community migration.
+   */
+  test('reads community counts from the generated v2 summary', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [
+        doc('artist-community', 'Artist Community', {
+          version: 2,
+          summary: {
+            totalContacts: 42,
+            segments: [{ id: 'vip', label: 'vip', count: 4 }],
+            suppressedCount: 1,
+            draftBroadcasts: 2,
+          },
+          recentBroadcasts: [],
+          warnings: [],
+        }),
+      ],
+    });
+
+    expect(state.attention).toContainEqual(
+      expect.objectContaining({
+        kind: 'community',
+        text: '42 fan contacts exist, but no sent broadcast is recorded.',
+      }),
+    );
+  });
+
+  test('counts a sent broadcast from the v2 summary', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [
+        doc('artist-community', 'Artist Community', {
+          version: 2,
+          summary: { totalContacts: 42, segments: [], suppressedCount: 0, draftBroadcasts: 0 },
+          recentBroadcasts: [{ id: 'job-1', title: 'Launch', completedAt: '2026-07-04T00:00:00.000Z' }],
+          warnings: [],
+        }),
+      ],
+    });
+
+    expect(state.attention.filter((item) => item.kind === 'community')).toEqual([]);
+  });
+
+  test('still reads the pre-migration v1 community shape', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [
+        doc('artist-community', 'Artist Community', {
+          version: 1,
+          updatedAt: '2026-07-04T00:00:00.000Z',
+          contacts: Array.from({ length: 42 }, () => ({ segment: 'fans' })),
+          emailJobs: [],
+        }),
+      ],
+    });
+
+    expect(state.attention).toContainEqual(
+      expect.objectContaining({
+        kind: 'community',
+        text: '42 fan contacts exist, but no sent broadcast is recorded.',
+      }),
+    );
+  });
 });
 
 function operational(overrides: Partial<import('./types.ts').HqOperationalSnapshot> = {}): import('./types.ts').HqOperationalSnapshot {
