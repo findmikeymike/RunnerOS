@@ -35,7 +35,16 @@ while IFS= read -r match; do
     apps/electron/src/preload/bootstrap.ts)
       [[ "$text" == *"ipcRenderer.send('__transport:status'"* ]] && allowed=true
       ;;
+    apps/electron/src/main/licensing/runtime.ts)
+      # Licensing gates the WS transport itself: preload asks
+      # __license:authorize-channel before exposing a channel, so routing these
+      # pushes through the typed sink would be circular. Both pair with
+      # ipcRenderer.on listeners in preload/bootstrap.ts.
+      [[ "$text" == *"window.webContents.send(LICENSE_IPC.STATE_CHANGED"* ]] && allowed=true
+      [[ "$text" == *"_event.sender.send(LICENSE_IPC.REQUIRED)"* ]] && allowed=true
+      ;;
   esac
+  true
 
   if [[ "$allowed" != true ]]; then
     violations+=("$file:$line:$text")
