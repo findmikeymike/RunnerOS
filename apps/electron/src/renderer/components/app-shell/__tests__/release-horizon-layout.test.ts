@@ -8,6 +8,8 @@ describe('Release Horizon month planning UI', () => {
 
     expect(source).toContain('top-1/2 flex -translate-y-1/2 items-center justify-center')
     expect(source).toContain("event === 'release' ? 'bg-white/90' : event === 'live' ? 'bg-red-500' : 'bg-[#ff5a00]'")
+    expect(source).toContain('absolute left-2 top-2 flex items-baseline gap-1.5')
+    expect(source).not.toContain('title="Month plan saved"')
   })
 
   test('opens a large presentation view before exposing the structured editor', () => {

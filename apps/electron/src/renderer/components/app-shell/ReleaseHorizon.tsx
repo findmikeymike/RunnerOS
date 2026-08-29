@@ -148,12 +148,9 @@ export function ReleaseHorizon({
                     : 'border-white/[0.045] bg-white/[0.018] hover:border-white/[0.10] hover:bg-white/[0.035]',
                 )}
               >
-                <span className="absolute inset-x-2 top-2 flex items-start justify-between gap-1">
-                  <span>
-                    <span className={cn('block text-[10px] font-medium uppercase tracking-[0.12em]', populated ? 'text-[#ff6a00]' : 'text-white/48')}>{month.label}</span>
-                    <span className="mt-0.5 block text-[8px] text-white/20">{month.year}</span>
-                  </span>
-                  {monthPlan ? <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-white/35" title="Month plan saved" /> : null}
+                <span className="absolute left-2 top-2 flex items-baseline gap-1.5">
+                  <span className={cn('text-[10px] font-medium uppercase tracking-[0.12em]', populated ? 'text-[#ff6a00]' : 'text-white/48')}>{month.label}</span>
+                  <span className="text-[8px] text-white/20">{month.year}</span>
                 </span>
                 {displayTitle ? (
                   <span className="absolute inset-x-2 top-1/2 flex -translate-y-1/2 items-center justify-center gap-1.5 text-center">
