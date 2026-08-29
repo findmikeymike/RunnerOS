@@ -111,6 +111,55 @@ describe('Manager Brief', () => {
     expect(first.revision).toBe(second.revision);
   });
 
+  test('labels stale Spotify and partial Instagram independently without inventing movement', () => {
+    const brief = buildManagerBrief({
+      workspaceId: 'hq-1',
+      now,
+      docs: [
+        jsonDoc('artist-spotify-snapshot', {
+          version: 1,
+          snapshotDate: '2026-08-01',
+          windowDays: 28,
+          artist: {},
+          metrics: { streams: 1000 },
+          updatedAt: '2026-08-01T00:00:00.000Z',
+        }),
+        jsonDoc('artist-instagram-snapshot', {
+          version: 1,
+          dataSource: 'instagram-insights-browser',
+          snapshotDate: '2026-08-28',
+          windowDays: 14,
+          profile: { profile: 'primary' },
+          metrics: { followers: 2000, followerDelta: -12 },
+          partial: true,
+          errors: ['Reach was unavailable.'],
+          updatedAt: '2026-08-28T00:00:00.000Z',
+        }),
+      ],
+      relatedCampaigns: [],
+    });
+
+    expect(brief.growth.spotify).toEqual(expect.objectContaining({ value: 1000, delta: undefined }));
+    expect(brief.growth.instagram).toEqual(expect.objectContaining({ value: 2000, delta: -12, partial: true }));
+    expect(brief.sourceHealth).toContainEqual(expect.objectContaining({ source: 'artist-spotify-snapshot', status: 'stale' }));
+    expect(brief.sourceHealth).toContainEqual(expect.objectContaining({ source: 'artist-instagram-snapshot', status: 'partial' }));
+  });
+
+  test('reports malformed year planning as source health and omits invented trajectory', () => {
+    const brief = buildManagerBrief({
+      workspaceId: 'hq-1',
+      now,
+      docs: [jsonDoc('artist-release-horizon', { version: 2, months: 'not-a-month-map' })],
+      relatedCampaigns: [],
+    });
+
+    expect(brief.trajectory).toEqual([]);
+    expect(brief.sourceHealth).toContainEqual(expect.objectContaining({
+      source: 'artist-release-horizon',
+      status: 'malformed',
+    }));
+  });
+
   test('never exceeds the prompt budget under hostile source text', () => {
     const huge = 'A'.repeat(20_000);
     const campaignSnapshot = campaign('campaign-1', huge, '2026-09-12');

@@ -2,6 +2,7 @@ import {
   buildManagerBrief,
   buildHqStateContextDoc,
   HQ_STATE_CONTEXT_SLUG,
+  parseHqStateOfPlay,
   serializeHqStateOfPlay,
 } from '@craft-agent/shared/hq-state'
 import {
@@ -16,6 +17,15 @@ import { buildHqStateInput, findArtistHqWorkspace } from './snapshot'
 
 const scheduledRefreshes = new Map<string, ReturnType<typeof setTimeout>>()
 const REFRESH_DEBOUNCE_MS = 100
+const refreshDiagnostics = new Map<string, HqStateRefreshDiagnostic>()
+
+export interface HqStateRefreshDiagnostic {
+  workspaceRootPath: string
+  status: 'success' | 'failed'
+  attemptedAt: string
+  revision?: string
+  error?: string
+}
 
 export function shouldRefreshHqStateForContextSlug(slug: string): boolean {
   return slug !== HQ_STATE_CONTEXT_SLUG
@@ -107,12 +117,32 @@ function applyRecommendationState(
 }
 
 export function refreshHqStateContextDocBestEffort(workspaceRootPath: string): LoadedContextDoc | null {
+  const attemptedAt = new Date().toISOString()
   try {
-    return refreshHqStateContextDoc(workspaceRootPath)
+    const refreshed = refreshHqStateContextDoc(workspaceRootPath)
+    const state = parseHqStateOfPlay(refreshed.body)
+    refreshDiagnostics.set(workspaceRootPath, {
+      workspaceRootPath,
+      status: 'success',
+      attemptedAt,
+      revision: state?.version === 2 ? state.managerBrief.revision : undefined,
+    })
+    return refreshed
   } catch (error) {
-    console.warn('[hq-state] Failed to refresh State of Play context doc:', error instanceof Error ? error.message : error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    refreshDiagnostics.set(workspaceRootPath, {
+      workspaceRootPath,
+      status: 'failed',
+      attemptedAt,
+      error: errorMessage,
+    })
+    console.warn('[hq-state] Failed to refresh State of Play context doc:', errorMessage)
     return null
   }
+}
+
+export function getHqStateRefreshDiagnostic(workspaceRootPath: string): HqStateRefreshDiagnostic | null {
+  return refreshDiagnostics.get(workspaceRootPath) ?? null
 }
 
 export function scheduleHqStateContextRefresh(workspaceRootPath: string): void {

@@ -9,6 +9,7 @@ import type { HandlerDeps } from '../handler-deps'
 import { isValidWorkspaceRootPath } from '../../utils/path-validation'
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import { assertWorkspaceSecretsUpdatePermission } from './team-permission-helpers'
+import { scheduleHqStateContextRefresh } from '../../hq-state/refresh'
 
 export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.workspaces.GET,
@@ -101,6 +102,9 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
       deps.platform.logger.warn?.(`[agents] Failed to activate the new Creative Lab team: ${(err as Error).message}`)
     }
     deps.platform.logger.info(`Created workspace "${name}" at ${rootPath}${remoteServer ? ` (remote: ${remoteServer.url})` : ''}`)
+    if (workspace.artistWorkspaceScope === 'campaign') {
+      scheduleHqStateContextRefresh(workspace.rootPath)
+    }
     return workspace
   })
 

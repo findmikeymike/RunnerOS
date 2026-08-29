@@ -33,6 +33,7 @@ const EVENT_BASE = {
   createdAt: '2026-07-01T00:00:00.000Z',
   updatedAt: '2026-07-01T00:00:00.000Z',
 };
+const CALENDAR_UPDATED_AT = '2026-08-01T00:00:00.000Z';
 
 describe('artist calendar', () => {
   test('an absent doc yields an empty calendar without error', () => {
@@ -51,6 +52,7 @@ describe('artist calendar', () => {
       doc(
         json({
           version: 1,
+          updatedAt: CALENDAR_UPDATED_AT,
           events: [
             EVENT_BASE,
             { id: 'e2', date: 'not-a-date', title: 'Dropped' },
@@ -71,7 +73,7 @@ describe('artist calendar', () => {
    */
   test('a mistyped field drops that field, not the whole calendar', () => {
     const result = parseArtistCalendarDocResult(
-      doc(json({ version: 1, events: [{ ...EVENT_BASE, time: 5, notes: 7 }] })),
+      doc(json({ version: 1, updatedAt: CALENDAR_UPDATED_AT, events: [{ ...EVENT_BASE, time: 5, notes: 7 }] })),
     );
     expect(result.ok).toBe(true);
     expect(result.calendar.events).toHaveLength(1);
@@ -84,6 +86,7 @@ describe('artist calendar', () => {
       doc(
         json({
           version: 1,
+          updatedAt: CALENDAR_UPDATED_AT,
           events: [
             {
               ...EVENT_BASE,
@@ -101,7 +104,7 @@ describe('artist calendar', () => {
 
   test('discards an unrecognized google sync status', () => {
     const result = parseArtistCalendarDocResult(
-      doc(json({ version: 1, events: [{ ...EVENT_BASE, google: { syncStatus: 'nonsense' } }] })),
+      doc(json({ version: 1, updatedAt: CALENDAR_UPDATED_AT, events: [{ ...EVENT_BASE, google: { syncStatus: 'nonsense' } }] })),
     );
     expect(result.calendar.events[0]?.google?.syncStatus).toBeUndefined();
   });

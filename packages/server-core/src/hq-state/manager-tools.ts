@@ -45,6 +45,7 @@ import type {
 } from '@craft-agent/session-tools-core';
 import { existsSync } from 'node:fs';
 import { buildHqStateInput, buildManagerCampaignSnapshots } from './snapshot';
+import { getHqStateRefreshDiagnostic } from './refresh';
 
 const MANAGER_RESULT_MAX_CHARS = 12_000;
 
@@ -54,6 +55,12 @@ export function getLiveManagerBrief(
 ): ManagerContextToolResult {
   const persisted = parseHqStateOfPlay(loadContextDoc(workspaceRootPath, HQ_STATE_CONTEXT_SLUG)?.body ?? '');
   const persistedRevision = persisted?.version === 2 ? persisted.managerBrief.revision : undefined;
+  const refreshDiagnostic = getHqStateRefreshDiagnostic(workspaceRootPath);
+  const publicRefreshDiagnostic = refreshDiagnostic ? {
+    status: refreshDiagnostic.status,
+    attemptedAt: refreshDiagnostic.attemptedAt,
+    revision: refreshDiagnostic.revision,
+  } : null;
   try {
     const state = buildHqStateOfPlay(buildHqStateInput(workspaceRootPath));
     return bounded({
@@ -62,11 +69,17 @@ export function getLiveManagerBrief(
       live: true,
       persistedRevision,
       brief: state.managerBrief,
-      warnings: state.managerBrief.sourceHealth
+      warnings: [
+        ...(refreshDiagnostic?.status === 'failed'
+          ? [`Last persisted refresh failed at ${refreshDiagnostic.attemptedAt}; live composition recovered current canonical sources.`]
+          : []),
+        ...state.managerBrief.sourceHealth
         .filter((item) => item.status !== 'fresh')
         .map((item) => `${item.source}: ${item.status}${item.message ? ` - ${item.message}` : ''}`),
+      ],
+      refreshDiagnostic: publicRefreshDiagnostic,
     });
-  } catch (error) {
+  } catch {
     if (persisted?.version === 2) {
       return bounded({
         ok: true,
@@ -74,10 +87,11 @@ export function getLiveManagerBrief(
         live: false,
         persistedRevision,
         brief: persisted.managerBrief,
-        warnings: [`Live composition failed: ${message(error)}`],
+        warnings: ['Live composition failed; using the last valid persisted Manager Brief.'],
+        refreshDiagnostic: publicRefreshDiagnostic,
       });
     }
-    return { ok: false, changed: false, live: false, warnings: [], error: message(error) };
+    return { ok: false, changed: false, live: false, warnings: [], error: 'Manager Brief is unavailable because live composition failed and no persisted brief exists.' };
   }
 }
 
@@ -321,8 +335,4 @@ function cap(value: string | undefined, max: number): string | undefined {
   if (!value) return undefined;
   const cleaned = value.replace(/\s+/g, ' ').trim();
   return cleaned.length <= max ? cleaned : `${cleaned.slice(0, Math.max(0, max - 3)).trimEnd()}...`;
-}
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

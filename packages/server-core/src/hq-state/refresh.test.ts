@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseHqStateOfPlay, HQ_STATE_CONTEXT_SLUG } from '@craft-agent/shared/hq-state'
-import { readHqRecommendationStore, upsertHqRecommendationOutcome } from '@craft-agent/shared/hq-state/recommendation-storage'
+import { HQ_RECOMMENDATIONS_DIR, readHqRecommendationStore, upsertHqRecommendationOutcome } from '@craft-agent/shared/hq-state/recommendation-storage'
 import { transitionHqRecommendation } from '@craft-agent/shared/hq-state/recommendation-storage'
 import { createOutputBundle } from '@craft-agent/shared/outputs'
 import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context'
@@ -12,6 +12,7 @@ import {
   refreshHqStateContextDoc,
   scheduleHqStateContextRefresh,
   cancelScheduledHqStateContextRefresh,
+  getHqStateRefreshDiagnostic,
   shouldRefreshHqStateForContextSlug,
 } from './refresh'
 
@@ -95,9 +96,34 @@ describe('HQ state refresh', () => {
         '[hq-state] Failed to refresh State of Play context doc:',
         expect.stringContaining('not-a-workspace'),
       )
+      expect(getHqStateRefreshDiagnostic('/dev/null/not-a-workspace')).toEqual(expect.objectContaining({
+        status: 'failed',
+        error: expect.stringContaining('not-a-workspace'),
+      }))
     } finally {
       console.warn = originalWarn
     }
+  })
+
+  test('preserves the last valid brief and records diagnostics when persistence fails', () => {
+    const workspace = tempWorkspace()
+    const first = refreshHqStateContextDoc(workspace)
+    const priorBody = first.body
+    rmSync(join(workspace, HQ_RECOMMENDATIONS_DIR), { recursive: true, force: true })
+    writeFileSync(join(workspace, HQ_RECOMMENDATIONS_DIR), 'blocks recommendation persistence', 'utf8')
+    const originalWarn = console.warn
+    console.warn = mock(() => {}) as typeof console.warn
+    try {
+      expect(refreshHqStateContextDocBestEffort(workspace)).toBeNull()
+    } finally {
+      console.warn = originalWarn
+    }
+
+    expect(loadContextDoc(workspace, HQ_STATE_CONTEXT_SLUG)?.body).toBe(priorBody)
+    expect(getHqStateRefreshDiagnostic(workspace)).toEqual(expect.objectContaining({
+      status: 'failed',
+      error: expect.any(String),
+    }))
   })
 
   test('coalesces high-frequency refresh requests by workspace', async () => {
@@ -114,6 +140,7 @@ describe('HQ state refresh', () => {
     await Bun.sleep(150)
 
     expect(loadContextDoc(workspace, HQ_STATE_CONTEXT_SLUG)).not.toBeNull()
+    expect(getHqStateRefreshDiagnostic(workspace)).toEqual(expect.objectContaining({ status: 'success' }))
     cancelScheduledHqStateContextRefresh(workspace)
   })
 

@@ -14,6 +14,7 @@ import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
 import { isValidWorkingDirectory } from '../../utils/path-validation'
 import type { SharedFolderProvider } from '@craft-agent/shared/workspaces'
 import { assertGlobalSecretVaultPermission, assertSessionFilesWritePermission } from './team-permission-helpers'
+import { scheduleHqStateContextRefresh } from '../../hq-state/refresh'
 
 const execFileAsync = promisify(execFile)
 const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
@@ -410,6 +411,9 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
         throw new Error('Workspace type must be campaign, creative lab, or general.')
       }
       updateWorkspaceArtistScope(workspaceId, normalizedValue)
+      if (workspace.artistWorkspaceScope === 'campaign' || normalizedValue === 'campaign') {
+        scheduleHqStateContextRefresh(workspace.rootPath)
+      }
       deps.platform.logger.info(`Workspace type updated: ${workspaceId} = ${normalizedValue}`)
       return
     }
@@ -452,6 +456,9 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
 
     // Save the config
     saveWorkspaceConfig(workspace.rootPath, config)
+    if (key === 'name' && workspace.artistWorkspaceScope === 'campaign') {
+      scheduleHqStateContextRefresh(workspace.rootPath)
+    }
     deps.platform.logger.info(`Workspace setting updated: ${key} = ${JSON.stringify(normalizedValue)}`)
   })
 
@@ -550,6 +557,9 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       writeMovedToTombstone(result.originalRootPath, result.finalRootPath, result.migrationId)
       if (journal) journal = updateTeamMigrationJournal(journal, 'source-tombstoned')
       await rebind(lease, result.finalRootPath)
+      if (workspace.artistWorkspaceScope === 'hq' || workspace.artistWorkspaceScope === 'campaign') {
+        scheduleHqStateContextRefresh(result.finalRootPath)
+      }
       if (journal) journal = updateTeamMigrationJournal(journal, 'runtime-rebound')
       completePreparedWorkspaceMigration(result)
       if (journal) updateTeamMigrationJournal(journal, 'complete')

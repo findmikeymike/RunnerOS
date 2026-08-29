@@ -922,8 +922,15 @@ app.whenReady().then(async () => {
       // Remove workspace from config (cleanup stale entries)
       ipcMain.handle('workspace:remove', async (_event, workspaceId: string) => {
         assertProductLicensedChannel('workspace:remove')
-        const { removeWorkspace: remove } = await import('@craft-agent/shared/config')
-        return remove(workspaceId)
+        const { getWorkspaceByNameOrId, getWorkspaces, removeWorkspace: remove } = await import('@craft-agent/shared/config')
+        const removedWorkspace = getWorkspaceByNameOrId(workspaceId)
+        const hqRootPath = getWorkspaces().find((workspace) => workspace.artistWorkspaceScope === 'hq')?.rootPath
+        const removed = await remove(workspaceId)
+        if (removed && removedWorkspace?.artistWorkspaceScope === 'campaign' && hqRootPath) {
+          const { scheduleHqStateContextRefresh } = await import('@craft-agent/server-core')
+          scheduleHqStateContextRefresh(hqRootPath)
+        }
+        return removed
       })
 
       // Cross-server RPC — invoke a channel on an arbitrary remote server

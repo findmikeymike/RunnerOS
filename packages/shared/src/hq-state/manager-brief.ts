@@ -370,7 +370,9 @@ function operationalHealth(input: BuildManagerBriefInput): ManagerSourceHealth[]
   return (input.operational?.sourceHealth ?? []).map((item) => ({
     source: `operational:${item.source}`,
     status: item.status === 'fresh' ? 'fresh' : item.status === 'unavailable' ? 'unavailable' : 'partial',
-    observedAt: item.latestDataAt ?? item.checkedAt,
+    // checkedAt is diagnostic runtime noise, not artist truth. Including it in
+    // the brief would churn the revision on every read even when nothing changed.
+    observedAt: item.latestDataAt,
     message: cap(item.message, 220),
   }));
 }

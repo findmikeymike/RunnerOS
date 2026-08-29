@@ -1,5 +1,5 @@
 ---
-status: approved-for-implementation
+status: implemented-v1
 owner: agent
 last_verified: 2026-08-29
 source_of_truth: true
@@ -918,6 +918,18 @@ The move is complete only when:
 11. Scripted manager evals pass.
 12. Existing approval boundaries and specialist routing continue to pass regression tests.
 13. The Electron transparency panel is live-smoked; automated checks alone are not release proof.
+
+## V1 Verification Record
+
+Verified locally on 2026-08-29:
+
+- all nine package typechecks pass
+- 323 focused Manager Brief, context, prompt, privacy, backend-parity, and UI tests pass
+- isolated campaign lifecycle coverage proves campaign addition/removal refreshes the related HQ and stale campaign IDs fail closed
+- failed persisted refreshes preserve the last valid brief and expose sanitized diagnostics
+- wide and narrow Electron smoke confirms the Manager transparency panel renders and refreshes in place
+
+The deterministic scripted eval suite pins the six required questions to minimal retrieval contracts and safety rules. A provider-backed conversational quality eval remains a separate authenticated/cost-bearing release check; it is not simulated by unit tests.
 
 ## Rival Review Disposition
 
