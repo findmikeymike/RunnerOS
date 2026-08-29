@@ -27,7 +27,8 @@ import {
   parseScheduledWorkDocResult,
   SCHEDULED_WORK_CONTEXT_SLUG,
 } from '@craft-agent/shared/scheduled-work';
-import { loadAllContextDocs, loadContextDoc } from '@craft-agent/shared/workspace-context';
+import { loadAuthorizedContextDocsForAgent, loadContextDoc } from '@craft-agent/shared/workspace-context';
+import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions';
 import { buildHqOperationalSnapshot } from './operational';
 
 export function buildHqStateInput(workspaceRootPath: string, now = new Date()): BuildHqStateInput {
@@ -35,7 +36,7 @@ export function buildHqStateInput(workspaceRootPath: string, now = new Date()): 
   if (!existsSync(workspaceRootPath)) throw new Error(`HQ workspace does not exist: ${workspaceRootPath}`);
   return {
     workspaceId: workspace?.id ?? basename(workspaceRootPath),
-    docs: loadAllContextDocs(workspaceRootPath),
+    docs: loadAuthorizedContextDocsForAgent(workspaceRootPath, CONCIERGE_SLUG),
     relatedCampaigns: workspace ? buildManagerCampaignSnapshots() : [],
     operational: buildHqOperationalSnapshot(workspaceRootPath),
     now,

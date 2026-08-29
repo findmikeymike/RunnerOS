@@ -512,6 +512,7 @@ body
     expect(hnic?.metadata.tags).toContain('workflows')
     expect(hnic?.metadata.skills).toContain('workflow-creator')
     expect(hnic?.metadata.skills).toContain('automation-creator')
+    expect(hnic?.metadata.skills).toContain('artist-manager-operating-system')
     expect(hnic?.systemPrompt).toContain('current active-agent capability catalog')
     expect(hnic?.systemPrompt).toContain('@setup-concierge')
     expect(hnic?.systemPrompt).toContain('design it as an automation')

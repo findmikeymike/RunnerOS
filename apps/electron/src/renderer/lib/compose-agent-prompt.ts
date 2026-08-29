@@ -12,6 +12,7 @@ export {
   buildMemorySection,
   buildWorkspaceContextSection,
   composeAgentSystemPrompt,
+  managerBriefReceiptFromDocs,
   type AgentCatalogEntry,
   type AgentPromptMemoryOptions,
 } from '@craft-agent/shared/agent-prompt'

@@ -417,7 +417,13 @@ export function canAgentAccessContextDoc(
 ): boolean {
   if (!doc.metadata.enabled) return false;
   const normalizedAgentSlug = normalizeAgentSlug(agentSlug);
-  if (normalizedAgentSlug === CONCIERGE_SLUG && doc.metadata.private !== true) return true;
+  if (normalizedAgentSlug === CONCIERGE_SLUG) {
+    if (doc.metadata.private === true) {
+      return doc.metadata.routing.mode === 'targeted'
+        && doc.metadata.routing.agents.includes(CONCIERGE_SLUG);
+    }
+    return true;
+  }
   return routingAllowsAgent(doc, normalizedAgentSlug);
 }
 

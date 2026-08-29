@@ -152,6 +152,23 @@ export type {
   ScheduleWorkTriggerInput,
 } from './schedule-work.ts';
 
+// Artist Manager and authorized workspace context reads
+export {
+  handleGetManagerBrief,
+  handleGetArtistContext,
+  handleGetCampaignContext,
+  handleListWorkspaceContext,
+  handleGetWorkspaceContext,
+} from './manager-context.ts';
+export type {
+  GetManagerBriefInput,
+  GetArtistContextInput,
+  GetCampaignContextInput,
+  ListWorkspaceContextInput,
+  GetWorkspaceContextInput,
+  ManagerContextToolResult,
+} from './manager-context.ts';
+
 // Create Workflow (workflow-creator skill)
 export { handleCreateWorkflow } from './create-workflow.ts';
 export type {

@@ -134,6 +134,21 @@ export interface SessionScopedToolCallbacks {
   scheduleWorkFn?: (
     input: import('@craft-agent/session-tools-core').ScheduleWorkToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').ScheduleWorkResult>;
+  getManagerBriefFn?: (
+    input: import('@craft-agent/session-tools-core').GetManagerBriefInput,
+  ) => Promise<import('@craft-agent/session-tools-core').ManagerContextToolResult>;
+  getArtistContextFn?: (
+    input: import('@craft-agent/session-tools-core').GetArtistContextInput,
+  ) => Promise<import('@craft-agent/session-tools-core').ManagerContextToolResult>;
+  getCampaignContextFn?: (
+    input: import('@craft-agent/session-tools-core').GetCampaignContextInput,
+  ) => Promise<import('@craft-agent/session-tools-core').ManagerContextToolResult>;
+  listWorkspaceContextFn?: (
+    input: import('@craft-agent/session-tools-core').ListWorkspaceContextInput,
+  ) => Promise<import('@craft-agent/session-tools-core').ManagerContextToolResult>;
+  getWorkspaceContextFn?: (
+    input: import('@craft-agent/session-tools-core').GetWorkspaceContextInput,
+  ) => Promise<import('@craft-agent/session-tools-core').ManagerContextToolResult>;
   /** Create a workflow in the global library (used by the workflow-creator skill's create_workflow tool). */
   createWorkflowFn?: (
     input: import('@craft-agent/session-tools-core').CreateWorkflowToolInput,

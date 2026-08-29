@@ -51,6 +51,34 @@ describe('session tool filtering helpers', () => {
     expect(getSessionToolNames({ includeScheduleWork: true }).has('schedule_work')).toBe(true);
   });
 
+  it('exposes semantic Manager tools only to HNIC while keeping authorized context reads generic', () => {
+    const ordinary = getSessionToolNames();
+    expect(ordinary.has('get_manager_brief')).toBe(false);
+    expect(ordinary.has('get_artist_context')).toBe(false);
+    expect(ordinary.has('get_campaign_context')).toBe(false);
+    expect(ordinary.has('list_workspace_context')).toBe(true);
+    expect(ordinary.has('get_workspace_context')).toBe(true);
+
+    const manager = getSessionToolNames({ includeManagerTools: true });
+    expect(manager.has('get_manager_brief')).toBe(true);
+    expect(manager.has('get_artist_context')).toBe(true);
+    expect(manager.has('get_campaign_context')).toBe(true);
+  });
+
+  it('marks all Manager and context retrieval tools read-only and safe-mode allowed', () => {
+    for (const name of [
+      'get_manager_brief',
+      'get_artist_context',
+      'get_campaign_context',
+      'list_workspace_context',
+      'get_workspace_context',
+    ]) {
+      const def = SESSION_TOOL_DEFS.find((candidate) => candidate.name === name);
+      expect(def?.readOnly).toBe(true);
+      expect(def?.safeMode).toBe('allow');
+    }
+  });
+
   it('exposes Creative Lab tools only when explicitly enabled', () => {
     expect(getSessionToolNames().has('create_lab_song')).toBe(false);
     expect(getSessionToolNames().has('save_lab_lyrics')).toBe(false);

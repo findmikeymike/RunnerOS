@@ -4,7 +4,7 @@ import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { MemoryEntry, LoadedMemoryFile } from '@craft-agent/shared/memory/types'
 import { selectActiveMemoryEntries } from '@craft-agent/shared/memory/render'
 import { resolveAgentReferences, hasMissingReferences, describeMissingReferences } from '@/lib/agent-references'
-import { composeAgentSystemPrompt } from '@/lib/compose-agent-prompt'
+import { composeAgentSystemPrompt, managerBriefReceiptFromDocs } from '@/lib/compose-agent-prompt'
 import type { AgentDefinitionDTO, ContextDocDTO, CreateSessionOptions, Session, LoadedSkill, LoadedSource } from '../../shared/types'
 
 export async function ensureAgentDeclaredSkillsEnabled(params: {
@@ -100,6 +100,7 @@ export function buildAgentCreateSessionOptions(
     : agent.systemPrompt
   const isConcierge = agent.slug === CONCIERGE_SLUG
   const agentCatalog = context?.agentCatalog ?? []
+  const managerBriefReceipt = managerBriefReceiptFromDocs(context?.contextDocs ?? [])
 
   const options: CreateSessionOptions = {
     customSystemPrompt: composedPrompt || undefined,
@@ -142,6 +143,7 @@ export function buildAgentCreateSessionOptions(
           slug: doc.slug,
           name: doc.metadata.name,
         })),
+        ...(managerBriefReceipt ? { managerBrief: managerBriefReceipt } : {}),
         memory: {
           user: selectActiveMemoryEntries(context?.userMemoryEntries ?? []).map((entry) => ({ name: memoryEntryTitle(entry) })),
           agent: selectActiveMemoryEntries(context?.agentMemoryEntries ?? []).map((entry) => ({ name: memoryEntryTitle(entry) })),

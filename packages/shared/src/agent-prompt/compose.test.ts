@@ -9,6 +9,7 @@ import {
   buildAgentCatalogSection,
   buildWorkspaceContextSection,
   composeAgentSystemPrompt,
+  managerBriefReceiptFromDocs,
   type PromptAgent,
   type PromptContextDoc,
 } from './compose.ts';
@@ -131,6 +132,15 @@ describe('composeAgentSystemPrompt', () => {
     );
     expect(result).not.toContain('## Manager Brief');
     expect(result).not.toContain('json hq-state-of-play');
+  });
+
+  test('launch receipt records Manager Brief diagnostics without its body', () => {
+    const receipt = managerBriefReceiptFromDocs([hqStateDoc()]);
+    expect(receipt?.revision).toBeTruthy();
+    expect(receipt?.generatedAt).toBe('2026-08-29T12:00:00.000Z');
+    expect(receipt?.sourceHealth.length).toBeGreaterThan(0);
+    expect(JSON.stringify(receipt)).not.toContain('Mikey Mike');
+    expect(JSON.stringify(receipt)).not.toContain('raw soul');
   });
 });
 

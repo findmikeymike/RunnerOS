@@ -136,6 +136,11 @@ export interface SessionLaunchReceipt {
     sources: string[];
     trustedWorkerTools?: string[];
     contextDocs: Array<{ slug: string; name: string }>;
+    managerBrief?: {
+      revision: string;
+      generatedAt: string;
+      sourceHealth: Array<{ source: string; status: string }>;
+    };
     agentCatalog?: Array<{
       slug: string;
       name: string;

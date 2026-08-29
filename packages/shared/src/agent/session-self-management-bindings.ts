@@ -268,6 +268,36 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'getManagerBrief', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.getManagerBriefFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'getArtistContext', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.getArtistContextFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'getCampaignContext', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.getCampaignContextFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'listWorkspaceContext', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.listWorkspaceContextFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'getWorkspaceContext', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.getWorkspaceContextFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'createWorkflow', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.createWorkflowFn;

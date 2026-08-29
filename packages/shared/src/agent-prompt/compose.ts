@@ -200,6 +200,23 @@ export function buildManagerBriefPromptSectionFromDocs(docs: PromptContextDoc[])
   }
 }
 
+/** Compact diagnostics for launch receipts; never stores the brief body. */
+export function managerBriefReceiptFromDocs(docs: PromptContextDoc[]): {
+  revision: string;
+  generatedAt: string;
+  sourceHealth: Array<{ source: string; status: string }>;
+} | undefined {
+  const stateDoc = docs.find((doc) => doc.slug === HQ_STATE_CONTEXT_SLUG && doc.metadata.enabled !== false);
+  if (!stateDoc) return undefined;
+  const state = parseHqStateOfPlay(stateDoc.body);
+  if (state?.version !== 2) return undefined;
+  return {
+    revision: state.managerBrief.revision,
+    generatedAt: state.managerBrief.generatedAt,
+    sourceHealth: state.managerBrief.sourceHealth.map((item) => ({ source: item.source, status: item.status })),
+  };
+}
+
 /**
  * The delegation catalog. Emitted as data with an explicit instruction not to
  * follow anything inside it: entries come from user-editable agent files, so a

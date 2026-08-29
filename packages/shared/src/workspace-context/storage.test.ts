@@ -400,7 +400,7 @@ describe('delivery-aware context routing', () => {
     expect(shouldInjectContextDoc(privateDoc, 'writer')).toBe(true);
   });
 
-  test('private broadcast remains available to all because routing authorizes all', () => {
+  test('private broadcast does not use the Concierge override without explicit targeting', () => {
     upsertContextDoc(workspace, {
       slug: 'private-broadcast',
       metadata: {
@@ -412,7 +412,7 @@ describe('delivery-aware context routing', () => {
       },
       body: 'private by policy, broadcast by routing',
     });
-    expect(canAgentAccessContextDoc(loadContextDoc(workspace, 'private-broadcast')!, CONCIERGE_SLUG)).toBe(true);
+    expect(canAgentAccessContextDoc(loadContextDoc(workspace, 'private-broadcast')!, CONCIERGE_SLUG)).toBe(false);
   });
 
   test('legacy loader behavior is unchanged until migration', () => {

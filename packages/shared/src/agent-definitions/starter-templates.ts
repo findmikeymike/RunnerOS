@@ -11,7 +11,7 @@
 
 import type { CreateAgentInput } from './storage.ts'
 import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, OPEN_SLIDE_AGENT_SLUG } from './types.ts'
-import { CREATOR_SYSTEM_SKILL_SLUGS } from '../skills/system.ts'
+import { CONCIERGE_SYSTEM_SKILL_SLUGS, CREATOR_SYSTEM_SKILL_SLUGS } from '../skills/system.ts'
 import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts'
 
 const PORTABLE_AGENT_LIBRARY_ROOT = RUNTIME_IDENTITY.variant === 'artist-os'
@@ -37,7 +37,7 @@ export const STARTER_AGENTS: CreateAgentInput[] = [
       inputs: 'Any goal, task, question, campaign need, automation idea, workflow idea, or worker-routing request.',
       outputs: 'A direct answer, worker handoff, queued-work plan, automation/workflow draft, or approval-gated next action.',
       tags: ['chat', 'guide', 'routing', 'workflows', 'automations'],
-      skills: [...CREATOR_SYSTEM_SKILL_SLUGS],
+      skills: [...CONCIERGE_SYSTEM_SKILL_SLUGS],
     },
     systemPrompt: `You are HNIC — Head Nerd in Charge, the in-app Concierge.
 

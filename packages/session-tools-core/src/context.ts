@@ -402,6 +402,17 @@ export interface SessionToolContext {
   /** Create typed one-shot or trigger-owned scheduled work. HNIC-only backend capability. */
   scheduleWork?(input: import('./handlers/schedule-work.ts').ScheduleWorkToolInput): Promise<import('./handlers/schedule-work.ts').ScheduleWorkResult>;
 
+  /** Compose the current bounded Artist Manager Brief without persisting it. HNIC-only. */
+  getManagerBrief?(input: import('./handlers/manager-context.ts').GetManagerBriefInput): Promise<import('./handlers/manager-context.ts').ManagerContextToolResult>;
+  /** Read one bounded normalized Artist HQ detail topic. HNIC-only. */
+  getArtistContext?(input: import('./handlers/manager-context.ts').GetArtistContextInput): Promise<import('./handlers/manager-context.ts').ManagerContextToolResult>;
+  /** Read bounded canonical detail from one configured campaign. HNIC-only. */
+  getCampaignContext?(input: import('./handlers/manager-context.ts').GetCampaignContextInput): Promise<import('./handlers/manager-context.ts').ManagerContextToolResult>;
+  /** List authorized workspace context metadata without bodies. */
+  listWorkspaceContext?(input: import('./handlers/manager-context.ts').ListWorkspaceContextInput): Promise<import('./handlers/manager-context.ts').ManagerContextToolResult>;
+  /** Read one authorized workspace context document with a hard body bound. */
+  getWorkspaceContext?(input: import('./handlers/manager-context.ts').GetWorkspaceContextInput): Promise<import('./handlers/manager-context.ts').ManagerContextToolResult>;
+
   /**
    * Create a workflow in the global workflow library and optionally activate it
    * in the current workspace. Backend owns parse/write validation, slug

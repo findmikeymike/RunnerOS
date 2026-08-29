@@ -264,6 +264,7 @@ export function getSessionScopedTools(
     tools = getSessionToolDefs({
       includeDeveloperFeedback: FEATURE_FLAGS.developerFeedback,
       includeScheduleWork: agentSlug === 'concierge',
+      includeManagerTools: agentSlug === 'concierge',
       includeLabTools,
     })
       .filter(def => def.handler !== null) // Skip backend-specific tools (call_llm)

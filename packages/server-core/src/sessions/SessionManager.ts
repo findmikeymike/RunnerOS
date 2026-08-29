@@ -132,6 +132,13 @@ import { listDeepResearchRuns, readDeepResearchRun, profileDeepResearchSource } 
 import { createLabSong, loadLabSongs, saveLabLyrics } from '@craft-agent/shared/lab'
 import { OutputService } from '../outputs/OutputService'
 import { refreshHqStateContextDocBestEffort, scheduleHqStateContextRefresh } from '../hq-state/refresh'
+import {
+  getArtistContextDetail,
+  getAuthorizedWorkspaceContext,
+  getCampaignContextDetail,
+  getLiveManagerBrief,
+  listAuthorizedWorkspaceContext,
+} from '../hq-state/manager-tools'
 import { publishLatestSpotifySnapshotContext } from '../pulses/spotify-snapshot-publisher'
 import { recoverInterruptedWorkspaceMigrations } from '../workspaces/workspace-migration-recovery'
 import {
@@ -184,7 +191,7 @@ import type { PulseAction } from '@craft-agent/shared/pulses'
 import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
 import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
-import { composeAgentSystemPrompt } from '@craft-agent/shared/agent-prompt'
+import { composeAgentSystemPrompt, managerBriefReceiptFromDocs } from '@craft-agent/shared/agent-prompt'
 import { filterAttachmentsForModelInput } from './runtime-config'
 import { inferScheduledWorkScope, persistHnicScheduleWork } from '../scheduled-work/HnicScheduledWork'
 import { assertAutomatedTeamBrowserCommandAllowed } from './team-automation-browser-guard'
@@ -2532,6 +2539,7 @@ export class SessionManager implements ISessionManager {
       agentCatalog,
       { userMemoryEntries, agentMemoryEntries },
     )
+    const managerBriefReceipt = managerBriefReceiptFromDocs(contextDocs)
     return {
       customSystemPrompt,
       agentSkillSlugs: resolvedSkillSlugs.length > 0 ? resolvedSkillSlugs : undefined,
@@ -2567,6 +2575,7 @@ export class SessionManager implements ISessionManager {
             slug: doc.slug,
             name: doc.metadata.name,
           })),
+          ...(managerBriefReceipt ? { managerBrief: managerBriefReceipt } : {}),
           memory: {
             user: selectActiveMemoryEntries(userMemoryEntries).map((entry) => ({ name: memoryEntryTitle(entry) })),
             agent: selectActiveMemoryEntries(agentMemoryEntries).map((entry) => ({ name: memoryEntryTitle(entry) })),
@@ -6856,6 +6865,23 @@ user a clickable link to where the thing now lives.`
 
       // Wire up session self-management tools (set_session_labels, set_session_status, etc.)
       mergeSessionScopedToolCallbacks(managed.id, {
+        ...(managed.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
+          ? {
+            getManagerBriefFn: async (input) => getLiveManagerBrief(managed.workspace.rootPath, input),
+            getArtistContextFn: async (input) => getArtistContextDetail(managed.workspace.rootPath, CONCIERGE_SLUG, input),
+            getCampaignContextFn: async (input) => getCampaignContextDetail(input),
+          }
+          : {}),
+        listWorkspaceContextFn: async (input) => listAuthorizedWorkspaceContext(
+          managed.workspace.rootPath,
+          managed.spawnedFromAgent?.agentSlug ?? null,
+          input,
+        ),
+        getWorkspaceContextFn: async (input) => getAuthorizedWorkspaceContext(
+          managed.workspace.rootPath,
+          managed.spawnedFromAgent?.agentSlug ?? null,
+          input,
+        ),
         setSessionLabelsFn: (sessionId: string | undefined, labels: string[]) => {
           this.setSessionLabels(sessionId ?? managed.id, labels)
         },
