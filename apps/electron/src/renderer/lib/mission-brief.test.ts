@@ -7,6 +7,7 @@ import {
   missionBriefMetadata,
   missionReleaseDateKey,
   parseMissionBriefDoc,
+  parseMissionBriefDocResult,
   serializeMissionBriefBody,
 } from './mission-brief'
 import type { ContextDocDTO } from '../../shared/types'
@@ -110,8 +111,25 @@ describe('mission brief utilities', () => {
     expect(exact.status).toBe('full')
   })
 
-  test('accepts dated campaign context but ignores fuzzy release targets', () => {
-    expect(missionReleaseDateKey({ releaseDate: 'July 24, 2026' })).toBe('2026-07-24')
+  test('accepts only exact valid release dates', () => {
+    expect(missionReleaseDateKey({ releaseDate: 'July 24, 2026' })).toBeUndefined()
     expect(missionReleaseDateKey({ releaseDate: 'this summer' })).toBeUndefined()
+    expect(missionReleaseDateKey({ releaseDate: '2026-02-31' })).toBeUndefined()
+  })
+
+  test('preserves persisted timestamps and reports missing freshness', () => {
+    const brief = {
+      ...buildMissionBrief('workspace-1', { title: 'Night Drive' }),
+      confirmedAt: '2026-05-01T00:00:00.000Z',
+      updatedAt: '2026-05-02T00:00:00.000Z',
+    }
+    const parsed = parseMissionBriefDocResult({ body: serializeMissionBriefBody(brief) })
+    expect(parsed.ok).toBe(true)
+    expect(parsed.ok && parsed.brief.updatedAt).toBe('2026-05-02T00:00:00.000Z')
+    expect(parsed.ok && parsed.brief.confirmedAt).toBe('2026-05-01T00:00:00.000Z')
+
+    const missing = parseMissionBriefDocResult({ body: '```json\n{"workspaceId":"workspace-1"}\n```' })
+    expect(missing.ok).toBe(false)
+    expect(missing.ok || missing.error).toContain('updatedAt')
   })
 })

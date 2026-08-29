@@ -89,13 +89,22 @@ export function parseArtistCalendarDocResult(
         error: 'Artist Calendar JSON has an unsupported shape.',
       };
     }
+    const updatedAt = parsed.updatedAt;
+    if (!isIsoTimestamp(updatedAt)) {
+      return {
+        ok: false,
+        calendar: { version: 1, events: [], updatedAt: '1970-01-01T00:00:00.000Z' },
+        error: 'Artist Calendar updatedAt is missing or invalid.',
+      };
+    }
     return {
       ok: true,
       calendar: {
         version: 1,
-        events: parsed.events.filter(isCalendarEvent).map(normalizeCalendarEvent),
-        updatedAt:
-          typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
+        events: parsed.events
+          .filter(isCalendarEvent)
+          .map((event) => normalizeCalendarEvent(event, updatedAt)),
+        updatedAt,
       },
     };
   } catch {
@@ -203,7 +212,7 @@ export function attachPersonToCalendarEvent(
   };
 }
 
-function normalizeCalendarEvent(event: ArtistCalendarEvent): ArtistCalendarEvent {
+function normalizeCalendarEvent(event: ArtistCalendarEvent, fallbackTimestamp: string): ArtistCalendarEvent {
   return {
     ...event,
     title: event.title.trim(),
@@ -213,9 +222,13 @@ function normalizeCalendarEvent(event: ArtistCalendarEvent): ArtistCalendarEvent
     relatedPersonIds: normalizeIds(event.relatedPersonIds),
     google: normalizeGoogleSync(event.google),
     deletedAt: normalizeInlineText(event.deletedAt),
-    updatedAt: typeof event.updatedAt === 'string' ? event.updatedAt : new Date().toISOString(),
-    createdAt: typeof event.createdAt === 'string' ? event.createdAt : new Date().toISOString(),
+    updatedAt: isIsoTimestamp(event.updatedAt) ? event.updatedAt : fallbackTimestamp,
+    createdAt: isIsoTimestamp(event.createdAt) ? event.createdAt : fallbackTimestamp,
   };
+}
+
+function isIsoTimestamp(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Date.parse(value));
 }
 
 function normalizeGoogleSync(value: unknown): GoogleCalendarSyncState | undefined {

@@ -1,6 +1,14 @@
 import { createHash } from 'node:crypto'
 import { loadGlobalAgent, readActivatedAgents } from '@craft-agent/shared/agent-definitions'
 import {
+  ARTIST_CALENDAR_CONTEXT_SLUG,
+  artistCalendarMetadata,
+  parseArtistCalendarDocResult,
+  serializeArtistCalendarBody,
+  type ArtistCalendar,
+  type ArtistCalendarEvent,
+} from '@craft-agent/shared/artist-context'
+import {
   CAMPAIGN_CALENDAR_CONTEXT_SLUG,
   campaignCalendarMetadata,
   createCampaignCalendarItem,
@@ -288,20 +296,6 @@ function campaignItem(campaignId: string, order: ScheduledWorkOrder, status: 'dr
   })
 }
 
-type ArtistCalendarEvent = {
-  id: string
-  date: string
-  title: string
-  time?: string
-  scheduledWorkId?: string
-  workspaceLinks: unknown[]
-  relatedPersonIds: string[]
-  createdAt: string
-  updatedAt: string
-}
-type ArtistCalendarDocument = { version: 1; events: ArtistCalendarEvent[]; updatedAt: string }
-const ARTIST_CALENDAR_CONTEXT_SLUG = 'artist-calendar'
-
 function hqEvent(order: ScheduledWorkOrder): ArtistCalendarEvent {
   const local = formatInTimezone(order.startAt, order.timezone)
   return {
@@ -317,21 +311,18 @@ function hqEvent(order: ScheduledWorkOrder): ArtistCalendarEvent {
   }
 }
 
-function readArtistCalendar(rootPath: string): ArtistCalendarDocument {
+function readArtistCalendar(rootPath: string): ArtistCalendar {
   const doc = loadContextDoc(rootPath, ARTIST_CALENDAR_CONTEXT_SLUG)
-  if (!doc) return { version: 1, events: [], updatedAt: new Date().toISOString() }
-  const match = doc.body.match(/```json\s*([\s\S]*?)```/i)
-  if (!match?.[1]) throw new Error('Artist Calendar JSON block is missing.')
-  const parsed = JSON.parse(match[1]) as Partial<ArtistCalendarDocument>
-  if (parsed.version !== 1 || !Array.isArray(parsed.events)) throw new Error('Artist Calendar JSON has an unsupported shape.')
-  return { version: 1, events: parsed.events as ArtistCalendarEvent[], updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString() }
+  const parsed = parseArtistCalendarDocResult(doc ?? undefined)
+  if (!parsed.ok) throw new Error(parsed.error)
+  return parsed.calendar
 }
 
-function writeArtistCalendar(rootPath: string, calendar: ArtistCalendarDocument): void {
+function writeArtistCalendar(rootPath: string, calendar: ArtistCalendar): void {
   upsertContextDoc(rootPath, {
     slug: ARTIST_CALENDAR_CONTEXT_SLUG,
-    metadata: { name: 'Artist Calendar', description: 'Global dates, deadlines, meetings, releases, reminders, and scheduled work.', routing: { mode: 'broadcast' }, enabled: true },
-    body: ['This is global artist calendar context. Treat it as long-term creator context, not one-campaign context.', '', '```json', JSON.stringify(calendar, null, 2), '```'].join('\n'),
+    metadata: artistCalendarMetadata(),
+    body: serializeArtistCalendarBody(calendar),
   })
 }
 

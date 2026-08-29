@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { artistBrandingDoc, type ArtistBranding } from './branding.ts';
+import { parseArtistCalendarDocResult } from './calendar.ts';
 import { extractJsonBlock } from './json-block.ts';
 import { artistProfileDoc, type ArtistProfile } from './profile.ts';
 import { normalizeInlineText, normalizeProseText, toFiniteNumber, trimText } from './text.ts';
@@ -176,5 +177,30 @@ describe('artist text docs', () => {
     const parsed = artistProfileDoc.parse(doc(artistProfileDoc.serialize(profile)));
     expect(parsed.value.team).toBe('manager: Dana');
     expect(artistProfileDoc.completion(profile)).toBe(0);
+  });
+});
+
+describe('artist calendar freshness', () => {
+  test('preserves persisted document timestamps and uses them for legacy event timestamps', () => {
+    const result = parseArtistCalendarDocResult(doc([
+      '```json',
+      JSON.stringify({
+        version: 1,
+        events: [{ id: 'event-1', date: '2026-09-01', title: 'Release', workspaceLinks: [], relatedPersonIds: [] }],
+        updatedAt: '2026-08-29T01:00:00.000Z',
+      }),
+      '```',
+    ].join('\n')));
+
+    expect(result.ok).toBe(true);
+    expect(result.calendar.updatedAt).toBe('2026-08-29T01:00:00.000Z');
+    expect(result.calendar.events[0]?.createdAt).toBe('2026-08-29T01:00:00.000Z');
+    expect(result.calendar.events[0]?.updatedAt).toBe('2026-08-29T01:00:00.000Z');
+  });
+
+  test('does not make a persisted calendar look fresh when updatedAt is missing', () => {
+    const result = parseArtistCalendarDocResult(doc('```json\n{"version":1,"events":[]}\n```'));
+    expect(result.ok).toBe(false);
+    expect(result.calendar.updatedAt).toBe('1970-01-01T00:00:00.000Z');
   });
 });

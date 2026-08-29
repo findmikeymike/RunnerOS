@@ -2,6 +2,14 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { getSourceCredentialManager, getSourcesBySlugs } from '@craft-agent/shared/sources'
 import {
+  ARTIST_CALENDAR_CONTEXT_SLUG,
+  artistCalendarMetadata,
+  parseArtistCalendarDocResult,
+  serializeArtistCalendarBody,
+  type ArtistCalendar,
+  type ArtistCalendarEvent,
+} from '@craft-agent/shared/artist-context'
+import {
   loadAllContextDocs,
   loadContextDoc,
   upsertContextDoc,
@@ -11,41 +19,9 @@ import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { refreshHqStateContextDocBestEffort } from '../../hq-state/refresh'
 
-const ARTIST_CALENDAR_CONTEXT_SLUG = 'artist-calendar'
 const GOOGLE_CALENDAR_SOURCE_SLUG = 'google-calendar'
 
-type SyncStatus = 'not-synced' | 'synced' | 'local-change' | 'remote-change' | 'conflict' | 'error'
 type ParsedEventTime = { ok: true; time: string | null } | { ok: false; error: string }
-
-interface GoogleCalendarSyncState {
-  calendarId?: string
-  eventId?: string
-  htmlLink?: string
-  etag?: string
-  syncStatus?: SyncStatus
-  lastSyncedAt?: string
-  error?: string
-}
-
-interface ArtistCalendarEvent {
-  id: string
-  date: string
-  title: string
-  time?: string
-  notes?: string
-  workspaceLinks?: unknown[]
-  relatedPersonIds?: unknown[]
-  google?: GoogleCalendarSyncState
-  deletedAt?: string
-  createdAt?: string
-  updatedAt?: string
-}
-
-interface ArtistCalendar {
-  version: 1
-  events: ArtistCalendarEvent[]
-  updatedAt: string
-}
 
 export interface GoogleCalendarSyncResult {
   ok: boolean
@@ -95,7 +71,7 @@ export function registerGoogleWorkspaceHandlers(server: RpcServer, deps: Handler
     if (!token) return { ok: false, synced: 0, deleted: 0, failed: 0, error: 'Google Calendar is not connected yet.' }
 
     const doc = loadContextDoc(workspace.rootPath, ARTIST_CALENDAR_CONTEXT_SLUG)
-    const parsed = parseArtistCalendar(doc)
+    const parsed = parseArtistCalendarDocResult(doc ?? undefined)
     if (!parsed.ok) return { ok: false, synced: 0, deleted: 0, failed: 0, error: parsed.error }
 
     const calendarId = process.env.GOOGLE_WORKSPACE_PRIMARY_CALENDAR_ID?.trim() || 'primary'
@@ -174,13 +150,8 @@ export function registerGoogleWorkspaceHandlers(server: RpcServer, deps: Handler
 
     upsertContextDoc(workspace.rootPath, {
       slug: ARTIST_CALENDAR_CONTEXT_SLUG,
-      metadata: {
-        name: 'Artist Calendar',
-        description: 'Global dates, deadlines, meetings, releases, and reminders for the artist.',
-        routing: { mode: 'broadcast' },
-        enabled: true,
-      },
-      body: serializeArtistCalendar(nextCalendar),
+      metadata: artistCalendarMetadata(),
+      body: serializeArtistCalendarBody(nextCalendar),
     })
     refreshHqStateContextDocBestEffort(workspace.rootPath)
     broadcastContextChanged(deps, workspaceId, loadAllContextDocs(workspace.rootPath))
@@ -265,64 +236,6 @@ function toGoogleEventPayload(event: ArtistCalendarEvent): Record<string, unknow
     end: { dateTime: end.toISOString() },
     extendedProperties: { private: { runnerosEventId: event.id } },
   }
-}
-
-function parseArtistCalendar(doc: LoadedContextDoc | null): { ok: true; calendar: ArtistCalendar } | { ok: false; error: string } {
-  if (!doc?.body.trim()) {
-    return { ok: true, calendar: { version: 1, events: [], updatedAt: new Date().toISOString() } }
-  }
-  const json = extractJson(doc.body)
-  if (!json) return { ok: false, error: 'Artist Calendar exists, but no JSON block could be read.' }
-  try {
-    const parsed = JSON.parse(json) as Partial<ArtistCalendar>
-    if (parsed.version !== 1 || !Array.isArray(parsed.events)) {
-      return { ok: false, error: 'Artist Calendar JSON has an unsupported shape.' }
-    }
-    return {
-      ok: true,
-      calendar: {
-        version: 1,
-        events: parsed.events.filter(isCalendarEvent),
-        updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
-      },
-    }
-  } catch {
-    return { ok: false, error: 'Artist Calendar JSON is malformed.' }
-  }
-}
-
-function serializeArtistCalendar(calendar: ArtistCalendar): string {
-  return [
-    'This is global artist calendar context. Treat it as long-term creator context, not one-campaign context.',
-    '',
-    '```json',
-    JSON.stringify({
-      version: 1,
-      events: [...calendar.events].sort((a, b) => `${a.date} ${a.time ?? ''}`.localeCompare(`${b.date} ${b.time ?? ''}`)),
-      updatedAt: calendar.updatedAt,
-    }, null, 2),
-    '```',
-  ].join('\n')
-}
-
-function extractJson(body: string): string | null {
-  const fenced = body.match(/```json\s*([\s\S]*?)```/i)
-  if (fenced?.[1]) return fenced[1]
-  const firstBrace = body.indexOf('{')
-  const lastBrace = body.lastIndexOf('}')
-  if (firstBrace === -1 || lastBrace <= firstBrace) return null
-  return body.slice(firstBrace, lastBrace + 1)
-}
-
-function isCalendarEvent(value: unknown): value is ArtistCalendarEvent {
-  const candidate = value as Partial<ArtistCalendarEvent>
-  return Boolean(
-    typeof candidate.id === 'string'
-    && typeof candidate.date === 'string'
-    && /^\d{4}-\d{2}-\d{2}$/.test(candidate.date)
-    && typeof candidate.title === 'string'
-    && candidate.title.trim(),
-  )
 }
 
 function parseTime(value: string | undefined): ParsedEventTime {

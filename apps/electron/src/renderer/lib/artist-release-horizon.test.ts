@@ -3,6 +3,7 @@ import type { ContextDocDTO } from '../../shared/types'
 import {
   emptyArtistReleaseHorizon,
   parseArtistReleaseHorizon,
+  parseArtistReleaseHorizonDocResult,
   serializeArtistReleaseHorizon,
 } from './artist-release-horizon'
 
@@ -21,13 +22,16 @@ describe('artist release horizon', () => {
       updatedAt: '2026-08-29T00:00:00.000Z',
     })
 
-    expect(parseArtistReleaseHorizon(doc(body)).months).toEqual({
+    const parsed = parseArtistReleaseHorizonDocResult(doc(body))
+    expect(parsed.horizon.months).toEqual({
       '2026-09': { title: 'New single', event: 'release', plan: 'Finish the single.', keyGoal: 'Deliver master' },
     })
+    expect(parsed.horizon.updatedAt).toBe('2026-08-29T00:00:00.000Z')
   })
 
   it('migrates legacy month notes without losing the plan text', () => {
-    const parsed = parseArtistReleaseHorizon(doc('```json\n{"version":1,"monthNotes":{"2026-10":"Shoot the campaign visuals."}}\n```'))
+    const result = parseArtistReleaseHorizonDocResult(doc('```json\n{"version":1,"monthNotes":{"2026-10":"Shoot the campaign visuals."}}\n```'))
+    const parsed = result.horizon
 
     expect(parsed.months['2026-10']).toEqual({
       title: 'Shoot the campaign visuals',
@@ -35,6 +39,8 @@ describe('artist release horizon', () => {
       plan: 'Shoot the campaign visuals.',
       keyGoal: '',
     })
+    expect(result.ok).toBe(false)
+    expect(parsed.updatedAt).toBe('1970-01-01T00:00:00.000Z')
   })
 
   it('returns an empty plan for malformed context', () => {

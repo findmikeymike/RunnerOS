@@ -9,6 +9,7 @@ import {
   getReleaseBoardItemAction,
   mergeReleaseBoardWithAssets,
   parseReleaseBoardDoc,
+  parseReleaseBoardDocResult,
   serializeReleaseBoardBody,
   toggleReleaseBoardItem,
   updateReleaseBoardItemStatus,
@@ -67,6 +68,19 @@ describe('release board utilities', () => {
     const visuals = parsed?.categories.find((category) => category.id === 'visuals')
     expect(visuals?.items.find((item) => item.id === 'cover-art')?.status).toBe('done')
     expect(visuals?.items.find((item) => item.id === 'cover-art')?.label).toBe('Single Art')
+  })
+
+  test('preserves persisted freshness and rejects a missing timestamp', () => {
+    const board = { ...buildDefaultReleaseBoard('workspace-1'), updatedAt: '2026-04-03T00:00:00.000Z' }
+    const parsed = parseReleaseBoardDocResult({ body: serializeReleaseBoardBody(board) })
+    expect(parsed.ok).toBe(true)
+    expect(parsed.ok && parsed.board.updatedAt).toBe('2026-04-03T00:00:00.000Z')
+
+    const missing = parseReleaseBoardDocResult({
+      body: '```json\n{"version":1,"workspaceId":"workspace-1","categories":[]}\n```',
+    })
+    expect(missing.ok).toBe(false)
+    expect(missing.ok || missing.error).toContain('updatedAt')
   })
 
   test('adds new tasks as not applicable when loading an existing campaign', () => {

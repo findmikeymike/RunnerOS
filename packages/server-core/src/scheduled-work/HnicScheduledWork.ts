@@ -3,6 +3,13 @@ import { createHash } from 'node:crypto'
 import { Cron } from 'croner'
 import type { ScheduleWorkToolInput } from '@craft-agent/session-tools-core'
 import { loadGlobalAgent, readActivatedAgents } from '@craft-agent/shared/agent-definitions'
+import {
+  ARTIST_CALENDAR_CONTEXT_SLUG,
+  artistCalendarMetadata,
+  parseArtistCalendarDocResult,
+  serializeArtistCalendarBody,
+  type ArtistCalendar,
+} from '@craft-agent/shared/artist-context'
 import { loadGlobalWorkflow, readActivatedWorkflows } from '@craft-agent/shared/workflows'
 import {
   CAMPAIGN_CALENDAR_CONTEXT_SLUG,
@@ -271,27 +278,18 @@ function writeScheduledWork(rootPath: string, work: ReturnType<typeof parseSched
   upsertContextDoc(rootPath, { slug: SCHEDULED_WORK_CONTEXT_SLUG, metadata: scheduledWorkMetadata(), body: serializeScheduledWorkBody(work) })
 }
 
-type ArtistCalendarDocument = {
-  version: 1
-  events: Array<{ id: string; date: string; time?: string; title: string; notes?: string; scheduledWorkId?: string; workspaceLinks: unknown[]; relatedPersonIds: string[]; createdAt: string; updatedAt: string }>
-  updatedAt: string
+function readArtistCalendar(rootPath: string): ArtistCalendar {
+  const doc = loadContextDoc(rootPath, ARTIST_CALENDAR_CONTEXT_SLUG)
+  const parsed = parseArtistCalendarDocResult(doc ?? undefined)
+  if (!parsed.ok) throw new Error(parsed.error)
+  return parsed.calendar
 }
 
-function readArtistCalendar(rootPath: string): ArtistCalendarDocument {
-  const doc = loadContextDoc(rootPath, 'artist-calendar')
-  if (!doc) return { version: 1, events: [], updatedAt: new Date().toISOString() }
-  const match = doc.body.match(/```json\s*([\s\S]*?)```/i)
-  if (!match?.[1]) throw new Error('Artist Calendar JSON block is missing.')
-  const parsed = JSON.parse(match[1]) as ArtistCalendarDocument
-  if (parsed.version !== 1 || !Array.isArray(parsed.events)) throw new Error('Artist Calendar JSON has an unsupported shape.')
-  return parsed
-}
-
-function writeArtistCalendar(rootPath: string, calendar: ArtistCalendarDocument): void {
+function writeArtistCalendar(rootPath: string, calendar: ArtistCalendar): void {
   upsertContextDoc(rootPath, {
-    slug: 'artist-calendar',
-    metadata: { name: 'Artist Calendar', description: 'Global dates, deadlines, meetings, releases, reminders, and scheduled work.', routing: { mode: 'broadcast' }, enabled: true },
-    body: ['This is global artist calendar context. Treat it as long-term creator context, not one-campaign context.', '', '```json', JSON.stringify(calendar, null, 2), '```'].join('\n'),
+    slug: ARTIST_CALENDAR_CONTEXT_SLUG,
+    metadata: artistCalendarMetadata(),
+    body: serializeArtistCalendarBody(calendar),
   })
 }
 
