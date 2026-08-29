@@ -53,6 +53,7 @@ import { AgendaPage, type AgendaTaskDraft } from './AgendaPage'
 import { PeoplePageHeader } from './PeoplePageHeader'
 import { CompactPageHeader } from './CompactPageHeader'
 import { ReleaseHorizon } from './ReleaseHorizon'
+import { ManagerKnowledgePanel, type ManagerSourceSurface } from './ManagerKnowledgePanel'
 import { buildCampaignSchedulePlanFromComposer, buildHqSchedulePlanFromComposer, type ScheduledWorkComposerDraft } from '@/lib/scheduled-work-composer'
 import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult, type ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import {
@@ -1086,13 +1087,30 @@ export function ArtistHQHome({
     setHqRefreshBusy(true)
     try {
       await window.electronAPI.refreshHqState(workspaceId)
+      await refreshContext()
       toast.success('State of Play refreshed')
     } catch (error) {
       toast.error('Could not refresh State of Play', { description: error instanceof Error ? error.message : String(error) })
     } finally {
       setHqRefreshBusy(false)
     }
-  }, [workspaceId])
+  }, [refreshContext, workspaceId])
+
+  const openManagerSource = React.useCallback((surface: ManagerSourceSurface) => {
+    if (surface.kind === 'campaign') {
+      onOpenCampaignWorkspace?.(surface.workspaceId)
+      return
+    }
+    if (surface.kind === 'vault') {
+      navigate(routes.view.vault())
+      return
+    }
+    if (surface.kind === 'outputs') {
+      navigate(routes.view.outputs())
+      return
+    }
+    window.location.hash = `${HQ_HASH_PREFIX}${surface.tab}`
+  }, [onOpenCampaignWorkspace])
 
   const refreshedStaleHqStateRef = React.useRef<string | null>(null)
   React.useEffect(() => {
@@ -1615,6 +1633,7 @@ export function ArtistHQHome({
               onOpenEntity={openHqStateEntity}
               onTransitionRecommendation={transitionHqRecommendation}
               onRefresh={refreshHqState}
+              onOpenManagerSource={openManagerSource}
             />
 
             <section>
@@ -2461,6 +2480,7 @@ type StateOfPlayPanelProps = {
   onOpenEntity: (entity: HqStateEntityRef) => void
   onTransitionRecommendation: (recommendationId: string, to: 'dismissed' | 'snoozed') => void
   onRefresh: () => void
+  onOpenManagerSource: (surface: ManagerSourceSurface) => void
 }
 
 function StateOfPlayPanel(props: StateOfPlayPanelProps) {
@@ -2529,7 +2549,7 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
             onClick={() => setDetailsOpen(true)}
             className="inline-flex h-8 shrink-0 items-center gap-1 rounded-[8px] px-2.5 text-xs font-medium text-white/58 transition-colors hover:bg-black/20 hover:text-white/85"
           >
-            Details
+            Manager
             <ChevronRight className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -2539,6 +2559,7 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
         <DrawerContent className="inset-y-0 right-0 left-auto mt-0 h-full !w-full rounded-none border-l border-white/[0.08] bg-[#070708] sm:!max-w-[560px]">
           <DrawerHeader className="relative border-b border-white/[0.06] px-5 py-4 pr-16 text-left">
             <DrawerTitle className="text-sm font-semibold text-white/78">Next move</DrawerTitle>
+            <DrawerDescription className="sr-only">Manager recommendation and source transparency.</DrawerDescription>
             <DrawerClose asChild>
               <button
                 type="button"
@@ -2570,6 +2591,7 @@ function StateOfPlayDetailPanel({
   onOpenEntity,
   onTransitionRecommendation,
   onRefresh,
+  onOpenManagerSource,
 }: StateOfPlayPanelProps) {
   if (!state) {
     return (
@@ -2684,6 +2706,15 @@ function StateOfPlayDetailPanel({
             />
           </div>
         </section>
+      ) : null}
+
+      {state.version === 2 ? (
+        <ManagerKnowledgePanel
+          brief={state.managerBrief}
+          refreshBusy={refreshBusy}
+          onRefresh={onRefresh}
+          onOpenSource={onOpenManagerSource}
+        />
       ) : null}
     </div>
   )
