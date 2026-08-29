@@ -164,10 +164,8 @@ import {
   type SaveMemoryInput,
   type UpdateMemoryInput,
 } from '@craft-agent/shared/memory'
-import { buildCanvasGuidanceSection } from '@craft-agent/shared/agent-definitions/canvas-guidance'
 import {
   buildSharedIntelDocs,
-  buildSharedIntelPromptSection,
   buildYouTubeIntelCandidates,
   isSharedIntelContextSlug,
   parseSharedIntelNote,
@@ -187,6 +185,7 @@ import type { PulseAction } from '@craft-agent/shared/pulses'
 import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
 import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
+import { composeAgentSystemPrompt } from '@craft-agent/shared/agent-prompt'
 import { filterAttachmentsForModelInput } from './runtime-config'
 import { inferScheduledWorkScope, persistHnicScheduleWork } from '../scheduled-work/HnicScheduledWork'
 import { assertAutomatedTeamBrowserCommandAllowed } from './team-automation-browser-guard'
@@ -402,14 +401,6 @@ const defaultSessionRuntimeHooks: SessionRuntimeHooks = {
   },
 }
 
-const SECTION_DELIMITER = '\n\n---\n\n'
-const WORKSPACE_CONTEXT_HEADER = 'Workspace context — read this before starting work:'
-const USER_MEMORY_HEADER = 'What we know about you (USER.md):'
-const AGENT_MEMORY_HEADER = 'My memory of working with you (MEMORY.md):'
-const SKILLS_HEADER = 'You have these skills bundled with you (always available — reach for them when relevant):'
-const SOURCES_HEADER = 'You have these tools bundled with you (MCP servers, APIs, and local connectors):'
-const PLANNING_NUDGE = 'When planning, check your bundled skills and tools before working from scratch.'
-
 type WorkflowMemoryEntry = StoredMemoryEntry
 type WorkflowMemoryInputs = {
   userEntries?: WorkflowMemoryEntry[]
@@ -472,15 +463,6 @@ export function runnerSecretPolicyError(spawnedFromAgent?: SpawnedAgentRef): str
 
 function isPrerequisiteRetryResult(result: string): boolean {
   return /^\s*You must read the (?:skill instruction files|source guide|browser tools guide) before/i.test(result)
-}
-
-function buildWorkflowWorkspaceContextSection(docs: Array<{ slug: string; metadata: { name: string; enabled?: boolean }; body: string }>): string {
-  const usable = docs.filter((d) => d.metadata.enabled !== false && !isSharedIntelContextSlug(d.slug) && d.body.trim().length > 0)
-  if (usable.length === 0) return ''
-  return `${WORKSPACE_CONTEXT_HEADER}\n\n${usable.map((doc) => {
-    const heading = doc.metadata.name.trim() || doc.slug
-    return `## ${heading}\n\n${doc.body.trim()}`
-  }).join('\n\n')}`
 }
 
 async function loadUserMemoryEntries(): Promise<WorkflowMemoryEntry[]> {
@@ -615,19 +597,6 @@ function memoryEntryTitle(entry: WorkflowMemoryEntry): string {
   return entry.name.trim() || 'Memory'
 }
 
-/**
- * Build the workflow-step prompt's memory section using the canonical
- * shared renderer. Kept identical to the renderer-spawned chat path
- * in `apps/electron/src/renderer/lib/compose-agent-prompt.ts` — both
- * call into `buildMemorySectionsText` from `@craft-agent/shared/memory`.
- *
- * Filters expired entries and empties internally; callers cannot
- * accidentally skip those filters.
- */
-function buildWorkflowMemoryText(memory?: WorkflowMemoryInputs): string {
-  return buildMemorySectionsText(memory?.userEntries ?? [], memory?.agentEntries ?? [])
-}
-
 function findPreviousUserMessage(messages: Message[], beforeIndex: number): Message | undefined {
   for (let index = beforeIndex - 1; index >= 0; index--) {
     const message = messages[index]
@@ -640,57 +609,6 @@ function truncateMemorySidecarText(value: string, maxLength = 8000): string {
   const normalized = value.trim()
   if (normalized.length <= maxLength) return normalized
   return `${normalized.slice(0, maxLength)}\n[truncated]`
-}
-
-function formatWorkflowBundleBullet(slug: string, name: string | undefined, description: string | undefined): string {
-  const head = `  • @${slug}`
-  const displayName = name?.trim()
-  const desc = description?.trim()
-  if (displayName && desc) return `${head} (${displayName}) — ${desc}`
-  if (displayName) return `${head} — ${displayName}`
-  if (desc) return `${head} — ${desc}`
-  return head
-}
-
-function buildWorkflowAgentPrompt(
-  agent: { systemPrompt: string; metadata: { skills?: string[]; sources?: string[]; optionalSources?: string[]; visualAgent?: boolean } },
-  skills: LoadedSkill[],
-  sources: LoadedSource[],
-  contextDocs: Array<{ slug: string; metadata: { name: string; enabled?: boolean }; body: string }>,
-  memory?: WorkflowMemoryInputs,
-): string {
-  const body = (agent.systemPrompt ?? '').trimEnd()
-  const contextSection = buildWorkflowWorkspaceContextSection(contextDocs)
-  const sharedIntelSection = buildSharedIntelPromptSection(contextDocs)
-  const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
-  const sourceBySlug = new Map(sources.map((s) => [s.config.slug, s]))
-  const skillBullets = (agent.metadata.skills ?? [])
-    .map((slug) => {
-      const skill = skillBySlug.get(slug)
-      return skill ? formatWorkflowBundleBullet(slug, skill.metadata.name, skill.metadata.description) : null
-    })
-    .filter((line): line is string => Boolean(line))
-  const sourceBullets = [
-    ...(agent.metadata.sources ?? []),
-    ...(agent.metadata.optionalSources ?? []),
-  ]
-    .map((slug) => {
-      const source = sourceBySlug.get(slug)
-      return source ? formatWorkflowBundleBullet(slug, source.config.name, source.config.tagline) : null
-    })
-    .filter((line): line is string => Boolean(line))
-  const footerParts: string[] = []
-  if (skillBullets.length > 0) footerParts.push(`${SKILLS_HEADER}\n${skillBullets.join('\n')}`)
-  if (sourceBullets.length > 0) footerParts.push(`${SOURCES_HEADER}\n${sourceBullets.join('\n')}`)
-  if (footerParts.length > 0) footerParts.push(PLANNING_NUDGE)
-  const parts = [body]
-  if (contextSection) parts.push(contextSection)
-  if (sharedIntelSection) parts.push(sharedIntelSection)
-  const memorySection = buildWorkflowMemoryText(memory)
-  if (memorySection) parts.push(memorySection)
-  parts.push(buildCanvasGuidanceSection(agent))
-  if (footerParts.length > 0) parts.push(footerParts.join('\n\n'))
-  return parts.join(SECTION_DELIMITER)
 }
 
 function completeLaunchReceipt(
@@ -2536,13 +2454,15 @@ export class SessionManager implements ISessionManager {
    * Resolve the full session-options shape for an agent slug — persona +
    * skills + sources + activated context docs + memory + launch receipt.
    *
-   * Single source of truth for both:
+   * Single source of truth for every server-spawned session:
    *   - The workflow runner step-spawn path
    *   - The Pulse executor driver-spawn path
+   *   - Agent-to-agent delegation via `message_agent`
    *
-   * Both must compose prompts identically; this method is what guarantees it.
-   * If the renderer's `composeAgentSystemPrompt` ever ships a server-side
-   * shared module, swap the inline call to `buildWorkflowAgentPrompt` here.
+   * Composes through `composeAgentSystemPrompt` from
+   * `@craft-agent/shared/agent-prompt`, the same function the renderer chat
+   * launch uses, so a server-spawned agent sees the same prompt as a
+   * chat-spawned one.
    */
   async resolveAgentSessionOptions(
     workspaceId: string,
@@ -2593,10 +2513,27 @@ export class SessionManager implements ISessionManager {
       loadUserMemoryEntries(),
       loadAgentMemoryEntries(agent.slug),
     ])
-    const customSystemPrompt = buildWorkflowAgentPrompt(agent, skills, usableSources, contextDocs, {
-      userEntries: userMemoryEntries,
-      agentEntries: agentMemoryEntries,
-    })
+    // The catalog is what makes delegation work: `message_agent` requires a slug
+    // from it. Server-spawned sessions (workflow steps, pulses, delegated
+    // children) need it too, or an agent can be delegated to but cannot delegate
+    // onward. Recursion stays bounded by the agent-message depth limit.
+    const agentCatalog = loadActivatedAgents(ws.rootPath).map((entry) => ({
+      slug: entry.slug,
+      name: entry.metadata.name,
+      description: entry.metadata.description,
+      inputs: entry.metadata.inputs,
+      outputs: entry.metadata.outputs,
+      visualAgent: entry.metadata.visualAgent,
+      tags: entry.metadata.tags,
+    }))
+    const customSystemPrompt = composeAgentSystemPrompt(
+      agent,
+      skills,
+      usableSources,
+      contextDocs,
+      agentCatalog,
+      { userMemoryEntries, agentMemoryEntries },
+    )
     return {
       customSystemPrompt,
       agentSkillSlugs: resolvedSkillSlugs.length > 0 ? resolvedSkillSlugs : undefined,
@@ -2636,7 +2573,17 @@ export class SessionManager implements ISessionManager {
             user: selectActiveMemoryEntries(userMemoryEntries).map((entry) => ({ name: memoryEntryTitle(entry) })),
             agent: selectActiveMemoryEntries(agentMemoryEntries).map((entry) => ({ name: memoryEntryTitle(entry) })),
           },
+          ...(agentCatalog.length > 0 ? { agentCatalog } : {}),
         },
+        ...(agent.slug === CONCIERGE_SLUG
+          ? {
+            routing: {
+              mode: 'concierge' as const,
+              activeAgentCount: agentCatalog.length,
+              instruction: 'Use the active agent capability catalog to route the user to a specialist when appropriate.',
+            },
+          }
+          : {}),
       },
     }
   }
