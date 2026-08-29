@@ -178,6 +178,17 @@ describe('Artist OS persistent shell chrome', () => {
     }
   })
 
+  test('creates an empty Lab song from the Songs page before opening the Pad', () => {
+    const songs = readFileSync(join(import.meta.dir, '..', 'LabSongsPage.tsx'), 'utf8')
+
+    expect(songs).toContain('createLabUiSong')
+    expect(songs).toContain('placeholder="Song title"')
+    expect(songs).toContain('placeholder="Tag (optional)"')
+    expect(songs).toContain('Add to Songs')
+    expect(songs).toContain('project: draftTag.trim() || \'Loose Singles\'')
+    expect(songs).toContain('onClick={() => setAddSongOpen(true)}')
+  })
+
   test('keeps HQ cards darker than soot but distinct from the black canvas', () => {
     const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
 

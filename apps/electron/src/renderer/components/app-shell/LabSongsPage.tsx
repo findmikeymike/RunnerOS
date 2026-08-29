@@ -14,7 +14,13 @@ import {
 import { navigate, routes } from '@/lib/navigate'
 import { cn } from '@/lib/utils'
 import { CompactPageHeader } from './CompactPageHeader'
-import { hydrateLabState, loadLabUiSongs, subscribeLabSongs } from '@/lib/lab-song-state'
+import {
+  createLabUiSong,
+  hydrateLabState,
+  LAB_PROJECT_COLORS,
+  loadLabUiSongs,
+  subscribeLabSongs,
+} from '@/lib/lab-song-state'
 
 interface LabSongsPageProps {
   workspaceId?: string
@@ -85,6 +91,9 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
   const [filterPreset, setFilterPreset] = React.useState<FilterPreset>('all')
   const [query, setQuery] = React.useState('')
   const [songs, setSongs] = React.useState<SongRecord[]>([])
+  const [addSongOpen, setAddSongOpen] = React.useState(false)
+  const [draftTitle, setDraftTitle] = React.useState('')
+  const [draftTag, setDraftTag] = React.useState('')
 
   const refreshSongs = React.useCallback(() => {
     setSongs(loadLabUiSongs(workspaceId).map((song) => ({
@@ -130,6 +139,24 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
       })
   }, [filterPreset, query, songs])
 
+  const createSong = React.useCallback((event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const title = draftTitle.trim()
+    if (!title) return
+
+    createLabUiSong(workspaceId, {
+      title,
+      project: draftTag.trim() || 'Loose Singles',
+      color: LAB_PROJECT_COLORS[songs.length % LAB_PROJECT_COLORS.length],
+      notes: '',
+    })
+    setDraftTitle('')
+    setDraftTag('')
+    setFilterPreset('all')
+    setQuery('')
+    setAddSongOpen(false)
+  }, [draftTag, draftTitle, songs.length, workspaceId])
+
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="flex w-full flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
@@ -141,7 +168,7 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
             <>
               <button
                 type="button"
-                onClick={() => navigate(routes.view.lab('pad'))}
+                onClick={() => setAddSongOpen(true)}
                 className="inline-flex h-9 items-center gap-2 rounded-full bg-white/90 px-5 text-xs font-medium text-black transition-transform hover:scale-[1.02] active:scale-95"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -158,6 +185,54 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
             </>
           }
         />
+
+        {addSongOpen ? (
+          <form
+            onSubmit={createSong}
+            className="flex flex-col gap-3 rounded-2xl border border-[#fb923c]/20 bg-[#0A0A0A] p-4 shadow-minimal sm:flex-row sm:items-end"
+            aria-label="Add song"
+          >
+            <label className="min-w-0 flex-1">
+              <span className="mb-1.5 block text-[9px] font-medium uppercase tracking-[0.15em] text-white/38">Title</span>
+              <input
+                autoFocus
+                value={draftTitle}
+                onChange={(event) => setDraftTitle(event.target.value)}
+                placeholder="Song title"
+                className="h-10 w-full rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 text-sm text-white/80 outline-none placeholder:text-white/25 focus:border-[#fb923c]/35"
+              />
+            </label>
+            <label className="min-w-0 flex-1">
+              <span className="mb-1.5 block text-[9px] font-medium uppercase tracking-[0.15em] text-white/38">Tag</span>
+              <input
+                value={draftTag}
+                onChange={(event) => setDraftTag(event.target.value)}
+                placeholder="Tag (optional)"
+                className="h-10 w-full rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 text-sm text-white/80 outline-none placeholder:text-white/25 focus:border-[#fb923c]/35"
+              />
+            </label>
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAddSongOpen(false)
+                  setDraftTitle('')
+                  setDraftTag('')
+                }}
+                className="h-10 rounded-full border border-white/[0.07] px-4 text-xs font-medium text-white/52 hover:bg-white/[0.04]"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!draftTitle.trim()}
+                className="h-10 rounded-full bg-white/90 px-5 text-xs font-medium text-black transition-transform hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                Add to Songs
+              </button>
+            </div>
+          </form>
+        ) : null}
 
         <section className="rounded-2xl border border-white/[0.04] bg-[#0A0A0A] shadow-minimal">
           <div className="flex items-center justify-between gap-3 border-b border-white/[0.04] p-4">
@@ -205,7 +280,7 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
           <div>
             <button
               type="button"
-              onClick={() => navigate(routes.view.lab('pad'))}
+              onClick={() => setAddSongOpen(true)}
               className="group grid w-full grid-cols-[minmax(0,1fr)_150px_120px_96px] items-center gap-4 border-b border-white/[0.035] px-4 py-4 text-left transition-colors hover:bg-white/[0.025]"
             >
               <span className="inline-flex min-w-0 items-center gap-3">
