@@ -122,6 +122,33 @@ describe('buildAgentCatalogSection', () => {
     expect(section).toContain('line break here');
   });
 
+  test('strips bidi overrides and zero-width marks', () => {
+    const section = buildAgentCatalogSection([
+      { slug: 'a', name: 'Bad‮Name', description: 'zero​width﻿here' },
+    ]);
+    expect(section).not.toContain('‮');
+    expect(section).not.toContain('​');
+    expect(section).not.toContain('﻿');
+  });
+
+  test('truncation does not split a surrogate pair', () => {
+    // description caps at 240, so the cut lands at 237. Padding to 236 puts the
+    // emoji's two code units at 236-237, straddling it. Truncating by raw
+    // length keeps only the high surrogate, which JSON.stringify then emits as
+    // a bare \\udXXX escape.
+    const straddling = buildAgentCatalogSection([
+      { slug: 'a', name: 'A', description: `${'x'.repeat(236)}\u{1F3B5}${'y'.repeat(40)}` },
+    ]);
+    expect(straddling).toContain('...');
+    expect(/\\ud[89ab][0-9a-f]{2}/i.test(straddling)).toBe(false);
+
+    // One character earlier the pair fits, and must survive intact.
+    const fitting = buildAgentCatalogSection([
+      { slug: 'a', name: 'A', description: `${'x'.repeat(235)}\u{1F3B5}${'y'.repeat(40)}` },
+    ]);
+    expect(fitting).toContain('\u{1F3B5}');
+  });
+
   test('truncates overlong values', () => {
     const section = buildAgentCatalogSection([
       { slug: 'a', name: 'A', description: 'x'.repeat(400) },

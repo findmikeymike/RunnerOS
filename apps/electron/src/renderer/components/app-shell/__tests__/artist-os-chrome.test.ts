@@ -220,7 +220,12 @@ describe('Artist OS persistent shell chrome', () => {
 
   test('does not leave a former North Star spacer before HQ analytics', () => {
     const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
-    const profile = readFileSync(join(import.meta.dir, '..', '..', '..', 'lib', 'artist-profile.ts'), 'utf8')
+    // The profile schema lives in packages/shared now; the renderer lib module
+    // is a re-export and no longer carries the field declarations.
+    const profile = readFileSync(
+      join(import.meta.dir, '..', '..', '..', '..', '..', '..', '..', 'packages', 'shared', 'src', 'artist-context', 'profile.ts'),
+      'utf8',
+    )
     const operations = hq.indexOf('id="hq-home-operations"')
     const spotify = hq.indexOf('<SpotifyPulseCard', operations)
 

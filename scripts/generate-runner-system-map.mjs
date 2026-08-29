@@ -14,7 +14,7 @@ const WORKER_DEFAULTS_FILE = join(ROOT, 'apps/electron/src/renderer/lib/worker-d
 const AGENT_DEFAULTS_FILE = join(ROOT, 'packages/shared/src/agent-definitions/defaults.ts');
 const LAB_WORKSPACE_HOME_FILE = join(ROOT, 'apps/electron/src/renderer/components/app-shell/LabWorkspaceHome.tsx');
 const RUN_AGENT_FILE = join(ROOT, 'apps/electron/src/renderer/lib/run-agent.ts');
-const COMPOSE_AGENT_PROMPT_FILE = join(ROOT, 'apps/electron/src/renderer/lib/compose-agent-prompt.ts');
+const COMPOSE_AGENT_PROMPT_FILE = join(ROOT, 'packages/shared/src/agent-prompt/compose.ts');
 const SESSION_MANAGER_FILE = join(ROOT, 'packages/server-core/src/sessions/SessionManager.ts');
 const SHARED_INTEL_HANDLER_FILE = join(ROOT, 'packages/server-core/src/handlers/rpc/shared-intel.ts');
 const SHARED_INTEL_ROUTER_FILE = join(ROOT, 'packages/shared/src/shared-intel/router.ts');
@@ -452,8 +452,11 @@ function main() {
       campaignDefaultWorkerSlugs: campaignDefaultSlugs,
       labDefaultWorkerSlugs: labDefaultSlugs,
       workflowCount: Array.isArray(starterWorkflows) ? starterWorkflows.length : 0,
+      // Shared Intel is injected by the shared composer; the server path counts
+      // as wired when SessionManager composes through it rather than inlining
+      // its own prompt assembly.
       sharedIntelPromptWired: text(COMPOSE_AGENT_PROMPT_FILE).includes('buildSharedIntelPromptSection')
-        && text(SESSION_MANAGER_FILE).includes('buildSharedIntelPromptSection'),
+        && text(SESSION_MANAGER_FILE).includes('composeAgentSystemPrompt'),
       finalsPromotionWired: text(TOOL_DEFS_FILE).includes('promote_output_to_final')
         && text(OUTPUT_SERVICE_FILE).includes('promoteToFinal')
         && text(OUTPUT_FINALS_FILE).includes('withOutputFinalsRegistryLock')

@@ -153,7 +153,6 @@ import {
   recallMemoryEntries,
   saveMemoryEntry,
   updateMemoryEntry,
-  buildMemorySectionsText,
   selectActiveMemoryEntries,
   type DeleteMemoryInput,
   type MemoryEntry as StoredMemoryEntry,
@@ -402,10 +401,6 @@ const defaultSessionRuntimeHooks: SessionRuntimeHooks = {
 }
 
 type WorkflowMemoryEntry = StoredMemoryEntry
-type WorkflowMemoryInputs = {
-  userEntries?: WorkflowMemoryEntry[]
-  agentEntries?: WorkflowMemoryEntry[]
-}
 type SpawnedAgentRef = { agentSlug: string; agentName?: string; timestamp?: number }
 
 const DIRECT_USER_MEMORY_AGENT_SLUGS = new Set([CONCIERGE_SLUG, ORCHESTRATOR_SLUG])

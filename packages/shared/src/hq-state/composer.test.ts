@@ -403,6 +403,42 @@ describe('HQ State of Play composer', () => {
     expect(state.attention.filter((item) => item.kind === 'community')).toEqual([]);
   });
 
+  /**
+   * These docs are user- and agent-authored, so a field can arrive with the
+   * wrong type. Reaching `.filter()` on a string used to throw and take the
+   * whole brief down.
+   */
+  test('survives source docs whose collection fields are the wrong type', () => {
+    const cases = [
+      ['artist-network', { version: 1, people: 'not-an-array' }],
+      ['artist-calendar', { version: 1, events: { fake: true } }],
+      ['artist-calendar', { version: 1, events: 'string' }],
+      ['artist-spotify-snapshot', { snapshotDate: '2026-08-01', metrics: {}, tracks: 'nope', geo: 'nope' }],
+    ] as const;
+
+    for (const [slug, payload] of cases) {
+      const state = buildHqStateOfPlay({ now, docs: [doc(slug, slug, payload)] });
+      expect(state.headline.length).toBeGreaterThan(0);
+      expect(Array.isArray(state.missing)).toBe(true);
+    }
+  });
+
+  test('treats wrong-typed community counts as zero rather than trusting them', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [
+        doc('artist-community', 'Artist Community', {
+          version: 2,
+          summary: { totalContacts: '42', draftBroadcasts: '7' },
+          recentBroadcasts: 'nope',
+        }),
+      ],
+    });
+
+    expect(state.missing).toContain('community contacts');
+    expect(state.attention.filter((item) => item.kind === 'community')).toEqual([]);
+  });
+
   test('still reads the pre-migration v1 community shape', () => {
     const state = buildHqStateOfPlay({
       now,

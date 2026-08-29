@@ -267,12 +267,28 @@ function normalizeCatalogSlug(value: string): string {
   return normalizeCatalogText(value, CATALOG_TEXT_LIMITS.slug).replace(/^@+/, '');
 }
 
-/** Strips control characters so a catalog value cannot forge prompt structure. */
+/**
+ * Strips characters a catalog value could use to forge prompt structure:
+ * C0/DEL controls, plus Unicode bidi overrides, isolates, and zero-width marks
+ * that can reorder or hide text without showing up as whitespace.
+ */
 function normalizeCatalogText(value: string, maxLength: number): string {
   const cleaned = value
-    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   if (cleaned.length <= maxLength) return cleaned;
-  return `${cleaned.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
+  return `${truncateCodePoints(cleaned, Math.max(0, maxLength - 3)).trimEnd()}...`;
+}
+
+/**
+ * Truncates by UTF-16 length without splitting a surrogate pair, which would
+ * leave a lone high surrogate in the prompt.
+ */
+function truncateCodePoints(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  const sliced = value.slice(0, maxLength);
+  const lastCode = sliced.charCodeAt(sliced.length - 1);
+  const splitsPair = lastCode >= 0xd800 && lastCode <= 0xdbff;
+  return splitsPair ? sliced.slice(0, -1) : sliced;
 }
