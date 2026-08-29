@@ -1,3 +1,5 @@
+import type { ArtistCalendar } from '../artist-context/calendar.ts';
+import type { ArtistNetwork } from '../artist-context/network.ts';
 import type { ArtistProfile } from '../artist-context/profile.ts';
 import type { ArtistSpotifySnapshot } from '../artist-context/spotify.ts';
 import { ARTIST_VAULT_CONTEXT_SLUG, type VaultManifest } from '../artist-vault/types.ts';
@@ -31,27 +33,9 @@ type ArtistProfileDoc = Partial<ArtistProfile>;
 /** Read view of the Spotify snapshot doc. See ArtistProfileDoc for why this is derived. */
 type SpotifySnapshotDoc = Partial<ArtistSpotifySnapshot>;
 
-interface NetworkDoc {
-  people?: Array<{
-    name?: string;
-    category?: string;
-    role?: string;
-    relationship?: string;
-    lastTouch?: string;
-    canHelpWith?: string;
-  }>;
-  updatedAt?: string;
-}
-
-interface CalendarDoc {
-  events?: Array<{
-    date?: string;
-    title?: string;
-    time?: string;
-    deletedAt?: string;
-  }>;
-  updatedAt?: string;
-}
+/** Read views of the network and calendar docs. See ArtistProfileDoc for why these are derived. */
+type NetworkDoc = Partial<ArtistNetwork>;
+type CalendarDoc = Partial<ArtistCalendar>;
 
 interface CommunityDoc {
   contacts?: Array<{ segment?: string; city?: string; lastContacted?: string }>;
