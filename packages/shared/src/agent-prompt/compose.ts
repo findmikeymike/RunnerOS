@@ -33,9 +33,13 @@
 import { buildCanvasGuidanceSection } from '../agent-definitions/canvas-guidance.ts';
 import { CONCIERGE_SLUG } from '../agent-definitions/types.ts';
 import {
+  CAMPAIGN_MANAGER_BRIEF_MAX_CHARS,
+  CAMPAIGN_STATE_CONTEXT_SLUG,
   HQ_STATE_CONTEXT_SLUG,
   MANAGER_BRIEF_MAX_CHARS,
   parseHqStateOfPlay,
+  parseCampaignManagerBrief,
+  renderCampaignManagerBriefPromptSection,
   renderManagerBriefPromptSection,
 } from '../hq-state/index.ts';
 import { buildMemorySectionsText } from '../memory/render.ts';
@@ -176,6 +180,7 @@ export function buildWorkspaceContextSection(docs: PromptContextDoc[]): string {
       doc.metadata.enabled !== false
       && !isSharedIntelContextSlug(doc.slug)
       && doc.slug !== HQ_STATE_CONTEXT_SLUG
+      && doc.slug !== CAMPAIGN_STATE_CONTEXT_SLUG
       && doc.body.trim().length > 0,
   );
   if (usable.length === 0) return '';
@@ -189,12 +194,23 @@ export function buildWorkspaceContextSection(docs: PromptContextDoc[]): string {
 /** Converts the one derived HQ document into one bounded HNIC-only prompt section. */
 export function buildManagerBriefPromptSectionFromDocs(docs: PromptContextDoc[]): string {
   const stateDoc = docs.find((doc) => doc.slug === HQ_STATE_CONTEXT_SLUG && doc.metadata.enabled !== false);
-  if (!stateDoc) return '';
-  const state = parseHqStateOfPlay(stateDoc.body);
-  if (state?.version !== 2) return '';
+  if (stateDoc) {
+    const state = parseHqStateOfPlay(stateDoc.body);
+    if (state?.version !== 2) return '';
+    try {
+      const rendered = renderManagerBriefPromptSection(state.managerBrief);
+      return rendered.length <= MANAGER_BRIEF_MAX_CHARS ? rendered : '';
+    } catch {
+      return '';
+    }
+  }
+  const campaignDoc = docs.find((doc) => doc.slug === CAMPAIGN_STATE_CONTEXT_SLUG && doc.metadata.enabled !== false);
+  if (!campaignDoc) return '';
+  const brief = parseCampaignManagerBrief(campaignDoc.body);
+  if (!brief) return '';
   try {
-    const rendered = renderManagerBriefPromptSection(state.managerBrief);
-    return rendered.length <= MANAGER_BRIEF_MAX_CHARS ? rendered : '';
+    const rendered = renderCampaignManagerBriefPromptSection(brief);
+    return rendered.length <= CAMPAIGN_MANAGER_BRIEF_MAX_CHARS ? rendered : '';
   } catch {
     return '';
   }
@@ -207,14 +223,22 @@ export function managerBriefReceiptFromDocs(docs: PromptContextDoc[]): {
   sourceHealth: Array<{ source: string; status: string }>;
 } | undefined {
   const stateDoc = docs.find((doc) => doc.slug === HQ_STATE_CONTEXT_SLUG && doc.metadata.enabled !== false);
-  if (!stateDoc) return undefined;
-  const state = parseHqStateOfPlay(stateDoc.body);
-  if (state?.version !== 2) return undefined;
-  return {
-    revision: state.managerBrief.revision,
-    generatedAt: state.managerBrief.generatedAt,
-    sourceHealth: state.managerBrief.sourceHealth.map((item) => ({ source: item.source, status: item.status })),
-  };
+  if (stateDoc) {
+    const state = parseHqStateOfPlay(stateDoc.body);
+    if (state?.version !== 2) return undefined;
+    return {
+      revision: state.managerBrief.revision,
+      generatedAt: state.managerBrief.generatedAt,
+      sourceHealth: state.managerBrief.sourceHealth.map((item) => ({ source: item.source, status: item.status })),
+    };
+  }
+  const campaignDoc = docs.find((doc) => doc.slug === CAMPAIGN_STATE_CONTEXT_SLUG && doc.metadata.enabled !== false);
+  const brief = campaignDoc ? parseCampaignManagerBrief(campaignDoc.body) : null;
+  return brief ? {
+    revision: brief.revision,
+    generatedAt: brief.generatedAt,
+    sourceHealth: brief.sourceHealth.map((item) => ({ source: item.source, status: item.status })),
+  } : undefined;
 }
 
 /**

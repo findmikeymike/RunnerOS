@@ -155,6 +155,7 @@ export type {
 // Artist Manager and authorized workspace context reads
 export {
   handleGetManagerBrief,
+  handleGetCampaignBrief,
   handleGetArtistContext,
   handleGetCampaignContext,
   handleListWorkspaceContext,
@@ -162,6 +163,7 @@ export {
 } from './manager-context.ts';
 export type {
   GetManagerBriefInput,
+  GetCampaignBriefInput,
   GetArtistContextInput,
   GetCampaignContextInput,
   ListWorkspaceContextInput,

@@ -137,6 +137,9 @@ export interface SessionScopedToolCallbacks {
   getManagerBriefFn?: (
     input: import('@craft-agent/session-tools-core').GetManagerBriefInput,
   ) => Promise<import('@craft-agent/session-tools-core').ManagerContextToolResult>;
+  getCampaignBriefFn?: (
+    input: import('@craft-agent/session-tools-core').GetCampaignBriefInput,
+  ) => Promise<import('@craft-agent/session-tools-core').ManagerContextToolResult>;
   getArtistContextFn?: (
     input: import('@craft-agent/session-tools-core').GetArtistContextInput,
   ) => Promise<import('@craft-agent/session-tools-core').ManagerContextToolResult>;

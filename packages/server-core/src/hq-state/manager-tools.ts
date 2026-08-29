@@ -1,12 +1,16 @@
 import { getWorkspaces } from '@craft-agent/shared/config';
 import {
   ARTIST_CALENDAR_CONTEXT_SLUG,
+  ARTIST_BRANDING_CONTEXT_SLUG,
   ARTIST_INSTAGRAM_SNAPSHOT_CONTEXT_SLUG,
   ARTIST_NETWORK_CONTEXT_SLUG,
   ARTIST_PROFILE_CONTEXT_SLUG,
   ARTIST_RELEASE_HORIZON_CONTEXT_SLUG,
   ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG,
+  ARTIST_VOICE_CONTEXT_SLUG,
+  artistBrandingDoc,
   artistProfileDoc,
+  artistVoiceDoc,
   missionReleaseDateKey,
   parseArtistCalendarDocResult,
   parseArtistInstagramSnapshotDocResult,
@@ -25,7 +29,15 @@ import {
 } from '@craft-agent/shared/campaign-calendar';
 import { ARTIST_COMMUNITY_CONTEXT_SLUG } from '@craft-agent/shared/community';
 import { loadArtistVaultManifest, ARTIST_VAULT_CONTEXT_SLUG } from '@craft-agent/shared/artist-vault';
-import { buildHqStateOfPlay, HQ_STATE_CONTEXT_SLUG, parseHqStateOfPlay, resolveHqCampaignFocus } from '@craft-agent/shared/hq-state';
+import {
+  buildCampaignManagerBrief,
+  buildHqStateOfPlay,
+  CAMPAIGN_STATE_CONTEXT_SLUG,
+  HQ_STATE_CONTEXT_SLUG,
+  parseCampaignManagerBrief,
+  parseHqStateOfPlay,
+  resolveHqCampaignFocus,
+} from '@craft-agent/shared/hq-state';
 import { getMissionAssetManifestPath, loadMissionAssetManifest } from '@craft-agent/shared/mission-assets';
 import { listOutputManifests } from '@craft-agent/shared/outputs';
 import { isSharedIntelContextSlug, parseSharedIntelNote } from '@craft-agent/shared/shared-intel';
@@ -38,14 +50,16 @@ import {
 import type {
   GetArtistContextInput,
   GetCampaignContextInput,
+  GetCampaignBriefInput,
   GetManagerBriefInput,
   GetWorkspaceContextInput,
   ListWorkspaceContextInput,
   ManagerContextToolResult,
 } from '@craft-agent/session-tools-core';
 import { existsSync } from 'node:fs';
-import { buildHqStateInput, buildManagerCampaignSnapshots } from './snapshot';
+import { buildHqStateInput, buildManagerCampaignSnapshot, buildManagerCampaignSnapshots, findArtistHqWorkspace } from './snapshot';
 import { getHqStateRefreshDiagnostic } from './refresh';
+import { buildHqOperationalSnapshot } from './operational';
 
 const MANAGER_RESULT_MAX_CHARS = 12_000;
 
@@ -95,6 +109,50 @@ export function getLiveManagerBrief(
   }
 }
 
+export function getLiveCampaignBrief(
+  campaignRootPath: string,
+  input: GetCampaignBriefInput,
+): ManagerContextToolResult {
+  const campaignWorkspace = getWorkspaces().find((workspace) => (
+    workspace.rootPath === campaignRootPath && workspace.artistWorkspaceScope === 'campaign'
+  ));
+  if (!campaignWorkspace) return { ok: false, error: 'The current workspace is not a configured campaign.' };
+  const persisted = parseCampaignManagerBrief(loadContextDoc(campaignRootPath, CAMPAIGN_STATE_CONTEXT_SLUG)?.body ?? '');
+  try {
+    const hqWorkspace = findArtistHqWorkspace();
+    if (!hqWorkspace) throw new Error('Artist HQ workspace is not configured.');
+    const artistBrief = buildHqStateOfPlay(buildHqStateInput(hqWorkspace.rootPath)).managerBrief;
+    const brief = buildCampaignManagerBrief({
+      artistWorkspaceId: hqWorkspace.id,
+      artistBrief,
+      campaign: buildManagerCampaignSnapshot(campaignWorkspace, true),
+      operational: buildHqOperationalSnapshot(campaignRootPath),
+    });
+    return bounded({
+      ok: true,
+      changed: Boolean(input.knownRevision && input.knownRevision !== brief.revision),
+      live: true,
+      persistedRevision: persisted?.revision,
+      brief,
+      warnings: brief.sourceHealth
+        .filter((item) => item.status !== 'fresh')
+        .map((item) => `${item.source}: ${item.status}${item.message ? ` - ${item.message}` : ''}`),
+    });
+  } catch {
+    if (persisted) {
+      return bounded({
+        ok: true,
+        changed: Boolean(input.knownRevision && input.knownRevision !== persisted.revision),
+        live: false,
+        persistedRevision: persisted.revision,
+        brief: persisted,
+        warnings: ['Live composition failed; using the last valid persisted Campaign Manager Brief.'],
+      });
+    }
+    return { ok: false, changed: false, live: false, warnings: [], error: 'Campaign Manager Brief is unavailable because live composition failed and no persisted brief exists.' };
+  }
+}
+
 export function getArtistContextDetail(
   workspaceRootPath: string,
   agentSlug: string | null,
@@ -113,6 +171,26 @@ export function getArtistContextDetail(
     case 'profile': {
       source = ARTIST_PROFILE_CONTEXT_SLUG;
       const parsed = artistProfileDoc.parse(bySlug.get(source));
+      if (!parsed.ok) return missing(source, parsed.error);
+      data = parsed.value;
+      updatedAt = parsed.value.updatedAt;
+      break;
+    }
+    case 'branding': {
+      source = ARTIST_BRANDING_CONTEXT_SLUG;
+      const doc = bySlug.get(source);
+      if (!doc) return missing(source, 'Artist Branding is unavailable or unauthorized.');
+      const parsed = artistBrandingDoc.parse(doc);
+      if (!parsed.ok) return missing(source, parsed.error);
+      data = parsed.value;
+      updatedAt = parsed.value.updatedAt;
+      break;
+    }
+    case 'voice': {
+      source = ARTIST_VOICE_CONTEXT_SLUG;
+      const doc = bySlug.get(source);
+      if (!doc) return missing(source, 'Artist Voice is unavailable or unauthorized.');
+      const parsed = artistVoiceDoc.parse(doc);
       if (!parsed.ok) return missing(source, parsed.error);
       data = parsed.value;
       updatedAt = parsed.value.updatedAt;
@@ -194,11 +272,12 @@ export function getArtistContextDetail(
 export function getCampaignContextDetail(
   input: GetCampaignContextInput,
   now = new Date(),
+  preferredCampaignId?: string,
 ): ManagerContextToolResult {
   const campaigns = getWorkspaces().filter((workspace) => workspace.artistWorkspaceScope === 'campaign');
   if (campaigns.length === 0) return { ok: false, error: 'No campaign workspaces are configured.' };
   const snapshots = buildManagerCampaignSnapshots();
-  const selected = selectCampaign(campaigns, snapshots, input, now);
+  const selected = selectCampaign(campaigns, snapshots, input, now, preferredCampaignId);
   if (!selected) return { ok: false, error: input.select === 'by-id' ? `Campaign not found: ${input.campaignId ?? ''}` : 'No campaign matches that selection.' };
   const { workspace, reason } = selected;
   const include = new Set(input.include?.length ? input.include : ['brief', 'readiness', 'work']);
@@ -286,10 +365,15 @@ function selectCampaign(
   snapshots: ReturnType<typeof buildManagerCampaignSnapshots>,
   input: GetCampaignContextInput,
   now: Date,
+  preferredCampaignId?: string,
 ) {
   if (input.select === 'by-id') {
     const workspace = campaigns.find((item) => item.id === input.campaignId);
     return workspace ? { workspace, reason: 'Exact configured campaign id.' } : null;
+  }
+  if ((input.select === 'primary' || input.select === 'focus') && preferredCampaignId) {
+    const workspace = campaigns.find((item) => item.id === preferredCampaignId);
+    if (workspace) return { workspace, reason: 'Current open campaign workspace.' };
   }
   if (input.select === 'primary') return { workspace: campaigns[0]!, reason: 'Primary campaign workspace.' };
   if (input.select === 'focus') {

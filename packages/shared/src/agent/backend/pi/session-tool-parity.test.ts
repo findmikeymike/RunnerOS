@@ -25,6 +25,9 @@ describe('Pi backend session tool parity', () => {
     expect(manager).toContain('mcp__session__get_manager_brief');
     expect(manager).toContain('mcp__session__get_artist_context');
     expect(manager).toContain('mcp__session__get_campaign_context');
+    expect(manager).not.toContain('mcp__session__get_campaign_brief');
+    expect(getSessionToolProxyDefs({ includeManagerTools: true, includeCampaignManagerTools: true }).map((tool) => tool.name))
+      .toContain('mcp__session__get_campaign_brief');
   });
 
   it('exposes Lab tools only for Lab proxy registration', () => {

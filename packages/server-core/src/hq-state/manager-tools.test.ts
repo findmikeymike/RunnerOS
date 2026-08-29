@@ -166,6 +166,23 @@ describe('Manager context retrieval', () => {
     expect(JSON.stringify(result)).toContain('Mikey Mike');
     expect(JSON.stringify(result)).not.toContain(root);
   });
+
+  test('retrieves branding and voice as bounded HQ detail instead of guessing from the compact brief', () => {
+    const root = workspace();
+    write(root, 'artist-branding', jsonBody({ version: 1, creativeDna: 'Beautiful damage and defiant tenderness.', updatedAt: '2026-08-29T00:00:00.000Z' }));
+    write(root, 'artist-voice', jsonBody({ version: 1, summary: 'Direct, funny, bruised, never corporate.', updatedAt: '2026-08-29T00:00:00.000Z' }), {
+      routing: { mode: 'targeted', agents: ['social-publisher'] },
+    });
+
+    expect(getArtistContextDetail(root, 'concierge', { topic: 'branding' })).toEqual(expect.objectContaining({ ok: true, source: 'artist-branding' }));
+    expect(getArtistContextDetail(root, 'concierge', { topic: 'voice' })).toEqual(expect.objectContaining({ ok: true, source: 'artist-voice' }));
+
+    write(root, 'artist-voice', jsonBody({ version: 1, summary: 'Private worker notes.', updatedAt: '2026-08-29T00:00:00.000Z' }), {
+      routing: { mode: 'targeted', agents: ['social-publisher'] },
+      private: true,
+    });
+    expect(getArtistContextDetail(root, 'concierge', { topic: 'voice' }).ok).toBe(false);
+  });
 });
 
 function workspace(): string {

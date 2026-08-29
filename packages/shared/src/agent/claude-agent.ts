@@ -952,6 +952,7 @@ export class ClaudeAgent extends BaseAgent {
           this.config.workspace.id,
           this.config.session?.spawnedFromAgent?.agentSlug,
           this.config.workspace.artistWorkspaceScope === 'lab',
+          this.config.workspace.artistWorkspaceScope,
         ),
         ...(runnerDocsMcpUrl
           ? {

@@ -61,10 +61,30 @@ describe('Artist Manager workspace lifecycle', () => {
     refresh.scheduleHqStateContextRefresh(campaignRoot)
     await Bun.sleep(150)
     const first = hqState.parseHqStateOfPlay(context.loadContextDoc(hqRoot, hqState.HQ_STATE_CONTEXT_SLUG)?.body ?? '')
+    const campaignBrief = hqState.parseCampaignManagerBrief(
+      context.loadContextDoc(campaignRoot, hqState.CAMPAIGN_STATE_CONTEXT_SLUG)?.body ?? '',
+    )
     expect(first?.version).toBe(2)
     expect(first?.version === 2 ? first.managerBrief.campaignFocus?.workspaceId : undefined).toBe(campaign.id)
+    expect(campaignBrief?.workspaceId).toBe(campaign.id)
+    expect(campaignBrief?.artistWorkspaceId).toBe(hq.id)
+    expect(campaignBrief?.campaign.name).toBe('September Single')
+    expect(managerTools.getLiveCampaignBrief(campaignRoot, { knownRevision: campaignBrief!.revision }))
+      .toEqual(expect.objectContaining({ ok: true, live: true, changed: false }))
+
+    const anotherRoot = join(testRoot, 'another-campaign')
+    mkdirSync(anotherRoot, { recursive: true })
+    const another = config.addWorkspace({ name: 'Closer Campaign', rootPath: anotherRoot, artistWorkspaceScope: 'campaign' })
+    context.upsertContextDoc(anotherRoot, {
+      slug: 'mission-brief',
+      metadata: { name: 'Mission Brief', routing: { mode: 'broadcast' }, enabled: true },
+      body: jsonBody({ version: 1, id: 'mission-brief', workspaceId: another.id, status: 'full', completeness: 100, title: 'Closer Campaign', releaseDate: '2026-08-30', updatedAt: '2026-08-29T00:00:00.000Z' }),
+    })
+    expect(managerTools.getCampaignContextDetail({ select: 'focus' }, new Date('2026-08-29T00:00:00.000Z'), campaign.id))
+      .toEqual(expect.objectContaining({ selection: expect.objectContaining({ workspaceId: campaign.id, reason: 'Current open campaign workspace.' }) }))
 
     expect(await config.removeWorkspace(campaign.id)).toBe(true)
+    expect(await config.removeWorkspace(another.id)).toBe(true)
     refresh.scheduleHqStateContextRefresh(hqRoot)
     await Bun.sleep(150)
     const second = hqState.parseHqStateOfPlay(context.loadContextDoc(hqRoot, hqState.HQ_STATE_CONTEXT_SLUG)?.body ?? '')

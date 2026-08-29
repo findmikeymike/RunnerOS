@@ -3,8 +3,9 @@ import type { ToolResult } from '../types.ts';
 import { errorResponse, successResponse } from '../response.ts';
 
 export interface GetManagerBriefInput { knownRevision?: string }
+export interface GetCampaignBriefInput { knownRevision?: string }
 export interface GetArtistContextInput {
-  topic: 'profile' | 'month-plan' | 'growth' | 'intel' | 'calendar' | 'network' | 'community' | 'vault';
+  topic: 'profile' | 'branding' | 'voice' | 'month-plan' | 'growth' | 'intel' | 'calendar' | 'network' | 'community' | 'vault';
   month?: string;
   query?: string;
   limit?: number;
@@ -37,6 +38,10 @@ async function invoke(
 
 export function handleGetManagerBrief(ctx: SessionToolContext, input: GetManagerBriefInput): Promise<ToolResult> {
   return invoke(ctx.getManagerBrief, input, 'get_manager_brief is only available to HNIC.');
+}
+
+export function handleGetCampaignBrief(ctx: SessionToolContext, input: GetCampaignBriefInput): Promise<ToolResult> {
+  return invoke(ctx.getCampaignBrief, input, 'get_campaign_brief is only available to HNIC inside a campaign workspace.');
 }
 
 export function handleGetArtistContext(ctx: SessionToolContext, input: GetArtistContextInput): Promise<ToolResult> {

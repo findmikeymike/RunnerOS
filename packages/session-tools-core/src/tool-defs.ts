@@ -60,6 +60,7 @@ import { handleCampaignCalendarWrite } from './handlers/campaign-calendar.ts';
 import { handleScheduleWork } from './handlers/schedule-work.ts';
 import {
   handleGetManagerBrief,
+  handleGetCampaignBrief,
   handleGetArtistContext,
   handleGetCampaignContext,
   handleListWorkspaceContext,
@@ -584,8 +585,12 @@ export const GetManagerBriefSchema = z.object({
   knownRevision: z.string().max(128).optional(),
 });
 
+export const GetCampaignBriefSchema = z.object({
+  knownRevision: z.string().max(128).optional(),
+});
+
 export const GetArtistContextSchema = z.object({
-  topic: z.enum(['profile', 'month-plan', 'growth', 'intel', 'calendar', 'network', 'community', 'vault']),
+  topic: z.enum(['profile', 'branding', 'voice', 'month-plan', 'growth', 'intel', 'calendar', 'network', 'community', 'vault']),
   month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
   query: z.string().max(240).optional(),
   limit: z.number().int().min(1).max(20).optional(),
@@ -1341,7 +1346,9 @@ Rules:
 
 After success, state what will run, where it appears, and when or what triggers it.`,
 
-  get_manager_brief: `Read a freshly composed, bounded Artist Manager Brief. HNIC-only and read-only. Use before current priorities, growth, campaign readiness, timing, year-plan fit, delegation, or next-step advice. Pass the known revision when available so the result can say whether current truth changed.`,
+  get_manager_brief: `Read a freshly composed, bounded Artist Manager Brief. Artist HQ or campaign HNIC-only and read-only. Use for the holistic artist picture: current priorities, growth, year-plan fit, cross-campaign timing, delegation, or trajectory. Inside a campaign, start with get_campaign_brief for campaign readiness and blockers. Pass the known revision when available so the result can say whether current truth changed.`,
+
+  get_campaign_brief: `Read the freshly composed, bounded brief for the current open campaign. Campaign HNIC-only and read-only. Use first for campaign priorities, readiness, timing, blockers, active work, or next-step advice. Pass the known revision when available.`,
 
   get_artist_context: `Read one bounded normalized Artist HQ detail topic. HNIC-only and read-only. Retrieve only the topic needed for the current decision; do not preload every topic. Growth data includes freshness and must not be converted into a trend without comparable points.`,
 
@@ -1665,6 +1672,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'campaign_calendar_write', description: TOOL_DESCRIPTIONS.campaign_calendar_write, inputSchema: CampaignCalendarWriteSchema, executionMode: 'registry', safeMode: 'block', handler: handleCampaignCalendarWrite },
   { name: 'schedule_work', description: TOOL_DESCRIPTIONS.schedule_work, inputSchema: ScheduleWorkSchema, executionMode: 'registry', safeMode: 'block', handler: handleScheduleWork },
   { name: 'get_manager_brief', description: TOOL_DESCRIPTIONS.get_manager_brief, inputSchema: GetManagerBriefSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetManagerBrief },
+  { name: 'get_campaign_brief', description: TOOL_DESCRIPTIONS.get_campaign_brief, inputSchema: GetCampaignBriefSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetCampaignBrief },
   { name: 'get_artist_context', description: TOOL_DESCRIPTIONS.get_artist_context, inputSchema: GetArtistContextSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetArtistContext },
   { name: 'get_campaign_context', description: TOOL_DESCRIPTIONS.get_campaign_context, inputSchema: GetCampaignContextSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetCampaignContext },
   { name: 'list_workspace_context', description: TOOL_DESCRIPTIONS.list_workspace_context, inputSchema: ListWorkspaceContextSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListWorkspaceContext },
@@ -1699,6 +1707,8 @@ export interface SessionToolFilterOptions {
   includeScheduleWork?: boolean;
   /** Include the HNIC-only semantic Manager tools. */
   includeManagerTools?: boolean;
+  /** Include the current-campaign brief tool. */
+  includeCampaignManagerTools?: boolean;
   /** Include Creative Lab song tools only inside an explicit Lab workspace. */
   includeLabTools?: boolean;
 }
@@ -1713,6 +1723,7 @@ export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionT
   const includeDeveloperFeedback = options?.includeDeveloperFeedback ?? true;
   const includeScheduleWork = options?.includeScheduleWork ?? false;
   const includeManagerTools = options?.includeManagerTools ?? false;
+  const includeCampaignManagerTools = options?.includeCampaignManagerTools ?? false;
   const includeLabTools = options?.includeLabTools ?? false;
 
   return SESSION_TOOL_DEFS.filter(def => {
@@ -1721,6 +1732,7 @@ export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionT
     }
     if (!includeScheduleWork && def.name === 'schedule_work') return false;
     if (!includeManagerTools && ['get_manager_brief', 'get_artist_context', 'get_campaign_context'].includes(def.name)) return false;
+    if (!includeCampaignManagerTools && def.name === 'get_campaign_brief') return false;
     if (!includeLabTools && ['create_lab_song', 'save_lab_lyrics', 'list_lab_songs'].includes(def.name)) return false;
     return true;
   });
@@ -1835,6 +1847,7 @@ export function getToolDefsAsJsonSchema(opts?: {
   includeDeveloperFeedback?: boolean;
   includeScheduleWork?: boolean;
   includeManagerTools?: boolean;
+  includeCampaignManagerTools?: boolean;
   includeLabTools?: boolean;
 }): JsonSchemaToolDef[] {
   const prefix = opts?.prefix || '';
@@ -1842,6 +1855,7 @@ export function getToolDefsAsJsonSchema(opts?: {
     includeDeveloperFeedback: opts?.includeDeveloperFeedback,
     includeScheduleWork: opts?.includeScheduleWork,
     includeManagerTools: opts?.includeManagerTools,
+    includeCampaignManagerTools: opts?.includeCampaignManagerTools,
     includeLabTools: opts?.includeLabTools,
   });
 

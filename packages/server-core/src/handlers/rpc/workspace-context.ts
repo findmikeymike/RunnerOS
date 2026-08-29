@@ -19,6 +19,7 @@ import type { HandlerDeps } from '../handler-deps'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
 import {
   refreshArtistHqStateForWorkspaceBestEffort,
+  refreshCampaignStateContextDocBestEffort,
   refreshHqStateContextDocBestEffort,
   shouldRefreshHqStateForContextSlug,
 } from '../../hq-state/refresh'
@@ -83,6 +84,8 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
     if (!workspace) return []
     if (agentSlug?.trim().toLowerCase() === CONCIERGE_SLUG && workspace.artistWorkspaceScope === 'hq') {
       refreshHqStateContextDocBestEffort(workspace.rootPath)
+    } else if (agentSlug?.trim().toLowerCase() === CONCIERGE_SLUG && workspace.artistWorkspaceScope === 'campaign') {
+      refreshCampaignStateContextDocBestEffort(workspace.rootPath)
     }
     return loadPromptContextDocsForAgent(workspace.rootPath, agentSlug)
   })
@@ -103,6 +106,8 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
       })
       if (shouldRefreshHqStateForContextSlug(payload.slug)) {
         refreshArtistHqStateForWorkspaceBestEffort(rootPath)
+        const workspace = getWorkspaceByNameOrId(workspaceId)
+        if (workspace?.artistWorkspaceScope === 'campaign') refreshCampaignStateContextDocBestEffort(rootPath)
       }
       broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
       return loaded
@@ -118,6 +123,8 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
       if (ok) {
         if (shouldRefreshHqStateForContextSlug(slug)) {
           refreshArtistHqStateForWorkspaceBestEffort(rootPath)
+          const workspace = getWorkspaceByNameOrId(workspaceId)
+          if (workspace?.artistWorkspaceScope === 'campaign') refreshCampaignStateContextDocBestEffort(rootPath)
         }
         broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
       }

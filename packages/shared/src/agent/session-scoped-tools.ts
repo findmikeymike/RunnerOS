@@ -220,8 +220,9 @@ export function getSessionScopedTools(
   workspaceId?: string,
   agentSlug?: string,
   includeLabTools = false,
+  artistWorkspaceScope?: string,
 ): ReturnType<typeof createSdkMcpServer> {
-  const cacheKey = `${sessionId}::${workspaceRootPath}::${agentSlug ?? ''}::lab=${includeLabTools}`;
+  const cacheKey = `${sessionId}::${workspaceRootPath}::${agentSlug ?? ''}::scope=${artistWorkspaceScope ?? ''}::lab=${includeLabTools}`;
 
   // Return cached tools if available, but always create a fresh MCP server wrapper
   let tools: any[] | undefined = sessionToolsCache.get(cacheKey);
@@ -264,7 +265,8 @@ export function getSessionScopedTools(
     tools = getSessionToolDefs({
       includeDeveloperFeedback: FEATURE_FLAGS.developerFeedback,
       includeScheduleWork: agentSlug === 'concierge',
-      includeManagerTools: agentSlug === 'concierge',
+      includeManagerTools: agentSlug === 'concierge' && (artistWorkspaceScope === 'hq' || artistWorkspaceScope === 'campaign'),
+      includeCampaignManagerTools: agentSlug === 'concierge' && artistWorkspaceScope === 'campaign',
       includeLabTools,
     })
       .filter(def => def.handler !== null) // Skip backend-specific tools (call_llm)

@@ -3,6 +3,8 @@ import type { MissionBrief } from '../artist-context/mission-brief.ts';
 
 export const HQ_STATE_CONTEXT_SLUG = 'hq-state-of-play';
 export const HQ_STATE_CONTEXT_FENCE = 'json hq-state-of-play';
+export const CAMPAIGN_STATE_CONTEXT_SLUG = 'campaign-state-of-play';
+export const CAMPAIGN_STATE_CONTEXT_FENCE = 'json campaign-state-of-play';
 
 export const HQ_SOURCE_CONTEXT_SLUGS = {
   profile: 'artist-profile',
@@ -155,7 +157,58 @@ export interface ManagerCampaignSnapshot {
   work?: ManagerCollectionSummary;
   assets?: ManagerCollectionSummary;
   outputs?: ManagerCollectionSummary;
+  calendarHighlights?: Array<{ title: string; date: string; status: string }>;
+  workHighlights?: Array<{ title: string; startAt: string; status: string }>;
+  essentialAssets?: Array<{ label: string; available: boolean }>;
+  outputHighlights?: Array<{ title: string; status: string; updatedAt: string }>;
   sourceHealth: ManagerSourceHealth[];
+}
+
+export interface CampaignManagerBriefV1 {
+  version: 1;
+  workspaceId: string;
+  artistWorkspaceId: string;
+  revision: string;
+  generatedAt: string;
+  budget: { maxChars: 6000; actualChars: number; truncated: boolean };
+  artist: {
+    artistName?: string;
+    mission?: string;
+    sound?: string;
+    audience?: string;
+    trajectory: ManagerBriefV1['trajectory'];
+    growth: ManagerBriefV1['growth'];
+    intelligence: ManagerBriefV1['intelligence'];
+  };
+  campaign: {
+    name: string;
+    mission?: MissionBrief;
+    readiness?: ManagerCampaignSnapshot['readiness'];
+    calendar?: ManagerCollectionSummary;
+    work?: ManagerCollectionSummary;
+    assets?: ManagerCollectionSummary;
+    outputs?: ManagerCollectionSummary;
+    calendarHighlights: NonNullable<ManagerCampaignSnapshot['calendarHighlights']>;
+    workHighlights: NonNullable<ManagerCampaignSnapshot['workHighlights']>;
+    essentialAssets: NonNullable<ManagerCampaignSnapshot['essentialAssets']>;
+    outputHighlights: NonNullable<ManagerCampaignSnapshot['outputHighlights']>;
+  };
+  operatingState: {
+    approvals: string[];
+    failures: string[];
+    activeWork: string[];
+    blockers: string[];
+    suggestedFocus?: string;
+  };
+  sourceHealth: ManagerSourceHealth[];
+}
+
+export interface BuildCampaignManagerBriefInput {
+  artistWorkspaceId: string;
+  artistBrief: ManagerBriefV1;
+  campaign: ManagerCampaignSnapshot;
+  operational?: HqOperationalSnapshot;
+  now?: Date;
 }
 
 export interface ManagerGrowthSignal {

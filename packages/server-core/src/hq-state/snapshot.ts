@@ -45,14 +45,14 @@ export function buildHqStateInput(workspaceRootPath: string, now = new Date()): 
 
 export function buildManagerCampaignSnapshots(): ManagerCampaignSnapshot[] {
   const campaigns = getWorkspaces().filter((workspace) => workspace.artistWorkspaceScope === 'campaign');
-  return campaigns.map((workspace, index) => buildCampaignSnapshot(workspace, index === 0));
+  return campaigns.map((workspace, index) => buildManagerCampaignSnapshot(workspace, index === 0));
 }
 
 export function findArtistHqWorkspace() {
   return getWorkspaces().find((workspace) => workspace.artistWorkspaceScope === 'hq') ?? null;
 }
 
-function buildCampaignSnapshot(
+export function buildManagerCampaignSnapshot(
   workspace: ReturnType<typeof getWorkspaces>[number],
   primary: boolean,
 ): ManagerCampaignSnapshot {
@@ -84,11 +84,11 @@ function buildCampaignSnapshot(
     readiness: totals ? { ...totals, nextMissing } : undefined,
     calendar: collectionSummary(
       calendar.ok ? calendar.calendar.items.filter((item) => !item.deletedAt) : [],
-      calendar.ok ? calendar.calendar.updatedAt : undefined,
+      calendarDoc && calendar.ok ? calendar.calendar.updatedAt : undefined,
     ),
     work: collectionSummary(
       work.ok ? work.work.items.filter((item) => !item.deletedAt) : [],
-      work.ok ? work.work.updatedAt : undefined,
+      workDoc && work.ok ? work.work.updatedAt : undefined,
     ),
     assets: {
       total: assetsPresent ? assets.files.length : 0,
@@ -100,6 +100,28 @@ function buildCampaignSnapshot(
       completed: outputs.filter((output) => output.status === 'published' || Boolean(output.completedAt)).length,
       updatedAt: outputs.map((output) => output.updatedAt).sort().at(-1),
     },
+    calendarHighlights: calendar.ok
+      ? calendar.calendar.items
+        .filter((item) => !item.deletedAt && !['done', 'canceled'].includes(item.status))
+        .sort((left, right) => `${left.date}T${left.time ?? '00:00'}`.localeCompare(`${right.date}T${right.time ?? '00:00'}`))
+        .slice(0, 5)
+        .map((item) => ({ title: item.title, date: item.time ? `${item.date} ${item.time}` : item.date, status: item.status }))
+      : [],
+    workHighlights: work.ok
+      ? work.work.items
+        .filter((item) => !item.deletedAt && !['done', 'canceled'].includes(item.status))
+        .sort((left, right) => left.startAt.localeCompare(right.startAt))
+        .slice(0, 5)
+        .map((item) => ({ title: item.title, startAt: item.startAt, status: item.status }))
+      : [],
+    essentialAssets: ['master', 'lyrics', 'cover-art'].map((kind) => ({
+      label: kind === 'cover-art' ? 'Cover art' : kind[0]!.toUpperCase() + kind.slice(1),
+      available: assetsPresent && assets.files.some((file) => file.kind === kind && file.status === 'available'),
+    })),
+    outputHighlights: outputs
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .slice(0, 4)
+      .map((output) => ({ title: output.title, status: output.status, updatedAt: output.updatedAt })),
     sourceHealth: [
       parseHealth(`${workspace.id}:mission-brief`, Boolean(missionDoc), mission.ok, mission.ok ? mission.brief.updatedAt : undefined, mission.ok ? undefined : mission.error),
       parseHealth(`${workspace.id}:release-board`, Boolean(boardDoc), board.ok, board.ok ? board.board.updatedAt : undefined, board.ok ? undefined : board.error),

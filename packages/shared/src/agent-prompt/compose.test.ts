@@ -13,7 +13,7 @@ import {
   type PromptAgent,
   type PromptContextDoc,
 } from './compose.ts';
-import { buildHqStateContextDoc } from '../hq-state/index.ts';
+import { buildCampaignManagerBrief, buildHqStateContextDoc, campaignStateContextMetadata, serializeCampaignManagerBrief, type ManagerBriefV1 } from '../hq-state/index.ts';
 
 const agent = (overrides: Partial<PromptAgent['metadata']> = {}, systemPrompt = 'Persona.'): PromptAgent => ({
   systemPrompt,
@@ -59,6 +59,37 @@ function hqStateDoc(): PromptContextDoc {
     }],
   });
   return doc(built.slug, built.metadata.name, built.body);
+}
+
+function campaignStateDoc(): PromptContextDoc {
+  const artistBrief: ManagerBriefV1 = {
+    version: 1,
+    workspaceId: 'artist-hq',
+    revision: 'manager-v1:fnv1a:12345678',
+    generatedAt: '2026-08-29T12:00:00.000Z',
+    budget: { maxChars: 8000, actualChars: 0, truncated: false },
+    identity: { artistName: 'Mikey Mike', mission: 'Build a lasting catalog.' },
+    trajectory: [],
+    growth: {},
+    intelligence: [],
+    operatingState: { attention: [], blockers: [], activeWork: [] },
+    sourceHealth: [],
+  };
+  const brief = buildCampaignManagerBrief({
+    artistWorkspaceId: 'artist-hq',
+    artistBrief,
+    campaign: {
+      workspaceId: 'campaign-1',
+      name: 'September Single',
+      primary: true,
+      mission: { id: 'mission-brief', workspaceId: 'campaign-1', status: 'full', completeness: 100, title: 'September Single', goal: 'Build audience.', releaseDate: '2026-09-12', updatedAt: '2026-08-29T00:00:00.000Z' },
+      readiness: { done: 8, total: 12, nextMissing: ['Cover art'] },
+      sourceHealth: [],
+    },
+    now: new Date('2026-08-29T12:00:00.000Z'),
+  });
+  const metadata = campaignStateContextMetadata();
+  return doc('campaign-state-of-play', metadata.name, serializeCampaignManagerBrief(brief));
 }
 
 describe('composeAgentSystemPrompt', () => {
@@ -134,6 +165,19 @@ describe('composeAgentSystemPrompt', () => {
     expect(result).not.toContain('json hq-state-of-play');
   });
 
+  test('injects exactly one bounded Campaign Manager Brief for campaign HNIC', () => {
+    const result = composeAgentSystemPrompt(
+      { ...agent(), slug: 'concierge' },
+      [],
+      [],
+      [campaignStateDoc()],
+    );
+    expect(result.match(/## Campaign Manager Brief/g)).toHaveLength(1);
+    expect(result).toContain('Campaign: September Single');
+    expect(result).toContain('Artist: Mikey Mike');
+    expect(result).not.toContain('json campaign-state-of-play');
+  });
+
   test('launch receipt records Manager Brief diagnostics without its body', () => {
     const receipt = managerBriefReceiptFromDocs([hqStateDoc()]);
     expect(receipt?.revision).toBeTruthy();
@@ -152,12 +196,14 @@ describe('buildWorkspaceContextSection', () => {
       doc('blank', 'Blank', '   '),
       doc('shared-intel-1', 'Intel', 'Routed separately.'),
       hqStateDoc(),
+      campaignStateDoc(),
     ]);
     expect(section).toContain('## Goals');
     expect(section).not.toContain('Hidden.');
     expect(section).not.toContain('## Blank');
     expect(section).not.toContain('Routed separately.');
     expect(section).not.toContain('json hq-state-of-play');
+    expect(section).not.toContain('json campaign-state-of-play');
   });
 
   test('falls back to the slug when a doc has no name', () => {

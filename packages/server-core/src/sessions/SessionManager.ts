@@ -131,14 +131,16 @@ import {
 import { listDeepResearchRuns, readDeepResearchRun, profileDeepResearchSource } from '@craft-agent/shared/deep-research'
 import { createLabSong, loadLabSongs, saveLabLyrics } from '@craft-agent/shared/lab'
 import { OutputService } from '../outputs/OutputService'
-import { refreshHqStateContextDocBestEffort, scheduleHqStateContextRefresh } from '../hq-state/refresh'
+import { refreshCampaignStateContextDocBestEffort, refreshHqStateContextDocBestEffort, scheduleHqStateContextRefresh } from '../hq-state/refresh'
 import {
   getArtistContextDetail,
   getAuthorizedWorkspaceContext,
   getCampaignContextDetail,
+  getLiveCampaignBrief,
   getLiveManagerBrief,
   listAuthorizedWorkspaceContext,
 } from '../hq-state/manager-tools'
+import { findArtistHqWorkspace } from '../hq-state/snapshot'
 import { publishLatestSpotifySnapshotContext } from '../pulses/spotify-snapshot-publisher'
 import { recoverInterruptedWorkspaceMigrations } from '../workspaces/workspace-migration-recovery'
 import {
@@ -2479,6 +2481,8 @@ export class SessionManager implements ISessionManager {
     if (!agent) throw new Error(`Agent not found: ${agentSlug}`)
     if (agent.slug === CONCIERGE_SLUG && ws.artistWorkspaceScope === 'hq') {
       refreshHqStateContextDocBestEffort(ws.rootPath)
+    } else if (agent.slug === CONCIERGE_SLUG && ws.artistWorkspaceScope === 'campaign') {
+      refreshCampaignStateContextDocBestEffort(ws.rootPath)
     }
     const declaredSkillSlugs = agent.metadata.skills ?? []
     const skills = ensureDeclaredGlobalSkillsEnabledForAgent(ws.rootPath, declaredSkillSlugs, loadAllSkills(ws.rootPath))
@@ -3351,6 +3355,14 @@ export class SessionManager implements ISessionManager {
             artistManagerOperatingSkillMd,
           ).updated) {
             sessionLog.info('[skills] Upgraded Artist Manager operating judgment')
+          }
+          if (artistManagerOperatingSkillMd && replaceRequiredGlobalSkillFileIfHashMatches(
+            'artist-manager-operating-system',
+            'SKILL.md',
+            '0cbd75dbb5cb85de1032dcb6a8846a550877d2a070d19d98b5f025246f312259',
+            artistManagerOperatingSkillMd,
+          ).updated) {
+            sessionLog.info('[skills] Upgraded Artist Manager campaign retrieval rules')
           }
           const brandingAgent = STARTER_AGENTS.find(agent => agent.slug === 'branding-agent')
           const brandingSkillSlugs = brandingAgent?.metadata.skills ?? []
@@ -6879,10 +6891,28 @@ user a clickable link to where the thing now lives.`
       // Wire up session self-management tools (set_session_labels, set_session_status, etc.)
       mergeSessionScopedToolCallbacks(managed.id, {
         ...(managed.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
+          && (managed.workspace.artistWorkspaceScope === 'hq' || managed.workspace.artistWorkspaceScope === 'campaign')
           ? {
-            getManagerBriefFn: async (input) => getLiveManagerBrief(managed.workspace.rootPath, input),
-            getArtistContextFn: async (input) => getArtistContextDetail(managed.workspace.rootPath, CONCIERGE_SLUG, input),
-            getCampaignContextFn: async (input) => getCampaignContextDetail(input),
+            getManagerBriefFn: async (input) => {
+              const hq = findArtistHqWorkspace()
+              return hq
+                ? getLiveManagerBrief(hq.rootPath, input)
+                : { ok: false, error: 'Artist HQ workspace is not configured.' }
+            },
+            ...(managed.workspace.artistWorkspaceScope === 'campaign'
+              ? { getCampaignBriefFn: async (input) => getLiveCampaignBrief(managed.workspace.rootPath, input) }
+              : {}),
+            getArtistContextFn: async (input) => {
+              const hq = findArtistHqWorkspace()
+              return hq
+                ? getArtistContextDetail(hq.rootPath, CONCIERGE_SLUG, input)
+                : { ok: false, error: 'Artist HQ workspace is not configured.' }
+            },
+            getCampaignContextFn: async (input) => getCampaignContextDetail(
+              input,
+              new Date(),
+              managed.workspace.artistWorkspaceScope === 'campaign' ? managed.workspace.id : undefined,
+            ),
           }
           : {}),
         listWorkspaceContextFn: async (input) => listAuthorizedWorkspaceContext(
@@ -7772,6 +7802,7 @@ user a clickable link to where the thing now lives.`
             metadata: campaignCalendarMetadata(),
             body: serializeCampaignCalendarBody(writeResult.calendar),
           })
+          scheduleHqStateContextRefresh(managed.workspace.rootPath)
           this.eventSink?.(
             RPC_CHANNELS.workspaceContext.CHANGED,
             { to: 'all' },
@@ -7805,6 +7836,7 @@ user a clickable link to where the thing now lives.`
                   withAutomationLock: withAutomationConfigMutex,
                   writeFileAtomic,
                 })
+                scheduleHqStateContextRefresh(managed.workspace.rootPath)
                 return {
                   ok: true,
                   destination: input.destination,

@@ -268,6 +268,7 @@ export { handleScheduleWork } from './handlers/index.ts';
 
 export type {
   GetManagerBriefInput,
+  GetCampaignBriefInput,
   GetArtistContextInput,
   GetCampaignContextInput,
   ListWorkspaceContextInput,
@@ -277,6 +278,7 @@ export type {
 
 export {
   handleGetManagerBrief,
+  handleGetCampaignBrief,
   handleGetArtistContext,
   handleGetCampaignContext,
   handleListWorkspaceContext,
@@ -392,6 +394,7 @@ export {
   CampaignCalendarWriteSchema,
   ScheduleWorkSchema,
   GetManagerBriefSchema,
+  GetCampaignBriefSchema,
   GetArtistContextSchema,
   GetCampaignContextSchema,
   ListWorkspaceContextSchema,

@@ -513,7 +513,10 @@ export class PiAgent extends BaseAgent {
     this.assertBackendSessionToolParity();
     const sessionToolDefs = getSessionToolProxyDefs({
       includeScheduleWork: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge',
-      includeManagerTools: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge',
+      includeManagerTools: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge'
+        && (this.config.workspace.artistWorkspaceScope === 'hq' || this.config.workspace.artistWorkspaceScope === 'campaign'),
+      includeCampaignManagerTools: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge'
+        && this.config.workspace.artistWorkspaceScope === 'campaign',
       includeLabTools: this.config.workspace.artistWorkspaceScope === 'lab',
     });
 

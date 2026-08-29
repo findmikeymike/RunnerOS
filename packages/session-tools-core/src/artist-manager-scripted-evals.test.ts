@@ -82,6 +82,9 @@ describe('Artist Manager scripted eval contracts', () => {
     ), 'utf8')
 
     expect(skill).toContain('read the live Manager Brief before advising')
+    expect(skill).toContain('use `get_campaign_brief` first')
+    expect(skill).toContain('campaign currently open')
+    expect(skill).toContain('with `branding` or `voice`')
     expect(skill).toContain('Retrieve the smallest relevant detail')
     expect(skill).toContain('one clear recommendation')
     expect(skill).toContain('Do not treat every gap, task, or metric as equally important')

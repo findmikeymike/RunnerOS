@@ -3,6 +3,7 @@ import type { SessionToolContext } from '../context.ts';
 import {
   handleGetArtistContext,
   handleGetCampaignContext,
+  handleGetCampaignBrief,
   handleGetManagerBrief,
   handleGetWorkspaceContext,
   handleListWorkspaceContext,
@@ -18,6 +19,7 @@ describe('manager context handlers', () => {
   test('manager-only handlers fail closed without HNIC callbacks', async () => {
     for (const result of await Promise.all([
       handleGetManagerBrief(context(), {}),
+      handleGetCampaignBrief(context(), {}),
       handleGetArtistContext(context(), { topic: 'profile' }),
       handleGetCampaignContext(context(), { select: 'focus' }),
     ])) {
@@ -36,6 +38,7 @@ describe('manager context handlers', () => {
   test('returns normalized callback data without changing it', async () => {
     const ctx = context({
       getManagerBrief: callback,
+      getCampaignBrief: callback,
       getArtistContext: callback,
       getCampaignContext: callback,
       listWorkspaceContext: callback,
@@ -43,6 +46,7 @@ describe('manager context handlers', () => {
     });
     for (const result of await Promise.all([
       handleGetManagerBrief(ctx, {}),
+      handleGetCampaignBrief(ctx, {}),
       handleGetArtistContext(ctx, { topic: 'growth' }),
       handleGetCampaignContext(ctx, { select: 'next-future' }),
       handleListWorkspaceContext(ctx, {}),

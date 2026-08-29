@@ -2,7 +2,7 @@
 name: artist-manager-operating-system
 description: Use when HNIC advises an artist from current Artist HQ state, connects decisions to the year plan or next campaign, retrieves supporting detail, or delegates manager work. Not for specialist execution itself.
 metadata:
-  version: 1.1.0
+  version: 1.2.0
   last_verified: 2026-08-29
 ---
 
@@ -21,6 +21,14 @@ Classify the request before retrieving anything:
 - **Consequential action:** sending, posting, publishing, spending, deleting, scheduling external work, or changing an account.
 
 Answer a small timeless question directly. For current-state questions, read the live Manager Brief before advising when `get_manager_brief` is available. If Manager tools are unavailable, use only the context already supplied, identify any relevant freshness limitation, and never pretend a live refresh occurred.
+
+### Choose the right brief
+
+- In **Artist HQ**, use `get_manager_brief` for the holistic artist picture, year trajectory, growth, intelligence, and campaign focus.
+- In a **campaign workspace**, use `get_campaign_brief` first for the open campaign's mission, date, readiness, blockers, active work, and approvals. Use `get_manager_brief` only when the decision genuinely depends on the wider artist trajectory.
+- Use `get_campaign_context` for deeper canonical campaign detail. In a campaign workspace, `focus` means the campaign currently open—not whichever campaign happens to be closest by date.
+- Use `get_artist_context` with `branding` or `voice` when a decision depends on foundation clarity or public expression. Do not infer a branding or voice gap from a compact brief alone.
+- `list_workspace_context` and `get_workspace_context` only inspect the current workspace. Do not use them as a substitute for HQ retrieval from inside a campaign.
 
 ## Read Only What The Decision Needs
 

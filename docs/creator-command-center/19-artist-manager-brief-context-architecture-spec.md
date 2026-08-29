@@ -1,5 +1,5 @@
 ---
-status: implemented-v1
+status: implemented-v1.1
 owner: agent
 last_verified: 2026-08-29
 source_of_truth: true
@@ -27,6 +27,21 @@ The system will:
 7. add one operating skill that teaches HNIC when to trust the brief, retrieve detail, recommend, delegate, and require approval
 
 This is a context and decision-support system. It is not permission for autonomous public action.
+
+## Campaign Manager Extension (V1.1)
+
+The same HNIC now operates correctly inside campaign workspaces without loading the full HQ filing cabinet:
+
+- each campaign owns one disposable `campaign-state-of-play` derived document;
+- campaign HNIC receives one bounded Campaign Manager Brief with a small artist bridge, exact campaign mission, release readiness, essential assets, upcoming work, approvals, failures, and source health;
+- `get_campaign_brief` refreshes that exact open campaign in memory and falls back to the last valid persisted brief if live composition fails;
+- `get_manager_brief` and `get_artist_context` always resolve against the configured Artist HQ, even when called from a campaign;
+- campaign `get_campaign_context({ select: "focus" })` is pinned to the campaign currently open, while HQ keeps date-based focus selection;
+- `branding` and `voice` are explicit bounded Artist HQ detail topics, with private-context authorization preserved;
+- Manager tools are exposed only to HNIC in HQ or campaign scope; general and Lab HNIC sessions do not receive misleading manager tools;
+- campaign and HQ derived briefs refresh together after campaign context, calendar, scheduled work, automation, or output changes.
+
+The operating skill tells campaign HNIC to start with the campaign brief, pull the holistic HQ brief only when the decision depends on the wider trajectory, and retrieve deep canonical details only when they can change the recommendation.
 
 ## Product Outcome
 

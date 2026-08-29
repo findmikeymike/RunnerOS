@@ -1,8 +1,12 @@
 import {
+  buildCampaignManagerBrief,
   buildManagerBrief,
   buildHqStateContextDoc,
+  campaignStateContextMetadata,
+  CAMPAIGN_STATE_CONTEXT_SLUG,
   HQ_STATE_CONTEXT_SLUG,
   parseHqStateOfPlay,
+  serializeCampaignManagerBrief,
   serializeHqStateOfPlay,
 } from '@craft-agent/shared/hq-state'
 import {
@@ -13,7 +17,8 @@ import {
 import { persistHqRecommendations, reconcileHqRecommendationOutcomes } from './recommendations'
 import { readHqRecommendationOutcomes, readHqRecommendationStore } from '@craft-agent/shared/hq-state/recommendation-storage'
 import { getWorkspaces } from '@craft-agent/shared/config'
-import { buildHqStateInput, findArtistHqWorkspace } from './snapshot'
+import { buildHqStateInput, buildManagerCampaignSnapshot, findArtistHqWorkspace } from './snapshot'
+import { buildHqOperationalSnapshot } from './operational'
 
 const scheduledRefreshes = new Map<string, ReturnType<typeof setTimeout>>()
 const REFRESH_DEBOUNCE_MS = 100
@@ -28,7 +33,7 @@ export interface HqStateRefreshDiagnostic {
 }
 
 export function shouldRefreshHqStateForContextSlug(slug: string): boolean {
-  return slug !== HQ_STATE_CONTEXT_SLUG
+  return slug !== HQ_STATE_CONTEXT_SLUG && slug !== CAMPAIGN_STATE_CONTEXT_SLUG
 }
 
 export function refreshHqStateContextDoc(workspaceRootPath: string): LoadedContextDoc {
@@ -77,6 +82,41 @@ export function refreshArtistHqStateForWorkspaceBestEffort(changedRootPath: stri
     return null
   }
   return refreshHqStateContextDocBestEffort(targetRootPath)
+}
+
+export function refreshCampaignStateContextDoc(campaignRootPath: string): LoadedContextDoc {
+  const campaignWorkspace = getWorkspaces().find((workspace) => (
+    workspace.rootPath === campaignRootPath && workspace.artistWorkspaceScope === 'campaign'
+  ))
+  if (!campaignWorkspace) throw new Error(`Campaign workspace is not configured: ${campaignRootPath}`)
+  const hqWorkspace = findArtistHqWorkspace()
+  if (!hqWorkspace) throw new Error('Artist HQ workspace is not configured.')
+
+  const artistState = buildHqStateContextDoc(buildHqStateInput(hqWorkspace.rootPath)).state
+  if (artistState.version !== 2) throw new Error('Artist HQ Manager Brief is unavailable.')
+  const brief = buildCampaignManagerBrief({
+    artistWorkspaceId: hqWorkspace.id,
+    artistBrief: artistState.managerBrief,
+    campaign: buildManagerCampaignSnapshot(campaignWorkspace, true),
+    operational: buildHqOperationalSnapshot(campaignRootPath),
+  })
+  const existing = loadAllContextDocs(campaignRootPath).find((doc) => doc.slug === CAMPAIGN_STATE_CONTEXT_SLUG)
+  return upsertContextDoc(campaignRootPath, {
+    slug: CAMPAIGN_STATE_CONTEXT_SLUG,
+    metadata: existing
+      ? { ...campaignStateContextMetadata(), enabled: existing.metadata.enabled }
+      : campaignStateContextMetadata(),
+    body: serializeCampaignManagerBrief(brief),
+  })
+}
+
+export function refreshCampaignStateContextDocBestEffort(campaignRootPath: string): LoadedContextDoc | null {
+  try {
+    return refreshCampaignStateContextDoc(campaignRootPath)
+  } catch (error) {
+    console.warn('[hq-state] Failed to refresh Campaign State of Play context doc:', error instanceof Error ? error.message : String(error))
+    return null
+  }
 }
 
 function applyRecentOutcome(state: import('@craft-agent/shared/hq-state').HqStateOfPlay, workspaceRootPath: string): void {
@@ -146,24 +186,38 @@ export function getHqStateRefreshDiagnostic(workspaceRootPath: string): HqStateR
 }
 
 export function scheduleHqStateContextRefresh(workspaceRootPath: string): void {
+  const changedWorkspace = getWorkspaces().find((workspace) => workspace.rootPath === workspaceRootPath)
+  if (changedWorkspace?.artistWorkspaceScope === 'campaign') {
+    scheduleRefresh(`campaign:${workspaceRootPath}`, () => refreshCampaignStateContextDocBestEffort(workspaceRootPath))
+  } else if (changedWorkspace?.artistWorkspaceScope === 'hq') {
+    for (const campaign of getWorkspaces().filter((workspace) => workspace.artistWorkspaceScope === 'campaign')) {
+      scheduleRefresh(`campaign:${campaign.rootPath}`, () => refreshCampaignStateContextDocBestEffort(campaign.rootPath))
+    }
+  }
   const targetRootPath = resolveHqRefreshRoot(workspaceRootPath)
   if (!targetRootPath) return
-  const pending = scheduledRefreshes.get(targetRootPath)
+  scheduleRefresh(`hq:${targetRootPath}`, () => refreshHqStateContextDocBestEffort(targetRootPath))
+}
+
+function scheduleRefresh(key: string, refresh: () => void): void {
+  const pending = scheduledRefreshes.get(key)
   if (pending) clearTimeout(pending)
   const timer = setTimeout(() => {
-    scheduledRefreshes.delete(targetRootPath)
-    refreshHqStateContextDocBestEffort(targetRootPath)
+    scheduledRefreshes.delete(key)
+    refresh()
   }, REFRESH_DEBOUNCE_MS)
   timer.unref?.()
-  scheduledRefreshes.set(targetRootPath, timer)
+  scheduledRefreshes.set(key, timer)
 }
 
 export function cancelScheduledHqStateContextRefresh(workspaceRootPath: string): void {
   const targetRootPath = resolveHqRefreshRoot(workspaceRootPath) ?? workspaceRootPath
-  const pending = scheduledRefreshes.get(targetRootPath)
-  if (!pending) return
-  clearTimeout(pending)
-  scheduledRefreshes.delete(targetRootPath)
+  for (const key of [`hq:${targetRootPath}`, `campaign:${workspaceRootPath}`]) {
+    const pending = scheduledRefreshes.get(key)
+    if (!pending) continue
+    clearTimeout(pending)
+    scheduledRefreshes.delete(key)
+  }
 }
 
 function resolveHqRefreshRoot(changedRootPath: string): string | null {

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { parseHqStateOfPlay, HQ_STATE_CONTEXT_SLUG } from '@craft-agent/shared/hq-state'
+import { CAMPAIGN_STATE_CONTEXT_SLUG, parseHqStateOfPlay, HQ_STATE_CONTEXT_SLUG } from '@craft-agent/shared/hq-state'
 import { HQ_RECOMMENDATIONS_DIR, readHqRecommendationStore, upsertHqRecommendationOutcome } from '@craft-agent/shared/hq-state/recommendation-storage'
 import { transitionHqRecommendation } from '@craft-agent/shared/hq-state/recommendation-storage'
 import { createOutputBundle } from '@craft-agent/shared/outputs'
@@ -56,6 +56,7 @@ describe('HQ state refresh', () => {
 
   test('does not refresh recursively for the derived doc itself', () => {
     expect(shouldRefreshHqStateForContextSlug(HQ_STATE_CONTEXT_SLUG)).toBe(false)
+    expect(shouldRefreshHqStateForContextSlug(CAMPAIGN_STATE_CONTEXT_SLUG)).toBe(false)
     expect(shouldRefreshHqStateForContextSlug('artist-profile')).toBe(true)
   })
 

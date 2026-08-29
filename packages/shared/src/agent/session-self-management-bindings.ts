@@ -274,6 +274,12 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'getCampaignBrief', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.getCampaignBriefFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'getArtistContext', {
     get() { return getSessionScopedToolCallbacks(sessionId)?.getArtistContextFn; },
     configurable: true,

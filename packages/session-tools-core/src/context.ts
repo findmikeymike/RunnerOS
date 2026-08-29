@@ -404,6 +404,8 @@ export interface SessionToolContext {
 
   /** Compose the current bounded Artist Manager Brief without persisting it. HNIC-only. */
   getManagerBrief?(input: import('./handlers/manager-context.ts').GetManagerBriefInput): Promise<import('./handlers/manager-context.ts').ManagerContextToolResult>;
+  /** Compose the current bounded Campaign Manager Brief. Campaign HNIC-only. */
+  getCampaignBrief?(input: import('./handlers/manager-context.ts').GetCampaignBriefInput): Promise<import('./handlers/manager-context.ts').ManagerContextToolResult>;
   /** Read one bounded normalized Artist HQ detail topic. HNIC-only. */
   getArtistContext?(input: import('./handlers/manager-context.ts').GetArtistContextInput): Promise<import('./handlers/manager-context.ts').ManagerContextToolResult>;
   /** Read bounded canonical detail from one configured campaign. HNIC-only. */
