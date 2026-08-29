@@ -3253,6 +3253,7 @@ export class SessionManager implements ISessionManager {
             listEnabledGlobalSkillSlugs,
             loadGlobalSkillBySlug,
             replaceRequiredGlobalSkillFileIfContains,
+            replaceRequiredGlobalSkillFileIfHashMatches,
             setGlobalSkillEnabled,
             STARTER_SKILLS,
             BUNDLED_STARTER_SKILLS,
@@ -3338,6 +3339,18 @@ export class SessionManager implements ISessionManager {
             recordDoctorHandoffSkillMd,
           ).updated) {
             sessionLog.info('[skills] Hardened Record Doctor handoff recipient privacy')
+          }
+          const artistManagerOperatingSkillMd = BUNDLED_STARTER_SKILLS
+            .find(skill => skill.slug === 'artist-manager-operating-system')
+            ?.files.find(file => file.path === 'SKILL.md')
+            ?.content
+          if (artistManagerOperatingSkillMd && replaceRequiredGlobalSkillFileIfHashMatches(
+            'artist-manager-operating-system',
+            'SKILL.md',
+            '933db890f28003881fde43ae18e1126f6279e182f3957bc583fdc0a9701b612c',
+            artistManagerOperatingSkillMd,
+          ).updated) {
+            sessionLog.info('[skills] Upgraded Artist Manager operating judgment')
           }
           const brandingAgent = STARTER_AGENTS.find(agent => agent.slug === 'branding-agent')
           const brandingSkillSlugs = brandingAgent?.metadata.skills ?? []

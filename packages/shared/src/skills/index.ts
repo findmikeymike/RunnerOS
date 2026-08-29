@@ -25,6 +25,7 @@ export {
   downloadSkillIcon,
   ensureRequiredGlobalSkills,
   replaceRequiredGlobalSkillFileIfContains,
+  replaceRequiredGlobalSkillFileIfHashMatches,
   mirrorSkillToGlobal,
   backfillWorkspaceSkillsToGlobal,
 } from './storage.ts';

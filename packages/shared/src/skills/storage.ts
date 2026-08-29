@@ -17,7 +17,7 @@ import {
   writeFileSync,
 } from 'fs';
 import { dirname, join } from 'path';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import matter from 'gray-matter';
 import type { LoadedSkill, SkillMetadata, SkillSource } from './types.ts';
 import {
@@ -702,6 +702,29 @@ export function replaceRequiredGlobalSkillFileIfContains(
 
   const current = readFileSync(target, 'utf-8');
   if (!current.includes(marker)) return { updated: false };
+
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, replacementContent, 'utf-8');
+  invalidateSkillsCache();
+  return { updated: true };
+}
+
+/**
+ * Upgrade an untouched shipped skill while preserving every customized copy.
+ * The expected digest is computed from the previous bundled file contents.
+ */
+export function replaceRequiredGlobalSkillFileIfHashMatches(
+  slug: string,
+  filePath: string,
+  expectedSha256: string,
+  replacementContent: string,
+): { updated: boolean } {
+  const target = join(GLOBAL_AGENT_SKILLS_DIR, slug, filePath);
+  if (!existsSync(target)) return { updated: false };
+
+  const current = readFileSync(target, 'utf-8');
+  const digest = createHash('sha256').update(current).digest('hex');
+  if (digest !== expectedSha256) return { updated: false };
 
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, replacementContent, 'utf-8');

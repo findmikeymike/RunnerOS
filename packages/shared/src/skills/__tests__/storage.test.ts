@@ -16,6 +16,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync,
 import * as os from 'os';
 import { join, resolve, sep } from 'path';
 import { statSync, unlinkSync } from 'fs';
+import { createHash } from 'crypto';
 
 const sandboxHome = mkdtempSync(join(os.tmpdir(), 'skills-storage-home-'));
 const sandboxHomeResolved = resolve(sandboxHome);
@@ -50,6 +51,7 @@ const {
   backfillWorkspaceSkillsToGlobal,
   ensureRequiredGlobalSkills,
   replaceRequiredGlobalSkillFileIfContains,
+  replaceRequiredGlobalSkillFileIfHashMatches,
   GLOBAL_AGENT_SKILLS_DIR,
 } = storageModule;
 
@@ -1117,5 +1119,42 @@ describe.serial('replaceRequiredGlobalSkillFileIfContains', () => {
 
     expect(result.updated).toBe(false);
     expect(readFileSync(join(GLOBAL_AGENT_SKILLS_DIR, slug, 'SKILL.md'), 'utf-8')).toBe('CUSTOM_BODY');
+  });
+});
+
+describe.serial('replaceRequiredGlobalSkillFileIfHashMatches', () => {
+  it.serial('upgrades an untouched shipped skill', () => {
+    const slug = `${TEST_PREFIX}required-hash-replace`;
+    const oldBody = 'OLD_SHIPPED_BODY';
+    mkdirSync(join(GLOBAL_AGENT_SKILLS_DIR, slug), { recursive: true });
+    writeFileSync(join(GLOBAL_AGENT_SKILLS_DIR, slug, 'SKILL.md'), oldBody, 'utf-8');
+
+    const result = replaceRequiredGlobalSkillFileIfHashMatches(
+      slug,
+      'SKILL.md',
+      createHash('sha256').update(oldBody).digest('hex'),
+      'NEW_BODY',
+    );
+
+    expect(result.updated).toBe(true);
+    expect(readFileSync(join(GLOBAL_AGENT_SKILLS_DIR, slug, 'SKILL.md'), 'utf-8')).toBe('NEW_BODY');
+  });
+
+  it.serial('preserves a customized skill even when it retains stale markers', () => {
+    const slug = `${TEST_PREFIX}required-hash-preserve`;
+    const oldBody = 'version: 1.0.0\nOLD_SHIPPED_BODY';
+    const customizedBody = `${oldBody}\nUSER CUSTOMIZATION`;
+    mkdirSync(join(GLOBAL_AGENT_SKILLS_DIR, slug), { recursive: true });
+    writeFileSync(join(GLOBAL_AGENT_SKILLS_DIR, slug, 'SKILL.md'), customizedBody, 'utf-8');
+
+    const result = replaceRequiredGlobalSkillFileIfHashMatches(
+      slug,
+      'SKILL.md',
+      createHash('sha256').update(oldBody).digest('hex'),
+      'NEW_BODY',
+    );
+
+    expect(result.updated).toBe(false);
+    expect(readFileSync(join(GLOBAL_AGENT_SKILLS_DIR, slug, 'SKILL.md'), 'utf-8')).toBe(customizedBody);
   });
 });
