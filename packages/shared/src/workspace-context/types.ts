@@ -11,9 +11,10 @@
  *     to different agents.
  *   - Routing is per-doc. Default = broadcast to every agent. Targeted
  *     routing names specific agent slugs.
- *   - The Concierge agent ALWAYS receives every enabled doc, regardless
- *     of routing. Its job is omniscience; we hard-wire the override in
- *     the loader, not in the file.
+ *   - Delivery and access are separate. `always` docs may enter a prompt;
+ *     `on-demand` docs remain available for explicit retrieval only.
+ *   - The Concierge may retrieve every enabled non-private doc regardless
+ *     of routing. Private docs still obey their declared routing.
  *   - Frontmatter mirrors AGENT.md / SKILL.md so the YAML+markdown idiom
  *     stays consistent.
  */
@@ -31,6 +32,8 @@ import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 export type ContextDocRouting =
   | { mode: 'broadcast' }
   | { mode: 'targeted'; agents: string[] };
+
+export type ContextDocDelivery = 'always' | 'on-demand';
 
 /**
  * Goal status. When set, the doc is treated as a Goal by the Pulse runtime
@@ -64,6 +67,13 @@ export interface ContextDocMetadata {
    * Lets users keep drafts without affecting prompts. Defaults to true.
    */
   enabled: boolean;
+  /**
+   * Prompt delivery policy. Missing preserves legacy prompt delivery for
+   * regular agents, while Concierge treats it as on-demand.
+   */
+  delivery?: ContextDocDelivery;
+  /** If true, Concierge receives no routing override for this doc. */
+  private?: boolean;
   /** Goal status — when set, this doc is a Pulse goal. */
   status?: ContextDocGoalStatus;
   /** Goal priority. Only meaningful when `status` is set. */
@@ -75,6 +85,8 @@ export interface ContextDocMetadata {
 export type ContextDocParseWarningCode =
   | 'invalid-agents'
   | 'invalid-enabled'
+  | 'invalid-delivery'
+  | 'invalid-private'
   | 'invalid-status'
   | 'invalid-priority'
   | 'invalid-deadline';

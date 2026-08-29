@@ -657,6 +657,11 @@ function WorkspaceContextEditDialog({
       name,
       description: form.description.trim() || undefined,
       enabled: form.enabled,
+      // Delivery/privacy controls are not exposed in this dialog yet. Preserve
+      // existing policy when editing so an ordinary content change cannot
+      // silently widen prompt delivery or Concierge access.
+      delivery: doc?.metadata.delivery,
+      private: doc?.metadata.private,
       routing: form.routingMode === 'broadcast'
         ? { mode: 'broadcast' }
         : { mode: 'targeted', agents: form.agents },

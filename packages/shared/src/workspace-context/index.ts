@@ -9,6 +9,7 @@
 export type {
   ContextDocGoalPriority,
   ContextDocGoalStatus,
+  ContextDocDelivery,
   ContextDocMetadata,
   ContextDocParseWarning,
   ContextDocParseWarningCode,
@@ -33,6 +34,10 @@ export {
   loadAllContextDocs,
   loadContextDoc,
   loadActiveContextDocsForAgent,
+  canAgentAccessContextDoc,
+  shouldInjectContextDoc,
+  loadAuthorizedContextDocsForAgent,
+  loadPromptContextDocsForAgent,
   upsertContextDoc,
   deleteContextDoc,
   type UpsertContextDocInput,

@@ -4,11 +4,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   deleteContextDoc,
+  canAgentAccessContextDoc,
   loadActiveContextDocsForAgent,
   loadAllContextDocs,
+  loadAuthorizedContextDocsForAgent,
   loadContextDoc,
+  loadPromptContextDocsForAgent,
   parseContextFile,
   serializeContextDoc,
+  shouldInjectContextDoc,
   upsertContextDoc,
 } from './storage.ts';
 import type { ContextDocMetadata } from './types.ts';
@@ -71,6 +75,25 @@ describe('parseContextFile', () => {
   test('enabled: false is honored', () => {
     const got = parseContextFile('---\nname: A\nenabled: false\n---\n');
     expect(got!.metadata.enabled).toBe(false);
+  });
+
+  test('delivery and private fields parse', () => {
+    const got = parseContextFile('---\nname: A\ndelivery: on-demand\nprivate: true\n---\n');
+    expect(got!.metadata.delivery).toBe('on-demand');
+    expect(got!.metadata.private).toBe(true);
+    expect(got!.warnings).toEqual([]);
+  });
+
+  test('invalid delivery fails closed to on-demand with a warning', () => {
+    const got = parseContextFile('---\nname: A\ndelivery: sometimes\n---\n');
+    expect(got!.metadata.delivery).toBe('on-demand');
+    expect(got!.warnings.find((w) => w.code === 'invalid-delivery')).toBeDefined();
+  });
+
+  test('invalid private defaults false with a warning', () => {
+    const got = parseContextFile('---\nname: A\nprivate: hidden\n---\n');
+    expect(got!.metadata.private).toBe(false);
+    expect(got!.warnings.find((w) => w.code === 'invalid-private')).toBeDefined();
   });
 
   test('valid goal fields parse and round-trip', () => {
@@ -141,6 +164,18 @@ describe('serializeContextDoc', () => {
     const parsed = parseContextFile(text);
     expect(parsed!.metadata.routing).toEqual({ mode: 'targeted', agents: ['writer'] });
     expect(parsed!.metadata.enabled).toBe(false);
+  });
+
+  test('round-trips explicit delivery and private metadata', () => {
+    const meta: ContextDocMetadata = {
+      name: 'Private Detail',
+      routing: { mode: 'targeted', agents: ['writer'] },
+      enabled: true,
+      delivery: 'on-demand',
+      private: true,
+    };
+    const parsed = parseContextFile(serializeContextDoc(meta, 'Sensitive detail.'));
+    expect(parsed!.metadata).toEqual(meta);
   });
 });
 
@@ -271,5 +306,121 @@ describe('loadActiveContextDocsForAgent', () => {
   test('disabled docs are never delivered, even to Concierge', () => {
     const got = loadActiveContextDocsForAgent(workspace, CONCIERGE_SLUG);
     expect(got.find((d) => d.slug === 'disabled-doc')).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Delivery-aware routing — dormant until prompt callers migrate
+// ---------------------------------------------------------------------------
+
+describe('delivery-aware context routing', () => {
+  beforeEach(() => {
+    upsertContextDoc(workspace, {
+      slug: 'legacy-broadcast',
+      metadata: { name: 'Legacy', routing: { mode: 'broadcast' }, enabled: true },
+      body: 'legacy',
+    });
+    upsertContextDoc(workspace, {
+      slug: 'always-writer',
+      metadata: {
+        name: 'Always Writer',
+        routing: { mode: 'targeted', agents: ['writer'] },
+        enabled: true,
+        delivery: 'always',
+      },
+      body: 'writer',
+    });
+    upsertContextDoc(workspace, {
+      slug: 'demand-writer',
+      metadata: {
+        name: 'Demand Writer',
+        routing: { mode: 'targeted', agents: ['writer'] },
+        enabled: true,
+        delivery: 'on-demand',
+      },
+      body: 'detail',
+    });
+    upsertContextDoc(workspace, {
+      slug: 'private-writer',
+      metadata: {
+        name: 'Private Writer',
+        routing: { mode: 'targeted', agents: ['writer'] },
+        enabled: true,
+        delivery: 'always',
+        private: true,
+      },
+      body: 'private',
+    });
+    upsertContextDoc(workspace, {
+      slug: 'disabled-always',
+      metadata: {
+        name: 'Disabled',
+        routing: { mode: 'broadcast' },
+        enabled: false,
+        delivery: 'always',
+      },
+      body: 'disabled',
+    });
+  });
+
+  test('authorization includes on-demand docs but never disabled docs', () => {
+    expect(loadAuthorizedContextDocsForAgent(workspace, 'writer').map((d) => d.slug)).toEqual([
+      'always-writer',
+      'demand-writer',
+      'legacy-broadcast',
+      'private-writer',
+    ]);
+  });
+
+  test('prompt injection excludes on-demand docs', () => {
+    expect(loadPromptContextDocsForAgent(workspace, 'writer').map((d) => d.slug)).toEqual([
+      'always-writer',
+      'legacy-broadcast',
+      'private-writer',
+    ]);
+  });
+
+  test('Concierge can retrieve routed non-private docs but legacy docs default on-demand', () => {
+    const authorized = loadAuthorizedContextDocsForAgent(workspace, CONCIERGE_SLUG);
+    expect(authorized.map((d) => d.slug)).toEqual([
+      'always-writer',
+      'demand-writer',
+      'legacy-broadcast',
+    ]);
+    expect(loadPromptContextDocsForAgent(workspace, CONCIERGE_SLUG).map((d) => d.slug)).toEqual([
+      'always-writer',
+    ]);
+  });
+
+  test('private disables Concierge override but permits explicitly targeted agents', () => {
+    const privateDoc = loadContextDoc(workspace, 'private-writer')!;
+    expect(canAgentAccessContextDoc(privateDoc, CONCIERGE_SLUG)).toBe(false);
+    expect(shouldInjectContextDoc(privateDoc, CONCIERGE_SLUG)).toBe(false);
+    expect(canAgentAccessContextDoc(privateDoc, 'writer')).toBe(true);
+    expect(shouldInjectContextDoc(privateDoc, 'writer')).toBe(true);
+  });
+
+  test('private broadcast remains available to all because routing authorizes all', () => {
+    upsertContextDoc(workspace, {
+      slug: 'private-broadcast',
+      metadata: {
+        name: 'Private Broadcast',
+        routing: { mode: 'broadcast' },
+        enabled: true,
+        delivery: 'on-demand',
+        private: true,
+      },
+      body: 'private by policy, broadcast by routing',
+    });
+    expect(canAgentAccessContextDoc(loadContextDoc(workspace, 'private-broadcast')!, CONCIERGE_SLUG)).toBe(true);
+  });
+
+  test('legacy loader behavior is unchanged until migration', () => {
+    expect(loadActiveContextDocsForAgent(workspace, CONCIERGE_SLUG).map((d) => d.slug)).toEqual([
+      'always-writer',
+      'demand-writer',
+      'legacy-broadcast',
+      'private-writer',
+    ]);
   });
 });

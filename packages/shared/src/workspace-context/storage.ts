@@ -8,11 +8,9 @@
  * doc's name, description, routing (which agents see it), and whether
  * it is enabled. Body content is free-form markdown.
  *
- * The routing model has one hard-coded rule the loader enforces:
- * the Concierge agent always receives every enabled doc, regardless of
- * the doc's `agents:` frontmatter. This is intentional — narrowing the
- * Concierge would defeat its job. Documented at the call sites that
- * filter by agent (loadActiveContextDocsForAgent).
+ * Delivery-aware helpers keep prompt injection separate from authorized
+ * on-demand retrieval. The legacy loader remains unchanged until callers are
+ * migrated to the new contract.
  */
 
 import {
@@ -33,6 +31,7 @@ import {
   CONTEXT_FILE,
   type ContextDocGoalPriority,
   type ContextDocGoalStatus,
+  type ContextDocDelivery,
   type ContextDocMetadata,
   type ContextDocParseWarning,
   type ContextDocRouting,
@@ -218,6 +217,39 @@ function coerceEnabled(value: unknown, warnings: ContextDocParseWarning[]): bool
   return true;
 }
 
+function coerceDelivery(
+  value: unknown,
+  warnings: ContextDocParseWarning[],
+): ContextDocDelivery | undefined {
+  if (value == null) return undefined;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'always' || normalized === 'on-demand') return normalized;
+  }
+  warnings.push(
+    warning(
+      'delivery',
+      'invalid-delivery',
+      'delivery must be "always" or "on-demand"; defaulting to on-demand.',
+    ),
+  );
+  return 'on-demand';
+}
+
+function coercePrivate(value: unknown, warnings: ContextDocParseWarning[]): boolean | undefined {
+  if (value == null) return undefined;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === 'yes') return true;
+    if (normalized === 'false' || normalized === 'no') return false;
+  }
+  warnings.push(
+    warning('private', 'invalid-private', 'private must be true or false; defaulting to false.'),
+  );
+  return false;
+}
+
 export function parseContextFile(
   content: string,
 ): { metadata: ContextDocMetadata; body: string; warnings: ContextDocParseWarning[] } | null {
@@ -238,11 +270,15 @@ export function parseContextFile(
     typeof data.description === 'string' ? data.description.trim() || undefined : undefined;
   const routing = coerceRouting(data.agents, warnings);
   const enabled = coerceEnabled(data.enabled, warnings);
+  const delivery = coerceDelivery(data.delivery, warnings);
+  const isPrivate = coercePrivate(data.private, warnings);
   const status = coerceGoalStatus(data.status, warnings);
   const priority = coerceGoalPriority(data.priority, warnings);
   const deadline = coerceGoalDeadline(data.deadline, warnings);
 
   const metadata: ContextDocMetadata = { name, description, routing, enabled };
+  if (delivery) metadata.delivery = delivery;
+  if (isPrivate != null) metadata.private = isPrivate;
   if (status) metadata.status = status;
   if (priority) metadata.priority = priority;
   if (deadline) metadata.deadline = deadline;
@@ -261,6 +297,8 @@ export function serializeContextDoc(metadata: ContextDocMetadata, body: string):
   data.agents = metadata.routing.mode === 'broadcast' ? 'all' : metadata.routing.agents;
   // Only serialize enabled when false; default-true stays implicit and clean.
   if (!metadata.enabled) data.enabled = false;
+  if (metadata.delivery) data.delivery = metadata.delivery;
+  if (metadata.private) data.private = true;
   if (metadata.status) data.status = metadata.status;
   if (metadata.priority) data.priority = metadata.priority;
   if (metadata.deadline) data.deadline = metadata.deadline;
@@ -358,6 +396,64 @@ export function loadActiveContextDocsForAgent(
     if (normalizedAgentSlug == null) return false;
     return doc.metadata.routing.agents.includes(normalizedAgentSlug);
   });
+}
+
+function normalizeAgentSlug(agentSlug: string | null): string | null {
+  return typeof agentSlug === 'string' ? agentSlug.trim().toLowerCase() : null;
+}
+
+function routingAllowsAgent(doc: LoadedContextDoc, agentSlug: string | null): boolean {
+  if (doc.metadata.routing.mode === 'broadcast') return true;
+  return agentSlug != null && doc.metadata.routing.agents.includes(agentSlug);
+}
+
+/**
+ * Whether an agent may retrieve a context doc. Delivery policy does not affect
+ * access: on-demand docs remain retrievable. Disabled docs are inaccessible.
+ */
+export function canAgentAccessContextDoc(
+  doc: LoadedContextDoc,
+  agentSlug: string | null,
+): boolean {
+  if (!doc.metadata.enabled) return false;
+  const normalizedAgentSlug = normalizeAgentSlug(agentSlug);
+  if (normalizedAgentSlug === CONCIERGE_SLUG && doc.metadata.private !== true) return true;
+  return routingAllowsAgent(doc, normalizedAgentSlug);
+}
+
+/**
+ * Whether a context doc should be injected into an agent prompt.
+ *
+ * Missing delivery preserves legacy `always` behavior for regular/ad-hoc
+ * agents, but defaults to `on-demand` for Concierge to prevent context bloat.
+ */
+export function shouldInjectContextDoc(
+  doc: LoadedContextDoc,
+  agentSlug: string | null,
+): boolean {
+  if (!canAgentAccessContextDoc(doc, agentSlug)) return false;
+  const normalizedAgentSlug = normalizeAgentSlug(agentSlug);
+  const delivery = doc.metadata.delivery
+    ?? (normalizedAgentSlug === CONCIERGE_SLUG ? 'on-demand' : 'always');
+  return delivery === 'always';
+}
+
+/** Load enabled context docs the agent is authorized to retrieve. */
+export function loadAuthorizedContextDocsForAgent(
+  workspaceRootPath: string,
+  agentSlug: string | null,
+): LoadedContextDoc[] {
+  return loadAllContextDocs(workspaceRootPath)
+    .filter((doc) => canAgentAccessContextDoc(doc, agentSlug));
+}
+
+/** Load only context docs eligible for automatic prompt injection. */
+export function loadPromptContextDocsForAgent(
+  workspaceRootPath: string,
+  agentSlug: string | null,
+): LoadedContextDoc[] {
+  return loadAllContextDocs(workspaceRootPath)
+    .filter((doc) => shouldInjectContextDoc(doc, agentSlug));
 }
 
 // ============================================================================

@@ -517,6 +517,9 @@ body
     expect(hnic?.systemPrompt).toContain('design it as an automation')
     expect(hnic?.systemPrompt).toContain('suggest a workflow')
     expect(hnic?.systemPrompt).toContain('Handoff target')
+    expect(hnic?.systemPrompt).toContain('compact Manager Brief')
+    expect(hnic?.systemPrompt).toContain('one recommendation')
+    expect(hnic?.systemPrompt).not.toContain('EVERY workspace-context doc')
   })
 
   test('starter library includes Setup Concierge for app setup and help', () => {
