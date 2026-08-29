@@ -193,6 +193,7 @@ flowchart LR
   A_ads_agent --> T_meta_ads["source:meta-ads"]
   A_ads_agent --> T_google_ads["source:google-ads"]
   A_ads_agent --> T_ads_operator["source:ads-operator"]
+  A_ads_agent --> T_printing_press_social["source:printing-press-social"]
   Campaign["Campaign Workspace"] --> A_ads_agent
   Registry --> A_ads_strategist["Ad Strategy\nask\nPromotion"]
   Workers --> A_ads_strategist
@@ -254,6 +255,7 @@ flowchart LR
   Registry --> A_social_publisher["Social Publisher\nask\nSocials"]
   Workers --> A_social_publisher
   A_social_publisher --> S_social_publishing["skill:social-publishing"]
+  A_social_publisher --> S_instagram_growth_snapshot["skill:instagram-growth-snapshot"]
   A_social_publisher --> T_printing_press_social["source:printing-press-social"]
   Registry --> A_trypost_agent["TryPost\nask\nSocials"]
   Workers --> A_trypost_agent

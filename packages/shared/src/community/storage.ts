@@ -27,6 +27,7 @@ import type {
   CommunityIndex,
   CommunitySegment,
   CommunityState,
+  CommunitySummaryDoc,
   CommunitySuppressionRecord,
   ConsentStatus,
   ContactSource,
@@ -197,13 +198,14 @@ function generateSummaryBody(state: Omit<CommunityState, 'migrated'>): string {
     .filter((job) => job.status === 'sent')
     .slice(0, 5)
     .map((job) => ({ id: job.id, title: job.title, completedAt: job.send?.completedAt }));
-  const payload = {
+  const payload: CommunitySummaryDoc = {
     version: 2,
     summary: {
       totalContacts: state.index.totalContacts,
       segments: Array.from(segmentCounts.entries()).map(([id, count]) => ({ id, label: id, count })),
       lastBroadcastAt: recentBroadcasts[0]?.completedAt,
       suppressedCount: state.index.suppressedCount,
+      draftBroadcasts: state.emailJobs.filter((job) => !job.deletedAt && job.status !== 'sent').length,
     },
     recentBroadcasts,
     warnings: [],

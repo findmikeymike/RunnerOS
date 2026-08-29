@@ -3,6 +3,10 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { pathToFileURL } from 'url'
+// Populates the Pi model catalog in this process, matching what the migration
+// subprocess loads, so fixtures can be built from the same model list.
+import '../../../tests/setup/register-pi-model-resolver.ts'
+import { getDefaultModelsForConnection } from '../llm-connections.ts'
 
 const STORAGE_MODULE_PATH = pathToFileURL(join(import.meta.dir, '..', 'storage.ts')).href
 const PI_RESOLVER_SETUP_PATH = pathToFileURL(join(import.meta.dir, '..', '..', '..', 'tests', 'setup', 'register-pi-model-resolver.ts')).href
@@ -85,6 +89,11 @@ function readPiApiKeyConnection(configPath: string): any {
 
 function getModelIds(connection: any): string[] {
   return (connection.models ?? []).map((m: any) => typeof m === 'string' ? m : m.id)
+}
+
+/** Prefixed OpenRouter model IDs as the migration subprocess sees them. */
+function openRouterModelIds(): string[] {
+  return getModelIds({ models: getDefaultModelsForConnection('pi', 'openrouter') })
 }
 
 describe('startup migration (integration)', () => {
@@ -225,6 +234,16 @@ describe('startup migration (integration)', () => {
   it('normalizes legacy unprefixed userDefined3Tier model IDs instead of resetting', () => {
     const { configDir, workspaceRoot, configPath } = setupWorkspaceConfigDir()
 
+    // Derived from the live catalog rather than hardcoded: migration only keeps
+    // models the provider still offers, so pinned vendor IDs make this test fail
+    // whenever the Pi SDK drops one (an earlier fixture used ai21/jamba-large-1.7,
+    // which OpenRouter no longer lists).
+    const [firstPrefixed, secondPrefixed] = openRouterModelIds().slice(0, 2)
+    if (!firstPrefixed || !secondPrefixed) {
+      throw new Error('expected at least two OpenRouter models in the Pi catalog')
+    }
+    const stripPrefix = (id: string) => id.replace(/^pi\//, '')
+
     writeRootConfig(configPath, workspaceRoot, [
       {
         slug: 'pi-api-key',
@@ -234,8 +253,8 @@ describe('startup migration (integration)', () => {
         piAuthProvider: 'openrouter',
         modelSelectionMode: 'userDefined3Tier',
         createdAt: Date.now(),
-        models: ['ai21/jamba-large-1.7', 'openrouter/auto'],
-        defaultModel: 'ai21/jamba-large-1.7',
+        models: [stripPrefix(firstPrefixed), stripPrefix(secondPrefixed)],
+        defaultModel: stripPrefix(firstPrefixed),
       },
     ])
 
@@ -245,8 +264,36 @@ describe('startup migration (integration)', () => {
     expect(connection).toBeDefined()
     expect(connection.modelSelectionMode).toBe('userDefined3Tier')
     const modelIds = getModelIds(connection)
-    expect(modelIds).toEqual(['pi/ai21/jamba-large-1.7', 'pi/openrouter/auto'])
-    expect(connection.defaultModel).toBe('pi/ai21/jamba-large-1.7')
+    expect(modelIds).toEqual([firstPrefixed, secondPrefixed])
+    expect(connection.defaultModel).toBe(firstPrefixed)
+  })
+
+  it('drops userDefined3Tier models the provider no longer offers', () => {
+    const { configDir, workspaceRoot, configPath } = setupWorkspaceConfigDir()
+
+    const [survivor] = openRouterModelIds()
+    if (!survivor) throw new Error('expected at least one OpenRouter model in the Pi catalog')
+
+    writeRootConfig(configPath, workspaceRoot, [
+      {
+        slug: 'pi-api-key',
+        name: 'Runner Backend (OpenRouter)',
+        providerType: 'pi',
+        authType: 'api_key',
+        piAuthProvider: 'openrouter',
+        modelSelectionMode: 'userDefined3Tier',
+        createdAt: Date.now(),
+        models: ['vendor/retired-model-that-does-not-exist', survivor.replace(/^pi\//, '')],
+        defaultModel: 'vendor/retired-model-that-does-not-exist',
+      },
+    ])
+
+    runMigration(configDir)
+
+    const connection = readPiApiKeyConnection(configPath)
+    const modelIds = getModelIds(connection)
+    expect(modelIds).toEqual([survivor])
+    expect(connection.defaultModel).toBe(survivor)
   })
 })
 

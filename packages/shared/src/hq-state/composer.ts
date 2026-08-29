@@ -1,3 +1,8 @@
+import type { ArtistCalendar } from '../artist-context/calendar.ts';
+import type { ArtistNetwork } from '../artist-context/network.ts';
+import type { ArtistProfile } from '../artist-context/profile.ts';
+import type { ArtistSpotifySnapshot } from '../artist-context/spotify.ts';
+import type { CommunitySummaryDoc } from '../community/types.ts';
 import { ARTIST_VAULT_CONTEXT_SLUG, type VaultManifest } from '../artist-vault/types.ts';
 import { isSharedIntelContextSlug, parseSharedIntelNote } from '../shared-intel/index.ts';
 import type { ContextDocMetadata, LoadedContextDoc } from '../workspace-context/types.ts';
@@ -18,67 +23,32 @@ import {
   type HqStateRouteHint,
 } from './types.ts';
 
-interface ArtistProfileDoc {
-  artistName?: string;
-  bio?: string;
-  themes?: string;
-  sound?: string;
-  visualWorld?: string;
-  audience?: string;
-  similarArtists?: string;
-  priorityMarkets?: string;
-  spotifyProfile?: string;
-  promoBudget?: string;
-  rules?: string;
-  updatedAt?: string;
-}
+/**
+ * Read view of the Artist Profile doc. Derived from the canonical schema rather
+ * than restated, so renaming a profile field breaks this build instead of
+ * silently emptying the State of Play. Partial because the doc is user-authored
+ * and read here without normalization.
+ */
+type ArtistProfileDoc = Partial<ArtistProfile>;
 
-interface SpotifySnapshotDoc {
-  snapshotDate?: string;
-  windowDays?: number;
-  metrics?: {
-    streams?: number;
-    listeners?: number;
-    followers?: number;
-    popularity?: number;
-  };
-  geo?: {
-    topCities?: Array<{ city?: string; country?: string; listeners?: number }>;
-  };
-  tracks?: Array<{ name?: string; streams?: number; saves?: number; playlistAdds?: number }>;
-  playlistsDriving?: Array<{ name?: string; listeners?: number }>;
-  partial?: boolean;
-  errors?: string[];
-  updatedAt?: string;
-}
+/** Read view of the Spotify snapshot doc. See ArtistProfileDoc for why this is derived. */
+type SpotifySnapshotDoc = Partial<ArtistSpotifySnapshot>;
 
-interface NetworkDoc {
-  people?: Array<{
-    name?: string;
-    category?: string;
-    role?: string;
-    relationship?: string;
-    lastTouch?: string;
-    canHelpWith?: string;
-  }>;
-  updatedAt?: string;
-}
+/** Read views of the network and calendar docs. See ArtistProfileDoc for why these are derived. */
+type NetworkDoc = Partial<ArtistNetwork>;
+type CalendarDoc = Partial<ArtistCalendar>;
 
-interface CalendarDoc {
-  events?: Array<{
-    date?: string;
-    title?: string;
-    time?: string;
-    deletedAt?: string;
-  }>;
-  updatedAt?: string;
-}
-
-interface CommunityDoc {
-  contacts?: Array<{ segment?: string; city?: string; lastContacted?: string }>;
-  emailJobs?: Array<{ title?: string; status?: string; createdAt?: string; updatedAt?: string }>;
-  updatedAt?: string;
-}
+/**
+ * Read view of the community doc. The generated body is v2 (a summary, with
+ * fan records kept out of agent context); the inline v1 fields are still
+ * accepted for workspaces that have not run the community migration yet.
+ */
+type CommunityDoc = Partial<CommunitySummaryDoc> & {
+  /** v1 only, pre-migration. */
+  contacts?: unknown[];
+  /** v1 only, pre-migration. */
+  emailJobs?: Array<{ status?: string }>;
+};
 
 interface HqInputState {
   docs: LoadedContextDoc[];
@@ -531,7 +501,7 @@ function buildAttention(input: HqInputState): HqStateAttentionItem[] {
     });
   }
 
-  if (input.spotify?.partial || input.spotify?.errors?.length) {
+  if (input.spotify?.partial || asArray(input.spotify?.errors).length > 0) {
     items.push({
       kind: 'spotify',
       text: 'Spotify snapshot is partial or has errors; refresh before making performance calls.',
@@ -559,9 +529,9 @@ function buildMomentum(input: HqInputState): HqStateOfPlay['momentum'] {
 
   if (spotify?.metrics?.listeners) up.push(`${formatNumber(spotify.metrics.listeners)} Spotify listeners in latest snapshot.`);
   if (spotify?.metrics?.streams) up.push(`${formatNumber(spotify.metrics.streams)} Spotify streams in latest snapshot.`);
-  const topTrack = spotify?.tracks?.find((track) => clean(track.name));
+  const topTrack = asArray(spotify?.tracks).find((track) => clean(track.name));
   if (topTrack?.name) up.push(`Top track signal: ${topTrack.name}${topTrack.streams ? ` (${formatNumber(topTrack.streams)} streams)` : ''}.`);
-  const topCity = spotify?.geo?.topCities?.find((city) => clean(city.city));
+  const topCity = asArray(spotify?.geo?.topCities).find((city) => clean(city.city));
   if (topCity?.city) up.push(`Top city signal: ${topCity.city}${topCity.country ? `, ${topCity.country}` : ''}.`);
   if (community.contacts > 0) up.push(`${community.contacts} community contact${community.contacts === 1 ? '' : 's'} tracked.`);
   if (vault.agentUsable > 0) up.push(`${vault.agentUsable} agent-usable Vault asset${vault.agentUsable === 1 ? '' : 's'} available.`);
@@ -569,7 +539,8 @@ function buildMomentum(input: HqInputState): HqStateOfPlay['momentum'] {
 
   if (!spotify) down.push('No Spotify snapshot yet.');
   else if (spotify.partial) down.push('Spotify snapshot is marked partial.');
-  if (spotify?.errors?.length) down.push(`Spotify snapshot has ${spotify.errors.length} error${spotify.errors.length === 1 ? '' : 's'}.`);
+  const spotifyErrorCount = asArray(spotify?.errors).length;
+  if (spotifyErrorCount > 0) down.push(`Spotify snapshot has ${spotifyErrorCount} error${spotifyErrorCount === 1 ? '' : 's'}.`);
   if (community.contacts === 0) down.push('No community contacts tracked yet.');
   if (vault.total === 0) down.push('Vault has no assets yet.');
   if (input.goals.length === 0) down.push('No active HQ goals are tracked.');
@@ -587,9 +558,12 @@ function buildMissing(input: HqInputState): string[] {
   if (!clean(profile?.audience)) missing.push('target audience');
   if (!clean(profile?.visualWorld)) missing.push('visual world');
   if (!input.spotify) missing.push('Spotify snapshot');
-  if (!input.calendar?.events?.some((event) => !event.deletedAt)) missing.push('calendar dates');
-  if (!input.network?.people?.length) missing.push('network contacts');
-  if (!input.community?.contacts?.length) missing.push('community contacts');
+  if (!asArray(input.calendar?.events).some((event) => !event.deletedAt)) missing.push('calendar dates');
+  if (asArray(input.network?.people).length === 0) missing.push('network contacts');
+  // Via summarizeCommunity so this understands both the generated v2 summary
+  // and the pre-migration v1 body; reading `contacts` directly reported every
+  // v2 workspace as having none.
+  if (summarizeCommunity(input.community).contacts === 0) missing.push('community contacts');
   if (!vault.finalMaster) missing.push('final master in Vault');
   if (!vault.coverArt) missing.push('cover art in Vault');
   if (!vault.pressPhoto) missing.push('press photo in Vault');
@@ -769,7 +743,7 @@ function isAgentUsableVaultAsset(asset: VaultManifest['assets'][number]): boolea
 }
 
 function nextUpcomingEvent(input: HqInputState, withinDays: number): NonNullable<CalendarDoc['events']>[number] | null {
-  const events = input.calendar?.events ?? [];
+  const events = asArray(input.calendar?.events);
   return events
     .filter((event) => event.date && event.title && !event.deletedAt)
     .map((event) => ({ event, days: daysUntil(event.date!, input.now) }))
@@ -778,7 +752,7 @@ function nextUpcomingEvent(input: HqInputState, withinDays: number): NonNullable
 }
 
 function mostActionableStalePerson(input: HqInputState): NonNullable<NetworkDoc['people']>[number] | null {
-  const people = input.network?.people ?? [];
+  const people = asArray(input.network?.people);
   return people
     .filter((person) => clean(person.name))
     .map((person) => ({ person, score: personScore(person, input.now) }))
@@ -796,12 +770,32 @@ function personScore(person: NonNullable<NetworkDoc['people']>[number], now: Dat
 }
 
 function summarizeCommunity(community: CommunityDoc | null): { contacts: number; unsentDrafts: number; sentJobs: number } {
-  const jobs = community?.emailJobs ?? [];
+  if (!community) return { contacts: 0, unsentDrafts: 0, sentJobs: 0 };
+
+  // v2: the generated summary. `recentBroadcasts` holds sent jobs only.
+  // Counts are type-checked rather than trusted: the doc is parsed without
+  // validation, so a string here would flow straight into the brief.
+  if (isPlainObject(community.summary)) {
+    const summary = community.summary as Partial<CommunitySummaryDoc['summary']>;
+    return {
+      contacts: countOf(summary.totalContacts),
+      unsentDrafts: countOf(summary.draftBroadcasts),
+      sentJobs: Array.isArray(community.recentBroadcasts) ? community.recentBroadcasts.length : 0,
+    };
+  }
+
+  // v1: inline records, before the community migration ran.
+  const jobs = Array.isArray(community.emailJobs) ? community.emailJobs : [];
   return {
-    contacts: community?.contacts?.length ?? 0,
-    unsentDrafts: jobs.filter((job) => job.status !== 'sent').length,
-    sentJobs: jobs.filter((job) => job.status === 'sent').length,
+    contacts: Array.isArray(community.contacts) ? community.contacts.length : 0,
+    unsentDrafts: jobs.filter((job) => job?.status !== 'sent').length,
+    sentJobs: jobs.filter((job) => job?.status === 'sent').length,
   };
+}
+
+/** Non-negative integer counts only; anything else reads as zero. */
+function countOf(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
 function dedupeAttention(items: HqStateAttentionItem[]): HqStateAttentionItem[] {
@@ -814,6 +808,16 @@ function dedupeAttention(items: HqStateAttentionItem[]): HqStateAttentionItem[] 
     out.push(item);
   }
   return out;
+}
+
+/**
+ * Collection fields read off source docs, which are parsed without validation.
+ * A doc written by hand or by an agent can carry a string where an array
+ * belongs, and reaching `.filter()` on it would throw and take the whole brief
+ * down. Anything that is not an array reads as empty.
+ */
+function asArray<T>(value: T[] | undefined): T[] {
+  return Array.isArray(value) ? value : [];
 }
 
 function readJsonObject<T extends object>(doc: LoadedContextDoc | undefined): T | null {

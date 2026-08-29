@@ -354,6 +354,111 @@ describe('HQ State of Play composer', () => {
     });
     expect(parseHqStateOfPlay(serializeHqStateOfPlay(state))?.nextMove.entityRef).toEqual(state.nextMove.entityRef);
   });
+
+  /**
+   * The generated community doc became a v2 summary while this composer still
+   * read the v1 inline `contacts`/`emailJobs` arrays, so every community signal
+   * silently went to zero. Both shapes must be understood: v2 is what is written
+   * today, v1 survives in workspaces that have not run the community migration.
+   */
+  test('reads community counts from the generated v2 summary', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [
+        doc('artist-community', 'Artist Community', {
+          version: 2,
+          summary: {
+            totalContacts: 42,
+            segments: [{ id: 'vip', label: 'vip', count: 4 }],
+            suppressedCount: 1,
+            draftBroadcasts: 2,
+          },
+          recentBroadcasts: [],
+          warnings: [],
+        }),
+      ],
+    });
+
+    expect(state.attention).toContainEqual(
+      expect.objectContaining({
+        kind: 'community',
+        text: '42 fan contacts exist, but no sent broadcast is recorded.',
+      }),
+    );
+  });
+
+  test('counts a sent broadcast from the v2 summary', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [
+        doc('artist-community', 'Artist Community', {
+          version: 2,
+          summary: { totalContacts: 42, segments: [], suppressedCount: 0, draftBroadcasts: 0 },
+          recentBroadcasts: [{ id: 'job-1', title: 'Launch', completedAt: '2026-07-04T00:00:00.000Z' }],
+          warnings: [],
+        }),
+      ],
+    });
+
+    expect(state.attention.filter((item) => item.kind === 'community')).toEqual([]);
+  });
+
+  /**
+   * These docs are user- and agent-authored, so a field can arrive with the
+   * wrong type. Reaching `.filter()` on a string used to throw and take the
+   * whole brief down.
+   */
+  test('survives source docs whose collection fields are the wrong type', () => {
+    const cases = [
+      ['artist-network', { version: 1, people: 'not-an-array' }],
+      ['artist-calendar', { version: 1, events: { fake: true } }],
+      ['artist-calendar', { version: 1, events: 'string' }],
+      ['artist-spotify-snapshot', { snapshotDate: '2026-08-01', metrics: {}, tracks: 'nope', geo: 'nope' }],
+    ] as const;
+
+    for (const [slug, payload] of cases) {
+      const state = buildHqStateOfPlay({ now, docs: [doc(slug, slug, payload)] });
+      expect(state.headline.length).toBeGreaterThan(0);
+      expect(Array.isArray(state.missing)).toBe(true);
+    }
+  });
+
+  test('treats wrong-typed community counts as zero rather than trusting them', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [
+        doc('artist-community', 'Artist Community', {
+          version: 2,
+          summary: { totalContacts: '42', draftBroadcasts: '7' },
+          recentBroadcasts: 'nope',
+        }),
+      ],
+    });
+
+    expect(state.missing).toContain('community contacts');
+    expect(state.attention.filter((item) => item.kind === 'community')).toEqual([]);
+  });
+
+  test('still reads the pre-migration v1 community shape', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [
+        doc('artist-community', 'Artist Community', {
+          version: 1,
+          updatedAt: '2026-07-04T00:00:00.000Z',
+          contacts: Array.from({ length: 42 }, () => ({ segment: 'fans' })),
+          emailJobs: [],
+        }),
+      ],
+    });
+
+    expect(state.attention).toContainEqual(
+      expect.objectContaining({
+        kind: 'community',
+        text: '42 fan contacts exist, but no sent broadcast is recorded.',
+      }),
+    );
+  });
 });
 
 function operational(overrides: Partial<import('./types.ts').HqOperationalSnapshot> = {}): import('./types.ts').HqOperationalSnapshot {

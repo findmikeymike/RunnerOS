@@ -1,13 +1,13 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-08-25
+last_verified: 2026-08-29
 source_of_truth: true
 ---
 
 # Runner System Map
 
-Generated: 2026-08-25
+Generated: 2026-08-29
 
 ## Why This Exists
 
@@ -22,7 +22,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - workersLaunchpad: `apps/electron/src/renderer/components/app-shell/AgentsLaunchpad.tsx`
 - workerDefaults: `apps/electron/src/renderer/lib/worker-defaults.ts`
 - runAgent: `apps/electron/src/renderer/lib/run-agent.ts`
-- composeAgentPrompt: `apps/electron/src/renderer/lib/compose-agent-prompt.ts`
+- composeAgentPrompt: `packages/shared/src/agent-prompt/compose.ts`
 - sessionManager: `packages/server-core/src/sessions/SessionManager.ts`
 - sharedIntelHandler: `packages/server-core/src/handlers/rpc/shared-intel.ts`
 - sharedIntelRouter: `packages/shared/src/shared-intel/router.ts`
@@ -61,7 +61,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Scheduled Work execution: wired
 - Domains: Command 3, Content Creation 9, Creative 6, Merch 2, Operators 2, Other Workers 6, Outreach 5, Promotion 9, Research 4, Socials 3
 - Permission modes: ask 41, safe 8
-- Known skills: 125 (89 bundled, 6 system, 125 user-global on this machine)
+- Known skills: 126 (90 bundled, 6 system, 126 user-global on this machine)
 - Known builtin sources: 27
 
 ## Reference Health
@@ -431,7 +431,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Tags: `creative`, `producer`, `song-review`, `music`, `email`, `handoff`
 - Signals: `approval-capable`, `artifact-output-aware`, `external-action-boundary`, `optional-source-aware`
 - Inputs: Song file/link, artist name, song title, desired review goal, song notes, references, timeline, contact info, and approval to send.
-- Outputs: A Record Doctor submission packet, producer email draft to mikeymikemusic@gmail.com, approval checklist, Gmail draft/send receipt when connected, or manual copy-paste packet.
+- Outputs: A Record Doctor submission packet, producer email draft, approval checklist, Gmail draft/send receipt when connected, or manual copy-paste packet.
 
 #### World Builder (`world-builder`)
 
@@ -687,7 +687,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
 - Skills: `meta-ads`, `google-ads`, `paid-ads-browser-operator`, `music-ad-conversion-protocol`
-- Sources: `meta-ads`, `google-ads`, `ads-operator`
+- Sources: `meta-ads`, `google-ads`, `ads-operator`, `printing-press-social`
 - Optional sources: none
 - Trusted tools: none
 - Tags: `ads`, `meta`, `google-ads`, `spotify-ads`, `paid-search`, `reporting`, `diagnostics`, `growth`
@@ -872,7 +872,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Plan social rollouts and route approved Finals through Artist OS, Postiz, or TryPost.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`
-- Skills: `social-publishing`
+- Skills: `social-publishing`, `instagram-growth-snapshot`
 - Sources: `printing-press-social`
 - Optional sources: `postiz`, `trypost`
 - Trusted tools: none

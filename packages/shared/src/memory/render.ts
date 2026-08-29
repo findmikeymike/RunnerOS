@@ -2,14 +2,11 @@
  * Canonical rendering of memory entries into the agent's runtime system
  * prompt.
  *
- * Lives in `@craft-agent/shared` because BOTH the renderer-spawned chat
- * path (apps/electron/src/renderer/lib/compose-agent-prompt.ts) and the
- * server-spawned workflow path (packages/server-core/src/sessions/SessionManager.ts)
- * inject memory, and the format MUST match — otherwise the same agent
- * sees different prompt shapes depending on origin and the LLM behaves
- * inconsistently.
- *
- * Both render sites import from this file. Do not fork.
+ * The single render site is `agent-prompt/compose.ts`, which every launch
+ * path now composes through — renderer chat, workflow steps, pulses, and
+ * agent delegation. Keep it that way: memory rendered differently per origin
+ * means the same agent sees a different prompt shape depending on how it was
+ * started.
  */
 
 import type { MemoryEntry } from './types.ts';
