@@ -36,6 +36,7 @@
     "./hq-state": "./src/hq-state/index.ts",
     "./hq-state/recommendation-storage": "./src/hq-state/recommendation-storage.ts",
     "./artist-vault": "./src/artist-vault/index.ts",
+    "./artist-context": "./src/artist-context/index.ts",
     "./memory": "./src/memory/index.ts",
     "./memory/render": "./src/memory/render.ts",
     "./memory/types": "./src/memory/types.ts",

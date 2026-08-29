@@ -1,3 +1,4 @@
+import type { ArtistProfile } from '../artist-context/profile.ts';
 import { ARTIST_VAULT_CONTEXT_SLUG, type VaultManifest } from '../artist-vault/types.ts';
 import { isSharedIntelContextSlug, parseSharedIntelNote } from '../shared-intel/index.ts';
 import type { ContextDocMetadata, LoadedContextDoc } from '../workspace-context/types.ts';
@@ -18,20 +19,13 @@ import {
   type HqStateRouteHint,
 } from './types.ts';
 
-interface ArtistProfileDoc {
-  artistName?: string;
-  bio?: string;
-  themes?: string;
-  sound?: string;
-  visualWorld?: string;
-  audience?: string;
-  similarArtists?: string;
-  priorityMarkets?: string;
-  spotifyProfile?: string;
-  promoBudget?: string;
-  rules?: string;
-  updatedAt?: string;
-}
+/**
+ * Read view of the Artist Profile doc. Derived from the canonical schema rather
+ * than restated, so renaming a profile field breaks this build instead of
+ * silently emptying the State of Play. Partial because the doc is user-authored
+ * and read here without normalization.
+ */
+type ArtistProfileDoc = Partial<ArtistProfile>;
 
 interface SpotifySnapshotDoc {
   snapshotDate?: string;
