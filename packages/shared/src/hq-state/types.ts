@@ -1,4 +1,5 @@
-import type { ContextDocMetadata } from '../workspace-context/types.ts';
+import type { ContextDocMetadata, LoadedContextDoc } from '../workspace-context/types.ts';
+import type { MissionBrief } from '../artist-context/mission-brief.ts';
 
 export const HQ_STATE_CONTEXT_SLUG = 'hq-state-of-play';
 export const HQ_STATE_CONTEXT_FENCE = 'json hq-state-of-play';
@@ -118,6 +119,122 @@ export interface HqOperationalSnapshot {
   failures: HqOperationalItem[];
   recentOutputs: HqOperationalItem[];
   sourceHealth: HqOperationalSourceHealth[];
+}
+
+export interface ManagerSourceRef {
+  workspaceId: string;
+  contextSlug?: string;
+  entityType?: string;
+  entityId?: string;
+  updatedAt?: string;
+}
+
+export interface ManagerSourceHealth {
+  source: string;
+  status: 'fresh' | 'stale' | 'partial' | 'malformed' | 'unavailable';
+  observedAt?: string;
+  staleAfter?: string;
+  message?: string;
+}
+
+export interface ManagerCollectionSummary {
+  total: number;
+  active?: number;
+  blocked?: number;
+  completed?: number;
+  updatedAt?: string;
+}
+
+export interface ManagerCampaignSnapshot {
+  workspaceId: string;
+  name: string;
+  primary: boolean;
+  mission?: MissionBrief;
+  readiness?: { done: number; total: number; nextMissing: string[] };
+  calendar?: ManagerCollectionSummary;
+  work?: ManagerCollectionSummary;
+  assets?: ManagerCollectionSummary;
+  outputs?: ManagerCollectionSummary;
+  sourceHealth: ManagerSourceHealth[];
+}
+
+export interface ManagerGrowthSignal {
+  asOf: string;
+  windowDays?: number;
+  primaryMetric: string;
+  value?: number;
+  delta?: number;
+  highlights: string[];
+  partial: boolean;
+  source: ManagerSourceRef;
+}
+
+export interface ManagerBriefV1 {
+  version: 1;
+  workspaceId: string;
+  revision: string;
+  generatedAt: string;
+  budget: {
+    maxChars: 8000;
+    actualChars: number;
+    truncated: boolean;
+  };
+  identity: {
+    artistName?: string;
+    mission?: string;
+    sound?: string;
+    audience?: string;
+    operatingRules?: string[];
+  };
+  trajectory: Array<{
+    month: string;
+    title: string;
+    event: 'release' | 'promotion' | 'live' | 'creation' | 'business';
+    keyGoal?: string;
+    source: ManagerSourceRef;
+  }>;
+  campaignFocus?: {
+    workspaceId: string;
+    name: string;
+    label: 'Current campaign' | 'Next campaign' | 'Latest campaign' | 'Release date needed';
+    releaseDate?: string;
+    goal?: string;
+    readiness?: { done: number; total: number };
+    nextMissing?: string[];
+    source: ManagerSourceRef;
+  };
+  growth: {
+    spotify?: ManagerGrowthSignal;
+    instagram?: ManagerGrowthSignal;
+  };
+  intelligence: Array<{
+    id: string;
+    title: string;
+    summary: string;
+    whyItMatters?: string;
+    confidence: 'high' | 'medium' | 'low';
+    source: ManagerSourceRef;
+  }>;
+  operatingState: {
+    nextMove?: { title: string; why: string; worker?: string };
+    attention: string[];
+    blockers: string[];
+    activeWork: string[];
+  };
+  sourceHealth: ManagerSourceHealth[];
+}
+
+export interface BuildManagerBriefInput {
+  workspaceId: string;
+  docs: LoadedContextDoc[];
+  relatedCampaigns: ManagerCampaignSnapshot[];
+  operatingState?: {
+    nextMove?: HqStateNextMove;
+    attention?: HqStateAttentionItem[];
+    blockers?: string[];
+  };
+  operational?: HqOperationalSnapshot;
+  now?: Date;
 }
 
 export interface HqStateOfPlay {

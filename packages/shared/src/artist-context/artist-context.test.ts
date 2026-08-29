@@ -122,10 +122,20 @@ describe('artist text docs', () => {
   });
 
   test('drops non-string field values instead of storing them', () => {
-    const result = artistVoiceDoc.parse(doc('```json\n{"version":1,"summary":42,"avoid":null}\n```'));
+    const result = artistVoiceDoc.parse(doc('```json\n{"version":1,"summary":42,"avoid":null,"updatedAt":"2026-07-04T00:00:00.000Z"}\n```'));
     expect(result.ok).toBe(true);
     expect(result.value.summary).toBeUndefined();
     expect(result.value.avoid).toBeUndefined();
+  });
+
+  test('preserves persisted freshness and reports a missing timestamp', () => {
+    const parsed = artistProfileDoc.parse(doc('```json\n{"version":1,"artistName":"Mikey Mike","updatedAt":"2026-04-01T00:00:00.000Z"}\n```'));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.value.updatedAt).toBe('2026-04-01T00:00:00.000Z');
+
+    const missing = artistProfileDoc.parse(doc('```json\n{"version":1,"artistName":"Mikey Mike"}\n```'));
+    expect(missing.ok).toBe(false);
+    expect(missing.ok || missing.error).toContain('updatedAt');
   });
 
   test('completion scores only the fields that count toward it', () => {

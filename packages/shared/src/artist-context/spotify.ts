@@ -45,6 +45,8 @@ export interface ArtistSpotifySnapshot {
   partial?: boolean;
   errors?: string[];
   updatedAt: string;
+  /** True only when an old snapshot lacked updatedAt and snapshotDate was used instead. */
+  updatedAtInferred?: true;
 }
 
 type SpotifyTrack = NonNullable<ArtistSpotifySnapshot['tracks']>[number];
@@ -122,10 +124,16 @@ export function parseArtistSpotifySnapshotJsonResult(body: string): ArtistSpotif
             : undefined,
         partial: Boolean(parsed.partial),
         errors: Array.isArray(parsed.errors) ? parsed.errors.map(String) : [],
-        updatedAt: normalizeInlineText(parsed.updatedAt) ?? new Date().toISOString(),
+        updatedAt: normalizeTimestamp(parsed.updatedAt) ?? `${snapshotDate}T00:00:00.000Z`,
+        updatedAtInferred: normalizeTimestamp(parsed.updatedAt) ? undefined : true,
       };
     },
   );
+}
+
+function normalizeTimestamp(value: unknown): string | undefined {
+  const timestamp = normalizeInlineText(value);
+  return timestamp && !Number.isNaN(Date.parse(timestamp)) ? timestamp : undefined;
 }
 
 /**

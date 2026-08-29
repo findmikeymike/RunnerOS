@@ -75,16 +75,18 @@ export function defineArtistTextDoc<T extends ArtistTextRecord>(
 
   const empty = (): T => ({ version: 1, updatedAt: new Date().toISOString() }) as T;
 
-  const normalize = (record: Partial<T>): T => {
+  const normalizeWithTimestamp = (record: Partial<T>, updatedAt: string): T => {
     // Key insertion order is load-bearing: it is the order fields appear in the
     // serialized doc on disk. `version` first, `updatedAt` last.
     const normalized: Record<string, unknown> = { version: 1 };
     for (const field of fields) {
       normalized[field as string] = normalizeProseText(record[field]);
     }
-    normalized.updatedAt = new Date().toISOString();
+    normalized.updatedAt = updatedAt;
     return normalized as T;
   };
+
+  const normalize = (record: Partial<T>): T => normalizeWithTimestamp(record, new Date().toISOString());
 
   const parse = (doc: Pick<LoadedContextDoc, 'body'> | undefined): ArtistTextDocParse<T> => {
     if (!doc?.body.trim()) return { ok: true, value: empty() };
@@ -105,7 +107,10 @@ export function defineArtistTextDoc<T extends ArtistTextRecord>(
       if (parsed.version !== 1) {
         return { ok: false, value: empty(), error: `${label} JSON has an unsupported shape.` };
       }
-      return { ok: true, value: normalize(parsed) };
+      if (!isIsoTimestamp(parsed.updatedAt)) {
+        return { ok: false, value: empty(), error: `${label} updatedAt is missing or invalid.` };
+      }
+      return { ok: true, value: normalizeWithTimestamp(parsed, parsed.updatedAt) };
     } catch {
       return { ok: false, value: empty(), error: `${label} JSON is malformed.` };
     }
@@ -119,4 +124,8 @@ export function defineArtistTextDoc<T extends ArtistTextRecord>(
   };
 
   return { slug, metadata, empty, normalize, parse, serialize, completion };
+}
+
+function isIsoTimestamp(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Date.parse(value));
 }
