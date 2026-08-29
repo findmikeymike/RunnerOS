@@ -21,6 +21,7 @@ import { useDeepResearchRuns } from '@/hooks/useDeepResearchRuns'
 import { useAtomValue } from 'jotai'
 import { WorkflowRunInputDialog } from './WorkflowRunInputDialog'
 import type { LoadedSource, WorkflowDTO, WorkflowRunDTO, WorkflowRunState } from '../../shared/types'
+import { CompactPageHeader } from '@/components/app-shell/CompactPageHeader'
 
 interface WorkflowsListPageProps {
   workspaceId: string
@@ -207,34 +208,24 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="mx-auto min-h-full w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
-        <header className="relative mb-6 overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] p-6 lg:p-8">
-          <div className="absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full bg-violet-600/10 blur-[110px]" />
-          <div className="absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full bg-violet-500/5 blur-[120px]" />
-          <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex-1">
-              <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5">
-                <WorkflowIcon className="h-3.5 w-3.5 text-violet-300/80" />
-                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/65">Routines</span>
+        <CompactPageHeader
+          eyebrow="Routines"
+          title={t('sidebar.workflows')}
+          tone="violet"
+          className="mb-6"
+          eyebrowAccessory={
                 <button
                   type="button"
                   onClick={() => setInfoOpen(true)}
-                  className="-mr-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.035] text-white/46 transition-colors hover:bg-white/[0.07] hover:text-white/80"
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.035] text-white/46 transition-colors hover:bg-white/[0.07] hover:text-white/80"
                   aria-label="What are workflows?"
                   title="What are workflows?"
                 >
-                  <Info className="h-3 w-3" />
+                  <Info className="h-2.5 w-2.5" />
                 </button>
-              </div>
-              <div className="max-w-3xl">
-                <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl lg:text-[56px] lg:leading-[0.96]">
-                  {t('sidebar.workflows')}
-                </h1>
-                <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
-                  {t('workflows.list.subtitle')}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
+          }
+          actions={
+            <>
               <button
                 type="button"
                 onClick={() => setDeepResearchOpen(true)}
@@ -267,9 +258,9 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
                 <Plus className="h-3.5 w-3.5" />
                 {t('workflows.list.new')}
               </button>
-            </div>
-          </div>
-        </header>
+            </>
+          }
+        />
 
         {loading ? (
           <div className="flex h-full items-center justify-center text-sm text-white/50">{t('common.loading')}</div>

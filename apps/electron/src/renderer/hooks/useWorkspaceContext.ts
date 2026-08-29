@@ -27,6 +27,10 @@ function sortDocs(docs: ContextDocDTO[]): ContextDocDTO[] {
   return [...docs].sort((a, b) => a.metadata.name.localeCompare(b.metadata.name))
 }
 
+export function shouldRefreshWorkspaceContext(state: WorkspaceContextState, hasLoaded: boolean): boolean {
+  return !hasLoaded || state.loading
+}
+
 export function useWorkspaceContext(workspaceId: string | null | undefined): UseWorkspaceContextResult {
   const workspaceKey = getWorkspaceKey(workspaceId)
   const [state, setState] = useAtom(workspaceContextStateAtomFamily(workspaceKey))
@@ -73,10 +77,10 @@ export function useWorkspaceContext(workspaceId: string | null | undefined): Use
   }, [refresh, workspaceKey])
 
   useEffect(() => {
-    if (!loadedWorkspaceKeys.has(workspaceKey)) {
-      refresh()
+    if (shouldRefreshWorkspaceContext(state, loadedWorkspaceKeys.has(workspaceKey))) {
+      void refresh()
     }
-  }, [refresh, workspaceKey])
+  }, [refresh, state.loading, workspaceKey])
 
   useEffect(() => {
     mountedWorkspaceKeys.set(workspaceKey, (mountedWorkspaceKeys.get(workspaceKey) ?? 0) + 1)

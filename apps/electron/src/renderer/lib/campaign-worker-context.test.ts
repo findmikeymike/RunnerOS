@@ -12,6 +12,7 @@ import {
 const artistProfile: ArtistProfile = {
   version: 1,
   artistName: 'HNlC',
+  mission: 'Make outsiders feel understood through emotionally honest music.',
   sound: 'Dark pop with cinematic hooks.',
   audience: 'Heartbroken city kids who live on TikTok.',
   updatedAt: '2026-06-30T00:00:00.000Z',
@@ -101,6 +102,7 @@ describe('campaign worker context', () => {
     expect(body).toContain('Next move: Ready to launch workers from this campaign context.')
     expect(body).toContain('"title": "Night Drive"')
     expect(body).toContain('"name": "HNlC"')
+    expect(body).toContain('"mission": "Make outsiders feel understood through emotionally honest music."')
     expect(body).toContain('"commentReplyExamples": "appreciate you. this one felt different."')
     expect(body).toContain('"master": "assets/master.txt"')
   })

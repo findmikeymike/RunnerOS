@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { navigate, routes } from '@/lib/navigate'
 import { cn } from '@/lib/utils'
+import { CompactPageHeader } from './CompactPageHeader'
 import { hydrateLabState, loadLabUiSongs, subscribeLabSongs, type LabUiSong } from '@/lib/lab-song-state'
 import { useAgents } from '@/hooks/useAgents'
 
@@ -102,40 +103,12 @@ export function LabWorkspaceHome({ workspaceId, workspaceName }: LabWorkspaceHom
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="flex w-full flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
-        <section className="relative min-h-[230px] overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A]">
-          <div className="absolute -left-[20%] -top-[40%] h-[600px] w-[600px] rounded-full bg-orange-600/10 blur-[120px]" />
-          <div className="absolute -bottom-[45%] -right-[10%] h-[620px] w-[620px] rounded-full bg-indigo-600/5 blur-[120px]" />
-
-          <div className="relative z-10 flex min-h-[230px] flex-col justify-between p-6 lg:p-8">
-            <div className="flex items-start justify-between gap-4">
-              <div className="inline-flex items-center gap-2.5 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 pr-4 backdrop-blur-md">
-                <span className="flex h-2 w-2 items-center justify-center rounded-full bg-[#f97316]/20">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#fb923c]" />
-                </span>
-                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/70">
-                  Creative Workspace
-                </span>
-              </div>
-              <p className="text-right text-[10px] font-medium uppercase tracking-[0.2em] text-white/38">
-                Songs · Lyrics · Research
-              </p>
-            </div>
-
-            <div className="my-5 max-w-[760px]">
-              <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl md:text-6xl lg:text-[56px] lg:leading-[0.94]">
-                The Lab
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
-                A quiet place to collect loose ideas, write songs, shape lyrics, and turn sparks into something worth finishing.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-4 border-t border-white/[0.05] pt-4 md:flex-row md:items-end md:justify-between">
-              <div>
-                <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-white/40">Workspace</p>
-                <p className="mt-1 text-xs font-medium text-white/72">{workspaceName || 'Creative Lab'}</p>
-              </div>
-              <div className="flex shrink-0 flex-wrap gap-2.5">
+        <CompactPageHeader
+          eyebrow={workspaceName || 'Creative Workspace'}
+          title="The Lab"
+          tone="orange"
+          actions={
+            <>
                 <button
                   type="button"
                   onClick={() => navigate(routes.view.lab('pad'))}
@@ -151,10 +124,9 @@ export function LabWorkspaceHome({ workspaceId, workspaceName }: LabWorkspaceHom
                 >
                   Songs
                 </button>
-              </div>
-            </div>
-          </div>
-        </section>
+            </>
+          }
+        />
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <ActionTile icon={PenLine} title="Song Pad" detail="Write loose, then shape the structure." onClick={() => navigate(routes.view.lab('pad'))} />

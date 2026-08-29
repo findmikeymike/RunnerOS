@@ -76,10 +76,11 @@ This is the source-of-truth artist profile. Answer what you can; leave blanks fo
     expect(result.profile.rules).toBe('Generic mysterious girl.')
   })
 
-  it('round trips a workspace-relative HQ banner reference', () => {
+  it('round trips the Artist North Star and workspace-relative HQ banner reference', () => {
     const body = serializeArtistProfileBody({
       version: 1,
       artistName: 'Nova Saint',
+      mission: 'Make outsiders feel understood through emotionally honest music.',
       bannerImagePath: 'assets/images/cover-art/hq-banner.webp',
       updatedAt: '2026-07-30T00:00:00.000Z',
     })
@@ -87,6 +88,7 @@ This is the source-of-truth artist profile. Answer what you can; leave blanks fo
     const result = parseArtistProfileDocResult(doc(body))
 
     expect(result.ok).toBe(true)
+    expect(result.profile.mission).toBe('Make outsiders feel understood through emotionally honest music.')
     expect(result.profile.bannerImagePath).toBe('assets/images/cover-art/hq-banner.webp')
   })
 })

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Circle, Clock3, GripVertical, MessageCircle, Plus, Send, Trash2, Users } from 'lucide-react'
+import { CheckCircle2, ChevronDown, ChevronRight, Circle, Clock3, GripVertical, MessageCircle, Plus, Send, Trash2, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   DndContext,
@@ -29,6 +29,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  StyledContextMenuContent,
+  StyledContextMenuItem,
+} from '@/components/ui/styled-context-menu'
 import { cn } from '@/lib/utils'
 import { getSessionTitle } from '@/utils/session'
 import type { SessionMeta } from '@/atoms/sessions'
@@ -36,6 +42,7 @@ import type { AgendaTaskComment, AgendaTaskThread } from '@craft-agent/shared/ag
 import type { TeamModeStatus } from '../../../shared/types'
 import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
 import { agendaTaskPreview, firstAgendaDetailLine, isAgendaSession } from './agenda-utils'
+import { CompactPageHeader } from './CompactPageHeader'
 import {
   ARTIST_NETWORK_CONTEXT_SLUG,
   parseArtistNetworkDocResult,
@@ -54,7 +61,7 @@ export interface AgendaTaskDraft {
 interface AgendaPageProps {
   sessions: SessionMeta[]
   onCreateTask: (task: AgendaTaskDraft) => Promise<string>
-  onDeleteTask: (sessionId: string) => Promise<boolean>
+  onDeleteTask: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
   workspaceId?: string
   networkWorkspaceId?: string
   embedded?: boolean
@@ -80,7 +87,7 @@ function DroppableLane({ id, children, className }: { id: string, children: Reac
   )
 }
 
-function DraggableCard({ session, detailsPreview, networkPeople, onClick, compact = false }: { session: SessionMeta, detailsPreview?: string, networkPeople: ArtistNetworkPerson[], onClick: () => void, compact?: boolean }) {
+function DraggableCard({ session, detailsPreview, networkPeople, onClick, onDelete, compact = false }: { session: SessionMeta, detailsPreview?: string, networkPeople: ArtistNetworkPerson[], onClick: () => void, onDelete: () => void, compact?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: session.id,
     data: { session }
@@ -93,45 +100,57 @@ function DraggableCard({ session, detailsPreview, networkPeople, onClick, compac
   }
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        "group relative flex w-full flex-col rounded-[13px] border border-white/[0.07] bg-[#0F0F10] px-3 text-left transition-colors hover:bg-[#121314]",
-        compact ? 'gap-1 py-2' : 'gap-2 py-2.5',
-        isDragging && "shadow-2xl border-white/[0.15]"
-      )}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={onClick}
-          className="flex-1 text-left line-clamp-1 text-sm font-medium leading-5 text-white/80 hover:text-white"
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          ref={setNodeRef}
+          style={style}
+          className={cn(
+            "group relative flex w-full flex-col rounded-[13px] border border-white/[0.07] bg-[#0F0F10] px-3 text-left transition-colors hover:bg-[#121314]",
+            compact ? 'gap-1 py-2' : 'gap-2 py-2.5',
+            isDragging && "shadow-2xl border-white/[0.15]"
+          )}
         >
-          {getSessionTitle(session)}
-        </button>
-        <div className="flex items-center gap-2">
-          <Circle className={cn('h-3 w-3 shrink-0', session.isProcessing ? 'text-orange-300' : 'text-white/24')} />
-          <button
-            type="button"
-            className="cursor-grab p-1 text-white/20 opacity-0 transition-opacity hover:text-white/50 group-hover:opacity-100"
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={onClick}
+              className="flex-1 text-left line-clamp-1 text-sm font-medium leading-5 text-white/80 hover:text-white"
+            >
+              {getSessionTitle(session)}
+            </button>
+            <button
+              type="button"
+              className="cursor-grab p-1 text-white/30 transition-colors hover:text-white/55"
+              aria-label={`Drag ${getSessionTitle(session)}`}
             {...attributes}
             {...listeners}
           >
             <GripVertical className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <button type="button" onClick={onClick} className="text-left w-full cursor-pointer">
+            <p className="line-clamp-1 text-xs leading-5 text-white/38">
+              {agendaTaskPreview(detailsPreview, session.preview, session.spawnedFromAgent?.agentName)}
+            </p>
+            <div className={cn('flex items-center justify-between gap-2', compact ? 'mt-1' : 'mt-2')}>
+              <div />
+              <PersonBadge labels={session.labels} people={networkPeople} />
+            </div>
           </button>
         </div>
-      </div>
-      <button type="button" onClick={onClick} className="text-left w-full cursor-pointer">
-        <p className="line-clamp-1 text-xs leading-5 text-white/38">
-          {agendaTaskPreview(detailsPreview, session.preview, session.spawnedFromAgent?.agentName)}
-        </p>
-        <div className={cn('flex items-center justify-between gap-2', compact ? 'mt-1' : 'mt-2')}>
-          <div />
-          <PersonBadge labels={session.labels} people={networkPeople} />
-        </div>
-      </button>
-    </div>
+      </ContextMenuTrigger>
+      <StyledContextMenuContent minWidth="min-w-0" className="p-1">
+        <StyledContextMenuItem
+          variant="destructive"
+          onSelect={onDelete}
+          className="gap-1.5 px-2 pr-2"
+        >
+          <X className="h-3.5 w-3.5" />
+          Delete
+        </StyledContextMenuItem>
+      </StyledContextMenuContent>
+    </ContextMenu>
   )
 }
 
@@ -140,7 +159,7 @@ function CardOverlay({ session, detailsPreview, networkPeople }: { session: Sess
     <div className="w-full rotate-2 rounded-[13px] border border-white/[0.15] bg-[#0F0F10] px-3 py-2.5 shadow-2xl">
       <div className="flex items-center justify-between gap-3">
         <p className="line-clamp-1 text-sm font-medium leading-5 text-white/80">{getSessionTitle(session)}</p>
-        <Circle className={cn('h-3 w-3 shrink-0', session.isProcessing ? 'text-orange-300' : 'text-white/24')} />
+        <GripVertical className="h-3.5 w-3.5 shrink-0 text-white/30" />
       </div>
       <p className="mt-1 line-clamp-1 text-xs leading-5 text-white/38">
         {agendaTaskPreview(detailsPreview, session.preview, session.spawnedFromAgent?.agentName)}
@@ -283,23 +302,30 @@ export function AgendaPage({ sessions, onCreateTask, onDeleteTask, workspaceId, 
     setCommentDraft('')
   }, [])
 
-  const deleteTask = React.useCallback(async () => {
-    if (!selectedSession || deleting) return
+  const deleteAgendaSession = React.useCallback(async (session: SessionMeta, skipConfirmation = false) => {
+    if (deleting) return
     setDeleting(true)
     try {
-      const deleted = await onDeleteTask(selectedSession.id)
+      const deleted = await onDeleteTask(session.id, skipConfirmation)
       if (!deleted) return
       if (workspaceId && teamStatus?.team.enabled && teamStatus.joined) {
-        await window.electronAPI.deleteAgendaTaskThread(workspaceId, selectedSession.id).catch((error) => {
+        await window.electronAPI.deleteAgendaTaskThread(workspaceId, session.id).catch((error) => {
           console.warn('Task deleted but its Team Mode discussion could not be removed:', error)
         })
       }
-      setSelectedSessionId(null)
-      setTaskThread(null)
+      if (selectedSessionId === session.id) {
+        setSelectedSessionId(null)
+        setTaskThread(null)
+      }
     } finally {
       setDeleting(false)
     }
-  }, [deleting, onDeleteTask, selectedSession, teamStatus?.joined, teamStatus?.team.enabled, workspaceId])
+  }, [deleting, onDeleteTask, selectedSessionId, teamStatus?.joined, teamStatus?.team.enabled, workspaceId])
+
+  const deleteTask = React.useCallback(async () => {
+    if (!selectedSession) return
+    await deleteAgendaSession(selectedSession)
+  }, [deleteAgendaSession, selectedSession])
 
   const addComment = React.useCallback(async () => {
     const body = commentDraft.trim()
@@ -421,24 +447,12 @@ export function AgendaPage({ sessions, onCreateTask, onDeleteTask, workspaceId, 
     <div className={cn(embedded ? 'h-full min-h-0 text-foreground' : 'h-full overflow-y-auto bg-[#050505] text-foreground')}>
       <div className={cn(embedded ? 'h-full min-h-0 w-full' : 'mx-auto min-h-full w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5')}>
         {embedded ? null : (
-        <header className="relative mb-6 overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] p-6 lg:p-8">
-          <div className="absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full bg-orange-600/10 blur-[110px]" />
-          <div className="absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full bg-orange-500/5 blur-[120px]" />
-          <div className="relative z-10 flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5">
-                <CalendarDays className="h-3.5 w-3.5 text-orange-300/80" />
-                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/65">Work Board</span>
-              </div>
-              <div className="max-w-3xl">
-                <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl lg:text-[56px] lg:leading-[0.96]">
-                  Agenda
-                </h1>
-                <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
-                  Track jobs, follow-ups, and active work without opening chat. Campaign command centers stay inside their own workspaces.
-                </p>
-              </div>
-            </div>
+        <CompactPageHeader
+          eyebrow="Work Board"
+          title="Agenda"
+          tone="orange"
+          className="mb-6"
+          actions={
             <button
               type="button"
               onClick={openCreateEditor}
@@ -447,8 +461,8 @@ export function AgendaPage({ sessions, onCreateTask, onDeleteTask, workspaceId, 
               <Plus className="h-3.5 w-3.5" />
               New Task
             </button>
-          </div>
-        </header>
+          }
+        />
         )}
 
         <DndContext
@@ -458,10 +472,10 @@ export function AgendaPage({ sessions, onCreateTask, onDeleteTask, workspaceId, 
           onDragEnd={handleDragEnd}
         >
           <div className={cn(
-            'grid grid-cols-1 lg:grid-cols-3',
+            'grid grid-cols-1',
             embedded
-              ? 'h-full min-h-0 overflow-hidden rounded-[14px] border border-white/[0.055] bg-[#0C0D0E] divide-y divide-white/[0.055] lg:divide-x lg:divide-y-0'
-              : 'min-h-[520px] gap-3',
+              ? 'h-full min-h-0 grid-rows-3 divide-y divide-white/[0.055]'
+              : 'min-h-[520px] gap-3 lg:grid-cols-3',
           )}>
             {AGENDA_COLUMNS.map((column, index) => {
               const items = byColumn.get(column.id) ?? []
@@ -472,11 +486,11 @@ export function AgendaPage({ sessions, onCreateTask, onDeleteTask, workspaceId, 
                   className={cn(
                     'transition-colors',
                     embedded
-                      ? 'flex min-h-0 flex-col p-3'
+                      ? 'flex min-h-0 flex-col px-3 py-2.5'
                       : 'rounded-[18px] border border-white/[0.055] bg-[#0C0D0E] p-3',
                   )}
                 >
-                  <div className={cn('flex items-center justify-between', embedded ? 'mb-2 pb-1' : 'mb-3 border-b border-white/[0.045] pb-2.5')}>
+                  <div className={cn('flex items-center justify-between', embedded ? 'mb-1.5 pb-0.5' : 'mb-3 border-b border-white/[0.045] pb-2.5')}>
                     <div className="flex items-center gap-2">
                       <ColumnIcon index={index} />
                       <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">{column.label}</h2>
@@ -497,7 +511,7 @@ export function AgendaPage({ sessions, onCreateTask, onDeleteTask, workspaceId, 
                     </div>
                   </div>
 
-                  <div className={cn('space-y-2', embedded && 'min-h-0 flex-1 overflow-y-auto pr-0.5')}>
+                  <div className={cn('space-y-1.5', embedded && 'min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5')}>
                     {items.map((session) => (
                       <DraggableCard
                         key={session.id}
@@ -505,6 +519,7 @@ export function AgendaPage({ sessions, onCreateTask, onDeleteTask, workspaceId, 
                         detailsPreview={detailsPreviews[session.id]}
                         networkPeople={networkPeople}
                         onClick={() => openEditor(session)}
+                        onDelete={() => void deleteAgendaSession(session, true)}
                         compact={embedded}
                       />
                     ))}
@@ -684,7 +699,7 @@ function TaskComment({ comment }: { comment: AgendaTaskComment }) {
 
 function ColumnIcon({ index }: { index: number }) {
   const Icon = index === 0 ? Circle : index === 1 ? Clock3 : CheckCircle2
-  return <Icon className="h-3.5 w-3.5 text-white/35" />
+  return <Icon className="h-3.5 w-3.5 text-[#f97316]" />
 }
 
 function normalizeAgendaStatus(status: string | undefined): AgendaColumnId {

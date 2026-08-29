@@ -92,6 +92,9 @@ import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui
 import { TemplatesGalleryDialog } from '@/components/automations/TemplatesGalleryDialog'
 import { ChevronDown, ChevronRight, Plus, Sparkles, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { CompactPageHeader } from './CompactPageHeader'
+import { MISSION_BRIEF_CONTEXT_SLUG, missionReleaseDateKey, parseMissionBriefDoc } from '@/lib/mission-brief'
+import type { HqCampaignSummary } from '@/lib/artist-hq-home-feed'
 
 export interface MainContentPanelProps {
   /** Whether both sidebar and navigator are hidden (focus mode / CMD+.) */
@@ -149,7 +152,7 @@ export function MainContentPanel({
     () => findPrimaryCampaignWorkspace(workspaces),
     [workspaces],
   )
-  const campaignWorkspaces = useMemo(
+  const campaignWorkspaceRefs = useMemo(
     () => workspaces
       .filter((workspace) => isArtistCampaignWorkspace(workspace))
       .map((workspace) => ({
@@ -159,6 +162,30 @@ export function MainContentPanel({
       })),
     [primaryCampaignWorkspace?.id, workspaces],
   )
+  const [campaignWorkspaces, setCampaignWorkspaces] = useState<HqCampaignSummary[]>(campaignWorkspaceRefs)
+
+  React.useEffect(() => {
+    let canceled = false
+    setCampaignWorkspaces(campaignWorkspaceRefs)
+
+    void Promise.all(campaignWorkspaceRefs.map(async (campaign): Promise<HqCampaignSummary> => {
+      try {
+        const docs = await window.electronAPI.listWorkspaceContextDocs(campaign.id)
+        const brief = parseMissionBriefDoc(docs.find((doc) => doc.slug === MISSION_BRIEF_CONTEXT_SLUG))
+        return {
+          ...campaign,
+          releaseDate: brief ? missionReleaseDateKey(brief) : undefined,
+          missionTitle: brief?.title,
+        }
+      } catch {
+        return campaign
+      }
+    })).then((summaries) => {
+      if (!canceled) setCampaignWorkspaces(summaries)
+    })
+
+    return () => { canceled = true }
+  }, [campaignWorkspaceRefs])
   const handleOpenCampaignWorkspace = useCallback(async (workspaceId: string) => {
     await Promise.resolve(onSelectWorkspace(workspaceId))
     navigation.navigate(routes.view.campaign())
@@ -178,7 +205,10 @@ export function MainContentPanel({
     if (details.trim()) await window.electronAPI.setSessionNotes(session.id, details)
     return session.id
   }, [activeWorkspaceId, onCreateSession])
-  const handleDeleteAgendaTask = useCallback((sessionId: string) => onDeleteSession(sessionId), [onDeleteSession])
+  const handleDeleteAgendaTask = useCallback(
+    (sessionId: string, skipConfirmation = false) => onDeleteSession(sessionId, skipConfirmation),
+    [onDeleteSession],
+  )
 
   // Session multi-select state
   const isMultiSelectActive = useIsMultiSelectActive()
@@ -312,7 +342,13 @@ export function MainContentPanel({
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         {navState.subpage === 'calendar' ? (
-          <CampaignCalendarPage workspaceId={activeWorkspaceId || ''} />
+          <CampaignCalendarPage
+            workspaceId={activeWorkspaceId || ''}
+            agendaSessions={workspaceSessions}
+            onCreateAgendaTask={handleCreateAgendaTask}
+            onDeleteAgendaTask={handleDeleteAgendaTask}
+            networkWorkspaceId={artistHQWorkspace?.id || activeWorkspaceId || ''}
+          />
         ) : (
           <ArtistCommandCenterHome
             workspaceId={activeWorkspaceId || ''}
@@ -768,7 +804,6 @@ type ResourceRow = {
 function ResourceRows({
   label,
   title,
-  description,
   sources,
   sourceFilter,
   workspaceId,
@@ -903,26 +938,13 @@ function ResourceRows({
     <>
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="mx-auto flex min-h-full max-w-[1600px] flex-col px-5 py-4 xl:px-8 xl:py-5">
-        <header className="relative mb-6 overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] p-6 lg:p-8">
-          <div className="absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full bg-blue-600/10 blur-[110px]" />
-          <div className="absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full bg-blue-500/5 blur-[120px]" />
-          <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex-1">
-              <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5">
-                <div className="h-3.5 w-3.5 text-blue-300/80 rounded-full border border-current" />
-                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/65">{label}</span>
-              </div>
-              <div className="max-w-3xl">
-                <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl lg:text-[56px] lg:leading-[0.96]">
-                  {title}
-                </h1>
-                <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
-                  {description}
-                </p>
-              </div>
-            </div>
-            {automations || (addEditConfig && addLabel) ? (
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <CompactPageHeader
+          eyebrow={label}
+          title={title}
+          tone="blue"
+          className="mb-6"
+          actions={automations || (addEditConfig && addLabel) ? (
+            <>
                 {automations ? (
                   <TemplatesGalleryDialog
                     trigger={
@@ -951,10 +973,9 @@ function ResourceRows({
                     {...addEditConfig}
                   />
                 ) : null}
-              </div>
-            ) : null}
-          </div>
-        </header>
+            </>
+          ) : undefined}
+        />
 
         {rows.length === 0 ? (
           automations ? (

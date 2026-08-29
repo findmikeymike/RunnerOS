@@ -5,6 +5,7 @@ export const ARTIST_PROFILE_CONTEXT_SLUG = 'artist-profile'
 export interface ArtistProfile {
   version: 1
   artistName?: string
+  mission?: string
   aliases?: string
   bio?: string
   themes?: string
@@ -96,6 +97,7 @@ export function serializeArtistProfileBody(profile: ArtistProfile): string {
 export function profileCompletion(profile: ArtistProfile): number {
   const fields: Array<keyof ArtistProfile> = [
     'artistName',
+    'mission',
     'bio',
     'themes',
     'sound',
@@ -117,6 +119,7 @@ function normalizeProfile(profile: Partial<ArtistProfile>): ArtistProfile {
   return {
     version: 1,
     artistName: clean(profile.artistName),
+    mission: clean(profile.mission),
     aliases: clean(profile.aliases),
     bio: clean(profile.bio),
     themes: clean(profile.themes),

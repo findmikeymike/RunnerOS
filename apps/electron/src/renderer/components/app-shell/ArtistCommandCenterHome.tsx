@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { CompactPageHeader } from './CompactPageHeader'
 import {
   Dialog,
   DialogContent,
@@ -247,11 +248,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
     [artistProfile, artistVoice, assetManifest, mission],
   )
   const title = mission.title || 'Untitled Campaign'
-  const subtitle = hasMission
-    ? mission.goal || mission.mood || 'Campaign brief started. Add more context when ready.'
-    : 'Start with a goal, files, or a worker.'
   const focus = mission.timeline || mission.releaseDate || (hasMission ? mission.missionType || 'Campaign active' : 'No brief yet')
-  const readinessLabel = hasMission ? `${mission.completeness}% ready` : 'Not started'
   const refreshAssetManifest = React.useCallback(async () => {
     if (!workspaceId) return
     const manifest = await window.electronAPI.getMissionAssetManifest(workspaceId)
@@ -616,47 +613,16 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="flex min-h-full w-full flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
-        <section className="relative min-h-[230px] overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A]">
-          <div className="absolute -left-[20%] -top-[40%] h-[760px] w-[760px] rounded-full bg-red-600/10 blur-[160px]" />
-          <div className="absolute -bottom-[40%] -right-[10%] h-[600px] w-[600px] rounded-full bg-indigo-600/5 blur-[120px]" />
-
-          <div className="relative z-10 flex min-h-[230px] flex-col justify-between p-6 lg:p-8">
-            <div className="flex items-start justify-between gap-4">
-              <div className="inline-flex items-center gap-2.5 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 pr-4 backdrop-blur-md">
-                <span className={cn('flex h-2 w-2 items-center justify-center rounded-full', hasMission ? 'bg-emerald-500/20' : 'bg-white/10')}>
-                  <span className={cn('h-1.5 w-1.5 rounded-full', hasMission ? 'bg-emerald-500' : 'bg-white/35')} />
-                </span>
-                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/70">
-                  {hasMission ? 'Campaign Active' : 'Campaign Empty'}
-                </span>
+        <CompactPageHeader
+          eyebrow={hasMission ? 'Campaign Active' : 'Campaign Empty'}
+          title={title}
+          tone="red"
+          actions={
+            <>
+              <div className="hidden text-right sm:block">
+                <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-white/38">Focus</p>
+                <p className="mt-1 text-[11px] font-medium capitalize text-white/70">{focus}</p>
               </div>
-              <div className="text-right">
-                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/40">Focus</p>
-                <p className="mt-1.5 text-xs font-medium capitalize text-white/70">{focus}</p>
-              </div>
-            </div>
-
-            <div className="my-5 max-w-[760px]">
-              <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl md:text-6xl lg:text-[56px] lg:leading-[0.94]">
-                {title}
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
-                {subtitle}
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-4 border-t border-white/[0.05] pt-4 md:flex-row md:items-end md:justify-between">
-              <div className="flex w-full max-w-2xl flex-col gap-4 md:flex-row md:items-end md:gap-8">
-                <div className="shrink-0">
-                  <p className="mb-1 text-[9px] font-medium uppercase tracking-[0.18em] text-white/35">Brief</p>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/[0.035] px-2.5 py-1">
-                    <span className={cn('h-1.5 w-1.5 rounded-full', hasMission ? 'bg-emerald-400/80' : 'bg-white/30')} />
-                    <span className="text-[10px] font-medium text-white/55">{readinessLabel}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex shrink-0 flex-wrap gap-2.5">
                 <button
                   type="button"
                   onClick={() => setDrawerOpen(true)}
@@ -665,10 +631,9 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
                   {hasMission ? 'Edit Campaign' : 'Create Campaign'}
                   <ArrowRight className="h-3.5 w-3.5" />
                 </button>
-              </div>
-            </div>
-          </div>
-        </section>
+            </>
+          }
+        />
 
         <ReleaseBoardRow
           board={releaseBoard}

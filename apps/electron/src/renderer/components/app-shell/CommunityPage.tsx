@@ -1,11 +1,10 @@
 import * as React from 'react'
 import {
   ArrowRight,
-  CheckCircle2,
-  Clock3,
-  Download,
+  ChevronDown,
   Loader2,
   Mail,
+  Menu,
   Plus,
   Send,
   Sparkles,
@@ -16,6 +15,14 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
 import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
+import { PeoplePageHeader } from './PeoplePageHeader'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+  StyledDropdownMenuSeparator,
+} from '@/components/ui/styled-dropdown'
 import type {
   CommunityContactRecord,
   CommunitySegment,
@@ -77,6 +84,8 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
   const [saving, setSaving] = React.useState(false)
   const [draftingEmail, setDraftingEmail] = React.useState(false)
   const [importBasis, setImportBasis] = React.useState<ImportBasis>('unknown')
+  const [addFanOpen, setAddFanOpen] = React.useState(false)
+  const [emailQueueOpen, setEmailQueueOpen] = React.useState(false)
 
   const refreshCommunity = React.useCallback(async (foreground = true) => {
     if (foreground) setLoading(true)
@@ -121,6 +130,7 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
       })
       )
       setDraft(emptyDraft)
+      setAddFanOpen(false)
       toast.success('Fan saved to Community')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -187,84 +197,21 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
     ? ['vip', 'local', 'buyers', 'street-team', 'general']
     : [activeSegment]
   const activeAudience = activeSegment === 'all' ? 'all fans' : `${segmentLabel(activeSegment)} fans`
-  const vipCount = contacts.filter((fan) => fan.segments.includes('vip')).length
-  const emailReady = contacts.filter((fan) => fan.email?.includes('@') && fan.consentStatus === 'opted-in').length
+  const selectPeopleView = React.useCallback((view: 'network' | 'community') => {
+    if (view === 'community') return
+    const nextHash = '#artist-hq/network'
+    window.location.hash = nextHash
+    navigate(routes.view.allSessions(), { skipAutoSelect: true })
+  }, [])
 
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="min-h-full w-full px-5 py-4 xl:px-8 xl:py-5">
-        <header className="relative mb-6 overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] p-6 lg:p-8">
-          <div className="absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full bg-orange-600/10 blur-[110px]" />
-          <div className="absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full bg-orange-500/5 blur-[120px]" />
-          <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex-1">
-              <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5">
-                <Users className="h-3.5 w-3.5 text-orange-300/80" />
-                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/65">Fan Base</span>
-              </div>
-              <div className="max-w-3xl">
-                <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl lg:text-[56px] lg:leading-[0.96]">
-                  Community
-                </h1>
-                <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
-                  Fans, segments, emails, and outreach jobs for the artist.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => navigate(routes.view.sourcesApi('gmail'))}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/68 transition-colors hover:bg-white/[0.06]"
-              >
-                <Mail className="h-3.5 w-3.5" />
-                Connect Gmail
-              </button>
-              <select
-                value={importBasis}
-                onChange={(event) => setImportBasis(event.target.value as ImportBasis)}
-                className="h-9 rounded-full border border-white/[0.08] bg-white/[0.035] px-3 text-xs font-medium text-white/68 outline-none"
-              >
-                {importBasisOptions.map((option) => (
-                  <option key={option.id} value={option.id}>{option.label}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => void importCsv()}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/68 transition-colors hover:bg-white/[0.06]"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Import CSV
-              </button>
-              <button
-                type="button"
-                disabled={draftingEmail}
-                onClick={() => void draftEmail(activeAudience, selectedSegmentIds, true)}
-                className="inline-flex h-9 items-center gap-2 rounded-full bg-[#f97316]/90 px-4 text-xs font-medium text-white transition-colors hover:bg-[#f97316]"
-              >
-                {draftingEmail ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                Draft Email
-              </button>
-            </div>
-          </div>
-        </header>
+        <PeoplePageHeader activeView="community" onSelectView={selectPeopleView} />
 
-        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard label="Fans" value={String(contacts.length)} detail={`${vipCount} VIP`} />
-          <MetricCard label="Email Ready" value={String(emailReady)} detail="opted-in addresses" />
-          <MetricCard label="Segments" value="5" detail="VIP, local, buyers, street, general" />
-          <MetricCard label="Queued" value={String(emailJobs.length)} detail="email jobs" />
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <section className="rounded-[16px] border border-white/[0.05] bg-[#0c0c0c]/80 p-4">
-            <div className="mb-4 flex flex-col gap-3 border-b border-white/[0.045] pb-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h2 className="text-[11px] font-medium uppercase tracking-[0.15em] text-white/50">Fan List</h2>
-                <p className="mt-1 text-xs text-white/32">Email contacts saved as team-safe community records.</p>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
+        <section className="mt-3 rounded-2xl border border-white/[0.025] bg-[#0C0D0E] p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-wrap gap-1.5">
                 {segmentFilters.map((segment) => (
                   <button
                     key={segment.id}
@@ -280,6 +227,118 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
                     {segment.label}
                   </button>
                 ))}
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setAddFanOpen((open) => !open)}
+                aria-expanded={addFanOpen}
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-full bg-white/90 px-4 text-xs font-medium text-black transition-colors hover:bg-white"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Fan
+                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', addFanOpen && 'rotate-180')} />
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Community actions"
+                    title="Community actions"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.025] text-white/52 transition-colors hover:bg-white/[0.06] hover:text-white/85"
+                  >
+                    <Menu className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <StyledDropdownMenuContent align="end" sideOffset={6} className="w-60">
+                  <StyledDropdownMenuItem onClick={() => navigate(routes.view.sourcesApi('gmail'))}>
+                    <Mail />
+                    Connect Gmail
+                  </StyledDropdownMenuItem>
+                  <div className="px-2 py-2">
+                    <label className="mb-1.5 block text-[9px] font-medium uppercase tracking-[0.14em] text-white/34">
+                      CSV consent
+                    </label>
+                    <select
+                      value={importBasis}
+                      onChange={(event) => setImportBasis(event.target.value as ImportBasis)}
+                      className="h-8 w-full rounded-[7px] border border-white/[0.08] bg-black/35 px-2 text-[11px] text-white/68 outline-none"
+                    >
+                      {importBasisOptions.map((option) => (
+                        <option key={option.id} value={option.id}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <StyledDropdownMenuItem onClick={() => void importCsv()}>
+                    <Upload />
+                    Import CSV
+                  </StyledDropdownMenuItem>
+                  <StyledDropdownMenuSeparator />
+                  <StyledDropdownMenuItem
+                    disabled={draftingEmail}
+                    onClick={() => void draftEmail(activeAudience, selectedSegmentIds, true)}
+                  >
+                    {draftingEmail ? <Loader2 className="animate-spin" /> : <Sparkles />}
+                    Draft Email
+                  </StyledDropdownMenuItem>
+                </StyledDropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
+          {addFanOpen ? (
+            <div className="mt-3 rounded-[14px] border border-white/[0.05] bg-black/20 p-3">
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+                <Input value={draft.name} placeholder="Name" onChange={(name) => setDraft((value) => ({ ...value, name }))} />
+                <Input value={draft.email} placeholder="Email" onChange={(email) => setDraft((value) => ({ ...value, email }))} />
+                <select
+                  value={draft.segment}
+                  onChange={(event) => setDraft((value) => ({ ...value, segment: event.target.value as CommunitySegment }))}
+                  className="h-9 w-full rounded-[10px] border border-white/[0.06] bg-black/30 px-3 text-xs text-white/70 outline-none"
+                >
+                  {segmentFilters.filter((segment) => segment.id !== 'all').map((segment) => (
+                    <option key={segment.id} value={segment.id}>{segment.label}</option>
+                  ))}
+                </select>
+                <select
+                  value={draft.consentStatus}
+                  onChange={(event) => setDraft((value) => ({ ...value, consentStatus: event.target.value as ConsentStatus }))}
+                  className="h-9 w-full rounded-[10px] border border-white/[0.06] bg-black/30 px-3 text-xs text-white/70 outline-none"
+                >
+                  {consentOptions.map((option) => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                <Input value={draft.city} placeholder="City" onChange={(city) => setDraft((value) => ({ ...value, city }))} />
+                <Input value={draft.tags} placeholder="Tags" onChange={(tags) => setDraft((value) => ({ ...value, tags }))} />
+              </div>
+              <textarea
+                value={draft.notes}
+                placeholder="Notes"
+                onChange={(event) => setDraft((value) => ({ ...value, notes: event.target.value }))}
+                className="mt-2 min-h-[70px] w-full resize-none rounded-[10px] border border-white/[0.06] bg-black/25 px-3 py-2 text-xs text-white/70 outline-none placeholder:text-white/24 focus:border-white/14"
+              />
+              <div className="mt-2 flex justify-end">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void addFan()}
+                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[9px] bg-[#f97316] px-4 text-xs font-medium text-white transition-colors hover:bg-[#fb8122] disabled:cursor-wait disabled:opacity-50"
+                >
+                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                  Save Fan
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-4 border-t border-white/[0.045] pt-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-[11px] font-medium uppercase tracking-[0.15em] text-white/50">Fan List</h2>
+                <p className="mt-1 text-xs text-white/32">{contacts.length} saved contact{contacts.length === 1 ? '' : 's'}</p>
               </div>
             </div>
 
@@ -298,67 +357,29 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
               <div className="flex h-48 flex-col items-center justify-center rounded-[12px] border border-dashed border-white/[0.04] bg-white/[0.01] text-center">
                 <Users className="mb-2 h-5 w-5 text-white/10" />
                 <p className="text-[13px] font-medium text-white/40">No fans saved yet.</p>
-                <p className="mt-1 text-[11px] text-white/25">Add the first contact from the panel on the right.</p>
+                <p className="mt-1 text-[11px] text-white/25">Use Add Fan above when you are ready.</p>
               </div>
             )}
-          </section>
+          </div>
 
-          <aside className="space-y-4">
-            <section className="rounded-[16px] border border-white/[0.05] bg-[#0c0c0c]/80 p-4">
-              <div className="mb-4 flex items-center gap-2 border-b border-white/[0.045] pb-3">
-                <Plus className="h-3.5 w-3.5 text-white/40" />
-                <h2 className="text-[11px] font-medium uppercase tracking-[0.15em] text-white/50">Add Fan</h2>
+          <div className="mt-4 border-t border-white/[0.045] pt-2">
+            <button
+              type="button"
+              onClick={() => setEmailQueueOpen((open) => !open)}
+              aria-expanded={emailQueueOpen}
+              className="flex h-9 w-full items-center justify-between gap-3 rounded-[9px] px-2 text-left transition-colors hover:bg-white/[0.025]"
+            >
+              <div className="flex items-center gap-2">
+                <Send className="h-3.5 w-3.5 text-white/40" />
+                <h2 className="text-[11px] font-medium uppercase tracking-[0.15em] text-white/50">Email Queue</h2>
               </div>
-              <div className="space-y-1.5">
-                <Input value={draft.name} placeholder="Name" onChange={(name) => setDraft((value) => ({ ...value, name }))} />
-                <Input value={draft.email} placeholder="Email" onChange={(email) => setDraft((value) => ({ ...value, email }))} />
-                <select
-                  value={draft.segment}
-                  onChange={(event) => setDraft((value) => ({ ...value, segment: event.target.value as CommunitySegment }))}
-                  className="h-8 w-full rounded-[8px] border border-white/[0.04] bg-white/[0.015] px-3 text-[11px] text-white/70 outline-none focus:border-white/10"
-                >
-                  {segmentFilters.filter((segment) => segment.id !== 'all').map((segment) => (
-                    <option key={segment.id} value={segment.id}>{segment.label}</option>
-                  ))}
-                </select>
-                <select
-                  value={draft.consentStatus}
-                  onChange={(event) => setDraft((value) => ({ ...value, consentStatus: event.target.value as ConsentStatus }))}
-                  className="h-9 w-full rounded-[10px] border border-white/[0.06] bg-white/[0.025] px-3 text-xs text-white/70 outline-none"
-                >
-                  {consentOptions.map((option) => (
-                    <option key={option.id} value={option.id}>{option.label}</option>
-                  ))}
-                </select>
-                <Input value={draft.city} placeholder="City" onChange={(city) => setDraft((value) => ({ ...value, city }))} />
-                <Input value={draft.tags} placeholder="Tags" onChange={(tags) => setDraft((value) => ({ ...value, tags }))} />
-                <textarea
-                  value={draft.notes}
-                  placeholder="Notes"
-                  onChange={(event) => setDraft((value) => ({ ...value, notes: event.target.value }))}
-                  className="min-h-[64px] w-full resize-none rounded-[8px] border border-white/[0.04] bg-white/[0.015] px-3 py-2 text-[11px] text-white/70 outline-none placeholder:text-white/20 focus:border-white/10"
-                />
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => void addFan()}
-                  className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-[8px] bg-orange-500/80 text-[11px] font-medium text-white transition-colors hover:bg-orange-500 disabled:cursor-wait disabled:opacity-50"
-                >
-                  {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-                  Save Fan
-                </button>
+              <div className="flex items-center gap-2 text-white/28">
+                <span className="text-[10px] tabular-nums">{emailJobs.length}</span>
+                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', emailQueueOpen && 'rotate-180')} />
               </div>
-            </section>
-
-            <section className="rounded-[16px] border border-white/[0.05] bg-[#0c0c0c]/80 p-4">
-              <div className="mb-4 flex items-center justify-between border-b border-white/[0.045] pb-3">
-                <div className="flex items-center gap-2">
-                  <Send className="h-3.5 w-3.5 text-white/40" />
-                  <h2 className="text-[11px] font-medium uppercase tracking-[0.15em] text-white/50">Email Queue</h2>
-                </div>
-                <span className="text-[10px] tabular-nums text-white/28">{emailJobs.length}</span>
-              </div>
-              <div className="space-y-2">
+            </button>
+            {emailQueueOpen ? (
+              <div className="mt-2 space-y-2 px-2 pb-2">
                 {emailJobs.length ? emailJobs.map((email) => (
                   <button
                     key={email.id}
@@ -381,34 +402,9 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
                   </div>
                 )}
               </div>
-            </section>
-
-            <section className="rounded-[16px] border border-white/[0.05] bg-[#0c0c0c]/80 p-4">
-              <div className="mb-4 flex items-center gap-2 border-b border-white/[0.045] pb-3">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300/65" />
-                <h2 className="text-[11px] font-medium uppercase tracking-[0.15em] text-white/50">Next Moves</h2>
-              </div>
-              <div className="space-y-1.5">
-                <ActionButton icon={Download} label="Export segment" onClick={() => toast.info('Segment export is next.')} />
-                <ActionButton icon={Clock3} label="Schedule send" onClick={() => toast.info('Scheduling will use Gmail once connected.')} />
-              </div>
-            </section>
-          </aside>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <div className="rounded-[14px] border border-white/[0.04] bg-white/[0.015] px-4 py-3 transition-colors hover:bg-white/[0.025]">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/40">{label}</p>
-      </div>
-      <div className="mt-2 flex items-end justify-between gap-3">
-        <p className="text-2xl font-medium tracking-tight text-white/90">{value}</p>
-        <p className="pb-0.5 text-right text-[11px] text-white/30">{detail}</p>
+            ) : null}
+          </div>
+        </section>
       </div>
     </div>
   )
@@ -460,26 +456,5 @@ function Badge({ children }: { children: React.ReactNode }) {
     <span className="inline-flex h-6 w-fit items-center rounded-full bg-white/[0.03] px-2 text-[9px] font-medium uppercase tracking-[0.12em] text-white/40">
       {children}
     </span>
-  )
-}
-
-function ActionButton({
-  icon: Icon,
-  label,
-  onClick,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex h-8 w-full items-center gap-2 rounded-[8px] bg-white/[0.015] px-3 text-left text-[11px] font-medium text-white/50 transition-colors hover:bg-white/[0.04] hover:text-white/80"
-    >
-      <Icon className="h-3.5 w-3.5" />
-      {label}
-    </button>
   )
 }

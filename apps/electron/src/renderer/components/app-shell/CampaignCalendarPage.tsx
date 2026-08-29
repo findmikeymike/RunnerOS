@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Bot, CalendarDays, CheckCircle2, ExternalLink, FileText, Pencil, ReceiptText, RotateCcw, Trash2, X } from 'lucide-react'
+import { Bot, CheckCircle2, ExternalLink, FileText, Pencil, ReceiptText, RotateCcw, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../../shared/routes'
@@ -12,6 +12,9 @@ import {
   type ScheduledWorkStatus,
 } from '@craft-agent/shared/scheduled-work'
 import { cn } from '@/lib/utils'
+import { CompactPageHeader } from './CompactPageHeader'
+import { AgendaPage, type AgendaTaskDraft } from './AgendaPage'
+import type { SessionMeta } from '@/atoms/sessions'
 import { MISSION_BRIEF_CONTEXT_SLUG, missionReleaseDateKey, parseMissionBriefDoc } from '@/lib/mission-brief'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import {
@@ -92,7 +95,19 @@ const emptyCampaignCalendarDraft = (date = todayKey): CampaignCalendarDraft => (
   outputRefs: [],
 })
 
-export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
+export function CampaignCalendarPage({
+  workspaceId,
+  agendaSessions,
+  onCreateAgendaTask,
+  onDeleteAgendaTask,
+  networkWorkspaceId,
+}: {
+  workspaceId: string
+  agendaSessions: SessionMeta[]
+  onCreateAgendaTask: (task: AgendaTaskDraft) => Promise<string>
+  onDeleteAgendaTask: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
+  networkWorkspaceId: string
+}) {
   const { navigate } = useNavigation()
   const { docs, upsert, refresh } = useWorkspaceContext(workspaceId)
   const savedCampaignCalendarResult = React.useMemo(
@@ -444,77 +459,75 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
   }, [refresh, workspaceId])
 
   return (
-    <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
-      <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
-        <section className="relative overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] p-6 lg:p-8">
-          <div className="absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full bg-orange-600/10 blur-[110px]" />
-          <div className="absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full bg-orange-500/5 blur-[120px]" />
-          <div className="relative z-10">
-            <div className="flex items-start justify-between gap-4">
-              <div className="inline-flex items-center gap-2.5 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 pr-4">
-                <CalendarDays className="h-3.5 w-3.5 text-white/58" />
-                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/70">Schedule</span>
-              </div>
+    <div className="h-full overflow-y-auto bg-[#050505] text-foreground lg:overflow-hidden">
+      <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col gap-3 px-5 py-4 lg:h-full lg:min-h-0 xl:px-8 xl:py-5">
+        <CompactPageHeader
+          eyebrow="Schedule"
+          title="Plan"
+          tone="orange"
+          actions={
               <div className="text-right">
-                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/35">Next</p>
-                <p className="mt-1.5 text-xs font-medium text-white/70">{nextCalendarDate}</p>
+                <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-white/35">Next</p>
+                <p className="mt-1 text-[11px] font-medium text-white/70">{nextCalendarDate}</p>
               </div>
-            </div>
-
-            <div className="mt-8 max-w-3xl">
-              <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl lg:text-[56px] lg:leading-[0.96]">
-                Calendar
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
-                Campaign-scoped schedule, deadlines, reviews, and important release checkpoints.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <CampaignCalendarSurface
-          items={activeCalendarItems}
-          releaseDate={releaseDate}
-          selectedDate={selectedCalendarDate}
-          visibleMonth={visibleCalendarMonth}
-          selectedDateItems={selectedDateCalendarItems}
-          editingItemId={calendarEditId}
-          editDraft={calendarEditDraft}
-          disabled={Boolean(storageError)}
-          parseError={storageError}
-          onSelectDate={(date) => {
-            setSelectedCalendarDate(date)
-          }}
-          onChangeMonth={setVisibleCalendarMonth}
-          onChangeEditDraft={setCalendarEditDraft}
-          onEditItem={openCampaignCalendarItemEdit}
-          onCancelEditItem={cancelCampaignCalendarItemEdit}
-          onSaveEditItem={saveCampaignCalendarItemEdit}
-          onApproveItem={approveCampaignCalendarJob}
-          onRequeueItem={requeueCampaignCalendarJob}
-          onDeleteItem={deleteCampaignCalendarItem}
-          socialProfiles={socialProfiles}
-          workById={new Map(scheduledWork.items.map((order) => [order.id, order]))}
-          onOpenSession={(sessionId) => window.electronAPI.openSessionInNewWindow(workspaceId, sessionId)}
-          onOpenRun={(runId) => navigate(routes.view.workflowRun(runId))}
-          onOpenOutput={(outputId) => navigate(routes.view.output(outputId))}
-          onReviewDecision={decideScheduledWork}
-          onResolveProducedOutput={resolveProducedOutput}
-          onApproveSocial={approveScheduledSocial}
-          onQueueReplacement={(work) => {
-            setComposerPrefill({
-              title: work.title,
-              suggestedType: work.type,
-              inputRefs: work.inputRefs.filter((ref) => ref.kind !== 'produced-output'),
-            })
-            setComposerOpen(true)
-          }}
-          onOpenSocialSettings={(subpage) => navigate(routes.view.settings(subpage))}
-          onOpenComposer={(type) => {
-            setComposerPrefill(type ? { mode: 'event', suggestedType: type } : { mode: 'job' })
-            setComposerOpen(true)
-          }}
+          }
         />
+
+        <div className="grid min-h-[430px] flex-1 grid-cols-1 gap-3 lg:min-h-0 lg:grid-cols-[minmax(0,2.15fr)_minmax(300px,0.85fr)]">
+          <CampaignCalendarSurface
+            items={activeCalendarItems}
+            releaseDate={releaseDate}
+            selectedDate={selectedCalendarDate}
+            visibleMonth={visibleCalendarMonth}
+            selectedDateItems={selectedDateCalendarItems}
+            editingItemId={calendarEditId}
+            editDraft={calendarEditDraft}
+            disabled={Boolean(storageError)}
+            parseError={storageError}
+            onSelectDate={(date) => {
+              setSelectedCalendarDate(date)
+            }}
+            onChangeMonth={setVisibleCalendarMonth}
+            onChangeEditDraft={setCalendarEditDraft}
+            onEditItem={openCampaignCalendarItemEdit}
+            onCancelEditItem={cancelCampaignCalendarItemEdit}
+            onSaveEditItem={saveCampaignCalendarItemEdit}
+            onApproveItem={approveCampaignCalendarJob}
+            onRequeueItem={requeueCampaignCalendarJob}
+            onDeleteItem={deleteCampaignCalendarItem}
+            socialProfiles={socialProfiles}
+            workById={new Map(scheduledWork.items.map((order) => [order.id, order]))}
+            onOpenSession={(sessionId) => window.electronAPI.openSessionInNewWindow(workspaceId, sessionId)}
+            onOpenRun={(runId) => navigate(routes.view.workflowRun(runId))}
+            onOpenOutput={(outputId) => navigate(routes.view.output(outputId))}
+            onReviewDecision={decideScheduledWork}
+            onResolveProducedOutput={resolveProducedOutput}
+            onApproveSocial={approveScheduledSocial}
+            onQueueReplacement={(work) => {
+              setComposerPrefill({
+                title: work.title,
+                suggestedType: work.type,
+                inputRefs: work.inputRefs.filter((ref) => ref.kind !== 'produced-output'),
+              })
+              setComposerOpen(true)
+            }}
+            onOpenSocialSettings={(subpage) => navigate(routes.view.settings(subpage))}
+            onOpenComposer={(type) => {
+              setComposerPrefill(type ? { mode: 'event', suggestedType: type } : { mode: 'job' })
+              setComposerOpen(true)
+            }}
+          />
+          <div id="campaign-calendar-kanban" className="min-h-[280px] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#17191B] lg:h-full lg:min-h-0">
+            <AgendaPage
+              embedded
+              sessions={agendaSessions}
+              onCreateTask={onCreateAgendaTask}
+              onDeleteTask={onDeleteAgendaTask}
+              workspaceId={workspaceId}
+              networkWorkspaceId={networkWorkspaceId}
+            />
+          </div>
+        </div>
         <ScheduledWorkComposer
           open={composerOpen}
           entry={composerEntry}
@@ -618,7 +631,7 @@ function CampaignCalendarSurface({
   })
 
   return (
-    <section className="flex min-h-[430px] flex-1 flex-col rounded-2xl border border-white/[0.08] bg-[#0C0D0E] p-5 shadow-minimal">
+    <section className="flex min-h-[430px] flex-1 flex-col rounded-2xl border border-white/[0.08] bg-[#0C0D0E] p-5 shadow-minimal lg:min-h-0">
       {parseError ? (
         <div className="mb-3 rounded-xl border border-red-300/15 bg-red-500/10 p-3 text-xs text-red-100/70">
           {parseError}

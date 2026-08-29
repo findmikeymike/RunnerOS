@@ -3,13 +3,13 @@ import {
   ArrowDownUp,
   ChevronDown,
   GripVertical,
-  ListMusic,
   Music2,
   PenLine,
   Plus,
   Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { CompactPageHeader } from './CompactPageHeader'
 import { navigate, routes } from '@/lib/navigate'
 import {
   createLabUiSong,
@@ -163,27 +163,17 @@ export function LabSequencePage({ workspaceId, workspaceName }: LabSequencePageP
   return (
     <div className="h-full overflow-hidden bg-[#050505] text-foreground">
       <div className="flex h-full min-h-0 w-full flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
-        <section className="relative overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] px-5 py-5 shadow-minimal lg:px-7 lg:py-6">
-          <div className="absolute -left-[18%] -top-[80%] h-[520px] w-[520px] rounded-full bg-orange-600/8 blur-[115px]" />
-          <div className="relative z-10 flex items-end justify-between gap-4">
-            <div className="min-w-0">
-              <div className="mb-3 inline-flex items-center gap-2.5 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 pr-4">
-                <ListMusic className="h-3.5 w-3.5 text-white/45" />
-                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/65">
-                  {workspaceName || 'The Lab'}
-                </span>
-              </div>
-              <h1 className="text-3xl font-medium tracking-tighter text-white/90 sm:text-4xl">Projects</h1>
-              <p className="mt-2 max-w-2xl text-sm font-light leading-relaxed text-white/48">
-                Build album, EP, and setlist orders from your song pool.
-              </p>
-            </div>
+        <CompactPageHeader
+          eyebrow={workspaceName || 'The Lab'}
+          title="Projects"
+          tone="orange"
+          actions={
             <div className="hidden shrink-0 items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.025] px-4 py-2 text-[10px] uppercase tracking-[0.16em] text-white/42 sm:flex">
               <ArrowDownUp className="h-3.5 w-3.5" />
               Drag to order
             </div>
-          </div>
-        </section>
+          }
+        />
 
         <div className="grid min-h-0 flex-1 grid-cols-[360px_minmax(0,1fr)] gap-3">
           <aside className="flex min-h-0 flex-col gap-3">

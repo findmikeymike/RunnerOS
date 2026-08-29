@@ -19,6 +19,7 @@ import { UserProfileDialog } from '@/components/agents/UserProfileDialog'
 import { ServerDirectoryBrowser } from '@/components/ServerDirectoryBrowser'
 import { cn } from '@/lib/utils'
 import type { ContextDocDTO, ContextDocMetadata, SelfEditTargetInfo, WorkspaceSettings } from '../../shared/types'
+import { CompactPageHeader } from '@/components/app-shell/CompactPageHeader'
 
 type GoalStatus = 'active' | 'blocked' | 'paused' | 'done'
 type GoalPriority = 'low' | 'normal' | 'high'
@@ -302,17 +303,14 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
       <div className="mx-auto w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
-        <div className="mb-6 flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-[28px] font-semibold leading-tight text-white">Workspace Context</h1>
-              <TokenBadge tokens={approxTokens} tone={tokenTone} />
-            </div>
-            <p className="mt-1 max-w-md text-[12px] leading-[18px] text-white/54">
-              Markdown notes injected into agent prompts by routing rules.
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+        <CompactPageHeader
+          eyebrow="Workspace"
+          title="Context"
+          tone="orange"
+          className="mb-6"
+          actions={
+            <>
+            <TokenBadge tokens={approxTokens} tone={tokenTone} />
             <button
               type="button"
               onClick={() => setProfileOpen(true)}
@@ -352,8 +350,9 @@ export default function WorkspaceContextPage({ workspaceId }: WorkspaceContextPa
             <Plus className="h-3 w-3" />
             New
             </button>
-          </div>
-        </div>
+            </>
+          }
+        />
 
         {loading ? (
           <div className="flex min-h-[360px] items-center justify-center text-sm text-white/50">Loading context...</div>

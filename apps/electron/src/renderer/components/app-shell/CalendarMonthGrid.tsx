@@ -35,6 +35,7 @@ export function CalendarMonthGrid({
   onDayAction,
   onSelectItem,
   compact = false,
+  appearance = 'dark',
 }: {
   visibleMonth: Date
   selectedDate: string
@@ -45,15 +46,18 @@ export function CalendarMonthGrid({
   onDayAction?: (date: string, actionId: string) => void
   onSelectItem?: (date: string, itemId: string) => void
   compact?: boolean
+  appearance?: 'dark' | 'paper'
 }) {
   const [menu, setMenu] = React.useState<{ date: string; x: number; y: number } | null>(null)
   const days = React.useMemo(() => buildMonthDays(visibleMonth), [visibleMonth])
   const monthLabel = visibleMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const paper = appearance === 'paper'
 
   React.useEffect(() => {
     if (!menu) return
     const close = (event: PointerEvent) => {
-      if (!(event.target as HTMLElement | null)?.closest('[data-calendar-day-menu]')) setMenu(null)
+      const target = event.target as HTMLElement | null
+      if (!target?.closest('[data-calendar-day-menu], [data-calendar-day-trigger]')) setMenu(null)
     }
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setMenu(null)
@@ -69,29 +73,44 @@ export function CalendarMonthGrid({
   const openMenu = React.useCallback((date: string, x: number, y: number) => {
     onSelectDate(date)
     if (dayActions.length === 0 && (dayMetaByDate.get(date)?.items?.length ?? 0) === 0) return
-    setMenu({
-      date,
-      x: Math.max(8, Math.min(x, window.innerWidth - 248)),
-      y: Math.max(8, Math.min(y, window.innerHeight - 360)),
-    })
+    setMenu((current) => current?.date === date
+      ? null
+      : {
+          date,
+          x: Math.max(8, Math.min(x, window.innerWidth - 248)),
+          y: Math.max(8, Math.min(y, window.innerHeight - 360)),
+        })
   }, [dayActions.length, dayMetaByDate, onSelectDate])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={cn(
+      'flex min-h-0 flex-1 flex-col',
+      paper && 'rounded-[12px] bg-[#17191B] p-3 text-white',
+    )}>
       <div className="mb-2 flex items-center justify-between">
         <button
           type="button"
           onClick={() => onChangeMonth(addMonths(visibleMonth, -1))}
-          className="rounded-full border border-white/[0.12] p-2 text-white/65 hover:bg-white/[0.08] hover:text-white"
+          className={cn(
+            'rounded-full border p-2 transition-colors',
+            paper
+              ? 'border-white/[0.10] bg-black/20 text-white/60 hover:bg-white/[0.08] hover:text-white'
+              : 'border-white/[0.12] text-white/65 hover:bg-white/[0.08] hover:text-white',
+          )}
           aria-label="Previous month"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <div className="text-sm font-semibold text-white/88">{monthLabel}</div>
+        <div className={cn('text-sm font-semibold', paper ? 'text-white/86' : 'text-white/88')}>{monthLabel}</div>
         <button
           type="button"
           onClick={() => onChangeMonth(addMonths(visibleMonth, 1))}
-          className="rounded-full border border-white/[0.12] p-2 text-white/65 hover:bg-white/[0.08] hover:text-white"
+          className={cn(
+            'rounded-full border p-2 transition-colors',
+            paper
+              ? 'border-white/[0.10] bg-black/20 text-white/60 hover:bg-white/[0.08] hover:text-white'
+              : 'border-white/[0.12] text-white/65 hover:bg-white/[0.08] hover:text-white',
+          )}
           aria-label="Next month"
         >
           <ChevronRight className="h-4 w-4" />
@@ -99,13 +118,16 @@ export function CalendarMonthGrid({
       </div>
       <div className="grid grid-cols-7 gap-1">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-          <div key={day} className="py-1 text-center text-[9px] font-semibold uppercase tracking-[0.14em] text-white/55">
+          <div key={day} className={cn('py-1 text-center text-[9px] font-semibold uppercase tracking-[0.14em]', paper ? 'text-white/52' : 'text-white/55')}>
             {day}
           </div>
         ))}
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-1">
-        {days.map((day) => {
+      <div className={cn(
+        'grid min-h-0 flex-1 grid-cols-7 grid-rows-6',
+        paper ? 'gap-0 overflow-hidden rounded-[9px] border border-white/[0.10] bg-[#17191B]' : 'gap-1',
+      )}>
+        {days.map((day, dayIndex) => {
           const key = toDateKey(day)
           const meta = dayMetaByDate.get(key)
           const count = meta?.count ?? 0
@@ -120,6 +142,7 @@ export function CalendarMonthGrid({
           return (
             <div
               key={key}
+              data-calendar-day-trigger
               role="button"
               tabIndex={0}
               onClick={(event) => openMenu(key, event.clientX, event.clientY)}
@@ -135,22 +158,41 @@ export function CalendarMonthGrid({
               }}
               aria-haspopup={dayActions.length > 0 || items.length > 0 ? 'menu' : undefined}
               className={cn(
-                'flex flex-col rounded-[10px] border p-1.5 text-left transition-colors',
+                'flex flex-col p-1.5 text-left transition-colors',
+                paper ? 'rounded-none' : 'rounded-[10px] border',
                 compact ? 'min-h-[48px]' : 'min-h-[56px]',
-                isSelected
-                  ? 'border-[#f97316]/60 bg-[#0F0F10] hover:bg-[#12110F]'
-                  : isCurrentMonth
-                    ? 'border-white/[0.06] bg-[#0F0F10] hover:bg-[#121314]'
-                    : 'border-white/[0.025] bg-[#090A0B] hover:bg-[#0C0D0E]',
+                paper && dayIndex % 7 !== 6 && 'border-r border-white/[0.10]',
+                paper && dayIndex < 35 && 'border-b border-white/[0.10]',
+                paper
+                  ? isToday
+                    ? isSelected
+                      ? 'bg-[radial-gradient(circle_at_100%_0%,rgba(249,115,22,0.13),transparent_62%),#090A0B] shadow-[inset_0_0_0_1px_#f97316] hover:brightness-110'
+                      : 'bg-[radial-gradient(circle_at_100%_0%,rgba(249,115,22,0.13),transparent_62%),#090A0B] hover:brightness-110'
+                    : isSelected
+                      ? 'bg-[#17191B] shadow-[inset_0_0_0_1px_#f97316] hover:bg-[#1B1D1F]'
+                    : isCurrentMonth
+                      ? 'bg-[#17191B] hover:bg-[#1B1D1F]'
+                      : 'bg-[#202224] hover:bg-[#242628]'
+                  : isToday
+                    ? isSelected
+                      ? 'border-[#f97316]/60 bg-[radial-gradient(circle_at_100%_0%,rgba(249,115,22,0.13),transparent_62%),#090A0B] hover:brightness-110'
+                      : 'border-white/[0.08] bg-[radial-gradient(circle_at_100%_0%,rgba(249,115,22,0.13),transparent_62%),#090A0B] hover:brightness-110'
+                    : isSelected
+                      ? 'border-[#f97316]/60 bg-[#090A0B] hover:bg-[#0C0D0E]'
+                    : isCurrentMonth
+                      ? 'border-white/[0.06] bg-[#090A0B] hover:bg-[#0C0D0E]'
+                      : 'border-white/[0.04] bg-[#121314] hover:bg-[#151617]',
               )}
             >
               <span className={cn(
                 'text-[13px] font-medium',
-                isSelected || isToday
+                isToday
+                  ? 'text-[#f97316]'
+                  : isSelected
                   ? 'text-[#f97316]'
                   : isCurrentMonth
                     ? 'text-white/82'
-                    : 'text-white/28',
+                    : paper ? 'text-white/30' : 'text-white/28',
               )}>
                 {day.getDate()}
               </span>
@@ -180,7 +222,7 @@ export function CalendarMonthGrid({
                         onSelectDate(key)
                         onSelectItem?.(key, item.id)
                       }}
-                      className={cn('size-2.5 shrink-0 rounded-[2px] ring-1 ring-white/15 transition-transform hover:scale-125', item.markerClass ?? dots[index % Math.max(dots.length, 1)] ?? 'bg-orange-400/85')}
+                      className={cn('size-2.5 shrink-0 rounded-[2px] ring-1 transition-transform hover:scale-125', paper ? 'ring-white/10' : 'ring-white/15', item.markerClass ?? dots[index % Math.max(dots.length, 1)] ?? 'bg-orange-400/85')}
                     />
                   ))}
                   {hiddenItemCount > 0 ? (
@@ -192,7 +234,7 @@ export function CalendarMonthGrid({
                         event.stopPropagation()
                         openMenu(key, event.clientX, event.clientY)
                       }}
-                      className="shrink-0 text-[9px] font-semibold text-white/48 hover:text-white/80"
+                      className={cn('shrink-0 text-[9px] font-semibold', paper ? 'text-white/42 hover:text-white/75' : 'text-white/48 hover:text-white/80')}
                     >
                       +{hiddenItemCount}
                     </button>
@@ -201,7 +243,7 @@ export function CalendarMonthGrid({
               ) : dots.length > 0 ? (
                 <div className="mt-auto flex gap-1.5 pt-1.5">
                   {dots.map((dotClass, index) => (
-                    <span key={`${dotClass}-${index}`} className={cn('size-2.5 rounded-[2px] ring-1 ring-white/15', dotClass)} />
+                    <span key={`${dotClass}-${index}`} className={cn('size-2.5 rounded-[2px] ring-1', paper ? 'ring-white/10' : 'ring-white/15', dotClass)} />
                   ))}
                 </div>
               ) : null}

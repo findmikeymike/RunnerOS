@@ -56,23 +56,61 @@ describe('Artist OS persistent shell chrome', () => {
     expect(styles).toContain('.artist-os-main-canvas .bg-\\[\\#050505\\]')
   })
 
-  test('uses a black HQ hero with one orange glow on the right', () => {
+  test('uses the global compact page header for HQ', () => {
     const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
+    const compactHeader = readFileSync(join(import.meta.dir, '..', 'CompactPageHeader.tsx'), 'utf8')
 
-    expect(hq).toContain('min-h-[250px]')
-    expect(hq).toContain('bg-[radial-gradient(circle_at_100%_50%,rgba(249,115,22,0.26),transparent_48%),#050505]')
-    expect(hq).toContain("orb1: 'bg-transparent'")
-    expect(hq).toContain("orb2: 'bg-transparent'")
+    expect(hq).toContain('<CompactPageHeader')
+    expect(hq).toContain("const headerTone = tab === 'profile' || tab === 'branding' ? 'blue' : tab === 'voice' ? 'red' : 'orange'")
+    expect(hq).toContain('dimBackgroundImage={SHOW_HQ_BANNER_FILTER}')
+    expect(hq).toContain("borderless={tab === 'home'}")
+    expect(hq).toContain("titleClassName={tab === 'home' ? 'text-[50px]' : undefined}")
+    expect(hq).toContain("after:ring-2 after:ring-inset after:ring-[#050505]")
+    expect(hq).not.toContain("!border-transparent")
+    expect(compactHeader).toContain("!borderless && 'border'")
+    expect(compactHeader).toContain('min-h-[154px]')
+    expect(compactHeader).not.toContain('min-h-[118px]')
+    expect(compactHeader).toContain('const GLOBAL_HERO_BACKGROUND')
+    expect(compactHeader).toContain('radial-gradient(70% 54% at 50% 118%')
+    expect(compactHeader).toContain('linear-gradient(90deg, #D90B16 0%, #F22409 20%, #FF5A00 50%')
+    expect(compactHeader).not.toContain('globalHeroBackground')
+    expect(compactHeader).not.toContain('<img src={resolvedBackgroundImage}')
+    expect(compactHeader).toContain('rounded-[22px]')
+    expect(compactHeader).not.toContain('rounded-full blur')
+    expect(compactHeader).toContain('className="min-w-0 self-end"')
+    expect(compactHeader).toContain("cn('mt-1 truncate text-[30px] font-medium tracking-tight text-white/92', titleClassName)")
   })
 
-  test('keeps Network on the compact Work page hero height', () => {
+  test('uses one direct People destination and a shared compact Network/Community header', () => {
     const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
+    const community = readFileSync(join(import.meta.dir, '..', 'CommunityPage.tsx'), 'utf8')
+    const peopleHeader = readFileSync(join(import.meta.dir, '..', 'PeoplePageHeader.tsx'), 'utf8')
+    const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
+    const peopleStart = shell.indexOf('id: "nav:people"')
+    const peopleItem = shell.slice(peopleStart, shell.indexOf('id: "nav:work"', peopleStart))
 
-    expect(hq).toContain("const usesCompactSectionHeader = tab === 'network'")
-    expect(hq).toContain("usesCompactSectionHeader ? 'min-h-[230px]' : 'min-h-[250px]'")
+    expect(peopleItem).toContain("onClick: () => handleArtistHQNavClick('network')")
+    expect(peopleItem).not.toContain('expandable: true')
+    expect(peopleItem).not.toContain('items: [')
+    expect(hq).toMatch(/<PeoplePageHeader\s+activeView="network"/)
+    expect(community).toContain('<PeoplePageHeader activeView="community"')
+    expect(peopleHeader).toContain('<CompactPageHeader')
+    expect(peopleHeader).toContain('tone="emerald"')
+    expect(peopleHeader).toContain('role="tablist"')
+    expect(peopleHeader).toContain("(['network', 'community'] as const)")
+    expect(community).toContain('aria-label="Community actions"')
+    expect(community).toContain('<StyledDropdownMenuContent align="end"')
+    expect(community).toContain('Connect Gmail')
+    expect(community).toContain('aria-expanded={addFanOpen}')
+    expect(community).toContain('mt-3 rounded-2xl border border-white/[0.025] bg-[#0C0D0E] p-4')
+    expect(community).toContain('bg-[#0C0D0E] p-4')
+    expect(community).toContain('aria-expanded={emailQueueOpen}')
+    expect(community).not.toContain('<MetricCard')
+    expect(community).not.toContain('xl:grid-cols-[minmax(0,1fr)_340px]')
+    expect(community).not.toContain('>Next Moves</h2>')
   })
 
-  test('uses one direct Plan destination with a compact blue header and unified calendar board', () => {
+  test('keeps the HQ Plan page available while hiding its navigation entry behind a flag', () => {
     const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
     const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
     const planItem = shell.slice(shell.indexOf('id: "nav:plan"'), shell.indexOf('id: "nav:people"'))
@@ -80,28 +118,64 @@ describe('Artist OS persistent shell chrome', () => {
     const board = hq.indexOf('<AgendaPage', calendar)
     const planCardEnd = hq.indexOf('</HQCard>', board)
 
-    expect(hq).toContain("{tab !== 'calendar' ? (")
-    expect(hq).toContain('>Plan</h1>')
-    expect(hq).toContain('min-h-[118px]')
-    expect(hq).toContain('bg-[linear-gradient(105deg,#07090D_0%,#0A1020_58%,#102A55_100%)]')
-    expect(hq).toContain('<ArtistCalendarView\n                compact')
+    expect(hq).toContain("{tab !== 'calendar' && tab !== 'network' ? (")
+    expect(hq).toContain('title="Plan"')
+    expect(hq).toContain('title="Plan"\n            tone="orange"')
+    expect(hq).toContain('<ArtistCalendarView\n                  compact')
     expect(board).toBeGreaterThan(calendar)
     expect(planCardEnd).toBeGreaterThan(board)
-    expect(hq).toContain('embedded\n                  sessions={agendaSessions}')
-    expect(hq).toContain('id="plan-kanban" className="-mx-3 mt-4 min-h-[140px] flex-1 border-t')
+    expect(hq).toContain('embedded\n                    sessions={agendaSessions}')
+    expect(hq).toContain('lg:grid-cols-[minmax(0,2.15fr)_minmax(300px,0.85fr)]')
+    expect(hq).toContain('id="plan-kanban" className="min-h-[280px] overflow-hidden border-t')
+    expect(hq).toContain('lg:border-l lg:border-t-0')
     expect(hq).not.toContain('planBoardOpen')
     expect(hq).toContain("tab === 'calendar' ? 'overflow-hidden' : 'overflow-y-auto'")
+    expect(shell).toContain('const SHOW_HQ_PLAN_NAV = false')
+    expect(shell).toMatch(/if \(SHOW_HQ_PLAN_NAV\) \{\s+result\.push\(\{ id: 'nav:plan'/)
+    expect(shell).toMatch(/\.\.\.\(\(SHOW_HQ_PLAN_NAV \? \[\{\s+id: "nav:plan"/)
+    expect(shell).toMatch(/id: "nav:calendar",\s+title: "Plan"/)
     const agenda = readFileSync(join(import.meta.dir, '..', 'AgendaPage.tsx'), 'utf8')
     expect(agenda).toContain('aria-label="Add task to To Do"')
-    expect(agenda).toContain("embedded && 'min-h-0 flex-1 overflow-y-auto pr-0.5'")
-    expect(agenda).toContain("? 'h-full min-h-0 overflow-hidden rounded-[14px] border border-white/[0.055] bg-[#0C0D0E] divide-y divide-white/[0.055] lg:divide-x lg:divide-y-0'")
-    expect(agenda).toContain("? 'flex min-h-0 flex-col p-3'")
+    expect(agenda).toContain("embedded && 'min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5'")
+    expect(agenda).toContain("? 'h-full min-h-0 grid-rows-3 divide-y divide-white/[0.055]'")
+    expect(agenda).toContain("? 'flex min-h-0 flex-col px-3 py-2.5'")
     expect(agenda).not.toContain('Nothing here.')
     expect(agenda).toContain('Delete task')
     expect(agenda).toContain('Discussion')
     expect(agenda).not.toContain('Open Thread')
     expect(planItem).toContain("onClick: () => handleArtistHQNavClick('calendar')")
     expect(planItem).not.toContain('expandable: true')
+  })
+
+  test('uses the unified compact gradient header for Workers, Workflows, and Automations', () => {
+    const workers = readFileSync(join(import.meta.dir, '..', 'AgentsLaunchpad.tsx'), 'utf8')
+    const workflows = readFileSync(join(import.meta.dir, '..', '..', '..', 'pages', 'WorkflowsListPage.tsx'), 'utf8')
+    const automations = readFileSync(join(import.meta.dir, '..', 'MainContentPanel.tsx'), 'utf8')
+    const compactHeader = readFileSync(join(import.meta.dir, '..', 'CompactPageHeader.tsx'), 'utf8')
+
+    expect(workers).toContain('tone="orange"')
+    expect(workflows).toContain('tone="violet"')
+    expect(automations).toContain('tone="blue"')
+    expect(compactHeader.split('border-orange-100/[0.12]').length - 1).toBe(5)
+  })
+
+  test('routes all major HQ and workspace page headers through the compact system', () => {
+    const files = [
+      'ArtistCommandCenterHome.tsx',
+      'CampaignCalendarPage.tsx',
+      'AgendaPage.tsx',
+      'VaultPage.tsx',
+      'LabWorkspaceHome.tsx',
+      'LabSongsPage.tsx',
+      'LabSequencePage.tsx',
+    ]
+
+    for (const file of files) {
+      const source = readFileSync(join(import.meta.dir, '..', file), 'utf8')
+      expect(source).toContain('<CompactPageHeader')
+      expect(source).not.toContain('text-[56px]')
+      expect(source).not.toContain('min-h-[230px]')
+    }
   })
 
   test('keeps HQ cards darker than soot but distinct from the black canvas', () => {
@@ -111,28 +185,53 @@ describe('Artist OS persistent shell chrome', () => {
     expect(hq).toContain("bg-[#0F0F10] p-4")
   })
 
-  test('places the quieter next move below Projects and uses vivid orange Pulse accents', () => {
+  test('places the quieter next move below the Release Horizon and uses vivid orange Pulse accents', () => {
     const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
-    const projects = hq.indexOf('<SectionTitle icon={FolderKanban} title="Projects"')
+    const releaseHorizon = hq.indexOf('<ReleaseHorizon')
     const nextMove = hq.indexOf('<StateOfPlayPanel')
     const workers = hq.indexOf('>Workers &amp; signals</span>')
 
-    expect(projects).toBeGreaterThan(-1)
-    expect(nextMove).toBeGreaterThan(projects)
+    expect(releaseHorizon).toBeGreaterThan(-1)
+    expect(nextMove).toBeGreaterThan(releaseHorizon)
     expect(workers).toBeGreaterThan(nextMove)
     expect(hq).toContain('text-sm font-medium tracking-tight text-white/88')
     expect(hq).toContain('text-[#f97316]')
   })
 
-  test('shows Pulse cards directly and styles Workers and signals like the next-move row', () => {
+  test('places the Pulse stack directly below the HQ header', () => {
     const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
 
     expect(hq).not.toContain('<span>More details</span>')
+    expect(hq).not.toContain('PIN_HQ_PULSES_TO_BOTTOM')
+    expect(hq).not.toContain('className="flex min-h-[calc(100dvh-176px)] flex-col"')
+    expect(hq).toContain('id="hq-home-operations" className="space-y-3"')
     expect(hq).toContain('<HQCard className="overflow-hidden p-0">')
+    expect(hq).toContain('group relative flex h-[184px] flex-col rounded-[14px]')
+    expect(hq).toContain('border border-white/[0.06] bg-[#0F0F10]')
+    expect(hq).not.toContain('border border-[#f97316]/35')
+    expect(hq).toContain('aria-label="Open Spotify Pulse analysis"')
+    expect(hq).toContain('aria-label="Open Social Pulse analysis"')
+    expect(hq).toContain('aria-label="Open Intel Pulse analysis"')
+    expect(hq).toContain('<PulseDetailsDialog')
+    expect(hq).not.toContain('mt-3 grid grid-cols-3 gap-2 rounded-[12px] bg-black/20 py-3')
     expect(hq).toContain('>Workers &amp; signals</span>')
     expect(hq).toContain('h-1.5 w-1.5 shrink-0 rounded-full bg-[#f97316]')
-    expect(hq).toContain("active ? 'text-[#f97316]/85'")
-    expect(hq).toContain('bottom-0 h-px bg-[#f97316]')
+  })
+
+  test('does not leave a former North Star spacer before HQ analytics', () => {
+    const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
+    const profile = readFileSync(join(import.meta.dir, '..', '..', '..', 'lib', 'artist-profile.ts'), 'utf8')
+    const operations = hq.indexOf('id="hq-home-operations"')
+    const spotify = hq.indexOf('<SpotifyPulseCard', operations)
+
+    expect(operations).toBeGreaterThan(-1)
+    expect(spotify).toBeGreaterThan(operations)
+    expect(hq).not.toContain('min-h-[clamp(280px,42vh,420px)] flex-1 bg-[#050505]')
+    expect(hq).not.toContain('<ArtistNorthStar')
+    expect(hq).not.toContain('North Star</p>')
+    expect(hq).not.toContain('What are you building toward?')
+    expect(hq).toContain('Artist mission / North Star')
+    expect(profile).toContain('mission?: string')
   })
 
   test('orders Spotify before Social and keeps Social focused on Instagram analytics', () => {

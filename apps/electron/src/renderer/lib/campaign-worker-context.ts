@@ -82,6 +82,7 @@ export function serializeCampaignWorkerContext(input: CampaignWorkerContextInput
     },
     artist: {
       name: input.artistProfile?.artistName ?? null,
+      mission: input.artistProfile?.mission ?? null,
       aliases: input.artistProfile?.aliases ?? null,
       sound: input.artistProfile?.sound ?? null,
       visualWorld: input.artistProfile?.visualWorld ?? null,

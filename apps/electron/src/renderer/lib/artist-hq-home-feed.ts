@@ -7,6 +7,14 @@ export interface HqCampaignSummary {
   id: string
   name: string
   primary?: boolean
+  releaseDate?: string
+  missionTitle?: string
+}
+
+export interface HqCampaignFocus {
+  campaign: HqCampaignSummary
+  label: 'Current campaign' | 'Next campaign' | 'Latest campaign' | 'Release date needed'
+  dateLabel?: string
 }
 
 export interface HqHomeTimelineItem {
@@ -198,6 +206,34 @@ export function buildHqProjectColumns(
   ]
 }
 
+export function resolveHqCampaignFocus(
+  campaigns: HqCampaignSummary[],
+  now = new Date(),
+): HqCampaignFocus | null {
+  const today = localDateKey(now)
+  const dated = campaigns
+    .filter((campaign): campaign is HqCampaignSummary & { releaseDate: string } => Boolean(campaign.releaseDate))
+    .map((campaign) => ({ campaign, distance: dayDistance(today, campaign.releaseDate) }))
+    .sort((left, right) => Math.abs(left.distance) - Math.abs(right.distance) || right.distance - left.distance)
+
+  const closest = dated[0]
+  if (closest) {
+    const label = Math.abs(closest.distance) <= 45
+      ? 'Current campaign'
+      : closest.distance > 0
+        ? 'Next campaign'
+        : 'Latest campaign'
+    return {
+      campaign: closest.campaign,
+      label,
+      dateLabel: formatReleaseDate(closest.campaign.releaseDate),
+    }
+  }
+
+  const fallback = campaigns.find((campaign) => campaign.primary) ?? campaigns[0]
+  return fallback ? { campaign: fallback, label: 'Release date needed' } : null
+}
+
 export function hqHeaderNextLabel(
   nextMoveTitle: string | undefined,
   timeline: HqHomeTimelineItem[],
@@ -239,6 +275,12 @@ function formatWorkOwner(order: ScheduledWorkOrder): string {
   if (order.execution.type === 'agent-task') return `@${order.execution.agentSlug}`
   if (order.execution.type === 'workflow-run') return order.execution.workflowSlug
   return order.type.replaceAll('-', ' ')
+}
+
+function formatReleaseDate(dateKey: string): string {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    .format(new Date(year!, month! - 1, day!))
 }
 
 function dedupeByTitle(items: HqHomeWorkerItem[]): HqHomeWorkerItem[] {

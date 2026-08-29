@@ -8,6 +8,7 @@ import {
   buildHqThisWeekItems,
   buildHqWorkerItems,
   hqHeaderNextLabel,
+  resolveHqCampaignFocus,
   shouldRefreshHqStateOnOpen,
 } from './artist-hq-home-feed'
 
@@ -108,6 +109,26 @@ describe('Artist HQ home feed', () => {
     expect(columns.find((column) => column.id === 'active')?.cards[0]?.title).toBe('Content batch')
     expect(columns.find((column) => column.id === 'waiting')?.cards[0]?.title).toBe('Approve final post')
     expect(columns.find((column) => column.id === 'upcoming')?.cards[0]?.title).toBe('Next EP')
+  })
+
+  test('focuses the campaign whose release date is closest to today', () => {
+    const focus = resolveHqCampaignFocus([
+      { id: 'older', name: 'Older Single', releaseDate: '2026-06-01' },
+      { id: 'next', name: 'Next Single', releaseDate: '2026-08-05' },
+      { id: 'later', name: 'Later EP', releaseDate: '2026-11-20', primary: true },
+    ], now)
+
+    expect(focus?.campaign.id).toBe('next')
+    expect(focus?.label).toBe('Current campaign')
+    expect(focus?.dateLabel).toBe('Aug 5, 2026')
+  })
+
+  test('does not invent a next campaign when release dates are missing', () => {
+    const focus = resolveHqCampaignFocus([{ id: 'undated', name: 'Undated Album', primary: true }], now)
+
+    expect(focus?.campaign.id).toBe('undated')
+    expect(focus?.label).toBe('Release date needed')
+    expect(focus?.dateLabel).toBeUndefined()
   })
 
   test('uses the nearest dated item for the header and refreshes stale state on open', () => {

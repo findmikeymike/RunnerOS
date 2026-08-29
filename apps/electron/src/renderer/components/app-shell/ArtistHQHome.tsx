@@ -2,13 +2,11 @@ import * as React from 'react'
 import {
   Bot,
   CalendarClock,
-  CalendarDays,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   ExternalLink,
   FileText,
-  FolderKanban,
   ImagePlus,
   Info,
   MessageSquareText,
@@ -23,7 +21,6 @@ import {
   Sparkles,
   Trash2,
   UserRound,
-  Users,
   X,
 } from 'lucide-react'
 import { useAtomValue } from 'jotai'
@@ -53,6 +50,9 @@ import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerHeader, Dr
 import { ScheduledWorkComposer, type ScheduledWorkComposerEntry } from '@/components/calendar/ScheduledWorkComposer'
 import { StateOfPlayRefreshButton } from './StateOfPlayControls'
 import { AgendaPage, type AgendaTaskDraft } from './AgendaPage'
+import { PeoplePageHeader } from './PeoplePageHeader'
+import { CompactPageHeader } from './CompactPageHeader'
+import { ReleaseHorizon } from './ReleaseHorizon'
 import { buildCampaignSchedulePlanFromComposer, buildHqSchedulePlanFromComposer, type ScheduledWorkComposerDraft } from '@/lib/scheduled-work-composer'
 import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult, type ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import {
@@ -155,15 +155,20 @@ import {
 } from '@/lib/artist-intel'
 import type { SocialAccountsDoctorResult } from '../../../shared/types'
 import {
-  buildHqProjectColumns,
   buildHqThisWeekItems,
   buildHqWorkerItems,
   hqHeaderNextLabel,
   shouldRefreshHqStateOnOpen,
   type HqCampaignSummary,
-  type HqHomeProjectColumn,
   type HqHomeWorkerItem,
 } from '@/lib/artist-hq-home-feed'
+import {
+  ARTIST_RELEASE_HORIZON_CONTEXT_SLUG,
+  artistReleaseHorizonMetadata,
+  parseArtistReleaseHorizon,
+  serializeArtistReleaseHorizon,
+  type ArtistReleaseMonthPlan,
+} from '@/lib/artist-release-horizon'
 
 interface ArtistHQHomeProps {
   workspaceId: string
@@ -175,7 +180,7 @@ interface ArtistHQHomeProps {
   onOpenCampaignWorkspace?: (workspaceId: string) => void
   agendaSessions?: SessionMeta[]
   onCreateAgendaTask?: (task: AgendaTaskDraft) => Promise<string>
-  onDeleteAgendaTask?: (sessionId: string) => Promise<boolean>
+  onDeleteAgendaTask?: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
 }
 
 type ArtistHQTab = 'home' | 'profile' | 'voice' | 'calendar' | 'network' | 'research' | 'branding'
@@ -237,6 +242,7 @@ const emptyCalendarEditDraft: CalendarEditDraft = {
 }
 const emptyProfileDraft: ProfileDraft = {
   artistName: '',
+  mission: '',
   aliases: '',
   bio: '',
   themes: '',
@@ -335,6 +341,10 @@ export function ArtistHQHome({
     [docs],
   )
   const profile = profileResult.profile
+  const releaseHorizon = React.useMemo(
+    () => parseArtistReleaseHorizon(docs.find((doc) => doc.slug === ARTIST_RELEASE_HORIZON_CONTEXT_SLUG)),
+    [docs],
+  )
   const workspaceRootPath = React.useMemo(
     () => workspaces.find((workspace) => workspace.id === workspaceId)?.rootPath ?? null,
     [workspaces, workspaceId],
@@ -452,10 +462,6 @@ export function ArtistHQHome({
   const workerItems = React.useMemo(
     () => buildHqWorkerItems(automations, scheduledWorkResult.work.items, workspaceWorkerSessions),
     [automations, scheduledWorkResult.work.items, workspaceWorkerSessions],
-  )
-  const projectColumns = React.useMemo(
-    () => buildHqProjectColumns(campaignWorkspaces, scheduledWorkResult.work.items),
-    [campaignWorkspaces, scheduledWorkResult.work.items],
   )
   const selectedDateEvents = React.useMemo(
     () => activeCalendarEvents.filter((event) => event.date === selectedDate),
@@ -810,6 +816,38 @@ export function ArtistHQHome({
       toast.error(err instanceof Error ? err.message : String(err))
     }
   }, [profileDraft, profileResult, upsert])
+
+  const saveReleaseMonthPlan = React.useCallback(async (monthKey: string, value: ArtistReleaseMonthPlan | null) => {
+    const nextMonths = { ...releaseHorizon.months }
+    if (value && (value.title.trim() || value.plan.trim() || value.keyGoal.trim())) nextMonths[monthKey] = value
+    else delete nextMonths[monthKey]
+    await upsert({
+      slug: ARTIST_RELEASE_HORIZON_CONTEXT_SLUG,
+      metadata: artistReleaseHorizonMetadata(),
+      body: serializeArtistReleaseHorizon({
+        version: 2,
+        months: nextMonths,
+        updatedAt: new Date().toISOString(),
+      }),
+    })
+    toast.success('Month saved')
+  }, [releaseHorizon.months, upsert])
+
+  const saveReleaseNorthStar = React.useCallback(async (mission: string) => {
+    if (!profileResult.ok) {
+      throw new Error(`${profileResult.error} Open Workspace Context to recover it before saving.`)
+    }
+    await upsert({
+      slug: ARTIST_PROFILE_CONTEXT_SLUG,
+      metadata: artistProfileMetadata(),
+      body: serializeArtistProfileBody({
+        ...profile,
+        mission: mission.trim() || undefined,
+        updatedAt: new Date().toISOString(),
+      }),
+    })
+    toast.success('Direction saved')
+  }, [profile, profileResult, upsert])
 
   const saveBannerImagePath = React.useCallback(async (bannerImagePath?: string) => {
     if (!profileResult.ok) {
@@ -1423,150 +1461,93 @@ export function ArtistHQHome({
       case 'calendar':
         return {
           title: 'Calendar',
-          description: 'Schedule, events, and important dates for the artist.',
-          orb1: 'bg-orange-600/10',
-          orb2: 'bg-orange-500/5',
-          icon: <CalendarDays className="h-3.5 w-3.5 text-white/58" />,
           label: 'Schedule',
         }
       case 'network':
         return {
           title: 'Network',
-          description: 'Relationships, roles, contact info, and context on everyone who matters to the artist.',
-          orb1: 'bg-emerald-600/10',
-          orb2: 'bg-teal-500/5',
-          icon: <Users className="h-3.5 w-3.5 text-white/58" />,
           label: 'Contacts',
         }
       case 'profile':
         return {
           title: 'Profile',
-          description: 'Global context every worker should know before touching campaigns, content, research, ads, or outreach.',
-          orb1: 'bg-blue-600/10',
-          orb2: 'bg-indigo-500/5',
-          icon: <UserRound className="h-3.5 w-3.5 text-white/58" />,
           label: 'Context',
         }
       case 'voice':
         return {
           title: 'Voice',
-          description: 'How the artist talks, writes captions, phrases ideas, and wants public copy to sound.',
-          orb1: 'bg-pink-600/10',
-          orb2: 'bg-orange-500/5',
-          icon: <MessageSquareText className="h-3.5 w-3.5 text-white/58" />,
           label: 'Style',
         }
       case 'branding':
         return {
           title: 'Branding',
-          description: 'Artist positioning, narrative, voice, references, and creative direction.',
-          orb1: 'bg-blue-600/10',
-          orb2: 'bg-emerald-500/5',
-          icon: <Sparkles className="h-3.5 w-3.5 text-white/58" />,
           label: 'Brain',
         }
       default:
         return {
           title: artistName,
-          description: 'Global career context, planning, and work',
-          orb1: 'bg-transparent',
-          orb2: 'bg-transparent',
-          icon: <Sparkles className="h-3.5 w-3.5 text-white/58" />,
           label: 'Artist HQ',
         }
     }
   }
 
   const headerProps = getHeaderProps()
-  const usesCompactSectionHeader = tab === 'network'
-
+  const headerTone = tab === 'profile' || tab === 'branding' ? 'blue' : tab === 'voice' ? 'red' : 'orange'
   return (
     <div className={cn('h-full bg-[#050505] text-foreground', tab === 'calendar' ? 'overflow-hidden' : 'overflow-y-auto')}>
-      <div className={cn('mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5', tab === 'calendar' ? 'h-full min-h-0' : 'min-h-full')}>
-        {tab !== 'calendar' ? (
-        <section
-          className={cn(
-            'relative overflow-hidden rounded-[24px] border border-white/[0.05]',
-            usesCompactSectionHeader ? 'min-h-[230px]' : 'min-h-[250px]',
-            tab === 'home'
-              ? 'bg-[radial-gradient(circle_at_100%_50%,rgba(249,115,22,0.26),transparent_48%),#050505]'
-              : 'bg-[#0A0A0A]',
-          )}
-        >
-          {tab === 'home' && bannerImageDataUrl ? (
+      <div className={cn(
+        'mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5',
+        tab === 'calendar' ? 'h-full min-h-0' : 'min-h-full',
+      )}>
+        {tab !== 'calendar' && tab !== 'network' ? (
+        <CompactPageHeader
+          eyebrow={headerProps.label}
+          title={headerProps.title}
+          tone={headerTone}
+          backgroundImage={tab === 'home' ? bannerImageDataUrl : null}
+          dimBackgroundImage={SHOW_HQ_BANNER_FILTER}
+          borderless={tab === 'home'}
+          titleClassName={tab === 'home' ? 'text-[50px]' : undefined}
+          className={tab === 'home' ? "after:pointer-events-none after:absolute after:inset-0 after:z-[9] after:rounded-[inherit] after:ring-2 after:ring-inset after:ring-[#050505] after:content-['']" : undefined}
+          actions={
             <>
-              <img
-                src={bannerImageDataUrl}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
-              />
-              {SHOW_HQ_BANNER_FILTER ? (
+              <div className="hidden min-w-0 text-right sm:block">
+                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/38">Next</p>
+                <p className="mt-1 max-w-48 truncate text-[11px] font-medium text-white/72">{nextDate}</p>
+              </div>
+              {tab === 'home' ? (
                 <>
-                  <div className="absolute inset-0 bg-black/55" />
-                  <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/55 to-transparent" />
+                  {bannerImageDataUrl ? (
+                    <button
+                      type="button"
+                      onClick={removeBannerImage}
+                      disabled={bannerImageBusy}
+                      aria-label="Remove HQ banner"
+                      title="Remove HQ banner"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-white/[0.1] bg-black/35 text-white/48 backdrop-blur-md transition-colors hover:bg-black/55 hover:text-red-100/80 disabled:cursor-wait disabled:opacity-45"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={chooseBannerImage}
+                    disabled={bannerImageBusy}
+                    aria-label={bannerImageDataUrl ? 'Replace HQ banner' : 'Add HQ banner'}
+                    title={bannerImageDataUrl ? 'Replace HQ banner' : 'Add HQ banner'}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-white/[0.1] bg-black/35 text-white/58 backdrop-blur-md transition-colors hover:bg-black/55 hover:text-white/90 disabled:cursor-wait disabled:opacity-45"
+                  >
+                    <ImagePlus className="h-4 w-4" />
+                  </button>
                 </>
               ) : null}
             </>
-          ) : (
-            <>
-              <div className={cn('absolute -left-[18%] -top-[50%] h-[700px] w-[700px] rounded-full blur-[150px]', headerProps.orb1)} />
-              <div className={cn('absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full blur-[120px]', headerProps.orb2)} />
-            </>
-          )}
-          <div className={cn(
-            'relative z-10 flex flex-col justify-between p-6 lg:p-8',
-            usesCompactSectionHeader ? 'min-h-[230px]' : 'min-h-[250px]',
-          )}>
-            <div className="flex items-start justify-between gap-4">
-              <div className="inline-flex items-center gap-2.5 rounded-full border border-white/[0.08] bg-black/25 px-3 py-1.5 pr-4 backdrop-blur-md">
-                {headerProps.icon}
-                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/72">{headerProps.label}</span>
-              </div>
-              <div className="hidden min-w-0 text-right sm:block">
-                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/38">Next</p>
-                <p className="mt-1.5 max-w-56 line-clamp-2 text-xs font-medium text-white/72">{nextDate}</p>
-              </div>
-            </div>
-            <div className="max-w-3xl">
-              <h1 className="text-4xl font-medium tracking-tighter text-white/92 sm:text-5xl lg:text-[56px] lg:leading-[0.96]">
-                {headerProps.title}
-              </h1>
-              <p className="mt-3 max-w-3xl text-sm font-light leading-relaxed text-white/58">
-                {headerProps.description}
-              </p>
-            </div>
-          </div>
-          {tab === 'home' ? (
-            <div className="absolute bottom-4 right-4 z-20 flex items-center gap-1.5">
-              {bannerImageDataUrl ? (
-                <button
-                  type="button"
-                  onClick={removeBannerImage}
-                  disabled={bannerImageBusy}
-                  aria-label="Remove HQ banner"
-                  title="Remove HQ banner"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-white/[0.1] bg-black/35 text-white/48 backdrop-blur-md transition-colors hover:bg-black/55 hover:text-red-100/80 disabled:cursor-wait disabled:opacity-45"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={chooseBannerImage}
-                disabled={bannerImageBusy}
-                aria-label={bannerImageDataUrl ? 'Replace HQ banner' : 'Add HQ banner'}
-                title={bannerImageDataUrl ? 'Replace HQ banner' : 'Add HQ banner'}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-white/[0.1] bg-black/35 text-white/58 backdrop-blur-md transition-colors hover:bg-black/55 hover:text-white/90 disabled:cursor-wait disabled:opacity-45"
-              >
-                <ImagePlus className="h-4 w-4" />
-              </button>
-            </div>
-          ) : null}
-        </section>
+          }
+        />
         ) : null}
 
         {tab === 'home' && (
-          <>
+          <div id="hq-home-operations" className="space-y-3">
             <HQCard className="overflow-hidden p-0">
               <div id="hq-home-details" className="grid grid-cols-1 divide-y divide-white/[0.055] lg:grid-cols-3 lg:divide-x lg:divide-y-0">
                 <SpotifyPulseCard
@@ -1609,22 +1590,18 @@ export function ArtistHQHome({
               </div>
             </HQCard>
 
-            <HQCard className="p-0">
-              <div className="flex items-center justify-between gap-3 px-4 py-3">
-                <SectionTitle icon={FolderKanban} title="Projects" meta="global" compact />
-              </div>
-              <div className="px-4 pb-4 pt-1">
-                <ProjectBoard
-                  columns={projectColumns}
-                  onOpenCampaignWorkspace={onOpenCampaignWorkspace ?? (
-                    primaryCampaignWorkspaceId && onOpenPrimaryCampaignWorkspace
-                      ? () => onOpenPrimaryCampaignWorkspace()
-                      : undefined
-                  )}
-                  onOpenScheduledWork={() => { window.location.hash = '#artist-hq/calendar' }}
-                />
-              </div>
-            </HQCard>
+            <ReleaseHorizon
+              campaigns={campaignWorkspaces}
+              northStar={profile.mission}
+              plan={releaseHorizon}
+              onOpenCampaign={onOpenCampaignWorkspace ?? (
+                primaryCampaignWorkspaceId && onOpenPrimaryCampaignWorkspace
+                  ? () => onOpenPrimaryCampaignWorkspace()
+                  : undefined
+              )}
+              onSaveNorthStar={saveReleaseNorthStar}
+              onSaveMonthPlan={saveReleaseMonthPlan}
+            />
 
             <StateOfPlayPanel
               state={hqState}
@@ -1682,7 +1659,7 @@ export function ArtistHQHome({
               ) : null}
             </section>
 
-          </>
+          </div>
         )}
 
         {tab === 'profile' && (
@@ -1745,14 +1722,12 @@ export function ArtistHQHome({
 
         {tab === 'calendar' && (
           <>
-          <header className="relative min-h-[118px] overflow-hidden rounded-[22px] border border-blue-300/[0.08] bg-[linear-gradient(105deg,#07090D_0%,#0A1020_58%,#102A55_100%)]">
-            <div className="absolute -right-16 -top-28 h-72 w-72 rounded-full bg-blue-500/20 blur-[90px]" />
-            <div className="relative z-10 flex min-h-[118px] items-center justify-between gap-5 px-6 py-5">
-              <div>
-                <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-blue-200/48">Artist HQ</p>
-                <h1 className="mt-1 text-[30px] font-medium tracking-tight text-white/92">Plan</h1>
-              </div>
-              <div className="flex shrink-0 items-center gap-1.5">
+          <CompactPageHeader
+            eyebrow="Artist HQ"
+            title="Plan"
+            tone="orange"
+            actions={
+              <>
                 <button
                   type="button"
                   onClick={connectGoogleCalendar}
@@ -1770,44 +1745,58 @@ export function ArtistHQHome({
                   <RefreshCw className={cn('h-3 w-3', googleCalendarBusy && 'animate-spin')} />
                   Sync
                 </button>
-              </div>
-            </div>
-          </header>
-          <HQCard className="flex min-h-0 flex-1 flex-col overflow-hidden border-white/[0.08] bg-[#0C0D0E] p-3">
+              </>
+            }
+          />
+          <HQCard className="flex min-h-0 flex-1 flex-col overflow-hidden border-white/[0.08] bg-[#050505] p-0">
             {!calendarResult.ok ? (
-              <div className="mb-4 rounded-[14px] border border-red-400/20 bg-red-500/10 p-3 text-xs leading-5 text-red-100/80">
+              <div className="mx-3 mt-3 rounded-[10px] border border-red-400/20 bg-red-500/10 p-3 text-xs leading-5 text-red-100/80">
                 {calendarResult.error} Saving is paused so existing calendar context is not overwritten.
               </div>
             ) : null}
             {!scheduledWorkResult.ok ? (
-              <div className="mb-4 rounded-[14px] border border-red-400/20 bg-red-500/10 p-3 text-xs leading-5 text-red-100/80">
+              <div className="mx-3 mt-3 rounded-[10px] border border-red-400/20 bg-red-500/10 p-3 text-xs leading-5 text-red-100/80">
                 {scheduledWorkResult.error} Queueing is paused so existing scheduled work is not overwritten.
               </div>
             ) : null}
-            <div className="flex h-[400px] shrink-0 flex-col">
-              <ArtistCalendarView
-                compact
-                events={activeCalendarEvents}
-                selectedDate={selectedDate}
-                visibleMonth={visibleMonth}
-                disabled={!calendarResult.ok || !scheduledWorkResult.ok}
-                onSelectDate={setSelectedDate}
-                onChangeMonth={setVisibleMonth}
-                editingEventId={calendarEditId}
-                editDraft={calendarEditDraft}
-                onChangeEditDraft={setCalendarEditDraft}
-                onEditEvent={openCalendarEventEdit}
-                onCancelEditEvent={cancelCalendarEventEdit}
-                onSaveEditEvent={saveCalendarEventEdit}
-                onDeleteEvent={deleteCalendarEvent}
-                onQueueHqWork={(type) => {
-                  setCalendarComposerType(type)
-                  setCalendarComposerTarget('hq')
-                }}
-                selectedDateEvents={selectedDateEvents}
-                workById={scheduledWorkById}
-                workspaceId={workspaceId}
-              />
+            <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,2.15fr)_minmax(300px,0.85fr)]">
+              <div className="flex min-h-[430px] min-w-0 flex-col p-3 lg:min-h-0 lg:pr-4">
+                <ArtistCalendarView
+                  compact
+                  events={activeCalendarEvents}
+                  selectedDate={selectedDate}
+                  visibleMonth={visibleMonth}
+                  disabled={!calendarResult.ok || !scheduledWorkResult.ok}
+                  onSelectDate={setSelectedDate}
+                  onChangeMonth={setVisibleMonth}
+                  editingEventId={calendarEditId}
+                  editDraft={calendarEditDraft}
+                  onChangeEditDraft={setCalendarEditDraft}
+                  onEditEvent={openCalendarEventEdit}
+                  onCancelEditEvent={cancelCalendarEventEdit}
+                  onSaveEditEvent={saveCalendarEventEdit}
+                  onDeleteEvent={deleteCalendarEvent}
+                  onQueueHqWork={(type) => {
+                    setCalendarComposerType(type)
+                    setCalendarComposerTarget('hq')
+                  }}
+                  selectedDateEvents={selectedDateEvents}
+                  workById={scheduledWorkById}
+                  workspaceId={workspaceId}
+                />
+              </div>
+              {onCreateAgendaTask && onDeleteAgendaTask ? (
+                <div id="plan-kanban" className="min-h-[280px] overflow-hidden border-t border-white/[0.07] bg-[#17191B] lg:min-h-0 lg:border-l lg:border-t-0">
+                  <AgendaPage
+                    embedded
+                    sessions={agendaSessions}
+                    onCreateTask={onCreateAgendaTask}
+                    onDeleteTask={onDeleteAgendaTask}
+                    workspaceId={workspaceId}
+                    networkWorkspaceId={workspaceId}
+                  />
+                </div>
+              ) : null}
             </div>
             <ScheduledWorkComposer
               open={calendarComposerTarget !== null}
@@ -1818,24 +1807,19 @@ export function ArtistHQHome({
               allowedTypes={calendarComposerTarget === 'hq' ? ['event', 'agent-task', 'workflow-run'] : undefined}
               allowFollowUps={calendarComposerTarget !== 'hq'}
             />
-            {onCreateAgendaTask && onDeleteAgendaTask ? (
-              <div id="plan-kanban" className="-mx-3 mt-4 min-h-[140px] flex-1 border-t border-white/[0.055] px-3 pt-3">
-                <AgendaPage
-                  embedded
-                  sessions={agendaSessions}
-                  onCreateTask={onCreateAgendaTask}
-                  onDeleteTask={onDeleteAgendaTask}
-                  workspaceId={workspaceId}
-                  networkWorkspaceId={workspaceId}
-                />
-              </div>
-            ) : null}
           </HQCard>
           </>
         )}
 
         {tab === 'network' && (
-          <HQCard>
+          <>
+            <PeoplePageHeader
+              activeView="network"
+              onSelectView={(view) => {
+                if (view === 'community') navigate(routes.view.community())
+              }}
+            />
+            <HQCard>
             <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-2">
                 <div className="relative">
@@ -1906,8 +1890,9 @@ export function ArtistHQHome({
               </div>
             ) : null}
 
-            <NetworkBoard categories={network.categories} people={filteredPeople} onSelectPerson={openPerson} />
-          </HQCard>
+              <NetworkBoard categories={network.categories} people={filteredPeople} onSelectPerson={openPerson} />
+            </HQCard>
+          </>
         )}
 
         {tab === 'branding' && (
@@ -2075,7 +2060,10 @@ function PulseRunControls({
         <TooltipTrigger asChild>
           <button
             type="button"
-            onClick={onRun}
+            onClick={(event) => {
+              event.stopPropagation()
+              onRun()
+            }}
             disabled={busy || runDisabled}
             title={manualLabel}
             aria-label={manualLabel}
@@ -2091,7 +2079,10 @@ function PulseRunControls({
         <TooltipTrigger asChild>
           <button
             type="button"
-            onClick={onToggle}
+            onClick={(event) => {
+              event.stopPropagation()
+              onToggle()
+            }}
             disabled={busy}
             title={weeklyTooltip}
             aria-label={weeklyTooltip}
@@ -2134,6 +2125,7 @@ function SpotifyPulseCard({
   onToggle: () => void
   onRun: () => void
 }) {
+  const [detailsOpen, setDetailsOpen] = React.useState(false)
   const headlineLabel = publicApi ? 'Artist popularity' : 'Streams'
   const headlineValue = publicApi ? snapshot?.metrics.popularity : snapshot?.metrics.streams
   const popularity = publicApi && typeof headlineValue === 'number'
@@ -2154,29 +2146,21 @@ function SpotifyPulseCard({
     : '--'
 
   return (
-    <section className="min-w-0 overflow-hidden">
-      <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-3">
-        <div className="min-w-0">
-            <h3 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/65">Spotify Pulse</h3>
-            <p className="mt-0.5 text-[9px] text-white/48">{sourceLabel}</p>
-        </div>
-        <PulseRunControls
-          active={active}
-          busy={busy}
-          runDisabled={runDisabled}
-          manualLabel="Run Spotify Pulse now — manual"
-          weeklyLabel="Weekly Spotify auto-run"
-          activeClassName="border-[#f97316]/40 bg-[#f97316]/14 text-[#f97316]"
-          onRun={onRun}
-          onToggle={onToggle}
-        />
-      </div>
-
-      <div className="p-4">
-        <div className="flex h-[184px] flex-col rounded-[14px] border border-[#f97316]/35 bg-[#0F0F10] p-4">
-          <div className="flex items-end justify-between gap-4">
+    <section className="min-w-0 p-4">
+      <div
+        className="group relative flex h-[184px] flex-col rounded-[14px] border border-white/[0.06] bg-[#0F0F10] p-4 transition-colors hover:border-white/[0.12] hover:bg-[#121213]"
+      >
+          <button
+            type="button"
+            aria-label="Open Spotify Pulse analysis"
+            onClick={() => setDetailsOpen(true)}
+            className="absolute inset-0 z-0 cursor-pointer rounded-[14px] outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#f97316]/70"
+          />
+          <div className="pointer-events-none relative z-[1] flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="text-[9px] font-medium uppercase tracking-[0.15em] text-[#f97316]">
+                <span className="text-white/52">Spotify Pulse</span>
+                <span className="text-white/24"> · </span>
                 {headlineLabel}{!publicApi && snapshot?.windowDays ? ` · ${snapshot.windowDays} days` : ''}
               </p>
               <div className="mt-1.5 flex flex-wrap items-end gap-2">
@@ -2186,30 +2170,84 @@ function SpotifyPulseCard({
                 {!publicApi ? <SpotifyGrowthBadge growth={growth} /> : null}
               </div>
             </div>
-            <p className="shrink-0 text-right text-[10px] leading-4 text-white/34">
-              {snapshot ? formatShortDate(snapshot.snapshotDate) : 'Awaiting data'}
-            </p>
+            <div className="pointer-events-auto flex shrink-0 items-center gap-2">
+              <p className="text-right text-[10px] leading-4 text-white/34">
+                {snapshot ? formatShortDate(snapshot.snapshotDate) : 'Awaiting data'}
+              </p>
+              <PulseRunControls
+                active={active}
+                busy={busy}
+                runDisabled={runDisabled}
+                manualLabel="Run Spotify Pulse now — manual"
+                weeklyLabel="Weekly Spotify auto-run"
+                activeClassName="border-[#f97316]/40 bg-[#f97316]/14 text-[#f97316]"
+                onRun={onRun}
+                onToggle={onToggle}
+              />
+            </div>
           </div>
-          {popularity !== null ? (
-            <SignalProgress value={popularity} tone="bg-[#f97316]" label={`${Math.round(popularity)} of 100`} />
-          ) : (
-            <SpotifyPerformanceChart snapshot={snapshot} history={history} />
-          )}
-        </div>
+          <div className="pointer-events-none relative z-[1] flex min-h-0 flex-1 flex-col">
+            {popularity !== null ? (
+              <SignalProgress value={popularity} tone="bg-[#f97316]" label={`${Math.round(popularity)} of 100`} />
+            ) : (
+              <SpotifyPerformanceChart snapshot={snapshot} history={history} />
+            )}
+          </div>
+      </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-2 rounded-[12px] bg-black/20 py-3">
+      <PulseDetailsDialog
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        title="Spotify Pulse"
+        description={`${sourceLabel}${snapshot ? ` · ${formatShortDate(snapshot.snapshotDate)}` : ''}`}
+      >
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[12px] border border-white/[0.06] bg-white/[0.06] sm:grid-cols-3">
+          <SignalStat label="Streams" value={formatMetric(snapshot?.metrics.streams)} />
           <SignalStat label="Listeners" value={formatMetric(snapshot?.metrics.listeners)} />
           <SignalStat label="Streams / listener" value={streamsPerListener} />
-          <SignalStat
-            label={publicApi ? 'Top genre' : 'Top city'}
-            value={publicApi
-              ? snapshot?.artist.genres?.[0] ?? '--'
-              : snapshot?.geo?.topCities?.[0]?.city ?? '--'}
-          />
+          <SignalStat label="Followers" value={formatMetric(snapshot?.metrics.followers)} />
+          <SignalStat label="Saves" value={formatMetric(snapshot?.metrics.saves)} />
+          <SignalStat label="Popularity" value={formatMetric(snapshot?.metrics.popularity)} />
+          <SignalStat label="Save rate" value={formatRateMetric(snapshot?.metrics.saveRate)} />
+          <SignalStat label="Skip rate" value={formatRateMetric(snapshot?.metrics.skipRate)} />
+          <SignalStat label="Stream change" value={formatPercentMetric(growth?.streamsPercent, true)} />
         </div>
-
-        {error ? <p className="mt-2 text-xs leading-5 text-red-100/65">{error}</p> : null}
-      </div>
+        <PulseDetailSection title="Top tracks" empty="No track analysis yet.">
+          {(snapshot?.tracks ?? []).slice(0, 8).map((track) => (
+            <PulseDetailRow
+              key={track.id ?? track.name}
+              label={track.name}
+              value={`${formatMetric(track.streams)} streams · ${formatMetric(track.saves)} saves`}
+            />
+          ))}
+        </PulseDetailSection>
+        <PulseDetailSection title="Top cities" empty="No city analysis yet.">
+          {(snapshot?.geo?.topCities ?? []).slice(0, 8).map((city) => (
+            <PulseDetailRow
+              key={`${city.city}-${city.country ?? ''}`}
+              label={[city.city, city.country].filter(Boolean).join(', ')}
+              value={`${formatMetric(city.listeners)} listeners`}
+            />
+          ))}
+        </PulseDetailSection>
+        <PulseDetailSection title="Playlists driving discovery" empty="No playlist analysis yet.">
+          {(snapshot?.playlistsDriving ?? []).slice(0, 8).map((playlist) => (
+            <PulseDetailRow
+              key={`${playlist.name}-${playlist.type ?? ''}`}
+              label={playlist.name}
+              value={[playlist.type, typeof playlist.listeners === 'number' ? `${formatMetric(playlist.listeners)} listeners` : null].filter(Boolean).join(' · ') || '--'}
+            />
+          ))}
+        </PulseDetailSection>
+        <PulseDetailSection title="Discovery sources" empty="No source breakdown yet.">
+          {Object.entries(snapshot?.sources ?? {}).map(([source, value]) => (
+            <PulseDetailRow key={source} label={source} value={formatMetric(value)} />
+          ))}
+        </PulseDetailSection>
+        {error || snapshot?.errors?.length ? (
+          <PulseDetailNotice>{error ?? snapshot?.errors?.join(' · ')}</PulseDetailNotice>
+        ) : null}
+      </PulseDetailsDialog>
     </section>
   )
 }
@@ -2316,10 +2354,75 @@ function SpotifyPerformanceChart({
 
 function SignalStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 px-3 first:pl-3 last:pr-3">
+    <div className="min-w-0 bg-[#0F0F10] px-3 py-3">
       <p className="text-[8px] font-medium uppercase tracking-[0.13em] text-white/48">{label}</p>
       <p title={value} className="mt-1.5 truncate text-[13px] font-medium text-white/82">{value}</p>
     </div>
+  )
+}
+
+function PulseDetailsDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  children,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  title: string
+  description: string
+  children: React.ReactNode
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[min(760px,calc(100vh-2rem))] w-[min(680px,calc(100vw-2rem))] max-w-[680px] flex-col gap-0 overflow-hidden border-white/[0.09] bg-[#0C0D0E] p-0 text-white shadow-2xl">
+        <DialogHeader className="shrink-0 border-b border-white/[0.06] px-5 py-4 pr-14 text-left">
+          <DialogTitle className="text-lg font-medium tracking-[-0.02em]">{title}</DialogTitle>
+          <DialogDescription className="text-xs text-white/40">{description}</DialogDescription>
+        </DialogHeader>
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+          {children}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function PulseDetailSection({
+  title,
+  empty,
+  children,
+}: {
+  title: string
+  empty: string
+  children: React.ReactNode
+}) {
+  const hasChildren = React.Children.count(children) > 0
+  return (
+    <section>
+      <p className="mb-2 text-[9px] font-medium uppercase tracking-[0.15em] text-white/38">{title}</p>
+      <div className="overflow-hidden rounded-[12px] border border-white/[0.06] bg-[#0F0F10]">
+        {hasChildren ? children : <p className="px-3 py-4 text-xs text-white/32">{empty}</p>}
+      </div>
+    </section>
+  )
+}
+
+function PulseDetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-white/[0.05] px-3 py-2.5 last:border-b-0">
+      <p className="min-w-0 truncate text-xs text-white/72">{label}</p>
+      <p className="shrink-0 text-[10px] capitalize text-white/36">{value}</p>
+    </div>
+  )
+}
+
+function PulseDetailNotice({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="rounded-[10px] border border-red-300/10 bg-red-300/[0.04] px-3 py-2.5 text-xs leading-5 text-red-100/65">
+      {children}
+    </p>
   )
 }
 
@@ -2677,6 +2780,7 @@ function IntelPulseCard({
   onRun: () => void
   onEdit: () => void
 }) {
+  const [detailsOpen, setDetailsOpen] = React.useState(false)
   const latestRun = report.runs[0]
   const videoCount = report.videoCount ?? latestRun?.videoCount
   const nuggetCount = report.nuggetCount ?? latestRun?.nuggetCount
@@ -2691,76 +2795,102 @@ function IntelPulseCard({
         : config.enabled ? scheduled ? 'Scheduled' : 'Manual' : 'Off'
 
   return (
-    <section className="min-w-0 overflow-hidden">
-      <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-3">
-        <div className="min-w-0">
-            <h3 className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-white/65">Intel Pulse</h3>
-            <p className="mt-0.5 text-[9px] text-white/48">{statusLabel}</p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {report.outputId || report.sessionId ? (
-            <button
-              type="button"
-              onClick={() => report.outputId
-                ? navigate(routes.view.output(report.outputId))
-                : navigate(routes.view.allSessions(report.sessionId!))}
-              title="Open latest Intel report"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.07] bg-white/[0.02] text-white/28 transition-colors hover:text-white/65"
-              aria-label="Open latest Intel report"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </button>
-          ) : null}
+    <section className="min-w-0 p-4">
+      <div
+        className="group relative flex h-[184px] flex-col rounded-[14px] border border-white/[0.06] bg-[#0F0F10] p-4 transition-colors hover:border-white/[0.12] hover:bg-[#121213]"
+      >
           <button
             type="button"
-            onClick={onEdit}
-            title="Edit Intel channels"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.07] bg-white/[0.02] text-white/28 transition-colors hover:text-white/65"
-            aria-label="Edit Intel channels"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-          </button>
-          <PulseRunControls
-            active={scheduled}
-            busy={busy}
-            runDisabled={running || !agentReady || config.sources.length === 0}
-            manualLabel="Run Intel Pulse now — manual"
-            weeklyLabel="Weekly Intel auto-run"
-            activeClassName="border-[#f97316]/40 bg-[#f97316]/14 text-[#f97316]"
-            onRun={onRun}
-            onToggle={onToggle}
+            aria-label="Open Intel Pulse analysis"
+            onClick={() => setDetailsOpen(true)}
+            className="absolute inset-0 z-0 cursor-pointer rounded-[14px] outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#f97316]/70"
           />
-        </div>
-      </div>
-
-      <div className="p-4">
-        <div className="flex h-[184px] flex-col rounded-[14px] border border-[#f97316]/35 bg-[#0F0F10] p-4">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <p className="text-[9px] font-medium uppercase tracking-[0.15em] text-[#f97316]">Research captured</p>
+          <div className="pointer-events-none relative z-[1] flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="truncate text-[9px] font-medium uppercase tracking-[0.15em] text-[#f97316]">
+                <span className="text-white/52">Intel Pulse</span>
+                <span className="text-white/24"> · </span>
+                Research captured
+              </p>
               <p className="mt-1.5 text-[28px] font-medium leading-none tracking-[-0.04em] text-white/90">
                 {formatMetric(nuggetCount ?? videoCount)}
               </p>
             </div>
-            <p className="text-right text-[10px] leading-4 text-white/34">
-              {nuggetCount !== undefined ? 'Nuggets' : videoCount !== undefined ? 'Videos' : 'Awaiting run'}
-              <br />
-              {latestLabel}
-            </p>
+            <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={onEdit}
+                title="Edit Intel channels"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.07] bg-white/[0.02] text-white/28 transition-colors hover:text-white/65"
+                aria-label="Edit Intel channels"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+              </button>
+              <PulseRunControls
+                active={scheduled}
+                busy={busy}
+                runDisabled={running || !agentReady || config.sources.length === 0}
+                manualLabel="Run Intel Pulse now — manual"
+                weeklyLabel="Weekly Intel auto-run"
+                activeClassName="border-[#f97316]/40 bg-[#f97316]/14 text-[#f97316]"
+                onRun={onRun}
+                onToggle={onToggle}
+              />
+            </div>
           </div>
-          <IntelActivityChart runs={report.runs} />
-        </div>
+          <div className="pointer-events-none relative z-[1] mt-auto">
+            <IntelActivityChart runs={report.runs} />
+          </div>
+      </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-2 rounded-[12px] bg-black/20 py-3">
+      <PulseDetailsDialog
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        title="Intel Pulse"
+        description={`${statusLabel} · ${latestLabel}`}
+      >
+        {report.title || report.summary ? (
+          <div className="rounded-[12px] border border-white/[0.06] bg-[#0F0F10] p-4">
+            {report.title ? <p className="text-sm font-medium text-white/86">{report.title}</p> : null}
+            {report.summary ? <p className="mt-2 text-xs leading-5 text-white/52">{report.summary}</p> : null}
+          </div>
+        ) : null}
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[12px] border border-white/[0.06] bg-white/[0.06] sm:grid-cols-3">
           <SignalStat label="Channels" value={String(config.sources.length)} />
           <SignalStat label="Videos" value={formatMetric(videoCount)} />
           <SignalStat label="Nuggets" value={formatMetric(nuggetCount)} />
+          <SignalStat label="Lookback" value={`${config.sinceDays} days`} />
+          <SignalStat label="Cadence" value={config.cadence} />
+          <SignalStat label="Latest run" value={latestLabel} />
         </div>
-
-        {configError || reportError ? (
-          <p className="mt-2 text-xs leading-5 text-red-100/65">{configError || reportError}</p>
+        <PulseDetailSection title="Watched channels" empty="No Intel channels configured.">
+          {config.sources.map((source) => (
+            <PulseDetailRow key={source.id} label={source.name} value={`${source.priority} priority`} />
+          ))}
+        </PulseDetailSection>
+        <PulseDetailSection title="Recent analysis" empty="No Intel analysis runs yet.">
+          {report.runs.slice(0, 8).map((run) => (
+            <PulseDetailRow
+              key={run.id}
+              label={run.title ?? run.summary ?? formatShortDate(run.generatedAt)}
+              value={`${run.status} · ${formatMetric(run.nuggetCount ?? run.videoCount)}`}
+            />
+          ))}
+        </PulseDetailSection>
+        {report.outputId || report.sessionId ? (
+          <button
+            type="button"
+            onClick={() => report.outputId
+              ? navigate(routes.view.output(report.outputId))
+              : navigate(routes.view.allSessions(report.sessionId!))}
+            className="inline-flex h-9 items-center gap-2 self-start rounded-[9px] border border-white/[0.09] bg-white/[0.035] px-3 text-xs text-white/68 hover:bg-white/[0.07] hover:text-white/90"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Open full report
+          </button>
         ) : null}
-      </div>
+        {configError || reportError ? <PulseDetailNotice>{configError || reportError}</PulseDetailNotice> : null}
+      </PulseDetailsDialog>
     </section>
   )
 }
@@ -2788,6 +2918,7 @@ function SocialPulseCard({
   onToggle: () => void
   onManage: () => void
 }) {
+  const [detailsOpen, setDetailsOpen] = React.useState(false)
   const instagramProfiles = doctor?.platforms.find((entry) => entry.platform === 'instagram')?.profiles ?? []
   const readyInstagramProfiles = instagramProfiles.filter((profile) => profile.ready).length
   const statusLabel = busy
@@ -2800,62 +2931,81 @@ function SocialPulseCard({
   const followerDelta = snapshot?.metrics.followerDelta
 
   return (
-    <section className="min-w-0 overflow-hidden">
-      <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-3">
-        <div className="min-w-0">
-            <h3 className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-white/65">Social Pulse</h3>
-            <p className="mt-0.5 text-[9px] text-white/48">{statusLabel}</p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+    <section className="min-w-0 p-4">
+      <div
+        className="group relative flex h-[184px] flex-col rounded-[14px] border border-white/[0.06] bg-[#0F0F10] p-4 transition-colors hover:border-white/[0.12] hover:bg-[#121213]"
+      >
           <button
             type="button"
-            onClick={onManage}
-            title="Manage social accounts"
-            aria-label="Manage social accounts"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.07] bg-white/[0.02] text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/65"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-          </button>
-          <PulseRunControls
-            active={active}
-            busy={busy}
-            runDisabled={runDisabled}
-            manualLabel="Run Instagram Insights now — manual"
-            weeklyLabel="Weekly Instagram Insights auto-run"
-            activeClassName="border-[#f97316]/40 bg-[#f97316]/14 text-[#f97316]"
-            onRun={onRun}
-            onToggle={onToggle}
+            aria-label="Open Social Pulse analysis"
+            onClick={() => setDetailsOpen(true)}
+            className="absolute inset-0 z-0 cursor-pointer rounded-[14px] outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#f97316]/70"
           />
-        </div>
-      </div>
-
-      <div className="p-4">
-        <div className="flex h-[184px] flex-col rounded-[14px] border border-[#f97316]/35 bg-[#0F0F10] p-4">
-          <div className="flex items-end justify-between gap-4">
-            <div>
+          <div className="pointer-events-none relative z-[1] flex items-start justify-between gap-4">
+            <div className="min-w-0">
               <p className="text-[9px] font-medium uppercase tracking-[0.15em] text-[#f97316]">
+                <span className="text-white/52">Social Pulse</span>
+                <span className="text-white/24"> · </span>
                 Follower change
               </p>
               <p className="mt-1.5 text-[28px] font-medium leading-none tracking-[-0.04em] text-white/90">
                 {formatSignedMetric(followerDelta)}
               </p>
             </div>
-            <p className="text-right text-[10px] leading-4 text-white/34">
-              {snapshot ? formatShortDate(snapshot.snapshotDate) : 'Awaiting data'}
-            </p>
+            <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={onManage}
+                title="Manage social accounts"
+                aria-label="Manage social accounts"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.07] bg-white/[0.02] text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/65"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+              </button>
+              <PulseRunControls
+                active={active}
+                busy={busy}
+                runDisabled={runDisabled}
+                manualLabel="Run Instagram Insights now — manual"
+                weeklyLabel="Weekly Instagram Insights auto-run"
+                activeClassName="border-[#f97316]/40 bg-[#f97316]/14 text-[#f97316]"
+                onRun={onRun}
+                onToggle={onToggle}
+              />
+            </div>
           </div>
 
-          <InstagramGrowthChart history={history} />
-        </div>
-
-        <div className="mt-3 grid grid-cols-3 gap-2 rounded-[12px] bg-black/20 py-3">
-          <SignalStat label="Followers" value={formatMetric(snapshot?.metrics.followers)} />
-          <SignalStat label="Reach" value={formatMetric(snapshot?.metrics.accountsReached)} />
-          <SignalStat label="Interactions" value={formatMetric(snapshot?.metrics.interactions)} />
-        </div>
-
-        {error ? <p className="mt-2 text-xs leading-5 text-red-100/65">{error}</p> : null}
+          <div className="pointer-events-none relative z-[1] mt-auto">
+            <InstagramGrowthChart history={history} />
+          </div>
       </div>
+
+      <PulseDetailsDialog
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        title="Social Pulse"
+        description={statusLabel}
+      >
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[12px] border border-white/[0.06] bg-white/[0.06] sm:grid-cols-3">
+          <SignalStat label="Followers" value={formatMetric(snapshot?.metrics.followers)} />
+          <SignalStat label="Follower change" value={formatSignedMetric(snapshot?.metrics.followerDelta)} />
+          <SignalStat label="Reach" value={formatMetric(snapshot?.metrics.accountsReached)} />
+          <SignalStat label="Engaged" value={formatMetric(snapshot?.metrics.accountsEngaged)} />
+          <SignalStat label="Interactions" value={formatMetric(snapshot?.metrics.interactions)} />
+          <SignalStat label="Profile visits" value={formatMetric(snapshot?.metrics.profileVisits)} />
+          <SignalStat label="Likes" value={formatMetric(snapshot?.metrics.likes)} />
+          <SignalStat label="Comments" value={formatMetric(snapshot?.metrics.comments)} />
+          <SignalStat label="Period" value={snapshot?.windowDays ? `${snapshot.windowDays} days` : '--'} />
+        </div>
+        <PulseDetailSection title="Follower trend" empty="Run Social Pulse again to build a trend.">
+          {history.slice().reverse().map((point) => (
+            <PulseDetailRow key={point.date} label={formatShortDate(point.date)} value={formatSignedMetric(point.followerDelta)} />
+          ))}
+        </PulseDetailSection>
+        {error || snapshot?.errors?.length ? (
+          <PulseDetailNotice>{error ?? snapshot?.errors?.join(' · ')}</PulseDetailNotice>
+        ) : null}
+      </PulseDetailsDialog>
     </section>
   )
 }
@@ -3131,6 +3281,17 @@ function formatMetric(value: number | undefined): string {
   return new Intl.NumberFormat('en-US', { notation: value >= 10000 ? 'compact' : 'standard' }).format(value)
 }
 
+function formatPercentMetric(value: number | undefined, signed = false): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
+  return `${signed && value > 0 ? '+' : ''}${value.toFixed(Math.abs(value) >= 10 ? 0 : 1)}%`
+}
+
+function formatRateMetric(value: number | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
+  const percent = Math.abs(value) <= 1 ? value * 100 : value
+  return `${percent.toFixed(Math.abs(percent) >= 10 ? 0 : 1)}%`
+}
+
 function formatShortDate(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -3339,6 +3500,13 @@ function ArtistProfileForm({
 }) {
   return (
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <ProfileField label="Artist mission / North Star" wide>
+        <TextArea
+          value={draft.mission ?? ''}
+          onChange={(mission) => onChange({ ...draft, mission })}
+          placeholder="One lasting sentence: what is this artist building, changing, or making people feel?"
+        />
+      </ProfileField>
       <ProfileField label="Artist name">
         <Input value={draft.artistName ?? ''} onChange={(artistName) => onChange({ ...draft, artistName })} placeholder="Name fans know" />
       </ProfileField>
@@ -3550,6 +3718,7 @@ function ArtistCalendarView({
     <div className="flex min-h-0 flex-1 flex-col">
       <CalendarMonthGrid
         compact={compact}
+        appearance="paper"
         visibleMonth={visibleMonth}
         selectedDate={selectedDate}
         dayMetaByDate={dayMetaByDate}
@@ -3680,84 +3849,6 @@ function ArtistCalendarView({
 
 function HqWorkLink({ label, onClick }: { label: string; onClick: () => void }) {
   return <button type="button" onClick={onClick} className="inline-flex h-7 items-center gap-1 rounded-[5px] border border-white/[0.07] px-2 text-[10px] font-medium text-white/52 hover:bg-white/[0.04]">{label}<ExternalLink className="h-3 w-3" /></button>
-}
-
-function ProjectBoard({
-  columns,
-  onOpenCampaignWorkspace,
-  onOpenScheduledWork,
-}: {
-  columns: HqHomeProjectColumn[]
-  onOpenCampaignWorkspace?: (workspaceId: string) => void
-  onOpenScheduledWork: () => void
-}) {
-  const [activeColumnId, setActiveColumnId] = React.useState<HqHomeProjectColumn['id']>('focus')
-  const activeColumn = columns.find((column) => column.id === activeColumnId) ?? columns[0]
-  const visibleCards = activeColumn?.cards.slice(0, 3) ?? []
-
-  return (
-    <div>
-      <div role="tablist" aria-label="Project status" className="flex gap-1 overflow-x-auto border-b border-white/[0.05]">
-        {columns.map((column) => {
-          const active = column.id === activeColumn?.id
-          return (
-            <button
-              key={column.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setActiveColumnId(column.id)}
-              className={cn(
-                'relative flex h-9 shrink-0 items-center gap-2 px-3 text-[10px] font-semibold uppercase tracking-[0.13em] transition-colors',
-                active ? 'text-white/78' : 'text-white/32 hover:text-white/58',
-              )}
-            >
-              {column.label}
-              <span className={cn('tabular-nums', active ? 'text-[#f97316]/85' : 'text-white/24')}>{column.cards.length}</span>
-              {active ? <span className="absolute inset-x-2 bottom-0 h-px bg-[#f97316]" /> : null}
-            </button>
-          )
-        })}
-      </div>
-      <div role="tabpanel" className="pt-3">
-        {visibleCards.length > 0 ? (
-          <div className="space-y-2">
-            {visibleCards.map((card) => (
-              <button
-                key={card.id}
-                type="button"
-                onClick={() => card.kind === 'campaign' && card.workspaceId
-                  ? onOpenCampaignWorkspace?.(card.workspaceId)
-                  : onOpenScheduledWork()}
-                disabled={card.kind === 'campaign' && !onOpenCampaignWorkspace}
-                className={cn(
-                  'flex min-h-14 w-full items-center justify-between gap-3 rounded-[9px] border border-white/[0.055] bg-white/[0.02] px-3 text-left transition-colors',
-                  card.kind === 'campaign' && !onOpenCampaignWorkspace
-                    ? 'cursor-not-allowed opacity-55'
-                    : 'hover:border-orange-300/25 hover:bg-orange-300/[0.045]',
-                )}
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-xs font-semibold text-white/72">{card.title}</span>
-                  <span className="mt-1 block truncate text-[10px] text-white/32">{card.detail}</span>
-                </span>
-                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-white/25" />
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="flex h-14 items-center rounded-[9px] border border-dashed border-white/[0.055] px-3 text-xs text-white/30">
-            No {activeColumn?.label.toLowerCase()} items.
-          </div>
-        )}
-        {(activeColumn?.cards.length ?? 0) > visibleCards.length ? (
-          <button type="button" onClick={onOpenScheduledWork} className="mt-2 text-[10px] font-medium text-orange-100/55 hover:text-orange-100/82">
-            View all {activeColumn?.cards.length}
-          </button>
-        ) : null}
-      </div>
-    </div>
-  )
 }
 
 function NetworkBoard({
@@ -3979,6 +4070,7 @@ function personToDraft(person: ArtistNetworkPerson): NetworkDraft {
 function profileToDraft(profile: ArtistProfile): ProfileDraft {
   return {
     artistName: profile.artistName ?? '',
+    mission: profile.mission ?? '',
     aliases: profile.aliases ?? '',
     bio: profile.bio ?? '',
     themes: profile.themes ?? '',

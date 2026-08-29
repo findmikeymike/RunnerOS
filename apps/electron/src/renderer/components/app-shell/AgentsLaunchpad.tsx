@@ -33,6 +33,7 @@ import { useAppShellContext } from '@/context/AppShellContext'
 import { openAgentSessionComposer } from '@/lib/run-agent'
 import { cn } from '@/lib/utils'
 import { defaultWorkerSlugs } from '@/lib/worker-defaults'
+import { CompactPageHeader } from './CompactPageHeader'
 import { getModelsForProviderType } from '@config/llm-connections'
 import { getModelShortName, type ModelDefinition } from '@config/models'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
@@ -123,25 +124,13 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="mx-auto min-h-full w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
-        <header className="relative mb-6 overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] p-6 lg:p-8">
-          <div className="absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full bg-orange-600/10 blur-[110px]" />
-          <div className="absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full bg-orange-500/5 blur-[120px]" />
-          <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex-1">
-              <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-orange-300/80" />
-                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/65">Team</span>
-              </div>
-              <div className="max-w-3xl">
-                <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl lg:text-[56px] lg:leading-[0.96]">
-                  Workers
-                </h1>
-                <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
-                  Music operators for release planning, content, ads, audience intelligence, and creative execution.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <CompactPageHeader
+          eyebrow="Team"
+          title="Workers"
+          tone="orange"
+          className="mb-6"
+          actions={
+            <>
               <button
                 type="button"
                 onClick={() => setCreateOpen(true)}
@@ -158,9 +147,9 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
                 <Settings2 className="h-3.5 w-3.5" />
                 Manage library
               </button>
-            </div>
-          </div>
-        </header>
+            </>
+          }
+        />
 
         {/* Active worker cards */}
         {loading && grouped.length === 0 ? (

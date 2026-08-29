@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { CompactPageHeader } from './CompactPageHeader'
 import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
 import type {
   VaultAssetKind,
@@ -316,24 +317,20 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
   return (
     <div className="h-full overflow-hidden bg-[#050505] text-white">
       <div className="flex h-full flex-col px-5 py-4 xl:px-7">
-        <header className="mb-4 shrink-0 px-1">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="mb-1 inline-flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#fb923c]/72">
-                <FolderOpen className="h-3.5 w-3.5" />
-                Artist Library
-              </div>
-              <h1 className="text-[42px] font-medium leading-none tracking-tight text-white/94">Vault</h1>
-              <p className="mt-1 max-w-2xl text-sm text-white/42">{workspaceName || 'Workspace'} files, references, and private material.</p>
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
+        <CompactPageHeader
+          eyebrow={workspaceName || 'Artist Library'}
+          title="Vault"
+          tone="orange"
+          className="mb-4 shrink-0"
+          actions={
+            <>
               <ToolbarButton disabled={busy !== null} onClick={() => void startImport('any')} icon={Upload} label="Import" active={busy === 'choose:any'} />
               <ToolbarButton disabled={busy !== null} onClick={() => void linkFolder()} icon={FolderPlus} label="Link Folder" active={busy === 'link-folder'} />
               <ToolbarButton disabled={busy !== null} onClick={() => void scanFolder()} icon={RefreshCw} label="Scan" active={busy === 'scan'} />
               <ToolbarButton onClick={openFolder} icon={FolderOpen} label="Open Folder" />
-            </div>
-          </div>
-        </header>
+            </>
+          }
+        />
 
         <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
           <main

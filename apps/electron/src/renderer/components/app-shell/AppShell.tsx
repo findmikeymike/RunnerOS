@@ -30,7 +30,6 @@ import {
   FlaskConical,
   FolderOpen,
   Calendar,
-  Mail,
   Layers,
   Briefcase,
   Bot,
@@ -187,6 +186,9 @@ interface AppShellProps {
 
 /** Filter mode for tri-state filtering: include shows only matching, exclude hides matching */
 type FilterMode = 'include' | 'exclude'
+
+// Keep the HQ Plan route and page available while its navigation entry is temporarily hidden.
+const SHOW_HQ_PLAN_NAV = false
 
 const altClickTooltipLabel = isMac ? '⌥ click to exclude' : 'Alt click to exclude'
 
@@ -2160,7 +2162,6 @@ function AppShellContent({
   const labSessionsActive = isLabWorkspace
     && isSessionsNavigation(navState)
     && !workChatActive
-  const peopleExpanded = expandedMainNavGroups.has('people')
   const workExpanded = expandedMainNavGroups.has('work')
   const brainExpanded = expandedMainNavGroups.has('brain')
   const planActive = isAgendaNavigation(navState)
@@ -2211,12 +2212,10 @@ function AppShellContent({
 
     result.push({ id: 'nav:hq', type: 'nav', action: () => handleArtistHQNavClick('home') })
     result.push({ id: 'nav:work-chat', type: 'nav', action: handleWorkChatClick })
-    result.push({ id: 'nav:plan', type: 'nav', action: () => handleArtistHQNavClick('calendar') })
-    result.push({ id: 'nav:people', type: 'nav', action: () => toggleMainNavGroup('people') })
-    if (peopleExpanded) {
-      result.push({ id: 'nav:network', type: 'nav', action: () => handleArtistHQNavClick('network') })
-      result.push({ id: 'nav:community', type: 'nav', action: () => navigate(routes.view.community()) })
+    if (SHOW_HQ_PLAN_NAV) {
+      result.push({ id: 'nav:plan', type: 'nav', action: () => handleArtistHQNavClick('calendar') })
     }
+    result.push({ id: 'nav:people', type: 'nav', action: () => handleArtistHQNavClick('network') })
     result.push({ id: 'nav:work', type: 'nav', action: () => toggleMainNavGroup('work') })
     if (workExpanded) {
       result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
@@ -2233,7 +2232,7 @@ function AppShellContent({
     }
 
     return result
-  }, [brainExpanded, handleAgentsClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, isArtistHQWorkspace, isLabWorkspace, navigate, peopleExpanded, toggleMainNavGroup, vaultActive, workExpanded])
+  }, [brainExpanded, handleAgentsClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, isArtistHQWorkspace, isLabWorkspace, navigate, toggleMainNavGroup, vaultActive, workExpanded])
 
   const sidebarProjectGroups = React.useMemo(() => {
     const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
@@ -2589,7 +2588,7 @@ function AppShellContent({
         },
         {
           id: "nav:calendar",
-          title: "Calendar",
+          title: "Plan",
           icon: Calendar,
           variant: campaignCalendarActive ? "default" : "ghost",
           onClick: handleCampaignCalendarClick,
@@ -2654,38 +2653,19 @@ function AppShellContent({
         variant: hqHomeActive ? "default" : "ghost",
         onClick: () => handleArtistHQNavClick('home'),
       },
-      {
+      ...((SHOW_HQ_PLAN_NAV ? [{
         id: "nav:plan",
         title: "Plan",
         icon: Calendar,
         variant: planActive ? "default" : "ghost",
         onClick: () => handleArtistHQNavClick('calendar'),
-      },
+      }] : []) as LeftSidebarItem[]),
       {
         id: "nav:people",
         title: "People",
         icon: Users,
         variant: peopleActive ? "default" : "ghost",
-        expandable: true,
-        expanded: peopleExpanded,
-        onToggle: () => toggleMainNavGroup('people'),
-        onClick: () => toggleMainNavGroup('people'),
-        items: [
-          {
-            id: "nav:network",
-            title: "Network",
-            icon: Users,
-            variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/network' ? "default" : "ghost",
-            onClick: () => handleArtistHQNavClick('network'),
-          },
-          {
-            id: "nav:community",
-            title: "Community",
-            icon: Mail,
-            variant: isCommunityNavigation(navState) ? "default" : "ghost",
-            onClick: () => navigate(routes.view.community()),
-          },
-        ],
+        onClick: () => handleArtistHQNavClick('network'),
       },
       {
         id: "nav:work",
@@ -2780,7 +2760,7 @@ function AppShellContent({
         ],
       },
     ]
-  }, [artistHqHash, automations.length, brainActive, brainExpanded, campaignActive, campaignCalendarActive, campaignHomeActive, handleAgentsClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleChatHistoryToggle, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, isLabWorkspace, labHomeActive, labPadActive, labSequenceActive, labSessionsActive, labSongsActive, navigate, navState, openAddAutomation, peopleActive, peopleExpanded, planActive, sessionsNavExpanded, t, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
+  }, [artistHqHash, automations.length, brainActive, brainExpanded, campaignActive, campaignCalendarActive, campaignHomeActive, handleAgentsClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleChatHistoryToggle, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, isLabWorkspace, labHomeActive, labPadActive, labSequenceActive, labSessionsActive, labSongsActive, navigate, navState, openAddAutomation, peopleActive, planActive, sessionsNavExpanded, t, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
 
   const sidebarSessionHistory = React.useMemo(() => {
     if (!sessionsNavExpanded || !workChatActive) return null
