@@ -189,6 +189,16 @@ describe('Artist OS persistent shell chrome', () => {
     expect(songs).toContain('onClick={() => setAddSongOpen(true)}')
   })
 
+  test('lets writers persist Focus and Status directly from the Songs list', () => {
+    const songs = readFileSync(join(import.meta.dir, '..', 'LabSongsPage.tsx'), 'utf8')
+
+    expect(songs).toContain('upsertLabUiSong')
+    expect(songs).toContain('onSetFocused')
+    expect(songs).toContain('onSetStatus')
+    expect(songs).toContain('aria-pressed={song.focused}')
+    expect(songs).toContain('Status for ${song.title}')
+  })
+
   test('keeps HQ cards darker than soot but distinct from the black canvas', () => {
     const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
 

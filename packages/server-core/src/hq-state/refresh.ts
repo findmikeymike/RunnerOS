@@ -5,6 +5,7 @@ import {
   campaignStateContextMetadata,
   CAMPAIGN_STATE_CONTEXT_SLUG,
   HQ_STATE_CONTEXT_SLUG,
+  parseCampaignManagerBrief,
   parseHqStateOfPlay,
   serializeCampaignManagerBrief,
   serializeHqStateOfPlay,
@@ -23,6 +24,7 @@ import { buildHqOperationalSnapshot } from './operational'
 const scheduledRefreshes = new Map<string, ReturnType<typeof setTimeout>>()
 const REFRESH_DEBOUNCE_MS = 100
 const refreshDiagnostics = new Map<string, HqStateRefreshDiagnostic>()
+const campaignRefreshDiagnostics = new Map<string, HqStateRefreshDiagnostic>()
 
 export interface HqStateRefreshDiagnostic {
   workspaceRootPath: string
@@ -84,6 +86,24 @@ export function refreshArtistHqStateForWorkspaceBestEffort(changedRootPath: stri
   return refreshHqStateContextDocBestEffort(targetRootPath)
 }
 
+/** Refreshes every derived manager brief affected by a canonical workspace mutation. */
+export function refreshArtistManagerStateForWorkspaceBestEffort(changedRootPath: string): {
+  hq: LoadedContextDoc | null
+  campaigns: LoadedContextDoc[]
+} {
+  const hq = refreshArtistHqStateForWorkspaceBestEffort(changedRootPath)
+  const changedWorkspace = getWorkspaces().find((workspace) => workspace.rootPath === changedRootPath)
+  const targets = changedWorkspace?.artistWorkspaceScope === 'hq'
+    ? getWorkspaces().filter((workspace) => workspace.artistWorkspaceScope === 'campaign')
+    : changedWorkspace?.artistWorkspaceScope === 'campaign'
+      ? [changedWorkspace]
+      : []
+  const campaigns = targets
+    .map((workspace) => refreshCampaignStateContextDocBestEffort(workspace.rootPath))
+    .filter((doc): doc is LoadedContextDoc => Boolean(doc))
+  return { hq, campaigns }
+}
+
 export function refreshCampaignStateContextDoc(campaignRootPath: string): LoadedContextDoc {
   const campaignWorkspace = getWorkspaces().find((workspace) => (
     workspace.rootPath === campaignRootPath && workspace.artistWorkspaceScope === 'campaign'
@@ -111,12 +131,32 @@ export function refreshCampaignStateContextDoc(campaignRootPath: string): Loaded
 }
 
 export function refreshCampaignStateContextDocBestEffort(campaignRootPath: string): LoadedContextDoc | null {
+  const attemptedAt = new Date().toISOString()
   try {
-    return refreshCampaignStateContextDoc(campaignRootPath)
+    const refreshed = refreshCampaignStateContextDoc(campaignRootPath)
+    const brief = parseCampaignManagerBrief(refreshed.body)
+    campaignRefreshDiagnostics.set(campaignRootPath, {
+      workspaceRootPath: campaignRootPath,
+      status: 'success',
+      attemptedAt,
+      revision: brief?.revision,
+    })
+    return refreshed
   } catch (error) {
-    console.warn('[hq-state] Failed to refresh Campaign State of Play context doc:', error instanceof Error ? error.message : String(error))
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    campaignRefreshDiagnostics.set(campaignRootPath, {
+      workspaceRootPath: campaignRootPath,
+      status: 'failed',
+      attemptedAt,
+      error: errorMessage,
+    })
+    console.warn('[hq-state] Failed to refresh Campaign State of Play context doc:', errorMessage)
     return null
   }
+}
+
+export function getCampaignStateRefreshDiagnostic(campaignRootPath: string): HqStateRefreshDiagnostic | null {
+  return campaignRefreshDiagnostics.get(campaignRootPath) ?? null
 }
 
 function applyRecentOutcome(state: import('@craft-agent/shared/hq-state').HqStateOfPlay, workspaceRootPath: string): void {
@@ -212,7 +252,11 @@ function scheduleRefresh(key: string, refresh: () => void): void {
 
 export function cancelScheduledHqStateContextRefresh(workspaceRootPath: string): void {
   const targetRootPath = resolveHqRefreshRoot(workspaceRootPath) ?? workspaceRootPath
-  for (const key of [`hq:${targetRootPath}`, `campaign:${workspaceRootPath}`]) {
+  const changedWorkspace = getWorkspaces().find((workspace) => workspace.rootPath === workspaceRootPath)
+  const campaignKeys = changedWorkspace?.artistWorkspaceScope === 'hq'
+    ? getWorkspaces().filter((workspace) => workspace.artistWorkspaceScope === 'campaign').map((workspace) => `campaign:${workspace.rootPath}`)
+    : [`campaign:${workspaceRootPath}`]
+  for (const key of [`hq:${targetRootPath}`, ...campaignKeys]) {
     const pending = scheduledRefreshes.get(key)
     if (!pending) continue
     clearTimeout(pending)

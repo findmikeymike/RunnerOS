@@ -119,4 +119,39 @@ describe('Lab song storage', () => {
       rmSync(root, { recursive: true, force: true })
     }
   })
+
+  test('persists valid per-line alternatives and drops malformed entries', () => {
+    const root = tmpWorkspace()
+    try {
+      const song = createLabSong(root, { title: 'Alternate Lines' })
+      const state = loadLabState(root)
+      saveLabState(root, {
+        ...state,
+        songs: [{
+          ...song,
+          lineAlternatives: [{
+            id: 'rough-line-1',
+            source: 'rough',
+            anchorText: 'Window down',
+            lineIndex: 0,
+            occurrence: 0,
+            alternatives: [{ id: 'alt-1', text: 'Windows open', createdAt: '2026-08-29T00:00:00.000Z' }],
+            updatedAt: '2026-08-29T00:00:00.000Z',
+          }],
+        }],
+      })
+
+      expect(loadLabSongs(root)[0]?.lineAlternatives).toEqual([{
+        id: 'rough-line-1',
+        source: 'rough',
+        anchorText: 'Window down',
+        lineIndex: 0,
+        occurrence: 0,
+        alternatives: [{ id: 'alt-1', text: 'Windows open', createdAt: '2026-08-29T00:00:00.000Z' }],
+        updatedAt: '2026-08-29T00:00:00.000Z',
+      }])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
 })

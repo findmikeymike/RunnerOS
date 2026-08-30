@@ -7,6 +7,7 @@ import {
   WORKSPACE_CONTEXT_HEADER,
   buildAgentBundleFooter,
   buildAgentCatalogSection,
+  buildManagerBriefPromptSectionFromDocs,
   buildWorkspaceContextSection,
   composeAgentSystemPrompt,
   managerBriefReceiptFromDocs,
@@ -185,6 +186,16 @@ describe('composeAgentSystemPrompt', () => {
     expect(receipt?.sourceHealth.length).toBeGreaterThan(0);
     expect(JSON.stringify(receipt)).not.toContain('Mikey Mike');
     expect(JSON.stringify(receipt)).not.toContain('raw soul');
+  });
+
+  test('malformed campaign state cannot break prompt composition or launch receipts', () => {
+    const malformed = doc(
+      'campaign-state-of-play',
+      'Campaign State of Play',
+      '```json campaign-state-of-play\n{"version":1,"workspaceId":"campaign-1","artistWorkspaceId":"hq-1","revision":"campaign-manager-v1:fnv1a:12345678","campaign":{}}\n```',
+    );
+    expect(buildManagerBriefPromptSectionFromDocs([malformed])).toBe('');
+    expect(managerBriefReceiptFromDocs([malformed])).toBeUndefined();
   });
 });
 

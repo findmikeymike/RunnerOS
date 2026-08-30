@@ -18,7 +18,7 @@ import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
 import {
-  refreshArtistHqStateForWorkspaceBestEffort,
+  refreshArtistManagerStateForWorkspaceBestEffort,
   refreshCampaignStateContextDocBestEffort,
   refreshHqStateContextDocBestEffort,
   shouldRefreshHqStateForContextSlug,
@@ -105,9 +105,7 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
         body: payload.body,
       })
       if (shouldRefreshHqStateForContextSlug(payload.slug)) {
-        refreshArtistHqStateForWorkspaceBestEffort(rootPath)
-        const workspace = getWorkspaceByNameOrId(workspaceId)
-        if (workspace?.artistWorkspaceScope === 'campaign') refreshCampaignStateContextDocBestEffort(rootPath)
+        refreshArtistManagerStateForWorkspaceBestEffort(rootPath)
       }
       broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
       return loaded
@@ -122,9 +120,7 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
       const ok = deleteContextDoc(rootPath, slug)
       if (ok) {
         if (shouldRefreshHqStateForContextSlug(slug)) {
-          refreshArtistHqStateForWorkspaceBestEffort(rootPath)
-          const workspace = getWorkspaceByNameOrId(workspaceId)
-          if (workspace?.artistWorkspaceScope === 'campaign') refreshCampaignStateContextDocBestEffort(rootPath)
+          refreshArtistManagerStateForWorkspaceBestEffort(rootPath)
         }
         broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
       }

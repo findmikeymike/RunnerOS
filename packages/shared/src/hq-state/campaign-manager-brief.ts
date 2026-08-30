@@ -118,13 +118,25 @@ export function renderCampaignManagerBriefPromptSection(brief: CampaignManagerBr
     if (state.approvals.length) lines.push(`Awaiting approval: ${state.approvals.join(' | ')}`);
     if (state.activeWork.length) lines.push(`Active work: ${state.activeWork.join(' | ')}`);
   }
-  if (brief.campaign.calendarHighlights.length) {
+  const upcomingCalendar = brief.campaign.calendarHighlights.filter((item) => item.timing !== 'overdue');
+  const overdueCalendar = brief.campaign.calendarHighlights.filter((item) => item.timing === 'overdue');
+  if (upcomingCalendar.length) {
     lines.push('', '### Upcoming Calendar');
-    for (const item of brief.campaign.calendarHighlights) lines.push(`- ${item.date}: ${item.title} [${item.status}]`);
+    for (const item of upcomingCalendar) lines.push(`- ${item.date}: ${item.title} [${item.status}]`);
   }
-  if (brief.campaign.workHighlights.length) {
-    lines.push('', '### Scheduled Work');
-    for (const item of brief.campaign.workHighlights) lines.push(`- ${item.startAt}: ${item.title} [${item.status}]`);
+  if (overdueCalendar.length) {
+    lines.push('', '### Overdue Calendar');
+    for (const item of overdueCalendar) lines.push(`- ${item.date}: ${item.title} [${item.status}]`);
+  }
+  const upcomingWork = brief.campaign.workHighlights.filter((item) => item.timing !== 'overdue');
+  const overdueWork = brief.campaign.workHighlights.filter((item) => item.timing === 'overdue');
+  if (upcomingWork.length) {
+    lines.push('', '### Upcoming Work');
+    for (const item of upcomingWork) lines.push(`- ${item.startAt}: ${item.title} [${item.status}]`);
+  }
+  if (overdueWork.length) {
+    lines.push('', '### Overdue Work');
+    for (const item of overdueWork) lines.push(`- ${item.startAt}: ${item.title} [${item.status}]`);
   }
   if (brief.artist.trajectory.length) {
     lines.push('', '### Artist Horizon');
@@ -150,12 +162,203 @@ export function parseCampaignManagerBrief(body: string): CampaignManagerBriefV1 
   const match = body.match(new RegExp(`\\\`\\\`\\\`${CAMPAIGN_STATE_CONTEXT_FENCE}\\s*([\\s\\S]*?)\\\`\\\`\\\``, 'i'));
   if (!match?.[1]) return null;
   try {
-    const value = JSON.parse(match[1]) as Partial<CampaignManagerBriefV1>;
-    if (value.version !== 1 || !value.workspaceId || !value.artistWorkspaceId || !value.revision || !value.campaign) return null;
-    return value as CampaignManagerBriefV1;
+    const value: unknown = JSON.parse(match[1]);
+    if (!isCampaignManagerBrief(value)) return null;
+    const rendered = renderCampaignManagerBriefPromptSection(value);
+    // actualChars is persisted diagnostics, not an integrity boundary. Renderer
+    // wording can evolve while an otherwise valid cached v1 brief remains usable.
+    if (value.budget.actualChars > value.budget.maxChars || rendered.length > value.budget.maxChars) return null;
+    if (revision(value) !== value.revision) return null;
+    return value;
   } catch {
     return null;
   }
+}
+
+function isCampaignManagerBrief(value: unknown): value is CampaignManagerBriefV1 {
+  if (!isRecord(value)) return false;
+  if (
+    value.version !== 1
+    || !isNonEmptyString(value.workspaceId)
+    || !isNonEmptyString(value.artistWorkspaceId)
+    || !/^campaign-manager-v1:fnv1a:[0-9a-f]{8}$/.test(asString(value.revision))
+    || !isValidTimestamp(value.generatedAt)
+    || !isRecord(value.budget)
+    || value.budget.maxChars !== CAMPAIGN_MANAGER_BRIEF_MAX_CHARS
+    || !isNonNegativeFiniteNumber(value.budget.actualChars)
+    || typeof value.budget.truncated !== 'boolean'
+  ) return false;
+
+  if (!isRecord(value.artist)) return false;
+  if (!areOptionalStrings(value.artist, ['artistName', 'mission', 'sound', 'audience'])) return false;
+  if (!Array.isArray(value.artist.trajectory) || !value.artist.trajectory.every(isTrajectoryItem)) return false;
+  if (!isRecord(value.artist.growth) || !isOptionalGrowthSignal(value.artist.growth.spotify) || !isOptionalGrowthSignal(value.artist.growth.instagram)) return false;
+  if (!Array.isArray(value.artist.intelligence) || !value.artist.intelligence.every(isIntelligenceItem)) return false;
+
+  if (!isRecord(value.campaign) || !isNonEmptyString(value.campaign.name)) return false;
+  if (value.campaign.mission !== undefined && !isMissionBrief(value.campaign.mission)) return false;
+  if (value.campaign.readiness !== undefined && !isReadiness(value.campaign.readiness)) return false;
+  for (const key of ['calendar', 'work', 'assets', 'outputs'] as const) {
+    if (value.campaign[key] !== undefined && !isCollectionSummary(value.campaign[key])) return false;
+  }
+  if (!isArrayOf(value.campaign.calendarHighlights, isCalendarHighlight)) return false;
+  if (!isArrayOf(value.campaign.workHighlights, isWorkHighlight)) return false;
+  if (!isArrayOf(value.campaign.essentialAssets, isEssentialAsset)) return false;
+  if (!isArrayOf(value.campaign.outputHighlights, isOutputHighlight)) return false;
+
+  if (!isRecord(value.operatingState)) return false;
+  if (!isStringArray(value.operatingState.approvals)
+    || !isStringArray(value.operatingState.failures)
+    || !isStringArray(value.operatingState.activeWork)
+    || !isStringArray(value.operatingState.blockers)
+    || !isOptionalString(value.operatingState.suggestedFocus)) return false;
+
+  return isArrayOf(value.sourceHealth, isSourceHealth);
+}
+
+function isTrajectoryItem(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.month)
+    && isNonEmptyString(value.title)
+    && ['release', 'promotion', 'live', 'creation', 'business'].includes(asString(value.event))
+    && isOptionalString(value.keyGoal)
+    && isSourceRef(value.source);
+}
+
+function isGrowthSignal(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.asOf)
+    && isNonEmptyString(value.primaryMetric)
+    && isOptionalFiniteNumber(value.windowDays)
+    && isOptionalFiniteNumber(value.value)
+    && isOptionalFiniteNumber(value.delta)
+    && isStringArray(value.highlights)
+    && typeof value.partial === 'boolean'
+    && isSourceRef(value.source);
+}
+
+function isOptionalGrowthSignal(value: unknown): boolean {
+  return value === undefined || isGrowthSignal(value);
+}
+
+function isIntelligenceItem(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.id)
+    && isNonEmptyString(value.title)
+    && isNonEmptyString(value.summary)
+    && isOptionalString(value.whyItMatters)
+    && ['high', 'medium', 'low'].includes(asString(value.confidence))
+    && isSourceRef(value.source);
+}
+
+function isSourceRef(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.workspaceId)
+    && areOptionalStrings(value, ['contextSlug', 'entityType', 'entityId', 'updatedAt']);
+}
+
+function isMissionBrief(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (!isNonEmptyString(value.id) || !isNonEmptyString(value.workspaceId) || !isNonEmptyString(value.status)) return false;
+  if (!isNonNegativeFiniteNumber(value.completeness)) return false;
+  if (!areOptionalStrings(value, ['missionType', 'title', 'goal', 'timeline', 'releaseDate', 'promoBudget', 'mood', 'visualWorld', 'targetListener', 'updatedAt'])) return false;
+  if (value.channels !== undefined && !isStringArray(value.channels)) return false;
+  if (value.openQuestions !== undefined && !isStringArray(value.openQuestions)) return false;
+  return value.references === undefined || isArrayOf(value.references, (item) => (
+    isRecord(item) && isNonEmptyString(item.type) && isNonEmptyString(item.value)
+  ));
+}
+
+function isReadiness(value: unknown): boolean {
+  return isRecord(value)
+    && isNonNegativeFiniteNumber(value.done)
+    && isNonNegativeFiniteNumber(value.total)
+    && isStringArray(value.nextMissing);
+}
+
+function isCollectionSummary(value: unknown): boolean {
+  return isRecord(value)
+    && isNonNegativeFiniteNumber(value.total)
+    && isOptionalFiniteNumber(value.active)
+    && isOptionalFiniteNumber(value.blocked)
+    && isOptionalFiniteNumber(value.completed)
+    && isOptionalString(value.updatedAt);
+}
+
+function isCalendarHighlight(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.title)
+    && isNonEmptyString(value.date)
+    && isNonEmptyString(value.status)
+    && (value.timing === undefined || ['upcoming', 'overdue'].includes(asString(value.timing)));
+}
+
+function isWorkHighlight(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.title)
+    && isNonEmptyString(value.startAt)
+    && isNonEmptyString(value.status)
+    && (value.timing === undefined || ['upcoming', 'overdue'].includes(asString(value.timing)));
+}
+
+function isEssentialAsset(value: unknown): boolean {
+  return isRecord(value) && isNonEmptyString(value.label) && typeof value.available === 'boolean';
+}
+
+function isOutputHighlight(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.title)
+    && isNonEmptyString(value.status)
+    && isNonEmptyString(value.updatedAt);
+}
+
+function isSourceHealth(value: unknown): boolean {
+  return isRecord(value)
+    && isNonEmptyString(value.source)
+    && ['fresh', 'stale', 'partial', 'malformed', 'unavailable'].includes(asString(value.status))
+    && isOptionalString(value.observedAt)
+    && isOptionalString(value.staleAfter)
+    && isOptionalString(value.message);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isArrayOf(value: unknown, predicate: (item: unknown) => boolean): value is unknown[] {
+  return Array.isArray(value) && value.every(predicate);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return isArrayOf(value, isNonEmptyString);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
+}
+
+function areOptionalStrings(value: Record<string, unknown>, keys: string[]): boolean {
+  return keys.every((key) => isOptionalString(value[key]));
+}
+
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function isOptionalFiniteNumber(value: unknown): boolean {
+  return value === undefined || (typeof value === 'number' && Number.isFinite(value));
+}
+
+function isValidTimestamp(value: unknown): value is string {
+  return isNonEmptyString(value) && Number.isFinite(Date.parse(value));
+}
+
+function asString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
 }
 
 function finalizeBudget(source: CampaignManagerBriefV1): CampaignManagerBriefV1 {

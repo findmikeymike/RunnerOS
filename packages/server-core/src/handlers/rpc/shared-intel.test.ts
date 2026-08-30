@@ -26,7 +26,7 @@ const loadAllGlobalAgents = mock(() => [
 ])
 const loadActivatedAgents = mock(() => [])
 const getWorkspaceByNameOrId = mock(() => ({ id: 'ws-1', name: 'Workspace', rootPath: '/tmp/ws-1' }))
-const refreshHqStateContextDocBestEffort = mock(() => undefined)
+const refreshArtistManagerStateForWorkspaceBestEffort = mock(() => ({ hq: null, campaigns: [] }))
 
 mock.module('@craft-agent/shared/workspace-context', () => ({
   loadAllContextDocs,
@@ -43,7 +43,7 @@ mock.module('@craft-agent/shared/config', () => ({
 }))
 
 mock.module('../../hq-state/refresh', () => ({
-  refreshHqStateContextDocBestEffort,
+  refreshArtistManagerStateForWorkspaceBestEffort,
 }))
 
 function createHarness() {
@@ -79,7 +79,7 @@ beforeEach(() => {
   loadAllGlobalAgents.mockClear()
   loadActivatedAgents.mockClear()
   getWorkspaceByNameOrId.mockClear()
-  refreshHqStateContextDocBestEffort.mockClear()
+  refreshArtistManagerStateForWorkspaceBestEffort.mockClear()
 })
 
 describe('shared intel RPC handler', () => {
@@ -130,6 +130,6 @@ describe('shared intel RPC handler', () => {
     })
     expect(result.notes[0]?.routeReasons?.length).toBeGreaterThan(0)
     expect(upsertContextDoc).toHaveBeenCalledTimes(1)
-    expect(refreshHqStateContextDocBestEffort).toHaveBeenCalledWith('/tmp/ws-1')
+    expect(refreshArtistManagerStateForWorkspaceBestEffort).toHaveBeenCalledWith('/tmp/ws-1')
   })
 })

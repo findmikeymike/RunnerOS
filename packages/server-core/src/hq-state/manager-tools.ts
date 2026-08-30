@@ -58,7 +58,7 @@ import type {
 } from '@craft-agent/session-tools-core';
 import { existsSync } from 'node:fs';
 import { buildHqStateInput, buildManagerCampaignSnapshot, buildManagerCampaignSnapshots, findArtistHqWorkspace } from './snapshot';
-import { getHqStateRefreshDiagnostic } from './refresh';
+import { getCampaignStateRefreshDiagnostic, getHqStateRefreshDiagnostic } from './refresh';
 import { buildHqOperationalSnapshot } from './operational';
 
 const MANAGER_RESULT_MAX_CHARS = 12_000;
@@ -118,6 +118,12 @@ export function getLiveCampaignBrief(
   ));
   if (!campaignWorkspace) return { ok: false, error: 'The current workspace is not a configured campaign.' };
   const persisted = parseCampaignManagerBrief(loadContextDoc(campaignRootPath, CAMPAIGN_STATE_CONTEXT_SLUG)?.body ?? '');
+  const refreshDiagnostic = getCampaignStateRefreshDiagnostic(campaignRootPath);
+  const publicRefreshDiagnostic = refreshDiagnostic ? {
+    status: refreshDiagnostic.status,
+    attemptedAt: refreshDiagnostic.attemptedAt,
+    revision: refreshDiagnostic.revision,
+  } : null;
   try {
     const hqWorkspace = findArtistHqWorkspace();
     if (!hqWorkspace) throw new Error('Artist HQ workspace is not configured.');
@@ -134,9 +140,15 @@ export function getLiveCampaignBrief(
       live: true,
       persistedRevision: persisted?.revision,
       brief,
-      warnings: brief.sourceHealth
-        .filter((item) => item.status !== 'fresh')
-        .map((item) => `${item.source}: ${item.status}${item.message ? ` - ${item.message}` : ''}`),
+      warnings: [
+        ...(refreshDiagnostic?.status === 'failed'
+          ? [`Last persisted campaign refresh failed at ${refreshDiagnostic.attemptedAt}; live composition recovered current canonical sources.`]
+          : []),
+        ...brief.sourceHealth
+          .filter((item) => item.status !== 'fresh')
+          .map((item) => `${item.source}: ${item.status}${item.message ? ` - ${item.message}` : ''}`),
+      ],
+      refreshDiagnostic: publicRefreshDiagnostic,
     });
   } catch {
     if (persisted) {
@@ -146,7 +158,13 @@ export function getLiveCampaignBrief(
         live: false,
         persistedRevision: persisted.revision,
         brief: persisted,
-        warnings: ['Live composition failed; using the last valid persisted Campaign Manager Brief.'],
+        warnings: [
+          ...(refreshDiagnostic?.status === 'failed'
+            ? [`Last persisted campaign refresh failed at ${refreshDiagnostic.attemptedAt}.`]
+            : []),
+          'Live composition failed; using the last valid persisted Campaign Manager Brief.',
+        ],
+        refreshDiagnostic: publicRefreshDiagnostic,
       });
     }
     return { ok: false, changed: false, live: false, warnings: [], error: 'Campaign Manager Brief is unavailable because live composition failed and no persisted brief exists.' };
@@ -276,7 +294,7 @@ export function getCampaignContextDetail(
 ): ManagerContextToolResult {
   const campaigns = getWorkspaces().filter((workspace) => workspace.artistWorkspaceScope === 'campaign');
   if (campaigns.length === 0) return { ok: false, error: 'No campaign workspaces are configured.' };
-  const snapshots = buildManagerCampaignSnapshots();
+  const snapshots = buildManagerCampaignSnapshots(now);
   const selected = selectCampaign(campaigns, snapshots, input, now, preferredCampaignId);
   if (!selected) return { ok: false, error: input.select === 'by-id' ? `Campaign not found: ${input.campaignId ?? ''}` : 'No campaign matches that selection.' };
   const { workspace, reason } = selected;

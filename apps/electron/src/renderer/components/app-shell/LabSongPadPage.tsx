@@ -7,9 +7,12 @@ import {
   FlaskConical,
   Info,
   Layers,
+  ListPlus,
   Music2,
   Plus,
+  RotateCcw,
   Sparkles,
+  Trash2,
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -37,6 +40,12 @@ import {
   type ArtistProfile,
 } from '@/lib/artist-profile'
 import {
+  buildLineTargets,
+  matchLineAlternativeGroups,
+  promoteLineAlternative,
+  type LabLineTarget,
+} from '@/lib/lab-line-alternatives'
+import {
   getSelectedLabSongId,
   hydrateLabState,
   LAB_DEFAULT_SECTIONS,
@@ -47,6 +56,10 @@ import {
   upsertLabUiSong,
   type LabUiSong,
 } from '@/lib/lab-song-state'
+import type {
+  LabSongLineAlternativeGroup,
+  LabSongLineSource,
+} from '@craft-agent/shared/lab'
 import type { AgentDefinitionDTO, ProsodyLookupResult, ProsodyRhymeItem } from '../../../shared/types'
 
 interface LabSongPadPageProps {
@@ -118,6 +131,7 @@ function fallbackSong(workspaceId?: string): LabUiSong {
     roughText: '',
     rememberText: '',
     sections: LAB_DEFAULT_SECTIONS,
+    lineAlternatives: [],
     captures: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -157,6 +171,17 @@ function appendText(existing: string, incoming: string) {
   return existing.trim() ? `${existing.trim()}\n${clean}` : clean
 }
 
+function replaceLineAt(text: string, lineIndex: number, nextLine: string): string {
+  const lines = text.split('\n')
+  if (lineIndex < 0 || lineIndex >= lines.length) return text
+  lines[lineIndex] = nextLine
+  return lines.join('\n')
+}
+
+function lineAlternativeId(prefix: 'group' | 'alt'): string {
+  return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`
+}
+
 function textareaBase(extra?: string) {
   return cn(
     'w-full resize-none border-0 bg-transparent text-sm leading-7 tracking-normal text-white/82 outline-none placeholder:text-white/20',
@@ -166,6 +191,208 @@ function textareaBase(extra?: string) {
 
 function sectionRows(text: string) {
   return Math.max(2, text.split('\n').length + 1)
+}
+
+interface LineAlternativeTextareaProps {
+  value: string
+  source: LabSongLineSource
+  sectionId?: string
+  lineAlternatives: LabSongLineAlternativeGroup[]
+  rows?: number
+  placeholder?: string
+  className?: string
+  onChange: React.ChangeEventHandler<HTMLTextAreaElement>
+  onSelect: React.ReactEventHandler<HTMLTextAreaElement>
+  onKeyUp: React.KeyboardEventHandler<HTMLTextAreaElement>
+  onMouseUp: React.MouseEventHandler<HTMLTextAreaElement>
+  onOpenAlternatives: () => void
+  onAddAlternatives: (target: LabLineTarget, group: LabSongLineAlternativeGroup | undefined, lines: string[]) => void
+  onPromoteAlternative: (target: LabLineTarget, group: LabSongLineAlternativeGroup, alternativeId: string) => void
+  onDeleteAlternative: (groupId: string, alternativeId: string) => void
+}
+
+const LineAlternativeTextarea: React.FC<LineAlternativeTextareaProps> = ({
+  value,
+  source,
+  sectionId,
+  lineAlternatives,
+  rows,
+  placeholder,
+  className,
+  onChange,
+  onSelect,
+  onKeyUp,
+  onMouseUp,
+  onOpenAlternatives,
+  onAddAlternatives,
+  onPromoteAlternative,
+  onDeleteAlternative,
+}) => {
+  const [scrollTop, setScrollTop] = React.useState(0)
+  const targets = React.useMemo(() => buildLineTargets(value, source, sectionId), [sectionId, source, value])
+  const groupsByLine = React.useMemo(
+    () => matchLineAlternativeGroups(value, lineAlternatives, source, sectionId),
+    [lineAlternatives, sectionId, source, value],
+  )
+
+  return (
+    <div className="relative">
+      <textarea
+        value={value}
+        rows={rows}
+        onChange={onChange}
+        onSelect={onSelect}
+        onKeyUp={onKeyUp}
+        onMouseUp={onMouseUp}
+        onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+        placeholder={placeholder}
+        className={cn(className, 'pr-8')}
+      />
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-7 overflow-hidden" aria-hidden="false">
+        {targets.map((target) => {
+          if (!target.anchorText.trim()) return null
+          const group = groupsByLine.get(target.lineIndex)
+          const top = target.lineIndex * 28 - scrollTop
+          if (top < -24) return null
+          return (
+            <LineAlternativePopover
+              key={`${target.lineIndex}-${target.anchorText}-${target.occurrence}`}
+              target={target}
+              group={group}
+              top={top}
+              onOpen={onOpenAlternatives}
+              onAdd={onAddAlternatives}
+              onPromote={onPromoteAlternative}
+              onDelete={onDeleteAlternative}
+            />
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function LineAlternativePopover({
+  target,
+  group,
+  top,
+  onOpen,
+  onAdd,
+  onPromote,
+  onDelete,
+}: {
+  target: LabLineTarget
+  group?: LabSongLineAlternativeGroup
+  top: number
+  onOpen: () => void
+  onAdd: LineAlternativeTextareaProps['onAddAlternatives']
+  onPromote: LineAlternativeTextareaProps['onPromoteAlternative']
+  onDelete: LineAlternativeTextareaProps['onDeleteAlternative']
+}) {
+  const [open, setOpen] = React.useState(false)
+  const [draft, setDraft] = React.useState('')
+  const storeDraft = () => {
+    const lines = draft.split('\n').map((line) => line.trim()).filter(Boolean)
+    if (!lines.length) return
+    onAdd(target, group, lines)
+    setDraft('')
+  }
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen)
+        if (nextOpen) onOpen()
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Alternatives for ${target.anchorText}`}
+          title="Alternate lines"
+          className={cn(
+            'pointer-events-auto absolute right-0 flex h-6 min-w-6 items-center justify-center rounded-full border px-1 text-[8px] transition-all',
+            group?.alternatives.length
+              ? 'border-[#fb923c]/30 bg-[#fb923c]/10 text-[#fdba74] opacity-90'
+              : 'border-white/[0.05] bg-[#111] text-white/22 opacity-0 hover:border-white/[0.12] hover:text-white/55 hover:opacity-100 focus:opacity-100',
+          )}
+          style={{ top }}
+        >
+          <ListPlus className="h-3 w-3" />
+          {group?.alternatives.length ? <span className="ml-0.5">{group.alternatives.length}</span> : null}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="left"
+        sideOffset={8}
+        className="w-[330px] border border-white/[0.1] bg-[#0b0b0b] p-3 text-white shadow-modal-small"
+      >
+        <div className="mb-2">
+          <div className="text-[9px] font-medium uppercase tracking-[0.15em] text-[#fdba74]/70">Alternate lines</div>
+          <div className="mt-1 truncate text-xs text-white/46">{target.anchorText}</div>
+        </div>
+
+        {group?.alternatives.length ? (
+          <div className="mb-2 space-y-1.5">
+            {group.alternatives.map((alternative) => (
+              <div key={alternative.id} className="flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.02] p-1.5">
+                <button
+                  type="button"
+                  title="Use this line and keep the current line as an alternate"
+                  onClick={() => onPromote(target, group, alternative.id)}
+                  className="min-w-0 flex-1 rounded-md px-1.5 py-1 text-left text-xs leading-5 text-white/70 hover:bg-white/[0.05] hover:text-white/90"
+                >
+                  {alternative.text}
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Use ${alternative.text}`}
+                  title="Promote line"
+                  onClick={() => onPromote(target, group, alternative.id)}
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white/30 hover:bg-white/[0.06] hover:text-[#fdba74]"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Delete ${alternative.text}`}
+                  title="Delete alternate"
+                  onClick={() => onDelete(group.id, alternative.id)}
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white/22 hover:bg-red-500/10 hover:text-red-200/70"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <textarea
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') storeDraft()
+          }}
+          rows={3}
+          placeholder="Write another version…\nOne alternate per line."
+          className="w-full resize-none rounded-lg border border-white/[0.07] bg-white/[0.025] px-2.5 py-2 text-xs leading-5 text-white/78 outline-none placeholder:text-white/24 focus:border-[#fb923c]/30"
+        />
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className="text-[9px] text-white/25">⌘ Enter to store</span>
+          <button
+            type="button"
+            disabled={!draft.trim()}
+            onClick={storeDraft}
+            className="rounded-full bg-white/90 px-3 py-1.5 text-[10px] font-medium text-black disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            Store alternate
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 function selectionAnchor(
@@ -444,8 +671,6 @@ function roleForSection(section: SongSection): LabWorkerRole | null {
 }
 
 export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, workspaceName }: LabSongPadPageProps) {
-  const roughRef = React.useRef<HTMLTextAreaElement>(null)
-  const rememberRef = React.useRef<HTMLTextAreaElement>(null)
   const activeWorkerRunIdRef = React.useRef(0)
   const prosodyLookupRunIdRef = React.useRef(0)
   const sentFlashTimerRef = React.useRef<number | null>(null)
@@ -462,6 +687,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
   const [roughText, setRoughText] = React.useState(() => readInitialSong().roughText)
   const [rememberText, setRememberText] = React.useState(() => readInitialSong().rememberText)
   const [sections, setSections] = React.useState<SongSection[]>(() => readInitialSong().sections.length ? readInitialSong().sections : INITIAL_SECTIONS)
+  const [lineAlternatives, setLineAlternatives] = React.useState<LabSongLineAlternativeGroup[]>(() => readInitialSong().lineAlternatives ?? [])
   const [selectedText, setSelectedText] = React.useState('')
   const [sentFlashTarget, setSentFlashTarget] = React.useState<string | null>(null)
   const [selectionSource, setSelectionSource] = React.useState<SelectionSource>('rough')
@@ -498,6 +724,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
     setRoughText(next.roughText)
     setRememberText(next.rememberText)
     setSections(next.sections.length ? next.sections : INITIAL_SECTIONS)
+    setLineAlternatives(next.lineAlternatives ?? [])
   }), [songId, workspaceId])
 
   React.useEffect(() => {
@@ -509,6 +736,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
     setRoughText(next.roughText)
     setRememberText(next.rememberText)
     setSections(next.sections.length ? next.sections : INITIAL_SECTIONS)
+    setLineAlternatives(next.lineAlternatives ?? [])
   }, [songId, workspaceId])
 
   React.useEffect(() => {
@@ -527,6 +755,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
       roughText,
       rememberText,
       sections,
+      lineAlternatives,
       captures: existing?.captures ?? [],
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
@@ -534,7 +763,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
     window.queueMicrotask(() => {
       savingSongRef.current = false
     })
-  }, [activeSongId, labHydrated, title, project, projectColor, roughText, rememberText, sections, workspaceId])
+  }, [activeSongId, labHydrated, title, project, projectColor, roughText, rememberText, sections, lineAlternatives, workspaceId])
 
   const artistProfile = React.useMemo(
     () => parseArtistProfileDocResult(artistProfileDocs.find((doc) => doc.slug === ARTIST_PROFILE_CONTEXT_SLUG)).profile,
@@ -639,6 +868,77 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
       { id: `section-${Date.now()}`, label: 'New Section', text: '', optional: true },
     ])
     setShowEmptySections(true)
+  }, [])
+
+  const openLineAlternatives = React.useCallback(() => {
+    setProsodySelection(null)
+  }, [])
+
+  const addLineAlternatives = React.useCallback((
+    target: LabLineTarget,
+    matchedGroup: LabSongLineAlternativeGroup | undefined,
+    lines: string[],
+  ) => {
+    const now = new Date().toISOString()
+    setLineAlternatives((current) => {
+      const existing = matchedGroup ? current.find((group) => group.id === matchedGroup.id) : undefined
+      const seen = new Set(existing?.alternatives.map((alternative) => alternative.text.toLowerCase()) ?? [])
+      seen.add(target.anchorText.trim().toLowerCase())
+      const additions = lines
+        .map((line) => line.trim())
+        .filter((line) => {
+          const key = line.toLowerCase()
+          if (!line || seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
+        .map((text) => ({ id: lineAlternativeId('alt'), text, createdAt: now }))
+      if (!additions.length) return current
+      if (existing) {
+        return current.map((group) => group.id === existing.id ? {
+          ...group,
+          ...target,
+          alternatives: [...group.alternatives, ...additions],
+          updatedAt: now,
+        } : group)
+      }
+      return [...current, {
+        id: lineAlternativeId('group'),
+        ...target,
+        alternatives: additions,
+        updatedAt: now,
+      }]
+    })
+  }, [])
+
+  const promoteAlternative = React.useCallback((
+    target: LabLineTarget,
+    matchedGroup: LabSongLineAlternativeGroup,
+    alternativeId: string,
+  ) => {
+    const promoted = promoteLineAlternative(
+      { ...matchedGroup, ...target },
+      alternativeId,
+      target.anchorText,
+    )
+    setLineAlternatives((current) => current.map((group) => (
+      group.id === matchedGroup.id ? promoted.group : group
+    )))
+    if (target.source === 'rough') {
+      setRoughText((current) => replaceLineAt(current, target.lineIndex, promoted.primaryLine))
+      return
+    }
+    setSections((current) => current.map((section) => section.id === target.sectionId
+      ? { ...section, text: replaceLineAt(section.text, target.lineIndex, promoted.primaryLine) }
+      : section))
+  }, [])
+
+  const deleteLineAlternative = React.useCallback((groupId: string, alternativeId: string) => {
+    setLineAlternatives((current) => current.flatMap((group) => {
+      if (group.id !== groupId) return [group]
+      const alternatives = group.alternatives.filter((alternative) => alternative.id !== alternativeId)
+      return alternatives.length ? [{ ...group, alternatives, updatedAt: new Date().toISOString() }] : []
+    }))
   }, [])
 
   const buildPayload = React.useCallback((section: SongSection, action: LyricAgentAction, route: LabWorkerRouteResult): LyricAgentPayload => buildLyricAgentPayload({
@@ -1004,15 +1304,20 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
             </div>
 
             <div className="min-h-0 flex-1 p-3">
-              <textarea
-                ref={roughRef}
+              <LineAlternativeTextarea
                 value={roughText}
+                source="rough"
+                lineAlternatives={lineAlternatives}
                 onChange={(event) => setRoughText(event.target.value)}
                 onSelect={(event) => capturePadSelection('rough', event.currentTarget)}
                 onKeyUp={(event) => capturePadSelection('rough', event.currentTarget)}
                 onMouseUp={(event) => capturePadSelection('rough', event.currentTarget, { x: event.clientX + 4, y: event.clientY - 34 })}
                 placeholder=""
                 className={textareaBase('min-h-[560px]')}
+                onOpenAlternatives={openLineAlternatives}
+                onAddAlternatives={addLineAlternatives}
+                onPromoteAlternative={promoteAlternative}
+                onDeleteAlternative={deleteLineAlternative}
               />
 
               <div className="my-5 flex items-center gap-3">
@@ -1024,7 +1329,6 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
               </div>
 
               <textarea
-                ref={rememberRef}
                 value={rememberText}
                 onChange={(event) => setRememberText(event.target.value)}
                 onSelect={(event) => capturePadSelection('remember', event.currentTarget)}
@@ -1195,15 +1499,22 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                       </button>
                     </div>
                   </div>
-                  <textarea
+                  <LineAlternativeTextarea
                     value={section.text}
                     rows={sectionRows(section.text)}
+                    source="section"
+                    sectionId={section.id}
+                    lineAlternatives={lineAlternatives}
                     onChange={(event) => updateSection(section.id, event.target.value)}
                     onSelect={(event) => captureSectionProsodySelection(section.id, event.currentTarget)}
                     onKeyUp={(event) => captureSectionProsodySelection(section.id, event.currentTarget)}
                     onMouseUp={(event) => captureSectionProsodySelection(section.id, event.currentTarget, { x: event.clientX + 4, y: event.clientY - 34 })}
                     placeholder=""
                     className={textareaBase('overflow-hidden text-white/76 placeholder:text-white/14')}
+                    onOpenAlternatives={openLineAlternatives}
+                    onAddAlternatives={addLineAlternatives}
+                    onPromoteAlternative={promoteAlternative}
+                    onDeleteAlternative={deleteLineAlternative}
                   />
                 </article>
               ))}

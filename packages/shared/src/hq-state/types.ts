@@ -157,8 +157,8 @@ export interface ManagerCampaignSnapshot {
   work?: ManagerCollectionSummary;
   assets?: ManagerCollectionSummary;
   outputs?: ManagerCollectionSummary;
-  calendarHighlights?: Array<{ title: string; date: string; status: string }>;
-  workHighlights?: Array<{ title: string; startAt: string; status: string }>;
+  calendarHighlights?: Array<{ title: string; date: string; status: string; timing?: 'upcoming' | 'overdue' }>;
+  workHighlights?: Array<{ title: string; startAt: string; status: string; timing?: 'upcoming' | 'overdue' }>;
   essentialAssets?: Array<{ label: string; available: boolean }>;
   outputHighlights?: Array<{ title: string; status: string; updatedAt: string }>;
   sourceHealth: ManagerSourceHealth[];

@@ -10,6 +10,21 @@ describe('lab worker routing', () => {
     expect(getLabWorkerRoles('reference-master')).toContain('research.reference')
     expect(getLabWorkerRoles('the-excavator')).toContain('song.concept')
     expect(getLabWorkerRoles('the-excavator')).not.toContain('lyrics.generate')
+    expect(getLabWorkerRoles('hooker')).toContain('lyrics.section.chorus')
+  })
+
+  test('routes chorus work to the built-in Hooker worker', () => {
+    const route = resolveLabWorkerRoute([
+      agent('legendary-writer', 'Legendary Writer'),
+      agent('hooker', 'Hooker'),
+    ], {
+      role: 'lyrics.section.chorus',
+      fallbackRoles: ['lyrics.rewrite'],
+      sectionLabel: 'Chorus',
+    })
+
+    expect(route.role).toBe('lyrics.section.chorus')
+    expect(route.recommended?.agent.slug).toBe('hooker')
   })
 
   test('routes to the active worker for a role', () => {

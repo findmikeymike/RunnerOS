@@ -31,21 +31,31 @@ import { loadAuthorizedContextDocsForAgent, loadContextDoc } from '@craft-agent/
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions';
 import { buildHqOperationalSnapshot } from './operational';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const CAMPAIGN_SOURCE_STALE_DAYS = {
+  'mission-brief': 30,
+  'release-board': 14,
+  'campaign-calendar': 14,
+  'scheduled-work': 7,
+  'mission-assets': 30,
+  outputs: 30,
+} as const;
+
 export function buildHqStateInput(workspaceRootPath: string, now = new Date()): BuildHqStateInput {
   const workspace = getWorkspaces().find((candidate) => candidate.rootPath === workspaceRootPath);
   if (!existsSync(workspaceRootPath)) throw new Error(`HQ workspace does not exist: ${workspaceRootPath}`);
   return {
     workspaceId: workspace?.id ?? basename(workspaceRootPath),
     docs: loadAuthorizedContextDocsForAgent(workspaceRootPath, CONCIERGE_SLUG),
-    relatedCampaigns: workspace ? buildManagerCampaignSnapshots() : [],
+    relatedCampaigns: workspace ? buildManagerCampaignSnapshots(now) : [],
     operational: buildHqOperationalSnapshot(workspaceRootPath),
     now,
   };
 }
 
-export function buildManagerCampaignSnapshots(): ManagerCampaignSnapshot[] {
+export function buildManagerCampaignSnapshots(now = new Date()): ManagerCampaignSnapshot[] {
   const campaigns = getWorkspaces().filter((workspace) => workspace.artistWorkspaceScope === 'campaign');
-  return campaigns.map((workspace, index) => buildManagerCampaignSnapshot(workspace, index === 0));
+  return campaigns.map((workspace, index) => buildManagerCampaignSnapshot(workspace, index === 0, now));
 }
 
 export function findArtistHqWorkspace() {
@@ -55,6 +65,7 @@ export function findArtistHqWorkspace() {
 export function buildManagerCampaignSnapshot(
   workspace: ReturnType<typeof getWorkspaces>[number],
   primary: boolean,
+  now = new Date(),
 ): ManagerCampaignSnapshot {
   const missionDoc = loadContextDoc(workspace.rootPath, MISSION_BRIEF_CONTEXT_SLUG);
   const mission = parseMissionBriefDocResult(missionDoc ?? undefined);
@@ -74,6 +85,29 @@ export function buildManagerCampaignSnapshot(
       .filter((item) => item.status === 'needed')
       .map((item) => item.label)
       .slice(0, 5)
+    : [];
+  const today = now.toISOString().slice(0, 10);
+  const calendarCandidates = calendar.ok
+    ? calendar.calendar.items
+      .filter((item) => !item.deletedAt && !['done', 'canceled'].includes(item.status))
+      .map((item) => ({
+        title: item.title,
+        date: item.time ? `${item.date} ${item.time}` : item.date,
+        status: item.status,
+        timing: item.date < today ? 'overdue' as const : 'upcoming' as const,
+        sortKey: `${item.date}T${item.time ?? '00:00'}`,
+      }))
+    : [];
+  const workCandidates = work.ok
+    ? work.work.items
+      .filter((item) => !item.deletedAt && !['done', 'canceled'].includes(item.status))
+      .map((item) => ({
+        title: item.title,
+        startAt: item.startAt,
+        status: item.status,
+        timing: Date.parse(item.startAt) < now.getTime() ? 'overdue' as const : 'upcoming' as const,
+        sortKey: item.startAt,
+      }))
     : [];
 
   return {
@@ -100,20 +134,10 @@ export function buildManagerCampaignSnapshot(
       completed: outputs.filter((output) => output.status === 'published' || Boolean(output.completedAt)).length,
       updatedAt: outputs.map((output) => output.updatedAt).sort().at(-1),
     },
-    calendarHighlights: calendar.ok
-      ? calendar.calendar.items
-        .filter((item) => !item.deletedAt && !['done', 'canceled'].includes(item.status))
-        .sort((left, right) => `${left.date}T${left.time ?? '00:00'}`.localeCompare(`${right.date}T${right.time ?? '00:00'}`))
-        .slice(0, 5)
-        .map((item) => ({ title: item.title, date: item.time ? `${item.date} ${item.time}` : item.date, status: item.status }))
-      : [],
-    workHighlights: work.ok
-      ? work.work.items
-        .filter((item) => !item.deletedAt && !['done', 'canceled'].includes(item.status))
-        .sort((left, right) => left.startAt.localeCompare(right.startAt))
-        .slice(0, 5)
-        .map((item) => ({ title: item.title, startAt: item.startAt, status: item.status }))
-      : [],
+    calendarHighlights: selectDatedHighlights(calendarCandidates)
+      .map(({ sortKey: _sortKey, ...item }) => item),
+    workHighlights: selectDatedHighlights(workCandidates)
+      .map(({ sortKey: _sortKey, ...item }) => item),
     essentialAssets: ['master', 'lyrics', 'cover-art'].map((kind) => ({
       label: kind === 'cover-art' ? 'Cover art' : kind[0]!.toUpperCase() + kind.slice(1),
       available: assetsPresent && assets.files.some((file) => file.kind === kind && file.status === 'available'),
@@ -123,23 +147,27 @@ export function buildManagerCampaignSnapshot(
       .slice(0, 4)
       .map((output) => ({ title: output.title, status: output.status, updatedAt: output.updatedAt })),
     sourceHealth: [
-      parseHealth(`${workspace.id}:mission-brief`, Boolean(missionDoc), mission.ok, mission.ok ? mission.brief.updatedAt : undefined, mission.ok ? undefined : mission.error),
-      parseHealth(`${workspace.id}:release-board`, Boolean(boardDoc), board.ok, board.ok ? board.board.updatedAt : undefined, board.ok ? undefined : board.error),
-      parseHealth(`${workspace.id}:campaign-calendar`, Boolean(calendarDoc), calendar.ok, calendar.ok ? calendar.calendar.updatedAt : undefined, calendar.ok ? undefined : calendar.error),
-      parseHealth(`${workspace.id}:scheduled-work`, Boolean(workDoc), work.ok, work.ok ? work.work.updatedAt : undefined, work.ok ? undefined : work.error),
-      {
-        source: `${workspace.id}:mission-assets`,
-        status: assetsPresent ? 'fresh' : 'unavailable',
-        observedAt: assetsPresent ? assets.updatedAt : undefined,
-        message: assetsPresent ? undefined : 'No campaign asset manifest.',
-      },
-      {
-        source: `${workspace.id}:outputs`,
-        status: 'fresh',
-        observedAt: outputs.map((output) => output.updatedAt).sort().at(-1),
-      },
+      parseHealth(`${workspace.id}:mission-brief`, Boolean(missionDoc), mission.ok, mission.ok ? mission.brief.updatedAt : undefined, CAMPAIGN_SOURCE_STALE_DAYS['mission-brief'], now, mission.ok ? undefined : mission.error),
+      parseHealth(`${workspace.id}:release-board`, Boolean(boardDoc), board.ok, board.ok ? board.board.updatedAt : undefined, CAMPAIGN_SOURCE_STALE_DAYS['release-board'], now, board.ok ? undefined : board.error),
+      parseHealth(`${workspace.id}:campaign-calendar`, Boolean(calendarDoc), calendar.ok, calendar.ok ? calendar.calendar.updatedAt : undefined, CAMPAIGN_SOURCE_STALE_DAYS['campaign-calendar'], now, calendar.ok ? undefined : calendar.error),
+      parseHealth(`${workspace.id}:scheduled-work`, Boolean(workDoc), work.ok, work.ok ? work.work.updatedAt : undefined, CAMPAIGN_SOURCE_STALE_DAYS['scheduled-work'], now, work.ok ? undefined : work.error),
+      parseHealth(`${workspace.id}:mission-assets`, assetsPresent, true, assetsPresent ? assets.updatedAt : undefined, CAMPAIGN_SOURCE_STALE_DAYS['mission-assets'], now, assetsPresent ? undefined : 'No campaign asset manifest.'),
+      outputs.length
+        ? parseHealth(`${workspace.id}:outputs`, true, true, outputs.map((output) => output.updatedAt).sort().at(-1), CAMPAIGN_SOURCE_STALE_DAYS.outputs, now)
+        : { source: `${workspace.id}:outputs`, status: 'fresh' },
     ],
   };
+}
+
+function selectDatedHighlights<T extends { timing: 'upcoming' | 'overdue'; sortKey: string }>(items: T[]): T[] {
+  const upcoming = items
+    .filter((item) => item.timing === 'upcoming')
+    .sort((left, right) => left.sortKey.localeCompare(right.sortKey));
+  const overdue = items
+    .filter((item) => item.timing === 'overdue')
+    .sort((left, right) => right.sortKey.localeCompare(left.sortKey));
+  const selectedUpcoming = upcoming.slice(0, overdue.length ? 4 : 5);
+  return [...selectedUpcoming, ...overdue.slice(0, 5 - selectedUpcoming.length)];
 }
 
 function collectionSummary(
@@ -160,10 +188,22 @@ function parseHealth(
   present: boolean,
   ok: boolean,
   observedAt?: string,
+  staleDays = 30,
+  now = new Date(),
   error?: string,
 ): ManagerSourceHealth {
-  if (!present) return { source, status: 'unavailable', message: 'No source available.' };
+  if (!present) return { source, status: 'unavailable', message: error ?? 'No source available.' };
   if (!ok) return { source, status: 'malformed', observedAt, message: error };
-  if (!observedAt) return { source, status: 'partial', message: 'Source timestamp is missing or invalid.' };
-  return { source, status: 'fresh', observedAt };
+  const observedMs = observedAt ? Date.parse(observedAt) : Number.NaN;
+  if (!Number.isFinite(observedMs)) return { source, status: 'partial', message: 'Source timestamp is missing or invalid.' };
+  const normalizedObservedAt = new Date(observedMs).toISOString();
+  const staleAfter = new Date(observedMs + staleDays * DAY_MS).toISOString();
+  const stale = now.getTime() > Date.parse(staleAfter);
+  return {
+    source,
+    status: stale ? 'stale' : 'fresh',
+    observedAt: normalizedObservedAt,
+    staleAfter,
+    message: stale ? `${source.split(':').at(-1)} has not changed within its expected ${staleDays}-day window.` : undefined,
+  };
 }

@@ -234,11 +234,16 @@ export function managerBriefReceiptFromDocs(docs: PromptContextDoc[]): {
   }
   const campaignDoc = docs.find((doc) => doc.slug === CAMPAIGN_STATE_CONTEXT_SLUG && doc.metadata.enabled !== false);
   const brief = campaignDoc ? parseCampaignManagerBrief(campaignDoc.body) : null;
-  return brief ? {
-    revision: brief.revision,
-    generatedAt: brief.generatedAt,
-    sourceHealth: brief.sourceHealth.map((item) => ({ source: item.source, status: item.status })),
-  } : undefined;
+  if (!brief) return undefined;
+  try {
+    return {
+      revision: brief.revision,
+      generatedAt: brief.generatedAt,
+      sourceHealth: brief.sourceHealth.map((item) => ({ source: item.source, status: item.status })),
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 /**

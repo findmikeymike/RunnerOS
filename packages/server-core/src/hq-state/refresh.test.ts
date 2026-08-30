@@ -12,7 +12,9 @@ import {
   refreshHqStateContextDoc,
   scheduleHqStateContextRefresh,
   cancelScheduledHqStateContextRefresh,
+  getCampaignStateRefreshDiagnostic,
   getHqStateRefreshDiagnostic,
+  refreshCampaignStateContextDocBestEffort,
   shouldRefreshHqStateForContextSlug,
 } from './refresh'
 
@@ -100,6 +102,26 @@ describe('HQ state refresh', () => {
       expect(getHqStateRefreshDiagnostic('/dev/null/not-a-workspace')).toEqual(expect.objectContaining({
         status: 'failed',
         error: expect.stringContaining('not-a-workspace'),
+      }))
+    } finally {
+      console.warn = originalWarn
+    }
+  })
+
+  test('campaign best-effort refresh records failures instead of hiding them', () => {
+    const rootPath = '/dev/null/not-a-campaign'
+    const originalWarn = console.warn
+    const warn = mock(() => {})
+    console.warn = warn as typeof console.warn
+    try {
+      expect(refreshCampaignStateContextDocBestEffort(rootPath)).toBeNull()
+      expect(warn).toHaveBeenCalledWith(
+        '[hq-state] Failed to refresh Campaign State of Play context doc:',
+        expect.stringContaining('not configured'),
+      )
+      expect(getCampaignStateRefreshDiagnostic(rootPath)).toEqual(expect.objectContaining({
+        status: 'failed',
+        error: expect.stringContaining('not configured'),
       }))
     } finally {
       console.warn = originalWarn

@@ -58,6 +58,7 @@ function normalizeSong(song: LabSong): LabSong {
     color: song.color || LAB_PROJECT_COLORS[0],
     notes: song.notes || '',
     sections: normalizeSections(song.sections ?? []),
+    lineAlternatives: Array.isArray(song.lineAlternatives) ? song.lineAlternatives : [],
     captures: Array.isArray(song.captures) ? song.captures : [],
   }
 }
@@ -237,6 +238,7 @@ export function createLabUiSong(workspaceId: string | undefined, input: Pick<Lab
     roughText: '',
     rememberText: '',
     sections: LAB_DEFAULT_SECTIONS,
+    lineAlternatives: [],
     captures: [],
     createdAt: now,
     updatedAt: now,

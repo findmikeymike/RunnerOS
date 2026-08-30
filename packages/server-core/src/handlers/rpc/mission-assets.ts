@@ -40,7 +40,7 @@ import {
   requestClientOpenPath,
 } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
-import { refreshArtistHqStateForWorkspaceBestEffort } from '../../hq-state/refresh'
+import { refreshArtistManagerStateForWorkspaceBestEffort } from '../../hq-state/refresh'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.missionAssets.GET,
@@ -80,7 +80,7 @@ function mirrorManifestToContext(workspaceRootPath: string, workspaceId: string,
     metadata: missionAssetContextMetadata(),
     body: serializeMissionAssetContext(manifest),
   })
-  refreshArtistHqStateForWorkspaceBestEffort(workspaceRootPath)
+  refreshArtistManagerStateForWorkspaceBestEffort(workspaceRootPath)
   broadcastContextChanged(deps, workspaceId, loadAllContextDocs(workspaceRootPath))
 }
 

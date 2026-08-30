@@ -47,6 +47,42 @@ describe('Campaign Manager Brief', () => {
     expect(renderCampaignManagerBriefPromptSection(brief).length).toBeLessThanOrEqual(CAMPAIGN_MANAGER_BRIEF_MAX_CHARS);
     expect(brief.budget.actualChars).toBe(renderCampaignManagerBriefPromptSection(brief).length);
   });
+
+  test('rejects structurally incomplete and tampered persisted briefs', () => {
+    const malformed = `\`\`\`campaign-state-of-play\n${JSON.stringify({
+      version: 1,
+      workspaceId: 'campaign-1',
+      artistWorkspaceId: 'hq-1',
+      revision: 'campaign-manager-v1:fnv1a:12345678',
+      campaign: {},
+    })}\n\`\`\``;
+    expect(parseCampaignManagerBrief(malformed)).toBeNull();
+
+    const valid = buildCampaignManagerBrief({ artistWorkspaceId: 'hq-1', artistBrief: artistBrief(), campaign: campaign() });
+    valid.campaign.name = 'Tampered after revision';
+    expect(parseCampaignManagerBrief(serializeCampaignManagerBrief(valid))).toBeNull();
+  });
+
+  test('labels overdue and upcoming campaign work separately', () => {
+    const snapshot = campaign();
+    snapshot.calendarHighlights = [
+      { title: 'Release day', date: '2026-09-12', status: 'scheduled', timing: 'upcoming' },
+      { title: 'Late artwork', date: '2026-08-20', status: 'scheduled', timing: 'overdue' },
+    ];
+    snapshot.workHighlights = [
+      { title: 'Pitch press', startAt: '2026-09-01T12:00:00.000Z', status: 'scheduled', timing: 'upcoming' },
+      { title: 'Approve master', startAt: '2026-08-20T12:00:00.000Z', status: 'scheduled', timing: 'overdue' },
+    ];
+    const rendered = renderCampaignManagerBriefPromptSection(buildCampaignManagerBrief({
+      artistWorkspaceId: 'hq-1',
+      artistBrief: artistBrief(),
+      campaign: snapshot,
+    }));
+    expect(rendered).toContain('### Upcoming Calendar');
+    expect(rendered).toContain('### Overdue Calendar');
+    expect(rendered).toContain('### Upcoming Work');
+    expect(rendered).toContain('### Overdue Work');
+  });
 });
 
 function artistBrief(): ManagerBriefV1 {
@@ -73,7 +109,7 @@ function campaign(): ManagerCampaignSnapshot {
     mission: { id: 'mission-brief', workspaceId: 'campaign-1', status: 'full', completeness: 90, missionType: 'single', title: 'September Single', goal: 'Build audience.', releaseDate: '2026-09-12', updatedAt: '2026-08-29T00:00:00.000Z' },
     readiness: { done: 8, total: 12, nextMissing: ['Cover art'] },
     essentialAssets: [{ label: 'Master', available: true }, { label: 'Cover art', available: false }],
-    calendarHighlights: [{ title: 'Final mix', date: '2026-09-01', status: 'scheduled' }],
+    calendarHighlights: [{ title: 'Final mix', date: '2026-09-01', status: 'scheduled', timing: 'upcoming' }],
     workHighlights: [],
     outputHighlights: [],
     sourceHealth: [],

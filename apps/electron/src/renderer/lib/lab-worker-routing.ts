@@ -39,6 +39,7 @@ const LAB_WORKER_ROLES: Record<string, LabWorkerRole[]> = {
   'record-doctor': ['producer.handoff'],
   'reference-master': ['research.reference', 'song.reference', 'song.concept'],
   'the-excavator': ['song.concept'],
+  'hooker': ['lyrics.section.chorus', 'lyrics.rewrite'],
   'chorus-writer': ['lyrics.section.chorus', 'lyrics.rewrite'],
   'hook-doctor': ['lyrics.section.chorus', 'song.concept'],
   'bridge-builder': ['lyrics.section.bridge', 'lyrics.rewrite'],
@@ -46,6 +47,7 @@ const LAB_WORKER_ROLES: Record<string, LabWorkerRole[]> = {
 
 const ROLE_AGENT_PRIORITY: Partial<Record<LabWorkerRole, string[]>> = {
   'lyrics.generate': ['reverse-magic'],
+  'lyrics.section.chorus': ['hooker', 'chorus-writer', 'hook-doctor'],
   'song.concept': ['the-excavator', 'reverse-magic', 'reference-master'],
   'song.reference': ['reference-master', 'reverse-magic'],
   'research.reference': ['reference-master'],

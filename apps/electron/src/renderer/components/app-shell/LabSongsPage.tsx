@@ -10,6 +10,7 @@ import {
   PenLine,
   Plus,
   Search,
+  Star,
 } from 'lucide-react'
 import { navigate, routes } from '@/lib/navigate'
 import { cn } from '@/lib/utils'
@@ -20,6 +21,7 @@ import {
   LAB_PROJECT_COLORS,
   loadLabUiSongs,
   subscribeLabSongs,
+  upsertLabUiSong,
 } from '@/lib/lab-song-state'
 
 interface LabSongsPageProps {
@@ -48,16 +50,26 @@ type SongRecord = {
   createdAt: string
 }
 
-function SongRow({ song }: { song: SongRecord }) {
+function SongRow({
+  song,
+  onSetFocused,
+  onSetStatus,
+}: {
+  song: SongRecord
+  onSetFocused: (songId: string, focused: boolean) => void
+  onSetStatus: (songId: string, status: SongStatus) => void
+}) {
   const StatusIcon = song.status === 'done' ? CheckCircle2 : CircleDot
 
   return (
-    <button
-      type="button"
-      onClick={() => navigate(routes.view.lab('pad', song.id))}
-      className="group grid w-full grid-cols-[minmax(0,1fr)_150px_120px_96px] items-center gap-4 border-b border-white/[0.035] px-4 py-4 text-left transition-colors last:border-b-0 hover:bg-white/[0.025]"
+    <div
+      className="group grid w-full grid-cols-[minmax(0,1fr)_150px_120px_120px] items-center gap-4 border-b border-white/[0.035] px-4 py-4 transition-colors last:border-b-0 hover:bg-white/[0.025]"
     >
-      <span className="min-w-0">
+      <button
+        type="button"
+        onClick={() => navigate(routes.view.lab('pad', song.id))}
+        className="min-w-0 text-left"
+      >
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate text-sm font-medium text-white/86">{song.title}</span>
           {song.focused ? (
@@ -67,23 +79,44 @@ function SongRow({ song }: { song: SongRecord }) {
           ) : null}
         </span>
         <span className="mt-1 block truncate text-xs text-white/36">{song.preview}</span>
-      </span>
+      </button>
 
       <span className="inline-flex min-w-0 items-center gap-2 text-xs text-white/48">
         <Folder className="h-3.5 w-3.5 shrink-0 text-white/28" />
         <span className="truncate">{song.project}</span>
       </span>
 
-      <span className="inline-flex items-center gap-2 text-xs capitalize text-white/45">
+      <label className="inline-flex items-center gap-2 text-xs capitalize text-white/45">
         <StatusIcon className={cn('h-3.5 w-3.5', song.status === 'done' ? 'text-emerald-300/70' : 'text-white/30')} />
-        {song.status}
-      </span>
+        <span className="sr-only">Status for {song.title}</span>
+        <select
+          aria-label={`Status for ${song.title}`}
+          value={song.status}
+          onChange={(event) => onSetStatus(song.id, event.target.value as SongStatus)}
+          className="bg-transparent text-xs capitalize text-white/55 outline-none"
+        >
+          <option value="working">Working</option>
+          <option value="done">Done</option>
+        </select>
+      </label>
 
       <span className="inline-flex items-center justify-end gap-2 text-xs text-white/32">
+        <button
+          type="button"
+          aria-label={`${song.focused ? 'Remove' : 'Add'} ${song.title} ${song.focused ? 'from' : 'to'} focus`}
+          aria-pressed={song.focused}
+          onClick={() => onSetFocused(song.id, !song.focused)}
+          className={cn(
+            'rounded-full p-1.5 transition-colors hover:bg-white/[0.06]',
+            song.focused ? 'text-[#fb923c]' : 'text-white/25',
+          )}
+        >
+          <Star className={cn('h-3.5 w-3.5', song.focused && 'fill-current')} />
+        </button>
         <Clock3 className="h-3.5 w-3.5" />
         {formatRelativeDate(song.editedAt)}
       </span>
-    </button>
+    </div>
   )
 }
 
@@ -156,6 +189,20 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
     setQuery('')
     setAddSongOpen(false)
   }, [draftTag, draftTitle, songs.length, workspaceId])
+
+  const updateSong = React.useCallback((songId: string, patch: Partial<Pick<SongRecord, 'focused' | 'status'>>) => {
+    const song = loadLabUiSongs(workspaceId).find((item) => item.id === songId)
+    if (!song) return
+    upsertLabUiSong(workspaceId, { ...song, ...patch })
+  }, [workspaceId])
+
+  const onSetFocused = React.useCallback((songId: string, focused: boolean) => {
+    updateSong(songId, { focused })
+  }, [updateSong])
+
+  const onSetStatus = React.useCallback((songId: string, status: SongStatus) => {
+    updateSong(songId, { status })
+  }, [updateSong])
 
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
@@ -270,7 +317,7 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
             </div>
           </div>
 
-          <div className="grid grid-cols-[minmax(0,1fr)_150px_120px_96px] gap-4 border-b border-white/[0.035] px-4 py-2 text-[9px] font-medium uppercase tracking-[0.16em] text-white/30">
+          <div className="grid grid-cols-[minmax(0,1fr)_150px_120px_120px] gap-4 border-b border-white/[0.035] px-4 py-2 text-[9px] font-medium uppercase tracking-[0.16em] text-white/30">
             <span>Song</span>
             <span>Project</span>
             <span>Status</span>
@@ -281,7 +328,7 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
             <button
               type="button"
               onClick={() => setAddSongOpen(true)}
-              className="group grid w-full grid-cols-[minmax(0,1fr)_150px_120px_96px] items-center gap-4 border-b border-white/[0.035] px-4 py-4 text-left transition-colors hover:bg-white/[0.025]"
+              className="group grid w-full grid-cols-[minmax(0,1fr)_150px_120px_120px] items-center gap-4 border-b border-white/[0.035] px-4 py-4 text-left transition-colors hover:bg-white/[0.025]"
             >
               <span className="inline-flex min-w-0 items-center gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-dashed border-white/[0.12] bg-white/[0.018]">
@@ -299,7 +346,14 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
               </span>
             </button>
 
-            {visibleSongs.map((song) => <SongRow key={song.id} song={song} />)}
+            {visibleSongs.map((song) => (
+              <SongRow
+                key={song.id}
+                song={song}
+                onSetFocused={onSetFocused}
+                onSetStatus={onSetStatus}
+              />
+            ))}
           </div>
         </section>
 

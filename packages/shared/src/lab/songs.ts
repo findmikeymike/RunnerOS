@@ -13,6 +13,26 @@ export interface LabSongSection {
   text: string
   optional?: boolean
 }
+
+export type LabSongLineSource = 'rough' | 'section'
+
+export interface LabSongLineAlternative {
+  id: string
+  text: string
+  createdAt: string
+}
+
+export interface LabSongLineAlternativeGroup {
+  id: string
+  source: LabSongLineSource
+  sectionId?: string
+  anchorText: string
+  lineIndex: number
+  occurrence: number
+  alternatives: LabSongLineAlternative[]
+  updatedAt: string
+}
+
 export interface LabSongCapture {
   id: string
   text: string
@@ -38,6 +58,7 @@ export interface LabSong {
   roughText: string
   rememberText: string
   sections: LabSongSection[]
+  lineAlternatives: LabSongLineAlternativeGroup[]
   captures: LabSongCapture[]
   createdAt: string
   updatedAt: string
@@ -164,6 +185,37 @@ function normalizeCapture(value: unknown): LabSongCapture | null {
   }
 }
 
+function normalizeLineAlternative(value: unknown): LabSongLineAlternative | null {
+  const alternative = value as Partial<LabSongLineAlternative> | null
+  if (!alternative || typeof alternative.id !== 'string' || typeof alternative.text !== 'string' || !alternative.text.trim()) return null
+  return {
+    id: alternative.id,
+    text: alternative.text.trim(),
+    createdAt: typeof alternative.createdAt === 'string' ? alternative.createdAt : nowIso(),
+  }
+}
+
+function normalizeLineAlternativeGroup(value: unknown): LabSongLineAlternativeGroup | null {
+  const group = value as Partial<LabSongLineAlternativeGroup> | null
+  if (!group || typeof group.id !== 'string' || (group.source !== 'rough' && group.source !== 'section')) return null
+  if (group.source === 'section' && typeof group.sectionId !== 'string') return null
+  if (!Array.isArray(group.alternatives)) return null
+  const alternatives = group.alternatives
+    .map(normalizeLineAlternative)
+    .filter((alternative): alternative is LabSongLineAlternative => alternative !== null)
+  if (!alternatives.length) return null
+  return {
+    id: group.id,
+    source: group.source,
+    sectionId: group.source === 'section' ? group.sectionId : undefined,
+    anchorText: typeof group.anchorText === 'string' ? group.anchorText : '',
+    lineIndex: Number.isInteger(group.lineIndex) && Number(group.lineIndex) >= 0 ? Number(group.lineIndex) : 0,
+    occurrence: Number.isInteger(group.occurrence) && Number(group.occurrence) >= 0 ? Number(group.occurrence) : 0,
+    alternatives,
+    updatedAt: typeof group.updatedAt === 'string' ? group.updatedAt : nowIso(),
+  }
+}
+
 function normalizeSong(value: unknown): LabSong | null {
   const song = value as Partial<LabSong> | null
   if (!song || typeof song.id !== 'string' || typeof song.title !== 'string') return null
@@ -181,6 +233,11 @@ function normalizeSong(value: unknown): LabSong | null {
     sections: Array.isArray(song.sections)
       ? song.sections.map(normalizeSection).filter((section): section is LabSongSection => section !== null)
       : defaultSections(),
+    lineAlternatives: Array.isArray(song.lineAlternatives)
+      ? song.lineAlternatives
+        .map(normalizeLineAlternativeGroup)
+        .filter((group): group is LabSongLineAlternativeGroup => group !== null)
+      : [],
     captures: Array.isArray(song.captures)
       ? song.captures.map(normalizeCapture).filter((capture): capture is LabSongCapture => capture !== null)
       : [],
@@ -347,6 +404,7 @@ export function createLabSong(workspaceRoot: string, input: CreateLabSongInput):
     roughText: '',
     rememberText: '',
     sections: defaultSections(),
+    lineAlternatives: [],
     captures: [],
     createdAt: timestamp,
     updatedAt: timestamp,
