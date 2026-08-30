@@ -41,6 +41,7 @@ import {
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
 import { TopBar } from "./TopBar"
+import { LabSparkDock } from "./LabSparkDock"
 import { WorkspaceRail } from "./WorkspaceRail"
 import { McpIcon } from "../icons/McpIcon"
 import { cn } from "@/lib/utils"
@@ -2901,6 +2902,9 @@ function AppShellContent({
           showHistoryButtons={!usesWorkspaceHeader}
           isCompact={isAutoCompact}
         />
+      {isLabWorkspace && activeWorkspaceId ? (
+        <LabSparkDock workspaceId={activeWorkspaceId} attachToCurrentSong={labPadActive} />
+      ) : null}
       {usesWorkspaceHeader && !effectiveSidebarAndNavigatorHidden && !isAutoCompact && !isSidebarVisible && (
         <button
           data-testid="sidebar-toggle-open"

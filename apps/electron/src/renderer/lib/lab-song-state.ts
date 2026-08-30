@@ -1,9 +1,10 @@
-import type { LabProjectsState, LabSong, LabSongSection, LabState } from '@craft-agent/shared/lab'
+import type { LabProjectsState, LabSong, LabSongSection, LabSpark, LabState } from '@craft-agent/shared/lab'
 
 export type LabUiSongSection = LabSongSection
 export type LabUiSong = LabSong
 export type LabUiSequencePage = LabProjectsState['sequencePages'][number]
 export type LabUiProjectsState = LabProjectsState
+export type LabUiSpark = LabSpark
 
 const SONGS_KEY_PREFIX = 'lab:songs:v1'
 const PROJECTS_KEY_PREFIX = 'lab:projects:v1'
@@ -35,6 +36,7 @@ function workspaceKey(workspaceId?: string): string {
 function emptyState(): LabState {
   return {
     songs: [],
+    sparks: [],
     projects: {
       poolOrder: [],
       sequencePages: [{ id: DEFAULT_SEQUENCE_ID, title: 'Master Sequence', songIds: [] }],
@@ -71,6 +73,7 @@ function normalizeState(state: LabState): LabState {
     : fallback.sequencePages
   return {
     songs,
+    sparks: Array.isArray(state.sparks) ? state.sparks : [],
     projects: {
       poolOrder: Array.isArray(state.projects?.poolOrder) ? state.projects.poolOrder : songs.map((song) => song.id),
       sequencePages,
@@ -118,6 +121,7 @@ function readLegacyState(workspaceId: string): LabState | null {
     const selectedSongId = window.localStorage.getItem(localStorageKey(SELECTED_SONG_KEY_PREFIX, workspaceId)) ?? undefined
     return normalizeState({
       songs,
+      sparks: [],
       projects: {
         poolOrder: Array.isArray(projects.poolOrder) ? projects.poolOrder : songs.map((song) => song.id),
         sequencePages: Array.isArray(projects.sequencePages) && projects.sequencePages.length
@@ -185,6 +189,10 @@ export function loadLabUiSongs(workspaceId?: string): LabSong[] {
   return stateByWorkspace.get(workspaceKey(workspaceId))?.songs ?? []
 }
 
+export function loadLabUiSparks(workspaceId?: string): LabSpark[] {
+  return stateByWorkspace.get(workspaceKey(workspaceId))?.sparks ?? []
+}
+
 function persistState(workspaceId: string | undefined, state: LabState): Promise<LabState> {
   if (!workspaceId) return Promise.resolve(state)
   const normalized = normalizeState(state)
@@ -212,6 +220,55 @@ function persistState(workspaceId: string | undefined, state: LabState): Promise
 export function saveLabUiSongs(workspaceId: string | undefined, songs: LabSong[]) {
   const current = stateByWorkspace.get(workspaceKey(workspaceId)) ?? emptyState()
   return persistState(workspaceId, { ...current, songs })
+}
+
+export function saveLabUiSparks(workspaceId: string | undefined, sparks: LabSpark[]) {
+  const current = stateByWorkspace.get(workspaceKey(workspaceId)) ?? emptyState()
+  return persistState(workspaceId, { ...current, sparks })
+}
+
+export function createLabUiSpark(
+  workspaceId: string | undefined,
+  input: Pick<LabSpark, 'text' | 'kind' | 'tags'> & Pick<Partial<LabSpark>, 'songId' | 'pinned'>,
+): LabSpark {
+  const now = new Date().toISOString()
+  const spark: LabSpark = {
+    id: `spark-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`,
+    text: input.text.trim(),
+    kind: input.kind,
+    tags: Array.from(new Set(input.tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean))),
+    pinned: input.pinned === true,
+    songId: input.songId,
+    createdAt: now,
+    updatedAt: now,
+  }
+  void saveLabUiSparks(workspaceId, [spark, ...loadLabUiSparks(workspaceId)])
+  return spark
+}
+
+export function updateLabUiSpark(
+  workspaceId: string | undefined,
+  sparkId: string,
+  patch: Partial<Pick<LabSpark, 'text' | 'kind' | 'tags' | 'pinned' | 'songId'>>,
+): LabSpark | null {
+  const sparks = loadLabUiSparks(workspaceId)
+  const existing = sparks.find((spark) => spark.id === sparkId)
+  if (!existing) return null
+  const next: LabSpark = {
+    ...existing,
+    ...patch,
+    text: patch.text?.trim() || existing.text,
+    tags: patch.tags
+      ? Array.from(new Set(patch.tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean)))
+      : existing.tags,
+    updatedAt: new Date().toISOString(),
+  }
+  void saveLabUiSparks(workspaceId, sparks.map((spark) => spark.id === sparkId ? next : spark))
+  return next
+}
+
+export function deleteLabUiSpark(workspaceId: string | undefined, sparkId: string): void {
+  void saveLabUiSparks(workspaceId, loadLabUiSparks(workspaceId).filter((spark) => spark.id !== sparkId))
 }
 
 export function upsertLabUiSong(workspaceId: string | undefined, song: LabSong): LabSong {

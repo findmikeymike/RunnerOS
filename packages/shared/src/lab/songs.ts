@@ -6,6 +6,18 @@ import { atomicWriteFileSync } from '../utils/files.ts'
 export type LabSongStatus = 'working' | 'done'
 export type LabSongDestination = 'rough_pad' | 'remember' | 'section'
 export type LabSongWriteMode = 'append' | 'replace'
+export type LabSparkKind = 'line' | 'concept' | 'title' | 'image' | 'wildcard'
+
+export interface LabSpark {
+  id: string
+  text: string
+  kind: LabSparkKind
+  tags: string[]
+  pinned: boolean
+  songId?: string
+  createdAt: string
+  updatedAt: string
+}
 
 export interface LabSongSection {
   id: string
@@ -100,6 +112,7 @@ export interface SaveLabLyricsInput {
 export interface LabSongsLibrary {
   version: 2
   songs: LabSong[]
+  sparks: LabSpark[]
   projects: LabProjectsState
 }
 
@@ -118,6 +131,7 @@ export interface LabProjectsState {
 
 export interface LabState {
   songs: LabSong[]
+  sparks: LabSpark[]
   projects: LabProjectsState
 }
 
@@ -216,6 +230,35 @@ function normalizeLineAlternativeGroup(value: unknown): LabSongLineAlternativeGr
   }
 }
 
+function normalizeSpark(value: unknown): LabSpark | null {
+  const spark = value as Partial<LabSpark> | null
+  if (!spark || typeof spark.id !== 'string' || typeof spark.text !== 'string' || !spark.text.trim()) return null
+  const kind: LabSparkKind = spark.kind === 'line'
+    || spark.kind === 'concept'
+    || spark.kind === 'title'
+    || spark.kind === 'image'
+    || spark.kind === 'wildcard'
+    ? spark.kind
+    : 'wildcard'
+  const tags = Array.isArray(spark.tags)
+    ? Array.from(new Set(spark.tags
+      .filter((tag): tag is string => typeof tag === 'string')
+      .map((tag) => tag.trim().toLowerCase())
+      .filter(Boolean)))
+    : []
+  const timestamp = nowIso()
+  return {
+    id: spark.id,
+    text: spark.text.trim(),
+    kind,
+    tags,
+    pinned: spark.pinned === true,
+    songId: typeof spark.songId === 'string' ? spark.songId : undefined,
+    createdAt: typeof spark.createdAt === 'string' ? spark.createdAt : timestamp,
+    updatedAt: typeof spark.updatedAt === 'string' ? spark.updatedAt : timestamp,
+  }
+}
+
 function normalizeSong(value: unknown): LabSong | null {
   const song = value as Partial<LabSong> | null
   if (!song || typeof song.id !== 'string' || typeof song.title !== 'string') return null
@@ -250,9 +293,12 @@ function normalizeLibrary(value: unknown): LabSongsLibrary {
   const parsed = value as Partial<LabSongsLibrary> | null
   if (!parsed || !Array.isArray(parsed.songs)) {
     const songs: LabSong[] = []
-    return { version: 2, songs, projects: defaultProjects(songs) }
+    return { version: 2, songs, sparks: [], projects: defaultProjects(songs) }
   }
   const songs = parsed.songs.map(normalizeSong).filter((song): song is LabSong => song !== null)
+  const sparks = Array.isArray(parsed.sparks)
+    ? parsed.sparks.map(normalizeSpark).filter((spark): spark is LabSpark => spark !== null)
+    : []
   const candidate = parsed.projects
   const sequencePages = Array.isArray(candidate?.sequencePages)
     ? candidate.sequencePages.flatMap((value) => {
@@ -269,6 +315,7 @@ function normalizeLibrary(value: unknown): LabSongsLibrary {
   return {
     version: 2,
     songs,
+    sparks,
     projects: {
       poolOrder: Array.isArray(candidate?.poolOrder)
         ? candidate.poolOrder.filter((id): id is string => typeof id === 'string')
@@ -288,11 +335,11 @@ export function loadLabState(workspaceRoot: string): LabState {
   const path = getLibraryPath(workspaceRoot)
   if (!existsSync(path)) {
     const songs: LabSong[] = []
-    return { songs, projects: defaultProjects(songs) }
+    return { songs, sparks: [], projects: defaultProjects(songs) }
   }
   try {
     const library = normalizeLibrary(JSON.parse(readFileSync(path, 'utf-8')))
-    return { songs: library.songs, projects: library.projects }
+    return { songs: library.songs, sparks: library.sparks, projects: library.projects }
   } catch {
     try {
       renameSync(path, `${path}.corrupt-${Date.now()}`)
@@ -300,7 +347,7 @@ export function loadLabState(workspaceRoot: string): LabState {
       // Recovery remains non-destructive whenever the filesystem permits it.
     }
     const songs: LabSong[] = []
-    return { songs, projects: defaultProjects(songs) }
+    return { songs, sparks: [], projects: defaultProjects(songs) }
   }
 }
 
@@ -309,7 +356,7 @@ export function saveLabState(workspaceRoot: string, state: LabState): LabState {
   const path = getLibraryPath(workspaceRoot)
   mkdirSync(join(workspaceRoot, LAB_DIR), { recursive: true })
   atomicWriteFileSync(path, `${JSON.stringify(normalized, null, 2)}\n`)
-  return { songs: normalized.songs, projects: normalized.projects }
+  return { songs: normalized.songs, sparks: normalized.sparks, projects: normalized.projects }
 }
 
 export function loadLabSongs(workspaceRoot: string): LabSong[] {
@@ -318,7 +365,7 @@ export function loadLabSongs(workspaceRoot: string): LabSong[] {
 
 export function saveLabSongs(workspaceRoot: string, songs: LabSong[]): void {
   const current = loadLabState(workspaceRoot)
-  saveLabState(workspaceRoot, { songs, projects: current.projects })
+  saveLabState(workspaceRoot, { songs, sparks: current.sparks, projects: current.projects })
 }
 
 function uniqueSongId(existing: LabSong[], title: string): string {

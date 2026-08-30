@@ -154,4 +154,38 @@ describe('Lab song storage', () => {
       rmSync(root, { recursive: true, force: true })
     }
   })
+
+  test('persists typed, tagged sparks with optional song context', () => {
+    const root = tmpWorkspace()
+    try {
+      const song = createLabSong(root, { title: 'Night Drive' })
+      const state = loadLabState(root)
+      saveLabState(root, {
+        ...state,
+        sparks: [{
+          id: 'spark-1',
+          text: 'Headlights know my name',
+          kind: 'line',
+          tags: ['night', 'hook'],
+          pinned: true,
+          songId: song.id,
+          createdAt: '2026-08-29T00:00:00.000Z',
+          updatedAt: '2026-08-29T00:00:00.000Z',
+        }],
+      })
+
+      expect(loadLabState(root).sparks).toEqual([{
+        id: 'spark-1',
+        text: 'Headlights know my name',
+        kind: 'line',
+        tags: ['night', 'hook'],
+        pinned: true,
+        songId: song.id,
+        createdAt: '2026-08-29T00:00:00.000Z',
+        updatedAt: '2026-08-29T00:00:00.000Z',
+      }])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
 })

@@ -189,6 +189,17 @@ describe('Artist OS persistent shell chrome', () => {
     expect(songs).toContain('onClick={() => setAddSongOpen(true)}')
   })
 
+  test('keeps Spark capture available across the Lab with a searchable bank', () => {
+    const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
+    const dock = readFileSync(join(import.meta.dir, '..', 'LabSparkDock.tsx'), 'utf8')
+
+    expect(shell).toContain('<LabSparkDock workspaceId={activeWorkspaceId} attachToCurrentSong={labPadActive} />')
+    expect(dock).toContain('Catch the spark')
+    expect(dock).toContain('Open Spark Bank')
+    expect(dock).toContain('filterLabSparks')
+    expect(dock).toContain('Attached to ${activeSongTitle}')
+  })
+
   test('lets writers persist Focus and Status directly from the Songs list', () => {
     const songs = readFileSync(join(import.meta.dir, '..', 'LabSongsPage.tsx'), 'utf8')
 
