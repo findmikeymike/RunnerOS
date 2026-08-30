@@ -59,6 +59,8 @@ function options(root: string, workInput: ScheduleWorkToolInput, scope: 'hq' | '
       await mkdir(dirname(path), { recursive: true })
       await writeFile(path, data, 'utf-8')
     },
+    continuationRuntimeId: 'runtime-1',
+    continuationFenceToken: 'solo',
   }
 }
 
@@ -67,6 +69,53 @@ afterEach(async () => {
 })
 
 describe('persistHnicScheduleWork', () => {
+  test('creates one visible coordinator and one hidden first round for confirmed continuation', async () => {
+    const root = createRoot()
+    upsertContextDoc(root, {
+      slug: 'launch-goal',
+      metadata: { name: 'Launch Goal', routing: { mode: 'broadcast' }, enabled: true, status: 'active' },
+      body: 'Finish the launch plan.',
+    })
+    const workInput = input({
+      execution: {
+        type: 'agent-task', agentSlug: 'youtube-intel', brief: 'Create the report.', permissionMode: 'safe',
+        expectedOutput: { requirement: 'required', kind: 'report' },
+      },
+      continuation: { goalSlug: 'launch-goal', objective: 'Finish the launch plan.', maxRounds: 3 },
+    })
+
+    const saved = await persistHnicScheduleWork(options(root, workInput))
+    const parsed = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, 'campaign-1')
+    const calendar = parseCampaignCalendarDocResult(loadContextDoc(root, CAMPAIGN_CALENDAR_CONTEXT_SLUG) ?? undefined, 'campaign-1')
+    if (!parsed.ok) throw new Error(parsed.error)
+    if (!calendar.ok) throw new Error(calendar.error)
+
+    expect(parsed.work.items).toHaveLength(2)
+    const coordinator = parsed.work.items.find((item) => item.id === saved.id)
+    const round = parsed.work.items.find((item) => item.continuation?.role === 'round')
+    expect(coordinator?.status).toBe('waiting')
+    expect(coordinator?.continuation?.role).toBe('coordinator')
+    expect(round?.status).toBe('scheduled')
+    expect(round?.calendarVisibility).toBe('hidden')
+    expect(calendar.calendar.items).toHaveLength(1)
+    expect(calendar.calendar.items[0]?.scheduledWorkId).toBe(coordinator?.id)
+  })
+
+  test('rejects continuation against a non-active Goal', async () => {
+    const root = createRoot()
+    upsertContextDoc(root, {
+      slug: 'paused-goal',
+      metadata: { name: 'Paused Goal', routing: { mode: 'broadcast' }, enabled: true, status: 'paused' },
+      body: 'Wait.',
+    })
+    await expect(persistHnicScheduleWork(options(root, input({
+      execution: {
+        type: 'agent-task', agentSlug: 'youtube-intel', brief: 'Create the report.', permissionMode: 'safe',
+        expectedOutput: { requirement: 'required', kind: 'report' },
+      },
+      continuation: { goalSlug: 'paused-goal', objective: 'Wait.', maxRounds: 3 },
+    })))).rejects.toThrow(/must exist, be enabled, and be active/)
+  })
   test('writes one idempotent work order and linked campaign item', async () => {
     const root = createRoot()
     const first = await persistHnicScheduleWork(options(root, input()))

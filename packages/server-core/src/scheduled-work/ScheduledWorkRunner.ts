@@ -1,4 +1,5 @@
 import { createCampaignJobRun, type CampaignExternalExecutionReceipt, type CampaignJobRun } from '@craft-agent/shared/campaign-calendar'
+import { randomUUID } from 'node:crypto'
 import type { OutputManifest } from '@craft-agent/shared/outputs'
 import {
   SCHEDULED_WORK_CONTEXT_SLUG,
@@ -11,8 +12,11 @@ import {
   type ScheduledWorkDocument,
   type ScheduledWorkInputRef,
   type ScheduledWorkOrder,
+  type ScheduledWorkContinuation,
   type ScheduledSocialActionPreview,
   type ScheduledSocialApproval,
+  type ManageGoalRunInput,
+  type ManageGoalRunResult,
 } from '@craft-agent/shared/scheduled-work'
 import {
   loadAllContextDocs,
@@ -40,6 +44,7 @@ export interface ScheduledWorkRunnerDeps {
     expectedOutput: ExpectedOutputContract
     inputRefs: ScheduledWorkInputRef[]
     onStarted: (sessionId: string) => void | Promise<void>
+    continuation?: ScheduledWorkContinuation
   }): Promise<{ sessionId?: string } | void>
   startWorkflow(input: {
     workOrderId: string
@@ -58,6 +63,8 @@ export interface ScheduledWorkRunnerDeps {
     outputs: OutputManifest[]
   }): Promise<{ sharedIntelContextSlugs?: string[] }>
   readAgentSession?(sessionId: string): Promise<'running' | 'completed' | 'interrupted' | 'missing'>
+  awaitAgentCompletionBarrier?(sessionId: string): Promise<boolean>
+  abortAgentSession?(sessionId: string): Promise<void>
   prepareSocial?(input: { workspaceId: string; workspaceRootPath: string; order: ScheduledWorkOrder }): Promise<ScheduledSocialActionPreview>
   executeSocial?(input: { workspaceId: string; workspaceRootPath: string; order: ScheduledWorkOrder; preview: ScheduledSocialActionPreview; approval: ScheduledSocialApproval }): Promise<{ receiptId: string; externalUrl?: string; summary: string }>
   emitContextChanged?(workspaceId: string, docs: LoadedContextDoc[]): void
@@ -99,6 +106,7 @@ interface OutputMatchResult {
 const MAX_CONCURRENT_AGENT_TASKS = 3
 
 export class ScheduledWorkRunner {
+  readonly runtimeId = randomUUID()
   private readonly inFlight = new Set<string>()
   private readonly activeAgentRuns = new Set<string>()
   private readonly activeSocialProfiles = new Set<string>()
@@ -113,6 +121,131 @@ export class ScheduledWorkRunner {
   private canContinue(workspaceRootPath: string, capturedFence: string | null): boolean {
     if (!this.deps.canRunBackgroundWork(workspaceRootPath)) return false
     return !this.deps.getBackgroundFenceToken || this.deps.getBackgroundFenceToken(workspaceRootPath) === capturedFence
+  }
+
+  async manageGoalRun(
+    workspaceId: string,
+    workspaceRootPath: string,
+    input: ManageGoalRunInput,
+  ): Promise<ManageGoalRunResult> {
+    if (input.requiresUserConfirmation) throw new Error('Goal run changes require explicit user confirmation.')
+    if (!input.explanation.trim()) throw new Error('Explain why the Goal run is changing.')
+    return this.deps.withLock(workspaceRootPath, async () => {
+      const parsed = this.readWork(workspaceRootPath, workspaceId)
+      if (!parsed.ok) throw new Error(parsed.error)
+      const coordinator = parsed.work.items.find((candidate) => candidate.continuation?.role === 'coordinator'
+        && candidate.continuation.runId === input.runId && !candidate.deletedAt)
+      if (!coordinator?.continuation || coordinator.updatedAt !== input.expectedUpdatedAt) {
+        throw new Error('Goal run changed before this operation. Refresh and review it again.')
+      }
+      const rounds = parsed.work.items
+        .filter((candidate) => candidate.continuation?.role === 'round' && candidate.continuation.runId === input.runId && !candidate.deletedAt)
+        .sort((left, right) => (left.continuation?.round ?? 0) - (right.continuation?.round ?? 0))
+      const latest = rounds.at(-1)
+      if (!latest?.continuation) throw new Error('Goal run has no recoverable round history.')
+      if (latest.status === 'running') {
+        if (input.operation === 'rearm') throw new Error('The Goal run is still active and cannot be resumed again.')
+        const sessionId = currentSessionId(latest)
+        if (!sessionId || !this.deps.abortAgentSession) throw new Error('The active round could not be stopped safely. Open its session and stop it first.')
+        await this.deps.abortAgentSession(sessionId)
+      }
+      const nowIso = (this.deps.now?.() ?? new Date()).toISOString()
+
+      if (input.operation === 'pause' || input.operation === 'cancel') {
+        const attention = this.buildAttention('continuation-disarmed', input.operation === 'pause'
+          ? `Continuation paused: ${input.explanation.trim()}`
+          : `Continuation canceled: ${input.explanation.trim()}`)
+        const nextLatest: ScheduledWorkOrder = (latest.status === 'scheduled' || latest.status === 'running')
+          ? {
+              ...latest,
+              status: input.operation === 'cancel' ? 'canceled' : 'needs-attention',
+              attention: input.operation === 'cancel' ? undefined : attention,
+              updatedAt: nowIso,
+              runs: latest.status === 'running'
+                ? updateLatestRun(latest.runs, latest.id, { status: 'failed', endedAt: nowIso, error: attention.message })
+                : latest.runs,
+            }
+          : latest
+        const nextCoordinator: ScheduledWorkOrder = {
+          ...coordinator,
+          status: input.operation === 'cancel' ? 'canceled' : 'needs-attention',
+          attention: input.operation === 'cancel' ? undefined : attention,
+          runs: mergeCoordinatorRun(coordinator.runs, nextLatest.runs.at(-1)),
+          updatedAt: nowIso,
+        }
+        const items = parsed.work.items.map((candidate) => {
+          if (candidate.id === coordinator.id) return nextCoordinator
+          if (candidate.id === latest.id) return nextLatest
+          return candidate
+        })
+        const persisted = this.writeContinuationWork(workspaceId, workspaceRootPath, parsed.work, items, nextCoordinator, nowIso)
+        return { work: persisted.work, coordinator: nextCoordinator }
+      }
+
+      if (coordinator.status !== 'needs-attention') throw new Error('Only a stopped Goal run can be resumed.')
+      const goal = loadContextDoc(workspaceRootPath, coordinator.continuation.goalSlug)
+      if (!goal || !goal.metadata.enabled || goal.metadata.status !== 'active') throw new Error('Goal must exist, be enabled, and be active before resuming.')
+      const goalRevision = scheduledWorkDefinitionDigest({ metadata: goal.metadata, body: goal.body })
+      const runnerFence = this.deps.getBackgroundFenceToken?.(workspaceRootPath)
+      if (!runnerFence) throw new Error('Runner ownership could not be verified before resuming.')
+      const maxRounds = input.maxRounds ?? coordinator.continuation.maxRounds
+      if (!Number.isInteger(maxRounds) || maxRounds < 2 || maxRounds > 8) throw new Error('maxRounds must be an integer from 2 through 8.')
+      const canReuseUnstartedRound = latest.runs.length === 0 && latest.result === undefined
+      const nextRound = canReuseUnstartedRound ? latest.continuation.round : latest.continuation.round + 1
+      if (nextRound > maxRounds) throw new Error('Increase maxRounds before resuming this exhausted Goal run.')
+      const objective = input.objective?.trim() || coordinator.continuation.objective
+      if (!objective) throw new Error('A Goal objective is required before resuming.')
+      const nextId = canReuseUnstartedRound ? latest.id : `${coordinator.id}-round-${nextRound}`
+      if (!canReuseUnstartedRound && parsed.work.items.some((candidate) => candidate.id === nextId)) throw new Error('The next continuation round already exists. Refresh before resuming.')
+      const continuation = {
+        ...latest.continuation,
+        goalRevision,
+        objective,
+        round: nextRound,
+        maxRounds,
+        runtimeId: this.runtimeId,
+        runnerFence,
+        parentOrderId: canReuseUnstartedRound ? latest.continuation.parentOrderId : latest.id,
+        priorRoundSessionId: canReuseUnstartedRound ? latest.continuation.priorRoundSessionId : currentSessionId(latest),
+        priorRoundOutputIds: canReuseUnstartedRound
+          ? latest.continuation.priorRoundOutputIds
+          : latest.result?.type === 'agent-task' ? latest.result.outputIds : undefined,
+      }
+      const successor: ScheduledWorkOrder = {
+        ...latest,
+        id: nextId,
+        calendarLink: { ...latest.calendarLink, itemId: `${coordinator.calendarLink.itemId}-round-${nextRound}` },
+        title: `${coordinator.title} — round ${nextRound}`,
+        status: 'scheduled',
+        startAt: nowIso,
+        result: undefined,
+        attention: undefined,
+        runs: [],
+        continuation,
+        executionKey: {
+          payloadDigest: scheduledWorkDefinitionDigest({ runId: continuation.runId, goalRevision, objective, round: nextRound, maxRounds, execution: latest.execution, inputRefs: latest.inputRefs }),
+          idempotencyKey: `${continuation.runId}:round:${nextRound}:${goalRevision}`,
+        },
+        createdAt: canReuseUnstartedRound ? latest.createdAt : nowIso,
+        updatedAt: nowIso,
+      }
+      const nextCoordinator: ScheduledWorkOrder = {
+        ...coordinator,
+        status: 'waiting',
+        attention: undefined,
+        continuation: { ...coordinator.continuation, goalRevision, objective, maxRounds, runtimeId: this.runtimeId, runnerFence },
+        executionKey: {
+          ...coordinator.executionKey,
+          payloadDigest: scheduledWorkDefinitionDigest({ execution: coordinator.execution, goalRevision, objective, maxRounds }),
+        },
+        updatedAt: nowIso,
+      }
+      const items = canReuseUnstartedRound
+        ? parsed.work.items.map((candidate) => candidate.id === coordinator.id ? nextCoordinator : candidate.id === latest.id ? successor : candidate)
+        : [...parsed.work.items.map((candidate) => candidate.id === coordinator.id ? nextCoordinator : candidate), successor]
+      const persisted = this.writeContinuationWork(workspaceId, workspaceRootPath, parsed.work, items, nextCoordinator, nowIso)
+      return { work: persisted.work, coordinator: nextCoordinator }
+    })
   }
 
   async scanWorkspace(
@@ -152,6 +285,12 @@ export class ScheduledWorkRunner {
       for (const orderId of candidates) {
         const current = this.getCurrentOrder(workspaceRootPath, workspaceId, orderId)
         if (!current || current.deletedAt || current.legacyRef) continue
+        const currentContinuationIssue = this.continuationFenceIssue(workspaceRootPath, current)
+        if (current.continuation?.role === 'round' && currentContinuationIssue) {
+          const persisted = await this.stopContinuation(workspaceId, workspaceRootPath, current.id, currentContinuationIssue)
+          if (persisted.updated) result.blocked += 1
+          continue
+        }
         if (current.status === 'needs-approval' && current.execution.type === 'social-publish') {
           if (!current.socialAction) {
             if (!this.deps.prepareSocial) continue
@@ -352,6 +491,11 @@ export class ScheduledWorkRunner {
       const execution = order.execution
       if (execution.type !== 'agent-task') return 'failed'
       if (!this.canContinue(workspaceRootPath, capturedFence)) throw new Error('Team runner fence changed before scheduled agent execution.')
+      const continuationIssue = this.continuationFenceIssue(workspaceRootPath, order)
+      if (continuationIssue) {
+        await this.stopContinuation(workspaceId, workspaceRootPath, order.id, continuationIssue)
+        return 'failed'
+      }
       const started = await this.deps.executeAgentTask({
         workOrderId: order.id,
         workspace: { id: workspaceId, rootPath: workspaceRootPath },
@@ -360,6 +504,7 @@ export class ScheduledWorkRunner {
         permissionMode: execution.permissionMode,
         expectedOutput: execution.expectedOutput,
         inputRefs: order.inputRefs,
+        continuation: order.continuation,
         onStarted: async (startedSessionId) => {
           const cleaned = clean(startedSessionId)
           if (!cleaned) return
@@ -377,12 +522,25 @@ export class ScheduledWorkRunner {
       if (!sessionId) {
         throw new Error(`Agent task ${order.id} completed without reporting a session id.`)
       }
+      if (order.continuation && !(await this.deps.awaitAgentCompletionBarrier?.(sessionId))) {
+        await this.stopContinuation(
+          workspaceId,
+          workspaceRootPath,
+          order.id,
+          this.buildAttention('continuation-disarmed', 'Continuation stopped because session persistence could not be proven. Review the completed session before resuming.'),
+        )
+        return 'failed'
+      }
       const outputs = this.matchExpectedOutputs(
         execution.expectedOutput,
         sessionId,
         this.deps.listOutputManifests(workspaceRootPath),
       )
       if (!outputs.satisfied) {
+        if (order.continuation?.role === 'round') {
+          await this.settleContinuationRound(workspaceId, workspaceRootPath, order.id, sessionId, [], undefined)
+          return 'done'
+        }
         await this.finishWithAttention(
           workspaceId,
           workspaceRootPath,
@@ -392,15 +550,19 @@ export class ScheduledWorkRunner {
         return 'failed'
       }
       const processed = await this.postProcessAgentTask(workspaceId, workspaceRootPath, order, sessionId, outputs.matched)
-      await this.finishAgentDone(workspaceId, workspaceRootPath, order.id, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs)
+      if (order.continuation?.role === 'round') {
+        await this.settleContinuationRound(workspaceId, workspaceRootPath, order.id, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs)
+      } else {
+        await this.finishAgentDone(workspaceId, workspaceRootPath, order.id, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs)
+      }
       return 'done'
     } catch (error) {
-      await this.finishWithAttention(
-        workspaceId,
-        workspaceRootPath,
-        order.id,
-        this.buildAttention('execution-failed', errorMessage(error)),
-      )
+      const attention = this.buildAttention('execution-failed', errorMessage(error))
+      if (order.continuation?.role === 'round') {
+        await this.stopContinuation(workspaceId, workspaceRootPath, order.id, attention)
+      } else {
+        await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, attention)
+      }
       return 'failed'
     }
   }
@@ -412,27 +574,32 @@ export class ScheduledWorkRunner {
   ): Promise<'running' | 'done' | 'failed'> {
     const sessionId = currentSessionId(order)
     if (!sessionId || !this.deps.readAgentSession) {
-      const persisted = await this.finishWithAttention(
-        workspaceId,
-        workspaceRootPath,
-        order.id,
-        this.buildAttention('execution-failed', runningAgentMessage(order)),
-      )
+      const attention = this.buildAttention('execution-failed', runningAgentMessage(order))
+      const persisted = order.continuation?.role === 'round'
+        ? await this.stopContinuation(workspaceId, workspaceRootPath, order.id, attention)
+        : await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, attention)
       return persisted.updated ? 'failed' : 'running'
     }
     const state = await this.deps.readAgentSession(sessionId)
     if (state === 'running') return 'running'
     if (state !== 'completed') {
-      const persisted = await this.finishWithAttention(
-        workspaceId,
-        workspaceRootPath,
-        order.id,
-        this.buildAttention(
+      const attention = this.buildAttention(
           'execution-failed',
           state === 'missing'
             ? `Scheduled agent session ${sessionId} no longer exists.`
             : `Scheduled agent session ${sessionId} stopped before producing a final response.`,
-        ),
+        )
+      const persisted = order.continuation?.role === 'round'
+        ? await this.stopContinuation(workspaceId, workspaceRootPath, order.id, attention)
+        : await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, attention)
+      return persisted.updated ? 'failed' : 'running'
+    }
+    if (order.continuation && !(await this.deps.awaitAgentCompletionBarrier?.(sessionId))) {
+      const persisted = await this.stopContinuation(
+        workspaceId,
+        workspaceRootPath,
+        order.id,
+        this.buildAttention('continuation-disarmed', 'Continuation stopped because session persistence could not be proven after restart. Review the session before resuming.'),
       )
       return persisted.updated ? 'failed' : 'running'
     }
@@ -443,6 +610,10 @@ export class ScheduledWorkRunner {
       this.deps.listOutputManifests(workspaceRootPath),
     )
     if (!outputs.satisfied) {
+      if (order.continuation?.role === 'round') {
+        const persisted = await this.settleContinuationRound(workspaceId, workspaceRootPath, order.id, sessionId, [], undefined)
+        return persisted.updated ? 'done' : 'running'
+      }
       const persisted = await this.finishWithAttention(
         workspaceId,
         workspaceRootPath,
@@ -455,22 +626,22 @@ export class ScheduledWorkRunner {
     try {
       processed = await this.postProcessAgentTask(workspaceId, workspaceRootPath, order, sessionId, outputs.matched)
     } catch (error) {
-      const persisted = await this.finishWithAttention(
-        workspaceId,
-        workspaceRootPath,
-        order.id,
-        this.buildAttention('execution-failed', errorMessage(error)),
-      )
+      const attention = this.buildAttention('execution-failed', errorMessage(error))
+      const persisted = order.continuation?.role === 'round'
+        ? await this.stopContinuation(workspaceId, workspaceRootPath, order.id, attention)
+        : await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, attention)
       return persisted.updated ? 'failed' : 'running'
     }
-    const persisted = await this.finishAgentDone(
-      workspaceId,
-      workspaceRootPath,
-      order.id,
-      sessionId,
-      outputs.matched.map((output) => output.id),
-      processed.sharedIntelContextSlugs,
-    )
+    const persisted = order.continuation?.role === 'round'
+      ? await this.settleContinuationRound(workspaceId, workspaceRootPath, order.id, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs)
+      : await this.finishAgentDone(
+          workspaceId,
+          workspaceRootPath,
+          order.id,
+          sessionId,
+          outputs.matched.map((output) => output.id),
+          processed.sharedIntelContextSlugs,
+        )
     return persisted.updated ? 'done' : 'running'
   }
 
@@ -762,6 +933,194 @@ export class ScheduledWorkRunner {
     })
   }
 
+  private continuationFenceIssue(
+    workspaceRootPath: string,
+    order: ScheduledWorkOrder,
+  ): ScheduledWorkAttention | undefined {
+    const continuation = order.continuation
+    if (!continuation) return undefined
+    if (continuation.runtimeId !== this.runtimeId) {
+      return this.buildAttention('continuation-disarmed', 'Continuation was disarmed by an app restart or runner ownership change. Review the latest round before resuming.')
+    }
+    if (this.deps.getBackgroundFenceToken
+      && this.deps.getBackgroundFenceToken(workspaceRootPath) !== continuation.runnerFence) {
+      return this.buildAttention('continuation-disarmed', 'Continuation was disarmed because runner ownership changed. Review the latest round before resuming.')
+    }
+    const goal = loadContextDoc(workspaceRootPath, continuation.goalSlug)
+    if (!goal || !goal.metadata.enabled || goal.metadata.status !== 'active') {
+      return this.buildAttention('goal-not-active', `Continuation stopped because Goal @${continuation.goalSlug} is missing, disabled, or no longer active.`)
+    }
+    const revision = scheduledWorkDefinitionDigest({ metadata: goal.metadata, body: goal.body })
+    if (revision !== continuation.goalRevision) {
+      return this.buildAttention('goal-revision-changed', `Continuation stopped because Goal @${continuation.goalSlug} changed. Review the new objective before resuming.`)
+    }
+    return undefined
+  }
+
+  private async stopContinuation(
+    workspaceId: string,
+    workspaceRootPath: string,
+    orderId: string,
+    attention: ScheduledWorkAttention,
+  ): Promise<PersistResult> {
+    return this.deps.withLock(workspaceRootPath, async () => {
+      const parsed = this.readWork(workspaceRootPath, workspaceId)
+      if (!parsed.ok) throw new Error(parsed.error)
+      const child = parsed.work.items.find((candidate) => candidate.id === orderId && !candidate.deletedAt)
+      const continuation = child?.continuation
+      if (!child || child.status === 'canceled' || continuation?.role !== 'round') return { updated: false, work: parsed.work, order: child }
+      const coordinator = parsed.work.items.find((candidate) => candidate.id === continuation.coordinatorOrderId && !candidate.deletedAt)
+      if (coordinator?.status === 'canceled') return { updated: false, work: parsed.work, order: child }
+      if (!coordinator || coordinator.continuation?.role !== 'coordinator') {
+        attention = this.buildAttention('continuation-state-invalid', 'Continuation coordinator is missing or invalid. No further round was started.')
+      }
+      const nowIso = (this.deps.now?.() ?? new Date()).toISOString()
+      const stoppedChild: ScheduledWorkOrder = {
+        ...child,
+        status: 'needs-attention',
+        attention,
+        updatedAt: nowIso,
+        runs: child.status === 'running'
+          ? updateLatestRun(child.runs, child.id, { status: 'failed', endedAt: nowIso, error: attention.message })
+          : child.runs,
+      }
+      const items = parsed.work.items.map((candidate) => {
+        if (candidate.id === stoppedChild.id) return stoppedChild
+        if (candidate.id === coordinator?.id) return { ...coordinator, status: 'needs-attention' as const, attention, runs: mergeCoordinatorRun(coordinator.runs, stoppedChild.runs.at(-1)), updatedAt: nowIso }
+        return candidate
+      })
+      const work = { ...parsed.work, items, updatedAt: nowIso }
+      this.writeWork(workspaceRootPath, work)
+      this.deps.emitContextChanged?.(workspaceId, loadAllContextDocs(workspaceRootPath))
+      return { updated: true, work, order: stoppedChild }
+    })
+  }
+
+  private async settleContinuationRound(
+    workspaceId: string,
+    workspaceRootPath: string,
+    orderId: string,
+    sessionId: string,
+    outputIds: string[],
+    sharedIntelContextSlugs?: string[],
+  ): Promise<PersistResult> {
+    return this.deps.withLock(workspaceRootPath, async () => {
+      const parsed = this.readWork(workspaceRootPath, workspaceId)
+      if (!parsed.ok) throw new Error(parsed.error)
+      const child = parsed.work.items.find((candidate) => candidate.id === orderId && !candidate.deletedAt)
+      const continuation = child?.continuation
+      if (!child || child.status !== 'running' || child.execution.type !== 'agent-task' || continuation?.role !== 'round') {
+        return { updated: false, work: parsed.work, order: child }
+      }
+      const coordinator = parsed.work.items.find((candidate) => candidate.id === continuation.coordinatorOrderId && !candidate.deletedAt)
+      if (!coordinator || coordinator.continuation?.role !== 'coordinator') {
+        return this.stopContinuationUnlocked(parsed.work, child, undefined, this.buildAttention('continuation-state-invalid', 'Continuation coordinator is missing or invalid. No further round was started.'), workspaceId, workspaceRootPath)
+      }
+      const fenceIssue = this.continuationFenceIssue(workspaceRootPath, child)
+      if (fenceIssue) return this.stopContinuationUnlocked(parsed.work, child, coordinator, fenceIssue, workspaceId, workspaceRootPath)
+
+      const nowIso = (this.deps.now?.() ?? new Date()).toISOString()
+      const result = { type: 'agent-task' as const, sessionId, outputIds, ...(sharedIntelContextSlugs?.length ? { sharedIntelContextSlugs } : {}) }
+      const completedChild: ScheduledWorkOrder = {
+        ...child,
+        status: 'done',
+        attention: undefined,
+        result,
+        updatedAt: nowIso,
+        runs: updateLatestRun(child.runs, child.id, {
+          status: 'done',
+          sessionId,
+          endedAt: nowIso,
+          resultSummary: outputIds.length > 0 ? `Completed with ${outputIds.length} output${outputIds.length === 1 ? '' : 's'}.` : 'Round completed without the required Output.',
+        }),
+      }
+
+      if (outputIds.length > 0) {
+        const completedCoordinator: ScheduledWorkOrder = { ...coordinator, status: 'done', attention: undefined, result, runs: mergeCoordinatorRun(coordinator.runs, completedChild.runs.at(-1)), updatedAt: nowIso }
+        const items = parsed.work.items.map((candidate) => candidate.id === child.id ? completedChild : candidate.id === coordinator.id ? completedCoordinator : candidate)
+        return this.writeContinuationWork(workspaceId, workspaceRootPath, parsed.work, items, completedChild, nowIso)
+      }
+
+      if (continuation.round >= continuation.maxRounds) {
+        const attention = this.buildAttention('continuation-round-limit', `Continuation reached its ${continuation.maxRounds}-round limit without the required Output. Review the round history before resuming.`)
+        const limitedChild = { ...completedChild, status: 'needs-attention' as const, attention }
+        const limitedCoordinator: ScheduledWorkOrder = { ...coordinator, status: 'needs-attention', attention, runs: mergeCoordinatorRun(coordinator.runs, limitedChild.runs.at(-1)), updatedAt: nowIso }
+        const items = parsed.work.items.map((candidate) => candidate.id === child.id ? limitedChild : candidate.id === coordinator.id ? limitedCoordinator : candidate)
+        return this.writeContinuationWork(workspaceId, workspaceRootPath, parsed.work, items, limitedChild, nowIso)
+      }
+
+      const nextRound = continuation.round + 1
+      const nextId = `${continuation.coordinatorOrderId}-round-${nextRound}`
+      const existingNext = parsed.work.items.find((candidate) => candidate.id === nextId)
+      const successor: ScheduledWorkOrder = existingNext ?? {
+        ...child,
+        id: nextId,
+        calendarLink: { ...child.calendarLink, itemId: `${coordinator.calendarLink.itemId}-round-${nextRound}` },
+        title: `${coordinator.title} — round ${nextRound}`,
+        status: 'scheduled',
+        startAt: nowIso,
+        result: undefined,
+        attention: undefined,
+        runs: [],
+        continuation: {
+          ...continuation,
+          round: nextRound,
+          parentOrderId: child.id,
+          priorRoundSessionId: sessionId,
+          priorRoundOutputIds: outputIds,
+        },
+        executionKey: {
+          payloadDigest: scheduledWorkDefinitionDigest({ runId: continuation.runId, goalRevision: continuation.goalRevision, round: nextRound, execution: child.execution, inputRefs: child.inputRefs }),
+          idempotencyKey: `${continuation.runId}:round:${nextRound}:${continuation.goalRevision}`,
+        },
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      }
+      const waitingCoordinator: ScheduledWorkOrder = { ...coordinator, status: 'waiting', attention: undefined, runs: mergeCoordinatorRun(coordinator.runs, completedChild.runs.at(-1)), updatedAt: nowIso }
+      let items = parsed.work.items.map((candidate) => candidate.id === child.id ? completedChild : candidate.id === coordinator.id ? waitingCoordinator : candidate)
+      if (!existingNext) items = [...items, successor]
+      return this.writeContinuationWork(workspaceId, workspaceRootPath, parsed.work, items, completedChild, nowIso)
+    })
+  }
+
+  private stopContinuationUnlocked(
+    base: ScheduledWorkDocument,
+    child: ScheduledWorkOrder,
+    coordinator: ScheduledWorkOrder | undefined,
+    attention: ScheduledWorkAttention,
+    workspaceId: string,
+    workspaceRootPath: string,
+  ): PersistResult {
+    const nowIso = (this.deps.now?.() ?? new Date()).toISOString()
+    const stoppedChild: ScheduledWorkOrder = {
+      ...child,
+      status: 'needs-attention',
+      attention,
+      updatedAt: nowIso,
+      runs: updateLatestRun(child.runs, child.id, { status: 'failed', endedAt: nowIso, error: attention.message }),
+    }
+    const items = base.items.map((candidate) => candidate.id === child.id
+      ? stoppedChild
+      : candidate.id === coordinator?.id
+        ? { ...coordinator, status: 'needs-attention' as const, attention, runs: mergeCoordinatorRun(coordinator.runs, stoppedChild.runs.at(-1)), updatedAt: nowIso }
+        : candidate)
+    return this.writeContinuationWork(workspaceId, workspaceRootPath, base, items, stoppedChild, nowIso)
+  }
+
+  private writeContinuationWork(
+    workspaceId: string,
+    workspaceRootPath: string,
+    base: ScheduledWorkDocument,
+    items: ScheduledWorkOrder[],
+    order: ScheduledWorkOrder,
+    nowIso: string,
+  ): PersistResult {
+    const work = { ...base, items, updatedAt: nowIso }
+    this.writeWork(workspaceRootPath, work)
+    this.deps.emitContextChanged?.(workspaceId, loadAllContextDocs(workspaceRootPath))
+    return { updated: true, work, order }
+  }
+
   private async updateOrder(
     workspaceId: string,
     workspaceRootPath: string,
@@ -953,6 +1312,14 @@ function updateLatestRun(
       externalReceipt: patch.externalReceipt,
     }),
   ]
+}
+
+function mergeCoordinatorRun(runs: CampaignJobRun[], roundRun: CampaignJobRun | undefined): CampaignJobRun[] {
+  if (!roundRun) return runs
+  const existing = runs.findIndex((candidate) => candidate.id === roundRun.id)
+  return existing >= 0
+    ? runs.map((candidate, index) => index === existing ? roundRun : candidate)
+    : [...runs, roundRun]
 }
 
 function matchesExpectedOutput(output: OutputManifest, expected: ExpectedOutputContract): boolean {

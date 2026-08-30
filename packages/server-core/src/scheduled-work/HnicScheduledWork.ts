@@ -44,6 +44,8 @@ export interface ScheduleWorkPersistenceOptions {
   onContextChanged: (docs: LoadedContextDoc[]) => void
   withAutomationLock: <T>(path: string, fn: () => Promise<T>) => Promise<T>
   writeFileAtomic: (path: string, data: string) => Promise<void>
+  continuationRuntimeId?: string
+  continuationFenceToken?: string
 }
 
 export async function persistHnicScheduleWork(options: ScheduleWorkPersistenceOptions): Promise<{
@@ -116,7 +118,35 @@ async function persistCalendarWork(options: ScheduleWorkPersistenceOptions, exec
   const orderId = `${options.scope === 'hq' ? 'hq-work' : 'scheduled-work'}-${requestId}`
   const calendarItemId = `${options.scope === 'hq' ? orderId : `campaign-item-${requestId}`}-calendar`
   const now = new Date().toISOString()
-  const payloadDigest = scheduledWorkDefinitionDigest({ execution, inputRefs: [], startAt })
+  const continuationInput = options.input.continuation
+  if (continuationInput && execution.type !== 'agent-task') throw new Error('Continuation is available only for agent tasks.')
+  const goalDoc = continuationInput ? loadContextDoc(options.workspaceRootPath, continuationInput.goalSlug) : undefined
+  if (continuationInput && (!goalDoc || !goalDoc.metadata.enabled || goalDoc.metadata.status !== 'active')) {
+    throw new Error(`Continuation Goal must exist, be enabled, and be active: ${continuationInput.goalSlug}`)
+  }
+  if (continuationInput && execution.type === 'agent-task' && execution.expectedOutput.requirement !== 'required') {
+    throw new Error('Continuation requires a required Output contract.')
+  }
+  if (continuationInput && execution.type === 'agent-task' && execution.permissionMode !== 'safe') {
+    throw new Error('Continuation runs are draft-only and require safe permission mode.')
+  }
+  if (continuationInput && (!Number.isInteger(continuationInput.maxRounds) || continuationInput.maxRounds < 2 || continuationInput.maxRounds > 8)) {
+    throw new Error('Continuation maxRounds must be an integer from 2 through 8.')
+  }
+  const runtimeId = continuationInput ? options.continuationRuntimeId?.trim() : undefined
+  const runnerFence = continuationInput ? options.continuationFenceToken?.trim() : undefined
+  if (continuationInput && !runtimeId) throw new Error('Scheduled Work continuation runtime is unavailable.')
+  if (continuationInput && !runnerFence) throw new Error('Scheduled Work continuation runner ownership could not be verified.')
+  const goalRevision = goalDoc ? scheduledWorkDefinitionDigest({ metadata: goalDoc.metadata, body: goalDoc.body }) : undefined
+  const runId = continuationInput ? `goal-run-${requestId}` : undefined
+  const continuationDefinition = continuationInput ? {
+    goalSlug: continuationInput.goalSlug,
+    goalRevision,
+    objective: continuationInput.objective.trim(),
+    maxRounds: continuationInput.maxRounds,
+    permissionCeiling: execution.type === 'agent-task' ? execution.permissionMode : undefined,
+  } : undefined
+  const payloadDigest = scheduledWorkDefinitionDigest({ execution, inputRefs: [], startAt, continuation: continuationDefinition })
   const order: ScheduledWorkOrder = {
     version: 1,
     id: orderId,
@@ -127,7 +157,7 @@ async function persistCalendarWork(options: ScheduleWorkPersistenceOptions, exec
     title: options.input.title.trim(),
     intentId: hqSemanticIntentId({ title: options.input.title, intent: JSON.stringify(execution) }),
     type: execution.type,
-    status: 'scheduled',
+    status: continuationInput ? 'waiting' : 'scheduled',
     startAt,
     timezone,
     execution,
@@ -135,9 +165,40 @@ async function persistCalendarWork(options: ScheduleWorkPersistenceOptions, exec
     approvals: [],
     runs: [],
     executionKey: { payloadDigest, idempotencyKey: `${orderId}:${startAt}:${payloadDigest}` },
+    continuation: continuationInput && execution.type === 'agent-task' ? {
+      role: 'coordinator',
+      runId: runId!,
+      coordinatorOrderId: orderId,
+      goalSlug: continuationInput.goalSlug,
+      goalRevision: goalRevision!,
+      objective: continuationInput.objective.trim(),
+      round: 0,
+      maxRounds: continuationInput.maxRounds,
+      runtimeId: runtimeId!,
+      runnerFence: runnerFence!,
+      permissionCeiling: execution.permissionMode,
+    } : undefined,
     createdAt: now,
     updatedAt: now,
   }
+  const firstRound: ScheduledWorkOrder | undefined = order.continuation && execution.type === 'agent-task' ? {
+    ...order,
+    id: `${orderId}-round-1`,
+    calendarLink: { calendar: options.scope, itemId: `${calendarItemId}-round-1` },
+    calendarVisibility: 'hidden',
+    title: `${order.title} — round 1`,
+    status: 'scheduled',
+    continuation: {
+      ...order.continuation,
+      role: 'round',
+      round: 1,
+      parentOrderId: orderId,
+    },
+    executionKey: {
+      payloadDigest: scheduledWorkDefinitionDigest({ payloadDigest, runId, round: 1 }),
+      idempotencyKey: `${runId}:round:1:${goalRevision}`,
+    },
+  } : undefined
 
   return withWorkspaceContextLock(options.workspaceRootPath, async () => {
     const parsedWork = parseScheduledWorkDocResult(loadContextDoc(options.workspaceRootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, options.workspaceId)
@@ -155,13 +216,17 @@ async function persistCalendarWork(options: ScheduleWorkPersistenceOptions, exec
       ? { ok: true as const, work: parsedWork.work, item: existingOrder }
       : applyScheduledWorkMutation(parsedWork.work, { operation: 'upsert', order, expectedUpdatedAt: null }, now)
     if (!mutation.ok) throw new Error(mutation.error)
+    const firstRoundMutation = firstRound && !existingOrder
+      ? applyScheduledWorkMutation(mutation.work, { operation: 'upsert', order: firstRound, expectedUpdatedAt: null }, now)
+      : mutation
+    if (!firstRoundMutation.ok) throw new Error(firstRoundMutation.error)
     let changed = !existingOrder
 
     if (options.scope === 'hq') {
       const artistCalendar = readArtistCalendar(options.workspaceRootPath)
       const existingEvent = artistCalendar.events.find((candidate) => candidate.id === calendarItemId)
       if (existingEvent && existingEvent.scheduledWorkId !== order.id) throw new Error('HQ Calendar id is already bound to different work.')
-      if (!existingOrder) writeScheduledWork(options.workspaceRootPath, mutation.work)
+      if (!existingOrder) writeScheduledWork(options.workspaceRootPath, firstRoundMutation.work)
       if (!existingEvent) {
         changed = true
         writeArtistCalendar(options.workspaceRootPath, {
@@ -199,7 +264,7 @@ async function persistCalendarWork(options: ScheduleWorkPersistenceOptions, exec
         source: 'agent',
         scheduledWorkId: order.id,
       })
-      if (!existingOrder) writeScheduledWork(options.workspaceRootPath, mutation.work)
+      if (!existingOrder) writeScheduledWork(options.workspaceRootPath, firstRoundMutation.work)
       if (!existingItem) {
         changed = true
         upsertContextDoc(options.workspaceRootPath, {

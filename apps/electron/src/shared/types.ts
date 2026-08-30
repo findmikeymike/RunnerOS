@@ -175,6 +175,8 @@ import type {
   ScheduledWorkMutation,
   ScheduledWorkMutationResult,
   ScheduledWorkParseResult,
+  ManageGoalRunInput,
+  ManageGoalRunResult,
 } from '@craft-agent/shared/scheduled-work';
 export type {
   CancelCampaignWorkInput,
@@ -194,6 +196,8 @@ export type {
   ScheduledWorkDocument,
   ScheduledWorkMutation,
   ScheduledWorkMutationResult,
+  ManageGoalRunInput,
+  ManageGoalRunResult,
   ScheduledWorkParseResult,
 };
 
@@ -1104,6 +1108,7 @@ export interface ElectronAPI {
   decideCampaignWork(workspaceId: string, input: DecideCampaignWorkInput): Promise<DecideCampaignWorkResult>
   resolveCampaignProducedOutput(workspaceId: string, input: ResolveCampaignProducedOutputInput): Promise<ResolveCampaignProducedOutputResult>
   approveCampaignSocialWork(workspaceId: string, input: ApproveCampaignSocialWorkInput): Promise<ApproveCampaignSocialWorkResult>
+  manageGoalRun(workspaceId: string, input: ManageGoalRunInput): Promise<ManageGoalRunResult>
   scheduleHqWork(workspaceId: string, input: ScheduleHqWorkInput): Promise<ScheduleHqWorkResult>
   migrateCampaignScheduledWork(workspaceId: string): Promise<ScheduledWorkMigrationResult>
   shareSessionIntel(input: ShareIntelRequest): Promise<ShareIntelResult>

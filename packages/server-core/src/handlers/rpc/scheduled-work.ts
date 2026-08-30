@@ -49,6 +49,8 @@ import {
   type ScheduledWorkMutation,
   type ScheduledWorkMutationResult,
   type ScheduledWorkParseResult,
+  type ManageGoalRunInput,
+  type ManageGoalRunResult,
 } from '@craft-agent/shared/scheduled-work'
 import {
   loadAllContextDocs,
@@ -76,6 +78,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.scheduledWork.DECIDE_CAMPAIGN,
   RPC_CHANNELS.scheduledWork.RESOLVE_CAMPAIGN_OUTPUT,
   RPC_CHANNELS.scheduledWork.APPROVE_CAMPAIGN_SOCIAL,
+  RPC_CHANNELS.scheduledWork.MANAGE_GOAL_RUN,
   RPC_CHANNELS.scheduledWork.SCHEDULE_HQ,
   RPC_CHANNELS.scheduledWork.MIGRATE_CAMPAIGN,
 ] as const
@@ -151,6 +154,17 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         broadcastChanged(deps, workspaceId, rootPath)
         return result
       })
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.scheduledWork.MANAGE_GOAL_RUN,
+    async (_ctx, workspaceId: string, input: ManageGoalRunInput): Promise<ManageGoalRunResult> => {
+      const rootPath = resolveRootPath(workspaceId)
+      assertTeamPermission(rootPath, 'files.write')
+      const result = await deps.sessionManager.manageGoalRun(workspaceId, rootPath, input)
+      broadcastChanged(deps, workspaceId, rootPath)
+      return result
     },
   )
 

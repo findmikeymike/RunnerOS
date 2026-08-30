@@ -458,6 +458,39 @@ export function CampaignCalendarPage({
     }
   }, [refresh, workspaceId])
 
+  const manageGoalRun = React.useCallback(async (order: ScheduledWorkOrder, operation: 'rearm' | 'pause' | 'cancel') => {
+    if (!order.continuation || order.continuation.role !== 'coordinator') return
+    let objective: string | undefined
+    let maxRounds: number | undefined
+    if (operation === 'rearm') {
+      const confirmedObjective = window.prompt('Confirm the Goal objective before resuming:', order.continuation.objective)
+      if (!confirmedObjective?.trim()) return
+      objective = confirmedObjective.trim()
+      if (order.attention?.reason === 'continuation-round-limit') {
+        const entered = window.prompt('New maximum rounds (up to 8):', String(Math.min(order.continuation.maxRounds + 1, 8)))
+        if (!entered) return
+        maxRounds = Number(entered)
+      }
+    } else if (!window.confirm(`${operation === 'pause' ? 'Pause' : 'Cancel'} this Goal run?`)) return
+    try {
+      const result = await window.electronAPI.manageGoalRun(workspaceId, {
+        runId: order.continuation.runId,
+        operation,
+        expectedUpdatedAt: order.updatedAt,
+        explanation: operation === 'rearm' ? 'User reviewed and resumed the Goal run.' : `User ${operation}d the Goal run.`,
+        requiresUserConfirmation: false,
+        objective,
+        maxRounds,
+      })
+      setOptimisticScheduledWork(result.work)
+      toast.success(operation === 'rearm' ? 'Goal run resumed' : operation === 'pause' ? 'Goal run paused' : 'Goal run canceled')
+    } catch (error) {
+      setOptimisticScheduledWork(null)
+      await refresh()
+      throw error
+    }
+  }, [refresh, workspaceId])
+
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground lg:overflow-hidden">
       <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col gap-3 px-5 py-4 lg:h-full lg:min-h-0 xl:px-8 xl:py-5">
@@ -503,6 +536,7 @@ export function CampaignCalendarPage({
             onReviewDecision={decideScheduledWork}
             onResolveProducedOutput={resolveProducedOutput}
             onApproveSocial={approveScheduledSocial}
+            onManageGoalRun={manageGoalRun}
             onQueueReplacement={(work) => {
               setComposerPrefill({
                 title: work.title,
@@ -567,6 +601,7 @@ function CampaignCalendarSurface({
   onReviewDecision,
   onResolveProducedOutput,
   onApproveSocial,
+  onManageGoalRun,
   onQueueReplacement,
   onOpenSocialSettings,
   onOpenComposer,
@@ -597,6 +632,7 @@ function CampaignCalendarSurface({
   onReviewDecision: (order: ScheduledWorkOrder, decision: 'approved' | 'changes-requested', notes?: string) => Promise<void>
   onResolveProducedOutput: (order: ScheduledWorkOrder, outputId: string) => Promise<void>
   onApproveSocial: (order: ScheduledWorkOrder) => Promise<void>
+  onManageGoalRun: (order: ScheduledWorkOrder, operation: 'rearm' | 'pause' | 'cancel') => Promise<void>
   onQueueReplacement: (order: ScheduledWorkOrder) => void
   onOpenSocialSettings: (subpage: ConnectionSettingsSubpage) => void
   onOpenComposer: (type?: ScheduledWorkComposerEntry['suggestedType']) => void
@@ -700,7 +736,7 @@ function CampaignCalendarSurface({
                       </div>
                       {item.notes ? <div className="mt-2 text-xs leading-5 text-white/38">{item.notes}</div> : null}
                       <CampaignCalendarJobDetails item={item} />
-                      {work ? <ScheduledWorkDetails work={work} calendarStatus={item.status} producedOutputIds={producedOutputIds} onOpenSession={onOpenSession} onOpenRun={onOpenRun} onOpenOutput={onOpenOutput} onReviewDecision={onReviewDecision} onResolveProducedOutput={onResolveProducedOutput} onApproveSocial={onApproveSocial} onQueueReplacement={onQueueReplacement} onOpenSocialSettings={onOpenSocialSettings} /> : null}
+                      {work ? <ScheduledWorkDetails work={work} calendarStatus={item.status} producedOutputIds={producedOutputIds} onOpenSession={onOpenSession} onOpenRun={onOpenRun} onOpenOutput={onOpenOutput} onReviewDecision={onReviewDecision} onResolveProducedOutput={onResolveProducedOutput} onApproveSocial={onApproveSocial} onManageGoalRun={onManageGoalRun} onQueueReplacement={onQueueReplacement} onOpenSocialSettings={onOpenSocialSettings} /> : null}
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
                       {item.status === 'needs-approval' && !item.scheduledWorkId ? (
@@ -824,7 +860,7 @@ function CampaignCalendarJobDetails({ item }: { item: CampaignCalendarItem }) {
   )
 }
 
-function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenSession, onOpenRun, onOpenOutput, onReviewDecision, onResolveProducedOutput, onApproveSocial, onQueueReplacement, onOpenSocialSettings }: {
+function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenSession, onOpenRun, onOpenOutput, onReviewDecision, onResolveProducedOutput, onApproveSocial, onManageGoalRun, onQueueReplacement, onOpenSocialSettings }: {
   work: ScheduledWorkOrder
   calendarStatus: CampaignCalendarItemStatus
   producedOutputIds: string[]
@@ -834,6 +870,7 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
   onReviewDecision: (order: ScheduledWorkOrder, decision: 'approved' | 'changes-requested', notes?: string) => Promise<void>
   onResolveProducedOutput: (order: ScheduledWorkOrder, outputId: string) => Promise<void>
   onApproveSocial: (order: ScheduledWorkOrder) => Promise<void>
+  onManageGoalRun: (order: ScheduledWorkOrder, operation: 'rearm' | 'pause' | 'cancel') => Promise<void>
   onQueueReplacement: (order: ScheduledWorkOrder) => void
   onOpenSocialSettings: (subpage: ConnectionSettingsSubpage) => void
 }) {
@@ -877,6 +914,13 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
       {work.attention ? (
         <div className="mt-2 rounded-[6px] border border-red-300/10 bg-red-300/[0.045] px-2 py-1.5 text-[11px] leading-4 text-red-100/66">
           {work.attention.message}
+        </div>
+      ) : null}
+      {work.continuation?.role === 'coordinator' ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {work.status === 'needs-attention' ? <button type="button" disabled={busy} onClick={() => { setBusy(true); void onManageGoalRun(work, 'rearm').catch((error) => setDecisionError(error instanceof Error ? error.message : String(error))).finally(() => setBusy(false)) }} className="h-7 rounded-[5px] bg-white/85 px-2.5 text-[10px] font-semibold text-black disabled:opacity-40">Review and resume</button> : null}
+          {work.status === 'waiting' ? <button type="button" disabled={busy} onClick={() => { setBusy(true); void onManageGoalRun(work, 'pause').catch((error) => setDecisionError(error instanceof Error ? error.message : String(error))).finally(() => setBusy(false)) }} className="h-7 rounded-[5px] border border-white/[0.08] px-2.5 text-[10px] font-medium text-white/58 disabled:opacity-40">Pause</button> : null}
+          {(work.status === 'waiting' || work.status === 'needs-attention') ? <button type="button" disabled={busy} onClick={() => { setBusy(true); void onManageGoalRun(work, 'cancel').catch((error) => setDecisionError(error instanceof Error ? error.message : String(error))).finally(() => setBusy(false)) }} className="h-7 rounded-[5px] border border-red-300/10 px-2.5 text-[10px] font-medium text-red-100/60 disabled:opacity-40">Cancel</button> : null}
         </div>
       ) : null}
       {work.status === 'needs-attention' && work.attention?.reason !== 'produced-output-ambiguous' && work.attention?.reason !== 'produced-output-missing' && work.attention?.reason !== 'execution-uncertain' ? (

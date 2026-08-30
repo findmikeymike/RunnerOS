@@ -38,6 +38,11 @@ export interface ScheduleWorkToolInput {
   timezone?: string;
   trigger?: ScheduleWorkTriggerInput;
   showOnCalendar?: boolean;
+  continuation?: {
+    goalSlug: string;
+    objective: string;
+    maxRounds: number;
+  };
 }
 
 export interface ScheduleWorkResult {
@@ -65,6 +70,23 @@ export async function handleScheduleWork(ctx: SessionToolContext, args: Schedule
     if (!args.execution.brief?.trim()) return errorResponse('agent-task requires a clear brief.');
   } else if (!args.execution.workflowSlug?.trim()) {
     return errorResponse('workflow-run requires workflowSlug.');
+  }
+  if (args.continuation) {
+    if (args.destination !== 'calendar' || args.execution.type !== 'agent-task') {
+      return errorResponse('Continuation is available only for Calendar agent tasks.');
+    }
+    if (!args.continuation.goalSlug?.trim() || !args.continuation.objective?.trim()) {
+      return errorResponse('Continuation requires goalSlug and objective.');
+    }
+    if (!Number.isInteger(args.continuation.maxRounds) || args.continuation.maxRounds < 2 || args.continuation.maxRounds > 8) {
+      return errorResponse('Continuation maxRounds must be an integer from 2 through 8.');
+    }
+    if (args.execution.expectedOutput?.requirement !== 'required') {
+      return errorResponse('Continuation requires a required expectedOutput contract.');
+    }
+    if (args.execution.permissionMode !== 'safe') {
+      return errorResponse('Continuation runs are draft-only and require permissionMode safe.');
+    }
   }
   if (args.destination === 'calendar') {
     if (!args.startAt || Number.isNaN(Date.parse(args.startAt))) return errorResponse('Calendar work requires startAt as an ISO timestamp.');

@@ -43,6 +43,11 @@ export type WorkAttentionReason =
   | 'changes-requested'
   | 'produced-output-missing'
   | 'produced-output-ambiguous'
+  | 'goal-not-active'
+  | 'goal-revision-changed'
+  | 'continuation-disarmed'
+  | 'continuation-round-limit'
+  | 'continuation-state-invalid'
 
 export interface ScheduledWorkAttention {
   reason: WorkAttentionReason
@@ -86,6 +91,23 @@ export interface ScheduledWorkChainLink {
     stepId: string
     releaseOn: 'success' | 'creative-approval'
   }
+}
+
+export interface ScheduledWorkContinuation {
+  role: 'coordinator' | 'round'
+  runId: string
+  coordinatorOrderId: string
+  goalSlug: string
+  goalRevision: string
+  objective: string
+  round: number
+  maxRounds: number
+  runtimeId: string
+  runnerFence: string
+  permissionCeiling: 'safe' | 'ask'
+  parentOrderId?: string
+  priorRoundSessionId?: string
+  priorRoundOutputIds?: string[]
 }
 
 export interface ExpectedOutputContract {
@@ -194,6 +216,7 @@ export interface ScheduledWorkOrder {
     idempotencyKey: string
   }
   chain?: ScheduledWorkChainLink
+  continuation?: ScheduledWorkContinuation
   legacyRef?: {
     campaignItemId: string
     campaignJobId: string
@@ -301,6 +324,21 @@ export interface ScheduleHqWorkResult {
   updated: boolean
   work: ScheduledWorkDocument
   orders: ScheduledWorkOrder[]
+}
+
+export interface ManageGoalRunInput {
+  runId: string
+  operation: 'rearm' | 'pause' | 'cancel'
+  expectedUpdatedAt: string
+  explanation: string
+  requiresUserConfirmation?: boolean
+  objective?: string
+  maxRounds?: number
+}
+
+export interface ManageGoalRunResult {
+  work: ScheduledWorkDocument
+  coordinator: ScheduledWorkOrder
 }
 
 export type ScheduledWorkParseResult =
@@ -615,6 +653,7 @@ function isScheduledWorkOrder(value: unknown): value is ScheduledWorkOrder {
     && (order.socialApproval === undefined || isScheduledSocialApproval(order.socialApproval))
     && (order.attention === undefined || isScheduledWorkAttention(order.attention))
     && (order.chain === undefined || isScheduledWorkChainLink(order.chain))
+    && (order.continuation === undefined || isScheduledWorkContinuation(order.continuation, order))
     && Boolean(order.executionKey
       && clean(order.executionKey.payloadDigest)
       && clean(order.executionKey.idempotencyKey))
@@ -702,6 +741,39 @@ function isScheduledWorkChainLink(value: unknown): value is ScheduledWorkChainLi
     ))
 }
 
+function isScheduledWorkContinuation(value: unknown, order: Partial<ScheduledWorkOrder>): value is ScheduledWorkContinuation {
+  if (!value || typeof value !== 'object') return false
+  const continuation = value as Partial<ScheduledWorkContinuation>
+  if (order.type !== 'agent-task' || order.execution?.type !== 'agent-task') return false
+  if (continuation.role !== 'coordinator' && continuation.role !== 'round') return false
+  if (!clean(continuation.runId) || !clean(continuation.coordinatorOrderId)
+    || !clean(continuation.goalSlug) || !clean(continuation.goalRevision)
+    || !clean(continuation.objective) || !clean(continuation.runtimeId) || !clean(continuation.runnerFence)) return false
+  if (!Number.isInteger(continuation.maxRounds) || continuation.maxRounds! < 2 || continuation.maxRounds! > 8) return false
+  if (!Number.isInteger(continuation.round) || continuation.round! < 0 || continuation.round! > continuation.maxRounds!) return false
+  if (continuation.permissionCeiling !== 'safe' && continuation.permissionCeiling !== 'ask') return false
+  if (continuation.priorRoundSessionId !== undefined && !clean(continuation.priorRoundSessionId)) return false
+  if (continuation.priorRoundOutputIds !== undefined
+    && (!Array.isArray(continuation.priorRoundOutputIds)
+      || continuation.priorRoundOutputIds.some((id) => !clean(id)))) return false
+  if (continuation.permissionCeiling !== 'safe') return false
+  if (order.execution.permissionMode !== continuation.permissionCeiling
+    || order.execution.expectedOutput.requirement !== 'required') return false
+  if (continuation.role === 'coordinator') {
+    return continuation.round === 0
+      && continuation.coordinatorOrderId === order.id
+      && continuation.parentOrderId === undefined
+      && order.status !== 'scheduled'
+      && order.status !== 'running'
+  }
+  return continuation.round! >= 1
+    && continuation.coordinatorOrderId !== order.id
+    && order.calendarVisibility === 'hidden'
+    && (continuation.round === 1
+      ? continuation.parentOrderId === continuation.coordinatorOrderId
+      : Boolean(clean(continuation.parentOrderId)))
+}
+
 function isScheduledWorkResult(value: unknown, type: ScheduledWorkType): value is ScheduledWorkResult {
   if (!value || typeof value !== 'object') return false
   const result = value as Partial<ScheduledWorkResult>
@@ -731,7 +803,12 @@ function isScheduledWorkAttention(value: unknown): value is ScheduledWorkAttenti
     || attention.reason === 'approval-invalidated'
     || attention.reason === 'changes-requested'
     || attention.reason === 'produced-output-missing'
-    || attention.reason === 'produced-output-ambiguous')
+    || attention.reason === 'produced-output-ambiguous'
+    || attention.reason === 'goal-not-active'
+    || attention.reason === 'goal-revision-changed'
+    || attention.reason === 'continuation-disarmed'
+    || attention.reason === 'continuation-round-limit'
+    || attention.reason === 'continuation-state-invalid')
     && Boolean(clean(attention.message))
 }
 

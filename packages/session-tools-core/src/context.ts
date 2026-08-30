@@ -401,6 +401,7 @@ export interface SessionToolContext {
 
   /** Create typed one-shot or trigger-owned scheduled work. HNIC-only backend capability. */
   scheduleWork?(input: import('./handlers/schedule-work.ts').ScheduleWorkToolInput): Promise<import('./handlers/schedule-work.ts').ScheduleWorkResult>;
+  manageGoalRun?(input: import('./handlers/manage-goal-run.ts').ManageGoalRunToolInput): Promise<import('./handlers/manage-goal-run.ts').ManageGoalRunToolResult>;
 
   /** Compose the current bounded Artist Manager Brief without persisting it. HNIC-only. */
   getManagerBrief?(input: import('./handlers/manager-context.ts').GetManagerBriefInput): Promise<import('./handlers/manager-context.ts').ManagerContextToolResult>;

@@ -477,6 +477,7 @@ export const CHANNEL_MAP = {
   decideCampaignWork: invoke(RPC_CHANNELS.scheduledWork.DECIDE_CAMPAIGN),
   resolveCampaignProducedOutput: invoke(RPC_CHANNELS.scheduledWork.RESOLVE_CAMPAIGN_OUTPUT),
   approveCampaignSocialWork: invoke(RPC_CHANNELS.scheduledWork.APPROVE_CAMPAIGN_SOCIAL),
+  manageGoalRun: invoke(RPC_CHANNELS.scheduledWork.MANAGE_GOAL_RUN),
   scheduleHqWork: invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_HQ),
   migrateCampaignScheduledWork: invoke(RPC_CHANNELS.scheduledWork.MIGRATE_CAMPAIGN),
   shareSessionIntel: invoke(RPC_CHANNELS.sharedIntel.SHARE),

@@ -27,6 +27,7 @@ import type { SessionBundle, DispatchMode } from '@craft-agent/shared/sessions'
 import type { EventSink } from '../transport/types.ts'
 import type { LoadedSkill } from '@craft-agent/shared/skills'
 import type { QueueWorkAction } from '@craft-agent/shared/automations'
+import type { ManageGoalRunInput, ManageGoalRunResult } from '@craft-agent/shared/scheduled-work'
 
 export interface WorkspaceMigrationRuntimeLease {
   workspaceId: string
@@ -258,6 +259,7 @@ export interface ISessionManager {
     action: QueueWorkAction
     eventTimestamp?: number
   }): Promise<{ orderIds: string[] }>
+  manageGoalRun(workspaceId: string, workspaceRootPath: string, input: ManageGoalRunInput): Promise<ManageGoalRunResult>
 }
 
 /**

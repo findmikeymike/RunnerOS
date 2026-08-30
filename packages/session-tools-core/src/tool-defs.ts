@@ -58,6 +58,7 @@ import { handleCreateAutomation } from './handlers/create-automation.ts';
 import { handleCreateWorkflow } from './handlers/create-workflow.ts';
 import { handleCampaignCalendarWrite } from './handlers/campaign-calendar.ts';
 import { handleScheduleWork } from './handlers/schedule-work.ts';
+import { handleManageGoalRun } from './handlers/manage-goal-run.ts';
 import {
   handleGetManagerBrief,
   handleGetCampaignBrief,
@@ -579,6 +580,21 @@ export const ScheduleWorkSchema = z.object({
   timezone: z.string().optional().describe('IANA timezone. Required for Calendar work and recommended for scheduled automations.'),
   trigger: ScheduleWorkTriggerSchema.optional().describe('Required for Automation work.'),
   showOnCalendar: z.boolean().optional().describe('Automation jobs appear on Calendar by default. Set false for background maintenance work.'),
+  continuation: z.object({
+    goalSlug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
+    objective: z.string().min(1).max(4000),
+    maxRounds: z.number().int().min(2).max(8),
+  }).optional().describe('Bounded continuation for a confirmed Calendar agent task. Requires a required expectedOutput contract.'),
+});
+
+export const ManageGoalRunSchema = z.object({
+  runId: z.string().min(1),
+  operation: z.enum(['rearm', 'pause', 'cancel']),
+  expectedUpdatedAt: z.string().min(1),
+  explanation: z.string().min(1),
+  requiresUserConfirmation: z.boolean().optional(),
+  objective: z.string().min(1).max(4000).optional(),
+  maxRounds: z.number().int().min(2).max(8).optional(),
 });
 
 export const GetManagerBriefSchema = z.object({
@@ -1347,9 +1363,14 @@ Rules:
 - Calendar work requires startAt and timezone.
 - Automation work requires trigger. Set showOnCalendar false for background maintenance that should not clutter Calendar.
 - Agent tasks require a concrete brief. Use expectedOutput when a durable artifact is required.
+- Bounded continuation requires an active Goal context slug, explicit objective, 2-8 rounds, a required Output contract, and permissionMode safe. Confirm all of those with the user first.
 - This initial HNIC tool schedules agent tasks and workflow runs only. Social publishing remains approval-gated through Campaign Calendar UI.
 
 After success, state what will run, where it appears, and when or what triggers it.`,
+
+  manage_goal_run: `Re-arm, pause, or cancel one bounded Goal continuation run. HNIC-only.
+
+Use only after the user explicitly confirms the operation. Read the current coordinator first and pass its exact runId and updatedAt. Re-arm must restate the objective; increase maxRounds only when the user approves a new bound. Never use this tool to bypass an approval or resume an uncertain external action.`,
 
   get_manager_brief: `Read a freshly composed, bounded Artist Manager Brief. Artist HQ or campaign HNIC-only and read-only. Use for the holistic artist picture: current priorities, growth, year-plan fit, cross-campaign timing, delegation, or trajectory. Inside a campaign, start with get_campaign_brief for campaign readiness and blockers. Pass the known revision when available so the result can say whether current truth changed.`,
 
@@ -1676,6 +1697,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'create_automation', description: TOOL_DESCRIPTIONS.create_automation, inputSchema: CreateAutomationSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateAutomation },
   { name: 'campaign_calendar_write', description: TOOL_DESCRIPTIONS.campaign_calendar_write, inputSchema: CampaignCalendarWriteSchema, executionMode: 'registry', safeMode: 'block', handler: handleCampaignCalendarWrite },
   { name: 'schedule_work', description: TOOL_DESCRIPTIONS.schedule_work, inputSchema: ScheduleWorkSchema, executionMode: 'registry', safeMode: 'block', handler: handleScheduleWork },
+  { name: 'manage_goal_run', description: TOOL_DESCRIPTIONS.manage_goal_run, inputSchema: ManageGoalRunSchema, executionMode: 'registry', safeMode: 'block', handler: handleManageGoalRun },
   { name: 'get_manager_brief', description: TOOL_DESCRIPTIONS.get_manager_brief, inputSchema: GetManagerBriefSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetManagerBrief },
   { name: 'get_campaign_brief', description: TOOL_DESCRIPTIONS.get_campaign_brief, inputSchema: GetCampaignBriefSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetCampaignBrief },
   { name: 'get_artist_context', description: TOOL_DESCRIPTIONS.get_artist_context, inputSchema: GetArtistContextSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetArtistContext },
@@ -1735,7 +1757,7 @@ export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionT
     if (!includeDeveloperFeedback && def.name === 'send_developer_feedback') {
       return false;
     }
-    if (!includeScheduleWork && def.name === 'schedule_work') return false;
+    if (!includeScheduleWork && (def.name === 'schedule_work' || def.name === 'manage_goal_run')) return false;
     if (!includeManagerTools && ['get_manager_brief', 'get_artist_context', 'get_campaign_context'].includes(def.name)) return false;
     if (!includeCampaignManagerTools && def.name === 'get_campaign_brief') return false;
     if (!includeLabTools && ['create_lab_song', 'save_lab_lyrics', 'list_lab_songs'].includes(def.name)) return false;

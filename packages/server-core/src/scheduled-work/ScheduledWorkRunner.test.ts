@@ -8,6 +8,7 @@ import {
   parseScheduledWorkDocResult,
   scheduledWorkMetadata,
   serializeScheduledWorkBody,
+  scheduledWorkDefinitionDigest,
   type ScheduledWorkDocument,
   type ScheduledWorkOrder,
 } from '@craft-agent/shared/scheduled-work'
@@ -44,6 +45,54 @@ function writeWork(root: string, items: ScheduledWorkOrder[]): void {
   })
 }
 
+function writeGoal(root: string, body = 'Finish the launch plan.'): string {
+  const metadata = {
+    name: 'Launch Goal',
+    routing: { mode: 'broadcast' as const },
+    enabled: true,
+    status: 'active' as const,
+  }
+  upsertContextDoc(root, { slug: 'launch-goal', metadata, body })
+  const loaded = loadContextDoc(root, 'launch-goal')!
+  return scheduledWorkDefinitionDigest({ metadata: loaded.metadata, body: loaded.body })
+}
+
+function continuationOrders(runtimeId: string, goalRevision: string, round = 1, maxRounds = 3): ScheduledWorkOrder[] {
+  const execution = {
+    type: 'agent-task' as const,
+    agentSlug: 'content-genius',
+    brief: 'Finish the launch plan.',
+    permissionMode: 'safe' as const,
+    expectedOutput: { requirement: 'required' as const, kind: 'report' as const },
+  }
+  const coordinator = buildOrder({
+    id: 'goal-coordinator',
+    status: 'waiting',
+    execution,
+    continuation: {
+      role: 'coordinator', runId: 'goal-run-1', coordinatorOrderId: 'goal-coordinator',
+      goalSlug: 'launch-goal', goalRevision, objective: 'Finish the launch plan.',
+      round: 0, maxRounds, runtimeId, permissionCeiling: 'safe',
+      runnerFence: 'solo',
+    },
+  })
+  const child = buildOrder({
+    id: `goal-coordinator-round-${round}`,
+    title: `Launch plan — round ${round}`,
+    status: 'scheduled',
+    calendarVisibility: 'hidden',
+    calendarLink: { calendar: 'campaign', itemId: `calendar-round-${round}` },
+    execution,
+    continuation: {
+      role: 'round', runId: 'goal-run-1', coordinatorOrderId: 'goal-coordinator',
+      goalSlug: 'launch-goal', goalRevision, objective: 'Finish the launch plan.',
+      round, maxRounds, runtimeId, permissionCeiling: 'safe', parentOrderId: round === 1 ? 'goal-coordinator' : `goal-coordinator-round-${round - 1}`,
+      runnerFence: 'solo',
+    },
+  })
+  return [coordinator, child]
+}
+
 function readWork(root: string): ScheduledWorkDocument {
   const parsed = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, workspaceId)
   if (!parsed.ok) throw new Error(parsed.error)
@@ -64,6 +113,7 @@ function buildOrder(overrides: Partial<ScheduledWorkOrder> = {}): ScheduledWorkO
     id: overrides.id ?? 'order-1',
     owner: overrides.owner ?? { scope: 'campaign', workspaceId, campaignId: workspaceId },
     calendarLink: overrides.calendarLink ?? { calendar: 'campaign', itemId: 'calendar-1' },
+    calendarVisibility: overrides.calendarVisibility,
     title: overrides.title ?? 'Launch copy',
     type,
     status: overrides.status ?? 'scheduled',
@@ -80,6 +130,7 @@ function buildOrder(overrides: Partial<ScheduledWorkOrder> = {}): ScheduledWorkO
     attention: overrides.attention,
     executionKey: overrides.executionKey ?? { payloadDigest: 'digest-1', idempotencyKey: 'idem-1' },
     chain: overrides.chain,
+    continuation: overrides.continuation,
     legacyRef: overrides.legacyRef,
     createdAt: overrides.createdAt ?? '2026-07-09T00:00:00.000Z',
     updatedAt: overrides.updatedAt ?? '2026-07-09T00:00:00.000Z',
@@ -135,6 +186,222 @@ async function waitFor(predicate: () => boolean, attempts = 100): Promise<void> 
 }
 
 describe('ScheduledWorkRunner', () => {
+  test('advances a completed continuation round without Output by creating one hidden successor', async () => {
+    const root = makeRoot()
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: createLock(),
+      executeAgentTask: async ({ onStarted }) => { await onStarted('goal-session-1'); return { sessionId: 'goal-session-1' } },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      awaitAgentCompletionBarrier: async () => true,
+    })
+    const revision = writeGoal(root)
+    writeWork(root, continuationOrders(runner.runtimeId, revision))
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => readWork(root).items.some((item) => item.id === 'goal-coordinator-round-2'))
+
+    const work = readWork(root)
+    expect(work.items.find((item) => item.id === 'goal-coordinator')?.status).toBe('waiting')
+    expect(work.items.find((item) => item.id === 'goal-coordinator-round-1')?.status).toBe('done')
+    const successors = work.items.filter((item) => item.id === 'goal-coordinator-round-2')
+    expect(successors).toHaveLength(1)
+    expect(successors[0]?.calendarVisibility).toBe('hidden')
+    expect(successors[0]?.status).toBe('scheduled')
+    expect(successors[0]?.continuation?.priorRoundSessionId).toBe('goal-session-1')
+  })
+
+  test('does not advance when the completed-session persistence barrier cannot be proven', async () => {
+    const root = makeRoot()
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: createLock(),
+      executeAgentTask: async ({ onStarted }) => { await onStarted('goal-session-unflushed'); return { sessionId: 'goal-session-unflushed' } },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      awaitAgentCompletionBarrier: async () => false,
+    })
+    const revision = writeGoal(root)
+    writeWork(root, continuationOrders(runner.runtimeId, revision))
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => readWork(root).items.find((item) => item.id === 'goal-coordinator')?.status === 'needs-attention')
+
+    const work = readWork(root)
+    expect(work.items.find((item) => item.id === 'goal-coordinator')?.attention?.reason).toBe('continuation-disarmed')
+    expect(work.items.some((item) => item.id === 'goal-coordinator-round-2')).toBe(false)
+  })
+
+  test('completes the coordinator when a continuation round produces the required Output', async () => {
+    const root = makeRoot()
+    const manifest = buildManifest('goal-output', 'goal-session-2')
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: createLock(),
+      executeAgentTask: async ({ onStarted }) => { await onStarted('goal-session-2'); return { sessionId: 'goal-session-2' } },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [manifest],
+      awaitAgentCompletionBarrier: async () => true,
+    })
+    const revision = writeGoal(root)
+    writeWork(root, continuationOrders(runner.runtimeId, revision))
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => readWork(root).items.find((item) => item.id === 'goal-coordinator')?.status === 'done')
+
+    const coordinator = readWork(root).items.find((item) => item.id === 'goal-coordinator')
+    expect(coordinator?.result).toEqual({ type: 'agent-task', sessionId: 'goal-session-2', outputIds: ['goal-output'] })
+    expect(readWork(root).items.some((item) => item.id === 'goal-coordinator-round-2')).toBe(false)
+  })
+
+  test('disarms persisted continuation work before execution after a runner restart', async () => {
+    const root = makeRoot()
+    const revision = writeGoal(root)
+    writeWork(root, continuationOrders('previous-runtime', revision))
+    let executions = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: createLock(),
+      executeAgentTask: async () => { executions += 1; return { sessionId: 'should-not-run' } },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      awaitAgentCompletionBarrier: async () => true,
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+
+    expect(executions).toBe(0)
+    expect(readWork(root).items.find((item) => item.id === 'goal-coordinator')?.attention?.reason).toBe('continuation-disarmed')
+    expect(readWork(root).items.find((item) => item.id === 'goal-coordinator-round-1')?.status).toBe('needs-attention')
+  })
+
+  test('stops continuation when the Goal revision changes', async () => {
+    const root = makeRoot()
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'should-not-run' }),
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      awaitAgentCompletionBarrier: async () => true,
+    })
+    const revision = writeGoal(root)
+    writeWork(root, continuationOrders(runner.runtimeId, revision))
+    writeGoal(root, 'A changed launch objective.')
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+
+    expect(readWork(root).items.find((item) => item.id === 'goal-coordinator')?.attention?.reason).toBe('goal-revision-changed')
+  })
+
+  test('disarms continuation when Team Mode runner ownership changes', async () => {
+    const root = makeRoot()
+    let fence = 'owner-a'
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      getBackgroundFenceToken: () => fence,
+      withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'should-not-run' }),
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      awaitAgentCompletionBarrier: async () => true,
+    })
+    const revision = writeGoal(root)
+    const items = continuationOrders(runner.runtimeId, revision).map((item) => ({
+      ...item,
+      continuation: item.continuation ? { ...item.continuation, runnerFence: 'owner-a' } : undefined,
+    }))
+    writeWork(root, items)
+    fence = 'owner-b'
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+
+    expect(readWork(root).items.find((item) => item.id === 'goal-coordinator')?.attention?.reason).toBe('continuation-disarmed')
+  })
+
+  test('stops visibly at the continuation round limit', async () => {
+    const root = makeRoot()
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      getBackgroundFenceToken: () => 'solo',
+      withLock: createLock(),
+      executeAgentTask: async ({ onStarted }) => { await onStarted('goal-session-limit'); return { sessionId: 'goal-session-limit' } },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      awaitAgentCompletionBarrier: async () => true,
+    })
+    const revision = writeGoal(root)
+    writeWork(root, continuationOrders(runner.runtimeId, revision, 2, 2))
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => readWork(root).items.find((item) => item.id === 'goal-coordinator')?.status === 'needs-attention')
+
+    expect(readWork(root).items.find((item) => item.id === 'goal-coordinator')?.attention?.reason).toBe('continuation-round-limit')
+    expect(readWork(root).items.some((item) => item.id === 'goal-coordinator-round-3')).toBe(false)
+  })
+
+  test('re-arms an unstarted stopped round in place without spending round budget', async () => {
+    const root = makeRoot()
+    const revision = writeGoal(root)
+    writeWork(root, continuationOrders('previous-runtime', revision))
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      getBackgroundFenceToken: () => 'solo',
+      withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'unused' }),
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      awaitAgentCompletionBarrier: async () => true,
+    })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    const stopped = readWork(root).items.find((item) => item.id === 'goal-coordinator')!
+
+    const result = await runner.manageGoalRun(workspaceId, root, {
+      runId: 'goal-run-1', operation: 'rearm', expectedUpdatedAt: stopped.updatedAt,
+      explanation: 'User reviewed the stopped round.', objective: 'Finish the launch plan.',
+    })
+
+    expect(result.coordinator.status).toBe('waiting')
+    const successor = result.work.items.find((item) => item.id === 'goal-coordinator-round-1')
+    expect(successor?.status).toBe('scheduled')
+    expect(successor?.continuation?.runtimeId).toBe(runner.runtimeId)
+    expect(successor?.continuation?.round).toBe(1)
+    expect(result.work.items.some((item) => item.id === 'goal-coordinator-round-2')).toBe(false)
+  })
+
+  test('pauses a waiting continuation without starting another round', async () => {
+    const root = makeRoot()
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'unused' }),
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      awaitAgentCompletionBarrier: async () => true,
+    })
+    const revision = writeGoal(root)
+    writeWork(root, continuationOrders(runner.runtimeId, revision))
+    const coordinator = readWork(root).items.find((item) => item.id === 'goal-coordinator')!
+
+    const result = await runner.manageGoalRun(workspaceId, root, {
+      runId: 'goal-run-1', operation: 'pause', expectedUpdatedAt: coordinator.updatedAt,
+      explanation: 'User paused the run.',
+    })
+
+    expect(result.coordinator.status).toBe('needs-attention')
+    expect(result.coordinator.attention?.reason).toBe('continuation-disarmed')
+    expect(result.work.items.find((item) => item.id === 'goal-coordinator-round-1')?.status).toBe('needs-attention')
+  })
   test('falls back to console logging when no logger is injected', async () => {
     const root = makeRoot()
     upsertContextDoc(root, {

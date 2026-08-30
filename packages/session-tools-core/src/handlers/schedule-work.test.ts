@@ -59,4 +59,19 @@ describe('schedule_work', () => {
     expect(result.isError).toBe(true);
     expect((result.content[0] as { text: string }).text).toContain('requires a trigger');
   });
+
+  test('requires a bounded required-Output Calendar agent task for continuation', async () => {
+    const result = await handleScheduleWork(context(async () => ({ ok: true })), {
+      ...calendarInput,
+      execution: {
+        type: 'agent-task',
+        agentSlug: 'youtube-research-agent',
+        brief: 'Create the weekly YouTube intelligence report.',
+        expectedOutput: { requirement: 'optional' },
+      },
+      continuation: { goalSlug: 'launch-goal', objective: 'Finish the launch plan.', maxRounds: 3 },
+    });
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toContain('required expectedOutput');
+  });
 });

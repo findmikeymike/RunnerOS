@@ -501,6 +501,8 @@ export const RPC_CHANNELS = {
     RESOLVE_CAMPAIGN_OUTPUT: 'scheduledWork:resolveCampaignOutput',
     /** Approve one exact prepared native social action. */
     APPROVE_CAMPAIGN_SOCIAL: 'scheduledWork:approveCampaignSocial',
+    /** Re-arm, pause, or cancel one bounded Goal continuation run. */
+    MANAGE_GOAL_RUN: 'scheduledWork:manageGoalRun',
     /** Create HQ-owned scheduled work and authoritative Artist Calendar shells. */
     SCHEDULE_HQ: 'scheduledWork:scheduleHq',
     /** Migrate embedded campaign jobs into scheduled-work. */

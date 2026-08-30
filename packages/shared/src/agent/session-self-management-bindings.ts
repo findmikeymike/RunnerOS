@@ -268,6 +268,14 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'manageGoalRun', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.manageGoalRunFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'getManagerBrief', {
     get() { return getSessionScopedToolCallbacks(sessionId)?.getManagerBriefFn; },
     configurable: true,

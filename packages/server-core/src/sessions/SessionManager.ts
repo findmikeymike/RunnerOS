@@ -107,7 +107,7 @@ import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import { assertOutputAssetPath, listOutputManifests, readOutput } from '@craft-agent/shared/outputs'
-import { scheduledWorkDefinitionDigest, type ExpectedOutputContract, type ScheduledWorkInputRef } from '@craft-agent/shared/scheduled-work'
+import { scheduledWorkDefinitionDigest, type ExpectedOutputContract, type ScheduledWorkContinuation, type ScheduledWorkInputRef } from '@craft-agent/shared/scheduled-work'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
@@ -208,6 +208,7 @@ function buildScheduledWorkAgentPrompt(
   brief: string,
   expectedOutput: ExpectedOutputContract,
   inputRefs: ScheduledWorkInputRef[],
+  continuation?: ScheduledWorkContinuation,
 ): string {
   const outputRequirement = expectedOutput.requirement === 'required'
     ? `Create at least ${Math.max(expectedOutput.minimumCount ?? 1, 1)} RunnerOS Output${expectedOutput.kind ? ` of kind ${expectedOutput.kind}` : ''}${expectedOutput.title ? ` titled "${expectedOutput.title}"` : ''}. This work is not complete until that Output exists.`
@@ -222,6 +223,18 @@ function buildScheduledWorkAgentPrompt(
         return `- Produced Output from step: ${ref.stepId}`
       }).join('\n')
     : '- No attached inputs.'
+  const continuationContext = continuation?.role === 'round' ? [
+    '',
+    '[BOUNDED GOAL CONTINUATION]',
+    `Goal: @${continuation.goalSlug}`,
+    `Goal revision: ${continuation.goalRevision}`,
+    `Objective: ${continuation.objective}`,
+    `Round: ${continuation.round} of ${continuation.maxRounds}`,
+    ...(continuation.priorRoundSessionId ? [`Prior round session: ${continuation.priorRoundSessionId}`] : []),
+    ...(continuation.priorRoundOutputIds?.length ? [`Prior round Outputs: ${continuation.priorRoundOutputIds.join(', ')}`] : []),
+    'Produce the required Output only when the objective is genuinely complete. If more work is needed, finish this round honestly without manufacturing a completion Output.',
+    'Do not take external or public actions; those require their normal separate exact approval path.',
+  ] : []
   return [
     `Scheduled work order: ${workOrderId}`,
     '',
@@ -232,6 +245,7 @@ function buildScheduledWorkAgentPrompt(
     '',
     outputRequirement,
     'Report blockers honestly. Do not claim completion when required evidence or Outputs are missing.',
+    ...continuationContext,
   ].join('\n')
 }
 
@@ -2834,6 +2848,14 @@ export class SessionManager implements ISessionManager {
     return { orderIds: queued.orderIds }
   }
 
+  async manageGoalRun(
+    workspaceId: string,
+    workspaceRootPath: string,
+    input: import('@craft-agent/shared/scheduled-work').ManageGoalRunInput,
+  ): Promise<import('@craft-agent/shared/scheduled-work').ManageGoalRunResult> {
+    return this.getScheduledWorkRunner().manageGoalRun(workspaceId, workspaceRootPath, input)
+  }
+
   private getScheduledWorkRunner(): ScheduledWorkRunner {
     if (!this.scheduledWorkRunner) {
       this.scheduledWorkRunner = new ScheduledWorkRunner({
@@ -2845,7 +2867,7 @@ export class SessionManager implements ISessionManager {
           return this.executePromptAutomation({
             workspaceId: input.workspace.id,
             workspaceRootPath: input.workspace.rootPath,
-            prompt: buildScheduledWorkAgentPrompt(input.workOrderId, input.brief, input.expectedOutput, input.inputRefs),
+            prompt: buildScheduledWorkAgentPrompt(input.workOrderId, input.brief, input.expectedOutput, input.inputRefs, input.continuation),
             labels: ['scheduled-work'],
             permissionMode: input.permissionMode,
             agentSlug: input.agentSlug,
@@ -2880,6 +2902,14 @@ export class SessionManager implements ISessionManager {
           if (session.isProcessing || (managed?.messageQueue.length ?? 0) > 0) return 'running'
           return session.lastFinalMessageId ? 'completed' : 'interrupted'
         },
+        awaitAgentCompletionBarrier: async (sessionId) => {
+          const managed = this.sessions.get(sessionId)
+          if (!managed || managed.isProcessing || managed.messageQueue.length > 0 || !managed.lastFinalMessageId) return false
+          this.persistSession(managed)
+          await this.flushSession(sessionId)
+          return true
+        },
+        abortAgentSession: async (sessionId) => this.cancelProcessing(sessionId, true),
         prepareSocial: this.scheduledSocialPreparer,
         executeSocial: this.scheduledSocialExecutor,
         emitContextChanged: (workspaceId, docs) => {
@@ -7886,6 +7916,8 @@ user a clickable link to where the thing now lives.`
                   },
                   withAutomationLock: withAutomationConfigMutex,
                   writeFileAtomic,
+                  continuationRuntimeId: this.getScheduledWorkRunner().runtimeId,
+                  continuationFenceToken: getWorkspaceBackgroundFenceToken(managed.workspace.rootPath) ?? undefined,
                 })
                 scheduleHqStateContextRefresh(managed.workspace.rootPath)
                 return {
@@ -7904,6 +7936,9 @@ user a clickable link to where the thing now lives.`
                 }
               }
             }
+          : undefined,
+        manageGoalRunFn: canScheduleWork(managed.spawnedFromAgent)
+          ? async (input) => this.manageGoalRun(managed.workspace.id, managed.workspace.rootPath, input)
           : undefined,
         createWorkflowFn: async (input) => {
           const slug = input.slug
