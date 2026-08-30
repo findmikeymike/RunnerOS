@@ -4,6 +4,7 @@ import {
   buildLineTargets,
   matchLineAlternativeGroups,
   promoteLineAlternative,
+  reconcileLineAlternativeGroups,
 } from './lab-line-alternatives'
 
 describe('Lab line alternatives', () => {
@@ -42,6 +43,31 @@ describe('Lab line alternatives', () => {
     expect(promoted.group.alternatives).toEqual([
       { id: 'alt-1', text: 'Window down', createdAt: '2026-08-30T00:00:00.000Z' },
     ])
+  })
+
+  test('removes an alternate group when its lyric line is deleted', () => {
+    const group = alternativeGroup({ anchorText: 'Window down', lineIndex: 1 })
+    const reconciled = reconcileLineAlternativeGroups(
+      'First line\nWindow down\nLast line',
+      'First line\nLast line',
+      [group],
+      'rough',
+    )
+
+    expect(reconciled).toEqual([])
+  })
+
+  test('keeps alternatives when a writer splits the primary line', () => {
+    const group = alternativeGroup({ anchorText: 'Window down forever', lineIndex: 0 })
+    const reconciled = reconcileLineAlternativeGroups(
+      'Window down forever\nLast line',
+      'Window down\nforever\nLast line',
+      [group],
+      'rough',
+    )
+
+    expect(reconciled[0]?.lineIndex).toBe(0)
+    expect(reconciled[0]?.anchorText).toBe('Window down')
   })
 })
 

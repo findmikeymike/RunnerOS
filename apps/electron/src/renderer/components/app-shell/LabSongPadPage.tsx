@@ -43,6 +43,7 @@ import {
   buildLineTargets,
   matchLineAlternativeGroups,
   promoteLineAlternative,
+  reconcileLineAlternativeGroups,
   type LabLineTarget,
 } from '@/lib/lab-line-alternatives'
 import {
@@ -248,7 +249,7 @@ const LineAlternativeTextarea: React.FC<LineAlternativeTextareaProps> = ({
         placeholder={placeholder}
         className={cn(className, 'pr-8')}
       />
-      <div className="pointer-events-none absolute inset-y-0 right-0 w-7 overflow-hidden" aria-hidden="false">
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-7 overflow-hidden">
         {targets.map((target) => {
           if (!target.anchorText.trim()) return null
           const group = groupsByLine.get(target.lineIndex)
@@ -315,7 +316,7 @@ function LineAlternativePopover({
             'pointer-events-auto absolute right-0 flex h-6 min-w-6 items-center justify-center rounded-full border px-1 text-[8px] transition-all',
             group?.alternatives.length
               ? 'border-[#fb923c]/30 bg-[#fb923c]/10 text-[#fdba74] opacity-90'
-              : 'border-white/[0.05] bg-[#111] text-white/22 opacity-0 hover:border-white/[0.12] hover:text-white/55 hover:opacity-100 focus:opacity-100',
+              : 'border-white/[0.05] bg-[#111] text-white/22 opacity-20 hover:border-white/[0.12] hover:text-white/55 hover:opacity-100 focus:opacity-100',
           )}
           style={{ top }}
         >
@@ -860,7 +861,19 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
 
   const deleteSection = React.useCallback((sectionId: string) => {
     setSections((current) => current.filter((section) => section.id !== sectionId))
+    setLineAlternatives((current) => current.filter((group) => group.sectionId !== sectionId))
   }, [])
+
+  const updateRoughText = React.useCallback((nextText: string) => {
+    setLineAlternatives((current) => reconcileLineAlternativeGroups(roughText, nextText, current, 'rough'))
+    setRoughText(nextText)
+  }, [roughText])
+
+  const updateSectionText = React.useCallback((sectionId: string, nextText: string) => {
+    const previousText = sections.find((section) => section.id === sectionId)?.text ?? ''
+    setLineAlternatives((current) => reconcileLineAlternativeGroups(previousText, nextText, current, 'section', sectionId))
+    updateSection(sectionId, nextText)
+  }, [sections, updateSection])
 
   const addCustomSection = React.useCallback(() => {
     setSections((current) => [
@@ -1308,7 +1321,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                 value={roughText}
                 source="rough"
                 lineAlternatives={lineAlternatives}
-                onChange={(event) => setRoughText(event.target.value)}
+                onChange={(event) => updateRoughText(event.target.value)}
                 onSelect={(event) => capturePadSelection('rough', event.currentTarget)}
                 onKeyUp={(event) => capturePadSelection('rough', event.currentTarget)}
                 onMouseUp={(event) => capturePadSelection('rough', event.currentTarget, { x: event.clientX + 4, y: event.clientY - 34 })}
@@ -1505,7 +1518,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                     source="section"
                     sectionId={section.id}
                     lineAlternatives={lineAlternatives}
-                    onChange={(event) => updateSection(section.id, event.target.value)}
+                    onChange={(event) => updateSectionText(section.id, event.target.value)}
                     onSelect={(event) => captureSectionProsodySelection(section.id, event.currentTarget)}
                     onKeyUp={(event) => captureSectionProsodySelection(section.id, event.currentTarget)}
                     onMouseUp={(event) => captureSectionProsodySelection(section.id, event.currentTarget, { x: event.clientX + 4, y: event.clientY - 34 })}

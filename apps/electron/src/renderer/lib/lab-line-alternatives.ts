@@ -76,6 +76,34 @@ export function promoteLineAlternative(
   }
 }
 
+export function reconcileLineAlternativeGroups(
+  previousText: string,
+  nextText: string,
+  groups: LabSongLineAlternativeGroup[],
+  source: LabSongLineSource,
+  sectionId?: string,
+): LabSongLineAlternativeGroup[] {
+  const previousLines = previousText.split('\n')
+  const nextTargets = buildLineTargets(nextText, source, sectionId)
+  return groups.flatMap((group) => {
+    if (!sameScope(group, source, sectionId)) return [group]
+    const exact = nextTargets.find((target) => (
+      target.anchorText === group.anchorText && target.occurrence === group.occurrence
+    ))
+    if (exact) return [{ ...group, ...exact }]
+    if (previousLines.length < nextTargets.length) {
+      const splitLine = nextTargets[group.lineIndex]
+      return splitLine ? [{ ...group, ...splitLine }] : []
+    }
+    if (previousLines.length > nextTargets.length) {
+      const mergedLine = nextTargets.find((target) => target.anchorText.includes(group.anchorText))
+      return mergedLine ? [{ ...group, ...mergedLine }] : []
+    }
+    const revised = nextTargets[group.lineIndex]
+    return revised ? [{ ...group, ...revised }] : []
+  })
+}
+
 function sameScope(
   group: LabSongLineAlternativeGroup,
   source: LabSongLineSource,
