@@ -258,6 +258,8 @@ export interface ChatGoalEventMetadata {
   revision: number;
   timestamp: number;
   round: number;
+  /** Added after Goal V1; older persisted events may not include it. */
+  maxRounds?: number;
   status: 'active' | 'paused' | 'blocked' | 'budget-limited' | 'complete' | 'cancelled';
   summary: string;
 }

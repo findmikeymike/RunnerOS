@@ -47,6 +47,9 @@ import {
   handleAuthRequest,
   handleAuthCompleted,
   handleUsageUpdate,
+  handleGoalStateChanged,
+  handleGoalCreationProposed,
+  handleGoalEvent,
 } from './handlers/session'
 
 /**
@@ -215,6 +218,15 @@ export function processEvent(
 
     case 'usage_update':
       return handleUsageUpdate(state, event)
+
+    case 'goal_state_changed':
+      return handleGoalStateChanged(state, event)
+
+    case 'goal_creation_proposed':
+      return handleGoalCreationProposed(state, event)
+
+    case 'goal_event':
+      return handleGoalEvent(state, event)
 
     default: {
       // Unknown event type - return state unchanged but as new reference

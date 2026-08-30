@@ -63,6 +63,7 @@ export type {
 
 // Thinking level types
 import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels';
+import type { ChatGoalState, CreateChatGoalInput } from '@craft-agent/shared/sessions';
 import type { HqRecommendationCandidate, HqRecommendationDetail, HqRecommendationLaunchInput, HqRecommendationLaunchResult, HqRecommendationOutcome, HqRecommendationStore, HqRecommendationTransitionInput, HqRecommendationUsefulnessInput } from '@craft-agent/shared/hq-state';
 export type { ThinkingLevel };
 export { THINKING_LEVELS, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels';
@@ -564,7 +565,15 @@ export interface ElectronAPI {
   respondToCredential(sessionId: string, requestId: string, response: CredentialResponse): Promise<boolean>
 
   // Consolidated session command handler
-  sessionCommand(sessionId: string, command: SessionCommand): Promise<void | ShareResult | RefreshTitleResult | { count: number }>
+  sessionCommand(sessionId: string, command: SessionCommand): Promise<
+    | void
+    | ShareResult
+    | RefreshTitleResult
+    | { count: number }
+    | ChatGoalState
+    | { proposal: CreateChatGoalInput; confirmationNonce: string }
+    | { accepted: true; messageId: string; chatGoal: ChatGoalState }
+  >
 
   // Server info (REMOTE_ELIGIBLE — returns data from whichever server owns the workspace)
   getServerHomeDir(): Promise<string>

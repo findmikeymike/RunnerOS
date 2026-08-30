@@ -90,6 +90,7 @@ import {
 } from "@/atoms/visual-surfaces"
 import { VisualSurfacePanel } from "@/components/visual-surfaces/VisualSurfacePanel"
 import { VisualSurfaceToggle } from "@/components/visual-surfaces/VisualSurfaceToggle"
+import { ChatGoalControls, parseChatGoalCommand } from "./input/ChatGoalControls"
 
 // ============================================================================
 // CSS Custom Highlight API helper
@@ -1287,6 +1288,14 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Handle message submission from InputContainer
   // Backend handles interruption and queueing if currently processing
   const handleSubmit = (message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => {
+    const goalObjective = parseChatGoalCommand(message)
+    if (goalObjective !== undefined && session) {
+      window.dispatchEvent(new CustomEvent('craft:open-goal', {
+        detail: { sessionId: session.id, objective: goalObjective || undefined },
+      }))
+      return
+    }
+
     const hasBaseMessage = message.trim().length > 0
     const followUpSection = formatFollowUpSection(pendingFollowUpAnnotations, {
       includeTopSeparator: hasBaseMessage,
@@ -2080,6 +2089,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                 latestOutput={latestSessionVisualOutput}
               />
             }
+            beforeInputSlot={<ChatGoalControls session={session} />}
             inputProps={{
               placeholder,
               disabled: isInputDisabled,
@@ -2488,6 +2498,28 @@ function MessageBubble({
             Conversation Compacted
           </span>
           <div className="flex-1 h-px bg-border" />
+        </div>
+      )
+    }
+
+    if (message.displayIntent === 'goal-event' && message.goalEvent) {
+      const event = message.goalEvent
+      const label = event.type === 'created'
+        ? 'Goal started'
+        : event.type === 'resumed'
+          ? 'Goal continuing'
+          : event.type === 'completed'
+            ? 'Goal complete'
+            : event.type === 'budget-limited'
+              ? 'Goal limit reached'
+              : `Goal ${event.type}`
+      return (
+        <div className="flex items-center gap-3 my-5 px-3">
+          <div className="h-px flex-1 bg-white/[0.07]" />
+          <span className="max-w-[70%] truncate text-[11px] text-white/38" title={event.summary}>
+            {label} · Round {event.round}{event.maxRounds ? ` of ${event.maxRounds}` : ''} · {event.summary}
+          </span>
+          <div className="h-px flex-1 bg-white/[0.07]" />
         </div>
       )
     }

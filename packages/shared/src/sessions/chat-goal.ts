@@ -84,6 +84,7 @@ export interface ChatGoalEvent {
   revision: number;
   timestamp: number;
   round: number;
+  maxRounds: number;
   status: ChatGoalStatus;
   summary: string;
 }
@@ -489,6 +490,7 @@ export function makeChatGoalEvent(
     revision: goal.revision,
     timestamp,
     round: goal.round,
+    maxRounds: goal.maxRounds,
     status: goal.status,
     summary: cleanRequired(summary, 'summary', CHAT_GOAL_MAX_OBJECTIVE_CHARS),
   };

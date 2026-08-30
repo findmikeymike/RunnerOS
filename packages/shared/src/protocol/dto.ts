@@ -232,6 +232,7 @@ export type SessionEvent =
   | { type: 'working_directory_error'; sessionId: string; error: string }
   | { type: 'goal_state_changed'; sessionId: string; chatGoal?: ChatGoalState }
   | { type: 'goal_creation_proposed'; sessionId: string; proposal: CreateChatGoalInput; confirmationNonce: string }
+  | { type: 'goal_event'; sessionId: string; message: Message }
 
 export interface SendMessageOptions {
   skillSlugs?: string[]

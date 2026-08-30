@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createChatGoalState, loadSession, pauseChatGoalState } from '@craft-agent/shared/sessions';
 import { SessionManager, createManagedSession } from './SessionManager.ts';
+import type { ChatGoalDriver } from './ChatGoalDriver.ts';
 
 describe('SessionManager chat Goal management', () => {
   let root: string;
@@ -137,6 +138,8 @@ describe('SessionManager chat Goal management', () => {
 
   it('requires a host nonce and durably admits the first Goal turn before acknowledgement', async () => {
     installSession({ withGoal: false });
+    const pushedEvents: Array<{ type?: string }> = [];
+    manager.setEventSink((_channel, _target, event) => pushedEvents.push(event));
     const prepared = await manager.prepareChatGoalCreation('session-1', {
       objective: 'Finish the release plan',
       doneWhen: 'The plan is saved and verified',
@@ -163,6 +166,49 @@ describe('SessionManager chat Goal management', () => {
     expect(persisted?.chatGoal?.id).toBe(manager.getChatGoal('session-1')?.id);
     expect(persisted?.messages.some(message => message.id === acceptedMessageId && message.type === 'user')).toBe(true);
     expect(persisted?.messages.some(message => message.goalEvent?.type === 'created')).toBe(true);
+    expect(pushedEvents.some(event => event.type === 'goal_event')).toBe(true);
+  });
+
+  it('persists and emits a visible divider when an automatic round is admitted', async () => {
+    const managed = installSession();
+    managed.chatGoal = { ...managed.chatGoal!, round: 1 };
+    const pushedEvents: Array<{ type?: string; message?: { goalEvent?: { round?: number } } }> = [];
+    manager.setEventSink((_channel, _target, event) => pushedEvents.push(event));
+    const driver = (manager as unknown as { chatGoalDriver: ChatGoalDriver }).chatGoalDriver;
+    const reservation = driver.reserve({
+      sessionId: managed.id,
+      goal: managed.chatGoal,
+      processingGeneration: managed.processingGeneration,
+      settledReason: 'complete',
+      didReceiveFinalResponse: true,
+      hasQueuedHumanInput: false,
+      hasPendingAuth: false,
+      hasPendingApproval: false,
+      hasPendingPlan: false,
+      hasPendingBackgroundWork: false,
+      isArchived: false,
+      currentTotalTokens: 0,
+    });
+    expect(reservation.kind).toBe('reserved');
+    if (reservation.kind !== 'reserved') return;
+
+    await manager.sendMessage(
+      managed.id,
+      '<system-reminder>Continue.</system-reminder>',
+      undefined,
+      undefined,
+      { hidden: true },
+      undefined,
+      undefined,
+      undefined,
+      { kind: 'continuation', reservationId: reservation.reservation.id },
+    ).catch(() => { /* expected post-ack provider-init failure in this unit harness */ });
+
+    const continued = loadSession(root, managed.id)?.messages.find(message =>
+      message.goalEvent?.type === 'resumed' && message.goalEvent.round === 2
+    );
+    expect(continued?.goalEvent?.summary).toContain('continuing automatically');
+    expect(pushedEvents.some(event => event.type === 'goal_event' && event.message?.goalEvent?.round === 2)).toBe(true);
   });
 
   it('finalizes a provisional completion only after a clean final response', async () => {

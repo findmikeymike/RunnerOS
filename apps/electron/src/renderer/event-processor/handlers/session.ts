@@ -39,6 +39,9 @@ import type {
   AuthRequestEvent,
   AuthCompletedEvent,
   UsageUpdateEvent,
+  GoalStateChangedEvent,
+  GoalCreationProposedEvent,
+  GoalEvent,
   Effect,
 } from '../types'
 import type { Message } from '../../../shared/types'
@@ -145,6 +148,56 @@ export function handleError(
         currentStatus: undefined,  // Clear any lingering status
       },
       streaming: null,
+    },
+    effects: [],
+  }
+}
+
+export function handleGoalStateChanged(
+  state: SessionState,
+  event: GoalStateChangedEvent
+): ProcessResult {
+  return {
+    state: {
+      ...state,
+      session: {
+        ...state.session,
+        chatGoal: event.chatGoal,
+      },
+    },
+    effects: [],
+  }
+}
+
+export function handleGoalCreationProposed(
+  state: SessionState,
+  event: GoalCreationProposedEvent
+): ProcessResult {
+  return {
+    state: {
+      ...state,
+      session: { ...state.session },
+    },
+    effects: [{
+      type: 'open_goal_setup',
+      sessionId: event.sessionId,
+      proposal: event.proposal,
+      confirmationNonce: event.confirmationNonce,
+    }],
+  }
+}
+
+export function handleGoalEvent(
+  state: SessionState,
+  event: GoalEvent
+): ProcessResult {
+  const messages = state.session.messages.some(message => message.id === event.message.id)
+    ? state.session.messages
+    : [...state.session.messages, event.message]
+  return {
+    state: {
+      ...state,
+      session: { ...state.session, messages },
     },
     effects: [],
   }

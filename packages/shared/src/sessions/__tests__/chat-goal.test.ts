@@ -85,6 +85,7 @@ describe('chat goal state', () => {
       revision: 2,
       timestamp: 200,
       round: 0,
+      maxRounds: 6,
       status: 'cancelled',
       summary: 'Stopped.',
     });

@@ -6,6 +6,7 @@
  */
 
 import type { Session, Message, PermissionRequest, CredentialRequest, TypedError, PermissionMode, SessionStatus, AuthRequest, ToolDisplayMeta } from '../../shared/types'
+import type { ChatGoalState, CreateChatGoalInput } from '@craft-agent/shared/sessions'
 
 /**
  * Streaming state for a session - replaces streamingTextRef
@@ -469,6 +470,25 @@ export interface UsageUpdateEvent {
   }
 }
 
+export interface GoalStateChangedEvent {
+  type: 'goal_state_changed'
+  sessionId: string
+  chatGoal?: ChatGoalState
+}
+
+export interface GoalCreationProposedEvent {
+  type: 'goal_creation_proposed'
+  sessionId: string
+  proposal: CreateChatGoalInput
+  confirmationNonce: string
+}
+
+export interface GoalEvent {
+  type: 'goal_event'
+  sessionId: string
+  message: Message
+}
+
 /**
  * Union of all agent events
  */
@@ -514,6 +534,9 @@ export type AgentEvent =
   | AuthCompletedEvent
   | SourceActivatedEvent
   | UsageUpdateEvent
+  | GoalStateChangedEvent
+  | GoalCreationProposedEvent
+  | GoalEvent
 
 /**
  * Side effects that need to be handled outside the pure processor
@@ -526,6 +549,7 @@ export type Effect =
   | { type: 'auto_retry'; sessionId: string; originalMessage: string; sourceSlug: string }
   | { type: 'restore_input'; text: string }
   | { type: 'toast_error'; message: string }
+  | { type: 'open_goal_setup'; sessionId: string; proposal: CreateChatGoalInput; confirmationNonce: string }
 
 /**
  * Result of processing an event

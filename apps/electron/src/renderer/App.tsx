@@ -70,6 +70,7 @@ import { useStaleSessionRecovery } from '@/hooks/useStaleSessionRecovery'
 import { TransportConnectionBanner, shouldShowTransportConnectionBanner } from '@/components/app-shell/TransportConnectionBanner'
 import { getFileManagerName } from '@/lib/platform'
 import { RENDERER_PRODUCT_VARIANT } from '@/lib/product-identity'
+import { publishChatGoalSetup } from '@/lib/chat-goal-setup'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
 
@@ -707,7 +708,7 @@ export default function App() {
     // Handoff events signal end of streaming - need to sync back to React state
     // Also includes todo_state_changed so status updates immediately reflect in sidebar
     // async_operation included so shimmer effect on session titles updates in real-time
-    const handoffEventTypes = new Set(['complete', 'error', 'interrupted', 'typed_error', 'session_status_changed', 'session_flagged', 'session_unflagged', 'name_changed', 'labels_changed', 'title_generated', 'async_operation'])
+    const handoffEventTypes = new Set(['complete', 'error', 'interrupted', 'typed_error', 'session_status_changed', 'session_flagged', 'session_unflagged', 'name_changed', 'labels_changed', 'title_generated', 'async_operation', 'goal_state_changed'])
 
     // Helper to handle side effects (same logic for both paths)
     const handleEffects = (effects: Effect[], sessionId: string, eventType: string) => {
@@ -790,6 +791,14 @@ export default function App() {
           }
           case 'toast_error': {
             toast.error(effect.message, { duration: 5000 })
+            break
+          }
+          case 'open_goal_setup': {
+            publishChatGoalSetup({
+              sessionId: effect.sessionId,
+              proposal: effect.proposal,
+              confirmationNonce: effect.confirmationNonce,
+            })
             break
           }
         }

@@ -916,8 +916,11 @@ export function FreeFormInput({
     if (commandId === 'safe') onPermissionModeChange?.('safe')
     else if (commandId === 'ask') onPermissionModeChange?.('ask')
     else if (commandId === 'allow-all') onPermissionModeChange?.('allow-all')
+    else if (commandId === 'goal') {
+      window.dispatchEvent(new CustomEvent('craft:open-goal', { detail: { sessionId } }))
+    }
     else if (commandId === 'compact' && !isProcessing) onSubmit('/compact', undefined)
-  }, [onPermissionModeChange, isProcessing, onSubmit])
+  }, [onPermissionModeChange, isProcessing, onSubmit, sessionId])
 
   // Handle folder selection from slash command menu
   const handleSlashFolderSelect = React.useCallback((path: string) => {

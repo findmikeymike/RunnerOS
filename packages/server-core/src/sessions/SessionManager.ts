@@ -8430,16 +8430,18 @@ user a clickable link to where the thing now lives.`
     goal: ChatGoalState,
     type: ChatGoalEventType,
     summary: string,
-  ): void {
+  ): Message {
     const event = makeChatGoalEvent(goal, type, summary)
-    managed.messages.push({
+    const message: Message = {
       id: generateMessageId(),
       role: 'info',
       content: event.summary,
       timestamp: event.timestamp,
       displayIntent: 'goal-event',
       goalEvent: event,
-    })
+    }
+    managed.messages.push(message)
+    return message
   }
 
   private async commitChatGoalState(
@@ -8450,9 +8452,10 @@ user a clickable link to where the thing now lives.`
   ): Promise<ChatGoalState> {
     await this.ensureMessagesLoaded(managed)
     managed.chatGoal = next
-    this.appendChatGoalEvent(managed, next, eventType, summary)
+    const goalEventMessage = this.appendChatGoalEvent(managed, next, eventType, summary)
     this.persistSession(managed)
     await this.flushSession(managed.id)
+    this.sendEvent({ type: 'goal_event', sessionId: managed.id, message: goalEventMessage }, managed.workspace.id)
     sessionLog.info('Chat Goal state changed', {
       sessionId: managed.id,
       goalId: next.id,
@@ -9919,6 +9922,7 @@ user a clickable link to where the thing now lives.`
     let goalAdmissionRollback: (() => void) | undefined
     let admittedGoalState: ChatGoalState | undefined
     let admittedTurn: ChatGoalTurnContext | undefined
+    let admittedGoalEvent: Message | undefined
 
     try {
       // Clear any pending plan execution state when a new user message is sent.
@@ -9980,7 +9984,7 @@ user a clickable link to where the thing now lives.`
           admittedGoalState = admitChatGoalRound(created)
           managed.chatGoal = admittedGoalState
           managed.pendingChatGoalProposal = undefined
-          this.appendChatGoalEvent(managed, admittedGoalState, 'created', 'Goal started by the user.')
+          admittedGoalEvent = this.appendChatGoalEvent(managed, admittedGoalState, 'created', 'Goal started by the user.')
           admittedTurn = {
             origin: 'goal-initial',
             goalId: admittedGoalState.id,
@@ -10002,6 +10006,12 @@ user a clickable link to where the thing now lives.`
           if (!reservation) throw new Error('Goal continuation reservation is stale')
           admittedGoalState = admitChatGoalRound(managed.chatGoal!)
           managed.chatGoal = admittedGoalState
+          admittedGoalEvent = this.appendChatGoalEvent(
+            managed,
+            admittedGoalState,
+            'resumed',
+            `Goal continuing automatically at round ${admittedGoalState.round} of ${admittedGoalState.maxRounds}.`,
+          )
           admittedTurn = {
             origin: 'goal-continuation',
             goalId: admittedGoalState.id,
@@ -10073,6 +10083,9 @@ user a clickable link to where the thing now lives.`
         // enqueues with a 500ms debounce. (#616 reliability fix.)
         await this.flushSession(managed.id)
         if (admittedGoalState) {
+          if (admittedGoalEvent) {
+            this.sendEvent({ type: 'goal_event', sessionId, message: admittedGoalEvent }, managed.workspace.id)
+          }
           this.sendEvent({ type: 'goal_state_changed', sessionId, chatGoal: admittedGoalState }, managed.workspace.id)
           goalAdmissionRollback = undefined
         }
@@ -10114,6 +10127,9 @@ user a clickable link to where the thing now lives.`
         this.persistSession(managed)
         await this.flushSession(managed.id)
         if (admittedGoalState) {
+          if (admittedGoalEvent) {
+            this.sendEvent({ type: 'goal_event', sessionId, message: admittedGoalEvent }, managed.workspace.id)
+          }
           this.sendEvent({ type: 'goal_state_changed', sessionId, chatGoal: admittedGoalState }, managed.workspace.id)
           goalAdmissionRollback = undefined
         }
