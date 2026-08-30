@@ -66,7 +66,6 @@ export {
   loadWorkspaceSources,
   loadAllSources,
   getEnabledSources,
-  isSourceUsable,
   getSourcesBySlugs,
   // Global tier
   GLOBAL_WORKSPACE_ID,
@@ -92,6 +91,8 @@ export {
   // Parsing utilities
   parseGuideMarkdown,
 } from './storage.ts';
+
+export { isSourceUsable } from './availability.ts';
 
 // Credential Manager (unified credential operations)
 export {

@@ -166,10 +166,10 @@ export function CalendarMonthGrid({
                 paper
                   ? isToday
                     ? isSelected
-                      ? 'bg-[radial-gradient(circle_at_100%_0%,rgba(249,115,22,0.13),transparent_62%),#090A0B] shadow-[inset_0_0_0_1px_#f97316] hover:brightness-110'
+                      ? 'bg-[radial-gradient(circle_at_100%_0%,rgba(249,115,22,0.13),transparent_62%),#090A0B] ring-1 ring-inset ring-[#f97316] hover:brightness-110'
                       : 'bg-[radial-gradient(circle_at_100%_0%,rgba(249,115,22,0.13),transparent_62%),#090A0B] hover:brightness-110'
                     : isSelected
-                      ? 'bg-[#17191B] shadow-[inset_0_0_0_1px_#f97316] hover:bg-[#1B1D1F]'
+                      ? 'bg-[#17191B] ring-1 ring-inset ring-[#f97316] hover:bg-[#1B1D1F]'
                     : isCurrentMonth
                       ? 'bg-[#17191B] hover:bg-[#1B1D1F]'
                       : 'bg-[#202224] hover:bg-[#242628]'

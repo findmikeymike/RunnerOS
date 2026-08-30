@@ -13,7 +13,8 @@
  * no-auth sources are incorrectly filtered out.
  *
  * Allowed in:
- *   - storage.ts (where isSourceUsable is defined)
+ *   - availability.ts (where isSourceUsable is defined)
+ *   - storage.ts (legacy source storage boundary)
  *   - credential-manager.ts (state-setting operations, inverse check)
  *   - server-builder.ts (documented exceptions for OAuth providers)
  *
@@ -31,13 +32,13 @@ module.exports = {
     type: 'suggestion',
     docs: {
       description:
-        'Disallow inline source.config.isAuthenticated checks. Use isSourceUsable() from storage.ts instead.',
+        'Disallow inline source.config.isAuthenticated checks. Use isSourceUsable() from availability.ts instead.',
       category: 'Best Practices',
       recommended: true,
     },
     messages: {
       useIsSourceUsable:
-        'Do not check source.config.isAuthenticated directly. Use isSourceUsable() from sources/storage.ts instead. ' +
+        'Do not check source.config.isAuthenticated directly. Use isSourceUsable() from sources/availability.ts instead. ' +
         'Direct checks often miss sources with authType: "none" which should be considered authenticated.',
     },
     schema: [],
@@ -46,7 +47,8 @@ module.exports = {
   create(context) {
     // Files where direct isAuthenticated access is allowed
     const allowedFiles = [
-      'storage.ts', // isSourceUsable is defined here
+      'availability.ts', // isSourceUsable is defined here
+      'storage.ts', // Legacy source storage boundary
       'credential-manager.ts', // State-setting and inverse check
       'server-builder.ts', // OAuth provider checks (documented)
     ]

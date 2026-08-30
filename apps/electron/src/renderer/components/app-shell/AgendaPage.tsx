@@ -108,7 +108,7 @@ function DraggableCard({ session, detailsPreview, networkPeople, onClick, onDele
           className={cn(
             "group relative flex w-full flex-col rounded-[13px] border border-white/[0.07] bg-[#0F0F10] px-3 text-left transition-colors hover:bg-[#121314]",
             compact ? 'gap-1 py-2' : 'gap-2 py-2.5',
-            isDragging && "shadow-2xl border-white/[0.15]"
+            isDragging && "shadow-strong border-white/[0.15]"
           )}
         >
           <div className="flex items-center justify-between gap-3">
@@ -156,7 +156,7 @@ function DraggableCard({ session, detailsPreview, networkPeople, onClick, onDele
 
 function CardOverlay({ session, detailsPreview, networkPeople }: { session: SessionMeta, detailsPreview?: string, networkPeople: ArtistNetworkPerson[] }) {
   return (
-    <div className="w-full rotate-2 rounded-[13px] border border-white/[0.15] bg-[#0F0F10] px-3 py-2.5 shadow-2xl">
+    <div className="w-full rotate-2 rounded-[13px] border border-white/[0.15] bg-[#0F0F10] px-3 py-2.5 shadow-strong">
       <div className="flex items-center justify-between gap-3">
         <p className="line-clamp-1 text-sm font-medium leading-5 text-white/80">{getSessionTitle(session)}</p>
         <GripVertical className="h-3.5 w-3.5 shrink-0 text-white/30" />
@@ -541,7 +541,7 @@ export function AgendaPage({ sessions, onCreateTask, onDeleteTask, workspaceId, 
         setCreatingTask(false)
         setSelectedSessionId(null)
       }}>
-        <DialogContent className="max-w-[620px] border-white/[0.08] bg-[#080808] text-white shadow-2xl">
+        <DialogContent className="max-w-[620px] border-white/[0.08] bg-[#080808] text-white shadow-modal-small">
           <DialogHeader>
             <DialogTitle className="text-xl font-medium">{creatingTask ? 'New task' : 'Edit task'}</DialogTitle>
             <DialogDescription className="sr-only">

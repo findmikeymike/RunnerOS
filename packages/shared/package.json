@@ -52,6 +52,7 @@
     "./prompts": "./src/prompts/index.ts",
     "./sessions": "./src/sessions/index.ts",
     "./sources": "./src/sources/index.ts",
+    "./sources/availability": "./src/sources/availability.ts",
     "./sources/types": "./src/sources/types.ts",
     "./skills": "./src/skills/index.ts",
     "./workspaces": "./src/workspaces/index.ts",

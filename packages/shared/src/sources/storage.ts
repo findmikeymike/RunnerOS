@@ -33,6 +33,8 @@ import {
   isIconUrl,
 } from '../utils/icon.ts';
 
+export { isSourceUsable } from './availability.ts';
+
 function normalizeGoogleApiConfig(config: FolderSourceConfig): FolderSourceConfig {
   if (config.type !== 'api' || !config.api || config.provider !== 'google') return config;
 
@@ -490,33 +492,6 @@ export function loadWorkspaceSources(workspaceRootPath: string): LoadedSource[] 
  */
 export function getEnabledSources(workspaceRootPath: string): LoadedSource[] {
   return loadWorkspaceSources(workspaceRootPath).filter((s) => s.config.enabled);
-}
-
-/**
- * Check if a source is ready for use (enabled and authenticated).
- * Sources with authType: 'none' or undefined are considered authenticated.
- *
- * Use this instead of inline `s.config.enabled && s.config.isAuthenticated` checks
- * to ensure consistent handling of no-auth sources.
- */
-export function isSourceUsable(source: LoadedSource): boolean {
-  if (!source.config.enabled) return false;
-
-  // Get auth type from MCP or API config
-  const authType = source.config.mcp?.authType || source.config.api?.authType;
-
-  // Provider-router local sources represent key-backed external APIs. They do
-  // not spawn a server, but they still require at least one configured key
-  // before they should be injected into an agent session.
-  if (source.config.type === 'local' && source.config.local?.format === 'provider-router') {
-    return source.config.isAuthenticated === true;
-  }
-
-  // Sources with no auth requirement are always usable when enabled
-  if (authType === 'none' || authType === undefined) return true;
-
-  // Sources requiring auth must be authenticated
-  return source.config.isAuthenticated === true;
 }
 
 /**

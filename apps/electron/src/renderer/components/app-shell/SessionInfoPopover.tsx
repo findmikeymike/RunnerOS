@@ -23,7 +23,7 @@ const DEFAULT_POPOVER_CONTENT_CLASS = [
   'w-[380px] h-[500px] min-w-[240px] max-w-[440px]',
   'overflow-hidden rounded-[12px]',
   'border border-white/[0.08] bg-[#08090b]/95 text-foreground',
-  'shadow-[0_24px_80px_rgba(0,0,0,0.62)] backdrop-blur-xl p-0',
+  'shadow-modal-small backdrop-blur-xl p-0',
 ].join(' ')
 const DEFAULT_DRAWER_CONTENT_CLASS = [
   'data-[vaul-drawer-direction=bottom]:inset-x-2',
@@ -144,7 +144,7 @@ function SessionInfoPopoverContent({ sessionId, sessionFolderPath }: { sessionId
         <label className="mb-2 block select-none text-[11px] font-semibold uppercase tracking-[0.08em] text-white/42">
           {t("chat.title")}
         </label>
-        <div className="rounded-[10px] border border-white/[0.08] bg-white/[0.045] shadow-inner-subtle transition-colors has-[:focus]:border-white/18 has-[:focus]:bg-white/[0.065]">
+        <div className="rounded-[10px] border border-white/[0.08] bg-white/[0.045] shadow-minimal transition-colors has-[:focus]:border-white/18 has-[:focus]:bg-white/[0.065]">
           <Input
             value={name}
             onChange={handleNameChange}

@@ -2471,7 +2471,7 @@ function PulseDetailsDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[min(760px,calc(100vh-2rem))] w-[min(680px,calc(100vw-2rem))] max-w-[680px] flex-col gap-0 overflow-hidden border-white/[0.09] bg-[#0C0D0E] p-0 text-white shadow-2xl">
+      <DialogContent className="flex max-h-[min(760px,calc(100vh-2rem))] w-[min(680px,calc(100vw-2rem))] max-w-[680px] flex-col gap-0 overflow-hidden border-white/[0.09] bg-[#0C0D0E] p-0 text-white shadow-modal-small">
         <DialogHeader className="shrink-0 border-b border-white/[0.06] px-5 py-4 pr-14 text-left">
           <DialogTitle className="text-lg font-medium tracking-[-0.02em]">{title}</DialogTitle>
           <DialogDescription className="text-xs text-white/40">{description}</DialogDescription>
@@ -3233,7 +3233,7 @@ function IntelConfigDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[calc(100vh-2rem)] w-[min(720px,calc(100vw-2rem))] max-w-[720px] flex-col gap-0 overflow-hidden border-white/[0.1] bg-[#111315] p-0 text-white shadow-2xl">
+      <DialogContent className="flex max-h-[calc(100vh-2rem)] w-[min(720px,calc(100vw-2rem))] max-w-[720px] flex-col gap-0 overflow-hidden border-white/[0.1] bg-[#111315] p-0 text-white shadow-modal-small">
         <DialogHeader className="shrink-0 border-b border-white/[0.07] bg-[linear-gradient(110deg,rgba(251,146,60,0.10),rgba(124,58,237,0.04)_48%,transparent)] px-5 py-5 pr-14">
           <DialogTitle className="text-xl font-medium tracking-[-0.02em]">Intel channels</DialogTitle>
           <DialogDescription className="text-white/46">Choose the YouTube channels Artist HQ watches each week.</DialogDescription>
@@ -3360,7 +3360,7 @@ function IntelConfigDialog({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-white/[0.08] bg-[#171A1D] px-5 py-3.5 shadow-[0_-12px_30px_rgba(0,0,0,0.28)]">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-white/[0.08] bg-[#171A1D] px-5 py-3.5 shadow-middle">
             <button
               type="button"
               onClick={addSource}
@@ -3999,7 +3999,7 @@ function PersonCard({ person, onClick }: { person: ArtistNetworkPerson; onClick:
     <button 
       type="button" 
       onClick={onClick} 
-      className="group flex flex-col justify-between rounded-[14px] border border-white/[0.04] bg-white/[0.015] p-3 text-left transition-all hover:bg-white/[0.03] hover:border-white/[0.08] hover:shadow-lg hover:-translate-y-0.5"
+      className="group flex flex-col justify-between rounded-[14px] border border-white/[0.04] bg-white/[0.015] p-3 text-left transition-all hover:bg-white/[0.03] hover:border-white/[0.08] hover:shadow-middle hover:-translate-y-0.5"
     >
       <div className="flex items-start justify-between gap-2 w-full">
         <div className="flex items-center justify-center h-8 w-8 rounded-full bg-gradient-to-br from-white/10 to-white/5 border border-white/10 shrink-0">
@@ -4062,7 +4062,7 @@ function PersonDetailPanel({
   disabled?: boolean
 }) {
   return (
-    <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[420px] flex-col border-l border-white/[0.08] bg-[#080808]/95 p-4 shadow-2xl backdrop-blur-xl">
+    <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[420px] flex-col border-l border-white/[0.08] bg-[#080808]/95 p-4 shadow-strong backdrop-blur-xl">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/35">Network</p>

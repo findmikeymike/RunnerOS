@@ -13,9 +13,16 @@ import { isSourceUsable } from '../storage.ts';
 import type { SourceCredentialManager } from '../credential-manager.ts';
 
 // Mock storage module to prevent disk I/O
-const mockMarkSourceAuthenticated = mock(() => true);
+const mockMarkLoadedSourceAuthenticated = mock((source: LoadedSource) => {
+  Object.assign(source.config, {
+    isAuthenticated: true,
+    connectionStatus: 'connected' as const,
+    connectionError: undefined,
+  });
+  return true;
+});
 mock.module('../storage.ts', () => ({
-  markSourceAuthenticated: mockMarkSourceAuthenticated,
+  markLoadedSourceAuthenticated: mockMarkLoadedSourceAuthenticated,
 }));
 
 /**
@@ -314,7 +321,7 @@ function createMockCredManager(overrides: Partial<SourceCredentialManager> = {})
 
 describe('TokenRefreshManager', () => {
   beforeEach(() => {
-    mockMarkSourceAuthenticated.mockClear();
+    mockMarkLoadedSourceAuthenticated.mockClear();
   });
 
   describe('needsRefresh', () => {
@@ -439,7 +446,7 @@ describe('TokenRefreshManager', () => {
       expect(isSourceUsable(source)).toBe(true);
       expect(source.config.connectionStatus).toBe('connected');
       expect(source.config.connectionError).toBeUndefined();
-      expect(mockMarkSourceAuthenticated).toHaveBeenCalledWith('/mock/workspace', 'craft-mcp');
+      expect(mockMarkLoadedSourceAuthenticated).toHaveBeenCalledWith(source);
     });
 
     test('does NOT restore auth on failed refresh', async () => {
@@ -467,7 +474,7 @@ describe('TokenRefreshManager', () => {
 
       expect(result.success).toBe(false);
       expect(isSourceUsable(source)).toBe(false);
-      expect(mockMarkSourceAuthenticated).not.toHaveBeenCalled();
+      expect(mockMarkLoadedSourceAuthenticated).not.toHaveBeenCalled();
     });
   });
 
@@ -508,7 +515,7 @@ describe('TokenRefreshManager', () => {
       expect(isSourceUsable(source)).toBe(true);
       expect(source.config.connectionStatus).toBe('connected');
       expect(source.config.connectionError).toBeUndefined();
-      expect(mockMarkSourceAuthenticated).toHaveBeenCalledWith('/mock/workspace', 'craft-mcp');
+      expect(mockMarkLoadedSourceAuthenticated).toHaveBeenCalledWith(source);
     });
   });
 

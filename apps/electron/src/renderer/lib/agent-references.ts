@@ -18,6 +18,7 @@
  */
 
 import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG } from '@craft-agent/shared/agent-definitions/types'
+import { isSourceUsable } from '@craft-agent/shared/sources/availability'
 import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
 import type { LoadedSkill, LoadedSource } from '../../shared/types'
 import type { AgentDefinitionDTO } from '../../shared/types'
@@ -65,7 +66,7 @@ export function resolveAgentReferences(
   const resolvedOptionalSources = declaredOptionalSources.filter((slug) => {
     if (requiredSourceSet.has(slug)) return false
     const source = sourceBySlug.get(slug)
-    return source ? isRendererSourceUsable(source) : false
+    return source ? isSourceUsable(source) : false
   })
 
   return {
@@ -75,13 +76,6 @@ export function resolveAgentReferences(
     missingSkills,
     missingSources,
   }
-}
-
-function isRendererSourceUsable(source: LoadedSource): boolean {
-  if (!source.config.enabled) return false
-  const authType = source.config.mcp?.authType || source.config.api?.authType
-  if (authType === 'none' || authType === undefined) return true
-  return source.config.isAuthenticated === true
 }
 
 /** Convenience flag: any references unresolvable on the current machine? */

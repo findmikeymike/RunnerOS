@@ -348,7 +348,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
             onDrop={(event) => void handleDrop(event)}
             className={cn(
               'relative min-h-0 overflow-hidden rounded-[18px] border bg-[#080808] transition-colors',
-              dragActive ? 'border-[#f97316]/55 bg-[#140a04] shadow-[0_0_40px_rgba(249,115,22,0.12)]' : 'border-white/[0.055]',
+              dragActive ? 'border-[#f97316]/55 bg-[#140a04] shadow-tinted' : 'border-white/[0.055]',
             )}
           >
             {dragActive && (
@@ -376,7 +376,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                       }}
                       className={cn(
                         'inline-flex h-9 shrink-0 items-center gap-2 rounded-[10px] border px-3 text-xs font-medium transition-colors',
-                        active ? 'border-[#f97316]/45 bg-[#2a1206]/80 text-white shadow-[0_0_18px_rgba(249,115,22,0.08)]' : 'border-transparent bg-transparent text-white/48 hover:bg-white/[0.035] hover:text-white/82',
+                        active ? 'border-[#f97316]/45 bg-[#2a1206]/80 text-white shadow-tinted' : 'border-transparent bg-transparent text-white/48 hover:bg-white/[0.035] hover:text-white/82',
                       )}
                     >
                       <Icon className={cn('h-3.5 w-3.5', active ? 'text-[#fb923c]' : 'text-white/42')} />
@@ -677,7 +677,7 @@ function ImportModal({
   const skipped = draft.plan?.skipped ?? []
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="max-h-[82vh] w-full max-w-3xl overflow-hidden rounded-[18px] border border-white/[0.08] bg-[#080808] shadow-2xl">
+      <div className="max-h-[82vh] w-full max-w-3xl overflow-hidden rounded-[18px] border border-white/[0.08] bg-[#080808] shadow-modal-small">
         <div className="flex items-start justify-between gap-4 border-b border-white/[0.06] p-4">
           <div>
             <h2 className="text-xl font-semibold text-white/90">Confirm Vault Import</h2>

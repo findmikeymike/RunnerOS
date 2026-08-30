@@ -674,14 +674,12 @@ describe('loadAllSources', () => {
       const disconnected = loadAllSources(makeWorkspace()).find((s: LoadedSource) => s.config.slug === 'media-generation');
       expect(disconnected).toBeDefined();
       expect(disconnected!.config.connectionStatus).toBe('needs_auth');
-      expect(disconnected!.config.isAuthenticated).toBe(false);
       expect(isSourceUsable(disconnected!)).toBe(false);
 
       process.env.FAL_API_KEY = 'test-fal-key';
       const connected = loadAllSources(makeWorkspace()).find((s: LoadedSource) => s.config.slug === 'media-generation');
       expect(connected).toBeDefined();
       expect(connected!.config.connectionStatus).toBe('connected');
-      expect(connected!.config.isAuthenticated).toBe(true);
       expect(isSourceUsable(connected!)).toBe(true);
     } finally {
       if (saved.fal === undefined) delete process.env.FAL_API_KEY; else process.env.FAL_API_KEY = saved.fal;
@@ -1063,7 +1061,7 @@ describe('getSourcesBySlugs', () => {
     const ws = makeWorkspace();
     const sources = getSourcesBySlugs(ws, ['youtube-research']);
 
-    expect(sources[0]!.config.isAuthenticated).toBe(true);
+    expect(isSourceUsable(sources[0]!)).toBe(true);
     expect(sources[0]!.config.connectionStatus).toBe('untested');
     expect(sources[0]!.config.connectionError).toContain('not validated');
   });
