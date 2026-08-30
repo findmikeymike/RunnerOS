@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 import {
   Drawer,
   DrawerContent,
+  DrawerDescription,
   DrawerHeader,
   DrawerTitle,
 } from '@/components/ui/drawer'
@@ -87,6 +88,7 @@ export function MissionBriefDrawer({
   onSaveLyrics,
   onOpenAssetsFolder,
 }: MissionBriefDrawerProps) {
+  const closeButtonRef = React.useRef<HTMLButtonElement>(null)
   const [activeTab, setActiveTab] = React.useState<DrawerTab>('brief')
   const [draft, setDraft] = React.useState<Partial<MissionBrief>>(mission)
   const [saving, setSaving] = React.useState(false)
@@ -166,6 +168,10 @@ export function MissionBriefDrawer({
       <DrawerContent
         overlay={<div className="fixed inset-0 z-modal bg-black/20 backdrop-blur-[1px]" />}
         className="w-[min(560px,100vw)] !max-w-[min(560px,100vw)] border-l border-white/[0.08] bg-[#070707] text-white shadow-strong sm:!max-w-[560px]"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault()
+          closeButtonRef.current?.focus()
+        }}
       >
         <DrawerHeader className="border-b border-white/[0.06] px-5 py-4 text-left">
           <div className="flex items-start justify-between gap-4">
@@ -177,8 +183,12 @@ export function MissionBriefDrawer({
               <DrawerTitle className="text-xl font-medium tracking-tight text-white">
                 {mission.title || 'Create Campaign'}
               </DrawerTitle>
+              <DrawerDescription className="sr-only">
+                Define the campaign brief, dates, audience, visual direction, and campaign assets.
+              </DrawerDescription>
             </div>
             <button
+              ref={closeButtonRef}
               type="button"
               onClick={() => onOpenChange(false)}
               className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03] text-white/50 hover:bg-white/[0.08] hover:text-white"
