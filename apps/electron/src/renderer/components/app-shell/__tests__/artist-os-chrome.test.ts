@@ -5,6 +5,7 @@ import { join } from 'node:path'
 describe('Artist OS persistent shell chrome', () => {
   test('uses the thin ScriptOS-style sidebar and bottom-corner toggle', () => {
     const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
+    const styles = readFileSync(join(import.meta.dir, '..', '..', '..', 'index.css'), 'utf8')
     const openToggle = shell.indexOf('data-testid="sidebar-toggle-open"')
     const panelShell = shell.indexOf('=== OUTER LAYOUT: Unified Panel Stack')
 
@@ -14,6 +15,9 @@ describe('Artist OS persistent shell chrome', () => {
     expect(shell).toContain('pointer-events-auto absolute bottom-3 right-2 z-[80]')
     expect(shell).toContain('pointer-events-auto fixed bottom-3 left-2 z-[100]')
     expect(shell).toContain('usesWorkspaceHeader ? "px-3 pb-10 pt-10"')
+    expect(shell).toContain('usesWorkspaceHeader && "artist-os-sidebar-glass"')
+    expect(styles).toContain('.artist-os-sidebar-glass {')
+    expect(styles).toContain('backdrop-filter: blur(28px) saturate(145%);')
     expect(shell).not.toContain('w-[56px]')
     expect(shell).not.toContain('<PanelLeftRounded')
   })

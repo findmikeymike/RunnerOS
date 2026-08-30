@@ -2950,7 +2950,10 @@ function AppShellContent({
             <div
               ref={sidebarRef}
               style={{ width: effectiveSidebarWidth }}
-              className="h-full font-sans relative"
+              className={cn(
+                "h-full font-sans relative",
+                usesWorkspaceHeader && "artist-os-sidebar-glass",
+              )}
               data-focus-zone="sidebar"
               tabIndex={sidebarFocused ? 0 : -1}
               onKeyDown={handleSidebarKeyDown}

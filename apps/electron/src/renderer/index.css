@@ -865,6 +865,16 @@ html[data-font="inter"] {
     background-color: transparent;
   }
 
+  /* Near-black sidebar glass: lifted only by translucency, blur, and a quiet warm sheen. */
+  .artist-os-sidebar-glass {
+    background:
+      radial-gradient(140% 85% at -15% -10%, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.026) 34%, transparent 62%),
+      radial-gradient(120% 58% at 50% 108%, rgba(150, 35, 15, 0.12) 0%, rgba(180, 70, 10, 0.038) 42%, transparent 72%),
+      linear-gradient(180deg, rgba(18, 18, 20, 0.78), rgba(7, 7, 8, 0.94));
+    backdrop-filter: blur(28px) saturate(145%);
+    -webkit-backdrop-filter: blur(28px) saturate(145%);
+  }
+
   .runneros-page-wrap {
     width: 100%;
     max-width: 1600px;
