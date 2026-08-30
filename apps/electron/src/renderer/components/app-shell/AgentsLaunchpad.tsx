@@ -397,7 +397,7 @@ function AgentCard({
         type="button"
         onClick={onStartChat}
         disabled={isLaunching}
-        className="relative flex min-h-[88px] w-full items-start gap-3 overflow-hidden rounded-[12px] border border-white/[0.09] bg-[#0f1011] px-3 py-3 pr-[78px] text-left transition-colors hover:border-white/[0.16] hover:bg-[#141516] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/55 disabled:cursor-wait"
+        className="relative flex min-h-[88px] w-full items-start gap-3 overflow-hidden rounded-[12px] bg-white/[0.055] px-3 py-3 pr-[78px] text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] backdrop-blur-md transition-colors hover:bg-white/[0.075] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/55 disabled:cursor-wait"
         aria-label={`Start chat with ${name}`}
       >
         <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-gradient-to-br from-[#fb923c] to-[#f97316] text-neutral-950">
