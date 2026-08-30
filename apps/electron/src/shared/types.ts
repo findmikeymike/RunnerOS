@@ -520,6 +520,18 @@ export interface ProsodyLookupResult {
   error?: string
 }
 
+export interface ArtistManagerVoiceProxyInfo {
+  webSocketUrl: string
+  accessToken: string
+  voiceId?: string
+}
+
+export interface ArtistManagerVoiceProviderStatus {
+  assemblyAi: boolean
+  inworld: boolean
+  ready: boolean
+}
+
 export interface ElectronAPI {
   /** Stable identity for this renderer window, used to arbitrate native sidecar ownership. */
   readonly webContentsId: number
@@ -1277,6 +1289,9 @@ export interface ElectronAPI {
     width: number
     height: number
   }>
+  getArtistManagerVoiceProxyInfo(): Promise<ArtistManagerVoiceProxyInfo>
+  getArtistManagerVoiceProviderStatus(): Promise<ArtistManagerVoiceProviderStatus>
+  createArtistManagerVoiceAssemblyToken(): Promise<string>
   onOutputsUpdated(callback: (workspaceId: string) => void): () => void
 
   // Notifications (bell entries from pulses + future system sources)

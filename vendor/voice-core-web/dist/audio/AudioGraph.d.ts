@@ -1,0 +1,41 @@
+import type { VoiceRuntimeConfig } from "../types";
+export declare class AudioGraph {
+    private static readonly OUTPUT_ACK_TIMEOUT_MS;
+    private static readonly MEDIA_START_TIMEOUT_MS;
+    private audioContext;
+    private mediaStream;
+    private sourceNode;
+    private inputNode;
+    private inputSinkNode;
+    private outputNode;
+    private inputFramesHandler;
+    private outputPlaybackHandler;
+    private outputQueuePressureHandler;
+    private outputDebugHandler;
+    private outputErrorHandler;
+    private readonly outputResampler;
+    private inputDeliveryActive;
+    private pendingInputDelivery;
+    private inputDeliveryGeneration;
+    private startGeneration;
+    private pendingStartCancellation;
+    private readonly outputAdmissions;
+    start(config: VoiceRuntimeConfig): Promise<void>;
+    stop(): Promise<void>;
+    getSampleRate(): number | null;
+    cancelPendingStart(): void;
+    enqueueOutputFrames(frames: Float32Array, sampleRateHz: number, channels: number): Promise<void>;
+    private postOutputSlice;
+    clearOutputQueue(): void;
+    setInputFramesHandler(handler: ((frames: Float32Array, sampleRateHz: number, channels: number) => void | Promise<void>) | null): void;
+    setOutputPlaybackHandler(handler: ((active: boolean) => void) | null): void;
+    setOutputQueuePressureHandler(handler: ((active: boolean, queuedSamples: number) => void) | null): void;
+    setOutputDebugHandler(handler: ((message: string) => void) | null): void;
+    setOutputErrorHandler(handler: ((error: Error) => void) | null): void;
+    private normalizeOutputFrames;
+    private enqueueInputDelivery;
+    private downmixToMono;
+    private cancelPendingOutputRequests;
+    private withMediaStartTimeout;
+}
+//# sourceMappingURL=AudioGraph.d.ts.map

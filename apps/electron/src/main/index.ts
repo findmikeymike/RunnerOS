@@ -128,6 +128,10 @@ import {
 } from './campaign-social-job-preparer'
 import { executeScheduledSocialBrowser } from './scheduled-social-browser-executor'
 import { runSocialJson } from './social-cli'
+import {
+  startArtistManagerVoiceProxy,
+  type ArtistManagerVoiceProxy,
+} from './artist-manager-voice-proxy'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -228,6 +232,7 @@ let messagingHandle: MessagingBootstrapHandle | null = null
 // Inbound webhook trigger HTTP server handle. Held at module scope so the
 // before-quit handler can stop it cleanly.
 let triggerServerHandle: { url: string; stop: () => Promise<void> } | null = null
+let artistManagerVoiceProxy: ArtistManagerVoiceProxy | null = null
 
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
@@ -397,6 +402,7 @@ app.whenReady().then(async () => {
 
   if (RUNTIME_IDENTITY.variant === 'artist-os') {
     await initializeDesktopLicensing()
+    artistManagerVoiceProxy = await startArtistManagerVoiceProxy()
   }
 
   // Register bundled assets root so all seeding functions can find their files
@@ -587,6 +593,18 @@ app.whenReady().then(async () => {
         width: image.getSize().width,
         height: image.getSize().height,
       }
+    })
+    ipcMain.handle('__artist-manager-voice:proxy-info', () => {
+      if (!artistManagerVoiceProxy) throw new Error('Artist Manager voice is unavailable in this app mode')
+      return artistManagerVoiceProxy.info
+    })
+    ipcMain.handle('__artist-manager-voice:provider-status', () => {
+      if (!artistManagerVoiceProxy) throw new Error('Artist Manager voice is unavailable in this app mode')
+      return artistManagerVoiceProxy.providerStatus()
+    })
+    ipcMain.handle('__artist-manager-voice:assembly-token', () => {
+      if (!artistManagerVoiceProxy) throw new Error('Artist Manager voice is unavailable in this app mode')
+      return artistManagerVoiceProxy.createAssemblyAiToken()
     })
     registerProsodyIpcHandlers()
 
@@ -1341,6 +1359,15 @@ async function performQuitCleanup(): Promise<void> {
       await triggerServerHandle.stop()
     } catch (error) {
       mainLog.error('[trigger-server] stop failed:', error)
+    }
+  }
+
+  if (artistManagerVoiceProxy) {
+    try {
+      await artistManagerVoiceProxy.close()
+      artistManagerVoiceProxy = null
+    } catch (error) {
+      mainLog.error('[artist-manager-voice] cleanup failed:', error)
     }
   }
 

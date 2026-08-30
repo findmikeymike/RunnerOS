@@ -38,6 +38,11 @@ export default defineConfig({
   ],
   root: resolve(__dirname, 'src/renderer'),
   base: './',
+  // Voice Core's module worker imports the matching WASM package, so it must
+  // remain ESM. Vite's IIFE worker default cannot represent that code split.
+  worker: {
+    format: 'es',
+  },
   build: {
     outDir: resolve(__dirname, 'dist/renderer'),
     emptyDirBeforeWrite: true,

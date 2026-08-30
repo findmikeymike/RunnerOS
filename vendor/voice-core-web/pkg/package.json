@@ -1,0 +1,16 @@
+{
+  "name": "conversational_web",
+  "type": "module",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "files": [
+    "conversational_web_bg.wasm",
+    "conversational_web.js",
+    "conversational_web.d.ts"
+  ],
+  "main": "conversational_web.js",
+  "types": "conversational_web.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

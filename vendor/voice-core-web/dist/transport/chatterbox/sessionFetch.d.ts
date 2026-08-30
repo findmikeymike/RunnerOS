@@ -1,0 +1,2 @@
+export declare function createChatterboxSessionFetch(baseFetch: typeof fetch, approvedRoot: string, sessionToken: string | null, baseUrl: string): typeof fetch;
+//# sourceMappingURL=sessionFetch.d.ts.map

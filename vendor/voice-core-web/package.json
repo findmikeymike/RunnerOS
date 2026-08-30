@@ -1,0 +1,33 @@
+{
+  "name": "@voice-core/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vite-oriented browser SDK for realtime conversational Voice Core applications",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nichetypes/voice-core-rs"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./cloud": {
+      "types": "./dist/cloud.d.ts",
+      "import": "./dist/cloud.js"
+    }
+  },
+  "files": [
+    "README.md",
+    "dist",
+    "pkg"
+  ]
+}

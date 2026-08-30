@@ -10,6 +10,7 @@ import {
   ImagePlus,
   Info,
   MessageSquareText,
+  Mic,
   Music2,
   Pencil,
   Play,
@@ -58,6 +59,8 @@ import { PeoplePageHeader } from './PeoplePageHeader'
 import { CompactPageHeader } from './CompactPageHeader'
 import { ReleaseHorizon } from './ReleaseHorizon'
 import { ManagerKnowledgePanel, type ManagerSourceSurface } from './ManagerKnowledgePanel'
+import { ArtistManagerVoiceDialog } from './ArtistManagerVoiceDialog'
+import { useArtistManagerVoice } from '@/hooks/useArtistManagerVoice'
 import { buildCampaignSchedulePlanFromComposer, buildHqSchedulePlanFromComposer, type ScheduledWorkComposerDraft } from '@/lib/scheduled-work-composer'
 import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult, type ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import {
@@ -458,6 +461,12 @@ export function ArtistHQHome({
     () => dedupeAgentsBySlug([...shellActiveAgents, ...workspaceActiveAgents, ...allAgents]),
     [allAgents, shellActiveAgents, workspaceActiveAgents],
   )
+  const managerVoice = useArtistManagerVoice({
+    workspaceId,
+    agents: availableAgents,
+    skills,
+    sources,
+  })
   const researchDocs = React.useMemo(
     () => docs.filter((doc) => /research|report|intel|analysis/i.test(`${doc.slug} ${doc.metadata.name} ${doc.metadata.description ?? ''}`)),
     [docs],
@@ -1645,6 +1654,15 @@ export function ArtistHQHome({
               </div>
               {tab === 'home' ? (
                 <>
+                  <button
+                    type="button"
+                    onClick={() => managerVoice.setOpen(true)}
+                    aria-label="Talk to Artist Manager"
+                    title="Talk to Artist Manager"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-white/[0.1] bg-black/35 text-white/58 backdrop-blur-md transition-colors hover:bg-black/55 hover:text-white/90"
+                  >
+                    <Mic className="h-3.5 w-3.5" />
+                  </button>
                   {bannerImageDataUrl ? (
                     <button
                       type="button"
@@ -1673,6 +1691,8 @@ export function ArtistHQHome({
           }
         />
         ) : null}
+
+        <ArtistManagerVoiceDialog voice={managerVoice} />
 
         {tab === 'home' && (
           <div id="hq-home-operations" className="space-y-3">

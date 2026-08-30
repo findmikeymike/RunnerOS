@@ -1,0 +1,30 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const __wbg_webruntime_free: (a: number, b: number) => void;
+export const webruntime_clear_context: (a: number) => void;
+export const webruntime_complete_user_transcript: (a: number, b: number, c: number) => [number, number];
+export const webruntime_feed_input_audio: (a: number, b: number, c: number, d: number, e: number) => void;
+export const webruntime_flush_output_audio: (a: number, b: bigint) => [number, number];
+export const webruntime_get_context_json: (a: number) => [number, number, number, number];
+export const webruntime_get_input_stats_json: (a: number) => [number, number, number, number];
+export const webruntime_get_state: (a: number) => [number, number];
+export const webruntime_is_running: (a: number) => number;
+export const webruntime_new: (a: number, b: number) => [number, number, number];
+export const webruntime_notify_output_playback_finished: (a: number) => [number, number];
+export const webruntime_pop_audio_json: (a: number) => [number, number, number, number];
+export const webruntime_push_assistant_text: (a: number, b: number, c: number, d: number) => [number, number];
+export const webruntime_push_partial_transcript: (a: number, b: number, c: number) => void;
+export const webruntime_push_tts_audio: (a: number, b: number, c: number, d: number, e: number, f: bigint) => [number, number, number];
+export const webruntime_set_config: (a: number, b: number, c: number) => [number, number];
+export const webruntime_start: (a: number) => [number, number];
+export const webruntime_start_listening: (a: number) => [number, number];
+export const webruntime_stop: (a: number) => [number, number];
+export const webruntime_tick: (a: number) => [number, number, number, number];
+export const webruntime_trigger_barge_in: (a: number) => [number, number];
+export const __wbindgen_externrefs: WebAssembly.Table;
+export const __wbindgen_malloc: (a: number, b: number) => number;
+export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+export const __externref_table_dealloc: (a: number) => void;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
+export const __wbindgen_start: () => void;

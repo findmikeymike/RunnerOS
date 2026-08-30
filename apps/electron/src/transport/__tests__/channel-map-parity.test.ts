@@ -28,6 +28,9 @@ type ApiToChannelMapKeys = Exclude<
   | 'onTransferProgress' // direct IPC listener — chunk upload progress
   | 'changeLanguage' // direct IPC to main process — syncs i18n language
   | 'captureVisualElement' // direct IPC to main process — captures the renderer window
+  | 'getArtistManagerVoiceProxyInfo' // direct IPC — local authenticated voice proxy
+  | 'getArtistManagerVoiceProviderStatus' // direct IPC — returns booleans, never secrets
+  | 'createArtistManagerVoiceAssemblyToken' // direct IPC — mints a short-lived STT token
   | 'lookupProsodyRhymes' // direct IPC to main process — local ambient rhyme engine
   | 'getLicenseState' // direct IPC to protected main-process licensing authority
   | 'activateLicense'
