@@ -590,16 +590,21 @@ export const GetCampaignBriefSchema = z.object({
 });
 
 export const GetArtistContextSchema = z.object({
-  topic: z.enum(['profile', 'branding', 'voice', 'month-plan', 'growth', 'intel', 'calendar', 'network', 'community', 'vault']),
+  topic: z.enum(['profile', 'branding', 'voice', 'month-plan', 'growth', 'intel', 'calendar', 'timeline', 'network', 'community', 'vault']),
   month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
   query: z.string().max(240).optional(),
-  limit: z.number().int().min(1).max(20).optional(),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  tier: z.enum(['strategic', 'operational']).optional(),
+  limit: z.number().int().min(1).max(60).optional(),
 });
 
 export const GetCampaignContextSchema = z.object({
   select: z.enum(['focus', 'next-future', 'latest-past', 'primary', 'by-id']),
   campaignId: z.string().max(128).optional(),
   include: z.array(z.enum(['brief', 'readiness', 'calendar', 'work', 'assets', 'outputs'])).max(6).optional(),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   limit: z.number().int().min(1).max(20).optional(),
 });
 
@@ -1350,7 +1355,7 @@ After success, state what will run, where it appears, and when or what triggers 
 
   get_campaign_brief: `Read the freshly composed, bounded brief for the current open campaign. Campaign HNIC-only and read-only. Use first for campaign priorities, readiness, timing, blockers, active work, or next-step advice. Pass the known revision when available.`,
 
-  get_artist_context: `Read one bounded normalized Artist HQ detail topic. HNIC-only and read-only. Retrieve only the topic needed for the current decision; do not preload every topic. Growth data includes freshness and must not be converted into a trend without comparable points.`,
+  get_artist_context: `Read one bounded normalized Artist HQ detail topic. HNIC-only and read-only. Retrieve only the topic needed for the current decision; do not preload every topic. Growth data includes freshness and must not be converted into a trend without comparable points. The timeline topic merges HQ events, campaign schedules, scheduled work, release dates, and goal deadlines into one dated list (default: next 90 days; strategic entries plus per-campaign roll-ups); use it for "what is coming up" and month-planning questions instead of stitching calendar sources yourself.`,
 
   get_campaign_context: `Read bounded canonical detail for one configured campaign. HNIC-only and read-only. Use focus unless the user asks for a different selection. by-id accepts only an exact configured campaign workspace id; arbitrary paths are never accepted.`,
 

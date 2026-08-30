@@ -185,6 +185,30 @@ describe('Manager context retrieval', () => {
   });
 });
 
+describe('calendar topic windowing', () => {
+  test('sorts chronologically and honors a from/to window instead of doc order', () => {
+    const root = workspace();
+    write(root, 'artist-calendar', jsonBody({
+      version: 1,
+      updatedAt: '2026-08-29T00:00:00.000Z',
+      events: [
+        { id: 'late', date: '2026-11-20', title: 'Late show', workspaceLinks: [], relatedPersonIds: [], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' },
+        { id: 'early', date: '2026-09-01', title: 'Early meet', workspaceLinks: [], relatedPersonIds: [], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' },
+        { id: 'outside', date: '2027-02-01', title: 'Next year', workspaceLinks: [], relatedPersonIds: [], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' },
+      ],
+    }));
+
+    const result = getArtistContextDetail(root, 'concierge', {
+      topic: 'calendar',
+      from: '2026-08-29',
+      to: '2026-12-31',
+    }) as { ok: boolean; data?: { events?: Array<{ id: string }> } };
+
+    expect(result.ok).toBe(true);
+    expect(result.data?.events?.map((event) => event.id)).toEqual(['early', 'late']);
+  });
+});
+
 function workspace(): string {
   const root = mkdtempSync(join(tmpdir(), 'artist-manager-tools-'));
   roots.push(root);
