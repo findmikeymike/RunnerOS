@@ -110,7 +110,9 @@ export function ReleaseHorizon({
     const monthKey = selectedMonthKey
     let cancelled = false
     setMonthSchedules({})
-    void Promise.all(campaignsForMonth(campaigns, monthKey).map(async (campaign) => {
+    // Strategic deadlines can land before or after a campaign's release
+    // month, so inspect every campaign rather than only releases this month.
+    void Promise.all(campaigns.map(async (campaign) => {
       try {
         return [campaign.id, await loadCampaignMonthSchedule(campaign.id, monthKey)] as const
       } catch {
@@ -204,10 +206,12 @@ export function ReleaseHorizon({
         <div className="grid min-w-[1040px] grid-cols-12 gap-1.5">
           {months.map((month) => {
             const monthCampaigns = campaignsForMonth(campaigns, month.key)
+            const activeCampaigns = campaignsActiveInMonth(campaigns, month.key)
+            const monthTimelineEntries = timelineEntries.filter((entry) => entry.date.startsWith(`${month.key}-`))
             const monthPlan = plan.months[month.key]
             const displayTitle = monthPlan?.title || monthCampaigns[0]?.name
             const displayEvent: ArtistReleaseEventType | undefined = monthPlan?.event || (monthCampaigns.length > 0 ? 'release' : undefined)
-            const populated = Boolean(displayTitle || monthPlan?.plan || monthPlan?.keyGoal)
+            const populated = Boolean(displayTitle || monthPlan?.plan || monthPlan?.keyGoal || monthTimelineEntries.length || activeCampaigns.length)
             return (
               <button
                 key={month.key}
@@ -231,8 +235,22 @@ export function ReleaseHorizon({
                   </span>
                 ) : null}
                 {monthCampaigns.length > (monthPlan ? 0 : 1) ? (
-                  <span className="absolute inset-x-2 bottom-2 text-center text-[8px] text-white/25">
-                    {monthCampaigns.length} release{monthCampaigns.length === 1 ? '' : 's'}
+                  <span className="absolute right-2 top-2 text-[8px] text-white/25">
+                    +{monthCampaigns.length - (monthPlan ? 0 : 1)}
+                  </span>
+                ) : null}
+                {activeCampaigns.length > 0 ? (
+                  <span className="absolute inset-x-2 bottom-2 flex flex-col gap-1" aria-label={`${activeCampaigns.length} active campaign${activeCampaigns.length === 1 ? '' : 's'}`}>
+                    {activeCampaigns.slice(0, 2).map((campaign) => (
+                      <span
+                        key={campaign.id}
+                        title={campaign.name}
+                        className={cn(
+                          'h-[2px] w-full rounded-full',
+                          campaign.releaseDate?.startsWith(`${month.key}-`) ? 'bg-white/80' : 'bg-[#ff5a00]/70',
+                        )}
+                      />
+                    ))}
                   </span>
                 ) : null}
               </button>
@@ -484,6 +502,15 @@ function campaignsForMonth(campaigns: HqCampaignSummary[], monthKey: string | nu
   return campaigns
     .filter((campaign) => campaign.releaseDate?.startsWith(`${monthKey}-`))
     .sort(compareCampaignDates)
+}
+
+function campaignsActiveInMonth(campaigns: HqCampaignSummary[], monthKey: string): HqCampaignSummary[] {
+  return campaigns.filter((campaign) => {
+    const anchor = campaign.releaseDate?.slice(0, 7)
+    const start = campaign.startDate?.slice(0, 7) ?? anchor
+    const finish = campaign.finishDate?.slice(0, 7) ?? anchor
+    return Boolean(start && finish && monthKey >= start && monthKey <= finish)
+  }).sort(compareCampaignDates)
 }
 
 function compareCampaignDates(left: HqCampaignSummary, right: HqCampaignSummary): number {

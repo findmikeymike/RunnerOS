@@ -13,7 +13,7 @@ import {
   parseArtistSpotifySnapshotDocResult,
   type ArtistSpotifySnapshot,
 } from '../artist-context/spotify.ts';
-import { missionReleaseDateKey } from '../artist-context/mission-brief.ts';
+import { missionCampaignWindow, missionReleaseDateKey } from '../artist-context/mission-brief.ts';
 import {
   ARTIST_CALENDAR_CONTEXT_SLUG,
   parseArtistCalendarDocResult,
@@ -104,6 +104,9 @@ export function buildManagerBrief(input: BuildManagerBriefInput): ManagerBriefV1
 
   const campaignFocus = resolveHqCampaignFocus(input.relatedCampaigns, now);
   if (campaignFocus) health.push(...campaignFocus.sourceHealth);
+  health.push(...input.relatedCampaigns.flatMap((campaign) => campaign.sourceHealth.filter((item) =>
+    item.status !== 'fresh'
+    && /:(mission-brief|campaign-calendar|scheduled-work)$/.test(item.source))));
   health.push(...operationalHealth(input));
 
   const profile = profileResult.ok && profileDoc ? profileResult.value : undefined;
@@ -194,6 +197,7 @@ export function resolveHqCampaignFocus(
     ?? campaigns.find((candidate) => candidate.primary)
     ?? campaigns[0]!;
   const label = selected?.label ?? 'Release date needed';
+  const campaignWindow = campaign.mission ? missionCampaignWindow(campaign.mission) : undefined;
   const missionUpdatedAt = campaign.mission?.updatedAt;
   const missionHealth = sourceHealth({
     source: `${campaign.workspaceId}:mission-brief`,
@@ -210,7 +214,10 @@ export function resolveHqCampaignFocus(
       workspaceId: campaign.workspaceId,
       name: cap(campaign.mission?.title, 120) ?? cap(campaign.name, 120) ?? 'Campaign',
       label,
+      startDate: campaignWindow?.startDate,
       releaseDate: selected?.id === campaign.workspaceId ? selected.releaseDate : undefined,
+      finishDate: campaignWindow?.finishDate,
+      dateStatuses: campaignWindow?.statuses,
       goal: cap(campaign.mission?.goal, 500),
       readiness: campaign.readiness ? { done: campaign.readiness.done, total: campaign.readiness.total } : undefined,
       nextMissing: campaign.readiness?.nextMissing.map((item) => cap(item, 120)).filter(isString).slice(0, 5),
@@ -231,8 +238,9 @@ const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
  * operational roll-ups from the snapshot summaries, and the beyond-window
  * synopsis so later-year releases stay visible as one line.
  *
- * Campaign day-of items are deliberately NOT read here — operational volume
- * reaches the brief only as counts, matching the altitude rule.
+ * Campaign snapshots carry normalized, payload-free timeline entries. That
+ * lets the brief include strategic deadlines/approvals and exact 90-day
+ * roll-ups without injecting execution payloads or rereading campaign files.
  */
 function buildBriefTimeline(
   input: BuildManagerBriefInput,
@@ -273,34 +281,74 @@ function buildBriefTimeline(
     hqWorkspaceId: input.workspaceId,
     hqEvents: calendar.ok ? calendar.calendar.events : [],
     hqOrders: work.ok ? work.work.items : [],
-    campaigns: input.relatedCampaigns.map((campaign) => ({
-      workspaceId: campaign.workspaceId,
-      label: campaign.name,
-      releaseDate: campaign.mission ? missionReleaseDateKey(campaign.mission) : undefined,
-      items: [],
-      orders: [],
-    })),
+    campaigns: input.relatedCampaigns.map((campaign) => {
+      const window = campaign.mission ? missionCampaignWindow(campaign.mission) : undefined;
+      return {
+        workspaceId: campaign.workspaceId,
+        label: campaign.name,
+        startDate: window?.startDate,
+        releaseDate: campaign.mission ? missionReleaseDateKey(campaign.mission) : undefined,
+        finishDate: window?.finishDate,
+        dateStatuses: window?.statuses,
+        items: [],
+        orders: [],
+      };
+    }),
     goals,
     tiers: ['strategic'],
-    limit: BRIEF_TIMELINE_ENTRY_LIMIT,
   });
 
+  const snapshotEntries = input.relatedCampaigns.flatMap((campaign) => campaign.timelineEntries ?? []);
+  const strategicEntries = dedupeTimelineEntries([
+    ...result.entries,
+    ...snapshotEntries.filter((entry) => entry.tier === 'strategic' && entry.date >= from && entry.date <= to),
+  ])
+    .sort((left, right) => left.sortKey.localeCompare(right.sortKey) || left.id.localeCompare(right.id))
+    .slice(0, BRIEF_TIMELINE_ENTRY_LIMIT);
+
   const rollups = input.relatedCampaigns
-    .map((campaign) => ({
-      label: cap(campaign.name, 80) ?? campaign.workspaceId,
-      scheduled: (campaign.calendar?.active ?? 0) + (campaign.work?.active ?? 0),
-      needsAttention: (campaign.calendar?.blocked ?? 0) + (campaign.work?.blocked ?? 0),
-    }))
+    .map((campaign) => {
+      const entries = (campaign.timelineEntries ?? []).filter((entry) => entry.date >= from && entry.date <= to);
+      if (campaign.timelineEntries) {
+        return {
+          label: cap(campaign.name, 80) ?? campaign.workspaceId,
+          scheduled: entries.filter((entry) => entry.tier === 'operational').length,
+          needsAttention: entries.filter((entry) => entry.needsAttention).length,
+        };
+      }
+      // Compatibility for callers that have not yet adopted normalized
+      // snapshots. Production snapshots always take the exact branch above.
+      return {
+        label: cap(campaign.name, 80) ?? campaign.workspaceId,
+        scheduled: Math.max(campaign.calendar?.active ?? 0, campaign.work?.active ?? 0),
+        needsAttention: Math.max(campaign.calendar?.blocked ?? 0, campaign.work?.blocked ?? 0),
+      };
+    })
     .filter((rollup) => rollup.scheduled > 0 || rollup.needsAttention > 0)
     .slice(0, BRIEF_TIMELINE_ROLLUP_LIMIT);
 
-  if (result.entries.length === 0 && rollups.length === 0 && result.beyondWindow.strategic === 0) {
+  const canonicalMilestoneIds = new Set(input.relatedCampaigns.flatMap((campaign) => [
+    `campaign-start:${campaign.workspaceId}`,
+    `release:${campaign.workspaceId}`,
+    `campaign-finish:${campaign.workspaceId}`,
+  ]));
+  const extraBeyond = dedupeTimelineEntries(snapshotEntries.filter((entry) =>
+    entry.tier === 'strategic'
+    && entry.date > to
+    && !canonicalMilestoneIds.has(entry.id)))
+    .sort((left, right) => left.sortKey.localeCompare(right.sortKey));
+  const beyond = {
+    strategic: result.beyondWindow.strategic + extraBeyond.length,
+    ...earliestDate(result.beyondWindow.nextDate, extraBeyond[0]?.date),
+  };
+
+  if (strategicEntries.length === 0 && rollups.length === 0 && beyond.strategic === 0) {
     return undefined;
   }
   return {
     from,
     to,
-    entries: result.entries.map((entry) => ({
+    entries: strategicEntries.map((entry) => ({
       date: entry.date,
       ...(entry.time ? { time: entry.time } : {}),
       title: cap(entry.title, 120) ?? 'Untitled',
@@ -309,8 +357,17 @@ function buildBriefTimeline(
       ...(entry.stale ? { stale: true } : {}),
     })),
     rollups,
-    beyond: result.beyondWindow,
+    beyond,
   };
+}
+
+function dedupeTimelineEntries<T extends { id: string }>(entries: T[]): T[] {
+  return [...new Map(entries.map((entry) => [entry.id, entry])).values()];
+}
+
+function earliestDate(left?: string, right?: string): { nextDate?: string } {
+  const nextDate = [left, right].filter(isString).sort()[0];
+  return nextDate ? { nextDate } : {};
 }
 
 export function renderManagerBriefPromptSection(brief: ManagerBriefV1): string {
@@ -329,7 +386,9 @@ export function renderManagerBriefPromptSection(brief: ManagerBriefV1): string {
   const campaign = brief.campaignFocus;
   if (campaign) {
     lines.push('', '### Campaign Focus', `${campaign.label}: ${campaign.name}`);
-    if (campaign.releaseDate) lines.push(`Release date: ${campaign.releaseDate}`);
+    if (campaign.startDate) lines.push(`Campaign start: ${campaign.startDate} (${campaign.dateStatuses?.start ?? 'target'})`);
+    if (campaign.releaseDate) lines.push(`Release date: ${campaign.releaseDate} (${campaign.dateStatuses?.release ?? 'target'})`);
+    if (campaign.finishDate) lines.push(`Campaign finish: ${campaign.finishDate} (${campaign.dateStatuses?.finish ?? 'target'})`);
     if (campaign.goal) lines.push(`Goal: ${campaign.goal}`);
     if (campaign.readiness) lines.push(`Readiness: ${campaign.readiness.done}/${campaign.readiness.total}`);
     if (campaign.nextMissing?.length) lines.push(`Next missing: ${campaign.nextMissing.join(', ')}`);

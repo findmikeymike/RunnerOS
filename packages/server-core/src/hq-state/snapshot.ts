@@ -5,6 +5,7 @@ import {
   MISSION_BRIEF_CONTEXT_SLUG,
   RELEASE_BOARD_CONTEXT_SLUG,
   getBoardTotals,
+  missionCampaignWindow,
   parseMissionBriefDocResult,
   parseReleaseBoardDocResult,
 } from '@craft-agent/shared/artist-context';
@@ -12,11 +13,14 @@ import {
   CAMPAIGN_CALENDAR_CONTEXT_SLUG,
   parseCampaignCalendarDocResult,
 } from '@craft-agent/shared/campaign-calendar';
-import type {
-  BuildHqStateInput,
-  ManagerCampaignSnapshot,
-  ManagerCollectionSummary,
-  ManagerSourceHealth,
+import {
+  addDaysToDateKey,
+  buildArtistTimeline,
+  dateKeyInTimezone,
+  type BuildHqStateInput,
+  type ManagerCampaignSnapshot,
+  type ManagerCollectionSummary,
+  type ManagerSourceHealth,
 } from '@craft-agent/shared/hq-state';
 import {
   getMissionAssetManifestPath,
@@ -127,6 +131,45 @@ export function buildManagerCampaignSnapshot(
         sortKey: item.startAt,
       }))
     : [];
+  const sourceHealth: ManagerSourceHealth[] = [
+    parseHealth(`${workspace.id}:mission-brief`, Boolean(missionDoc), mission.ok, mission.ok ? mission.brief.updatedAt : undefined, CAMPAIGN_SOURCE_STALE_DAYS['mission-brief'], now, mission.ok ? undefined : mission.error),
+    parseHealth(`${workspace.id}:release-board`, Boolean(boardDoc), board.ok, board.ok ? board.board.updatedAt : undefined, CAMPAIGN_SOURCE_STALE_DAYS['release-board'], now, board.ok ? undefined : board.error),
+    parseHealth(`${workspace.id}:campaign-calendar`, Boolean(calendarDoc), calendar.ok, calendar.ok ? calendar.calendar.updatedAt : undefined, CAMPAIGN_SOURCE_STALE_DAYS['campaign-calendar'], now, calendar.ok ? undefined : calendar.error),
+    parseHealth(`${workspace.id}:scheduled-work`, Boolean(workDoc), work.ok, work.ok ? work.work.updatedAt : undefined, CAMPAIGN_SOURCE_STALE_DAYS['scheduled-work'], now, work.ok ? undefined : work.error),
+    parseHealth(`${workspace.id}:mission-assets`, assetsPresent, true, assetsPresent ? assets.updatedAt : undefined, CAMPAIGN_SOURCE_STALE_DAYS['mission-assets'], now, assetsPresent ? undefined : 'No campaign asset manifest.'),
+    outputs.length
+      ? parseHealth(`${workspace.id}:outputs`, true, true, outputs.map((output) => output.updatedAt).sort().at(-1), CAMPAIGN_SOURCE_STALE_DAYS.outputs, now)
+      : { source: `${workspace.id}:outputs`, status: 'fresh' },
+  ];
+  const campaignWindow = mission.ok ? missionCampaignWindow(mission.brief) : undefined;
+  const staleSources = sourceHealth
+    .filter((source) => source.status === 'stale')
+    .map((source) => source.source.split(':').at(-1)!)
+    .filter(Boolean);
+  const timezone = resolveTimelineTimezone();
+  const timelineFrom = dateKeyInTimezone(now.toISOString(), timezone) ?? now.toISOString().slice(0, 10);
+  const timeline = buildArtistTimeline({
+    now,
+    from: timelineFrom,
+    to: addDaysToDateKey(timelineFrom, 366),
+    timezone,
+    hqWorkspaceId: findArtistHqWorkspace()?.id ?? workspace.id,
+    hqEvents: [],
+    hqOrders: [],
+    campaigns: [{
+      workspaceId: workspace.id,
+      campaignId: workspace.id,
+      label: workspace.name,
+      startDate: campaignWindow?.startDate,
+      releaseDate: campaignWindow?.releaseDate,
+      finishDate: campaignWindow?.finishDate,
+      dateStatuses: campaignWindow?.statuses,
+      items: calendar.ok ? calendar.calendar.items : [],
+      orders: work.ok ? work.work.items : [],
+      staleSources,
+    }],
+    goals: [],
+  });
 
   return {
     workspaceId: workspace.id,
@@ -164,16 +207,9 @@ export function buildManagerCampaignSnapshot(
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .slice(0, 4)
       .map((output) => ({ title: output.title, status: output.status, updatedAt: output.updatedAt })),
-    sourceHealth: [
-      parseHealth(`${workspace.id}:mission-brief`, Boolean(missionDoc), mission.ok, mission.ok ? mission.brief.updatedAt : undefined, CAMPAIGN_SOURCE_STALE_DAYS['mission-brief'], now, mission.ok ? undefined : mission.error),
-      parseHealth(`${workspace.id}:release-board`, Boolean(boardDoc), board.ok, board.ok ? board.board.updatedAt : undefined, CAMPAIGN_SOURCE_STALE_DAYS['release-board'], now, board.ok ? undefined : board.error),
-      parseHealth(`${workspace.id}:campaign-calendar`, Boolean(calendarDoc), calendar.ok, calendar.ok ? calendar.calendar.updatedAt : undefined, CAMPAIGN_SOURCE_STALE_DAYS['campaign-calendar'], now, calendar.ok ? undefined : calendar.error),
-      parseHealth(`${workspace.id}:scheduled-work`, Boolean(workDoc), work.ok, work.ok ? work.work.updatedAt : undefined, CAMPAIGN_SOURCE_STALE_DAYS['scheduled-work'], now, work.ok ? undefined : work.error),
-      parseHealth(`${workspace.id}:mission-assets`, assetsPresent, true, assetsPresent ? assets.updatedAt : undefined, CAMPAIGN_SOURCE_STALE_DAYS['mission-assets'], now, assetsPresent ? undefined : 'No campaign asset manifest.'),
-      outputs.length
-        ? parseHealth(`${workspace.id}:outputs`, true, true, outputs.map((output) => output.updatedAt).sort().at(-1), CAMPAIGN_SOURCE_STALE_DAYS.outputs, now)
-        : { source: `${workspace.id}:outputs`, status: 'fresh' },
-    ],
+    timelineEntries: timeline.entries,
+    timelineWarnings: timeline.warnings,
+    sourceHealth,
   };
 }
 

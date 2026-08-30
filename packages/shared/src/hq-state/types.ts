@@ -1,5 +1,6 @@
 import type { ContextDocMetadata, LoadedContextDoc } from '../workspace-context/types.ts';
 import type { MissionBrief } from '../artist-context/mission-brief.ts';
+import type { TimelineEntry, TimelineWarning } from './timeline.ts';
 
 export const HQ_STATE_CONTEXT_SLUG = 'hq-state-of-play';
 export const HQ_STATE_CONTEXT_FENCE = 'json hq-state-of-play';
@@ -164,6 +165,9 @@ export interface ManagerCampaignSnapshot {
   workHighlights?: Array<{ title: string; startAt: string; status: string; timing?: 'upcoming' | 'overdue' }>;
   essentialAssets?: Array<{ label: string; available: boolean }>;
   outputHighlights?: Array<{ title: string; status: string; updatedAt: string }>;
+  /** Normalized, payload-free campaign dates used by the HQ timeline and brief. */
+  timelineEntries?: TimelineEntry[];
+  timelineWarnings?: TimelineWarning[];
   sourceHealth: ManagerSourceHealth[];
 }
 
@@ -272,7 +276,10 @@ export interface ManagerBriefV1 {
     workspaceId: string;
     name: string;
     label: 'Current campaign' | 'Next campaign' | 'Latest campaign' | 'Release date needed';
+    startDate?: string;
     releaseDate?: string;
+    finishDate?: string;
+    dateStatuses?: { start?: 'target' | 'locked'; release?: 'target' | 'locked'; finish?: 'target' | 'locked' };
     goal?: string;
     readiness?: { done: number; total: number };
     nextMissing?: string[];

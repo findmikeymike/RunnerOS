@@ -215,6 +215,11 @@ describe('Manager Brief timeline section', () => {
       ...campaign('campaign-1', 'Autumn Single', '2026-10-02'),
       calendar: { total: 4, active: 3, blocked: 1, completed: 0, updatedAt: '2026-08-20T00:00:00.000Z' },
       work: { total: 2, active: 2, blocked: 0, completed: 0, updatedAt: '2026-08-20T00:00:00.000Z' },
+      timelineEntries: [
+        timelineEntry('deadline-1', '2026-09-10', 'Master deadline', 'strategic', true, 'deadline'),
+        timelineEntry('task-1', '2026-09-12', 'Prepare visualizer', 'operational'),
+        timelineEntry('task-2', '2026-09-14', 'Schedule teaser', 'operational'),
+      ],
     };
     const brief = buildManagerBrief({
       workspaceId: 'hq-1',
@@ -228,19 +233,20 @@ describe('Manager Brief timeline section', () => {
     expect(brief.timeline!.from).toBe('2026-08-29');
     expect(brief.timeline!.to).toBe('2026-11-27');
     expect(brief.timeline!.entries.map((entry) => entry.title)).toEqual([
+      'Master deadline',
       'Label meeting',
       'Autumn Single',
       'Hit 10k listeners',
     ]);
     expect(brief.timeline!.rollups).toEqual([
-      { label: 'Autumn Single', scheduled: 5, needsAttention: 1 },
+      { label: 'Autumn Single', scheduled: 2, needsAttention: 1 },
     ]);
     expect(brief.timeline!.beyond).toEqual({ strategic: 1, nextDate: '2027-01-15' });
 
     const rendered = renderManagerBriefPromptSection(brief);
     expect(rendered).toContain('### Timeline');
     expect(rendered).toContain('- 2026-09-20: Label meeting [event]');
-    expect(rendered).toContain('- Autumn Single: 5 scheduled, 1 need attention');
+    expect(rendered).toContain('- Autumn Single: 2 scheduled, 1 need attention');
     expect(rendered).toContain('Beyond: 1 strategic date later (next 2027-01-15)');
     // Release Horizon remains its own untouched section.
     const timelineIndex = rendered.indexOf('### Timeline');
@@ -382,6 +388,27 @@ function campaign(workspaceId: string, name: string, releaseDate?: string): Mana
     },
     readiness: { done: 8, total: 12, nextMissing: ['Cover art'] },
     sourceHealth: [],
+  };
+}
+
+function timelineEntry(
+  id: string,
+  date: string,
+  title: string,
+  tier: 'strategic' | 'operational',
+  needsAttention = false,
+  category: 'deadline' | 'task' = 'task',
+) {
+  return {
+    id: `campaign-item:${id}`,
+    date,
+    timezone: 'UTC',
+    sortKey: `${date}T00:00`,
+    title,
+    tier,
+    category,
+    needsAttention,
+    origin: { kind: 'campaign-item' as const, workspaceId: 'campaign-1', campaignId: 'campaign-1', sourceId: id },
   };
 }
 

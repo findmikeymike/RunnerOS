@@ -26,4 +26,11 @@ describe('Release Horizon month planning UI', () => {
     expect(source).toContain('border border-white/30')
     expect(source).toContain('text-white/78">{label}</span>')
   })
+
+  test('loads every campaign for month detail so cross-month deadlines are not hidden', () => {
+    const source = readFileSync(join(import.meta.dir, '..', 'ReleaseHorizon.tsx'), 'utf8')
+
+    expect(source).toContain('Promise.all(campaigns.map(async (campaign) =>')
+    expect(source).toContain('campaignsActiveInMonth(campaigns, month.key)')
+  })
 })

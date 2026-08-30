@@ -26,10 +26,12 @@ import {
   buildMissionBrief,
   hasSaveableMissionBrief,
   missionBriefContentKey,
+  missionCampaignWindow,
+  missionCampaignWindowError,
   missionBriefMetadata,
-  missionReleaseDateKey,
   serializeMissionBriefBody,
   type MissionBrief,
+  type CampaignDateStatus,
   type MissionReference,
   type MissionType,
 } from '@/lib/mission-brief'
@@ -95,7 +97,9 @@ export function MissionBriefDrawer({
 
   const editableBrief = React.useMemo(() => buildMissionBrief(workspaceId, draft), [draft, workspaceId])
   const savedBrief = React.useMemo(() => buildMissionBrief(workspaceId, mission), [mission, workspaceId])
-  const canSave = hasSaveableMissionBrief(editableBrief)
+  const campaignWindow = React.useMemo(() => missionCampaignWindow(editableBrief), [editableBrief])
+  const campaignWindowError = React.useMemo(() => missionCampaignWindowError(editableBrief), [editableBrief])
+  const canSave = hasSaveableMissionBrief(editableBrief) && !campaignWindowError
   const briefDirty = React.useMemo(
     () => missionBriefContentKey(editableBrief) !== missionBriefContentKey(savedBrief),
     [editableBrief, savedBrief],
@@ -111,6 +115,11 @@ export function MissionBriefDrawer({
     }
     if (!hasSaveableMissionBrief(brief)) {
       toast.message('Add a title or goal before saving')
+      return
+    }
+    const dateError = missionCampaignWindowError(brief)
+    if (dateError) {
+      toast.error(dateError)
       return
     }
     setSaving(true)
@@ -228,24 +237,53 @@ export function MissionBriefDrawer({
                   placeholder="What are we trying to make happen?"
                 />
               </Field>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Release date">
-                  <input
-                    type="date"
-                    value={missionReleaseDateKey(draft) ?? ''}
-                    onChange={(event) => setDraft((value) => ({ ...value, releaseDate: event.target.value || undefined }))}
-                    className={missionFieldClass}
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.015] p-3">
+                <div className="mb-3">
+                  <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/52">Campaign window</div>
+                  <div className="mt-1 text-[11px] leading-4 text-white/30">Start the rollout, anchor the release, and define when post-release work ends.</div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <CampaignDateField
+                    label="Start"
+                    date={campaignWindow.startDate}
+                    status={campaignWindow.statuses.start}
+                    onDateChange={(date) => setDraft((value) => ({ ...value, campaignStartDate: date }))}
+                    onStatusChange={(status) => setDraft((value) => ({
+                      ...value,
+                      campaignDateStatuses: { ...value.campaignDateStatuses, start: status },
+                    }))}
                   />
-                </Field>
-                <Field label="Promo Budget">
-                  <input
-                    value={draft.promoBudget ?? ''}
-                    onChange={(event) => setDraft((value) => ({ ...value, promoBudget: event.target.value }))}
-                    className={missionFieldClass}
-                    placeholder="$0, $500, $2k, not sure yet"
+                  <CampaignDateField
+                    label="Release"
+                    date={campaignWindow.releaseDate}
+                    status={campaignWindow.statuses.release}
+                    onDateChange={(date) => setDraft((value) => ({ ...value, releaseDate: date }))}
+                    onStatusChange={(status) => setDraft((value) => ({
+                      ...value,
+                      campaignDateStatuses: { ...value.campaignDateStatuses, release: status },
+                    }))}
                   />
-                </Field>
+                  <CampaignDateField
+                    label="Finish"
+                    date={campaignWindow.finishDate}
+                    status={campaignWindow.statuses.finish}
+                    onDateChange={(date) => setDraft((value) => ({ ...value, campaignFinishDate: date }))}
+                    onStatusChange={(status) => setDraft((value) => ({
+                      ...value,
+                      campaignDateStatuses: { ...value.campaignDateStatuses, finish: status },
+                    }))}
+                  />
+                </div>
+                {campaignWindowError ? <p className="mt-2 text-[11px] text-red-300/80">{campaignWindowError}</p> : null}
               </div>
+              <Field label="Promo Budget">
+                <input
+                  value={draft.promoBudget ?? ''}
+                  onChange={(event) => setDraft((value) => ({ ...value, promoBudget: event.target.value }))}
+                  className={missionFieldClass}
+                  placeholder="$0, $500, $2k, not sure yet"
+                />
+              </Field>
               <Field label="Timeline">
                 <input
                   value={draft.timeline ?? ''}
@@ -319,7 +357,7 @@ export function MissionBriefDrawer({
                   onClick={save}
                   disabled={saving || !canSave}
                   className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-full bg-orange-500 px-4 text-sm font-medium text-black hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-60"
-                  title={!canSave ? 'Add a title or goal before saving' : undefined}
+                  title={campaignWindowError ?? (!hasSaveableMissionBrief(editableBrief) ? 'Add a title or goal before saving' : undefined)}
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   Accept Brief
@@ -333,7 +371,7 @@ export function MissionBriefDrawer({
                 </button>
               </div>
               {!canSave ? (
-                <p className="mt-2 text-center text-[11px] text-white/32">Needs a title or goal before saving.</p>
+                <p className="mt-2 text-center text-[11px] text-white/32">{campaignWindowError ?? 'Needs a title or goal before saving.'}</p>
               ) : null}
             </>
           ) : (
@@ -367,6 +405,43 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-white/32">{label}</span>
       {children}
     </label>
+  )
+}
+
+function CampaignDateField({
+  label,
+  date,
+  status = 'target',
+  onDateChange,
+  onStatusChange,
+}: {
+  label: string
+  date?: string
+  status?: CampaignDateStatus
+  onDateChange: (date: string | undefined) => void
+  onStatusChange: (status: CampaignDateStatus) => void
+}) {
+  return (
+    <Field label={label}>
+      <div className="grid gap-1.5">
+        <input
+          type="date"
+          value={date ?? ''}
+          onChange={(event) => onDateChange(event.target.value || undefined)}
+          className={missionFieldClass}
+        />
+        <select
+          value={status}
+          onChange={(event) => onStatusChange(event.target.value as CampaignDateStatus)}
+          disabled={!date}
+          className={cn(missionFieldClass, 'py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40')}
+          aria-label={`${label} date status`}
+        >
+          <option value="target">Target</option>
+          <option value="locked">Locked</option>
+        </select>
+      </div>
+    </Field>
   )
 }
 

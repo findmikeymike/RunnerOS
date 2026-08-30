@@ -366,8 +366,9 @@ Each exists twice today; the timeline layer becomes the single home:
    existing calendar topics, warning propagation, staleness flags.
 3. **HQ Manager Brief `### Timeline`** with internal degrade order and the
    beyond-window synopsis; add `startAt`/`dueAt` to `HqOperationalItem`.
-4. **UI** — upgrade the Plan-page calendar to the unified lens; compact
-   90-day strip on HQ Home; repoint This Week.
+4. **UI** — enrich the existing HQ Release Horizon month pop-outs with the
+   unified strategic lens and repoint This Week; keep campaign Plan as the
+   detailed working calendar. A separate 90-day Home strip remains deferred.
 5. **Consolidation** — remove the duplicate focus/rolling-month/date helpers.
 
 Phases 1–2 are independently useful: the manager can answer timeline questions
@@ -384,8 +385,8 @@ before any UI ships.
    aware of later-year releases ("2 singles releasing in the last months of the
    year" stays visible as a one-liner).
 3. **Simplicity is a requirement, not a preference.** One big calendar per
-   campaign; HQ gets the Plan-page lens and a compact home strip — never a
-   second maintained calendar. Any future feature that would create two
+   campaign; HQ gets strategic dates through Release Horizon and the existing
+   compact This Week strip — never a second maintained calendar. Any future feature that would create two
    overlapping full-calendar pages in one product area is out of bounds.
 4. **`hqCalendarEventId`: delete** (agent's call, no product need identified).
 5. **No backward look.** Forward-only; `from` defaults to today. Retrospective

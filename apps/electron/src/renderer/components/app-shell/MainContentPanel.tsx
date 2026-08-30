@@ -93,7 +93,7 @@ import { TemplatesGalleryDialog } from '@/components/automations/TemplatesGaller
 import { ChevronDown, ChevronRight, Plus, Sparkles, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { CompactPageHeader } from './CompactPageHeader'
-import { MISSION_BRIEF_CONTEXT_SLUG, missionReleaseDateKey, parseMissionBriefDoc } from '@/lib/mission-brief'
+import { MISSION_BRIEF_CONTEXT_SLUG, missionCampaignWindow, missionReleaseDateKey, parseMissionBriefDoc } from '@/lib/mission-brief'
 import type { HqCampaignSummary } from '@/lib/artist-hq-home-feed'
 
 export interface MainContentPanelProps {
@@ -172,9 +172,13 @@ export function MainContentPanel({
       try {
         const docs = await window.electronAPI.listWorkspaceContextDocs(campaign.id)
         const brief = parseMissionBriefDoc(docs.find((doc) => doc.slug === MISSION_BRIEF_CONTEXT_SLUG))
+        const missionWindow = brief ? missionCampaignWindow(brief) : undefined
         return {
           ...campaign,
+          startDate: missionWindow?.startDate,
           releaseDate: brief ? missionReleaseDateKey(brief) : undefined,
+          finishDate: missionWindow?.finishDate,
+          dateStatuses: missionWindow?.statuses,
           missionTitle: brief?.title,
         }
       } catch {

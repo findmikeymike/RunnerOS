@@ -3,6 +3,8 @@ import {
   buildMissionBrief,
   extractMissionBrief,
   hasSaveableMissionBrief,
+  missionCampaignWindow,
+  missionCampaignWindowError,
   missionBriefContentKey,
   missionBriefMetadata,
   missionReleaseDateKey,
@@ -115,6 +117,41 @@ describe('mission brief utilities', () => {
     expect(missionReleaseDateKey({ releaseDate: 'July 24, 2026' })).toBeUndefined()
     expect(missionReleaseDateKey({ releaseDate: 'this summer' })).toBeUndefined()
     expect(missionReleaseDateKey({ releaseDate: '2026-02-31' })).toBeUndefined()
+  })
+
+  test('round-trips an explicit campaign window with target and locked milestones', () => {
+    const brief = buildMissionBrief('workspace-1', {
+      title: 'Night Drive',
+      campaignStartDate: '2026-06-01',
+      releaseDate: '2026-07-24',
+      campaignFinishDate: '2026-08-21',
+      campaignDateStatuses: { start: 'target', release: 'locked', finish: 'target' },
+    })
+    const parsed = parseMissionBriefDocResult({ body: serializeMissionBriefBody(brief) })
+
+    expect(parsed.ok).toBe(true)
+    expect(parsed.ok && missionCampaignWindow(parsed.brief)).toEqual({
+      startDate: '2026-06-01',
+      releaseDate: '2026-07-24',
+      finishDate: '2026-08-21',
+      statuses: { start: 'target', release: 'locked', finish: 'target' },
+    })
+    expect(missionBriefContentKey(brief)).toContain('campaignStartDate')
+  })
+
+  test('defaults dated milestones to target and rejects contradictory persisted order', () => {
+    const brief = buildMissionBrief('workspace-1', {
+      title: 'Night Drive',
+      campaignStartDate: '2026-08-01',
+      releaseDate: '2026-07-24',
+      campaignFinishDate: '2026-08-21',
+    })
+
+    expect(missionCampaignWindow(brief).statuses).toEqual({ start: 'target', release: 'target', finish: 'target' })
+    expect(missionCampaignWindowError(brief)).toContain('start')
+    const parsed = parseMissionBriefDocResult({ body: serializeMissionBriefBody(brief) })
+    expect(parsed.ok).toBe(false)
+    expect(parsed.ok || parsed.error).toContain('start')
   })
 
   test('preserves persisted timestamps and reports missing freshness', () => {

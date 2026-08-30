@@ -139,6 +139,17 @@ describe('dedup — explicit links only', () => {
     expect(timeline.warnings).toHaveLength(0);
   });
 
+  test('a hidden order also suppresses its linked shell', () => {
+    const timeline = buildArtistTimeline(baseInput({
+      campaigns: [campaign({
+        items: [campaignItem({ id: 'item-1', scheduledWorkId: 'order-1', kind: 'scheduled-job' })],
+        orders: [order({ id: 'order-1', calendarVisibility: 'hidden' })],
+      })],
+    }));
+
+    expect(timeline.entries).toHaveLength(0);
+  });
+
   test('a shell-side back-reference alone still collapses the pair to one entry', () => {
     // The order's calendarLink points at a stale id, but the shell's
     // scheduledWorkId names the order: one entry, shell title wins, warning.
@@ -254,6 +265,35 @@ describe('goal eligibility', () => {
     expect(timeline.entries).toHaveLength(0);
     expect(timeline.warnings.some((warning) => warning.source === 'mission-brief')).toBe(true);
   });
+
+  test('an impossible calendar date yields a warning, not an entry', () => {
+    const timeline = buildArtistTimeline(baseInput({
+      campaigns: [campaign({ releaseDate: '2026-02-31' })],
+    }));
+
+    expect(timeline.entries).toHaveLength(0);
+    expect(timeline.warnings).toHaveLength(1);
+  });
+
+  test('campaign start, release, and finish are distinct strategic milestones', () => {
+    const timeline = buildArtistTimeline(baseInput({
+      campaigns: [campaign({
+        startDate: '2026-09-01',
+        releaseDate: '2026-10-02',
+        finishDate: '2026-10-20',
+        dateStatuses: { start: 'locked', release: 'locked', finish: 'target' },
+      })],
+    }));
+
+    expect(timeline.entries.map((entry) => [entry.origin.kind, entry.status])).toEqual([
+      ['campaign-start', 'locked'],
+      ['release', 'locked'],
+      ['campaign-finish', 'target'],
+    ]);
+    expect(timeline.campaignWindows[0]).toEqual(expect.objectContaining({
+      startDate: '2026-09-01', releaseDate: '2026-10-02', finishDate: '2026-10-20',
+    }));
+  });
 });
 
 describe('ordering and windowing', () => {
@@ -317,9 +357,9 @@ describe('roll-ups', () => {
       tiers: ['strategic'],
     }));
 
-    // The failed item is strategic (needs attention); only 'a' is operational.
+    // The failed item is strategic but still counts as attention; only 'a' is operational volume.
     expect(timeline.rollups).toEqual([
-      { workspaceId: 'camp-1', campaignId: 'camp-1', label: 'Summer EP', counts: { total: 1, needsAttention: 0 } },
+      { workspaceId: 'camp-1', campaignId: 'camp-1', label: 'Summer EP', counts: { total: 1, needsAttention: 1 } },
     ]);
   });
 });
@@ -359,6 +399,17 @@ describe('timezone', () => {
 
     expect(timeline.entries[0]!.date).toBe('2026-09-10');
     expect(timeline.entries[0]!.time).toBe('22:30');
+  });
+
+  test('a timed campaign item is converted from its own timezone into the reference timezone', () => {
+    const timeline = buildArtistTimeline(baseInput({
+      timezone: 'America/Los_Angeles',
+      campaigns: [campaign({
+        items: [campaignItem({ date: '2026-09-10', time: '00:30', timezone: 'America/New_York' })],
+      })],
+    }));
+
+    expect(timeline.entries[0]).toEqual(expect.objectContaining({ date: '2026-09-09', time: '21:30' }));
   });
 
   test('dateKeyInTimezone returns null for garbage input', () => {

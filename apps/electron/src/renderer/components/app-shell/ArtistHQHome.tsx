@@ -481,7 +481,10 @@ export function ArtistHQHome({
       campaigns: campaignWorkspaces.map((campaign) => ({
         workspaceId: campaign.id,
         label: campaign.name,
+        startDate: campaign.startDate,
         releaseDate: campaign.releaseDate,
+        finishDate: campaign.finishDate,
+        dateStatuses: campaign.dateStatuses,
         items: [],
         orders: [],
       })),

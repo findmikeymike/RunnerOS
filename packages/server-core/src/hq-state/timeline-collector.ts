@@ -9,6 +9,7 @@
  */
 import {
   ARTIST_CALENDAR_CONTEXT_SLUG,
+  missionCampaignWindow,
   missionReleaseDateKey,
   MISSION_BRIEF_CONTEXT_SLUG,
   parseArtistCalendarDocResult,
@@ -25,6 +26,7 @@ import {
   CAMPAIGN_STATE_CONTEXT_SLUG,
   dateKeyInTimezone,
   HQ_STATE_CONTEXT_SLUG,
+  isTimelineDateKey,
   type ArtistTimeline,
   type TimelineCampaignInput,
   type TimelineGoalInput,
@@ -46,9 +48,13 @@ import { findArtistHqWorkspace, resolveTimelineTimezone } from './snapshot';
 export { addDaysToDateKey };
 
 const DEFAULT_WINDOW_DAYS = 90;
-const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-/** Mission briefs older than this mark their release entry stale (spec §8a). */
-const MISSION_BRIEF_STALE_MS = 30 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const STALE_DAYS = {
+  'artist-calendar': 30,
+  'campaign-calendar': 14,
+  'scheduled-work': 7,
+  'mission-brief': 30,
+} as const;
 
 export interface CollectArtistTimelineInput {
   from?: string;
@@ -66,26 +72,28 @@ export function collectArtistTimeline(
 
   const timezone = resolveTimelineTimezone();
   const todayKey = dateKeyInTimezone(now.toISOString(), timezone) ?? now.toISOString().slice(0, 10);
-  const from = input.from && DATE_KEY_REGEX.test(input.from) ? input.from : todayKey;
-  const to = input.to && DATE_KEY_REGEX.test(input.to)
+  const from = isTimelineDateKey(input.from) ? input.from : todayKey;
+  const to = isTimelineDateKey(input.to)
     ? input.to
     : addDaysToDateKey(from, DEFAULT_WINDOW_DAYS);
 
   const warnings: TimelineWarning[] = [];
 
-  const hqCalendar = parseArtistCalendarDocResult(
-    loadContextDoc(hq.rootPath, ARTIST_CALENDAR_CONTEXT_SLUG) ?? undefined,
-  );
+  const hqCalendarDoc = loadContextDoc(hq.rootPath, ARTIST_CALENDAR_CONTEXT_SLUG);
+  const hqCalendar = parseArtistCalendarDocResult(hqCalendarDoc ?? undefined);
+  const hqStaleSources: string[] = [];
   if (!hqCalendar.ok) {
     warnings.push({ source: 'artist-calendar', workspaceId: hq.id, reason: hqCalendar.error });
+  } else if (hqCalendarDoc) {
+    markStale('artist-calendar', hq.id, hqCalendar.calendar.updatedAt, STALE_DAYS['artist-calendar'], now, hqStaleSources, warnings);
   }
 
-  const hqWork = parseScheduledWorkDocResult(
-    loadContextDoc(hq.rootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined,
-    hq.id,
-  );
+  const hqWorkDoc = loadContextDoc(hq.rootPath, SCHEDULED_WORK_CONTEXT_SLUG);
+  const hqWork = parseScheduledWorkDocResult(hqWorkDoc ?? undefined, hq.id);
   if (!hqWork.ok) {
     warnings.push({ source: 'scheduled-work', workspaceId: hq.id, reason: hqWork.error });
+  } else if (hqWorkDoc) {
+    markStale('scheduled-work', hq.id, hqWork.work.updatedAt, STALE_DAYS['scheduled-work'], now, hqStaleSources, warnings);
   }
 
   const campaigns: TimelineCampaignInput[] = getWorkspaces()
@@ -93,39 +101,39 @@ export function collectArtistTimeline(
     .map((workspace) => {
       const staleSources: string[] = [];
 
-      const mission = parseMissionBriefDocResult(
-        loadContextDoc(workspace.rootPath, MISSION_BRIEF_CONTEXT_SLUG) ?? undefined,
-      );
+      const missionDoc = loadContextDoc(workspace.rootPath, MISSION_BRIEF_CONTEXT_SLUG);
+      const mission = parseMissionBriefDocResult(missionDoc ?? undefined);
       if (!mission.ok) {
         warnings.push({ source: 'mission-brief', workspaceId: workspace.id, reason: mission.error });
-      } else {
-        const updated = Date.parse(mission.brief.updatedAt);
-        if (Number.isFinite(updated) && now.getTime() - updated > MISSION_BRIEF_STALE_MS) {
-          staleSources.push('mission-brief');
-        }
+      } else if (missionDoc) {
+        markStale('mission-brief', workspace.id, mission.brief.updatedAt, STALE_DAYS['mission-brief'], now, staleSources, warnings);
       }
 
-      const calendar = parseCampaignCalendarDocResult(
-        loadContextDoc(workspace.rootPath, CAMPAIGN_CALENDAR_CONTEXT_SLUG) ?? undefined,
-        workspace.id,
-      );
+      const calendarDoc = loadContextDoc(workspace.rootPath, CAMPAIGN_CALENDAR_CONTEXT_SLUG);
+      const calendar = parseCampaignCalendarDocResult(calendarDoc ?? undefined, workspace.id);
       if (!calendar.ok) {
         warnings.push({ source: 'campaign-calendar', workspaceId: workspace.id, reason: calendar.error });
+      } else if (calendarDoc) {
+        markStale('campaign-calendar', workspace.id, calendar.calendar.updatedAt, STALE_DAYS['campaign-calendar'], now, staleSources, warnings);
       }
 
-      const work = parseScheduledWorkDocResult(
-        loadContextDoc(workspace.rootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined,
-        workspace.id,
-      );
+      const workDoc = loadContextDoc(workspace.rootPath, SCHEDULED_WORK_CONTEXT_SLUG);
+      const work = parseScheduledWorkDocResult(workDoc ?? undefined, workspace.id);
       if (!work.ok) {
         warnings.push({ source: 'scheduled-work', workspaceId: workspace.id, reason: work.error });
+      } else if (workDoc) {
+        markStale('scheduled-work', workspace.id, work.work.updatedAt, STALE_DAYS['scheduled-work'], now, staleSources, warnings);
       }
 
+      const campaignWindow = mission.ok ? missionCampaignWindow(mission.brief) : undefined;
       return {
         workspaceId: workspace.id,
         campaignId: workspace.id,
         label: workspace.name,
+        startDate: campaignWindow?.startDate,
         releaseDate: mission.ok ? missionReleaseDateKey(mission.brief) : undefined,
+        finishDate: campaignWindow?.finishDate,
+        dateStatuses: campaignWindow?.statuses,
         items: calendar.ok ? calendar.calendar.items : [],
         orders: work.ok ? work.work.items : [],
         ...(staleSources.length > 0 ? { staleSources } : {}),
@@ -141,7 +149,7 @@ export function collectArtistTimeline(
       && doc.metadata.status !== 'done'
       && doc.metadata.enabled !== false
       && typeof doc.metadata.deadline === 'string'
-      && DATE_KEY_REGEX.test(doc.metadata.deadline)
+      && isTimelineDateKey(doc.metadata.deadline)
       && !isSharedIntelContextSlug(doc.slug)
       && doc.slug !== HQ_STATE_CONTEXT_SLUG
       && doc.slug !== CAMPAIGN_STATE_CONTEXT_SLUG,
@@ -161,10 +169,30 @@ export function collectArtistTimeline(
     hqWorkspaceId: hq.id,
     hqEvents: hqCalendar.ok ? hqCalendar.calendar.events : [],
     hqOrders: hqWork.ok ? hqWork.work.items : [],
+    hqStaleSources,
     campaigns,
     goals,
     warnings,
     tiers: input.tier ? [input.tier] : undefined,
     limit: input.limit,
+  });
+}
+
+function markStale(
+  source: keyof typeof STALE_DAYS,
+  workspaceId: string,
+  observedAt: string | undefined,
+  staleDays: number,
+  now: Date,
+  staleSources: string[],
+  warnings: TimelineWarning[],
+): void {
+  const observed = observedAt ? Date.parse(observedAt) : Number.NaN;
+  if (!Number.isFinite(observed) || now.getTime() - observed <= staleDays * DAY_MS) return;
+  staleSources.push(source);
+  warnings.push({
+    source,
+    workspaceId,
+    reason: `${source} is older than ${staleDays} days; entries are shown but marked stale.`,
   });
 }

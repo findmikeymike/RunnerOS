@@ -20,6 +20,7 @@
  *   half-link warnings.
  */
 import type { ArtistCalendarEvent } from '../artist-context/calendar.ts';
+import type { CampaignDateStatuses } from '../artist-context/mission-brief.ts';
 import type { CampaignCalendarItem } from '../campaign-calendar/index.ts';
 import type { ScheduledWorkOrder, ScheduledWorkType } from '../scheduled-work/index.ts';
 
@@ -39,7 +40,9 @@ export type TimelineOriginKind =
   | 'hq-event'
   | 'campaign-item'
   | 'scheduled-work'
+  | 'campaign-start'
   | 'release'
+  | 'campaign-finish'
   | 'goal';
 
 export interface TimelineOrigin {
@@ -89,17 +92,33 @@ export interface ArtistTimeline {
   entries: TimelineEntry[];
   /** Operational volume per campaign, for altitudes that do not list it. */
   rollups: TimelineRollup[];
+  /** Canonical campaign spans used by year-level views. */
+  campaignWindows: TimelineCampaignWindow[];
   /** Strategic entries beyond `to`, so a bounded window can still say "2 more later this year". */
   beyondWindow: { strategic: number; nextDate?: string };
   warnings: TimelineWarning[];
+}
+
+export interface TimelineCampaignWindow {
+  workspaceId: string;
+  campaignId?: string;
+  label: string;
+  startDate?: string;
+  releaseDate?: string;
+  finishDate?: string;
+  statuses: CampaignDateStatuses;
+  stale?: boolean;
 }
 
 export interface TimelineCampaignInput {
   workspaceId: string;
   campaignId?: string;
   label: string;
+  startDate?: string;
   /** Canonical release date from mission-brief via `missionReleaseDateKey`. */
   releaseDate?: string;
+  finishDate?: string;
+  dateStatuses?: CampaignDateStatuses;
   items: CampaignCalendarItem[];
   orders: ScheduledWorkOrder[];
   /** Source names ('campaign-calendar' | 'scheduled-work' | 'mission-brief') that failed freshness. */
@@ -122,6 +141,8 @@ export interface BuildArtistTimelineInput {
   hqWorkspaceId: string;
   hqEvents: ArtistCalendarEvent[];
   hqOrders: ScheduledWorkOrder[];
+  /** HQ source names ('artist-calendar' | 'scheduled-work') that failed freshness. */
+  hqStaleSources?: string[];
   campaigns: TimelineCampaignInput[];
   goals: TimelineGoalInput[];
   /** Parse failures from the collector; merged into the output warnings. */
@@ -159,7 +180,7 @@ export function buildArtistTimeline(input: BuildArtistTimelineInput): ArtistTime
     items: [],
     orders: input.hqOrders,
     label: 'HQ',
-    staleSources: [],
+    staleSources: input.hqStaleSources ?? [],
   });
 
   for (const campaign of input.campaigns) {
@@ -174,37 +195,13 @@ export function buildArtistTimeline(input: BuildArtistTimelineInput): ArtistTime
       staleSources: campaign.staleSources ?? [],
     });
 
-    if (campaign.releaseDate) {
-      if (DATE_KEY_REGEX.test(campaign.releaseDate)) {
-        all.push({
-          id: `release:${campaign.workspaceId}`,
-          date: campaign.releaseDate,
-          timezone: input.timezone,
-          sortKey: `${campaign.releaseDate}T00:00`,
-          title: campaign.label,
-          tier: 'strategic',
-          category: 'release',
-          needsAttention: false,
-          stale: campaign.staleSources?.includes('mission-brief') || undefined,
-          origin: {
-            kind: 'release',
-            workspaceId: campaign.workspaceId,
-            campaignId: campaign.campaignId,
-            sourceId: campaign.workspaceId,
-          },
-        });
-      } else {
-        warnings.push({
-          source: 'mission-brief',
-          workspaceId: campaign.workspaceId,
-          reason: `Release date "${campaign.releaseDate}" is not a valid YYYY-MM-DD date.`,
-        });
-      }
-    }
+    addCampaignMilestone(all, warnings, input.timezone, campaign, 'start', campaign.startDate);
+    addCampaignMilestone(all, warnings, input.timezone, campaign, 'release', campaign.releaseDate);
+    addCampaignMilestone(all, warnings, input.timezone, campaign, 'finish', campaign.finishDate);
   }
 
   for (const goal of input.goals) {
-    if (!DATE_KEY_REGEX.test(goal.deadline)) {
+    if (!isDateKey(goal.deadline)) {
       warnings.push({
         source: 'goal',
         workspaceId: goal.workspaceId,
@@ -242,6 +239,16 @@ export function buildArtistTimeline(input: BuildArtistTimelineInput): ArtistTime
   // Roll-ups summarize operational volume regardless of the tier filter —
   // that is their purpose at strategic altitudes.
   const rollups = buildRollups(inWindow, input.campaigns);
+  const campaignWindows = input.campaigns.map((campaign) => ({
+    workspaceId: campaign.workspaceId,
+    ...(campaign.campaignId ? { campaignId: campaign.campaignId } : {}),
+    label: campaign.label,
+    ...(isDateKey(campaign.startDate) ? { startDate: campaign.startDate } : {}),
+    ...(isDateKey(campaign.releaseDate) ? { releaseDate: campaign.releaseDate } : {}),
+    ...(isDateKey(campaign.finishDate) ? { finishDate: campaign.finishDate } : {}),
+    statuses: campaign.dateStatuses ?? {},
+    ...(campaign.staleSources?.includes('mission-brief') ? { stale: true } : {}),
+  }));
 
   const tiers = new Set(input.tiers ?? ['strategic', 'operational']);
   const entries = inWindow
@@ -255,9 +262,48 @@ export function buildArtistTimeline(input: BuildArtistTimelineInput): ArtistTime
     timezone: input.timezone,
     entries,
     rollups,
+    campaignWindows,
     beyondWindow,
     warnings,
   };
+}
+
+function addCampaignMilestone(
+  out: TimelineEntry[],
+  warnings: TimelineWarning[],
+  timezone: string,
+  campaign: TimelineCampaignInput,
+  milestone: 'start' | 'release' | 'finish',
+  date: string | undefined,
+): void {
+  if (!date) return;
+  if (!isDateKey(date)) {
+    warnings.push({
+      source: 'mission-brief',
+      workspaceId: campaign.workspaceId,
+      reason: `${milestone[0]!.toUpperCase()}${milestone.slice(1)} date "${date}" is not a valid YYYY-MM-DD date.`,
+    });
+    return;
+  }
+  const kind = milestone === 'start' ? 'campaign-start' : milestone === 'finish' ? 'campaign-finish' : 'release';
+  out.push({
+    id: `${kind}:${campaign.workspaceId}`,
+    date,
+    timezone,
+    sortKey: `${date}T00:00`,
+    title: milestone === 'release' ? campaign.label : `${campaign.label} — campaign ${milestone}`,
+    tier: 'strategic',
+    category: milestone === 'release' ? 'release' : 'milestone',
+    status: campaign.dateStatuses?.[milestone] ?? 'target',
+    needsAttention: false,
+    stale: campaign.staleSources?.includes('mission-brief') || undefined,
+    origin: {
+      kind,
+      workspaceId: campaign.workspaceId,
+      campaignId: campaign.campaignId,
+      sourceId: campaign.workspaceId,
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -301,11 +347,6 @@ function collectScopeEntries(
   const consumedShells = new Set<string>();
 
   for (const order of scope.orders) {
-    if (order.deletedAt || order.status === 'canceled') continue;
-    // Hidden automation work has no calendar shell by design; the timeline
-    // must not resurrect it into a user-facing calendar.
-    if (order.calendarVisibility === 'hidden') continue;
-
     const linked =
       order.calendarLink.calendar === 'hq'
         ? eventById.get(order.calendarLink.itemId)
@@ -318,6 +359,14 @@ function collectScopeEntries(
         : itemByWorkId.get(order.id);
     const shell = linked ?? backReferenced;
     const shellBacklink = shell?.scheduledWorkId;
+
+    // A linked shell belongs to its order even when the order is canceled,
+    // deleted, or hidden. Consume it before omitting the order so a stale or
+    // partially-healed shell cannot resurrect private/canceled work.
+    if (order.deletedAt || order.status === 'canceled' || order.calendarVisibility === 'hidden') {
+      if (shell) consumedShells.add(shell.id);
+      continue;
+    }
 
     if (!shell) {
       warnings.push({
@@ -377,7 +426,7 @@ function collectScopeEntries(
 
   for (const event of scope.events) {
     if (event.deletedAt || consumedShells.has(event.id)) continue;
-    if (!DATE_KEY_REGEX.test(event.date)) continue;
+    if (!isDateKey(event.date)) continue;
     out.push({
       id: `hq-event:${event.id}`,
       date: event.date,
@@ -395,15 +444,28 @@ function collectScopeEntries(
 
   for (const item of scope.items) {
     if (item.deletedAt || item.status === 'canceled' || consumedShells.has(item.id)) continue;
-    if (!DATE_KEY_REGEX.test(item.date)) continue;
+    if (!isDateKey(item.date)) continue;
     const needsAttention = ATTENTION_STATUSES.has(item.status);
     const strategic = item.kind === 'deadline' || item.kind === 'approval' || needsAttention;
+    const converted = item.time
+      ? dateTimeInReferenceTimezone(item.date, item.time, item.timezone, input.timezone)
+      : null;
+    if (item.time && !converted) {
+      warnings.push({
+        source: 'campaign-calendar',
+        workspaceId: scope.workspaceId,
+        reason: `Calendar item "${item.title}" (${item.id}) has an unreadable local date, time, or timezone.`,
+      });
+      continue;
+    }
+    const date = converted?.date ?? item.date;
+    const time = converted?.time ?? item.time;
     out.push({
       id: `campaign-item:${item.id}`,
-      date: item.date,
-      ...(item.time ? { time: item.time } : {}),
+      date,
+      ...(time ? { time } : {}),
       timezone: input.timezone,
-      sortKey: `${item.date}T${item.time ?? '00:00'}`,
+      sortKey: `${date}T${time ?? '00:00'}`,
       title: item.title,
       tier: strategic ? 'strategic' : 'operational',
       category:
@@ -439,11 +501,11 @@ function buildRollups(
   const labelByWorkspace = new Map(campaigns.map((campaign) => [campaign.workspaceId, campaign]));
   const byWorkspace = new Map<string, { total: number; needsAttention: number }>();
   for (const entry of entries) {
-    if (entry.tier !== 'operational') continue;
+    if (!labelByWorkspace.has(entry.origin.workspaceId)) continue;
     const counts = byWorkspace.get(entry.origin.workspaceId) ?? { total: 0, needsAttention: 0 };
-    counts.total += 1;
+    if (entry.tier === 'operational') counts.total += 1;
     if (entry.needsAttention) counts.needsAttention += 1;
-    byWorkspace.set(entry.origin.workspaceId, counts);
+    if (counts.total > 0 || counts.needsAttention > 0) byWorkspace.set(entry.origin.workspaceId, counts);
   }
   return [...byWorkspace.entries()]
     .map(([workspaceId, counts]) => {
@@ -584,11 +646,69 @@ export function timeKeyInTimezone(value: string, timezone: string): string | und
   }
 }
 
+/** Convert a campaign-local wall-clock value into the shared reference zone. */
+export function dateTimeInReferenceTimezone(
+  dateKey: string,
+  timeKey: string,
+  sourceTimezone: string,
+  referenceTimezone: string,
+): { date: string; time: string } | null {
+  if (!isDateKey(dateKey) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(timeKey)) return null;
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const [hour, minute] = timeKey.split(':').map(Number);
+  const target = Date.UTC(year!, month! - 1, day!, hour!, minute!);
+  let guess = target;
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: sourceTimezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
+    for (let pass = 0; pass < 3; pass += 1) {
+      const parts = formatter.formatToParts(new Date(guess));
+      const value = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
+      const observed = Date.UTC(value('year'), value('month') - 1, value('day'), value('hour'), value('minute'));
+      if (!Number.isFinite(observed)) return null;
+      const adjustment = target - observed;
+      guess += adjustment;
+      if (adjustment === 0) break;
+    }
+    const finalParts = formatter.formatToParts(new Date(guess));
+    const finalValue = (type: Intl.DateTimeFormatPartTypes) => Number(finalParts.find((part) => part.type === type)?.value);
+    if (finalValue('year') !== year || finalValue('month') !== month || finalValue('day') !== day
+      || finalValue('hour') !== hour || finalValue('minute') !== minute) return null;
+    const instant = new Date(guess).toISOString();
+    const date = dateKeyInTimezone(instant, referenceTimezone);
+    const time = timeKeyInTimezone(instant, referenceTimezone);
+    return date && time ? { date, time } : null;
+  } catch {
+    return null;
+  }
+}
+
 /** `dateKey` plus `days`, computed in UTC so it cannot double-apply an offset. */
 export function addDaysToDateKey(dateKey: string, days: number): string {
   const [year, month, day] = dateKey.split('-').map(Number);
   const value = new Date(Date.UTC(year!, month! - 1, day! + days));
   return value.toISOString().slice(0, 10);
+}
+
+function isDateKey(value: string | undefined): value is string {
+  if (!value || !DATE_KEY_REGEX.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const parsed = new Date(Date.UTC(year!, month! - 1, day!));
+  return parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === month! - 1
+    && parsed.getUTCDate() === day;
+}
+
+/** Strict calendar-date validation for collectors and request boundaries. */
+export function isTimelineDateKey(value: string | undefined): value is string {
+  return isDateKey(value);
 }
 
 function localDateKey(date: Date): string {

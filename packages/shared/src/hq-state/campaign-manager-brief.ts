@@ -93,8 +93,10 @@ export function renderCampaignManagerBriefPromptSection(brief: CampaignManagerBr
   const mission = brief.campaign.mission;
   if (mission) {
     if (mission.missionType) lines.push(`Release type: ${mission.missionType}`);
-    if (mission.releaseDate) lines.push(`Release date: ${mission.releaseDate}`);
+    if (mission.campaignStartDate) lines.push(`Campaign start: ${mission.campaignStartDate} (${mission.campaignDateStatuses?.start ?? 'target'})`);
+    if (mission.releaseDate) lines.push(`Release date: ${mission.releaseDate} (${mission.campaignDateStatuses?.release ?? 'target'})`);
     else if (mission.timeline) lines.push(`Timeline: ${mission.timeline}`);
+    if (mission.campaignFinishDate) lines.push(`Campaign finish: ${mission.campaignFinishDate} (${mission.campaignDateStatuses?.finish ?? 'target'})`);
     if (mission.goal) lines.push(`Campaign goal: ${mission.goal}`);
     if (mission.targetListener) lines.push(`Target listener: ${mission.targetListener}`);
     if (mission.mood) lines.push(`Mood: ${mission.mood}`);
@@ -414,7 +416,10 @@ function compactMission(mission: MissionBrief): MissionBrief {
     title: cap(mission.title, 120),
     goal: cap(mission.goal, 500),
     timeline: cap(mission.timeline, 160),
+    campaignStartDate: cap(mission.campaignStartDate, 40),
     releaseDate: cap(mission.releaseDate, 40),
+    campaignFinishDate: cap(mission.campaignFinishDate, 40),
+    campaignDateStatuses: mission.campaignDateStatuses,
     promoBudget: cap(mission.promoBudget, 100),
     mood: cap(mission.mood, 240),
     visualWorld: cap(mission.visualWorld, 360),

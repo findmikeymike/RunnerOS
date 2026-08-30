@@ -8,7 +8,10 @@ export interface HqCampaignSummary {
   id: string
   name: string
   primary?: boolean
+  startDate?: string
   releaseDate?: string
+  finishDate?: string
+  dateStatuses?: { start?: 'target' | 'locked'; release?: 'target' | 'locked'; finish?: 'target' | 'locked' }
   missionTitle?: string
 }
 

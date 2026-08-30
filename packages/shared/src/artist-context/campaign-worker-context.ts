@@ -2,7 +2,7 @@ import type { MissionAssetManifest, MissionAssetRecord } from '../mission-assets
 import type { ContextDocMetadata } from '../workspace-context/types.ts'
 import type { ArtistProfile } from './profile.ts'
 import type { ArtistVoice } from './voice.ts'
-import type { MissionBrief } from './mission-brief.ts'
+import { missionCampaignWindow, type MissionBrief } from './mission-brief.ts'
 
 export const CAMPAIGN_WORKER_CONTEXT_SLUG = 'campaign-worker-context'
 
@@ -68,12 +68,19 @@ export function getCampaignWorkerReadiness(input: CampaignWorkerContextInput): C
 export function serializeCampaignWorkerContext(input: CampaignWorkerContextInput): string {
   const readiness = getCampaignWorkerReadiness(input)
   const files = availableFiles(input.assetManifest)
+  const campaignWindow = missionCampaignWindow(input.mission)
   const payload = {
     campaign: {
       type: input.mission.missionType ?? null,
       title: input.mission.title ?? null,
       goal: input.mission.goal ?? null,
       releaseTarget: input.mission.timeline ?? input.mission.releaseDate ?? null,
+      window: {
+        startDate: campaignWindow.startDate ?? null,
+        releaseDate: campaignWindow.releaseDate ?? null,
+        finishDate: campaignWindow.finishDate ?? null,
+        statuses: campaignWindow.statuses,
+      },
       promoBudget: input.mission.promoBudget ?? null,
       mood: input.mission.mood ?? null,
       visualWorld: input.mission.visualWorld ?? null,

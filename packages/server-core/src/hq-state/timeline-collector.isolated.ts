@@ -177,6 +177,30 @@ describe('Artist Timeline collector', () => {
     // The healthy campaign's entries are still present.
     expect(timeline.entries.map((entry) => entry.id)).toContain('campaign-item:deadline-1')
   })
+
+  test('stale campaign sources stay visible, are flagged, and emit one source warning', () => {
+    context.upsertContextDoc(campaignRoot, {
+      slug: 'campaign-calendar',
+      metadata: { name: 'Campaign Calendar', routing: { mode: 'broadcast' }, enabled: true },
+      body: jsonBody({
+        version: 1,
+        campaignId,
+        updatedAt: '2026-07-01T00:00:00.000Z',
+        items: [{
+          id: 'stale-deadline', date: '2026-09-26', timezone: 'UTC', title: 'Stale deadline', kind: 'deadline',
+          status: 'scheduled', source: 'user', assetRefs: [], finalRefs: [], outputRefs: [], personIds: [],
+          runHistory: [], createdAt: '2026-07-01T00:00:00.000Z', updatedAt: '2026-07-01T00:00:00.000Z',
+        }],
+      }),
+    })
+
+    const timeline = collector.collectArtistTimeline({ from: '2026-08-29', to: '2026-11-27' }, NOW)
+    const entry = timeline.entries.find((candidate) => candidate.id === 'campaign-item:stale-deadline')
+    expect(entry?.stale).toBe(true)
+    expect(timeline.warnings.filter((warning) =>
+      warning.workspaceId === campaignId && warning.source === 'campaign-calendar' && warning.reason.includes('older than 14 days')),
+    ).toHaveLength(1)
+  })
 })
 
 function jsonBody(value: unknown): string {

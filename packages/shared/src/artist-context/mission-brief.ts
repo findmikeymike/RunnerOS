@@ -4,6 +4,20 @@ export const MISSION_BRIEF_CONTEXT_SLUG = 'mission-brief'
 
 export type MissionStatus = 'empty' | 'light' | 'full'
 export type MissionType = 'single' | 'ep' | 'album' | 'other'
+export type CampaignDateStatus = 'target' | 'locked'
+
+export interface CampaignDateStatuses {
+  start?: CampaignDateStatus
+  release?: CampaignDateStatus
+  finish?: CampaignDateStatus
+}
+
+export interface MissionCampaignWindow {
+  startDate?: string
+  releaseDate?: string
+  finishDate?: string
+  statuses: CampaignDateStatuses
+}
 
 export interface MissionReference {
   type: 'artist' | 'song' | 'visual' | 'brand' | 'other'
@@ -19,7 +33,10 @@ export interface MissionBrief {
   title?: string
   goal?: string
   timeline?: string
+  campaignStartDate?: string
   releaseDate?: string
+  campaignFinishDate?: string
+  campaignDateStatuses?: CampaignDateStatuses
   promoBudget?: string
   mood?: string
   visualWorld?: string
@@ -159,6 +176,7 @@ export function extractMissionBrief(text: string, existing: Partial<MissionBrief
     goal: existing.goal ?? inferGoal(text),
     timeline: existing.timeline ?? inferTimeline(text),
     releaseDate: existing.releaseDate ?? inferTimeline(text),
+    campaignDateStatuses: existing.campaignDateStatuses,
     mood: existing.mood ?? inferMood(text),
     visualWorld: existing.visualWorld ?? inferVisualWorld(text),
     references: existing.references?.length ? existing.references : inferReferences(text),
@@ -199,7 +217,13 @@ function normalizeMissionBrief(
   confirmedAt?: string,
 ): MissionBrief {
   const completeness = calculateMissionCompleteness(input)
+  const campaignStartDate = normalizeDeadline(input.campaignStartDate)
   const releaseDate = normalizeDeadline(input.releaseDate) ?? normalizeDeadline(input.timeline)
+  const campaignFinishDate = normalizeDeadline(input.campaignFinishDate)
+  const campaignDateStatuses = normalizeCampaignDateStatuses(
+    input.campaignDateStatuses,
+    { startDate: campaignStartDate, releaseDate, finishDate: campaignFinishDate },
+  )
   return {
     id: input.id || MISSION_BRIEF_CONTEXT_SLUG,
     workspaceId,
@@ -209,7 +233,10 @@ function normalizeMissionBrief(
     title: clean(input.title),
     goal: clean(input.goal),
     timeline: clean(input.timeline),
+    campaignStartDate,
     releaseDate,
+    campaignFinishDate,
+    campaignDateStatuses,
     promoBudget: clean(input.promoBudget),
     mood: clean(input.mood),
     visualWorld: clean(input.visualWorld),
@@ -255,7 +282,10 @@ export function missionBriefContentKey(brief: MissionBrief): string {
     title: brief.title ?? null,
     goal: brief.goal ?? null,
     timeline: brief.timeline ?? null,
+    campaignStartDate: brief.campaignStartDate ?? null,
     releaseDate: brief.releaseDate ?? null,
+    campaignFinishDate: brief.campaignFinishDate ?? null,
+    campaignDateStatuses: brief.campaignDateStatuses ?? null,
     promoBudget: brief.promoBudget ?? null,
     mood: brief.mood ?? null,
     visualWorld: brief.visualWorld ?? null,
@@ -269,6 +299,39 @@ export function missionBriefContentKey(brief: MissionBrief): string {
 
 export function missionReleaseDateKey(brief: Pick<MissionBrief, 'releaseDate' | 'timeline'>): string | undefined {
   return normalizeDeadline(brief.releaseDate) ?? normalizeDeadline(brief.timeline)
+}
+
+export function missionCampaignWindow(
+  brief: Pick<MissionBrief, 'campaignStartDate' | 'releaseDate' | 'timeline' | 'campaignFinishDate' | 'campaignDateStatuses'>,
+): MissionCampaignWindow {
+  const startDate = normalizeDeadline(brief.campaignStartDate)
+  const releaseDate = missionReleaseDateKey(brief)
+  const finishDate = normalizeDeadline(brief.campaignFinishDate)
+  return {
+    startDate,
+    releaseDate,
+    finishDate,
+    statuses: normalizeCampaignDateStatuses(
+      brief.campaignDateStatuses,
+      { startDate, releaseDate, finishDate },
+    ) ?? {},
+  }
+}
+
+export function missionCampaignWindowError(
+  brief: Pick<MissionBrief, 'campaignStartDate' | 'releaseDate' | 'timeline' | 'campaignFinishDate' | 'campaignDateStatuses'>,
+): string | undefined {
+  const { startDate, releaseDate, finishDate } = missionCampaignWindow(brief)
+  if (startDate && releaseDate && startDate > releaseDate) {
+    return 'Campaign start must be on or before the release date.'
+  }
+  if (releaseDate && finishDate && releaseDate > finishDate) {
+    return 'Campaign finish must be on or after the release date.'
+  }
+  if (!releaseDate && startDate && finishDate && startDate > finishDate) {
+    return 'Campaign finish must be on or after the campaign start.'
+  }
+  return undefined
 }
 
 export function parseMissionBriefDocResult(
@@ -287,14 +350,19 @@ export function parseMissionBriefDocResult(
     if (!isIsoTimestamp(parsed.updatedAt)) {
       return { ok: false, brief: null, error: 'Campaign Brief updatedAt is missing or invalid.' }
     }
+    const brief = normalizeMissionBrief(
+      workspaceId,
+      parsed,
+      parsed.updatedAt,
+      isIsoTimestamp(parsed.confirmedAt) ? parsed.confirmedAt : undefined,
+    )
+    const campaignWindowError = missionCampaignWindowError(brief)
+    if (campaignWindowError) {
+      return { ok: false, brief: null, error: campaignWindowError }
+    }
     return {
       ok: true,
-      brief: normalizeMissionBrief(
-        workspaceId,
-        parsed,
-        parsed.updatedAt,
-        isIsoTimestamp(parsed.confirmedAt) ? parsed.confirmedAt : undefined,
-      ),
+      brief,
     }
   } catch {
     return { ok: false, brief: null, error: 'Campaign Brief JSON is malformed.' }
@@ -332,6 +400,22 @@ function normalizeDeadline(value: string | undefined): string | undefined {
     : undefined
 }
 
+function normalizeCampaignDateStatuses(
+  input: CampaignDateStatuses | undefined,
+  dates: { startDate?: string; releaseDate?: string; finishDate?: string },
+): CampaignDateStatuses | undefined {
+  const statuses: CampaignDateStatuses = {
+    start: dates.startDate ? normalizeCampaignDateStatus(input?.start) : undefined,
+    release: dates.releaseDate ? normalizeCampaignDateStatus(input?.release) : undefined,
+    finish: dates.finishDate ? normalizeCampaignDateStatus(input?.finish) : undefined,
+  }
+  return statuses.start || statuses.release || statuses.finish ? statuses : undefined
+}
+
+function normalizeCampaignDateStatus(value: unknown): CampaignDateStatus {
+  return value === 'locked' ? 'locked' : 'target'
+}
+
 function isIsoTimestamp(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Date.parse(value))
 }
@@ -341,6 +425,9 @@ function buildEnhancedSummary(brief: Partial<MissionBrief>, missing: string[]): 
     brief.title ? `Campaign: ${brief.title}` : 'Campaign: untitled',
     brief.missionType ? `Type: ${brief.missionType}` : null,
     brief.goal ? `Goal: ${brief.goal}` : null,
+    brief.campaignStartDate ? `Campaign start: ${brief.campaignStartDate} (${brief.campaignDateStatuses?.start ?? 'target'})` : null,
+    brief.releaseDate ? `Release date: ${brief.releaseDate} (${brief.campaignDateStatuses?.release ?? 'target'})` : null,
+    brief.campaignFinishDate ? `Campaign finish: ${brief.campaignFinishDate} (${brief.campaignDateStatuses?.finish ?? 'target'})` : null,
     brief.timeline ? `Release target: ${brief.timeline}` : null,
     brief.promoBudget ? `Promo budget: ${brief.promoBudget}` : null,
     brief.mood ? `Mood: ${brief.mood}` : null,
