@@ -19,10 +19,12 @@ import {
   parseCampaignCalendarDocResult,
 } from '@craft-agent/shared/campaign-calendar';
 import { getWorkspaces } from '@craft-agent/shared/config';
-import { loadPreferences } from '@craft-agent/shared/config';
 import {
+  addDaysToDateKey,
   buildArtistTimeline,
+  CAMPAIGN_STATE_CONTEXT_SLUG,
   dateKeyInTimezone,
+  HQ_STATE_CONTEXT_SLUG,
   type ArtistTimeline,
   type TimelineCampaignInput,
   type TimelineGoalInput,
@@ -34,11 +36,14 @@ import {
   SCHEDULED_WORK_CONTEXT_SLUG,
 } from '@craft-agent/shared/scheduled-work';
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions';
+import { isSharedIntelContextSlug } from '@craft-agent/shared/shared-intel';
 import {
   loadAuthorizedContextDocsForAgent,
   loadContextDoc,
 } from '@craft-agent/shared/workspace-context';
-import { findArtistHqWorkspace } from './snapshot';
+import { findArtistHqWorkspace, resolveTimelineTimezone } from './snapshot';
+
+export { addDaysToDateKey };
 
 const DEFAULT_WINDOW_DAYS = 90;
 const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -50,30 +55,6 @@ export interface CollectArtistTimelineInput {
   to?: string;
   tier?: TimelineTier;
   limit?: number;
-}
-
-/**
- * Resolve the reference timezone: the user's preference when set and valid,
- * otherwise the system timezone (spec §13.1 — no new setting).
- */
-export function resolveTimelineTimezone(): string {
-  const preferred = loadPreferences().timezone?.trim();
-  if (preferred) {
-    try {
-      new Intl.DateTimeFormat('en-US', { timeZone: preferred });
-      return preferred;
-    } catch {
-      // Invalid preference falls through to the system zone.
-    }
-  }
-  return Intl.DateTimeFormat().resolvedOptions().timeZone;
-}
-
-/** `dateKey` plus `days`, computed in UTC so it cannot double-apply an offset. */
-export function addDaysToDateKey(dateKey: string, days: number): string {
-  const [year, month, day] = dateKey.split('-').map(Number);
-  const value = new Date(Date.UTC(year!, month! - 1, day! + days));
-  return value.toISOString().slice(0, 10);
 }
 
 export function collectArtistTimeline(
@@ -160,7 +141,10 @@ export function collectArtistTimeline(
       && doc.metadata.status !== 'done'
       && doc.metadata.enabled !== false
       && typeof doc.metadata.deadline === 'string'
-      && DATE_KEY_REGEX.test(doc.metadata.deadline),
+      && DATE_KEY_REGEX.test(doc.metadata.deadline)
+      && !isSharedIntelContextSlug(doc.slug)
+      && doc.slug !== HQ_STATE_CONTEXT_SLUG
+      && doc.slug !== CAMPAIGN_STATE_CONTEXT_SLUG,
     )
     .map((doc) => ({
       slug: doc.slug,

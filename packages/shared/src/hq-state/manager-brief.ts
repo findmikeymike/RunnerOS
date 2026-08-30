@@ -14,6 +14,16 @@ import {
   type ArtistSpotifySnapshot,
 } from '../artist-context/spotify.ts';
 import { missionReleaseDateKey } from '../artist-context/mission-brief.ts';
+import {
+  ARTIST_CALENDAR_CONTEXT_SLUG,
+  parseArtistCalendarDocResult,
+} from '../artist-context/calendar.ts';
+import {
+  parseScheduledWorkDocResult,
+  SCHEDULED_WORK_CONTEXT_SLUG,
+} from '../scheduled-work/index.ts';
+import { addDaysToDateKey, buildArtistTimeline, dateKeyInTimezone, resolveCampaignFocusByReleaseDate, rollingMonthKeys } from './timeline.ts';
+import { CAMPAIGN_STATE_CONTEXT_SLUG, HQ_STATE_CONTEXT_SLUG } from './types.ts';
 import { isSharedIntelContextSlug, parseSharedIntelNote } from '../shared-intel/index.ts';
 import type { LoadedContextDoc } from '../workspace-context/types.ts';
 import type {
@@ -125,6 +135,7 @@ export function buildManagerBrief(input: BuildManagerBriefInput): ManagerBriefV1
       source: sourceRef(input.workspaceId, doc.slug, note!.updatedAt),
     }));
 
+  const timeline = buildBriefTimeline(input, docs, docBySlug, now);
   const nextMove = input.operatingState?.nextMove;
   const brief: ManagerBriefV1 = {
     version: 1,
@@ -140,6 +151,7 @@ export function buildManagerBrief(input: BuildManagerBriefInput): ManagerBriefV1
       operatingRules: splitRules(profile?.rules).slice(0, 5),
     },
     trajectory,
+    timeline,
     campaignFocus: campaignFocus?.focus,
     growth: {
       spotify: spotify ? spotifySignal(input.workspaceId, spotify) : undefined,
@@ -154,7 +166,9 @@ export function buildManagerBrief(input: BuildManagerBriefInput): ManagerBriefV1
       } : undefined,
       attention: (input.operatingState?.attention ?? []).map((item) => cap(item.text, 240)).filter(isString).slice(0, 3),
       blockers: (input.operatingState?.blockers ?? []).map((item) => cap(item, 240)).filter(isString).slice(0, 3),
-      activeWork: (input.operational?.active ?? []).map((item) => cap(`${item.title} — ${item.status}`, 220)).filter(isString).slice(0, 3),
+      activeWork: (input.operational?.active ?? [])
+        .map((item) => cap(`${item.title} — ${item.status}${item.startAt ? ` (starts ${item.startAt.slice(0, 10)})` : ''}`, 220))
+        .filter(isString).slice(0, 3),
     },
     sourceHealth: dedupeHealth(health),
   };
@@ -167,30 +181,19 @@ export function resolveHqCampaignFocus(
   now = new Date(),
 ): { focus: NonNullable<ManagerBriefV1['campaignFocus']>; sourceHealth: ManagerSourceHealth[] } | null {
   if (campaigns.length === 0) return null;
-  const start = startOfDay(now).getTime();
-  const dated = campaigns
-    .map((campaign) => {
-      const releaseDate = campaign.mission ? missionReleaseDateKey(campaign.mission) : undefined;
-      if (!releaseDate) return null;
-      const timestamp = Date.parse(`${releaseDate}T00:00:00.000Z`);
-      if (Number.isNaN(timestamp)) return null;
-      const days = Math.round((timestamp - start) / DAY_MS);
-      return { campaign, releaseDate, days };
-    })
-    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
-    .sort((left, right) => Math.abs(left.days) - Math.abs(right.days)
-      || Number(right.days >= 0) - Number(left.days >= 0)
-      || left.campaign.name.localeCompare(right.campaign.name));
-
-  const selected = dated[0];
-  const campaign = selected?.campaign ?? campaigns.find((candidate) => candidate.primary) ?? campaigns[0]!;
-  const label = selected
-    ? Math.abs(selected.days) <= 45
-      ? 'Current campaign' as const
-      : selected.days >= 0
-        ? 'Next campaign' as const
-        : 'Latest campaign' as const
-    : 'Release date needed' as const;
+  const selected = resolveCampaignFocusByReleaseDate(
+    campaigns.map((candidate) => ({
+      id: candidate.workspaceId,
+      name: candidate.name,
+      releaseDate: candidate.mission ? missionReleaseDateKey(candidate.mission) : undefined,
+      primary: candidate.primary,
+    })),
+    now,
+  );
+  const campaign = campaigns.find((candidate) => candidate.workspaceId === selected?.id)
+    ?? campaigns.find((candidate) => candidate.primary)
+    ?? campaigns[0]!;
+  const label = selected?.label ?? 'Release date needed';
   const missionUpdatedAt = campaign.mission?.updatedAt;
   const missionHealth = sourceHealth({
     source: `${campaign.workspaceId}:mission-brief`,
@@ -207,13 +210,106 @@ export function resolveHqCampaignFocus(
       workspaceId: campaign.workspaceId,
       name: cap(campaign.mission?.title, 120) ?? cap(campaign.name, 120) ?? 'Campaign',
       label,
-      releaseDate: selected?.campaign.workspaceId === campaign.workspaceId ? selected.releaseDate : undefined,
+      releaseDate: selected?.id === campaign.workspaceId ? selected.releaseDate : undefined,
       goal: cap(campaign.mission?.goal, 500),
       readiness: campaign.readiness ? { done: campaign.readiness.done, total: campaign.readiness.total } : undefined,
       nextMissing: campaign.readiness?.nextMissing.map((item) => cap(item, 120)).filter(isString).slice(0, 5),
       source: sourceRef(campaign.workspaceId, 'mission-brief', missionUpdatedAt),
     },
     sourceHealth: dedupeHealth([missionHealth, ...campaign.sourceHealth]),
+  };
+}
+
+const BRIEF_TIMELINE_WINDOW_DAYS = 90;
+const BRIEF_TIMELINE_ENTRY_LIMIT = 10;
+const BRIEF_TIMELINE_ROLLUP_LIMIT = 5;
+const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The brief's `### Timeline` section (spec 20 §9): strategic entries for the
+ * next 90 days from the HQ stores the composer already receives, per-campaign
+ * operational roll-ups from the snapshot summaries, and the beyond-window
+ * synopsis so later-year releases stay visible as one line.
+ *
+ * Campaign day-of items are deliberately NOT read here — operational volume
+ * reaches the brief only as counts, matching the altitude rule.
+ */
+function buildBriefTimeline(
+  input: BuildManagerBriefInput,
+  docs: LoadedContextDoc[],
+  docBySlug: Map<string, LoadedContextDoc>,
+  now: Date,
+): ManagerBriefV1['timeline'] {
+  const timezone = input.timezone ?? 'UTC';
+  const from = dateKeyInTimezone(now.toISOString(), timezone) ?? now.toISOString().slice(0, 10);
+  const to = addDaysToDateKey(from, BRIEF_TIMELINE_WINDOW_DAYS);
+
+  const calendar = parseArtistCalendarDocResult(docBySlug.get(ARTIST_CALENDAR_CONTEXT_SLUG));
+  const work = parseScheduledWorkDocResult(docBySlug.get(SCHEDULED_WORK_CONTEXT_SLUG), input.workspaceId);
+
+  // Goal eligibility per spec §3: Pulse goals only, with generated state and
+  // shared-intel docs excluded by slug so they can never masquerade as goals.
+  const goals = docs
+    .filter((doc) =>
+      doc.metadata.status !== undefined
+      && doc.metadata.status !== 'done'
+      && typeof doc.metadata.deadline === 'string'
+      && DATE_KEY_REGEX.test(doc.metadata.deadline)
+      && !isSharedIntelContextSlug(doc.slug)
+      && doc.slug !== HQ_STATE_CONTEXT_SLUG
+      && doc.slug !== CAMPAIGN_STATE_CONTEXT_SLUG)
+    .map((doc) => ({
+      slug: doc.slug,
+      title: doc.metadata.name.trim() || doc.slug,
+      deadline: doc.metadata.deadline!,
+      workspaceId: input.workspaceId,
+    }));
+
+  const result = buildArtistTimeline({
+    now,
+    from,
+    to,
+    timezone,
+    hqWorkspaceId: input.workspaceId,
+    hqEvents: calendar.ok ? calendar.calendar.events : [],
+    hqOrders: work.ok ? work.work.items : [],
+    campaigns: input.relatedCampaigns.map((campaign) => ({
+      workspaceId: campaign.workspaceId,
+      label: campaign.name,
+      releaseDate: campaign.mission ? missionReleaseDateKey(campaign.mission) : undefined,
+      items: [],
+      orders: [],
+    })),
+    goals,
+    tiers: ['strategic'],
+    limit: BRIEF_TIMELINE_ENTRY_LIMIT,
+  });
+
+  const rollups = input.relatedCampaigns
+    .map((campaign) => ({
+      label: cap(campaign.name, 80) ?? campaign.workspaceId,
+      scheduled: (campaign.calendar?.active ?? 0) + (campaign.work?.active ?? 0),
+      needsAttention: (campaign.calendar?.blocked ?? 0) + (campaign.work?.blocked ?? 0),
+    }))
+    .filter((rollup) => rollup.scheduled > 0 || rollup.needsAttention > 0)
+    .slice(0, BRIEF_TIMELINE_ROLLUP_LIMIT);
+
+  if (result.entries.length === 0 && rollups.length === 0 && result.beyondWindow.strategic === 0) {
+    return undefined;
+  }
+  return {
+    from,
+    to,
+    entries: result.entries.map((entry) => ({
+      date: entry.date,
+      ...(entry.time ? { time: entry.time } : {}),
+      title: cap(entry.title, 120) ?? 'Untitled',
+      category: entry.category,
+      workspaceId: entry.origin.workspaceId,
+      ...(entry.stale ? { stale: true } : {}),
+    })),
+    rollups,
+    beyond: result.beyondWindow,
   };
 }
 
@@ -259,6 +355,20 @@ export function renderManagerBriefPromptSection(brief: ManagerBriefV1): string {
     for (const item of warnings) lines.push(`- ${item.source}: ${item.status}${item.message ? ` — ${item.message}` : ''}`);
   }
 
+  const timeline = brief.timeline;
+  if (timeline && (timeline.entries.length || timeline.rollups.length || timeline.beyond.strategic > 0)) {
+    lines.push('', '### Timeline', `Window: ${timeline.from} to ${timeline.to}`);
+    for (const entry of timeline.entries) {
+      lines.push(`- ${entry.date}${entry.time ? ` ${entry.time}` : ''}: ${entry.title} [${entry.category}]${entry.stale ? ' [stale]' : ''}`);
+    }
+    for (const rollup of timeline.rollups) {
+      lines.push(`- ${rollup.label}: ${rollup.scheduled} scheduled${rollup.needsAttention ? `, ${rollup.needsAttention} need attention` : ''}`);
+    }
+    if (timeline.beyond.strategic > 0) {
+      lines.push(`Beyond: ${timeline.beyond.strategic} strategic date${timeline.beyond.strategic === 1 ? '' : 's'} later${timeline.beyond.nextDate ? ` (next ${timeline.beyond.nextDate})` : ''}`);
+    }
+  }
+
   if (brief.trajectory.length) {
     lines.push('', '### Release Horizon');
     for (const item of brief.trajectory) {
@@ -289,6 +399,17 @@ function finalizeBudget(source: ManagerBriefV1): ManagerBriefV1 {
     if (brief.intelligence.length) return Boolean(brief.intelligence.pop());
     if ((brief.growth.instagram?.highlights.length ?? 0) > 0) return Boolean(brief.growth.instagram!.highlights.pop());
     if ((brief.growth.spotify?.highlights.length ?? 0) > 0) return Boolean(brief.growth.spotify!.highlights.pop());
+    // Timeline degrades internally, then drops whole — always before trajectory
+    // (spec 20 §9): roll-ups first, then entries beyond 30 days farthest-first,
+    // then the section including its near entries and beyond-window line.
+    if (brief.timeline?.rollups.length) return Boolean(brief.timeline.rollups.pop());
+    if (brief.timeline) {
+      const nearThreshold = addDaysToDateKey(brief.timeline.from, 30);
+      const farthest = brief.timeline.entries.at(-1);
+      if (farthest && farthest.date > nearThreshold) return Boolean(brief.timeline.entries.pop());
+      brief.timeline = undefined;
+      return true;
+    }
     if (brief.trajectory.length) return Boolean(brief.trajectory.pop());
     return false;
   };
@@ -321,6 +442,7 @@ function managerBriefRevision(brief: ManagerBriefV1): string {
   const stable = stableStringify({
     identity: brief.identity,
     trajectory: brief.trajectory,
+    timeline: brief.timeline,
     campaignFocus: brief.campaignFocus,
     growth: brief.growth,
     intelligence: brief.intelligence,
@@ -410,10 +532,7 @@ function sourceRef(workspaceId: string, contextSlug: string, updatedAt?: string)
 
 function isMonthInRollingWindow(month: string, now: Date): boolean {
   if (!/^\d{4}-\d{2}$/.test(month)) return false;
-  const currentIndex = now.getUTCFullYear() * 12 + now.getUTCMonth();
-  const [year, monthNumber] = month.split('-').map(Number);
-  const candidateIndex = year! * 12 + monthNumber! - 1;
-  return candidateIndex >= currentIndex && candidateIndex < currentIndex + 12;
+  return rollingMonthKeys(now).includes(month);
 }
 
 function intelScore(updatedAt: string, confidence: 'high' | 'medium' | 'low', now: Date): number {
@@ -492,10 +611,6 @@ function fnv1a(value: string): string {
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return hash.toString(16).padStart(8, '0');
-}
-
-function startOfDay(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
 function formatNumber(value: number): string {

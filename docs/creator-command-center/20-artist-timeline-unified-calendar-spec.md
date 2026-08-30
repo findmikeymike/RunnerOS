@@ -312,9 +312,11 @@ and its hash gate in `SessionManager.ts`.
   campaign's roll-up, expandable to its schedule. Clicking any entry navigates
   to its owning surface. Read and navigate only; creating nuanced campaign
   work from here routes into that campaign.
-- **HQ Home gets only a compact "next 90 days" strip** (a handful of strategic
-  entries + roll-up counts); the existing This Week card becomes a thin call
-  into the timeline.
+- **HQ Home keeps the This Week card as its compact strip** — now a thin view
+  over the shared timeline (7-day window). A dedicated 90-day Home strip is
+  deferred: the 90-day picture lives in the Manager Brief's `### Timeline`
+  section and the year view's month pop-outs, and a third Home surface was
+  judged clutter until real use argues otherwise.
 - **HQ global events stay narrow**: genuinely artist-wide items (meetings,
   live appearances). Campaign dates *surface* in HQ automatically via the
   timeline; they are never re-entered there.
@@ -341,11 +343,18 @@ Each exists twice today; the timeline layer becomes the single home:
 
 - `resolveHqCampaignFocus` — `manager-brief.ts:165` and
   `artist-hq-home-feed.ts:209`, same ≤45-day rule.
-- Rolling-12-month windows — `isMonthInRollingWindow` (`manager-brief.ts:411`)
-  and `buildRollingMonths` (`ReleaseHorizon.tsx:342`).
+- Rolling-12-month windows — consolidated into `rollingMonthKeys`
+  (`timeline.ts`); `isMonthInRollingWindow` and the year view's
+  `buildRollingMonths` are thin views over it.
 - Timezone/date-key helpers — currently renderer-only in
   `artist-hq-home-feed.ts` (`dateKeyInTimezone` :339, `timeKey` :372); lift to
   shared, do not write a third set.
+- Known limitation: the renderer cannot read `UserPreferences.timezone`
+  (server-side config), so renderer surfaces anchor to the orders' own
+  timezone (uniform per user in practice) with system-timezone fallback, while
+  the server brief and tools use the preference. Exposing the preference to
+  the renderer would close the gap; until then a mixed-timezone order set
+  renders in the first order's zone.
 - `buildHqThisWeekItems` becomes a thin call with a 7-day window.
 
 ## 12. Phasing

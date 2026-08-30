@@ -288,21 +288,36 @@ function collectScopeEntries(
 
   const eventById = new Map(scope.events.map((event) => [event.id, event]));
   const itemById = new Map(scope.items.map((item) => [item.id, item]));
+  // Shell back-references (shell.scheduledWorkId -> shell). The canonical pair
+  // is bidirectional, but a shell written before the link healed may only
+  // carry the back-reference; honoring it keeps the pair to one entry.
+  const eventByWorkId = new Map(
+    scope.events.flatMap((event) => (event.scheduledWorkId ? [[event.scheduledWorkId, event] as const] : [])),
+  );
+  const itemByWorkId = new Map(
+    scope.items.flatMap((item) => (item.scheduledWorkId ? [[item.scheduledWorkId, item] as const] : [])),
+  );
   /** Shell ids consumed by a paired order — suppressed from standalone emission. */
   const consumedShells = new Set<string>();
 
   for (const order of scope.orders) {
-    if (order.status === 'canceled') continue;
+    if (order.deletedAt || order.status === 'canceled') continue;
     // Hidden automation work has no calendar shell by design; the timeline
     // must not resurrect it into a user-facing calendar.
     if (order.calendarVisibility === 'hidden') continue;
 
-    const shell =
+    const linked =
       order.calendarLink.calendar === 'hq'
         ? eventById.get(order.calendarLink.itemId)
         : itemById.get(order.calendarLink.itemId);
-    const shellBacklink =
-      shell && 'scheduledWorkId' in shell ? shell.scheduledWorkId : undefined;
+    // Fall back to the shell-side back-reference so a one-way pair still
+    // collapses to one entry instead of duplicating.
+    const backReferenced =
+      order.calendarLink.calendar === 'hq'
+        ? eventByWorkId.get(order.id)
+        : itemByWorkId.get(order.id);
+    const shell = linked ?? backReferenced;
+    const shellBacklink = shell?.scheduledWorkId;
 
     if (!shell) {
       warnings.push({
@@ -310,14 +325,14 @@ function collectScopeEntries(
         workspaceId: scope.workspaceId,
         reason: `Order "${order.title}" (${order.id}) links to a missing calendar item ${order.calendarLink.itemId}.`,
       });
-    } else if (shellBacklink !== order.id) {
-      warnings.push({
-        source: 'scheduled-work',
-        workspaceId: scope.workspaceId,
-        reason: `Order "${order.title}" (${order.id}) and calendar item ${order.calendarLink.itemId} are half-linked.`,
-      });
-      consumedShells.add(shell.id);
     } else {
+      if (shellBacklink !== order.id || shell !== linked) {
+        warnings.push({
+          source: 'scheduled-work',
+          workspaceId: scope.workspaceId,
+          reason: `Order "${order.title}" (${order.id}) and calendar item ${shell.id} are half-linked.`,
+        });
+      }
       consumedShells.add(shell.id);
     }
 
@@ -451,6 +466,82 @@ function compareEntries(left: TimelineEntry, right: TimelineEntry): number {
   return left.id.localeCompare(right.id);
 }
 
+/**
+ * The rolling window of month keys starting at the current month — UTC when no
+ * timezone is given (matching the Manager Brief's trajectory window), or the
+ * given reference timezone's current month. Single home for the "next 12
+ * months" concept (spec 20 §11).
+ */
+export function rollingMonthKeys(now: Date, count = 12, timezone?: string): string[] {
+  const startKey = timezone
+    ? dateKeyInTimezone(now.toISOString(), timezone) ?? now.toISOString().slice(0, 10)
+    : now.toISOString().slice(0, 10);
+  const [year, month] = startKey.split('-').map(Number);
+  const startIndex = year! * 12 + (month! - 1);
+  return Array.from({ length: count }, (_, offset) => {
+    const index = startIndex + offset;
+    return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`;
+  });
+}
+
+export interface CampaignFocusCandidate {
+  id: string;
+  name: string;
+  /** Strict YYYY-MM-DD; anything else is treated as undated. */
+  releaseDate?: string;
+  primary?: boolean;
+}
+
+export interface CampaignFocusSelection {
+  id: string;
+  name: string;
+  label: 'Current campaign' | 'Next campaign' | 'Latest campaign' | 'Release date needed';
+  releaseDate?: string;
+  /** Signed days from today to the release (negative = past). */
+  days?: number;
+}
+
+/**
+ * Pick the campaign the artist is "in" right now: the release date closest to
+ * today (ties: future first, then name), labeled Current within +/-45 days.
+ * Shared so the Manager Brief and the HQ header cannot disagree about which
+ * campaign is in focus. Days are computed in UTC from date keys.
+ */
+export function resolveCampaignFocusByReleaseDate(
+  candidates: CampaignFocusCandidate[],
+  now: Date,
+): CampaignFocusSelection | null {
+  if (candidates.length === 0) return null;
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const dated = candidates
+    .map((candidate) => {
+      if (!candidate.releaseDate || !/^\d{4}-\d{2}-\d{2}$/.test(candidate.releaseDate)) return null;
+      const timestamp = Date.parse(`${candidate.releaseDate}T00:00:00.000Z`);
+      if (Number.isNaN(timestamp)) return null;
+      return { candidate, days: Math.round((timestamp - today) / (24 * 60 * 60 * 1000)) };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+    .sort((left, right) =>
+      Math.abs(left.days) - Math.abs(right.days)
+      || Number(right.days >= 0) - Number(left.days >= 0)
+      || left.candidate.name.localeCompare(right.candidate.name));
+
+  const selected = dated[0];
+  if (selected) {
+    return {
+      id: selected.candidate.id,
+      name: selected.candidate.name,
+      label: Math.abs(selected.days) <= 45
+        ? 'Current campaign'
+        : selected.days >= 0 ? 'Next campaign' : 'Latest campaign',
+      releaseDate: selected.candidate.releaseDate,
+      days: selected.days,
+    };
+  }
+  const fallback = candidates.find((candidate) => candidate.primary) ?? candidates[0]!;
+  return { id: fallback.id, name: fallback.name, label: 'Release date needed' };
+}
+
 // ---------------------------------------------------------------------------
 // Timezone helpers (promoted from the renderer's artist-hq-home-feed.ts so the
 // server and tools share one implementation — spec §11)
@@ -491,6 +582,13 @@ export function timeKeyInTimezone(value: string, timezone: string): string | und
   } catch {
     return undefined;
   }
+}
+
+/** `dateKey` plus `days`, computed in UTC so it cannot double-apply an offset. */
+export function addDaysToDateKey(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const value = new Date(Date.UTC(year!, month! - 1, day! + days));
+  return value.toISOString().slice(0, 10);
 }
 
 function localDateKey(date: Date): string {

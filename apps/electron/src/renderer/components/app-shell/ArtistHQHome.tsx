@@ -163,6 +163,9 @@ import {
   type HqCampaignSummary,
   type HqHomeWorkerItem,
 } from '@/lib/artist-hq-home-feed'
+import { addDaysToDateKey, buildArtistTimeline, CAMPAIGN_STATE_CONTEXT_SLUG, type TimelineEntry } from '@craft-agent/shared/hq-state'
+import { isSharedIntelContextSlug } from '@craft-agent/shared/shared-intel'
+import { CAMPAIGN_CALENDAR_CONTEXT_SLUG, parseCampaignCalendarDocResult } from '@craft-agent/shared/campaign-calendar'
 import {
   ARTIST_RELEASE_HORIZON_CONTEXT_SLUG,
   artistReleaseHorizonMetadata,
@@ -456,6 +459,61 @@ export function ArtistHQHome({
     () => buildHqThisWeekItems(activeCalendarEvents, scheduledWorkResult.work.items),
     [activeCalendarEvents, scheduledWorkResult.work.items],
   )
+  // Strategic 12-month timeline for the year view's month pop-outs (spec 20 §9).
+  // Campaign day-of items are not merged here; each month dialog fetches the
+  // owning campaign's schedule on demand so detail stays campaign-owned.
+  const timelineTimezone = React.useMemo(
+    () => scheduledWorkResult.work.items.find((order) => order.timezone)?.timezone
+      ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+    [scheduledWorkResult.work.items],
+  )
+  const horizonTimelineEntries = React.useMemo<TimelineEntry[]>(() => {
+    const timezone = timelineTimezone
+    const from = new Date().toISOString().slice(0, 10)
+    return buildArtistTimeline({
+      now: new Date(),
+      from,
+      to: addDaysToDateKey(from, 366),
+      timezone,
+      hqWorkspaceId: workspaceId,
+      hqEvents: activeCalendarEvents,
+      hqOrders: scheduledWorkResult.work.items,
+      campaigns: campaignWorkspaces.map((campaign) => ({
+        workspaceId: campaign.id,
+        label: campaign.name,
+        releaseDate: campaign.releaseDate,
+        items: [],
+        orders: [],
+      })),
+      goals: docs
+        .filter((doc) =>
+          doc.metadata.status !== undefined
+          && doc.metadata.status !== 'done'
+          && doc.metadata.enabled !== false
+          && typeof doc.metadata.deadline === 'string'
+          && /^\d{4}-\d{2}-\d{2}$/.test(doc.metadata.deadline)
+          && !isSharedIntelContextSlug(doc.slug)
+          && doc.slug !== HQ_STATE_CONTEXT_SLUG
+          && doc.slug !== CAMPAIGN_STATE_CONTEXT_SLUG)
+        .map((doc) => ({
+          slug: doc.slug,
+          title: doc.metadata.name.trim() || doc.slug,
+          deadline: doc.metadata.deadline!,
+          workspaceId,
+        })),
+      tiers: ['strategic'],
+    }).entries
+  }, [activeCalendarEvents, scheduledWorkResult.work.items, campaignWorkspaces, docs, workspaceId, timelineTimezone])
+
+  const loadCampaignMonthSchedule = React.useCallback(async (campaignWorkspaceId: string, monthKey: string) => {
+    const doc = await window.electronAPI.getWorkspaceContextDoc(campaignWorkspaceId, CAMPAIGN_CALENDAR_CONTEXT_SLUG)
+    const parsed = parseCampaignCalendarDocResult(doc ?? undefined, campaignWorkspaceId)
+    if (!parsed.ok) return []
+    return parsed.calendar.items
+      .filter((item) => !item.deletedAt && item.status !== 'canceled' && item.date.startsWith(`${monthKey}-`))
+      .sort((left, right) => `${left.date}T${left.time ?? '00:00'}`.localeCompare(`${right.date}T${right.time ?? '00:00'}`))
+      .map((item) => ({ id: item.id, date: item.date, time: item.time, title: item.title, status: item.status, kind: item.kind }))
+  }, [])
   const workspaceWorkerSessions = React.useMemo(
     () => [...sessionMetaMap.values()].filter((session) => session.workspaceId === workspaceId),
     [sessionMetaMap, workspaceId],
@@ -1612,6 +1670,9 @@ export function ArtistHQHome({
               campaigns={campaignWorkspaces}
               northStar={profile.mission}
               plan={releaseHorizon}
+              timelineEntries={horizonTimelineEntries}
+              timelineTimezone={timelineTimezone}
+              loadCampaignMonthSchedule={loadCampaignMonthSchedule}
               onOpenCampaign={onOpenCampaignWorkspace ?? (
                 primaryCampaignWorkspaceId && onOpenPrimaryCampaignWorkspace
                   ? () => onOpenPrimaryCampaignWorkspace()
