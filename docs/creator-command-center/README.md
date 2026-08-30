@@ -28,6 +28,7 @@ Core Artist HQ and campaign workspace specs live here.
 - [17 Lab Worker Routing Foundation](./17-lab-worker-routing-foundation-spec.md)
 - [18 Lab Integration Hardening](./18-lab-integration-hardening-spec.md)
 - [19 Artist Manager Brief And Context Architecture](./19-artist-manager-brief-context-architecture-spec.md)
+- [20 Artist Timeline / Unified Calendar](./20-artist-timeline-unified-calendar-spec.md)
 
 Current V1 implementation notes:
 
