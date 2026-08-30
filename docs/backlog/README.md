@@ -18,8 +18,7 @@ Living priority queue: [TO DO](./TO-DO.md).
 - [External Integration Live Verification](./external-integration-live-verification.md) - real-account/API smoke queue for commerce, ads, Social Publisher, research, visual tools, Canvas, and Secrets. This is the main end-to-end proof list.
 - [Google OAuth Production App](./google-oauth-production-app.md) - Runner-owned verified OAuth app so users can connect Gmail, Calendar, and Drive without creating a Google Cloud project.
 - [Tool Licensing + Packaging Audit](./tool-licensing-packaging-audit.md) - commercial-license, binary, model, checksum, provenance, and clean-machine packaging gate.
-- [Windows Version](./windows-version.md) - Windows binaries, packaged runtime behavior, browser automation, and cross-platform agent/tool QA.
-- [Windows Reliability Audit Plan](./windows-reliability-audit-plan.md) - source-of-truth execution plan for generated compatibility inventory, portability scanning, packaged artifact proof, Windows CI, clean-machine smoke, and diagnostics.
+- [Windows Work](./windows-work.md) - current prioritized Windows 11 x64 blockers, capability work, CI, signing, clean-machine smoke, and release gate. Detailed references: [audit plan](./windows-reliability-audit-plan.md) and [earlier tool inventory](./windows-version.md).
 
 ## Partially Shipped
 

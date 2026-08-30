@@ -2,10 +2,12 @@
 status: active
 owner: unassigned
 last_verified: 2026-07-11
-source_of_truth: true
+source_of_truth: false
 ---
 
 # Windows Reliability Audit Plan
+
+> Detailed reference plan. The current prioritized execution backlog is [Windows Work](./windows-work.md).
 
 ## Mission
 
@@ -317,4 +319,3 @@ Windows work is complete only when:
 - Credentials and private account data remain machine-local and redacted.
 - CI and clean-machine evidence agree.
 - The published compatibility report contains no unresolved core blocker.
-
