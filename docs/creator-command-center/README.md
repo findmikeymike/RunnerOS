@@ -29,6 +29,8 @@ Core Artist HQ and campaign workspace specs live here.
 - [18 Lab Integration Hardening](./18-lab-integration-hardening-spec.md)
 - [19 Artist Manager Brief And Context Architecture](./19-artist-manager-brief-context-architecture-spec.md)
 - [20 Artist Timeline / Unified Calendar](./20-artist-timeline-unified-calendar-spec.md)
+- [21 Bounded Goal Continuation Driver](./21-bounded-goal-continuation-driver-spec.md)
+- [22 Chat-Native Goal Mode](./22-chat-native-goal-mode-spec.md)
 
 Current V1 implementation notes:
 
