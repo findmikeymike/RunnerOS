@@ -12,6 +12,7 @@
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 import type { StoredAttachment, MessageRole, ToolStatus, AuthRequestType, AuthStatus, CredentialInputMode, StoredMessage } from '@craft-agent/core/types';
+import type { ChatGoalState } from './chat-goal.ts';
 
 /**
  * Session fields that persist to disk.
@@ -41,6 +42,8 @@ export const SESSION_PERSISTENT_FIELDS = [
   'sharedUrl', 'sharedId',
   // Plan execution
   'pendingPlanExecution',
+  // Chat-native Goal Mode
+  'chatGoal',
   // Archive
   'isArchived', 'archivedAt',
   // Branching
@@ -244,6 +247,8 @@ export interface SessionConfig {
     /** Whether execution has already been dispatched from the UI. */
     executionDispatched?: boolean;
   };
+  /** Current or most recent chat-native Goal. Terminal history lives in session messages. */
+  chatGoal?: ChatGoalState;
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean;
   /** Whether this session is archived */
@@ -374,6 +379,8 @@ export interface SessionHeader {
     /** Whether execution has already been dispatched from the UI. */
     executionDispatched?: boolean;
   };
+  /** Current or most recent chat-native Goal. */
+  chatGoal?: ChatGoalState;
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean;
   /** Whether this session is archived */
@@ -452,6 +459,8 @@ export interface SessionMetadata {
   connectionLocked?: boolean;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
+  /** Current or most recent chat-native Goal. */
+  chatGoal?: ChatGoalState;
   /** ID of last message user has read - for unread detection */
   lastReadMessageId?: string;
   /** ID of the last final (non-intermediate) assistant message - for unread detection */

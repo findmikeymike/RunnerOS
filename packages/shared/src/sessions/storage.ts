@@ -43,6 +43,7 @@ import { debug } from '../utils/debug.ts';
 import { getStatusCategory } from '../statuses/storage.ts';
 import { readSessionHeader, readSessionJsonl } from './jsonl.ts';
 import { sessionPersistenceQueue } from './persistence-queue.ts';
+import { ChatGoalValidationError, parseChatGoalState } from './chat-goal.ts';
 
 // Re-export types for convenience
 export type { SessionConfig } from './types.ts';
@@ -559,6 +560,7 @@ export async function updateSessionMetadata(
     | 'llmConnection'
     | 'isArchived'
     | 'archivedAt'
+    | 'chatGoal'
   >>
 ): Promise<void> {
   const session = loadSession(workspaceRootPath, sessionId);
@@ -580,6 +582,15 @@ export async function updateSessionMetadata(
   if (updates.llmConnection !== undefined) session.llmConnection = updates.llmConnection;
   if (updates.isArchived !== undefined) session.isArchived = updates.isArchived;
   if ('archivedAt' in updates) session.archivedAt = updates.archivedAt;
+  if ('chatGoal' in updates) {
+    if (updates.chatGoal === undefined) {
+      delete session.chatGoal;
+    } else {
+      const parsedGoal = parseChatGoalState(updates.chatGoal);
+      if (!parsedGoal) throw new ChatGoalValidationError('Invalid chat Goal state');
+      session.chatGoal = parsedGoal;
+    }
+  }
 
   await saveSession(session);
 }

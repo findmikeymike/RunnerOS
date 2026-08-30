@@ -94,6 +94,42 @@ export {
 // Field utilities
 export { pickSessionFields } from './utils.ts';
 
+// Chat-native Goal Mode
+export type {
+  ChatGoalStatus,
+  ChatGoalStopCode,
+  ChatGoalCompletion,
+  ChatGoalStop,
+  ChatGoalBlockerAudit,
+  ChatGoalState,
+  ChatGoalEventType,
+  ChatGoalEvent,
+  CreateChatGoalInput,
+  EditChatGoalInput,
+} from './chat-goal.ts';
+export {
+  CHAT_GOAL_SCHEMA_VERSION,
+  CHAT_GOAL_DEFAULT_MAX_ROUNDS,
+  CHAT_GOAL_MIN_ROUNDS,
+  CHAT_GOAL_MAX_ROUNDS,
+  ChatGoalValidationError,
+  ChatGoalConflictError,
+  isChatGoalTerminal,
+  createChatGoalState,
+  parseChatGoalState,
+  assertChatGoalRevision,
+  editChatGoalState,
+  pauseChatGoalState,
+  resumeChatGoalState,
+  admitChatGoalRound,
+  completeChatGoalState,
+  limitChatGoalByBudget,
+  recordChatGoalBlocker,
+  disarmChatGoalAfterRestart,
+  cancelChatGoalState,
+  makeChatGoalEvent,
+} from './chat-goal.ts';
+
 // Slug generator utilities
 export {
   generateDatePrefix,
@@ -124,4 +160,3 @@ export {
   validateBundle,
   MAX_BUNDLE_SIZE_BYTES,
 } from './bundle.ts';
-

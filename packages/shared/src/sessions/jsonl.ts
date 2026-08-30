@@ -15,6 +15,7 @@ import { toPortablePath, expandPath, normalizePath } from '../utils/paths.ts';
 import { debug } from '../utils/debug.ts';
 import { safeJsonParse } from '../utils/files.ts';
 import { pickSessionFields } from './utils.ts';
+import { parseChatGoalState } from './chat-goal.ts';
 
 // ============================================================
 // Session Path Portability
@@ -68,6 +69,12 @@ function normalizeHeaderPermissionModes<T extends SessionHeader>(header: T): T {
     header.previousPermissionMode = previousPermissionMode;
   } else {
     delete (header as Partial<SessionHeader>).previousPermissionMode;
+  }
+
+  if ('chatGoal' in header) {
+    const parsedGoal = parseChatGoalState(header.chatGoal);
+    if (parsedGoal) header.chatGoal = parsedGoal;
+    else delete (header as Partial<SessionHeader>).chatGoal;
   }
 
   return header;
