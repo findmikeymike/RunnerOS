@@ -168,6 +168,7 @@ describe('Artist OS persistent shell chrome', () => {
     expect(workers).toContain('aria-label={`Start chat with ${name}`}')
     expect(workers).toContain('aria-label={`Configure ${name}`}')
     expect(workers).toContain('{description}')
+    expect(workers).not.toContain('<MessageSquare')
     expect(workers).not.toContain('onClick={() => setSelectedAgent(agent)}')
   })
 

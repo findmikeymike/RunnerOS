@@ -16,7 +16,7 @@
  */
 
 import * as React from 'react'
-import { BookOpen, Boxes, ChevronDown, ChevronRight, Clock3, DatabaseZap, Kanban, LoaderCircle, Lock, MessageSquare, Plus, Search, Settings2, Sparkles, Star, Zap } from 'lucide-react'
+import { BookOpen, Boxes, ChevronDown, ChevronRight, Clock3, DatabaseZap, Kanban, LoaderCircle, Lock, Plus, Search, Settings2, Sparkles, Star, Zap } from 'lucide-react'
 import { useAtomValue } from 'jotai'
 import { toast } from 'sonner'
 import { useAgents } from '@/hooks/useAgents'
@@ -418,7 +418,6 @@ function AgentCard({
             {description}
           </span>
         </span>
-        <MessageSquare className="absolute bottom-3 right-3 h-3.5 w-3.5 text-white/24 transition-colors group-hover:text-orange-200/70" />
       </button>
 
       <div className={cn(
