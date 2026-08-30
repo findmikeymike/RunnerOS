@@ -38,14 +38,14 @@ import {
   type ArtistNetworkPerson,
 } from '@/lib/artist-network'
 
+type AgendaColumnId = 'todo' | 'in-progress' | 'done'
+
 interface AgendaPageProps {
   sessions: SessionMeta[]
   onOpenSession: (sessionId: string) => void
-  onNewTask: () => void
+  onCreateTask: (task: { title: string; details: string; status: AgendaColumnId; personId: string | null }) => Promise<string>
   networkWorkspaceId?: string
 }
-
-type AgendaColumnId = 'todo' | 'in-progress' | 'done'
 
 const AGENDA_COLUMNS: Array<{ id: AgendaColumnId; label: string }> = [
   { id: 'todo', label: 'To Do' },
@@ -84,7 +84,7 @@ function DraggableCard({ session, networkPeople, onClick }: { session: SessionMe
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group relative flex w-full flex-col gap-2 rounded-[13px] border border-white/[0.055] bg-white/[0.025] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.05]",
+        "group relative flex w-full flex-col gap-2 rounded-[13px] border border-white/[0.09] bg-[#17191b] px-3 py-2.5 text-left transition-colors hover:bg-[#1e2124]",
         isDragging && "shadow-2xl border-white/[0.15]"
       )}
     >
@@ -123,7 +123,7 @@ function DraggableCard({ session, networkPeople, onClick }: { session: SessionMe
 
 function CardOverlay({ session, networkPeople }: { session: SessionMeta, networkPeople: ArtistNetworkPerson[] }) {
   return (
-    <div className="w-full rounded-[13px] border border-white/[0.15] bg-[#1a1a1a] px-3 py-2.5 shadow-2xl rotate-2">
+    <div className="w-full rounded-[13px] border border-white/[0.15] bg-[#17191b] px-3 py-2.5 shadow-2xl rotate-2">
       <div className="flex items-center justify-between gap-3">
         <p className="line-clamp-1 text-sm font-medium leading-5 text-white/80">{getSessionTitle(session)}</p>
         <Circle className={cn('h-3 w-3 shrink-0', session.isProcessing ? 'text-orange-300' : 'text-white/24')} />
@@ -139,10 +139,11 @@ function CardOverlay({ session, networkPeople }: { session: SessionMeta, network
   )
 }
 
-export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspaceId }: AgendaPageProps) {
+export function AgendaPage({ sessions, onOpenSession, onCreateTask, networkWorkspaceId }: AgendaPageProps) {
   const [networkPeople, setNetworkPeople] = React.useState<ArtistNetworkPerson[]>([])
   const [sessionOverrides, setSessionOverrides] = React.useState<Record<string, SessionOverride>>({})
   const [selectedSessionId, setSelectedSessionId] = React.useState<string | null>(null)
+  const [creatingTask, setCreatingTask] = React.useState(false)
   const [draftTitle, setDraftTitle] = React.useState('')
   const [draftDetails, setDraftDetails] = React.useState('')
   const [draftStatus, setDraftStatus] = React.useState<AgendaColumnId>('todo')
@@ -192,6 +193,7 @@ export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspac
   )
 
   const openEditor = React.useCallback((session: SessionMeta) => {
+    setCreatingTask(false)
     setSelectedSessionId(session.id)
     setDraftTitle(getSessionTitle(session))
     setDraftDetails('')
@@ -204,9 +206,34 @@ export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspac
     })
   }, [])
 
+  const openCreateEditor = React.useCallback(() => {
+    setSelectedSessionId(null)
+    setCreatingTask(true)
+    setDraftTitle('')
+    setDraftDetails('')
+    setDraftStatus('todo')
+    setDraftPersonId(NO_PERSON_VALUE)
+  }, [])
+
   const saveEditor = React.useCallback(async () => {
+    if (!creatingTask && !selectedSession) return
+    const title = draftTitle.trim() || (selectedSession ? getSessionTitle(selectedSession) : 'New task')
+    if (creatingTask) {
+      setSaving(true)
+      try {
+        await onCreateTask({
+          title,
+          details: draftDetails,
+          status: draftStatus,
+          personId: draftPersonId === NO_PERSON_VALUE ? null : draftPersonId,
+        })
+        setCreatingTask(false)
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
     if (!selectedSession) return
-    const title = draftTitle.trim() || getSessionTitle(selectedSession)
     const labels = setPersonLabel(selectedSession.labels ?? [], draftPersonId === NO_PERSON_VALUE ? null : draftPersonId)
     setSaving(true)
     try {
@@ -234,7 +261,7 @@ export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspac
     } finally {
       setSaving(false)
     }
-  }, [draftDetails, draftPersonId, draftStatus, draftTitle, selectedSession])
+  }, [creatingTask, draftDetails, draftPersonId, draftStatus, draftTitle, onCreateTask, selectedSession])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -298,7 +325,7 @@ export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspac
             </div>
             <button
               type="button"
-              onClick={onNewTask}
+              onClick={openCreateEditor}
               className="inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-white/90 px-4 text-xs font-medium text-black hover:bg-white transition-colors"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -352,10 +379,14 @@ export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspac
         </DndContext>
       </div>
 
-      <Dialog open={Boolean(selectedSession)} onOpenChange={(open) => !open && setSelectedSessionId(null)}>
+      <Dialog open={creatingTask || Boolean(selectedSession)} onOpenChange={(open) => {
+        if (open) return
+        setCreatingTask(false)
+        setSelectedSessionId(null)
+      }}>
         <DialogContent className="max-w-[620px] border-white/[0.08] bg-[#080808] text-white shadow-2xl">
           <DialogHeader>
-            <DialogTitle className="text-xl font-medium">Edit task</DialogTitle>
+            <DialogTitle className="text-xl font-medium">{creatingTask ? 'New task' : 'Edit task'}</DialogTitle>
             <DialogDescription className="sr-only">
               Edit the task title, notes, board status, and assigned Network person.
             </DialogDescription>
@@ -385,7 +416,7 @@ export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspac
                   <SelectTrigger className="rounded-[10px] border-white/[0.08] bg-white/[0.025] text-white/74">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-overlay">
                     {AGENDA_COLUMNS.map((column) => (
                       <SelectItem key={column.id} value={column.id}>{column.label}</SelectItem>
                     ))}
@@ -398,7 +429,7 @@ export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspac
                   <SelectTrigger className="rounded-[10px] border-white/[0.08] bg-white/[0.025] text-white/74">
                     <SelectValue placeholder="Tag from Network" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-overlay">
                     <SelectItem value={NO_PERSON_VALUE}>No person</SelectItem>
                     {networkPeople.map((person) => (
                       <SelectItem key={person.id} value={person.id}>{person.name}</SelectItem>
@@ -409,20 +440,22 @@ export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspac
             </div>
           </div>
           <DialogFooter>
-            <button
-              type="button"
-              onClick={() => selectedSession && onOpenSession(selectedSession.id)}
-              className="h-10 rounded-full border border-white/[0.08] px-4 text-sm font-medium text-white/62 hover:bg-white/[0.04]"
-            >
-              Open Thread
-            </button>
+            {!creatingTask ? (
+              <button
+                type="button"
+                onClick={() => selectedSession && onOpenSession(selectedSession.id)}
+                className="h-10 rounded-full border border-white/[0.08] px-4 text-sm font-medium text-white/62 hover:bg-white/[0.04]"
+              >
+                Open Thread
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={saveEditor}
               disabled={saving}
               className="h-10 rounded-full bg-white px-5 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? 'Saving...' : creatingTask ? 'Add Task' : 'Save'}
             </button>
           </DialogFooter>
         </DialogContent>

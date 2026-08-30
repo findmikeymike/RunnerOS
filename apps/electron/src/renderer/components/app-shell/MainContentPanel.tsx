@@ -123,6 +123,7 @@ export function MainContentPanel({
     onDuplicateAutomation,
     onDeleteAutomation,
     onSelectWorkspace,
+    onCreateSession,
     enabledSources,
     skills,
   } = useAppShellContext()
@@ -465,7 +466,17 @@ export function MainContentPanel({
             }
             navigate(routes.view.allSessions(sessionId))
           }}
-          onNewTask={() => navigate(routes.action.newSession({ name: 'New task', label: AGENDA_LABEL, status: 'todo' }))}
+          onCreateTask={async ({ title, details, status, personId }) => {
+            if (!activeWorkspaceId) throw new Error('No active workspace')
+            const labels = [AGENDA_LABEL, ...(personId ? [`person::${personId}`] : [])]
+            const session = await onCreateSession(activeWorkspaceId, {
+              name: title,
+              labels,
+              sessionStatus: status,
+            })
+            if (details.trim()) await window.electronAPI.setSessionNotes(session.id, details)
+            return session.id
+          }}
           networkWorkspaceId={artistHQWorkspace?.id || activeWorkspaceId || ''}
         />
       </Panel>

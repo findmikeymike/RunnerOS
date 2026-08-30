@@ -617,7 +617,7 @@ function CampaignCalendarSurface({
   })
 
   return (
-    <section className="rounded-2xl border border-white/[0.04] bg-[#0A0A0A] p-5 shadow-minimal">
+    <section className="rounded-2xl border border-white/[0.08] bg-[#151719] p-5 shadow-minimal">
       {parseError ? (
         <div className="mb-3 rounded-xl border border-red-300/15 bg-red-500/10 p-3 text-xs text-red-100/70">
           {parseError}

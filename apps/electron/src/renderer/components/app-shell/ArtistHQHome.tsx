@@ -1591,7 +1591,7 @@ export function ArtistHQHome({
         )}
 
         {tab === 'calendar' && (
-          <HQCard>
+          <HQCard className="border-white/[0.08] bg-[#151719]">
             {!calendarResult.ok ? (
               <div className="mb-4 rounded-[14px] border border-red-400/20 bg-red-500/10 p-3 text-xs leading-5 text-red-100/80">
                 {calendarResult.error} Saving is paused so existing calendar context is not overwritten.
@@ -3357,7 +3357,7 @@ function ArtistCalendarView({
           type="button"
           onClick={onConnectGoogle}
           disabled={googleBusy}
-          className="h-8 rounded-[6px] border border-white/[0.07] px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/55 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
+          className="h-8 rounded-[6px] border border-white/[0.10] px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/65 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
         >
           {googleConnected ? 'Reconnect Google' : 'Connect Google'}
         </button>
@@ -3365,7 +3365,7 @@ function ArtistCalendarView({
           type="button"
           onClick={onSyncGoogle}
           disabled={disabled || googleBusy}
-          className="inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-white/90 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-white px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-black hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <RefreshCw className={cn('h-3.5 w-3.5', googleBusy && 'animate-spin')} />
           Sync
