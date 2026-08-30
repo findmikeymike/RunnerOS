@@ -89,7 +89,12 @@ export class ChatGoalDriver {
     return { kind: 'reserved', reservation };
   }
 
-  consume(sessionId: string, reservationId: string, goal: ChatGoalState | undefined): ChatGoalReservation | undefined {
+  consume(
+    sessionId: string,
+    reservationId: string,
+    goal: ChatGoalState | undefined,
+    processingGeneration: number,
+  ): ChatGoalReservation | undefined {
     const reservation = this.reservations.get(sessionId);
     if (!reservation || reservation.id !== reservationId) return undefined;
     this.reservations.delete(sessionId);
@@ -99,6 +104,7 @@ export class ChatGoalDriver {
       || goal.id !== reservation.goalId
       || goal.revision !== reservation.goalRevision
       || goal.round + 1 !== reservation.nextRound
+      || processingGeneration !== reservation.processingGeneration
     ) {
       return undefined;
     }

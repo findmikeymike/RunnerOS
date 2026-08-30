@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: implementation-in-progress
 owner: agent
 last_verified: 2026-08-30
 source_of_truth: true
@@ -391,6 +391,8 @@ Metrics should distinguish:
 - rounds and approximate cost per completed Goal
 
 ## Acceptance Tests
+
+Implementation checkpoint (2026-08-30): slices 1–4 are implemented and pass focused tests. Full typecheck, the Artist OS renderer build, and live Electron creation/review/start/paused/edit/stop UI paths pass. Slice 5 is not complete: a live provider rate limit prevented multi-round completion plus native/fallback steering and restart-disarm certification. The observed failure paused the Goal without spinning. Do not present Goal Mode as shipped until those remaining live gates pass.
 
 ### State And Persistence
 

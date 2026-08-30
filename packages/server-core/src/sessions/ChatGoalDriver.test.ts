@@ -43,7 +43,16 @@ describe('ChatGoalDriver', () => {
     if (result.kind !== 'reserved') return;
 
     const changedGoal = { ...input().goal, revision: 2 };
-    expect(driver.consume('session-1', result.reservation.id, changedGoal)).toBeUndefined();
+    expect(driver.consume('session-1', result.reservation.id, changedGoal, 1)).toBeUndefined();
+  });
+
+  it('rejects a reservation after another turn changes the processing generation', () => {
+    const driver = new ChatGoalDriver();
+    const result = driver.reserve(input());
+    expect(result.kind).toBe('reserved');
+    if (result.kind !== 'reserved') return;
+
+    expect(driver.consume('session-1', result.reservation.id, input().goal, 2)).toBeUndefined();
   });
 
   it('pauses at auth, plan, background, and failed-turn boundaries', () => {

@@ -10002,7 +10002,12 @@ user a clickable link to where the thing now lives.`
             admissionResult: 'admitted',
           })
         } else {
-          const reservation = this.chatGoalDriver.consume(sessionId, goalAdmission.reservationId, managed.chatGoal)
+          const reservation = this.chatGoalDriver.consume(
+            sessionId,
+            goalAdmission.reservationId,
+            managed.chatGoal,
+            managed.processingGeneration,
+          )
           if (!reservation) throw new Error('Goal continuation reservation is stale')
           admittedGoalState = admitChatGoalRound(managed.chatGoal!)
           managed.chatGoal = admittedGoalState
