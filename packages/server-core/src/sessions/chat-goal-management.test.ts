@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createChatGoalState, loadSession, pauseChatGoalState } from '@craft-agent/shared/sessions';
+import { admitChatGoalRound, createChatGoalState, loadSession, pauseChatGoalState } from '@craft-agent/shared/sessions';
 import { SessionManager, createManagedSession } from './SessionManager.ts';
 import type { ChatGoalDriver } from './ChatGoalDriver.ts';
 
@@ -211,6 +211,25 @@ describe('SessionManager chat Goal management', () => {
     expect(pushedEvents.some(event => event.type === 'goal_event' && event.message?.goalEvent?.round === 2)).toBe(true);
   });
 
+  it('returns a typed invalidation when a continuation reservation is stale', async () => {
+    const managed = installSession();
+
+    await expect(manager.sendMessage(
+      managed.id,
+      '<system-reminder>Continue.</system-reminder>',
+      undefined,
+      undefined,
+      { hidden: true },
+      undefined,
+      undefined,
+      undefined,
+      { kind: 'continuation', reservationId: 'missing-reservation' },
+    )).rejects.toMatchObject({
+      name: 'ChatGoalAdmissionInvalidatedError',
+      code: 'stale-reservation',
+    });
+  });
+
   it('finalizes a provisional completion only after a clean final response', async () => {
     const managed = installSession();
     await manager.flagSession('session-1');
@@ -284,5 +303,102 @@ describe('SessionManager chat Goal management', () => {
 
     expect(manager.getChatGoal('session-1')?.status).toBe('paused');
     expect(manager.getChatGoal('session-1')?.stop?.code).toBe('needs-auth');
+  });
+
+  it('disarms and persists an active Goal when sessions are restored after restart', async () => {
+    const managed = installSession();
+    await manager.flagSession(managed.id);
+
+    const restarted = new SessionManager();
+    await (restarted as unknown as {
+      loadSessionsFromDisk(workspaces: Array<typeof managed.workspace>): Promise<void>;
+    }).loadSessionsFromDisk([managed.workspace]);
+
+    expect(restarted.getChatGoal(managed.id)?.status).toBe('paused');
+    expect(restarted.getChatGoal(managed.id)?.stop?.code).toBe('restart-disarmed');
+    expect(loadSession(root, managed.id)?.chatGoal?.status).toBe('paused');
+    expect(loadSession(root, managed.id)?.messages.at(-1)?.goalEvent?.type).toBe('paused');
+  });
+
+  it('pauses after two identical continuation turns make no tool progress', async () => {
+    const managed = installSession();
+    managed.chatGoal = { ...managed.chatGoal!, round: 1 };
+    const settle = (manager as unknown as {
+      settleChatGoalAtIdle(
+        session: typeof managed,
+        reason: 'complete',
+        didReceiveNewFinalMessage: boolean,
+        turn: {
+          origin: 'goal-continuation';
+          goalId: string;
+          goalRevision: number;
+          reservationId: string;
+          admittedRound: number;
+          completedToolCountAtStart: number;
+          failedToolCountAtStart: number;
+        },
+      ): Promise<ReturnType<ChatGoalDriver['consume']>>;
+    }).settleChatGoalAtIdle.bind(manager);
+
+    managed.messages.push({ id: 'assistant-1', role: 'assistant', content: 'I am still reviewing the same files.', timestamp: 200 });
+    const firstReservation = await settle(managed, 'complete', true, {
+      origin: 'goal-continuation',
+      goalId: 'goal-1',
+      goalRevision: 1,
+      reservationId: 'prior-reservation-1',
+      admittedRound: 1,
+      completedToolCountAtStart: 0,
+      failedToolCountAtStart: 0,
+    });
+    expect(firstReservation).toBeDefined();
+    if (!firstReservation) return;
+
+    const driver = (manager as unknown as { chatGoalDriver: ChatGoalDriver }).chatGoalDriver;
+    expect(driver.consume(managed.id, firstReservation.id, managed.chatGoal, managed.processingGeneration)).toBeDefined();
+    managed.chatGoal = admitChatGoalRound(managed.chatGoal!);
+    managed.messages.push({ id: 'assistant-2', role: 'assistant', content: 'I am still reviewing the same files.', timestamp: 300 });
+
+    await settle(managed, 'complete', true, {
+      origin: 'goal-continuation',
+      goalId: 'goal-1',
+      goalRevision: 1,
+      reservationId: firstReservation.id,
+      admittedRound: 2,
+      completedToolCountAtStart: 0,
+      failedToolCountAtStart: 0,
+    });
+
+    expect(manager.getChatGoal(managed.id)?.status).toBe('paused');
+    expect(manager.getChatGoal(managed.id)?.stop?.code).toBe('no-progress');
+  });
+
+  it('invalidates an active Goal reservation when its session is deleted', async () => {
+    const managed = installSession();
+    const driver = (manager as unknown as { chatGoalDriver: ChatGoalDriver }).chatGoalDriver;
+    const result = driver.reserve({
+      sessionId: managed.id,
+      goal: managed.chatGoal!,
+      processingGeneration: managed.processingGeneration,
+      settledReason: 'complete',
+      didReceiveFinalResponse: true,
+      hasQueuedHumanInput: false,
+      hasPendingAuth: false,
+      hasPendingApproval: false,
+      hasPendingPlan: false,
+      hasPendingBackgroundWork: false,
+      isArchived: false,
+      currentTotalTokens: 0,
+    });
+    expect(result.kind).toBe('reserved');
+    if (result.kind !== 'reserved') return;
+
+    await manager.deleteSession(managed.id);
+
+    expect(driver.consume(
+      managed.id,
+      result.reservation.id,
+      managed.chatGoal,
+      managed.processingGeneration,
+    )).toBeUndefined();
   });
 });

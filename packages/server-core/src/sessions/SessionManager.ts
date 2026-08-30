@@ -1555,6 +1555,18 @@ type ChatGoalSendAdmission =
   | { kind: 'create'; confirmationNonce: string }
   | { kind: 'continuation'; reservationId: string }
 
+type ChatGoalAdmissionInvalidationCode = 'idle-boundary-lost' | 'human-input-priority' | 'stale-reservation'
+
+class ChatGoalAdmissionInvalidatedError extends Error {
+  readonly code: ChatGoalAdmissionInvalidationCode
+
+  constructor(code: ChatGoalAdmissionInvalidationCode, message: string) {
+    super(message)
+    this.name = 'ChatGoalAdmissionInvalidatedError'
+    this.code = code
+  }
+}
+
 /**
  * Create a ManagedSession from any session-like source (SessionMetadata, SessionConfig, StoredSession).
  * Spreads all matching fields from the source so new persistent fields automatically propagate.
@@ -4998,9 +5010,8 @@ user a clickable link to where the thing now lives.`
   }
 
   // Load all existing sessions from disk into memory (metadata only - messages are lazy-loaded)
-  private async loadSessionsFromDisk(): Promise<void> {
+  private async loadSessionsFromDisk(workspaces = getWorkspaces()): Promise<void> {
     try {
-      const workspaces = getWorkspaces()
       let totalSessions = 0
 
       // Iterate over each workspace and load its sessions
@@ -9736,6 +9747,9 @@ user a clickable link to where the thing now lives.`
       return
     }
 
+    // A reserved continuation must not outlive its owning session.
+    this.chatGoalDriver.invalidate(sessionId)
+
     // Get workspace slug before deleting
     const workspaceRootPath = managed.workspace.rootPath
 
@@ -9942,7 +9956,10 @@ user a clickable link to where the thing now lives.`
       if (goalAdmission) {
         if (managed.isProcessing) {
           this.chatGoalDriver.invalidate(sessionId)
-          throw new Error('Goal admission lost the idle boundary to another message')
+          throw new ChatGoalAdmissionInvalidatedError(
+            'idle-boundary-lost',
+            'Goal admission lost the idle boundary to another message',
+          )
         }
         if (managed.isArchived) throw new Error('Goal Mode cannot run in an archived chat')
         if (managed.pendingAuthRequest) throw new Error('Resolve authentication before continuing Goal Mode')
@@ -9951,7 +9968,10 @@ user a clickable link to where the thing now lives.`
         }
         if (managed.messageQueue.length > 0) {
           this.chatGoalDriver.invalidate(sessionId)
-          throw new Error('Queued human input has priority over Goal continuation')
+          throw new ChatGoalAdmissionInvalidatedError(
+            'human-input-priority',
+            'Queued human input has priority over Goal continuation',
+          )
         }
         if (Array.from(this.pendingPermissionRequests.values()).some(request => request.sessionId === sessionId)) {
           throw new Error('Resolve the pending approval before continuing Goal Mode')
@@ -10008,7 +10028,12 @@ user a clickable link to where the thing now lives.`
             managed.chatGoal,
             managed.processingGeneration,
           )
-          if (!reservation) throw new Error('Goal continuation reservation is stale')
+          if (!reservation) {
+            throw new ChatGoalAdmissionInvalidatedError(
+              'stale-reservation',
+              'Goal continuation reservation is stale',
+            )
+          }
           admittedGoalState = admitChatGoalRound(managed.chatGoal!)
           managed.chatGoal = admittedGoalState
           admittedGoalEvent = this.appendChatGoalEvent(
@@ -11199,13 +11224,13 @@ user a clickable link to where the thing now lives.`
         undefined,
         { kind: 'continuation', reservationId: reservation.id },
       ).catch((error) => {
-        const message = error instanceof Error ? error.message : String(error)
-        if (message.includes('stale') || message.includes('priority') || message.includes('idle boundary')) {
+        if (error instanceof ChatGoalAdmissionInvalidatedError) {
           sessionLog.info('Goal continuation invalidated before admission', {
             sessionId: reservation.sessionId,
             goalId: reservation.goalId,
             revision: reservation.goalRevision,
             reservationId: reservation.id,
+            reason: error.code,
           })
           return
         }
