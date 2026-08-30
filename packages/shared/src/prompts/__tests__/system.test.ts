@@ -10,6 +10,7 @@ mock.module('../../config/preferences.ts', () => ({
 }))
 
 import { getSystemPrompt } from '../system'
+import { getDocPath } from '../../docs/index'
 
 const GIT_CONVENTIONS_HEADING = '## Git Conventions'
 const CO_AUTHOR_TRAILER = 'Co-Authored-By: Runner <agents-noreply@runneros.local>'
@@ -34,6 +35,12 @@ describe('system prompt guidance', () => {
 
     expect(prompt).toContain('The subtask needs file/shell tools, sources, skills, or a saved agent persona')
     expect(prompt).not.toContain('The subtask needs tools (Read, Bash, Grep)')
+  })
+
+  it('points browser prerequisites at the active runtime data root', () => {
+    const prompt = getSystemPrompt(undefined, undefined, '/tmp/workspace', '/tmp/workspace')
+
+    expect(prompt).toContain(`read \`${getDocPath('browser-tools.md')}\``)
   })
 
   it('teaches agents when to use message_agent for specialist delegation', () => {

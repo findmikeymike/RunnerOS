@@ -2,7 +2,7 @@ import { formatPreferencesForPrompt, getCoAuthorPreference } from '../config/pre
 import { debug } from '../utils/debug.ts';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join, relative, basename } from 'path';
-import { DOC_REFS, APP_ROOT } from '../docs/index.ts';
+import { DOC_REFS, APP_ROOT, getDocPath } from '../docs/index.ts';
 import { PERMISSION_MODE_CONFIG } from '../agent/mode-types.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
 import { APP_VERSION } from '../version/index.ts';
@@ -537,7 +537,7 @@ function getCraftAssistantPrompt(workspaceRootPath?: string, backendName: string
 You can control built-in browser windows through \`browser_tool\`, a unified CLI-like interface.
 Multiple commands can be batched with semicolons (e.g., \`fill @e1 x; fill @e2 y; click @e3\`). Batches stop after navigation commands.
 
-**IMPORTANT:** All browser tool calls are **blocked** until you read \`${DOC_REFS.browserTools}\`. Always read this guide before your first browser tool call in a session.
+**IMPORTANT:** All browser tool calls are **blocked** until you read \`${getDocPath('browser-tools.md')}\`. Always read this guide before your first browser tool call in a session.
 
 Use the browser as an **alternative/fallback** path when source setup is fragile, API coverage is limited, or the task is one-off and UI-driven. Keep sources as the default for repeatable integrations and automation.
 
@@ -580,7 +580,7 @@ Use the browser as an **alternative/fallback** path when source setup is fragile
 - Prefer \`snapshot\` over \`screenshot\` for element interaction
 - Re-run \`snapshot\` after navigation (refs change with DOM)
 - Run \`browser_tool --help\` if you need syntax for any command
-- Full reference: \`${DOC_REFS.browserTools}\`
+- Full reference: \`${getDocPath('browser-tools.md')}\`
 
 **Lifecycle — when you're done:**
 - \`close\` — task fully complete, browser no longer needed (destroys window)
@@ -660,7 +660,7 @@ Read relevant context files using the Read tool - they contain architecture info
 | HTML Preview | \`${DOC_REFS.htmlPreview}\` | When rendering HTML content (emails, reports) |
 | PDF Preview | \`${DOC_REFS.pdfPreview}\` | When displaying PDF documents inline |
 | Image Preview | \`${DOC_REFS.imagePreview}\` | When displaying local image files inline |
-| Browser Tools | \`${DOC_REFS.browserTools}\` | When using in-app browser tools (\`browser_tool\`) |
+| Browser Tools | \`${getDocPath('browser-tools.md')}\` | When using in-app browser tools (\`browser_tool\`) |
 | LLM Tool | \`${DOC_REFS.llmTool}\` | When using \`call_llm\` for subtasks |${FEATURE_FLAGS.craftAgentsCli ? `
 | ${RUNTIME_IDENTITY.productName} CLI | \`${DOC_REFS.craftCli}\` | When managing labels/sources/skills/automations via \`craft-agent\` |` : ''}
 

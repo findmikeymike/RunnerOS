@@ -28,6 +28,7 @@ import { toast } from 'sonner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
+import { resolvePulseExecutionTarget, type PulseExecutionTarget } from '@/lib/pulse-execution'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { useAgents } from '@/hooks/useAgents'
 import { useOutputs, type OutputSummaryDTO } from '@/hooks/useOutputs'
@@ -297,6 +298,8 @@ export function ArtistHQHome({
 }: ArtistHQHomeProps) {
   const {
     activeAgents: shellActiveAgents = [],
+    llmConnections,
+    workspaceDefaultLlmConnection,
     workspaces,
   } = useAppShellContext()
   const { activeAgents: workspaceActiveAgents, allAgents } = useAgents(workspaceId)
@@ -381,6 +384,10 @@ export function ArtistHQHome({
     [docs],
   )
   const spotifySyncActive = Boolean(spotifySyncAutomation?.enabled)
+  const pulseExecutionTarget = React.useMemo(
+    () => resolvePulseExecutionTarget(llmConnections, workspaceDefaultLlmConnection),
+    [llmConnections, workspaceDefaultLlmConnection],
+  )
   const instagramResult = React.useMemo(
     () => parseArtistInstagramSnapshotDocResult(docs.find((doc) => doc.slug === ARTIST_INSTAGRAM_SNAPSHOT_CONTEXT_SLUG)),
     [docs],
@@ -1240,7 +1247,7 @@ export function ArtistHQHome({
         await window.electronAPI.createAutomationFromTemplate(
           workspaceId,
           'SchedulerTick',
-          createSpotifySyncMatcher(),
+          createSpotifySyncMatcher(pulseExecutionTarget),
         )
         toast.success('Weekly Spotify sync enabled')
       }
@@ -1250,7 +1257,7 @@ export function ArtistHQHome({
     } finally {
       setSpotifySyncBusy(false)
     }
-  }, [refreshAutomations, spotifySyncAutomation, workspaceId])
+  }, [pulseExecutionTarget, refreshAutomations, spotifySyncAutomation, workspaceId])
 
   const runSpotifyPulse = React.useCallback(async () => {
     if (!spotifyAnalyst) {
@@ -1266,6 +1273,7 @@ export function ArtistHQHome({
           type: 'prompt',
           agentSlug: 'spotify-analyst',
           prompt: createSpotifySyncPrompt(),
+          ...pulseExecutionTarget,
         }],
         permissionMode: 'safe',
         labels: ['spotify', 'artist-hq', 'manual'],
@@ -1280,7 +1288,7 @@ export function ArtistHQHome({
     } finally {
       setSpotifySyncBusy(false)
     }
-  }, [spotifyAnalyst, workspaceId])
+  }, [pulseExecutionTarget, spotifyAnalyst, workspaceId])
 
   const toggleInstagramSync = React.useCallback(async () => {
     setInstagramSyncBusy(true)
@@ -1298,7 +1306,7 @@ export function ArtistHQHome({
         await window.electronAPI.createAutomationFromTemplate(
           workspaceId,
           'SchedulerTick',
-          createInstagramSyncMatcher(),
+          createInstagramSyncMatcher(pulseExecutionTarget),
         )
         toast.success('Weekly Instagram sync enabled')
       }
@@ -1308,7 +1316,7 @@ export function ArtistHQHome({
     } finally {
       setInstagramSyncBusy(false)
     }
-  }, [instagramSyncAutomation, refreshAutomations, workspaceId])
+  }, [instagramSyncAutomation, pulseExecutionTarget, refreshAutomations, workspaceId])
 
   const runInstagramPulse = React.useCallback(async () => {
     if (!socialPublisher) {
@@ -1324,6 +1332,7 @@ export function ArtistHQHome({
           type: 'prompt',
           agentSlug: 'social-publisher',
           prompt: createInstagramSyncPrompt(),
+          ...pulseExecutionTarget,
         }],
         permissionMode: 'safe',
         labels: ['instagram', 'insights', 'artist-hq', 'manual'],
@@ -1338,7 +1347,7 @@ export function ArtistHQHome({
     } finally {
       setInstagramSyncBusy(false)
     }
-  }, [socialPublisher, workspaceId])
+  }, [pulseExecutionTarget, socialPublisher, workspaceId])
 
   const submitCalendarWork = React.useCallback(async (draft: ScheduledWorkComposerDraft) => {
     if (draft.type === 'event') {
@@ -4277,7 +4286,7 @@ Write the returned context payload to Artist HQ workspace context slug ${ARTIST_
 Keep the final note short: snapshot date, key movement, any missing setup.`
 }
 
-function createSpotifySyncMatcher(): Record<string, unknown> {
+function createSpotifySyncMatcher(executionTarget: PulseExecutionTarget = {}): Record<string, unknown> {
   return {
     name: SPOTIFY_SYNC_AUTOMATION_NAME,
     cron: SPOTIFY_SYNC_CRON,
@@ -4289,6 +4298,7 @@ function createSpotifySyncMatcher(): Record<string, unknown> {
         type: 'prompt',
         agentSlug: 'spotify-analyst',
         prompt: createSpotifySyncPrompt(),
+        ...executionTarget,
       },
     ],
   }
@@ -4304,7 +4314,7 @@ Save an immutable snapshot under data/instagram/snapshots and write its context 
 Do not publish, reply, DM, follow, or change account settings. Never fabricate unavailable metrics. Keep the final note short: profile, actual reporting window, follower growth or decline, reach, interactions, and blockers.`
 }
 
-function createInstagramSyncMatcher(): Record<string, unknown> {
+function createInstagramSyncMatcher(executionTarget: PulseExecutionTarget = {}): Record<string, unknown> {
   return {
     name: INSTAGRAM_SYNC_AUTOMATION_NAME,
     cron: INSTAGRAM_SYNC_CRON,
@@ -4316,6 +4326,7 @@ function createInstagramSyncMatcher(): Record<string, unknown> {
         type: 'prompt',
         agentSlug: 'social-publisher',
         prompt: createInstagramSyncPrompt(),
+        ...executionTarget,
       },
     ],
   }

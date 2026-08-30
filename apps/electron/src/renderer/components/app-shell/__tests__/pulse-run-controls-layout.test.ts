@@ -35,8 +35,8 @@ describe('Pulse run controls', () => {
 
   test('groups all three pulse panels inside one card with thin responsive dividers', () => {
     const source = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
-    const start = source.indexOf('{homeDetailsOpen ? (')
-    const end = source.indexOf('<HomeWeekOverviewCard', start)
+    const start = source.indexOf('<div id="hq-home-operations"')
+    const end = source.indexOf('<ReleaseHorizon', start)
     const pulseGroup = source.slice(start, end)
 
     expect(pulseGroup).toContain('<HQCard className="overflow-hidden p-0">')
@@ -47,14 +47,14 @@ describe('Pulse run controls', () => {
     expect(pulseGroup).toContain('<SocialPulseCard')
   })
 
-  test('orders Social, Spotify, Intel and aligns their graphic panels', () => {
+  test('orders Spotify, Social, Intel and aligns their graphic panels', () => {
     const source = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
-    const start = source.indexOf('{homeDetailsOpen ? (')
-    const end = source.indexOf('<HQCard className="p-0">', start)
+    const start = source.indexOf('<div id="hq-home-operations"')
+    const end = source.indexOf('<ReleaseHorizon', start)
     const pulseGroup = source.slice(start, end)
 
-    expect(pulseGroup.indexOf('<SocialPulseCard')).toBeLessThan(pulseGroup.indexOf('<SpotifyPulseCard'))
-    expect(pulseGroup.indexOf('<SpotifyPulseCard')).toBeLessThan(pulseGroup.indexOf('<IntelPulseCard'))
+    expect(pulseGroup.indexOf('<SpotifyPulseCard')).toBeLessThan(pulseGroup.indexOf('<SocialPulseCard'))
+    expect(pulseGroup.indexOf('<SocialPulseCard')).toBeLessThan(pulseGroup.indexOf('<IntelPulseCard'))
     expect(source.match(/flex h-\[184px\] flex-col rounded-\[14px\]/g)).toHaveLength(3)
   })
 })
