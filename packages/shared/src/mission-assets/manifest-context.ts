@@ -4,9 +4,10 @@ import { MISSION_ASSET_CONTEXT_SLUG } from './types.ts';
 
 export function missionAssetContextMetadata(): ContextDocMetadata {
   return {
-    name: 'Mission Assets',
-    description: 'Local files attached to this creative mission.',
+    name: 'Campaign Assets',
+    description: 'Working and source files attached to this campaign.',
     routing: { mode: 'broadcast' },
+    delivery: 'on-demand',
     enabled: true,
     status: 'active',
     priority: 'normal',
@@ -15,7 +16,7 @@ export function missionAssetContextMetadata(): ContextDocMetadata {
 
 export function serializeMissionAssetContext(manifest: MissionAssetManifest): string {
   return [
-    'This context lists local files attached to the current mission. These are mission vault copies unless a record says otherwise. Do not assume every file has been analyzed. Use tools to inspect files when needed.',
+    'This context lists Campaign Assets: working and source files for the current release. They are not approved finals unless promoted into the Release Kit. Do not assume every file has been analyzed. Use tools to inspect files when needed.',
     '',
     '```json',
     JSON.stringify(manifest, null, 2),

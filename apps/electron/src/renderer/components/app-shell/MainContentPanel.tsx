@@ -64,6 +64,7 @@ import { AgentsLaunchpad } from './AgentsLaunchpad'
 import { ArtistHQHome } from './ArtistHQHome'
 import { ArtistCommandCenterHome } from './ArtistCommandCenterHome'
 import { CampaignCalendarPage } from './CampaignCalendarPage'
+import { ReleaseKitPage } from './ReleaseKitPage'
 import { LabWorkspaceHome } from './LabWorkspaceHome'
 import { LabSongsPage } from './LabSongsPage'
 import { LabSongPadPage } from './LabSongPadPage'
@@ -352,6 +353,15 @@ export function MainContentPanel({
             onCreateAgendaTask={handleCreateAgendaTask}
             onDeleteAgendaTask={handleDeleteAgendaTask}
             networkWorkspaceId={artistHQWorkspace?.id || activeWorkspaceId || ''}
+          />
+        ) : navState.subpage === 'release-kit' ? (
+          <ReleaseKitPage
+            workspaceId={activeWorkspaceId || ''}
+            hqWorkspaceId={artistHQWorkspace?.id}
+            outputs={outputs}
+            outputsLoading={outputsLoading}
+            outputsError={outputsError}
+            onOutputClick={(outputId) => navigate(routes.view.output(outputId))}
           />
         ) : (
           <ArtistCommandCenterHome

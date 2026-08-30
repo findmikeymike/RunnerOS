@@ -18,6 +18,15 @@ import type { HandlerDeps } from '../handler-deps'
 import { refreshHqStateContextDoc, refreshHqStateContextDocBestEffort } from '../../hq-state/refresh'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
 
+export const HANDLED_CHANNELS = [
+  RPC_CHANNELS.hqState.REFRESH,
+  RPC_CHANNELS.hqState.LIST_RECOMMENDATIONS,
+  RPC_CHANNELS.hqState.GET_RECOMMENDATION_DETAIL,
+  RPC_CHANNELS.hqState.SET_RECOMMENDATION_USEFULNESS,
+  RPC_CHANNELS.hqState.TRANSITION_RECOMMENDATION,
+  RPC_CHANNELS.hqState.LAUNCH_RECOMMENDATION,
+] as const
+
 export function registerHqStateHandlers(server: RpcServer, deps: HandlerDeps): void {
   server.handle(RPC_CHANNELS.hqState.REFRESH, async (_ctx, workspaceId: string): Promise<{ generatedAt: string }> => {
     const rootPath = resolveRootPath(workspaceId)

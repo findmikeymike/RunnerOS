@@ -87,7 +87,21 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
     } else if (agentSlug?.trim().toLowerCase() === CONCIERGE_SLUG && workspace.artistWorkspaceScope === 'campaign') {
       refreshCampaignStateContextDocBestEffort(workspace.rootPath)
     }
-    return loadPromptContextDocsForAgent(workspace.rootPath, agentSlug)
+    const docs = loadPromptContextDocsForAgent(workspace.rootPath, agentSlug)
+    if (workspace.artistWorkspaceScope !== 'hq' && workspace.artistWorkspaceScope !== 'campaign' && workspace.artistWorkspaceScope !== 'lab') return docs
+    return [{
+      slug: 'artist-os-workspace',
+      metadata: {
+        name: 'Artist OS Workspace',
+        description: 'Compact product-scope marker used for shared Artist OS operating rules.',
+        routing: { mode: 'broadcast' as const },
+        delivery: 'always' as const,
+        enabled: true,
+      },
+      body: `Artist OS workspace scope: ${workspace.artistWorkspaceScope}.`,
+      path: workspace.rootPath,
+      workspaceRootPath: workspace.rootPath,
+    }, ...docs]
   })
 
   server.handle(RPC_CHANNELS.workspaceContext.UPSERT, async (_ctx, workspaceId: string, payload: UpsertContextDocPayload): Promise<LoadedContextDoc> => {

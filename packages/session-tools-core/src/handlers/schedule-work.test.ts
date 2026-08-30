@@ -49,6 +49,22 @@ describe('schedule_work', () => {
     expect((result.content[0] as { text: string }).text).toContain('Work scheduled');
   });
 
+  test('accepts exact Release Kit inputs and rejects malformed checksums', async () => {
+    let captured: ScheduleWorkToolInput | undefined;
+    const valid = await handleScheduleWork(context(async (value) => {
+      captured = value;
+      return { ok: true, destination: 'calendar' };
+    }), { ...calendarInput, inputRefs: [{ kind: 'release-kit', itemId: 'kit-1', sha256: 'a'.repeat(64) }] });
+    expect(valid.isError).toBe(false);
+    expect(captured?.inputRefs?.[0]?.itemId).toBe('kit-1');
+
+    const invalid = await handleScheduleWork(context(async () => ({ ok: true })), {
+      ...calendarInput,
+      inputRefs: [{ kind: 'release-kit', itemId: 'kit-1', sha256: 'not-a-hash' }],
+    });
+    expect(invalid.isError).toBe(true);
+  });
+
   test('requires a trigger for Automation work', async () => {
     const result = await handleScheduleWork(context(async () => ({ ok: true })), {
       ...calendarInput,

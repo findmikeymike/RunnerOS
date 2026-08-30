@@ -31,12 +31,14 @@ Core Artist HQ and campaign workspace specs live here.
 - [20 Artist Timeline / Unified Calendar](./20-artist-timeline-unified-calendar-spec.md)
 - [21 Bounded Goal Continuation Driver](./21-bounded-goal-continuation-driver-spec.md)
 - [22 Chat-Native Goal Mode](./22-chat-native-goal-mode-spec.md)
+- [23 Release Kit, Outputs, And Artist Vault](./23-release-kit-architecture-spec.md)
 
 Current V1 implementation notes:
 
 - State of Play V2 is specified as a phased opportunity engine; V1 remains the shipped implementation until each phase is verified.
 
-- Outputs -> Finals is wired through UI list/detail actions and the `promote_output_to_final` session tool. Finals are pointers stored in workspace context; campaign promotion uses the active campaign workspace id.
+- Campaign Release Kit is the approved-canon layer above Campaign Assets and Outputs. Promotion copies and hashes exact uploads, Campaign Assets, HQ Vault assets, or Output files; legacy campaign Final pointers migrate on first load.
+- All Artist OS agents receive the same Vault/Assets/Outputs/Release Kit contract and trusted lookup/promotion tools. Private or agent-disabled Vault assets remain unavailable.
 - Campaign Scheduled Work now has a guided composer, backend-owned atomic mutations, durable agent/workflow completion polling, review decisions, attention states, and approval-blocked social work.
 - College Radio and Spotify Playlist Creator are default HQ/Campaign workers; College Radio hands verified email work to Outreach Agent.
 - Artist HQ Home now derives `Next`, `This Week`, `Workers`, and `Projects` from State of Play, Calendar, Scheduled Work, Automations, and campaign workspace data instead of sample cards. State of Play also renders live HQ goals and refreshes when its derived snapshot is missing or older than 12 hours.

@@ -10,6 +10,7 @@
     ".": "./src/index.ts",
     "./transport": "./src/transport/index.ts",
     "./outputs": "./src/outputs/OutputService.ts",
+    "./release-kit": "./src/release-kit/index.ts",
     "./runtime": "./src/runtime/index.ts",
     "./handlers": "./src/handlers/index.ts",
     "./bootstrap": "./src/bootstrap/index.ts",

@@ -169,6 +169,21 @@ describe('runPreToolUseChecks', () => {
     mockCraftAgentsCliFlag = false;
   });
 
+  it('requires exact approval for Release Kit promotion even in allow-all mode', () => {
+    mockEffectivePermissionMode = 'allow-all';
+    const result = runPreToolUseChecks(createInput({
+      toolName: 'mcp__session__promote_to_release_kit',
+      input: { sourceType: 'output', sourceId: 'out-1', assetId: 'asset-2', category: 'artwork', subtype: 'cover-art' },
+      permissionMode: 'allow-all',
+    }));
+
+    expect(result.type).toBe('prompt');
+    if (result.type === 'prompt') {
+      expect(result.description).toContain('asset-2');
+      expect(result.description).toContain('promote_to_release_kit');
+    }
+  });
+
   // ============================================================
   // Step 1: Permission mode check
   // ============================================================

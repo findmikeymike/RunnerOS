@@ -178,9 +178,10 @@ export function writeOutputFinalsRegistry(workspaceRootPath: string, registry: O
   upsertContextDoc(workspaceRootPath, {
     slug: OUTPUT_FINALS_CONTEXT_SLUG,
     metadata: {
-      name: 'Finals',
-      description: 'Trusted HQ and campaign assets promoted from Outputs.',
+      name: 'Legacy Finals Pointers',
+      description: 'Compatibility pointers retained for migration into campaign Release Kits.',
       routing: { mode: 'broadcast' },
+      delivery: 'on-demand',
       enabled: true,
     },
     body: JSON.stringify(normalized, null, 2),

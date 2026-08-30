@@ -61,6 +61,7 @@ import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
 import { assertTeamPermission } from '@craft-agent/shared/workspaces'
+import { resolveVerifiedReleaseKitItemPathWhileLocked, withReleaseKitLockAsync } from '@craft-agent/shared/release-kit'
 
 export interface ScheduledWorkMigrationResult {
   updated: boolean
@@ -422,7 +423,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
     async (_ctx, workspaceId: string, input: ScheduleCampaignWorkInput): Promise<ScheduleCampaignWorkResult> => {
       const rootPath = resolveRootPath(workspaceId)
       assertTeamPermission(rootPath, 'files.write')
-      return withWorkspaceContextLock(rootPath, async () => {
+      const persist = () => withWorkspaceContextLock(rootPath, async () => {
         const validation = applyScheduledWorkMutation(emptyScheduledWorkDocument(workspaceId), {
           operation: 'upsert',
           order: input.order,
@@ -483,6 +484,9 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           calendarItem,
         }
       })
+      return input.order.inputRefs.some((ref) => ref.kind === 'release-kit')
+        ? withReleaseKitLockAsync(rootPath, persist)
+        : persist()
     },
   )
 
@@ -491,7 +495,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
     async (_ctx, workspaceId: string, input: ScheduleCampaignChainInput): Promise<ScheduleCampaignChainResult> => {
       const rootPath = resolveRootPath(workspaceId)
       assertTeamPermission(rootPath, 'files.write')
-      return withWorkspaceContextLock(rootPath, async () => {
+      const persist = () => withWorkspaceContextLock(rootPath, async () => {
         assertCampaignChainInput(workspaceId, input)
         for (let index = 0; index < input.orders.length; index += 1) {
           const order = input.orders[index]!
@@ -549,6 +553,9 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           calendarItems: resolvedShells,
         }
       })
+      return input.orders.some((order) => order.inputRefs.some((ref) => ref.kind === 'release-kit'))
+        ? withReleaseKitLockAsync(rootPath, persist)
+        : persist()
     },
   )
 
@@ -650,6 +657,10 @@ function assertCampaignScheduleInput(workspaceId: string, input: ScheduleCampaig
     || calendarItem.deletedAt) {
     throw new Error('Campaign Calendar shell does not match the scheduled work order.')
   }
+  if (order.execution.type === 'social-publish'
+    && (order.inputRefs.length !== 1 || order.inputRefs[0]?.kind !== 'release-kit')) {
+    throw new Error('Campaign social work requires one exact Release Kit item.')
+  }
   assertCampaignShellMatchesOrder(order, calendarItem)
 }
 
@@ -665,7 +676,7 @@ function assertCampaignChainInput(workspaceId: string, input: ScheduleCampaignCh
     ? root.inputRefs.length === 1
       && child.inputRefs.length === 1
       && JSON.stringify(root.inputRefs) === JSON.stringify(child.inputRefs)
-      && (root.inputRefs[0]?.kind === 'final' || root.inputRefs[0]?.kind === 'output')
+      && (root.inputRefs[0]?.kind === 'release-kit' || root.inputRefs[0]?.kind === 'final' || root.inputRefs[0]?.kind === 'output')
     : producedRefs.length === 1
       && (child.type === 'review'
         ? producedRefs[0]?.bindTo.kind === 'review-target'
@@ -704,6 +715,9 @@ function assertCampaignShellMatchesOrder(order: ScheduledWorkDocument['items'][n
   const finalRefs = order.inputRefs
     .filter((ref) => ref.kind === 'final')
     .map((ref) => ({ outputId: ref.outputId, assetId: ref.assetId, slot: ref.slot, label: ref.label }))
+  const releaseKitRefs = order.inputRefs
+    .filter((ref) => ref.kind === 'release-kit')
+    .map((ref) => ({ itemId: ref.itemId, sha256: ref.sha256, label: ref.label }))
   const outputRefs = order.inputRefs
     .filter((ref) => ref.kind === 'output')
     .map((ref) => ({ outputId: ref.outputId, title: ref.title, kind: ref.outputKind }))
@@ -724,6 +738,7 @@ function assertCampaignShellMatchesOrder(order: ScheduledWorkDocument['items'][n
     || calendarItem.accountSetId !== expectedAccountSetId
     || calendarItem.personIds.length > 0
     || !sameJson(calendarItem.finalRefs, finalRefs)
+    || !sameJson(calendarItem.releaseKitRefs, releaseKitRefs)
     || !sameJson(calendarItem.outputRefs, outputRefs)
     || !sameJson(calendarItem.assetRefs, assetRefs)
     || !sameJson(actualSocialProfiles, expectedSocialProfiles)) {
@@ -887,6 +902,9 @@ async function validateScheduleRuntime(deps: HandlerDeps, rootPath: string, orde
   const finals = readOutputFinalsRegistry(rootPath).finals
   const vault = loadArtistVaultManifest(rootPath, order.owner.workspaceId)
   for (const ref of order.inputRefs) {
+    if (ref.kind === 'release-kit') {
+      resolveVerifiedReleaseKitItemPathWhileLocked(rootPath, order.owner.workspaceId, order.owner.workspaceId, ref.itemId, ref.sha256)
+    }
     if (ref.kind === 'output' && !outputs.has(ref.outputId)) {
       throw new Error(`Referenced Output was not found: ${ref.outputId}`)
     }

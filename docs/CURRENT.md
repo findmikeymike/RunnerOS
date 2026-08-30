@@ -1,7 +1,7 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-08-25
+last_verified: 2026-08-30
 source_of_truth: true
 ---
 
@@ -9,14 +9,19 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-08-25
-- Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/integration/lab-integration-hardening`
-- Branch: `codex/lab-integration-hardening`
-- Integration base: `codex/artist-os-runtime-isolation`
-- Current goal: finish Creative Lab integration verification, then perform manual Electron smoke.
-- Overall state: integrated beta. Creative Lab is implemented on this integration branch; manual/package smoke, live-provider proof, Team Mode, and Windows remain.
+- Date: 2026-08-30
+- Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/active/artist-os-release-kit`
+- Branch: `codex/artist-os-release-kit`
+- Feature base: `5dcf37dc6 feat(chat): add Goal mode controls`
+- Current goal: hand off the verified Release Kit V1 for review and commit.
+- Overall state: core implementation, focused tests, full typecheck, Artist OS build, and isolated Electron page smoke passed. The explicit follow-ups below remain deferred.
 
 ## Recently Completed
+
+- Defined and implemented the four-layer artist asset model: HQ Vault, Campaign Assets, Outputs, and campaign Release Kit.
+- Added independent hashed Release Kit snapshots, owner-aware locking, full-hash drift verification, non-resurrecting legacy campaign Finals migration, RPC/API/MCP wiring, exact scheduled-work references, and a dedicated campaign page.
+- Added trusted asset/Output/Release Kit tools plus one universal Artist OS prompt contract so HNIC and every specialist agent use the same locations, approval rules, and face-reference behavior.
+- Routed campaign Output approval into Release Kit and kept old Finals pointers as migration/HQ compatibility only.
 
 - Verified Claude Sonnet background completion after the parent turn, compact parent status, child-session opening, interruption, same-session resume, and renderer reload. Internal receipt/session plumbing and delegation protocol are now hidden from the normal transcript while remaining durably stored for runtime use.
 - Closed two additional runtime gates: existing DeepSeek/Pi chat plus terminal-tool execution is verified, and Claude Sonnet recovered correctly after Explore mode blocked a Write without creating the requested file.
@@ -56,6 +61,10 @@ source_of_truth: true
 
 ## Current Boundaries
 
+- Release Kit is campaign-only. HQ Vault remains the career library; HQ legacy Finals pointers are intentionally not redesigned in this slice.
+- Release Kit approval is not approval to publish, send, spend, or change an external account.
+- Release Board and Scheduled Work attachment selection still have legacy Final compatibility; direct Release Kit category alignment is a follow-up in spec 23.
+
 - TryPost and Postiz provider work is implemented but not live-account verified. TryPost uses `https://app.trypost.it/mcp/trypost`; Postiz Cloud uses `https://api.postiz.com/mcp`.
 - Provider agents own drafts, schedules, and publishing on their connected services. Direct-browser Social Publisher remains the comment/DM and platform-native fallback path; Postiz MCP does not expose comment tools.
 - HQ Calendar and Campaign Calendar are separate stores and pages.
@@ -68,6 +77,14 @@ source_of_truth: true
 - Token control is enforced: only the newest upload per channel is eligible, processed video IDs persist in `artist-intel-state`, unchanged channels skip transcript ingestion, and no older fallback video is used.
 
 ## Verification State
+
+Release Kit V1 passed on `codex/artist-os-release-kit`:
+
+- 104 focused tests, 573 assertions, 0 failures across storage, trusted-source service rules, session tools, universal agent context, route parsing, RPC registration, and existing Vault/Asset behavior.
+- `bun run typecheck:all` passed.
+- `bun run electron:build:artist-os` passed for generated skills, main, preload, renderer, resources, and assets.
+- `git diff --check` passed.
+- An isolated Electron instance on port `6173` loaded a copied campaign and rendered `Release Kit` as its own campaign nav/page with Finals, Outputs, readiness categories, Folder, and Add Final entry points. The existing Artist OS instance and real profile were not modified.
 
 Creative Lab automated integration gates passed on `codex/lab-integration-hardening`:
 
@@ -101,9 +118,10 @@ The development app launched successfully from this worktree, restored Artist HQ
 
 ## Next Actions
 
-1. Run the eight-step Creative Lab manual smoke in `docs/creator-command-center/18-lab-integration-hardening-spec.md`.
-2. Smoke every Campaign Release Board play control and verify the correct worker/workflow, inherited context, immediate first message, and non-public boundary.
-3. Smoke HQ Home banner, live cards, manual pulse runs, weekly toggles, detail links, and compact lower sections.
+1. Review and commit the Release Kit V1 slice.
+2. Run manual source-flow smoke for upload, Campaign Asset, HQ Vault, Output, Primary replacement, removal, and legacy migration using disposable files.
+3. Align Release Board readiness with Release Kit categories, then add Release Kit-aware Scheduled Work/social attachment selection.
+4. Run the eight-step Creative Lab manual smoke in `docs/creator-command-center/18-lab-integration-hardening-spec.md`.
 4. Smoke Content Mastermind, Paid Campaign, Industry Outreach, College Radio, and Merch Product Builder from their intended libraries.
 5. Run the Daily Social Comment Replies five-step checklist in `docs/backlog/external-integration-live-verification.md`.
 6. Continue live-account/provider smoke for Social Publisher, YouTube Intelligence, Spotify, Printify/Shopify, TryPost/Postiz, and paid ads.

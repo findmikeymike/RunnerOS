@@ -496,6 +496,18 @@ export const CHANNEL_MAP = {
   scanArtistVault: invoke(RPC_CHANNELS.artistVault.SCAN),
   openArtistVaultFolder: invoke(RPC_CHANNELS.artistVault.OPEN_FOLDER),
 
+  // Campaign Release Kit
+  getReleaseKit: invoke(RPC_CHANNELS.releaseKit.GET),
+  getReleaseKitItem: invoke(RPC_CHANNELS.releaseKit.GET_ITEM),
+  chooseReleaseKitUpload: invoke(RPC_CHANNELS.releaseKit.CHOOSE_UPLOAD),
+  promoteToReleaseKit: invoke(RPC_CHANNELS.releaseKit.PROMOTE),
+  removeFromReleaseKit: invoke(RPC_CHANNELS.releaseKit.REMOVE),
+  setReleaseKitPrimary: invoke(RPC_CHANNELS.releaseKit.SET_PRIMARY),
+  verifyReleaseKit: invoke(RPC_CHANNELS.releaseKit.VERIFY),
+  migrateLegacyFinalsToReleaseKit: invoke(RPC_CHANNELS.releaseKit.MIGRATE_LEGACY),
+  openReleaseKitFolder: invoke(RPC_CHANNELS.releaseKit.OPEN_FOLDER),
+  onReleaseKitChanged: listener(RPC_CHANNELS.releaseKit.CHANGED),
+
   // Mission assets
   getMissionAssetManifest: invoke(RPC_CHANNELS.missionAssets.GET),
   planMissionAssetImports: invoke(RPC_CHANNELS.missionAssets.PLAN_IMPORT),

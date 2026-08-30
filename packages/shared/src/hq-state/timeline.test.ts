@@ -51,6 +51,7 @@ function campaignItem(overrides: Partial<CampaignCalendarItem> = {}): CampaignCa
     source: 'user',
     assetRefs: [],
     finalRefs: [],
+    releaseKitRefs: [],
     outputRefs: [],
     personIds: [],
     runHistory: [],

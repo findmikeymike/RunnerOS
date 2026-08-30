@@ -3,10 +3,35 @@ import {
   createCampaignCalendarItem,
   createCampaignScheduledJob,
 } from '@craft-agent/shared/campaign-calendar'
-import { executeScheduledSocialWork, prepareCampaignSocialJob, prepareScheduledSocialWork } from '../campaign-social-job-preparer'
+import { executeScheduledSocialWork, prepareCampaignSocialJob, prepareScheduledSocialWork, resolveCampaignSocialMediaPath } from '../campaign-social-job-preparer'
 import type { ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
+import { materializeReleaseKitItem, resolveReleaseKitItemPath } from '@craft-agent/shared/release-kit'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 describe('prepareCampaignSocialJob', () => {
+  test('resolves only the exact untampered Release Kit snapshot', () => {
+    const root = mkdtempSync(join(tmpdir(), 'release-kit-social-'))
+    const source = join(root, 'teaser.mp4')
+    writeFileSync(source, 'approved-teaser')
+    const promoted = materializeReleaseKitItem(root, {
+      workspaceId: 'campaign-1', campaignId: 'campaign-1',
+      source: { type: 'campaign-asset', assetId: 'asset-1' }, sourcePath: source,
+      category: 'video', subtype: 'teaser', promotedBy: 'user',
+    })
+    const job = createCampaignScheduledJob({ runAt: '2026-07-10T14:00:00.000Z', actionType: 'post-asset' })
+    const item = createCampaignCalendarItem({
+      campaignId: 'campaign-1', date: '2026-07-10', title: 'Post teaser', kind: 'scheduled-job', job,
+      releaseKitRefs: [{ itemId: promoted.item.id, sha256: promoted.item.sha256 }],
+    })
+    const input = { workspaceId: 'campaign-1', workspaceRootPath: root, item, job }
+    const snapshot = resolveReleaseKitItemPath(root, promoted.item.relativePath)
+    expect(resolveCampaignSocialMediaPath(input)).toBe(snapshot)
+    writeFileSync(snapshot, 'changed-teaser')
+    expect(() => resolveCampaignSocialMediaPath(input)).toThrow(/integrity verification/i)
+  })
+
   test('builds an exact Printing Press dry-run from profile and final refs', async () => {
     const job = createCampaignScheduledJob({
       runAt: '2026-07-10T14:00:00.000Z',

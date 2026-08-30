@@ -539,6 +539,18 @@ export const RPC_CHANNELS = {
     SCAN: 'artistVault:scan',
     OPEN_FOLDER: 'artistVault:openFolder',
   },
+  releaseKit: {
+    GET: 'releaseKit:get',
+    GET_ITEM: 'releaseKit:getItem',
+    CHOOSE_UPLOAD: 'releaseKit:chooseUpload',
+    PROMOTE: 'releaseKit:promote',
+    REMOVE: 'releaseKit:remove',
+    SET_PRIMARY: 'releaseKit:setPrimary',
+    VERIFY: 'releaseKit:verify',
+    MIGRATE_LEGACY: 'releaseKit:migrateLegacy',
+    OPEN_FOLDER: 'releaseKit:openFolder',
+    CHANGED: 'releaseKit:changed',
+  },
   memory: {
     /** List one agent's MEMORY.md entries. */
     LIST_AGENT: 'memory:listAgent',

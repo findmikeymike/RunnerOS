@@ -233,6 +233,21 @@ export type {
 };
 
 import type {
+  PromoteToReleaseKitInput,
+  ReleaseKitItemDetail,
+  ReleaseKitManifest,
+  ReleaseKitMigrationResult,
+  ReleaseKitVerificationResult,
+} from '@craft-agent/shared/release-kit';
+export type {
+  PromoteToReleaseKitInput,
+  ReleaseKitItemDetail,
+  ReleaseKitManifest,
+  ReleaseKitMigrationResult,
+  ReleaseKitVerificationResult,
+};
+
+import type {
   MissionAssetImportCandidate,
   MissionAssetImportOptions,
   MissionAssetImportResult,
@@ -1139,6 +1154,18 @@ export interface ElectronAPI {
   scanArtistVault(workspaceId: string): Promise<VaultAssetScanResult>
   openArtistVaultFolder(workspaceId: string): Promise<boolean>
 
+  // Campaign Release Kit (approved, immutable campaign snapshots)
+  getReleaseKit(workspaceId: string): Promise<ReleaseKitManifest>
+  getReleaseKitItem(workspaceId: string, itemId: string): Promise<ReleaseKitItemDetail>
+  chooseReleaseKitUpload(workspaceId: string): Promise<{ path: string; originalFileName: string } | null>
+  promoteToReleaseKit(workspaceId: string, input: PromoteToReleaseKitInput): Promise<{ manifest: ReleaseKitManifest; item: ReleaseKitItemDetail['item'] }>
+  removeFromReleaseKit(workspaceId: string, itemId: string): Promise<ReleaseKitManifest>
+  setReleaseKitPrimary(workspaceId: string, itemId: string): Promise<ReleaseKitManifest>
+  verifyReleaseKit(workspaceId: string): Promise<ReleaseKitVerificationResult>
+  migrateLegacyFinalsToReleaseKit(workspaceId: string): Promise<ReleaseKitMigrationResult>
+  openReleaseKitFolder(workspaceId: string): Promise<boolean>
+  onReleaseKitChanged(callback: (workspaceId: string, manifest: ReleaseKitManifest) => void): () => void
+
   // Mission assets (workspace-local source files mirrored into context)
   getMissionAssetManifest(workspaceId: string): Promise<MissionAssetManifest>
   planMissionAssetImports(workspaceId: string, filePaths: string[], options?: MissionAssetImportOptions): Promise<{
@@ -1554,7 +1581,7 @@ export interface SessionsNavigationState {
 
 export interface CampaignNavigationState {
   navigator: 'campaign'
-  subpage?: 'home' | 'calendar'
+  subpage?: 'home' | 'calendar' | 'release-kit'
   rightSidebar?: RightSidebarPanel
 }
 
@@ -1792,7 +1819,9 @@ export const DEFAULT_NAVIGATION_STATE: NavigationState = {
 
 export const getNavigationStateKey = (state: NavigationState): string => {
   if (state.navigator === 'campaign') {
-    return state.subpage === 'calendar' ? 'campaign/calendar' : 'campaign'
+    if (state.subpage === 'calendar') return 'campaign/calendar'
+    if (state.subpage === 'release-kit') return 'campaign/release-kit'
+    return 'campaign'
   }
   if (state.navigator === 'lab') {
     if (state.tab === 'pad') return state.songId ? `lab/pad/song/${encodeURIComponent(state.songId)}` : 'lab/pad'
@@ -1874,6 +1903,7 @@ export const getNavigationStateKey = (state: NavigationState): string => {
 export const parseNavigationStateKey = (key: string): NavigationState | null => {
   if (key === 'campaign') return { navigator: 'campaign' }
   if (key === 'campaign/calendar') return { navigator: 'campaign', subpage: 'calendar' }
+  if (key === 'campaign/release-kit') return { navigator: 'campaign', subpage: 'release-kit' }
   if (key === 'lab') return { navigator: 'lab' }
   if (key === 'lab/songs') return { navigator: 'lab', tab: 'songs' }
   if (key === 'lab/pad') return { navigator: 'lab', tab: 'pad' }

@@ -1,10 +1,13 @@
 import * as React from 'react'
-import { Box, CheckCircle2, FileText, Image, Link2, ReceiptText, Search, Star } from 'lucide-react'
+import { Box, CheckCircle2, FileText, Image, Link2, PackageCheck, ReceiptText, Search, Star } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { EntityRow } from '@/components/ui/entity-row'
 import { Input } from '@/components/ui/input'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { cn } from '@/lib/utils'
+import { useNavigation } from '@/contexts/NavigationContext'
+import { routes } from '../../../shared/routes'
+import { setPendingReleaseKitOutput } from '@/lib/release-kit-navigation'
 import { OutputFinalActionDialog } from '@/components/outputs/OutputFinalActionDialog'
 import { useOutputs, type OutputFinalPointerDTO, type OutputKind, type OutputSummaryDTO } from '@/hooks/useOutputs'
 
@@ -30,6 +33,7 @@ export function OutputsListPanel({
   onOutputClick,
 }: Props) {
   const { t } = useTranslation()
+  const { navigate } = useNavigation()
   const { promoteToFinal, removeFromFinal } = useOutputs(workspaceId)
   const [query, setQuery] = React.useState('')
   const [finalAction, setFinalAction] = React.useState<{
@@ -91,10 +95,15 @@ export function OutputsListPanel({
                 </div>
               }
               titleTrailing={<span className="text-[11px] text-muted-foreground">{formatRelativeTime(output.createdAt, t)}</span>}
-              titleSuffix={output.finals?.length ? <FinalBadge finals={output.finals} /> : undefined}
+              titleSuffix={!currentCampaignId && output.finals?.length ? <FinalBadge finals={output.finals} /> : undefined}
               menuContent={
                 <OutputFinalsMenu
                   output={output}
+                  campaignMode={Boolean(currentCampaignId)}
+                  onOpenReleaseKit={() => {
+                    setPendingReleaseKitOutput(output.id)
+                    navigate(routes.view.campaign('release-kit'))
+                  }}
                   onAction={(action) => setFinalAction({ output, action })}
                 />
               }
@@ -105,7 +114,7 @@ export function OutputsListPanel({
           ))
         )}
       </div>
-      <OutputFinalActionDialog
+      {!currentCampaignId ? <OutputFinalActionDialog
         open={Boolean(finalAction)}
         action={finalAction?.action ?? 'promote'}
         output={finalAction?.output ?? null}
@@ -115,20 +124,32 @@ export function OutputsListPanel({
         promoteToFinal={promoteToFinal}
         removeFromFinal={removeFromFinal}
         currentCampaignId={currentCampaignId}
-      />
+      /> : null}
     </div>
   )
 }
 
 function OutputFinalsMenu({
   output,
+  campaignMode,
+  onOpenReleaseKit,
   onAction,
 }: {
   output: OutputSummaryDTO
+  campaignMode: boolean
+  onOpenReleaseKit: () => void
   onAction: (action: 'promote' | 'primary' | 'remove') => void
 }) {
   const { MenuItem, Separator } = useMenuComponents()
   const primary = output.finals?.find((entry) => entry.isPrimary)
+  if (campaignMode) {
+    return (
+      <MenuItem onClick={onOpenReleaseKit}>
+        <PackageCheck className="mr-2 h-3.5 w-3.5" />
+        Approve in Release Kit
+      </MenuItem>
+    )
+  }
   return (
     <>
       <MenuItem onClick={() => onAction('promote')}>

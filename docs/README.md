@@ -13,7 +13,7 @@ Start here when you need project context without reading the whole repo.
 
 1. [CURRENT.md](./CURRENT.md) - live branch/status notes.
 2. [../HANDOFF.md](../HANDOFF.md) - zero-context takeover brief for the current build.
-3. [creator-command-center/13-scheduled-work-composer-execution-spec.md](./creator-command-center/13-scheduled-work-composer-execution-spec.md) - current Scheduled Work product/runtime contract.
+3. [creator-command-center/23-release-kit-architecture-spec.md](./creator-command-center/23-release-kit-architecture-spec.md) - current HQ Vault, Campaign Assets, Outputs, and Release Kit contract.
 4. [creator-command-center/14-state-of-play-opportunity-engine-spec.md](./creator-command-center/14-state-of-play-opportunity-engine-spec.md) - approved evolution contract for State of Play V2.
 5. [creator-command-center/15-artist-os-runtime-isolation-plan.md](./creator-command-center/15-artist-os-runtime-isolation-plan.md) - release-gating plan for making Artist OS a fully separate application from Runner.
 6. [system-map](./system-map/) - generated map of workers, skills, sources, Scheduled Work, launch surfaces, and approval boundaries.
@@ -25,6 +25,7 @@ Start here when you need project context without reading the whole repo.
 Current active work:
 
 - HQ and Campaign calendars share a progressive Event/Job composer while keeping global and campaign ownership separate.
+- Campaign Release Kit is the approved-canon layer. It snapshots exact uploads, Campaign Assets, HQ Vault assets, or Outputs and gives every Artist OS agent one trusted retrieval/promotion contract.
 - Campaign Scheduled Work is implemented for Event, Agent Task, Workflow Run, Social Publish, and Review / Approval, with backend-owned writes and durable completion tracking.
 - Automations can queue the same typed work from schedule/file/webhook/URL/message triggers; standalone background agent/workflow runs may hide their Calendar shell.
 - HNIC alone has the `schedule_work` tool for confirmed Calendar or Automation agent/workflow work.
@@ -42,7 +43,7 @@ Current active work:
 - `tools/genesis-lyric` is the local single-song lyric-video renderer/storyboard helper.
 - `tools/lyrics-transcriber` is the local Whisper/FFmpeg wrapper for Vault song transcription and timed lyric review.
 - Mac arm64 transcription has bundled app-owned binaries; Windows/Linux runtime parity is tracked in backlog and intentionally blocked until verified.
-- Active Creator Command specs: [HQ State Of Play / Proactive Routing](./creator-command-center/09-hq-state-of-play-proactive-routing.md), [Work Products / Output Architecture](./creator-command-center/10-work-products-output-architecture-spec.md), [Outputs, Finals, And Asset Promotion](./creator-command-center/11-outputs-finals-asset-promotion-spec.md), [Campaign Calendar And Scheduled Jobs](./creator-command-center/12-campaign-calendar-scheduled-jobs-spec.md), [Scheduled Work Composer And Execution](./creator-command-center/13-scheduled-work-composer-execution-spec.md), [State Of Play Opportunity Engine](./creator-command-center/14-state-of-play-opportunity-engine-spec.md), and [Artist OS Runtime Isolation](./creator-command-center/15-artist-os-runtime-isolation-plan.md).
+- Active Creator Command specs: [Release Kit, Outputs, And Artist Vault](./creator-command-center/23-release-kit-architecture-spec.md), [HQ State Of Play / Proactive Routing](./creator-command-center/09-hq-state-of-play-proactive-routing.md), [Work Products / Output Architecture](./creator-command-center/10-work-products-output-architecture-spec.md), [Campaign Calendar And Scheduled Jobs](./creator-command-center/12-campaign-calendar-scheduled-jobs-spec.md), [Scheduled Work Composer And Execution](./creator-command-center/13-scheduled-work-composer-execution-spec.md), [State Of Play Opportunity Engine](./creator-command-center/14-state-of-play-opportunity-engine-spec.md), and [Artist OS Runtime Isolation](./creator-command-center/15-artist-os-runtime-isolation-plan.md).
 
 ## Main Areas
 

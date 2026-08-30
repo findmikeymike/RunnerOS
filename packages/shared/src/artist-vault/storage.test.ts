@@ -99,13 +99,13 @@ describe('artist vault', () => {
     expect(body).toContain('Final master: vault/music/masters-finals/night-drive-final.wav');
     expect(body).toContain('Press photo: vault/visuals/artist-photos/press-headshot.jpg');
     expect(body).toContain('Face reference: vault/visuals/face-references/face-reference-01.jpg');
-    expect(body).toContain('Vault files are usable by agents by default.');
+    expect(body).toContain('Only agent-approved Vault files are exposed here.');
     expect(body).toContain('Private or non-agent-usable assets: 0');
     expect(artistVaultContextMetadata().description).toContain('song matching metadata');
     expect(artistVaultContextMetadata().routing).toEqual({ mode: 'broadcast' });
   });
 
-  test('business assets default usable and redact paths when marked private', () => {
+  test('sensitive business assets default private and redact their paths', () => {
     const workspace = tempWorkspace();
     const split = join(workspace, 'song-splitsheet.pdf');
     writeFileSync(split, 'private splits');
@@ -120,8 +120,8 @@ describe('artist vault', () => {
     const body = serializeArtistVaultContext(privateManifest);
 
     expect(asset?.kind).toBe('split-sheet');
-    expect(asset?.rightsStatus).toBe('safe-to-use');
-    expect(asset?.usableByAgents).toBe(true);
+    expect(asset?.rightsStatus).toBe('private');
+    expect(asset?.usableByAgents).toBe(false);
     expect(privateAsset?.rightsStatus).toBe('private');
     expect(privateAsset?.usableByAgents).toBe(false);
     expect(asset?.relativePath).toBe('vault/business/splits/song-splitsheet.pdf');
@@ -161,14 +161,15 @@ describe('artist vault', () => {
     const loaded = loadArtistVaultManifest(workspace, 'workspace-1');
 
     expect(first.added.map((asset) => asset.kind).sort()).toEqual(['contract', 'face-reference', 'master-final']);
-    expect(first.added.find((asset) => asset.kind === 'contract')?.usableByAgents).toBe(true);
+    expect(first.added.find((asset) => asset.kind === 'contract')?.usableByAgents).toBe(false);
+    expect(first.added.find((asset) => asset.kind === 'contract')?.rightsStatus).toBe('private');
     expect(first.added.find((asset) => asset.kind === 'face-reference')?.usableByAgents).toBe(true);
     expect(first.added.find((asset) => asset.kind === 'master-final')?.usableByAgents).toBe(true);
     expect(second.added).toHaveLength(0);
     expect(loaded.assets).toHaveLength(3);
   });
 
-  test('links an external folder without copying files and defaults assets usable', () => {
+  test('links an external folder without copying files and keeps sensitive documents private', () => {
     const workspace = tempWorkspace();
     const linkedFolder = join(workspace, 'external');
     mkdirSync(linkedFolder, { recursive: true });
@@ -181,10 +182,11 @@ describe('artist vault', () => {
     expect(result.linked.map((asset) => asset.kind).sort()).toEqual(['contract', 'cover-art']);
     expect(result.linked.every((asset) => asset.source === 'linked-folder')).toBe(true);
     expect(result.linked.every((asset) => asset.relativePath === undefined)).toBe(true);
-    expect(result.linked.every((asset) => asset.usableByAgents)).toBe(true);
+    expect(result.linked.find((asset) => asset.kind === 'cover-art')?.usableByAgents).toBe(true);
+    expect(result.linked.find((asset) => asset.kind === 'contract')?.usableByAgents).toBe(false);
     expect(result.manifest.storageMode).toBe('linked');
     expect(body).toContain(join(linkedFolder, 'approved-cover.png'));
-    expect(body).toContain(join(linkedFolder, 'producer-contract.pdf'));
+    expect(body).not.toContain(join(linkedFolder, 'producer-contract.pdf'));
   });
 
   test('linked folder scan skips Vault manifest and temp files', () => {
@@ -216,7 +218,7 @@ describe('artist vault', () => {
 
     expect(imported.imported[0]?.relativePath).toBe('vault/visuals/cover-art/single-cover.png');
     expect(linked.linked[0]?.kind).toBe('contract');
-    expect(body).toContain(join(linkedFolder, 'session-contract.pdf'));
+    expect(body).not.toContain(join(linkedFolder, 'session-contract.pdf'));
   });
 
   test('updates asset metadata and keeps category aligned with kind', () => {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   AGENT_CATALOG_HEADER,
+  ARTIST_ASSET_CONTRACT_HEADER,
   PLANNING_NUDGE,
   SKILLS_HEADER,
   SOURCES_HEADER,
@@ -100,6 +101,36 @@ describe('composeAgentSystemPrompt', () => {
     expect(result).not.toContain(WORKSPACE_CONTEXT_HEADER);
     expect(result).not.toContain(AGENT_CATALOG_HEADER);
     expect(result).not.toContain(SKILLS_HEADER);
+    expect(result).not.toContain(ARTIST_ASSET_CONTRACT_HEADER);
+  });
+
+  test('gives every Artist OS agent the same Vault, Assets, Outputs, and Release Kit contract', () => {
+    const result = composeAgentSystemPrompt(
+      { ...agent(), slug: 'content-director' },
+      [],
+      [],
+      [campaignStateDoc()],
+    );
+    expect(result).toContain(ARTIST_ASSET_CONTRACT_HEADER);
+    expect(result).toContain('HQ Vault is the reusable career library');
+    expect(result).toContain('Campaign Assets are source files and works in progress');
+    expect(result).toContain('Outputs are durable agent/user work products and drafts');
+    expect(result).toContain('Release Kit is the approved campaign canon');
+    expect(result).toContain('promote_to_release_kit');
+    expect(result).toContain('approved face-reference images');
+  });
+
+  test('injects the asset contract from explicit Artist OS workspace scope without relying on context docs or skill names', () => {
+    const result = composeAgentSystemPrompt(
+      { ...agent(), slug: 'content-director' },
+      [],
+      [],
+      [],
+      [],
+      { artistWorkspaceScope: 'campaign' },
+    );
+    expect(result).toContain(ARTIST_ASSET_CONTRACT_HEADER);
+    expect(result).toContain('Release Kit is the approved campaign canon');
   });
 
   /**

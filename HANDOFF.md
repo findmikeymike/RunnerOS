@@ -1,30 +1,38 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-08-04
+last_verified: 2026-08-30
 source_of_truth: true
 ---
 
-# Handoff: Creator Social Integration
+# Handoff: Artist OS Release Kit Integration
 
 ## Start Here
 
-- Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/integration/creator-social-integration`
-- Branch: `codex/hq-home-compact-ui`
-- Current implementation head: `fa5c7d5b feat(campaign): connect release tasks to workers`
-- Remote comparison: 10 commits ahead of `origin/codex/creator-social-integration`; this local stack is not pushed.
-- Worktree was clean after `fa5c7d5b`. Trade God remains a separate worktree and isolated runtime under `~/.trade-god`; do not re-register it as an Artist OS workspace.
+- Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/active/artist-os-release-kit`
+- Branch: `codex/artist-os-release-kit`
+- Feature base: `5dcf37dc6 feat(chat): add Goal mode controls`
+- Current slice is not yet committed. Preserve other RunnerOS worktrees and keep Trade God isolated.
 
 Read in this order:
 
-1. `docs/CURRENT.md`
-2. `docs/creator-command-center/13-scheduled-work-composer-execution-spec.md`
+1. `docs/creator-command-center/23-release-kit-architecture-spec.md`
+2. `docs/CURRENT.md`
 3. `docs/system-map/runner-system-map.md`
-4. `packages/shared/src/scheduled-work/index.ts`
-5. `packages/shared/src/skills/bundled/social-publishing/references/engagement-playbook.md`
-6. `packages/shared/src/skills/bundled/youtube-intelligence/SKILL.md`
+4. `packages/shared/src/release-kit/storage.ts`
+5. `packages/server-core/src/release-kit/ReleaseKitService.ts`
+6. `packages/shared/src/agent-prompt/compose.ts`
 
 ## Product State
+
+### HQ Vault, Campaign Assets, Outputs, And Release Kit
+
+- HQ Vault is the reusable career library. Campaign Assets are release inputs and working files. Outputs are durable agent/user work. Release Kit is approved campaign canon.
+- Campaign navigation has a dedicated Release Kit page with Finals and Outputs views plus a progressive exact-source promotion flow.
+- Promotion accepts a user upload, registered Campaign Asset, eligible HQ Vault asset, or Output file and creates an independent SHA-256 snapshot under `release-kit/`.
+- The compact `context/release-kit/CONTEXT.md` mirror plus trusted session tools teach all Artist OS agents where approved material lives without guessing paths.
+- Campaign Output actions route into Release Kit instead of creating new legacy pointer-only Finals. Old campaign pointers migrate on first Release Kit load; HQ legacy pointers remain temporary compatibility.
+- Agents cannot pass arbitrary upload paths, read private/disabled Vault files, silently finalize work, or treat Release Kit approval as permission to post, send, spend, or mutate an external account.
 
 ### Artist HQ Home
 
@@ -66,7 +74,7 @@ Read in this order:
 - Automations can create typed `queue-work` actions from schedule, file, webhook, URL, and inbound-message triggers.
 - Automations and Calendar share the same Scheduled Work runner, completion rules, chains, recovery, approvals, and receipts.
 - Standalone background agent/workflow automations may set `showOnCalendar: false`. Review, social, and chained work must remain visible.
-- HNIC alone receives the `schedule_work` session tool. After user confirmation it can schedule an agent task or workflow on Calendar, or create a queue-work Automation.
+- HNIC alone receives the `schedule_work` session tool. After user confirmation it can schedule an agent task or workflow on Calendar, or create a queue-work Automation. One-shot campaign work can bind exact Release Kit item IDs/checksums; the same refs are persisted on the Calendar shell.
 - Stable idempotency keys are required when HNIC retries the same request.
 
 ### Scheduled Social Publishing
@@ -129,7 +137,7 @@ Primary files:
 
 ### Other Active Integration Surfaces
 
-- Outputs become Finals through UI actions or the `promote_output_to_final` session tool. Finals are locked pointers to Output bundles, not copied assets.
+- Campaign Outputs become approved Release Kit snapshots through the dedicated page or `promote_to_release_kit`. The legacy `promote_output_to_final` tool maps campaign calls into Release Kit for compatibility.
 - Shared Intel routes durable session context to selected agents at launch; HNIC retains the broad context override.
 - College Radio is default-visible in Campaigns and addable to HQ, verifies directory leads live, creates durable Outreach packets, and hands verified email targets to Outreach Agent. Private Gmail drafts can be created automatically; sends remain exact-approval gated.
 - Merch Product Builder can create one private unpublished Printify product and official mockups. Spending, ordering, syncing, publishing, deleting, and other consequential actions remain exact-approval gated.
@@ -151,6 +159,33 @@ Primary files:
 - Generated map source: `scripts/generate-runner-system-map.mjs`
 
 ## Verification Truth
+
+Passed on 2026-08-30 for Release Kit V1:
+
+```bash
+bun test packages/shared/src/release-kit/storage.test.ts \
+  packages/server-core/src/release-kit/ReleaseKitService.test.ts \
+  packages/session-tools-core/src/handlers/release-kit.test.ts \
+  packages/shared/src/agent-prompt/compose.test.ts \
+  apps/electron/src/shared/__tests__/route-parser-automations.test.ts \
+  packages/shared/src/artist-vault/storage.test.ts \
+  packages/shared/src/mission-assets/storage.test.ts \
+  apps/electron/src/main/handlers/__tests__/registration.test.ts \
+  apps/electron/src/main/handlers/__tests__/registration-profiles.test.ts \
+  packages/session-tools-core/src/tool-defs-filtering.test.ts
+# 104 pass, 0 fail, 573 assertions
+
+bun run typecheck:all
+# passed
+
+bun run electron:build:artist-os
+# passed
+
+git diff --check
+# passed
+```
+
+An isolated Electron instance on port `6173` loaded a disposable copy of a campaign and rendered the dedicated Release Kit navigation/page. The real Artist OS profile and its running app were not modified. Direct source promotion, Primary replacement, removal, and legacy migration still need a manual disposable-file smoke; their storage/service/tool paths have automated coverage.
 
 Passed on 2026-08-04 for the current Release Board and Social Publisher slice:
 
@@ -180,16 +215,17 @@ git status -sb
 
 ## Next Best Moves
 
-1. Smoke every Campaign Release Board play control: correct target, inherited context, immediate first message, workflow input dialog, no accidental completion, and no public action.
-2. Smoke HQ Home live cards: persisted counts, banner upload, Spotify / Intel manual Run, weekly toggles, Calendar / needs-attention / Finals links, projects, and the lower workers/signals details area.
-3. Smoke the five new artist workflows from their intended HQ/Campaign libraries and confirm one durable final Output per run.
-4. Run the five-step Daily Social Comment Replies checklist in `docs/backlog/external-integration-live-verification.md`.
-5. Continue the live-provider queue in that same document: Social Publisher, YouTube Intelligence, Spotify, Printify/Shopify, TryPost/Postiz, and paid ads.
-6. Record passes in `docs/development/vetted.md`; fix failures before expanding scope.
-7. Update `docs/CURRENT.md` and this handoff after the smoke round, then commit the docs/results as a separate coherent slice.
+1. Review and commit the Release Kit V1 slice.
+2. Smoke upload, Campaign Asset, HQ Vault, Output, Primary replacement, removal, and legacy migration with disposable files.
+3. Align Release Board readiness with Release Kit categories, then update Scheduled Work/social attachment selection.
+4. Continue the existing Release Board, HQ Home, workflow, and live-provider smoke queues below.
 
 ## Known Gaps
 
+- Release Board task completion and Release Kit asset readiness are still separate truths; direct category alignment is deferred.
+- Scheduled Work and social attachment pickers retain legacy Final compatibility and do not yet prefer Release Kit items.
+- HQ still has its legacy Finals pointer model. Release Kit is campaign-only in V1.
+- The dedicated page was live-smoked, but destructive/mutating source flows still need a disposable-file manual pass.
 - The current Release Board and compact HQ UI have automated coverage but still need the manual Electron smoke above.
 - Real social accounts have not been smoke-tested for the new delegated engagement flow.
 - Scheduled publishing has automated executor coverage but still needs per-platform live-account proof; selector drift must fail closed.

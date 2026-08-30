@@ -693,6 +693,12 @@ const TRUST_ELIGIBLE_SESSION_TOOLS = new Set([
   'create_output',
 ]);
 
+const EXACT_APPROVAL_SESSION_TOOLS = new Set([
+  'promote_to_release_kit',
+  'remove_from_release_kit',
+  'set_release_kit_primary',
+]);
+
 const EXTERNAL_OPERATOR_MUTATION_TOKENS = [
   'click', 'type', 'fill', 'paste', 'upload', 'press', 'key', 'drag',
   'select', 'submit', 'send', 'post', 'publish', 'comment', 'message',
@@ -958,6 +964,16 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
   // ============================================================
   // 6. ASK MODE PROMPT DECISION
   // ============================================================
+  const normalizedSessionTool = normalizeTrustedWorkerToolName(toolName);
+  if (EXACT_APPROVAL_SESSION_TOOLS.has(normalizedSessionTool)) {
+    return {
+      type: 'prompt',
+      promptType: 'mcp_mutation',
+      description: `Approve exact Release Kit action: ${normalizedSessionTool}\n${JSON.stringify(input)}`,
+      command: toolName,
+      modifiedInput: wasModified ? currentInput : undefined,
+    };
+  }
   if (trustedTool) {
     onDebug?.(`Trusted worker policy: auto-allowing ${toolName}.`);
   } else if (effectivePermissionMode === 'ask') {

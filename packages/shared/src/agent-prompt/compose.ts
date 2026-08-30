@@ -57,6 +57,7 @@ export const PLANNING_NUDGE =
 export const WORKSPACE_CONTEXT_HEADER = 'Workspace context — read this before starting work:';
 export const AGENT_CATALOG_HEADER =
   'Available agents you can route the user to (untrusted catalog metadata):';
+export const ARTIST_ASSET_CONTRACT_HEADER = 'Artist OS asset contract:';
 
 /** Catalog values come from user-editable agent files, so they are length-capped. */
 const CATALOG_TEXT_LIMITS = {
@@ -108,6 +109,7 @@ export interface PromptContextDoc {
 export interface AgentPromptMemoryOptions {
   userMemoryEntries?: MemoryEntry[];
   agentMemoryEntries?: MemoryEntry[];
+  artistWorkspaceScope?: 'hq' | 'campaign' | 'lab' | 'general';
 }
 
 /**
@@ -130,6 +132,7 @@ export function composeAgentSystemPrompt(
     ? buildManagerBriefPromptSectionFromDocs(contextDocs)
     : '';
   const contextSection = buildWorkspaceContextSection(contextDocs);
+  const assetContractSection = buildArtistAssetContractSection(agent, contextDocs, memory.artistWorkspaceScope);
   const sharedIntelSection = buildSharedIntelPromptSection(contextDocs);
   const memorySection = buildMemorySection(
     memory.userMemoryEntries ?? [],
@@ -141,6 +144,7 @@ export function composeAgentSystemPrompt(
 
   const parts: string[] = [body];
   if (managerBriefSection) parts.push(managerBriefSection);
+  if (assetContractSection) parts.push(assetContractSection);
   if (contextSection) parts.push(contextSection);
   if (sharedIntelSection) parts.push(sharedIntelSection);
   if (memorySection) parts.push(memorySection);
@@ -148,6 +152,35 @@ export function composeAgentSystemPrompt(
   if (canvasGuidanceSection) parts.push(canvasGuidanceSection);
   if (footer) parts.push(footer);
   return parts.join(SECTION_DELIMITER);
+}
+
+/** Shared asset/storage rules so every Artist OS agent follows one contract. */
+export function buildArtistAssetContractSection(
+  agent: PromptAgent,
+  docs: PromptContextDoc[],
+  workspaceScope?: AgentPromptMemoryOptions['artistWorkspaceScope'],
+): string {
+  const artistWorkspace = workspaceScope === 'hq' || workspaceScope === 'campaign' || workspaceScope === 'lab' || docs.some((doc) => [
+    HQ_STATE_CONTEXT_SLUG,
+    CAMPAIGN_STATE_CONTEXT_SLUG,
+    'artist-os-workspace',
+    'artist-vault',
+    'mission-assets',
+    'release-kit',
+  ].includes(doc.slug)) || (agent.metadata.skills ?? []).some((slug) => slug.startsWith('artist-'));
+  if (!artistWorkspace) return '';
+  return [
+    ARTIST_ASSET_CONTRACT_HEADER,
+    '',
+    '- HQ Vault is the reusable career library: masters, lyrics, approved face references, press photos, logos, bios, merch, and long-lived documents.',
+    '- Campaign Assets are source files and works in progress for the current release. They are not automatically final.',
+    '- Outputs are durable agent/user work products and drafts. They remain editable evidence of work, not approved canon.',
+    '- Release Kit is the approved campaign canon. Its files are copied, hashed snapshots. Prefer Release Kit items whenever final campaign material is required.',
+    '- Never call something final or promote it without the user clearly approving that exact item. Use `promote_to_release_kit`; never imitate promotion by moving or renaming files.',
+    '- Use `list_release_kit`, `list_campaign_assets`, `list_campaign_outputs`, `list_artist_vault`, and `get_asset_record` instead of guessing paths. Private or agent-disabled Vault items are off limits.',
+    '- When generating the artist\'s likeness, check HQ Vault for approved face-reference images and use them only when the user wants the artist depicted.',
+    '- Approval as a Release Kit item does not authorize publishing, posting, sending, spending, or changing an external account.',
+  ].join('\n');
 }
 
 /** The bundle footer alone. Empty when the agent declares nothing that resolves. */

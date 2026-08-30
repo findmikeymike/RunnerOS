@@ -40,6 +40,12 @@ export interface CampaignFinalRef {
   label?: string;
 }
 
+export interface CampaignReleaseKitRef {
+  itemId: string;
+  sha256: string;
+  label?: string;
+}
+
 export interface CampaignOutputRef {
   outputId: string;
   title?: string;
@@ -102,6 +108,7 @@ export interface CampaignScheduleApprovalBinding {
   socialProfileRefs: SocialProfileRef[];
   assetRefs: CampaignAssetRef[];
   finalRefs: CampaignFinalRef[];
+  releaseKitRefs: CampaignReleaseKitRef[];
   outputRefs: CampaignOutputRef[];
 }
 
@@ -151,6 +158,7 @@ export interface CampaignCalendarItem {
   source: CampaignCalendarItemSource;
   assetRefs: CampaignAssetRef[];
   finalRefs: CampaignFinalRef[];
+  releaseKitRefs: CampaignReleaseKitRef[];
   outputRefs: CampaignOutputRef[];
   personIds: string[];
   accountSetId?: string;
@@ -291,6 +299,7 @@ export function createCampaignCalendarItem(input: {
   personIds?: string[];
   assetRefs?: CampaignAssetRef[];
   finalRefs?: CampaignFinalRef[];
+  releaseKitRefs?: CampaignReleaseKitRef[];
   outputRefs?: CampaignOutputRef[];
   socialProfileRefs?: SocialProfileRef[];
   accountSetId?: string;
@@ -311,6 +320,7 @@ export function createCampaignCalendarItem(input: {
     source: input.source ?? 'user',
     assetRefs: input.assetRefs ?? [],
     finalRefs: input.finalRefs ?? [],
+    releaseKitRefs: input.releaseKitRefs ?? [],
     outputRefs: input.outputRefs ?? [],
     personIds: input.personIds ?? [],
     accountSetId: input.accountSetId,
@@ -357,7 +367,7 @@ export function createCampaignScheduledJob(input: {
 
 export function updateCampaignCalendarItem(
   item: CampaignCalendarItem,
-  patch: Partial<Pick<CampaignCalendarItem, 'date' | 'time' | 'timezone' | 'title' | 'notes' | 'kind' | 'status' | 'personIds' | 'assetRefs' | 'finalRefs' | 'outputRefs' | 'accountSetId' | 'socialProfileRefs' | 'scheduledWorkId' | 'job' | 'approvals' | 'runHistory'>>,
+  patch: Partial<Pick<CampaignCalendarItem, 'date' | 'time' | 'timezone' | 'title' | 'notes' | 'kind' | 'status' | 'personIds' | 'assetRefs' | 'finalRefs' | 'releaseKitRefs' | 'outputRefs' | 'accountSetId' | 'socialProfileRefs' | 'scheduledWorkId' | 'job' | 'approvals' | 'runHistory'>>,
 ): CampaignCalendarItem {
   return normalizeCampaignCalendarItem({
     ...item,
@@ -479,6 +489,7 @@ export function applyCampaignCalendarWriteIntent(
       source,
       assetRefs: intent.item.assetRefs ?? [],
       finalRefs: intent.item.finalRefs ?? [],
+      releaseKitRefs: intent.item.releaseKitRefs ?? [],
       outputRefs: intent.item.outputRefs ?? [],
       personIds: intent.item.personIds ?? [],
       approvals: intent.item.approvals ?? [],
@@ -520,6 +531,7 @@ export function applyCampaignCalendarWriteIntent(
     personIds: intent.item.personIds ?? existing.personIds,
     assetRefs: intent.item.assetRefs ?? existing.assetRefs,
     finalRefs: intent.item.finalRefs ?? existing.finalRefs,
+    releaseKitRefs: intent.item.releaseKitRefs ?? existing.releaseKitRefs,
     outputRefs: intent.item.outputRefs ?? existing.outputRefs,
     accountSetId: intent.item.accountSetId ?? existing.accountSetId,
     socialProfileRefs: intent.item.socialProfileRefs ?? existing.socialProfileRefs,
@@ -545,6 +557,7 @@ export function applyCampaignCalendarWriteIntent(
       || stableStringify(existing.socialProfileRefs ?? []) !== stableStringify(item.socialProfileRefs ?? [])
       || stableStringify(existing.assetRefs) !== stableStringify(item.assetRefs)
       || stableStringify(existing.finalRefs) !== stableStringify(item.finalRefs)
+      || stableStringify(existing.releaseKitRefs) !== stableStringify(item.releaseKitRefs)
       || stableStringify(existing.outputRefs) !== stableStringify(item.outputRefs)
     );
   if (item.job && (externalBindingsChanged || scheduleChanged)) {
@@ -717,6 +730,7 @@ function createApprovalBinding(
     socialProfileRefs: item.socialProfileRefs ?? [],
     assetRefs: item.assetRefs,
     finalRefs: item.finalRefs,
+    releaseKitRefs: item.releaseKitRefs,
     outputRefs: item.outputRefs,
   };
 }
@@ -746,6 +760,7 @@ function approvalMatchesJob(
     && stableStringify(binding.socialProfileRefs) === stableStringify(item.socialProfileRefs ?? [])
     && stableStringify(binding.assetRefs) === stableStringify(item.assetRefs)
     && stableStringify(binding.finalRefs) === stableStringify(item.finalRefs)
+    && stableStringify(binding.releaseKitRefs) === stableStringify(item.releaseKitRefs)
     && stableStringify(binding.outputRefs) === stableStringify(item.outputRefs);
 }
 
@@ -763,6 +778,7 @@ function normalizeCampaignCalendarItem(item: CampaignCalendarItem): CampaignCale
     source: normalizeSource(item.source),
     assetRefs: normalizeAssetRefs(item.assetRefs),
     finalRefs: normalizeFinalRefs(item.finalRefs),
+    releaseKitRefs: normalizeReleaseKitRefs(item.releaseKitRefs),
     outputRefs: normalizeOutputRefs(item.outputRefs),
     personIds: normalizeIds(item.personIds),
     accountSetId: clean(item.accountSetId),
@@ -903,6 +919,18 @@ function normalizeFinalRefs(value: unknown): CampaignFinalRef[] {
     .map((item) => ({ outputId: item.outputId.trim(), slot: clean(item.slot), assetId: clean(item.assetId), label: clean(item.label) }));
 }
 
+function normalizeReleaseKitRefs(value: unknown): CampaignReleaseKitRef[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+    const item = entry as Partial<CampaignReleaseKitRef>;
+    const itemId = clean(item.itemId);
+    const sha256 = clean(item.sha256)?.toLowerCase();
+    if (!itemId || !/^kit_[a-z0-9_-]+$/i.test(itemId) || !sha256 || !/^[a-f0-9]{64}$/.test(sha256)) return [];
+    return [{ itemId, sha256, label: clean(item.label) }];
+  });
+}
+
 function normalizeOutputRefs(value: unknown): CampaignOutputRef[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -961,6 +989,7 @@ function normalizeApprovalBinding(value: unknown): CampaignScheduleApprovalBindi
     socialProfileRefs: normalizeSocialProfileRefs(binding.socialProfileRefs) ?? [],
     assetRefs: normalizeAssetRefs(binding.assetRefs),
     finalRefs: normalizeFinalRefs(binding.finalRefs),
+    releaseKitRefs: normalizeReleaseKitRefs(binding.releaseKitRefs),
     outputRefs: normalizeOutputRefs(binding.outputRefs),
   };
 }

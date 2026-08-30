@@ -66,6 +66,7 @@ export interface ScheduledWorkCalendarLink {
 }
 
 export type ScheduledWorkInputRef =
+  | { kind: 'release-kit'; itemId: string; sha256: string; label?: string }
   | { kind: 'final'; outputId: string; assetId?: string; slot?: string; label?: string }
   | { kind: 'output'; outputId: string; title?: string; outputKind?: string }
   | { kind: 'vault'; assetId: string; label?: string; assetKind?: string }
@@ -527,6 +528,7 @@ function workOrderFromCampaignItem(
     timezone: job.timezone || item.timezone,
     execution,
     inputRefs: [
+      ...item.releaseKitRefs.map((ref) => ({ kind: 'release-kit' as const, ...ref })),
       ...item.finalRefs.map((ref) => ({ kind: 'final' as const, ...ref })),
       ...item.outputRefs.map((ref) => ({ kind: 'output' as const, outputId: ref.outputId, title: ref.title, outputKind: ref.kind })),
     ],
@@ -714,6 +716,9 @@ function matchesExpectedVersion(existing: ScheduledWorkOrder | undefined, expect
 function isScheduledWorkInputRef(value: unknown): value is ScheduledWorkInputRef {
   if (!value || typeof value !== 'object') return false
   const ref = value as Partial<ScheduledWorkInputRef>
+  if (ref.kind === 'release-kit') {
+    return Boolean(clean(ref.itemId)) && /^[a-f0-9]{64}$/i.test(clean(ref.sha256) ?? '')
+  }
   if (ref.kind === 'final' || ref.kind === 'output') return Boolean(clean(ref.outputId))
   if (ref.kind === 'vault') return Boolean(clean(ref.assetId))
   if (ref.kind !== 'produced-output' || !clean(ref.stepId) || !ref.bindTo) return false

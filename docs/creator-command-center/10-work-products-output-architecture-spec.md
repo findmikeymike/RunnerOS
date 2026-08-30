@@ -7,6 +7,8 @@ source_of_truth: true
 
 # Work Products / Output Architecture
 
+> Campaign finalization is superseded by [23 Release Kit, Outputs, And Artist Vault](./23-release-kit-architecture-spec.md). Outputs remain durable work products; approved campaign canon now becomes copied, hashed Release Kit snapshots rather than pointers.
+
 ## Purpose
 
 Work Products are the durable deliverables of Artist HQ and campaign work.
@@ -36,7 +38,7 @@ Work Products
 
 Work Products are existing Outputs shown in HQ and campaign widgets.
 
-Finals are trusted pointers to existing Outputs. They are covered by [11 Outputs, Finals, And Asset Promotion](./11-outputs-finals-asset-promotion-spec.md) and should not be implemented as a separate asset library.
+The legacy Finals pointer model remains only for HQ compatibility and migration. Campaign approval is covered by [23 Release Kit, Outputs, And Artist Vault](./23-release-kit-architecture-spec.md).
 
 Inside the widget, split them into two simple sections:
 

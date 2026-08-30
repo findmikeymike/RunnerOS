@@ -33,6 +33,7 @@ import { hqSemanticIntentId } from '@craft-agent/shared/hq-state'
 import { generateShortId, resolveAutomationsConfigPath } from '@craft-agent/shared/automations/resolve-config-path'
 import { loadAllContextDocs, loadContextDoc, upsertContextDoc, type LoadedContextDoc } from '@craft-agent/shared/workspace-context'
 import { withWorkspaceContextLock } from './workspace-context-lock'
+import { resolveVerifiedReleaseKitItemPathWhileLocked, withReleaseKitLockAsync } from '@craft-agent/shared/release-kit'
 
 type WorkspaceScope = 'hq' | 'campaign'
 
@@ -118,6 +119,15 @@ async function persistCalendarWork(options: ScheduleWorkPersistenceOptions, exec
   const orderId = `${options.scope === 'hq' ? 'hq-work' : 'scheduled-work'}-${requestId}`
   const calendarItemId = `${options.scope === 'hq' ? orderId : `campaign-item-${requestId}`}-calendar`
   const now = new Date().toISOString()
+  const inputRefs = (options.input.inputRefs ?? []).map((ref) => ({
+    kind: 'release-kit' as const,
+    itemId: ref.itemId.trim(),
+    sha256: ref.sha256.toLowerCase(),
+    ...(ref.label?.trim() ? { label: ref.label.trim() } : {}),
+  }))
+  if (inputRefs.length > 0 && options.scope !== 'campaign') {
+    throw new Error('Release Kit inputs belong to campaign Calendar work.')
+  }
   const continuationInput = options.input.continuation
   if (continuationInput && execution.type !== 'agent-task') throw new Error('Continuation is available only for agent tasks.')
   const goalDoc = continuationInput ? loadContextDoc(options.workspaceRootPath, continuationInput.goalSlug) : undefined
@@ -146,7 +156,7 @@ async function persistCalendarWork(options: ScheduleWorkPersistenceOptions, exec
     maxRounds: continuationInput.maxRounds,
     permissionCeiling: execution.type === 'agent-task' ? execution.permissionMode : undefined,
   } : undefined
-  const payloadDigest = scheduledWorkDefinitionDigest({ execution, inputRefs: [], startAt, continuation: continuationDefinition })
+  const payloadDigest = scheduledWorkDefinitionDigest({ execution, inputRefs, startAt, continuation: continuationDefinition })
   const order: ScheduledWorkOrder = {
     version: 1,
     id: orderId,
@@ -161,7 +171,7 @@ async function persistCalendarWork(options: ScheduleWorkPersistenceOptions, exec
     startAt,
     timezone,
     execution,
-    inputRefs: [],
+    inputRefs,
     approvals: [],
     runs: [],
     executionKey: { payloadDigest, idempotencyKey: `${orderId}:${startAt}:${payloadDigest}` },
@@ -200,7 +210,16 @@ async function persistCalendarWork(options: ScheduleWorkPersistenceOptions, exec
     },
   } : undefined
 
-  return withWorkspaceContextLock(options.workspaceRootPath, async () => {
+  const persist = () => withWorkspaceContextLock(options.workspaceRootPath, async () => {
+    for (const ref of inputRefs) {
+      resolveVerifiedReleaseKitItemPathWhileLocked(
+        options.workspaceRootPath,
+        options.workspaceId,
+        options.workspaceId,
+        ref.itemId,
+        ref.sha256,
+      )
+    }
     const parsedWork = parseScheduledWorkDocResult(loadContextDoc(options.workspaceRootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, options.workspaceId)
     if (!parsedWork.ok) throw new Error(parsedWork.error)
     const existingOrder = parsedWork.work.items.find((candidate) => candidate.id === order.id)
@@ -263,6 +282,7 @@ async function persistCalendarWork(options: ScheduleWorkPersistenceOptions, exec
         status: 'scheduled',
         source: 'agent',
         scheduledWorkId: order.id,
+        releaseKitRefs: inputRefs.map(({ itemId, sha256, label }) => ({ itemId, sha256, label })),
       })
       if (!existingOrder) writeScheduledWork(options.workspaceRootPath, firstRoundMutation.work)
       if (!existingItem) {
@@ -277,6 +297,9 @@ async function persistCalendarWork(options: ScheduleWorkPersistenceOptions, exec
     if (changed) options.onContextChanged(loadAllContextDocs(options.workspaceRootPath))
     return { id: order.id, title: order.title }
   })
+  return inputRefs.length > 0
+    ? withReleaseKitLockAsync(options.workspaceRootPath, persist)
+    : persist()
 }
 
 async function persistAutomation(options: ScheduleWorkPersistenceOptions, execution: ScheduledWorkExecution): Promise<{ id: string; title: string; nextFireAt?: string }> {

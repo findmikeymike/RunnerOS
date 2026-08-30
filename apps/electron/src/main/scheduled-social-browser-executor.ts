@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { readOutputManifest, resolveOutputAssetPath } from '@craft-agent/shared/outputs'
+import { resolveVerifiedReleaseKitItemPath } from '@craft-agent/shared/release-kit'
 import type {
   ScheduledSocialActionPreview,
   ScheduledSocialApproval,
@@ -281,6 +282,19 @@ export function fingerprintScheduledSocialBrowserMedia(path: string): string {
 }
 
 export function resolveScheduledSocialBrowserMediaPath(workspaceRootPath: string, order: ScheduledWorkOrder): string | undefined {
+  const releaseKitRefs = order.inputRefs.filter((ref) => ref.kind === 'release-kit')
+  if (releaseKitRefs.length > 1) throw new Error('Social work has multiple Release Kit media references.')
+  const releaseKitRef = releaseKitRefs[0]
+  if (releaseKitRef) {
+    return resolveVerifiedReleaseKitItemPath(
+      workspaceRootPath,
+      order.owner.workspaceId,
+      order.owner.campaignId ?? order.owner.workspaceId,
+      releaseKitRef.itemId,
+      releaseKitRef.sha256,
+    )
+  }
+  // Legacy schedules remain executable during migration, but new schedules require Release Kit refs.
   for (const ref of order.inputRefs) {
     if (ref.kind !== 'final' && ref.kind !== 'output') continue
     const manifest = readOutputManifest(workspaceRootPath, ref.outputId)

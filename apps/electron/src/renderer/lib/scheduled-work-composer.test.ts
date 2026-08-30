@@ -102,7 +102,7 @@ describe('scheduled work composer drafts', () => {
     const initial = createScheduledWorkComposerDraft({
       ...defaults,
       suggestedType: 'social-publish',
-      inputRefs: [{ kind: 'final', outputId: 'output-1', assetId: 'asset-1', slot: 'primary' }],
+      inputRefs: [{ kind: 'release-kit', itemId: 'kit_teaser', sha256: 'a'.repeat(64), label: 'Teaser' }],
     })
     if (initial.type !== 'social-publish') throw new Error('Expected social draft')
     const draft = {
@@ -129,6 +129,7 @@ describe('scheduled work composer drafts', () => {
       scheduledWorkId: 'scheduled-work-request-1',
       kind: 'scheduled-job',
       status: 'needs-approval',
+      releaseKitRefs: [{ itemId: 'kit_teaser', sha256: 'a'.repeat(64), label: 'Teaser' }],
     })
     expect(result.calendarItem.job).toBeUndefined()
   })
@@ -137,7 +138,7 @@ describe('scheduled work composer drafts', () => {
     const initial = createScheduledWorkComposerDraft({
       ...defaults,
       suggestedType: 'social-publish',
-      inputRefs: [{ kind: 'final', outputId: 'output-1', assetId: 'asset-1', slot: 'primary' }],
+      inputRefs: [{ kind: 'release-kit', itemId: 'kit_video', sha256: 'b'.repeat(64) }],
     })
     if (initial.type !== 'social-publish') throw new Error('Expected social draft')
     const draft = {
@@ -154,6 +155,23 @@ describe('scheduled work composer drafts', () => {
       ...draft,
       platformOptions: { postType: 'video', visibility: 'private', madeForKids: 'no' },
     })).toBeUndefined()
+  })
+
+  test('rejects legacy mutable Output refs for new campaign social work', () => {
+    const initial = createScheduledWorkComposerDraft({
+      ...defaults,
+      suggestedType: 'social-publish',
+      inputRefs: [{ kind: 'final', outputId: 'output-1', assetId: 'asset-1' }],
+    })
+    if (initial.type !== 'social-publish') throw new Error('Expected social draft')
+    expect(validateComposerDraft({
+      ...initial,
+      title: 'Publish teaser',
+      time: '10:00',
+      platform: 'instagram',
+      profileId: 'artist-main',
+      caption: 'Out Friday.',
+    })).toMatch(/Release Kit/)
   })
 
   test('keeps ask-mode agent tasks runnable while preserving permission mode', () => {

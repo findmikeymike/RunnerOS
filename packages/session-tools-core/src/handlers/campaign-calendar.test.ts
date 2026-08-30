@@ -60,7 +60,7 @@ describe('handleCampaignCalendarWrite', () => {
     expect(called).toBe(false);
   });
 
-  it('passes structured scheduled-job intent to backend', async () => {
+  it('passes exact Release Kit references on non-social scheduled work', async () => {
     let captured: CampaignCalendarWriteToolInput | undefined;
     const result = await handleCampaignCalendarWrite(makeCtx({
       campaignCalendarWrite: async (input) => {
@@ -78,18 +78,40 @@ describe('handleCampaignCalendarWrite', () => {
       explanation: 'User asked to schedule the teaser post.',
       item: {
         date: '2026-07-10',
-        title: 'Post teaser',
+        title: 'Review teaser',
+        releaseKitRefs: [{ itemId: 'kit-1', sha256: 'a'.repeat(64), label: 'Teaser' }],
         job: {
           runAt: '2026-07-10T14:00:00.000Z',
-          actionType: 'post-asset',
-          payload: { platform: 'instagram' },
+          actionType: 'review',
+          payload: { prompt: 'Review the teaser.' },
         },
       },
     });
 
     expect(result.isError).not.toBe(true);
-    expect(captured?.item.job?.actionType).toBe('post-asset');
+    expect(captured?.item.releaseKitRefs?.[0]?.itemId).toBe('kit-1');
     expect((result.content[0] as any).text).toContain('needs-approval');
+  });
+
+  it('rejects legacy social publishing and directs HNIC to schedule_work', async () => {
+    let called = false;
+    const result = await handleCampaignCalendarWrite(makeCtx({
+      campaignCalendarWrite: async () => {
+        called = true;
+        return { ok: true };
+      },
+    }), {
+      operation: 'create',
+      explanation: 'Publish the teaser.',
+      item: {
+        date: '2026-07-10',
+        title: 'Post teaser',
+        job: { runAt: '2026-07-10T14:00:00.000Z', actionType: 'post-asset' },
+      },
+    });
+    expect(result.isError).toBe(true);
+    expect(called).toBe(false);
+    expect((result.content[0] as any).text).toContain('schedule_work');
   });
 
   it('rejects sensitive scheduled-job payload material before calling backend', async () => {
@@ -107,7 +129,7 @@ describe('handleCampaignCalendarWrite', () => {
         title: 'Post teaser',
         job: {
           runAt: '2026-07-10T14:00:00.000Z',
-          actionType: 'post-asset',
+          actionType: 'custom-prompt',
           payload: { platform: 'instagram', accessToken: 'abc123' },
         },
       },

@@ -75,6 +75,18 @@ import {
   handleRecallMemory,
 } from './handlers/memory.ts';
 import { handleCreateOutput, handlePromoteOutputToFinal } from './handlers/outputs.ts';
+import {
+  handleListReleaseKit,
+  handleGetReleaseKitItem,
+  handlePromoteToReleaseKit,
+  handleRemoveFromReleaseKit,
+  handleSetReleaseKitPrimary,
+  handleListCampaignAssets,
+  handleListArtistVault,
+  handleListCampaignOutputs,
+  handleGetCampaignOutput,
+  handleGetAssetRecord,
+} from './handlers/release-kit.ts';
 import { handleCreateLabSong, handleSaveLabLyrics, handleListLabSongs } from './handlers/lab-songs.ts';
 import { handleArtworkCompose } from './handlers/artwork-compose.ts';
 import { handleMediaProviderRequest } from './handlers/media-provider-request.ts';
@@ -554,6 +566,11 @@ export const CampaignCalendarWriteSchema = z.object({
     assetRefs: z.array(z.object({ assetId: z.string(), label: z.string().optional(), kind: z.string().optional() })).optional(),
     finalRefs: z.array(z.object({ outputId: z.string(), slot: z.string().optional(), assetId: z.string().optional(), label: z.string().optional() })).optional(),
     outputRefs: z.array(z.object({ outputId: z.string(), title: z.string().optional(), kind: z.string().optional() })).optional(),
+    releaseKitRefs: z.array(z.object({
+      itemId: z.string().min(1),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/i),
+      label: z.string().optional(),
+    })).optional().describe('Exact immutable Release Kit references for this calendar item.'),
     accountSetId: z.string().optional(),
     socialProfileRefs: z.array(z.object({ platform: z.string(), profileId: z.string().optional(), label: z.string().optional() })).optional(),
     job: CampaignCalendarJobSchema.optional(),
@@ -594,6 +611,12 @@ export const ScheduleWorkSchema = z.object({
   explanation: z.string().min(1),
   requiresUserConfirmation: z.boolean().optional(),
   execution: ScheduleWorkExecutionSchema,
+  inputRefs: z.array(z.object({
+    kind: z.literal('release-kit'),
+    itemId: z.string().min(1),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/i),
+    label: z.string().optional(),
+  })).max(20).optional().describe('Exact approved Release Kit inputs for a one-shot campaign Calendar job.'),
   startAt: z.string().optional().describe('ISO timestamp. Required for Calendar work.'),
   timezone: z.string().optional().describe('IANA timezone. Required for Calendar work and recommended for scheduled automations.'),
   trigger: ScheduleWorkTriggerSchema.optional().describe('Required for Automation work.'),
@@ -750,6 +773,43 @@ export const PromoteOutputToFinalSchema = z.object({
   assetId: z.string().min(1).optional().describe('Optional asset id inside the Output. Defaults to the Output primary asset.'),
   makePrimary: z.boolean().optional().describe('Mark this final as the current primary choice for the slot without removing other finals.'),
   note: z.string().optional().describe('Optional short note about why this was promoted.'),
+});
+
+const ReleaseKitItemSchema = z.object({
+  campaignWorkspaceId: z.string().min(1).optional().describe('HNIC-only cross-workspace target. Campaign agents omit this.'),
+  itemId: z.string().min(1).describe('Exact Release Kit item id returned by list_release_kit.'),
+});
+
+export const PromoteToReleaseKitSchema = z.object({
+  campaignWorkspaceId: z.string().min(1).optional().describe('HNIC-only cross-workspace target. Campaign agents omit this.'),
+  sourceType: z.enum(['campaign-asset', 'vault-asset', 'output']).describe('Registered source layer. Arbitrary file paths are intentionally not accepted.'),
+  sourceId: z.string().min(1).describe('Campaign Asset id, HQ Vault asset id, or Output id.'),
+  assetId: z.string().min(1).optional().describe('Required exact file asset id when sourceType is output.'),
+  vaultWorkspaceId: z.string().min(1).optional().describe('Required for an HQ Vault source; returned by list_artist_vault.'),
+  category: z.enum(['audio', 'artwork', 'video', 'images', 'copy', 'plans', 'merch', 'documents', 'references']),
+  subtype: z.string().min(1).describe('Specific role such as master, clean-version, cover-art, lyric-video, press-photo, or marketing-plan.'),
+  title: z.string().min(1).optional(),
+  makePrimary: z.boolean().optional().describe('Make this the default only within the same category and subtype.'),
+  note: z.string().optional(),
+});
+
+export const GetAssetRecordSchema = z.object({
+  sourceType: z.enum(['campaign-asset', 'vault-asset']),
+  assetId: z.string().min(1),
+  campaignWorkspaceId: z.string().min(1).optional().describe('HNIC-only target when reading a Campaign Asset.'),
+  vaultWorkspaceId: z.string().min(1).optional().describe('Required for an HQ Vault source.'),
+});
+
+export const ListReleaseKitSchema = z.object({ campaignWorkspaceId: z.string().min(1).optional() });
+export const GetReleaseKitItemSchema = ReleaseKitItemSchema;
+export const RemoveFromReleaseKitSchema = ReleaseKitItemSchema;
+export const SetReleaseKitPrimarySchema = ReleaseKitItemSchema;
+export const ListCampaignAssetsSchema = z.object({ campaignWorkspaceId: z.string().min(1).optional() });
+export const ListArtistVaultSchema = z.object({});
+export const ListCampaignOutputsSchema = z.object({ campaignWorkspaceId: z.string().min(1).optional() });
+export const GetCampaignOutputSchema = z.object({
+  campaignWorkspaceId: z.string().min(1).optional(),
+  outputId: z.string().min(1),
 });
 
 const LabSongStatusSchema = z.enum(['working', 'done']);
@@ -1366,7 +1426,8 @@ Rules:
 - Ask once if the date/time, asset, account/profile, or target action is ambiguous.
 - For normal reminders/deadlines/reviews, create a local item.
 - For runnable work, include \`item.job\`.
-- For live external actions such as posting or outreach, set/expect \`needs-approval\`; this tool does not approve or execute live actions.
+- Do not create \`post-asset\` jobs here. Campaign social publishing must use the typed scheduled-work flow with exactly one Release Kit item and checksum.
+- For other external actions such as outreach, set/expect \`needs-approval\`; this tool does not approve or execute live actions.
 - Never store passwords, cookies, tokens, 2FA codes, or private local paths in calendar payloads.
 
 Runnable job payloads:
@@ -1387,8 +1448,9 @@ Rules:
 - Calendar work requires startAt and timezone.
 - Automation work requires trigger. Set showOnCalendar false for background maintenance that should not clutter Calendar.
 - Agent tasks require a concrete brief. Use expectedOutput when a durable artifact is required.
+- For one-shot campaign work that must use an approved asset, attach the exact Release Kit item ID and SHA-256 in inputRefs. The backend re-verifies it and copies the reference into the Calendar shell.
 - Bounded continuation requires an active Goal context slug, explicit objective, 2-8 rounds, a required Output contract, and permissionMode safe. Confirm all of those with the user first.
-- This initial HNIC tool schedules agent tasks and workflow runs only. Social publishing remains approval-gated through Campaign Calendar UI.
+- This HNIC tool schedules agent tasks and workflow runs only. Native social publishing remains separately approval-gated through the Campaign Calendar composer.
 
 After success, state what will run, where it appears, and when or what triggers it.`,
 
@@ -1514,7 +1576,9 @@ Use Browser Pane or browser tools, not Canvas, when the user wants to test, debu
 
 Do NOT use this for ordinary chat replies, scratch notes, temporary plans, or files that are not intended as final deliverables. Prefer one concise primary output over dumping every intermediate artifact.`,
 
-  promote_output_to_final: `Promote an existing Output into Finals.
+  promote_output_to_final: `Legacy-compatible Output finalization.
+
+For campaign work, this now creates a copied Release Kit snapshot. Prefer \`promote_to_release_kit\` for new work because its category, subtype, source, and Primary behavior are explicit. HQ compatibility pointers remain available for old workflows.
 
 Use this only after the user clearly asks or confirms. Do not silently finalize work.
 
@@ -1525,7 +1589,29 @@ Inputs:
 - slot: named Finals slot like Cover Art, Shortform Clips, Artist Bio, Press Copy, Captions, Ads, References.
 - makePrimary: optional; marks the current default for that slot without deleting other Finals.
 
-Finals are trusted pointers to Outputs. This does not duplicate files, publish anything, send anything, or delete competing options.`,
+Campaign Release Kit promotion duplicates the selected file into an immutable hashed snapshot. This does not publish, send, spend, or delete competing options.`,
+
+  list_release_kit: `List the approved campaign Release Kit. Release Kit items are copied, hashed snapshots that agents may treat as campaign canon. Use this before reaching into working Campaign Assets or draft Outputs when final material is needed.`,
+
+  get_release_kit_item: `Get one exact Release Kit item, including its approved snapshot path and provenance. Use the returned path to read or reuse that final asset.`,
+
+  promote_to_release_kit: `Copy one registered Campaign Asset, HQ Vault asset, or Output file into the campaign Release Kit.
+
+Use only when the user clearly approves that exact item as final. Never silently finalize a draft. This tool accepts trusted source IDs, not arbitrary filesystem paths. Promotion creates an independent hashed snapshot; later edits to the source do not mutate the final.`,
+
+  remove_from_release_kit: `Remove one exact item from the campaign Release Kit. Use only when the user clearly asks to remove or demote that final. This deletes the Release Kit snapshot, not its original Campaign Asset, HQ Vault asset, or Output.`,
+
+  set_release_kit_primary: `Make one ready Release Kit item the Primary choice for its category and subtype. Other approved options stay in the kit. Use when the user chooses the preferred master, cover, video, plan, or other final.`,
+
+  list_campaign_assets: `List registered working/source files in the current campaign. Campaign Assets are inputs and works in progress; they are not final unless promoted into the Release Kit.`,
+
+  list_artist_vault: `List agent-usable items from the Artist HQ Vault. The HQ Vault is the artist's reusable career library: masters, lyrics, press photos, face references, logos, bios, merch, and other long-lived material. Private or disallowed items are omitted.`,
+
+  list_campaign_outputs: `List durable agent and user work products in a campaign. Outputs are drafts and deliverables with provenance; they are not approved canon until the user promotes an exact file into the Release Kit.`,
+
+  get_campaign_output: `Get one campaign Output manifest, including its file assets and provenance. Use this before promoting an Output when the user refers to prior agent work by name or description.`,
+
+  get_asset_record: `Get one exact registered Campaign Asset or HQ Vault record by id. Use this to inspect metadata, rights, agent usability, and path before using or promoting it.`,
 
   create_lab_song: `Create a new Song in the Lab.
 
@@ -1738,6 +1824,16 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'recall_memory', description: TOOL_DESCRIPTIONS.recall_memory, inputSchema: RecallMemorySchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleRecallMemory },
   { name: 'create_output', description: TOOL_DESCRIPTIONS.create_output, inputSchema: CreateOutputSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateOutput },
   { name: 'promote_output_to_final', description: TOOL_DESCRIPTIONS.promote_output_to_final, inputSchema: PromoteOutputToFinalSchema, executionMode: 'registry', safeMode: 'block', handler: handlePromoteOutputToFinal },
+  { name: 'list_release_kit', description: TOOL_DESCRIPTIONS.list_release_kit, inputSchema: ListReleaseKitSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListReleaseKit },
+  { name: 'get_release_kit_item', description: TOOL_DESCRIPTIONS.get_release_kit_item, inputSchema: GetReleaseKitItemSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetReleaseKitItem },
+  { name: 'promote_to_release_kit', description: TOOL_DESCRIPTIONS.promote_to_release_kit, inputSchema: PromoteToReleaseKitSchema, executionMode: 'registry', safeMode: 'block', handler: handlePromoteToReleaseKit },
+  { name: 'remove_from_release_kit', description: TOOL_DESCRIPTIONS.remove_from_release_kit, inputSchema: RemoveFromReleaseKitSchema, executionMode: 'registry', safeMode: 'block', handler: handleRemoveFromReleaseKit },
+  { name: 'set_release_kit_primary', description: TOOL_DESCRIPTIONS.set_release_kit_primary, inputSchema: SetReleaseKitPrimarySchema, executionMode: 'registry', safeMode: 'block', handler: handleSetReleaseKitPrimary },
+  { name: 'list_campaign_assets', description: TOOL_DESCRIPTIONS.list_campaign_assets, inputSchema: ListCampaignAssetsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListCampaignAssets },
+  { name: 'list_artist_vault', description: TOOL_DESCRIPTIONS.list_artist_vault, inputSchema: ListArtistVaultSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListArtistVault },
+  { name: 'list_campaign_outputs', description: TOOL_DESCRIPTIONS.list_campaign_outputs, inputSchema: ListCampaignOutputsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListCampaignOutputs },
+  { name: 'get_campaign_output', description: TOOL_DESCRIPTIONS.get_campaign_output, inputSchema: GetCampaignOutputSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetCampaignOutput },
+  { name: 'get_asset_record', description: TOOL_DESCRIPTIONS.get_asset_record, inputSchema: GetAssetRecordSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetAssetRecord },
   { name: 'create_lab_song', description: TOOL_DESCRIPTIONS.create_lab_song, inputSchema: CreateLabSongSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateLabSong },
   { name: 'save_lab_lyrics', description: TOOL_DESCRIPTIONS.save_lab_lyrics, inputSchema: SaveLabLyricsSchema, executionMode: 'registry', safeMode: 'block', handler: handleSaveLabLyrics },
   { name: 'list_lab_songs', description: TOOL_DESCRIPTIONS.list_lab_songs, inputSchema: ListLabSongsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListLabSongs },

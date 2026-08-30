@@ -126,6 +126,9 @@ import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import { assertOutputAssetPath, listOutputManifests, readOutput } from '@craft-agent/shared/outputs'
+import { loadMissionAssetManifest } from '@craft-agent/shared/mission-assets'
+import { loadArtistVaultManifest } from '@craft-agent/shared/artist-vault'
+import { ReleaseKitService, releaseKitPlacementFromLegacySlot } from '../release-kit/ReleaseKitService'
 import { scheduledWorkDefinitionDigest, type ExpectedOutputContract, type ScheduledWorkContinuation, type ScheduledWorkInputRef } from '@craft-agent/shared/scheduled-work'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
@@ -244,6 +247,7 @@ function buildScheduledWorkAgentPrompt(
   const refs = inputRefs.length > 0
     ? inputRefs.map((ref) => {
         if (ref.kind === 'final') return `- Campaign Final: output=${ref.outputId}${ref.assetId ? ` asset=${ref.assetId}` : ''}${ref.slot ? ` slot=${ref.slot}` : ''}`
+        if (ref.kind === 'release-kit') return `- Release Kit item: ${ref.itemId} sha256=${ref.sha256}${ref.label ? ` (${ref.label})` : ''}`
         if (ref.kind === 'output') return `- Output: ${ref.outputId}${ref.title ? ` (${ref.title})` : ''}`
         if (ref.kind === 'vault') return `- Vault asset: ${ref.assetId}${ref.label ? ` (${ref.label})` : ''}`
         return `- Produced Output from step: ${ref.stepId}`
@@ -2627,7 +2631,7 @@ export class SessionManager implements ISessionManager {
       usableSources,
       contextDocs,
       agentCatalog,
-      { userMemoryEntries, agentMemoryEntries },
+      { userMemoryEntries, agentMemoryEntries, artistWorkspaceScope: ws.artistWorkspaceScope },
     )
     const managerBriefReceipt = managerBriefReceiptFromDocs(contextDocs)
     return {
@@ -7125,6 +7129,33 @@ user a clickable link to where the thing now lives.`
         }
       }
 
+      const releaseKitService = new ReleaseKitService({
+        onChanged: (workspaceId, manifest) => {
+          this.eventSink?.(RPC_CHANNELS.releaseKit.CHANGED, { to: 'workspace', workspaceId }, workspaceId, manifest)
+          const target = getWorkspaceByNameOrId(workspaceId)
+          if (target) {
+            this.eventSink?.(
+              RPC_CHANNELS.workspaceContext.CHANGED,
+              { to: 'workspace', workspaceId },
+              workspaceId,
+              loadAllContextDocs(target.rootPath),
+            )
+          }
+        },
+      })
+      const resolveReleaseKitTarget = (requestedWorkspaceId?: string) => {
+        const requested = requestedWorkspaceId?.trim()
+        const isHnic = managed.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
+        if (requested && requested !== managed.workspace.id && !isHnic) {
+          throw new Error('Only HNIC can manage another campaign workspace Release Kit.')
+        }
+        const target = requested ? getWorkspaceByNameOrId(requested) : managed.workspace
+        if (!target || target.artistWorkspaceScope !== 'campaign') {
+          throw new Error('A campaign workspace is required.')
+        }
+        return target
+      }
+
       // Wire up session self-management tools (set_session_labels, set_session_status, etc.)
       mergeSessionScopedToolCallbacks(managed.id, {
         ...(managed.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
@@ -7268,6 +7299,18 @@ user a clickable link to where the thing now lives.`
           })
         },
         promoteOutputToFinalFn: async (input) => {
+          if (input.scope === 'campaign') {
+            const target = resolveReleaseKitTarget(input.campaignId)
+            const placement = releaseKitPlacementFromLegacySlot(input.slot)
+            const result = releaseKitService.promote(target.id, {
+              source: { type: 'output', outputId: input.outputId, assetId: input.assetId },
+              category: placement.category,
+              subtype: placement.subtype,
+              makePrimary: input.makePrimary,
+              note: input.note,
+            }, 'agent')
+            return { ok: true, finalId: result.item.id }
+          }
           const outputService = new OutputService({
             getWorkspaceRootPath: (workspaceId) => {
               if (workspaceId !== managed.workspace.id) {
@@ -7284,6 +7327,138 @@ user a clickable link to where the thing now lives.`
             promotedBy: 'agent',
           })
           return { ok: true, finalId: final.id }
+        },
+        listReleaseKitFn: async (input) => {
+          try {
+            const target = resolveReleaseKitTarget(input.campaignWorkspaceId)
+            const manifest = releaseKitService.get(target.id)
+            return {
+              ok: true,
+              data: {
+                ...manifest,
+              },
+            }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
+        },
+        getReleaseKitItemFn: async (input) => {
+          try {
+            const target = resolveReleaseKitTarget(input.campaignWorkspaceId)
+            return { ok: true, data: releaseKitService.getItem(target.id, input.itemId) }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
+        },
+        promoteToReleaseKitFn: async (input) => {
+          try {
+            const target = resolveReleaseKitTarget(input.campaignWorkspaceId)
+            const source = input.sourceType === 'campaign-asset'
+              ? { type: 'campaign-asset' as const, assetId: input.sourceId }
+              : input.sourceType === 'vault-asset'
+                ? { type: 'vault-asset' as const, assetId: input.sourceId, vaultWorkspaceId: input.vaultWorkspaceId! }
+                : { type: 'output' as const, outputId: input.sourceId, assetId: input.assetId }
+            const result = releaseKitService.promote(target.id, {
+              source,
+              category: input.category,
+              subtype: input.subtype,
+              title: input.title,
+              makePrimary: input.makePrimary,
+              note: input.note,
+            }, 'agent')
+            return { ok: true, data: result }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
+        },
+        removeFromReleaseKitFn: async (input) => {
+          try {
+            const target = resolveReleaseKitTarget(input.campaignWorkspaceId)
+            return { ok: true, data: releaseKitService.remove(target.id, input.itemId) }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
+        },
+        setReleaseKitPrimaryFn: async (input) => {
+          try {
+            const target = resolveReleaseKitTarget(input.campaignWorkspaceId)
+            return { ok: true, data: releaseKitService.setPrimary(target.id, input.itemId) }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
+        },
+        listCampaignAssetsFn: async (input) => {
+          try {
+            const target = resolveReleaseKitTarget(input.campaignWorkspaceId)
+            const manifest = loadMissionAssetManifest(target.rootPath, target.id)
+            return { ok: true, data: { workspaceId: target.id, workspaceRootPath: target.rootPath, assets: manifest.files } }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
+        },
+        listArtistVaultFn: async () => {
+          try {
+            const hq = findArtistHqWorkspace()
+            if (!hq) throw new Error('Artist HQ workspace is not configured.')
+            const manifest = loadArtistVaultManifest(hq.rootPath, hq.id)
+            const assets = manifest.assets.filter((asset) => (
+              asset.usableByAgents
+                && asset.rightsStatus !== 'private'
+                && asset.status !== 'missing'
+                && asset.status !== 'archived'
+            ))
+            return { ok: true, data: { vaultWorkspaceId: hq.id, workspaceRootPath: hq.rootPath, assets } }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
+        },
+        listCampaignOutputsFn: async (input) => {
+          try {
+            const target = resolveReleaseKitTarget(input.campaignWorkspaceId)
+            const outputItems = listOutputManifests(target.rootPath).map((output) => ({
+              id: output.id,
+              title: output.title,
+              kind: output.kind,
+              status: output.status,
+              summary: output.summary,
+              updatedAt: output.updatedAt,
+              origin: output.origin,
+              primary: output.primary,
+              assetCount: output.assets.length,
+            }))
+            return { ok: true, data: { workspaceId: target.id, outputs: outputItems } }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
+        },
+        getCampaignOutputFn: async (input) => {
+          try {
+            const target = resolveReleaseKitTarget(input.campaignWorkspaceId)
+            const output = readOutput(target.rootPath, input.outputId)
+            if (!output) throw new Error(`Output not found: ${input.outputId}`)
+            return { ok: true, data: output }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
+        },
+        getAssetRecordFn: async (input) => {
+          try {
+            if (input.sourceType === 'campaign-asset') {
+              const target = resolveReleaseKitTarget(input.campaignWorkspaceId)
+              const asset = loadMissionAssetManifest(target.rootPath, target.id).files.find((candidate) => candidate.id === input.assetId)
+              if (!asset) throw new Error(`Campaign Asset not found: ${input.assetId}`)
+              if (!asset.usableByAgents) throw new Error('This Campaign Asset is not approved for agent use.')
+              return { ok: true, data: { workspaceId: target.id, workspaceRootPath: target.rootPath, asset } }
+            }
+            const hq = getWorkspaceByNameOrId(input.vaultWorkspaceId ?? '')
+            if (!hq || hq.artistWorkspaceScope !== 'hq') throw new Error('Artist HQ Vault workspace not found.')
+            const asset = loadArtistVaultManifest(hq.rootPath, hq.id).assets.find((candidate) => candidate.id === input.assetId)
+            if (!asset) throw new Error(`HQ Vault asset not found: ${input.assetId}`)
+            if (!asset.usableByAgents || asset.rightsStatus === 'private') throw new Error('This HQ Vault asset is not approved for agent use.')
+            return { ok: true, data: { vaultWorkspaceId: hq.id, workspaceRootPath: hq.rootPath, asset } }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
         },
         ...(isCreativeLabWorkspaceInfo(managed.workspace) ? {
           createLabSongFn: async (input) => {

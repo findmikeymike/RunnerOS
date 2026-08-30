@@ -199,6 +199,28 @@ export {
   handleCreateOutput,
   handlePromoteOutputToFinal,
 } from './outputs.ts';
+
+export {
+  handleListReleaseKit,
+  handleGetReleaseKitItem,
+  handlePromoteToReleaseKit,
+  handleRemoveFromReleaseKit,
+  handleSetReleaseKitPrimary,
+  handleListCampaignAssets,
+  handleListArtistVault,
+  handleListCampaignOutputs,
+  handleGetCampaignOutput,
+  handleGetAssetRecord,
+} from './release-kit.ts';
+export type {
+  PromoteToReleaseKitToolInput,
+  ReleaseKitItemToolInput,
+  GetAssetRecordToolInput,
+  ReleaseKitToolResult,
+  ReleaseKitCategory,
+  CampaignReleaseKitToolInput,
+  GetCampaignOutputToolInput,
+} from './release-kit.ts';
 export type {
   CreateOutputToolInput,
   CreateOutputResult,

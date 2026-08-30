@@ -67,6 +67,15 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.artistVault.SAVE_OUTPUT_ASSET,
   RPC_CHANNELS.artistVault.SCAN,
   RPC_CHANNELS.artistVault.OPEN_FOLDER,
+  RPC_CHANNELS.releaseKit.GET,
+  RPC_CHANNELS.releaseKit.GET_ITEM,
+  RPC_CHANNELS.releaseKit.CHOOSE_UPLOAD,
+  RPC_CHANNELS.releaseKit.PROMOTE,
+  RPC_CHANNELS.releaseKit.REMOVE,
+  RPC_CHANNELS.releaseKit.SET_PRIMARY,
+  RPC_CHANNELS.releaseKit.VERIFY,
+  RPC_CHANNELS.releaseKit.MIGRATE_LEGACY,
+  RPC_CHANNELS.releaseKit.OPEN_FOLDER,
 
   // auth — local auth state + native dialogs
   RPC_CHANNELS.auth.LOGOUT,

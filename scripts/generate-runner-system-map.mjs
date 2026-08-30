@@ -24,6 +24,9 @@ const OUTPUT_FINALS_FILE = join(ROOT, 'packages/shared/src/outputs/finals.ts');
 const OUTPUT_SERVICE_FILE = join(ROOT, 'packages/server-core/src/outputs/OutputService.ts');
 const OUTPUTS_HOOK_FILE = join(ROOT, 'apps/electron/src/renderer/hooks/useOutputs.ts');
 const OUTPUT_FINAL_ACTION_DIALOG_FILE = join(ROOT, 'apps/electron/src/renderer/components/outputs/OutputFinalActionDialog.tsx');
+const RELEASE_KIT_STORAGE_FILE = join(ROOT, 'packages/shared/src/release-kit/storage.ts');
+const RELEASE_KIT_SERVICE_FILE = join(ROOT, 'packages/server-core/src/release-kit/ReleaseKitService.ts');
+const RELEASE_KIT_PAGE_FILE = join(ROOT, 'apps/electron/src/renderer/components/app-shell/ReleaseKitPage.tsx');
 const BUNDLED_SKILLS_FILE = join(ROOT, 'packages/shared/src/skills/bundled.generated.ts');
 const BUILTIN_SOURCES_FILE = join(ROOT, 'packages/shared/src/sources/builtin-sources.ts');
 const STARTER_WORKFLOWS_FILE = join(ROOT, 'packages/shared/src/workflows/starter-templates.ts');
@@ -426,6 +429,9 @@ function main() {
       outputService: rel(OUTPUT_SERVICE_FILE),
       outputsHook: rel(OUTPUTS_HOOK_FILE),
       outputFinalActionDialog: rel(OUTPUT_FINAL_ACTION_DIALOG_FILE),
+      releaseKitStorage: rel(RELEASE_KIT_STORAGE_FILE),
+      releaseKitService: rel(RELEASE_KIT_SERVICE_FILE),
+      releaseKitPage: rel(RELEASE_KIT_PAGE_FILE),
       bundledSkills: rel(BUNDLED_SKILLS_FILE),
       builtinSources: rel(BUILTIN_SOURCES_FILE),
       starterWorkflows: rel(STARTER_WORKFLOWS_FILE),
@@ -461,6 +467,10 @@ function main() {
         && text(OUTPUT_SERVICE_FILE).includes('promoteToFinal')
         && text(OUTPUT_FINALS_FILE).includes('withOutputFinalsRegistryLock')
         && text(OUTPUT_FINAL_ACTION_DIALOG_FILE).includes('Set as Final'),
+      releaseKitWired: text(TOOL_DEFS_FILE).includes('promote_to_release_kit')
+        && text(RELEASE_KIT_STORAGE_FILE).includes('materializeReleaseKitItem')
+        && text(RELEASE_KIT_SERVICE_FILE).includes('class ReleaseKitService')
+        && text(RELEASE_KIT_PAGE_FILE).includes('Release Kit'),
       scheduledWorkWired: Object.entries(scheduledWorkWiring)
         .filter(([key]) => key !== 'queueTypes')
         .every(([, value]) => value === true),
@@ -478,8 +488,10 @@ function main() {
       'Concierge receives broad workspace context and an active-agent capability catalog for routing.',
       'Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.',
       'Specialist agents do not need individual prompt edits for Shared Intel; they see only the routed docs selected for their slug. Concierge/HNIC can see all enabled context docs through its existing override.',
-      'Outputs become Finals through UI actions or the promote_output_to_final session tool; Finals are pointers to existing Output bundles, not copied assets.',
-      'Finals writes use a workspace filesystem lock under context/.locks/output-finals.lock; campaign Finals require campaignId and source Outputs cannot be deleted while still referenced.',
+      'HQ Vault is reusable career canon; Campaign Assets are release inputs; Outputs are durable work; Release Kit is approved campaign canon.',
+      'Campaign Release Kit promotion accepts registered uploads, Campaign Assets, HQ Vault assets, or Outputs and creates independent hashed snapshots under release-kit/.',
+      'All Artist OS agents receive one shared asset contract and trusted lookup tools; agents must not guess paths or silently finalize work.',
+      'The old context/finals/CONTEXT.md pointer registry is compatibility and migration input, not the campaign source of truth.',
       'Campaign Scheduled Work separates calendar shells from executable work orders and uses backend-owned schedule/cancel/review mutations.',
       'Agent/workflow scheduled work completes only after terminal child state; required Outputs, missed windows, stale runs, and failures become visible attention states.',
       'Scheduled social publishing waits at needs-approval, then the guarded native browser executor may run only the exact approved profile, payload, media bytes, and browser partition and must return a durable receipt.',
@@ -504,7 +516,7 @@ function rel(filePath) {
 }
 
 function renderReadme() {
-  return `---\nstatus: current\nowner: agent\nlast_verified: ${GENERATED_AT}\nsource_of_truth: true\n---\n\n# Runner System Map\n\nGenerated map of Runner-specific worker, context, Output/Final, Scheduled Work, Automations, HNIC scheduling, and social-execution wiring that generic code graphs miss.\n\nFiles:\n\n- [runner-system-map.md](./runner-system-map.md) - human-readable worker/system wiring.\n- [runner-system-map.json](./runner-system-map.json) - machine-readable source for agents.\n- [runner-system-map.mmd](./runner-system-map.mmd) - Mermaid graph for quick visual scans.\n\nRegenerate after changing starter agents, worker visibility, launch routing, Scheduled Work, Automations, Outputs/Finals, or permission/tool rules:\n\n\`\`\`bash\nnode scripts/generate-runner-system-map.mjs\n\`\`\`\n\nThis map is derived from code. If it disagrees with the running app, inspect the source files listed in the generated JSON before editing docs by hand.\n`;
+  return `---\nstatus: current\nowner: agent\nlast_verified: ${GENERATED_AT}\nsource_of_truth: true\n---\n\n# Runner System Map\n\nGenerated map of Runner-specific worker, context, artist asset, Release Kit, Scheduled Work, Automations, HNIC scheduling, and social-execution wiring that generic code graphs miss.\n\nFiles:\n\n- [runner-system-map.md](./runner-system-map.md) - human-readable worker/system wiring.\n- [runner-system-map.json](./runner-system-map.json) - machine-readable source for agents.\n- [runner-system-map.mmd](./runner-system-map.mmd) - Mermaid graph for quick visual scans.\n\nRegenerate after changing starter agents, worker visibility, launch routing, Scheduled Work, Automations, Vault/Assets/Outputs/Release Kit, or permission/tool rules:\n\n\`\`\`bash\nnode scripts/generate-runner-system-map.mjs\n\`\`\`\n\nThis map is derived from code. If it disagrees with the running app, inspect the source files listed in the generated JSON before editing docs by hand.\n`;
 }
 
 function renderMarkdown(map) {
@@ -522,7 +534,7 @@ function renderMarkdown(map) {
   lines.push('');
   lines.push('## Why This Exists');
   lines.push('');
-  lines.push('This map captures Runner-specific wiring that future agents often miss: worker visibility, skill/source bundles, approval mode, trusted tools, Canvas awareness, context injection, Outputs/Finals, Scheduled Work, Automations, HNIC scheduling, social execution, and launch surfaces.');
+  lines.push('This map captures Runner-specific wiring that future agents often miss: worker visibility, skill/source bundles, approval mode, trusted tools, Canvas awareness, context injection, Vault/Assets/Outputs/Release Kit, Scheduled Work, Automations, HNIC scheduling, social execution, and launch surfaces.');
   lines.push('');
   lines.push('## Source Files');
   lines.push('');
@@ -536,7 +548,8 @@ function renderMarkdown(map) {
   lines.push(`- Lab default workers: ${formatList(map.summary.labDefaultWorkerSlugs)}`);
   lines.push(`- Starter workflows mapped: ${map.summary.workflowCount}`);
   lines.push(`- Shared Intel prompt injection: ${map.summary.sharedIntelPromptWired ? 'wired' : 'not detected'}`);
-  lines.push(`- Outputs -> Finals promotion: ${map.summary.finalsPromotionWired ? 'wired' : 'not detected'}`);
+  lines.push(`- Campaign Release Kit: ${map.summary.releaseKitWired ? 'wired' : 'not detected'}`);
+  lines.push(`- Legacy HQ Finals compatibility: ${map.summary.finalsPromotionWired ? 'wired' : 'not detected'}`);
   lines.push(`- Scheduled Work execution: ${map.summary.scheduledWorkWired ? 'wired' : 'incomplete'}`);
   lines.push(`- Domains: ${Object.entries(map.summary.domains).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   lines.push(`- Permission modes: ${Object.entries(map.summary.permissionModes).map(([k, v]) => `${k} ${v}`).join(', ')}`);
@@ -573,14 +586,14 @@ function renderMarkdown(map) {
   lines.push('- Prompt delivery: `composeAgentSystemPrompt` and workflow prompt composition inject matching notes into a dedicated `Shared Intel for this worker:` section and remove them from generic workspace context to avoid duplicate/bloat.');
   lines.push('- Practical result: agents know to check it because the runtime places the relevant notes in their system prompt at launch. Individual saved agent prompts do not need to be edited.');
   lines.push('');
-  lines.push('## Outputs -> Finals Promotion');
+  lines.push('## Artist Assets And Release Kit');
   lines.push('');
-  lines.push('- User action: Output list/detail actions open `OutputFinalActionDialog` for `Set as Final`, `Set as Primary`, or `Remove from Finals`.');
-  lines.push('- Agent action: `promote_output_to_final` is exposed through the session tool manifest and calls the same backend promotion path.');
-  lines.push('- Backend action: `OutputService.promoteToFinal` validates workspace ownership, then writes through shared Finals registry helpers.');
-  lines.push('- Storage: Finals live as JSON pointers in `context/finals/CONTEXT.md`; the Output bundle remains canonical.');
-  lines.push('- Safety: writes use `context/.locks/output-finals.lock`, corrupt registry data fails closed, campaign Finals require `campaignId`, and source Output deletion is blocked while referenced.');
-  lines.push('- Surfacing: HQ and campaign command-center widgets read Outputs with attached Final pointers; campaign widgets fail closed without a campaign id.');
+  lines.push('- Product layers: HQ Vault is reusable career material; Campaign Assets are release inputs; Outputs are durable drafts/work; Release Kit is approved campaign canon.');
+  lines.push('- User action: the campaign `Release Kit` page promotes an upload, Campaign Asset, HQ Vault asset, or exact Output file.');
+  lines.push('- Agent action: trusted list/get tools resolve IDs and paths; `promote_to_release_kit`, `remove_from_release_kit`, and `set_release_kit_primary` are mutating approval-gated tools.');
+  lines.push('- Storage: promotion copies the exact file under `release-kit/<category>/<subtype>/`, records provenance and SHA-256 in `release-kit/manifest.json`, and mirrors a compact map to `context/release-kit/CONTEXT.md`.');
+  lines.push('- Safety: agents cannot submit arbitrary upload paths, private/agent-disabled Vault assets are excluded, Primary is scoped by category and subtype, and external publish/send/spend authority remains separate.');
+  lines.push('- Compatibility: campaign `promote_output_to_final` now creates a Release Kit snapshot; legacy `context/finals/CONTEXT.md` pointers migrate on first Release Kit load. HQ pointer behavior remains temporarily available.');
   lines.push('');
   lines.push('## Campaign Scheduled Work');
   lines.push('');
@@ -664,13 +677,16 @@ function renderMermaid(map) {
   lines.push('  SharedIntelPrompt --> Session');
   lines.push('  Session --> Sources["Enabled Sources"]');
   lines.push('  Session --> Skills["Agent Skills"]');
-  lines.push('  Outputs["Outputs"] --> FinalsDialog["Output Final Dialog"]');
-  lines.push('  FinalsDialog --> FinalsService["OutputService Finals Actions"]');
-  lines.push('  SessionTools["Session Tools"] --> PromoteFinal["promote_output_to_final"]');
-  lines.push('  PromoteFinal --> FinalsService');
-  lines.push('  FinalsService --> FinalsRegistry["context/finals/CONTEXT.md"]');
-  lines.push('  FinalsService --> FinalsLock["context/.locks/output-finals.lock"]');
-  lines.push('  FinalsRegistry --> HQFinals["HQ / Campaign Finals Widgets"]');
+  lines.push('  Vault["HQ Vault"] --> ReleaseKitPage["Campaign Release Kit Page"]');
+  lines.push('  CampaignAssets["Campaign Assets"] --> ReleaseKitPage');
+  lines.push('  Outputs["Outputs"] --> ReleaseKitPage');
+  lines.push('  Upload["User Upload"] --> ReleaseKitPage');
+  lines.push('  SessionTools["Session Tools"] --> PromoteFinal["promote_to_release_kit"]');
+  lines.push('  PromoteFinal --> ReleaseKitService["ReleaseKitService"]');
+  lines.push('  ReleaseKitPage --> ReleaseKitService');
+  lines.push('  ReleaseKitService --> ReleaseKitManifest["release-kit/manifest.json + snapshots"]');
+  lines.push('  ReleaseKitService --> ReleaseKitContext["context/release-kit/CONTEXT.md"]');
+  lines.push('  ReleaseKitContext --> Session');
   lines.push('  CampaignCalendar["Campaign Calendar"] --> WorkComposer["Scheduled Work Composer"]');
   lines.push('  HQCalendar["HQ Calendar"] --> WorkComposer');
   lines.push('  Automations["Automations Hub"] --> WorkComposer');

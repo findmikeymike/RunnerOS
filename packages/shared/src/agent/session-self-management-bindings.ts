@@ -368,6 +368,66 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'listReleaseKit', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.listReleaseKitFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'getReleaseKitItem', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.getReleaseKitItemFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'promoteToReleaseKit', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.promoteToReleaseKitFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'removeFromReleaseKit', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.removeFromReleaseKitFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'setReleaseKitPrimary', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.setReleaseKitPrimaryFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'listCampaignAssets', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.listCampaignAssetsFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'listArtistVault', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.listArtistVaultFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'listCampaignOutputs', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.listCampaignOutputsFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'getCampaignOutput', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.getCampaignOutputFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'getAssetRecord', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.getAssetRecordFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'createLabSong', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.createLabSongFn;

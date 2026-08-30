@@ -1,5 +1,5 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+import { getWorkspaceByNameOrId, getWorkspaces } from '@craft-agent/shared/config'
 import {
   artistVaultContextMetadata,
   artistVaultContextSlug,
@@ -60,6 +60,15 @@ function resolveRootPath(workspaceId: string): string {
   const workspace = getWorkspaceByNameOrId(workspaceId)
   if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
   return workspace.rootPath
+}
+
+function resolveArtistVaultTarget(workspaceId: string): NonNullable<ReturnType<typeof getWorkspaceByNameOrId>> {
+  const sourceWorkspace = getWorkspaceByNameOrId(workspaceId)
+  if (!sourceWorkspace) throw new Error(`Workspace not found: ${workspaceId}`)
+  if (sourceWorkspace.artistWorkspaceScope === 'hq') return sourceWorkspace
+  const hq = getWorkspaces().find((workspace) => workspace.artistWorkspaceScope === 'hq')
+  if (!hq) throw new Error('Artist HQ workspace is not configured.')
+  return hq
 }
 
 function outputService(): OutputService {
@@ -165,11 +174,12 @@ export function registerArtistVaultHandlers(server: RpcServer, deps: HandlerDeps
   server.handle(
     RPC_CHANNELS.artistVault.SAVE_OUTPUT_ASSET,
     async (_ctx, workspaceId: string, outputId: string, assetId?: string, options?: VaultAssetImportOptions): Promise<VaultAssetImportResult> => {
-      const rootPath = resolveRootPath(workspaceId)
+      const target = resolveArtistVaultTarget(workspaceId)
+      const rootPath = target.rootPath
       return withWorkspaceMutex(rootPath, async () => {
         const assetPath = selectOutputAssetPath(workspaceId, outputId, assetId)
-        const result = await importArtistVaultAssetsAsync(rootPath, workspaceId, [assetPath], options ?? {})
-        mirrorManifestToContext(rootPath, workspaceId, result.manifest, deps)
+        const result = await importArtistVaultAssetsAsync(rootPath, target.id, [assetPath], options ?? {})
+        mirrorManifestToContext(rootPath, target.id, result.manifest, deps)
         return result
       })
     },

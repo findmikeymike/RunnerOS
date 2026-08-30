@@ -155,16 +155,17 @@ export function validateComposerDraft(draft: ScheduledWorkComposerDraft): string
   if (draft.type === 'social-publish') {
     if (!draft.profileId) return 'Choose one ready social profile.'
     if (!draft.caption.trim()) return 'Add the final caption.'
-    if (draft.inputRefs.length !== 1 || (draft.inputRefs[0]?.kind !== 'final' && draft.inputRefs[0]?.kind !== 'output')) {
-      return 'Choose one exact Output or Final.'
+    const allowedKind = draft.owner.scope === 'campaign' ? 'release-kit' : undefined
+    if (draft.inputRefs.length !== 1 || (allowedKind ? draft.inputRefs[0]?.kind !== allowedKind : (draft.inputRefs[0]?.kind !== 'final' && draft.inputRefs[0]?.kind !== 'output'))) {
+      return allowedKind ? 'Choose one ready Release Kit item.' : 'Choose one exact Output or Final.'
     }
     const platformError = validateSocialPlatformOptions(draft.platform, draft.platformOptions)
     if (platformError) return platformError
   }
   if (draft.type === 'review') {
     if (!draft.reviewerId && draft.reviewerType !== 'user') return 'Choose a reviewer.'
-    if (draft.inputRefs.length === 0 || draft.inputRefs.some((ref) => ref.kind !== 'final' && ref.kind !== 'output')) {
-      return 'Choose an Output or Final to review.'
+    if (draft.inputRefs.length === 0 || draft.inputRefs.some((ref) => ref.kind !== 'release-kit' && ref.kind !== 'final' && ref.kind !== 'output')) {
+      return 'Choose a Release Kit item, Output, or Final to review.'
     }
   }
   const followUpError = validateFollowUp(draft)
@@ -181,16 +182,17 @@ export function validateComposerSection(
     if (draft.type === 'agent-task' && !draft.brief.trim()) return 'Add a clear brief.'
     if (draft.type === 'social-publish') {
       if (!draft.caption.trim()) return 'Add the final caption.'
-      if (draft.inputRefs.length !== 1 || (draft.inputRefs[0]?.kind !== 'final' && draft.inputRefs[0]?.kind !== 'output')) {
-        return 'Choose one exact Output or Final.'
+      const allowedKind = draft.owner.scope === 'campaign' ? 'release-kit' : undefined
+      if (draft.inputRefs.length !== 1 || (allowedKind ? draft.inputRefs[0]?.kind !== allowedKind : (draft.inputRefs[0]?.kind !== 'final' && draft.inputRefs[0]?.kind !== 'output'))) {
+        return allowedKind ? 'Choose one ready Release Kit item.' : 'Choose one exact Output or Final.'
       }
       return validateSocialPlatformOptions(draft.platform, draft.platformOptions)
     }
     if (draft.type === 'review' && (
       draft.inputRefs.length === 0
-      || draft.inputRefs.some(ref => ref.kind !== 'final' && ref.kind !== 'output')
+      || draft.inputRefs.some(ref => ref.kind !== 'release-kit' && ref.kind !== 'final' && ref.kind !== 'output')
     )) {
-      return 'Choose an Output or Final to review.'
+      return 'Choose a Release Kit item, Output, or Final to review.'
     }
     return undefined
   }
@@ -291,6 +293,7 @@ export function buildCampaignScheduleFromComposer(
     status,
     assetRefs: draft.inputRefs.filter((ref) => ref.kind === 'vault').map((ref) => ({ assetId: ref.assetId, label: ref.label, kind: ref.assetKind })),
     finalRefs: draft.inputRefs.filter((ref) => ref.kind === 'final').map((ref) => ({ outputId: ref.outputId, assetId: ref.assetId, slot: ref.slot, label: ref.label })),
+    releaseKitRefs: draft.inputRefs.filter((ref) => ref.kind === 'release-kit').map((ref) => ({ itemId: ref.itemId, sha256: ref.sha256, label: ref.label })),
     outputRefs: draft.inputRefs.filter((ref) => ref.kind === 'output').map((ref) => ({ outputId: ref.outputId, title: ref.title, kind: ref.outputKind })),
     accountSetId: draft.type === 'social-publish' ? draft.accountSetId || undefined : undefined,
     socialProfileRefs: draft.type === 'social-publish' ? [{ platform: draft.platform, profileId: draft.profileId, label: draft.profileLabel }] : undefined,
@@ -378,6 +381,7 @@ export function buildCampaignSchedulePlanFromComposer(
     kind: 'scheduled-job',
     status: 'draft',
     finalRefs: childInputRefs.filter((ref) => ref.kind === 'final').map((ref) => ({ outputId: ref.outputId, assetId: ref.assetId, slot: ref.slot, label: ref.label })),
+    releaseKitRefs: childInputRefs.filter((ref) => ref.kind === 'release-kit').map((ref) => ({ itemId: ref.itemId, sha256: ref.sha256, label: ref.label })),
     outputRefs: childInputRefs.filter((ref) => ref.kind === 'output').map((ref) => ({ outputId: ref.outputId, title: ref.title, kind: ref.outputKind })),
     accountSetId: draft.followUp.type === 'social-publish' ? draft.followUp.accountSetId || undefined : undefined,
     socialProfileRefs: draft.followUp.type === 'social-publish' ? [{ platform: draft.followUp.platform, profileId: draft.followUp.profileId, label: draft.followUp.profileLabel }] : undefined,
@@ -490,7 +494,7 @@ function validateFollowUp(draft: Exclude<ScheduledWorkComposerDraft, EventCompos
   if (followUp.type === 'social-publish') {
     if (!followUp.profileId) return 'Choose the follow-up social profile.'
     if (!followUp.caption.trim()) return 'Add the follow-up caption.'
-    if (draft.inputRefs.length !== 1 || (draft.inputRefs[0]?.kind !== 'final' && draft.inputRefs[0]?.kind !== 'output')) return 'Review one exact Output or Final before publishing.'
+    if (draft.inputRefs.length !== 1 || draft.inputRefs[0]?.kind !== 'release-kit') return 'Review one exact Release Kit item before publishing.'
     const platformError = validateSocialPlatformOptions(followUp.platform, followUp.platformOptions)
     if (platformError) return platformError
   }
