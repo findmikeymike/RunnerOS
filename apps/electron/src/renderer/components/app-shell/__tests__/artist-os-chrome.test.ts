@@ -187,6 +187,8 @@ describe('Artist OS persistent shell chrome', () => {
     expect(songs).toContain('Add to Songs')
     expect(songs).toContain('project: draftTag.trim() || \'Loose Singles\'')
     expect(songs).toContain('onClick={() => setAddSongOpen(true)}')
+    expect(songs).toContain('deleteLabUiSong')
+    expect(songs).toContain('Save changes')
   })
 
   test('keeps Spark capture available across the Lab with a searchable bank', () => {
@@ -198,6 +200,32 @@ describe('Artist OS persistent shell chrome', () => {
     expect(dock).toContain('Open Spark Bank')
     expect(dock).toContain('filterLabSparks')
     expect(dock).toContain('Attached to ${activeSongTitle}')
+    expect(dock).toContain('Edit spark')
+  })
+
+  test('connects Lab Home to the canonical Spark Bank and bounded songwriting team', () => {
+    const home = readFileSync(join(import.meta.dir, '..', 'LabWorkspaceHome.tsx'), 'utf8')
+
+    expect(home).toContain('loadLabUiSparks')
+    expect(home).toContain('openLabSparkBank')
+    expect(home).toContain('LAB_DEFAULT_WORKER_SLUGS')
+    expect(home).toContain("routes.view.agents('reference-master')")
+    expect(home).not.toContain('song.rememberText')
+  })
+
+  test('self-heals declared songwriting skills before a Pad worker launches', () => {
+    const pad = readFileSync(join(import.meta.dir, '..', 'LabSongPadPage.tsx'), 'utf8')
+
+    expect(pad).toContain('ensureAgentDeclaredSkillsEnabled')
+    expect(pad).toMatch(/ensureAgentDeclaredSkillsEnabled\([\s\S]*?buildAgentCreateSessionOptions/)
+  })
+
+  test('lets writers delete extra sequence pages without deleting their songs', () => {
+    const sequence = readFileSync(join(import.meta.dir, '..', 'LabSequencePage.tsx'), 'utf8')
+
+    expect(sequence).toContain('removeLabSequencePage')
+    expect(sequence).toContain('Songs stay in your library.')
+    expect(sequence).toContain('Delete sequence page')
   })
 
   test('lets writers persist Focus and Status directly from the Songs list', () => {

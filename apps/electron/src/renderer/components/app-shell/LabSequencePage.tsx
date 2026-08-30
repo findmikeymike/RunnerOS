@@ -17,6 +17,7 @@ import {
   LAB_PROJECT_COLORS,
   loadLabProjectsState,
   loadLabUiSongs,
+  removeLabSequencePage,
   saveLabProjectsState,
   setSelectedLabSongId,
   subscribeLabSongs,
@@ -74,7 +75,12 @@ export function LabSequencePage({ workspaceId, workspaceName }: LabSequencePageP
 
   React.useEffect(() => {
     if (!labHydrated) return
-    saveLabProjectsState(workspaceId, { poolOrder, sequencePages, activeSequenceId })
+    saveLabProjectsState(workspaceId, {
+      poolOrder,
+      sequencePages,
+      activeSequenceId,
+      selectedSongId: loadLabProjectsState(workspaceId).selectedSongId,
+    })
   }, [activeSequenceId, labHydrated, poolOrder, sequencePages, workspaceId])
 
   const songsById = React.useMemo(() => new Map(songs.map((song) => [song.id, song])), [songs])
@@ -100,6 +106,19 @@ export function LabSequencePage({ workspaceId, workspaceName }: LabSequencePageP
     const page = { id: `sequence-${Date.now()}`, title: `Project List ${nextNumber}`, songIds: [] }
     setSequencePages((prev) => [...prev, page])
     setActiveSequenceId(page.id)
+  }
+
+  const deleteActiveSequence = () => {
+    if (!activeSequence || sequencePages.length <= 1) return
+    if (!window.confirm(`Delete “${activeSequence.title || 'Untitled'}”? Songs stay in your library.`)) return
+    const next = removeLabSequencePage({
+      poolOrder,
+      sequencePages,
+      activeSequenceId,
+      selectedSongId: loadLabProjectsState(workspaceId).selectedSongId,
+    }, activeSequence.id)
+    setSequencePages(next.sequencePages)
+    setActiveSequenceId(next.activeSequenceId)
   }
 
   const addSong = () => {
@@ -308,7 +327,20 @@ export function LabSequencePage({ workspaceId, workspaceName }: LabSequencePageP
                   className="min-w-0 flex-1 border-0 bg-transparent text-[10px] font-medium uppercase tracking-[0.18em] text-white/58 outline-none"
                   placeholder="Sequence title"
                 />
-                <span className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/36">{sequenceSongs.length}</span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/36">{sequenceSongs.length}</span>
+                  {sequencePages.length > 1 ? (
+                    <button
+                      type="button"
+                      onClick={deleteActiveSequence}
+                      title="Delete sequence page"
+                      aria-label={`Delete ${activeSequence?.title || 'sequence page'}`}
+                      className="rounded-full p-1.5 text-white/22 transition-colors hover:bg-red-500/10 hover:text-red-200/70"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
             {sequenceSongs.length === 0 ? (

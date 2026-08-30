@@ -14,7 +14,9 @@ import {
 import { navigate, routes } from '@/lib/navigate'
 import { cn } from '@/lib/utils'
 import { CompactPageHeader } from './CompactPageHeader'
-import { hydrateLabState, loadLabUiSongs, subscribeLabSongs, type LabUiSong } from '@/lib/lab-song-state'
+import { hydrateLabState, loadLabUiSongs, loadLabUiSparks, subscribeLabSongs, type LabUiSong, type LabUiSpark } from '@/lib/lab-song-state'
+import { openLabSparkBank } from '@/lib/lab-sparks'
+import { LAB_DEFAULT_WORKER_SLUGS } from '@/lib/worker-defaults'
 import { useAgents } from '@/hooks/useAgents'
 
 interface LabWorkspaceHomeProps {
@@ -84,21 +86,30 @@ function ActionTile({
 
 export function LabWorkspaceHome({ workspaceId, workspaceName }: LabWorkspaceHomeProps) {
   const [songs, setSongs] = React.useState<LabUiSong[]>([])
+  const [sparks, setSparks] = React.useState<LabUiSpark[]>([])
   const { activeAgents } = useAgents(workspaceId, { includeSystemVisibleAgents: false })
-  const refreshSongs = React.useCallback(() => setSongs(loadLabUiSongs(workspaceId)), [workspaceId])
+  const refreshLab = React.useCallback(() => {
+    setSongs(loadLabUiSongs(workspaceId))
+    setSparks(loadLabUiSparks(workspaceId))
+  }, [workspaceId])
 
   React.useEffect(() => {
-    void hydrateLabState(workspaceId).then(refreshSongs)
-    return subscribeLabSongs(refreshSongs)
-  }, [refreshSongs, workspaceId])
+    void hydrateLabState(workspaceId).then(refreshLab)
+    return subscribeLabSongs(refreshLab)
+  }, [refreshLab, workspaceId])
 
   const recentSongs = React.useMemo(
     () => [...songs].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 3),
     [songs],
   )
-  const sparks = React.useMemo(
-    () => songs.flatMap((song) => song.rememberText.split('\n').map((line) => line.trim()).filter(Boolean)).slice(0, 3),
-    [songs],
+  const recentSparks = React.useMemo(
+    () => [...sparks].sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt)).slice(0, 3),
+    [sparks],
+  )
+  const labWorkerSlugs = React.useMemo(() => new Set<string>(LAB_DEFAULT_WORKER_SLUGS), [])
+  const labTeam = React.useMemo(
+    () => activeAgents.filter((agent) => labWorkerSlugs.has(agent.slug)),
+    [activeAgents, labWorkerSlugs],
   )
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
@@ -131,7 +142,7 @@ export function LabWorkspaceHome({ workspaceId, workspaceName }: LabWorkspaceHom
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <ActionTile icon={PenLine} title="Song Pad" detail="Write loose, then shape the structure." onClick={() => navigate(routes.view.lab('pad'))} />
           <ActionTile icon={FileText} title="Songs" detail="Browse drafts by project, focus, and status." onClick={() => navigate(routes.view.lab('songs'))} />
-          <ActionTile icon={Search} title="Research" detail="Collect references, stories, and concepts." onClick={() => navigate(routes.view.agents('researcher'))} />
+          <ActionTile icon={Search} title="Research" detail="Collect references, stories, and concepts." onClick={() => navigate(routes.view.agents('reference-master'))} />
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -154,27 +165,27 @@ export function LabWorkspaceHome({ workspaceId, workspaceName }: LabWorkspaceHom
           </LabCard>
 
           <LabCard>
-            <SectionTitle icon={Newspaper} title="Sparks" meta="Ideas" />
+            <SectionTitle icon={Newspaper} title="Sparks" meta={String(sparks.length)} />
             <div className="space-y-2">
-              {sparks.map((spark) => (
+              {recentSparks.map((spark) => (
                 <button
-                  key={spark}
+                  key={spark.id}
                   type="button"
-                  onClick={() => navigate(routes.view.agents('researcher'))}
+                  onClick={openLabSparkBank}
                   className="flex w-full items-center gap-2 rounded-xl border border-white/[0.04] bg-white/[0.012] px-3 py-3 text-left transition-colors hover:bg-white/[0.035]"
                 >
                   <Sparkles className="h-3.5 w-3.5 shrink-0 text-white/32" />
-                  <span className="truncate text-sm font-medium text-white/72">{spark}</span>
+                  <span className="truncate text-sm font-medium text-white/72">{spark.text}</span>
                 </button>
               ))}
-              {sparks.length === 0 ? <p className="px-1 py-3 text-xs text-white/34">Saved ideas will appear here.</p> : null}
+              {recentSparks.length === 0 ? <p className="px-1 py-3 text-xs text-white/34">Saved ideas will appear here.</p> : null}
             </div>
           </LabCard>
 
           <LabCard>
-            <SectionTitle icon={Bot} title="Lab Team" meta={`${activeAgents.length} active`} />
+            <SectionTitle icon={Bot} title="Lab Team" meta={`${labTeam.length} active`} />
             <div className="rounded-xl border border-white/[0.03] bg-white/[0.012] p-4">
-              <p className="text-sm font-medium text-white/75">{activeAgents.length ? 'Your creative team is ready' : 'No workers active'}</p>
+              <p className="text-sm font-medium text-white/75">{labTeam.length ? 'Your creative team is ready' : 'No workers active'}</p>
               <p className="mt-1 text-xs leading-5 text-white/38">
                 Activate only the specialists you want available in this Lab.
               </p>

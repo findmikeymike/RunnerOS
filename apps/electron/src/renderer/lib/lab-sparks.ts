@@ -2,6 +2,12 @@ import type { LabSpark, LabSparkKind } from '@craft-agent/shared/lab'
 
 export type LabSparkKindFilter = LabSparkKind | 'all'
 
+export const LAB_SPARK_BANK_OPEN_EVENT = 'lab-spark-bank-open'
+
+export function openLabSparkBank(): void {
+  window.dispatchEvent(new Event(LAB_SPARK_BANK_OPEN_EVENT))
+}
+
 export interface LabSparkFilters {
   query: string
   kind: LabSparkKindFilter

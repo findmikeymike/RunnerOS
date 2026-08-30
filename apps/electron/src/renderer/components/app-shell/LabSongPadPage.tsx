@@ -21,6 +21,7 @@ import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import { useAgents } from '@/hooks/useAgents'
 import {
   buildAgentCreateSessionOptions,
+  ensureAgentDeclaredSkillsEnabled,
   loadAgentMemoryEntries,
   loadUserMemoryEntries,
 } from '@/lib/run-agent'
@@ -510,13 +511,18 @@ async function runSavedLabWorker(
   payload: LyricAgentPayload,
   agentCatalog: AgentDefinitionDTO[],
 ): Promise<string> {
-  const [skills, sources, contextDocs, userMemoryEntries, agentMemoryEntries] = await Promise.all([
+  const [activeSkills, sources, contextDocs, userMemoryEntries, agentMemoryEntries] = await Promise.all([
     window.electronAPI.getSkills(workspaceId),
     window.electronAPI.getSources(workspaceId),
     window.electronAPI.listWorkspaceContextDocsForAgent(workspaceId, agent.slug),
     loadUserMemoryEntries(),
     loadAgentMemoryEntries(agent.slug),
   ])
+  const skills = await ensureAgentDeclaredSkillsEnabled({
+    agent,
+    workspaceId,
+    activeSkills,
+  })
   const baseOptions = buildAgentCreateSessionOptions(agent, {
     skills,
     sources,

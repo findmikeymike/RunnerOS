@@ -3,6 +3,7 @@ import {
   Check,
   Copy,
   Gem,
+  Pencil,
   Pin,
   Search,
   Tag,
@@ -31,6 +32,7 @@ import {
 } from '@/lib/lab-song-state'
 import {
   filterLabSparks,
+  LAB_SPARK_BANK_OPEN_EVENT,
   parseSparkTags,
   type LabSparkKindFilter,
 } from '@/lib/lab-sparks'
@@ -60,6 +62,8 @@ export const LabSparkDock: React.FC<LabSparkDockProps> = ({ workspaceId, attachT
   const [kindFilter, setKindFilter] = React.useState<LabSparkKindFilter>('all')
   const [tagFilter, setTagFilter] = React.useState<string | 'all'>('all')
   const [copiedId, setCopiedId] = React.useState<string | null>(null)
+  const [editingId, setEditingId] = React.useState<string | null>(null)
+  const [editingText, setEditingText] = React.useState('')
 
   const refresh = React.useCallback(() => setSparks(loadLabUiSparks(workspaceId)), [workspaceId])
 
@@ -67,6 +71,15 @@ export const LabSparkDock: React.FC<LabSparkDockProps> = ({ workspaceId, attachT
     void hydrateLabState(workspaceId).then(refresh)
     return subscribeLabSongs(refresh)
   }, [refresh, workspaceId])
+
+  React.useEffect(() => {
+    const open = () => {
+      setCaptureOpen(false)
+      setBankOpen(true)
+    }
+    window.addEventListener(LAB_SPARK_BANK_OPEN_EVENT, open)
+    return () => window.removeEventListener(LAB_SPARK_BANK_OPEN_EVENT, open)
+  }, [])
 
   const activeSongId = attachToCurrentSong ? getSelectedLabSongId(workspaceId) ?? undefined : undefined
   const songsById = React.useMemo(
@@ -112,6 +125,19 @@ export const LabSparkDock: React.FC<LabSparkDockProps> = ({ workspaceId, attachT
       setCopiedId(null)
     }
   }, [])
+
+  const startEditing = React.useCallback((spark: LabUiSpark) => {
+    setEditingId(spark.id)
+    setEditingText(spark.text)
+  }, [])
+
+  const saveEditing = React.useCallback((spark: LabUiSpark) => {
+    const text = editingText.trim()
+    if (!text) return
+    updateLabUiSpark(workspaceId, spark.id, { text })
+    setEditingId(null)
+    setEditingText('')
+  }, [editingText, workspaceId])
 
   return (
     <>
@@ -266,7 +292,27 @@ export const LabSparkDock: React.FC<LabSparkDockProps> = ({ workspaceId, attachT
                   {visibleSparks.map((spark) => (
                     <article key={spark.id} className="group rounded-xl border border-white/[0.055] bg-white/[0.018] p-3.5 hover:border-white/[0.09] hover:bg-white/[0.026]">
                       <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-6 text-white/76">{spark.text}</div>
+                        {editingId === spark.id ? (
+                          <div className="min-w-0 flex-1">
+                            <textarea
+                              autoFocus
+                              value={editingText}
+                              onChange={(event) => setEditingText(event.target.value)}
+                              onKeyDown={(event) => {
+                                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') saveEditing(spark)
+                                if (event.key === 'Escape') setEditingId(null)
+                              }}
+                              rows={4}
+                              className="w-full resize-none rounded-lg border border-[#fb923c]/20 bg-black/25 px-2.5 py-2 text-sm leading-6 text-white/80 outline-none focus:border-[#fb923c]/40"
+                            />
+                            <div className="mt-2 flex justify-end gap-2">
+                              <button type="button" onClick={() => setEditingId(null)} className="text-[10px] text-white/38 hover:text-white/68">Cancel</button>
+                              <button type="button" disabled={!editingText.trim()} onClick={() => saveEditing(spark)} className="rounded-full bg-white/90 px-3 py-1 text-[10px] font-medium text-black disabled:opacity-35">Save</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-6 text-white/76">{spark.text}</div>
+                        )}
                         <button
                           type="button"
                           aria-label={spark.pinned ? 'Unpin spark' : 'Pin spark'}
@@ -287,6 +333,9 @@ export const LabSparkDock: React.FC<LabSparkDockProps> = ({ workspaceId, attachT
                           ) : null}
                         </div>
                         <div className="flex shrink-0 items-center gap-1 opacity-45 transition-opacity group-hover:opacity-100">
+                          <button type="button" title="Edit spark" onClick={() => startEditing(spark)} className="rounded-full p-1.5 text-white/35 hover:bg-white/[0.06] hover:text-white/72">
+                            <Pencil className="h-3 w-3" />
+                          </button>
                           <button type="button" title="Copy spark" onClick={() => void copySpark(spark)} className="rounded-full p-1.5 text-white/35 hover:bg-white/[0.06] hover:text-white/72">
                             {copiedId === spark.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                           </button>

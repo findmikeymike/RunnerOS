@@ -7,16 +7,19 @@ import {
   Clock3,
   FileText,
   Folder,
+  Pencil,
   PenLine,
   Plus,
   Search,
   Star,
+  Trash2,
 } from 'lucide-react'
 import { navigate, routes } from '@/lib/navigate'
 import { cn } from '@/lib/utils'
 import { CompactPageHeader } from './CompactPageHeader'
 import {
   createLabUiSong,
+  deleteLabUiSong,
   hydrateLabState,
   LAB_PROJECT_COLORS,
   loadLabUiSongs,
@@ -54,16 +57,20 @@ function SongRow({
   song,
   onSetFocused,
   onSetStatus,
+  onEdit,
+  onDelete,
 }: {
   song: SongRecord
   onSetFocused: (songId: string, focused: boolean) => void
   onSetStatus: (songId: string, status: SongStatus) => void
+  onEdit: (song: SongRecord) => void
+  onDelete: (song: SongRecord) => void
 }) {
   const StatusIcon = song.status === 'done' ? CheckCircle2 : CircleDot
 
   return (
     <div
-      className="group grid w-full grid-cols-[minmax(0,1fr)_150px_120px_120px] items-center gap-4 border-b border-white/[0.035] px-4 py-4 transition-colors last:border-b-0 hover:bg-white/[0.025]"
+      className="group grid w-full grid-cols-[minmax(0,1fr)_150px_120px_180px] items-center gap-4 border-b border-white/[0.035] px-4 py-4 transition-colors last:border-b-0 hover:bg-white/[0.025]"
     >
       <button
         type="button"
@@ -115,6 +122,24 @@ function SongRow({
         </button>
         <Clock3 className="h-3.5 w-3.5" />
         {formatRelativeDate(song.editedAt)}
+        <button
+          type="button"
+          title={`Edit ${song.title}`}
+          aria-label={`Edit ${song.title}`}
+          onClick={() => onEdit(song)}
+          className="rounded-full p-1.5 text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/72"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          title={`Delete ${song.title}`}
+          aria-label={`Delete ${song.title}`}
+          onClick={() => onDelete(song)}
+          className="rounded-full p-1.5 text-white/22 transition-colors hover:bg-red-500/10 hover:text-red-200/75"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       </span>
     </div>
   )
@@ -127,6 +152,9 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
   const [addSongOpen, setAddSongOpen] = React.useState(false)
   const [draftTitle, setDraftTitle] = React.useState('')
   const [draftTag, setDraftTag] = React.useState('')
+  const [editingSongId, setEditingSongId] = React.useState<string | null>(null)
+  const [editTitle, setEditTitle] = React.useState('')
+  const [editProject, setEditProject] = React.useState('')
 
   const refreshSongs = React.useCallback(() => {
     setSongs(loadLabUiSongs(workspaceId).map((song) => ({
@@ -203,6 +231,35 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
   const onSetStatus = React.useCallback((songId: string, status: SongStatus) => {
     updateSong(songId, { status })
   }, [updateSong])
+
+  const startEditingSong = React.useCallback((song: SongRecord) => {
+    setEditingSongId(song.id)
+    setEditTitle(song.title)
+    setEditProject(song.project)
+    setAddSongOpen(false)
+  }, [])
+
+  const saveEditedSong = React.useCallback((event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const song = loadLabUiSongs(workspaceId).find((item) => item.id === editingSongId)
+    const title = editTitle.trim()
+    if (!song || !title) return
+    upsertLabUiSong(workspaceId, {
+      ...song,
+      title,
+      project: editProject.trim() || 'Loose Singles',
+    })
+    setEditingSongId(null)
+  }, [editProject, editTitle, editingSongId, workspaceId])
+
+  const deleteSong = React.useCallback((song: SongRecord) => {
+    const confirmed = window.confirm(
+      `Delete “${song.title}”? This removes its lyrics and takes it out of every sequence. Saved Sparks will stay in the Spark Bank.`,
+    )
+    if (!confirmed) return
+    deleteLabUiSong(workspaceId, song.id)
+    if (editingSongId === song.id) setEditingSongId(null)
+  }, [editingSongId, workspaceId])
 
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
@@ -281,6 +338,41 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
           </form>
         ) : null}
 
+        {editingSongId ? (
+          <form
+            onSubmit={saveEditedSong}
+            className="flex flex-col gap-3 rounded-2xl border border-white/[0.08] bg-[#0A0A0A] p-4 shadow-minimal sm:flex-row sm:items-end"
+            aria-label="Edit song"
+          >
+            <label className="min-w-0 flex-1">
+              <span className="mb-1.5 block text-[9px] font-medium uppercase tracking-[0.15em] text-white/38">Title</span>
+              <input
+                autoFocus
+                value={editTitle}
+                onChange={(event) => setEditTitle(event.target.value)}
+                className="h-10 w-full rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 text-sm text-white/80 outline-none focus:border-[#fb923c]/35"
+              />
+            </label>
+            <label className="min-w-0 flex-1">
+              <span className="mb-1.5 block text-[9px] font-medium uppercase tracking-[0.15em] text-white/38">Project / tag</span>
+              <input
+                value={editProject}
+                onChange={(event) => setEditProject(event.target.value)}
+                placeholder="Loose Singles"
+                className="h-10 w-full rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 text-sm text-white/80 outline-none placeholder:text-white/25 focus:border-[#fb923c]/35"
+              />
+            </label>
+            <div className="flex shrink-0 gap-2">
+              <button type="button" onClick={() => setEditingSongId(null)} className="h-10 rounded-full border border-white/[0.07] px-4 text-xs font-medium text-white/52 hover:bg-white/[0.04]">
+                Cancel
+              </button>
+              <button type="submit" disabled={!editTitle.trim()} className="h-10 rounded-full bg-white/90 px-5 text-xs font-medium text-black disabled:cursor-not-allowed disabled:opacity-35">
+                Save changes
+              </button>
+            </div>
+          </form>
+        ) : null}
+
         <section className="rounded-2xl border border-white/[0.04] bg-[#0A0A0A] shadow-minimal">
           <div className="flex items-center justify-between gap-3 border-b border-white/[0.04] p-4">
             <label className="inline-flex h-8 items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.025] px-3 text-xs text-white/45">
@@ -317,7 +409,7 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
             </div>
           </div>
 
-          <div className="grid grid-cols-[minmax(0,1fr)_150px_120px_120px] gap-4 border-b border-white/[0.035] px-4 py-2 text-[9px] font-medium uppercase tracking-[0.16em] text-white/30">
+          <div className="grid grid-cols-[minmax(0,1fr)_150px_120px_180px] gap-4 border-b border-white/[0.035] px-4 py-2 text-[9px] font-medium uppercase tracking-[0.16em] text-white/30">
             <span>Song</span>
             <span>Project</span>
             <span>Status</span>
@@ -328,7 +420,7 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
             <button
               type="button"
               onClick={() => setAddSongOpen(true)}
-              className="group grid w-full grid-cols-[minmax(0,1fr)_150px_120px_120px] items-center gap-4 border-b border-white/[0.035] px-4 py-4 text-left transition-colors hover:bg-white/[0.025]"
+              className="group grid w-full grid-cols-[minmax(0,1fr)_150px_120px_180px] items-center gap-4 border-b border-white/[0.035] px-4 py-4 text-left transition-colors hover:bg-white/[0.025]"
             >
               <span className="inline-flex min-w-0 items-center gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-dashed border-white/[0.12] bg-white/[0.018]">
@@ -352,6 +444,8 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
                 song={song}
                 onSetFocused={onSetFocused}
                 onSetStatus={onSetStatus}
+                onEdit={startEditingSong}
+                onDelete={deleteSong}
               />
             ))}
           </div>

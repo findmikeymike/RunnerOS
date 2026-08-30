@@ -67,21 +67,66 @@ function normalizeSong(song: LabSong): LabSong {
 
 function normalizeState(state: LabState): LabState {
   const songs = Array.isArray(state.songs) ? state.songs.map(normalizeSong) : []
+  const songIds = new Set(songs.map((song) => song.id))
   const fallback = emptyState().projects
   const sequencePages = Array.isArray(state.projects?.sequencePages) && state.projects.sequencePages.length
-    ? state.projects.sequencePages
+    ? state.projects.sequencePages.map((page) => ({
+        ...page,
+        songIds: Array.from(new Set(page.songIds.filter((songId) => songIds.has(songId)))),
+      }))
     : fallback.sequencePages
+  const savedPoolOrder = Array.isArray(state.projects?.poolOrder)
+    ? Array.from(new Set(state.projects.poolOrder.filter((songId) => songIds.has(songId))))
+    : []
+  const poolIds = new Set(savedPoolOrder)
   return {
     songs,
-    sparks: Array.isArray(state.sparks) ? state.sparks : [],
+    sparks: Array.isArray(state.sparks)
+      ? state.sparks.map((spark) => spark.songId && !songIds.has(spark.songId) ? { ...spark, songId: undefined } : spark)
+      : [],
     projects: {
-      poolOrder: Array.isArray(state.projects?.poolOrder) ? state.projects.poolOrder : songs.map((song) => song.id),
+      poolOrder: [...savedPoolOrder, ...songs.map((song) => song.id).filter((songId) => !poolIds.has(songId))],
       sequencePages,
       activeSequenceId: sequencePages.some((page) => page.id === state.projects?.activeSequenceId)
         ? state.projects.activeSequenceId
         : sequencePages[0]!.id,
-      selectedSongId: state.projects?.selectedSongId,
+      selectedSongId: state.projects?.selectedSongId && songIds.has(state.projects.selectedSongId)
+        ? state.projects.selectedSongId
+        : undefined,
     },
+  }
+}
+
+export function removeLabSongFromState(state: LabState, songId: string): LabState {
+  return normalizeState({
+    ...state,
+    songs: state.songs.filter((song) => song.id !== songId),
+    sparks: state.sparks.map((spark) => spark.songId === songId ? { ...spark, songId: undefined } : spark),
+    projects: {
+      ...state.projects,
+      poolOrder: state.projects.poolOrder.filter((id) => id !== songId),
+      sequencePages: state.projects.sequencePages.map((page) => ({
+        ...page,
+        songIds: page.songIds.filter((id) => id !== songId),
+      })),
+      selectedSongId: state.projects.selectedSongId === songId ? undefined : state.projects.selectedSongId,
+    },
+  })
+}
+
+export function removeLabSequencePage(
+  projects: LabProjectsState,
+  sequenceId: string,
+): LabProjectsState {
+  if (projects.sequencePages.length <= 1) return projects
+  const index = projects.sequencePages.findIndex((page) => page.id === sequenceId)
+  if (index < 0) return projects
+  const sequencePages = projects.sequencePages.filter((page) => page.id !== sequenceId)
+  const fallback = sequencePages[Math.min(index, sequencePages.length - 1)] ?? sequencePages[0]!
+  return {
+    ...projects,
+    sequencePages,
+    activeSequenceId: projects.activeSequenceId === sequenceId ? fallback.id : projects.activeSequenceId,
   }
 }
 
@@ -300,6 +345,13 @@ export function createLabUiSong(workspaceId: string | undefined, input: Pick<Lab
     createdAt: now,
     updatedAt: now,
   })
+}
+
+export function deleteLabUiSong(workspaceId: string | undefined, songId: string): boolean {
+  const current = stateByWorkspace.get(workspaceKey(workspaceId)) ?? emptyState()
+  if (!current.songs.some((song) => song.id === songId)) return false
+  void persistState(workspaceId, removeLabSongFromState(current, songId))
+  return true
 }
 
 export function setSelectedLabSongId(workspaceId: string | undefined, songId: string) {
