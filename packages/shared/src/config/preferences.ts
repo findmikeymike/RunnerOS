@@ -35,6 +35,13 @@ export interface LayoutPreferences {
   visualSidecarWidth?: number;
 }
 
+export interface WorkerDirectoryPreferences {
+  /** Worker slugs explicitly pinned by the user. */
+  favorites?: string[];
+  /** Worker slugs ordered from most to least recently launched. */
+  recent?: string[];
+}
+
 export interface UserPreferences {
   name?: string;
   timezone?: string;
@@ -47,6 +54,8 @@ export interface UserPreferences {
   // Memory OS behavior preferences
   memory?: MemoryPreferences;
   layout?: LayoutPreferences;
+  /** Per-workspace worker directory preferences, keyed by workspace id. */
+  workerDirectory?: Record<string, WorkerDirectoryPreferences>;
   // Whether to include Co-Authored-By trailer on git commits (default: true)
   includeCoAuthoredBy?: boolean;
   // When the preferences were last updated
@@ -91,6 +100,9 @@ export function updatePreferences(updates: Partial<UserPreferences>): UserPrefer
     layout: updates.layout
       ? { ...current.layout, ...updates.layout }
       : current.layout,
+    workerDirectory: updates.workerDirectory
+      ? { ...current.workerDirectory, ...updates.workerDirectory }
+      : current.workerDirectory,
   };
   savePreferences(updated);
   return updated;

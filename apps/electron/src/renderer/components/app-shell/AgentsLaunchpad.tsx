@@ -7,14 +7,16 @@
  * subset, so this view is a friendly orientation surface instead.
  *
  * Surfaces:
- *   - Active agent cards (Orchestrator pinned first) — click to open detail
+ *   - Active worker directory — click any worker to start a chat
+ *   - Search, category filters, favorites, and recently used workers
+ *   - Worker configuration stays available as an explicit secondary action
  *   - "Manage agents" CTA → opens the AgentLibraryDialog (handled by parent
  *     via the same hook so toggling state is consistent across surfaces)
  *   - Lightweight intro copy framing the mental model
  */
 
 import * as React from 'react'
-import { BookOpen, Boxes, ChevronDown, ChevronRight, DatabaseZap, Kanban, Lock, MessageSquare, Plus, Settings2, Sparkles, Zap } from 'lucide-react'
+import { BookOpen, Boxes, ChevronDown, ChevronRight, Clock3, DatabaseZap, Kanban, LoaderCircle, Lock, MessageSquare, Plus, Search, Settings2, Sparkles, Star, Zap } from 'lucide-react'
 import { useAtomValue } from 'jotai'
 import { toast } from 'sonner'
 import { useAgents } from '@/hooks/useAgents'
@@ -44,6 +46,8 @@ interface AgentsLaunchpadProps {
   includeCampaignDefaultWorkers?: boolean
 }
 
+type WorkerDirectoryView = 'all' | 'recent' | 'favorites'
+
 export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = false }: AgentsLaunchpadProps) {
   const defaultVisibleSlugs = defaultWorkerSlugs(includeCampaignDefaultWorkers)
   const { activeAgents, allAgents, loading } = useAgents(workspaceId, {
@@ -57,9 +61,28 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
   const [createOpen, setCreateOpen] = React.useState(false)
   const [selectedAgent, setSelectedAgent] = React.useState<AgentDefinitionDTO | null>(null)
   const [collapsedDomains, setCollapsedDomains] = React.useState<Set<string>>(() => new Set())
+  const [query, setQuery] = React.useState('')
+  const [selectedDomain, setSelectedDomain] = React.useState('all')
+  const [directoryView, setDirectoryView] = React.useState<WorkerDirectoryView>('all')
+  const [favoriteSlugs, setFavoriteSlugs] = React.useState<string[]>([])
+  const [recentSlugs, setRecentSlugs] = React.useState<string[]>([])
+  const [launchingSlug, setLaunchingSlug] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    let cancelled = false
+    void readWorkerPreferences(workspaceId).then((preferences) => {
+      if (cancelled) return
+      setFavoriteSlugs(preferences.favorites)
+      setRecentSlugs(preferences.recent)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [workspaceId])
 
   const handleStartChat = React.useCallback(async (agent: AgentDefinitionDTO) => {
-    if (!workspaceId) return
+    if (!workspaceId || launchingSlug) return
+    setLaunchingSlug(agent.slug)
     try {
       const contextDocs = await window.electronAPI
         .listWorkspaceContextDocsForAgent(workspaceId, agent.slug)
@@ -73,12 +96,29 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
         sources,
         contextDocs,
       })
+      setRecentSlugs((current) => {
+        const next = [agent.slug, ...current.filter((slug) => slug !== agent.slug)].slice(0, 12)
+        writeWorkerPreference(workspaceId, 'recent', next)
+        return next
+      })
     } catch (err) {
       toast.error('Failed to start worker chat', {
         description: err instanceof Error ? err.message : String(err),
       })
+    } finally {
+      setLaunchingSlug(null)
     }
-  }, [onCreateSession, onInputChange, skills, sources, workspaceId])
+  }, [launchingSlug, onCreateSession, onInputChange, skills, sources, workspaceId])
+
+  const toggleFavorite = React.useCallback((slug: string) => {
+    setFavoriteSlugs((current) => {
+      const next = current.includes(slug)
+        ? current.filter((item) => item !== slug)
+        : [...current, slug]
+      writeWorkerPreference(workspaceId, 'favorites', next)
+      return next
+    })
+  }, [workspaceId])
 
   const grouped = React.useMemo(() => {
     const visibleAgents = dedupeLaunchpadAgents(activeAgents.filter((a) => (
@@ -109,6 +149,51 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
       .sort(([a], [b]) => agentDomainRank(a) - agentDomainRank(b) || a.localeCompare(b))
   }, [activeAgents, defaultVisibleSlugs, getDisplayName])
 
+  const domains = React.useMemo(() => grouped.map(([domain]) => domain), [grouped])
+
+  const visibleGroups = React.useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    const favorites = new Set(favoriteSlugs)
+    const recentOrder = new Map(recentSlugs.map((slug, index) => [slug, index]))
+    const matches = (agent: AgentDefinitionDTO, domain: string) => {
+      if (selectedDomain !== 'all' && domain !== selectedDomain) return false
+      if (directoryView === 'favorites' && !favorites.has(agent.slug)) return false
+      if (directoryView === 'recent' && !recentOrder.has(agent.slug)) return false
+      if (!normalizedQuery) return true
+      return [
+        getDisplayName(agent),
+        agent.metadata.name,
+        agent.metadata.description,
+        agent.slug,
+        domain,
+      ].some((value) => value.toLowerCase().includes(normalizedQuery))
+    }
+
+    const filtered = grouped
+      .map(([domain, agents]) => [domain, agents.filter((agent) => matches(agent, domain))] as const)
+      .filter(([, agents]) => agents.length > 0)
+
+    if (directoryView === 'recent') {
+      const agents = filtered
+        .flatMap(([, items]) => items)
+        .sort((a, b) => (recentOrder.get(a.slug) ?? Number.MAX_SAFE_INTEGER) - (recentOrder.get(b.slug) ?? Number.MAX_SAFE_INTEGER))
+      return agents.length > 0 ? [['Recent', agents] as const] : []
+    }
+
+    if (directoryView === 'favorites') {
+      return filtered.length > 0
+        ? [['Favorites', filtered.flatMap(([, agents]) => agents)] as const]
+        : []
+    }
+
+    return filtered
+  }, [directoryView, favoriteSlugs, getDisplayName, grouped, query, recentSlugs, selectedDomain])
+
+  const visibleWorkerCount = React.useMemo(
+    () => visibleGroups.reduce((count, [, agents]) => count + agents.length, 0),
+    [visibleGroups],
+  )
+
   const toggleDomain = React.useCallback((domain: string) => {
     setCollapsedDomains((current) => {
       const next = new Set(current)
@@ -128,7 +213,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
           eyebrow="Team"
           title="Workers"
           tone="orange"
-          className="mb-6"
+          className="mb-4 !min-h-[112px] [&>div.relative]:!min-h-[112px]"
           actions={
             <>
               <button
@@ -151,7 +236,45 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
           }
         />
 
-        {/* Active worker cards */}
+        <div className="mb-5 flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative min-w-0 flex-1 lg:max-w-xl">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search workers by name or capability"
+              aria-label="Search workers"
+              className="h-10 w-full rounded-[10px] border border-white/[0.08] bg-white/[0.035] pl-9 pr-3 text-sm text-white outline-none transition-colors placeholder:text-white/28 focus:border-orange-400/45 focus:bg-white/[0.05]"
+            />
+          </div>
+
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="inline-flex h-10 items-center rounded-[10px] border border-white/[0.08] bg-white/[0.025] p-1" role="group" aria-label="Worker view">
+              <DirectoryViewButton active={directoryView === 'all'} onClick={() => setDirectoryView('all')}>
+                All
+              </DirectoryViewButton>
+              <DirectoryViewButton active={directoryView === 'recent'} onClick={() => setDirectoryView('recent')} icon={<Clock3 className="h-3 w-3" />}>
+                Recent
+              </DirectoryViewButton>
+              <DirectoryViewButton active={directoryView === 'favorites'} onClick={() => setDirectoryView('favorites')} icon={<Star className="h-3 w-3" />}>
+                Favorites
+              </DirectoryViewButton>
+            </div>
+            <label className="sr-only" htmlFor="worker-domain-filter">Filter workers by category</label>
+            <select
+              id="worker-domain-filter"
+              value={selectedDomain}
+              onChange={(event) => setSelectedDomain(event.target.value)}
+              className="h-10 min-w-[154px] rounded-[10px] border border-white/[0.08] bg-[#111] px-3 text-xs text-white/68 outline-none transition-colors focus:border-orange-400/45"
+            >
+              <option value="all">All categories</option>
+              {domains.map((domain) => <option key={domain} value={domain}>{domain}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Active worker directory */}
         {loading && grouped.length === 0 ? (
           <div className="text-sm text-white/50">Loading workers...</div>
         ) : grouped.length === 0 ? (
@@ -159,9 +282,19 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
             allAgentsCount={allAgents.length}
             onOpenLibrary={() => setLibraryOpen(true)}
           />
+        ) : visibleGroups.length === 0 ? (
+          <WorkerDirectoryEmptyState
+            view={directoryView}
+            hasQuery={Boolean(query.trim()) || selectedDomain !== 'all'}
+            onReset={() => {
+              setQuery('')
+              setSelectedDomain('all')
+              setDirectoryView('all')
+            }}
+          />
         ) : (
           <div className="space-y-5">
-            {grouped.map(([domain, agents]) => {
+            {visibleGroups.map(([domain, agents]) => {
               const collapsed = collapsedDomains.has(domain)
 
               return (
@@ -182,7 +315,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
                     <span className="text-[11px] text-white/32">{agents.length}</span>
                   </button>
                   {!collapsed && (
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
                       {agents.map((agent) => (
                         <AgentCard
                           key={agent.slug}
@@ -190,8 +323,11 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
                           name={cleanDisplayText(getDisplayName(agent))}
                           description={cleanDisplayText(agent.metadata.description)}
                           isOrchestrator={agent.slug === ORCHESTRATOR_SLUG}
-                          onClick={() => setSelectedAgent(agent)}
+                          isFavorite={favoriteSlugs.includes(agent.slug)}
+                          isLaunching={launchingSlug === agent.slug}
                           onStartChat={() => void handleStartChat(agent)}
+                          onToggleFavorite={() => toggleFavorite(agent.slug)}
+                          onConfigure={() => setSelectedAgent(agent)}
                         />
                       ))}
                     </div>
@@ -199,6 +335,9 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
                 </section>
               )
             })}
+            <p className="pb-1 text-right text-[11px] text-white/28">
+              {visibleWorkerCount} {visibleWorkerCount === 1 ? 'worker' : 'workers'}
+            </p>
           </div>
         )}
       </div>
@@ -232,45 +371,39 @@ interface AgentCardProps {
   name: string
   description: string
   isOrchestrator: boolean
-  onClick: () => void
+  isFavorite: boolean
+  isLaunching: boolean
   onStartChat: () => void
+  onToggleFavorite: () => void
+  onConfigure: () => void
 }
 
-function AgentCard({ slug, name, description, isOrchestrator, onClick, onStartChat }: AgentCardProps) {
+function AgentCard({
+  slug,
+  name,
+  description,
+  isOrchestrator,
+  isFavorite,
+  isLaunching,
+  onStartChat,
+  onToggleFavorite,
+  onConfigure,
+}: AgentCardProps) {
   const Icon = getAgentCardIcon(slug, name)
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') return
-        event.preventDefault()
-        onClick()
-      }}
-      className="group relative min-h-[122px] overflow-hidden rounded-[14px] border border-white/10 bg-neutral-900/60 p-3.5 pb-9 text-left shadow-middle transition-all duration-200 hover:-translate-y-0.5 hover:border-white/16 hover:bg-neutral-900/70 hover:shadow-middle"
-    >
-      <div className={cn(
-        "pointer-events-none absolute h-24 w-24 rounded-full blur-2xl",
-        isOrchestrator ? "-right-8 -top-8 bg-[#fed7aa]/9" : "-right-8 -top-8 bg-[#fff7ed]/6"
-      )} />
+    <div className="group relative min-h-[88px]">
       <button
         type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          onStartChat()
-        }}
-        className="absolute bottom-3 right-3 inline-flex h-[30px] w-[30px] items-center justify-center rounded-[9px] text-white/42 transition-colors hover:bg-white/[0.06] hover:text-white/82"
+        onClick={onStartChat}
+        disabled={isLaunching}
+        className="relative flex min-h-[88px] w-full items-start gap-3 overflow-hidden rounded-[12px] border border-white/[0.09] bg-[#0f1011] px-3 py-3 pr-[78px] text-left transition-colors hover:border-white/[0.16] hover:bg-[#141516] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/55 disabled:cursor-wait"
         aria-label={`Start chat with ${name}`}
       >
-        <MessageSquare className="h-[15px] w-[15px]" />
-      </button>
-      <div className="relative flex items-center gap-2.5">
-        <span className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] bg-gradient-to-br from-[#fb923c] to-[#f97316] text-neutral-950 shadow-middle">
-          <Icon className="h-[11px] w-[11px]" />
+        <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-gradient-to-br from-[#fb923c] to-[#f97316] text-neutral-950">
+          {isLaunching ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3 w-3" />}
         </span>
-        <div className="min-w-0">
+        <span className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             <h3 className="truncate text-[14px] font-semibold tracking-tight text-white">
               {name}
@@ -281,11 +414,94 @@ function AgentCard({ slug, name, description, isOrchestrator, onClick, onStartCh
               </span>
             )}
           </div>
-        </div>
+          <span className="mt-1 block line-clamp-2 text-[11.5px] leading-[17px] text-neutral-300/76">
+            {description}
+          </span>
+        </span>
+        <MessageSquare className="absolute bottom-3 right-3 h-3.5 w-3.5 text-white/24 transition-colors group-hover:text-orange-200/70" />
+      </button>
+
+      <div className={cn(
+        'absolute right-2.5 top-2.5 z-10 flex items-center gap-0.5 rounded-[8px] bg-[#0f1011]/90 p-0.5 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100',
+        isFavorite ? 'opacity-100' : 'opacity-0',
+      )}>
+        <button
+          type="button"
+          onClick={onToggleFavorite}
+          className={cn(
+            'inline-flex h-7 w-7 items-center justify-center rounded-[7px] transition-colors hover:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/55',
+            isFavorite ? 'text-orange-300' : 'text-white/32 hover:text-white/72',
+          )}
+          aria-label={isFavorite ? `Remove ${name} from favorites` : `Add ${name} to favorites`}
+          aria-pressed={isFavorite}
+        >
+          <Star className={cn('h-3.5 w-3.5', isFavorite && 'fill-current')} />
+        </button>
+        <button
+          type="button"
+          onClick={onConfigure}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-white/32 transition-colors hover:bg-white/[0.07] hover:text-white/72 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/55"
+          aria-label={`Configure ${name}`}
+        >
+          <Settings2 className="h-3.5 w-3.5" />
+        </button>
       </div>
-      <p className="relative mt-2 line-clamp-3 text-[11.5px] leading-[18px] text-neutral-300/82">
-        {description}
-      </p>
+    </div>
+  )
+}
+
+function DirectoryViewButton({
+  active,
+  onClick,
+  icon,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  icon?: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'inline-flex h-8 items-center gap-1.5 rounded-[7px] px-2.5 text-[11px] font-medium transition-colors',
+        active ? 'bg-white/[0.09] text-white' : 'text-white/42 hover:bg-white/[0.045] hover:text-white/72',
+      )}
+    >
+      {icon}
+      {children}
+    </button>
+  )
+}
+
+function WorkerDirectoryEmptyState({
+  view,
+  hasQuery,
+  onReset,
+}: {
+  view: WorkerDirectoryView
+  hasQuery: boolean
+  onReset: () => void
+}) {
+  const message = hasQuery
+    ? 'No workers match those filters.'
+    : view === 'favorites'
+      ? 'No favorite workers yet.'
+      : 'No recently used workers yet.'
+
+  return (
+    <div className="rounded-[14px] border border-dashed border-white/[0.10] bg-white/[0.02] px-5 py-10 text-center">
+      <p className="text-sm text-white/56">{message}</p>
+      <button
+        type="button"
+        onClick={onReset}
+        className="mt-3 inline-flex h-8 items-center rounded-[8px] border border-white/[0.09] bg-white/[0.04] px-3 text-xs text-white/62 transition-colors hover:bg-white/[0.07] hover:text-white"
+      >
+        Show all workers
+      </button>
     </div>
   )
 }
@@ -296,6 +512,70 @@ function getAgentCardIcon(slug: string, name: string) {
   if (text.includes('security') || text.includes('ads') || text.includes('compliance')) return Lock
   if (text.includes('workflow') || text.includes('project') || text.includes('ops')) return Kanban
   return Sparkles
+}
+
+interface WorkerDirectoryPreferencesFile {
+  workerDirectory?: Record<string, {
+    favorites?: string[]
+    recent?: string[]
+  }>
+  updatedAt?: number
+  [key: string]: unknown
+}
+
+function parseWorkerSlugs(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : []
+}
+
+async function readWorkerPreferences(
+  workspaceId: string | null | undefined,
+): Promise<{ favorites: string[]; recent: string[] }> {
+  try {
+    const { content } = await window.electronAPI.readPreferences()
+    const parsed = JSON.parse(content || '{}') as WorkerDirectoryPreferencesFile
+    const workspacePreferences = parsed.workerDirectory?.[workspaceId ?? 'default']
+    return {
+      favorites: parseWorkerSlugs(workspacePreferences?.favorites),
+      recent: parseWorkerSlugs(workspacePreferences?.recent),
+    }
+  } catch {
+    return { favorites: [], recent: [] }
+  }
+}
+
+let workerPreferenceWriteQueue = Promise.resolve()
+
+function writeWorkerPreference(
+  workspaceId: string | null | undefined,
+  preference: 'favorites' | 'recent',
+  slugs: string[],
+) {
+  const workspaceKey = workspaceId ?? 'default'
+  workerPreferenceWriteQueue = workerPreferenceWriteQueue
+    .catch(() => undefined)
+    .then(async () => {
+      const { content } = await window.electronAPI.readPreferences()
+      const parsed = JSON.parse(content || '{}') as WorkerDirectoryPreferencesFile
+      const currentWorkspace = parsed.workerDirectory?.[workspaceKey] ?? {}
+      const next: WorkerDirectoryPreferencesFile = {
+        ...parsed,
+        workerDirectory: {
+          ...parsed.workerDirectory,
+          [workspaceKey]: {
+            ...currentWorkspace,
+            [preference]: slugs,
+          },
+        },
+        updatedAt: Date.now(),
+      }
+      const result = await window.electronAPI.writePreferences(JSON.stringify(next, null, 2))
+      if (!result.success) throw new Error(result.error ?? 'Preference write failed')
+    })
+    .catch((error) => {
+      console.warn('[Workers] Failed to save directory preferences:', error)
+    })
 }
 
 interface AgentDetailDialogProps {

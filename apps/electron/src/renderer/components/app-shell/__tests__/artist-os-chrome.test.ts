@@ -159,6 +159,18 @@ describe('Artist OS persistent shell chrome', () => {
     expect(compactHeader.split('border-orange-100/[0.12]').length - 1).toBe(5)
   })
 
+  test('makes the Workers directory chat-first without hiding worker descriptions', () => {
+    const workers = readFileSync(join(import.meta.dir, '..', 'AgentsLaunchpad.tsx'), 'utf8')
+
+    expect(workers).toContain('placeholder="Search workers by name or capability"')
+    expect(workers).toContain("type WorkerDirectoryView = 'all' | 'recent' | 'favorites'")
+    expect(workers).toContain('onClick={onStartChat}')
+    expect(workers).toContain('aria-label={`Start chat with ${name}`}')
+    expect(workers).toContain('aria-label={`Configure ${name}`}')
+    expect(workers).toContain('{description}')
+    expect(workers).not.toContain('onClick={() => setSelectedAgent(agent)}')
+  })
+
   test('routes all major HQ and workspace page headers through the compact system', () => {
     const files = [
       'ArtistCommandCenterHome.tsx',
