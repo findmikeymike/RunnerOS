@@ -1,7 +1,10 @@
 import * as React from 'react'
 import {
+  CalendarDays,
   Check,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   FileArchive,
   FileText,
@@ -22,6 +25,8 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/components/ui/drawer'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import {
   buildMissionBrief,
@@ -48,6 +53,14 @@ import type { ReleaseBoard } from '@/lib/release-board'
 const missionTypes: MissionType[] = ['single', 'ep', 'album', 'other']
 const missionFieldClass = 'w-full rounded-lg border border-white/[0.07] bg-black/25 px-3 py-2 text-sm text-white/78 outline-none placeholder:text-white/22 focus:border-orange-300/45'
 type DrawerTab = 'brief' | 'assets'
+type CampaignDateKey = 'start' | 'release' | 'finish'
+
+const campaignDateOrder: CampaignDateKey[] = ['start', 'release', 'finish']
+const campaignDateLabels: Record<CampaignDateKey, string> = {
+  start: 'Start',
+  release: 'Release',
+  finish: 'Finish',
+}
 
 type SaveMissionBrief = (input: {
   slug: string
@@ -89,6 +102,7 @@ export function MissionBriefDrawer({
   onOpenAssetsFolder,
 }: MissionBriefDrawerProps) {
   const closeButtonRef = React.useRef<HTMLButtonElement>(null)
+  const [drawerPortalContainer, setDrawerPortalContainer] = React.useState<HTMLDivElement | null>(null)
   const [activeTab, setActiveTab] = React.useState<DrawerTab>('brief')
   const [draft, setDraft] = React.useState<Partial<MissionBrief>>(mission)
   const [saving, setSaving] = React.useState(false)
@@ -173,6 +187,7 @@ export function MissionBriefDrawer({
           closeButtonRef.current?.focus()
         }}
       >
+        <div ref={setDrawerPortalContainer} className="contents" />
         <DrawerHeader className="border-b border-white/[0.06] px-5 py-4 text-left">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -252,38 +267,25 @@ export function MissionBriefDrawer({
                   <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/52">Campaign window</div>
                   <div className="mt-1 text-[11px] leading-4 text-white/30">Start the rollout, anchor the release, and define when post-release work ends.</div>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <CampaignDateField
-                    label="Start"
-                    date={campaignWindow.startDate}
-                    status={campaignWindow.statuses.start}
-                    onDateChange={(date) => setDraft((value) => ({ ...value, campaignStartDate: date }))}
-                    onStatusChange={(status) => setDraft((value) => ({
-                      ...value,
-                      campaignDateStatuses: { ...value.campaignDateStatuses, start: status },
-                    }))}
-                  />
-                  <CampaignDateField
-                    label="Release"
-                    date={campaignWindow.releaseDate}
-                    status={campaignWindow.statuses.release}
-                    onDateChange={(date) => setDraft((value) => ({ ...value, releaseDate: date }))}
-                    onStatusChange={(status) => setDraft((value) => ({
-                      ...value,
-                      campaignDateStatuses: { ...value.campaignDateStatuses, release: status },
-                    }))}
-                  />
-                  <CampaignDateField
-                    label="Finish"
-                    date={campaignWindow.finishDate}
-                    status={campaignWindow.statuses.finish}
-                    onDateChange={(date) => setDraft((value) => ({ ...value, campaignFinishDate: date }))}
-                    onStatusChange={(status) => setDraft((value) => ({
-                      ...value,
-                      campaignDateStatuses: { ...value.campaignDateStatuses, finish: status },
-                    }))}
-                  />
-                </div>
+                <CampaignWindowPicker
+                  dates={{
+                    start: campaignWindow.startDate,
+                    release: campaignWindow.releaseDate,
+                    finish: campaignWindow.finishDate,
+                  }}
+                  statuses={campaignWindow.statuses}
+                  portalContainer={drawerPortalContainer}
+                  onDateChange={(key, date) => setDraft((value) => ({
+                    ...value,
+                    ...(key === 'start' ? { campaignStartDate: date } : {}),
+                    ...(key === 'release' ? { releaseDate: date } : {}),
+                    ...(key === 'finish' ? { campaignFinishDate: date } : {}),
+                  }))}
+                  onStatusChange={(key, status) => setDraft((value) => ({
+                    ...value,
+                    campaignDateStatuses: { ...value.campaignDateStatuses, [key]: status },
+                  }))}
+                />
                 {campaignWindowError ? <p className="mt-2 text-[11px] text-red-300/80">{campaignWindowError}</p> : null}
               </div>
               <Field label="Promo Budget">
@@ -418,41 +420,245 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-function CampaignDateField({
-  label,
-  date,
-  status = 'target',
+function CampaignWindowPicker({
+  dates,
+  statuses,
+  portalContainer,
   onDateChange,
   onStatusChange,
 }: {
-  label: string
-  date?: string
-  status?: CampaignDateStatus
-  onDateChange: (date: string | undefined) => void
-  onStatusChange: (status: CampaignDateStatus) => void
+  dates: Record<CampaignDateKey, string | undefined>
+  statuses: Partial<Record<CampaignDateKey, CampaignDateStatus>>
+  portalContainer?: HTMLElement | null
+  onDateChange: (key: CampaignDateKey, date: string | undefined) => void
+  onStatusChange: (key: CampaignDateKey, status: CampaignDateStatus) => void
 }) {
+  const today = React.useMemo(() => startOfMonth(new Date()), [])
+  const months = React.useMemo(() => Array.from({ length: 12 }, (_, index) => addMonths(today, index)), [today])
+  const [open, setOpen] = React.useState(false)
+  const [activeKey, setActiveKey] = React.useState<CampaignDateKey>('start')
+  const [visibleMonth, setVisibleMonth] = React.useState(today)
+  const activeDate = parseDateKey(dates[activeKey])
+
+  const openFor = React.useCallback((key: CampaignDateKey) => {
+    setActiveKey(key)
+    setVisibleMonth(parseDateKey(dates[key]) ?? today)
+    setOpen(true)
+  }, [dates, today])
+
+  const selectDate = React.useCallback((date: Date | undefined) => {
+    if (!date) return
+    onDateChange(activeKey, toDateKey(date))
+    const nextIndex = campaignDateOrder.indexOf(activeKey) + 1
+    const nextKey = campaignDateOrder[nextIndex]
+    if (!nextKey) {
+      setOpen(false)
+      return
+    }
+    setActiveKey(nextKey)
+    setVisibleMonth(parseDateKey(dates[nextKey]) ?? startOfMonth(date))
+  }, [activeKey, dates, onDateChange])
+
+  const disabledMatcher = React.useMemo(() => {
+    const start = parseDateKey(dates.start)
+    const release = parseDateKey(dates.release)
+    const finish = parseDateKey(dates.finish)
+    if (activeKey === 'start') return release ? { after: release } : finish ? { after: finish } : undefined
+    if (activeKey === 'release') {
+      if (start && finish) return [{ before: start }, { after: finish }]
+      return start ? { before: start } : finish ? { after: finish } : undefined
+    }
+    return release ? { before: release } : start ? { before: start } : undefined
+  }, [activeKey, dates.finish, dates.release, dates.start])
+
   return (
-    <Field label={label}>
-      <div className="grid gap-1.5">
-        <input
-          type="date"
-          value={date ?? ''}
-          onChange={(event) => onDateChange(event.target.value || undefined)}
-          className={missionFieldClass}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {campaignDateOrder.map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => openFor(key)}
+              className={cn(
+                'group min-w-0 rounded-[10px] border px-3 py-2.5 text-left transition-colors',
+                open && activeKey === key
+                  ? 'border-orange-300/45 bg-orange-300/[0.08]'
+                  : 'border-white/[0.07] bg-black/25 hover:border-white/[0.14] hover:bg-white/[0.035]',
+              )}
+              aria-label={`Choose ${campaignDateLabels[key].toLowerCase()} date`}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className="text-[9px] font-medium uppercase tracking-[0.16em] text-white/38">{campaignDateLabels[key]}</span>
+                <CalendarDays className="h-3.5 w-3.5 text-white/28 transition-colors group-hover:text-white/48" />
+              </span>
+              <span className={cn('mt-1.5 block truncate text-sm', dates[key] ? 'text-white/82' : 'text-white/26')}>
+                {formatCampaignDate(dates[key])}
+              </span>
+              <span className={cn('mt-1 block text-[9px] uppercase tracking-[0.12em]', dates[key] ? 'text-white/32' : 'text-transparent')}>
+                {statuses[key] === 'locked' ? 'Locked' : 'Target'}
+              </span>
+            </button>
+          ))}
+        </div>
+      </PopoverAnchor>
+      <PopoverContent
+        align="start"
+        sideOffset={8}
+        collisionPadding={16}
+        container={portalContainer}
+        className="z-overlay w-[min(360px,calc(100vw-32px))] rounded-[14px] border-white/[0.10] bg-[#111214] p-3 text-white shadow-modal-small"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
+        <div className="mb-3 grid grid-cols-3 gap-1 rounded-[9px] bg-black/30 p-1">
+          {campaignDateOrder.map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => {
+                setActiveKey(key)
+                setVisibleMonth(parseDateKey(dates[key]) ?? visibleMonth)
+              }}
+              className={cn(
+                'h-8 rounded-[7px] text-[10px] font-medium uppercase tracking-[0.12em] transition-colors',
+                activeKey === key ? 'bg-white text-black' : 'text-white/42 hover:bg-white/[0.05] hover:text-white/70',
+              )}
+            >
+              {campaignDateLabels[key]}
+            </button>
+          ))}
+        </div>
+
+        <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {months.map((month) => {
+            const selected = month.getFullYear() === visibleMonth.getFullYear() && month.getMonth() === visibleMonth.getMonth()
+            return (
+              <button
+                key={`${month.getFullYear()}-${month.getMonth()}`}
+                type="button"
+                onClick={() => setVisibleMonth(month)}
+                className={cn(
+                  'h-8 shrink-0 rounded-full px-3 text-[10px] font-medium transition-colors',
+                  selected ? 'bg-orange-400/18 text-orange-200' : 'bg-white/[0.035] text-white/42 hover:bg-white/[0.07] hover:text-white/72',
+                )}
+              >
+                {month.toLocaleDateString('en-US', { month: 'short' })} {String(month.getFullYear()).slice(2)}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="flex h-9 items-center justify-between px-1">
+          <button
+            type="button"
+            onClick={() => setVisibleMonth((month) => addMonths(month, -1))}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/48 transition-colors hover:bg-white/[0.07] hover:text-white"
+            aria-label="Previous month"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="text-sm font-medium text-white/78">
+            {visibleMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          </span>
+          <button
+            type="button"
+            onClick={() => setVisibleMonth((month) => addMonths(month, 1))}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/48 transition-colors hover:bg-white/[0.07] hover:text-white"
+            aria-label="Next month"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+
+        <Calendar
+          mode="single"
+          hideNavigation
+          month={visibleMonth}
+          onMonthChange={setVisibleMonth}
+          selected={activeDate}
+          onSelect={selectDate}
+          disabled={disabledMatcher}
+          modifiers={{
+            campaignStart: parseDateKey(dates.start),
+            campaignRelease: parseDateKey(dates.release),
+            campaignFinish: parseDateKey(dates.finish),
+          }}
+          modifiersClassNames={{
+            campaignStart: 'ring-1 ring-white/30',
+            campaignRelease: 'ring-1 ring-orange-400/65',
+            campaignFinish: 'ring-1 ring-emerald-400/45',
+          }}
+          className="bg-transparent p-1 [--cell-size:2.25rem]"
+          classNames={{
+            month: 'relative flex w-full flex-col gap-2',
+            month_caption: 'hidden',
+            selected: 'bg-white text-black rounded-md',
+            today: 'bg-white/[0.07] rounded-md',
+            weekday: 'text-white/38',
+            outside: 'text-white/18 aria-selected:text-white/45',
+            disabled: 'text-white/24 opacity-100',
+          }}
         />
-        <select
-          value={status}
-          onChange={(event) => onStatusChange(event.target.value as CampaignDateStatus)}
-          disabled={!date}
-          className={cn(missionFieldClass, 'py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40')}
-          aria-label={`${label} date status`}
-        >
-          <option value="target">Target</option>
-          <option value="locked">Locked</option>
-        </select>
-      </div>
-    </Field>
+
+        <div className="mt-2 flex items-center justify-between gap-3 border-t border-white/[0.07] pt-3">
+          <div className="flex rounded-[8px] bg-black/30 p-1">
+            {(['target', 'locked'] as CampaignDateStatus[]).map((status) => (
+              <button
+                key={status}
+                type="button"
+                onClick={() => onStatusChange(activeKey, status)}
+                disabled={!dates[activeKey]}
+                className={cn(
+                  'h-7 rounded-[6px] px-2.5 text-[9px] font-medium uppercase tracking-[0.1em] transition-colors disabled:cursor-not-allowed disabled:opacity-30',
+                  (statuses[activeKey] ?? 'target') === status ? 'bg-white/[0.10] text-white/78' : 'text-white/30 hover:text-white/60',
+                )}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => onDateChange(activeKey, undefined)}
+            disabled={!dates[activeKey]}
+            className="h-8 rounded-[7px] px-2.5 text-[10px] text-white/34 transition-colors hover:bg-white/[0.05] hover:text-white/62 disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            Clear date
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
+}
+
+function parseDateKey(value?: string): Date | undefined {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined
+  const [year, month, day] = value.split('-').map(Number)
+  const date = new Date(year, month - 1, day)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return undefined
+  return date
+}
+
+function toDateKey(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function startOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+function addMonths(date: Date, amount: number): Date {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1)
+}
+
+function formatCampaignDate(value?: string): string {
+  const date = parseDateKey(value)
+  return date
+    ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'Choose date'
 }
 
 function TabButton({
