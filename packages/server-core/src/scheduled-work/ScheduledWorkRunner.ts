@@ -102,8 +102,13 @@ export class ScheduledWorkRunner {
   private readonly inFlight = new Set<string>()
   private readonly activeAgentRuns = new Set<string>()
   private readonly activeSocialProfiles = new Set<string>()
+  private readonly deps: ScheduledWorkRunnerDeps
+  private readonly log: Pick<Console, 'info' | 'warn' | 'error'>
 
-  constructor(private readonly deps: ScheduledWorkRunnerDeps) {}
+  constructor(deps: ScheduledWorkRunnerDeps) {
+    this.deps = deps
+    this.log = deps.log ?? console
+  }
 
   private canContinue(workspaceRootPath: string, capturedFence: string | null): boolean {
     if (!this.deps.canRunBackgroundWork(workspaceRootPath)) return false
@@ -129,7 +134,7 @@ export class ScheduledWorkRunner {
     try {
       const parsed = this.readWork(workspaceRootPath, workspaceId)
       if (!parsed.ok) {
-        this.deps.log?.warn?.(`[ScheduledWork] ${parsed.error}`)
+        this.log.warn(`[ScheduledWork] ${parsed.error}`)
         return { scanned: 0, started: 0, blocked: 0, completed: 0, failed: 0 }
       }
       const candidates = parsed.work.items
@@ -198,7 +203,7 @@ export class ScheduledWorkRunner {
           if (!claimed.order || claimed.order.execution.type !== 'social-publish' || !claimed.order.socialAction || !claimed.order.socialApproval) continue
           this.activeSocialProfiles.add(profileKey)
           void this.runSocial(workspaceId, workspaceRootPath, claimed.order, capturedFence)
-            .catch((error) => this.deps.log?.error?.(`[ScheduledWork] ${errorMessage(error)}`))
+            .catch((error) => this.log.error(`[ScheduledWork] ${errorMessage(error)}`))
             .finally(() => this.activeSocialProfiles.delete(profileKey))
           result.started += 1
           continue
@@ -253,7 +258,7 @@ export class ScheduledWorkRunner {
           // so skipping after the claim would strand it with nothing executing.
           if (current.execution.type === 'agent-task'
             && this.activeAgentRuns.size >= MAX_CONCURRENT_AGENT_TASKS) {
-            this.deps.log?.info?.(
+            this.log.info(
               `[ScheduledWork] Deferring "${current.title}" — ${this.activeAgentRuns.size} agent tasks already running.`,
             )
             continue
@@ -271,7 +276,7 @@ export class ScheduledWorkRunner {
             const activeKey = activeAgentRunKey(workspaceRootPath, claimed.order.id)
             this.activeAgentRuns.add(activeKey)
             void this.runAgentTask(workspaceId, workspaceRootPath, claimed.order, capturedFence)
-              .catch((error) => this.deps.log?.error?.(`[ScheduledWork] ${errorMessage(error)}`))
+              .catch((error) => this.log.error(`[ScheduledWork] ${errorMessage(error)}`))
               .finally(() => this.activeAgentRuns.delete(activeKey))
             result.started += 1
           }

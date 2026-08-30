@@ -81,6 +81,11 @@ export interface CampaignScheduledJobRunnerResult {
   failed: number
 }
 
+interface RunningClaimResult {
+  calendar: CampaignCalendar
+  item?: CampaignCalendarItem
+}
+
 const LOCAL_PREP_GRACE_MS = 24 * 60 * 60 * 1000
 const EXTERNAL_REVIEW_GRACE_MS = 30 * 60 * 1000
 
@@ -242,18 +247,26 @@ export class CampaignScheduledJobRunner {
           continue
         }
 
-        const running = markRunning(current, current.job, now)
-        calendar = await this.persistItem(workspaceId, workspaceRootPath, calendar, running)
+        const claim = await this.claimRunning(
+          workspaceId,
+          workspaceRootPath,
+          calendar,
+          current,
+          now,
+        )
+        calendar = claim.calendar
+        const running = claim.item
+        if (!running?.job) continue
 
         try {
-          const completed = await this.executeDueJob(workspaceId, workspaceRootPath, running, running.job!, now, capturedFence)
+          const completed = await this.executeDueJob(workspaceId, workspaceRootPath, running, running.job, now, capturedFence)
           calendar = await this.persistItem(workspaceId, workspaceRootPath, calendar, completed)
           result.started += 1
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
-          const failed = running.job!.attempts >= running.job!.maxAttempts
-            ? markTerminalFailed(running, running.job!, now, message)
-            : markRetryableFailure(running, running.job!, now, message)
+          const failed = running.job.attempts >= running.job.maxAttempts
+            ? markTerminalFailed(running, running.job, now, message)
+            : markRetryableFailure(running, running.job, now, message)
           calendar = await this.persistItem(workspaceId, workspaceRootPath, calendar, failed)
           result.failed += 1
         }
@@ -351,6 +364,44 @@ export class CampaignScheduledJobRunner {
     ))
   }
 
+  /**
+   * Atomically claim a due item only if the exact item observed by the scan is
+   * still current. The workspace lock alone cannot prevent a cancel/edit that
+   * was queued just before the runner's write from being overwritten.
+   */
+  private async claimRunning(
+    workspaceId: string,
+    workspaceRootPath: string,
+    calendar: CampaignCalendar,
+    expectedItem: CampaignCalendarItem,
+    now: Date,
+  ): Promise<RunningClaimResult> {
+    return withWorkspaceContextLock(workspaceRootPath, async () => {
+      const latestDoc = loadContextDoc(workspaceRootPath, CAMPAIGN_CALENDAR_CONTEXT_SLUG)
+      const latestParsed = parseCampaignCalendarDocResult(latestDoc ?? undefined, calendar.campaignId)
+      if (!latestParsed.ok) throw new Error(latestParsed.error)
+      const latestCalendar = latestParsed.calendar
+      const latestItem = latestCalendar.items.find((candidate) => candidate.id === expectedItem.id)
+
+      if (!latestItem
+        || latestItem.job?.id !== expectedItem.job?.id
+        || JSON.stringify(latestItem) !== JSON.stringify(expectedItem)) {
+        return { calendar: latestCalendar }
+      }
+
+      const running = markRunning(latestItem, latestItem.job!, now)
+      return {
+        calendar: await this.persistItemLocked(
+          workspaceId,
+          workspaceRootPath,
+          latestCalendar,
+          running,
+        ),
+        item: running,
+      }
+    })
+  }
+
   private async persistItemLocked(
     workspaceId: string,
     workspaceRootPath: string,
@@ -363,6 +414,7 @@ export class CampaignScheduledJobRunner {
     const latestCalendar = latestParsed.calendar
     const latestItem = latestCalendar.items.find((candidate) => candidate.id === item.id)
     if (!latestItem || latestItem.job?.id !== item.job?.id) return latestCalendar
+    if (latestItem.status === 'canceled' && item.status !== 'canceled') return latestCalendar
     const mergedItem: CampaignCalendarItem = {
       ...latestItem,
       status: item.status,

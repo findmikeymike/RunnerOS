@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -135,6 +135,31 @@ async function waitFor(predicate: () => boolean, attempts = 100): Promise<void> 
 }
 
 describe('ScheduledWorkRunner', () => {
+  test('falls back to console logging when no logger is injected', async () => {
+    const root = makeRoot()
+    upsertContextDoc(root, {
+      slug: SCHEDULED_WORK_CONTEXT_SLUG,
+      metadata: scheduledWorkMetadata(),
+      body: 'malformed scheduled work',
+    })
+    const warning = spyOn(console, 'warn').mockImplementation(() => {})
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'unused' }),
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+    })
+
+    try {
+      await runner.scanWorkspace(workspaceId, root)
+      expect(warning).toHaveBeenCalled()
+    } finally {
+      warning.mockRestore()
+    }
+  })
+
   test('skips scheduled work when this machine is not the background runner', async () => {
     const root = makeRoot()
     writeWork(root, [buildOrder()])

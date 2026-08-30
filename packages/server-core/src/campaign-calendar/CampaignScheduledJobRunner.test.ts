@@ -20,6 +20,7 @@ import {
   upsertContextDoc,
 } from '@craft-agent/shared/workspace-context'
 import { CampaignScheduledJobRunner } from './CampaignScheduledJobRunner'
+import { withWorkspaceContextLock } from '../scheduled-work/workspace-context-lock'
 
 let roots: string[] = []
 
@@ -767,5 +768,91 @@ describe('CampaignScheduledJobRunner', () => {
       'Prepare copy',
       'Concurrent user item',
     ])
+  })
+
+  test('does not execute an item canceled while its running claim waits for the workspace lock', async () => {
+    const root = makeRoot()
+    const item = createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Canceled post',
+      kind: 'scheduled-job',
+      job: createCampaignScheduledJob({
+        runAt: '2026-07-10T14:00:00.000Z',
+        actionType: 'ask-agent',
+        payload: { prompt: 'This must not run.' },
+      }),
+    })
+    writeCalendar(root, [item])
+    let executions = 0
+    const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
+      executePromptJob: async () => {
+        executions += 1
+        return { sessionId: 'must-not-start' }
+      },
+      startWorkflow: async () => ({ runId: 'must-not-start' }),
+    })
+
+    let scan: Promise<Awaited<ReturnType<typeof runner.scanWorkspace>>> | undefined
+    await withWorkspaceContextLock(root, async () => {
+      scan = runner.scanWorkspace('campaign-1', root, new Date('2026-07-10T14:01:00.000Z'))
+      await Promise.resolve()
+      const latest = readCalendar(root).items[0]!
+      writeCalendar(root, [{
+        ...latest,
+        status: 'canceled',
+        updatedAt: '2026-07-10T14:00:30.000Z',
+      }])
+    })
+
+    const result = await scan!
+    expect(executions).toBe(0)
+    expect(result.started).toBe(0)
+    expect(readCalendar(root).items[0]?.status).toBe('canceled')
+  })
+
+  test('keeps an in-flight item canceled when execution later completes', async () => {
+    const root = makeRoot()
+    const item = createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Canceled during execution',
+      kind: 'scheduled-job',
+      job: createCampaignScheduledJob({
+        runAt: '2026-07-10T14:00:00.000Z',
+        actionType: 'ask-agent',
+        payload: { prompt: 'Begin work.' },
+      }),
+    })
+    writeCalendar(root, [item])
+    let signalStarted!: () => void
+    let releaseExecution!: () => void
+    const started = new Promise<void>((resolve) => { signalStarted = resolve })
+    const execution = new Promise<void>((resolve) => { releaseExecution = resolve })
+    const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
+      executePromptJob: async () => {
+        signalStarted()
+        await execution
+        return { sessionId: 'session-finished-late' }
+      },
+      startWorkflow: async () => ({ runId: 'unused' }),
+    })
+
+    const scan = runner.scanWorkspace('campaign-1', root, new Date('2026-07-10T14:01:00.000Z'))
+    await started
+    const running = readCalendar(root).items[0]!
+    writeCalendar(root, [{
+      ...running,
+      status: 'canceled',
+      updatedAt: '2026-07-10T14:01:30.000Z',
+    }])
+    releaseExecution()
+    await scan
+
+    const saved = readCalendar(root).items[0]!
+    expect(saved.status).toBe('canceled')
+    expect(saved.runHistory.at(-1)?.status).toBe('running')
   })
 })

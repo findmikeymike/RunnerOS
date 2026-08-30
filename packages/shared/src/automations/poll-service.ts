@@ -56,7 +56,7 @@ export interface PollServiceOptions {
     matcherId: string;
     consecutiveFailures: number;
     error: string;
-  }) => void;
+  }) => Promise<void> | void;
 }
 
 export class PollService {
@@ -160,7 +160,7 @@ export class PollService {
           `[poll] ${matcherId} has failed ${bucket.consecutiveFailures} consecutive times and is backing off: ${message}`,
         );
         try {
-          this.options.onSustainedFailure?.({
+          await this.options.onSustainedFailure?.({
             matcherId,
             consecutiveFailures: bucket.consecutiveFailures,
             error: message,

@@ -18,7 +18,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveAutomationsConfigPath, generateShortId } from './resolve-config-path.ts';
-import { compactAutomationHistorySync } from './history-store.ts';
+import { appendAutomationHistoryEntry, compactAutomationHistorySync } from './history-store.ts';
 import { compactWebhookDeliveryHistorySync } from './delivery-history.ts';
 import { createLogger } from '../utils/debug.ts';
 import { WorkspaceEventBus, type EventPayloadMap, type EventDeliveryResult } from './event-bus.ts';
@@ -632,6 +632,21 @@ export class AutomationSystem implements AutomationsConfigProvider {
       onEvent: async (payload) => {
         if (!this.shouldRunBackgroundAutomation('PollUrl')) return;
         await this.eventBus.emit('PollUrl', payload);
+      },
+      onSustainedFailure: async ({ matcherId, consecutiveFailures, error }) => {
+        const failure = new Error(
+          `Poll ${matcherId} failed ${consecutiveFailures} consecutive times and is backing off: ${error}`,
+        );
+        try {
+          await appendAutomationHistoryEntry(this.options.workspaceRootPath, {
+            id: matcherId,
+            ts: Date.now(),
+            ok: false,
+            error: failure.message,
+          });
+        } finally {
+          this.options.onError?.('PollUrl', failure);
+        }
       },
     });
     this.pollService.applyMatchers(this.getMatchersForEvent('PollUrl'));

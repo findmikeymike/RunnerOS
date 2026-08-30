@@ -76,6 +76,45 @@ describe('AutomationSystem', () => {
   }
 
   describe('constructor', () => {
+    it('persists sustained poll failures so HQ can surface them', async () => {
+      writeFileSync(join(tempDir, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+        automations: {
+          PollUrl: [{
+            id: 'poll-broken',
+            name: 'Broken status poll',
+            pollUrl: 'https://example.com/status',
+            pollIntervalSec: 300,
+            actions: [{ type: 'prompt', prompt: 'poll' }],
+          }],
+        },
+      }));
+      const errors: string[] = [];
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+        onError: (event, error) => errors.push(`${event}:${error.message}`),
+      });
+      const pollService = (system as unknown as {
+        pollService: {
+          options: {
+            onSustainedFailure?: (input: { matcherId: string; consecutiveFailures: number; error: string }) => Promise<void> | void;
+          };
+        };
+      }).pollService;
+
+      await pollService.options.onSustainedFailure?.({
+        matcherId: 'poll-broken',
+        consecutiveFailures: 3,
+        error: 'ECONNREFUSED',
+      });
+
+      const history = readFileSync(join(tempDir, AUTOMATIONS_HISTORY_FILE), 'utf8');
+      expect(history).toContain('poll-broken');
+      expect(history).toContain('ECONNREFUSED');
+      expect(errors).toEqual([expect.stringContaining('PollUrl:Poll poll-broken failed 3 consecutive times')]);
+      await system.dispose();
+    });
+
     it('should create an AutomationSystem without automations.json', async () => {
       const system = new AutomationSystem({
         workspaceRootPath: tempDir,

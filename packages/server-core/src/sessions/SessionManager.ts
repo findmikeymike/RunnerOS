@@ -2264,6 +2264,7 @@ export class SessionManager implements ISessionManager {
         },
         onError: (event, error) => {
           sessionLog.error(`Automation failed for ${event}:`, error.message)
+          scheduleHqStateContextRefresh(workspaceRootPath)
         },
         onWebhookResults: () => {
           scheduleHqStateContextRefresh(workspaceRootPath)
