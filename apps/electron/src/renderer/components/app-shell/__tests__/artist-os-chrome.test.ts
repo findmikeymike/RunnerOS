@@ -201,6 +201,9 @@ describe('Artist OS persistent shell chrome', () => {
     expect(dock).toContain('filterLabSparks')
     expect(dock).toContain('Attached to ${activeSongTitle}')
     expect(dock).toContain('Edit spark')
+    expect(dock).toContain('aria-label="Spark type"')
+    expect(dock).toContain('aria-label="Spark tags"')
+    expect(dock).toContain('Delete this Spark? This cannot be undone.')
   })
 
   test('connects Lab Home to the canonical Spark Bank and bounded songwriting team', () => {

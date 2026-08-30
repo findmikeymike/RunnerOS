@@ -54,6 +54,7 @@ export const LabSparkDock: React.FC<LabSparkDockProps> = ({ workspaceId, attachT
   const [captureOpen, setCaptureOpen] = React.useState(false)
   const [bankOpen, setBankOpen] = React.useState(false)
   const [sparks, setSparks] = React.useState<LabUiSpark[]>([])
+  const [songs, setSongs] = React.useState(() => loadLabUiSongs(workspaceId))
   const [draft, setDraft] = React.useState('')
   const [draftKind, setDraftKind] = React.useState<LabSparkKind>('line')
   const [draftTags, setDraftTags] = React.useState('')
@@ -64,8 +65,13 @@ export const LabSparkDock: React.FC<LabSparkDockProps> = ({ workspaceId, attachT
   const [copiedId, setCopiedId] = React.useState<string | null>(null)
   const [editingId, setEditingId] = React.useState<string | null>(null)
   const [editingText, setEditingText] = React.useState('')
+  const [editingKind, setEditingKind] = React.useState<LabSparkKind>('line')
+  const [editingTags, setEditingTags] = React.useState('')
 
-  const refresh = React.useCallback(() => setSparks(loadLabUiSparks(workspaceId)), [workspaceId])
+  const refresh = React.useCallback(() => {
+    setSparks(loadLabUiSparks(workspaceId))
+    setSongs(loadLabUiSongs(workspaceId))
+  }, [workspaceId])
 
   React.useEffect(() => {
     void hydrateLabState(workspaceId).then(refresh)
@@ -83,8 +89,8 @@ export const LabSparkDock: React.FC<LabSparkDockProps> = ({ workspaceId, attachT
 
   const activeSongId = attachToCurrentSong ? getSelectedLabSongId(workspaceId) ?? undefined : undefined
   const songsById = React.useMemo(
-    () => new Map(loadLabUiSongs(workspaceId).map((song) => [song.id, song.title])),
-    [sparks, workspaceId],
+    () => new Map(songs.map((song) => [song.id, song.title])),
+    [songs],
   )
   const activeSongTitle = activeSongId ? songsById.get(activeSongId) : undefined
   const allTags = React.useMemo(
@@ -129,15 +135,28 @@ export const LabSparkDock: React.FC<LabSparkDockProps> = ({ workspaceId, attachT
   const startEditing = React.useCallback((spark: LabUiSpark) => {
     setEditingId(spark.id)
     setEditingText(spark.text)
+    setEditingKind(spark.kind)
+    setEditingTags(spark.tags.join(', '))
   }, [])
 
   const saveEditing = React.useCallback((spark: LabUiSpark) => {
     const text = editingText.trim()
     if (!text) return
-    updateLabUiSpark(workspaceId, spark.id, { text })
+    updateLabUiSpark(workspaceId, spark.id, {
+      text,
+      kind: editingKind,
+      tags: parseSparkTags(editingTags),
+    })
     setEditingId(null)
     setEditingText('')
-  }, [editingText, workspaceId])
+    setEditingTags('')
+  }, [editingKind, editingTags, editingText, workspaceId])
+
+  const deleteSpark = React.useCallback((spark: LabUiSpark) => {
+    if (!window.confirm('Delete this Spark? This cannot be undone.')) return
+    deleteLabUiSpark(workspaceId, spark.id)
+    if (editingId === spark.id) setEditingId(null)
+  }, [editingId, workspaceId])
 
   return (
     <>
@@ -305,6 +324,23 @@ export const LabSparkDock: React.FC<LabSparkDockProps> = ({ workspaceId, attachT
                               rows={4}
                               className="w-full resize-none rounded-lg border border-[#fb923c]/20 bg-black/25 px-2.5 py-2 text-sm leading-6 text-white/80 outline-none focus:border-[#fb923c]/40"
                             />
+                            <div className="mt-2 flex gap-2">
+                              <select
+                                aria-label="Spark type"
+                                value={editingKind}
+                                onChange={(event) => setEditingKind(event.target.value as LabSparkKind)}
+                                className="h-8 rounded-lg border border-white/[0.06] bg-[#0d0d0d] px-2 text-[10px] text-white/58 outline-none"
+                              >
+                                {SPARK_KINDS.map((kind) => <option key={kind.id} value={kind.id}>{kind.label}</option>)}
+                              </select>
+                              <input
+                                aria-label="Spark tags"
+                                value={editingTags}
+                                onChange={(event) => setEditingTags(event.target.value)}
+                                placeholder="Tags"
+                                className="h-8 min-w-0 flex-1 rounded-lg border border-white/[0.06] bg-black/20 px-2.5 text-[10px] text-white/58 outline-none placeholder:text-white/22"
+                              />
+                            </div>
                             <div className="mt-2 flex justify-end gap-2">
                               <button type="button" onClick={() => setEditingId(null)} className="text-[10px] text-white/38 hover:text-white/68">Cancel</button>
                               <button type="button" disabled={!editingText.trim()} onClick={() => saveEditing(spark)} className="rounded-full bg-white/90 px-3 py-1 text-[10px] font-medium text-black disabled:opacity-35">Save</button>
@@ -339,7 +375,7 @@ export const LabSparkDock: React.FC<LabSparkDockProps> = ({ workspaceId, attachT
                           <button type="button" title="Copy spark" onClick={() => void copySpark(spark)} className="rounded-full p-1.5 text-white/35 hover:bg-white/[0.06] hover:text-white/72">
                             {copiedId === spark.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                           </button>
-                          <button type="button" title="Delete spark" onClick={() => deleteLabUiSpark(workspaceId, spark.id)} className="rounded-full p-1.5 text-white/25 hover:bg-red-500/10 hover:text-red-200/65">
+                          <button type="button" title="Delete spark" onClick={() => deleteSpark(spark)} className="rounded-full p-1.5 text-white/25 hover:bg-red-500/10 hover:text-red-200/65">
                             <Trash2 className="h-3 w-3" />
                           </button>
                         </div>

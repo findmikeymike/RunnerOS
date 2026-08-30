@@ -373,7 +373,7 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
           </form>
         ) : null}
 
-        <section className="rounded-2xl border border-white/[0.04] bg-[#0A0A0A] shadow-minimal">
+        <section className="overflow-x-auto rounded-2xl border border-white/[0.04] bg-[#0A0A0A] shadow-minimal">
           <div className="flex items-center justify-between gap-3 border-b border-white/[0.04] p-4">
             <label className="inline-flex h-8 items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.025] px-3 text-xs text-white/45">
               <ArrowDownUp className="h-3.5 w-3.5 text-white/35" />
