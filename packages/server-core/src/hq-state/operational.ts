@@ -155,6 +155,8 @@ function scheduledItem(order: ScheduledWorkOrder): HqOperationalItem {
     title: order.title,
     status: order.status,
     updatedAt: order.updatedAt,
+    startAt: order.startAt,
+    dueAt: order.dueAt,
     scope,
     fingerprint: hqIntentFingerprint({ scope, worker, title: order.title, intent, semanticIntentId: order.intentId }),
     semanticIntentId: order.intentId,

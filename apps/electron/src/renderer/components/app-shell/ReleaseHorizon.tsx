@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { resolveHqCampaignFocus, type HqCampaignSummary } from '@/lib/artist-hq-home-feed'
+import { rollingMonthKeys, type TimelineEntry } from '@craft-agent/shared/hq-state'
 import type {
   ArtistReleaseEventType,
   ArtistReleaseHorizon,
@@ -23,10 +24,28 @@ const EMPTY_MONTH_PLAN: ArtistReleaseMonthPlan = {
   keyGoal: '',
 }
 
+interface CampaignMonthScheduleItem {
+  id: string
+  date: string
+  time?: string
+  title: string
+  status: string
+  kind: 'manual' | 'deadline' | 'approval' | 'scheduled-job'
+}
+
+/** Campaign items the artist must see at HQ altitude (spec 20 §6). */
+const STRATEGIC_ITEM_STATUSES = new Set(['needs-approval', 'failed', 'missed'])
+function isStrategicScheduleItem(item: CampaignMonthScheduleItem): boolean {
+  return item.kind === 'deadline' || item.kind === 'approval' || STRATEGIC_ITEM_STATUSES.has(item.status)
+}
+
 export function ReleaseHorizon({
   campaigns,
   northStar,
   plan,
+  timelineEntries = [],
+  timelineTimezone,
+  loadCampaignMonthSchedule,
   onOpenCampaign,
   onSaveNorthStar,
   onSaveMonthPlan,
@@ -34,11 +53,17 @@ export function ReleaseHorizon({
   campaigns: HqCampaignSummary[]
   northStar?: string
   plan: ArtistReleaseHorizon
+  /** Strategic entries from the unified timeline (spec 20 §9); month pop-outs filter by month. */
+  timelineEntries?: TimelineEntry[]
+  /** Reference timezone for month grouping, matching the entries' date keys. */
+  timelineTimezone?: string
+  /** Fetches a campaign's schedule for one month when its pop-out is opened. */
+  loadCampaignMonthSchedule?: (campaignWorkspaceId: string, monthKey: string) => Promise<CampaignMonthScheduleItem[]>
   onOpenCampaign?: (workspaceId: string) => void
   onSaveNorthStar: (value: string) => Promise<void>
   onSaveMonthPlan: (monthKey: string, value: ArtistReleaseMonthPlan | null) => Promise<void>
 }) {
-  const months = React.useMemo(() => buildRollingMonths(), [])
+  const months = React.useMemo(() => buildRollingMonths(new Date(), timelineTimezone), [timelineTimezone])
   const focus = React.useMemo(() => resolveHqCampaignFocus(campaigns), [campaigns])
   const [selectedMonthKey, setSelectedMonthKey] = React.useState<string | null>(null)
   const [monthDraft, setMonthDraft] = React.useState<ArtistReleaseMonthPlan>(EMPTY_MONTH_PLAN)
@@ -50,6 +75,53 @@ export function ReleaseHorizon({
   const selectedMonth = months.find((month) => month.key === selectedMonthKey)
   const selectedCampaigns = campaignsForMonth(campaigns, selectedMonthKey)
   const selectedPlan = selectedMonthKey ? plan.months[selectedMonthKey] : undefined
+  // Release entries are excluded here because the Dated releases block below
+  // already lists that month's campaigns by release date.
+  const [monthSchedules, setMonthSchedules] = React.useState<Record<string, CampaignMonthScheduleItem[]>>({})
+  // HQ-tier rows for the month: strategic timeline entries plus any campaign
+  // deadline/approval/attention items lifted from the fetched schedules
+  // (spec 20 §6 — those are strategic and must reach HQ altitude).
+  const selectedMonthEntries = React.useMemo(() => {
+    if (!selectedMonthKey) return []
+    const campaignNameById = new Map(campaigns.map((campaign) => [campaign.id, campaign.name]))
+    const lifted = Object.entries(monthSchedules).flatMap(([campaignWorkspaceId, items]) =>
+      items.filter(isStrategicScheduleItem).map((item) => ({
+        id: `campaign-item:${item.id}`,
+        date: item.date,
+        time: item.time,
+        title: campaignNameById.has(campaignWorkspaceId)
+          ? `${campaignNameById.get(campaignWorkspaceId)}: ${item.title}`
+          : item.title,
+        category: item.kind === 'deadline' ? 'deadline' : item.kind === 'approval' ? 'approval' : 'task',
+        stale: undefined as boolean | undefined,
+      })))
+    const rows = [
+      ...timelineEntries
+        .filter((entry) => entry.date.startsWith(`${selectedMonthKey}-`) && entry.origin.kind !== 'release')
+        .map((entry) => ({ id: entry.id, date: entry.date, time: entry.time, title: entry.title, category: entry.category as string, stale: entry.stale })),
+      ...lifted,
+    ]
+    return rows.sort((left, right) =>
+      `${left.date}T${left.time ?? '00:00'}`.localeCompare(`${right.date}T${right.time ?? '00:00'}`) || left.id.localeCompare(right.id))
+  }, [timelineEntries, selectedMonthKey, monthSchedules, campaigns])
+
+  React.useEffect(() => {
+    if (!selectedMonthKey || !loadCampaignMonthSchedule) return
+    const monthKey = selectedMonthKey
+    let cancelled = false
+    setMonthSchedules({})
+    void Promise.all(campaignsForMonth(campaigns, monthKey).map(async (campaign) => {
+      try {
+        return [campaign.id, await loadCampaignMonthSchedule(campaign.id, monthKey)] as const
+      } catch {
+        return [campaign.id, []] as const
+      }
+    })).then((loaded) => {
+      if (cancelled) return
+      setMonthSchedules(Object.fromEntries(loaded.filter(([, items]) => items.length > 0)))
+    })
+    return () => { cancelled = true }
+  }, [selectedMonthKey, campaigns, loadCampaignMonthSchedule])
 
   React.useEffect(() => setNorthStarDraft(northStar ?? ''), [northStar])
 
@@ -277,18 +349,54 @@ export function ReleaseHorizon({
                 </div>
               )}
 
+              {selectedMonthEntries.length > 0 ? (
+                <div className="border-t border-white/[0.06] pt-5">
+                  <div className="mb-3 text-[9px] font-medium uppercase tracking-[0.16em] text-white/30">This month</div>
+                  <div className="space-y-1.5">
+                    {selectedMonthEntries.map((entry) => (
+                      <div key={entry.id} className="flex items-center justify-between rounded-[8px] border border-white/[0.055] bg-white/[0.02] px-3 py-2.5 text-xs text-white/72">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="shrink-0 tabular-nums text-white/34">{entry.date.slice(8)}{entry.time ? ` ${entry.time}` : ''}</span>
+                          <span className="truncate">{entry.title}</span>
+                          {entry.stale ? <span className="shrink-0 rounded-[4px] bg-white/[0.06] px-1.5 py-0.5 text-[8px] uppercase tracking-wide text-white/40">stale</span> : null}
+                        </span>
+                        <span className="shrink-0 text-[9px] uppercase tracking-wide text-white/28">{entry.category}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               {selectedCampaigns.length > 0 ? (
                 <div className="border-t border-white/[0.06] pt-5">
                   <div className="mb-3 text-[9px] font-medium uppercase tracking-[0.16em] text-white/30">Dated releases</div>
                   <div className="space-y-1.5">
                     {selectedCampaigns.map((campaign) => (
-                      <button key={campaign.id} type="button" onClick={() => onOpenCampaign?.(campaign.id)} className="flex w-full items-center justify-between rounded-[8px] border border-white/[0.055] bg-white/[0.02] px-3 py-2.5 text-left text-xs text-white/72 hover:bg-white/[0.045]">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <EventMarker event="release" />
-                          <span className="truncate">{campaign.name}</span>
-                        </span>
-                        <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-white/30" />
-                      </button>
+                      <div key={campaign.id} className="rounded-[8px] border border-white/[0.055] bg-white/[0.02]">
+                        <button type="button" onClick={() => onOpenCampaign?.(campaign.id)} className="flex w-full items-center justify-between px-3 py-2.5 text-left text-xs text-white/72 hover:bg-white/[0.045]">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <EventMarker event="release" />
+                            <span className="truncate">{campaign.name}</span>
+                          </span>
+                          <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-white/30" />
+                        </button>
+                        {monthSchedules[campaign.id]?.length ? (
+                          <div className="space-y-1 border-t border-white/[0.045] px-3 py-2">
+                            {monthSchedules[campaign.id]!.slice(0, 6).map((item) => (
+                              <button key={item.id} type="button" onClick={() => onOpenCampaign?.(campaign.id)} className="flex w-full items-center justify-between text-left text-[10px] text-white/48 hover:text-white/78">
+                                <span className="flex min-w-0 items-center gap-2">
+                                  <span className="shrink-0 tabular-nums text-white/30">{item.date.slice(8)}{item.time ? ` ${item.time}` : ''}</span>
+                                  <span className="truncate">{item.title}</span>
+                                </span>
+                                <span className="shrink-0 text-[8px] uppercase tracking-wide text-white/24">{item.status}</span>
+                              </button>
+                            ))}
+                            {monthSchedules[campaign.id]!.length > 6 ? (
+                              <div className="text-[9px] text-white/28">+{monthSchedules[campaign.id]!.length - 6} more in the campaign calendar</div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -339,13 +447,18 @@ export function ReleaseHorizon({
   )
 }
 
-function buildRollingMonths(now = new Date()): ReleaseMonth[] {
-  return Array.from({ length: 12 }, (_, index) => {
-    const date = new Date(now.getFullYear(), now.getMonth() + index, 1)
+function buildRollingMonths(now = new Date(), timezone?: string): ReleaseMonth[] {
+  // Keys come from the shared rolling-window helper (spec 20 §11) so the grid
+  // and the timeline entries agree on which month a date belongs to. Falls
+  // back to the browser timezone, matching the entries' default.
+  const referenceTimezone = timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+  return rollingMonthKeys(now, 12, referenceTimezone).map((key) => {
+    const [year, month] = key.split('-').map(Number)
+    const date = new Date(year!, month! - 1, 1)
     return {
-      key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
+      key,
       label: new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date),
-      year: String(date.getFullYear()),
+      year: String(year),
     }
   })
 }

@@ -1,4 +1,5 @@
 import type { ScheduledWorkOrder, ScheduledWorkStatus } from '@craft-agent/shared/scheduled-work'
+import { buildArtistTimeline, resolveCampaignFocusByReleaseDate } from '@craft-agent/shared/hq-state'
 import type { AutomationListItem } from '@/components/automations/types'
 import type { ArtistCalendarEvent } from '@/lib/artist-calendar'
 import type { SessionMeta } from '@/atoms/sessions'
@@ -51,45 +52,47 @@ export interface HqHomeProjectColumn {
 
 const ACTIVE_WORK_STATUSES = new Set<ScheduledWorkStatus>(['waiting', 'scheduled', 'running'])
 const WAITING_WORK_STATUSES = new Set<ScheduledWorkStatus>(['needs-setup', 'needs-approval', 'awaiting-review', 'needs-attention'])
-const TERMINAL_WORK_STATUSES = new Set<ScheduledWorkStatus>(['done', 'canceled'])
 
+/**
+ * The 7-day home strip, expressed as a thin view over the shared artist
+ * timeline (spec 20 §11) so merge/dedup logic exists once. Display labels and
+ * the untimed-items-sort-last convention stay here.
+ */
 export function buildHqThisWeekItems(
   events: ArtistCalendarEvent[],
   work: ScheduledWorkOrder[],
   now = new Date(),
   limit = 4,
 ): HqHomeTimelineItem[] {
+  // Orders carry the user's timezone from creation; anchor the week to it so
+  // sorting matches what the calendar displays regardless of process TZ.
+  const timezone = work.find((order) => order.timezone)?.timezone
+    ?? Intl.DateTimeFormat().resolvedOptions().timeZone
   const today = localDateKey(now)
-  const end = addDaysKey(today, 6)
-  const scheduledEventWorkIds = new Set(events.flatMap((event) => event.scheduledWorkId ? [event.scheduledWorkId] : []))
-  const items: HqHomeTimelineItem[] = []
+  const timeline = buildArtistTimeline({
+    now,
+    from: today,
+    to: addDaysKey(today, 6),
+    timezone,
+    hqWorkspaceId: 'hq',
+    hqEvents: events,
+    hqOrders: work,
+    campaigns: [],
+    goals: [],
+  })
 
-  for (const event of events) {
-    if (event.deletedAt || event.date < today || event.date > end) continue
-    items.push({
-      id: `event:${event.id}`,
-      title: event.title,
-      when: relativeDateLabel(event.date, today, event.time),
-      sortKey: `${event.date}T${event.time || '23:59'}`,
-      kind: 'calendar',
-    })
-  }
-
-  for (const order of work) {
-    if (order.deletedAt || TERMINAL_WORK_STATUSES.has(order.status) || scheduledEventWorkIds.has(order.id)) continue
-    const date = dateKeyInTimezone(order.startAt, order.timezone)
-    if (!date || date < today || date > end) continue
-    items.push({
-      id: `work:${order.id}`,
-      title: order.title,
-      when: relativeDateLabel(date, today, timeLabel(order.startAt, order.timezone)),
-      sortKey: `${date}T${timeKey(order.startAt, order.timezone) ?? '23:59'}`,
-      kind: 'scheduled-work',
-      status: order.status,
-    })
-  }
-
-  return items
+  return timeline.entries
+    .filter((entry) => entry.status !== 'done')
+    .map((entry) => ({
+      id: entry.origin.kind === 'scheduled-work' ? `work:${entry.origin.sourceId}` : `event:${entry.origin.sourceId}`,
+      title: entry.title,
+      when: relativeDateLabel(entry.date, today, entry.time),
+      sortKey: `${entry.date}T${entry.time || '23:59'}`,
+      kind: entry.origin.kind === 'scheduled-work' ? 'scheduled-work' as const : 'calendar' as const,
+      ...(entry.origin.kind === 'scheduled-work' && entry.status
+        ? { status: entry.status as ScheduledWorkStatus }
+        : {}),
+    }))
     .sort((left, right) => left.sortKey.localeCompare(right.sortKey) || left.title.localeCompare(right.title))
     .slice(0, limit)
 }
@@ -206,32 +209,28 @@ export function buildHqProjectColumns(
   ]
 }
 
+/** Thin view over the shared focus selection (spec 20 §11) — one 45-day rule. */
 export function resolveHqCampaignFocus(
   campaigns: HqCampaignSummary[],
   now = new Date(),
 ): HqCampaignFocus | null {
-  const today = localDateKey(now)
-  const dated = campaigns
-    .filter((campaign): campaign is HqCampaignSummary & { releaseDate: string } => Boolean(campaign.releaseDate))
-    .map((campaign) => ({ campaign, distance: dayDistance(today, campaign.releaseDate) }))
-    .sort((left, right) => Math.abs(left.distance) - Math.abs(right.distance) || right.distance - left.distance)
-
-  const closest = dated[0]
-  if (closest) {
-    const label = Math.abs(closest.distance) <= 45
-      ? 'Current campaign'
-      : closest.distance > 0
-        ? 'Next campaign'
-        : 'Latest campaign'
-    return {
-      campaign: closest.campaign,
-      label,
-      dateLabel: formatReleaseDate(closest.campaign.releaseDate),
-    }
+  const selected = resolveCampaignFocusByReleaseDate(
+    campaigns.map((campaign) => ({
+      id: campaign.id,
+      name: campaign.name,
+      releaseDate: campaign.releaseDate,
+      primary: campaign.primary,
+    })),
+    now,
+  )
+  if (!selected) return null
+  const campaign = campaigns.find((candidate) => candidate.id === selected.id)
+  if (!campaign) return null
+  return {
+    campaign,
+    label: selected.label,
+    ...(selected.releaseDate ? { dateLabel: formatReleaseDate(selected.releaseDate) } : {}),
   }
-
-  const fallback = campaigns.find((campaign) => campaign.primary) ?? campaigns[0]
-  return fallback ? { campaign: fallback, label: 'Release date needed' } : null
 }
 
 export function hqHeaderNextLabel(
@@ -334,55 +333,4 @@ function dayDistance(left: string, right: string): number {
 function weekdayLabel(dateKey: string): string {
   const [year, month, day] = dateKey.split('-').map(Number)
   return new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(new Date(year!, month! - 1, day!))
-}
-
-function dateKeyInTimezone(value: string, timezone: string): string | null {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-  try {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(date)
-    const year = parts.find((part) => part.type === 'year')?.value
-    const month = parts.find((part) => part.type === 'month')?.value
-    const day = parts.find((part) => part.type === 'day')?.value
-    return year && month && day ? `${year}-${month}-${day}` : null
-  } catch {
-    return localDateKey(date)
-  }
-}
-
-function timeLabel(value: string, timezone: string): string | undefined {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return undefined
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      timeZone: timezone,
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(date)
-  } catch {
-    return undefined
-  }
-}
-
-function timeKey(value: string, timezone: string): string | undefined {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return undefined
-  try {
-    const parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone: timezone,
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
-    }).formatToParts(date)
-    const hour = parts.find((part) => part.type === 'hour')?.value
-    const minute = parts.find((part) => part.type === 'minute')?.value
-    return hour && minute ? `${hour}:${minute}` : undefined
-  } catch {
-    return undefined
-  }
 }

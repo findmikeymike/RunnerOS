@@ -105,6 +105,9 @@ export interface HqOperationalItem {
   status: string;
   updatedAt: string;
   expiresAt?: string;
+  /** Scheduled start, when the item is scheduled work. Lets the brief render dated active work. */
+  startAt?: string;
+  dueAt?: string;
   scope: HqOperationalScope;
   fingerprint: string;
   semanticIntentId?: string;
@@ -246,6 +249,25 @@ export interface ManagerBriefV1 {
     keyGoal?: string;
     source: ManagerSourceRef;
   }>;
+  /**
+   * Unified timeline (spec 20 §9): strategic dated entries for the window plus
+   * per-campaign operational roll-ups and a beyond-window synopsis. Optional so
+   * persisted pre-timeline briefs keep parsing.
+   */
+  timeline?: {
+    from: string;
+    to: string;
+    entries: Array<{
+      date: string;
+      time?: string;
+      title: string;
+      category: string;
+      workspaceId: string;
+      stale?: boolean;
+    }>;
+    rollups: Array<{ label: string; scheduled: number; needsAttention: number }>;
+    beyond: { strategic: number; nextDate?: string };
+  };
   campaignFocus?: {
     workspaceId: string;
     name: string;
@@ -287,6 +309,8 @@ export interface BuildManagerBriefInput {
     blockers?: string[];
   };
   operational?: HqOperationalSnapshot;
+  /** Reference timezone for the timeline window (spec 20 §13.1). Defaults to UTC. */
+  timezone?: string;
   now?: Date;
 }
 
@@ -320,6 +344,8 @@ export interface BuildHqStateInput {
   docs: LoadedContextDoc[];
   relatedCampaigns: ManagerCampaignSnapshot[];
   operational?: HqOperationalSnapshot;
+  /** Reference timezone for the timeline window (spec 20 §13.1). Defaults to UTC. */
+  timezone?: string;
   now?: Date;
 }
 

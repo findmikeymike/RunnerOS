@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { basename } from 'node:path';
-import { getWorkspaces } from '@craft-agent/shared/config';
+import { getWorkspaces, loadPreferences } from '@craft-agent/shared/config';
 import {
   MISSION_BRIEF_CONTEXT_SLUG,
   RELEASE_BOARD_CONTEXT_SLUG,
@@ -49,8 +49,26 @@ export function buildHqStateInput(workspaceRootPath: string, now = new Date()): 
     docs: loadAuthorizedContextDocsForAgent(workspaceRootPath, CONCIERGE_SLUG),
     relatedCampaigns: workspace ? buildManagerCampaignSnapshots(now) : [],
     operational: buildHqOperationalSnapshot(workspaceRootPath),
+    timezone: resolveTimelineTimezone(),
     now,
   };
+}
+
+/**
+ * Resolve the reference timezone: the user's preference when set and valid,
+ * otherwise the system timezone (spec 20 §13.1 — no new setting).
+ */
+export function resolveTimelineTimezone(): string {
+  const preferred = loadPreferences().timezone?.trim();
+  if (preferred) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: preferred });
+      return preferred;
+    } catch {
+      // Invalid preference falls through to the system zone.
+    }
+  }
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
 export function buildManagerCampaignSnapshots(now = new Date()): ManagerCampaignSnapshot[] {

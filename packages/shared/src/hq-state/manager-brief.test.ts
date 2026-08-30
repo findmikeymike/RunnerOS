@@ -193,6 +193,177 @@ describe('Manager Brief', () => {
   });
 });
 
+describe('Manager Brief timeline section', () => {
+  const timelineDocs = () => [
+    jsonDoc('artist-profile', {
+      version: 1,
+      artistName: 'Mikey Mike',
+      updatedAt: '2026-08-20T00:00:00.000Z',
+    }),
+    jsonDoc('artist-calendar', {
+      version: 1,
+      updatedAt: '2026-08-20T00:00:00.000Z',
+      events: [
+        { id: 'meet-1', date: '2026-09-20', title: 'Label meeting', workspaceLinks: [], relatedPersonIds: [], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' },
+      ],
+    }),
+    goalDoc('listeners-goal', 'Hit 10k listeners', '2026-10-15'),
+  ];
+
+  test('renders strategic dates, campaign roll-ups, and the beyond-window synopsis', () => {
+    const withWork: ManagerCampaignSnapshot = {
+      ...campaign('campaign-1', 'Autumn Single', '2026-10-02'),
+      calendar: { total: 4, active: 3, blocked: 1, completed: 0, updatedAt: '2026-08-20T00:00:00.000Z' },
+      work: { total: 2, active: 2, blocked: 0, completed: 0, updatedAt: '2026-08-20T00:00:00.000Z' },
+    };
+    const brief = buildManagerBrief({
+      workspaceId: 'hq-1',
+      now,
+      timezone: 'UTC',
+      docs: timelineDocs(),
+      relatedCampaigns: [withWork, campaign('campaign-2', 'Winter EP', '2027-01-15')],
+    });
+
+    expect(brief.timeline).toBeDefined();
+    expect(brief.timeline!.from).toBe('2026-08-29');
+    expect(brief.timeline!.to).toBe('2026-11-27');
+    expect(brief.timeline!.entries.map((entry) => entry.title)).toEqual([
+      'Label meeting',
+      'Autumn Single',
+      'Hit 10k listeners',
+    ]);
+    expect(brief.timeline!.rollups).toEqual([
+      { label: 'Autumn Single', scheduled: 5, needsAttention: 1 },
+    ]);
+    expect(brief.timeline!.beyond).toEqual({ strategic: 1, nextDate: '2027-01-15' });
+
+    const rendered = renderManagerBriefPromptSection(brief);
+    expect(rendered).toContain('### Timeline');
+    expect(rendered).toContain('- 2026-09-20: Label meeting [event]');
+    expect(rendered).toContain('- Autumn Single: 5 scheduled, 1 need attention');
+    expect(rendered).toContain('Beyond: 1 strategic date later (next 2027-01-15)');
+    // Release Horizon remains its own untouched section.
+    const timelineIndex = rendered.indexOf('### Timeline');
+    expect(timelineIndex).toBeGreaterThan(-1);
+  });
+
+  test('omits the section entirely when nothing is dated', () => {
+    const brief = buildManagerBrief({
+      workspaceId: 'hq-1',
+      now,
+      timezone: 'UTC',
+      docs: [jsonDoc('artist-profile', { version: 1, artistName: 'M', updatedAt: '2026-08-20T00:00:00.000Z' })],
+      relatedCampaigns: [],
+    });
+
+    expect(brief.timeline).toBeUndefined();
+    expect(renderManagerBriefPromptSection(brief)).not.toContain('### Timeline');
+  });
+
+  test('revision changes when a calendar event is added', () => {
+    const base = buildManagerBrief({ workspaceId: 'hq-1', now, timezone: 'UTC', docs: timelineDocs(), relatedCampaigns: [] });
+    const withExtra = buildManagerBrief({
+      workspaceId: 'hq-1',
+      now,
+      timezone: 'UTC',
+      docs: [
+        ...timelineDocs().filter((doc) => doc.slug !== 'artist-calendar'),
+        jsonDoc('artist-calendar', {
+          version: 1,
+          updatedAt: '2026-08-21T00:00:00.000Z',
+          events: [
+            { id: 'meet-1', date: '2026-09-20', title: 'Label meeting', workspaceLinks: [], relatedPersonIds: [], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' },
+            { id: 'show-1', date: '2026-09-28', title: 'Hometown show', workspaceLinks: [], relatedPersonIds: [], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' },
+          ],
+        }),
+      ],
+      relatedCampaigns: [],
+    });
+
+    expect(withExtra.revision).not.toBe(base.revision);
+  });
+
+  test('under budget pressure the timeline degrades before the release horizon', () => {
+    const monthKeys = ['2026-09', '2026-10', '2026-11', '2026-12', '2027-01', '2027-02', '2027-03', '2027-04', '2027-05', '2027-06', '2027-07', '2027-08'];
+    const longMonths: Record<string, { title: string; event: string; plan: string; keyGoal: string }> = {};
+    monthKeys.forEach((month, index) => {
+      longMonths[month] = {
+        title: `Plan ${index} ${'x'.repeat(90)}`,
+        event: 'release',
+        plan: 'p'.repeat(100),
+        keyGoal: `Goal ${index} ${'y'.repeat(160)}`,
+      };
+    });
+    const busyEvents = Array.from({ length: 10 }, (_, index) => ({
+      id: `event-${index}`,
+      date: `2026-09-${String(index + 1).padStart(2, '0')}`,
+      title: `Strategic commitment ${index} ${'z'.repeat(100)}`,
+      workspaceLinks: [],
+      relatedPersonIds: [],
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    }));
+    const brief = buildManagerBrief({
+      workspaceId: 'hq-1',
+      now,
+      timezone: 'UTC',
+      docs: [
+        jsonDoc('artist-profile', {
+          version: 1,
+          artistName: 'Mikey Mike',
+          mission: 'm'.repeat(480),
+          sound: 's'.repeat(340),
+          audience: 'a'.repeat(340),
+          rules: Array.from({ length: 5 }, (_, index) => `Rule ${index} ${'r'.repeat(160)}`).join('; '),
+          updatedAt: '2026-08-20T00:00:00.000Z',
+        }),
+        jsonDoc('artist-release-horizon', { version: 2, months: longMonths, updatedAt: '2026-08-20T00:00:00.000Z' }),
+        jsonDoc('artist-calendar', { version: 1, updatedAt: '2026-08-20T00:00:00.000Z', events: busyEvents }),
+      ],
+      relatedCampaigns: [{
+        ...campaign('campaign-1', 'Autumn Single', '2026-10-02'),
+        mission: {
+          ...campaign('campaign-1', 'Autumn Single', '2026-10-02').mission!,
+          goal: 'g'.repeat(490),
+        },
+        readiness: {
+          done: 3,
+          total: 12,
+          nextMissing: Array.from({ length: 5 }, (_, index) => `Missing piece ${index} ${'n'.repeat(100)}`),
+        },
+      }],
+      operatingState: {
+        blockers: Array.from({ length: 3 }, (_, index) => `Blocker ${index} ${'b'.repeat(220)}`),
+      },
+    });
+
+    expect(brief.budget.truncated).toBe(true);
+    const rendered = renderManagerBriefPromptSection(brief);
+    expect(rendered.length).toBeLessThanOrEqual(MANAGER_BRIEF_MAX_CHARS);
+    // Trajectory survives while the timeline gave ground first.
+    expect(brief.trajectory.length).toBeGreaterThan(0);
+    const timelineShrank = !brief.timeline || brief.timeline.entries.length < 10;
+    expect(timelineShrank).toBe(true);
+  });
+});
+
+function goalDoc(slug: string, name: string, deadline: string): LoadedContextDoc {
+  return {
+    slug,
+    metadata: {
+      name,
+      routing: { mode: 'broadcast' },
+      enabled: true,
+      status: 'active',
+      priority: 'high',
+      deadline,
+    } satisfies ContextDocMetadata,
+    body: 'Goal body.',
+    path: `/tmp/${slug}`,
+    workspaceRootPath: '/tmp',
+  };
+}
+
 function campaign(workspaceId: string, name: string, releaseDate?: string): ManagerCampaignSnapshot {
   return {
     workspaceId,

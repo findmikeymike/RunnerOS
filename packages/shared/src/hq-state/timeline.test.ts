@@ -139,6 +139,22 @@ describe('dedup — explicit links only', () => {
     expect(timeline.warnings).toHaveLength(0);
   });
 
+  test('a shell-side back-reference alone still collapses the pair to one entry', () => {
+    // The order's calendarLink points at a stale id, but the shell's
+    // scheduledWorkId names the order: one entry, shell title wins, warning.
+    const timeline = buildArtistTimeline(baseInput({
+      campaigns: [campaign({
+        items: [campaignItem({ id: 'item-1', title: 'Teaser goes live', kind: 'scheduled-job', scheduledWorkId: 'order-1' })],
+        orders: [order({ id: 'order-1', calendarLink: { calendar: 'campaign', itemId: 'stale-id' } })],
+      })],
+    }));
+
+    expect(timeline.entries).toHaveLength(1);
+    expect(timeline.entries[0]!.origin.kind).toBe('scheduled-work');
+    expect(timeline.entries[0]!.title).toBe('Teaser goes live');
+    expect(timeline.warnings.some((warning) => warning.reason.includes('half-linked'))).toBe(true);
+  });
+
   test('a shell without an order is a legitimate standalone entry', () => {
     const timeline = buildArtistTimeline(baseInput({
       campaigns: [campaign({ items: [campaignItem()] })],

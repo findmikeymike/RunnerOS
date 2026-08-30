@@ -155,6 +155,7 @@ export function buildHqStateOfPlay(args: BuildHqStateInput): HqStateOfPlayV2 {
         attention,
         blockers: missing,
       },
+      timezone: args.timezone,
       now,
     }),
   };
