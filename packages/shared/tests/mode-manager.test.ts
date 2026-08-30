@@ -734,6 +734,12 @@ describe('native read tools sensitive credential paths', () => {
     expect(shouldAllowToolInMode('mcp__session__message_agent', { agentSlug: 'worker', task: 'Research' }, 'safe').allowed).toBe(true);
   });
 
+  it('allows exposed role-scoped read tools in safe mode', () => {
+    expect(shouldAllowToolInMode('mcp__session__get_manager_brief', {}, 'safe').allowed).toBe(true);
+    expect(shouldAllowToolInMode('mcp__session__get_campaign_brief', {}, 'safe').allowed).toBe(true);
+    expect(shouldAllowToolInMode('mcp__session__list_lab_songs', {}, 'safe').allowed).toBe(true);
+  });
+
   it('keeps ask and allow-all semantics unchanged', () => {
     expect(shouldAllowToolInMode('Read', { file_path: '~/.ssh/id_rsa' }, 'ask').allowed).toBe(true);
     expect(shouldAllowToolInMode('Read', { file_path: '~/.ssh/id_rsa' }, 'allow-all').allowed).toBe(true);

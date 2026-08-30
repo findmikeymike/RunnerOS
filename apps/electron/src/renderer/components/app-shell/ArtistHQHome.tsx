@@ -29,6 +29,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
 import { resolvePulseExecutionTarget, type PulseExecutionTarget } from '@/lib/pulse-execution'
+import {
+  createWeeklyManagerCheckInMatcher,
+  isWeeklyManagerCheckInAutomation,
+} from '@/lib/weekly-manager-check-in'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { useAgents } from '@/hooks/useAgents'
 import { useOutputs, type OutputSummaryDTO } from '@/hooks/useOutputs'
@@ -39,7 +43,6 @@ import { sessionMetaMapAtom } from '@/atoms/sessions'
 import type { SessionMeta } from '@/atoms/sessions'
 import {
   dedupeAgentsBySlug,
-  proactiveHqModeStorageKey,
   resolveHqRecommendationActionState,
   resolveHqRouteReadiness,
   userFacingHqAttention,
@@ -336,7 +339,7 @@ export function ArtistHQHome({
   const [googleCalendarConnected, setGoogleCalendarConnected] = React.useState(false)
   const [bannerImageDataUrl, setBannerImageDataUrl] = React.useState<string | null>(null)
   const [bannerImageBusy, setBannerImageBusy] = React.useState(false)
-  const [proactiveMode, setProactiveMode] = React.useState(() => readBooleanLocalStorage(proactiveHqModeStorageKey(workspaceId), false))
+  const [managerCheckInBusy, setManagerCheckInBusy] = React.useState(false)
   const [homeUtilitiesOpen, setHomeUtilitiesOpen] = React.useState(() => readBooleanLocalStorage(hqHomeUtilitiesStorageKey(workspaceId), false))
   const [hqRouteBusy, setHqRouteBusy] = React.useState(false)
   const [hqRefreshBusy, setHqRefreshBusy] = React.useState(false)
@@ -403,6 +406,11 @@ export function ArtistHQHome({
     [automations],
   )
   const intelSyncActive = Boolean(intelSyncAutomation?.enabled)
+  const managerCheckInAutomation = React.useMemo(
+    () => automations.find(isWeeklyManagerCheckInAutomation) ?? null,
+    [automations],
+  )
+  const proactiveMode = Boolean(managerCheckInAutomation?.enabled)
   const calendarResult = React.useMemo(
     () => parseArtistCalendarDocResult(docs.find((doc) => doc.slug === ARTIST_CALENDAR_CONTEXT_SLUG)),
     [docs],
@@ -560,14 +568,6 @@ export function ArtistHQHome({
     () => network.people.find((person) => person.id === selectedPersonId) ?? null,
     [network.people, selectedPersonId],
   )
-
-  React.useEffect(() => {
-    setProactiveMode(readBooleanLocalStorage(proactiveHqModeStorageKey(workspaceId), false))
-  }, [workspaceId])
-
-  React.useEffect(() => {
-    writeBooleanLocalStorage(proactiveHqModeStorageKey(workspaceId), proactiveMode)
-  }, [proactiveMode, workspaceId])
 
   const refreshSocialPulse = React.useCallback(async () => {
     setSocialAccountsBusy(true)
@@ -1176,6 +1176,34 @@ export function ArtistHQHome({
     }
   }, [refreshContext, workspaceId])
 
+  const toggleProactiveMode = React.useCallback(async (enabled: boolean) => {
+    setManagerCheckInBusy(true)
+    try {
+      if (managerCheckInAutomation) {
+        await window.electronAPI.setAutomationEnabled(
+          workspaceId,
+          managerCheckInAutomation.event,
+          managerCheckInAutomation.matcherIndex,
+          enabled,
+        )
+      } else if (enabled) {
+        await window.electronAPI.createAutomationFromTemplate(
+          workspaceId,
+          'SchedulerTick',
+          createWeeklyManagerCheckInMatcher(pulseExecutionTarget),
+        )
+      }
+      await refreshAutomations()
+      toast.success(enabled ? 'Weekly manager check-in enabled' : 'Weekly manager check-in paused')
+    } catch (error) {
+      toast.error('Could not update the weekly manager check-in', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setManagerCheckInBusy(false)
+    }
+  }, [managerCheckInAutomation, pulseExecutionTarget, refreshAutomations, workspaceId])
+
   const openManagerSource = React.useCallback((surface: ManagerSourceSurface) => {
     if (surface.kind === 'campaign') {
       onOpenCampaignWorkspace?.(surface.workspaceId)
@@ -1710,10 +1738,11 @@ export function ArtistHQHome({
               state={hqState}
               workspaceId={workspaceId}
               proactiveMode={proactiveMode}
+              proactiveBusy={managerCheckInBusy}
               routeBusy={hqRouteBusy}
               refreshBusy={hqRefreshBusy}
               availableAgentSlugs={new Set(availableAgents.map((agent) => agent.slug))}
-              onToggleProactiveMode={setProactiveMode}
+              onToggleProactiveMode={(enabled) => { void toggleProactiveMode(enabled) }}
               onLaunchRoute={launchHqRoute}
               onOpenEntity={openHqStateEntity}
               onTransitionRecommendation={transitionHqRecommendation}
@@ -2557,6 +2586,7 @@ type StateOfPlayPanelProps = {
   state: HqStateOfPlay | null
   workspaceId: string
   proactiveMode: boolean
+  proactiveBusy: boolean
   routeBusy: boolean
   refreshBusy: boolean
   availableAgentSlugs: Set<string>
@@ -2572,6 +2602,7 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
   const {
     state,
     proactiveMode,
+    proactiveBusy,
     routeBusy,
     refreshBusy,
     availableAgentSlugs,
@@ -2598,7 +2629,8 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
             <Switch
               checked={proactiveMode}
               onCheckedChange={onToggleProactiveMode}
-              aria-label={proactiveMode ? 'Disable proactive HQ mode' : 'Enable proactive HQ mode'}
+              disabled={proactiveBusy}
+              aria-label={proactiveMode ? 'Pause weekly manager check-in' : 'Enable weekly manager check-in'}
               className="data-[state=checked]:bg-[#f97316]"
             />
           </div>
@@ -2668,6 +2700,7 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
 function StateOfPlayDetailPanel({
   state,
   proactiveMode,
+  proactiveBusy,
   routeBusy,
   availableAgentSlugs,
   refreshBusy,
@@ -2780,13 +2813,14 @@ function StateOfPlayDetailPanel({
 
           <div className="mt-6 flex items-center justify-between border-t border-white/[0.05] pt-4">
             <div>
-              <p className="text-xs font-medium text-white/60">Proactive mode</p>
-              <p className="mt-0.5 text-[11px] text-white/30">Prepare approved work automatically</p>
+              <p className="text-xs font-medium text-white/60">Weekly manager check-in</p>
+              <p className="mt-0.5 text-[11px] text-white/30">Mondays at 10:20, after Pulse updates</p>
             </div>
             <Switch
               checked={proactiveMode}
               onCheckedChange={onToggleProactiveMode}
-              aria-label={proactiveMode ? 'Disable proactive HQ mode' : 'Enable proactive HQ mode'}
+              disabled={proactiveBusy}
+              aria-label={proactiveMode ? 'Pause weekly manager check-in' : 'Enable weekly manager check-in'}
               className="data-[state=checked]:bg-orange-300"
             />
           </div>

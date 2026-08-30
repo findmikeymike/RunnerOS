@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { createManagedSession, ensureDeclaredGlobalSkillsEnabledForAgent } from './SessionManager.ts'
+import { backendAgentSessionFields, createManagedSession, ensureDeclaredGlobalSkillsEnabledForAgent } from './SessionManager.ts'
 
 describe('createManagedSession', () => {
   const workspace = {
@@ -25,6 +25,19 @@ describe('createManagedSession', () => {
     }, workspace as any)
 
     expect(managed.thinkingLevel).toBeUndefined()
+  })
+})
+
+describe('backendAgentSessionFields', () => {
+  it('forwards the saved-agent identity that unlocks role-scoped backend tools', () => {
+    const spawnedFromAgent = {
+      agentSlug: 'concierge',
+      agentName: 'HNIC',
+      timestamp: 123,
+    }
+
+    expect(backendAgentSessionFields(spawnedFromAgent)).toEqual({ spawnedFromAgent })
+    expect(backendAgentSessionFields()).toEqual({})
   })
 })
 

@@ -460,6 +460,12 @@ export function canScheduleWork(spawnedFromAgent?: SpawnedAgentRef): boolean {
   return Boolean(spawnedFromAgent?.agentSlug && SCHEDULE_WORK_AGENT_SLUGS.has(spawnedFromAgent.agentSlug))
 }
 
+export function backendAgentSessionFields(
+  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number },
+): { spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number } } {
+  return spawnedFromAgent ? { spawnedFromAgent } : {}
+}
+
 export function runnerSecretPolicyError(spawnedFromAgent?: SpawnedAgentRef): string {
   const actor = spawnedFromAgent?.agentSlug ? `Agent "${spawnedFromAgent.agentSlug}"` : 'This session'
   return `${actor} cannot save RunnerOS secrets directly. Route credential setup through HNIC or Setup Concierge.`
@@ -3605,6 +3611,38 @@ export class SessionManager implements ISessionManager {
           if (ensureBuiltInAgentSkillsForSlug(CONCIERGE_SLUG, CONCIERGE_SYSTEM_SKILL_SLUGS).updated) {
             sessionLog.info('[agent-definitions] Ensured Concierge has self-edit system skill')
           }
+          const legacyConciergeRole = `Your job is to act as the Work front door: understand what the user wants,
+pull the right context, choose the right worker/skill/tool/workflow, and make
+the next action obvious.`
+          const managerConciergeRole = `Your job is to act as the artist's manager and Work front door: understand what
+the user wants, keep the artist's trajectory in view, pull only the context the
+decision needs, choose the right worker/skill/tool/workflow, and make the next
+action obvious.`
+          const legacyConciergeContext = `You receive EVERY workspace-context doc the user has set up, even ones
+narrowly routed to other agents. That's deliberate — your job is to know
+the whole picture.`
+          const managerConciergeContext = `When a compact Manager Brief or Campaign Manager Brief and Manager tools are
+available, refresh the right brief before advice about current priorities,
+growth, campaign readiness, timing, year-plan fit, delegation, or what to do
+next. Inside a campaign, start with the current Campaign Manager Brief; pull the
+holistic Artist Manager Brief only when the wider trajectory changes the
+decision. Inspect freshness and uncertainty, then retrieve only the authorized
+detail the question needs. Never claim that a brief was refreshed when those
+tools are unavailable; use the supplied context and identify relevant limits.
+
+Manager judgment:
+  - Lead with one recommendation, why it matters now, and the smallest next step.
+  - Connect advice to mission, year trajectory, campaign focus, and observed
+    momentum only when the available evidence supports the connection.
+  - Never describe stale analytics as current, turn totals into growth without
+    comparable data, invent missing dates or metrics, or dump raw context.`
+          const conciergeManagerPromptUpdated = [
+            replaceBuiltInAgentPromptText(CONCIERGE_SLUG, legacyConciergeRole, managerConciergeRole).updated,
+            replaceBuiltInAgentPromptText(CONCIERGE_SLUG, legacyConciergeContext, managerConciergeContext).updated,
+          ].some(Boolean)
+          if (conciergeManagerPromptUpdated) {
+            sessionLog.info('[agent-definitions] Upgraded Concierge manager context contract')
+          }
           const contentDirectorAgent = STARTER_AGENTS.find(agent => agent.slug === 'content-director')
           if (contentDirectorAgent) {
             const contentDirectorMetadataUpdated = replaceBuiltInAgentMetadata('content-director', {
@@ -6004,6 +6042,10 @@ user a clickable link to where the thing now lives.`
       const sessionConfig = {
         id: managed.id,
         workspaceRootPath: managed.workspace.rootPath,
+        // Backend tool visibility depends on the owning agent identity. Keep
+        // it when forwarding server-spawned workflow, automation, and Pulse
+        // sessions or HNIC loses its Manager and scheduling tools.
+        ...backendAgentSessionFields(managed.spawnedFromAgent),
         sdkSessionId: managed.sdkSessionId,
         branchFromSdkSessionId: managed.branchContextStrategy === 'sdk-fork' ? managed.branchFromSdkSessionId : undefined,
         branchFromSessionPath: managed.branchContextStrategy === 'sdk-fork' ? managed.branchFromSessionPath : undefined,
