@@ -86,7 +86,7 @@ export function ReleaseHorizon({
     const campaignNameById = new Map(campaigns.map((campaign) => [campaign.id, campaign.name]))
     const lifted = Object.entries(monthSchedules).flatMap(([campaignWorkspaceId, items]) =>
       items.filter(isStrategicScheduleItem).map((item) => ({
-        id: `campaign-item:${item.id}`,
+        id: `campaign-item:${campaignWorkspaceId}:${item.id}`,
         date: item.date,
         time: item.time,
         title: campaignNameById.has(campaignWorkspaceId)

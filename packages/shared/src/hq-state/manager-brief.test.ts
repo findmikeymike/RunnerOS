@@ -400,7 +400,7 @@ function timelineEntry(
   category: 'deadline' | 'task' = 'task',
 ) {
   return {
-    id: `campaign-item:${id}`,
+    id: `campaign-item:campaign-1:${id}`,
     date,
     timezone: 'UTC',
     sortKey: `${date}T00:00`,

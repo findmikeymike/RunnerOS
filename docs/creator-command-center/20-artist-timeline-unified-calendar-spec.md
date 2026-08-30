@@ -107,7 +107,7 @@ export interface TimelineOrigin {
   kind: 'hq-event' | 'campaign-item' | 'scheduled-work' | 'release' | 'goal';
   workspaceId: string;
   campaignId?: string;
-  /** Id within the owning store. Composite entry id is `${kind}:${sourceId}`. */
+  /** Id within the owning store. Composite entry ids include workspace scope. */
   sourceId: string;
 }
 

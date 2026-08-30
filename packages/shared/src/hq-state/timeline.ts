@@ -49,7 +49,7 @@ export interface TimelineOrigin {
   kind: TimelineOriginKind;
   workspaceId: string;
   campaignId?: string;
-  /** Id within the owning store. The composite entry id is `${kind}:${sourceId}`. */
+  /** Id within the owning store. Composite entry ids also include workspace scope. */
   sourceId: string;
 }
 
@@ -210,7 +210,7 @@ export function buildArtistTimeline(input: BuildArtistTimelineInput): ArtistTime
       continue;
     }
     all.push({
-      id: `goal:${goal.slug}`,
+      id: `goal:${goal.workspaceId}:${goal.slug}`,
       date: goal.deadline,
       timezone: input.timezone,
       sortKey: `${goal.deadline}T00:00`,
@@ -396,11 +396,10 @@ function collectScopeEntries(
     }
 
     const shellItem = shell && 'kind' in shell ? shell : undefined;
-    const time =
-      (shell && shell.time) || timeKeyInTimezone(order.startAt, input.timezone);
+    const time = timeKeyInTimezone(order.startAt, input.timezone);
     const needsAttention = ATTENTION_STATUSES.has(order.status) || Boolean(order.attention);
     out.push({
-      id: `scheduled-work:${order.id}`,
+      id: `scheduled-work:${scope.workspaceId}:${order.id}`,
       date: dateKey,
       ...(time ? { time } : {}),
       timezone: input.timezone,
@@ -426,13 +425,28 @@ function collectScopeEntries(
 
   for (const event of scope.events) {
     if (event.deletedAt || consumedShells.has(event.id)) continue;
-    if (!isDateKey(event.date)) continue;
+    if (!isDateKey(event.date)) {
+      warnings.push({
+        source: 'artist-calendar',
+        workspaceId: scope.workspaceId,
+        reason: `Calendar event "${event.title}" (${event.id}) has an invalid date "${event.date}".`,
+      });
+      continue;
+    }
+    const time = isTimeKey(event.time) ? event.time : undefined;
+    if (event.time && !time) {
+      warnings.push({
+        source: 'artist-calendar',
+        workspaceId: scope.workspaceId,
+        reason: `Calendar event "${event.title}" (${event.id}) has an invalid time "${event.time}"; it is shown as all-day.`,
+      });
+    }
     out.push({
-      id: `hq-event:${event.id}`,
+      id: `hq-event:${scope.workspaceId}:${event.id}`,
       date: event.date,
-      ...(event.time ? { time: event.time } : {}),
+      ...(time ? { time } : {}),
       timezone: input.timezone,
-      sortKey: `${event.date}T${event.time ?? '00:00'}`,
+      sortKey: `${event.date}T${time ?? '00:00'}`,
       title: event.title,
       tier: 'strategic',
       category: 'event',
@@ -444,7 +458,14 @@ function collectScopeEntries(
 
   for (const item of scope.items) {
     if (item.deletedAt || item.status === 'canceled' || consumedShells.has(item.id)) continue;
-    if (!isDateKey(item.date)) continue;
+    if (!isDateKey(item.date)) {
+      warnings.push({
+        source: 'campaign-calendar',
+        workspaceId: scope.workspaceId,
+        reason: `Calendar item "${item.title}" (${item.id}) has an invalid date "${item.date}".`,
+      });
+      continue;
+    }
     const needsAttention = ATTENTION_STATUSES.has(item.status);
     const strategic = item.kind === 'deadline' || item.kind === 'approval' || needsAttention;
     const converted = item.time
@@ -454,14 +475,13 @@ function collectScopeEntries(
       warnings.push({
         source: 'campaign-calendar',
         workspaceId: scope.workspaceId,
-        reason: `Calendar item "${item.title}" (${item.id}) has an unreadable local date, time, or timezone.`,
+        reason: `Calendar item "${item.title}" (${item.id}) has an unreadable local time or timezone; it is shown as all-day.`,
       });
-      continue;
     }
     const date = converted?.date ?? item.date;
-    const time = converted?.time ?? item.time;
+    const time = converted?.time;
     out.push({
-      id: `campaign-item:${item.id}`,
+      id: `campaign-item:${scope.workspaceId}:${item.id}`,
       date,
       ...(time ? { time } : {}),
       timezone: input.timezone,
@@ -704,6 +724,10 @@ function isDateKey(value: string | undefined): value is string {
   return parsed.getUTCFullYear() === year
     && parsed.getUTCMonth() === month! - 1
     && parsed.getUTCDate() === day;
+}
+
+function isTimeKey(value: string | undefined): value is string {
+  return Boolean(value && /^([01]\d|2[0-3]):[0-5]\d$/.test(value));
 }
 
 /** Strict calendar-date validation for collectors and request boundaries. */

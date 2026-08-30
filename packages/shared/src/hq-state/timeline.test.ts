@@ -175,6 +175,20 @@ describe('dedup — explicit links only', () => {
     expect(timeline.entries[0]!.origin.kind).toBe('campaign-item');
   });
 
+  test('identical source ids in different campaigns remain distinct entries', () => {
+    const timeline = buildArtistTimeline(baseInput({
+      campaigns: [
+        campaign({ workspaceId: 'camp-1', campaignId: 'camp-1', items: [campaignItem({ id: 'shared-id' })] }),
+        campaign({ workspaceId: 'camp-2', campaignId: 'camp-2', label: 'Winter EP', items: [campaignItem({ id: 'shared-id' })] }),
+      ],
+    }));
+
+    expect(timeline.entries.map((entry) => entry.id)).toEqual([
+      'campaign-item:camp-1:shared-id',
+      'campaign-item:camp-2:shared-id',
+    ]);
+  });
+
   test('a release and a same-day HQ event both appear — no heuristic merging', () => {
     const timeline = buildArtistTimeline(baseInput({
       hqEvents: [hqEvent({ id: 'event-1', date: '2026-10-02', title: 'Single release party' })],
@@ -386,6 +400,21 @@ describe('warnings and staleness', () => {
     expect(timeline.entries).toHaveLength(2);
     expect(timeline.entries.every((entry) => entry.stale === true)).toBe(true);
   });
+
+  test('invalid dates warn, while an invalid time degrades to an all-day entry', () => {
+    const timeline = buildArtistTimeline(baseInput({
+      hqEvents: [hqEvent({ id: 'bad-event', date: '2026-02-31' })],
+      campaigns: [campaign({ items: [
+        campaignItem({ id: 'bad-date', date: '2026-13-01' }),
+        campaignItem({ id: 'bad-time', time: '25:99' }),
+      ] })],
+    }));
+
+    expect(timeline.entries).toHaveLength(1);
+    expect(timeline.entries[0]!.id).toBe('campaign-item:camp-1:bad-time');
+    expect(timeline.entries[0]!.time).toBeUndefined();
+    expect(timeline.warnings).toHaveLength(3);
+  });
 });
 
 describe('timezone', () => {
@@ -410,6 +439,18 @@ describe('timezone', () => {
     }));
 
     expect(timeline.entries[0]).toEqual(expect.objectContaining({ date: '2026-09-09', time: '21:30' }));
+  });
+
+  test('paired scheduled work uses the order instant for both reference date and time', () => {
+    const timeline = buildArtistTimeline(baseInput({
+      timezone: 'America/Los_Angeles',
+      campaigns: [campaign({
+        items: [campaignItem({ id: 'item-1', time: '18:00', timezone: 'America/New_York', scheduledWorkId: 'order-1' })],
+        orders: [order({ startAt: '2026-09-11T03:30:00.000Z' })],
+      })],
+    }));
+
+    expect(timeline.entries[0]).toEqual(expect.objectContaining({ date: '2026-09-10', time: '20:30' }));
   });
 
   test('dateKeyInTimezone returns null for garbage input', () => {

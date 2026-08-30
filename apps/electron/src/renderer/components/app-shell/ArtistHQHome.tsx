@@ -163,7 +163,7 @@ import {
   type HqCampaignSummary,
   type HqHomeWorkerItem,
 } from '@/lib/artist-hq-home-feed'
-import { addDaysToDateKey, buildArtistTimeline, CAMPAIGN_STATE_CONTEXT_SLUG, type TimelineEntry } from '@craft-agent/shared/hq-state'
+import { addDaysToDateKey, buildArtistTimeline, CAMPAIGN_STATE_CONTEXT_SLUG, dateKeyInTimezone, dateTimeInReferenceTimezone, type TimelineEntry } from '@craft-agent/shared/hq-state'
 import { isSharedIntelContextSlug } from '@craft-agent/shared/shared-intel'
 import { CAMPAIGN_CALENDAR_CONTEXT_SLUG, parseCampaignCalendarDocResult } from '@craft-agent/shared/campaign-calendar'
 import {
@@ -469,9 +469,10 @@ export function ArtistHQHome({
   )
   const horizonTimelineEntries = React.useMemo<TimelineEntry[]>(() => {
     const timezone = timelineTimezone
-    const from = new Date().toISOString().slice(0, 10)
+    const now = new Date()
+    const from = dateKeyInTimezone(now.toISOString(), timezone) ?? now.toISOString().slice(0, 10)
     return buildArtistTimeline({
-      now: new Date(),
+      now,
       from,
       to: addDaysToDateKey(from, 366),
       timezone,
@@ -513,10 +514,21 @@ export function ArtistHQHome({
     const parsed = parseCampaignCalendarDocResult(doc ?? undefined, campaignWorkspaceId)
     if (!parsed.ok) return []
     return parsed.calendar.items
-      .filter((item) => !item.deletedAt && item.status !== 'canceled' && item.date.startsWith(`${monthKey}-`))
+      .filter((item) => !item.deletedAt && item.status !== 'canceled')
+      .map((item) => {
+        const converted = item.time
+          ? dateTimeInReferenceTimezone(item.date, item.time, item.timezone, timelineTimezone)
+          : null
+        return {
+          ...item,
+          date: converted?.date ?? item.date,
+          time: converted?.time,
+        }
+      })
+      .filter((item) => item.date.startsWith(`${monthKey}-`))
       .sort((left, right) => `${left.date}T${left.time ?? '00:00'}`.localeCompare(`${right.date}T${right.time ?? '00:00'}`))
       .map((item) => ({ id: item.id, date: item.date, time: item.time, title: item.title, status: item.status, kind: item.kind }))
-  }, [])
+  }, [timelineTimezone])
   const workspaceWorkerSessions = React.useMemo(
     () => [...sessionMetaMap.values()].filter((session) => session.workspaceId === workspaceId),
     [sessionMetaMap, workspaceId],

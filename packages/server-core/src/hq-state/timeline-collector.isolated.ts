@@ -13,6 +13,7 @@ let managerTools: typeof import('./manager-tools.ts')
 let collector: typeof import('./timeline-collector.ts')
 
 let hqRoot: string
+let hqId: string
 let campaignRoot: string
 let campaignId: string
 
@@ -29,7 +30,7 @@ beforeAll(async () => {
   campaignRoot = join(testRoot, 'campaign')
   mkdirSync(hqRoot, { recursive: true })
   mkdirSync(campaignRoot, { recursive: true })
-  config.addWorkspace({ name: 'Artist HQ', rootPath: hqRoot, artistWorkspaceScope: 'hq' })
+  hqId = config.addWorkspace({ name: 'Artist HQ', rootPath: hqRoot, artistWorkspaceScope: 'hq' }).id
   const campaign = config.addWorkspace({ name: 'Autumn Single', rootPath: campaignRoot, artistWorkspaceScope: 'campaign' })
   campaignId = campaign.id
 
@@ -106,17 +107,17 @@ describe('Artist Timeline collector', () => {
     const timeline = collector.collectArtistTimeline({ from: '2026-08-29', to: '2026-11-27' }, NOW)
 
     const ids = timeline.entries.map((entry) => entry.id)
-    expect(ids).toContain('hq-event:meet-1')
-    expect(ids).toContain('goal:listeners-goal')
+    expect(ids).toContain(`hq-event:${hqId}:meet-1`)
+    expect(ids).toContain(`goal:${hqId}:listeners-goal`)
     expect(ids).toContain(`release:${campaignId}`)
-    expect(ids).toContain('campaign-item:deadline-1')
+    expect(ids).toContain(`campaign-item:${campaignId}:deadline-1`)
     // The operational task is listed AND counted in the campaign roll-up.
-    expect(ids).toContain('campaign-item:task-1')
+    expect(ids).toContain(`campaign-item:${campaignId}:task-1`)
     expect(timeline.rollups).toEqual([
       expect.objectContaining({ workspaceId: campaignId, label: 'Autumn Single', counts: { total: 1, needsAttention: 0 } }),
     ])
     // A bare deadline on a non-goal doc contributes nothing.
-    expect(ids).not.toContain('goal:not-a-goal')
+    expect(ids).not.toContain(`goal:${hqId}:not-a-goal`)
 
     const sorted = [...timeline.entries].sort((a, b) => a.sortKey.localeCompare(b.sortKey))
     expect(timeline.entries).toEqual(sorted)
@@ -130,7 +131,7 @@ describe('Artist Timeline collector', () => {
     )
 
     expect(timeline.entries.every((entry) => entry.tier === 'strategic')).toBe(true)
-    expect(timeline.entries.map((entry) => entry.id)).not.toContain('campaign-item:task-1')
+    expect(timeline.entries.map((entry) => entry.id)).not.toContain(`campaign-item:${campaignId}:task-1`)
     expect(timeline.rollups[0]?.counts.total).toBe(1)
   })
 
@@ -175,7 +176,7 @@ describe('Artist Timeline collector', () => {
 
     expect(timeline.warnings.some((warning) => warning.workspaceId === broken.id && warning.source === 'campaign-calendar')).toBe(true)
     // The healthy campaign's entries are still present.
-    expect(timeline.entries.map((entry) => entry.id)).toContain('campaign-item:deadline-1')
+    expect(timeline.entries.map((entry) => entry.id)).toContain(`campaign-item:${campaignId}:deadline-1`)
   })
 
   test('stale campaign sources stay visible, are flagged, and emit one source warning', () => {
@@ -195,7 +196,7 @@ describe('Artist Timeline collector', () => {
     })
 
     const timeline = collector.collectArtistTimeline({ from: '2026-08-29', to: '2026-11-27' }, NOW)
-    const entry = timeline.entries.find((candidate) => candidate.id === 'campaign-item:stale-deadline')
+    const entry = timeline.entries.find((candidate) => candidate.id === `campaign-item:${campaignId}:stale-deadline`)
     expect(entry?.stale).toBe(true)
     expect(timeline.warnings.filter((warning) =>
       warning.workspaceId === campaignId && warning.source === 'campaign-calendar' && warning.reason.includes('older than 14 days')),
