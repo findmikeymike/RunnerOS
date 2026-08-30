@@ -23,7 +23,7 @@ import type {
   UnreadSummary,
   ShareResult,
 } from '@craft-agent/shared/protocol'
-import type { SessionBundle, DispatchMode } from '@craft-agent/shared/sessions'
+import type { SessionBundle, DispatchMode, ChatGoalState, EditChatGoalInput, ChatGoalStopCode } from '@craft-agent/shared/sessions'
 import type { EventSink } from '../transport/types.ts'
 import type { LoadedSkill } from '@craft-agent/shared/skills'
 import type { QueueWorkAction } from '@craft-agent/shared/automations'
@@ -88,6 +88,11 @@ export interface ISessionManager {
   setSessionLabels(sessionId: string, labels: string[]): void
   setSessionConnection(sessionId: string, connectionSlug: string): Promise<void>
   updateSessionModel(sessionId: string, workspaceId: string, model: string | null, connection?: string): Promise<void>
+  pauseChatGoal(sessionId: string, expected: { goalId: string; revision: number }, options?: { message?: string; code?: ChatGoalStopCode }): Promise<ChatGoalState>
+  resumeChatGoal(sessionId: string, expected: { goalId: string; revision: number }): Promise<ChatGoalState>
+  editChatGoal(sessionId: string, expected: { goalId: string; revision: number }, patch: EditChatGoalInput): Promise<ChatGoalState>
+  cancelChatGoal(sessionId: string, expected: { goalId: string; revision: number }, message?: string): Promise<ChatGoalState>
+  clearChatGoal(sessionId: string, expected: { goalId: string; revision: number }): Promise<void>
 
   // ---------------------------------------------------------------------------
   // Messaging

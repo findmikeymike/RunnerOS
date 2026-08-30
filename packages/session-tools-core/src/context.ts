@@ -328,6 +328,15 @@ export interface SessionToolContext {
   /** Get detailed info about a session. Defaults to current session if no ID given. Injected by backend. */
   getSessionInfo?(sessionId?: string): SessionInfo | null;
 
+  /** Read the current chat-native Goal. */
+  getChatGoal?(): unknown | null;
+
+  /** Propose a Goal for explicit user confirmation; never activates it directly. */
+  proposeChatGoal?(input: import('./handlers/chat-goal.ts').CreateGoalToolInput): Promise<unknown>;
+
+  /** Request completion or blocking; the host finalizes only after turn settlement. */
+  requestChatGoalUpdate?(input: import('./handlers/chat-goal.ts').UpdateGoalToolInput): Promise<unknown>;
+
   /** List sessions in the workspace with pagination. Injected by backend. */
   listSessions?(options?: ListSessionsOptions): ListSessionsResult;
 

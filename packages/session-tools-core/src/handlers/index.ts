@@ -78,6 +78,8 @@ export { handleSetSessionStatus } from './set-session-status.ts';
 export type { SetSessionStatusArgs } from './set-session-status.ts';
 export { handleGetSessionInfo } from './get-session-info.ts';
 export type { GetSessionInfoArgs } from './get-session-info.ts';
+export { handleGetGoal, handleCreateGoal, handleUpdateGoal } from './chat-goal.ts';
+export type { CreateGoalToolInput, UpdateGoalToolInput } from './chat-goal.ts';
 export { handleListSessions } from './list-sessions.ts';
 export type { ListSessionsArgs } from './list-sessions.ts';
 export { handleListAgents } from './list-agents.ts';

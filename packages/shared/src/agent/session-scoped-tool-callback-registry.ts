@@ -57,6 +57,9 @@ export interface SessionScopedToolCallbacks {
   setSessionStatusFn?: (sessionId: string | undefined, status: string) => void | Promise<void>;
   /** Get detailed info about a session (defaults to current). */
   getSessionInfoFn?: (sessionId?: string) => import('@craft-agent/session-tools-core').SessionInfo | null;
+  getChatGoalFn?: () => unknown | null;
+  proposeChatGoalFn?: (input: import('@craft-agent/session-tools-core').CreateGoalToolInput) => Promise<unknown>;
+  requestChatGoalUpdateFn?: (input: import('@craft-agent/session-tools-core').UpdateGoalToolInput) => Promise<unknown>;
   /** List sessions in the workspace with pagination. */
   listSessionsFn?: (options?: import('@craft-agent/session-tools-core').ListSessionsOptions) => import('@craft-agent/session-tools-core').ListSessionsResult;
   /** List saved agents available to the workspace. */

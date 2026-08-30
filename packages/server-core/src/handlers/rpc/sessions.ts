@@ -105,6 +105,11 @@ function permissionForSessionCommand(command: SessionCommand): TeamPermissionAct
     case 'markCompactionComplete':
     case 'markPendingPlanExecutionDispatched':
     case 'clearPendingPlanExecution':
+    case 'goalPause':
+    case 'goalResume':
+    case 'goalEdit':
+    case 'goalCancel':
+    case 'goalClear':
     case 'addAnnotation':
     case 'removeAnnotation':
     case 'updateAnnotation':
@@ -413,6 +418,28 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
         return sessionManager.markPendingPlanExecutionDispatched(sessionId)
       case 'clearPendingPlanExecution':
         return sessionManager.clearPendingPlanExecution(sessionId)
+      case 'goalPause':
+        return sessionManager.pauseChatGoal(
+          sessionId,
+          { goalId: command.goalId, revision: command.revision },
+          { message: command.message },
+        )
+      case 'goalResume':
+        return sessionManager.resumeChatGoal(sessionId, { goalId: command.goalId, revision: command.revision })
+      case 'goalEdit':
+        return sessionManager.editChatGoal(
+          sessionId,
+          { goalId: command.goalId, revision: command.revision },
+          command.patch,
+        )
+      case 'goalCancel':
+        return sessionManager.cancelChatGoal(
+          sessionId,
+          { goalId: command.goalId, revision: command.revision },
+          command.message,
+        )
+      case 'goalClear':
+        return sessionManager.clearChatGoal(sessionId, { goalId: command.goalId, revision: command.revision })
       case 'addAnnotation':
         return sessionManager.addMessageAnnotation(sessionId, command.messageId, command.annotation)
       case 'removeAnnotation':

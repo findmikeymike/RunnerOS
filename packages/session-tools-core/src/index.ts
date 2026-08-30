@@ -222,6 +222,14 @@ export {
   // Visual surface
   handleVisualSurface,
   handleVisualSurfaceState,
+  handleGetGoal,
+  handleCreateGoal,
+  handleUpdateGoal,
+} from './handlers/index.ts';
+
+export type {
+  CreateGoalToolInput,
+  UpdateGoalToolInput,
 } from './handlers/index.ts';
 
 export type {

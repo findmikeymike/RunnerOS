@@ -459,6 +459,30 @@ export function attachSessionSelfManagementBindings(
     configurable: true,
     enumerable: true,
   });
+
+  Object.defineProperty(context, 'getChatGoal', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.getChatGoalFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'proposeChatGoal', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.proposeChatGoalFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'requestChatGoalUpdate', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.requestChatGoalUpdateFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
 }
 
 // ============================================================

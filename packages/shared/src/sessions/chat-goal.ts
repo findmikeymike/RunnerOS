@@ -344,6 +344,7 @@ export function pauseChatGoalState(
   return {
     ...goal,
     status: 'paused',
+    revision: goal.revision + 1,
     updatedAt: now,
     stop: { ...stop, at: now },
   };
@@ -415,6 +416,7 @@ export function limitChatGoalByBudget(
   return {
     ...goal,
     status: 'budget-limited',
+    revision: goal.revision + 1,
     updatedAt: now,
     stop: { code, message, at: now },
   };
@@ -440,6 +442,7 @@ export function recordChatGoalBlocker(
   return {
     ...goal,
     status: 'blocked',
+    revision: goal.revision + 1,
     updatedAt: now,
     blockerAudit,
     stop: { code: 'repeated-blocker', message, at: now },

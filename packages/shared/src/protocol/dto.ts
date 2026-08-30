@@ -19,6 +19,7 @@ import type { ThinkingLevel } from '../agent/thinking-levels'
 import type { QueueWorkAction } from '../automations/types'
 import type { CustomEndpointConfig } from '../config/llm-connections'
 import type { SessionLaunchReceipt } from '../sessions/types'
+import type { ChatGoalState, CreateChatGoalInput, EditChatGoalInput } from '../sessions/chat-goal'
 import type {
   AuthRequest as SharedAuthRequest,
   CredentialInputMode as SharedCredentialInputMode,
@@ -108,6 +109,8 @@ export interface Session {
   isArchived?: boolean
   archivedAt?: number
   supportsBranching?: boolean
+  /** Current or most recent chat-native Goal. */
+  chatGoal?: ChatGoalState
 }
 
 export interface CreateSessionOptions {
@@ -160,6 +163,8 @@ export interface RemoteSessionTransferPayload {
   labels?: string[]
   permissionMode?: PermissionMode
   summary: string
+  /** Paused Goal snapshot for explicit activation on the destination. */
+  chatGoal?: ChatGoalState
 }
 
 export interface ImportRemoteSessionTransferResult {
@@ -225,12 +230,14 @@ export type SessionEvent =
   | { type: 'usage_update'; sessionId: string; tokenUsage: { inputTokens: number; contextWindow?: number } }
   | { type: 'message_annotations_updated'; sessionId: string; messageId: string; annotations: AnnotationV1[] }
   | { type: 'working_directory_error'; sessionId: string; error: string }
+  | { type: 'goal_state_changed'; sessionId: string; chatGoal?: ChatGoalState }
+  | { type: 'goal_creation_proposed'; sessionId: string; proposal: CreateChatGoalInput }
 
 export interface SendMessageOptions {
   skillSlugs?: string[]
   badges?: ContentBadge[]
   optimisticMessageId?: string
-  displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task'
+  displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task' | 'goal-event'
   /** Drive a model turn without rendering this system-generated prompt. */
   hidden?: boolean
 }
@@ -265,6 +272,11 @@ export type SessionCommand =
   | { type: 'markCompactionComplete' }
   | { type: 'markPendingPlanExecutionDispatched' }
   | { type: 'clearPendingPlanExecution' }
+  | { type: 'goalPause'; goalId: string; revision: number; message?: string }
+  | { type: 'goalResume'; goalId: string; revision: number }
+  | { type: 'goalEdit'; goalId: string; revision: number; patch: EditChatGoalInput }
+  | { type: 'goalCancel'; goalId: string; revision: number; message?: string }
+  | { type: 'goalClear'; goalId: string; revision: number }
   | { type: 'addAnnotation'; messageId: string; annotation: AnnotationV1 }
   | { type: 'removeAnnotation'; messageId: string; annotationId: string }
   | { type: 'updateAnnotation'; messageId: string; annotationId: string; patch: Partial<AnnotationV1> }

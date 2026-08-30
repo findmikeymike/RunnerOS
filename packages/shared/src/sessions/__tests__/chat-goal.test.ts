@@ -66,7 +66,8 @@ describe('chat goal state', () => {
 
     expect(paused.status).toBe('paused');
     expect(resumed.status).toBe('active');
-    expect(resumed.revision).toBe(2);
+    expect(paused.revision).toBe(2);
+    expect(resumed.revision).toBe(3);
     expect(resumed.stop).toBeUndefined();
     expect(() => resumeChatGoalState({ ...paused, round: 2 })).toThrow(ChatGoalConflictError);
   });

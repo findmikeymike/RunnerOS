@@ -252,6 +252,16 @@ export interface AgentMessageNoticeMetadata {
   status?: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'timed-out';
 }
 
+export interface ChatGoalEventMetadata {
+  type: 'created' | 'edited' | 'paused' | 'resumed' | 'completed' | 'blocked' | 'budget-limited' | 'cancelled';
+  goalId: string;
+  revision: number;
+  timestamp: number;
+  round: number;
+  status: 'active' | 'paused' | 'blocked' | 'budget-limited' | 'complete' | 'cancelled';
+  summary: string;
+}
+
 /**
  * Runtime message type (includes transient fields like isStreaming)
  */
@@ -283,11 +293,13 @@ export interface Message {
   // Content badges for inline display (sources, skills)
   badges?: ContentBadge[];
   // UI-only display intent for internal/user-proxy messages that need custom rendering.
-  displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task';
+  displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task' | 'goal-event';
   // System-generated prompt that drives a turn but must not render as user text.
   hidden?: boolean;
   // Structured metadata for agent-message notices. Avoid parsing trusted actions from text.
   agentMessage?: AgentMessageNoticeMetadata;
+  /** Durable chat Goal lifecycle marker. */
+  goalEvent?: ChatGoalEventMetadata;
   /** Annotation payloads for this message */
   annotations?: AnnotationV1[];
   isError?: boolean;
@@ -377,9 +389,11 @@ export interface StoredMessage {
   /** Content badges for inline display (sources, skills) */
   badges?: ContentBadge[];
   // UI-only display intent for internal/user-proxy messages that need custom rendering.
-  displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task';
+  displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task' | 'goal-event';
   // Structured metadata for agent-message notices.
   agentMessage?: AgentMessageNoticeMetadata;
+  /** Durable chat Goal lifecycle marker. */
+  goalEvent?: ChatGoalEventMetadata;
   /** Annotations persisted at message level */
   annotations?: AnnotationV1[];
   // Turn grouping - critical for TurnCard rendering after reload

@@ -45,6 +45,7 @@ import { handleSendDeveloperFeedback } from './handlers/send-developer-feedback.
 import { handleSetSessionLabels } from './handlers/set-session-labels.ts';
 import { handleSetSessionStatus } from './handlers/set-session-status.ts';
 import { handleGetSessionInfo } from './handlers/get-session-info.ts';
+import { handleGetGoal, handleCreateGoal, handleUpdateGoal } from './handlers/chat-goal.ts';
 import { handleListSessions } from './handlers/list-sessions.ts';
 import { handleListAgents } from './handlers/list-agents.ts';
 import { handleListSkills } from './handlers/list-skills.ts';
@@ -264,6 +265,24 @@ export const SetSessionStatusSchema = z.object({
 
 export const GetSessionInfoSchema = z.object({
   sessionId: z.string().optional().describe('Session ID to query. Omit to get info about the current session.'),
+});
+
+export const GetGoalSchema = z.object({});
+
+export const CreateGoalSchema = z.object({
+  objective: z.string().min(1).max(4_000).describe('Exact objective for the proposed Goal.'),
+  doneWhen: z.string().min(1).max(2_000).optional().describe('Optional concrete completion condition.'),
+  maxRounds: z.number().int().min(2).max(12).optional().describe('Maximum rounds. Defaults to 6.'),
+  tokenBudget: z.number().int().positive().optional().describe('Optional explicit token budget.'),
+});
+
+export const UpdateGoalSchema = z.object({
+  goalId: z.string().min(1),
+  revision: z.number().int().positive(),
+  status: z.enum(['complete', 'blocked']),
+  summary: z.string().min(1).max(4_000),
+  evidence: z.array(z.string().min(1).max(4_000)).max(20).optional(),
+  blockerFingerprint: z.string().min(1).max(500).optional(),
 });
 
 export const ListSessionsSchema = z.object({
@@ -1186,6 +1205,12 @@ Omit sessionId to target the current session.`,
 Returns labels, status, name, permission mode, and other details.
 Call with no arguments to introspect your own session state.`,
 
+  get_goal: `Read the current chat-native Goal, including objective, revision, status, round, and budget. Use this before requesting completion or blocking. Read-only.`,
+
+  create_goal: `Propose a bounded Goal only when the user explicitly asked to start Goal Mode. This tool never activates work by itself: it opens a confirmation step for the exact objective, done condition, and round cap. Do not infer Goal Mode from a long prompt.`,
+
+  update_goal: `Request that the current chat-native Goal be marked complete or blocked. The host audits the request after the turn finishes. Complete requires a concise summary and concrete evidence when the done condition is verifiable. Blocked requires a stable blocker fingerprint and is accepted only after the same blocker recurs across three Goal turns. This tool cannot pause, resume, cancel, clear, or increase budget.`,
+
   list_sessions: `List sessions in the workspace. Returns total count + paginated results.
 
 Use filters (status, label, search) to narrow results instead of fetching everything. Default limit is 20 sessions.
@@ -1670,6 +1695,9 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'set_session_labels', description: TOOL_DESCRIPTIONS.set_session_labels, inputSchema: SetSessionLabelsSchema, executionMode: 'registry', safeMode: 'block', handler: handleSetSessionLabels },
   { name: 'set_session_status', description: TOOL_DESCRIPTIONS.set_session_status, inputSchema: SetSessionStatusSchema, executionMode: 'registry', safeMode: 'block', handler: handleSetSessionStatus },
   { name: 'get_session_info', description: TOOL_DESCRIPTIONS.get_session_info, inputSchema: GetSessionInfoSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetSessionInfo },
+  { name: 'get_goal', description: TOOL_DESCRIPTIONS.get_goal, inputSchema: GetGoalSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetGoal },
+  { name: 'create_goal', description: TOOL_DESCRIPTIONS.create_goal, inputSchema: CreateGoalSchema, executionMode: 'registry', safeMode: 'allow', handler: handleCreateGoal },
+  { name: 'update_goal', description: TOOL_DESCRIPTIONS.update_goal, inputSchema: UpdateGoalSchema, executionMode: 'registry', safeMode: 'allow', handler: handleUpdateGoal },
   { name: 'list_sessions', description: TOOL_DESCRIPTIONS.list_sessions, inputSchema: ListSessionsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSessions },
   { name: 'list_agents', description: TOOL_DESCRIPTIONS.list_agents, inputSchema: ListAgentsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListAgents },
   { name: 'list_skills', description: TOOL_DESCRIPTIONS.list_skills, inputSchema: ListSkillsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSkills },

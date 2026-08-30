@@ -39,7 +39,7 @@ import {
   type WorkspaceInfo,
 } from '@craft-agent/shared/config'
 import type { ActiveSessionInfo, SessionProcessingStatus } from '@craft-agent/core/types'
-import type { MemoryMutationResult, RecalledMemoryEntry, RecallMemoryResult, RecallMemoryToolInput } from '@craft-agent/session-tools-core'
+import type { MemoryMutationResult, RecalledMemoryEntry, RecallMemoryResult, RecallMemoryToolInput, CreateGoalToolInput, UpdateGoalToolInput } from '@craft-agent/session-tools-core'
 import { assertTeamPermission, evaluateTeamRunnerGate, getTeamModeStatus, loadWorkspaceConfig, type WorkspaceSyncArea } from '@craft-agent/shared/workspaces'
 import { detectClobberedWrites, scanProviderConflictedCopies } from '@craft-agent/shared/records'
 import {
@@ -88,6 +88,21 @@ import {
   type SessionStatus,
   type SessionHeader,
   type SessionLaunchReceipt,
+  type ChatGoalState,
+  type CreateChatGoalInput,
+  type EditChatGoalInput,
+  type ChatGoalEventType,
+  type ChatGoalStopCode,
+  createChatGoalState,
+  assertChatGoalRevision,
+  editChatGoalState,
+  pauseChatGoalState,
+  resumeChatGoalState,
+  cancelChatGoalState,
+  disarmChatGoalAfterRestart,
+  isChatGoalTerminal,
+  makeChatGoalEvent,
+  parseChatGoalState,
   pickSessionFields,
 } from '@craft-agent/shared/sessions'
 import { loadAllSources, loadGlobalSource, getSourcesBySlugs, readGlobalSourcesManifest, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
@@ -1497,6 +1512,12 @@ interface ManagedSession {
   // Provenance for sessions spawned by summoning a saved Agent.
   spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
   launchReceipt?: SessionLaunchReceipt
+  /** Current or most recent chat-native Goal. */
+  chatGoal?: ChatGoalState
+  /** Model-requested completion/blocking, finalized only after turn settlement. */
+  pendingChatGoalUpdate?: UpdateGoalToolInput
+  /** Startup could not durably disarm an active Goal; execution stays blocked until repaired. */
+  chatGoalPersistenceBlocked?: boolean
   // Promise that resolves when the agent instance is ready (for title gen to await)
   agentReady?: Promise<void>
   agentReadyResolve?: () => void
@@ -1746,6 +1767,15 @@ export class SessionManager implements ISessionManager {
       if (this.sendMessageAdmissionLocks.get(sessionId) === current) {
         this.sendMessageAdmissionLocks.delete(sessionId)
       }
+    }
+  }
+
+  private async withSessionAdmissionLock<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
+    const release = await this.acquireSendMessageAdmissionLock(sessionId)
+    try {
+      return await operation()
+    } finally {
+      release()
     }
   }
 
@@ -4804,7 +4834,7 @@ user a clickable link to where the thing now lives.`
       }
 
       // Load existing sessions from disk
-      this.loadSessionsFromDisk()
+      await this.loadSessionsFromDisk()
 
       this.workflowRunner = new WorkflowRunner({
         createSession: (wsId, opts) => this.createSession(wsId, opts).then((s) => ({ id: s.id })),
@@ -4933,7 +4963,7 @@ user a clickable link to where the thing now lives.`
   }
 
   // Load all existing sessions from disk into memory (metadata only - messages are lazy-loaded)
-  private loadSessionsFromDisk(): void {
+  private async loadSessionsFromDisk(): Promise<void> {
     try {
       const workspaces = getWorkspaces()
       let totalSessions = 0
@@ -4947,12 +4977,40 @@ user a clickable link to where the thing now lives.`
         const wsDefaultWorkingDir = wsConfig?.defaults?.workingDirectory
 
         for (const meta of sessionMetadata) {
+          let chatGoalPersistenceBlocked = false
+          if (meta.chatGoal?.status === 'active') {
+            const disarmed = disarmChatGoalAfterRestart(meta.chatGoal)
+            try {
+              const stored = loadStoredSession(workspaceRootPath, meta.id)
+              if (!stored) throw new Error('Session could not be loaded for restart disarm')
+              const event = makeChatGoalEvent(disarmed, 'paused', disarmed.stop!.message)
+              stored.chatGoal = disarmed
+              stored.messages.push({
+                id: generateMessageId(),
+                type: 'info',
+                content: event.summary,
+                timestamp: event.timestamp,
+                displayIntent: 'goal-event',
+                goalEvent: event,
+              })
+              await saveStoredSession(stored)
+              meta.chatGoal = disarmed
+            } catch (error) {
+              sessionLog.error(`Failed to persist restart disarm for Goal in session ${meta.id}:`, error)
+              meta.chatGoal = pauseChatGoalState(meta.chatGoal, {
+                code: 'persistence-failed',
+                message: 'Goal could not be safely disarmed on disk. Resolve session persistence before resuming.',
+              })
+              chatGoalPersistenceBlocked = true
+            }
+          }
           // Create managed session from metadata only (messages lazy-loaded on demand)
           // This dramatically reduces memory usage at startup - messages are loaded
           // when getSession() is called for a specific session
           const managed = createManagedSession(meta, workspace, {
             enabledSourceSlugs: undefined,  // Loaded with messages
             workingDirectory: meta.workingDirectory ?? wsDefaultWorkingDir,
+            chatGoalPersistenceBlocked,
           })
 
           // Migration: clear orphaned llmConnection references (e.g., after connection was deleted)
@@ -5340,8 +5398,8 @@ user a clickable link to where the thing now lives.`
    * Reload all sessions from disk.
    * Used after importing sessions to refresh the in-memory session list.
    */
-  reloadSessions(): void {
-    this.loadSessionsFromDisk()
+  async reloadSessions(): Promise<void> {
+    await this.loadSessionsFromDisk()
   }
 
   getSessions(workspaceId?: string): Session[] {
@@ -5605,6 +5663,7 @@ user a clickable link to where the thing now lives.`
       branchFromSdkCwd?: string
       branchFromSdkTurnId?: string
     } | undefined
+    let branchChatGoalSnapshot: ChatGoalState | undefined
 
     if (options?.branchFromSessionId || options?.branchFromMessageId) {
       if (!options.branchFromSessionId || !options.branchFromMessageId) {
@@ -5849,6 +5908,29 @@ user a clickable link to where the thing now lives.`
         branchedStored.messages = sourceMessages
       }
 
+      const sourceGoal = validatedBranch.sourceSession.chatGoal
+      const branchIncludesGoal = sourceGoal && sourceMessages.some((message) => message.goalEvent?.goalId === sourceGoal.id)
+      if (branchIncludesGoal) {
+        branchChatGoalSnapshot = isChatGoalTerminal(sourceGoal.status)
+          ? sourceGoal
+          : pauseChatGoalState(sourceGoal, {
+              code: 'ownership-changed',
+              message: 'Goal snapshot paused because this chat was branched. Resume to activate a new Goal in the branch.',
+            })
+        branchedStored.chatGoal = branchChatGoalSnapshot
+        if (branchChatGoalSnapshot !== sourceGoal) {
+          const event = makeChatGoalEvent(branchChatGoalSnapshot, 'paused', branchChatGoalSnapshot.stop!.message)
+          branchedStored.messages.push({
+            id: generateMessageId(),
+            type: 'info',
+            content: event.summary,
+            timestamp: event.timestamp,
+            displayIntent: 'goal-event',
+            goalEvent: event,
+          })
+        }
+      }
+
       branchedStored.branchFromMessageId = validatedBranch.sourceMessageId
       if (validatedBranch.branchContextStrategy === 'sdk-fork') {
         branchedStored.branchFromSdkSessionId = validatedBranch.branchFromSdkSessionId
@@ -5896,6 +5978,7 @@ user a clickable link to where the thing now lives.`
       branchFromSdkCwd: validatedBranch?.branchFromSdkCwd,
       branchFromSdkTurnId: validatedBranch?.branchFromSdkTurnId,
       branchSeedApplied: validatedBranch ? validatedBranch.branchContextStrategy === 'sdk-fork' : undefined,
+      chatGoal: branchChatGoalSnapshot,
       messagesLoaded: !isBranch,  // Branched sessions: lazy-load messages from JSONL
     })
 
@@ -7029,6 +7112,9 @@ user a clickable link to where the thing now lives.`
             isActive: session.agent != null,
           }
         },
+        getChatGoalFn: () => managed.chatGoal ?? null,
+        proposeChatGoalFn: (input) => this.proposeChatGoal(managed.id, input),
+        requestChatGoalUpdateFn: (input) => this.requestChatGoalUpdate(managed.id, input),
         saveMemoryFn: async (input) => {
           const scope = input.scope === 'user' ? 'user' : 'agent'
           if (scope === 'user' && !canDirectlyMutateUserMemory(managed.spawnedFromAgent)) {
@@ -8167,6 +8253,204 @@ user a clickable link to where the thing now lives.`
     }
   }
 
+  getChatGoal(sessionId: string): ChatGoalState | undefined {
+    return this.sessions.get(sessionId)?.chatGoal
+  }
+
+  async proposeChatGoal(sessionId: string, input: CreateGoalToolInput): Promise<{ proposed: true; proposal: CreateChatGoalInput; message: string }> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) throw new Error('Session not found')
+    if (managed.hidden || hasAutomatedSessionAncestry(managed.launchReceipt)) {
+      throw new Error('Goal Mode can only be started from a visible user-owned chat')
+    }
+    if (managed.chatGoal && !isChatGoalTerminal(managed.chatGoal.status)) {
+      throw new Error('This chat already has a non-terminal Goal')
+    }
+    const validated = createChatGoalState(input, { tokenBaseline: managed.tokenUsage?.totalTokens ?? 0 })
+    const proposal: CreateChatGoalInput = {
+      objective: validated.objective,
+      doneWhen: validated.doneWhen,
+      maxRounds: validated.maxRounds,
+      tokenBudget: validated.tokenBudget,
+    }
+    this.sendEvent({ type: 'goal_creation_proposed', sessionId, proposal }, managed.workspace.id)
+    return {
+      proposed: true,
+      proposal,
+      message: 'Goal proposal is awaiting explicit user confirmation. No Goal was activated.',
+    }
+  }
+
+  async requestChatGoalUpdate(sessionId: string, input: UpdateGoalToolInput): Promise<{ accepted: true; pending: true; status: 'complete' | 'blocked' }> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) throw new Error('Session not found')
+    const goal = assertChatGoalRevision(managed.chatGoal, input.goalId, input.revision)
+    if (goal.status !== 'active') throw new Error('Only an active Goal can request completion or blocking')
+    if (input.status === 'blocked' && !input.blockerFingerprint?.trim()) {
+      throw new Error('Blocked Goal requests require a stable blocker fingerprint')
+    }
+    if (managed.pendingChatGoalUpdate) {
+      throw new Error('This turn already submitted a Goal update request')
+    }
+    managed.pendingChatGoalUpdate = {
+      ...input,
+      summary: input.summary.trim(),
+      evidence: input.evidence?.map(item => item.trim()).filter(Boolean),
+      blockerFingerprint: input.blockerFingerprint?.trim(),
+    }
+    return { accepted: true, pending: true, status: input.status }
+  }
+
+  private appendChatGoalEvent(
+    managed: ManagedSession,
+    goal: ChatGoalState,
+    type: ChatGoalEventType,
+    summary: string,
+  ): void {
+    const event = makeChatGoalEvent(goal, type, summary)
+    managed.messages.push({
+      id: generateMessageId(),
+      role: 'info',
+      content: event.summary,
+      timestamp: event.timestamp,
+      displayIntent: 'goal-event',
+      goalEvent: event,
+    })
+  }
+
+  private async commitChatGoalState(
+    managed: ManagedSession,
+    next: ChatGoalState,
+    eventType: ChatGoalEventType,
+    summary: string,
+  ): Promise<ChatGoalState> {
+    await this.ensureMessagesLoaded(managed)
+    managed.chatGoal = next
+    this.appendChatGoalEvent(managed, next, eventType, summary)
+    this.persistSession(managed)
+    await this.flushSession(managed.id)
+    this.sendEvent({ type: 'goal_state_changed', sessionId: managed.id, chatGoal: next }, managed.workspace.id)
+    return next
+  }
+
+  private async repairChatGoalPersistenceBlock(managed: ManagedSession): Promise<void> {
+    if (!managed.chatGoalPersistenceBlocked) return
+    const goal = managed.chatGoal
+    if (!goal || goal.stop?.code !== 'persistence-failed') {
+      throw new Error('Goal persistence safety state is inconsistent; restart the app before resuming')
+    }
+
+    await this.ensureMessagesLoaded(managed)
+    const alreadyRecorded = managed.messages.some((message) => (
+      message.goalEvent?.goalId === goal.id
+      && message.goalEvent.revision === goal.revision
+      && message.goalEvent.status === goal.status
+    ))
+    if (!alreadyRecorded) {
+      this.appendChatGoalEvent(managed, goal, 'paused', goal.stop.message)
+    }
+    this.persistSession(managed)
+    try {
+      await this.flushSession(managed.id)
+    } catch (error) {
+      throw new Error(`Goal remains paused because session persistence is unavailable: ${error instanceof Error ? error.message : String(error)}`)
+    }
+    managed.chatGoalPersistenceBlocked = false
+  }
+
+  async pauseChatGoal(
+    sessionId: string,
+    expected: { goalId: string; revision: number },
+    options: { message?: string; code?: ChatGoalStopCode } = {},
+  ): Promise<ChatGoalState> {
+    return this.withSessionAdmissionLock(sessionId, async () => {
+      const managed = this.sessions.get(sessionId)
+      if (!managed) throw new Error('Session not found')
+      const goal = assertChatGoalRevision(managed.chatGoal, expected.goalId, expected.revision)
+      const next = pauseChatGoalState(goal, {
+        code: options.code ?? 'user-paused',
+        message: options.message?.trim() || 'Goal paused by the user.',
+      })
+      managed.pendingChatGoalUpdate = undefined
+      return this.commitChatGoalState(managed, next, 'paused', next.stop!.message)
+    })
+  }
+
+  async resumeChatGoal(
+    sessionId: string,
+    expected: { goalId: string; revision: number },
+  ): Promise<ChatGoalState> {
+    return this.withSessionAdmissionLock(sessionId, async () => {
+      const managed = this.sessions.get(sessionId)
+      if (!managed) throw new Error('Session not found')
+      if (managed.isArchived) throw new Error('Unarchive this chat before resuming its Goal')
+      if (managed.pendingAuthRequest || getStoredPendingPlanExecution(managed.workspace.rootPath, managed.id)) {
+        throw new Error('Resolve the pending authentication or plan handoff before resuming this Goal')
+      }
+      const goal = assertChatGoalRevision(managed.chatGoal, expected.goalId, expected.revision)
+      await this.repairChatGoalPersistenceBlock(managed)
+      if (goal.stop?.code === 'ownership-changed') {
+        const next = createChatGoalState({
+          objective: goal.objective,
+          doneWhen: goal.doneWhen,
+          maxRounds: goal.maxRounds,
+          tokenBudget: goal.tokenBudget,
+        }, { tokenBaseline: managed.tokenUsage?.totalTokens ?? 0 })
+        return this.commitChatGoalState(managed, next, 'created', 'New Goal activated from the transferred snapshot.')
+      }
+      const next = resumeChatGoalState(goal)
+      return this.commitChatGoalState(managed, next, 'resumed', 'Goal resumed by the user.')
+    })
+  }
+
+  async editChatGoal(
+    sessionId: string,
+    expected: { goalId: string; revision: number },
+    patch: EditChatGoalInput,
+  ): Promise<ChatGoalState> {
+    return this.withSessionAdmissionLock(sessionId, async () => {
+      const managed = this.sessions.get(sessionId)
+      if (!managed) throw new Error('Session not found')
+      const goal = assertChatGoalRevision(managed.chatGoal, expected.goalId, expected.revision)
+      const next = editChatGoalState(goal, patch)
+      managed.pendingChatGoalUpdate = undefined
+      return this.commitChatGoalState(managed, next, 'edited', 'Goal definition updated by the user.')
+    })
+  }
+
+  async cancelChatGoal(
+    sessionId: string,
+    expected: { goalId: string; revision: number },
+    message?: string,
+  ): Promise<ChatGoalState> {
+    return this.withSessionAdmissionLock(sessionId, async () => {
+      const managed = this.sessions.get(sessionId)
+      if (!managed) throw new Error('Session not found')
+      const goal = assertChatGoalRevision(managed.chatGoal, expected.goalId, expected.revision)
+      const next = cancelChatGoalState(goal, message?.trim() || 'Goal stopped by the user.')
+      managed.pendingChatGoalUpdate = undefined
+      return this.commitChatGoalState(managed, next, 'cancelled', next.stop!.message)
+    })
+  }
+
+  async clearChatGoal(
+    sessionId: string,
+    expected: { goalId: string; revision: number },
+  ): Promise<void> {
+    return this.withSessionAdmissionLock(sessionId, async () => {
+      const managed = this.sessions.get(sessionId)
+      if (!managed) throw new Error('Session not found')
+      const goal = assertChatGoalRevision(managed.chatGoal, expected.goalId, expected.revision)
+      if (!isChatGoalTerminal(goal.status)) throw new Error('Stop or complete this Goal before clearing it')
+      managed.chatGoal = undefined
+      managed.pendingChatGoalUpdate = undefined
+      await this.ensureMessagesLoaded(managed)
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+      this.sendEvent({ type: 'goal_state_changed', sessionId, chatGoal: undefined }, managed.workspace.id)
+    })
+  }
+
   async unflagSession(sessionId: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
@@ -8185,8 +8469,17 @@ user a clickable link to where the thing now lives.`
   }
 
   async archiveSession(sessionId: string): Promise<void> {
-    const managed = this.sessions.get(sessionId)
-    if (managed) {
+    return this.withSessionAdmissionLock(sessionId, async () => {
+      const managed = this.sessions.get(sessionId)
+      if (!managed) return
+      if (managed.chatGoal?.status === 'active') {
+        const paused = pauseChatGoalState(managed.chatGoal, {
+          code: 'session-archived',
+          message: 'Goal paused because this chat was archived.',
+        })
+        managed.pendingChatGoalUpdate = undefined
+        await this.commitChatGoalState(managed, paused, 'paused', paused.stop!.message)
+      }
       managed.isArchived = true
       managed.archivedAt = Date.now()
       // Persist in-memory state directly to avoid race with pending queue writes
@@ -8195,7 +8488,7 @@ user a clickable link to where the thing now lives.`
       // Notify all windows for this workspace
       this.sendEvent({ type: 'session_archived', sessionId }, managed.workspace.id)
       this.emitUnreadSummaryChanged()
-    }
+    })
   }
 
   async unarchiveSession(sessionId: string): Promise<void> {
@@ -11789,39 +12082,50 @@ user a clickable link to where the thing now lives.`
   }
 
   async exportRemoteSessionTransfer(sessionId: string, workspaceId: string): Promise<RemoteSessionTransferPayload | null> {
-    const managed = this.sessions.get(sessionId)
-    if (!managed) {
-      sessionLog.warn(`[dispatch] Cannot export remote transfer: ${sessionId} not found`)
-      return null
-    }
+    return this.withSessionAdmissionLock(sessionId, async () => {
+      const managed = this.sessions.get(sessionId)
+      if (!managed) {
+        sessionLog.warn(`[dispatch] Cannot export remote transfer: ${sessionId} not found`)
+        return null
+      }
 
-    if (managed.workspace.id !== workspaceId) {
-      sessionLog.warn(`[dispatch] Session ${sessionId} does not belong to workspace ${workspaceId}`)
-      return null
-    }
+      if (managed.workspace.id !== workspaceId) {
+        sessionLog.warn(`[dispatch] Session ${sessionId} does not belong to workspace ${workspaceId}`)
+        return null
+      }
 
-    if (managed.isProcessing) {
-      sessionLog.warn(`[dispatch] Cannot export remote transfer ${sessionId}: still processing`)
-      return null
-    }
+      if (managed.isProcessing) {
+        sessionLog.warn(`[dispatch] Cannot export remote transfer ${sessionId}: still processing`)
+        return null
+      }
 
-    this.persistSession(managed)
-    await sessionPersistenceQueue.flush(sessionId)
+      if (managed.chatGoal?.status === 'active') {
+        const paused = pauseChatGoalState(managed.chatGoal, {
+          code: 'ownership-changed',
+          message: 'Goal paused before remote transfer. Resume explicitly on the destination.',
+        })
+        await this.commitChatGoalState(managed, paused, 'paused', paused.stop!.message)
+      }
 
-    const summary = await this.generateRemoteTransferSummary(managed)
-    if (!summary) {
-      sessionLog.warn(`[dispatch] Failed to generate remote transfer summary for ${sessionId}`)
-      return null
-    }
+      this.persistSession(managed)
+      await sessionPersistenceQueue.flush(sessionId)
 
-    return {
-      sourceSessionId: managed.id,
-      name: managed.name,
-      sessionStatus: managed.sessionStatus,
-      labels: managed.labels,
-      permissionMode: managed.permissionMode,
-      summary,
-    }
+      const summary = await this.generateRemoteTransferSummary(managed)
+      if (!summary) {
+        sessionLog.warn(`[dispatch] Failed to generate remote transfer summary for ${sessionId}`)
+        return null
+      }
+
+      return {
+        sourceSessionId: managed.id,
+        name: managed.name,
+        sessionStatus: managed.sessionStatus,
+        labels: managed.labels,
+        permissionMode: managed.permissionMode,
+        summary,
+        chatGoal: managed.chatGoal,
+      }
+    })
   }
 
   async importRemoteSessionTransfer(
@@ -11830,6 +12134,10 @@ user a clickable link to where the thing now lives.`
   ): Promise<ImportRemoteSessionTransferResult> {
     if (!payload || typeof payload !== 'object' || typeof payload.summary !== 'string' || !payload.summary.trim()) {
       throw new Error('Invalid remote session transfer payload')
+    }
+    const transferredGoal = parseChatGoalState(payload.chatGoal)
+    if (payload.chatGoal && !transferredGoal) {
+      throw new Error('Invalid Goal state in remote session transfer payload')
     }
 
     const session = await this.createSession(workspaceId, {
@@ -11846,6 +12154,21 @@ user a clickable link to where the thing now lives.`
 
     managed.transferredSessionSummary = payload.summary.trim()
     managed.transferredSessionSummaryApplied = false
+    if (transferredGoal) {
+      const snapshot = isChatGoalTerminal(transferredGoal.status)
+        ? transferredGoal
+        : pauseChatGoalState(transferredGoal, {
+            code: 'ownership-changed',
+            message: 'Transferred Goal snapshot is paused. Resume to activate a new Goal on this device.',
+          })
+      managed.chatGoal = snapshot
+      const eventType: ChatGoalEventType = snapshot.status === 'complete'
+        ? 'completed'
+        : snapshot.status === 'cancelled'
+          ? 'cancelled'
+          : 'paused'
+      this.appendChatGoalEvent(managed, snapshot, eventType, snapshot.stop?.message ?? snapshot.completion?.summary ?? 'Goal snapshot transferred.')
+    }
     this.persistSession(managed)
     await sessionPersistenceQueue.flush(session.id)
 
@@ -11966,6 +12289,33 @@ user a clickable link to where the thing now lives.`
       transferredSessionSummaryApplied: header.transferredSessionSummaryApplied,
       messages: bundle.session.messages,
       tokenUsage: header.tokenUsage ?? DEFAULT_TOKEN_USAGE,
+    }
+
+    const bundledGoal = parseChatGoalState(header.chatGoal)
+    if (header.chatGoal && !bundledGoal) {
+      throw new Error('Invalid Goal state in imported session bundle')
+    }
+    if (bundledGoal) {
+      const importedGoal = isChatGoalTerminal(bundledGoal.status)
+        ? bundledGoal
+        : pauseChatGoalState(bundledGoal, {
+            code: 'ownership-changed',
+            message: mode === 'fork'
+              ? 'Goal snapshot paused in this fork. Resume to activate a new Goal in the fork.'
+              : 'Goal paused during session transfer. Resume explicitly on this runtime.',
+          })
+      storedSession.chatGoal = importedGoal
+      if (importedGoal !== bundledGoal) {
+        const event = makeChatGoalEvent(importedGoal, 'paused', importedGoal.stop!.message)
+        storedSession.messages.push({
+          id: generateMessageId(),
+          type: 'info',
+          content: event.summary,
+          timestamp: event.timestamp,
+          displayIntent: 'goal-event',
+          goalEvent: event,
+        })
+      }
     }
 
     // Fork-specific: set up SDK branching if branchInfo provided
