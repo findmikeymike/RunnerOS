@@ -18,6 +18,7 @@ import {
   readFileSync,
   writeFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
   unlinkSync,
@@ -368,11 +369,17 @@ export function listSessions(workspaceRootPath: string): SessionMetadata[] {
       const sessionDir = join(sessionsDir, sessionId);
       const jsonlFile = join(sessionDir, 'session.jsonl');
 
-      // Clean up orphaned .tmp files from crashed atomic writes.
-      // These are harmless but waste disk space.
+      // Orphaned .tmp files come from a crash during an atomic write. If the
+      // real file survived, the .tmp is stale and safe to drop. If it did not,
+      // the .tmp is the only copy of that session — promote it instead of
+      // deleting it, or the crash silently destroys the transcript.
       const tmpFile = jsonlFile + '.tmp';
       if (existsSync(tmpFile)) {
-        try { unlinkSync(tmpFile); } catch { /* ignore */ }
+        if (existsSync(jsonlFile)) {
+          try { unlinkSync(tmpFile); } catch { /* ignore */ }
+        } else {
+          try { renameSync(tmpFile, jsonlFile); } catch { /* ignore */ }
+        }
       }
 
       if (existsSync(jsonlFile)) {

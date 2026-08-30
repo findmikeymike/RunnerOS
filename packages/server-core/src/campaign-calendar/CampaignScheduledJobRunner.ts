@@ -22,6 +22,7 @@ import {
   loadContextDoc,
   upsertContextDoc,
 } from '@craft-agent/shared/workspace-context'
+import { withWorkspaceContextLock } from '../scheduled-work/workspace-context-lock.ts'
 
 export interface CampaignScheduledJobRunnerDeps {
   canRunBackgroundWork(workspaceRootPath: string): boolean
@@ -328,7 +329,29 @@ export class CampaignScheduledJobRunner {
     return markDone(item, job, now, { sessionId, resultSummary: agentSlug ? `Started @${agentSlug}.` : 'Started scheduled prompt session.' })
   }
 
+  /**
+   * Read-modify-write of the campaign calendar doc.
+   *
+   * Runs inside the same workspace lock every RPC mutation uses. Without it a
+   * user action landing between this read and its write — most importantly
+   * cancelling a scheduled post — is silently overwritten by stale in-memory
+   * state, and the post still goes out.
+   */
   private async persistItem(
+    workspaceId: string,
+    workspaceRootPath: string,
+    calendar: CampaignCalendar,
+    item: CampaignCalendarItem,
+  ): Promise<CampaignCalendar> {
+    return withWorkspaceContextLock(workspaceRootPath, () => this.persistItemLocked(
+      workspaceId,
+      workspaceRootPath,
+      calendar,
+      item,
+    ))
+  }
+
+  private async persistItemLocked(
     workspaceId: string,
     workspaceRootPath: string,
     calendar: CampaignCalendar,

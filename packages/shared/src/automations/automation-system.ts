@@ -603,6 +603,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
       localTime: payload.localTime,
       utcTime: payload.timestamp,
       catchUp: payload.catchUp,
+      catchUpFromMs: payload.catchUpFromMs,
     });
   }
 

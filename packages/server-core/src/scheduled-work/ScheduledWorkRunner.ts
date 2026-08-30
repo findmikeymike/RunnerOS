@@ -88,6 +88,16 @@ interface OutputMatchResult {
   message?: string
 }
 
+/**
+ * Ceiling on agent sessions this runner starts at once.
+ *
+ * Waking from sleep can make a whole night of work due in a single scan.
+ * Launching every order together spawns competing agent sessions that exhaust
+ * memory and provider rate limits, and the artist just sees a wall of
+ * failures. Orders over the cap stay `scheduled` for the next scan.
+ */
+const MAX_CONCURRENT_AGENT_TASKS = 3
+
 export class ScheduledWorkRunner {
   private readonly inFlight = new Set<string>()
   private readonly activeAgentRuns = new Set<string>()
@@ -236,6 +246,16 @@ export class ScheduledWorkRunner {
               (order, nowIso) => ({ ...order, status: 'needs-approval', attention: undefined, updatedAt: nowIso }),
             )
             if (persisted.updated) result.blocked += 1
+            continue
+          }
+
+          // Check the cap BEFORE claiming: a claimed order is already `running`,
+          // so skipping after the claim would strand it with nothing executing.
+          if (current.execution.type === 'agent-task'
+            && this.activeAgentRuns.size >= MAX_CONCURRENT_AGENT_TASKS) {
+            this.deps.log?.info?.(
+              `[ScheduledWork] Deferring "${current.title}" — ${this.activeAgentRuns.size} agent tasks already running.`,
+            )
             continue
           }
 

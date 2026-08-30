@@ -33,6 +33,95 @@ function makeQueuedFetch(responses: Array<{ status: number; body?: string; heade
   };
 }
 
+describe('PollService sustained failure', () => {
+  /** Always-failing fetch: models a revoked key or dead host. */
+  const failingFetch = (async () => { throw new Error('ECONNREFUSED'); }) as unknown as typeof fetch;
+
+  function brokenMatcher(): AutomationMatcher {
+    return {
+      id: 'p-broken',
+      pollUrl: 'https://example.com/dead',
+      pollIntervalSec: 9999,
+      actions: [{ type: 'prompt', prompt: 'noop' }],
+    };
+  }
+
+  test('escalates once after repeated failures, not on every cycle', async () => {
+    const reports: Array<{ matcherId: string; consecutiveFailures: number }> = [];
+    const svc = new PollService({
+      workspaceId: 'ws-1',
+      onEvent: () => {},
+      fetchImpl: failingFetch,
+      onSustainedFailure: (input) => { reports.push(input); },
+    });
+    svc.applyMatchers([brokenMatcher()]);
+
+    // Below the threshold: still treated as flaky, no escalation.
+    await svc.runOnce('p-broken');
+    await svc.runOnce('p-broken');
+    expect(reports).toHaveLength(0);
+
+    // Crossing the threshold escalates exactly once...
+    await svc.runOnce('p-broken');
+    expect(reports).toHaveLength(1);
+    expect(reports[0]!.matcherId).toBe('p-broken');
+    expect(reports[0]!.consecutiveFailures).toBe(3);
+
+    // ...and keeps quiet while the same outage continues.
+    await svc.runOnce('p-broken');
+    await svc.runOnce('p-broken');
+    expect(reports).toHaveLength(1);
+
+    svc.dispose();
+  });
+
+  test('recovery re-arms the alert so a later outage is reported again', async () => {
+    const reports: Array<{ consecutiveFailures: number }> = [];
+    let shouldFail = true;
+    const flakyFetch = (async () => {
+      if (shouldFail) throw new Error('ECONNREFUSED');
+      return new Response('ok', { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const svc = new PollService({
+      workspaceId: 'ws-1',
+      onEvent: () => {},
+      fetchImpl: flakyFetch,
+      onSustainedFailure: (input) => { reports.push(input); },
+    });
+    svc.applyMatchers([brokenMatcher()]);
+
+    for (let i = 0; i < 3; i += 1) await svc.runOnce('p-broken');
+    expect(reports).toHaveLength(1);
+
+    shouldFail = false;
+    await svc.runOnce('p-broken');
+
+    shouldFail = true;
+    for (let i = 0; i < 3; i += 1) await svc.runOnce('p-broken');
+    expect(reports).toHaveLength(2);
+
+    svc.dispose();
+  });
+
+  test('a throwing failure reporter cannot break the poll loop', async () => {
+    const svc = new PollService({
+      workspaceId: 'ws-1',
+      onEvent: () => {},
+      fetchImpl: failingFetch,
+      onSustainedFailure: () => { throw new Error('reporter exploded'); },
+    });
+    svc.applyMatchers([brokenMatcher()]);
+
+    for (let i = 0; i < 4; i += 1) {
+      await svc.runOnce('p-broken');
+    }
+    // Reaching here without throwing is the assertion.
+    expect(true).toBe(true);
+    svc.dispose();
+  });
+});
+
 describe('PollService', () => {
   test('first poll establishes baseline (does not fire)', async () => {
     const events: PollUrlPayload[] = [];

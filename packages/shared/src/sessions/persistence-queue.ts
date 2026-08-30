@@ -1,4 +1,4 @@
-import { writeFile, rename, unlink } from 'fs/promises'
+import { writeFile, rename } from 'fs/promises'
 import { dirname } from 'path'
 import type { StoredSession, SessionHeader } from './types.js'
 import { getSessionFilePath, ensureSessionsDir, ensureSessionDir } from './storage.js'
@@ -148,7 +148,7 @@ class SessionPersistenceQueue {
       // the original session.jsonl remains intact.
       //
       // Update signature BEFORE the write so that fs.watch events fired
-      // during unlink/rename are correctly identified as self-writes.
+      // during the rename are correctly identified as self-writes.
       // Without this, onSessionMetadataChange sees the stale signature
       // and reverts in-memory metadata on idle sessions.
       const finalSignature = getHeaderMetadataSignature(header)
@@ -156,8 +156,11 @@ class SessionPersistenceQueue {
 
       const tmpFile = filePath + '.tmp'
       await writeFile(tmpFile, lines.join('\n') + '\n', 'utf-8')
-      // On Windows, rename fails if target exists. Delete first for cross-platform compatibility.
-      try { await unlink(filePath) } catch { /* ignore if doesn't exist */ }
+      // rename() replaces the destination atomically on every platform Node
+      // supports. Do NOT unlink first: that opens a window where a crash
+      // leaves no session.jsonl at all, and the only surviving copy is the
+      // .tmp that startup cleanup used to delete. See readSessionJsonl's
+      // recovery path in ./storage.ts.
       await rename(tmpFile, filePath)
       debug(`[PersistenceQueue] Wrote session ${sessionId}`)
     } catch (error) {

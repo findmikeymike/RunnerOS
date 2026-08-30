@@ -3,7 +3,43 @@
  */
 
 import { describe, it, expect, afterEach, jest, spyOn } from 'bun:test';
-import { matchesCron } from './cron-matcher.ts';
+import { cronMatchedInWindow, matchesCron } from './cron-matcher.ts';
+
+describe('cronMatchedInWindow (suspend catch-up)', () => {
+  // The failure this exists to prevent: lid closed 08:55 Friday, opened 10:15.
+  // The 09:00 Friday pulse must still be recognized as due.
+  const friday0855 = new Date(2026, 1, 13, 8, 55, 0).getTime();
+  const friday1015 = new Date(2026, 1, 13, 10, 15, 0).getTime();
+
+  it('detects a schedule that came due inside the missed window', () => {
+    expect(cronMatchedInWindow('0 9 * * 5', friday0855, friday1015)).toBe(true);
+  });
+
+  it('ignores a schedule that was not due inside the window', () => {
+    expect(cronMatchedInWindow('0 9 * * 1', friday0855, friday1015)).toBe(false);
+  });
+
+  it('excludes the window start so an already-handled tick cannot refire', () => {
+    const friday0900 = new Date(2026, 1, 13, 9, 0, 0).getTime();
+    // Starting exactly at the occurrence: it belongs to the previous tick.
+    expect(cronMatchedInWindow('0 9 * * 5', friday0900, friday1015)).toBe(false);
+  });
+
+  it('includes an occurrence landing exactly on the window end', () => {
+    const friday0900 = new Date(2026, 1, 13, 9, 0, 0).getTime();
+    expect(cronMatchedInWindow('0 9 * * 5', friday0855, friday0900)).toBe(true);
+  });
+
+  it('rejects empty, inverted, and non-finite windows', () => {
+    expect(cronMatchedInWindow('* * * * *', friday1015, friday0855)).toBe(false);
+    expect(cronMatchedInWindow('* * * * *', friday0855, friday0855)).toBe(false);
+    expect(cronMatchedInWindow('* * * * *', Number.NaN, friday1015)).toBe(false);
+  });
+
+  it('returns false for a malformed expression instead of throwing', () => {
+    expect(cronMatchedInWindow('not a cron', friday0855, friday1015)).toBe(false);
+  });
+});
 
 describe('cron-matcher', () => {
   afterEach(() => {

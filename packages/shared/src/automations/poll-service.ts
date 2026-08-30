@@ -46,6 +46,17 @@ export interface PollServiceOptions {
   fetchImpl?: typeof fetch;
   /** Skip the first-poll baseline establishment — emit on every poll. Tests only. */
   emitOnFirstPoll?: boolean;
+  /**
+   * Called when a poll has failed enough consecutive times to be considered
+   * broken (bad URL, revoked key, dead host). Without a surface for this, a
+   * poll that fails every cycle looks "enabled" forever while producing
+   * nothing.
+   */
+  onSustainedFailure?: (input: {
+    matcherId: string;
+    consecutiveFailures: number;
+    error: string;
+  }) => void;
 }
 
 export class PollService {
@@ -93,6 +104,8 @@ export class PollService {
         lastFingerprint: null,
         timer: null,
         firstPollDone: false,
+        consecutiveFailures: 0,
+        failureReported: false,
       };
       this.buckets.set(matcherId, bucket);
       // Stagger first poll by a small jitter so a config-load with N polls
@@ -131,14 +144,41 @@ export class PollService {
 
     try {
       await this.executePoll(bucket);
+      // Recovered: drop the backoff and re-arm the alert for the next outage.
+      if (bucket.consecutiveFailures > 0) {
+        log.info(`[poll] ${matcherId} recovered after ${bucket.consecutiveFailures} failure(s)`);
+        bucket.consecutiveFailures = 0;
+        bucket.failureReported = false;
+      }
     } catch (err) {
-      log.warn(`[poll] ${matcherId} poll failed:`, err);
+      bucket.consecutiveFailures += 1;
+      const message = err instanceof Error ? err.message : String(err);
+      if (bucket.consecutiveFailures >= POLL_FAILURE_ALERT_THRESHOLD && !bucket.failureReported) {
+        // Escalate once per outage: repeating every cycle would be its own noise.
+        bucket.failureReported = true;
+        log.error(
+          `[poll] ${matcherId} has failed ${bucket.consecutiveFailures} consecutive times and is backing off: ${message}`,
+        );
+        try {
+          this.options.onSustainedFailure?.({
+            matcherId,
+            consecutiveFailures: bucket.consecutiveFailures,
+            error: message,
+          });
+        } catch {
+          // A reporting failure must never stop the poll loop.
+        }
+      } else {
+        log.warn(`[poll] ${matcherId} poll failed:`, err);
+      }
     }
 
-    // Reschedule, regardless of outcome
+    // Reschedule, regardless of outcome. Failing polls back off exponentially
+    // so a dead endpoint is not hit at full cadence indefinitely.
     if (this.disposed) return;
     if (bucket.timer) clearTimeout(bucket.timer);
-    bucket.timer = setTimeout(() => this.runOnce(matcherId), bucket.intervalMs);
+    const delay = bucket.intervalMs * pollBackoffMultiplier(bucket.consecutiveFailures);
+    bucket.timer = setTimeout(() => this.runOnce(matcherId), delay);
   }
 
   private async executePoll(bucket: PollBucket): Promise<void> {
@@ -242,6 +282,20 @@ interface PollBucket {
   timer: ReturnType<typeof setTimeout> | null;
   /** True after the first poll completes; baseline-establishment marker. */
   firstPollDone: boolean;
+  /** Consecutive failed polls; resets to 0 on any success. Drives backoff. */
+  consecutiveFailures: number;
+  /** True once the sustained-failure escalation has fired for this outage. */
+  failureReported: boolean;
+}
+
+/** Consecutive failures before a poll is treated as broken rather than flaky. */
+const POLL_FAILURE_ALERT_THRESHOLD = 3;
+/** Ceiling on the backoff multiplier so a dead endpoint is not hammered. */
+const POLL_MAX_BACKOFF_MULTIPLIER = 8;
+
+function pollBackoffMultiplier(consecutiveFailures: number): number {
+  if (consecutiveFailures <= 0) return 1;
+  return Math.min(2 ** (consecutiveFailures - 1), POLL_MAX_BACKOFF_MULTIPLIER);
 }
 
 function clampInterval(input: number | undefined): number {

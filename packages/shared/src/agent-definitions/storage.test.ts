@@ -503,6 +503,28 @@ body
     expect(loadGlobalAgent('orchestrator', { globalAgentsDir })!.metadata.name).toBe('Orchestrator')
   })
 
+  test('ensureRequiredAgents repairs a required agent truncated by a crash', () => {
+    const required = [
+      {
+        slug: 'concierge',
+        metadata: { name: 'HNIC', description: 'Routes work.' },
+        systemPrompt: 'Route work.',
+      },
+    ]
+
+    expect(ensureRequiredAgents(required, { globalAgentsDir }).ensured).toBe(1)
+
+    // Simulate a crash during a non-atomic write: the file exists but holds
+    // nothing parseable. A bare existence check would skip it forever and
+    // leave the user with no Concierge.
+    const file = join(globalAgentsDir, 'concierge', 'AGENT.md')
+    writeFileSync(file, '', 'utf-8')
+    expect(loadGlobalAgent('concierge', { globalAgentsDir })).toBeNull()
+
+    expect(ensureRequiredAgents(required, { globalAgentsDir }).ensured).toBe(1)
+    expect(loadGlobalAgent('concierge', { globalAgentsDir })!.metadata.name).toBe('HNIC')
+  })
+
   test('starter library includes HNIC as workflow-aware work router', () => {
     const hnic = STARTER_AGENTS.find((agent) => agent.slug === 'concierge')
 

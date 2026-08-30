@@ -28,6 +28,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import matter from 'gray-matter';
+import { atomicWriteFileSync } from '../utils/files.ts';
 import type { PermissionMode } from '../agent/mode-types.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 import { normalizeThinkingLevel, THINKING_LEVEL_IDS } from '../agent/thinking-levels.ts';
@@ -448,7 +449,9 @@ export function writeGlobalAgent(input: CreateAgentInput, options?: AgentStorage
   const dir = getGlobalAgentDir(input.slug, options);
   mkdirSync(dir, { recursive: true });
   const file = join(dir, AGENT_FILE);
-  writeFileSync(file, serializeAgent(input.metadata, input.systemPrompt), 'utf-8');
+  // Atomic: a crash mid-write must not leave a truncated AGENT.md, which
+  // parses to nothing while still satisfying the reseed existence check.
+  atomicWriteFileSync(file, serializeAgent(input.metadata, input.systemPrompt));
   forgetDeletedAgent(input.slug, options);
 
   const loaded = loadGlobalAgent(input.slug, options);
@@ -553,9 +556,13 @@ export function ensureRequiredAgents(
     if (readDeletedAgentSlugs(options).has(a.slug)) continue;
     const dir = getGlobalAgentDir(a.slug, options);
     const file = join(dir, AGENT_FILE);
-    if (existsSync(file)) continue;
+    // Presence alone is not health: a file truncated by a crash still exists
+    // but parses to nothing, and a bare existence check would leave a
+    // required agent (the Concierge among them) permanently broken. Reseed
+    // when the file is missing OR unreadable.
+    if (existsSync(file) && loadGlobalAgent(a.slug, options)) continue;
     mkdirSync(dir, { recursive: true });
-    writeFileSync(file, serializeAgent(a.metadata, a.systemPrompt), 'utf-8');
+    atomicWriteFileSync(file, serializeAgent(a.metadata, a.systemPrompt));
     ensured += 1;
   }
   return { ensured };

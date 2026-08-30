@@ -19,9 +19,9 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
-  writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { atomicWriteFileSync } from '../utils/files.ts';
 import matter from 'gray-matter';
 import { CONCIERGE_SLUG, AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 import {
@@ -486,10 +486,12 @@ export function upsertContextDoc(
   }
   const dir = getContextDocDir(workspaceRootPath, input.slug);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(
+  // Atomic: a crash mid-write must never leave a truncated CONTEXT.md, which
+  // the loader treats as unparseable and silently drops — losing the artist's
+  // profile, calendar, or campaign brief.
+  atomicWriteFileSync(
     join(dir, CONTEXT_FILE),
     serializeContextDoc(input.metadata, input.body),
-    'utf-8',
   );
   const loaded = loadContextDoc(workspaceRootPath, input.slug);
   if (!loaded) throw new Error(`Failed to re-load context doc "${input.slug}" after write`);

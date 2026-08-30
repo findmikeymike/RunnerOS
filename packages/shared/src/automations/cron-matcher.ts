@@ -43,6 +43,34 @@ export function normalizeStandardFiveFieldCron(expr: string | undefined): string
   return trimmed;
 }
 
+/**
+ * Did this cron have an occurrence inside (fromMs, toMs]?
+ *
+ * `matchesCron` only ever asks about the current minute, so a tick fired after
+ * the process was suspended (laptop sleep, app closed) can never see the
+ * schedule it slept through. This answers the catch-up question instead:
+ * "while we were not running, should this have fired?"
+ *
+ * The window is exclusive at the start so the tick that already handled
+ * `fromMs` cannot fire the same occurrence twice.
+ */
+export function cronMatchedInWindow(
+  cronExpr: string,
+  fromMs: number,
+  toMs: number,
+  timezone?: string,
+): boolean {
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) return false;
+  try {
+    const job = new Cron(cronExpr, timezone ? { timezone } : {});
+    const nextRun = job.nextRun(new Date(fromMs));
+    return !!nextRun && nextRun.getTime() <= toMs;
+  } catch (error) {
+    console.error(`[cronMatchedInWindow] Error:`, error);
+    return false;
+  }
+}
+
 export function matchesCron(cronExpr: string, timezone?: string): boolean {
   try {
     const options = timezone ? { timezone } : {};

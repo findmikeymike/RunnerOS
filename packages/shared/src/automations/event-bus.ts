@@ -57,6 +57,8 @@ export interface SchedulerTickPayload extends BaseEventPayload {
   localTime: string;
   utcTime: string;
   catchUp?: boolean;
+  /** Epoch ms to replay schedules from when this tick follows a suspend/restart. */
+  catchUpFromMs?: number;
 }
 
 /** Label config change payload */

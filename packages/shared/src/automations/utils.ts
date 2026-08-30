@@ -7,7 +7,7 @@
 
 import type { BaseEventPayload } from './event-bus.ts';
 import type { AutomationEvent, AutomationMatcher, PromptReferences, AgentEvent, SdkAutomationInput } from './types.ts';
-import { matchesCron } from './cron-matcher.ts';
+import { cronMatchedInWindow, matchesCron } from './cron-matcher.ts';
 import { sanitizeForShell } from './security.ts';
 import { evaluateConditions } from './conditions.ts';
 
@@ -156,10 +156,22 @@ export interface MatcherContext {
  * Do not call directly from feature code. Use matcherMatchesWithContext()/adapters
  * so condition gating is never bypassed.
  */
-function matchesBasePredicate(matcher: AutomationMatcher, event: AutomationEvent, matchValue: string): boolean {
+function matchesBasePredicate(
+  matcher: AutomationMatcher,
+  event: AutomationEvent,
+  matchValue: string,
+  payload?: Record<string, unknown>,
+): boolean {
   if (matcher.enabled === false) return false;
   if (event === 'SchedulerTick') {
-    return !!matcher.cron && matchesCron(matcher.cron, matcher.timezone);
+    if (!matcher.cron) return false;
+    if (matchesCron(matcher.cron, matcher.timezone)) return true;
+    // Catch-up tick: the process was suspended or restarted, so also ask
+    // whether this cron was due during the gap we missed.
+    const catchUpFromMs = payload?.catchUpFromMs;
+    if (typeof catchUpFromMs !== 'number') return false;
+    const toMs = typeof payload?.timestamp === 'number' ? payload.timestamp : Date.now();
+    return cronMatchedInWindow(matcher.cron, catchUpFromMs, toMs, matcher.timezone);
   }
   // WebhookReceive: slug is an exact-match URL identifier. The trigger server
   // already routes by slug, but matchers without a slug must NOT match (they'd
@@ -218,7 +230,7 @@ export function matcherMatchesWithContext(
     if (matcher.id !== payloadMatcherId) return false;
   }
 
-  if (!matchesBasePredicate(matcher, event, context.matchValue)) return false;
+  if (!matchesBasePredicate(matcher, event, context.matchValue, context.payload)) return false;
 
   if (matcher.conditions?.length) {
     return evaluateConditions(matcher.conditions, {
