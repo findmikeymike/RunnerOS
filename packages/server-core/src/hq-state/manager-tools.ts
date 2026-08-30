@@ -58,6 +58,7 @@ import type {
 } from '@craft-agent/session-tools-core';
 import { existsSync } from 'node:fs';
 import { buildHqStateInput, buildManagerCampaignSnapshot, buildManagerCampaignSnapshots, findArtistHqWorkspace } from './snapshot';
+import { collectArtistTimeline } from './timeline-collector';
 import { getCampaignStateRefreshDiagnostic, getHqStateRefreshDiagnostic } from './refresh';
 import { buildHqOperationalSnapshot } from './operational';
 
@@ -255,8 +256,30 @@ export function getArtistContextDetail(
       source = ARTIST_CALENDAR_CONTEXT_SLUG;
       const parsed = parseArtistCalendarDocResult(bySlug.get(source));
       if (!parsed.ok) warning = parsed.error;
-      data = { events: parsed.calendar.events.filter((item) => !item.deletedAt).slice(0, limit).map((item) => ({ id: item.id, date: item.date, time: item.time, title: cap(item.title, 160), notes: cap(item.notes, 500), relatedPersonIds: item.relatedPersonIds })) };
+      data = {
+        events: sortDatedAscending(
+          windowDated(parsed.calendar.events.filter((item) => !item.deletedAt), input.from, input.to),
+        ).slice(0, limit).map((item) => ({ id: item.id, date: item.date, time: item.time, title: cap(item.title, 160), notes: cap(item.notes, 500), relatedPersonIds: item.relatedPersonIds })),
+      };
       updatedAt = parsed.calendar.updatedAt;
+      break;
+    }
+    case 'timeline': {
+      // The unified artist timeline: HQ events, campaign items, scheduled
+      // work, release dates, and goal deadlines in one dated list. Spec 20.
+      source = 'artist-timeline';
+      try {
+        const timeline = collectArtistTimeline(
+          { from: input.from, to: input.to, tier: input.tier, limit: clamp(input.limit, 30, 1, 60) },
+          now,
+        );
+        data = timeline;
+        warning = timeline.warnings.length > 0
+          ? timeline.warnings.map((item) => `${item.source}${item.workspaceId ? ` (${item.workspaceId})` : ''}: ${item.reason}`).join(' | ')
+          : undefined;
+      } catch (error) {
+        return missing(source, error instanceof Error ? error.message : 'Timeline is unavailable.');
+      }
       break;
     }
     case 'network': {
@@ -315,11 +338,27 @@ export function getCampaignContextDetail(
   }
   if (include.has('calendar')) {
     const result = parseCampaignCalendarDocResult(loadContextDoc(workspace.rootPath, CAMPAIGN_CALENDAR_CONTEXT_SLUG) ?? undefined, workspace.id);
-    sections.calendar = result.ok ? { updatedAt: result.calendar.updatedAt, items: result.calendar.items.filter((item) => !item.deletedAt).slice(0, limit) } : { unavailable: true, error: result.error };
+    sections.calendar = result.ok
+      ? {
+        updatedAt: result.calendar.updatedAt,
+        items: sortDatedAscending(
+          windowDated(result.calendar.items.filter((item) => !item.deletedAt), input.from, input.to),
+        ).slice(0, limit),
+      }
+      : { unavailable: true, error: result.error };
   }
   if (include.has('work')) {
     const result = parseScheduledWorkDocResult(loadContextDoc(workspace.rootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, workspace.id);
-    sections.work = result.ok ? { updatedAt: result.work.updatedAt, items: result.work.items.filter((item) => !item.deletedAt).slice(0, limit) } : { unavailable: true, error: result.error };
+    sections.work = result.ok
+      ? {
+        updatedAt: result.work.updatedAt,
+        items: result.work.items
+          .filter((item) => !item.deletedAt)
+          .filter((item) => (!input.from || item.startAt.slice(0, 10) >= input.from) && (!input.to || item.startAt.slice(0, 10) <= input.to))
+          .sort((left, right) => left.startAt.localeCompare(right.startAt))
+          .slice(0, limit),
+      }
+      : { unavailable: true, error: result.error };
   }
   if (include.has('assets')) {
     const present = existsSync(getMissionAssetManifestPath(workspace.rootPath));
@@ -411,6 +450,18 @@ function selectCampaign(
   const hit = candidates[0];
   const workspace = campaigns.find((item) => item.id === hit?.snapshot.workspaceId);
   return workspace ? { workspace, reason: `${input.select} by release date ${hit!.date}.` } : null;
+}
+
+/** Keeps only entries whose YYYY-MM-DD date falls inside the optional window. */
+function windowDated<T extends { date: string }>(items: T[], from?: string, to?: string): T[] {
+  return items.filter((item) => (!from || item.date >= from) && (!to || item.date <= to));
+}
+
+/** Chronological ascending — first-N-in-doc-order was a bug, not a contract. */
+function sortDatedAscending<T extends { date: string; time?: string }>(items: T[]): T[] {
+  return [...items].sort((left, right) =>
+    `${left.date}T${left.time ?? '00:00'}`.localeCompare(`${right.date}T${right.time ?? '00:00'}`),
+  );
 }
 
 function readJsonBlock(body: string | undefined): unknown | null {

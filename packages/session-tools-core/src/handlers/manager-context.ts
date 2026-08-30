@@ -5,15 +5,25 @@ import { errorResponse, successResponse } from '../response.ts';
 export interface GetManagerBriefInput { knownRevision?: string }
 export interface GetCampaignBriefInput { knownRevision?: string }
 export interface GetArtistContextInput {
-  topic: 'profile' | 'branding' | 'voice' | 'month-plan' | 'growth' | 'intel' | 'calendar' | 'network' | 'community' | 'vault';
+  topic: 'profile' | 'branding' | 'voice' | 'month-plan' | 'growth' | 'intel' | 'calendar' | 'timeline' | 'network' | 'community' | 'vault';
   month?: string;
   query?: string;
+  /** Window start (YYYY-MM-DD) for calendar and timeline topics. Defaults to today. */
+  from?: string;
+  /** Window end (YYYY-MM-DD). Timeline defaults to 90 days after `from`. */
+  to?: string;
+  /** Timeline only: restrict to one tier instead of both. */
+  tier?: 'strategic' | 'operational';
   limit?: number;
 }
 export interface GetCampaignContextInput {
   select: 'focus' | 'next-future' | 'latest-past' | 'primary' | 'by-id';
   campaignId?: string;
   include?: Array<'brief' | 'readiness' | 'calendar' | 'work' | 'assets' | 'outputs'>;
+  /** Window start (YYYY-MM-DD) for calendar and work sections. */
+  from?: string;
+  /** Window end (YYYY-MM-DD) for calendar and work sections. */
+  to?: string;
   limit?: number;
 }
 export interface ListWorkspaceContextInput { query?: string; limit?: number }

@@ -3364,6 +3364,14 @@ export class SessionManager implements ISessionManager {
           ).updated) {
             sessionLog.info('[skills] Upgraded Artist Manager campaign retrieval rules')
           }
+          if (artistManagerOperatingSkillMd && replaceRequiredGlobalSkillFileIfHashMatches(
+            'artist-manager-operating-system',
+            'SKILL.md',
+            '2afda63c131d62adb67a5ee618e22281270549b869487156a74a8bdda1713f4f',
+            artistManagerOperatingSkillMd,
+          ).updated) {
+            sessionLog.info('[skills] Taught Artist Manager the unified timeline topic')
+          }
           const brandingAgent = STARTER_AGENTS.find(agent => agent.slug === 'branding-agent')
           const brandingSkillSlugs = brandingAgent?.metadata.skills ?? []
           const missingBrandingSkills = brandingSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
