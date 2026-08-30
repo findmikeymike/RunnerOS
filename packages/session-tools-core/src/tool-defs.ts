@@ -282,7 +282,6 @@ export const UpdateGoalSchema = z.object({
   status: z.enum(['complete', 'blocked']),
   summary: z.string().min(1).max(4_000),
   evidence: z.array(z.string().min(1).max(4_000)).max(20).optional(),
-  blockerFingerprint: z.string().min(1).max(500).optional(),
 });
 
 export const ListSessionsSchema = z.object({
@@ -1209,7 +1208,7 @@ Call with no arguments to introspect your own session state.`,
 
   create_goal: `Propose a bounded Goal only when the user explicitly asked to start Goal Mode. This tool never activates work by itself: it opens a confirmation step for the exact objective, done condition, and round cap. Do not infer Goal Mode from a long prompt.`,
 
-  update_goal: `Request that the current chat-native Goal be marked complete or blocked. The host audits the request after the turn finishes. Complete requires a concise summary and concrete evidence when the done condition is verifiable. Blocked requires a stable blocker fingerprint and is accepted only after the same blocker recurs across three Goal turns. This tool cannot pause, resume, cancel, clear, or increase budget.`,
+  update_goal: `Request that the current chat-native Goal be marked complete or blocked. The host audits the request after the turn finishes. Complete requires a concise summary and concrete evidence when the done condition is verifiable. The host derives and audits blocker identity across Goal turns. This tool cannot pause, resume, cancel, clear, or increase budget.`,
 
   list_sessions: `List sessions in the workspace. Returns total count + paginated results.
 

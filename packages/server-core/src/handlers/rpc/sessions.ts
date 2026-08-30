@@ -105,6 +105,8 @@ function permissionForSessionCommand(command: SessionCommand): TeamPermissionAct
     case 'markCompactionComplete':
     case 'markPendingPlanExecutionDispatched':
     case 'clearPendingPlanExecution':
+    case 'goalPrepare':
+    case 'goalCreate':
     case 'goalPause':
     case 'goalResume':
     case 'goalEdit':
@@ -418,6 +420,10 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
         return sessionManager.markPendingPlanExecutionDispatched(sessionId)
       case 'clearPendingPlanExecution':
         return sessionManager.clearPendingPlanExecution(sessionId)
+      case 'goalPrepare':
+        return sessionManager.prepareChatGoalCreation(sessionId, command.proposal)
+      case 'goalCreate':
+        return sessionManager.startChatGoal(sessionId, command.confirmationNonce, command.initialMessage)
       case 'goalPause':
         return sessionManager.pauseChatGoal(
           sessionId,

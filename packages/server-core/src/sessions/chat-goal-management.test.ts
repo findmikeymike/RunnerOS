@@ -12,17 +12,24 @@ describe('SessionManager chat Goal management', () => {
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), 'chat-goal-management-'));
     manager = new SessionManager();
+    (manager as unknown as { dispatchChatGoalContinuation(): void }).dispatchChatGoalContinuation = () => {};
   });
 
   afterEach(() => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  function installSession() {
+  function installSession(options: { withGoal?: boolean; hidden?: boolean } = {}) {
     const workspace = { id: 'ws-test', name: 'Test', rootPath: root, createdAt: 1 };
     const chatGoal = createChatGoalState({ objective: 'Finish the plan' }, { id: 'goal-1', now: 100 });
     const managed = createManagedSession(
-      { id: 'session-1', createdAt: 1, chatGoal },
+      {
+        id: 'session-1',
+        name: 'Goal test session',
+        createdAt: 1,
+        chatGoal: options.withGoal === false ? undefined : chatGoal,
+        hidden: options.hidden,
+      },
       workspace as never,
       { messagesLoaded: true },
     );
@@ -89,7 +96,6 @@ describe('SessionManager chat Goal management', () => {
       revision: 1,
       status: 'blocked',
       summary: 'Blocked.',
-      blockerFingerprint: 'same-blocker',
     })).rejects.toThrow('already submitted');
   });
 
@@ -122,11 +128,115 @@ describe('SessionManager chat Goal management', () => {
   });
 
   it('rejects Goal proposals from hidden sessions', async () => {
-    const managed = installSession();
-    managed.hidden = true;
+    installSession({ hidden: true });
 
     await expect(manager.proposeChatGoal('session-1', {
       objective: 'Run invisibly',
     })).rejects.toThrow('visible user-owned chat');
+  });
+
+  it('requires a host nonce and durably admits the first Goal turn before acknowledgement', async () => {
+    installSession({ withGoal: false });
+    const prepared = await manager.prepareChatGoalCreation('session-1', {
+      objective: 'Finish the release plan',
+      doneWhen: 'The plan is saved and verified',
+      maxRounds: 4,
+    });
+
+    await expect(manager.startChatGoal('session-1', 'wrong-nonce', 'Start the plan')).rejects.toThrow('confirmation');
+    expect(manager.getChatGoal('session-1')).toBeUndefined();
+
+    let acceptedMessageId: string | undefined;
+    await manager.sendMessage(
+      'session-1',
+      'Start the plan',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (messageId) => { acceptedMessageId = messageId; },
+      { kind: 'create', confirmationNonce: prepared.confirmationNonce },
+    ).catch(() => { /* expected post-ack provider-init failure in this unit harness */ });
+    const persisted = loadSession(root, 'session-1');
+    expect(manager.getChatGoal('session-1')?.round).toBe(1);
+    expect(persisted?.chatGoal?.id).toBe(manager.getChatGoal('session-1')?.id);
+    expect(persisted?.messages.some(message => message.id === acceptedMessageId && message.type === 'user')).toBe(true);
+    expect(persisted?.messages.some(message => message.goalEvent?.type === 'created')).toBe(true);
+  });
+
+  it('finalizes a provisional completion only after a clean final response', async () => {
+    const managed = installSession();
+    await manager.flagSession('session-1');
+    managed.isProcessing = true;
+    managed.processingGeneration = 1;
+    managed.activeChatGoalTurn = {
+      origin: 'goal-initial',
+      goalId: 'goal-1',
+      goalRevision: 1,
+      admittedRound: 1,
+      completedToolCountAtStart: 0,
+      failedToolCountAtStart: 0,
+    };
+    managed.messages.push({ id: 'assistant-1', role: 'assistant', content: 'Finished.', timestamp: 200 });
+    await manager.requestChatGoalUpdate('session-1', {
+      goalId: 'goal-1',
+      revision: 1,
+      status: 'complete',
+      summary: 'Finished the plan.',
+    });
+
+    await (manager as unknown as {
+      onProcessingStopped(id: string, reason: 'complete'): Promise<void>;
+    }).onProcessingStopped('session-1', 'complete');
+
+    expect(manager.getChatGoal('session-1')?.status).toBe('complete');
+    expect(loadSession(root, 'session-1')?.chatGoal?.completion?.summary).toBe('Finished the plan.');
+  });
+
+  it('deduplicates completion and reserves only one continuation', async () => {
+    const managed = installSession();
+    await manager.flagSession('session-1');
+    managed.isProcessing = true;
+    managed.processingGeneration = 1;
+    managed.activeChatGoalTurn = {
+      origin: 'goal-initial',
+      goalId: 'goal-1',
+      goalRevision: 1,
+      admittedRound: 1,
+      completedToolCountAtStart: 0,
+      failedToolCountAtStart: 0,
+    };
+    managed.messages.push({ id: 'assistant-1', role: 'assistant', content: 'More work remains.', timestamp: 200 });
+    let dispatches = 0;
+    (manager as unknown as { dispatchChatGoalContinuation(): void }).dispatchChatGoalContinuation = () => { dispatches += 1; };
+    const stop = (manager as unknown as {
+      onProcessingStopped(id: string, reason: 'complete'): Promise<void>;
+    }).onProcessingStopped.bind(manager);
+
+    await Promise.all([stop('session-1', 'complete'), stop('session-1', 'complete')]);
+    expect(dispatches).toBe(1);
+  });
+
+  it('pauses instead of continuing across an authentication boundary', async () => {
+    const managed = installSession();
+    await manager.flagSession('session-1');
+    managed.isProcessing = true;
+    managed.processingGeneration = 1;
+    managed.pendingAuthRequest = { requestId: 'auth-1' } as never;
+    managed.messages.push({ id: 'assistant-1', role: 'assistant', content: 'Authentication is required.', timestamp: 200 });
+    await manager.requestChatGoalUpdate('session-1', {
+      goalId: 'goal-1',
+      revision: 1,
+      status: 'complete',
+      summary: 'Claimed complete despite auth.',
+    });
+
+    await (manager as unknown as {
+      onProcessingStopped(id: string, reason: 'complete'): Promise<void>;
+    }).onProcessingStopped('session-1', 'complete');
+
+    expect(manager.getChatGoal('session-1')?.status).toBe('paused');
+    expect(manager.getChatGoal('session-1')?.stop?.code).toBe('needs-auth');
   });
 });

@@ -6,7 +6,7 @@ import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger 
 import { basename, dirname, join } from 'path'
 import { existsSync } from 'fs'
 import { readFile, writeFile, mkdir, rename } from 'fs/promises'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns, generateConversationSummary, resolveKeepBackgroundTasksAlive } from '@craft-agent/shared/agent'
 import {
   resolveSessionConnection,
@@ -94,9 +94,13 @@ import {
   type ChatGoalEventType,
   type ChatGoalStopCode,
   createChatGoalState,
+  admitChatGoalRound,
   assertChatGoalRevision,
+  completeChatGoalState,
   editChatGoalState,
+  limitChatGoalByBudget,
   pauseChatGoalState,
+  recordChatGoalBlocker,
   resumeChatGoalState,
   cancelChatGoalState,
   disarmChatGoalAfterRestart,
@@ -133,6 +137,13 @@ import {
 } from '../campaign-calendar/CampaignScheduledJobRunner'
 import { ScheduledWorkRunner, type ScheduledSocialExecutor, type ScheduledSocialPreparer } from '../scheduled-work/ScheduledWorkRunner'
 import { queueAutomationWork } from '../scheduled-work/AutomationWorkQueue'
+import {
+  ChatGoalDriver,
+  buildChatGoalContinuationPrompt,
+  detectChatGoalWaitBoundary,
+  type ChatGoalReservation,
+  type ChatGoalTurnContext,
+} from './ChatGoalDriver'
 import { withWorkspaceContextLock } from '../scheduled-work/workspace-context-lock'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
 import { AgentMessageService } from '../agent-messaging/AgentMessageService'
@@ -1516,6 +1527,17 @@ interface ManagedSession {
   chatGoal?: ChatGoalState
   /** Model-requested completion/blocking, finalized only after turn settlement. */
   pendingChatGoalUpdate?: UpdateGoalToolInput
+  /** Host-issued proposal awaiting a user confirmation action. */
+  pendingChatGoalProposal?: {
+    nonce: string
+    proposal: CreateChatGoalInput
+    createdAt: number
+  }
+  /** Host-owned accounting for the currently admitted turn. */
+  activeChatGoalTurn?: ChatGoalTurnContext
+  lastSettledProcessingGeneration?: number
+  chatGoalNoProgressTurns?: number
+  chatGoalLastAssistantFingerprint?: string
   /** Startup could not durably disarm an active Goal; execution stays blocked until repaired. */
   chatGoalPersistenceBlocked?: boolean
   // Promise that resolves when the agent instance is ready (for title gen to await)
@@ -1528,6 +1550,10 @@ interface ManagedSession {
   // Ephemeral — not persisted to disk. Cleared after one-shot injection.
   wasInterrupted?: boolean
 }
+
+type ChatGoalSendAdmission =
+  | { kind: 'create'; confirmationNonce: string }
+  | { kind: 'continuation'; reservationId: string }
 
 /**
  * Create a ManagedSession from any session-like source (SessionMetadata, SessionConfig, StoredSession).
@@ -1660,6 +1686,14 @@ function getCompletedToolUseSummary(managed: ManagedSession | undefined): { coun
   return { count: names.length, names: Array.from(new Set(names)).sort() }
 }
 
+function getFailedToolUseCount(managed: ManagedSession | undefined): number {
+  if (!managed) return 0
+  return managed.messages.filter((message) => (
+    message.role === 'tool'
+    && (message.isError === true || message.toolStatus === 'error')
+  )).length
+}
+
 /**
  * Convert a ManagedSession to a renderer-side Session object.
  * Uses pickSessionFields() for persistent fields so new fields propagate automatically.
@@ -1748,6 +1782,7 @@ export class SessionManager implements ISessionManager {
   // O(1) index: taskId → sessionId for background task output lookup (avoids O(n) session scan)
   private taskOutputIndex: Map<string, string> = new Map()
   private readonly keepBackgroundTasksAlive = resolveKeepBackgroundTasksAlive()
+  private readonly chatGoalDriver = new ChatGoalDriver()
 
   private async acquireSendMessageAdmissionLock(sessionId: string): Promise<() => void> {
     const previous = this.sendMessageAdmissionLocks.get(sessionId) ?? Promise.resolve()
@@ -6881,6 +6916,25 @@ user a clickable link to where the thing now lives.`
           if (managed.isProcessing && managed.agent) {
             sessionLog.info(`Interrupting for plan submission in session ${managed.id}`)
             managed.agent.interruptForHandoff(AbortReason.PlanSubmitted)
+            if (managed.chatGoal?.status === 'active') {
+              this.chatGoalDriver.invalidate(managed.id)
+              managed.pendingChatGoalUpdate = undefined
+              const paused = pauseChatGoalState(managed.chatGoal, {
+                code: 'needs-approval',
+                message: 'Goal paused while the submitted plan awaits user review.',
+              })
+              try {
+                await this.commitChatGoalState(managed, paused, 'paused', paused.stop!.message)
+              } catch (error) {
+                sessionLog.error(`Failed to persist Goal pause for plan handoff in session ${managed.id}:`, error)
+                managed.chatGoal = pauseChatGoalState(paused, {
+                  code: 'persistence-failed',
+                  message: 'Goal is paused because its plan-handoff state could not be saved.',
+                })
+                managed.chatGoalPersistenceBlocked = true
+                this.sendEvent({ type: 'goal_state_changed', sessionId: managed.id, chatGoal: managed.chatGoal }, managed.workspace.id)
+              }
+            }
             this.setProcessing(managed, false)
 
             // Release browser overlay + session binding because the agent is no longer running.
@@ -6899,7 +6953,7 @@ user a clickable link to where the thing now lives.`
       }
 
       // Wire up onAuthRequest to add auth message to conversation and pause execution
-      managed.agent.onAuthRequest = (request) => {
+      managed.agent.onAuthRequest = async (request) => {
         sessionLog.info(`Auth request for session ${managed.id}:`, request.type, request.sourceSlug)
 
         // Create auth-request message
@@ -6937,6 +6991,25 @@ user a clickable link to where the thing now lives.`
         if (managed.isProcessing && managed.agent) {
           sessionLog.info(`Interrupting for auth request in session ${managed.id}`)
           managed.agent.interruptForHandoff(AbortReason.AuthRequest)
+          if (managed.chatGoal?.status === 'active') {
+            this.chatGoalDriver.invalidate(managed.id)
+            managed.pendingChatGoalUpdate = undefined
+            const paused = pauseChatGoalState(managed.chatGoal, {
+              code: 'needs-auth',
+              message: 'Goal paused until the requested authentication is completed.',
+            })
+            try {
+              await this.commitChatGoalState(managed, paused, 'paused', paused.stop!.message)
+            } catch (error) {
+              sessionLog.error(`Failed to persist Goal pause for auth handoff in session ${managed.id}:`, error)
+              managed.chatGoal = pauseChatGoalState(paused, {
+                code: 'persistence-failed',
+                message: 'Goal is paused because its authentication-handoff state could not be saved.',
+              })
+              managed.chatGoalPersistenceBlocked = true
+              this.sendEvent({ type: 'goal_state_changed', sessionId: managed.id, chatGoal: managed.chatGoal }, managed.workspace.id)
+            }
+          }
           this.setProcessing(managed, false)
 
           // Release browser overlay + session binding because the agent is paused awaiting user auth.
@@ -8257,12 +8330,11 @@ user a clickable link to where the thing now lives.`
     return this.sessions.get(sessionId)?.chatGoal
   }
 
-  async proposeChatGoal(sessionId: string, input: CreateGoalToolInput): Promise<{ proposed: true; proposal: CreateChatGoalInput; message: string }> {
-    const managed = this.sessions.get(sessionId)
-    if (!managed) throw new Error('Session not found')
+  private stageChatGoalProposal(managed: ManagedSession, input: CreateChatGoalInput): { proposal: CreateChatGoalInput; confirmationNonce: string } {
     if (managed.hidden || hasAutomatedSessionAncestry(managed.launchReceipt)) {
       throw new Error('Goal Mode can only be started from a visible user-owned chat')
     }
+    if (managed.isArchived) throw new Error('Unarchive this chat before starting Goal Mode')
     if (managed.chatGoal && !isChatGoalTerminal(managed.chatGoal.status)) {
       throw new Error('This chat already has a non-terminal Goal')
     }
@@ -8273,7 +8345,27 @@ user a clickable link to where the thing now lives.`
       maxRounds: validated.maxRounds,
       tokenBudget: validated.tokenBudget,
     }
-    this.sendEvent({ type: 'goal_creation_proposed', sessionId, proposal }, managed.workspace.id)
+    const confirmationNonce = randomUUID()
+    managed.pendingChatGoalProposal = { nonce: confirmationNonce, proposal, createdAt: Date.now() }
+    this.sendEvent({
+      type: 'goal_creation_proposed',
+      sessionId: managed.id,
+      proposal,
+      confirmationNonce,
+    }, managed.workspace.id)
+    return { proposal, confirmationNonce }
+  }
+
+  async prepareChatGoalCreation(sessionId: string, input: CreateChatGoalInput): Promise<{ proposal: CreateChatGoalInput; confirmationNonce: string }> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) throw new Error('Session not found')
+    return this.stageChatGoalProposal(managed, input)
+  }
+
+  async proposeChatGoal(sessionId: string, input: CreateGoalToolInput): Promise<{ proposed: true; proposal: CreateChatGoalInput; message: string }> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) throw new Error('Session not found')
+    const { proposal } = this.stageChatGoalProposal(managed, input)
     return {
       proposed: true,
       proposal,
@@ -8281,14 +8373,47 @@ user a clickable link to where the thing now lives.`
     }
   }
 
+  async startChatGoal(
+    sessionId: string,
+    confirmationNonce: string,
+    initialMessage: string,
+  ): Promise<{ accepted: true; messageId: string; chatGoal: ChatGoalState }> {
+    if (!initialMessage.trim()) throw new Error('The first Goal message is required')
+    return new Promise((resolve, reject) => {
+      let acknowledged = false
+      void this.sendMessage(
+        sessionId,
+        initialMessage.trim(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        (messageId) => {
+          acknowledged = true
+          const chatGoal = this.sessions.get(sessionId)?.chatGoal
+          if (!chatGoal) {
+            reject(new Error('Goal admission completed without an authoritative Goal state'))
+            return
+          }
+          resolve({ accepted: true, messageId, chatGoal })
+        },
+        { kind: 'create', confirmationNonce },
+      ).catch((error) => {
+        if (!acknowledged) {
+          reject(error)
+          return
+        }
+        void this.pauseChatGoalAfterExecutionFailure(sessionId, error)
+      })
+    })
+  }
+
   async requestChatGoalUpdate(sessionId: string, input: UpdateGoalToolInput): Promise<{ accepted: true; pending: true; status: 'complete' | 'blocked' }> {
     const managed = this.sessions.get(sessionId)
     if (!managed) throw new Error('Session not found')
     const goal = assertChatGoalRevision(managed.chatGoal, input.goalId, input.revision)
     if (goal.status !== 'active') throw new Error('Only an active Goal can request completion or blocking')
-    if (input.status === 'blocked' && !input.blockerFingerprint?.trim()) {
-      throw new Error('Blocked Goal requests require a stable blocker fingerprint')
-    }
     if (managed.pendingChatGoalUpdate) {
       throw new Error('This turn already submitted a Goal update request')
     }
@@ -8296,7 +8421,6 @@ user a clickable link to where the thing now lives.`
       ...input,
       summary: input.summary.trim(),
       evidence: input.evidence?.map(item => item.trim()).filter(Boolean),
-      blockerFingerprint: input.blockerFingerprint?.trim(),
     }
     return { accepted: true, pending: true, status: input.status }
   }
@@ -8329,6 +8453,14 @@ user a clickable link to where the thing now lives.`
     this.appendChatGoalEvent(managed, next, eventType, summary)
     this.persistSession(managed)
     await this.flushSession(managed.id)
+    sessionLog.info('Chat Goal state changed', {
+      sessionId: managed.id,
+      goalId: next.id,
+      revision: next.revision,
+      round: next.round,
+      status: next.status,
+      stopCode: next.stop?.code,
+    })
     this.sendEvent({ type: 'goal_state_changed', sessionId: managed.id, chatGoal: next }, managed.workspace.id)
     return next
   }
@@ -8366,6 +8498,7 @@ user a clickable link to where the thing now lives.`
     return this.withSessionAdmissionLock(sessionId, async () => {
       const managed = this.sessions.get(sessionId)
       if (!managed) throw new Error('Session not found')
+      this.chatGoalDriver.invalidate(sessionId)
       const goal = assertChatGoalRevision(managed.chatGoal, expected.goalId, expected.revision)
       const next = pauseChatGoalState(goal, {
         code: options.code ?? 'user-paused',
@@ -8380,27 +8513,40 @@ user a clickable link to where the thing now lives.`
     sessionId: string,
     expected: { goalId: string; revision: number },
   ): Promise<ChatGoalState> {
-    return this.withSessionAdmissionLock(sessionId, async () => {
+    let reservation: ChatGoalReservation | undefined
+    const authoritative = await this.withSessionAdmissionLock(sessionId, async () => {
       const managed = this.sessions.get(sessionId)
       if (!managed) throw new Error('Session not found')
+      this.chatGoalDriver.invalidate(sessionId)
       if (managed.isArchived) throw new Error('Unarchive this chat before resuming its Goal')
-      if (managed.pendingAuthRequest || getStoredPendingPlanExecution(managed.workspace.rootPath, managed.id)) {
-        throw new Error('Resolve the pending authentication or plan handoff before resuming this Goal')
+      if (
+        managed.pendingAuthRequest
+        || getStoredPendingPlanExecution(managed.workspace.rootPath, managed.id)
+        || Array.from(this.pendingPermissionRequests.values()).some(request => request.sessionId === sessionId)
+        || managed.messages.some(message => message.role === 'tool' && message.toolStatus === 'backgrounded')
+      ) {
+        throw new Error('Resolve pending authentication, approval, plan handoff, or background work before resuming this Goal')
       }
       const goal = assertChatGoalRevision(managed.chatGoal, expected.goalId, expected.revision)
       await this.repairChatGoalPersistenceBlock(managed)
+      let next: ChatGoalState
       if (goal.stop?.code === 'ownership-changed') {
-        const next = createChatGoalState({
+        next = createChatGoalState({
           objective: goal.objective,
           doneWhen: goal.doneWhen,
           maxRounds: goal.maxRounds,
           tokenBudget: goal.tokenBudget,
         }, { tokenBaseline: managed.tokenUsage?.totalTokens ?? 0 })
-        return this.commitChatGoalState(managed, next, 'created', 'New Goal activated from the transferred snapshot.')
+        await this.commitChatGoalState(managed, next, 'created', 'New Goal activated from the transferred snapshot.')
+      } else {
+        next = resumeChatGoalState(goal)
+        await this.commitChatGoalState(managed, next, 'resumed', 'Goal resumed by the user.')
       }
-      const next = resumeChatGoalState(goal)
-      return this.commitChatGoalState(managed, next, 'resumed', 'Goal resumed by the user.')
+      reservation = await this.settleChatGoalAtIdle(managed, 'complete', true, undefined)
+      return managed.chatGoal ?? next
     })
+    if (reservation) this.dispatchChatGoalContinuation(reservation)
+    return authoritative
   }
 
   async editChatGoal(
@@ -8411,6 +8557,7 @@ user a clickable link to where the thing now lives.`
     return this.withSessionAdmissionLock(sessionId, async () => {
       const managed = this.sessions.get(sessionId)
       if (!managed) throw new Error('Session not found')
+      this.chatGoalDriver.invalidate(sessionId)
       const goal = assertChatGoalRevision(managed.chatGoal, expected.goalId, expected.revision)
       const next = editChatGoalState(goal, patch)
       managed.pendingChatGoalUpdate = undefined
@@ -8426,6 +8573,7 @@ user a clickable link to where the thing now lives.`
     return this.withSessionAdmissionLock(sessionId, async () => {
       const managed = this.sessions.get(sessionId)
       if (!managed) throw new Error('Session not found')
+      this.chatGoalDriver.invalidate(sessionId)
       const goal = assertChatGoalRevision(managed.chatGoal, expected.goalId, expected.revision)
       const next = cancelChatGoalState(goal, message?.trim() || 'Goal stopped by the user.')
       managed.pendingChatGoalUpdate = undefined
@@ -8440,6 +8588,7 @@ user a clickable link to where the thing now lives.`
     return this.withSessionAdmissionLock(sessionId, async () => {
       const managed = this.sessions.get(sessionId)
       if (!managed) throw new Error('Session not found')
+      this.chatGoalDriver.invalidate(sessionId)
       const goal = assertChatGoalRevision(managed.chatGoal, expected.goalId, expected.revision)
       if (!isChatGoalTerminal(goal.status)) throw new Error('Stop or complete this Goal before clearing it')
       managed.chatGoal = undefined
@@ -8472,6 +8621,7 @@ user a clickable link to where the thing now lives.`
     return this.withSessionAdmissionLock(sessionId, async () => {
       const managed = this.sessions.get(sessionId)
       if (!managed) return
+      this.chatGoalDriver.invalidate(sessionId)
       if (managed.chatGoal?.status === 'active') {
         const paused = pauseChatGoalState(managed.chatGoal, {
           code: 'session-archived',
@@ -9746,6 +9896,7 @@ user a clickable link to where the thing now lives.`
      * (#616). Pre-persist errors still reject the outer promise as before.
      */
     onAck?: (messageId: string) => void,
+    goalAdmission?: ChatGoalSendAdmission,
   ): Promise<void> {
     this.assertPaidExecutionAuthorized()
     const releaseAdmissionLock = await this.acquireSendMessageAdmissionLock(sessionId)
@@ -9765,14 +9916,112 @@ user a clickable link to where the thing now lives.`
       throw new Error('Workspace migration is in progress. Try again when the move finishes.')
     }
 
+    let goalAdmissionRollback: (() => void) | undefined
+    let admittedGoalState: ChatGoalState | undefined
+    let admittedTurn: ChatGoalTurnContext | undefined
+
     try {
       // Clear any pending plan execution state when a new user message is sent.
       // This acts as a safety valve - if the user moves on, we don't want to
       // auto-execute an old plan later.
-      await clearStoredPendingPlanExecution(managed.workspace.rootPath, sessionId)
+      if (!goalAdmission) {
+        await clearStoredPendingPlanExecution(managed.workspace.rootPath, sessionId)
+      }
 
       // Ensure messages are loaded before we try to add new ones
       await this.ensureMessagesLoaded(managed)
+
+      if (!goalAdmission) {
+        managed.pendingChatGoalProposal = undefined
+      }
+
+      if (goalAdmission) {
+        if (managed.isProcessing) {
+          this.chatGoalDriver.invalidate(sessionId)
+          throw new Error('Goal admission lost the idle boundary to another message')
+        }
+        if (managed.isArchived) throw new Error('Goal Mode cannot run in an archived chat')
+        if (managed.pendingAuthRequest) throw new Error('Resolve authentication before continuing Goal Mode')
+        if (getStoredPendingPlanExecution(managed.workspace.rootPath, sessionId)) {
+          throw new Error('Resolve the pending plan handoff before continuing Goal Mode')
+        }
+        if (managed.messageQueue.length > 0) {
+          this.chatGoalDriver.invalidate(sessionId)
+          throw new Error('Queued human input has priority over Goal continuation')
+        }
+        if (Array.from(this.pendingPermissionRequests.values()).some(request => request.sessionId === sessionId)) {
+          throw new Error('Resolve the pending approval before continuing Goal Mode')
+        }
+
+        const priorGoal = managed.chatGoal
+        const priorProposal = managed.pendingChatGoalProposal
+        const priorMessageCount = managed.messages.length
+        goalAdmissionRollback = () => {
+          managed.chatGoal = priorGoal
+          managed.pendingChatGoalProposal = priorProposal
+          managed.messages.splice(priorMessageCount)
+        }
+
+        if (goalAdmission.kind === 'create') {
+          const pending = managed.pendingChatGoalProposal
+          if (!pending || pending.nonce !== goalAdmission.confirmationNonce) {
+            throw new Error('Goal confirmation expired or does not match this proposal')
+          }
+          if (Date.now() - pending.createdAt > 10 * 60_000) {
+            managed.pendingChatGoalProposal = undefined
+            throw new Error('Goal confirmation expired; review and confirm it again')
+          }
+          if (managed.chatGoal && !isChatGoalTerminal(managed.chatGoal.status)) {
+            throw new Error('This chat already has a non-terminal Goal')
+          }
+          const created = createChatGoalState(pending.proposal, {
+            tokenBaseline: managed.tokenUsage?.totalTokens ?? 0,
+          })
+          admittedGoalState = admitChatGoalRound(created)
+          managed.chatGoal = admittedGoalState
+          managed.pendingChatGoalProposal = undefined
+          this.appendChatGoalEvent(managed, admittedGoalState, 'created', 'Goal started by the user.')
+          admittedTurn = {
+            origin: 'goal-initial',
+            goalId: admittedGoalState.id,
+            goalRevision: admittedGoalState.revision,
+            admittedRound: admittedGoalState.round,
+            completedToolCountAtStart: getCompletedToolUseSummary(managed).count,
+            failedToolCountAtStart: getFailedToolUseCount(managed),
+          }
+          sessionLog.info('Chat Goal turn admitted', {
+            sessionId,
+            goalId: admittedGoalState.id,
+            revision: admittedGoalState.revision,
+            round: admittedGoalState.round,
+            origin: admittedTurn.origin,
+            admissionResult: 'admitted',
+          })
+        } else {
+          const reservation = this.chatGoalDriver.consume(sessionId, goalAdmission.reservationId, managed.chatGoal)
+          if (!reservation) throw new Error('Goal continuation reservation is stale')
+          admittedGoalState = admitChatGoalRound(managed.chatGoal!)
+          managed.chatGoal = admittedGoalState
+          admittedTurn = {
+            origin: 'goal-continuation',
+            goalId: admittedGoalState.id,
+            goalRevision: admittedGoalState.revision,
+            reservationId: reservation.id,
+            admittedRound: admittedGoalState.round,
+            completedToolCountAtStart: getCompletedToolUseSummary(managed).count,
+            failedToolCountAtStart: getFailedToolUseCount(managed),
+          }
+          sessionLog.info('Chat Goal turn admitted', {
+            sessionId,
+            goalId: admittedGoalState.id,
+            revision: admittedGoalState.revision,
+            round: admittedGoalState.round,
+            origin: admittedTurn.origin,
+            reservationId: reservation.id,
+            admissionResult: 'admitted',
+          })
+        }
+      }
 
       // If currently processing, redirect mid-stream. Each backend decides its strategy:
       // - Pi: steers (injects message, events continue through existing stream)
@@ -9823,6 +10072,10 @@ user a clickable link to where the thing now lives.`
         // before we tell the renderer "accepted" — `persistSession` only
         // enqueues with a 500ms debounce. (#616 reliability fix.)
         await this.flushSession(managed.id)
+        if (admittedGoalState) {
+          this.sendEvent({ type: 'goal_state_changed', sessionId, chatGoal: admittedGoalState }, managed.workspace.id)
+          goalAdmissionRollback = undefined
+        }
         onAck?.(userMessage.id)
         return
       }
@@ -9860,6 +10113,10 @@ user a clickable link to where the thing now lives.`
         // `persistSession` is debounced (500ms). #616.
         this.persistSession(managed)
         await this.flushSession(managed.id)
+        if (admittedGoalState) {
+          this.sendEvent({ type: 'goal_state_changed', sessionId, chatGoal: admittedGoalState }, managed.workspace.id)
+          goalAdmissionRollback = undefined
+        }
         onAck?.(userMessage.id)
 
         // Emit user_message event so UI can confirm the optimistic message
@@ -9908,34 +10165,42 @@ user a clickable link to where the thing now lives.`
       // Evaluate auto-label rules against the user message (common path for both
       // fresh and queued messages). Scans regex patterns configured on labels,
       // then merges any new matches into the session's label array.
-      try {
-        const labelTree = listLabels(managed.workspace.rootPath)
-        const autoMatches = evaluateAutoLabels(message, labelTree)
+      if (!options?.hidden) {
+        try {
+          const labelTree = listLabels(managed.workspace.rootPath)
+          const autoMatches = evaluateAutoLabels(message, labelTree)
 
-        if (autoMatches.length > 0) {
-          const existingLabels = managed.labels ?? []
-          const newEntries = autoMatches
-            .map(m => `${m.labelId}::${m.value}`)
-            .filter(entry => !existingLabels.includes(entry))
+          if (autoMatches.length > 0) {
+            const existingLabels = managed.labels ?? []
+            const newEntries = autoMatches
+              .map(m => `${m.labelId}::${m.value}`)
+              .filter(entry => !existingLabels.includes(entry))
 
-          if (newEntries.length > 0) {
-            managed.labels = [...existingLabels, ...newEntries]
-            this.persistSession(managed)
-            this.sendEvent({
-              type: 'labels_changed',
-              sessionId,
-              labels: managed.labels,
-            }, managed.workspace.id)
+            if (newEntries.length > 0) {
+              managed.labels = [...existingLabels, ...newEntries]
+              this.persistSession(managed)
+              this.sendEvent({
+                type: 'labels_changed',
+                sessionId,
+                labels: managed.labels,
+              }, managed.workspace.id)
+            }
           }
+        } catch (e) {
+          sessionLog.warn(`Auto-label evaluation failed for session ${sessionId}:`, e)
         }
-      } catch (e) {
-        sessionLog.warn(`Auto-label evaluation failed for session ${sessionId}:`, e)
       }
 
       managed.lastMessageAt = Date.now()
       this.setProcessing(managed, true)
+      managed.activeChatGoalTurn = admittedTurn ?? {
+        origin: 'human',
+        completedToolCountAtStart: getCompletedToolUseSummary(managed).count,
+        failedToolCountAtStart: getFailedToolUseCount(managed),
+      }
       releaseAdmissionLockOnce()
     } catch (err) {
+      goalAdmissionRollback?.()
       releaseAdmissionLockOnce()
       throw err
     }
@@ -10025,8 +10290,24 @@ user a clickable link to where the thing now lives.`
     // Start perf span for entire sendMessage flow
     const sendSpan = perf.span('session.sendMessage', { sessionId })
 
-    // Get or create the agent (lazy loading)
-    const agent = await this.getOrCreateAgent(managed)
+    // Get or create the agent (lazy loading). Initialization happens before the
+    // streaming try/catch below, so it needs its own cleanup boundary.
+    let agent: AgentInstance
+    try {
+      agent = await this.getOrCreateAgent(managed)
+    } catch (error) {
+      sendSpan.mark('agent.init_failed')
+      sendSpan.setMetadata('error', error instanceof Error ? error.message : String(error))
+      sendSpan.end()
+      if (goalAdmission || managed.chatGoal?.status === 'active') {
+        // Let any send already waiting on this session's admission gate observe
+        // the current processing turn and enter the human queue before teardown.
+        const releaseFailureCleanupGate = await this.acquireSendMessageAdmissionLock(sessionId)
+        releaseFailureCleanupGate()
+        await this.onProcessingStopped(sessionId, 'error')
+      }
+      throw error
+    }
     sendSpan.mark('agent.ready')
 
     // Always set all sources for context (even if none are enabled), including built-ins
@@ -10113,7 +10394,7 @@ user a clickable link to where the thing now lives.`
     try {
       sessionLog.info('Starting chat for session:', sessionId)
       sessionLog.info('Workspace:', JSON.stringify(managed.workspace, null, 2))
-      sessionLog.info('Message:', message)
+      sessionLog.info('Message:', options?.hidden ? '[hidden internal message]' : message)
       sessionLog.info('Agent model:', agent.getModel())
       sessionLog.info('process.cwd():', process.cwd())
 
@@ -10538,6 +10819,11 @@ user a clickable link to where the thing now lives.`
     const managed = this.sessions.get(sessionId)
     if (!managed) return
 
+    if (managed.lastSettledProcessingGeneration === managed.processingGeneration && !managed.isProcessing) {
+      return
+    }
+    managed.lastSettledProcessingGeneration = managed.processingGeneration
+
     sessionLog.info(`Processing stopped for session ${sessionId}: ${reason}`)
 
     // 1. Cleanup state
@@ -10546,6 +10832,8 @@ user a clickable link to where the thing now lives.`
 
     const turnStartFinalMessageId = managed.turnStartFinalMessageId
     managed.turnStartFinalMessageId = undefined
+    const settledGoalTurn = managed.activeChatGoalTurn
+    managed.activeChatGoalTurn = undefined
 
     // Clear agent control overlay between turns. The session keeps browser
     // ownership (boundSessionId) — only the visual overlay is removed.
@@ -10596,6 +10884,8 @@ user a clickable link to where the thing now lives.`
     // 5. Check queue and process or complete
     if (managed.messageQueue.length > 0) {
       // Has queued messages - process next
+      managed.pendingChatGoalUpdate = undefined
+      this.chatGoalDriver.invalidate(sessionId)
       this.processNextQueuedMessage(sessionId)
     } else {
       // Session is truly done — release browser ownership.
@@ -10610,13 +10900,31 @@ user a clickable link to where the thing now lives.`
         this.scheduleMemorySidecarReview(managed, currentFinalMessageId)
       }
 
-      // No queue - emit complete to UI (include tokenUsage and hasUnread for state updates)
-      this.sendEvent({
-        type: 'complete',
-        sessionId,
-        tokenUsage: managed.tokenUsage,
-        hasUnread: managed.hasUnread,  // Propagate unread state to renderer
-      }, managed.workspace.id)
+      let reservation: ChatGoalReservation | undefined
+      await this.withSessionAdmissionLock(sessionId, async () => {
+        // A human message may have won the admission lock after processing stopped.
+        if (managed.isProcessing || managed.messageQueue.length > 0) return
+        reservation = await this.settleChatGoalAtIdle(
+          managed,
+          reason,
+          didReceiveNewFinalMessage,
+          settledGoalTurn,
+        )
+        this.persistSession(managed)
+        await this.flushSession(managed.id)
+        // Emit while still holding admission: a waiting human send cannot start
+        // before the prior turn's completion signal is delivered.
+        this.sendEvent({
+          type: 'complete',
+          sessionId,
+          tokenUsage: managed.tokenUsage,
+          hasUnread: managed.hasUnread,
+        }, managed.workspace.id)
+      })
+
+      if (reservation) {
+        this.dispatchChatGoalContinuation(reservation)
+      }
     }
 
     // 6. Always persist
@@ -10690,6 +10998,216 @@ user a clickable link to where the thing now lives.`
         // Call onProcessingStopped to handle cleanup and check for more queued messages
         this.onProcessingStopped(sessionId, 'error')
       })
+    })
+  }
+
+  private async persistChatGoalStateWithoutEvent(managed: ManagedSession, next: ChatGoalState): Promise<void> {
+    managed.chatGoal = next
+    this.persistSession(managed)
+    await this.flushSession(managed.id)
+    this.sendEvent({ type: 'goal_state_changed', sessionId: managed.id, chatGoal: next }, managed.workspace.id)
+  }
+
+  private async settleChatGoalAtIdle(
+    managed: ManagedSession,
+    reason: 'complete' | 'interrupted' | 'error' | 'timeout',
+    didReceiveNewFinalMessage: boolean,
+    settledTurn: ChatGoalTurnContext | undefined,
+  ): Promise<ChatGoalReservation | undefined> {
+    if (managed.isProcessing || managed.messageQueue.length > 0) return undefined
+    const goal = managed.chatGoal
+    if (!goal || goal.status !== 'active') {
+      managed.pendingChatGoalUpdate = undefined
+      this.chatGoalDriver.invalidate(managed.id)
+      return undefined
+    }
+
+    const hasPendingAuth = Boolean(managed.pendingAuthRequest)
+    const hasPendingApproval = Array.from(this.pendingPermissionRequests.values()).some(request => request.sessionId === managed.id)
+    const hasPendingPlan = Boolean(getStoredPendingPlanExecution(managed.workspace.rootPath, managed.id))
+    const hasPendingBackgroundWork = managed.messages.some(message => message.role === 'tool' && message.toolStatus === 'backgrounded')
+    const hadNewToolFailure = getFailedToolUseCount(managed) > (settledTurn?.failedToolCountAtStart ?? 0)
+    const hasUnresolvedBoundary = hasPendingAuth
+      || hasPendingApproval
+      || hasPendingPlan
+      || hasPendingBackgroundWork
+      || hadNewToolFailure
+
+    const pendingUpdate = managed.pendingChatGoalUpdate
+    managed.pendingChatGoalUpdate = undefined
+    if (
+      pendingUpdate
+      && reason === 'complete'
+      && didReceiveNewFinalMessage
+      && !hasUnresolvedBoundary
+      && pendingUpdate.goalId === goal.id
+      && pendingUpdate.revision === goal.revision
+    ) {
+      if (pendingUpdate.status === 'complete') {
+        if (goal.doneWhen && !pendingUpdate.evidence?.length) {
+          const paused = pauseChatGoalState(goal, {
+            code: 'needs-decision',
+            message: 'The agent reported completion without evidence for the stated done condition. Review before resuming.',
+          })
+          await this.commitChatGoalState(managed, paused, 'paused', paused.stop!.message)
+          return undefined
+        }
+        const completed = completeChatGoalState(goal, {
+          summary: pendingUpdate.summary,
+          evidence: pendingUpdate.evidence,
+        })
+        await this.commitChatGoalState(managed, completed, 'completed', completed.completion!.summary)
+        return undefined
+      }
+
+      const normalizedBlocker = pendingUpdate.summary.toLowerCase().replace(/\s+/g, ' ').trim()
+      const fingerprint = createHash('sha256').update(normalizedBlocker).digest('hex').slice(0, 24)
+      const audited = recordChatGoalBlocker(goal, {
+        fingerprint,
+        message: pendingUpdate.summary,
+      })
+      if (audited.status === 'blocked') {
+        await this.commitChatGoalState(managed, audited, 'blocked', audited.stop!.message)
+        return undefined
+      }
+      await this.persistChatGoalStateWithoutEvent(managed, audited)
+    }
+
+    const currentGoal = managed.chatGoal
+    if (!currentGoal || currentGoal.status !== 'active') return undefined
+
+    if (hadNewToolFailure) {
+      const paused = pauseChatGoalState(currentGoal, {
+        code: 'provider-error',
+        message: 'Goal paused because a tool failed during the prior turn.',
+      })
+      await this.commitChatGoalState(managed, paused, 'paused', paused.stop!.message)
+      return undefined
+    }
+
+    const finalAssistant = [...managed.messages].reverse().find(message => message.role === 'assistant' && !message.isIntermediate)
+    const completedToolCount = getCompletedToolUseSummary(managed).count
+    const waitBoundary = settledTurn && finalAssistant
+      ? detectChatGoalWaitBoundary(finalAssistant.content)
+      : undefined
+    if (waitBoundary) {
+      const paused = pauseChatGoalState(currentGoal, waitBoundary)
+      await this.commitChatGoalState(managed, paused, 'paused', paused.stop!.message)
+      return undefined
+    }
+    if (settledTurn?.origin === 'goal-continuation' && finalAssistant) {
+      const fingerprint = createHash('sha256')
+        .update(finalAssistant.content.toLowerCase().replace(/\s+/g, ' ').trim())
+        .digest('hex')
+        .slice(0, 24)
+      const madeToolProgress = completedToolCount > settledTurn.completedToolCountAtStart
+      if (!madeToolProgress && fingerprint === managed.chatGoalLastAssistantFingerprint) {
+        managed.chatGoalNoProgressTurns = (managed.chatGoalNoProgressTurns ?? 0) + 1
+      } else {
+        managed.chatGoalNoProgressTurns = 0
+      }
+      managed.chatGoalLastAssistantFingerprint = fingerprint
+      if ((managed.chatGoalNoProgressTurns ?? 0) >= 1) {
+        const paused = pauseChatGoalState(currentGoal, {
+          code: 'no-progress',
+          message: 'Goal paused because two continuation turns produced no new progress.',
+        })
+        await this.commitChatGoalState(managed, paused, 'paused', paused.stop!.message)
+        return undefined
+      }
+    }
+
+    const reservationResult = this.chatGoalDriver.reserve({
+      sessionId: managed.id,
+      goal: currentGoal,
+      processingGeneration: managed.processingGeneration,
+      settledReason: reason,
+      didReceiveFinalResponse: didReceiveNewFinalMessage,
+      hasQueuedHumanInput: managed.messageQueue.length > 0,
+      hasPendingAuth,
+      hasPendingApproval,
+      hasPendingPlan,
+      hasPendingBackgroundWork,
+      isArchived: Boolean(managed.isArchived),
+      currentTotalTokens: managed.tokenUsage?.totalTokens ?? 0,
+    })
+
+    if (reservationResult.kind === 'pause') {
+      const paused = pauseChatGoalState(currentGoal, {
+        code: reservationResult.code,
+        message: reservationResult.message,
+      })
+      await this.commitChatGoalState(managed, paused, 'paused', paused.stop!.message)
+      return undefined
+    }
+    if (reservationResult.kind === 'limit') {
+      const limited = limitChatGoalByBudget(currentGoal, reservationResult.budget)
+      await this.commitChatGoalState(managed, limited, 'budget-limited', limited.stop!.message)
+      return undefined
+    }
+    if (reservationResult.kind === 'reserved') {
+      sessionLog.info('Chat Goal continuation reserved', {
+        sessionId: managed.id,
+        goalId: reservationResult.reservation.goalId,
+        revision: reservationResult.reservation.goalRevision,
+        round: reservationResult.reservation.nextRound,
+        reservationId: reservationResult.reservation.id,
+        admissionResult: 'reserved',
+      })
+    }
+    return reservationResult.kind === 'reserved' ? reservationResult.reservation : undefined
+  }
+
+  private dispatchChatGoalContinuation(reservation: ChatGoalReservation): void {
+    setImmediate(() => {
+      const managed = this.sessions.get(reservation.sessionId)
+      const goal = managed?.chatGoal
+      if (!managed || !goal) {
+        this.chatGoalDriver.invalidate(reservation.sessionId)
+        return
+      }
+      const prompt = buildChatGoalContinuationPrompt(goal, managed.tokenUsage?.totalTokens ?? 0)
+      void this.sendMessage(
+        reservation.sessionId,
+        prompt,
+        undefined,
+        undefined,
+        { hidden: true },
+        undefined,
+        undefined,
+        undefined,
+        { kind: 'continuation', reservationId: reservation.id },
+      ).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        if (message.includes('stale') || message.includes('priority') || message.includes('idle boundary')) {
+          sessionLog.info('Goal continuation invalidated before admission', {
+            sessionId: reservation.sessionId,
+            goalId: reservation.goalId,
+            revision: reservation.goalRevision,
+            reservationId: reservation.id,
+          })
+          return
+        }
+        void this.pauseChatGoalAfterExecutionFailure(reservation.sessionId, error)
+      })
+    })
+  }
+
+  private async pauseChatGoalAfterExecutionFailure(sessionId: string, error: unknown): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return
+    if (managed.isProcessing) {
+      await this.onProcessingStopped(sessionId, 'error')
+      return
+    }
+    await this.withSessionAdmissionLock(sessionId, async () => {
+      const current = managed.chatGoal
+      if (!current || current.status !== 'active') return
+      const paused = pauseChatGoalState(current, {
+        code: 'provider-error',
+        message: `Goal paused because the provider turn failed: ${error instanceof Error ? error.message : String(error)}`,
+      })
+      await this.commitChatGoalState(managed, paused, 'paused', paused.stop!.message)
     })
   }
 

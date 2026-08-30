@@ -53,4 +53,18 @@ describe('message display intent', () => {
     expect(storedToMessage(stored).displayIntent).toBe('agent-delegation-task');
     expect(storedToMessage(stored).content).toContain('Task:\nReview this.');
   });
+
+  it('persists the hidden marker for internal Goal continuation prompts', () => {
+    const message: Message = {
+      id: 'msg-goal-hidden',
+      role: 'user',
+      content: '<system-reminder>Continue Goal.</system-reminder>',
+      timestamp: 123,
+      hidden: true,
+    };
+
+    const stored = messageToStored(message);
+    expect(stored.hidden).toBe(true);
+    expect(storedToMessage(stored).hidden).toBe(true);
+  });
 });

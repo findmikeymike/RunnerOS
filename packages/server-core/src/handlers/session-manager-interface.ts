@@ -151,6 +151,15 @@ export interface ISessionManager {
   setPendingPlanExecution(sessionId: string, planPath: string, draftInputSnapshot?: string): Promise<void>
   markPendingPlanExecutionDispatched(sessionId: string): Promise<void>
   clearPendingPlanExecution(sessionId: string): Promise<void>
+  prepareChatGoalCreation(
+    sessionId: string,
+    input: import('@craft-agent/shared/sessions').CreateChatGoalInput,
+  ): Promise<{ proposal: import('@craft-agent/shared/sessions').CreateChatGoalInput; confirmationNonce: string }>
+  startChatGoal(
+    sessionId: string,
+    confirmationNonce: string,
+    initialMessage: string,
+  ): Promise<{ accepted: true; messageId: string; chatGoal: import('@craft-agent/shared/sessions').ChatGoalState }>
   getPendingPlanExecution(sessionId: string): { planPath: string; draftInputSnapshot?: string; awaitingCompaction: boolean; executionDispatched: boolean } | null
   markCompactionComplete(sessionId: string): Promise<void>
 

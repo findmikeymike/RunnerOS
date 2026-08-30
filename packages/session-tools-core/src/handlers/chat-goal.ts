@@ -15,7 +15,6 @@ export interface UpdateGoalToolInput {
   status: 'complete' | 'blocked';
   summary: string;
   evidence?: string[];
-  blockerFingerprint?: string;
 }
 
 export async function handleGetGoal(ctx: SessionToolContext): Promise<ToolResult> {

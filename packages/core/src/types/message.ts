@@ -390,6 +390,8 @@ export interface StoredMessage {
   badges?: ContentBadge[];
   // UI-only display intent for internal/user-proxy messages that need custom rendering.
   displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task' | 'goal-event';
+  // Persisted internal prompt marker; viewer and desktop grouping both hide it.
+  hidden?: boolean;
   // Structured metadata for agent-message notices.
   agentMessage?: AgentMessageNoticeMetadata;
   /** Durable chat Goal lifecycle marker. */

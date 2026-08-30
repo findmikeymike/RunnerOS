@@ -231,7 +231,7 @@ export type SessionEvent =
   | { type: 'message_annotations_updated'; sessionId: string; messageId: string; annotations: AnnotationV1[] }
   | { type: 'working_directory_error'; sessionId: string; error: string }
   | { type: 'goal_state_changed'; sessionId: string; chatGoal?: ChatGoalState }
-  | { type: 'goal_creation_proposed'; sessionId: string; proposal: CreateChatGoalInput }
+  | { type: 'goal_creation_proposed'; sessionId: string; proposal: CreateChatGoalInput; confirmationNonce: string }
 
 export interface SendMessageOptions {
   skillSlugs?: string[]
@@ -272,6 +272,8 @@ export type SessionCommand =
   | { type: 'markCompactionComplete' }
   | { type: 'markPendingPlanExecutionDispatched' }
   | { type: 'clearPendingPlanExecution' }
+  | { type: 'goalPrepare'; proposal: CreateChatGoalInput }
+  | { type: 'goalCreate'; confirmationNonce: string; initialMessage: string }
   | { type: 'goalPause'; goalId: string; revision: number; message?: string }
   | { type: 'goalResume'; goalId: string; revision: number }
   | { type: 'goalEdit'; goalId: string; revision: number; patch: EditChatGoalInput }
