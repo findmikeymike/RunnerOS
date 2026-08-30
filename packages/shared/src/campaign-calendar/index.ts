@@ -159,7 +159,6 @@ export interface CampaignCalendarItem {
   job?: CampaignScheduledJob;
   approvals?: CampaignScheduleApproval[];
   runHistory: CampaignJobRun[];
-  hqCalendarEventId?: string;
   externalCalendar?: ExternalCalendarSyncState;
   deletedAt?: string;
   createdAt: string;
