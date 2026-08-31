@@ -54,6 +54,12 @@ export interface Escalation {
   toolCall: EscalationToolCall;
   /** JSON-serializable result attached when the escalation resolves. */
   result?: unknown;
+  resolvedBy?: EscalationResolver;
+}
+
+export interface EscalationResolver {
+  type: 'user';
+  clientId: string;
 }
 
 export interface CreateEscalationInput {
@@ -79,8 +85,8 @@ export interface EscalationStore {
   create(input: CreateEscalationInput): Escalation;
   listPending(opts?: ListPendingOptions): Escalation[];
   get(id: string): Escalation | null;
-  approve(id: string, result?: unknown): Escalation;
-  reject(id: string, result?: unknown): Escalation;
+  approve(id: string, resolvedBy: EscalationResolver, result?: unknown): Escalation;
+  reject(id: string, resolvedBy: EscalationResolver, result?: unknown): Escalation;
   subscribe(listener: EscalationListener): () => void;
   close(): void;
 }
@@ -100,7 +106,8 @@ CREATE TABLE IF NOT EXISTS escalations (
   resolved_at     INTEGER,
   duration_ms     INTEGER,
   tool_call_json  TEXT NOT NULL,
-  result_json     TEXT
+  result_json     TEXT,
+  resolved_by_json TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_escalations_status_created
   ON escalations(status, created_at);
@@ -123,6 +130,7 @@ interface Row {
   duration_ms: number | null;
   tool_call_json: string;
   result_json: string | null;
+  resolved_by_json: string | null;
 }
 
 function rowToEscalation(r: Row): Escalation {
@@ -141,6 +149,14 @@ function rowToEscalation(r: Row): Escalation {
       result = undefined;
     }
   }
+  let resolvedBy: EscalationResolver | undefined;
+  if (r.resolved_by_json) {
+    try {
+      resolvedBy = JSON.parse(r.resolved_by_json) as EscalationResolver;
+    } catch {
+      resolvedBy = undefined;
+    }
+  }
   return {
     id: r.id,
     workflowRunId: r.workflow_run_id,
@@ -152,6 +168,7 @@ function rowToEscalation(r: Row): Escalation {
     durationMs: r.duration_ms ?? undefined,
     toolCall,
     result,
+    resolvedBy,
   };
 }
 
@@ -173,6 +190,10 @@ class SqliteEscalationStore implements EscalationStore {
     this.db = new Database(dbPath);
     this.db.exec('PRAGMA journal_mode = WAL;');
     this.db.exec(SCHEMA);
+    const columns = this.db.prepare('PRAGMA table_info(escalations)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'resolved_by_json')) {
+      this.db.exec('ALTER TABLE escalations ADD COLUMN resolved_by_json TEXT;');
+    }
     // H3: lock the on-disk DB to user-only read/write. Pending escalation
     // rows can carry tool-call recommendation strings that include secrets
     // (PR bodies, paths to `.env`, etc.); the default umask leaves them
@@ -248,17 +269,18 @@ class SqliteEscalationStore implements EscalationStore {
     return row ? rowToEscalation(row) : null;
   }
 
-  approve(id: string, result?: unknown): Escalation {
-    return this.resolve(id, 'approved', result);
+  approve(id: string, resolvedBy: EscalationResolver, result?: unknown): Escalation {
+    return this.resolve(id, 'approved', resolvedBy, result);
   }
 
-  reject(id: string, result?: unknown): Escalation {
-    return this.resolve(id, 'rejected', result);
+  reject(id: string, resolvedBy: EscalationResolver, result?: unknown): Escalation {
+    return this.resolve(id, 'rejected', resolvedBy, result);
   }
 
   private resolve(
     id: string,
     next: 'approved' | 'rejected',
+    resolvedBy: EscalationResolver,
     result: unknown,
   ): Escalation {
     const current = this.get(id);
@@ -272,19 +294,21 @@ class SqliteEscalationStore implements EscalationStore {
     }
     const resolvedAt = Date.now();
     const resultJson = result === undefined ? null : JSON.stringify(result);
+    const resolvedByJson = JSON.stringify(resolvedBy);
     this.db
       .prepare(
         `UPDATE escalations
-         SET status = ?, resolved_at = ?, result_json = ?
+         SET status = ?, resolved_at = ?, result_json = ?, resolved_by_json = ?
          WHERE id = ?`,
       )
-      .run(next, resolvedAt, resultJson, id);
+      .run(next, resolvedAt, resultJson, resolvedByJson, id);
 
     const updated: Escalation = {
       ...current,
       status: next,
       resolvedAt,
       result,
+      resolvedBy,
     };
     this.notify(updated);
     return updated;
@@ -368,10 +392,10 @@ export function getEscalation(id: string): Escalation | null {
   return getEscalationStore().get(id);
 }
 
-export function approveEscalation(id: string, result?: unknown): Escalation {
-  return getEscalationStore().approve(id, result);
+export function approveEscalation(id: string, resolvedBy: EscalationResolver, result?: unknown): Escalation {
+  return getEscalationStore().approve(id, resolvedBy, result);
 }
 
-export function rejectEscalation(id: string, result?: unknown): Escalation {
-  return getEscalationStore().reject(id, result);
+export function rejectEscalation(id: string, resolvedBy: EscalationResolver, result?: unknown): Escalation {
+  return getEscalationStore().reject(id, resolvedBy, result);
 }

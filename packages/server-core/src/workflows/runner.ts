@@ -68,7 +68,7 @@ export type WorkflowRunEvent =
    * downstream observers (Electron IPC, automations event bus, tests)
    * can see paused runs without coupling to `@craft-agent/shared/agent`.
    */
-  | { type: 'escalation.created'; escalation: EscalationNotification['escalation'] };
+  | { type: 'escalation.created'; workspaceId: string; escalation: EscalationNotification['escalation'] };
 
 export type WorkflowRunEventDetail =
   | {
@@ -233,7 +233,9 @@ export class WorkflowRunner {
     // TODO: wire into the cross-process automations event bus when that
     // surface lands so the UI gets toast-style escalation notifications.
     setEscalationNotifier((event) => {
-      this.emitEvent({ type: 'escalation.created', escalation: event.escalation });
+      const workspaceId = this.active.get(event.escalation.workflowRunId)?.snapshot.workspaceId;
+      if (!workspaceId) return;
+      this.emitEvent({ type: 'escalation.created', workspaceId, escalation: event.escalation });
     });
   }
 

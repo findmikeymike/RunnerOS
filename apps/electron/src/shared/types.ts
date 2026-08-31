@@ -2,6 +2,7 @@
 // Protocol re-exports (channels, DTOs, events, wire types)
 // =============================================================================
 export * from '@craft-agent/shared/protocol'
+import type { WorkflowAttentionDTO } from '@craft-agent/shared/protocol'
 
 // =============================================================================
 // Package re-exports (convenience for renderer imports)
@@ -1259,9 +1260,12 @@ export interface ElectronAPI {
   cancelWorkflowRun(workspaceId: string, runId: string): Promise<WorkflowRunDTO>
   resumeWorkflowRun(workspaceId: string, runId: string, stepId?: string): Promise<WorkflowRunDTO>
   deleteWorkflowRun(workspaceId: string, runId: string): Promise<boolean>
+  listWorkflowAttention(workspaceId: string, runId?: string): Promise<WorkflowAttentionDTO[]>
+  resolveWorkflowAttention(workspaceId: string, escalationId: string, decision: 'approved' | 'rejected'): Promise<WorkflowAttentionDTO>
   onWorkflowRunUpdated(
     callback: (workspaceId: string, run: WorkflowRunDTO, eventType: 'created' | 'updated' | 'completed') => void,
   ): () => void
+  onWorkflowAttentionUpdated(callback: (workspaceId: string, attention: WorkflowAttentionDTO) => void): () => void
 
   // Deep Research runs
   startDeepResearchRun(workspaceId: string, input: StartDeepResearchRunInput): Promise<DeepResearchRunDTO>

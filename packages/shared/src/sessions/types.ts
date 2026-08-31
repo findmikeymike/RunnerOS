@@ -103,6 +103,12 @@ export interface SessionLaunchReceipt {
   origin: 'manual' | 'agent' | 'concierge' | 'workflow' | 'deep-research' | 'automation' | 'branch' | 'spawned-session';
   /** Immutable ancestry marker for sessions descended from background execution. */
   automatedAncestry?: boolean;
+  /** Host-stamped provenance for an agent-delegated child session. */
+  delegation?: {
+    parentSessionId?: string;
+    mechanism: 'spawn-session' | 'message-agent';
+    depth: number;
+  };
   summary?: string;
   agent?: {
     slug: string;

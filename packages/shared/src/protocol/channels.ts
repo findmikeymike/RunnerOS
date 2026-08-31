@@ -622,6 +622,9 @@ export const RPC_CHANNELS = {
     CANCEL: 'workflow-runs:cancel',
     RESUME: 'workflow-runs:resume',
     DELETE: 'workflow-runs:delete',
+    LIST_ATTENTION: 'workflow-runs:list-attention',
+    RESOLVE_ATTENTION: 'workflow-runs:resolve-attention',
+    ATTENTION_UPDATED: 'workflow-runs:attention-updated',
     /** Single push event covering created / updated / completed transitions. */
     UPDATED: 'workflow-runs:updated',
   },

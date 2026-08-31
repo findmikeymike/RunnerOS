@@ -82,7 +82,12 @@ describe('AgentMessageService', () => {
     expect(result.status).toBe('succeeded');
     expect(result.childSessionId).toBe('child-1');
     expect(created[0]).toMatchObject({ hidden: true, permissionMode: 'safe', labels: ['agent-message-depth:1'] });
-    expect(created[0]).toMatchObject({ launchReceipt: { automatedAncestry: true } });
+    expect(created[0]).toMatchObject({
+      launchReceipt: {
+        automatedAncestry: true,
+        delegation: { parentSessionId: 'parent', mechanism: 'message-agent', depth: 1 },
+      },
+    });
     expect(created[0]).toMatchObject({
       launchReceipt: {
         injected: {

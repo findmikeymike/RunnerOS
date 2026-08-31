@@ -51,8 +51,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  *   - arbitrary code execution:
  *       `execute_code` → `script_sandbox`
  */
-export const SPAWN_SESSION_BLOCKED_TOOLS: ReadonlySet<string> = Object.freeze(
-  new Set<string>([
+const ENFORCED_SPAWN_SESSION_BLOCKED_TOOLS = new Set<string>([
     // Recursive spawn (tool-defs.ts:969). The depth gate is the primary
     // defense; this is belt-and-braces in case the depth counter is bypassed.
     'spawn_session',
@@ -76,7 +75,10 @@ export const SPAWN_SESSION_BLOCKED_TOOLS: ReadonlySet<string> = Object.freeze(
 
     // Arbitrary code execution — force tool-by-tool reasoning.
     'script_sandbox',                   // tool-defs.ts:965
-  ]),
+  ]);
+
+export const SPAWN_SESSION_BLOCKED_TOOLS: ReadonlySet<string> = Object.freeze(
+  new Set(ENFORCED_SPAWN_SESSION_BLOCKED_TOOLS),
 );
 
 /**
@@ -91,7 +93,12 @@ export const SPAWN_SESSION_BLOCKED_TOOLS: ReadonlySet<string> = Object.freeze(
  * where tool names are visible).
  */
 export function stripBlockedTools(toolNames: readonly string[]): string[] {
-  return toolNames.filter((t) => !SPAWN_SESSION_BLOCKED_TOOLS.has(t));
+  return toolNames.filter((t) => !ENFORCED_SPAWN_SESSION_BLOCKED_TOOLS.has(t));
+}
+
+export function isToolBlockedForDelegatedSession(toolName: string, delegatedSession: boolean): boolean {
+  if (!delegatedSession) return false;
+  return ENFORCED_SPAWN_SESSION_BLOCKED_TOOLS.has(toolName.replace(/^mcp__session__/, ''));
 }
 
 // ---------------------------------------------------------------------------

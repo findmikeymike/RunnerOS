@@ -159,7 +159,7 @@ describe('gateWriteAttempt — pause/resume', () => {
     expect(executed).toBe(0); // paused — execute() NOT called yet
 
     // Approve via the store (the same code path the UI/RPC handler will use).
-    store.approve(escalation.id);
+    store.approve(escalation.id, { type: 'user', clientId: 'test-client' });
 
     const outcome = await outcomePromise;
     expect(outcome.kind).toBe('executed');
@@ -188,7 +188,7 @@ describe('gateWriteAttempt — pause/resume', () => {
     const pendingList = store.listPending({ workflowRunId: 'run-2' });
     expect(pendingList).toHaveLength(1);
     const id = pendingList[0]!.id;
-    store.reject(id, { reason: 'too dangerous' });
+    store.reject(id, { type: 'user', clientId: 'test-client' }, { reason: 'too dangerous' });
 
     const outcome = await outcomePromise;
     expect(outcome.kind).toBe('denied');
@@ -259,10 +259,10 @@ describe('gateWriteAttempt — pause/resume', () => {
     expect(all).toHaveLength(2);
     const [first, second] = all;
     // Approve second first → resolves p2 first.
-    store.approve(second!.id);
+    store.approve(second!.id, { type: 'user', clientId: 'test-client' });
     const o2 = await p2;
     expect(o2.kind).toBe('executed');
-    store.reject(first!.id);
+    store.reject(first!.id, { type: 'user', clientId: 'test-client' });
     const o1 = await p1;
     expect(o1.kind).toBe('denied');
   });

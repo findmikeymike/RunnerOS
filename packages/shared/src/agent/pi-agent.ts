@@ -64,6 +64,7 @@ import { attachSessionSelfManagementBindings } from './session-self-management-b
 
 // Session tool proxy definitions (for registering with subprocess)
 import { getSessionToolProxyDefs, SESSION_TOOL_NAMES } from './backend/pi/session-tool-defs.ts';
+import { isToolBlockedForDelegatedSession } from './spawn-session-isolation.ts';
 
 // Session tool registry (for executing proxy tool calls)
 import {
@@ -511,6 +512,7 @@ export class PiAgent extends BaseAgent {
     // These tools (SubmitPlan, config_validate, source auth, call_llm, etc.)
     // are executed in the main process when the LLM calls them.
     this.assertBackendSessionToolParity();
+    const delegatedSession = this.config.session?.launchReceipt?.delegation !== undefined;
     const sessionToolDefs = getSessionToolProxyDefs({
       includeScheduleWork: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge',
       includeManagerTools: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge'
@@ -518,6 +520,8 @@ export class PiAgent extends BaseAgent {
       includeCampaignManagerTools: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge'
         && this.config.workspace.artistWorkspaceScope === 'campaign',
       includeLabTools: this.config.workspace.artistWorkspaceScope === 'lab',
+    }).filter((tool) => {
+      return !isToolBlockedForDelegatedSession(tool.name, delegatedSession);
     });
 
     // Patch call_llm description with provider-specific model hint

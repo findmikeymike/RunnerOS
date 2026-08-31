@@ -6,6 +6,7 @@ import { routes } from '../../shared/routes'
 import { useWorkflowRuns } from '@/hooks/useWorkflowRuns'
 import { useWorkflows } from '@/hooks/useWorkflows'
 import { RunStateDot } from './WorkflowsListPage'
+import type { WorkflowAttentionDTO } from '../../shared/types'
 
 interface Props {
   workspaceId: string
@@ -16,6 +17,21 @@ export default function RecentRunsPage({ workspaceId }: Props) {
   const { navigate } = useNavigation()
   const { runs, loading, error } = useWorkflowRuns(workspaceId)
   const { allWorkflows } = useWorkflows(workspaceId)
+  const [attention, setAttention] = React.useState<WorkflowAttentionDTO[]>([])
+
+  React.useEffect(() => {
+    let mounted = true
+    void window.electronAPI.listWorkflowAttention(workspaceId).then((items) => {
+      if (mounted) setAttention(items)
+    }).catch(() => {})
+    const cleanup = window.electronAPI.onWorkflowAttentionUpdated((changedWorkspaceId, changed) => {
+      if (changedWorkspaceId !== workspaceId) return
+      setAttention((current) => changed.status === 'pending'
+        ? [...current.filter((item) => item.id !== changed.id), changed]
+        : current.filter((item) => item.id !== changed.id))
+    })
+    return () => { mounted = false; cleanup() }
+  }, [workspaceId])
 
   const nameBySlug = React.useMemo(() => {
     const map = new Map<string, string>()
@@ -51,6 +67,7 @@ export default function RecentRunsPage({ workspaceId }: Props) {
               const startedMs = r.createdAt ? Date.parse(r.createdAt) : 0
               const completedMs = r.completedAt ? Date.parse(r.completedAt) : 0
               const durationMs = startedMs && completedMs ? Math.max(0, completedMs - startedMs) : 0
+              const attentionCount = attention.filter((item) => item.workflowRunId === r.id).length
               return (
                 <button
                   key={r.id}
@@ -67,6 +84,7 @@ export default function RecentRunsPage({ workspaceId }: Props) {
                     </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-3">
+                    {attentionCount > 0 && <span className="rounded-full bg-orange-400/12 px-2 py-0.5 text-[10px] text-orange-200/80">Needs decision</span>}
                     <span className="font-mono text-[11px] text-white/42">{r.id.slice(0, 8)}</span>
                     <RunStateDot state={r.state} />
                     <span className="w-10 text-right text-[11px] text-white/42">

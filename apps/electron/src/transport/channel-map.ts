@@ -553,7 +553,10 @@ export const CHANNEL_MAP = {
   cancelWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.CANCEL),
   resumeWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.RESUME),
   deleteWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.DELETE),
+  listWorkflowAttention: invoke(RPC_CHANNELS.workflowRuns.LIST_ATTENTION),
+  resolveWorkflowAttention: invoke(RPC_CHANNELS.workflowRuns.RESOLVE_ATTENTION),
   onWorkflowRunUpdated: listener(RPC_CHANNELS.workflowRuns.UPDATED),
+  onWorkflowAttentionUpdated: listener(RPC_CHANNELS.workflowRuns.ATTENTION_UPDATED),
 
   // Deep Research runs
   startDeepResearchRun: invoke(RPC_CHANNELS.deepResearch.START),

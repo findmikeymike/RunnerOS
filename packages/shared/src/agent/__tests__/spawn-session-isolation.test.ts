@@ -20,6 +20,7 @@ import {
   runWithSubagentApproval,
   buildSubagentRefusalPayload,
   shouldRejectSpawn,
+  isToolBlockedForDelegatedSession,
   type ApprovalCallback,
   type ApprovalDecision,
 } from '../spawn-session-isolation.ts';
@@ -87,6 +88,15 @@ describe('stripBlockedTools', () => {
 
   it('handles empty input', () => {
     expect(stripBlockedTools([])).toEqual([]);
+  });
+});
+
+describe('delegated session tool visibility', () => {
+  it('blocks both Claude and Pi spellings only for delegated children', () => {
+    expect(isToolBlockedForDelegatedSession('save_memory', true)).toBe(true);
+    expect(isToolBlockedForDelegatedSession('mcp__session__save_memory', true)).toBe(true);
+    expect(isToolBlockedForDelegatedSession('save_memory', false)).toBe(false);
+    expect(isToolBlockedForDelegatedSession('read_file', true)).toBe(false);
   });
 });
 

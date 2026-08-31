@@ -25,7 +25,8 @@
  *   - "default": existing per-workspace policy applies.
  *   - "subconscious": agent should pause and escalate on write attempts.
  *     Runtime semantics ship in plan 01-07; this plan only plumbs the field.
- *   - "yolo": skip approval checks (operator-acknowledged risk).
+ *   - "yolo": legacy alias for no extra escalation gate. It never bypasses
+ *     the workspace permission policy and should not be shown in new UI.
  *
  *   NOTE: this is intentionally distinct from the workspace `PermissionMode`
  *   union (`safe | ask | allow-all`) defined in `agent/mode-types.ts`. The

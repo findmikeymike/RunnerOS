@@ -19,6 +19,7 @@ import type {
   WorkflowRunState,
   WorkflowRunStep,
   WorkflowRunStepState,
+  WorkflowAttentionDTO,
 } from '../../shared/types'
 
 interface Props {
@@ -44,6 +45,8 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
   const [rerunOpen, setRerunOpen] = React.useState(false)
   const [recoveryPendingStepId, setRecoveryPendingStepId] = React.useState<string | null>(null)
   const [now, setNow] = React.useState(() => Date.now())
+  const [attention, setAttention] = React.useState<WorkflowAttentionDTO[]>([])
+  const [resolvingAttentionId, setResolvingAttentionId] = React.useState<string | null>(null)
 
   // Hydrate on mount; live updates flow through useWorkflowRuns broadcast.
   React.useEffect(() => {
@@ -65,6 +68,23 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
     load()
     return () => { mounted = false }
   }, [workspaceId, runId, t])
+
+  React.useEffect(() => {
+    let mounted = true
+    const refresh = () => window.electronAPI.listWorkflowAttention(workspaceId, runId)
+      .then((items) => { if (mounted) setAttention(items) })
+      .catch(() => { if (mounted) setAttention([]) })
+    void refresh()
+    const cleanup = window.electronAPI.onWorkflowAttentionUpdated((changedWorkspaceId, changed) => {
+      if (changedWorkspaceId !== workspaceId || changed.workflowRunId !== runId) return
+      if (changed.status === 'pending') {
+        setAttention((current) => [...current.filter((item) => item.id !== changed.id), changed])
+      } else {
+        setAttention((current) => current.filter((item) => item.id !== changed.id))
+      }
+    })
+    return () => { mounted = false; cleanup() }
+  }, [workspaceId, runId])
 
   // Prefer the version pushed via broadcast (live), fall back to the
   // hydrated one taken at mount.
@@ -114,6 +134,19 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
       toast.error(err instanceof Error ? err.message : String(err))
     } finally {
       setRecoveryPendingStepId(null)
+    }
+  }
+
+  const handleAttention = async (item: WorkflowAttentionDTO, decision: 'approved' | 'rejected') => {
+    setResolvingAttentionId(item.id)
+    try {
+      await window.electronAPI.resolveWorkflowAttention(workspaceId, item.id, decision)
+      setAttention((current) => current.filter((candidate) => candidate.id !== item.id))
+      toast.success(decision === 'approved' ? 'Action authorized' : 'Action skipped')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setResolvingAttentionId(null)
     }
   }
 
@@ -190,6 +223,24 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
         </div>
 
       <div className="flex max-w-5xl flex-col gap-5">
+        {attention.length > 0 && (
+          <Section title="Needs your decision">
+            <div className="flex flex-col gap-2">
+              {attention.map((item) => (
+                <div key={item.id} className="runneros-card px-3 py-3">
+                  <div className="text-sm font-medium text-white/82">{displayToolName(item.toolCall.name)}</div>
+                  <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-[6px] bg-black/20 p-2 text-[11px] text-white/60">{formatAttentionArgs(item.toolCall.args)}</pre>
+                  <div className="mt-2 text-[11px] text-white/38">Agent note</div>
+                  <div className="mt-0.5 text-xs text-white/55">{item.recommendation}</div>
+                  <div className="mt-3 flex gap-2">
+                    <Button size="sm" onClick={() => void handleAttention(item, 'approved')} disabled={resolvingAttentionId !== null}>Allow this action</Button>
+                    <Button size="sm" variant="outline" onClick={() => void handleAttention(item, 'rejected')} disabled={resolvingAttentionId !== null}>Skip action</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
         <RunOutputCard
           runState={run.state}
           outputIds={outputRefs.outputIds}
@@ -258,6 +309,18 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
       </div>
     </div>
   )
+}
+
+function displayToolName(name: string): string {
+  return name.replace(/^mcp__[^_]+__/, '').replaceAll('_', ' ')
+}
+
+function formatAttentionArgs(args: unknown): string {
+  try {
+    return JSON.stringify(args, null, 2)
+  } catch {
+    return String(args)
+  }
 }
 
 function StepCard({

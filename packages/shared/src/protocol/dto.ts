@@ -167,8 +167,9 @@ export interface CreateSessionOptions {
    * notifies via the registered notifier, and pauses the run until the
    * user resolves via `approveEscalation` / `rejectEscalation`.
    *
-   * `"yolo"` bypasses the gate (operator-acknowledged risk). `"default"`
-   * (or undefined) is a no-op — normal workspace permission mode applies.
+   * `"yolo"` is retained only as a legacy no-extra-gate alias. It does not
+   * bypass the normal workspace permission policy. `"default"` (or undefined)
+   * is also a no-op.
    *
    * This is independent of `permissionMode` above which is the per-
    * workspace `safe|ask|allow-all` mode.
@@ -192,6 +193,20 @@ export interface RemoteSessionTransferPayload {
   chatGoal?: ChatGoalState
   /** Advisory task list; runtime-local execution claims are removed on import. */
   sessionTasks?: SessionTaskList
+}
+
+export interface WorkflowAttentionDTO {
+  id: string
+  workflowRunId: string
+  taskId?: string
+  recommendation: string
+  status: 'pending' | 'approved' | 'rejected'
+  createdAt: number
+  resolvedAt?: number
+  durationMs?: number
+  toolCall: { name: string; args: unknown }
+  result?: unknown
+  resolvedBy?: { type: 'user'; clientId: string }
 }
 
 export interface ImportRemoteSessionTransferResult {

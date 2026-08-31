@@ -20,6 +20,7 @@ import type {
   UpdateInfo,
   BrowserInstanceInfo,
   DeepLinkNavigation,
+  WorkflowAttentionDTO,
 } from './dto'
 
 export type { NotificationEntry } from '../notifications/types'
@@ -46,6 +47,7 @@ export interface BroadcastEventMap {
     run: WorkflowRunSnapshot,
     eventType: 'created' | 'updated' | 'completed',
   ]
+  [RPC_CHANNELS.workflowRuns.ATTENTION_UPDATED]: [workspaceId: string, attention: WorkflowAttentionDTO]
   [RPC_CHANNELS.deepResearch.UPDATED]: [
     workspaceId: string,
     run: DeepResearchRunSnapshot,

@@ -980,6 +980,7 @@ export class ClaudeAgent extends BaseAgent {
           this.config.session?.spawnedFromAgent?.agentSlug,
           this.config.workspace.artistWorkspaceScope === 'lab',
           this.config.workspace.artistWorkspaceScope,
+          this.config.session?.launchReceipt?.delegation !== undefined,
         ),
         ...(runnerDocsMcpUrl
           ? {

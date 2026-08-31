@@ -241,6 +241,11 @@ export class AgentMessageService {
           createdAt: Date.now(),
           origin: 'agent',
           automatedAncestry: runtime.automatedAncestry === true,
+          delegation: {
+            parentSessionId: runtime.parentSessionId,
+            mechanism: 'message-agent',
+            depth: depth + 1,
+          },
           summary: `Delegated by ${runtime.callerAgentSlug ?? 'session'} via message_agent.`,
           agent: baseLaunchReceipt?.agent ?? {
             slug: input.agentSlug,

@@ -3070,8 +3070,12 @@ export class SessionManager implements ISessionManager {
 
   private broadcastWorkflowRunUpdated(event: WorkflowRunEvent): void {
     if (event.type === 'escalation.created') {
-      // A dedicated escalation channel will surface these independently of
-      // workflow run updates. There is no workspace id on this event shape.
+      this.eventSink?.(
+        RPC_CHANNELS.workflowRuns.ATTENTION_UPDATED,
+        { to: 'workspace', workspaceId: event.workspaceId },
+        event.workspaceId,
+        event.escalation,
+      )
       return
     }
     const workspaceId = event.type === 'outputs.updated' ? event.workspaceId : event.run.workspaceId
@@ -6681,6 +6685,7 @@ user a clickable link to where the thing now lives.`
         // it when forwarding server-spawned workflow, automation, and Pulse
         // sessions or HNIC loses its Manager and scheduling tools.
         ...backendAgentSessionFields(managed.spawnedFromAgent),
+        launchReceipt: managed.launchReceipt,
         sdkSessionId: managed.sdkSessionId,
         branchFromSdkSessionId: managed.branchContextStrategy === 'sdk-fork' ? managed.branchFromSdkSessionId : undefined,
         branchFromSessionPath: managed.branchContextStrategy === 'sdk-fork' ? managed.branchFromSessionPath : undefined,
@@ -7558,6 +7563,11 @@ user a clickable link to where the thing now lives.`
             createdAt: Date.now(),
             origin: 'spawned-session',
             automatedAncestry: hasAutomatedSessionAncestry(managed.launchReceipt),
+            delegation: {
+              parentSessionId: managed.id,
+              mechanism: 'spawn-session',
+              depth: parentDepth + 1,
+            },
             summary: `Spawned from session "${managed.name || managed.id}".`,
             config: {},
             injected: {

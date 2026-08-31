@@ -581,6 +581,9 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.workflowRuns.CANCEL,
   RPC_CHANNELS.workflowRuns.RESUME,
   RPC_CHANNELS.workflowRuns.DELETE,
+  RPC_CHANNELS.workflowRuns.LIST_ATTENTION,
+  RPC_CHANNELS.workflowRuns.RESOLVE_ATTENTION,
+  RPC_CHANNELS.workflowRuns.ATTENTION_UPDATED,
   RPC_CHANNELS.workflowRuns.UPDATED,
 
   // deep research — workspace-local research runs

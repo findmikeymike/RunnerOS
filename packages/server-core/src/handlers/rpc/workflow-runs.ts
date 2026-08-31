@@ -19,6 +19,12 @@ import {
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import {
+  approveEscalation,
+  listPendingEscalations,
+  rejectEscalation,
+  type Escalation,
+} from '@craft-agent/shared/agent'
 
 const WORKFLOW_RUNS_RESUME =
   (RPC_CHANNELS.workflowRuns as { RESUME?: string; RERUN_FROM_STEP?: string }).RESUME ??
@@ -32,6 +38,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workflowRuns.CANCEL,
   WORKFLOW_RUNS_RESUME,
   RPC_CHANNELS.workflowRuns.DELETE,
+  RPC_CHANNELS.workflowRuns.LIST_ATTENTION,
+  RPC_CHANNELS.workflowRuns.RESOLVE_ATTENTION,
 ] as const
 
 function resolveRootPath(workspaceId: string): string {
@@ -51,6 +59,44 @@ async function assertWorkflowRunPermission(workspaceId: string, action: 'agent.c
 }
 
 export function registerWorkflowRunsHandlers(server: RpcServer, deps: HandlerDeps): void {
+  server.handle(
+    RPC_CHANNELS.workflowRuns.LIST_ATTENTION,
+    async (_ctx, workspaceId: string, runId?: string): Promise<Escalation[]> => {
+      const rootPath = resolveRootPath(workspaceId)
+      return listPendingEscalations(runId ? { workflowRunId: runId } : undefined)
+        .filter((attention) => readRun(rootPath, attention.workflowRunId)?.workspaceId === workspaceId)
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.workflowRuns.RESOLVE_ATTENTION,
+    async (
+      ctx,
+      workspaceId: string,
+      escalationId: string,
+      decision: 'approved' | 'rejected',
+    ): Promise<Escalation> => {
+      const pending = listPendingEscalations().find((item) => item.id === escalationId)
+      if (!pending) throw new Error(`Pending attention item not found: ${escalationId}`)
+      const run = readRun(resolveRootPath(workspaceId), pending.workflowRunId)
+      if (!run || run.workspaceId !== workspaceId) {
+        throw new Error('Attention item does not belong to this workspace.')
+      }
+      await assertWorkflowRunPermission(workspaceId, 'agent.chat')
+      const resolvedBy = { type: 'user' as const, clientId: ctx.clientId }
+      const resolved = decision === 'approved'
+        ? approveEscalation(escalationId, resolvedBy)
+        : rejectEscalation(escalationId, resolvedBy)
+      server.push(
+        RPC_CHANNELS.workflowRuns.ATTENTION_UPDATED,
+        { to: 'workspace', workspaceId },
+        workspaceId,
+        resolved,
+      )
+      return resolved
+    },
+  )
+
   server.handle(
     RPC_CHANNELS.workflowRuns.START,
     async (

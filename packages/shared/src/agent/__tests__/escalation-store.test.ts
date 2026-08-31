@@ -74,7 +74,7 @@ describe('EscalationStore — listPending', () => {
     await new Promise((r) => setTimeout(r, 2));
     const c = store.create(sampleInput({ workflowRunId: 'run-c' }));
 
-    store.approve(b.id);
+    store.approve(b.id, { type: 'user', clientId: 'test-client' });
 
     const pending = store.listPending();
     expect(pending.map((e) => e.id)).toEqual([a.id, c.id]);
@@ -92,32 +92,34 @@ describe('EscalationStore — listPending', () => {
 describe('EscalationStore — approve / reject', () => {
   test('approve flips status, sets resolvedAt, stores result', () => {
     const e = store.create(sampleInput());
-    const updated = store.approve(e.id, { ok: true });
+    const updated = store.approve(e.id, { type: 'user', clientId: 'test-client' }, { ok: true });
     expect(updated.status).toBe('approved');
     expect(updated.resolvedAt).toBeGreaterThanOrEqual(updated.createdAt);
     expect(updated.result).toEqual({ ok: true });
+    expect(updated.resolvedBy).toEqual({ type: 'user', clientId: 'test-client' });
 
     const reread = store.get(e.id);
     expect(reread?.status).toBe('approved');
     expect(reread?.result).toEqual({ ok: true });
+    expect(reread?.resolvedBy).toEqual({ type: 'user', clientId: 'test-client' });
   });
 
   test('reject flips status to rejected', () => {
     const e = store.create(sampleInput());
-    const updated = store.reject(e.id, { reason: 'user clicked no' });
+    const updated = store.reject(e.id, { type: 'user', clientId: 'test-client' }, { reason: 'user clicked no' });
     expect(updated.status).toBe('rejected');
     expect(updated.result).toEqual({ reason: 'user clicked no' });
   });
 
   test('approve/reject on non-pending throws', () => {
     const e = store.create(sampleInput());
-    store.approve(e.id);
-    expect(() => store.approve(e.id)).toThrow(/current status is "approved"/);
-    expect(() => store.reject(e.id)).toThrow(/current status is "approved"/);
+    store.approve(e.id, { type: 'user', clientId: 'test-client' });
+    expect(() => store.approve(e.id, { type: 'user', clientId: 'test-client' })).toThrow(/current status is "approved"/);
+    expect(() => store.reject(e.id, { type: 'user', clientId: 'test-client' })).toThrow(/current status is "approved"/);
   });
 
   test('approve/reject on unknown id throws', () => {
-    expect(() => store.approve('does-not-exist')).toThrow(/not found/);
+    expect(() => store.approve('does-not-exist', { type: 'user', clientId: 'test-client' })).toThrow(/not found/);
   });
 });
 
@@ -129,8 +131,8 @@ describe('EscalationStore — multiple pending concurrent', () => {
     expect(store.listPending()).toHaveLength(5);
 
     // Resolve out of order.
-    store.approve(ids[2]!);
-    store.reject(ids[4]!);
+    store.approve(ids[2]!, { type: 'user', clientId: 'test-client' });
+    store.reject(ids[4]!, { type: 'user', clientId: 'test-client' });
     const stillPending = store.listPending();
     const expected: string[] = [ids[0]!, ids[1]!, ids[3]!];
     expect(stillPending.map((e) => e.id).sort()).toEqual(expected.sort());
@@ -141,7 +143,7 @@ describe('EscalationStore — durability across instance restart', () => {
   test('rows persist after close + reopen', () => {
     const a = store.create(sampleInput({ workflowRunId: 'run-persist' }));
     const b = store.create(sampleInput({ workflowRunId: 'run-persist-2' }));
-    store.approve(b.id, { side: 'effect' });
+    store.approve(b.id, { type: 'user', clientId: 'test-client' }, { side: 'effect' });
     store.close();
 
     // Reopen at the same path — should see both rows.
@@ -167,7 +169,7 @@ describe('EscalationStore — subscribe', () => {
       events.push({ id: e.id, status: e.status });
     });
     const e = store.create(sampleInput());
-    store.approve(e.id);
+    store.approve(e.id, { type: 'user', clientId: 'test-client' });
     unsub();
     store.create(sampleInput());
 

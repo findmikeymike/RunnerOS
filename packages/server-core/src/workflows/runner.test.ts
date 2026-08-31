@@ -2044,8 +2044,9 @@ describe('WorkflowRunner', () => {
     // this test is robust to leftover rows in the singleton SQLite store.
     const escalationEvent = events.find((e) => e.type === 'escalation.created');
     if (escalationEvent?.type !== 'escalation.created') throw new Error('no escalation event');
+    expect(escalationEvent.workspaceId).toBe(WORKSPACE_ID);
     const escId = escalationEvent.escalation.id;
-    escalationStore.approve(escId);
+    escalationStore.approve(escId, { type: 'user', clientId: 'test-client' });
 
     const outcome = (await gatePromise) as unknown as { kind: string; result?: unknown };
     expect(outcome.kind).toBe('executed');
@@ -2126,7 +2127,7 @@ describe('WorkflowRunner', () => {
 
     const escalationEvent = events.find((e) => e.type === 'escalation.created');
     if (escalationEvent?.type !== 'escalation.created') throw new Error('no escalation event');
-    escalationStore.reject(escalationEvent.escalation.id, 'user denied');
+    escalationStore.reject(escalationEvent.escalation.id, { type: 'user', clientId: 'test-client' }, 'user denied');
 
     const outcome = (await gatePromise) as unknown as { kind: string; reason?: string };
     expect(outcome.kind).toBe('denied');

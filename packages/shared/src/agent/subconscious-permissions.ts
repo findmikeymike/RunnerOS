@@ -223,7 +223,7 @@ export type WritePolicyDecision = 'allow' | 'deny' | 'escalate';
  *                  here means "let the workspace policy decide"; callers
  *                  must still consult Safe-Mode for actual gating).
  *   subconscious → reads allowed, writes → "escalate".
- *   yolo         → everything → "allow" (operator-acknowledged risk).
+ *   yolo         → legacy no-extra-gate alias. Normal workspace policy still applies.
  *
  * "subconscious" is the only mode that ever returns "escalate". The
  * dispatch table is intentionally tiny — extension points live in

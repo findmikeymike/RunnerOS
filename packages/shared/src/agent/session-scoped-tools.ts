@@ -33,6 +33,7 @@ import {
 } from '@craft-agent/session-tools-core';
 import { createLLMTool, type LLMQueryRequest, type LLMQueryResult } from './llm-tool.ts';
 import { createSpawnSessionTool, type SpawnSessionFn } from './spawn-session-tool.ts';
+import { isToolBlockedForDelegatedSession } from './spawn-session-isolation.ts';
 import { createBrowserTools, type BrowserPaneFns } from './browser-tools.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
 import { getBrowserToolEnabled, loadStoredConfig } from '../config/storage.ts';
@@ -222,8 +223,9 @@ export function getSessionScopedTools(
   agentSlug?: string,
   includeLabTools = false,
   artistWorkspaceScope?: string,
+  delegatedSession = false,
 ): ReturnType<typeof createSdkMcpServer> {
-  const cacheKey = `${sessionId}::${workspaceRootPath}::${agentSlug ?? ''}::scope=${artistWorkspaceScope ?? ''}::lab=${includeLabTools}`;
+  const cacheKey = `${sessionId}::${workspaceRootPath}::${agentSlug ?? ''}::scope=${artistWorkspaceScope ?? ''}::lab=${includeLabTools}::delegated=${delegatedSession}`;
 
   // Return cached tools if available, but always create a fresh MCP server wrapper
   let tools: any[] | undefined = sessionToolsCache.get(cacheKey);
@@ -270,6 +272,7 @@ export function getSessionScopedTools(
       includeCampaignManagerTools: agentSlug === 'concierge' && artistWorkspaceScope === 'campaign',
       includeLabTools,
     })
+      .filter(def => !isToolBlockedForDelegatedSession(def.name, delegatedSession))
       .filter(def => def.handler !== null) // Skip backend-specific tools (call_llm)
       .map(def => registryTool(def.name, def.inputSchema.shape));
 
@@ -296,8 +299,9 @@ export function getSessionScopedTools(
     //     a subagent cannot reach a source the parent itself doesn't have
     //     access to. Returns undefined when the parent has no explicit
     //     allowlist (inherit defaults — distinct from "deny all").
-    tools.push(
-      createSpawnSessionTool({
+    if (!delegatedSession) {
+      tools.push(
+        createSpawnSessionTool({
         sessionId,
         getSpawnSessionFn: () => {
           const callbacks = getSessionScopedToolCallbacks(sessionId);
@@ -311,8 +315,9 @@ export function getSessionScopedTools(
           const session = loadSession(workspaceRootPath, sessionId);
           return session?.enabledSourceSlugs;
         },
-      }),
-    );
+        }),
+      );
+    }
 
     // Add browser_* tools — backend-specific (requires BrowserPaneManager in Electron)
     // Gated by the "Built-in browser" setting so users with external browser tools
