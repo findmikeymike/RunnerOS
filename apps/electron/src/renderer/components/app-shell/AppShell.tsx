@@ -91,7 +91,7 @@ import { getResizeGradientStyle } from "@/hooks/useResizeGradient"
 import { useAction } from "@/actions"
 import { useFocusZone } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
-import { getSessionTitle } from "@/utils/session"
+import { getSessionAgentIdentity, getSessionTitle } from "@/utils/session"
 import { GENERAL_PROJECT_KEY, getSessionProjectInfo } from "@/utils/session-project"
 import { useSetAtom } from "jotai"
 import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter } from "../../../shared/types"
@@ -3089,7 +3089,7 @@ function AppShellContent({
                             : "text-white/42 hover:bg-white/[0.035] hover:text-white/70",
                         )}
                       >
-                        {getSessionTitle(item)}
+                        {getSessionAgentIdentity(item)?.name ?? getSessionTitle(item)}
                       </button>
                     )
                   })}
