@@ -48,7 +48,11 @@ function parseMessageAgentToolResult(message: Message): ActivityItem['agentMessa
     receiptId,
     childSessionId,
     targetAgentSlug: typeof message.toolInput?.agentSlug === 'string' ? message.toolInput.agentSlug : undefined,
-    status: message.isError ? 'failed' : 'succeeded',
+    status: message.isError
+      ? 'failed'
+      : content.includes('started delegated task in the background.')
+        ? 'running'
+        : 'succeeded',
   }
 }
 
@@ -296,7 +300,7 @@ function messageToActivity(message: Message, existingActivities: ActivityItem[] 
     shellId: message.shellId,
     elapsedSeconds: message.elapsedSeconds,
     isBackground: message.isBackground,
-    agentMessage: parseMessageAgentToolResult(message),
+    agentMessage: message.agentMessage ?? parseMessageAgentToolResult(message),
   }
 
   // Calculate depth incrementally using existing activities

@@ -375,6 +375,34 @@ describe('edge cases', () => {
 })
 
 describe('message_agent activity metadata', () => {
+  it('keeps a background delegation running until its terminal notice arrives', () => {
+    resetCounters()
+    const messages: Message[] = [
+      createUserMessage('Ask a specialist'),
+      {
+        id: 'tool-running-agent',
+        role: 'tool',
+        content: '',
+        timestamp: Date.now() + 100,
+        toolName: 'message_agent',
+        toolUseId: 'tu-running-agent',
+        toolInput: { agentSlug: 'reviewer' },
+        toolStatus: 'backgrounded',
+        toolResult: [
+          'Agent "reviewer" started delegated task in the background.',
+          'receiptId: receipt-running',
+          'childSessionId: child-running',
+        ].join('\n'),
+        isBackground: true,
+      },
+    ]
+
+    const turn = getLastAssistantTurn(groupMessagesByTurn(messages))
+
+    expect(turn?.activities[0]?.status).toBe('backgrounded')
+    expect(turn?.activities[0]?.agentMessage?.status).toBe('running')
+  })
+
   it('hydrates delegated child session metadata from a persisted tool result', () => {
     resetCounters()
     const messages: Message[] = [

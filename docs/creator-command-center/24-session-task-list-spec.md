@@ -98,9 +98,9 @@ Consequences:
 - A parent whose Goal is active only sees the result if a round happens for some other reason.
 - With the completion enforcer proposed below, a delegated task item would never resolve, and the session would refuse to complete forever.
 
-### Gap 2 — the parent never stops believing work is pending
+### Gap 2 — the server does not own the background boundary lifecycle
 
-Fixing Gap 1 alone does nothing. The Goal driver would still refuse the round.
+A wake protocol is incomplete unless the server owns the boundary it is waiting on.
 
 `hasPendingBackgroundWork` is derived from message state:
 
@@ -113,18 +113,11 @@ It is read at two places, and both are Goal gates:
 - `SessionManager.ts:11219` — feeds `hasUnresolvedBoundary` in the settle path, producing a `waiting-external` pause
 - `SessionManager.ts:8704` — blocks `resumeChatGoal`
 
-`toolStatus: 'backgrounded'` is set on the parent's original `message_agent` tool message and **is never cleared anywhere in the codebase.** A repository-wide search finds only those two read sites; the remaining matches (`task_backgrounded`, `shell_backgrounded`) are unrelated event cases.
+Implementation of Slice 0 found that the original analysis was incomplete: `toolStatus: 'backgrounded'` was only applied by the renderer for generic SDK Task events. The server forwarded those events without mutating its authoritative messages, and a background `message_agent` result was stored as `completed`. Goal Mode therefore saw no boundary and could continue while the delegated child was still running.
 
-The child's completion notice appends a *new* info message. It does not touch the original backgrounded tool message. So after a child finishes:
+Slice 0 establishes the complete server-owned lifecycle. A trusted background `message_agent` result persists its exact `receiptId` and marks the originating tool message `backgrounded`. A terminal passive notice clears that same message to `completed` or `error` before persistence. If the child finishes before the starting tool result arrives, the stored terminal notice wins and the later result cannot reopen the boundary.
 
-- the parent still reports pending background work, forever
-- the settle path pauses with `waiting-external`
-- `resumeChatGoal` refuses
-- **both entry paths into a continuation round are closed**
-
-This is why the wake protocol must clear the boundary before it attempts the wake. A wake delivered into an uncleared boundary is a no-op that looks like a bug in the driver.
-
-This also means a Goal that delegates any background work today can never continue on its own, independent of task lists. Gap 2 is a live defect in shipped Goal Mode, not merely a blocker for this feature.
+Without both halves, behavior fails in opposite directions: no starting boundary permits premature continuation; a starting boundary without terminal clearing blocks both continuation entry paths forever.
 
 The Goal specification already anticipated this. Under No-Spin Rules it lists as a pause condition:
 
@@ -132,7 +125,7 @@ The Goal specification already anticipated this. Under No-Spin Rules it lists as
 
 The qualifier is load-bearing. Background work *without* a terminal event must pause. A receipt reaching terminal status **is** a terminal event, and is therefore a legitimate reason to continue. The rule was written with this case in mind; the wake signal was never built.
 
-**The fix is small.** The durable receipt, the completion hook, the parent notice, and the persistence are all in place. What is missing is a single classification — that a terminal background receipt is a wake reason — plus the driver logic to act on it.
+Slice 0 now owns and clears this boundary. The remaining wake classification and driver behavior belong to Slice 6.
 
 ## Product Vocabulary
 
@@ -299,11 +292,11 @@ This classification is host-owned. Model output cannot mark an item `delegated`,
 
 This is the fix for both gaps above. Steps are ordered; step 0 is a precondition for everything after it.
 
-### 0. Clear the background boundary
+### 0. Own and clear the background boundary
 
-On a terminal receipt, the host locates the parent's originating `message_agent` tool message by receipt id and transitions its `toolStatus` from `'backgrounded'` to a terminal value before any wake is attempted.
+When background `message_agent` returns `running`, the host records its exact receipt id on the originating tool message and transitions `toolStatus` to `'backgrounded'`. On a terminal receipt, the host locates that message by receipt id and transitions it to a terminal value before any wake is attempted.
 
-This is the fix for Gap 2 and it must land first. Without it, both `settleChatGoalAtIdle` and `resumeChatGoal` continue to report unresolved background work and every wake is silently swallowed.
+This is the fix for Gap 2 and it must land first. Without both the start and terminal transitions, Goal Mode either continues prematurely or remains blocked after the child finishes.
 
 Two implementation options; the first is preferred:
 
@@ -312,7 +305,7 @@ Two implementation options; the first is preferred:
 
 Whichever is chosen, the rule is: **a backgrounded tool message must not outlive its receipt.** Clearing is idempotent and keyed by receipt id.
 
-Because this is a live defect in shipped Goal Mode — a Goal that backgrounds any delegation can never self-continue — step 0 is worth landing on its own, ahead of the rest of this feature.
+This is a live Goal Mode correctness defect and is worth landing on its own ahead of the rest of the task-list feature.
 
 ### 1. Classify the notice
 
@@ -492,7 +485,7 @@ Metrics worth distinguishing: lists created by source (native vs adapter); compl
 
 Ordered so that no slice ships a deadlock.
 
-**Slice 0 — Clear the background boundary.** Terminal receipts clear the originating tool message's `backgrounded` status. Independent of task lists, shippable alone, and a fix for a live Goal Mode defect: today a Goal that backgrounds any delegation can never self-continue. Land this first regardless of what follows.
+**Slice 0 — Own and clear the background boundary.** Running background delegations persist an exact receipt-linked boundary; terminal receipts clear it. The transition is idempotent and handles completion-before-start ordering. Independent of task lists and shippable alone. **Implemented 2026-08-30.**
 
 **Slice 1 — State model.** `packages/shared/src/sessions/session-tasks.ts`, pure functions and invariants, with unit tests. No runtime wiring.
 
@@ -534,7 +527,9 @@ Ordered so that no slice ships a deadlock.
 
 ### Background boundary (Slice 0)
 
+- a running background delegation creates one receipt-linked server boundary
 - a terminal receipt clears the originating tool message's `backgrounded` status
+- a terminal receipt that arrives before the starting tool result prevents that result from reopening the boundary
 - after clearing, `hasPendingBackgroundWork` reports false and both `settleChatGoalAtIdle` and `resumeChatGoal` admit
 - a Goal that backgrounds a delegation and receives a terminal receipt can continue — the regression test for the live defect
 - clearing is idempotent under duplicate or replayed receipts

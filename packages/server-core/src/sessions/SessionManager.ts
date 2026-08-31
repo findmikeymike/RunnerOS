@@ -1681,6 +1681,77 @@ const DEFAULT_TOKEN_USAGE = {
 
 const AGENT_MESSAGE_DEPTH_LABEL_PREFIX = 'agent-message-depth:'
 
+function isMessageAgentToolName(toolName: string | undefined): boolean {
+  return toolName === 'message_agent' || toolName?.endsWith('__message_agent') === true
+}
+
+function parseBackgroundAgentToolMessage(message: Message): AgentMessageNoticeMetadata | undefined {
+  if (message.role !== 'tool' || !isMessageAgentToolName(message.toolName)) return undefined
+  const result = message.toolResult ?? message.content
+  if (!result.includes('started delegated task in the background.')) return undefined
+  const receiptId = result.match(/^receiptId:\s*([^\s]+)\s*$/m)?.[1]
+  if (!receiptId) return undefined
+  return {
+    receiptId,
+    childSessionId: result.match(/^childSessionId:\s*([^\s]+)\s*$/m)?.[1],
+    targetAgentSlug: typeof message.toolInput?.agentSlug === 'string' ? message.toolInput.agentSlug : undefined,
+    status: 'running',
+  }
+}
+
+function isTerminalAgentMessageStatus(
+  status: AgentMessageNoticeMetadata['status'],
+): status is Exclude<NonNullable<AgentMessageNoticeMetadata['status']>, 'running'> {
+  return status === 'succeeded' || status === 'failed' || status === 'cancelled' || status === 'timed-out'
+}
+
+function applyTerminalAgentMessageStatus(
+  message: Message,
+  notice: AgentMessageNoticeMetadata,
+): void {
+  message.agentMessage = { ...message.agentMessage, ...notice }
+  message.toolStatus = notice.status === 'succeeded' ? 'completed' : 'error'
+  message.isError = notice.status !== 'succeeded'
+  message.isBackground = true
+}
+
+function reconcileBackgroundAgentToolMessage(messages: Message[], message: Message): void {
+  const running = parseBackgroundAgentToolMessage(message)
+  if (!running?.receiptId) return
+
+  const terminalNotice = [...messages].reverse().find(candidate => {
+    const notice = candidate.agentMessage
+    if (!notice) return false
+    return candidate.displayIntent === 'agent-message-passive'
+      && notice.receiptId === running.receiptId
+      && isTerminalAgentMessageStatus(notice.status)
+  })?.agentMessage
+
+  if (terminalNotice) {
+    applyTerminalAgentMessageStatus(message, terminalNotice)
+    return
+  }
+
+  message.agentMessage = running
+  message.toolStatus = 'backgrounded'
+  message.isError = false
+  message.isBackground = true
+}
+
+function clearBackgroundAgentBoundary(
+  messages: Message[],
+  notice: AgentMessageNoticeMetadata | undefined,
+): void {
+  if (!notice?.receiptId || !isTerminalAgentMessageStatus(notice.status)) return
+
+  for (const message of messages) {
+    const linkedReceiptId = message.agentMessage?.receiptId
+      ?? parseBackgroundAgentToolMessage(message)?.receiptId
+    if (linkedReceiptId !== notice.receiptId) continue
+    if (message.toolStatus === 'backgrounded') applyTerminalAgentMessageStatus(message, notice)
+  }
+}
+
 function getAgentMessageDepth(labels: string[] | undefined): number {
   const label = labels?.find((value) => value.startsWith(AGENT_MESSAGE_DEPTH_LABEL_PREFIX))
   if (!label) return 0
@@ -5146,6 +5217,11 @@ user a clickable link to where the thing now lives.`
     agentMessage?: AgentMessageNoticeMetadata,
   ): Promise<void> {
     await this.ensureMessagesLoaded(managed)
+
+    // A terminal receipt closes the exact message_agent boundary before the
+    // notice is persisted. This is intentionally idempotent and never treats a
+    // start notice as completion.
+    clearBackgroundAgentBoundary(managed.messages, agentMessage)
 
     const passiveMessage: Message = {
       id: generateMessageId(),
@@ -12104,6 +12180,7 @@ user a clickable link to where the thing now lives.`
         // parentToolUseId comes from CraftAgent (SDK-authoritative) or existing message
         const parentToolUseId = existingToolMsg?.parentToolUseId || event.parentToolUseId
 
+        let resolvedToolMessage: Message
         if (existingToolMsg) {
           // Keep lightweight status text in `content` and store full payload in `toolResult` only.
           existingToolMsg.toolResult = formattedResult
@@ -12113,6 +12190,7 @@ user a clickable link to where the thing now lives.`
           if (!existingToolMsg.parentToolUseId && event.parentToolUseId) {
             existingToolMsg.parentToolUseId = event.parentToolUseId
           }
+          resolvedToolMessage = existingToolMsg
         } else {
           // No matching tool_start found — create message from result.
           // This is normal for background subagent child tools where tool_result arrives
@@ -12137,7 +12215,14 @@ user a clickable link to where the thing now lives.`
             isError: inferredError,
           }
           managed.messages.push(toolMessage)
+          resolvedToolMessage = toolMessage
         }
+
+        // message_agent returns immediately for background work. Persist that
+        // receipt as the boundary Goal Mode waits on. If the child completed
+        // before this tool result arrived, reconcile against the terminal
+        // passive notice already in the session instead of reopening it.
+        reconcileBackgroundAgentToolMessage(managed.messages, resolvedToolMessage)
 
         // Send event to renderer if: (a) first completion, or (b) result content changed
         // (e.g., safety net auto-completed with empty result, then real result arrived later)
