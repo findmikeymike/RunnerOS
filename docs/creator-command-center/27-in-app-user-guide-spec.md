@@ -55,7 +55,7 @@ The panel contains:
    - **Start here** — a short ordered checklist.
    - **Where to go** — compact page/action rows with a direct button.
    - **Common questions** — small accordions for the few concepts that need explanation.
-4. Footer: **Ask Command**, **Keyboard shortcuts**, and a secondary **Full documentation** link.
+4. Footer: one **Still stuck? Ask Command** action.
 
 Avoid oversized cards, nested boxes, screenshot carousels, long prose, and hover-only explanations. Each row should have an icon, title, one short sentence, and optional action.
 
@@ -275,7 +275,7 @@ Suggested ownership:
 - `AppShell.tsx` — owns open state, derives workspace context, executes navigation.
 - `TopBar.tsx` — changes the current `?` dropdown into one `onOpenUserGuide` button.
 
-The existing external documentation links remain available in the guide footer. Do not delete the product-menu Help submenu or keyboard-shortcut access.
+The guide is not a directory of utility links. Existing documentation and shortcut settings can remain available elsewhere in the product, but they do not appear inside this essential guide.
 
 ## Accessibility
 
@@ -293,6 +293,7 @@ The existing external documentation links remain available in the guide footer. 
 - A forced onboarding tour or blocking first-run wizard.
 - Screenshot or video walkthroughs that quickly become stale.
 - Documentation for every integration, advanced setting, worker, or workflow.
+- Generic documentation and keyboard-shortcut link lists.
 - Analytics, completion gamification, or a permanent unread badge.
 - A fourth Lab tab. Lab receives a concise General entry until its guide scope warrants a separate decision.
 - Implementing capabilities that the guide discovers are missing.
@@ -304,7 +305,7 @@ The existing external documentation links remain available in the guide footer. 
 - Add typed content and action registry.
 - Add `ArtistGuideDialog`.
 - Replace the top-right help dropdown with the guide trigger.
-- Preserve external docs and shortcuts in the footer.
+- End the guide with one clear `Ask Command` escape hatch.
 
 ### Slice 2 — General setup
 
@@ -334,7 +335,6 @@ The existing external documentation links remain available in the guide footer. 
 5. The guide never teaches hidden HQ Plan navigation.
 6. Setup statuses never report `Ready` without a dependable validation signal.
 7. The copy clearly distinguishes HQ from Campaign, Worker from Workflow from Automation, and Essentials from Release Kit.
-8. External documentation and keyboard shortcuts remain reachable.
+8. The guide contains no peripheral utility-link clutter; its only footer action is `Ask Command`.
 9. The panel remains readable in a compact Electron window without clipped controls or nested page scrolling.
 10. A manual smoke confirms open, close, tab switching, focus return, settings deep links, HQ links, Campaign links, and Ask Command in the running canonical Artist OS build.
-
