@@ -11879,6 +11879,23 @@ user a clickable link to where the thing now lives.`
             listRevision: managed.sessionTasks?.revision,
             unfinishedTaskCount: unfinishedTasks.length,
           })
+          const taskRefs = unfinishedTasks.map(item => `${item.id} (${item.status})`).join(', ')
+          const rejectionMessage: Message = {
+            id: generateMessageId(),
+            role: 'user',
+            content: [
+              '<system-reminder>',
+              'Your Goal completion request was rejected because the host task list still has unfinished items.',
+              `Unfinished task ids: ${taskRefs}.`,
+              'Continue the work and update those task states before requesting Goal completion again.',
+              '</system-reminder>',
+            ].join('\n'),
+            timestamp: this.monotonic(),
+            hidden: true,
+          }
+          managed.messages.push(rejectionMessage)
+          this.persistSession(managed)
+          await this.flushSession(managed.id)
         } else {
           if (goal.doneWhen && !pendingUpdate.evidence?.length) {
             const paused = pauseChatGoalState(goal, {
@@ -11891,6 +11908,7 @@ user a clickable link to where the thing now lives.`
           const completed = completeChatGoalState(goal, {
             summary: pendingUpdate.summary,
             evidence: pendingUpdate.evidence,
+            taskVerification: managed.sessionTasksDegraded ? 'skipped-degraded' : undefined,
           })
           await this.commitChatGoalState(managed, completed, 'completed', completed.completion!.summary)
           return undefined

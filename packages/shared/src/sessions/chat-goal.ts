@@ -36,6 +36,8 @@ export type ChatGoalStopCode =
 export interface ChatGoalCompletion {
   summary: string;
   evidence?: string[];
+  /** Host-owned audit marker: task enforcement was unavailable at completion. */
+  taskVerification?: 'skipped-degraded';
   completedAt: number;
 }
 
@@ -260,11 +262,16 @@ export function parseChatGoalState(value: unknown): ChatGoalState | undefined {
     }
     if (candidate.completion) {
       if (typeof candidate.completion.summary !== 'string' || !Number.isFinite(candidate.completion.completedAt)) return undefined;
+      if (
+        candidate.completion.taskVerification !== undefined
+        && candidate.completion.taskVerification !== 'skipped-degraded'
+      ) return undefined;
       parsed.completion = {
         summary: candidate.completion.summary,
         evidence: Array.isArray(candidate.completion.evidence)
           ? candidate.completion.evidence.filter((item): item is string => typeof item === 'string')
           : undefined,
+        taskVerification: candidate.completion.taskVerification,
         completedAt: candidate.completion.completedAt,
       };
     }
@@ -396,7 +403,12 @@ export function completeChatGoalState(
     status: 'complete',
     revision: goal.revision + 1,
     updatedAt: now,
-    completion: { summary, evidence: evidence?.length ? evidence : undefined, completedAt: now },
+    completion: {
+      summary,
+      evidence: evidence?.length ? evidence : undefined,
+      taskVerification: completion.taskVerification,
+      completedAt: now,
+    },
     stop: undefined,
     blockerAudit: undefined,
   };

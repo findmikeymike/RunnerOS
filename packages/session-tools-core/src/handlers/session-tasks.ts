@@ -6,6 +6,7 @@ export type UpdateTasksOperation = 'init' | 'start' | 'done' | 'append' | 'drop'
 export type SessionTaskRejectionCode =
   | 'duplicate-content'
   | 'empty-content'
+  | 'content-too-long'
   | 'multiple-in-progress'
   | 'unknown-task-id'
   | 'terminal-item'
@@ -25,6 +26,7 @@ export interface UpdateTasksToolInput {
 const PUBLIC_REJECTION_CODES: Record<string, SessionTaskRejectionCode> = {
   'duplicate-content': 'duplicate-content',
   'empty-content': 'empty-content',
+  'content-too-long': 'content-too-long',
   'multiple-in-progress': 'multiple-in-progress',
   'task-not-found': 'unknown-task-id',
   'terminal-task': 'terminal-item',

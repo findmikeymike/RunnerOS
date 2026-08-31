@@ -77,4 +77,35 @@ describe('ChatGoalControls', () => {
     expect(recoveryButton).toBeDefined()
     expect(recoveryButton).not.toContain(' disabled=""')
   })
+
+  it('shows when completion could not verify open tasks', () => {
+    const session = {
+      id: 'session-1',
+      workspaceId: 'workspace-1',
+      workspaceName: 'Artist OS',
+      messages: [],
+      isProcessing: false,
+      lastMessageAt: 1,
+      chatGoal: {
+        schemaVersion: 1,
+        id: 'goal-1',
+        objective: 'Finish the plan',
+        status: 'complete',
+        revision: 2,
+        round: 1,
+        maxRounds: 6,
+        completion: {
+          summary: 'Finished the plan.',
+          taskVerification: 'skipped-degraded',
+          completedAt: 3,
+        },
+        createdAt: 1,
+        updatedAt: 3,
+      },
+    } satisfies Session
+
+    const html = renderToStaticMarkup(<ChatGoalControls session={session} />)
+    expect(html).toContain('Goal completed while task tracking was unavailable')
+    expect(html).toContain('Open tasks could not be verified')
+  })
 })

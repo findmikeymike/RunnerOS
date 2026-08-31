@@ -291,6 +291,13 @@ describe('SessionManager chat Goal management', () => {
     expect(manager.getChatGoal('session-1')?.status).toBe('active');
     expect(manager.getChatGoal('session-1')?.completion).toBeUndefined();
     expect(managed.pendingChatGoalUpdate).toBeUndefined();
+    const rejection = managed.messages.find(message =>
+      message.hidden && message.content.includes('completion request was rejected')
+    );
+    expect(rejection?.content).toContain(managed.sessionTasks.items[0]!.id);
+    expect(loadSession(root, 'session-1')?.messages.some(message =>
+      message.hidden && message.content.includes('completion request was rejected')
+    )).toBe(true);
   });
 
   it('does not enforce a stale task list after advisory persistence degrades', async () => {
@@ -317,6 +324,8 @@ describe('SessionManager chat Goal management', () => {
     }).settleChatGoalAtIdle(managed, 'complete', true, undefined);
 
     expect(manager.getChatGoal('session-1')?.status).toBe('complete');
+    expect(manager.getChatGoal('session-1')?.completion?.taskVerification).toBe('skipped-degraded');
+    expect(loadSession(root, 'session-1')?.chatGoal?.completion?.taskVerification).toBe('skipped-degraded');
   });
 
   it('deduplicates completion and reserves only one continuation', async () => {

@@ -318,6 +318,12 @@ export function ChatGoalControls({ session }: ChatGoalControlsProps) {
             </div>
           </div>
 
+          {goal.completion?.taskVerification === 'skipped-degraded' && (
+            <div role="status" className="mt-2 rounded-md bg-amber-400/[0.08] px-2 py-1.5 text-[11px] text-amber-200/75">
+              Goal completed while task tracking was unavailable. Open tasks could not be verified.
+            </div>
+          )}
+
           {expanded && (
             <div className="mt-2 border-t border-white/[0.06] pt-2 text-[12px] text-white/55">
               <div className="whitespace-pre-wrap text-white/72">{goal.objective}</div>

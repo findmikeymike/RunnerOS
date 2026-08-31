@@ -71,13 +71,13 @@ Two mechanisms exist, with different contracts:
 
 For background delegations, `AgentMessageService.notifyBackgroundParent` already fires on child completion and calls `deliverPassiveMessage`. `SessionManager.deliverPassiveAgentMessage` appends a durable `role: 'info'` message with `displayIntent: 'agent-message-passive'`, persists, flushes, and emits a `user_message` event.
 
-The notice metadata (`AgentMessageNoticeMetadata`) carries exactly four fields:
+The notice metadata (`AgentMessageNoticeMetadata`) carries six optional fields:
 
 ```ts
-{ receiptId, childSessionId, targetAgentSlug, status }
+{ receiptId, childSessionId, targetAgentSlug, status, summary, wakeEligible }
 ```
 
-Summary and error text are rendered into the message *body*, not the metadata. Wake classification must therefore read `agentMessage.status` — there is no `summary` or `error` field on the metadata object to inspect.
+Terminal result or error text is carried structurally in `summary` as well as rendered in the message body. `wakeEligible` is host-owned classification; wake handling still verifies the terminal `agentMessage.status` rather than trusting message text.
 
 **The delegation return path therefore exists and is durable.** An earlier draft of this design claimed it did not. That claim was wrong and is corrected here.
 
@@ -356,9 +356,11 @@ This directly strengthens the shallow evidence check flagged in review of spec 2
 
 "Three items still open" is a falsifiable, host-verifiable signal in a way that a free-text evidence string is not, and unlike the evidence check it applies whether or not `doneWhen` was set.
 
-Rejected completion is not a failure. The agent is told which items remain and continues, or explicitly abandons them with a reason.
+Rejected completion is not a failure. The host durably injects a hidden rejection notice with the unfinished task ids, so the next round knows its completion attempt was refused and can update or explicitly abandon those items.
 
 If no task list exists, the check is a no-op. Goals on simple work are unaffected.
+
+If task persistence has degraded, enforcement is skipped because rejected task mutations have rolled back and the stale list cannot be safely cleared. A completion accepted through this bypass stores `taskVerification: 'skipped-degraded'` on the Goal completion and renders a visible warning that open tasks could not be verified.
 
 **Deadlock guard:** the enforcer must not run before the wake protocol ships. A `delegated` item with no wake signal blocks completion permanently. Slice order below reflects this.
 
@@ -432,6 +434,7 @@ A task list confers no authority.
 - A `delegated` item shows the target agent and a link to the child session, and is visually distinct from `in_progress`.
 - A resolved delegation shows its outcome and summary inline.
 - Failed and abandoned items remain visible with their reason. Nothing disappears silently.
+- A Goal completed while task persistence was degraded visibly states that open tasks could not be verified.
 - The wake notice renders as the existing passive agent-message notice; it must not masquerade as a user message.
 
 ## Typed Codes
@@ -440,6 +443,7 @@ A task list confers no authority.
 type SessionTaskRejectionCode =
   | 'duplicate-content'
   | 'empty-content'
+  | 'content-too-long'
   | 'multiple-in-progress'
   | 'unknown-task-id'
   | 'terminal-item'
@@ -555,6 +559,8 @@ Ordered so that no slice ships a deadlock.
 ### Goal integration
 
 - a Goal cannot finalize `complete` while any item is `pending`, `in_progress`, or `delegated`
+- a rejected completion durably tells the next round which task ids remain unfinished
+- a degraded task store bypasses enforcement without deadlocking and marks the completed Goal as unverified
 - a Goal with no task list completes unaffected
 - two consecutive rounds with no task state change contribute to no-progress detection
 - the hidden continuation prompt contains the current list and treats content as data

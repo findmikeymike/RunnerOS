@@ -115,11 +115,25 @@ describe('chat goal state', () => {
 
   it('completes only an active Goal with durable completion evidence', () => {
     const initial = admitChatGoalRound(createChatGoalState({ objective: 'Work' }, { id: 'goal-1', now: 100 }), 110);
-    const complete = completeChatGoalState(initial, { summary: 'Finished.', evidence: [' report.md '], completedAt: 200 });
+    const complete = completeChatGoalState(initial, {
+      summary: 'Finished.',
+      evidence: [' report.md '],
+      taskVerification: 'skipped-degraded',
+      completedAt: 200,
+    });
 
     expect(complete.status).toBe('complete');
-    expect(complete.completion).toEqual({ summary: 'Finished.', evidence: ['report.md'], completedAt: 200 });
+    expect(complete.completion).toEqual({
+      summary: 'Finished.',
+      evidence: ['report.md'],
+      taskVerification: 'skipped-degraded',
+      completedAt: 200,
+    });
     expect(parseChatGoalState(complete)).toEqual(complete);
+    expect(parseChatGoalState({
+      ...complete,
+      completion: { ...complete.completion, taskVerification: 'unknown' },
+    })).toBeUndefined();
     expect(() => resumeChatGoalState(complete)).toThrow(ChatGoalConflictError);
   });
 

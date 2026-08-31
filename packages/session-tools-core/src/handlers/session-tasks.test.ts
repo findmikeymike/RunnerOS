@@ -33,6 +33,16 @@ describe('update_tasks session tool', () => {
     expect(result.content[0]?.text).toContain('Duplicate task content');
   });
 
+  it('maps overlong task content to an actionable rejection code', async () => {
+    const error = Object.assign(new Error('Task content must be 200 characters or fewer'), { code: 'content-too-long' });
+    const result = await handleUpdateTasks(context({
+      updateSessionTasks: async () => { throw error; },
+    }), { op: 'append', content: 'x'.repeat(201) });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('content-too-long');
+  });
+
   it('fails clearly when the backend capability is unavailable', async () => {
     const result = await handleUpdateTasks(context({}), { op: 'view' });
     expect(result.isError).toBe(true);
