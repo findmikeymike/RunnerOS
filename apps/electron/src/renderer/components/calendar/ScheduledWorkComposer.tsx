@@ -14,6 +14,7 @@ import {
 import type { ScheduledWorkInputRef, ScheduledWorkOwner } from '@craft-agent/shared/scheduled-work'
 import type { OutputKind } from '@craft-agent/shared/outputs'
 import type { VaultAssetRecord } from '@craft-agent/shared/artist-vault'
+import type { ReleaseKitItem } from '@craft-agent/shared/release-kit'
 import type { WorkflowDTO } from '../../../shared/types'
 import { useAgents } from '@/hooks/useAgents'
 import { useOutputs, type OutputSummaryDTO } from '@/hooks/useOutputs'
@@ -80,6 +81,8 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
   const [error, setError] = React.useState<string | null>(null)
   const [profiles, setProfiles] = React.useState<SocialProfile[]>([])
   const [vaultAssets, setVaultAssets] = React.useState<VaultAssetRecord[]>([])
+  const [releaseKitItems, setReleaseKitItems] = React.useState<ReleaseKitItem[]>([])
+  const [releaseKitLoading, setReleaseKitLoading] = React.useState(false)
   const { activeAgents, loading: agentsLoading } = useAgents(entry.owner.workspaceId)
   const { activeWorkflows, loading: workflowsLoading } = useWorkflows(entry.owner.workspaceId)
   const { outputs, loading: outputsLoading } = useOutputs(entry.owner.workspaceId)
@@ -114,6 +117,24 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
     })
     return () => { active = false }
   }, [entry.owner.workspaceId, open])
+
+  React.useEffect(() => {
+    if (!open || entry.owner.scope !== 'campaign') {
+      setReleaseKitItems([])
+      setReleaseKitLoading(false)
+      return
+    }
+    let active = true
+    setReleaseKitLoading(true)
+    void window.electronAPI.getReleaseKit(entry.owner.workspaceId).then((manifest) => {
+      if (active) setReleaseKitItems(manifest.items.filter((item) => item.status === 'ready'))
+    }).catch(() => {
+      if (active) setReleaseKitItems([])
+    }).finally(() => {
+      if (active) setReleaseKitLoading(false)
+    })
+    return () => { active = false }
+  }, [entry.owner.scope, entry.owner.workspaceId, open])
 
   const chooseType = React.useCallback((type: ScheduledWorkComposerType) => {
     setDraft((current) => selectScheduledWorkComposerType(current, type))
@@ -207,7 +228,8 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
               draft={draft}
               outputs={outputs}
               vaultAssets={vaultAssets}
-              loading={outputsLoading}
+              releaseKitItems={releaseKitItems}
+              loading={outputsLoading || releaseKitLoading}
               onChange={setDraft}
             />
           ) : null}
@@ -334,10 +356,11 @@ function RunnerSection({ draft, agents, workflows, profiles, loading, onChange, 
   )
 }
 
-function InputsSection({ draft, outputs, vaultAssets, loading, onChange }: {
+function InputsSection({ draft, outputs, vaultAssets, releaseKitItems, loading, onChange }: {
   draft: ScheduledWorkComposerDraft
   outputs: OutputSummaryDTO[]
   vaultAssets: VaultAssetRecord[]
+  releaseKitItems: ReleaseKitItem[]
   loading: boolean
   onChange: React.Dispatch<React.SetStateAction<ScheduledWorkComposerDraft>>
 }) {
@@ -390,9 +413,11 @@ function InputsSection({ draft, outputs, vaultAssets, loading, onChange }: {
           selected={workDraft.inputRefs}
           outputs={outputs}
           vaultAssets={vaultAssets}
+          releaseKitItems={releaseKitItems}
           loading={loading}
           single={socialOrReview}
           includeVault={!socialOrReview}
+          releaseKitOnly={draft.type === 'social-publish' && draft.owner.scope === 'campaign'}
           onChange={(inputRefs) => onChange({ ...workDraft, inputRefs } as ScheduledWorkComposerDraft)}
         />
       ) : null}
@@ -465,16 +490,22 @@ function WorkflowInputs({ draft, onChange }: {
   )
 }
 
-function InputReferencePicker({ selected, outputs, vaultAssets, loading, single, includeVault, onChange }: {
+function InputReferencePicker({ selected, outputs, vaultAssets, releaseKitItems, loading, single, includeVault, releaseKitOnly, onChange }: {
   selected: ScheduledWorkInputRef[]
   outputs: OutputSummaryDTO[]
   vaultAssets: VaultAssetRecord[]
+  releaseKitItems: ReleaseKitItem[]
   loading: boolean
   single: boolean
   includeVault: boolean
+  releaseKitOnly: boolean
   onChange: (refs: ScheduledWorkInputRef[]) => void
 }) {
-  const choices = [
+  const releaseKitChoices = releaseKitItems.map((item) => {
+    const ref = { kind: 'release-kit' as const, itemId: item.id, sha256: item.sha256, label: item.title }
+    return { id: inputRefId(ref), label: `Release Kit · ${item.title}`, ref }
+  })
+  const legacyChoices = [
     ...outputs.flatMap((output) => {
       const refs = [
         ...(output.finals ?? []).map((final) => ({ label: `${final.isPrimary ? 'Primary Final' : 'Final'} · ${output.title}`, ref: { kind: 'final' as const, outputId: output.id, assetId: final.assetId, slot: final.slot, label: output.title } })),
@@ -487,10 +518,11 @@ function InputReferencePicker({ selected, outputs, vaultAssets, loading, single,
       return { id: inputRefId(ref), label: `Vault · ${asset.label}`, ref }
     }),
   ]
+  const choices = releaseKitOnly ? releaseKitChoices : [...releaseKitChoices, ...legacyChoices]
   const selectedIds = new Set(selected.map(inputRefId))
   return (
     <Field label="Inputs">
-      {loading ? <EmptyLine>Loading Outputs...</EmptyLine> : choices.length === 0 ? <EmptyLine>No Outputs, Finals, or Vault assets available.</EmptyLine> : (
+      {loading ? <EmptyLine>Loading assets...</EmptyLine> : choices.length === 0 ? <EmptyLine>{releaseKitOnly ? 'No ready Release Kit items available.' : 'No Release Kit items, Outputs, Finals, or Vault assets available.'}</EmptyLine> : (
         <div className="max-h-44 overflow-y-auto border-y border-white/[0.06]">
           {choices.map((choice) => (
             <button key={choice.id} type="button" onClick={() => {
@@ -763,6 +795,7 @@ function timingLabel(type: Exclude<ScheduledWorkComposerType, 'event'>): string 
 }
 
 function inputRefId(ref: ScheduledWorkInputRef): string {
+  if (ref.kind === 'release-kit') return `release-kit:${ref.itemId}:${ref.sha256}`
   if (ref.kind === 'final') return `final:${ref.outputId}:${ref.assetId ?? ref.slot ?? ''}`
   if (ref.kind === 'output') return `output:${ref.outputId}`
   if (ref.kind === 'vault') return `vault:${ref.assetId}`

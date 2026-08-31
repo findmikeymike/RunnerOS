@@ -20,6 +20,7 @@ export interface CampaignCalendarWriteToolInput {
     assetRefs?: Array<{ assetId: string; label?: string; kind?: string }>;
     finalRefs?: Array<{ outputId: string; slot?: string; assetId?: string; label?: string }>;
     outputRefs?: Array<{ outputId: string; title?: string; kind?: string }>;
+    releaseKitRefs?: Array<{ itemId: string; sha256: string; label?: string }>;
     accountSetId?: string;
     socialProfileRefs?: Array<{ platform: string; profileId?: string; label?: string }>;
     job?: {
@@ -67,6 +68,9 @@ export async function handleCampaignCalendarWrite(
   }
 
   if (args.item.job) {
+    if (args.item.job.actionType === 'post-asset') {
+      return errorResponse('Social publishing must use HNIC schedule_work with one exact Release Kit item, not campaign_calendar_write.');
+    }
     if (!args.item.job.runAt || Number.isNaN(Date.parse(args.item.job.runAt))) {
       return errorResponse('item.job.runAt must be a valid ISO timestamp.');
     }

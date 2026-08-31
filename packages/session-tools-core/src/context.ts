@@ -483,6 +483,17 @@ export interface SessionToolContext {
    */
   promoteOutputToFinal?(input: import('./handlers/outputs.ts').PromoteOutputToFinalToolInput): Promise<import('./handlers/outputs.ts').PromoteOutputToFinalResult>;
 
+  listReleaseKit?(input: import('./handlers/release-kit.ts').CampaignReleaseKitToolInput): Promise<import('./handlers/release-kit.ts').ReleaseKitToolResult>;
+  getReleaseKitItem?(input: import('./handlers/release-kit.ts').ReleaseKitItemToolInput): Promise<import('./handlers/release-kit.ts').ReleaseKitToolResult>;
+  promoteToReleaseKit?(input: import('./handlers/release-kit.ts').PromoteToReleaseKitToolInput): Promise<import('./handlers/release-kit.ts').ReleaseKitToolResult>;
+  removeFromReleaseKit?(input: import('./handlers/release-kit.ts').ReleaseKitItemToolInput): Promise<import('./handlers/release-kit.ts').ReleaseKitToolResult>;
+  setReleaseKitPrimary?(input: import('./handlers/release-kit.ts').ReleaseKitItemToolInput): Promise<import('./handlers/release-kit.ts').ReleaseKitToolResult>;
+  listCampaignAssets?(input: import('./handlers/release-kit.ts').CampaignReleaseKitToolInput): Promise<import('./handlers/release-kit.ts').ReleaseKitToolResult>;
+  listArtistVault?(input: undefined): Promise<import('./handlers/release-kit.ts').ReleaseKitToolResult>;
+  listCampaignOutputs?(input: import('./handlers/release-kit.ts').CampaignReleaseKitToolInput): Promise<import('./handlers/release-kit.ts').ReleaseKitToolResult>;
+  getCampaignOutput?(input: import('./handlers/release-kit.ts').GetCampaignOutputToolInput): Promise<import('./handlers/release-kit.ts').ReleaseKitToolResult>;
+  getAssetRecord?(input: import('./handlers/release-kit.ts').GetAssetRecordToolInput): Promise<import('./handlers/release-kit.ts').ReleaseKitToolResult>;
+
   /**
    * Apply a validated visual surface operation to the current session Canvas.
    * Backend owns workspace/session resolution; callers cannot supply those IDs.

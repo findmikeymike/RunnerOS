@@ -10,6 +10,7 @@ import { resolveAutomationsConfigPath } from '@craft-agent/shared/automations/re
 import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult } from '@craft-agent/shared/scheduled-work'
 import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context'
 import { persistHnicScheduleWork } from './HnicScheduledWork'
+import { materializeReleaseKitItem } from '@craft-agent/shared/release-kit'
 
 mock.module('@craft-agent/shared/agent-definitions', () => ({
   ...actualAgentDefinitions,
@@ -129,6 +130,34 @@ describe('persistHnicScheduleWork', () => {
     expect(work.work.items).toHaveLength(1)
     expect(calendar.calendar.items).toHaveLength(1)
     expect(calendar.calendar.items[0]?.scheduledWorkId).toBe(work.work.items[0]?.id)
+  })
+
+  test('binds an exact verified Release Kit item to HNIC work and its calendar shell', async () => {
+    const root = createRoot()
+    const source = join(root, 'teaser.mp4')
+    await writeFile(source, 'approved-teaser')
+    const promoted = materializeReleaseKitItem(root, {
+      workspaceId: 'campaign-1', campaignId: 'campaign-1',
+      source: { type: 'campaign-asset', assetId: 'asset-1' }, sourcePath: source,
+      category: 'video', subtype: 'teaser', promotedBy: 'user',
+    })
+    await persistHnicScheduleWork(options(root, input({
+      inputRefs: [{ kind: 'release-kit', itemId: promoted.item.id, sha256: promoted.item.sha256, label: 'Approved teaser' }],
+    })))
+    const work = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, 'campaign-1')
+    const calendar = parseCampaignCalendarDocResult(loadContextDoc(root, CAMPAIGN_CALENDAR_CONTEXT_SLUG) ?? undefined, 'campaign-1')
+    if (!work.ok) throw new Error(work.error)
+    if (!calendar.ok) throw new Error(calendar.error)
+    expect(work.work.items[0]?.inputRefs).toEqual([{ kind: 'release-kit', itemId: promoted.item.id, sha256: promoted.item.sha256, label: 'Approved teaser' }])
+    expect(calendar.calendar.items[0]?.releaseKitRefs).toEqual([{ itemId: promoted.item.id, sha256: promoted.item.sha256, label: 'Approved teaser' }])
+  })
+
+  test('rejects a changed or mismatched Release Kit input before persistence', async () => {
+    const root = createRoot()
+    await expect(persistHnicScheduleWork(options(root, input({
+      inputRefs: [{ kind: 'release-kit', itemId: 'kit_missing', sha256: 'a'.repeat(64) }],
+    })))).rejects.toThrow(/not found/i)
+    expect(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG)).toBeNull()
   })
 
   test('rejects reusing an idempotency key for different work', async () => {

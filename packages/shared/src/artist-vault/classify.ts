@@ -186,6 +186,9 @@ export function defaultVaultPolicy(kind: VaultAssetKind): {
   rightsStatus: VaultRightsStatus;
   usableByAgents: boolean;
 } {
+  if (kind === 'contract' || kind === 'split-sheet' || kind === 'invoice') {
+    return { status: 'review', rightsStatus: 'private', usableByAgents: false };
+  }
   if (kind === 'master-final' || kind === 'final-video' || kind === 'cover-art' || kind === 'artist-photo' || kind === 'face-reference' || kind === 'logo-mark' || kind === 'ad-asset' || kind === 'one-sheet' || kind === 'epk') {
     return { status: 'final', rightsStatus: 'safe-to-use', usableByAgents: true };
   }

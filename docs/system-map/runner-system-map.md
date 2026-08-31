@@ -1,17 +1,17 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-08-29
+last_verified: 2026-08-30
 source_of_truth: true
 ---
 
 # Runner System Map
 
-Generated: 2026-08-29
+Generated: 2026-08-30
 
 ## Why This Exists
 
-This map captures Runner-specific wiring that future agents often miss: worker visibility, skill/source bundles, approval mode, trusted tools, Canvas awareness, context injection, Outputs/Finals, Scheduled Work, Automations, HNIC scheduling, social execution, and launch surfaces.
+This map captures Runner-specific wiring that future agents often miss: worker visibility, skill/source bundles, approval mode, trusted tools, Canvas awareness, context injection, Vault/Assets/Outputs/Release Kit, Scheduled Work, Automations, HNIC scheduling, social execution, and launch surfaces.
 
 ## Source Files
 
@@ -32,6 +32,9 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - outputService: `packages/server-core/src/outputs/OutputService.ts`
 - outputsHook: `apps/electron/src/renderer/hooks/useOutputs.ts`
 - outputFinalActionDialog: `apps/electron/src/renderer/components/outputs/OutputFinalActionDialog.tsx`
+- releaseKitStorage: `packages/shared/src/release-kit/storage.ts`
+- releaseKitService: `packages/server-core/src/release-kit/ReleaseKitService.ts`
+- releaseKitPage: `apps/electron/src/renderer/components/app-shell/ReleaseKitPage.tsx`
 - bundledSkills: `packages/shared/src/skills/bundled.generated.ts`
 - builtinSources: `packages/shared/src/sources/builtin-sources.ts`
 - starterWorkflows: `packages/shared/src/workflows/starter-templates.ts`
@@ -57,11 +60,12 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Lab default workers: `the-excavator`, `reverse-magic`, `hooker`, `legendary-writer`, `reference-master`, `record-doctor`
 - Starter workflows mapped: 7
 - Shared Intel prompt injection: wired
-- Outputs -> Finals promotion: wired
+- Campaign Release Kit: wired
+- Legacy HQ Finals compatibility: wired
 - Scheduled Work execution: wired
 - Domains: Command 3, Content Creation 9, Creative 6, Merch 2, Operators 2, Other Workers 6, Outreach 5, Promotion 9, Research 4, Socials 3
 - Permission modes: ask 41, safe 8
-- Known skills: 126 (90 bundled, 6 system, 126 user-global on this machine)
+- Known skills: 127 (91 bundled, 7 system, 127 user-global on this machine)
 - Known builtin sources: 27
 
 ## Reference Health
@@ -79,8 +83,10 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Concierge receives broad workspace context and an active-agent capability catalog for routing.
 - Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.
 - Specialist agents do not need individual prompt edits for Shared Intel; they see only the routed docs selected for their slug. Concierge/HNIC can see all enabled context docs through its existing override.
-- Outputs become Finals through UI actions or the promote_output_to_final session tool; Finals are pointers to existing Output bundles, not copied assets.
-- Finals writes use a workspace filesystem lock under context/.locks/output-finals.lock; campaign Finals require campaignId and source Outputs cannot be deleted while still referenced.
+- HQ Vault is reusable career canon; Campaign Assets are release inputs; Outputs are durable work; Release Kit is approved campaign canon.
+- Campaign Release Kit promotion accepts registered uploads, Campaign Assets, HQ Vault assets, or Outputs and creates independent hashed snapshots under release-kit/.
+- All Artist OS agents receive one shared asset contract and trusted lookup tools; agents must not guess paths or silently finalize work.
+- The old context/finals/CONTEXT.md pointer registry is compatibility and migration input, not the campaign source of truth.
 - Campaign Scheduled Work separates calendar shells from executable work orders and uses backend-owned schedule/cancel/review mutations.
 - Agent/workflow scheduled work completes only after terminal child state; required Outputs, missed windows, stale runs, and failures become visible attention states.
 - Scheduled social publishing waits at needs-approval, then the guarded native browser executor may run only the exact approved profile, payload, media bytes, and browser partition and must return a durable receipt.
@@ -99,14 +105,14 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Prompt delivery: `composeAgentSystemPrompt` and workflow prompt composition inject matching notes into a dedicated `Shared Intel for this worker:` section and remove them from generic workspace context to avoid duplicate/bloat.
 - Practical result: agents know to check it because the runtime places the relevant notes in their system prompt at launch. Individual saved agent prompts do not need to be edited.
 
-## Outputs -> Finals Promotion
+## Artist Assets And Release Kit
 
-- User action: Output list/detail actions open `OutputFinalActionDialog` for `Set as Final`, `Set as Primary`, or `Remove from Finals`.
-- Agent action: `promote_output_to_final` is exposed through the session tool manifest and calls the same backend promotion path.
-- Backend action: `OutputService.promoteToFinal` validates workspace ownership, then writes through shared Finals registry helpers.
-- Storage: Finals live as JSON pointers in `context/finals/CONTEXT.md`; the Output bundle remains canonical.
-- Safety: writes use `context/.locks/output-finals.lock`, corrupt registry data fails closed, campaign Finals require `campaignId`, and source Output deletion is blocked while referenced.
-- Surfacing: HQ and campaign command-center widgets read Outputs with attached Final pointers; campaign widgets fail closed without a campaign id.
+- Product layers: HQ Vault is reusable career material; Campaign Assets are release inputs; Outputs are durable drafts/work; Release Kit is approved campaign canon.
+- User action: the campaign `Release Kit` page promotes an upload, Campaign Asset, HQ Vault asset, or exact Output file.
+- Agent action: trusted list/get tools resolve IDs and paths; `promote_to_release_kit`, `remove_from_release_kit`, and `set_release_kit_primary` are mutating approval-gated tools.
+- Storage: promotion copies the exact file under `release-kit/<category>/<subtype>/`, records provenance and SHA-256 in `release-kit/manifest.json`, and mirrors a compact map to `context/release-kit/CONTEXT.md`.
+- Safety: agents cannot submit arbitrary upload paths, private/agent-disabled Vault assets are excluded, Primary is scoped by category and subtype, and external publish/send/spend authority remains separate.
+- Compatibility: campaign `promote_output_to_final` now creates a Release Kit snapshot; legacy `context/finals/CONTEXT.md` pointers migrate on first Release Kit load. HQ pointer behavior remains temporarily available.
 
 ## Campaign Scheduled Work
 
@@ -196,7 +202,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Main work chat. Routes goals to the right workers, skills, automations, and workflows.
 - Permission: `safe`; thinking: `medium`
 - Launch surfaces: `hq-sidebar-chat`, `campaign-sidebar-chat`, `system-agent-hidden-from-worker-home`
-- Skills: `agent-creator`, `automation-creator`, `workflow-creator`, `source-recipe`
+- Skills: `agent-creator`, `automation-creator`, `workflow-creator`, `source-recipe`, `artist-manager-operating-system`, `artist-os-guide`, `runneros-self-edit`
 - Sources: none
 - Optional sources: none
 - Trusted tools: none

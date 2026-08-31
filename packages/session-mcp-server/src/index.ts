@@ -34,7 +34,12 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSy
 import { basename, join, resolve } from 'node:path';
 import { isDeveloperFeedbackEnabled } from '@craft-agent/shared/feature-flags';
 import { OutputService } from '@craft-agent/server-core/outputs';
+import { ReleaseKitService } from '@craft-agent/server-core/release-kit';
+import { getWorkspaceByNameOrId, getWorkspaces } from '@craft-agent/shared/config';
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity';
+import { loadMissionAssetManifest } from '@craft-agent/shared/mission-assets';
+import { loadArtistVaultManifest } from '@craft-agent/shared/artist-vault';
+import { listOutputManifests, readOutput } from '@craft-agent/shared/outputs';
 // Import from session-tools-core
 import {
   type SessionToolContext,
@@ -207,6 +212,26 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
       return workspaceRootPath;
     },
   });
+  const releaseKitService = new ReleaseKitService();
+  const resolveCampaignId = (requested?: string): string => {
+    const targetId = requested?.trim() || workspaceId;
+    if (targetId !== workspaceId) {
+      throw new Error('This MCP session may manage only its current campaign workspace.');
+    }
+    const workspace = getWorkspaceByNameOrId(targetId);
+    if (!workspace || workspace.artistWorkspaceScope !== 'campaign') throw new Error('A campaign workspace is required.');
+    if (resolve(workspace.rootPath) !== resolve(workspaceRootPath)) {
+      throw new Error('Configured campaign workspace root does not match this MCP session root.');
+    }
+    return targetId;
+  };
+  const capability = async (run: () => unknown | Promise<unknown>) => {
+    try {
+      return { ok: true, data: await run() };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  };
 
   // Build context
   return {
@@ -269,6 +294,67 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
       });
       return { ok: true, finalId: final.id };
     },
+
+    listReleaseKit: (input) => capability(() => {
+      const targetId = resolveCampaignId(input.campaignWorkspaceId);
+      return releaseKitService.get(targetId);
+    }),
+    getReleaseKitItem: (input) => capability(() => releaseKitService.getItem(resolveCampaignId(input.campaignWorkspaceId), input.itemId)),
+    promoteToReleaseKit: (input) => capability(() => {
+      const targetId = resolveCampaignId(input.campaignWorkspaceId);
+      const source = input.sourceType === 'campaign-asset'
+        ? { type: 'campaign-asset' as const, assetId: input.sourceId }
+        : input.sourceType === 'vault-asset'
+          ? { type: 'vault-asset' as const, assetId: input.sourceId, vaultWorkspaceId: input.vaultWorkspaceId! }
+          : { type: 'output' as const, outputId: input.sourceId, assetId: input.assetId };
+      return releaseKitService.promote(targetId, {
+        source,
+        category: input.category,
+        subtype: input.subtype,
+        title: input.title,
+        makePrimary: input.makePrimary,
+        note: input.note,
+      }, 'agent');
+    }),
+    removeFromReleaseKit: (input) => capability(() => releaseKitService.remove(resolveCampaignId(input.campaignWorkspaceId), input.itemId)),
+    setReleaseKitPrimary: (input) => capability(() => releaseKitService.setPrimary(resolveCampaignId(input.campaignWorkspaceId), input.itemId)),
+    listCampaignAssets: (input) => capability(() => {
+      const targetId = resolveCampaignId(input.campaignWorkspaceId);
+      return { workspaceId: targetId, assets: loadMissionAssetManifest(workspaceRootPath, targetId).files };
+    }),
+    listArtistVault: () => capability(() => {
+      const hq = getWorkspaces().find((workspace) => workspace.artistWorkspaceScope === 'hq');
+      if (!hq) throw new Error('Artist HQ workspace is not configured.');
+      return {
+        vaultWorkspaceId: hq.id,
+        assets: loadArtistVaultManifest(hq.rootPath, hq.id).assets.filter((asset) => (
+          asset.usableByAgents && asset.rightsStatus !== 'private' && asset.status !== 'missing' && asset.status !== 'archived'
+        )),
+      };
+    }),
+    listCampaignOutputs: (input) => capability(() => {
+      const targetId = resolveCampaignId(input.campaignWorkspaceId);
+      return { workspaceId: targetId, outputs: listOutputManifests(workspaceRootPath) };
+    }),
+    getCampaignOutput: (input) => capability(() => {
+      resolveCampaignId(input.campaignWorkspaceId);
+      const output = readOutput(workspaceRootPath, input.outputId);
+      if (!output) throw new Error(`Output not found: ${input.outputId}`);
+      return output;
+    }),
+    getAssetRecord: (input) => capability(() => {
+      if (input.sourceType === 'campaign-asset') {
+        const targetId = resolveCampaignId(input.campaignWorkspaceId);
+        const asset = loadMissionAssetManifest(workspaceRootPath, targetId).files.find((candidate) => candidate.id === input.assetId);
+        if (!asset || !asset.usableByAgents) throw new Error(`Campaign Asset is unavailable to agents: ${input.assetId}`);
+        return { workspaceId: targetId, asset };
+      }
+      const hq = getWorkspaceByNameOrId(input.vaultWorkspaceId ?? '');
+      if (!hq || hq.artistWorkspaceScope !== 'hq') throw new Error('Artist HQ Vault workspace not found.');
+      const asset = loadArtistVaultManifest(hq.rootPath, hq.id).assets.find((candidate) => candidate.id === input.assetId);
+      if (!asset || !asset.usableByAgents || asset.rightsStatus === 'private') throw new Error(`HQ Vault asset is unavailable to agents: ${input.assetId}`);
+      return { vaultWorkspaceId: hq.id, asset };
+    }),
 
     applyVisualSurfaceEvent: (input) => Promise.resolve(
       outputService.applyVisualSurfaceEvent(

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, Archive, CalendarClock, CheckCircle2, ExternalLink, Eye, FileText, FileVideo, FolderOpen, Link2, Loader2, PanelTopOpen, ReceiptText, Route, Star } from 'lucide-react'
+import { AlertTriangle, Archive, CalendarClock, CheckCircle2, ExternalLink, Eye, FileText, FileVideo, FolderOpen, Link2, Loader2, PackageCheck, PanelTopOpen, ReceiptText, Route, Star } from 'lucide-react'
 import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,7 @@ import { findVideoProjectAsset } from '@/components/outputs/video-project-output
 import { OutputFinalActionDialog } from '@/components/outputs/OutputFinalActionDialog'
 import { campaignCalendarPrefillForOutput, isAdOutput } from '@/lib/output-finals-actions'
 import { setPendingCampaignCalendarPrefill } from '@/lib/campaign-calendar'
+import { setPendingReleaseKitOutput } from '@/lib/release-kit-navigation'
 import type { VaultKindHint } from '@craft-agent/shared/artist-vault'
 
 interface Props {
@@ -136,17 +137,27 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
               <CalendarClock className="mr-1.5 h-3.5 w-3.5" />
               Schedule
             </Button>
-            <Button size="sm" variant="outline" className="border-emerald-400/20 bg-emerald-400/10 text-white/82 hover:bg-emerald-400/15 hover:text-white" onClick={() => setFinalAction('promote')}>
-              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-              Set as Final
-            </Button>
-            {isFinal && (
+            {currentCampaignId ? (
+              <Button size="sm" variant="outline" className="border-emerald-400/20 bg-emerald-400/10 text-white/82 hover:bg-emerald-400/15 hover:text-white" onClick={() => {
+                setPendingReleaseKitOutput(manifest.id)
+                navigate(routes.view.campaign('release-kit'))
+              }}>
+                <PackageCheck className="mr-1.5 h-3.5 w-3.5" />
+                Approve in Release Kit
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" className="border-emerald-400/20 bg-emerald-400/10 text-white/82 hover:bg-emerald-400/15 hover:text-white" onClick={() => setFinalAction('promote')}>
+                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                Set as Final
+              </Button>
+            )}
+            {!currentCampaignId && isFinal && (
               <Button size="sm" variant="outline" className="border-sky-400/20 bg-sky-400/10 text-white/82 hover:bg-sky-400/15 hover:text-white" onClick={() => setFinalAction('primary')}>
                 <Star className="mr-1.5 h-3.5 w-3.5" />
                 Set as Primary
               </Button>
             )}
-            {isFinal && (
+            {!currentCampaignId && isFinal && (
               <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => setFinalAction('remove')}>
                 Remove from Finals
               </Button>
@@ -292,7 +303,7 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
           </div>
         </Section>
       </div>
-      <OutputFinalActionDialog
+      {!currentCampaignId ? <OutputFinalActionDialog
         open={Boolean(finalAction)}
         action={finalAction ?? 'promote'}
         output={manifest}
@@ -302,7 +313,7 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
         promoteToFinal={promoteToFinal}
         removeFromFinal={removeFromFinal}
         currentCampaignId={currentCampaignId}
-      />
+      /> : null}
       </div>
     </div>
   )

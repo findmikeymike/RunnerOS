@@ -6,6 +6,7 @@ import {
   readOutputManifest,
   resolveOutputAssetPath,
 } from '@craft-agent/shared/outputs'
+import { resolveVerifiedReleaseKitItemPath } from '@craft-agent/shared/release-kit'
 import type {
   CampaignCalendarItem,
   CampaignScheduledJob,
@@ -178,6 +179,18 @@ export function fingerprintCampaignSocialMediaPath(path: string): string {
 }
 
 export function resolveCampaignSocialMediaPath(input: PrepareInput): string | undefined {
+  if (input.item.releaseKitRefs.length > 1) throw new Error('Social post has multiple Release Kit media references.')
+  const releaseKitRef = input.item.releaseKitRefs[0]
+  if (releaseKitRef) {
+    return resolveVerifiedReleaseKitItemPath(
+      input.workspaceRootPath,
+      input.workspaceId,
+      input.workspaceId,
+      releaseKitRef.itemId,
+      releaseKitRef.sha256,
+    )
+  }
+  // Legacy schedules remain executable during migration, but new schedules require Release Kit refs.
   const refs = [
     ...input.item.finalRefs.map((ref) => ({ outputId: ref.outputId, assetId: ref.assetId })),
     ...input.item.outputRefs.map((ref) => ({ outputId: ref.outputId, assetId: undefined })),
@@ -197,6 +210,19 @@ export function resolveCampaignSocialMediaPath(input: PrepareInput): string | un
 }
 
 function resolveScheduledSocialMediaPath(workspaceRootPath: string, order: ScheduledWorkOrder): string | undefined {
+  const releaseKitRefs = order.inputRefs.filter((ref) => ref.kind === 'release-kit')
+  if (releaseKitRefs.length > 1) throw new Error('Social work has multiple Release Kit media references.')
+  const releaseKitRef = releaseKitRefs[0]
+  if (releaseKitRef) {
+    return resolveVerifiedReleaseKitItemPath(
+      workspaceRootPath,
+      order.owner.workspaceId,
+      order.owner.campaignId ?? order.owner.workspaceId,
+      releaseKitRef.itemId,
+      releaseKitRef.sha256,
+    )
+  }
+  // Legacy schedules remain executable during migration, but new schedules require Release Kit refs.
   for (const ref of order.inputRefs) {
     if (ref.kind !== 'final' && ref.kind !== 'output') continue
     const manifest = readOutputManifest(workspaceRootPath, ref.outputId)

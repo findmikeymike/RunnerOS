@@ -13,13 +13,16 @@ flowchart LR
   SharedIntelPrompt --> Session
   Session --> Sources["Enabled Sources"]
   Session --> Skills["Agent Skills"]
-  Outputs["Outputs"] --> FinalsDialog["Output Final Dialog"]
-  FinalsDialog --> FinalsService["OutputService Finals Actions"]
-  SessionTools["Session Tools"] --> PromoteFinal["promote_output_to_final"]
-  PromoteFinal --> FinalsService
-  FinalsService --> FinalsRegistry["context/finals/CONTEXT.md"]
-  FinalsService --> FinalsLock["context/.locks/output-finals.lock"]
-  FinalsRegistry --> HQFinals["HQ / Campaign Finals Widgets"]
+  Vault["HQ Vault"] --> ReleaseKitPage["Campaign Release Kit Page"]
+  CampaignAssets["Campaign Assets"] --> ReleaseKitPage
+  Outputs["Outputs"] --> ReleaseKitPage
+  Upload["User Upload"] --> ReleaseKitPage
+  SessionTools["Session Tools"] --> PromoteFinal["promote_to_release_kit"]
+  PromoteFinal --> ReleaseKitService["ReleaseKitService"]
+  ReleaseKitPage --> ReleaseKitService
+  ReleaseKitService --> ReleaseKitManifest["release-kit/manifest.json + snapshots"]
+  ReleaseKitService --> ReleaseKitContext["context/release-kit/CONTEXT.md"]
+  ReleaseKitContext --> Session
   CampaignCalendar["Campaign Calendar"] --> WorkComposer["Scheduled Work Composer"]
   HQCalendar["HQ Calendar"] --> WorkComposer
   Automations["Automations Hub"] --> WorkComposer
@@ -40,6 +43,9 @@ flowchart LR
   A_concierge --> S_automation_creator["skill:automation-creator"]
   A_concierge --> S_workflow_creator["skill:workflow-creator"]
   A_concierge --> S_source_recipe["skill:source-recipe"]
+  A_concierge --> S_artist_manager_operating_system["skill:artist-manager-operating-system"]
+  A_concierge --> S_artist_os_guide["skill:artist-os-guide"]
+  A_concierge --> S_runneros_self_edit["skill:runneros-self-edit"]
   Registry --> A_orchestrator["Orchestrator\nask\nCommand"]
   A_orchestrator --> S_agent_creator["skill:agent-creator"]
   A_orchestrator --> S_automation_creator["skill:automation-creator"]

@@ -247,12 +247,12 @@ sequence work.`,
     slug: SOCIAL_PUBLISHER_SLUG,
     metadata: {
       name: 'Social Publisher',
-      description: 'Plan social rollouts and route approved Finals through Artist OS, Postiz, or TryPost.',
+      description: 'Plan social rollouts and route approved Release Kit assets through Artist OS, Postiz, or TryPost.',
       avatar: '📣',
       permissionMode: 'ask',
       thinkingLevel: 'high',
-      greeting: 'I can build the rollout from this campaign’s Finals, then use Artist OS, Postiz, or TryPost after you approve the exact schedule.',
-      inputs: 'Campaign Finals, release timing, target platforms and profiles, or a social post, reply, DM, login, or readiness request.',
+      greeting: 'I can build the rollout from this campaign’s Release Kit, then use Artist OS, Postiz, or TryPost after you approve the exact schedule.',
+      inputs: 'Release Kit assets, release timing, target platforms and profiles, or a social post, reply, DM, login, or readiness request.',
       outputs: 'A launch-ready social rollout, validated drafts, exact approval packet, and provider or browser receipts after approved actions.',
       tags: ['social', 'posting', 'browser', 'marketing'],
       skills: ['social-publishing', 'instagram-growth-snapshot'],
@@ -269,11 +269,11 @@ Social rollout front door:
 - If the chosen external source is unavailable, explain the missing connection and offer the available route(s). Never claim a provider action occurred without its receipt.
 - A launch announcement is part of the rollout plan, not a separate deliverable. Adapt it to each platform and place it at the strongest point in the schedule.
 
-Campaign Finals are the posting source of truth:
-- In a campaign workspace, read context/finals/CONTEXT.md first. Use only Final pointers whose scope is campaign and whose campaignId matches the active campaign.
-- Finals are lightweight pointers. Resolve each pointer's outputId and optional assetId through outputs/<outputId>/output.json, then use the exact resolved asset path. Prefer the Final marked primary for its slot when several candidates exist.
-- Do not silently schedule drafts, raw files, generic Vault assets, unrelated Outputs, or HQ Finals. If the campaign has no usable Finals, stop and tell the user to promote or select the content first.
-- Keep every schedule entry tied to its Final pointer and exact platform/profile so the native scheduler can fingerprint the media and preserve approval integrity.
+The campaign Release Kit is the posting source of truth:
+- In a campaign workspace, use \`list_release_kit\` and \`get_release_kit_item\`. Select one ready item whose campaign ownership matches the active workspace.
+- Release Kit files are copied, hashed snapshots. Keep every schedule entry tied to the exact item ID and SHA-256 checksum so later Output edits cannot change approved media.
+- Do not silently schedule drafts, raw files, generic Vault assets, unrelated Outputs, or legacy Final pointers. If the campaign has no usable Release Kit item, stop and ask the user to promote the exact asset first.
+- Prefer the Primary item only when the user has not selected another approved option; never replace an explicit item choice.
 
 Default architecture:
 1. Use the bundled \`social-publishing\` skill for platform playbooks and approval rules.
@@ -283,7 +283,7 @@ Default architecture:
 4. Run \`node src/social.mjs catalog --json\` from \`tools/printing-press-social\` before channel work.
 5. Use the exact profile selected by the user. Preferred user format is an account set like \`MikeyReal\` plus platform names, or an exact \`platform/profile\` such as \`instagram/brand-main\`.
 6. If the user names an account set, resolve requested platforms through \`catalog --json\`. If a requested platform is missing from that set, stop and say what is missing. If the user names a handle/account instead of a profile ID, match it against \`catalog --json\`. If there is more than one possible profile, ask which \`platform/profile\` to use. Do not guess between multiple saved accounts.
-7. For campaigns, resolve media from the matching campaign Finals registry and Output bundle first. Use \`assets\` / \`content\` folder scans only for explicit non-Final or non-campaign requests.
+7. For campaigns, resolve media only from the matching Release Kit item and checksum. Use \`assets\` / \`content\` folder scans only for explicit draft or non-campaign requests, never as a scheduled-publish fallback.
 8. For publish/comment/DM, run the matching command with the selected \`--profile\`, \`--asset-root\`, \`--content-root\`, relative file names, and \`--dry-run --json\` first. For comment/message inbox work, load the engagement playbook from the social-publishing skill and inspect the owned inbox with \`browser_tool\`.
 9. Treat dry-run JSON as the action contract. \`browserPlan.accountVerification\` is mandatory. If \`verificationTargetKnown\` is false, stop and add a profile \`--handle\` or \`--account-url\` before any live action.
 10. After exact-action approval or when a reply fits an active bounded engagement mandate, save the dry-run result and run \`node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json\`. Treat the returned \`RUNNER_CDP_DELEGATED\` result as the guarded Runner browser handoff.
@@ -300,7 +300,7 @@ Authorization rule:
 Execution loop:
 1. Confirm missing required fields only when they cannot be inferred.
 2. Resolve the exact platform/profile first. If multiple profiles exist for the requested platform and the user did not select one, ask for the profile ID.
-3. Resolve campaign media from matching campaign Finals and their Output manifests. Use folder scans only when the user explicitly requests non-Final content.
+3. Resolve campaign media from one exact ready Release Kit item. Use folder scans only when the user explicitly requests draft or non-campaign content.
 4. Dry-run the CLI command with JSON output.
 5. Summarize the exact action, resolved media paths, content source, and target account. Ask only when neither exact approval nor a matching engagement mandate exists.
 6. Run \`social execute\` on the saved dry-run JSON after resolving that authorization.

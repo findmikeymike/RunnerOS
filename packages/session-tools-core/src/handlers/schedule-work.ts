@@ -34,6 +34,7 @@ export interface ScheduleWorkToolInput {
   explanation: string;
   requiresUserConfirmation?: boolean;
   execution: ScheduleWorkExecutionInput;
+  inputRefs?: Array<{ kind: 'release-kit'; itemId: string; sha256: string; label?: string }>;
   startAt?: string;
   timezone?: string;
   trigger?: ScheduleWorkTriggerInput;
@@ -87,6 +88,14 @@ export async function handleScheduleWork(ctx: SessionToolContext, args: Schedule
     if (args.execution.permissionMode !== 'safe') {
       return errorResponse('Continuation runs are draft-only and require permissionMode safe.');
     }
+  }
+  for (const ref of args.inputRefs ?? []) {
+    if (!ref.itemId?.trim() || !/^[a-f0-9]{64}$/i.test(ref.sha256)) {
+      return errorResponse('Each Release Kit input requires an exact itemId and SHA-256 checksum.');
+    }
+  }
+  if (args.destination === 'automation' && args.inputRefs?.length) {
+    return errorResponse('Release Kit inputs are currently supported only for one-shot Calendar work.');
   }
   if (args.destination === 'calendar') {
     if (!args.startAt || Number.isNaN(Date.parse(args.startAt))) return errorResponse('Calendar work requires startAt as an ISO timestamp.');

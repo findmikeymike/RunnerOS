@@ -186,6 +186,32 @@ export interface SessionScopedToolCallbacks {
   promoteOutputToFinalFn?: (
     input: import('@craft-agent/session-tools-core').PromoteOutputToFinalToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').PromoteOutputToFinalResult>;
+  listReleaseKitFn?: (input: { campaignWorkspaceId?: string }) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  getReleaseKitItemFn?: (input: { itemId: string; campaignWorkspaceId?: string }) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  promoteToReleaseKitFn?: (input: {
+    campaignWorkspaceId?: string;
+    sourceType: 'campaign-asset' | 'vault-asset' | 'output';
+    sourceId: string;
+    assetId?: string;
+    vaultWorkspaceId?: string;
+    category: 'audio' | 'artwork' | 'video' | 'images' | 'copy' | 'plans' | 'merch' | 'documents' | 'references';
+    subtype: string;
+    title?: string;
+    makePrimary?: boolean;
+    note?: string;
+  }) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  removeFromReleaseKitFn?: (input: { itemId: string; campaignWorkspaceId?: string }) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  setReleaseKitPrimaryFn?: (input: { itemId: string; campaignWorkspaceId?: string }) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  listCampaignAssetsFn?: (input: { campaignWorkspaceId?: string }) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  listArtistVaultFn?: (input: undefined) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  listCampaignOutputsFn?: (input: { campaignWorkspaceId?: string }) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  getCampaignOutputFn?: (input: { outputId: string; campaignWorkspaceId?: string }) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  getAssetRecordFn?: (input: {
+    sourceType: 'campaign-asset' | 'vault-asset';
+    assetId: string;
+    campaignWorkspaceId?: string;
+    vaultWorkspaceId?: string;
+  }) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
   /** Create a Lab song in the current workspace. */
   createLabSongFn?: (
     input: import('@craft-agent/session-tools-core').CreateLabSongToolInput,

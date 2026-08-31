@@ -2577,7 +2577,7 @@ function buildAppFileBuckets(workspaceRootPath: string | null, workingDirectory?
 
   buckets.push(
     { id: 'outputs', label: 'Outputs', description: 'Generated work', paths: [joinPath(workspaceRootPath, 'outputs')] },
-    { id: 'finals', label: 'Finals', description: 'Approved assets', paths: [joinPath(workspaceRootPath, 'finals'), joinPath(workspaceRootPath, 'output-finals')] },
+    { id: 'release-kit', label: 'Release Kit', description: 'Approved campaign canon', paths: [joinPath(workspaceRootPath, 'release-kit')] },
     { id: 'photos', label: 'Photos', description: 'Image assets', paths: [joinPath(workspaceRootPath, 'photos'), joinPath(workspaceRootPath, 'Photos'), joinPath(workspaceRootPath, 'assets', 'photos')] },
     { id: 'content', label: 'Content', description: 'Copy and content files', paths: [joinPath(workspaceRootPath, 'content'), joinPath(workspaceRootPath, 'Content')] },
     { id: 'campaigns', label: 'Campaigns', description: 'Campaign folders', paths: [joinPath(workspaceRootPath, 'campaigns'), joinPath(workspaceRootPath, 'Campaigns')] },

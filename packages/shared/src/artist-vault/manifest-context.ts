@@ -8,6 +8,7 @@ export function artistVaultContextMetadata(): ContextDocMetadata {
     name: 'Artist Vault',
     description: 'Global artist asset library with usable files, private files, and song matching metadata.',
     routing: { mode: 'broadcast' },
+    delivery: 'on-demand',
     enabled: true,
     status: 'active',
     priority: 'normal',
@@ -22,7 +23,7 @@ export function serializeArtistVaultContext(manifest: VaultManifest): string {
   return [
     'This context lists artist Vault assets. Do not assume files were analyzed. Use tools to inspect specific files only when needed.',
     '',
-    'Vault files are usable by agents by default. Private, missing, archived, and non-agent-usable asset paths are redacted from this context.',
+    'Only agent-approved Vault files are exposed here. Private, missing, archived, and non-agent-usable asset paths are redacted from this context.',
     '',
     '```json',
     JSON.stringify(safeManifest, null, 2),

@@ -15,6 +15,7 @@ import { registerSharedIntelHandlers } from './shared-intel'
 import { registerMemoryHandlers } from './memory'
 import { registerArtistVaultHandlers } from './artist-vault'
 import { registerMissionAssetsHandlers } from './mission-assets'
+import { registerReleaseKitHandlers } from './release-kit'
 import { registerWorkflowsHandlers } from './workflows'
 import { registerWorkflowRunsHandlers } from './workflow-runs'
 import { registerDeepResearchHandlers } from './deep-research'
@@ -62,6 +63,7 @@ export function registerCoreRpcHandlers(
   registerMemoryHandlers(server, deps)
   registerArtistVaultHandlers(server, deps)
   registerMissionAssetsHandlers(server, deps)
+  registerReleaseKitHandlers(server, deps)
   registerWorkflowsHandlers(server, deps)
   registerWorkflowRunsHandlers(server, deps)
   registerDeepResearchHandlers(server, deps)

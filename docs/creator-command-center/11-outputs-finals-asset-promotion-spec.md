@@ -1,11 +1,13 @@
 ---
-status: implemented-v1
+status: superseded
 owner: agent
 last_verified: 2026-07-06
 source_of_truth: true
 ---
 
 # Outputs, Finals, And Asset Promotion
+
+> Historical V1 contract. Superseded for campaign work by [23 Release Kit, Outputs, And Artist Vault](./23-release-kit-architecture-spec.md). The pointer registry remains migration input and temporary HQ compatibility; do not build new campaign behavior on it.
 
 ## Purpose
 
