@@ -183,10 +183,14 @@ describe('Artist OS persistent shell chrome', () => {
 
   test('keeps Artist OS chat and notification text visible on black surfaces', () => {
     const input = readFileSync(join(import.meta.dir, '..', 'input', 'FreeFormInput.tsx'), 'utf8')
+    const agentHeader = readFileSync(join(import.meta.dir, '..', 'ChatAgentHeader.tsx'), 'utf8')
     const bell = readFileSync(join(import.meta.dir, '..', '..', 'notifications', 'BellMenu.tsx'), 'utf8')
     const notification = readFileSync(join(import.meta.dir, '..', '..', 'notifications', 'NotificationItem.tsx'), 'utf8')
 
     expect(input).toContain("RENDERER_PRODUCT_VARIANT === 'artist-os' ? 'rgba(255, 255, 255, 0.92)' : undefined")
+    expect(agentHeader).toContain('bg-[#111112]/95')
+    expect(agentHeader).toContain('rgba(220,20,36,0.17)')
+    expect(agentHeader).toContain('rgba(255,82,0,0.10)')
     expect(bell).toContain('className="w-[360px] p-0 !text-white"')
     expect(notification).toContain("'border-l-2 px-3 py-2 text-sm text-white'")
   })

@@ -26,11 +26,11 @@ export function ChatAgentHeader({
 }: ChatAgentHeaderProps) {
   return (
     <div className={cn('relative z-panel shrink-0 px-3 pt-3 @xs/panel:px-4', className)}>
-      <div className={cn(CHAT_LAYOUT.maxWidth, 'relative mx-auto min-w-0 overflow-hidden rounded-[10px] bg-white/[0.055] shadow-[0_12px_32px_rgba(0,0,0,0.18)] backdrop-blur-xl')}>
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_8%_0%,rgba(236,72,36,0.12),transparent_42%),linear-gradient(110deg,rgba(255,255,255,0.035),transparent_58%)]" />
+      <div className={cn(CHAT_LAYOUT.maxWidth, 'relative mx-auto min-w-0 overflow-hidden rounded-[10px] bg-[#111112]/95 shadow-middle backdrop-blur-xl')}>
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_45%,rgba(220,20,36,0.17),transparent_43%),radial-gradient(circle_at_30%_115%,rgba(255,82,0,0.10),transparent_48%)]" />
         <div className="relative flex min-h-[82px] items-center gap-3 px-4 py-3 pr-14">
           {leadingAction && <div className="titlebar-no-drag shrink-0">{leadingAction}</div>}
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[9px] bg-black/22 text-sm font-medium text-white/88 shadow-inner">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[9px] bg-black/22 text-sm font-medium text-white/88 shadow-minimal">
             {avatar ? <span className="max-w-8 truncate">{avatar}</span> : <Bot className="h-[18px] w-[18px]" />}
           </div>
           <div className="min-w-0 flex-1">
