@@ -36,8 +36,9 @@ import {
 // App-level Permissions Directory
 // ============================================================
 
-// Track if permissions have been initialized this session (prevents re-init on hot reload)
-let permissionsInitialized = false;
+// Track the initialized data root so hot reloads remain cheap while runtime/test
+// config-directory changes still initialize the directory they actually target.
+let initializedPermissionsDir: string | null = null;
 
 /**
  * Get the app-level permissions directory.
@@ -45,7 +46,7 @@ let permissionsInitialized = false;
  * Reads env var dynamically so tests can override via CRAFT_CONFIG_DIR.
  */
 export function getAppPermissionsDir(): string {
-  return join(CONFIG_DIR, 'permissions');
+  return join(process.env.CRAFT_CONFIG_DIR?.trim() || CONFIG_DIR, 'permissions');
 }
 
 /**
@@ -60,13 +61,13 @@ export function getAppPermissionsDir(): string {
  * are never touched by this function.
  */
 export function ensureDefaultPermissions(): void {
-  // Skip if already initialized this session (prevents re-init on hot reload)
-  if (permissionsInitialized) {
+  const permissionsDir = getAppPermissionsDir();
+
+  // Skip if this data root was already initialized (prevents re-init on hot reload).
+  if (initializedPermissionsDir === permissionsDir) {
     return;
   }
-  permissionsInitialized = true;
-
-  const permissionsDir = getAppPermissionsDir();
+  initializedPermissionsDir = permissionsDir;
 
   // Create permissions directory if it doesn't exist
   if (!existsSync(permissionsDir)) {
@@ -740,7 +741,7 @@ class PermissionsConfigCache {
       permissionPaths: {
         workspacePath: getWorkspacePermissionsPath(context.workspaceRootPath),
         appDefaultPath: join(getAppPermissionsDir(), 'default.json'),
-        docsPath: join(CONFIG_DIR, 'docs', 'permissions.md'),
+        docsPath: join(process.env.CRAFT_CONFIG_DIR?.trim() || CONFIG_DIR, 'docs', 'permissions.md'),
       },
     };
 
