@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { navigate, routes } from '@/lib/navigate'
 import { CompactPageHeader } from './CompactPageHeader'
 import {
   Dialog,
@@ -100,6 +101,7 @@ import { ReleaseCountdownDial } from './ReleaseCountdownDial'
 interface ArtistCommandCenterHomeProps {
   workspaceId: string
   artistProfileWorkspaceId?: string
+  view?: 'overview' | 'release-board'
 }
 
 function SectionTitle({
@@ -145,11 +147,10 @@ function CommandCard({
   )
 }
 
-export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId }: ArtistCommandCenterHomeProps) {
+export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId, view = 'overview' }: ArtistCommandCenterHomeProps) {
   const [drawerOpen, setDrawerOpen] = React.useState(false)
   const [assetManifest, setAssetManifest] = React.useState<MissionAssetManifest | null>(null)
   const [assetBusy, setAssetBusy] = React.useState(false)
-  const [selectedReleaseCategoryId, setSelectedReleaseCategoryId] = React.useState<ReleaseBoardCategory['id'] | null>(null)
   const [launchingReleaseItemKey, setLaunchingReleaseItemKey] = React.useState<string | null>(null)
   const [pendingReleaseWorkflow, setPendingReleaseWorkflow] = React.useState<{
     workflow: WorkflowDTO
@@ -235,10 +236,6 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
   const releaseBoardBody = React.useMemo(
     () => serializeReleaseBoardBody(releaseBoard),
     [releaseBoard],
-  )
-  const selectedReleaseCategory = React.useMemo(
-    () => releaseBoard.categories.find((category) => category.id === selectedReleaseCategoryId) ?? null,
-    [releaseBoard.categories, selectedReleaseCategoryId],
   )
   const hasMission = mission.status !== 'empty'
   const workerReadiness = React.useMemo(
@@ -455,7 +452,6 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
         if (!workflow) {
           throw new Error(`${action.targetName} is not installed in the workflow library.`)
         }
-        setSelectedReleaseCategoryId(null)
         setPendingReleaseWorkflow({
           workflow,
           initialInputs: buildReleaseBoardWorkflowInputs(action, campaignBrief),
@@ -617,15 +613,16 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="flex min-h-full w-full flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
         <CompactPageHeader
-          eyebrow={hasMission ? 'Campaign Active' : 'Campaign Empty'}
-          title={title}
-          tone="red"
+          eyebrow={view === 'release-board' ? title : hasMission ? 'Campaign Active' : 'Campaign Empty'}
+          title={view === 'release-board' ? 'Release Board' : title}
+          tone={view === 'release-board' ? 'orange' : 'red'}
           actions={
-            <>
-              <div className="hidden text-right sm:block">
-                <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-white/38">Focus</p>
-                <p className="mt-1 text-[11px] font-medium capitalize text-white/70">{focus}</p>
-              </div>
+            view === 'release-board' ? null : (
+              <>
+                <div className="hidden text-right sm:block">
+                  <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-white/38">Focus</p>
+                  <p className="mt-1 text-[11px] font-medium capitalize text-white/70">{focus}</p>
+                </div>
                 <button
                   type="button"
                   onClick={() => setDrawerOpen(true)}
@@ -634,57 +631,76 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
                   {hasMission ? 'Edit Campaign' : 'Create Campaign'}
                   <ArrowRight className="h-3.5 w-3.5" />
                 </button>
-            </>
+              </>
+            )
           }
         />
 
-        <div className="flex justify-end px-2 py-1 sm:px-4">
-          <ReleaseCountdownDial
-            releaseDate={campaignWindow.releaseDate}
-            campaignStartDate={campaignWindow.startDate}
-            onClick={() => setDrawerOpen(true)}
-          />
-        </div>
-
-        <ReleaseBoardRow
-          board={releaseBoard}
-          onSelectCategory={setSelectedReleaseCategoryId}
-        />
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <TeamCard
-            people={campaignTeam}
-            networkPeople={artistNetwork.people}
-            disabled={!artistNetworkResult.ok || !inheritedArtistProfileWorkspaceId}
-            onOpenPicker={() => setTeamPickerOpen(true)}
-            onEditPerson={setEditingTeamPerson}
-            onRemovePerson={removeCampaignTeamPerson}
-          />
-
-          <CommandCard>
-            <SectionTitle icon={Bot} title="Active Workers" meta="Quiet" />
-
-            <div className="rounded-xl border border-white/[0.03] bg-white/[0.012] p-4">
-              <div className="flex items-start gap-3">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 text-white/32" />
-                <div>
-                  <p className="text-sm font-medium text-white/75">No background workers running</p>
-                  <p className="mt-1 text-xs leading-5 text-white/38">
-                    Once a campaign workflow starts, worker runs and handoffs can appear here.
-                  </p>
-                </div>
+        {view === 'release-board' ? (
+          <div className="pt-6">
+            <ReleaseBoardProgress board={releaseBoard} />
+            <div className="mt-5">
+              <ReleaseBoardWorkspace
+                board={releaseBoard}
+                launchingItemKey={launchingReleaseItemKey}
+                onLaunchItem={launchReleaseItem}
+                onSetItemStatus={setReleaseItemStatus}
+                onToggleItem={toggleReleaseItem}
+              />
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="grid items-stretch gap-3 md:grid-cols-[minmax(0,1fr)_116px]">
+              <ReleaseReadinessSummary
+                board={releaseBoard}
+                onOpen={() => navigate(routes.view.campaign('release-board'))}
+              />
+              <div className="flex min-h-[112px] items-center justify-center rounded-2xl border border-white/[0.04] bg-[#0A0A0A]">
+                <ReleaseCountdownDial
+                  releaseDate={campaignWindow.releaseDate}
+                  campaignStartDate={campaignWindow.startDate}
+                  onClick={() => setDrawerOpen(true)}
+                />
               </div>
             </div>
-          </CommandCard>
 
-          <CommandCard>
-            <SectionTitle icon={ShieldCheck} title="Approvals" meta="None" />
-            <EmptyCardLine
-              title="No pending approvals"
-              detail={hasMission ? 'Approvals will appear when workflows create review points.' : 'Create a campaign before approval workflows matter.'}
-            />
-          </CommandCard>
-        </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <TeamCard
+                people={campaignTeam}
+                networkPeople={artistNetwork.people}
+                disabled={!artistNetworkResult.ok || !inheritedArtistProfileWorkspaceId}
+                onOpenPicker={() => setTeamPickerOpen(true)}
+                onEditPerson={setEditingTeamPerson}
+                onRemovePerson={removeCampaignTeamPerson}
+              />
+
+              <CommandCard>
+                <SectionTitle icon={Bot} title="Active Workers" meta="Quiet" />
+
+                <div className="rounded-xl border border-white/[0.03] bg-white/[0.012] p-4">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-white/32" />
+                    <div>
+                      <p className="text-sm font-medium text-white/75">No background workers running</p>
+                      <p className="mt-1 text-xs leading-5 text-white/38">
+                        Once a campaign workflow starts, worker runs and handoffs can appear here.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CommandCard>
+
+              <CommandCard>
+                <SectionTitle icon={ShieldCheck} title="Approvals" meta="None" />
+                <EmptyCardLine
+                  title="No pending approvals"
+                  detail={hasMission ? 'Approvals will appear when workflows create review points.' : 'Create a campaign before approval workflows matter.'}
+                />
+              </CommandCard>
+            </div>
+          </>
+        )}
       </div>
 
       <MissionBriefDrawer
@@ -714,17 +730,6 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
             toast.error(err instanceof Error ? err.message : String(err))
           }
         }}
-      />
-
-      <ReleaseBoardDialog
-        category={selectedReleaseCategory}
-        launchingItemKey={launchingReleaseItemKey}
-        onOpenChange={(open) => {
-          if (!open) setSelectedReleaseCategoryId(null)
-        }}
-        onLaunchItem={launchReleaseItem}
-        onSetItemStatus={setReleaseItemStatus}
-        onToggleItem={toggleReleaseItem}
       />
 
       {pendingReleaseWorkflow ? (
@@ -769,220 +774,262 @@ const releaseCategoryIcons: Record<ReleaseBoardCategory['id'], React.ComponentTy
   team: CheckCircle2,
 }
 
-function ReleaseBoardRow({
+function ReleaseReadinessSummary({
   board,
-  onSelectCategory,
+  onOpen,
 }: {
   board: ReleaseBoard
-  onSelectCategory: (categoryId: ReleaseBoardCategory['id']) => void
+  onOpen: () => void
 }) {
   const totals = getBoardTotals(board)
   const percentComplete = totals.total > 0 ? Math.round((totals.done / totals.total) * 100) : 0
+  const nextNeeded = board.categories
+    .flatMap((category) => category.items.map((item) => ({ category, item })))
+    .find(({ item }) => item.status === 'needed')
 
   return (
-    <CommandCard className="p-5">
-      <div className="mb-5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div>
-            <h2 className="text-sm font-medium tracking-wide text-white/90">Release Board</h2>
-            <p className="mt-0.5 text-[11px] text-white/40">{totals.done} of {totals.total} handled</p>
-          </div>
+    <CommandCard className="flex min-h-[112px] items-center gap-5 p-4 sm:p-5">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <ClipboardCheck className="h-3.5 w-3.5 text-orange-200/62" />
+          <h2 className="text-sm font-medium text-white/82">Release readiness</h2>
+          <span className="text-[10px] text-white/32">{totals.done}/{totals.total}</span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[11px] font-medium text-emerald-300/80">{percentComplete}%</span>
-          <div className="h-px w-28 overflow-hidden bg-white/[0.08]">
-            <div className="h-full bg-emerald-400 transition-all duration-500" style={{ width: `${percentComplete}%` }} />
-          </div>
+        <div className="mt-3 h-px overflow-hidden bg-white/[0.08]">
+          <div className="h-full bg-gradient-to-r from-[#ff9700] to-[#ef2b10]" style={{ width: `${percentComplete}%` }} />
         </div>
+        <p className="mt-2 truncate text-[10px] text-white/38">
+          {nextNeeded ? `Next: ${nextNeeded.item.label} · ${nextNeeded.category.label}` : 'Every release item is handled.'}
+        </p>
       </div>
-
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        {board.categories.map((category) => (
-          <ReleaseBoardTile
-            key={category.id}
-            category={category}
-            onClick={() => onSelectCategory(category.id)}
-          />
-        ))}
-      </div>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="inline-flex h-8 shrink-0 items-center gap-2 rounded-full bg-white/[0.07] px-4 text-[10px] font-medium text-white/72 ring-1 ring-white/[0.10] transition-colors hover:bg-white/[0.11] hover:text-white"
+      >
+        Open board
+        <ArrowRight className="h-3 w-3" />
+      </button>
     </CommandCard>
   )
 }
 
-function ReleaseBoardTile({
-  category,
-  onClick,
-}: {
-  category: ReleaseBoardCategory
-  onClick: () => void
-}) {
-  const Icon = releaseCategoryIcons[category.id] || CheckCircle2
-  const progress = getCategoryProgress(category)
-  const allDone = progress.total > 0 && progress.done === progress.total
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group rounded-xl border border-white/[0.055] bg-[#171819] px-3 py-3 text-left transition-colors hover:border-white/[0.085] hover:bg-[#1d1f20]"
-    >
-      <div className="flex min-h-[68px] flex-col justify-between">
-        <div>
-          <div className="mb-2 flex items-center gap-2">
-            <Icon className={cn('h-4 w-4', allDone ? 'text-emerald-300/80' : 'text-white/38 group-hover:text-white/62')} />
-            <p className={cn(
-              'text-sm font-medium transition-colors',
-              allDone ? 'text-white/88' : 'text-white/72 group-hover:text-white/88',
-            )}>
-              {category.label}
-            </p>
-          </div>
-        </div>
-
-        <div>
-          <div className="mb-2 h-px overflow-hidden bg-white/[0.08]">
-            <div
-              className={cn('h-full transition-all duration-300', allDone ? 'bg-emerald-300/80' : 'bg-emerald-400/70')}
-              style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
-            />
-          </div>
-          <p className="text-[10px] text-white/30">
-            {progress.done}/{progress.total}
-          </p>
-        </div>
-      </div>
-    </button>
-  )
-}
-
-function ReleaseBoardDialog({
-  category,
+function ReleaseBoardWorkspace({
+  board,
   launchingItemKey,
-  onOpenChange,
   onLaunchItem,
   onSetItemStatus,
   onToggleItem,
 }: {
-  category: ReleaseBoardCategory | null
+  board: ReleaseBoard
   launchingItemKey: string | null
-  onOpenChange: (open: boolean) => void
   onLaunchItem: (category: ReleaseBoardCategory, item: ReleaseBoardItem) => void
-  onSetItemStatus: (
-    categoryId: ReleaseBoardCategory['id'],
-    itemId: string,
-    status: ReleaseBoardItemStatus,
-  ) => void
+  onSetItemStatus: (categoryId: ReleaseBoardCategory['id'], itemId: string, status: ReleaseBoardItemStatus) => void
   onToggleItem: (categoryId: ReleaseBoardCategory['id'], itemId: string) => void
 }) {
-  const Icon = category ? releaseCategoryIcons[category.id] : CheckCircle2
-  const progress = category ? getCategoryProgress(category) : { done: 0, total: 0 }
+  return (
+    <section className="grid gap-3 py-1">
+        {[
+          { key: 'foundation-visuals', categories: board.categories.slice(0, 2), layout: 'two' as const },
+          { key: 'content-setup', categories: board.categories.slice(2, 4), layout: 'two' as const },
+          { key: 'promotion', categories: board.categories.slice(4), layout: 'promotion' as const },
+        ].map(({ key, categories, layout }) => (
+          <ReleaseBoardBand
+            key={key}
+            categories={categories}
+            layout={layout}
+            launchingItemKey={launchingItemKey}
+            onLaunchItem={onLaunchItem}
+            onSetItemStatus={onSetItemStatus}
+            onToggleItem={onToggleItem}
+          />
+        ))}
+    </section>
+  )
+}
+
+function ReleaseBoardProgress({ board }: { board: ReleaseBoard }) {
+  const totals = getBoardTotals(board)
+  const remaining = Math.max(0, totals.total - totals.done)
+  const percentComplete = totals.total > 0 ? Math.round((totals.done / totals.total) * 100) : 0
 
   return (
-    <Dialog open={Boolean(category)} onOpenChange={onOpenChange}>
-      <DialogContent className="border-white/[0.08] bg-[#070707] text-white shadow-modal-small sm:max-w-[560px]">
-        {category ? (
-          <>
-            <DialogHeader className="pr-8">
-              <div className="mb-1 flex items-center gap-2">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025]">
-                  <Icon className="h-4 w-4 text-white/58" />
-                </span>
-                <div>
-                  <DialogTitle className="text-base font-medium text-white/88">{category.label}</DialogTitle>
-                  <DialogDescription className="mt-1 text-xs text-white/38">
-                    {progress.done}/{progress.total} handled
-                  </DialogDescription>
-                </div>
-              </div>
-            </DialogHeader>
+    <div className="flex justify-end">
+      <div className="w-full max-w-[360px]">
+        <div className="mb-2 flex items-end justify-between gap-4">
+          <p className="text-[9px] font-medium uppercase tracking-[0.16em] text-white/34">Overall progress</p>
+          <div className="flex items-center gap-3 text-[9px]">
+            <span className="text-white/58">{totals.done} done</span>
+            <span className="text-white/28">{remaining} left</span>
+          </div>
+        </div>
+        <div className="h-1 overflow-hidden rounded-full bg-white/[0.07]">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-[#ff8a00] to-[#ef2b10] transition-all duration-500"
+            style={{ width: `${percentComplete}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
 
-            <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
-              {category.items.map((item) => {
-                const done = item.status === 'done'
-                const skipped = item.status === 'skipped'
-                const action = getReleaseBoardItemAction(category.id, item.id)
-                const itemKey = `${category.id}:${item.id}`
-                const launching = launchingItemKey === itemKey
-                return (
-                  <div
-                    key={item.id}
-                    className="flex items-center gap-3 rounded-xl border border-white/[0.045] bg-white/[0.012] px-3 py-3"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onToggleItem(category.id, item.id)}
-                      aria-label={
-                        skipped
-                          ? `Restore ${item.label} as needed`
-                          : done
-                            ? `Mark ${item.label} as needed`
-                            : `Mark ${item.label} as done`
-                      }
-                      className={cn(
-                        'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors',
-                        done
-                          ? 'border-emerald-400/30 bg-emerald-400/14 text-emerald-300'
-                          : skipped
-                            ? 'border-white/[0.07] bg-white/[0.012] text-white/24'
-                          : 'border-white/[0.10] bg-white/[0.018] text-white/28 hover:border-white/20 hover:text-white/60',
-                      )}
-                    >
-                      {done ? (
-                        <Check className="h-3.5 w-3.5" />
-                      ) : skipped ? (
-                        <X className="h-3.5 w-3.5" />
-                      ) : (
-                        <Circle className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                    <div className="min-w-0 flex-1">
-                      <p className={cn('truncate text-sm font-medium', done ? 'text-white/78' : 'text-white/84')}>
-                        {item.label}
-                      </p>
-                      {item.linkedAssetId ? (
-                        <p className="mt-0.5 truncate text-[10px] text-emerald-300/48">Matched from campaign vault</p>
-                      ) : null}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => onSetItemStatus(category.id, item.id, skipped ? 'needed' : 'skipped')}
-                      title={skipped ? 'Restore this task' : 'Mark this task not applicable'}
-                      aria-label={skipped ? `Restore ${item.label}` : `Mark ${item.label} not applicable`}
-                      className={cn(
-                        'shrink-0 rounded-full px-2 py-1 text-[9px] font-medium uppercase tracking-[0.14em] transition-colors hover:bg-white/[0.07] hover:text-white/60',
-                        done
-                          ? 'bg-emerald-400/10 text-emerald-300/75'
-                          : skipped
-                            ? 'bg-white/[0.025] text-white/22'
-                            : 'bg-white/[0.035] text-white/32',
-                      )}
-                    >
-                      {done ? 'Done' : skipped ? 'N/A' : 'Needed'}
-                    </button>
-                    {action ? (
-                      <button
-                        type="button"
-                        onClick={() => onLaunchItem(category, item)}
-                        disabled={launchingItemKey !== null}
-                        title={`Create with ${action.targetName}`}
-                        aria-label={`Create ${item.label} with ${action.targetName}`}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-orange-300/15 bg-orange-400/[0.08] text-orange-200/80 transition-colors hover:border-orange-300/30 hover:bg-orange-400/[0.14] hover:text-orange-100 disabled:cursor-wait disabled:opacity-40"
-                      >
-                        {launching ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Play className="h-3.5 w-3.5 fill-current" />
-                        )}
-                      </button>
-                    ) : null}
-                  </div>
-                )
-              })}
+function ReleaseBoardBand({
+  categories,
+  layout,
+  launchingItemKey,
+  onLaunchItem,
+  onSetItemStatus,
+  onToggleItem,
+}: {
+  categories: ReleaseBoardCategory[]
+  layout: 'two' | 'promotion'
+  launchingItemKey: string | null
+  onLaunchItem: (category: ReleaseBoardCategory, item: ReleaseBoardItem) => void
+  onSetItemStatus: (categoryId: ReleaseBoardCategory['id'], itemId: string, status: ReleaseBoardItemStatus) => void
+  onToggleItem: (categoryId: ReleaseBoardCategory['id'], itemId: string) => void
+}) {
+  return (
+    <article
+      className="group relative overflow-hidden rounded-xl ring-1 ring-white/[0.055]"
+      style={{
+        backgroundColor: '#090909',
+        backgroundImage: [
+          'radial-gradient(at 88% 40%, rgba(20,20,20,0.58) 0px, transparent 78%)',
+          'radial-gradient(at 12% 20%, rgba(52,52,52,0.14) 0px, transparent 72%)',
+          'radial-gradient(at 0% 82%, rgba(72,72,72,0.10) 0px, transparent 74%)',
+          'radial-gradient(at 100% 100%, rgba(255,77,0,0.018) 0px, transparent 64%)',
+        ].join(', '),
+      }}
+    >
+      <div className="pointer-events-none absolute -inset-10 opacity-0 transition-opacity duration-500 group-hover:opacity-100">
+        <div className="absolute -inset-12 animate-spin rounded-full bg-gradient-to-r from-transparent via-white/[0.035] to-transparent blur-xl [animation-duration:18s]" />
+        <div className="absolute -inset-16 animate-spin rounded-full bg-gradient-to-r from-transparent via-orange-400/[0.022] to-transparent blur-2xl [animation-direction:reverse] [animation-duration:28s]" />
+      </div>
+      <div
+        className={cn(
+          'relative grid divide-y divide-white/[0.07] md:divide-x md:divide-y-0',
+          layout === 'two' ? 'md:grid-cols-2' : 'md:grid-cols-1 md:divide-x-0',
+        )}
+      >
+        {categories.map((category) => (
+          <ReleaseBoardSection
+            key={category.id}
+            category={category}
+            launchingItemKey={launchingItemKey}
+            onLaunchItem={onLaunchItem}
+            onSetItemStatus={onSetItemStatus}
+            onToggleItem={onToggleItem}
+          />
+        ))}
+      </div>
+    </article>
+  )
+}
+
+function ReleaseBoardSection({
+  category,
+  launchingItemKey,
+  onLaunchItem,
+  onSetItemStatus,
+  onToggleItem,
+}: {
+  category: ReleaseBoardCategory
+  launchingItemKey: string | null
+  onLaunchItem: (category: ReleaseBoardCategory, item: ReleaseBoardItem) => void
+  onSetItemStatus: (categoryId: ReleaseBoardCategory['id'], itemId: string, status: ReleaseBoardItemStatus) => void
+  onToggleItem: (categoryId: ReleaseBoardCategory['id'], itemId: string) => void
+}) {
+  const Icon = releaseCategoryIcons[category.id] || CheckCircle2
+  const progress = getCategoryProgress(category)
+  const allDone = progress.total > 0 && progress.done === progress.total
+  const progressPercent = progress.total > 0 ? (progress.done / progress.total) * 100 : 0
+
+  return (
+    <section className="min-w-0 p-3">
+      <div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/[0.035] ring-1 ring-white/[0.065]">
+              <Icon className={cn('h-3 w-3', allDone ? 'text-orange-200/80' : 'text-white/58')} />
+            </span>
+            <div className="min-w-0">
+              <h3 className="truncate text-[11px] font-medium text-white/90">{category.label}</h3>
             </div>
-          </>
-        ) : null}
-      </DialogContent>
-    </Dialog>
+          </div>
+          <span className={cn('shrink-0 text-[8px] font-semibold', allDone ? 'text-orange-200/80' : 'text-white/34')}>{progress.done}/{progress.total}</span>
+        </div>
+
+        <div className="mt-2 h-px overflow-hidden bg-white/[0.08]">
+          <div className="h-full bg-gradient-to-r from-[#ff9700] to-[#ef2b10] transition-all duration-300" style={{ width: `${progressPercent}%` }} />
+        </div>
+        <div className={cn('mt-2 grid gap-1', category.id === 'promotion' && 'md:grid-cols-2 lg:grid-cols-3')}>
+          {category.items.map((item) => {
+            const done = item.status === 'done'
+            const skipped = item.status === 'skipped'
+            const action = getReleaseBoardItemAction(category.id, item.id)
+            const itemKey = `${category.id}:${item.id}`
+            const launching = launchingItemKey === itemKey
+            return (
+              <div key={item.id} className="flex min-h-7 items-center gap-1.5 rounded-md bg-black/[0.35] px-2 py-1 ring-1 ring-white/[0.035] transition-colors hover:bg-white/[0.03]">
+                <button
+                  type="button"
+                  onClick={() => onToggleItem(category.id, item.id)}
+                  aria-label={
+                    skipped
+                      ? `Restore ${item.label} as needed`
+                      : done
+                        ? `Mark ${item.label} as needed`
+                        : `Mark ${item.label} as done`
+                  }
+                  className={cn(
+                    'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors',
+                    done
+                      ? 'border-orange-300/30 bg-orange-400/14 text-orange-200'
+                      : skipped
+                        ? 'border-white/[0.07] bg-white/[0.012] text-white/24'
+                        : 'border-white/[0.12] bg-white/[0.018] text-white/30 hover:border-white/25 hover:text-white/65',
+                  )}
+                >
+                  {done ? <Check className="h-2.5 w-2.5" /> : skipped ? <X className="h-2.5 w-2.5" /> : <Circle className="h-2.5 w-2.5" />}
+                </button>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className={cn('truncate text-[9px] font-normal', skipped ? 'text-white/24 line-through' : done ? 'text-white/46' : 'text-white/58')}>{item.label}</p>
+                    {item.linkedAssetId ? <span className="h-1 w-1 shrink-0 rounded-full bg-orange-300/80" title="Matched from campaign vault" /> : null}
+                  </div>
+                </div>
+                {done ? (
+                  <span className="text-[6px] font-semibold uppercase tracking-[0.1em] text-orange-200/62">Done</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onSetItemStatus(category.id, item.id, skipped ? 'needed' : 'skipped')}
+                    title={skipped ? 'Restore this item' : 'Mark this item not applicable'}
+                    aria-label={skipped ? `Restore ${item.label}` : `Mark ${item.label} not applicable`}
+                    className="rounded-full px-1 py-0.5 text-[6px] font-semibold uppercase tracking-[0.1em] text-white/25 transition-colors hover:bg-white/[0.06] hover:text-white/58"
+                  >
+                    {skipped ? 'N/A' : 'Skip'}
+                  </button>
+                )}
+                {action ? (
+                  <button
+                    type="button"
+                    onClick={() => onLaunchItem(category, item)}
+                    disabled={launchingItemKey !== null}
+                    title={`Cue ${action.targetName}`}
+                    aria-label={`Cue ${action.targetName} for ${item.label}`}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/[0.07] text-white/62 ring-1 ring-white/[0.10] transition-colors hover:bg-gradient-to-br hover:from-[#ff7a00] hover:to-[#ef2b10] hover:text-white disabled:cursor-wait disabled:opacity-35"
+                  >
+                    {launching ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Play className="h-2.5 w-2.5 fill-current" />}
+                  </button>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </section>
   )
 }
 

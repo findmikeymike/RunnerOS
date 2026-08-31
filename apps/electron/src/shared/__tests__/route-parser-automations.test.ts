@@ -115,6 +115,13 @@ describe('route-parser: library routes', () => {
     expect(parseRouteToNavigationState('campaign/release-kit')).toEqual({ navigator: 'campaign', subpage: 'release-kit' })
   })
 
+  it('round trips the campaign Release Board as its own page', () => {
+    const parsed = parseCompoundRoute('campaign/release-board')
+    expect(parsed).toEqual({ navigator: 'campaign', campaignSubpage: 'release-board', details: null })
+    expect(buildCompoundRoute(parsed!)).toBe('campaign/release-board')
+    expect(parseRouteToNavigationState('campaign/release-board')).toEqual({ navigator: 'campaign', subpage: 'release-board' })
+  })
+
   it('parses "lab" as the creative lab navigator', () => {
     const parsed = parseCompoundRoute('lab')
     expect(parsed).toEqual({ navigator: 'lab', labTab: 'home', details: null })

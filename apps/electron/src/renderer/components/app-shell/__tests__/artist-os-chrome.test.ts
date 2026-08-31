@@ -195,16 +195,44 @@ describe('Artist OS persistent shell chrome', () => {
     }
   })
 
-  test('shows the onboarded campaign release countdown below the hero', () => {
+  test('shows the release countdown beside a compact readiness handoff on campaign overview', () => {
     const campaign = readFileSync(join(import.meta.dir, '..', 'ArtistCommandCenterHome.tsx'), 'utf8')
-    const header = campaign.indexOf('<CompactPageHeader')
-    const countdown = campaign.indexOf('<ReleaseCountdownDial')
-    const board = campaign.indexOf('<ReleaseBoardRow')
+    const dial = readFileSync(join(import.meta.dir, '..', 'ReleaseCountdownDial.tsx'), 'utf8')
 
     expect(campaign).toContain('missionCampaignWindow(mission)')
     expect(campaign).toContain('releaseDate={campaignWindow.releaseDate}')
-    expect(countdown).toBeGreaterThan(header)
-    expect(board).toBeGreaterThan(countdown)
+    expect(campaign).toContain('<ReleaseReadinessSummary')
+    expect(campaign).toContain("navigate(routes.view.campaign('release-board'))")
+    expect(campaign).toContain('md:grid-cols-[minmax(0,1fr)_116px]')
+    expect(dial).toContain('h-[104px] w-[104px]')
+    expect(dial).not.toContain('#2b2b2f')
+    expect(dial).not.toContain('#242428')
+  })
+
+  test('gives Release Board assets and agent actions a dedicated campaign page', () => {
+    const campaign = readFileSync(join(import.meta.dir, '..', 'ArtistCommandCenterHome.tsx'), 'utf8')
+    const main = readFileSync(join(import.meta.dir, '..', 'MainContentPanel.tsx'), 'utf8')
+    const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
+
+    expect(campaign).toContain('function ReleaseBoardWorkspace')
+    expect(campaign).toContain('function ReleaseBoardBand')
+    expect(campaign).toContain('function ReleaseBoardSection')
+    expect(campaign).toContain('category.items.map((item)')
+    expect(campaign).toContain('aria-label={`Cue ${action.targetName} for ${item.label}`}')
+    expect(campaign).toContain('md:divide-x md:divide-y-0')
+    expect(campaign).toContain("category.id === 'promotion' && 'md:grid-cols-2 lg:grid-cols-3'")
+    expect(campaign).toContain('flex min-h-7 items-center')
+    expect(campaign).toContain('<ReleaseBoardProgress board={releaseBoard} />')
+    expect(campaign).toContain('max-w-[360px]')
+    expect(campaign).toContain('{remaining} left')
+    expect(campaign).toContain("backgroundColor: '#090909'")
+    expect(campaign).toContain('rgba(255,77,0,0.018)')
+    expect(campaign).toContain("'truncate text-[9px] font-normal'")
+    expect(main).toContain("navState.subpage === 'release-board'")
+    expect(main).toContain('view="release-board"')
+    expect(shell).toMatch(/id: "nav:release-board",\s+title: "Release Board"/)
+    expect(campaign).not.toContain('function ReleaseBoardDialog')
+    expect(campaign).not.toContain('selectedReleaseCategoryId')
   })
 
   test('creates an empty Lab song from the Songs page before opening the Pad', () => {

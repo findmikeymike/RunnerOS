@@ -1581,7 +1581,7 @@ export interface SessionsNavigationState {
 
 export interface CampaignNavigationState {
   navigator: 'campaign'
-  subpage?: 'home' | 'calendar' | 'release-kit'
+  subpage?: 'home' | 'calendar' | 'release-board' | 'release-kit'
   rightSidebar?: RightSidebarPanel
 }
 
@@ -1820,6 +1820,7 @@ export const DEFAULT_NAVIGATION_STATE: NavigationState = {
 export const getNavigationStateKey = (state: NavigationState): string => {
   if (state.navigator === 'campaign') {
     if (state.subpage === 'calendar') return 'campaign/calendar'
+    if (state.subpage === 'release-board') return 'campaign/release-board'
     if (state.subpage === 'release-kit') return 'campaign/release-kit'
     return 'campaign'
   }
@@ -1903,6 +1904,7 @@ export const getNavigationStateKey = (state: NavigationState): string => {
 export const parseNavigationStateKey = (key: string): NavigationState | null => {
   if (key === 'campaign') return { navigator: 'campaign' }
   if (key === 'campaign/calendar') return { navigator: 'campaign', subpage: 'calendar' }
+  if (key === 'campaign/release-board') return { navigator: 'campaign', subpage: 'release-board' }
   if (key === 'campaign/release-kit') return { navigator: 'campaign', subpage: 'release-kit' }
   if (key === 'lab') return { navigator: 'lab' }
   if (key === 'lab/songs') return { navigator: 'lab', tab: 'songs' }

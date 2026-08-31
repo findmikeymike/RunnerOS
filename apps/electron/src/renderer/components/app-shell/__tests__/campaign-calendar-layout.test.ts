@@ -44,7 +44,7 @@ describe('Calendar page layout', () => {
     expect(main).toContain("networkWorkspaceId={artistHQWorkspace?.id || activeWorkspaceId || ''}")
     const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
     expect(shell).toMatch(/id: "nav:calendar",\s+title: "Plan"/)
-    expect(shell).toMatch(/if \(!isArtistHQWorkspace\) \{[\s\S]*?id: "nav:campaign"[\s\S]*?id: "nav:release-kit"[\s\S]*?id: "nav:calendar"[\s\S]*?id: "nav:work"/)
+    expect(shell).toMatch(/if \(!isArtistHQWorkspace\) \{[\s\S]*?id: "nav:campaign"[\s\S]*?id: "nav:release-board"[\s\S]*?id: "nav:release-kit"[\s\S]*?id: "nav:calendar"[\s\S]*?id: "nav:work"/)
   })
 
   test('HQ Plan uses a wide calendar beside a compact task board', () => {

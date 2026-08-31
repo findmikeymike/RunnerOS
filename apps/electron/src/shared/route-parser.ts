@@ -55,7 +55,7 @@ export interface ParsedCompoundRoute {
   /** Output id for Video Studio navigator. */
   videoStudioOutputId?: string
   /** Campaign subpage. */
-  campaignSubpage?: 'home' | 'calendar' | 'release-kit'
+  campaignSubpage?: 'home' | 'calendar' | 'release-board' | 'release-kit'
   /** Lab sub-page. */
   labTab?: 'home' | 'songs' | 'pad' | 'sequence'
   /** Details page info (null for empty state) */
@@ -107,7 +107,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   const first = segments[0]
 
   if (first === 'campaign') {
-    const subpage = segments[1] === 'calendar' || segments[1] === 'release-kit' ? segments[1] : 'home'
+    const subpage = segments[1] === 'calendar' || segments[1] === 'release-board' || segments[1] === 'release-kit' ? segments[1] : 'home'
     return { navigator: 'campaign', campaignSubpage: subpage, details: null }
   }
 
@@ -382,6 +382,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
 export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   if (parsed.navigator === 'campaign') {
     if (parsed.campaignSubpage === 'calendar') return 'campaign/calendar'
+    if (parsed.campaignSubpage === 'release-board') return 'campaign/release-board'
     if (parsed.campaignSubpage === 'release-kit') return 'campaign/release-kit'
     return 'campaign'
   }
@@ -752,7 +753,7 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
   if (compound.navigator === 'campaign') {
     return {
       navigator: 'campaign',
-      ...(compound.campaignSubpage === 'calendar' || compound.campaignSubpage === 'release-kit'
+      ...(compound.campaignSubpage === 'calendar' || compound.campaignSubpage === 'release-board' || compound.campaignSubpage === 'release-kit'
         ? { subpage: compound.campaignSubpage }
         : {}),
     }

@@ -34,11 +34,11 @@ export function ReleaseCountdownDial({
       onClick={onClick}
       aria-label={accessibleLabel}
       title={accessibleLabel}
-      className="group relative flex h-52 w-52 shrink-0 items-center justify-center rounded-full border border-white/[0.09] bg-gradient-to-br from-[#2b2b2f] via-[#17171a] to-[#08080a] p-2.5 shadow-strong transition-transform hover:scale-[1.015] active:scale-[0.99]"
+      className="group relative flex h-[104px] w-[104px] shrink-0 items-center justify-center rounded-full border border-white/[0.09] bg-gradient-to-br from-[#1b1b1b] via-[#0f0f0f] to-[#020202] p-1.5 shadow-strong transition-transform hover:scale-[1.02] active:scale-[0.99]"
     >
-      <span className="absolute inset-2.5 rounded-full bg-[#070709] shadow-panel-focused" />
+      <span className="absolute inset-1.5 rounded-full bg-[#030303] shadow-panel-focused" />
       <span
-        className="absolute inset-4 rounded-full opacity-95 transition-opacity group-hover:opacity-100"
+        className="absolute inset-2.5 rounded-full opacity-95 transition-opacity group-hover:opacity-100"
         style={{
           background: countdown.hasDate
             ? `conic-gradient(from 210deg, #ffb000 0deg, #ff6a00 ${Math.max(10, arcDegrees * 0.55)}deg, #ff2700 ${arcDegrees}deg, rgba(255,255,255,0.055) ${trackStart}deg 300deg, transparent 300deg 360deg)`
@@ -47,17 +47,17 @@ export function ReleaseCountdownDial({
           mask: 'radial-gradient(transparent 62%, #000 63%)',
         }}
       />
-      <span className="relative z-10 flex h-[142px] w-[142px] flex-col items-center justify-center rounded-full border border-white/[0.075] bg-gradient-to-br from-[#242428] to-[#101012] shadow-strong">
-        <span className="absolute inset-2 rounded-full border border-white/[0.035]" />
-        <span className="absolute left-1/2 top-3 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-black shadow-xs" />
+      <span className="relative z-10 flex h-[70px] w-[70px] flex-col items-center justify-center rounded-full border border-white/[0.075] bg-gradient-to-br from-[#181818] to-[#070707] shadow-strong">
+        <span className="absolute inset-1.5 rounded-full border border-white/[0.035]" />
+        <span className="absolute left-1/2 top-1.5 h-1 w-1 -translate-x-1/2 rounded-full bg-black shadow-xs" />
         <span className={cn(
           'relative z-10 font-light tracking-[-0.06em] text-[#ff9700]',
-          countdown.released ? 'text-[27px] tracking-[0.05em]' : 'text-[48px]',
+          countdown.released ? 'text-[14px] tracking-[0.05em]' : 'text-[27px]',
         )}>
           {value}
         </span>
-        <span className="relative z-10 mt-0.5 text-[8px] font-semibold uppercase tracking-[0.2em] text-orange-200/62">{label}</span>
-        <span className="relative z-10 mt-1.5 text-[9px] font-medium text-white/34">{countdown.dateLabel}</span>
+        <span className="relative z-10 text-[5px] font-semibold uppercase tracking-[0.16em] text-white/64">{label}</span>
+        <span className="relative z-10 mt-0.5 text-[6px] font-medium text-white/34">{countdown.dateLabel}</span>
       </span>
     </button>
   )

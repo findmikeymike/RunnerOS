@@ -1804,6 +1804,15 @@ function AppShellContent({
     navigate(routes.view.campaign('calendar'))
   }, [])
 
+  const handleCampaignReleaseBoardClick = useCallback(() => {
+    if (window.location.hash.startsWith('#artist-hq/')) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+      setArtistHqHash('')
+    }
+    setSessionsNavExpanded(false)
+    navigate(routes.view.campaign('release-board'))
+  }, [])
+
   const handleCampaignReleaseKitClick = useCallback(() => {
     if (window.location.hash.startsWith('#artist-hq/')) {
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
@@ -2164,6 +2173,7 @@ function AppShellContent({
   const campaignActive = !isArtistHQWorkspace && isCampaignNavigation(navState)
   const campaignHomeActive = campaignActive && (navState.subpage ?? 'home') === 'home'
   const campaignCalendarActive = campaignActive && navState.subpage === 'calendar'
+  const campaignReleaseBoardActive = campaignActive && navState.subpage === 'release-board'
   const campaignReleaseKitActive = campaignActive && navState.subpage === 'release-kit'
   const activeCampaignId = !isArtistHQWorkspace ? activeWorkspaceId ?? undefined : undefined
   const labHomeActive = isLabWorkspace && isLabNavigation(navState) && !navState.tab
@@ -2210,6 +2220,7 @@ function AppShellContent({
 
     if (!isArtistHQWorkspace) {
       result.push({ id: 'nav:campaign', type: 'nav', action: handleCampaignHomeClick })
+      result.push({ id: 'nav:release-board', type: 'nav', action: handleCampaignReleaseBoardClick })
       result.push({ id: 'nav:release-kit', type: 'nav', action: handleCampaignReleaseKitClick })
       result.push({ id: 'nav:calendar', type: 'nav', action: handleCampaignCalendarClick })
       result.push({ id: 'nav:chat', type: 'nav', action: handleWorkChatClick })
@@ -2244,7 +2255,7 @@ function AppShellContent({
     }
 
     return result
-  }, [brainExpanded, handleAgentsClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleCampaignReleaseKitClick, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, isArtistHQWorkspace, isLabWorkspace, navigate, toggleMainNavGroup, vaultActive, workExpanded])
+  }, [brainExpanded, handleAgentsClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleCampaignReleaseBoardClick, handleCampaignReleaseKitClick, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, isArtistHQWorkspace, isLabWorkspace, navigate, toggleMainNavGroup, vaultActive, workExpanded])
 
   const sidebarProjectGroups = React.useMemo(() => {
     const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
@@ -2599,6 +2610,13 @@ function AppShellContent({
           onClick: handleCampaignHomeClick,
         },
         {
+          id: "nav:release-board",
+          title: "Release Board",
+          icon: ListTodo,
+          variant: campaignReleaseBoardActive ? "default" : "ghost",
+          onClick: handleCampaignReleaseBoardClick,
+        },
+        {
           id: "nav:release-kit",
           title: "Release Kit",
           icon: Archive,
@@ -2779,7 +2797,7 @@ function AppShellContent({
         ],
       },
     ]
-  }, [artistHqHash, automations.length, brainActive, brainExpanded, campaignActive, campaignCalendarActive, campaignHomeActive, campaignReleaseKitActive, handleAgentsClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleCampaignReleaseKitClick, handleChatHistoryToggle, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, isLabWorkspace, labHomeActive, labPadActive, labSequenceActive, labSessionsActive, labSongsActive, navigate, navState, openAddAutomation, peopleActive, planActive, sessionsNavExpanded, t, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
+  }, [artistHqHash, automations.length, brainActive, brainExpanded, campaignActive, campaignCalendarActive, campaignHomeActive, campaignReleaseBoardActive, campaignReleaseKitActive, handleAgentsClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleCampaignReleaseBoardClick, handleCampaignReleaseKitClick, handleChatHistoryToggle, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, isLabWorkspace, labHomeActive, labPadActive, labSequenceActive, labSessionsActive, labSongsActive, navigate, navState, openAddAutomation, peopleActive, planActive, sessionsNavExpanded, t, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
 
   const sidebarSessionHistory = React.useMemo(() => {
     if (!sessionsNavExpanded || !workChatActive) return null

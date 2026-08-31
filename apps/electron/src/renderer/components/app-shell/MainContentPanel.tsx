@@ -354,6 +354,12 @@ export function MainContentPanel({
             onDeleteAgendaTask={handleDeleteAgendaTask}
             networkWorkspaceId={artistHQWorkspace?.id || activeWorkspaceId || ''}
           />
+        ) : navState.subpage === 'release-board' ? (
+          <ArtistCommandCenterHome
+            workspaceId={activeWorkspaceId || ''}
+            artistProfileWorkspaceId={artistHQWorkspace?.id}
+            view="release-board"
+          />
         ) : navState.subpage === 'release-kit' ? (
           <ReleaseKitPage
             workspaceId={activeWorkspaceId || ''}

@@ -93,7 +93,7 @@ export const routes = {
   // ============================================
   view: {
     /** Campaign command center/home for non-HQ workspaces */
-    campaign: (subpage?: 'calendar' | 'release-kit') => subpage ? `campaign/${subpage}` as const : 'campaign' as const,
+    campaign: (subpage?: 'calendar' | 'release-board' | 'release-kit') => subpage ? `campaign/${subpage}` as const : 'campaign' as const,
 
     /** Lab workspace for creative exploration, lyrics, concepts, and research */
     lab: (tab?: 'songs' | 'pad' | 'sequence', songId?: string) => (
