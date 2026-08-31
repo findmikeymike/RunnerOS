@@ -163,3 +163,55 @@ export {
 
 // Export PowerShell validator root setter (for Electron startup on Windows)
 export { setPowerShellValidatorRoot } from './powershell-validator.ts';
+
+// Prompt-injection scanning for non-interactive (cron / workflow) dispatch.
+export {
+  assemblePrompt,
+  scanForInjection,
+  stripInvisibleChars,
+  INJECTION_PATTERNS,
+  PromptInjectionBlocked,
+  type AssemblePromptInput,
+  type InjectionPattern,
+  type InjectionScanResult,
+} from './prompt-builder.ts';
+
+// Subconscious mode — escalate-on-write gate + persistent escalation store (R7).
+// Concept-only re-implementation from OpenHuman (GPL-3.0); no source copied.
+export {
+  // Coordinator + outcome shape
+  gateWriteAttempt,
+  resolveSubconsciousAlias,
+  setEscalationNotifier,
+  type WriteAttemptOutcome,
+  type EscalationNotification,
+  type NotifyEscalation,
+  type GateWriteAttemptInput,
+  // Permission evaluator
+  evaluateWriteAttempt,
+  isWriteTool,
+  WRITE_TOOL_NAMES,
+  normalizeSubconsciousMode,
+  type SubconsciousMode,
+  type WritePolicyDecision,
+  // Store CRUD
+  createEscalation,
+  listPendingEscalations,
+  getEscalation,
+  approveEscalation,
+  rejectEscalation,
+  type Escalation,
+  type EscalationStatus,
+  type EscalationToolCall,
+  // Test-only helpers for resetting in-flight pause state and the store.
+  _resetSubconsciousModeForTests,
+} from './subconscious-mode.ts';
+export {
+  getEscalationStore,
+  getDefaultEscalationStorePath,
+  _resetDefaultEscalationStore,
+  type EscalationStore,
+  type CreateEscalationInput,
+  type ListPendingOptions,
+  type EscalationListener,
+} from './escalation-store.ts';

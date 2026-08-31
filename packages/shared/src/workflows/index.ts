@@ -63,7 +63,21 @@ export {
   type StructuredOutputParseResult,
 } from './output-schema.ts';
 
-export { normalizeWorkflowTriggerInputs } from './trigger-inputs.ts';
+export {
+  buildToolNotEnabledDenial,
+  isSourceAllowed,
+  normalizeWorkflowTriggerInputs,
+  parseTriggerToolsetOverride,
+  resolveEnabledToolsets,
+  resolvePermissionMode,
+  TRIGGER_PERMISSION_MODES,
+} from './trigger-inputs.ts';
+export type {
+  PlatformKey,
+  PlatformToolsetConfig,
+  TriggerPermissionMode,
+  TriggerToolsetOverride,
+} from './trigger-inputs.ts';
 
 export type {
   WorkflowRunState,

@@ -1221,4 +1221,441 @@ describe('WorkflowRunner', () => {
     ).rejects.toThrow(/Workflow step not found/);
     expect(h.sessions.size).toBe(0);
   });
+
+  // -------------------------------------------------------------------------
+  // R5: per-job toolset overrides (Hermes MIT — cron/scheduler.py:60-88,
+  // cron/jobs.py:523/662). Verifies the precedence chain applied at
+  // runner.executeStepAttempt before createSession.
+  // -------------------------------------------------------------------------
+
+  test('per-job toolset override replaces the agent default enabledSourceSlugs at session boot', async () => {
+    const h = makeHarness({ stepOutputs: ['ok', 'ok2'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: {
+        topic: 'demo',
+        // R5 override — agent default would have been ['researcher-source'].
+        enabled_source_slugs: ['github'],
+      },
+    });
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    // sess-1 boots with the per-job override, NOT the agent's default.
+    expect((h.sessions.get('sess-1')!.options as { enabledSourceSlugs?: string[] }).enabledSourceSlugs).toEqual(['github']);
+  });
+
+  test('per-job override of empty array denies all sources (does not fall through to defaults)', async () => {
+    const h = makeHarness({ stepOutputs: ['ok', 'ok2'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: {
+        topic: 'demo',
+        enabled_source_slugs: [],
+      },
+    });
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    // Empty array = explicit deny-all. Must propagate as [] to session, not
+    // the agent's default ['researcher-source'].
+    expect((h.sessions.get('sess-1')!.options as { enabledSourceSlugs?: string[] }).enabledSourceSlugs).toEqual([]);
+  });
+
+  test('no per-job override leaves agent default enabledSourceSlugs intact (backward compat)', async () => {
+    const h = makeHarness({ stepOutputs: ['ok', 'ok2'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'demo' },
+    });
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    expect((h.sessions.get('sess-1')!.options as { enabledSourceSlugs?: string[] }).enabledSourceSlugs)
+      .toEqual(['researcher-source']);
+  });
+
+  test('per-platform config overrides agent default when per-job override is absent', async () => {
+    const h = makeHarness({ stepOutputs: ['ok', 'ok2'] });
+    const runner = new WorkflowRunner({
+      ...h.deps,
+      getPlatformToolsetConfig: () => ({
+        workflow: { enabled_source_slugs: ['platform-source'] },
+      }),
+    });
+
+    await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'demo' },
+    });
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    expect((h.sessions.get('sess-1')!.options as { enabledSourceSlugs?: string[] }).enabledSourceSlugs)
+      .toEqual(['platform-source']);
+  });
+
+  test('per-job override wins over per-platform config', async () => {
+    const h = makeHarness({ stepOutputs: ['ok', 'ok2'] });
+    const runner = new WorkflowRunner({
+      ...h.deps,
+      getPlatformToolsetConfig: () => ({
+        workflow: { enabled_source_slugs: ['platform-source'] },
+      }),
+    });
+
+    await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'demo', enabled_source_slugs: ['github'] },
+    });
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    expect((h.sessions.get('sess-1')!.options as { enabledSourceSlugs?: string[] }).enabledSourceSlugs).toEqual(['github']);
+  });
+
+  test('malformed override does not crash the run; logs warning and uses agent default', async () => {
+    const h = makeHarness({ stepOutputs: ['ok', 'ok2'] });
+    const runner = new WorkflowRunner(h.deps);
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      await runner.start({
+        workflow: makeWorkflow(),
+        workspaceId: WORKSPACE_ID,
+        // Invalid shape — string instead of string[].
+        triggerInputs: { topic: 'demo', enabled_source_slugs: 'github' as unknown as string[] },
+      });
+      await waitFor(() => lastCompleted(h.events) !== undefined);
+    } finally {
+      warnSpy.mockRestore();
+    }
+
+    expect(lastCompleted(h.events)!.state).toBe('succeeded');
+    expect((h.sessions.get('sess-1')!.options as { enabledSourceSlugs?: string[] }).enabledSourceSlugs)
+      .toEqual(['researcher-source']);
+  });
+
+  // -------------------------------------------------------------------------
+  // R7 / Plan 01-07: subconscious-mode hint resolution.
+  //
+  // Verifies the runner consults the precedence chain (per-job >
+  // per-platform > default) and stashes the resolved hint on agentOptions
+  // via the `__subconsciousMode` annotation so the bootstrap layer can
+  // forward it. The actual escalate-on-write gate lives in the agent
+  // layer; this test only asserts the runner-side plumbing.
+  // -------------------------------------------------------------------------
+
+  test('R7: per-job permission_mode "subconscious" stashes hint on agentOptions', async () => {
+    const h = makeHarness({ stepOutputs: ['ok', 'ok2'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'demo', permission_mode: 'subconscious' },
+    });
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const opts = h.sessions.get('sess-1')!.options as {
+      __subconsciousMode?: string;
+    };
+    expect(opts.__subconsciousMode).toBe('subconscious');
+  });
+
+  test('R7: per-job permission_mode "yolo" stashes hint on agentOptions', async () => {
+    const h = makeHarness({ stepOutputs: ['ok', 'ok2'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'demo', permission_mode: 'yolo' },
+    });
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const opts = h.sessions.get('sess-1')!.options as {
+      __subconsciousMode?: string;
+    };
+    expect(opts.__subconsciousMode).toBe('yolo');
+  });
+
+  test('R7: no per-job permission_mode → __subconsciousMode is unset (default)', async () => {
+    const h = makeHarness({ stepOutputs: ['ok', 'ok2'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'demo' },
+    });
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const opts = h.sessions.get('sess-1')!.options as {
+      __subconsciousMode?: string;
+    };
+    // "default" mode is a no-op at the gate, so we don't bother stashing.
+    expect(opts.__subconsciousMode).toBeUndefined();
+  });
+
+  test('R7: per-platform permission_mode applies when per-job override is absent', async () => {
+    const h = makeHarness({ stepOutputs: ['ok', 'ok2'] });
+    const runner = new WorkflowRunner({
+      ...h.deps,
+      getPlatformToolsetConfig: () => ({
+        workflow: { permission_mode: 'subconscious' },
+      }),
+    });
+
+    await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'demo' },
+    });
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const opts = h.sessions.get('sess-1')!.options as {
+      __subconsciousMode?: string;
+    };
+    expect(opts.__subconsciousMode).toBe('subconscious');
+  });
+
+  test('R7: per-job permission_mode wins over per-platform config', async () => {
+    const h = makeHarness({ stepOutputs: ['ok', 'ok2'] });
+    const runner = new WorkflowRunner({
+      ...h.deps,
+      getPlatformToolsetConfig: () => ({
+        workflow: { permission_mode: 'subconscious' },
+      }),
+    });
+
+    await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'demo', permission_mode: 'yolo' },
+    });
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const opts = h.sessions.get('sess-1')!.options as {
+      __subconsciousMode?: string;
+    };
+    expect(opts.__subconsciousMode).toBe('yolo');
+  });
+
+  // -------------------------------------------------------------------------
+  // R7 / Plan 01-07: real pause integration — agent-side simulator.
+  //
+  // The agent-side gate (`gateWriteAttempt`) is a published API on
+  // `@craft-agent/shared/agent`. The runner forwards the resolved mode +
+  // runId to its `createSession` dep via typed fields on `CreateSessionOptions`
+  // (`subconsciousMode`, `workflowRunId`); a production agent backend reads
+  // those, sets them on its instance, and invokes `gateWriteAttempt` from
+  // its PreToolUse hook (see `claude-agent.ts`).
+  //
+  // We simulate that here by having the test's mock `createSession` invoke
+  // `gateWriteAttempt` directly with the same fields the production agent
+  // would read. This is sufficient to prove the runner→agent contract:
+  // when the runner sets `subconsciousMode === 'subconscious'`, the gate
+  // pauses; `approveEscalation` resumes and the closure runs; `rejectEscalation`
+  // returns denied without running the closure.
+  // -------------------------------------------------------------------------
+
+  test('R7: subconscious mode pauses on write; approveEscalation resumes and executes', async () => {
+    const {
+      gateWriteAttempt,
+      getEscalationStore,
+      _resetSubconsciousModeForTests,
+      _resetDefaultEscalationStore,
+    } = await import('@craft-agent/shared/agent');
+
+    _resetSubconsciousModeForTests();
+    _resetDefaultEscalationStore();
+    const escalationStore = getEscalationStore(':memory:');
+
+    // Custom harness whose createSession simulates an agent calling
+    // gateWriteAttempt on a write tool.
+    const sessions = new Map<string, SessionRecord>();
+    const events: WorkflowRunEvent[] = [];
+    const toolExecuted: string[] = [];
+    let gatePromise: Promise<unknown> | null = null;
+
+    const deps: WorkflowRunnerDeps = {
+      createSession: async (_wsId, options) => {
+        const id = `sess-${sessions.size + 1}`;
+        const isFirstStep = sessions.size === 0;
+        sessions.set(id, {
+          id,
+          prompts: [],
+          output: 'ok',
+          aborted: false,
+          options,
+          toolUseCount: 0,
+        });
+        const o = options as {
+          subconsciousMode?: 'default' | 'subconscious' | 'yolo';
+          workflowRunId?: string;
+        };
+        if (isFirstStep && o.subconsciousMode === 'subconscious' && o.workflowRunId) {
+          // Simulate the agent PreToolUse hook attempting a write tool.
+          gatePromise = gateWriteAttempt({
+            mode: o.subconsciousMode,
+            toolName: 'Write',
+            args: { path: '/tmp/x', contents: 'hi' },
+            workflowRunId: o.workflowRunId,
+            store: escalationStore,
+            execute: async () => {
+              toolExecuted.push('Write');
+              return 'wrote';
+            },
+          });
+        }
+        return { id };
+      },
+      resolveAgentSessionOptions: async () => ({ permissionMode: 'safe' }),
+      sendMessage: async () => {},
+      getLastAssistantText: () => 'ok',
+      abortSession: async () => {},
+      getWorkspaceRootPath: () => workspaceRoot,
+      emit: (event) => events.push(event),
+    };
+
+    const runner = new WorkflowRunner(deps);
+
+    await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'demo', permission_mode: 'subconscious' },
+    });
+
+    // Wait for the gate to produce a pending escalation event via the
+    // runner's notifier bridge.
+    await waitFor(() => events.some((e) => e.type === 'escalation.created'));
+    expect(gatePromise).not.toBeNull();
+    expect(toolExecuted).toEqual([]); // write NOT yet executed — paused.
+
+    // Assert an `escalation.created` event went out via deps.emit.
+    expect(events.some((e) => e.type === 'escalation.created')).toBe(true);
+
+    // Approve → gate resolves and replays execute(). Filter by event id so
+    // this test is robust to leftover rows in the singleton SQLite store.
+    const escalationEvent = events.find((e) => e.type === 'escalation.created');
+    if (escalationEvent?.type !== 'escalation.created') throw new Error('no escalation event');
+    const escId = escalationEvent.escalation.id;
+    escalationStore.approve(escId);
+
+    const outcome = (await gatePromise) as unknown as { kind: string; result?: unknown };
+    expect(outcome.kind).toBe('executed');
+    expect(outcome.result).toBe('wrote');
+    expect(toolExecuted).toEqual(['Write']); // write replayed after approval.
+
+    _resetSubconsciousModeForTests();
+    _resetDefaultEscalationStore();
+    escalationStore.close();
+  });
+
+  test('R7: subconscious mode pauses on write; rejectEscalation returns denied and does not execute', async () => {
+    const {
+      gateWriteAttempt,
+      getEscalationStore,
+      _resetSubconsciousModeForTests,
+      _resetDefaultEscalationStore,
+    } = await import('@craft-agent/shared/agent');
+
+    _resetSubconsciousModeForTests();
+    _resetDefaultEscalationStore();
+    const escalationStore = getEscalationStore(':memory:');
+
+    const sessions = new Map<string, SessionRecord>();
+    const events: WorkflowRunEvent[] = [];
+    const toolExecuted: string[] = [];
+    let gatePromise: Promise<unknown> | null = null;
+
+    const deps: WorkflowRunnerDeps = {
+      createSession: async (_wsId, options) => {
+        const id = `sess-${sessions.size + 1}`;
+        const isFirstStep = sessions.size === 0;
+        sessions.set(id, {
+          id,
+          prompts: [],
+          output: 'ok',
+          aborted: false,
+          options,
+          toolUseCount: 0,
+        });
+        const o = options as {
+          subconsciousMode?: 'default' | 'subconscious' | 'yolo';
+          workflowRunId?: string;
+        };
+        if (isFirstStep && o.subconsciousMode === 'subconscious' && o.workflowRunId) {
+          gatePromise = gateWriteAttempt({
+            mode: o.subconsciousMode,
+            toolName: 'Edit',
+            args: { path: '/tmp/y' },
+            workflowRunId: o.workflowRunId,
+            store: escalationStore,
+            execute: async () => {
+              toolExecuted.push('Edit');
+              return 'edited';
+            },
+          });
+        }
+        return { id };
+      },
+      resolveAgentSessionOptions: async () => ({ permissionMode: 'safe' }),
+      sendMessage: async () => {},
+      getLastAssistantText: () => 'ok',
+      abortSession: async () => {},
+      getWorkspaceRootPath: () => workspaceRoot,
+      emit: (event) => events.push(event),
+    };
+
+    const runner = new WorkflowRunner(deps);
+
+    await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'demo', permission_mode: 'subconscious' },
+    });
+
+    await waitFor(() => events.some((e) => e.type === 'escalation.created'));
+    expect(toolExecuted).toEqual([]);
+
+    const escalationEvent = events.find((e) => e.type === 'escalation.created');
+    if (escalationEvent?.type !== 'escalation.created') throw new Error('no escalation event');
+    escalationStore.reject(escalationEvent.escalation.id, 'user denied');
+
+    const outcome = (await gatePromise) as unknown as { kind: string; reason?: string };
+    expect(outcome.kind).toBe('denied');
+    expect(outcome.reason).toContain('rejected');
+    expect(toolExecuted).toEqual([]); // never ran.
+
+    _resetSubconsciousModeForTests();
+    _resetDefaultEscalationStore();
+    escalationStore.close();
+  });
+
+  test('R7: runner promotes subconscious mode + workflowRunId to typed fields on CreateSessionOptions', async () => {
+    const h = makeHarness({ stepOutputs: ['ok', 'ok2'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    const snap = await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'demo', permission_mode: 'subconscious' },
+    });
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const opts = h.sessions.get('sess-1')!.options as {
+      subconsciousMode?: string;
+      workflowRunId?: string;
+    };
+    expect(opts.subconsciousMode).toBe('subconscious');
+    expect(opts.workflowRunId).toBe(snap.id);
+  });
 });

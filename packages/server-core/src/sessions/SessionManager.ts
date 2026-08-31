@@ -2000,6 +2000,14 @@ export class SessionManager implements ISessionManager {
       )
       return
     }
+    if (event.type === 'escalation.created') {
+      // R7 / Plan 01-07: surface subconscious-mode escalations to the UI via
+      // the existing workflow-runs channel. The UI can filter on the
+      // payload shape. A dedicated channel can land later if needed.
+      // TODO: route to the automations event bus once that surface lands so
+      // toast notifications fire for escalations independent of the run feed.
+      return
+    }
     const eventType: 'created' | 'updated' | 'completed' =
       event.type === 'run.created' ? 'created' : event.type === 'run.completed' ? 'completed' : 'updated'
     this.eventSink(

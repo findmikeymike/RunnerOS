@@ -67,6 +67,12 @@ import {
   type PreToolUseCheckResult,
   BUILT_IN_TOOLS,
 } from './core/pre-tool-use.ts';
+// R7 / Plan 01-07: subconscious-mode gate (escalate-on-write).
+import {
+  gateWriteAttempt,
+  type SubconsciousMode,
+  evaluateWriteAttempt,
+} from './subconscious-mode.ts';
 import { type ThinkingLevel, THINKING_TO_EFFORT, getThinkingTokens, DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
 import { generateConversationSummary } from './conversation-summary.ts';
 import type { LoadedSource } from '../sources/types.ts';
@@ -475,6 +481,27 @@ export class ClaudeAgent extends BaseAgent {
   private lastStderrOutput: string[] = [];
   /** Pending steer message — injected via additionalContext on next PreToolUse */
   private pendingSteerMessage: string | null = null;
+
+  /**
+   * R7 / Plan 01-07: subconscious-mode hint for this session. When set to
+   * `"subconscious"`, the PreToolUse hook routes write tools through
+   * `gateWriteAttempt` to pause the run pending user approval. Set by the
+   * session-creation pathway from `CreateSessionOptions.subconsciousMode`.
+   */
+  private subconsciousMode: SubconsciousMode = 'default';
+  /** Anchor for escalation rows when this session was spawned by a workflow run. */
+  private workflowRunIdForEscalation: string | null = null;
+
+  /**
+   * Called by the session bootstrap (SessionManager.createSession or the
+   * workflow runner) to set the subconscious-mode hint and workflow run id
+   * for this session. The hint controls the PreToolUse gate's
+   * escalate-on-write behavior.
+   */
+  public setSubconsciousMode(mode: SubconsciousMode, workflowRunId?: string): void {
+    this.subconsciousMode = mode;
+    this.workflowRunIdForEscalation = workflowRunId ?? null;
+  }
 
   /**
    * Get the session ID for mode operations.
@@ -1061,6 +1088,51 @@ export class ClaudeAgent extends BaseAgent {
               this.onDebug?.(`PreToolUse hook: ${input.tool_name} (sessionId=${sessionId}, permissionMode=${permissionMode})`);
 
               const toolInput = input.tool_input as Record<string, unknown>;
+
+              // R7 / Plan 01-07: subconscious-mode gate. When this session
+              // was created with `subconsciousMode: "subconscious"`, route
+              // write-tool attempts through `gateWriteAttempt` which creates
+              // an Escalation row, notifies via the registered notifier, and
+              // returns once the user approves/rejects. The actual tool call
+              // is replayed by the SDK after we return `continue: true`
+              // (approve) or denied via `block` (reject). We do NOT execute
+              // the tool inside the gate's `execute` closure here — the SDK
+              // owns the actual dispatch — so the closure is a no-op marker
+              // that satisfies the gate's contract while letting the SDK do
+              // the work. This preserves the "args replayed verbatim"
+              // property because the SDK keeps the original tool input.
+              if (this.subconsciousMode !== 'default') {
+                const decision = evaluateWriteAttempt(
+                  this.subconsciousMode,
+                  input.tool_name,
+                  toolInput,
+                );
+                if (decision === 'escalate') {
+                  const outcome = await gateWriteAttempt({
+                    mode: this.subconsciousMode,
+                    toolName: input.tool_name,
+                    args: toolInput,
+                    workflowRunId: this.workflowRunIdForEscalation ?? sessionId,
+                    taskId: input.tool_use_id,
+                    // No-op execute: SDK will replay the tool itself on
+                    // `continue: true`. The gate's return shape only needs
+                    // to distinguish executed vs. denied — we map both
+                    // executed and (approved → would-execute) back to the
+                    // SDK's continue path.
+                    execute: async () => undefined,
+                  });
+                  if (outcome.kind === 'denied') {
+                    return blockWithReason(
+                      `Subconscious mode rejected tool "${input.tool_name}": ${outcome.reason}`,
+                    );
+                  }
+                  // outcome.kind === 'executed' → user approved → fall
+                  // through to the normal PreToolUse pipeline so the SDK
+                  // dispatches the tool with the same args.
+                }
+                // decision === 'allow' (read tool in subconscious mode, or
+                // any tool in yolo mode) → fall through.
+              }
 
               // Run centralized PreToolUse checks
               const checkResult = runPreToolUseChecks({

@@ -86,17 +86,19 @@
     "@craft-agent/session-tools-core": "workspace:*",
     "@isaacs/ttlcache": "^2.1.4",
     "@leeoniya/ufuzzy": "^1.0.19",
-    "bash-parser": "^0.5.0",
-    "croner": "^10.0.1",
-    "filtrex": "^3.1.0",
-    "glob": "^13.0.0",
-    "date-fns": "^4.1.0",
-    "i18next": "^26.0.3",
-    "incr-regex-package": "^1.0.4",
-    "shell-quote": "^1.8.3",
     "@mariozechner/pi-agent-core": "0.73.1",
     "@mariozechner/pi-ai": "0.73.1",
-    "@mariozechner/pi-coding-agent": "0.73.1"
+    "@mariozechner/pi-coding-agent": "0.73.1",
+    "bash-parser": "^0.5.0",
+    "croner": "^10.0.1",
+    "date-fns": "^4.1.0",
+    "filtrex": "^3.1.0",
+    "glob": "^13.0.0",
+    "i18next": "^26.0.3",
+    "incr-regex-package": "^1.0.4",
+    "proper-lockfile": "^4.1.2",
+    "shell-quote": "^1.8.3",
+    "systeminformation": "^5.31.6"
   },
   "peerDependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.2.111",
@@ -104,6 +106,7 @@
     "zod": ">=3.0.0"
   },
   "devDependencies": {
+    "@types/proper-lockfile": "^4.1.4",
     "@types/shell-quote": "^1.7.5",
     "@types/uuid": "^11.0.0"
   }

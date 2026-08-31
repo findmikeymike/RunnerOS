@@ -28,16 +28,27 @@ import {
   assertValidWorkflowRunId,
   markRunningRunsInterrupted,
   parseStructuredStepOutput,
+  parseTriggerToolsetOverride,
   readRun,
+  resolveEnabledToolsets,
+  resolvePermissionMode,
   resolveTemplate,
   writeRun,
   type LoadedWorkflow,
+  type PlatformToolsetConfig,
+  type TriggerToolsetOverride,
   type WorkflowStep,
   type WorkflowRunSnapshot,
   type WorkflowRunStep,
   type WorkflowStepExecutionReceipt,
 } from '@craft-agent/shared/workflows';
 import { OutputService } from '../outputs/OutputService';
+import {
+  assemblePrompt,
+  scanForInjection,
+  setEscalationNotifier,
+  type EscalationNotification,
+} from '@craft-agent/shared/agent';
 
 /**
  * Runner-event wire format. The bootstrap layer fans these out to the
@@ -48,7 +59,14 @@ export type WorkflowRunEvent =
   | { type: 'run.created'; run: WorkflowRunSnapshot }
   | { type: 'run.updated'; run: WorkflowRunSnapshot; detail?: WorkflowRunEventDetail }
   | { type: 'run.completed'; run: WorkflowRunSnapshot }
-  | { type: 'outputs.updated'; workspaceId: string };
+  | { type: 'outputs.updated'; workspaceId: string }
+  /**
+   * R7 / Plan 01-07: an escalation was created by the subconscious-mode
+   * gate. The runner forwards these from `setEscalationNotifier` so
+   * downstream observers (Electron IPC, automations event bus, tests)
+   * can see paused runs without coupling to `@craft-agent/shared/agent`.
+   */
+  | { type: 'escalation.created'; escalation: EscalationNotification['escalation'] };
 
 export type WorkflowRunEventDetail =
   | {
@@ -111,6 +129,15 @@ export interface WorkflowRunnerDeps {
   abortSession: (sessionId: string) => Promise<void>;
   /** Resolve a workspace ID to its root path on disk. */
   getWorkspaceRootPath: (workspaceId: string) => string;
+  /**
+   * Optional per-platform toolset config (R5). When provided, the workflow
+   * runner consults this in the precedence chain between the per-job override
+   * and the workspace default. See `resolveEnabledToolsets` in
+   * `@craft-agent/shared/workflows` for the chain.
+   */
+  getPlatformToolsetConfig?: (
+    workspaceId: string,
+  ) => PlatformToolsetConfig | undefined;
   /** Optional override for tests/hosts; default uses OutputService. */
   createDefaultWorkflowOutput?: (run: WorkflowRunSnapshot) => Promise<WorkflowRunSnapshot> | WorkflowRunSnapshot;
   /** Optional override for tests/hosts; default uses OutputService.markWorkflowOutputError. */
@@ -169,7 +196,114 @@ export class WorkflowRunner {
   private readonly active = new Map<string /* runId */, ActiveRun>();
   private readonly activeByKey = new Map<string /* concurrencyKey */, string /* runId */>();
 
-  constructor(private readonly deps: WorkflowRunnerDeps) {}
+  constructor(private readonly deps: WorkflowRunnerDeps) {
+    // R7 / Plan 01-07: bridge the agent-layer escalation notifier into
+    // this runner's event stream. The agent module is layered below the
+    // automations event bus, so it can't reach upward — we wire it here
+    // (the bootstrap layer for workflow runs) instead. Downstream
+    // observers (Electron IPC, automations bus, tests) subscribe via
+    // `deps.emit` and pick up `escalation.created` events alongside
+    // `run.updated`. If no real notification infra is wired here yet,
+    // this still gives tests a deterministic hook to assert pause/resume
+    // without reaching into agent module internals.
+    // TODO: wire into the cross-process automations event bus when that
+    // surface lands so the UI gets toast-style escalation notifications.
+    setEscalationNotifier((event) => {
+      this.emitEvent({ type: 'escalation.created', escalation: event.escalation });
+    });
+  }
+
+  /**
+   * R5: resolve the effective `enabledSourceSlugs` for this run by consulting
+   * the three-tier precedence chain (per-job override > per-platform > default).
+   * Ported from Hermes `cron/scheduler.py:60-88` (MIT). Returns a new
+   * `agentOptions` object with the resolved allow-list applied.
+   *
+   * Semantics:
+   *   - Per-job override absent → keep the agent's default `enabledSourceSlugs`.
+   *   - Per-job override `[]`   → deny all sources (explicit muzzle).
+   *   - Per-job override list   → replace the agent's `enabledSourceSlugs`.
+   *
+   * Trigger inputs are parsed defensively — malformed overrides log a warning
+   * and we fall through to the agent's default rather than crashing the run
+   * (matches Hermes graceful-degradation at `cron/scheduler.py:87`).
+   */
+  private applyTriggerToolsetOverride(
+    snapshot: WorkflowRunSnapshot,
+    agentOptions: Partial<CreateSessionOptions>,
+  ): Partial<CreateSessionOptions> {
+    let perJobOverride: TriggerToolsetOverride = {};
+    try {
+      perJobOverride = parseTriggerToolsetOverride(snapshot.trigger.inputs);
+    } catch (err) {
+      // Malformed override → log + ignore. The run continues with the agent's
+      // default toolset rather than failing on a parse error.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[WorkflowRunner] malformed trigger toolset override on run ${snapshot.id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return agentOptions;
+    }
+
+    // If neither the trigger nor any platform layer mentions slugs, leave the
+    // agent's default toolset untouched (no behavioral change).
+    const perPlatformConfig: PlatformToolsetConfig | undefined =
+      this.deps.getPlatformToolsetConfig?.(snapshot.workspaceId);
+    const platformHasSlugs =
+      perPlatformConfig?.workflow?.enabled_source_slugs !== undefined ||
+      perPlatformConfig?.cron?.enabled_source_slugs !== undefined;
+    if (perJobOverride.enabled_source_slugs === undefined && !platformHasSlugs) {
+      return agentOptions;
+    }
+
+    const resolved = resolveEnabledToolsets({
+      perJobOverride,
+      perPlatformConfig,
+      // Workflow runs consult the "workflow" platform layer first; the "cron"
+      // layer is the entry point for scheduled triggers in later plans.
+      platformKey: 'workflow',
+      defaultToolset: agentOptions.enabledSourceSlugs,
+    });
+
+    if (resolved === undefined) return agentOptions;
+
+    return {
+      ...agentOptions,
+      enabledSourceSlugs: resolved,
+    };
+  }
+
+  /**
+   * R7 / Plan 01-07: resolve the subconscious-mode hint for this run.
+   *
+   * The hint is one of `"default" | "subconscious" | "yolo"`. Returned for
+   * the receipt + so callers can fan it out to the agent-side
+   * `gateWriteAttempt` evaluator. Does NOT mutate `CreateSessionOptions`
+   * — that field is the per-workspace `safe|ask|allow-all` mode and
+   * intentionally separate (see `agent/mode-types.ts` and the file-
+   * header note in `shared/src/workflows/trigger-inputs.ts`).
+   *
+   * Precedence chain matches `applyTriggerToolsetOverride`:
+   *   per-job override > per-platform > default ("default").
+   */
+  private resolveTriggerPermissionMode(
+    snapshot: WorkflowRunSnapshot,
+  ): 'default' | 'subconscious' | 'yolo' {
+    let perJobOverride: TriggerToolsetOverride = {};
+    try {
+      perJobOverride = parseTriggerToolsetOverride(snapshot.trigger.inputs);
+    } catch {
+      // Malformed → fall through; resolver default is "default".
+      return 'default';
+    }
+    return resolvePermissionMode({
+      perJobOverride,
+      perPlatformConfig: this.deps.getPlatformToolsetConfig?.(snapshot.workspaceId),
+      platformKey: 'workflow',
+    });
+  }
 
   /**
    * Start a workflow run. Snapshots the workflow + persists initial state,
@@ -582,7 +716,36 @@ export class WorkflowRunner {
       active.snapshot.workspaceId,
       stepDef.agent,
     ) ?? {};
-    const agentOptions = normalizeWorkflowPermissionMode(resolvedAgentOptions);
+    const agentOptionsWithMode = normalizeWorkflowPermissionMode(resolvedAgentOptions);
+    // R5: Per-run toolset override (Hermes MIT — cron/scheduler.py:60-88,
+    // cron/jobs.py:523/662). Trigger inputs may carry an `enabled_source_slugs`
+    // override; if present, the agent's allow-list is replaced by the override
+    // (NOT intersected — an override of [] is a deliberate deny-all signal,
+    // not a fall-through to defaults). See packages/shared/src/workflows/trigger-inputs.ts
+    // for the precedence and undefined-vs-empty-array semantics.
+    const agentOptions = this.applyTriggerToolsetOverride(
+      active.snapshot,
+      agentOptionsWithMode,
+    );
+    // R7 / Plan 01-07: resolve the trigger-level subconscious-mode hint.
+    // The actual escalate-on-write gate lives in the agent layer
+    // (`@craft-agent/shared/agent#gateWriteAttempt`); the runner only
+    // resolves the hint and records it on the receipt-adjacent metadata so
+    // observers can see what mode each step ran under. The default mode
+    // is `"default"` which is a no-op at the gate.
+    const subconsciousMode = this.resolveTriggerPermissionMode(active.snapshot);
+    if (subconsciousMode !== 'default') {
+      // R7 / Plan 01-07: promote subconscious mode hint to typed fields on
+      // CreateSessionOptions so the agent's PreToolUse pipeline can read it
+      // directly. Workflow-run-id anchors any escalation row created to this
+      // run so the UI can resume it. The legacy `__subconsciousMode` is kept
+      // as a back-compat alias for any tests / debug observers that still
+      // grep for it.
+      (agentOptions as Partial<CreateSessionOptions>).subconsciousMode = subconsciousMode;
+      (agentOptions as Partial<CreateSessionOptions>).workflowRunId = active.snapshot.id;
+      (agentOptions as Partial<CreateSessionOptions> & { __subconsciousMode?: string }).__subconsciousMode =
+        subconsciousMode;
+    }
     const stepPrompt = this.buildStepPrompt(prompt, stepDef);
     stepRecord.executionReceipt = this.buildExecutionReceipt(stepDef, agentOptions, stepPrompt);
     this.touch(active);
@@ -620,6 +783,30 @@ export class WorkflowRunner {
     this.touch(active);
 
     if (active.abort.signal.aborted) return;
+
+    // Prompt-injection scan on the fully-assembled step prompt. Workflow
+    // steps run with auto-approved tools, so a payload smuggled in via the
+    // step's input template or upstream step output must be blocked before
+    // we hand it to the agent. Mirrors the cron dispatch gate
+    // (`prompt-handler.ts`) so both non-interactive paths use the same pack.
+    // TODO(#3968): thread loadedSkills + contextFiles into assemblePrompt
+    // once the loader lands in this lane. Today the scan only sees
+    // `userPrompt`, which means a skill body containing an injection
+    // payload would be a blind spot until that wiring lands.
+    const assembledForScan = assemblePrompt({ userPrompt: stepPrompt });
+    const scan = scanForInjection(assembledForScan);
+    if (scan.blocked) {
+      // Do NOT leak the matched pattern id to the user — an attacker can
+      // iterate against the scanner via the workflow run error UI.
+      // The structured server-side log below carries the full detail.
+      console.warn(
+        `[workflow-runner] prompt blocked by injection scanner — runId=${active.snapshot.id} stepId=${stepDef.id} pattern=${scan.pattern} reason=${scan.reason}`,
+      );
+      throw new StepAttemptError(
+        'prompt-injection-blocked',
+        'prompt rejected by safety scan',
+      );
+    }
 
     await this.sendMessageWithOptionalTimeout(active, session.id, stepPrompt, stepDef.timeout);
 

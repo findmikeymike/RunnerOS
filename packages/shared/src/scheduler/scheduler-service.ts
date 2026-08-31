@@ -3,7 +3,19 @@
  *
  * Aligned to minute boundaries for consistent timing.
  * Automations can subscribe using cron expressions in automations.json.
+ *
+ * Battery + CPU pressure gating (R3) is wired in via `shouldRunNow()` from
+ * `./gate.ts`. The gate is concept-only re-implementation from OpenHuman
+ * (GPL-3.0) — no source code copied. See `.planning/research/04-openhuman-concepts.md`.
  */
+
+import {
+  shouldRunNow,
+  resolveGatePolicy,
+  DEFAULT_GATE_CONFIG,
+  type GateDecision,
+  type GatePolicy,
+} from './gate.ts';
 
 export interface SchedulerTickPayload {
   /** ISO 8601 UTC timestamp */
@@ -20,14 +32,50 @@ export interface SchedulerTickPayload {
   dayName: string;
 }
 
+export interface SchedulerServiceOptions {
+  /** Effective gate policy. Workflow-level overrides should be merged in by the caller. */
+  gateConfig?: GatePolicy;
+  /** Override the gate decision function. Used by tests; defaults to real `shouldRunNow`. */
+  gate?: (policy: GatePolicy) => Promise<GateDecision>;
+  /** Sleep helper, swappable for tests. */
+  sleep?: (ms: number) => Promise<void>;
+  /**
+   * Called when the gate returns `pause`. Implementations may use this to
+   * reschedule the next tick on the `paused_poll_ms` cadence instead of the
+   * normal minute alignment.
+   */
+  reschedule?: (ms: number) => void;
+}
+
+const defaultSleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 export class SchedulerService {
   private timer: NodeJS.Timeout | null = null;
   private alignmentTimer: NodeJS.Timeout | null = null;
+  private pausedTimer: NodeJS.Timeout | null = null;
   private isTicking = false;
   private onTick: (payload: SchedulerTickPayload) => Promise<void>;
+  private gateConfig: GatePolicy;
+  private gate: (policy: GatePolicy) => Promise<GateDecision>;
+  private sleep: (ms: number) => Promise<void>;
+  private reschedule?: (ms: number) => void;
+  private lastDecision: GateDecision | null = null;
 
-  constructor(onTick: (payload: SchedulerTickPayload) => Promise<void>) {
+  constructor(
+    onTick: (payload: SchedulerTickPayload) => Promise<void>,
+    options: SchedulerServiceOptions = {}
+  ) {
     this.onTick = onTick;
+    this.gateConfig = resolveGatePolicy(options.gateConfig ?? DEFAULT_GATE_CONFIG);
+    this.gate = options.gate ?? ((policy) => shouldRunNow(policy));
+    this.sleep = options.sleep ?? defaultSleep;
+    this.reschedule = options.reschedule;
+  }
+
+  /** Replace the effective gate policy at runtime (e.g. on config hot-reload). */
+  setGateConfig(policy: Partial<GatePolicy> | GatePolicy): void {
+    this.gateConfig = resolveGatePolicy(policy);
   }
 
   start(): void {
@@ -39,8 +87,8 @@ export class SchedulerService {
 
     this.alignmentTimer = setTimeout(() => {
       this.alignmentTimer = null;
-      this.tick();
-      this.timer = setInterval(() => this.tick(), 60_000);
+      void this.tick();
+      this.timer = setInterval(() => void this.tick(), 60_000);
     }, msUntilNextMinute);
   }
 
@@ -53,6 +101,10 @@ export class SchedulerService {
       clearInterval(this.timer);
       this.timer = null;
     }
+    if (this.pausedTimer) {
+      clearTimeout(this.pausedTimer);
+      this.pausedTimer = null;
+    }
   }
 
   private async tick(): Promise<void> {
@@ -63,6 +115,43 @@ export class SchedulerService {
     this.isTicking = true;
 
     try {
+      // Pressure gate runs before any dispatch work.
+      let decision: GateDecision;
+      try {
+        decision = await this.gate(this.gateConfig);
+      } catch (err) {
+        // Fail open: if the sampler itself blows up, run normally so the
+        // scheduler never wedges silently. Log for observability.
+        console.error('[SchedulerService] Gate sampling failed; defaulting to run', err);
+        decision = 'run';
+      }
+
+      if (decision !== this.lastDecision) {
+        console.log(
+          `[SchedulerService] Gate decision: ${this.lastDecision ?? 'initial'} -> ${decision}`
+        );
+        this.lastDecision = decision;
+      }
+
+      if (decision === 'pause') {
+        const ms = this.gateConfig.paused_poll_ms;
+        if (this.reschedule) {
+          this.reschedule(ms);
+        } else if (this.timer) {
+          // Defer the next tick to paused_poll_ms instead of the normal 60s cadence.
+          if (this.pausedTimer) clearTimeout(this.pausedTimer);
+          this.pausedTimer = setTimeout(() => {
+            this.pausedTimer = null;
+            void this.tick();
+          }, ms);
+        }
+        return;
+      }
+
+      if (decision === 'throttle') {
+        await this.sleep(this.gateConfig.throttled_backoff_ms);
+      }
+
       const now = new Date();
       const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 

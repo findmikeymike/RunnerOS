@@ -214,6 +214,31 @@ export {
 };
 
 // ============================================================
+// R7 / Plan 01-07 — Subconscious-mode permissions
+// ============================================================
+//
+// The trigger-level subconscious permission gate (`"default" | "subconscious"
+// | "yolo"`) is implemented in the sibling file `subconscious-permissions.ts`.
+// Plan 01-07 originally called for those additions to live here, but the
+// executor factored them into a sibling module to keep the workspace-level
+// Safe-Mode config (this file) decoupled from the trigger-level gate. The
+// public surface is unified via the re-exports below so downstream consumers
+// can `import { isWriteTool, evaluateWriteAttempt, ... } from
+// '@craft-agent/shared/agent/permissions-config'` if that reads more
+// naturally for their call site.
+//
+// Live source of truth: `./subconscious-permissions.ts`.
+export {
+  WRITE_TOOL_NAMES,
+  isWriteTool,
+  evaluateWriteAttempt,
+  normalizeSubconsciousMode,
+  extractRecommendation,
+  type SubconsciousMode,
+  type WritePolicyDecision,
+} from './subconscious-permissions.ts';
+
+// ============================================================
 // Types
 // ============================================================
 
