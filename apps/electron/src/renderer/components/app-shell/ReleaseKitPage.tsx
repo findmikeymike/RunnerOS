@@ -302,6 +302,19 @@ function ReadinessStrip({ manifest }: { manifest: ReleaseKitManifest | null }) {
 function AudioPanel({ items, workspaceId, onChanged, onAdd }: FinalCategoryProps) {
   const featured = featuredReleaseKitItem(items)
   const openItem = useOpenReleaseKitItem(workspaceId)
+  const versionsRef = React.useRef<HTMLDetailsElement>(null)
+
+  React.useEffect(() => {
+    const closeVersions = (event: PointerEvent) => {
+      const versions = versionsRef.current
+      if (!versions?.open || !(event.target instanceof Node) || versions.contains(event.target)) return
+      versions.open = false
+    }
+
+    document.addEventListener('pointerdown', closeVersions)
+    return () => document.removeEventListener('pointerdown', closeVersions)
+  }, [])
+
   return (
     <section className={cn(RELEASE_KIT_SURFACE_CLASS, 'p-3')} style={RELEASE_KIT_SURFACE_STYLE}>
       <ReleaseKitSurfaceGlow />
@@ -328,7 +341,7 @@ function AudioPanel({ items, workspaceId, onChanged, onAdd }: FinalCategoryProps
               {WAVEFORM_HEIGHTS.map((height, index) => <span key={index} className={cn('w-0.5 rounded-full', index < 7 ? 'bg-[#f97316]' : 'bg-white/22')} style={{ height }} />)}
             </div>
             {items.length > 1 ? (
-              <details className="group/versions relative shrink-0">
+              <details ref={versionsRef} className="group/versions relative shrink-0">
                 <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.045] px-2.5 text-[11px] text-white/62 hover:bg-white/[0.07] [&::-webkit-details-marker]:hidden">
                   Versions <span className="text-white/32">{items.length - 1}</span><ChevronDown className="h-3 w-3 transition-transform group-open/versions:rotate-180" />
                 </summary>

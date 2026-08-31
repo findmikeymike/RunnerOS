@@ -214,6 +214,15 @@ describe('Artist OS persistent shell chrome', () => {
     expect(dial).not.toContain('#242428')
   })
 
+  test('closes the Release Kit audio versions menu when clicking outside it', () => {
+    const releaseKit = readFileSync(join(import.meta.dir, '..', 'ReleaseKitPage.tsx'), 'utf8')
+
+    expect(releaseKit).toContain("document.addEventListener('pointerdown', closeVersions)")
+    expect(releaseKit).toContain('versions.contains(event.target)')
+    expect(releaseKit).toContain('versions.open = false')
+    expect(releaseKit).toContain('ref={versionsRef}')
+  })
+
   test('gives Release Board assets and agent actions a dedicated campaign page', () => {
     const campaign = readFileSync(join(import.meta.dir, '..', 'ArtistCommandCenterHome.tsx'), 'utf8')
     const main = readFileSync(join(import.meta.dir, '..', 'MainContentPanel.tsx'), 'utf8')

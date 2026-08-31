@@ -12,8 +12,20 @@ describe('release countdown', () => {
   })
 
   test('identifies release day and past releases', () => {
-    expect(getReleaseCountdown('2026-08-31', undefined, new Date(2026, 7, 31, 8)).releaseDay).toBe(true)
-    expect(getReleaseCountdown('2026-08-30', undefined, new Date(2026, 7, 31, 8)).released).toBe(true)
+    const releaseDay = getReleaseCountdown('2026-08-31', undefined, new Date(2026, 7, 31, 8))
+    const released = getReleaseCountdown('2026-08-28', undefined, new Date(2026, 7, 31, 8))
+
+    expect(releaseDay).toMatchObject({ daysUntil: 0, releaseDay: true, released: false, progress: 1 })
+    expect(released).toMatchObject({ daysUntil: -3, releaseDay: false, released: true, progress: 1 })
+  })
+
+  test('keeps a bounded progress value for distant future releases', () => {
+    const result = getReleaseCountdown('2028-08-31', '2026-08-31', new Date(2026, 7, 31, 8))
+
+    expect(result.daysUntil).toBe(731)
+    expect(result.progress).toBe(0)
+    expect(result.released).toBe(false)
+    expect(result.releaseDay).toBe(false)
   })
 
   test('fails softly when onboarding has no valid release date', () => {
