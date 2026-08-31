@@ -1986,6 +1986,7 @@ function AppShellContent({
       'settings.social-accounts',
       'settings.spotify',
       'settings.ad-accounts',
+      'settings.messaging',
       'settings.permissions',
       'settings.app',
     ])
@@ -2053,6 +2054,7 @@ function AppShellContent({
       'settings.social-accounts': 'social-accounts',
       'settings.spotify': 'spotify',
       'settings.ad-accounts': 'ad-accounts',
+      'settings.messaging': 'messaging',
       'settings.permissions': 'permissions',
       'settings.app': 'app',
     }

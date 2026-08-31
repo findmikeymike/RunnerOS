@@ -1,4 +1,4 @@
-export type ArtistGuideTabId = 'general' | 'hq' | 'campaigns' | 'creative-lab' | 'top-bar'
+export type ArtistGuideTabId = 'general' | 'hq' | 'campaigns' | 'creative-lab' | 'connections' | 'top-bar'
 
 export type ArtistGuideWorkspaceKind = 'general' | 'hq' | 'campaign' | 'lab'
 
@@ -8,6 +8,7 @@ export type ArtistGuideActionId =
   | 'settings.social-accounts'
   | 'settings.spotify'
   | 'settings.ad-accounts'
+  | 'settings.messaging'
   | 'settings.permissions'
   | 'settings.app'
   | 'hq.home'
@@ -89,6 +90,15 @@ export type ArtistGuideTabContent = {
   conceptsLabel: string
 }
 
+export type ArtistGuideConnection = {
+  id: string
+  group: string
+  title: string
+  unlocks: string
+  setup: string
+  action: ArtistGuideAction
+}
+
 export type ArtistGuideAiReadiness = 'ready' | 'needs-setup' | 'check-setup'
 
 export function defaultArtistGuideTab(kind: ArtistGuideWorkspaceKind): ArtistGuideTabId {
@@ -104,6 +114,150 @@ export function deriveArtistGuideAiReadiness(
   if (!connections || connections.length === 0) return 'needs-setup'
   return connections.some((connection) => connection.isAuthenticated) ? 'ready' : 'check-setup'
 }
+
+export const ARTIST_GUIDE_PRIMARY_TAB_IDS: ArtistGuideTabId[] = ['general', 'hq', 'campaigns', 'creative-lab']
+export const ARTIST_GUIDE_UTILITY_TAB_IDS: ArtistGuideTabId[] = ['connections', 'top-bar']
+
+export const ARTIST_GUIDE_CONNECTIONS: ArtistGuideConnection[] = [
+  {
+    id: 'ai-providers', group: 'Core setup', title: 'AI providers',
+    unlocks: 'Powers every agent. Mix GPT or Claude subscriptions with API providers for model choice, cost, and routing.',
+    setup: 'Open AI, then sign in with a supported subscription or paste the provider key from its developer dashboard.',
+    action: { id: 'settings.ai', label: 'Open AI' },
+  },
+  {
+    id: 'google-workspace', group: 'Core setup', title: 'Google Workspace',
+    unlocks: 'Calendar, Gmail, Drive, and People access for connected workers and workflows.',
+    setup: 'Create Desktop OAuth credentials in Google Cloud, save the client ID and secret in Connections, then complete Google sign-in.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
+    id: 'messaging', group: 'Core setup', title: 'Telegram + WhatsApp',
+    unlocks: 'Routes messages into Artist OS sessions so agents can receive and respond through connected channels.',
+    setup: 'Open Phone Channels. Telegram uses a BotFather token; WhatsApp connects through its guided sign-in flow.',
+    action: { id: 'settings.messaging', label: 'Phone Channels' },
+  },
+  {
+    id: 'social-accounts', group: 'Artist accounts', title: 'Instagram, TikTok, X + YouTube',
+    unlocks: 'Gives approved social work an exact saved account and isolated browser login instead of guessing where to post.',
+    setup: 'Open Social Accounts, add the artist profile, open its login, sign in, and click Verify Account.',
+    action: { id: 'settings.social-accounts', label: 'Social Accounts' },
+  },
+  {
+    id: 'spotify', group: 'Artist accounts', title: 'Spotify',
+    unlocks: 'Lets Spotify workers inspect the artist account and use supported artist, ads, and analytics surfaces.',
+    setup: 'Open Spotify, add a profile, choose the needed surface, sign in through the controlled browser, and verify it.',
+    action: { id: 'settings.spotify', label: 'Spotify' },
+  },
+  {
+    id: 'ad-dashboard-accounts', group: 'Artist accounts', title: 'Meta + Google Ads dashboards',
+    unlocks: 'Gives Ad Runner an exact saved dashboard account for browser-based reporting and approved ad work.',
+    setup: 'Open Ad Accounts, add Meta or Google Ads, open the dashboard login, sign in, then click Verify.',
+    action: { id: 'settings.ad-accounts', label: 'Ad Accounts' },
+  },
+  {
+    id: 'meta-ads', group: 'Promotion + research', title: 'Meta Ads API',
+    unlocks: 'Account discovery, reporting, diagnostics, and supported campaign operations for Meta advertising.',
+    setup: 'Generate a Marketing API token in Meta Graph API Explorer, then connect the Meta Ads service.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
+    id: 'google-ads', group: 'Promotion + research', title: 'Google Ads API',
+    unlocks: 'Account lookup, reports, diagnostics, and supported Google Ads campaign work.',
+    setup: 'Follow Google Ads API setup for a developer token, OAuth credentials, and customer ID, then connect the service.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
+    id: 'youtube-research', group: 'Promotion + research', title: 'YouTube Research',
+    unlocks: 'Video, channel, transcript, comment, and research lookup for YouTube specialists.',
+    setup: 'Enable YouTube Data API in Google Cloud, create an API key, and save it under YouTube Research.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
+    id: 'genius', group: 'Promotion + research', title: 'Genius',
+    unlocks: 'Song, artist, album-art, annotation, and reference lookup for Creative Lab research.',
+    setup: 'Create a Genius API Client, generate a Client Access Token, and save it under Genius.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
+    id: 'trypost-provider', group: 'Promotion + research', title: 'TryPost',
+    unlocks: 'Drafts, schedules, previews, and approval-gated publishing across TryPost-connected social accounts.',
+    setup: 'Create a Personal Access Token in TryPost Settings → API Keys, then connect the TryPost source.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
+    id: 'postiz-provider', group: 'Promotion + research', title: 'Postiz',
+    unlocks: 'Drafts, schedules, and approval-gated publishing through connected Postiz channels.',
+    setup: 'Create a key in Postiz Settings → Developers → Public API, then connect the Postiz source.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
+    id: 'social-publishing', group: 'Promotion + research', title: 'Local Postiz tools',
+    unlocks: 'Optional Postiz credentials for bundled local and Squad social workflows outside the provider agent.',
+    setup: 'Add a Postiz API key and, for self-hosting, the Postiz base URL under Social Publishing Tools.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
+    id: 'resend-email', group: 'Community + commerce', title: 'Community Email',
+    unlocks: 'Lets Community send user-approved fan emails through Resend.',
+    setup: 'Create a Resend API key, verify the sending domain in Resend, then save the key under Community Email.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
+    id: 'shopify', group: 'Community + commerce', title: 'Shopify',
+    unlocks: 'Store and product access for merch, catalog, and commerce specialists.',
+    setup: 'Create a least-privilege Shopify custom app, then add its Admin API token and myshopify.com store domain.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
+    id: 'printify', group: 'Community + commerce', title: 'Printify',
+    unlocks: 'Product, mockup, and print-on-demand workflow access for merch specialists.',
+    setup: 'Create a Printify Personal Access Token in your Printify account, then save it under Printify.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
+    id: 'voice-audio', group: 'Creative providers', title: 'Voice + Audio',
+    unlocks: 'Speech, voiceover, transcription, and audio intelligence through AssemblyAI, ElevenLabs, Fish Audio, or Inworld.',
+    setup: 'Create keys in the provider dashboards you use, then add only those keys under Voice + Audio.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
+    id: 'media-generation', group: 'Creative providers', title: 'Media Generation',
+    unlocks: 'Image, video, avatar, and render generation through Fal, WaveSpeed, Replicate, HeyGen, MUAPI, or RunPod.',
+    setup: 'Create keys in the chosen provider dashboards, save them here, then optionally set quality, speed, or cost priority.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
+    id: 'avatar-video', group: 'Creative providers', title: 'Avatar Video',
+    unlocks: 'Lets video workflows target approved HeyGen avatars and voices instead of selecting them blindly.',
+    setup: 'Connect HeyGen first, then copy the approved avatar and voice IDs into Avatar Video.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
+    id: 'developer-cloud', group: 'Advanced + automation', title: 'Developer + Cloud',
+    unlocks: 'Optional GitHub, AWS, Stripe, npm, and Stitch access for technical workers and cloud workflows.',
+    setup: 'Create least-privilege credentials in the relevant provider dashboard and save only the keys your work needs.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
+    id: 'mcp-apps', group: 'Advanced + automation', title: 'MCP + Apps',
+    unlocks: 'Adds external app tools and custom MCP or API capabilities beyond the built-in connection list.',
+    setup: 'Add the available service key in Connections, or ask Command to connect a named MCP server or API.',
+    action: { id: 'app.tools', label: 'Open Tools' },
+  },
+  {
+    id: 'automation', group: 'Advanced + automation', title: 'Automation Webhooks',
+    unlocks: 'Authenticated inbound triggers and outbound notifications for services such as GitHub, Stripe, and Slack.',
+    setup: 'Create the webhook secret or URL in the sending service, then save its matching value under Automation Webhooks.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
+    id: 'zero', group: 'Advanced + automation', title: 'Zero CLI',
+    unlocks: 'Allows agents to call supported paid external services through a funded Zero wallet.',
+    setup: 'Set up and fund a Zero CLI wallet, then store its private key under Zero CLI.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+]
 
 export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
   {
@@ -575,6 +729,33 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
         body: 'The diamond button stays available throughout Creative Lab, so a line, title, image, or concept can be captured the moment it arrives.',
       },
     ],
+  },
+  {
+    id: 'connections',
+    label: 'Connections',
+    intro: 'Connect only the services you use. A connection gives agents tools; permissions and approvals still control what they may do.',
+    start: [
+      {
+        id: 'connections-start-built-in',
+        title: 'Use the built-in setup first',
+        body: 'Settings → Connections holds supported API keys, OAuth setup, provider sources, and service-specific instructions. Artist account logins have their own direct settings pages.',
+        icon: 'connection',
+        actions: [{ id: 'settings.connections', label: 'Open Connections' }],
+      },
+      {
+        id: 'connections-start-agent',
+        title: 'Ask Command to connect something else',
+        body: 'Say “Connect [service] to this workspace.” An agent can help create an MCP, REST API, or local source, find the official setup path, test it, and trigger OAuth or a secure credential prompt. You still approve credentials and external actions.',
+        icon: 'command',
+        actions: [
+          { id: 'workspace.command', label: 'Ask Command' },
+          { id: 'app.tools', label: 'Open Tools' },
+        ],
+      },
+    ],
+    destinations: [],
+    conceptsLabel: 'Connection safety',
+    concepts: [],
   },
   {
     id: 'top-bar',
