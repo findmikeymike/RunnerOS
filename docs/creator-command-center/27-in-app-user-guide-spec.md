@@ -196,6 +196,7 @@ Avoid oversized cards, nested boxes, screenshot carousels, long prose, and hover
 
 ### Calendar and jobs
 
+- Go to `Plan → Calendar` for campaign dates, reminders, and scheduled work.
 - Click a day and choose **Add event** for a date or reminder that does not run an agent.
 - Choose **Add job** for scheduled work performed by an agent or workflow.
 - A job needs a title and time. The composer collects the worker/workflow, instructions, inputs, review behavior, and schedule.
@@ -206,7 +207,7 @@ Avoid oversized cards, nested boxes, screenshot carousels, long prose, and hover
 ### Essential concepts
 
 - **Essentials versus Release Kit**  
-  Essentials shows what is unfinished. Release Kit contains what has been explicitly approved as final.
+  Essentials shows the core things a great release needs. Clicking the play icon beside an item cues the exact specialist who can help. Release Kit holds the final assets that go out into the world: the song master, Single Art, images, videos, and other approved release materials.
 
 - **Plan versus Automation**  
   Plan contains dated campaign events and jobs. Automations are reusable triggers or schedules; they are not a second campaign calendar.

@@ -428,7 +428,7 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
       {
         id: 'campaign-concept-calendar',
         title: 'Events and jobs',
-        body: 'Use Add event for a date or reminder. Use Add job when an agent or workflow should perform scheduled work.',
+        body: 'Go to Plan → Calendar. Use Add event for a date or reminder; use Add job when an agent or workflow should perform scheduled work.',
       },
       {
         id: 'campaign-concept-attention',
@@ -438,7 +438,7 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
       {
         id: 'campaign-concept-assets',
         title: 'Essentials versus Release Kit',
-        body: 'Essentials shows what is unfinished. Release Kit contains what has been explicitly approved as final.',
+        body: 'Essentials shows the core things a great release needs. Click the play icon beside an item to cue the exact specialist who can help. Release Kit holds the final assets that go out into the world—the song master, Single Art, images, videos, and other approved release materials.',
       },
       {
         id: 'campaign-concept-execution',
