@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-08-25
+last_verified: 2026-08-31
 source_of_truth: true
 ---
 
@@ -33,6 +33,7 @@ Core Artist HQ and campaign workspace specs live here.
 - [22 Chat-Native Goal Mode](./22-chat-native-goal-mode-spec.md)
 - [23 Release Kit, Outputs, And Artist Vault](./23-release-kit-architecture-spec.md)
 - [24 Session Task List And Delegation Return Path](./24-session-task-list-spec.md)
+- [25 Release Kit Asset Use And Social Scheduling Surface](./25-release-kit-asset-use-social-scheduling-spec.md)
 
 Current V1 implementation notes:
 
