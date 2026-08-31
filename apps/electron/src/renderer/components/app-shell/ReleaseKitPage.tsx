@@ -2,14 +2,16 @@ import * as React from 'react'
 import {
   Archive,
   ArrowLeft,
+  AudioWaveform,
   Bot,
   Check,
+  ChevronDown,
   File,
   FolderOpen,
   Image,
   Loader2,
-  Music2,
   PackageCheck,
+  Play,
   Plus,
   Star,
   Trash2,
@@ -28,10 +30,12 @@ import type {
 import type { OutputSummaryDTO } from '@/hooks/useOutputs'
 import type { OutputAsset, OutputManifest } from '@craft-agent/shared/outputs'
 import { Button } from '@/components/ui/button'
+import { CompactPageHeader } from './CompactPageHeader'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { consumePendingReleaseKitOutput } from '@/lib/release-kit-navigation'
 import { toast } from 'sonner'
+import { useAppShellContext } from '@/context/AppShellContext'
 
 interface ReleaseKitPageProps {
   workspaceId: string
@@ -55,6 +59,7 @@ interface SelectedSource {
 
 const CATEGORY_ORDER: ReleaseKitCategory[] = ['audio', 'artwork', 'video', 'images', 'copy', 'plans', 'merch', 'documents', 'references']
 const CORE_CATEGORIES = new Set<ReleaseKitCategory>(['audio', 'artwork', 'video', 'images', 'plans'])
+const VISUAL_CATEGORIES = new Set<ReleaseKitCategory>(['audio', 'artwork', 'video', 'images'])
 
 export function ReleaseKitPage({
   workspaceId,
@@ -70,6 +75,7 @@ export function ReleaseKitPage({
   const [tab, setTab] = React.useState<'finals' | 'outputs'>('finals')
   const [addOpen, setAddOpen] = React.useState(false)
   const [prefillOutput, setPrefillOutput] = React.useState<OutputSummaryDTO | null>(null)
+  const [itemPaths, setItemPaths] = React.useState<Record<string, string>>({})
 
   const refresh = React.useCallback(async () => {
     if (!workspaceId) return
@@ -110,6 +116,29 @@ export function ReleaseKitPage({
     setAddOpen(true)
   }, [outputs, outputsLoading, workspaceId])
 
+  React.useEffect(() => {
+    let cancelled = false
+    const previewable = manifest?.items.filter((item) => (
+      item.status !== 'missing' && (item.category === 'artwork' || item.category === 'video' || item.category === 'images')
+    )) ?? []
+    if (!previewable.length) {
+      setItemPaths({})
+      return () => { cancelled = true }
+    }
+    void Promise.all(previewable.map(async (item) => {
+      try {
+        const detail = await window.electronAPI.getReleaseKitItem(workspaceId, item.id)
+        return [item.id, detail.absolutePath] as const
+      } catch {
+        return null
+      }
+    })).then((entries) => {
+      if (cancelled) return
+      setItemPaths(Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => Boolean(entry))))
+    })
+    return () => { cancelled = true }
+  }, [manifest, workspaceId])
+
   const visibleCategories = React.useMemo(() => CATEGORY_ORDER.filter((category) => (
     CORE_CATEGORIES.has(category) || manifest?.items.some((item) => item.category === category)
   )), [manifest])
@@ -119,63 +148,58 @@ export function ReleaseKitPage({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#070708] text-white">
-      <header className="flex shrink-0 items-center justify-between border-b border-white/[0.08] px-7 py-5">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#fb923c]">
-            <PackageCheck className="h-3.5 w-3.5" /> Campaign canon
-          </div>
-          <h1 className="mt-1 text-2xl font-semibold text-white/92">Release Kit</h1>
-          <p className="mt-1 text-sm text-white/42">Approved masters, artwork, content, plans, and launch-ready documents.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="border-white/10 bg-white/[0.025] text-white/65 hover:bg-white/[0.06] hover:text-white" onClick={() => void window.electronAPI.openReleaseKitFolder(workspaceId)}>
-            <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> Folder
-          </Button>
-          <Button size="sm" className="bg-[#f97316] text-black hover:bg-[#fb923c]" onClick={() => { setPrefillOutput(null); setAddOpen(true) }}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> Add final
-          </Button>
-        </div>
-      </header>
+    <div className="h-full overflow-hidden bg-[#050505] text-white">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
+        <CompactPageHeader
+          eyebrow="Campaign Canon"
+          title="Release Kit"
+          tone="orange"
+          actions={
+            <>
+              <Button variant="outline" size="sm" className="h-9 rounded-full border-white/15 bg-black/15 px-4 text-white/72 backdrop-blur-md hover:bg-white/[0.09] hover:text-white" onClick={() => void window.electronAPI.openReleaseKitFolder(workspaceId)}>
+                <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> Folder
+              </Button>
+              <Button size="sm" className="h-9 rounded-full bg-white/90 px-5 text-black hover:bg-white" onClick={() => { setPrefillOutput(null); setAddOpen(true) }}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" /> Add final
+              </Button>
+            </>
+          }
+        />
 
-      <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-7 py-3">
-        <div className="inline-flex rounded-[6px] border border-white/[0.08] bg-black/25 p-0.5">
-          <TabButton active={tab === 'finals'} onClick={() => setTab('finals')}>Finals</TabButton>
-          <TabButton active={tab === 'outputs'} onClick={() => setTab('outputs')}>Outputs</TabButton>
+        <div className="flex shrink-0 items-center justify-between border-b border-white/[0.07] px-1 pb-3 pt-1">
+          <div className="inline-flex rounded-xl border border-white/[0.07] bg-white/[0.025] p-1 backdrop-blur-md">
+            <TabButton active={tab === 'finals'} onClick={() => setTab('finals')}>Finals</TabButton>
+            <TabButton active={tab === 'outputs'} onClick={() => setTab('outputs')}>Outputs</TabButton>
+          </div>
+          <span className="text-xs font-medium text-white/34"><span className="text-white/75">{manifest?.items.filter((item) => item.status === 'ready').length ?? 0}</span> approved</span>
         </div>
-        <span className="text-xs text-white/35">{manifest?.items.filter((item) => item.status === 'ready').length ?? 0} approved</span>
+
+        {error ? <div className="rounded-xl border border-red-500/25 bg-red-500/[0.06] px-3 py-2 text-xs text-red-200">{error}</div> : null}
+
+        <main className="min-h-0 flex-1 overflow-y-auto pb-8 pr-1">
+          {tab === 'finals' ? (
+            <FinalsGallery
+              manifest={manifest}
+              visibleCategories={visibleCategories}
+              itemPaths={itemPaths}
+              workspaceId={workspaceId}
+              onChanged={setManifest}
+              onAdd={() => setAddOpen(true)}
+            />
+          ) : (
+            <OutputsTab
+              outputs={outputs}
+              loading={outputsLoading}
+              error={outputsError}
+              onOpen={onOutputClick}
+              onPromote={(output) => {
+                setPrefillOutput(output)
+                setAddOpen(true)
+              }}
+            />
+          )}
+        </main>
       </div>
-
-      {error ? <div className="mx-7 mt-4 rounded-[6px] border border-red-500/25 bg-red-500/[0.06] px-3 py-2 text-xs text-red-200">{error}</div> : null}
-
-      <main className="min-h-0 flex-1 overflow-y-auto px-7 py-5">
-        {tab === 'finals' ? (
-          <div className="mx-auto max-w-[1180px] space-y-7">
-            <ReadinessStrip manifest={manifest} />
-            {visibleCategories.map((category) => (
-              <FinalCategory
-                key={category}
-                category={category}
-                items={manifest?.items.filter((item) => item.category === category) ?? []}
-                workspaceId={workspaceId}
-                onChanged={setManifest}
-                onAdd={() => setAddOpen(true)}
-              />
-            ))}
-          </div>
-        ) : (
-          <OutputsTab
-            outputs={outputs}
-            loading={outputsLoading}
-            error={outputsError}
-            onOpen={onOutputClick}
-            onPromote={(output) => {
-              setPrefillOutput(output)
-              setAddOpen(true)
-            }}
-          />
-        )}
-      </main>
 
       <AddFinalDialog
         open={addOpen}
@@ -193,20 +217,191 @@ export function ReleaseKitPage({
   )
 }
 
+function FinalsGallery({ manifest, visibleCategories, itemPaths, workspaceId, onChanged, onAdd }: {
+  manifest: ReleaseKitManifest | null
+  visibleCategories: ReleaseKitCategory[]
+  itemPaths: Record<string, string>
+  workspaceId: string
+  onChanged: (manifest: ReleaseKitManifest) => void
+  onAdd: () => void
+}) {
+  const itemsFor = (category: ReleaseKitCategory) => manifest?.items.filter((item) => item.category === category) ?? []
+  const quieterCategories = visibleCategories.filter((category) => !VISUAL_CATEGORIES.has(category))
+  return (
+    <div className="mx-auto max-w-[1240px] space-y-4">
+      <ReadinessStrip manifest={manifest} />
+      <AudioPanel items={itemsFor('audio')} workspaceId={workspaceId} onChanged={onChanged} onAdd={onAdd} />
+      <div className="grid items-stretch gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <SingleArtPanel items={itemsFor('artwork')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={onAdd} />
+        <ImagePanel items={itemsFor('images')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={onAdd} />
+      </div>
+      <VideoPanel items={itemsFor('video')} itemPaths={itemPaths} workspaceId={workspaceId} onChanged={onChanged} onAdd={onAdd} />
+      {quieterCategories.length ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {quieterCategories.map((category) => (
+            <FinalCategory
+              key={category}
+              category={category}
+              items={itemsFor(category)}
+              workspaceId={workspaceId}
+              onChanged={onChanged}
+              onAdd={onAdd}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function ReadinessStrip({ manifest }: { manifest: ReleaseKitManifest | null }) {
   return (
-    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[7px] border border-white/[0.08] bg-white/[0.08] sm:grid-cols-5">
+    <div
+      className="grid grid-cols-2 overflow-hidden rounded-full bg-[#242426] shadow-[0_8px_22px_rgba(0,0,0,0.18)] sm:grid-cols-5"
+      style={{
+        backgroundImage: 'radial-gradient(85% 220% at 0% 50%, rgba(249,115,22,0.11) 0%, rgba(249,115,22,0) 70%), radial-gradient(130% 220% at 50% -125%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 68%)',
+      }}
+    >
       {(['audio', 'artwork', 'video', 'images', 'plans'] as ReleaseKitCategory[]).map((category) => {
         const ready = manifest?.items.filter((item) => item.category === category && item.status === 'ready').length ?? 0
         return (
-          <div key={category} className="flex items-center justify-between bg-[#0d0d0f] px-3 py-2.5">
-            <span className="text-xs capitalize text-white/48">{category}</span>
-            <span className={cn('text-xs font-semibold', ready ? 'text-emerald-300' : 'text-white/24')}>{ready || '—'}</span>
+          <div key={category} className="flex min-h-6 items-center justify-between bg-[#09090a]/80 px-3 py-1">
+            <span className="text-[10px] font-normal text-white/55">{displayCategory(category)}</span>
+            {ready ? (
+              <span className="inline-flex min-w-5 items-center justify-center gap-1 rounded-full bg-emerald-200/[0.055] px-1 py-0.5 text-[9px] font-medium text-emerald-100/72">
+                <span className="h-1 w-1 rounded-full bg-emerald-300/80" />
+                {ready}
+              </span>
+            ) : <span className="h-1 w-1 rounded-full bg-white/14" aria-label="No approved items" />}
           </div>
         )
       })}
     </div>
   )
+}
+
+function AudioPanel({ items, workspaceId, onChanged, onAdd }: FinalCategoryProps) {
+  const featured = featuredItem(items)
+  const openItem = useOpenReleaseKitItem(workspaceId)
+  return (
+    <section className="relative rounded-2xl bg-white/[0.035] p-3 backdrop-blur-xl">
+      <div className="pointer-events-none absolute right-24 top-0 h-20 w-48 rounded-full bg-orange-500/[0.045] blur-3xl" />
+      <div className="relative flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="flex shrink-0 items-center gap-2 lg:w-[158px]">
+          <CategoryHeaderIcon category="audio" />
+          <h2 className="text-[11px] font-normal text-white/58">Final Audio</h2>
+          {items.length ? <span className="rounded-md bg-white/[0.07] px-1.5 py-0.5 text-[10px] font-medium text-white/45">{items.length}</span> : null}
+        </div>
+        {featured ? (
+          <div className="flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-white/[0.07] bg-black/25 px-3 py-2">
+            <button type="button" onClick={() => void openItem(featured)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f97316] text-white shadow-tinted transition-transform hover:scale-105" title="Open final audio">
+              <Play className="ml-0.5 h-3.5 w-3.5 fill-current" />
+            </button>
+            <button type="button" onClick={() => void openItem(featured)} className="min-w-0 flex-1 text-left">
+              <div className="flex items-center gap-2">
+                <span className="truncate text-sm font-medium text-white/88">{featured.title}</span>
+                {featured.isPrimary ? <PrimaryBadge /> : null}
+              </div>
+              <p className="mt-0.5 truncate text-[11px] text-white/38">{displaySubtype(featured.subtype)} · {displaySource(featured.source)}{featured.sizeBytes ? ` · ${formatFileSize(featured.sizeBytes)}` : ''}</p>
+            </button>
+            <div className="hidden h-8 items-end gap-[2px] opacity-55 xl:flex" aria-hidden="true">
+              {WAVEFORM_HEIGHTS.map((height, index) => <span key={index} className={cn('w-0.5 rounded-full', index < 7 ? 'bg-[#f97316]' : 'bg-white/22')} style={{ height }} />)}
+            </div>
+            {items.length > 1 ? (
+              <details className="group/versions relative shrink-0">
+                <summary className="flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.045] px-2.5 text-[11px] text-white/62 hover:bg-white/[0.07] [&::-webkit-details-marker]:hidden">
+                  Versions <span className="text-white/32">{items.length - 1}</span><ChevronDown className="h-3 w-3 transition-transform group-open/versions:rotate-180" />
+                </summary>
+                <div className="absolute right-0 top-10 z-30 w-72 max-w-[70vw] space-y-1.5 rounded-xl border border-white/[0.1] bg-[#101012]/95 p-2 shadow-modal-small backdrop-blur-xl">
+                  {items.filter((item) => item.id !== featured.id).map((item) => <FinalItem key={item.id} item={item} workspaceId={workspaceId} onChanged={onChanged} />)}
+                </div>
+              </details>
+            ) : null}
+            <FinalActions item={featured} workspaceId={workspaceId} onChanged={onChanged} />
+          </div>
+        ) : <VisualEmpty category="audio" label="Add approved audio" onAdd={onAdd} className="min-h-14 flex-1" />}
+        <button type="button" onClick={onAdd} aria-label="Add final audio" title="Add final audio" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white/38 transition-colors hover:bg-white/[0.05] hover:text-white/75"><Plus className="h-3.5 w-3.5" /></button>
+      </div>
+    </section>
+  )
+}
+
+function SingleArtPanel({ items, itemPaths, workspaceId, onChanged, onAdd }: FinalCategoryProps & { itemPaths: Record<string, string> }) {
+  const featured = featuredItem(items)
+  const openItem = useOpenReleaseKitItem(workspaceId)
+  return (
+    <section className="flex h-full flex-col rounded-2xl bg-white/[0.035] p-4 backdrop-blur-xl">
+      <MediaHeader category="artwork" title="Single Art" count={items.length} onAdd={onAdd} />
+      {featured ? (
+        <>
+          <div className="group relative mt-3 aspect-square overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-orange-950/80 via-[#171719] to-[#0d0d0f]">
+            <button type="button" onClick={() => void openItem(featured)} className="absolute inset-0 h-full w-full text-left" title="Open Single Art">
+              {itemPaths[featured.id] ? <img src={thumbnailUrl(itemPaths[featured.id]!)} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" /> : <Image className="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 text-white/14" />}
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-14">
+                <div className="flex items-center gap-2"><span className="truncate text-sm font-medium text-white">{featured.title}</span>{featured.isPrimary ? <PrimaryBadge /> : null}</div>
+                <p className="mt-1 text-[11px] text-white/48">{featured.sizeBytes ? formatFileSize(featured.sizeBytes) : displaySubtype(featured.subtype)}</p>
+              </div>
+            </button>
+            <div className="absolute right-2 top-2 opacity-60 transition-opacity group-hover:opacity-100"><FinalActions item={featured} workspaceId={workspaceId} onChanged={onChanged} surface /></div>
+          </div>
+          {items.length > 1 ? <div className="mt-2 space-y-2">{items.filter((item) => item.id !== featured.id).map((item) => <FinalItem key={item.id} item={item} workspaceId={workspaceId} onChanged={onChanged} />)}</div> : null}
+        </>
+      ) : <VisualEmpty category="artwork" label="Add Single Art" onAdd={onAdd} className="mt-3 aspect-square" />}
+    </section>
+  )
+}
+
+function VideoPanel({ items, itemPaths, workspaceId, onChanged, onAdd }: FinalCategoryProps & { itemPaths: Record<string, string> }) {
+  const openItem = useOpenReleaseKitItem(workspaceId)
+  return (
+    <section className="rounded-2xl bg-white/[0.035] p-4 backdrop-blur-xl">
+      <MediaHeader category="video" title="Videos" count={items.length} onAdd={onAdd} />
+      <div className="mt-3 grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8">
+        {items.map((item) => (
+          <div key={item.id} className="group relative aspect-[9/16] overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-[#232326] to-[#0b0b0d]">
+            <button type="button" onClick={() => void openItem(item)} className="absolute inset-0 h-full w-full" title={`Open ${item.title}`}>
+              {itemPaths[item.id] ? <img src={thumbnailUrl(itemPaths[item.id]!)} alt="" className="h-full w-full object-cover opacity-80 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-95" /> : null}
+              <span className="absolute left-1/2 top-1/2 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md transition group-hover:scale-110 group-hover:bg-[#f97316]"><Play className="ml-0.5 h-4 w-4 fill-current" /></span>
+              <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/65 to-transparent px-3 pb-3 pt-14 text-left">
+                <span className="block truncate text-xs font-medium text-white">{item.title}</span>
+                <span className="mt-1 block text-[10px] text-white/48">{displaySubtype(item.subtype)}</span>
+              </span>
+            </button>
+            <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100"><FinalActions item={item} workspaceId={workspaceId} onChanged={onChanged} surface /></div>
+          </div>
+        ))}
+        <VisualEmpty category="video" label="Upload video" onAdd={onAdd} className="aspect-[9/16]" />
+      </div>
+    </section>
+  )
+}
+
+function ImagePanel({ items, itemPaths, workspaceId, onChanged, onAdd }: FinalCategoryProps & { itemPaths: Record<string, string> }) {
+  const openItem = useOpenReleaseKitItem(workspaceId)
+  return (
+    <section className="flex h-full min-h-0 flex-col rounded-2xl bg-white/[0.035] p-4 backdrop-blur-xl">
+      <MediaHeader category="images" title="Press & Social Images" count={items.length} onAdd={onAdd} />
+      <div className="mt-3 grid min-h-[180px] flex-1 grid-flow-col auto-cols-[minmax(150px,220px)] gap-2.5 overflow-x-auto">
+        {items.map((item) => (
+          <div key={item.id} className="group relative h-full overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-[#242427] to-[#0d0d0f]">
+            <button type="button" onClick={() => void openItem(item)} className="absolute inset-0 h-full w-full" title={`Open ${item.title}`}>
+              {itemPaths[item.id] ? <img src={thumbnailUrl(itemPaths[item.id]!)} alt="" className="h-full w-full object-cover opacity-80 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-100" /> : <Image className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 text-white/12" />}
+              <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent px-3 pb-3 pt-10 text-left"><span className="block truncate text-xs font-medium text-white">{item.title}</span></span>
+            </button>
+            <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100"><FinalActions item={item} workspaceId={workspaceId} onChanged={onChanged} surface /></div>
+          </div>
+        ))}
+        <VisualEmpty category="images" label="Add image" onAdd={onAdd} className="h-full min-h-[180px]" />
+      </div>
+    </section>
+  )
+}
+
+interface FinalCategoryProps {
+  items: ReleaseKitItem[]
+  workspaceId: string
+  onChanged: (manifest: ReleaseKitManifest) => void
+  onAdd: () => void
 }
 
 function FinalCategory({ category, items, workspaceId, onChanged, onAdd }: {
@@ -217,18 +412,18 @@ function FinalCategory({ category, items, workspaceId, onChanged, onAdd }: {
   onAdd: () => void
 }) {
   return (
-    <section>
-      <div className="mb-2.5 flex items-center justify-between">
+    <section className="rounded-2xl bg-white/[0.025] p-5">
+      <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <CategoryIcon category={category} className="h-4 w-4 text-white/40" />
-          <h2 className="text-sm font-semibold capitalize text-white/78">{category}</h2>
+          <CategoryHeaderIcon category={category} />
+          <h2 className="text-[11px] font-normal text-white/58">{displayCategory(category)}</h2>
           <span className="text-xs text-white/28">{items.length}</span>
         </div>
-        <button type="button" onClick={onAdd} className="text-xs text-white/38 hover:text-white/75">Add</button>
+        <button type="button" onClick={onAdd} aria-label={`Add ${displayCategory(category)}`} title={`Add ${displayCategory(category)}`} className="flex h-7 w-7 items-center justify-center rounded-lg text-white/38 transition-colors hover:bg-white/[0.05] hover:text-white/75"><Plus className="h-3.5 w-3.5" /></button>
       </div>
       {items.length === 0 ? (
-        <button type="button" onClick={onAdd} className="flex h-16 w-full items-center justify-center rounded-[7px] border border-dashed border-white/[0.09] bg-white/[0.018] text-xs text-white/28 hover:border-white/[0.16] hover:text-white/55">
-          <Plus className="mr-1.5 h-3.5 w-3.5" /> Add approved {category}
+        <button type="button" onClick={onAdd} aria-label={`Add ${displayCategory(category)}`} title={`Add ${displayCategory(category)}`} className="flex h-14 w-full items-center justify-center rounded-xl bg-white/[0.018] text-white/16 transition hover:bg-white/[0.035] hover:text-white/42">
+          <CategoryIcon category={category} className="h-4 w-4" />
         </button>
       ) : (
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
@@ -240,20 +435,13 @@ function FinalCategory({ category, items, workspaceId, onChanged, onAdd }: {
 }
 
 function FinalItem({ item, workspaceId, onChanged }: { item: ReleaseKitItem; workspaceId: string; onChanged: (manifest: ReleaseKitManifest) => void }) {
-  const open = async () => {
-    try {
-      const detail = await window.electronAPI.getReleaseKitItem(workspaceId, item.id)
-      await window.electronAPI.openFile(detail.absolutePath)
-    } catch (error) {
-      toast.error('Could not open final', { description: error instanceof Error ? error.message : String(error) })
-    }
-  }
+  const openItem = useOpenReleaseKitItem(workspaceId)
   return (
-    <div className="group flex min-w-0 items-center gap-3 rounded-[7px] border border-white/[0.08] bg-[#111114] p-3 hover:border-white/[0.14] hover:bg-[#141417]">
-      <button type="button" onClick={() => void open()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[6px] bg-white/[0.045] text-white/45 hover:text-white/80" title="Open final">
+    <div className="group flex min-w-0 items-center gap-3 rounded-xl border border-white/[0.07] bg-black/20 p-3 hover:border-white/[0.13] hover:bg-white/[0.035]">
+      <button type="button" onClick={() => void openItem(item)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.045] text-white/45 hover:text-white/80" title="Open final">
         <CategoryIcon category={item.category} className="h-4 w-4" />
       </button>
-      <button type="button" onClick={() => void open()} className="min-w-0 flex-1 text-left">
+      <button type="button" onClick={() => void openItem(item)} className="min-w-0 flex-1 text-left">
         <div className="flex items-center gap-1.5">
           <span className="truncate text-sm font-medium text-white/82">{item.title}</span>
           {item.isPrimary ? <span className="rounded-[4px] bg-[#f97316]/14 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-[#fb923c]">Primary</span> : null}
@@ -263,17 +451,48 @@ function FinalItem({ item, workspaceId, onChanged }: { item: ReleaseKitItem; wor
           {item.status !== 'ready' ? <span className="text-amber-300">· {displaySubtype(item.status)}</span> : null}
         </div>
       </button>
-      <div className="flex shrink-0 items-center opacity-50 transition-opacity group-hover:opacity-100">
-        {!item.isPrimary && item.status === 'ready' ? (
-          <IconButton title="Set Primary" onClick={async () => onChanged(await window.electronAPI.setReleaseKitPrimary(workspaceId, item.id))}><Star className="h-3.5 w-3.5" /></IconButton>
-        ) : null}
-        <IconButton title="Remove final" danger onClick={async () => {
-          if (!window.confirm(`Remove “${item.title}” from the Release Kit? The source file will stay untouched.`)) return
-          onChanged(await window.electronAPI.removeFromReleaseKit(workspaceId, item.id))
-        }}><Trash2 className="h-3.5 w-3.5" /></IconButton>
-      </div>
+      <FinalActions item={item} workspaceId={workspaceId} onChanged={onChanged} />
     </div>
   )
+}
+
+function MediaHeader({ category, title, count, onAdd }: { category: ReleaseKitCategory; title: string; count: number; onAdd: () => void }) {
+  return (
+    <div className="relative z-10 flex items-center justify-between">
+      <div className="flex items-center gap-2.5">
+        <CategoryHeaderIcon category={category} />
+        <h2 className="text-[11px] font-normal text-white/58">{title}</h2>
+        {count ? <span className="rounded-md bg-white/[0.07] px-1.5 py-0.5 text-[10px] font-medium text-white/45">{count}</span> : null}
+      </div>
+      <button type="button" onClick={onAdd} aria-label={`Add ${title}`} title={`Add ${title}`} className="flex h-7 w-7 items-center justify-center rounded-lg text-white/38 transition-colors hover:bg-white/[0.05] hover:text-white/75"><Plus className="h-3.5 w-3.5" /></button>
+    </div>
+  )
+}
+
+function VisualEmpty({ category, label, onAdd, className }: { category: ReleaseKitCategory; label: string; onAdd: () => void; className?: string }) {
+  return (
+    <button type="button" onClick={onAdd} aria-label={label} title={label} className={cn('flex min-h-28 w-full items-center justify-center rounded-xl bg-white/[0.018] text-white/16 transition hover:bg-white/[0.035] hover:text-white/42', className)}>
+      <CategoryIcon category={category} className="h-4 w-4" />
+    </button>
+  )
+}
+
+function FinalActions({ item, workspaceId, onChanged, surface = false }: { item: ReleaseKitItem; workspaceId: string; onChanged: (manifest: ReleaseKitManifest) => void; surface?: boolean }) {
+  return (
+    <div className={cn('flex shrink-0 items-center opacity-55 transition-opacity group-hover:opacity-100', surface && 'rounded-lg bg-black/55 p-0.5 backdrop-blur-md')}>
+      {!item.isPrimary && item.status === 'ready' ? (
+        <IconButton title="Set Primary" onClick={async () => onChanged(await window.electronAPI.setReleaseKitPrimary(workspaceId, item.id))}><Star className="h-3.5 w-3.5" /></IconButton>
+      ) : null}
+      <IconButton title="Remove final" danger onClick={async () => {
+        if (!window.confirm(`Remove “${item.title}” from the Release Kit? The source file will stay untouched.`)) return
+        onChanged(await window.electronAPI.removeFromReleaseKit(workspaceId, item.id))
+      }}><Trash2 className="h-3.5 w-3.5" /></IconButton>
+    </div>
+  )
+}
+
+function PrimaryBadge() {
+  return <span className="shrink-0 rounded-md bg-[#f97316]/16 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-[#fb923c]">Primary</span>
 }
 
 function OutputsTab({ outputs, loading, error, onOpen, onPromote }: {
@@ -462,7 +681,7 @@ function AddFinalDialog({ open, onOpenChange, workspaceId, hqWorkspaceId, output
               <label className="block space-y-1.5 text-xs text-white/42">
                 <span>Category</span>
                 <select value={category} onChange={(event) => setCategory(event.target.value as ReleaseKitCategory)} className={INPUT_CLASS}>
-                  {CATEGORY_ORDER.map((option) => <option key={option} value={option}>{displaySubtype(option)}</option>)}
+                  {CATEGORY_ORDER.map((option) => <option key={option} value={option}>{displayCategory(option)}</option>)}
                 </select>
               </label>
               <label className="block space-y-1.5 text-xs text-white/42">
@@ -488,7 +707,7 @@ function AddFinalDialog({ open, onOpenChange, workspaceId, hqWorkspaceId, output
 }
 
 function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return <button type="button" onClick={onClick} className={cn('rounded-[4px] px-3 py-1.5 text-xs font-medium', active ? 'bg-white text-black' : 'text-white/42 hover:text-white/70')}>{children}</button>
+  return <button type="button" onClick={onClick} className={cn('rounded-lg px-4 py-1.5 text-xs font-medium transition-colors', active ? 'bg-white/10 text-white shadow-xs' : 'text-white/42 hover:text-white/70')}>{children}</button>
 }
 
 function SourceChoice({ icon: Icon, title, detail, onClick }: { icon: React.ComponentType<{ className?: string }>; title: string; detail: string; onClick: () => void }) {
@@ -509,10 +728,18 @@ function Centered({ children }: { children: React.ReactNode }) {
 }
 
 function CategoryIcon({ category, className }: { category: ReleaseKitCategory; className?: string }) {
-  if (category === 'audio') return <Music2 className={className} />
+  if (category === 'audio') return <AudioWaveform className={className} />
   if (category === 'artwork' || category === 'images') return <Image className={className} />
   if (category === 'video') return <Video className={className} />
   return <File className={className} />
+}
+
+function CategoryHeaderIcon({ category }: { category: ReleaseKitCategory }) {
+  return (
+    <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-red-500/65 to-orange-500/70 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.28),inset_0_-1px_0_rgba(255,255,255,0.04),0_4px_10px_rgba(249,115,22,0.10)] backdrop-blur-md">
+      <CategoryIcon category={category} className="h-2.5 w-2.5" />
+    </span>
+  )
 }
 
 function sourceFromCampaignAsset(asset: MissionAssetRecord): SelectedSource {
@@ -565,11 +792,47 @@ function displaySubtype(value: string): string {
   return value.replace(/[-_]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
+function displayCategory(category: ReleaseKitCategory): string {
+  if (category === 'audio') return 'Final Audio'
+  if (category === 'artwork') return 'Single Art'
+  if (category === 'video') return 'Videos'
+  if (category === 'images') return 'Press & Social Images'
+  return displaySubtype(category)
+}
+
 function displaySource(source: ReleaseKitSource): string {
   if (source.type === 'campaign-asset') return 'Campaign Asset'
   if (source.type === 'vault-asset') return 'HQ Vault'
   if (source.type === 'output' || source.type === 'legacy-final') return 'Output'
   return 'Upload'
 }
+
+function useOpenReleaseKitItem(workspaceId: string): (item: ReleaseKitItem) => Promise<void> {
+  const { onOpenFile } = useAppShellContext()
+  return React.useCallback(async (item: ReleaseKitItem) => {
+    try {
+      const detail = await window.electronAPI.getReleaseKitItem(workspaceId, item.id)
+      onOpenFile(detail.absolutePath)
+    } catch (error) {
+      toast.error('Could not open final', { description: error instanceof Error ? error.message : String(error) })
+    }
+  }, [onOpenFile, workspaceId])
+}
+
+function featuredItem(items: ReleaseKitItem[]): ReleaseKitItem | undefined {
+  return items.find((item) => item.isPrimary) ?? items[0]
+}
+
+function thumbnailUrl(path: string): string {
+  return `thumbnail://thumb/${encodeURIComponent(path)}`
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`
+}
+
+const WAVEFORM_HEIGHTS = ['28%', '48%', '72%', '94%', '78%', '58%', '36%', '50%', '82%', '100%', '68%', '42%', '60%', '88%', '54%', '32%', '70%', '46%']
 
 const INPUT_CLASS = 'h-10 w-full rounded-[6px] border border-white/[0.1] bg-[#111114] px-3 text-sm text-white/78 outline-none focus:border-[#f97316]/55'

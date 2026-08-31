@@ -2599,18 +2599,18 @@ function AppShellContent({
           onClick: handleCampaignHomeClick,
         },
         {
-          id: "nav:calendar",
-          title: "Plan",
-          icon: Calendar,
-          variant: campaignCalendarActive ? "default" : "ghost",
-          onClick: handleCampaignCalendarClick,
-        },
-        {
           id: "nav:release-kit",
           title: "Release Kit",
           icon: Archive,
           variant: campaignReleaseKitActive ? "default" : "ghost",
           onClick: handleCampaignReleaseKitClick,
+        },
+        {
+          id: "nav:calendar",
+          title: "Plan",
+          icon: Calendar,
+          variant: campaignCalendarActive ? "default" : "ghost",
+          onClick: handleCampaignCalendarClick,
         },
         {
           id: "nav:work",
