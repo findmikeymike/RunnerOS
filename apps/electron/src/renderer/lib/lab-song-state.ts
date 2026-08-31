@@ -56,6 +56,9 @@ function normalizeSections(sections: LabSongSection[]): LabSongSection[] {
 function normalizeSong(song: LabSong): LabSong {
   return {
     ...song,
+    title: !song.title?.trim() || song.title.trim().toLowerCase() === 'untitled song'
+      ? 'Untitled'
+      : song.title.trim(),
     project: song.project?.trim() || 'Loose Singles',
     color: song.color || LAB_PROJECT_COLORS[0],
     notes: song.notes || '',

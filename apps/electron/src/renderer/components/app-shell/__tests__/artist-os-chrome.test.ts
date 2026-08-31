@@ -317,6 +317,20 @@ describe('Artist OS persistent shell chrome', () => {
     expect(pad).toMatch(/ensureAgentDeclaredSkillsEnabled\([\s\S]*?buildAgentCreateSessionOptions/)
   })
 
+  test('explains Song Pad tools and avoids stacking its two writing panes', () => {
+    const pad = readFileSync(join(import.meta.dir, '..', 'LabSongPadPage.tsx'), 'utf8')
+
+    expect(pad).toContain('How Song Pad works')
+    expect(pad).toContain('Find rhymes')
+    expect(pad).toContain('Keep alternate lines')
+    expect(pad).toContain('Move ideas into place')
+    expect(pad).toContain('Ask a writing specialist')
+    expect(pad).toContain('Catch sparks anywhere')
+    expect(pad).toContain("const [compactPane, setCompactPane] = React.useState<SongPadPane>('rough')")
+    expect(pad).toContain("compactPane === 'rough' ? 'flex' : 'hidden xl:flex'")
+    expect(pad).toContain("compactPane === 'final' ? 'flex' : 'hidden xl:flex'")
+  })
+
   test('lets writers delete extra sequence pages without deleting their songs', () => {
     const sequence = readFileSync(join(import.meta.dir, '..', 'LabSequencePage.tsx'), 'utf8')
 

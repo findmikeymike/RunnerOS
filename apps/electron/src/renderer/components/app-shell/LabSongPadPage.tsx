@@ -5,6 +5,8 @@ import {
   Eye,
   EyeOff,
   FlaskConical,
+  Gem,
+  HelpCircle,
   Info,
   Layers,
   ListPlus,
@@ -88,6 +90,32 @@ type SongSection = {
   optional?: boolean
 }
 
+type SongPadPane = 'rough' | 'final'
+
+function SongPadGuideItem({
+  marker,
+  title,
+  description,
+  icon,
+}: {
+  marker: string
+  title: string
+  description: string
+  icon?: React.ReactNode
+}) {
+  return (
+    <div className="flex gap-3 rounded-lg bg-white/[0.02] px-3 py-2.5">
+      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#fb923c]/10 text-[9px] font-semibold text-[#fdba74]/80">
+        {icon ?? marker}
+      </div>
+      <div className="min-w-0">
+        <div className="text-xs font-medium text-white/76">{title}</div>
+        <p className="mt-0.5 text-[11px] leading-5 text-white/40">{description}</p>
+      </div>
+    </div>
+  )
+}
+
 type LyricAgentPayload = {
   action: LyricAgentAction
   actionLabel: string
@@ -124,7 +152,7 @@ const INITIAL_SECTIONS: SongSection[] = [
 function fallbackSong(workspaceId?: string): LabUiSong {
   return loadLabUiSongs(workspaceId)[0] ?? {
     id: 'untitled-song',
-    title: 'Untitled song',
+    title: 'Untitled',
     project: 'Loose Singles',
     color: LAB_PROJECT_COLORS[0],
     notes: '',
@@ -238,7 +266,7 @@ const LineAlternativeTextarea: React.FC<LineAlternativeTextareaProps> = ({
   )
 
   return (
-    <div className="relative">
+    <div className="group/lyrics relative">
       <textarea
         value={value}
         rows={rows}
@@ -317,7 +345,7 @@ function LineAlternativePopover({
             'pointer-events-auto absolute right-0 flex h-6 min-w-6 items-center justify-center rounded-full border px-1 text-[8px] transition-all',
             group?.alternatives.length
               ? 'border-[#fb923c]/30 bg-[#fb923c]/10 text-[#fdba74] opacity-90'
-              : 'border-white/[0.05] bg-[#111] text-white/22 opacity-20 hover:border-white/[0.12] hover:text-white/55 hover:opacity-100 focus:opacity-100',
+              : 'border-white/[0.08] bg-white/[0.035] text-white/42 opacity-55 group-hover/lyrics:opacity-85 hover:border-white/[0.16] hover:bg-white/[0.07] hover:text-white/80 hover:opacity-100 focus:opacity-100',
           )}
           style={{ top }}
         >
@@ -704,6 +732,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
   const [prosodyCopiedWord, setProsodyCopiedWord] = React.useState<string | null>(null)
   const [prosodyMorePage, setProsodyMorePage] = React.useState(false)
   const [showEmptySections, setShowEmptySections] = React.useState(true)
+  const [compactPane, setCompactPane] = React.useState<SongPadPane>('rough')
   const [activeAgentSectionId, setActiveAgentSectionId] = React.useState<string | null>(null)
   const [agentOutput, setAgentOutput] = React.useState('')
   const [agentBusy, setAgentBusy] = React.useState(false)
@@ -1230,8 +1259,8 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
           ) : null}
         </div>
       ) : null}
-      <div className="shrink-0 border-b border-white/[0.04] px-4 py-2.5">
-        <div className="flex w-full items-center justify-between gap-4">
+      <div className="shrink-0 px-3 pt-3">
+        <div className="relative flex w-full items-center justify-between gap-4 overflow-hidden rounded-xl bg-white/[0.045] px-4 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.055),0_8px_28px_rgba(0,0,0,0.2)] backdrop-blur-xl before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_12%_-80%,rgba(251,146,60,0.13),transparent_48%)]">
           <div className="min-w-0 flex-1">
             <div className="mb-1 flex items-center gap-1.5 text-[8px] font-medium uppercase tracking-[0.17em] text-white/34">
               <FlaskConical className="h-3 w-3" />
@@ -1241,34 +1270,89 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               className="w-full border-0 bg-transparent text-lg font-medium tracking-normal text-white/88 outline-none placeholder:text-white/25"
-              placeholder="Untitled song"
+              placeholder="Untitled"
             />
           </div>
-          <div className="flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.05] bg-white/[0.025] px-3 py-2 text-xs text-white/45">
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: projectColor }} />
-            <Music2 className="h-3.5 w-3.5" />
-            <input
-              value={project}
-              onChange={(event) => setProject(event.target.value)}
-              className="w-28 border-0 bg-transparent text-xs text-white/55 outline-none"
-              placeholder={workspaceName || 'Project'}
-            />
+          <div className="relative flex shrink-0 items-center gap-2">
+            <div className="flex items-center gap-2 rounded-xl bg-black/15 px-3 py-2 text-xs text-white/45 backdrop-blur-md">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: projectColor }} />
+              <Music2 className="h-3.5 w-3.5" />
+              <input
+                value={project}
+                onChange={(event) => setProject(event.target.value)}
+                className="w-20 border-0 bg-transparent text-xs text-white/55 outline-none sm:w-28"
+                placeholder={workspaceName || 'Project'}
+              />
+            </div>
+
+            <div className="flex h-8 items-center rounded-xl bg-black/15 p-0.5 xl:hidden">
+              {(['rough', 'final'] as const).map((pane) => (
+                <button
+                  key={pane}
+                  type="button"
+                  onClick={() => setCompactPane(pane)}
+                  className={cn(
+                    'h-7 rounded-[9px] px-2.5 text-[9px] font-medium capitalize transition-colors',
+                    compactPane === pane ? 'bg-white/12 text-white/82' : 'text-white/36 hover:text-white/62',
+                  )}
+                >
+                  {pane}
+                </button>
+              ))}
+            </div>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="How to use Song Pad"
+                  title="How to use Song Pad"
+                  className="flex h-8 w-8 items-center justify-center rounded-xl bg-black/15 text-white/42 backdrop-blur-md transition-colors hover:bg-white/[0.08] hover:text-white/78"
+                >
+                  <HelpCircle className="h-3.5 w-3.5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                side="bottom"
+                sideOffset={9}
+                className="max-h-[min(620px,calc(100vh-120px))] w-[390px] overflow-y-auto border border-white/[0.08] bg-[#0a0a0a]/96 p-4 text-white shadow-modal-small backdrop-blur-xl"
+              >
+                <div className="mb-3">
+                  <div className="text-sm font-medium text-white/88">How Song Pad works</div>
+                  <p className="mt-1 text-xs leading-5 text-white/42">
+                    Draft freely on the left, then shape the keeper version in Song Structure.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <SongPadGuideItem marker="01" title="Find rhymes" description="Highlight the final one to four words at the end of a line to open perfect and slant rhyme options." />
+                  <SongPadGuideItem marker="02" title="Keep alternate lines" description="No highlighting needed. Click the list-plus icon on the far right of a lyric line to store, compare, promote, or delete alternate versions." />
+                  <SongPadGuideItem marker="03" title="Move ideas into place" description="Highlight text, then use V1, P, C, V2, or R. It copies into that section or Remember This without deleting your rough draft." />
+                  <SongPadGuideItem marker="04" title="Ask a writing specialist" description="Use the magic icon beside a song section for rewrites, continuation, tightening, rhyme help, or a fresh option. Insert, replace, or remember the result." />
+                  <SongPadGuideItem marker="05" title="Catch sparks anywhere" description="The diamond at the bottom-right saves loose lines, images, titles, references, and concepts to your searchable Spark Bank." icon={<Gem className="h-3 w-3" />} />
+                </div>
+
+                <div className="mt-3 rounded-lg bg-white/[0.035] px-3 py-2.5 text-[11px] leading-5 text-white/42">
+                  Wide windows show Rough and Final side by side. On narrower windows, use the Rough / Final switch above. Your song saves as you work.
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-3 py-3">
         <div className="grid w-full gap-3 xl:grid-cols-[minmax(0,1.12fr)_minmax(440px,0.88fr)]">
-          <section className="flex min-h-[calc(100vh-176px)] flex-col rounded-xl border border-white/[0.05] bg-[#080808] shadow-minimal">
+          <section className={cn(
+            'min-h-[calc(100vh-176px)] flex-col rounded-xl border border-white/[0.05] bg-[#080808] shadow-minimal',
+            compactPane === 'rough' ? 'flex' : 'hidden xl:flex',
+          )}>
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.04] px-3 py-2">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="flex shrink-0 items-center gap-1.5 text-[8px] font-medium uppercase tracking-[0.14em] text-white/50">
-                  <Sparkles className="h-2.5 w-2.5 text-white/32" />
-                  Rough Pad
-                </div>
                 <div
                   title="Highlight text and click to send to song section."
-                  className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-white/30"
+                  className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-white/38"
                 >
                   <Info className="h-2.5 w-2.5" />
                 </div>
@@ -1282,10 +1366,10 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                     disabled={!selectedText.trim()}
                     onClick={() => sendSelectionToSection(section.id)}
                     className={cn(
-                      'inline-flex h-6 w-6 items-center justify-center rounded-full border text-[9px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-35',
+                      'inline-flex h-6 w-6 items-center justify-center rounded-full border text-[9px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                       sentFlashTarget === section.id
                         ? 'border-[#fb923c]/45 bg-[#fb923c]/16 text-[#fbbf24]'
-                        : 'border-white/[0.06] bg-white/[0.025] text-white/55 hover:bg-white/[0.05]',
+                        : 'border-white/[0.07] bg-white/[0.03] text-white/68 hover:bg-white/[0.055] hover:text-white/85',
                     )}
                   >
                     {section.label}
@@ -1297,10 +1381,10 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                   disabled={!selectedText.trim()}
                   onClick={() => sendSelectionToRemember()}
                   className={cn(
-                    'inline-flex h-6 w-6 items-center justify-center rounded-full border text-[9px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-35',
+                    'inline-flex h-6 w-6 items-center justify-center rounded-full border text-[9px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                     sentFlashTarget === 'remember'
                       ? 'border-[#fb923c]/45 bg-[#fb923c]/16 text-[#fbbf24]'
-                      : 'border-white/[0.06] bg-white/[0.025] text-white/55 hover:bg-white/[0.05]',
+                      : 'border-white/[0.07] bg-white/[0.03] text-white/68 hover:bg-white/[0.055] hover:text-white/85',
                   )}
                 >
                   R
@@ -1364,7 +1448,10 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
             </div>
           </section>
 
-          <section className="flex min-h-[calc(100vh-176px)] flex-col rounded-xl border border-white/[0.05] bg-[#080808] shadow-minimal">
+          <section className={cn(
+            'min-h-[calc(100vh-176px)] flex-col rounded-xl border border-white/[0.05] bg-[#080808] shadow-minimal',
+            compactPane === 'final' ? 'flex' : 'hidden xl:flex',
+          )}>
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.04] px-3 py-2">
               <div className="flex min-w-0 items-center gap-2">
                 <div className="flex items-center gap-1.5 text-[8px] font-medium uppercase tracking-[0.14em] text-white/50">
@@ -1412,7 +1499,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                             item.id === section.id ? { ...item, label } : item
                           )))
                         }}
-                        className="w-20 border-0 bg-transparent text-right text-[10px] font-medium uppercase tracking-[0.12em] text-white/34 outline-none focus:text-white/62"
+                        className="w-20 border-0 bg-transparent text-right text-[10px] font-medium uppercase tracking-[0.12em] text-white/48 outline-none focus:text-white/72"
                       />
                       <Popover
                         open={activeAgentSectionId === section.id}
