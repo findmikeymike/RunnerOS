@@ -127,6 +127,8 @@ import {
   prepareScheduledSocialWork,
 } from './campaign-social-job-preparer'
 import { executeScheduledSocialBrowser } from './scheduled-social-browser-executor'
+import { executeScheduledSocialAuto } from './scheduled-social-auto-executor'
+import { createScheduledSocialProviderRoutes } from './scheduled-social-provider-executors'
 import { runSocialJson } from './social-cli'
 import {
   startArtistManagerVoiceProxy,
@@ -729,7 +731,11 @@ app.whenReady().then(async () => {
           }))
           sm.setScheduledSocialExecution(
             (input) => prepareScheduledSocialWork(input, { runSocialJson }),
-            (input) => executeScheduledSocialBrowser(input, { browserPaneManager: browserPaneManager! }),
+            (input) => executeScheduledSocialAuto(input, {
+              providerRoutes: createScheduledSocialProviderRoutes(),
+              executeBrowser: (browserInput) => executeScheduledSocialBrowser(browserInput, { browserPaneManager: browserPaneManager! }),
+              log: (message) => console.info(`[ScheduledSocial] ${message}`),
+            }),
           )
           sm.setBrowserPaneManager(browserPaneManager!)
           return sm

@@ -136,7 +136,7 @@ const ITEM_ACTIONS: Record<string, ReleaseBoardItemAction> = {
     kind: 'agent',
     targetSlug: 'social-publisher',
     targetName: 'Social Publisher',
-    instruction: 'Build the complete social rollout, including the launch announcement, from this campaign\'s approved Finals and release timeline. First determine whether the user wants Artist OS native posting, Postiz, or TryPost. Draft and validate freely, but do not schedule or publish without exact approval.',
+    instruction: 'Build the complete social rollout, including the launch announcement, from this campaign\'s approved Finals and release timeline. Route approved posts automatically through an exact connected TryPost account, then Postiz, then Artist OS native posting. Draft and validate freely, but do not schedule or publish without exact approval.',
   },
   'content:idea-generation': {
     kind: 'workflow',

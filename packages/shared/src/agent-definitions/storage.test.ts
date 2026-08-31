@@ -586,7 +586,9 @@ body
     expect(socialPublisher?.systemPrompt).toContain('without asking again for every item')
     expect(socialPublisher?.systemPrompt).toContain('list_release_kit')
     expect(socialPublisher?.systemPrompt).toContain('item ID and SHA-256 checksum')
-    expect(socialPublisher?.systemPrompt).toContain('Artist OS native posting, Postiz, or TryPost')
+    expect(socialPublisher?.systemPrompt).toContain('Do not ask the user to choose a delivery route')
+    expect(socialPublisher?.systemPrompt).toContain('TryPost exact account first, Postiz exact account second')
+    expect(socialPublisher?.systemPrompt).not.toContain('first ask which connected route the user wants')
     expect(socialPublisher?.systemPrompt).toContain('A launch announcement is part of the rollout plan')
   })
 

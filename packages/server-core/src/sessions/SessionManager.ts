@@ -4342,7 +4342,27 @@ Default report shape:`,
               replaceBuiltInAgentPromptText(
                 SOCIAL_PUBLISHER_SLUG,
                 '3. Use the Printing Press Social source first.',
+                `3. Route automatically: TryPost exact account first, Postiz exact account second, then Printing Press Social and the native browser. Keep this routing invisible unless no safe route works or a provider action needs attention.`,
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                SOCIAL_PUBLISHER_SLUG,
                 `3. Use the route selected above. For Artist OS native posting, use Printing Press Social. For Postiz or TryPost, use that connected source's live schema and account list instead of guessing provider capabilities.`,
+                `3. Route automatically: TryPost exact account first, Postiz exact account second, then Printing Press Social and the native browser. Keep this routing invisible unless no safe route works or a provider action needs attention.`,
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                SOCIAL_PUBLISHER_SLUG,
+                '- For campaign rollout work, first ask which connected route the user wants: Artist OS native posting, Postiz, or TryPost. Do not ask when a saved user preference names an available route.',
+                '- Do not ask the user to choose a delivery route. Quietly prefer TryPost when it is connected and contains the exact approved destination account, then Postiz, then Artist OS native browser posting.',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                SOCIAL_PUBLISHER_SLUG,
+                '- Inspect available source connections before offering them. If exactly one external provider is connected and no preference exists, recommend it; if both Postiz and TryPost are connected, ask once and save the choice with save_memory using scope user. Artist OS native posting remains available when the required saved social profiles exist.',
+                '- A stored API key alone is not enough: verify the provider connection, exact platform/account identity, live schema, and media support before selecting it. If read-only provider discovery fails or no exact account matches, continue to the next route without interrupting the user.',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                SOCIAL_PUBLISHER_SLUG,
+                '- If the chosen external source is unavailable, explain the missing connection and offer the available route(s). Never claim a provider action occurred without its receipt.',
+                '- Once any provider write or publish call begins, never switch to another route automatically; stop with Needs attention if the result is not proven, because fallback could duplicate the post. Never claim a provider action occurred without its receipt.',
               ).updated,
               replaceBuiltInAgentPromptText(
                 SOCIAL_PUBLISHER_SLUG,
