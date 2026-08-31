@@ -60,6 +60,16 @@ interface SelectedSource {
 const CATEGORY_ORDER: ReleaseKitCategory[] = ['audio', 'artwork', 'video', 'images', 'copy', 'plans', 'merch', 'documents', 'references']
 const CORE_CATEGORIES = new Set<ReleaseKitCategory>(['audio', 'artwork', 'video', 'images', 'plans'])
 const VISUAL_CATEGORIES = new Set<ReleaseKitCategory>(['audio', 'artwork', 'video', 'images'])
+const RELEASE_KIT_SURFACE_CLASS = 'group/release-kit relative overflow-hidden rounded-2xl ring-1 ring-white/[0.055]'
+const RELEASE_KIT_SURFACE_STYLE: React.CSSProperties = {
+  backgroundColor: '#090909',
+  backgroundImage: [
+    'radial-gradient(at 88% 40%, rgba(20,20,20,0.58) 0px, transparent 78%)',
+    'radial-gradient(at 12% 20%, rgba(52,52,52,0.14) 0px, transparent 72%)',
+    'radial-gradient(at 0% 82%, rgba(72,72,72,0.10) 0px, transparent 74%)',
+    'radial-gradient(at 100% 100%, rgba(255,77,0,0.018) 0px, transparent 64%)',
+  ].join(', '),
+}
 
 export function ReleaseKitPage({
   workspaceId,
@@ -257,7 +267,7 @@ function FinalsGallery({ manifest, visibleCategories, itemPaths, workspaceId, on
 function ReadinessStrip({ manifest }: { manifest: ReleaseKitManifest | null }) {
   return (
     <div
-      className="grid grid-cols-2 overflow-hidden rounded-full bg-[#242426] shadow-[0_8px_22px_rgba(0,0,0,0.18)] sm:grid-cols-5"
+      className="grid grid-cols-2 overflow-hidden rounded-full bg-[#242426] shadow-minimal sm:grid-cols-5"
       style={{
         backgroundImage: 'radial-gradient(85% 220% at 0% 50%, rgba(249,115,22,0.11) 0%, rgba(249,115,22,0) 70%), radial-gradient(130% 220% at 50% -125%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 68%)',
       }}
@@ -284,12 +294,12 @@ function AudioPanel({ items, workspaceId, onChanged, onAdd }: FinalCategoryProps
   const featured = featuredItem(items)
   const openItem = useOpenReleaseKitItem(workspaceId)
   return (
-    <section className="relative rounded-2xl bg-white/[0.035] p-3 backdrop-blur-xl">
-      <div className="pointer-events-none absolute right-24 top-0 h-20 w-48 rounded-full bg-orange-500/[0.045] blur-3xl" />
+    <section className={cn(RELEASE_KIT_SURFACE_CLASS, 'p-3')} style={RELEASE_KIT_SURFACE_STYLE}>
+      <ReleaseKitSurfaceGlow />
       <div className="relative flex flex-col gap-3 lg:flex-row lg:items-center">
         <div className="flex shrink-0 items-center gap-2 lg:w-[158px]">
           <CategoryHeaderIcon category="audio" />
-          <h2 className="text-[11px] font-normal text-white/58">Final Audio</h2>
+          <h2 className="text-[11px] font-medium text-white/90">Final Audio</h2>
           {items.length ? <span className="rounded-md bg-white/[0.07] px-1.5 py-0.5 text-[10px] font-medium text-white/45">{items.length}</span> : null}
         </div>
         {featured ? (
@@ -330,23 +340,26 @@ function SingleArtPanel({ items, itemPaths, workspaceId, onChanged, onAdd }: Fin
   const featured = featuredItem(items)
   const openItem = useOpenReleaseKitItem(workspaceId)
   return (
-    <section className="flex h-full flex-col rounded-2xl bg-white/[0.035] p-4 backdrop-blur-xl">
-      <MediaHeader category="artwork" title="Single Art" count={items.length} onAdd={onAdd} />
-      {featured ? (
-        <>
-          <div className="group relative mt-3 aspect-square overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-orange-950/80 via-[#171719] to-[#0d0d0f]">
-            <button type="button" onClick={() => void openItem(featured)} className="absolute inset-0 h-full w-full text-left" title="Open Single Art">
-              {itemPaths[featured.id] ? <img src={thumbnailUrl(itemPaths[featured.id]!)} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" /> : <Image className="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 text-white/14" />}
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-14">
-                <div className="flex items-center gap-2"><span className="truncate text-sm font-medium text-white">{featured.title}</span>{featured.isPrimary ? <PrimaryBadge /> : null}</div>
-                <p className="mt-1 text-[11px] text-white/48">{featured.sizeBytes ? formatFileSize(featured.sizeBytes) : displaySubtype(featured.subtype)}</p>
-              </div>
-            </button>
-            <div className="absolute right-2 top-2 opacity-60 transition-opacity group-hover:opacity-100"><FinalActions item={featured} workspaceId={workspaceId} onChanged={onChanged} surface /></div>
-          </div>
-          {items.length > 1 ? <div className="mt-2 space-y-2">{items.filter((item) => item.id !== featured.id).map((item) => <FinalItem key={item.id} item={item} workspaceId={workspaceId} onChanged={onChanged} />)}</div> : null}
-        </>
-      ) : <VisualEmpty category="artwork" label="Add Single Art" onAdd={onAdd} className="mt-3 aspect-square" />}
+    <section className={cn(RELEASE_KIT_SURFACE_CLASS, 'h-full p-4')} style={RELEASE_KIT_SURFACE_STYLE}>
+      <ReleaseKitSurfaceGlow />
+      <div className="relative z-10 flex h-full flex-col">
+        <MediaHeader category="artwork" title="Single Art" count={items.length} onAdd={onAdd} />
+        {featured ? (
+          <>
+            <div className="group relative mt-3 aspect-square overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-orange-950/80 via-[#171719] to-[#0d0d0f]">
+              <button type="button" onClick={() => void openItem(featured)} className="absolute inset-0 h-full w-full text-left" title="Open Single Art">
+                {itemPaths[featured.id] ? <img src={thumbnailUrl(itemPaths[featured.id]!)} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" /> : <Image className="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 text-white/14" />}
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-14">
+                  <div className="flex items-center gap-2"><span className="truncate text-sm font-medium text-white">{featured.title}</span>{featured.isPrimary ? <PrimaryBadge /> : null}</div>
+                  <p className="mt-1 text-[11px] text-white/48">{featured.sizeBytes ? formatFileSize(featured.sizeBytes) : displaySubtype(featured.subtype)}</p>
+                </div>
+              </button>
+              <div className="absolute right-2 top-2 opacity-60 transition-opacity group-hover:opacity-100"><FinalActions item={featured} workspaceId={workspaceId} onChanged={onChanged} surface /></div>
+            </div>
+            {items.length > 1 ? <div className="mt-2 space-y-2">{items.filter((item) => item.id !== featured.id).map((item) => <FinalItem key={item.id} item={item} workspaceId={workspaceId} onChanged={onChanged} />)}</div> : null}
+          </>
+        ) : <VisualEmpty category="artwork" label="Add Single Art" onAdd={onAdd} className="mt-3 aspect-square" />}
+      </div>
     </section>
   )
 }
@@ -354,23 +367,26 @@ function SingleArtPanel({ items, itemPaths, workspaceId, onChanged, onAdd }: Fin
 function VideoPanel({ items, itemPaths, workspaceId, onChanged, onAdd }: FinalCategoryProps & { itemPaths: Record<string, string> }) {
   const openItem = useOpenReleaseKitItem(workspaceId)
   return (
-    <section className="rounded-2xl bg-white/[0.035] p-4 backdrop-blur-xl">
-      <MediaHeader category="video" title="Videos" count={items.length} onAdd={onAdd} />
-      <div className="mt-3 grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8">
-        {items.map((item) => (
-          <div key={item.id} className="group relative aspect-[9/16] overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-[#232326] to-[#0b0b0d]">
-            <button type="button" onClick={() => void openItem(item)} className="absolute inset-0 h-full w-full" title={`Open ${item.title}`}>
-              {itemPaths[item.id] ? <img src={thumbnailUrl(itemPaths[item.id]!)} alt="" className="h-full w-full object-cover opacity-80 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-95" /> : null}
-              <span className="absolute left-1/2 top-1/2 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md transition group-hover:scale-110 group-hover:bg-[#f97316]"><Play className="ml-0.5 h-4 w-4 fill-current" /></span>
-              <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/65 to-transparent px-3 pb-3 pt-14 text-left">
-                <span className="block truncate text-xs font-medium text-white">{item.title}</span>
-                <span className="mt-1 block text-[10px] text-white/48">{displaySubtype(item.subtype)}</span>
-              </span>
-            </button>
-            <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100"><FinalActions item={item} workspaceId={workspaceId} onChanged={onChanged} surface /></div>
-          </div>
-        ))}
-        <VisualEmpty category="video" label="Upload video" onAdd={onAdd} className="aspect-[9/16]" />
+    <section className={cn(RELEASE_KIT_SURFACE_CLASS, 'p-4')} style={RELEASE_KIT_SURFACE_STYLE}>
+      <ReleaseKitSurfaceGlow />
+      <div className="relative z-10">
+        <MediaHeader category="video" title="Videos" count={items.length} onAdd={onAdd} />
+        <div className="mt-3 grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8">
+          {items.map((item) => (
+            <div key={item.id} className="group relative aspect-[9/16] overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-[#232326] to-[#0b0b0d]">
+              <button type="button" onClick={() => void openItem(item)} className="absolute inset-0 h-full w-full" title={`Open ${item.title}`}>
+                {itemPaths[item.id] ? <img src={thumbnailUrl(itemPaths[item.id]!)} alt="" className="h-full w-full object-cover opacity-80 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-95" /> : null}
+                <span className="absolute left-1/2 top-1/2 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md transition group-hover:scale-110 group-hover:bg-[#f97316]"><Play className="ml-0.5 h-4 w-4 fill-current" /></span>
+                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/65 to-transparent px-3 pb-3 pt-14 text-left">
+                  <span className="block truncate text-xs font-medium text-white">{item.title}</span>
+                  <span className="mt-1 block text-[10px] text-white/48">{displaySubtype(item.subtype)}</span>
+                </span>
+              </button>
+              <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100"><FinalActions item={item} workspaceId={workspaceId} onChanged={onChanged} surface /></div>
+            </div>
+          ))}
+          <VisualEmpty category="video" label="Upload video" onAdd={onAdd} className="aspect-[9/16]" />
+        </div>
       </div>
     </section>
   )
@@ -379,19 +395,22 @@ function VideoPanel({ items, itemPaths, workspaceId, onChanged, onAdd }: FinalCa
 function ImagePanel({ items, itemPaths, workspaceId, onChanged, onAdd }: FinalCategoryProps & { itemPaths: Record<string, string> }) {
   const openItem = useOpenReleaseKitItem(workspaceId)
   return (
-    <section className="flex h-full min-h-0 flex-col rounded-2xl bg-white/[0.035] p-4 backdrop-blur-xl">
-      <MediaHeader category="images" title="Press & Social Images" count={items.length} onAdd={onAdd} />
-      <div className="mt-3 grid min-h-[180px] flex-1 grid-flow-col auto-cols-[minmax(150px,220px)] gap-2.5 overflow-x-auto">
-        {items.map((item) => (
-          <div key={item.id} className="group relative h-full overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-[#242427] to-[#0d0d0f]">
-            <button type="button" onClick={() => void openItem(item)} className="absolute inset-0 h-full w-full" title={`Open ${item.title}`}>
-              {itemPaths[item.id] ? <img src={thumbnailUrl(itemPaths[item.id]!)} alt="" className="h-full w-full object-cover opacity-80 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-100" /> : <Image className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 text-white/12" />}
-              <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent px-3 pb-3 pt-10 text-left"><span className="block truncate text-xs font-medium text-white">{item.title}</span></span>
-            </button>
-            <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100"><FinalActions item={item} workspaceId={workspaceId} onChanged={onChanged} surface /></div>
-          </div>
-        ))}
-        <VisualEmpty category="images" label="Add image" onAdd={onAdd} className="h-full min-h-[180px]" />
+    <section className={cn(RELEASE_KIT_SURFACE_CLASS, 'h-full min-h-0 p-4')} style={RELEASE_KIT_SURFACE_STYLE}>
+      <ReleaseKitSurfaceGlow />
+      <div className="relative z-10 flex h-full min-h-0 flex-col">
+        <MediaHeader category="images" title="Press & Social Images" count={items.length} onAdd={onAdd} />
+        <div className="mt-3 grid min-h-[180px] flex-1 grid-flow-col auto-cols-[minmax(150px,220px)] gap-2.5 overflow-x-auto">
+          {items.map((item) => (
+            <div key={item.id} className="group relative h-full overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-[#242427] to-[#0d0d0f]">
+              <button type="button" onClick={() => void openItem(item)} className="absolute inset-0 h-full w-full" title={`Open ${item.title}`}>
+                {itemPaths[item.id] ? <img src={thumbnailUrl(itemPaths[item.id]!)} alt="" className="h-full w-full object-cover opacity-80 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-100" /> : <Image className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 text-white/12" />}
+                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent px-3 pb-3 pt-10 text-left"><span className="block truncate text-xs font-medium text-white">{item.title}</span></span>
+              </button>
+              <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100"><FinalActions item={item} workspaceId={workspaceId} onChanged={onChanged} surface /></div>
+            </div>
+          ))}
+          <VisualEmpty category="images" label="Add image" onAdd={onAdd} className="h-full min-h-[180px]" />
+        </div>
       </div>
     </section>
   )
@@ -412,24 +431,27 @@ function FinalCategory({ category, items, workspaceId, onChanged, onAdd }: {
   onAdd: () => void
 }) {
   return (
-    <section className="rounded-2xl bg-white/[0.025] p-5">
-      <div className="mb-4 flex items-center justify-between">
+    <section className={cn(RELEASE_KIT_SURFACE_CLASS, 'p-5')} style={RELEASE_KIT_SURFACE_STYLE}>
+      <ReleaseKitSurfaceGlow />
+      <div className="relative z-10 mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <CategoryHeaderIcon category={category} />
-          <h2 className="text-[11px] font-normal text-white/58">{displayCategory(category)}</h2>
+          <h2 className="text-[11px] font-medium text-white/90">{displayCategory(category)}</h2>
           <span className="text-xs text-white/28">{items.length}</span>
         </div>
         <button type="button" onClick={onAdd} aria-label={`Add ${displayCategory(category)}`} title={`Add ${displayCategory(category)}`} className="flex h-7 w-7 items-center justify-center rounded-lg text-white/38 transition-colors hover:bg-white/[0.05] hover:text-white/75"><Plus className="h-3.5 w-3.5" /></button>
       </div>
-      {items.length === 0 ? (
-        <button type="button" onClick={onAdd} aria-label={`Add ${displayCategory(category)}`} title={`Add ${displayCategory(category)}`} className="flex h-14 w-full items-center justify-center rounded-xl bg-white/[0.018] text-white/16 transition hover:bg-white/[0.035] hover:text-white/42">
-          <CategoryIcon category={category} className="h-4 w-4" />
-        </button>
-      ) : (
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {items.map((item) => <FinalItem key={item.id} item={item} workspaceId={workspaceId} onChanged={onChanged} />)}
-        </div>
-      )}
+      <div className="relative z-10">
+        {items.length === 0 ? (
+          <button type="button" onClick={onAdd} aria-label={`Add ${displayCategory(category)}`} title={`Add ${displayCategory(category)}`} className="flex h-14 w-full items-center justify-center rounded-xl bg-white/[0.018] text-white/16 transition hover:bg-white/[0.035] hover:text-white/42">
+            <CategoryIcon category={category} className="h-4 w-4" />
+          </button>
+        ) : (
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {items.map((item) => <FinalItem key={item.id} item={item} workspaceId={workspaceId} onChanged={onChanged} />)}
+          </div>
+        )}
+      </div>
     </section>
   )
 }
@@ -461,10 +483,19 @@ function MediaHeader({ category, title, count, onAdd }: { category: ReleaseKitCa
     <div className="relative z-10 flex items-center justify-between">
       <div className="flex items-center gap-2.5">
         <CategoryHeaderIcon category={category} />
-        <h2 className="text-[11px] font-normal text-white/58">{title}</h2>
+        <h2 className="text-[11px] font-medium text-white/90">{title}</h2>
         {count ? <span className="rounded-md bg-white/[0.07] px-1.5 py-0.5 text-[10px] font-medium text-white/45">{count}</span> : null}
       </div>
       <button type="button" onClick={onAdd} aria-label={`Add ${title}`} title={`Add ${title}`} className="flex h-7 w-7 items-center justify-center rounded-lg text-white/38 transition-colors hover:bg-white/[0.05] hover:text-white/75"><Plus className="h-3.5 w-3.5" /></button>
+    </div>
+  )
+}
+
+function ReleaseKitSurfaceGlow() {
+  return (
+    <div className="pointer-events-none absolute -inset-10 opacity-0 transition-opacity duration-500 group-hover/release-kit:opacity-100" aria-hidden="true">
+      <div className="absolute -inset-12 animate-spin rounded-full bg-gradient-to-r from-transparent via-white/[0.035] to-transparent blur-xl [animation-duration:18s]" />
+      <div className="absolute -inset-16 animate-spin rounded-full bg-gradient-to-r from-transparent via-orange-400/[0.022] to-transparent blur-2xl [animation-direction:reverse] [animation-duration:28s]" />
     </div>
   )
 }
@@ -736,7 +767,7 @@ function CategoryIcon({ category, className }: { category: ReleaseKitCategory; c
 
 function CategoryHeaderIcon({ category }: { category: ReleaseKitCategory }) {
   return (
-    <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-red-500/65 to-orange-500/70 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.28),inset_0_-1px_0_rgba(255,255,255,0.04),0_4px_10px_rgba(249,115,22,0.10)] backdrop-blur-md">
+    <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-red-500/65 to-orange-500/70 text-white shadow-tinted backdrop-blur-md">
       <CategoryIcon category={category} className="h-2.5 w-2.5" />
     </span>
   )

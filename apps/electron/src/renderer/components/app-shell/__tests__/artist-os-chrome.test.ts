@@ -158,6 +158,8 @@ describe('Artist OS persistent shell chrome', () => {
     const compactHeader = readFileSync(join(import.meta.dir, '..', 'CompactPageHeader.tsx'), 'utf8')
 
     expect(workers).toContain('tone="orange"')
+    expect(workers).toContain('className="mb-4"')
+    expect(workers).not.toContain('!min-h-[112px]')
     expect(workflows).toContain('tone="violet"')
     expect(automations).toContain('tone="blue"')
     expect(compactHeader.split('border-orange-100/[0.12]').length - 1).toBe(5)
@@ -172,6 +174,9 @@ describe('Artist OS persistent shell chrome', () => {
     expect(workers).toContain('aria-label={`Start chat with ${name}`}')
     expect(workers).toContain('aria-label={`Configure ${name}`}')
     expect(workers).toContain('{description}')
+    expect(workers).toContain('space-y-6')
+    expect(workers).toContain('group/category')
+    expect(workers).toContain('text-white/72')
     expect(workers).not.toContain('<MessageSquare')
     expect(workers).not.toContain('onClick={() => setSelectedAgent(agent)}')
   })
@@ -228,11 +233,24 @@ describe('Artist OS persistent shell chrome', () => {
     expect(campaign).toContain("backgroundColor: '#090909'")
     expect(campaign).toContain('rgba(255,77,0,0.018)')
     expect(campaign).toContain("'truncate text-[9px] font-normal'")
+    expect(campaign).toContain('Open essentials')
     expect(main).toContain("navState.subpage === 'release-board'")
     expect(main).toContain('view="release-board"')
-    expect(shell).toMatch(/id: "nav:release-board",\s+title: "Release Board"/)
+    expect(shell).toMatch(/id: "nav:release-board",\s+title: "Essentials"/)
     expect(campaign).not.toContain('function ReleaseBoardDialog')
     expect(campaign).not.toContain('selectedReleaseCategoryId')
+  })
+
+  test('visually rhymes Release Kit cards with Essentials without changing their layouts', () => {
+    const releaseKit = readFileSync(join(import.meta.dir, '..', 'ReleaseKitPage.tsx'), 'utf8')
+
+    expect(releaseKit).toContain("const RELEASE_KIT_SURFACE_CLASS = 'group/release-kit relative overflow-hidden rounded-2xl ring-1 ring-white/[0.055]'")
+    expect(releaseKit).toContain("backgroundColor: '#090909'")
+    expect(releaseKit).toContain('rgba(255,77,0,0.018)')
+    expect(releaseKit).toContain('group-hover/release-kit:opacity-100')
+    expect(releaseKit).toContain('text-[11px] font-medium text-white/90')
+    expect(releaseKit).toContain("lg:grid-cols-[240px_minmax(0,1fr)]")
+    expect(releaseKit).toContain('aspect-[9/16]')
   })
 
   test('creates an empty Lab song from the Songs page before opening the Pad', () => {

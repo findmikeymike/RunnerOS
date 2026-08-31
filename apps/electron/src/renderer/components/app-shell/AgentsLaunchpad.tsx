@@ -213,7 +213,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
           eyebrow="Team"
           title="Workers"
           tone="orange"
-          className="mb-4 !min-h-[112px] [&>div.relative]:!min-h-[112px]"
+          className="mb-4"
           actions={
             <>
               <button
@@ -293,7 +293,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
             }}
           />
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-6">
             {visibleGroups.map(([domain, agents]) => {
               const collapsed = collapsedDomains.has(domain)
 
@@ -302,17 +302,19 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
                   <button
                     type="button"
                     onClick={() => toggleDomain(domain)}
-                    className="mb-2.5 flex w-full items-center gap-2.5 text-left"
+                    className="group/category mb-3 flex w-full items-center gap-3 text-left"
                     aria-expanded={!collapsed}
                   >
-                    {collapsed ? (
-                      <ChevronRight className="h-3 w-3 shrink-0 text-white/30" />
-                    ) : (
-                      <ChevronDown className="h-3 w-3 shrink-0 text-white/30" />
-                    )}
-                    <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/42">{domain}</h2>
-                    <div className="h-px flex-1 bg-white/[0.06]" />
-                    <span className="text-[11px] text-white/32">{agents.length}</span>
+                    <span className="inline-flex h-7 shrink-0 items-center gap-2 rounded-full bg-white/[0.055] px-2.5 transition-colors group-hover/category:bg-white/[0.075]">
+                      {collapsed ? (
+                        <ChevronRight className="h-3 w-3 shrink-0 text-white/42 transition-colors group-hover/category:text-orange-200/80" />
+                      ) : (
+                        <ChevronDown className="h-3 w-3 shrink-0 text-white/42 transition-colors group-hover/category:text-orange-200/80" />
+                      )}
+                      <h2 className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/72">{domain}</h2>
+                      <span className="text-[10px] font-medium text-white/34">{agents.length}</span>
+                    </span>
+                    <div className="h-px flex-1 bg-white/[0.07]" />
                   </button>
                   {!collapsed && (
                     <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
@@ -397,7 +399,7 @@ function AgentCard({
         type="button"
         onClick={onStartChat}
         disabled={isLaunching}
-        className="relative flex min-h-[88px] w-full items-start gap-3 overflow-hidden rounded-[12px] bg-white/[0.055] px-3 py-3 pr-[78px] text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] backdrop-blur-md transition-colors hover:bg-white/[0.075] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/55 disabled:cursor-wait"
+        className="relative flex min-h-[88px] w-full items-start gap-3 overflow-hidden rounded-[12px] bg-white/[0.055] px-3 py-3 pr-[78px] text-left shadow-minimal backdrop-blur-md transition-colors hover:bg-white/[0.075] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/55 disabled:cursor-wait"
         aria-label={`Start chat with ${name}`}
       >
         <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-gradient-to-br from-[#fb923c] to-[#f97316] text-neutral-950">
@@ -1011,7 +1013,10 @@ function AgentBundlePickerDialog({
   const [selected, setSelected] = React.useState<string[]>([])
   const [openGroups, setOpenGroups] = React.useState<Set<string>>(new Set())
   const [saving, setSaving] = React.useState(false)
-  const options = type === 'skills' ? skills : type === 'sources' ? sources : []
+  const options = React.useMemo(
+    () => type === 'skills' ? skills : type === 'sources' ? sources : [],
+    [skills, sources, type],
+  )
   const groupedOptions = React.useMemo(() => groupBundleOptions(options), [options])
 
   React.useEffect(() => {

@@ -614,7 +614,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
       <div className="flex min-h-full w-full flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
         <CompactPageHeader
           eyebrow={view === 'release-board' ? title : hasMission ? 'Campaign Active' : 'Campaign Empty'}
-          title={view === 'release-board' ? 'Release Board' : title}
+          title={view === 'release-board' ? 'Essentials' : title}
           tone={view === 'release-board' ? 'orange' : 'red'}
           actions={
             view === 'release-board' ? null : (
@@ -807,7 +807,7 @@ function ReleaseReadinessSummary({
         onClick={onOpen}
         className="inline-flex h-8 shrink-0 items-center gap-2 rounded-full bg-white/[0.07] px-4 text-[10px] font-medium text-white/72 ring-1 ring-white/[0.10] transition-colors hover:bg-white/[0.11] hover:text-white"
       >
-        Open board
+        Open essentials
         <ArrowRight className="h-3 w-3" />
       </button>
     </CommandCard>
