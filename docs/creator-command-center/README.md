@@ -35,6 +35,7 @@ Core Artist HQ and campaign workspace specs live here.
 - [24 Session Task List And Delegation Return Path](./24-session-task-list-spec.md)
 - [25 Release Kit Asset Use And Social Scheduling Surface](./25-release-kit-asset-use-social-scheduling-spec.md)
 - [26 Agent-Bound Messaging](./26-agent-bound-messaging-spec.md)
+- [27 In-App Artist OS User Guide](./27-in-app-user-guide-spec.md)
 
 Current V1 implementation notes:
 
