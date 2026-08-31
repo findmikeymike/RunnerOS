@@ -664,6 +664,14 @@ export interface AgentListItem {
   skills: string[];
   sources: string[];
   optionalSources?: string[];
+  sourceReadiness: {
+    status: 'ready' | 'degraded' | 'blocked';
+    sources: Array<{
+      slug: string;
+      required: boolean;
+      status: 'ready' | 'missing' | 'disabled' | 'authentication-required';
+    }>;
+  };
   trustedWorkerTools?: string[];
   inputs?: string;
   outputs?: string;

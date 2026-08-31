@@ -172,6 +172,7 @@ import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-resear
 import { AgentMessageService } from '../agent-messaging/AgentMessageService'
 import { DEFAULT_MAX_DEPTH, isPermissionEscalation, readAgentMessageReceipt, type AgentMessageReceipt } from '@craft-agent/shared/agent-messaging'
 import { agentMatchesSearch } from './agent-search'
+import { resolveAgentSourceReadiness } from './agent-source-readiness'
 import {
   createAgentMemorySidecarApplyMemory,
   createMemorySidecarReviewer,
@@ -8146,22 +8147,32 @@ user a clickable link to where the thing now lives.`
         },
         listAgentsFn: (options) => {
           const activeSlugs = new Set(loadActivatedAgents(managed.workspace.rootPath).map(agent => agent.slug))
-          let agents = loadAllGlobalAgents().map(agent => ({
-            slug: agent.slug,
-            name: agent.metadata.name,
-            description: agent.metadata.description,
-            avatar: agent.metadata.avatar,
-            active: activeSlugs.has(agent.slug),
-            permissionMode: agent.metadata.permissionMode,
-            thinkingLevel: agent.metadata.thinkingLevel,
-            skills: agent.metadata.skills ?? [],
-            sources: agent.metadata.sources ?? [],
-            optionalSources: agent.metadata.optionalSources ?? [],
-            trustedWorkerTools: agent.metadata.trustedWorkerTools ?? [],
-            inputs: agent.metadata.inputs,
-            outputs: agent.metadata.outputs,
-            tags: agent.metadata.tags ?? [],
+          const sourceCandidates = loadAllSources(managed.workspace.rootPath).map(source => ({
+            slug: source.config.slug,
+            enabled: source.config.enabled,
+            usable: isSourceUsable(source),
           }))
+          let agents = loadAllGlobalAgents().map(agent => {
+            const sources = agent.metadata.sources ?? []
+            const optionalSources = agent.metadata.optionalSources ?? []
+            return {
+              slug: agent.slug,
+              name: agent.metadata.name,
+              description: agent.metadata.description,
+              avatar: agent.metadata.avatar,
+              active: activeSlugs.has(agent.slug),
+              permissionMode: agent.metadata.permissionMode,
+              thinkingLevel: agent.metadata.thinkingLevel,
+              skills: agent.metadata.skills ?? [],
+              sources,
+              optionalSources,
+              sourceReadiness: resolveAgentSourceReadiness(sources, optionalSources, sourceCandidates),
+              trustedWorkerTools: agent.metadata.trustedWorkerTools ?? [],
+              inputs: agent.metadata.inputs,
+              outputs: agent.metadata.outputs,
+              tags: agent.metadata.tags ?? [],
+            }
+          })
 
           if (options?.activeOnly) {
             agents = agents.filter(agent => agent.active)

@@ -1296,7 +1296,7 @@ Use get_session_info for full details on a specific session (list-then-detail pa
 
   list_agents: `List saved agents available to this workspace.
 
-Use this before recommending which agent should handle a task. It returns each agent's slug, display name, description, active status, skills, sources, and capability fields (inputs, outputs, tags).
+Use this before recommending which agent should handle a task. It returns each agent's slug, display name, description, active status, skills, sources, source readiness, and capability fields (inputs, outputs, tags). Source readiness is ready, degraded when only optional sources are unavailable, or blocked when a required source is missing, disabled, or needs authentication.
 
 Prefer this over filesystem searches for AGENT.md files. For normal routing questions, call with activeOnly=true so recommendations come from the user's active workspace agents.`,
 

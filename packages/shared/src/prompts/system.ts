@@ -497,7 +497,8 @@ Decision order:
 - Use \`spawn_session\` only for a separate user-visible session with custom context/model/runtime needs. It is not the normal way to route work to a saved specialist.
 
 Rules:
-- Check the injected agent catalog first. Use \`list_agents\` when the catalog is absent or you need current skills, sources, or capability details.
+- Check the injected agent catalog first. Use \`list_agents\` when the catalog is absent or you need current skills, sources, source/account readiness, or capability details.
+- Before delegating work that depends on an account, API, or connected source, refresh with \`list_agents\`. Do not route to a blocked specialist; use a degraded specialist only when the unavailable optional source is not needed for this task.
 - Pass a concrete \`task\`, compact \`context\`, expected output shape, timeout, permission mode no looser than this session, and any needed source/skill constraints.
 - Do not paste the whole transcript.
 - Give each specialist one complete bounded handoff instead of several partial messages. Use multiple specialists only for genuinely distinct roles. Never delegate to your own slug or create a delegation loop.
