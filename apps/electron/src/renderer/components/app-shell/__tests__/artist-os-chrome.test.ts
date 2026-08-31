@@ -191,6 +191,14 @@ describe('Artist OS persistent shell chrome', () => {
     expect(notification).toContain("'border-l-2 px-3 py-2 text-sm text-white'")
   })
 
+  test('keeps weekly manager routing labels out of the Artist OS chat controls', () => {
+    const badges = readFileSync(join(import.meta.dir, '..', 'ActiveOptionBadges.tsx'), 'utf8')
+
+    expect(badges).toContain('ARTIST_OS_HIDDEN_CHAT_LABEL_IDS')
+    expect(badges).toContain("'manager', 'artist-hq', 'weekly'")
+    expect(badges).toContain("RENDERER_PRODUCT_VARIANT === 'artist-os'")
+  })
+
   test('routes all major HQ and workspace page headers through the compact system', () => {
     const files = [
       'ArtistCommandCenterHome.tsx',

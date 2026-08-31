@@ -18,6 +18,12 @@ import { getState } from '@/config/session-status-config'
 import { SessionStatusMenu } from '@/components/ui/session-status-menu'
 import { MetadataBadge } from '@/components/ui/metadata-badge'
 import { SessionInfoPopover } from './SessionInfoPopover'
+import { RENDERER_PRODUCT_VARIANT } from '@/lib/product-identity'
+
+// These tags route and organize the automated weekly manager session. They
+// remain attached to the session, but are implementation metadata rather than
+// useful chat controls for an artist.
+const ARTIST_OS_HIDDEN_CHAT_LABEL_IDS = new Set(['manager', 'artist-hq', 'weekly'])
 
 // ============================================================================
 // Permission Mode Icon Component
@@ -116,6 +122,7 @@ export function ActiveOptionBadges({
     const result: ResolvedLabelEntry[] = []
     for (let i = 0; i < sessionLabels.length; i++) {
       const parsed = parseLabelEntry(sessionLabels[i])
+      if (RENDERER_PRODUCT_VARIANT === 'artist-os' && ARTIST_OS_HIDDEN_CHAT_LABEL_IDS.has(parsed.id)) continue
       const config = flat.find(l => l.id === parsed.id)
       if (config) {
         result.push({ config, rawValue: parsed.rawValue, index: i })
