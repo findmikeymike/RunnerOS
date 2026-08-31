@@ -22,11 +22,13 @@ export interface SessionAgentIdentity {
 export function getSessionAgentIdentity(session: SessionLike | SessionMeta): SessionAgentIdentity | null {
   const spawned = session.spawnedFromAgent
   const receiptAgent = session.launchReceipt?.agent
-  const name = spawned?.agentName?.trim() || receiptAgent?.name?.trim()
+  const slug = spawned?.agentSlug || receiptAgent?.slug
+  const storedName = spawned?.agentName?.trim() || receiptAgent?.name?.trim()
+  const name = slug === 'concierge' ? 'Artist Manager' : storedName
   if (!name) return null
 
   return {
-    slug: spawned?.agentSlug || receiptAgent?.slug,
+    slug,
     name,
     description: receiptAgent?.description?.trim() || undefined,
   }

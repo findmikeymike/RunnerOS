@@ -15,7 +15,7 @@ HQ is the home base. Use it for broad artist/company context, setup, strategy, a
 
 Common uses:
 - Fill in artist profile, voice, branding, assets, and current priorities.
-- Talk to HNIC when you do not know which worker should handle a job.
+- Talk to Artist Manager when you do not know which worker should handle a job.
 - Review recent outputs, approvals, and active work.
 - Manage workers, skills, sources, automations, and settings.
 
@@ -35,20 +35,20 @@ Campaign workspaces can show a default starter team. Current default workers:
 - **World Builder**: creates the release world and fan experience.
 - **Content Genius**: plans short-form content and finishes locked ideas with captions/overlays.
 
-## HNIC
+## Artist Manager
 
-HNIC is the main guide and router.
+Artist Manager is the main guide and router.
 
-Use HNIC when:
+Use Artist Manager when:
 - you do not know what worker to use
 - you want a plan
 - you want to create a new worker, workflow, automation, or source
 - you want the app to explain what it can do
 - you want a task handed to the right specialist
 
-HNIC is not just chat. It can route to workers, suggest workflows, and help set up reusable systems.
+Artist Manager is not just chat. It can route to workers, suggest workflows, and help set up reusable systems.
 
-For setup, keys, connections, and "how do I use this?" questions, HNIC should hand you to **Setup Concierge**.
+For setup, keys, connections, and "how do I use this?" questions, Artist Manager should hand you to **Setup Concierge**.
 
 ## Setup Concierge
 

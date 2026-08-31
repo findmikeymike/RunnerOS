@@ -190,12 +190,12 @@ export interface FreeFormInputProps {
   /** Callback when focus state changes */
   onFocusChange?: (focused: boolean) => void
   // Source selection
-  /** Available sources (enabled only) */
+  /** Sources configured for this workspace */
   sources?: LoadedSource[]
   /** Currently enabled source slugs for this session */
   enabledSourceSlugs?: string[]
   /** Callback when source selection changes */
-  onSourcesChange?: (slugs: string[]) => void
+  onSourcesChange?: (slugs: string[]) => boolean | void | Promise<boolean | void>
   // Skill selection (for @mentions)
   /** Available skills for @mention autocomplete */
   skills?: LoadedSkill[]
@@ -507,6 +507,31 @@ export function FreeFormInput({
       prevEnabledSourceSlugsRef.current = enabledSourceSlugs
     }
   }, [enabledSourceSlugs])
+
+  const handleSourceToggle = React.useCallback(async (slug: string) => {
+    const previousSlugs = optimisticSourceSlugs
+    const nextSlugs = previousSlugs.includes(slug)
+      ? previousSlugs.filter(currentSlug => currentSlug !== slug)
+      : [...previousSlugs, slug]
+
+    setOptimisticSourceSlugs(nextSlugs)
+    try {
+      const accepted = await onSourcesChange?.(nextSlugs)
+      if (accepted === false) {
+        setOptimisticSourceSlugs(current => (
+          current.length === nextSlugs.length && current.every((value, index) => value === nextSlugs[index])
+            ? previousSlugs
+            : current
+        ))
+      }
+    } catch {
+      setOptimisticSourceSlugs(current => (
+        current.length === nextSlugs.length && current.every((value, index) => value === nextSlugs[index])
+          ? previousSlugs
+          : current
+      ))
+    }
+  }, [onSourcesChange, optimisticSourceSlugs])
 
   // Sync from parent when inputValue changes externally (e.g., switching sessions)
   const prevInputValueRef = React.useRef(coerceInputText(inputValue))
@@ -1875,30 +1900,14 @@ export function FreeFormInput({
                 anchorRef={sourceButtonRef}
                 sources={sources}
                 selectedSlugs={optimisticSourceSlugs}
-                onToggleSlug={(slug) => {
-                  const isEnabled = optimisticSourceSlugs.includes(slug)
-                  const newSlugs = isEnabled
-                    ? optimisticSourceSlugs.filter(currentSlug => currentSlug !== slug)
-                    : [...optimisticSourceSlugs, slug]
-                  setOptimisticSourceSlugs(newSlugs)
-                  onSourcesChange?.(newSlugs)
-                }}
+                onToggleSlug={handleSourceToggle}
               />
             </div>
-          )}
-          {onWorkingDirectoryChange && (
-            <WorkingDirectoryBadge
-              workingDirectory={workingDirectory}
-              onWorkingDirectoryChange={onWorkingDirectoryChange}
-              sessionFolderPath={sessionFolderPath}
-              isEmptySession={false}
-              workspaceId={workspaceId}
-            />
           )}
           </>
           )}
 
-          {/* Desktop: full badges row with labels and working directory */}
+          {/* Desktop: full context badges row */}
           {!compactMode && (
           <div className="flex items-center gap-1 min-w-32 shrink overflow-hidden">
           {/* 1. Attach Files Badge */}
@@ -1981,28 +1990,11 @@ export function FreeFormInput({
                 anchorRef={sourceButtonRef}
                 sources={sources}
                 selectedSlugs={optimisticSourceSlugs}
-                onToggleSlug={(slug) => {
-                  const isEnabled = optimisticSourceSlugs.includes(slug)
-                  const newSlugs = isEnabled
-                    ? optimisticSourceSlugs.filter(currentSlug => currentSlug !== slug)
-                    : [...optimisticSourceSlugs, slug]
-                  setOptimisticSourceSlugs(newSlugs)
-                  onSourcesChange?.(newSlugs)
-                }}
+                onToggleSlug={handleSourceToggle}
               />
             </div>
           )}
 
-          {/* 3. Working Directory Selector Badge */}
-          {onWorkingDirectoryChange && (
-            <WorkingDirectoryBadge
-              workingDirectory={workingDirectory}
-              onWorkingDirectoryChange={onWorkingDirectoryChange}
-              sessionFolderPath={sessionFolderPath}
-              isEmptySession={isEmptySession}
-              workspaceId={workspaceId}
-            />
-          )}
           </div>
           )}
 

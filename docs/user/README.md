@@ -15,4 +15,4 @@ These docs explain RunnerOS for normal users, not developers.
 
 The simple rule:
 
-Use **HNIC** when you do not know where to start. Use **Setup Concierge** when you are connecting services, adding keys, or learning the app. Use **Workers** when you know the job. Use **Outputs** when you want to find work products. Use **Finals** when an Output is trusted enough to reuse in an HQ or campaign kit.
+Use **Artist Manager** when you do not know where to start. Use **Setup Concierge** when you are connecting services, adding keys, or learning the app. Use **Workers** when you know the job. Use **Outputs** when you want to find work products. Use **Finals** when an Output is trusted enough to reuse in an HQ or campaign kit.

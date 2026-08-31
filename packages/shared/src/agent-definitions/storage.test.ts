@@ -525,11 +525,11 @@ body
     expect(loadGlobalAgent('concierge', { globalAgentsDir })!.metadata.name).toBe('HNIC')
   })
 
-  test('starter library includes HNIC as workflow-aware work router', () => {
+  test('starter library includes Artist Manager as workflow-aware work router', () => {
     const hnic = STARTER_AGENTS.find((agent) => agent.slug === 'concierge')
 
     expect(hnic).toBeDefined()
-    expect(hnic?.metadata.name).toBe('HNIC')
+    expect(hnic?.metadata.name).toBe('Artist Manager')
     expect(hnic?.metadata.tags).toContain('routing')
     expect(hnic?.metadata.tags).toContain('workflows')
     expect(hnic?.metadata.skills).toContain('workflow-creator')

@@ -19,7 +19,7 @@ Each category should show worker name, one-line job, and a tiny example output.
 
 ## Strategy And Command
 
-- **HNIC**: routes goals to the right worker, workflow, automation, or setup path.
+- **Artist Manager**: routes goals to the right worker, workflow, automation, or setup path.
 - **Setup Concierge**: helps connect services, keys, tools, and app setup.
 - **World Builder**: builds release worlds, fan experiences, and campaign mechanics.
 - **Branding Agent**: builds artist DNA, mythology, positioning, and campaign angles.
@@ -79,5 +79,5 @@ Each category should show worker name, one-line job, and a tiny example output.
 ## Copy Block
 
 ```text
-Artist OS Desktop ships with a real worker roster: strategy, content, visuals, video, outreach, ads, socials, commerce, setup, research, and human handoffs. Open a worker when you know the job. Ask HNIC when you do not.
+Artist OS Desktop ships with a real worker roster: strategy, content, visuals, video, outreach, ads, socials, commerce, setup, research, and human handoffs. Open a worker when you know the job. Ask Artist Manager when you do not.
 ```

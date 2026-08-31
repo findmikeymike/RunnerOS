@@ -28,7 +28,7 @@ Do not use background work for actions that need judgment right now, like approv
 Workers can hand work to other workers.
 
 Examples:
-- HNIC asks Content Genius for ideas.
+- Artist Manager asks Content Genius for ideas.
 - Content Genius hands an approved caption batch to Social Publisher.
 - Industry Hunter creates targets, can enrich LinkedIn/email leads through Zero, then Outreach Agent writes messages.
 - Art Director creates a visual brief, then an image/tool worker creates the asset.

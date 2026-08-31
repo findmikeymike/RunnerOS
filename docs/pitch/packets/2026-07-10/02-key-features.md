@@ -33,9 +33,9 @@ Launch specialist workers for the jobs around the music:
 - industry research, outreach, college radio, and playlist work
 - merch, print-on-demand, Shopify, setup, research, and orchestration
 
-## HNIC: One Front Door
+## Artist Manager: One Front Door
 
-Tell HNIC what you are trying to accomplish. It can route the job, launch the right worker, schedule work, coordinate multiple steps, or guide setup when a connection is missing.
+Tell Artist Manager what you are trying to accomplish. It can route the job, launch the right worker, schedule work, coordinate multiple steps, or guide setup when a connection is missing.
 
 ## Living Artist Context
 
@@ -89,4 +89,3 @@ Use supported models and providers based on quality, price, speed, privacy, or p
 ## Human Layer
 
 When the next move needs a real person, Artist OS Desktop can package the artist, song, campaign, assets, goals, and request into a clean handoff for expert review or promotion services.
-

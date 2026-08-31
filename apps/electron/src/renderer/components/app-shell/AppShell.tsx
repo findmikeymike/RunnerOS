@@ -1014,8 +1014,13 @@ function AppShellContent({
     try {
       await window.electronAPI.sessionCommand(sessionId, { type: 'setSources', sourceSlugs })
       // Session will emit a 'sources_changed' event that updates the session state
+      return true
     } catch (err) {
       console.error('[Chat] Failed to set session sources:', err)
+      toast.error('Could not update chat sources', {
+        description: err instanceof Error ? err.message : 'The previous source selection was restored.',
+      })
+      return false
     }
   }, [])
 
@@ -1946,7 +1951,7 @@ function AppShellContent({
       })
       setTimeout(() => focusZone('chat', { intent: 'programmatic' }), 50)
     } catch (error) {
-      toast.error('Failed to open HNIC chat', {
+      toast.error('Failed to open Artist Manager chat', {
         description: error instanceof Error ? error.message : String(error),
       })
     }

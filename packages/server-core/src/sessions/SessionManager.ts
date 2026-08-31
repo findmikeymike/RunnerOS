@@ -4379,18 +4379,27 @@ Default report shape:`,
               sessionLog.info('[agent-definitions] Updated Social Publisher rollout routing and campaign Finals contract')
             }
           }
-          if (replaceBuiltInAgentMetadata(CONCIERGE_SLUG, {
-            name: { from: 'Concierge', to: 'HNIC' },
+          const legacyConciergeRenamed = replaceBuiltInAgentMetadata(CONCIERGE_SLUG, {
+            name: { from: 'Concierge', to: 'Artist Manager' },
             description: {
               from: 'In-app guide. Knows every agent, skill, and tool — points you at the right one.',
-              to: 'Head Nerd in Charge. Knows every agent, skill, and tool — points you at the right one.',
+              to: 'Main work chat. Routes goals to the right workers, skills, automations, and workflows.',
             },
             greeting: {
               from: 'Tell me what you\'re trying to do. I\'ll point you at the right agent or answer directly if it\'s simple.',
               to: undefined,
             },
-          }).updated) {
-            sessionLog.info('[agent-definitions] Renamed Concierge to HNIC')
+          }).updated
+          const hnicRenamed = replaceBuiltInAgentMetadata(CONCIERGE_SLUG, {
+            name: { from: 'HNIC', to: 'Artist Manager' },
+          }).updated
+          const hnicPromptRenamed = replaceBuiltInAgentPromptText(
+            CONCIERGE_SLUG,
+            'You are HNIC — Head Nerd in Charge, the in-app Concierge.',
+            "You are Artist Manager, the artist's in-app manager and work concierge.",
+          ).updated
+          if (legacyConciergeRenamed || hnicRenamed || hnicPromptRenamed) {
+            sessionLog.info('[agent-definitions] Updated Concierge display name to Artist Manager')
           }
           if (replaceBuiltInAgentPromptText(
             CONCIERGE_SLUG,

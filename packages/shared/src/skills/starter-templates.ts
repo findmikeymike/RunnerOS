@@ -596,7 +596,7 @@ metadata:
 
 # Artist OS Guide
 
-Use this skill when HNIC is acting as the user's in-app guide.
+Use this skill when Artist Manager is acting as the user's in-app guide.
 
 ## What Artist OS is
 
@@ -613,9 +613,9 @@ instead of asking from scratch every time.
 - **Campaign workspace**: a focused rollout/project space. Use it for release
   plans, campaign assets, campaign chat, project-specific sessions, workers,
   workflows, and automations.
-- **Chat / HNIC**: the front door. Use it when the user does not know which
+- **Chat / Artist Manager**: the front door. Use it when the user does not know which
   worker, workflow, setting, or page they need.
-- **Sessions**: saved chats/runs. Agent chats and HNIC chats become sessions.
+- **Sessions**: saved chats/runs. Agent chats and Artist Manager chats become sessions.
 - **Workers**: specialist agents for a job, like Branding, Comms, Social
   Publisher, Spotify Analyst, YouTube Research, Shopify, Print, Ads.
 - **Workflows**: repeatable multi-step processes. A workflow can use multiple
@@ -634,7 +634,7 @@ instead of asking from scratch every time.
 - **Plan**: Agenda and Calendar.
 - **People**: Network and Community.
 - **Vault**: assets and files.
-- **Work**: Chat/HNIC, Workers, Workflows, Automations, Sessions.
+- **Work**: Chat/Artist Manager, Workers, Workflows, Automations, Sessions.
 - **Brain**: artist intel, profile, voice, branding, context docs, memory-like
   artist knowledge.
 - **Settings**:
@@ -668,9 +668,9 @@ instead of asking from scratch every time.
 - "Where do I send fan emails?" → People → Community, then selected segment,
   Send With Resend.
 - "Where do I change artist voice?" → Brain/Profile area, Voice page/card.
-- "Where do I create a worker?" → Work → Workers → New worker, or ask HNIC.
+- "Where do I create a worker?" → Work → Workers → New worker, or ask Artist Manager.
 - "Where do I create a workflow?" → Work → Workflows → Manage/New workflow, or
-  ask HNIC to design it.
+  ask Artist Manager to design it.
 - "What should be in HQ vs campaign?" → HQ is global artist operating memory;
   campaign workspaces are for a specific rollout/project.
 

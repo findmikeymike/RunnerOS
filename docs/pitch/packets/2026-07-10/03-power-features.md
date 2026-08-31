@@ -21,9 +21,9 @@ The Campaign Calendar is an execution layer, not just a list of dates.
 
 Artists and managers can schedule agent tasks, workflow runs, reviews, approvals, and social publishing around a release. Scheduled work can use approved Outputs, Finals, Primary Finals, and eligible Vault assets as direct inputs.
 
-## 2. Schedule Work By Talking To HNIC
+## 2. Schedule Work By Talking To Artist Manager
 
-The user can say what should happen and when. HNIC can create typed, tracked work without forcing the artist to configure technical triggers or cron rules.
+The user can say what should happen and when. Artist Manager can create typed, tracked work without forcing the artist to configure technical triggers or cron rules.
 
 One-time campaign work stays on the Calendar. Repeating or event-driven operations belong in Automations.
 
@@ -118,4 +118,3 @@ The artist's system is designed to support different model providers and local o
 Generic agent hubs give users agents and tools.
 
 Artist OS Desktop connects those capabilities to the artist, the release, the calendar, the approved assets, the social profiles, the campaign team, and the next real move.
-

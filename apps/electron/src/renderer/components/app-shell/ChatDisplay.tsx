@@ -212,10 +212,10 @@ interface ChatDisplayProps {
   /** Callback when attachment draft changes (add, remove, clear on send) */
   onAttachmentsChange?: (attachments: FileAttachment[]) => void
   // Source selection
-  /** Available sources (enabled only) */
+  /** Sources configured for this workspace */
   sources?: LoadedSource[]
   /** Callback when source selection changes */
-  onSourcesChange?: (slugs: string[]) => void
+  onSourcesChange?: (slugs: string[]) => boolean | void | Promise<boolean | void>
   // Skill selection (for @mentions)
   /** Available skills for @mention autocomplete */
   skills?: LoadedSkill[]

@@ -41,7 +41,7 @@ Artist OS Desktop ships with specialist workers, not blank chatbots wearing job 
 
 The roster includes artist strategy, branding, world building, writing, content, art direction, video editing, motion, ads, social publishing, outreach, industry research, college radio, Spotify analysis and playlist creation, fan communications, merch, commerce, setup, research, and orchestration.
 
-Each worker has its own skills, tools, context, operating rules, and expected outputs. HNIC acts as the front door, routing the goal to the right worker or coordinating several workers when the job crosses departments.
+Each worker has its own skills, tools, context, operating rules, and expected outputs. Artist Manager acts as the front door, routing the goal to the right worker or coordinating several workers when the job crosses departments.
 
 ## The System Knows The Artist
 
@@ -88,4 +88,3 @@ The spirit is simple:
 One place where the artist, the campaign, the team, the assets, the work, and the next move stay connected.
 
 **Build the command center around your next release.**
-

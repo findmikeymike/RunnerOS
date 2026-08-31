@@ -971,7 +971,7 @@ function WorkflowInfoDialog({
           />
           <WorkflowHelpRow
             title="Create your own"
-            text="Use New workflow for manual setup, or ask HNIC to design one with the right workers and steps."
+            text="Use New workflow for manual setup, or ask Artist Manager to design one with the right workers and steps."
           />
         </div>
       </DialogContent>

@@ -31,6 +31,7 @@ import { getSessionAgentIdentity } from '@/utils/session'
 import { useAgents } from '@/hooks/useAgents'
 // Model resolution: connection.defaultModel (no hardcoded defaults)
 import { resolveEffectiveConnectionSlug, isSessionConnectionUnavailable } from '@config/llm-connections'
+import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 
 export interface ChatPageProps {
   sessionId: string
@@ -398,7 +399,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     ? allAgents.find((agent) => agent.slug === sessionAgentIdentity.slug)
     : undefined
   const agentHeaderIdentity = sessionAgentIdentity ? {
-    name: currentAgent?.metadata.name ?? sessionAgentIdentity.name,
+    name: sessionAgentIdentity.slug === CONCIERGE_SLUG
+      ? sessionAgentIdentity.name
+      : (currentAgent?.metadata.name ?? sessionAgentIdentity.name),
     description: currentAgent?.metadata.description ?? sessionAgentIdentity.description,
     avatar: currentAgent?.metadata.avatar,
   } : null
@@ -695,7 +698,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 sessionStatuses={sessionStatuses}
                 onSessionStatusChange={handleSessionStatusChange}
                 workspaceId={activeWorkspaceId || undefined}
-                onSourcesChange={(slugs) => onSessionSourcesChange?.(sessionId, slugs)}
+                onSourcesChange={(slugs) => onSessionSourcesChange?.(sessionId, slugs) ?? false}
                 workingDirectory={sessionMeta.workingDirectory}
                 onWorkingDirectoryChange={handleWorkingDirectoryChange}
                 messagesLoading={messageLoadState.messagesLoading}
@@ -773,7 +776,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             sessionStatuses={sessionStatuses}
             onSessionStatusChange={handleSessionStatusChange}
             workspaceId={activeWorkspaceId || undefined}
-            onSourcesChange={(slugs) => onSessionSourcesChange?.(sessionId, slugs)}
+            onSourcesChange={(slugs) => onSessionSourcesChange?.(sessionId, slugs) ?? false}
             workingDirectory={workingDirectory}
             onWorkingDirectoryChange={handleWorkingDirectoryChange}
             sessionFolderPath={session?.sessionFolderPath}

@@ -28,4 +28,15 @@ describe('session agent identity', () => {
 
     expect(getSessionPreviewText(session, 64, 'Art Director')).toBe('Help me build the visual world.')
   })
+
+  test('shows the current Artist Manager name for legacy HNIC sessions', () => {
+    const identity = getSessionAgentIdentity({
+      name: 'Old chat title',
+      preview: 'What should I work on next?',
+      spawnedFromAgent: { agentSlug: 'concierge', agentName: 'HNIC' },
+    })
+
+    expect(identity?.name).toBe('Artist Manager')
+    expect(identity?.slug).toBe('concierge')
+  })
 })

@@ -960,7 +960,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     homeState.gateway.getBindingStore().unbind('whatsapp', msg.channelId)
     this.emitBindingChanged(homeWorkspaceId)
 
-    await adapter.sendText(msg.channelId, `Routing this WhatsApp chat to ${workspace.name}. Send a message to start HNIC there.`)
+    await adapter.sendText(msg.channelId, `Routing this WhatsApp chat to ${workspace.name}. Send a message to start Artist Manager there.`)
   }
 
   private async startWhatsAppHomeSession(
@@ -1009,7 +1009,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         channelId: msg.channelId,
         error: err,
       })
-      await adapter.sendText(msg.channelId, `Could not start HNIC: ${errorMsg}`)
+      await adapter.sendText(msg.channelId, `Could not start Artist Manager: ${errorMsg}`)
     }
   }
 
