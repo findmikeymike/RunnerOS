@@ -486,23 +486,23 @@ Do not use Canvas for every answer. Do not create duplicate cards. Do not claim 
 
 const AGENT_DELEGATION_GUIDANCE = `## Agent Delegation
 
-Use \`message_agent\` when another saved ${PRODUCT_AGENT_LIBRARY_NAME} agent is clearly better suited for a bounded specialist subtask and you need a real tool-capable child run.
+Delegate for capability fit, not merely because work is long. Use \`message_agent\` when another saved ${PRODUCT_AGENT_LIBRARY_NAME} agent is materially better suited because of its domain, skills, sources/accounts, or independent-review role, and you can define one bounded result.
 
-Good uses:
-- Ask a reviewer agent to inspect a focused draft, diff, plan, or contract.
-- Ask a researcher/analyst agent to investigate a narrow question with its own tools.
-- Ask a specialist agent to produce a compact result you can use in your current work.
+Decision order:
+- Work directly when you can do the task well with your current skills, sources, and tools.
+- Use \`call_llm\` for isolated text processing that needs no tools, sources, saved persona, or continuing session.
+- Use \`message_agent\` for one saved specialist's bounded, tool-capable contribution. Keep \`background\` false when you need its result before your next decision or final answer.
+- Use \`background: true\` only when the specialist work is independent and long-running and you have meaningful work to continue before checking its receipt, or an active Goal can resume from that receipt. Do not background the only remaining task and then claim the result is complete.
+- Use \`spawn_session\` only for a separate user-visible session with custom context/model/runtime needs. It is not the normal way to route work to a saved specialist.
 
 Rules:
-- Use \`list_agents\` first if you do not know the target agent slug.
+- Check the injected agent catalog first. Use \`list_agents\` when the catalog is absent or you need current skills, sources, or capability details.
 - Pass a concrete \`task\`, compact \`context\`, expected output shape, timeout, permission mode no looser than this session, and any needed source/skill constraints.
 - Do not paste the whole transcript.
-- Do not delegate trivial work you can do directly, vague brainstorming, social chatter, or loops.
-- The parent agent owns the final user answer; the child returns one requested artifact, check, decision, or summary.
-- Use \`call_llm\` for cheap single-shot text processing without tools; use \`message_agent\` when the subtask needs tools, sources, skills, or an agent persona.
-- Use \`background: true\` for longer specialist work when you can keep working before the result is ready.
-- Inspect receipts when background status, errors, or child output matters.
-- Delegation never bypasses approval for external sends/posts, credentials/OAuth, destructive writes, purchases, or other high-risk actions.
+- Give each specialist one complete bounded handoff instead of several partial messages. Use multiple specialists only for genuinely distinct roles. Never delegate to your own slug or create a delegation loop.
+- Do not delegate trivial work, vague brainstorming, or social chatter.
+- The parent owns integration and the final user answer. Inspect the returned result or durable receipt; starting a child is never evidence that its work succeeded.
+- Delegation neither creates nor erases authority. Carry forward the user's exact authorization, do not ask again merely because work was delegated, and do not expand that authorization to new recipients, content, accounts, spend, destructive actions, or other effects.
 - Treat \`message_agent\` failures as real blockers or retry with a smaller task.`;
 
 /**

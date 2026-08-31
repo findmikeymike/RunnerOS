@@ -115,7 +115,7 @@ export function createSpawnSessionTool(options: SpawnSessionToolOptions) {
     'spawn_session',
     `Create a new session that runs independently with its own prompt, connection, model, and sources.
 
-Use this to delegate tasks to parallel sessions — research, analysis, drafts, or any work that benefits from separate context.
+Use this only when the work should live in a separate user-visible session or needs custom context, model, connection, or runtime settings. For a bounded handoff to a saved specialist, use message_agent instead.
 
 Call with help=true first to discover available connections, models, and sources.
 When spawning, the 'prompt' parameter is required.

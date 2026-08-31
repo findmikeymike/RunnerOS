@@ -284,8 +284,10 @@ describe('composeAgentSystemPrompt', () => {
     expect(result).toContain('"tags": [')
     expect(result).toContain('"research"')
     expect(result).toContain('"cite"')
-    expect(result).toContain('Use this catalog to pick a specialist target')
-    expect(result).toContain('call `message_agent` with exactly one `agentSlug`')
+    expect(result).toContain('Delegate only when one specialist is materially better suited')
+    expect(result).toContain('Keep it blocking when you need the result for this answer')
+    expect(result).toContain('Never delegate to your own slug')
+    expect(result).toContain('call `message_agent` with exactly one other `agentSlug` per bounded handoff')
     expect(result).toContain('If only recommending a route to the user')
   })
 

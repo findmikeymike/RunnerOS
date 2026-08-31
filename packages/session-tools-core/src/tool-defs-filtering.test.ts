@@ -62,6 +62,16 @@ describe('session tool filtering helpers', () => {
     expect(taskTool?.safeMode).toBe('allow');
   });
 
+  it('teaches the saved-agent delegation boundary at tool-call time', () => {
+    const messageAgent = SESSION_TOOL_DEFS.find(def => def.name === 'message_agent');
+    const spawnSession = SESSION_TOOL_DEFS.find(def => def.name === 'spawn_session');
+
+    expect(messageAgent?.description).toContain('Keep background=false when the current answer or next decision needs the result');
+    expect(messageAgent?.description).toContain('Starting the child is not completion');
+    expect(spawnSession?.description).toContain('separate user-visible session');
+    expect(spawnSession?.description).toContain('use message_agent instead');
+  });
+
   it('exposes semantic Manager tools only to HNIC while keeping authorized context reads generic', () => {
     const ordinary = getSessionToolNames();
     expect(ordinary.has('get_manager_brief')).toBe(false);

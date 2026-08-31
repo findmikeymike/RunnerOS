@@ -554,6 +554,8 @@ describe('production wiring: getDelegationConfig honors stored config', () => {
       getParentSourceSlugs: () => undefined,
     });
     expect(def).toBeDefined();
+    expect(def.description).toContain('separate user-visible session');
+    expect(def.description).toContain('use message_agent instead');
   });
 
   it('subagent_auto_approve=true in stored config reaches the approval callback', async () => {

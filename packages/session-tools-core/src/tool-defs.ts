@@ -1244,7 +1244,7 @@ For large files (>2000 lines), use {path, startLine, endLine} to select a portio
 
   spawn_session: `Create a new session that runs independently with its own prompt, connection, model, and sources.
 
-Use this to delegate tasks to parallel sessions — research, analysis, drafts, or any work that benefits from separate context.
+Use this only when the work should live in a separate user-visible session or needs custom context, model, connection, or runtime settings. For a bounded handoff to a saved specialist, use message_agent instead.
 
 Call with help=true first to discover available connections, models, and sources.
 When spawning, the 'prompt' parameter is required.
@@ -1374,7 +1374,7 @@ The target session receives your message with a sender envelope containing your 
   message_agent: `Delegate a bounded task to a saved ${PRODUCT_AGENT_LIBRARY_NAME} agent.
 
 Creates a hidden child session using the target agent's normal prompt, sources, skills, timeout, receipt, and permission boundary.
-Use background=true for longer specialist work you do not need to block on; the receipt updates when the child finishes.`,
+Keep background=false when the current answer or next decision needs the result. Use background=true only for independent long work while the parent has meaningful work to continue or an active Goal can resume from the receipt. Starting the child is not completion; inspect its returned result or durable receipt.`,
 
   list_agent_message_receipts: `Inspect recent message_agent delegation receipts in the current workspace.
 

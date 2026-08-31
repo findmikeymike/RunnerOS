@@ -318,7 +318,9 @@ export function buildAgentCatalogSection(agents: AgentCatalogEntry[]): string {
     JSON.stringify(records, null, 2),
     '```',
     '',
-    'Use this catalog to pick a specialist target. If delegating, call `message_agent` with exactly one `agentSlug` from this catalog plus a compact task/context. If only recommending a route to the user, name exactly one agent slug and include a "Prompt:" label followed by the exact prompt to run.',
+    'Before substantive work, compare the needed domain, skills, sources/accounts, and independent-review value against this catalog. Delegate only when one specialist is materially better suited and the result can be bounded; otherwise work directly.',
+    'When delegating, call `message_agent` with exactly one other `agentSlug` per bounded handoff, full compact context, and the expected result. Keep it blocking when you need the result for this answer. Use `background: true` only for independent long work while meaningful parent work or an active Goal remains, and follow the receipt before claiming completion. Never delegate to your own slug or create a delegation loop.',
+    'If only recommending a route to the user, name exactly one agent slug and include a "Prompt:" label followed by the exact prompt to run.',
   ].join('\n');
 }
 

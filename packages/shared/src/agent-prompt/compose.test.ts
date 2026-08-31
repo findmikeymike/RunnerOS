@@ -145,6 +145,11 @@ describe('composeAgentSystemPrompt', () => {
     expect(result).toContain(AGENT_CATALOG_HEADER);
     expect(result).toContain('spotify-analyst');
     expect(result).toContain('message_agent');
+    expect(result).toContain('Delegate only when one specialist is materially better suited');
+    expect(result).toContain('Keep it blocking when you need the result for this answer');
+    expect(result).toContain('Use `background: true` only for independent long work');
+    expect(result).toContain('Never delegate to your own slug');
+    expect(result.match(/Before substantive work/g)).toHaveLength(1);
   });
 
   test('sections appear in a stable order', () => {
