@@ -41,6 +41,14 @@ export function serializeReleaseKitContext(manifest: ReleaseKitManifest): string
     status: item.status,
     isPrimary: item.isPrimary,
     source: item.source,
+    usage: {
+      bestFor: item.usage.bestFor,
+      contentRating: item.usage.contentRating,
+      notes: item.usage.notes,
+      restrictions: item.usage.restrictions,
+      updatedAt: item.usage.updatedAt,
+      updatedBy: item.usage.updatedBy,
+    },
   }));
   const lines = CATEGORY_ORDER.map((category) => {
     const categoryItems = manifest.items.filter((item) => item.category === category);

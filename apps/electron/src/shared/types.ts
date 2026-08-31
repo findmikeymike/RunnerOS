@@ -176,6 +176,7 @@ import type {
   ScheduledWorkMutation,
   ScheduledWorkMutationResult,
   ScheduledWorkParseResult,
+  ReleaseKitItemUseSummary,
   ManageGoalRunInput,
   ManageGoalRunResult,
 } from '@craft-agent/shared/scheduled-work';
@@ -200,6 +201,7 @@ export type {
   ManageGoalRunInput,
   ManageGoalRunResult,
   ScheduledWorkParseResult,
+  ReleaseKitItemUseSummary,
 };
 
 export interface ScheduledWorkMigrationResult {
@@ -238,6 +240,7 @@ import type {
   ReleaseKitManifest,
   ReleaseKitMigrationResult,
   ReleaseKitVerificationResult,
+  UpdateReleaseKitUsageInput,
 } from '@craft-agent/shared/release-kit';
 export type {
   PromoteToReleaseKitInput,
@@ -245,6 +248,7 @@ export type {
   ReleaseKitManifest,
   ReleaseKitMigrationResult,
   ReleaseKitVerificationResult,
+  UpdateReleaseKitUsageInput,
 };
 
 import type {
@@ -1157,10 +1161,12 @@ export interface ElectronAPI {
   // Campaign Release Kit (approved, immutable campaign snapshots)
   getReleaseKit(workspaceId: string): Promise<ReleaseKitManifest>
   getReleaseKitItem(workspaceId: string, itemId: string): Promise<ReleaseKitItemDetail>
+  listReleaseKitItemUses(workspaceId: string, itemId: string): Promise<ReleaseKitItemUseSummary[]>
   chooseReleaseKitUpload(workspaceId: string): Promise<{ path: string; originalFileName: string } | null>
   promoteToReleaseKit(workspaceId: string, input: PromoteToReleaseKitInput): Promise<{ manifest: ReleaseKitManifest; item: ReleaseKitItemDetail['item'] }>
   removeFromReleaseKit(workspaceId: string, itemId: string): Promise<ReleaseKitManifest>
   setReleaseKitPrimary(workspaceId: string, itemId: string): Promise<ReleaseKitManifest>
+  updateReleaseKitUsage(workspaceId: string, itemId: string, input: UpdateReleaseKitUsageInput): Promise<ReleaseKitManifest>
   verifyReleaseKit(workspaceId: string): Promise<ReleaseKitVerificationResult>
   migrateLegacyFinalsToReleaseKit(workspaceId: string): Promise<ReleaseKitMigrationResult>
   openReleaseKitFolder(workspaceId: string): Promise<boolean>

@@ -11,6 +11,7 @@ import {
   resolveReleaseKitItemPath,
   serializeReleaseKitContext,
   setReleaseKitPrimary,
+  updateReleaseKitItemUsage,
   verifyReleaseKit,
   withReleaseKitLockAsync,
 } from './index.ts';
@@ -193,6 +194,79 @@ describe('release kit storage', () => {
     expect(body).toContain(promoted.item.id);
     expect(body).toContain(promoted.item.relativePath);
     expect(body).toContain('Primary: cover.png');
+  });
+
+  test('migrates V1 manifests in memory without changing asset identity or snapshot trust', () => {
+    const workspace = tempWorkspace();
+    const source = join(workspace, 'cover.png');
+    writeFileSync(source, 'cover');
+    const promoted = promoteOutput(workspace, source, 'output-cover', 'artwork', 'single-cover', true);
+    const legacy = JSON.parse(readFileSync(getReleaseKitManifestPath(workspace), 'utf8')) as {
+      schemaVersion: number;
+      items: Array<Record<string, unknown>>;
+    };
+    legacy.schemaVersion = 1;
+    delete legacy.items[0]?.usage;
+    writeFileSync(getReleaseKitManifestPath(workspace), JSON.stringify(legacy));
+
+    const migrated = loadReleaseKitManifest(workspace, 'workspace-1', 'campaign-1');
+
+    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.items[0]?.id).toBe(promoted.item.id);
+    expect(migrated.items[0]?.sha256).toBe(promoted.item.sha256);
+    expect(migrated.items[0]?.relativePath).toBe(promoted.item.relativePath);
+    expect(migrated.items[0]?.usage).toEqual({
+      bestFor: [],
+      contentRating: 'unknown',
+      restrictions: {
+        blockedFromUse: false,
+        needsRightsClearance: false,
+        artistLikenessRestricted: false,
+      },
+      updatedAt: promoted.item.promotedAt,
+      updatedBy: 'migration',
+    });
+    expect((JSON.parse(readFileSync(getReleaseKitManifestPath(workspace), 'utf8')) as { schemaVersion: number }).schemaVersion).toBe(1);
+  });
+
+  test('persists bounded usage metadata and exposes safe fields to agents', () => {
+    const workspace = tempWorkspace();
+    const source = join(workspace, 'press.png');
+    writeFileSync(source, 'press');
+    const promoted = promoteOutput(workspace, source, 'output-press', 'images', 'press', false);
+
+    const manifest = updateReleaseKitItemUsage(workspace, 'workspace-1', 'campaign-1', promoted.item.id, {
+      bestFor: ['social', 'press', 'social'],
+      contentRating: 'clean',
+      notes: 'Best for launch-day posts.',
+      restrictions: { needsRightsClearance: true },
+    });
+    const usage = manifest.items[0]?.usage;
+
+    expect(manifest.schemaVersion).toBe(2);
+    expect(usage?.bestFor).toEqual(['social', 'press']);
+    expect(usage?.contentRating).toBe('clean');
+    expect(usage?.notes).toBe('Best for launch-day posts.');
+    expect(usage?.restrictions.needsRightsClearance).toBe(true);
+    expect(usage?.updatedBy).toBe('user');
+    expect(serializeReleaseKitContext(manifest)).toContain('needsRightsClearance');
+  });
+
+  test('rejects malformed or unbounded usage metadata', () => {
+    const workspace = tempWorkspace();
+    const source = join(workspace, 'press.png');
+    writeFileSync(source, 'press');
+    const promoted = promoteOutput(workspace, source, 'output-press', 'images', 'press', false);
+
+    expect(() => updateReleaseKitItemUsage(workspace, 'workspace-1', 'campaign-1', promoted.item.id, {
+      bestFor: ['social', 'unsupported'] as never,
+    })).toThrow(/usage metadata is invalid/i);
+    expect(() => updateReleaseKitItemUsage(workspace, 'workspace-1', 'campaign-1', promoted.item.id, {
+      notes: 'x'.repeat(1_001),
+    })).toThrow(/1000 characters or fewer|usage metadata is invalid/i);
+    expect(() => updateReleaseKitItemUsage(workspace, 'workspace-1', 'campaign-1', promoted.item.id, {
+      restrictions: { blockedFromUse: 'yes' as never },
+    })).toThrow(/usage metadata is invalid/i);
   });
 
   test('rejects invalid manifests and path traversal', () => {

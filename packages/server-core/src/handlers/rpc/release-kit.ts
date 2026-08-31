@@ -8,7 +8,9 @@ import {
   type ReleaseKitManifest,
   type ReleaseKitMigrationResult,
   type ReleaseKitVerificationResult,
+  type UpdateReleaseKitUsageInput,
 } from '@craft-agent/shared/release-kit'
+import type { ReleaseKitItemUseSummary } from '@craft-agent/shared/scheduled-work'
 import { loadAllContextDocs } from '@craft-agent/shared/workspace-context'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import {
@@ -21,10 +23,12 @@ import type { HandlerDeps } from '../handler-deps'
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.releaseKit.GET,
   RPC_CHANNELS.releaseKit.GET_ITEM,
+  RPC_CHANNELS.releaseKit.LIST_USES,
   RPC_CHANNELS.releaseKit.CHOOSE_UPLOAD,
   RPC_CHANNELS.releaseKit.PROMOTE,
   RPC_CHANNELS.releaseKit.REMOVE,
   RPC_CHANNELS.releaseKit.SET_PRIMARY,
+  RPC_CHANNELS.releaseKit.UPDATE_USAGE,
   RPC_CHANNELS.releaseKit.VERIFY,
   RPC_CHANNELS.releaseKit.MIGRATE_LEGACY,
   RPC_CHANNELS.releaseKit.OPEN_FOLDER,
@@ -54,6 +58,13 @@ export function registerReleaseKitHandlers(server: RpcServer, deps: HandlerDeps)
   server.handle(
     RPC_CHANNELS.releaseKit.GET_ITEM,
     async (_ctx, workspaceId: string, itemId: string): Promise<ReleaseKitItemDetail> => service.getItem(workspaceId, itemId),
+  )
+
+  server.handle(
+    RPC_CHANNELS.releaseKit.LIST_USES,
+    async (_ctx, workspaceId: string, itemId: string): Promise<ReleaseKitItemUseSummary[]> => (
+      service.listUses(workspaceId, itemId)
+    ),
   )
 
   server.handle(
@@ -94,6 +105,14 @@ export function registerReleaseKitHandlers(server: RpcServer, deps: HandlerDeps)
     async (_ctx, workspaceId: string, itemId: string): Promise<ReleaseKitManifest> => {
       await assertReleaseKitWrite(workspaceId)
       return service.setPrimary(workspaceId, itemId)
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.releaseKit.UPDATE_USAGE,
+    async (_ctx, workspaceId: string, itemId: string, input: UpdateReleaseKitUsageInput): Promise<ReleaseKitManifest> => {
+      await assertReleaseKitWrite(workspaceId)
+      return service.updateUsage(workspaceId, itemId, input)
     },
   )
 

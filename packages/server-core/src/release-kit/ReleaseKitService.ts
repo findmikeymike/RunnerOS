@@ -19,6 +19,7 @@ import {
   resolveReleaseKitItemPath,
   serializeReleaseKitContext,
   setReleaseKitPrimary,
+  updateReleaseKitItemUsage,
   verifyReleaseKit,
   verifyReleaseKitItem,
   type PromoteToReleaseKitInput,
@@ -26,11 +27,18 @@ import {
   type ReleaseKitItemDetail,
   type ReleaseKitManifest,
   type ReleaseKitMigrationResult,
+  type UpdateReleaseKitUsageInput,
 } from '@craft-agent/shared/release-kit'
 import { readOutputFinalsRegistry } from '@craft-agent/shared/outputs'
 import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context'
 import { assertTeamPermission } from '@craft-agent/shared/workspaces'
-import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult } from '@craft-agent/shared/scheduled-work'
+import {
+  SCHEDULED_WORK_CONTEXT_SLUG,
+  listReleaseKitItemUses,
+  parseScheduledWorkDocResult,
+  summarizeReleaseKitItemUses,
+  type ReleaseKitItemUseSummary,
+} from '@craft-agent/shared/scheduled-work'
 import { CAMPAIGN_CALENDAR_CONTEXT_SLUG, parseCampaignCalendarDocResult } from '@craft-agent/shared/campaign-calendar'
 import { OutputService } from '../outputs/OutputService'
 
@@ -71,6 +79,20 @@ export class ReleaseKitService {
       item,
       absolutePath: resolveReleaseKitItemPath(workspace.rootPath, item.relativePath),
     }
+  }
+
+  listUses(workspaceId: string, itemId: string): ReleaseKitItemUseSummary[] {
+    const workspace = this.getCampaignWorkspace(workspaceId)
+    const manifest = loadReleaseKitManifest(workspace.rootPath, workspace.id, workspace.id)
+    if (!manifest.items.some((item) => item.id === itemId)) {
+      throw new Error(`Release Kit item not found: ${itemId}`)
+    }
+    const scheduled = parseScheduledWorkDocResult(
+      loadContextDoc(workspace.rootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined,
+      workspace.id,
+    )
+    if (!scheduled.ok) throw new Error(`Cannot read Release Kit uses while Scheduled Work is invalid: ${scheduled.error}`)
+    return summarizeReleaseKitItemUses(scheduled.work, itemId)
   }
 
   promote(
@@ -122,6 +144,15 @@ export class ReleaseKitService {
     this.assertWritePermission(workspace.rootPath)
     this.prepareContextSync(workspace.rootPath)
     const manifest = setReleaseKitPrimary(workspace.rootPath, workspace.id, workspace.id, itemId)
+    this.commitContext(workspace.id, workspace.rootPath, manifest)
+    return manifest
+  }
+
+  updateUsage(workspaceId: string, itemId: string, input: UpdateReleaseKitUsageInput): ReleaseKitManifest {
+    const workspace = this.getCampaignWorkspace(workspaceId)
+    this.assertWritePermission(workspace.rootPath)
+    this.prepareContextSync(workspace.rootPath)
+    const manifest = updateReleaseKitItemUsage(workspace.rootPath, workspace.id, workspace.id, itemId, input)
     this.commitContext(workspace.id, workspace.rootPath, manifest)
     return manifest
   }
@@ -297,11 +328,8 @@ export class ReleaseKitService {
       workspaceId,
     )
     if (!scheduled.ok) throw new Error(`Cannot safely remove Release Kit item while Scheduled Work is invalid: ${scheduled.error}`)
-    const scheduledRefs = scheduled.work.items.filter((order) => (
-      !order.deletedAt
-      && order.status !== 'canceled'
-      && order.inputRefs.some((ref) => ref.kind === 'release-kit' && ref.itemId === itemId)
-    ))
+    const scheduledRefs = listReleaseKitItemUses(scheduled.work, itemId)
+      .filter((order) => order.status !== 'canceled')
 
     const calendar = parseCampaignCalendarDocResult(
       loadContextDoc(rootPath, CAMPAIGN_CALENDAR_CONTEXT_SLUG) ?? undefined,

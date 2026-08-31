@@ -26,6 +26,9 @@ import {
   type ReleaseKitItem,
   type ReleaseKitManifest,
   type ReleaseKitSource,
+  type ReleaseKitUsageMetadata,
+  type ReleaseKitUseCase,
+  type UpdateReleaseKitUsageInput,
   type ReleaseKitVerificationResult,
   type RemoveReleaseKitItemResult,
 } from './types.ts';
@@ -41,6 +44,7 @@ const RELEASE_KIT_CATEGORIES = new Set<ReleaseKitCategory>([
   'documents',
   'references',
 ]);
+const RELEASE_KIT_USE_CASES = new Set<ReleaseKitUseCase>(['social', 'ads', 'store', 'press', 'delivery']);
 const RELEASE_KIT_LOCK_TIMEOUT_MS = 10_000;
 const RELEASE_KIT_ORPHAN_LOCK_STALE_MS = 24 * 60 * 60 * 1000;
 const HASH_BUFFER_BYTES = 1024 * 1024;
@@ -57,7 +61,7 @@ export function getReleaseKitManifestPath(workspaceRootPath: string): string {
 
 export function emptyReleaseKitManifest(workspaceId: string, campaignId: string): ReleaseKitManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     workspaceId,
     campaignId,
     updatedAt: '1970-01-01T00:00:00.000Z',
@@ -125,6 +129,7 @@ export function materializeReleaseKitItem(
         promotedAt: now,
         promotedBy: input.promotedBy,
         ...(input.note?.trim() ? { note: input.note.trim().slice(0, 1_000) } : {}),
+        usage: defaultReleaseKitUsage(now, input.promotedBy === 'migration' ? 'migration' : 'system'),
       };
       const nextItems = manifest.items.map((existing) => (
         item.isPrimary && existing.category === item.category && existing.subtype === item.subtype
@@ -143,6 +148,56 @@ export function materializeReleaseKitItem(
       rmSync(destination, { force: true });
       throw error;
     }
+  });
+}
+
+export function defaultReleaseKitUsage(
+  updatedAt: string,
+  updatedBy: ReleaseKitUsageMetadata['updatedBy'] = 'migration',
+): ReleaseKitUsageMetadata {
+  return {
+    bestFor: [],
+    contentRating: 'unknown',
+    restrictions: {
+      blockedFromUse: false,
+      needsRightsClearance: false,
+      artistLikenessRestricted: false,
+    },
+    updatedAt,
+    updatedBy,
+  };
+}
+
+export function updateReleaseKitItemUsage(
+  workspaceRootPath: string,
+  workspaceId: string,
+  campaignId: string,
+  itemId: string,
+  input: UpdateReleaseKitUsageInput,
+): ReleaseKitManifest {
+  return withReleaseKitLock(workspaceRootPath, () => {
+    const manifest = loadReleaseKitManifest(workspaceRootPath, workspaceId, campaignId);
+    const current = manifest.items.find((item) => item.id === itemId);
+    if (!current) throw new Error(`Release Kit item not found: ${itemId}`);
+    const now = new Date().toISOString();
+    const usage = normalizeReleaseKitUsage({
+      ...current.usage,
+      ...(input.bestFor !== undefined ? { bestFor: input.bestFor } : {}),
+      ...(input.contentRating !== undefined ? { contentRating: input.contentRating } : {}),
+      ...(input.notes !== undefined ? { notes: input.notes ?? undefined } : {}),
+      ...(input.restrictions !== undefined
+        ? { restrictions: { ...current.usage.restrictions, ...input.restrictions } }
+        : {}),
+      updatedAt: now,
+      updatedBy: 'user',
+    });
+    const next: ReleaseKitManifest = {
+      ...manifest,
+      schemaVersion: 2,
+      updatedAt: now,
+      items: manifest.items.map((item) => item.id === itemId ? { ...item, usage } : item),
+    };
+    return saveReleaseKitManifest(workspaceRootPath, next);
   });
 }
 
@@ -427,21 +482,30 @@ function normalizeSource(source: ReleaseKitSource): ReleaseKitSource {
 function parseManifest(body: string): ReleaseKitManifest | null {
   try {
     const parsed = JSON.parse(body) as unknown;
-    return isReleaseKitManifest(parsed) ? parsed : null;
+    if (!isReleaseKitManifest(parsed)) return null;
+    return {
+      ...parsed,
+      schemaVersion: 2,
+      items: parsed.items.map((item) => ({
+        ...item,
+        usage: item.usage ?? defaultReleaseKitUsage(item.promotedAt),
+      })),
+    };
   } catch {
     return null;
   }
 }
 
 function isReleaseKitManifest(value: unknown): value is ReleaseKitManifest {
-  if (!isRecord(value) || value.schemaVersion !== 1) return false;
+  if (!isRecord(value) || (value.schemaVersion !== 1 && value.schemaVersion !== 2)) return false;
+  const schemaVersion = value.schemaVersion;
   if (typeof value.workspaceId !== 'string' || !value.workspaceId) return false;
   if (typeof value.campaignId !== 'string' || !value.campaignId) return false;
   if (typeof value.updatedAt !== 'string' || Number.isNaN(Date.parse(value.updatedAt))) return false;
-  return Array.isArray(value.items) && value.items.every(isReleaseKitItem);
+  return Array.isArray(value.items) && value.items.every((item) => isReleaseKitItem(item, schemaVersion));
 }
 
-function isReleaseKitItem(value: unknown): value is ReleaseKitItem {
+function isReleaseKitItem(value: unknown, schemaVersion: 1 | 2): value is ReleaseKitItem {
   if (!isRecord(value)) return false;
   if (typeof value.id !== 'string' || !value.id.startsWith('kit_')) return false;
   if (typeof value.campaignId !== 'string' || !value.campaignId) return false;
@@ -458,7 +522,49 @@ function isReleaseKitItem(value: unknown): value is ReleaseKitItem {
   if (typeof value.isPrimary !== 'boolean') return false;
   if (typeof value.promotedAt !== 'string' || Number.isNaN(Date.parse(value.promotedAt))) return false;
   if (value.promotedBy !== 'user' && value.promotedBy !== 'agent' && value.promotedBy !== 'migration') return false;
-  return value.note === undefined || typeof value.note === 'string';
+  if (value.note !== undefined && typeof value.note !== 'string') return false;
+  return schemaVersion === 1 ? value.usage === undefined : isReleaseKitUsage(value.usage);
+}
+
+function normalizeReleaseKitUsage(value: ReleaseKitUsageMetadata): ReleaseKitUsageMetadata {
+  if (!isReleaseKitUsage(value)) throw new Error('Release Kit usage metadata is invalid.');
+  const notes = value.notes?.trim();
+  if (notes && notes.length > 1_000) throw new Error('Release Kit usage notes must be 1000 characters or fewer.');
+  const { notes: _notes, ...rest } = value;
+  return {
+    ...rest,
+    bestFor: [...new Set(value.bestFor)],
+    ...(notes ? { notes } : {}),
+  };
+}
+
+function isReleaseKitUsage(value: unknown): value is ReleaseKitUsageMetadata {
+  if (!isRecord(value)) return false;
+  if (!Array.isArray(value.bestFor) || value.bestFor.some((entry) => typeof entry !== 'string' || !RELEASE_KIT_USE_CASES.has(entry as ReleaseKitUseCase))) return false;
+  if (value.contentRating !== 'clean' && value.contentRating !== 'explicit' && value.contentRating !== 'unknown') return false;
+  if (value.notes !== undefined && (typeof value.notes !== 'string' || value.notes.length > 1_000)) return false;
+  if (!isRecord(value.restrictions)
+    || typeof value.restrictions.blockedFromUse !== 'boolean'
+    || typeof value.restrictions.needsRightsClearance !== 'boolean'
+    || typeof value.restrictions.artistLikenessRestricted !== 'boolean') return false;
+  if (typeof value.updatedAt !== 'string' || Number.isNaN(Date.parse(value.updatedAt))) return false;
+  if (value.updatedBy !== 'user' && value.updatedBy !== 'system' && value.updatedBy !== 'migration') return false;
+  if (value.technical !== undefined && !isReleaseKitTechnical(value.technical)) return false;
+  return true;
+}
+
+function isReleaseKitTechnical(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  for (const key of ['width', 'height', 'durationSeconds'] as const) {
+    const entry = value[key];
+    if (entry !== undefined && (typeof entry !== 'number' || !Number.isFinite(entry) || entry < 0)) return false;
+  }
+  if (value.aspectRatio !== undefined && (typeof value.aspectRatio !== 'string' || value.aspectRatio.length > 40)) return false;
+  return value.orientation === undefined
+    || value.orientation === 'portrait'
+    || value.orientation === 'landscape'
+    || value.orientation === 'square'
+    || value.orientation === 'unknown';
 }
 
 function isReleaseKitSource(value: unknown): value is ReleaseKitSource {

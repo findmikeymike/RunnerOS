@@ -180,7 +180,9 @@ describe('ReleaseKitService source trust', () => {
     })
     expect(readOnly.get('campaign-1').items).toHaveLength(1)
     expect(readOnly.getItem('campaign-1', promoted.item.id).item.id).toBe(promoted.item.id)
+    expect(readOnly.listUses('campaign-1', promoted.item.id)).toEqual([])
     expect(() => readOnly.setPrimary('campaign-1', promoted.item.id)).toThrow(/files.write denied/i)
+    expect(() => readOnly.updateUsage('campaign-1', promoted.item.id, { notes: 'For launch week.' })).toThrow(/files.write denied/i)
     expect(() => readOnly.verify('campaign-1')).toThrow(/files.write denied/i)
     expect(() => readOnly.remove('campaign-1', promoted.item.id)).toThrow(/files.write denied/i)
   })
@@ -262,7 +264,44 @@ describe('ReleaseKitService source trust', () => {
     upsertContextDoc(campaignRoot, { slug: 'scheduled-work', metadata: { name: 'Scheduled Work', routing: { mode: 'broadcast' }, enabled: true }, body: serializeScheduledWorkBody({ version: 1, workspaceId: 'campaign-1', items: [order], updatedAt: order.updatedAt }) })
     upsertContextDoc(campaignRoot, { slug: 'campaign-calendar', metadata: { name: 'Campaign Calendar', routing: { mode: 'broadcast' }, enabled: true }, body: serializeCampaignCalendarBody({ version: 1, campaignId: 'campaign-1', items: [item], updatedAt: item.updatedAt }) })
 
+    expect(releaseKit.listUses('campaign-1', promoted.item.id)).toMatchObject([{
+      orderId: 'work-1',
+      calendarItemId: 'item-1',
+      platform: 'instagram',
+      profileId: 'artist',
+      status: 'scheduled',
+    }])
     expect(() => releaseKit.remove('campaign-1', promoted.item.id)).toThrow(/still referenced/i)
     expect(releaseKit.get('campaign-1').items.some((candidate) => candidate.id === promoted.item.id)).toBe(true)
+  })
+
+  test('updates bounded usage metadata and mirrors it into campaign context', () => {
+    const campaignRoot = mkdtempSync(join(tmpdir(), 'release-kit-service-campaign-'))
+    workspaces.set('campaign-1', {
+      id: 'campaign-1', name: 'Campaign', rootPath: campaignRoot, artistWorkspaceScope: 'campaign',
+    })
+    const source = join(campaignRoot, 'cover.png')
+    writeFileSync(source, 'cover')
+    const asset = importMissionAssets(campaignRoot, 'campaign-1', [source], { kindHint: 'cover-art' }).imported[0]!
+    const releaseKit = service()
+    const promoted = releaseKit.promote('campaign-1', {
+      source: { type: 'campaign-asset', assetId: asset.id }, category: 'artwork', subtype: 'cover-art',
+    }, 'user')
+
+    const manifest = releaseKit.updateUsage('campaign-1', promoted.item.id, {
+      bestFor: ['social', 'press'],
+      contentRating: 'clean',
+      notes: 'Use the square crop on release day.',
+      restrictions: { needsRightsClearance: true },
+    })
+
+    expect(manifest.items[0]?.usage).toMatchObject({
+      bestFor: ['social', 'press'],
+      contentRating: 'clean',
+      notes: 'Use the square crop on release day.',
+      restrictions: { blockedFromUse: false, needsRightsClearance: true, artistLikenessRestricted: false },
+      updatedBy: 'user',
+    })
+    expect(readFileSync(join(campaignRoot, 'context', 'release-kit', 'CONTEXT.md'), 'utf8')).toContain('needsRightsClearance')
   })
 })

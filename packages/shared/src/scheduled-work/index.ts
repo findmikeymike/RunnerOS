@@ -234,6 +234,24 @@ export interface ScheduledWorkDocument {
   updatedAt: string
 }
 
+export interface ReleaseKitItemUseSummary {
+  orderId: string
+  calendarItemId: string
+  title: string
+  platform?: string
+  profileId?: string
+  startAt: string
+  timezone: string
+  status: 'draft' | 'scheduled' | 'done' | 'needs-attention' | 'canceled'
+  attentionMessage?: string
+  receipt?: {
+    externalUrl?: string
+    completedAt: string
+    summary?: string
+  }
+  updatedAt: string
+}
+
 export interface ScheduleCampaignWorkInput {
   order: ScheduledWorkOrder
   calendarItem: CampaignCalendarItem
@@ -375,6 +393,56 @@ export function scheduledWorkDefinitionDigest(value: unknown): string {
 
 export function emptyScheduledWorkDocument(workspaceId: string): ScheduledWorkDocument {
   return { version: 1, workspaceId, items: [], updatedAt: new Date().toISOString() }
+}
+
+export function listReleaseKitItemUses(
+  work: ScheduledWorkDocument,
+  itemId: string,
+  now = new Date(),
+): ScheduledWorkOrder[] {
+  const nowMs = now.getTime()
+  return work.items
+    .filter((order) => !order.deletedAt && order.inputRefs.some((ref) => (
+      ref.kind === 'release-kit' && ref.itemId === itemId
+    )))
+    .sort((a, b) => {
+      const aGroup = releaseKitUseSortGroup(a, nowMs)
+      const bGroup = releaseKitUseSortGroup(b, nowMs)
+      if (aGroup !== bGroup) return aGroup - bGroup
+      const byDate = aGroup === 2
+        ? b.startAt.localeCompare(a.startAt)
+        : a.startAt.localeCompare(b.startAt)
+      return byDate || a.id.localeCompare(b.id)
+    })
+}
+
+export function summarizeReleaseKitItemUses(
+  work: ScheduledWorkDocument,
+  itemId: string,
+  options: { now?: Date; limit?: number } = {},
+): ReleaseKitItemUseSummary[] {
+  const limit = Math.max(1, Math.min(options.limit ?? 100, 100))
+  return listReleaseKitItemUses(work, itemId, options.now).slice(0, limit).map((order) => {
+    const execution = order.execution.type === 'social-publish' ? order.execution : undefined
+    const receipt = order.result?.type === 'social-publish' ? order.result.receipt : undefined
+    return {
+      orderId: order.id,
+      calendarItemId: order.calendarLink.itemId,
+      title: order.title,
+      platform: execution?.platform,
+      profileId: execution?.profileId,
+      startAt: order.startAt,
+      timezone: order.timezone,
+      status: releaseKitUseSummaryStatus(order.status),
+      attentionMessage: order.attention?.message,
+      receipt: receipt ? {
+        externalUrl: receipt.externalUrl,
+        completedAt: receipt.completedAt,
+        summary: receipt.summary,
+      } : undefined,
+      updatedAt: order.updatedAt,
+    }
+  })
 }
 
 export function parseScheduledWorkDocResult(
@@ -599,6 +667,18 @@ function resultFromRuns(type: ScheduledWorkType, runs: CampaignJobRun[]): Schedu
 function statusFromCampaignStatus(status: CampaignCalendarItemStatus): ScheduledWorkStatus {
   if (status === 'failed' || status === 'missed') return 'needs-attention'
   if (status === 'done' || status === 'running' || status === 'scheduled' || status === 'needs-approval' || status === 'draft' || status === 'canceled') return status
+  return 'scheduled'
+}
+
+function releaseKitUseSortGroup(order: ScheduledWorkOrder, nowMs: number): 0 | 1 | 2 {
+  if (order.status === 'needs-attention') return 0
+  if (order.status !== 'done' && order.status !== 'canceled' && Date.parse(order.startAt) >= nowMs) return 1
+  return 2
+}
+
+function releaseKitUseSummaryStatus(status: ScheduledWorkStatus): ReleaseKitItemUseSummary['status'] {
+  if (status === 'draft' || status === 'waiting' || status === 'needs-setup' || status === 'needs-approval') return 'draft'
+  if (status === 'done' || status === 'needs-attention' || status === 'canceled') return status
   return 'scheduled'
 }
 

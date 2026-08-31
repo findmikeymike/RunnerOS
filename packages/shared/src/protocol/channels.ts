@@ -542,10 +542,12 @@ export const RPC_CHANNELS = {
   releaseKit: {
     GET: 'releaseKit:get',
     GET_ITEM: 'releaseKit:getItem',
+    LIST_USES: 'releaseKit:listUses',
     CHOOSE_UPLOAD: 'releaseKit:chooseUpload',
     PROMOTE: 'releaseKit:promote',
     REMOVE: 'releaseKit:remove',
     SET_PRIMARY: 'releaseKit:setPrimary',
+    UPDATE_USAGE: 'releaseKit:updateUsage',
     VERIFY: 'releaseKit:verify',
     MIGRATE_LEGACY: 'releaseKit:migrateLegacy',
     OPEN_FOLDER: 'releaseKit:openFolder',

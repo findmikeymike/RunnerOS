@@ -9,9 +9,12 @@ import {
 import {
   applyScheduledWorkMutation,
   emptyScheduledWorkDocument,
+  listReleaseKitItemUses,
   migrateCampaignCalendarJobs,
   parseScheduledWorkDocResult,
   serializeScheduledWorkBody,
+  summarizeReleaseKitItemUses,
+  type ScheduledWorkOrder,
 } from './index.ts'
 import { hqSemanticIntentId } from '../hq-state/intent.ts'
 
@@ -311,5 +314,47 @@ describe('scheduled work documents', () => {
     expect(result.migrated).toBe(0)
     expect(result.work.items).toEqual([])
     expect(result.calendar.items[0]?.job).toBeDefined()
+  })
+
+  test('lists exact Release Kit uses with stable attention, future, and history ordering', () => {
+    const base = migrateCampaignCalendarJobs(calendarWithJob('post-asset'), emptyScheduledWorkDocument('campaign-1')).work.items[0]!
+    const makeOrder = (id: string, status: ScheduledWorkOrder['status'], startAt: string, itemId = 'kit-1'): ScheduledWorkOrder => ({
+      ...base,
+      id,
+      status,
+      startAt,
+      inputRefs: [{ kind: 'release-kit', itemId, sha256: 'a'.repeat(64) }],
+      result: status === 'done' ? {
+        type: 'social-publish',
+        receipt: {
+          id: `receipt-${id}`, actionType: 'post-asset', platform: 'instagram',
+          completedAt: startAt, payloadDigest: 'digest', approvalId: 'approval', externalUrl: 'https://example.com/post',
+        },
+      } : undefined,
+      attention: status === 'needs-attention' ? { reason: 'execution-failed', message: 'Reconnect Instagram.' } : undefined,
+    })
+    const work = {
+      ...emptyScheduledWorkDocument('campaign-1'),
+      items: [
+        makeOrder('done-old', 'done', '2026-08-01T12:00:00.000Z'),
+        makeOrder('future-late', 'scheduled', '2026-10-01T12:00:00.000Z'),
+        makeOrder('other-asset', 'scheduled', '2026-09-01T12:00:00.000Z', 'kit-2'),
+        { ...makeOrder('deleted', 'scheduled', '2026-09-01T12:00:00.000Z'), deletedAt: '2026-08-10T00:00:00.000Z' },
+        makeOrder('attention', 'needs-attention', '2026-07-01T12:00:00.000Z'),
+        makeOrder('future-soon', 'scheduled', '2026-09-01T12:00:00.000Z'),
+        makeOrder('canceled-new', 'canceled', '2026-08-15T12:00:00.000Z'),
+      ],
+    }
+
+    expect(listReleaseKitItemUses(work, 'kit-1', new Date('2026-08-20T00:00:00.000Z')).map((order) => order.id)).toEqual([
+      'attention', 'future-soon', 'future-late', 'canceled-new', 'done-old',
+    ])
+    expect(summarizeReleaseKitItemUses(work, 'kit-1', { now: new Date('2026-08-20T00:00:00.000Z') })).toMatchObject([
+      { orderId: 'attention', status: 'needs-attention', attentionMessage: 'Reconnect Instagram.' },
+      { orderId: 'future-soon', status: 'scheduled' },
+      { orderId: 'future-late', status: 'scheduled' },
+      { orderId: 'canceled-new', status: 'canceled' },
+      { orderId: 'done-old', status: 'done', receipt: { externalUrl: 'https://example.com/post' } },
+    ])
   })
 })

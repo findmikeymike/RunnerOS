@@ -499,10 +499,12 @@ export const CHANNEL_MAP = {
   // Campaign Release Kit
   getReleaseKit: invoke(RPC_CHANNELS.releaseKit.GET),
   getReleaseKitItem: invoke(RPC_CHANNELS.releaseKit.GET_ITEM),
+  listReleaseKitItemUses: invoke(RPC_CHANNELS.releaseKit.LIST_USES),
   chooseReleaseKitUpload: invoke(RPC_CHANNELS.releaseKit.CHOOSE_UPLOAD),
   promoteToReleaseKit: invoke(RPC_CHANNELS.releaseKit.PROMOTE),
   removeFromReleaseKit: invoke(RPC_CHANNELS.releaseKit.REMOVE),
   setReleaseKitPrimary: invoke(RPC_CHANNELS.releaseKit.SET_PRIMARY),
+  updateReleaseKitUsage: invoke(RPC_CHANNELS.releaseKit.UPDATE_USAGE),
   verifyReleaseKit: invoke(RPC_CHANNELS.releaseKit.VERIFY),
   migrateLegacyFinalsToReleaseKit: invoke(RPC_CHANNELS.releaseKit.MIGRATE_LEGACY),
   openReleaseKitFolder: invoke(RPC_CHANNELS.releaseKit.OPEN_FOLDER),

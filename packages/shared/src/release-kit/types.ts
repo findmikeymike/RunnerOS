@@ -14,6 +14,28 @@ export type ReleaseKitCategory =
   | 'references';
 
 export type ReleaseKitItemStatus = 'ready' | 'needs-review' | 'missing';
+export type ReleaseKitUseCase = 'social' | 'ads' | 'store' | 'press' | 'delivery';
+export type ReleaseKitContentRating = 'clean' | 'explicit' | 'unknown';
+
+export interface ReleaseKitUsageMetadata {
+  bestFor: ReleaseKitUseCase[];
+  contentRating: ReleaseKitContentRating;
+  notes?: string;
+  restrictions: {
+    blockedFromUse: boolean;
+    needsRightsClearance: boolean;
+    artistLikenessRestricted: boolean;
+  };
+  technical?: {
+    width?: number;
+    height?: number;
+    durationSeconds?: number;
+    aspectRatio?: string;
+    orientation?: 'portrait' | 'landscape' | 'square' | 'unknown';
+  };
+  updatedAt: string;
+  updatedBy: 'user' | 'system' | 'migration';
+}
 
 export type ReleaseKitSource =
   | { type: 'upload'; originalFileName: string }
@@ -39,14 +61,22 @@ export interface ReleaseKitItem {
   promotedAt: string;
   promotedBy: 'user' | 'agent' | 'migration';
   note?: string;
+  usage: ReleaseKitUsageMetadata;
 }
 
 export interface ReleaseKitManifest {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   workspaceId: string;
   campaignId: string;
   updatedAt: string;
   items: ReleaseKitItem[];
+}
+
+export interface UpdateReleaseKitUsageInput {
+  bestFor?: ReleaseKitUseCase[];
+  contentRating?: ReleaseKitContentRating;
+  notes?: string | null;
+  restrictions?: Partial<ReleaseKitUsageMetadata['restrictions']>;
 }
 
 export interface MaterializeReleaseKitItemInput {
