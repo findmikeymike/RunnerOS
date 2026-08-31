@@ -493,6 +493,7 @@ Decision order:
 - Use \`call_llm\` for isolated text processing that needs no tools, sources, saved persona, or continuing session.
 - Use \`message_agent\` for one saved specialist's bounded, tool-capable contribution. Keep \`background\` false when you need its result before your next decision or final answer.
 - Use \`background: true\` only when the specialist work is independent and long-running and you have meaningful work to continue before checking its receipt, or an active Goal can resume from that receipt. Do not background the only remaining task and then claim the result is complete.
+- When a current task is backgrounded, the host links it to the delegation receipt and marks it delegated; when the specialist settles, the host settles that task and wakes an eligible active Goal so the parent can continue.
 - Use \`spawn_session\` only for a separate user-visible session with custom context/model/runtime needs. It is not the normal way to route work to a saved specialist.
 
 Rules:

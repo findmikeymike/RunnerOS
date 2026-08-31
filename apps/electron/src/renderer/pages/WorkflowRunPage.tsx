@@ -474,7 +474,7 @@ function StepCard({
             ['Failure', stepDef?.onFailure],
             ['Completion', formatCompletionSummary(step.completion)],
             ['Agent receipt', formatExecutionReceiptSummary(step.executionReceipt)],
-            ['Subagents', formatAgentMessageReceiptsSummary(step.agentMessageReceipts)],
+            ['Specialist handoffs', formatAgentMessageReceiptsSummary(step.agentMessageReceipts)],
             ['Session', step.sessionId],
           ]}
         />
@@ -506,7 +506,7 @@ function StepCard({
       )}
       <div className="mt-2 ml-7 flex flex-col gap-1.5">
         <DetailBlock title="Agent execution receipt" value={step.executionReceipt} />
-        <DetailBlock title="Subagent message receipts" value={step.agentMessageReceipts} defaultOpen={(step.agentMessageReceipts?.length ?? 0) > 0} />
+        <DetailBlock title="Specialist handoff receipts" value={step.agentMessageReceipts} defaultOpen={(step.agentMessageReceipts?.length ?? 0) > 0} />
         <DetailBlock title="Resolved input / prompt" value={resolvedInput} defaultOpen={!!resolvedInput && step.state !== 'queued'} />
         {stepDef?.input && stepDef.input !== resolvedInput && (
           <DetailBlock title="Input template" value={stepDef.input} />

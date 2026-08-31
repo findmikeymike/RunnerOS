@@ -134,7 +134,7 @@ export default function DeepResearchRunPage({ runId, workspaceId }: Props) {
                       <div className="truncate text-sm text-white/78">{step.title}</div>
                       {subagentSummary && (
                         <div className="mt-1 text-xs text-white/42">
-                          Subagents: {subagentSummary}
+                          Specialist handoffs: {subagentSummary}
                         </div>
                       )}
                     </div>
@@ -179,7 +179,7 @@ function ReceiptDetails({ receipts }: { receipts: DeepResearchRunDTO['steps'][nu
   if (!receipts || receipts.length === 0) return null
   return (
     <details className="mt-2 text-xs text-white/42">
-      <summary className="cursor-pointer select-none hover:text-white/78">Subagent message receipts</summary>
+      <summary className="cursor-pointer select-none hover:text-white/78">Specialist handoff receipts</summary>
       <pre className="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[8px] border border-white/[0.07] bg-black/25 p-2 font-mono text-[11px] leading-relaxed text-white/64">
         {JSON.stringify(receipts, null, 2)}
       </pre>

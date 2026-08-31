@@ -50,6 +50,8 @@ describe('system prompt guidance', () => {
     expect(prompt).toContain('Delegate for capability fit, not merely because work is long')
     expect(prompt).toContain('Keep `background` false when you need its result')
     expect(prompt).toContain('Use `background: true` only when the specialist work is independent and long-running')
+    expect(prompt).toContain('marks it delegated; when the specialist settles')
+    expect(prompt).toContain('wakes an eligible active Goal')
     expect(prompt).toContain('Use `spawn_session` only for a separate user-visible session')
     expect(prompt).toContain('Check the injected agent catalog first')
     expect(prompt).toContain('Do not paste the whole transcript')
