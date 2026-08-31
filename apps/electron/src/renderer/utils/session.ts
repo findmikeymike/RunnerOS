@@ -8,7 +8,28 @@ import type { SessionStatusId } from "../config/session-status-config"
 type SessionLike = Pick<Session, 'name' | 'preview'> & {
   messages?: Session['messages']
   messageCount?: number
-  spawnedFromAgent?: { agentName: string }
+  spawnedFromAgent?: { agentSlug?: string; agentName: string }
+  launchReceipt?: Session['launchReceipt']
+}
+
+export interface SessionAgentIdentity {
+  slug?: string
+  name: string
+  description?: string
+}
+
+/** Stable agent identity for chat chrome and navigation labels. */
+export function getSessionAgentIdentity(session: SessionLike | SessionMeta): SessionAgentIdentity | null {
+  const spawned = session.spawnedFromAgent
+  const receiptAgent = session.launchReceipt?.agent
+  const name = spawned?.agentName?.trim() || receiptAgent?.name?.trim()
+  if (!name) return null
+
+  return {
+    slug: spawned?.agentSlug || receiptAgent?.slug,
+    name,
+    description: receiptAgent?.description?.trim() || undefined,
+  }
 }
 
 /**
@@ -66,7 +87,7 @@ export function getSessionTitle(session: SessionLike | SessionMeta): string {
  * Get a compact preview line for session-list rows.
  * Prefers the stored preview/first user message, but avoids duplicating the title.
  */
-export function getSessionPreviewText(session: SessionLike | SessionMeta, maxLength = 88): string | null {
+export function getSessionPreviewText(session: SessionLike | SessionMeta, maxLength = 88, displayTitle?: string): string | null {
   const source = session.preview
     || (('messages' in session && session.messages)
       ? session.messages.find(m => m.role === 'user')?.content
@@ -77,7 +98,7 @@ export function getSessionPreviewText(session: SessionLike | SessionMeta, maxLen
   const sanitized = sanitizePreview(source)
   if (!sanitized) return null
 
-  const title = getSessionTitle(session).replace(/…$/, '').trim()
+  const title = (displayTitle ?? getSessionTitle(session)).replace(/…$/, '').trim()
   const normalizedTitle = sanitizePreview(title)
   if (normalizedTitle && sanitized.toLowerCase() === normalizedTitle.toLowerCase()) {
     return null

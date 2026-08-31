@@ -11,7 +11,7 @@ import { SessionMenu } from "./SessionMenu"
 import { BatchSessionMenu } from "./BatchSessionMenu"
 import { SessionStatusIcon } from "./SessionStatusIcon"
 import { SessionBadges } from "./SessionBadges"
-import { getSessionTitle, getSessionPreviewText, highlightMatch, hasUnreadMeta, shortTimeLocale } from "@/utils/session"
+import { getSessionAgentIdentity, getSessionTitle, getSessionPreviewText, highlightMatch, hasUnreadMeta, shortTimeLocale } from "@/utils/session"
 import { getSessionProjectInfo } from "@/utils/session-project"
 import { useSessionListContext } from "@/context/SessionListContext"
 import { useAppShellContext } from "@/context/AppShellContext"
@@ -59,7 +59,9 @@ export function SessionItem({
   const hasRemoteWorkspaces = workspaces?.some(w => w.remoteServer) ?? false
   const { hotkey: nextHotkey } = useActionLabel('chat.nextSearchMatch')
   const { hotkey: prevHotkey } = useActionLabel('chat.prevSearchMatch')
-  const title = getSessionTitle(item)
+  const generatedTitle = getSessionTitle(item)
+  const agentIdentity = getSessionAgentIdentity(item)
+  const title = agentIdentity?.name ?? generatedTitle
   // For the active session, prefer logical match count over ripgrep count
   const activeMatch = ctx.activeChatMatchInfo
   const isActiveSession = isSelected && activeMatch?.sessionId === item.id
@@ -71,7 +73,9 @@ export function SessionItem({
     return ctx.flatLabels.some(l => l.id === labelId)
   }))
   const hasPendingPrompt = ctx.hasPendingPrompt?.(item.id) ?? false
-  const previewText = isCompactMode ? getSessionPreviewText(item) : null
+  const previewText = agentIdentity
+    ? getSessionPreviewText(item, 64, agentIdentity.name)
+    : (isCompactMode ? getSessionPreviewText(item) : null)
   const messagingBindingsBySession = useAtomValue(messagingBindingsBySessionAtom)
   const sessionBindings = messagingBindingsBySession.get(item.id) ?? []
   const hasMessagingBinding = sessionBindings.length > 0

@@ -78,6 +78,8 @@ export interface SessionMenuProps {
   onOpenInNewWindow: () => void
   onSendToWorkspace?: () => void
   onDelete: () => void
+  /** Removes organizational/title controls from the in-chat utility menu. */
+  surface?: 'default' | 'chat-header'
 }
 
 /**
@@ -101,6 +103,7 @@ export function SessionMenu({
   onSendToWorkspace,
   onDelete,
   hasRemoteWorkspaces,
+  surface = 'default',
 }: SessionMenuProps) {
   const { t } = useTranslation()
 
@@ -183,6 +186,7 @@ export function SessionMenu({
 
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator, Sub, SubTrigger, SubContent } = useMenuComponents()
+  const isChatHeader = surface === 'chat-header'
 
   return (
     <>
@@ -215,10 +219,10 @@ export function SessionMenu({
       {/* Connect to Messaging — pairing code flow */}
       <MessagingSessionMenuItem sessionId={sessionId} />
 
-      <Separator />
+      {!isChatHeader && <Separator />}
 
       {/* Status submenu - includes all statuses plus Flag/Unflag at the bottom */}
-      <Sub>
+      {!isChatHeader && <Sub>
         <SubTrigger className="pr-2">
           <span style={{ color: getStateColor(currentSessionStatus, sessionStatuses) ?? 'var(--foreground)' }}>
             {(() => {
@@ -238,10 +242,10 @@ export function SessionMenu({
             menu={{ MenuItem }}
           />
         </SubContent>
-      </Sub>
+      </Sub>}
 
       {/* Labels submenu - hierarchical label tree with nested sub-menus and toggle checkmarks */}
-      {labels.length > 0 && (
+      {!isChatHeader && labels.length > 0 && (
         <Sub>
           <SubTrigger className="pr-2">
             <Tag className="h-3.5 w-3.5" />
@@ -263,7 +267,7 @@ export function SessionMenu({
         </Sub>
       )}
 
-      {onLabelsChange && (
+      {!isChatHeader && onLabelsChange && (
         <Sub>
           <SubTrigger className="pr-2">
             <FolderKanban className="h-3.5 w-3.5" />
@@ -325,18 +329,18 @@ export function SessionMenu({
       <Separator />
 
       {/* Rename */}
-      <MenuItem onClick={onRename}>
+      {!isChatHeader && <MenuItem onClick={onRename}>
         <Pencil className="h-3.5 w-3.5" />
         <span className="flex-1">{t("common.rename")}</span>
-      </MenuItem>
+      </MenuItem>}
 
       {/* Regenerate Title - AI-generate based on recent messages */}
-      <MenuItem onClick={handleRefreshTitle}>
+      {!isChatHeader && <MenuItem onClick={handleRefreshTitle}>
         <RefreshCw className="h-3.5 w-3.5" />
         <span className="flex-1">{t("sessionMenu.regenerateTitle")}</span>
-      </MenuItem>
+      </MenuItem>}
 
-      <Separator />
+      {!isChatHeader && <Separator />}
 
       {/* Open in New Panel */}
       <MenuItem onClick={handleOpenInNewPanel}>

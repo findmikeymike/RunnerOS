@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { AlertCircle, Globe, Copy, RefreshCw, Link2Off, Info } from 'lucide-react'
 import { ChatDisplay, type ChatDisplayHandle } from '@/components/app-shell/ChatDisplay'
+import { ChatAgentHeader } from '@/components/app-shell/ChatAgentHeader'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { SessionMenu } from '@/components/app-shell/SessionMenu'
 import { SessionInfoPopover } from '@/components/app-shell/SessionInfoPopover'
@@ -26,6 +27,8 @@ import { productDeepLink } from '@/lib/product-identity'
 import { deriveSessionMessagesLoadState, formatSessionLoadFailure } from '@/lib/session-load'
 import { ensureSessionMessagesLoadedAtom, forceSessionMessagesReloadAtom, loadedSessionsAtom, sessionMetaMapAtom } from '@/atoms/sessions'
 import { getSessionTitle } from '@/utils/session'
+import { getSessionAgentIdentity } from '@/utils/session'
+import { useAgents } from '@/hooks/useAgents'
 // Model resolution: connection.defaultModel (no hardcoded defaults)
 import { resolveEffectiveConnectionSlug, isSessionConnectionUnavailable } from '@config/llm-connections'
 
@@ -98,6 +101,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   // Check if session exists in metadata (for loading state detection)
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const sessionMeta = sessionMetaMap.get(sessionId)
+  const { allAgents } = useAgents(activeWorkspaceId)
 
   // Fallback: ensure messages are loaded when session is viewed
   const ensureMessagesLoaded = useSetAtom(ensureSessionMessagesLoadedAtom)
@@ -387,6 +391,17 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   // Get display title for header - use getSessionTitle for consistent fallback logic with SessionList
   // Priority: name > first user message > preview > "New chat"
   const displayTitle = session ? getSessionTitle(session) : (sessionMeta ? getSessionTitle(sessionMeta) : t('chat.session'))
+  const sessionAgentIdentity = session
+    ? getSessionAgentIdentity(session)
+    : (sessionMeta ? getSessionAgentIdentity(sessionMeta) : null)
+  const currentAgent = sessionAgentIdentity?.slug
+    ? allAgents.find((agent) => agent.slug === sessionAgentIdentity.slug)
+    : undefined
+  const agentHeaderIdentity = sessionAgentIdentity ? {
+    name: currentAgent?.metadata.name ?? sessionAgentIdentity.name,
+    description: currentAgent?.metadata.description ?? sessionAgentIdentity.description,
+    avatar: currentAgent?.metadata.avatar,
+  } : null
   const isFlagged = session?.isFlagged || sessionMeta?.isFlagged || false
   const isArchived = session?.isArchived || sessionMeta?.isArchived || false
   const sharedUrl = session?.sharedUrl || sessionMeta?.sharedUrl || null
@@ -599,6 +614,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       onSessionStatusChange={handleSessionStatusChange}
       onOpenInNewWindow={handleOpenInNewWindow}
       onDelete={handleDelete}
+      surface="chat-header"
     />
   ) : null, [
     sessionMeta,
@@ -615,6 +631,19 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     handleOpenInNewWindow,
     handleDelete,
   ])
+
+  const chatHeader = !isCompactMode && agentHeaderIdentity ? (
+    <ChatAgentHeader
+      name={agentHeaderIdentity.name}
+      description={agentHeaderIdentity.description}
+      avatar={agentHeaderIdentity.avatar}
+      menu={titleMenu}
+      leadingAction={leadingAction}
+      rightSidebarButton={rightSidebarButton}
+    />
+  ) : (
+    <PanelHeader title={displayTitle} titleMenu={titleMenu} leadingAction={leadingAction} actions={headerActions} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+  )
 
   // Handle missing session - loading or deleted
   if (!session) {
@@ -637,7 +666,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       return (
         <>
           <div className="h-full flex flex-col">
-            <PanelHeader  title={displayTitle} titleMenu={titleMenu} leadingAction={leadingAction} actions={headerActions} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+            {chatHeader}
             <div className="flex-1 flex flex-col min-h-0">
               <ChatDisplay
                 ref={chatDisplayRef}
@@ -709,7 +738,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   return (
     <>
       <div className="h-full flex flex-col">
-        <PanelHeader  title={displayTitle} titleMenu={titleMenu} leadingAction={leadingAction} actions={headerActions} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+        {chatHeader}
         <div className="flex-1 flex flex-col min-h-0">
           <ChatDisplay
             ref={chatDisplayRef}
