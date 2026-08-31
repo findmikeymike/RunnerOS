@@ -107,6 +107,9 @@ import {
   isChatGoalTerminal,
   makeChatGoalEvent,
   parseChatGoalState,
+  parseSessionTaskList,
+  prepareSessionTaskListForFork,
+  prepareSessionTaskListForTransfer,
   recoverSessionTaskListAfterRestart,
   projectTodoWriteSessionTasks,
   SessionTaskStateError,
@@ -119,6 +122,7 @@ import {
   reopenSessionTask,
   returnSessionTaskToPending,
   settleSessionTaskDelegation,
+  orphanSessionTaskDelegation,
   startSessionTask,
   type SessionTaskDelegationOutcome,
   type SessionTaskList,
@@ -166,7 +170,7 @@ import {
 import { withWorkspaceContextLock } from '../scheduled-work/workspace-context-lock'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
 import { AgentMessageService } from '../agent-messaging/AgentMessageService'
-import { DEFAULT_MAX_DEPTH, isPermissionEscalation } from '@craft-agent/shared/agent-messaging'
+import { DEFAULT_MAX_DEPTH, isPermissionEscalation, readAgentMessageReceipt, type AgentMessageReceipt } from '@craft-agent/shared/agent-messaging'
 import { agentMatchesSearch } from './agent-search'
 import {
   createAgentMemorySidecarApplyMemory,
@@ -1852,7 +1856,7 @@ function applySessionTaskRestartRecovery(
     listId: recovered.id,
     revision: recovered.revision,
     timestamp,
-    operation: 'restart-demote-in-progress',
+    operation: 'restart-reconcile-runtime-claims',
     snapshot: recovered,
   }
   stored.sessionTasks = recovered
@@ -1862,8 +1866,69 @@ function applySessionTaskRestartRecovery(
     content: 'Interrupted task returned to pending after restart.',
     timestamp,
     displayIntent: 'task-event',
+    hidden: true,
     taskEvent: event,
   })
+}
+
+export function reconcileSessionTaskListAfterRestart(
+  list: SessionTaskList,
+  options: {
+    parentSessionId: string
+    childSessionExists: (sessionId: string) => boolean
+    readReceipt: (receiptId: string) => AgentMessageReceipt | null
+    now?: string
+  },
+): SessionTaskList {
+  let recovered = recoverSessionTaskListAfterRestart(list, options.now)
+  for (const item of recovered.items.filter(candidate => candidate.status === 'delegated' && candidate.delegation)) {
+    const delegation = item.delegation!
+    const receipt = options.readReceipt(delegation.receiptId)
+    if (
+      !receipt
+      || receipt.parentSessionId !== options.parentSessionId
+      || receipt.targetAgentSlug !== delegation.targetAgentSlug
+    ) {
+      recovered = orphanSessionTaskDelegation(recovered, item.id, {
+        summary: 'Orphaned delegation: its receipt or child session is no longer available.',
+        now: options.now,
+      })
+      continue
+    }
+    const childSessionId = receipt.childSessionId ?? delegation.childSessionId
+    if (!childSessionId || (receipt.status === 'running' && !options.childSessionExists(childSessionId))) {
+      recovered = orphanSessionTaskDelegation(recovered, item.id, {
+        summary: 'Orphaned delegation: its receipt or child session is no longer available.',
+        now: options.now,
+      })
+      continue
+    }
+    if (receipt.status === 'running') continue
+    const outcome: SessionTaskDelegationOutcome = receipt.status === 'succeeded'
+      ? 'succeeded'
+      : receipt.status === 'timed-out'
+        ? 'timeout'
+        : 'failed'
+    recovered = settleSessionTaskDelegation(recovered, item.id, outcome, {
+      summary: (receipt.result?.summary ?? receipt.error?.message)?.slice(0, SESSION_TASK_MAX_SUMMARY_CHARS),
+      now: options.now,
+    })
+  }
+  return recovered
+}
+
+export function relocateImportedSessionTaskList(
+  value: unknown,
+  mode: 'fork' | 'transfer',
+): SessionTaskList | undefined {
+  const parsed = parseSessionTaskList(value)
+  if (value !== undefined && value !== null && !parsed) {
+    throw new Error('Invalid task list in imported session payload')
+  }
+  if (!parsed) return undefined
+  return mode === 'fork'
+    ? prepareSessionTaskListForFork(parsed)
+    : prepareSessionTaskListForTransfer(parsed)
 }
 
 // Performance: Batch IPC delta events to reduce renderer load
@@ -5155,6 +5220,7 @@ user a clickable link to where the thing now lives.`
       for (const workspace of workspaces) {
         const workspaceRootPath = workspace.rootPath
         const sessionMetadata = listStoredSessions(workspaceRootPath)
+        const workspaceSessionIds = new Set(sessionMetadata.map(session => session.id))
         // Load workspace config once per workspace for default working directory
         const wsConfig = loadWorkspaceConfig(workspaceRootPath)
         const wsDefaultWorkingDir = wsConfig?.defaults?.workingDirectory
@@ -5189,14 +5255,22 @@ user a clickable link to where the thing now lives.`
           }
           let sessionTasksDegraded = false
           let sessionTasksError: string | undefined
-          if (meta.sessionTasks?.items.some((item) => item.status === 'in_progress')) {
-            const recovered = recoverSessionTaskListAfterRestart(meta.sessionTasks)
+          if (meta.sessionTasks?.items.some((item) => item.status === 'in_progress' || item.status === 'delegated')) {
             try {
-              const stored = loadStoredSession(workspaceRootPath, meta.id)
-              if (!stored) throw new Error('Session could not be loaded for task restart recovery')
-              applySessionTaskRestartRecovery(stored, recovered)
-              await saveStoredSession(stored)
-              meta.sessionTasks = recovered
+              const recovered = reconcileSessionTaskListAfterRestart(meta.sessionTasks, {
+                parentSessionId: meta.id,
+                childSessionExists: childSessionId => workspaceSessionIds.has(childSessionId),
+                readReceipt: receiptId => readAgentMessageReceipt(workspaceRootPath, receiptId),
+              })
+              if (recovered.revision === meta.sessionTasks.revision) {
+                meta.sessionTasks = recovered
+              } else {
+                const stored = loadStoredSession(workspaceRootPath, meta.id)
+                if (!stored) throw new Error('Session could not be loaded for task restart recovery')
+                applySessionTaskRestartRecovery(stored, recovered)
+                await saveStoredSession(stored)
+                meta.sessionTasks = recovered
+              }
             } catch (error) {
               sessionTasksError = error instanceof Error ? error.message : String(error)
               sessionLog.error(`Failed to persist task restart recovery for session ${meta.id}:`, error)
@@ -5905,13 +5979,21 @@ user a clickable link to where the thing now lives.`
     if (storedSession) {
       if (
         !managed.sessionTasksDegraded
-        && storedSession.sessionTasks?.items.some((item) => item.status === 'in_progress')
+        && storedSession.sessionTasks?.items.some((item) => item.status === 'in_progress' || item.status === 'delegated')
       ) {
-        const recovered = recoverSessionTaskListAfterRestart(storedSession.sessionTasks)
         const messageCountBeforeRecovery = storedSession.messages.length
         try {
-          applySessionTaskRestartRecovery(storedSession, recovered)
-          await saveStoredSession(storedSession)
+          const recovered = reconcileSessionTaskListAfterRestart(storedSession.sessionTasks, {
+            parentSessionId: managed.id,
+            childSessionExists: childSessionId => this.sessions.has(childSessionId),
+            readReceipt: receiptId => readAgentMessageReceipt(managed.workspace.rootPath, receiptId),
+          })
+          if (recovered.revision === storedSession.sessionTasks.revision) {
+            storedSession.sessionTasks = recovered
+          } else {
+            applySessionTaskRestartRecovery(storedSession, recovered)
+            await saveStoredSession(storedSession)
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
           sessionLog.error(`Failed to persist lazy task restart recovery for session ${managed.id}:`, error)
@@ -13471,6 +13553,7 @@ user a clickable link to where the thing now lives.`
         permissionMode: managed.permissionMode,
         summary,
         chatGoal: managed.chatGoal,
+        sessionTasks: managed.sessionTasksDegraded ? undefined : managed.sessionTasks,
       }
     })
   }
@@ -13486,6 +13569,7 @@ user a clickable link to where the thing now lives.`
     if (payload.chatGoal && !transferredGoal) {
       throw new Error('Invalid Goal state in remote session transfer payload')
     }
+    const transferredTasks = relocateImportedSessionTaskList(payload.sessionTasks, 'transfer')
 
     const session = await this.createSession(workspaceId, {
       name: payload.name,
@@ -13501,6 +13585,10 @@ user a clickable link to where the thing now lives.`
 
     managed.transferredSessionSummary = payload.summary.trim()
     managed.transferredSessionSummaryApplied = false
+    if (transferredTasks) {
+      managed.sessionTasks = transferredTasks
+      this.appendSessionTaskEvent(managed, transferredTasks, 'remote-transfer-import', 'updated')
+    }
     if (transferredGoal) {
       const snapshot = isChatGoalTerminal(transferredGoal.status)
         ? transferredGoal
@@ -13663,6 +13751,29 @@ user a clickable link to where the thing now lives.`
           goalEvent: event,
         })
       }
+    }
+
+    const relocatedTasks = relocateImportedSessionTaskList(header.sessionTasks, mode === 'fork' ? 'fork' : 'transfer')
+    if (relocatedTasks) {
+      const timestamp = Date.now()
+      const taskEvent: SessionTaskEventMetadata = {
+        type: 'updated',
+        listId: relocatedTasks.id,
+        revision: relocatedTasks.revision,
+        timestamp,
+        operation: mode === 'fork' ? 'fork-relocation' : 'transfer-relocation',
+        snapshot: relocatedTasks,
+      }
+      storedSession.sessionTasks = relocatedTasks
+      storedSession.messages.push({
+        id: generateMessageId(),
+        type: 'info',
+        content: mode === 'fork' ? 'Task list copied into fork.' : 'Task list transferred.',
+        timestamp,
+        displayIntent: 'task-event',
+        hidden: true,
+        taskEvent,
+      })
     }
 
     // Fork-specific: set up SDK branching if branchInfo provided

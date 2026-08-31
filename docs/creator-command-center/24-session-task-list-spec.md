@@ -502,7 +502,7 @@ Ordered so that no slice ships a deadlock.
 
 **Slice 7 — Goal integration.** Completion enforcement, no-progress signal, task list in the hidden continuation prompt. **Implemented 2026-08-30.**
 
-**Slice 8 — Hardening.** Timeout, orphan, and repeated-failure paths; restart/fork/transfer/archive behavior; observability.
+**Slice 8 — Hardening.** Timeout, orphan, and repeated-failure paths; restart/fork/transfer/archive behavior; observability. **Implemented 2026-08-30.**
 
 ## Acceptance Tests
 

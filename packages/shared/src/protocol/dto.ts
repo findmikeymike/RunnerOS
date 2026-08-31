@@ -171,6 +171,8 @@ export interface RemoteSessionTransferPayload {
   summary: string
   /** Paused Goal snapshot for explicit activation on the destination. */
   chatGoal?: ChatGoalState
+  /** Advisory task list; runtime-local execution claims are removed on import. */
+  sessionTasks?: SessionTaskList
 }
 
 export interface ImportRemoteSessionTransferResult {

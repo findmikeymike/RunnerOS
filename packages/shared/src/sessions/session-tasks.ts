@@ -24,6 +24,8 @@ export interface SessionTaskDelegation {
   settledAt?: string;
   outcome?: SessionTaskDelegationOutcome;
   summary?: string;
+  consecutiveFailures?: number;
+  settlementKind?: 'execution' | 'orphaned';
 }
 
 export interface SessionTask {
@@ -181,7 +183,21 @@ function parseDelegation(value: unknown): SessionTaskDelegation | undefined {
     SESSION_TASK_MAX_SUMMARY_CHARS,
     false,
   );
-  return { receiptId, childSessionId, targetAgentSlug, dispatchedAt, settledAt, outcome, summary };
+  const consecutiveFailures = candidate.consecutiveFailures === undefined
+    ? undefined
+    : candidate.consecutiveFailures;
+  if (
+    consecutiveFailures !== undefined
+    && (!Number.isInteger(consecutiveFailures) || consecutiveFailures < 1 || consecutiveFailures > 3)
+  ) {
+    fail('invalid-delegation', 'delegation.consecutiveFailures must be an integer from 1 to 3');
+  }
+  const settlementKind = candidate.settlementKind;
+  if (settlementKind !== undefined && settlementKind !== 'execution' && settlementKind !== 'orphaned') {
+    fail('invalid-delegation', 'delegation.settlementKind is invalid');
+  }
+  if (settlementKind && !outcome) fail('invalid-delegation', 'delegation.settlementKind requires an outcome');
+  return { receiptId, childSessionId, targetAgentSlug, dispatchedAt, settledAt, outcome, summary, consecutiveFailures, settlementKind };
 }
 
 function parseTask(value: unknown): SessionTask {
@@ -446,10 +462,15 @@ export function delegateSessionTask(
     if (!parsedDelegation || parsedDelegation.outcome) {
       fail('invalid-delegation', 'A new delegation cannot have a terminal outcome');
     }
+    const priorFailureCount = task.delegation?.outcome === 'failed' || task.delegation?.outcome === 'timeout'
+      ? task.delegation.settlementKind === 'orphaned'
+        ? task.delegation.consecutiveFailures
+        : (task.delegation.consecutiveFailures ?? 1)
+      : undefined;
     items[index] = {
       ...task,
       status: 'delegated',
-      delegation: parsedDelegation,
+      delegation: { ...parsedDelegation, consecutiveFailures: priorFailureCount },
       updatedAt: nowIso(now),
     };
     return items;
@@ -471,20 +492,55 @@ export function settleSessionTaskDelegation(
     }
     if (!DELEGATION_OUTCOMES.has(outcome)) fail('invalid-delegation', 'Delegation outcome is invalid');
     const settledAt = nowIso(options.now);
+    const failed = outcome === 'failed' || outcome === 'timeout';
+    const consecutiveFailures = failed ? (task.delegation.consecutiveFailures ?? 0) + 1 : undefined;
+    const shouldAbandon = (consecutiveFailures ?? 0) >= 3;
+    const repeatedFailureSummary = shouldAbandon
+      ? `Delegation abandoned after three consecutive failures${options.summary ? `: ${options.summary}` : '.'}`
+        .slice(0, SESSION_TASK_MAX_SUMMARY_CHARS)
+      : options.summary;
     const delegation = parseDelegation({
       ...task.delegation,
       settledAt,
-      outcome,
-      summary: options.summary,
+      outcome: shouldAbandon ? 'abandoned' : outcome,
+      summary: repeatedFailureSummary,
+      consecutiveFailures: shouldAbandon ? 3 : consecutiveFailures,
+      settlementKind: 'execution',
     })!;
     const status: SessionTaskStatus = outcome === 'succeeded'
       ? 'completed'
-      : outcome === 'abandoned'
+      : outcome === 'abandoned' || shouldAbandon
         ? 'abandoned'
         : 'pending';
     items[index] = { ...task, status, delegation, updatedAt: settledAt };
     return items;
   }, options.now);
+}
+
+/** Mark a runtime-local receipt claim orphaned without counting it as an execution failure. */
+export function orphanSessionTaskDelegation(
+  list: SessionTaskList,
+  taskId: string,
+  options: { summary?: string; now?: string } = {},
+): SessionTaskList {
+  return mutateTaskList(list, items => {
+    const index = findTaskIndex(items, taskId);
+    const task = items[index]!;
+    assertNotTerminal(task);
+    if (task.status !== 'delegated' || !task.delegation) {
+      fail('invalid-transition', 'Only a delegated task can be marked orphaned');
+    }
+    const settledAt = nowIso(options.now);
+    const delegation = parseDelegation({
+      ...task.delegation,
+      settledAt,
+      outcome: 'failed',
+      settlementKind: 'orphaned',
+      summary: options.summary ?? 'Orphaned delegation: its receipt or child session is no longer available.',
+    })!;
+    items[index] = { ...task, status: 'pending', delegation, updatedAt: settledAt };
+    return items;
+  }, options.now, 'native-tool');
 }
 
 /** Return an active task to pending when delegation was refused before a receipt existed. */
@@ -530,6 +586,53 @@ export function recoverSessionTaskListAfterRestart(
       ? { ...item, status: 'pending' as const, updatedAt: recoveryNow }
       : item
   )), recoveryNow);
+}
+
+function prepareSessionTaskListForRelocation(
+  list: SessionTaskList,
+  options: { newListId?: string; now?: string },
+): SessionTaskList {
+  const parsed = parseSessionTaskList(list);
+  if (!parsed) fail('invalid-list', 'Task list is invalid');
+  const requestedNow = nowIso(options.now);
+  const relocationNow = Date.parse(requestedNow) < Date.parse(parsed.updatedAt)
+    ? parsed.updatedAt
+    : requestedNow;
+  const id = options.newListId ?? parsed.id;
+  if (!id.startsWith('tasks_')) fail('invalid-list', 'Task list id is invalid');
+  const items = parsed.items.map(item => (
+    item.status === 'in_progress' || item.status === 'delegated'
+      ? { ...item, status: 'pending' as const, delegation: undefined, updatedAt: relocationNow }
+      : item
+  ));
+  const changed = id !== parsed.id || items.some((item, index) => item !== parsed.items[index]);
+  if (!changed) return parsed;
+  return {
+    ...parsed,
+    id,
+    revision: parsed.revision + 1,
+    items,
+    updatedAt: relocationNow,
+  };
+}
+
+/** Forks copy advisory history but never inherit live execution claims. */
+export function prepareSessionTaskListForFork(
+  list: SessionTaskList,
+  options: { id?: string; now?: string } = {},
+): SessionTaskList {
+  return prepareSessionTaskListForRelocation(list, {
+    newListId: options.id ?? `tasks_${randomUUID()}`,
+    now: options.now,
+  });
+}
+
+/** Transfers retain list identity while dropping runtime-local execution claims. */
+export function prepareSessionTaskListForTransfer(
+  list: SessionTaskList,
+  now?: string,
+): SessionTaskList {
+  return prepareSessionTaskListForRelocation(list, { now });
 }
 
 /** Project Claude's whole-array TodoWrite snapshot into the host-owned store. */

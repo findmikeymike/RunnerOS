@@ -12,8 +12,11 @@ import {
   reopenSessionTask,
   returnSessionTaskToPending,
   settleSessionTaskDelegation,
+  orphanSessionTaskDelegation,
   recoverSessionTaskListAfterRestart,
   projectTodoWriteSessionTasks,
+  prepareSessionTaskListForFork,
+  prepareSessionTaskListForTransfer,
   startSessionTask,
   type SessionTaskStateErrorCode,
 } from '../session-tasks.ts';
@@ -21,6 +24,7 @@ import {
 const T0 = '2026-08-30T12:00:00.000Z';
 const T1 = '2026-08-30T12:01:00.000Z';
 const T2 = '2026-08-30T12:02:00.000Z';
+const T3 = '2026-08-30T12:03:00.000Z';
 
 function expectCode(fn: () => unknown, code: SessionTaskStateErrorCode): void {
   try {
@@ -215,6 +219,64 @@ describe('session task-list state', () => {
     expect(reopened.items[0]?.delegation).toBeUndefined();
   });
 
+  it('abandons an item after three consecutive delegation failures', () => {
+    let list = delegateSessionTask(createList(), 'task_research', {
+      receiptId: 'receipt-1',
+      targetAgentSlug: 'researcher',
+      dispatchedAt: T0,
+    }, T0);
+    list = settleSessionTaskDelegation(list, 'task_research', 'failed', { summary: 'First failure', now: T1 });
+    expect(list.items[0]?.delegation?.consecutiveFailures).toBe(1);
+
+    list = delegateSessionTask(list, 'task_research', {
+      receiptId: 'receipt-2',
+      targetAgentSlug: 'researcher',
+      dispatchedAt: T1,
+    }, T1);
+    list = settleSessionTaskDelegation(list, 'task_research', 'timeout', { summary: 'Second failure', now: T2 });
+    expect(list.items[0]?.delegation?.consecutiveFailures).toBe(2);
+
+    list = delegateSessionTask(list, 'task_research', {
+      receiptId: 'receipt-3',
+      targetAgentSlug: 'researcher',
+      dispatchedAt: T2,
+    }, T2);
+    list = settleSessionTaskDelegation(list, 'task_research', 'failed', { summary: 'Third failure', now: T3 });
+
+    expect(list.items[0]?.status).toBe('abandoned');
+    expect(list.items[0]?.delegation?.outcome).toBe('abandoned');
+    expect(list.items[0]?.delegation?.consecutiveFailures).toBe(3);
+    expect(list.items[0]?.delegation?.summary).toContain('three consecutive failures');
+  });
+
+  it('records orphaning without incrementing the execution-failure streak', () => {
+    let list = delegateSessionTask(createList(), 'task_research', {
+      receiptId: 'receipt-1',
+      targetAgentSlug: 'researcher',
+      dispatchedAt: T0,
+    }, T0);
+    list = settleSessionTaskDelegation(list, 'task_research', 'failed', { now: T1 });
+    list = delegateSessionTask(list, 'task_research', {
+      receiptId: 'receipt-2',
+      targetAgentSlug: 'researcher',
+      dispatchedAt: T1,
+    }, T1);
+    list = orphanSessionTaskDelegation(list, 'task_research', { now: T2 });
+
+    expect(list.items[0]?.status).toBe('pending');
+    expect(list.items[0]?.delegation?.settlementKind).toBe('orphaned');
+    expect(list.items[0]?.delegation?.consecutiveFailures).toBe(1);
+
+    list = delegateSessionTask(list, 'task_research', {
+      receiptId: 'receipt-3',
+      targetAgentSlug: 'researcher',
+      dispatchedAt: T2,
+    }, T2);
+    list = settleSessionTaskDelegation(list, 'task_research', 'failed', { now: T3 });
+    expect(list.items[0]?.status).toBe('pending');
+    expect(list.items[0]?.delegation?.consecutiveFailures).toBe(2);
+  });
+
   it('returns active work to pending when delegation is refused before receipt creation', () => {
     const active = startSessionTask(createList(), 'task_research', T1);
     const pending = returnSessionTaskToPending(active, 'task_research', T2);
@@ -267,6 +329,27 @@ describe('session task-list state', () => {
     expect(recovered.revision).toBe(active.revision + 1);
     expect(recovered.items.find(item => item.id === 'task_research')?.status).toBe('pending');
     expect(recoverSessionTaskListAfterRestart(recovered, T2)).toEqual(recovered);
+  });
+
+  it('relocates task lists without carrying runtime-local execution claims', () => {
+    const active = startSessionTask(createList(), 'task_research', T1);
+    const claimed = delegateSessionTask(active, 'task_brief', {
+      receiptId: 'receipt-1',
+      targetAgentSlug: 'researcher',
+      dispatchedAt: T1,
+    }, T1);
+
+    const forked = prepareSessionTaskListForFork(claimed, { id: 'tasks_fork', now: T2 });
+    expect(forked.id).toBe('tasks_fork');
+    expect(forked.revision).toBe(claimed.revision + 1);
+    expect(forked.items.map(item => item.status)).toEqual(['pending', 'pending']);
+    expect(forked.items.every(item => item.delegation === undefined)).toBe(true);
+
+    const transferred = prepareSessionTaskListForTransfer(claimed, T2);
+    expect(transferred.id).toBe(claimed.id);
+    expect(transferred.revision).toBe(claimed.revision + 1);
+    expect(transferred.items.map(item => item.status)).toEqual(['pending', 'pending']);
+    expect(transferred.items.every(item => item.delegation === undefined)).toBe(true);
   });
 
   it('projects TodoWrite snapshots while preserving matching ids and timestamps', () => {

@@ -137,8 +137,11 @@ export {
   reopenSessionTask,
   delegateSessionTask,
   settleSessionTaskDelegation,
+  orphanSessionTaskDelegation,
   returnSessionTaskToPending,
   recoverSessionTaskListAfterRestart,
+  prepareSessionTaskListForFork,
+  prepareSessionTaskListForTransfer,
   projectTodoWriteSessionTasks,
 } from './session-tasks.ts';
 export {
