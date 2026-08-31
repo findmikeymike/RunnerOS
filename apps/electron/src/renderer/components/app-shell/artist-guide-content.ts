@@ -1,4 +1,4 @@
-export type ArtistGuideTabId = 'general' | 'hq' | 'campaigns'
+export type ArtistGuideTabId = 'general' | 'hq' | 'campaigns' | 'creative-lab'
 
 export type ArtistGuideWorkspaceKind = 'general' | 'hq' | 'campaign' | 'lab'
 
@@ -26,6 +26,11 @@ export type ArtistGuideActionId =
   | 'workspace.command'
   | 'app.outputs'
   | 'lab.home'
+  | 'lab.pad'
+  | 'lab.songs'
+  | 'lab.projects'
+  | 'lab.create'
+  | 'lab.spark-bank'
 
 export type ArtistGuideIconId =
   | 'ai'
@@ -45,6 +50,10 @@ export type ArtistGuideIconId =
   | 'calendar'
   | 'essentials'
   | 'release-kit'
+  | 'song-pad'
+  | 'songs'
+  | 'projects'
+  | 'spark'
 
 export type ArtistGuideAction = {
   id: ArtistGuideActionId
@@ -75,6 +84,7 @@ export type ArtistGuideAiReadiness = 'ready' | 'needs-setup' | 'check-setup'
 export function defaultArtistGuideTab(kind: ArtistGuideWorkspaceKind): ArtistGuideTabId {
   if (kind === 'hq') return 'hq'
   if (kind === 'campaign') return 'campaigns'
+  if (kind === 'lab') return 'creative-lab'
   return 'general'
 }
 
@@ -444,6 +454,115 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
         id: 'campaign-concept-execution',
         title: 'Sensitive execution',
         body: 'Posting, outreach, spending, and other external work must show the exact account, content, timing, and required authorization.',
+      },
+    ],
+  },
+  {
+    id: 'creative-lab',
+    label: 'Creative Lab',
+    intro: 'Write lyrics, develop ideas, and intelligently save and plan every song in one creative workspace.',
+    start: [
+      {
+        id: 'lab-start-pad',
+        title: 'Start writing in Song Pad',
+        body: 'Craft lyrics in a focused writing space with rhymes, line alternatives, and specialist help close at hand.',
+        icon: 'song-pad',
+        actions: [{ id: 'lab.pad', label: 'Open Song Pad' }],
+      },
+      {
+        id: 'lab-start-songs',
+        title: 'Document every song',
+        body: 'Keep every finished song and work in progress organized instead of losing drafts across notes and chats.',
+        icon: 'songs',
+        actions: [{ id: 'lab.songs', label: 'Open Songs' }],
+      },
+      {
+        id: 'lab-start-projects',
+        title: 'Shape songs into projects',
+        body: 'Sequence songs as a playlist, album, EP, or other project so you can see how the body of work flows.',
+        icon: 'projects',
+        actions: [{ id: 'lab.projects', label: 'Open Projects' }],
+      },
+      {
+        id: 'lab-start-create',
+        title: 'Create with specialists',
+        body: 'Discuss songs, strengthen lyrics, explore enhancements, and research ideas with the right specialist agents.',
+        icon: 'workers',
+        actions: [{ id: 'lab.create', label: 'Open Create' }],
+      },
+      {
+        id: 'lab-start-spark',
+        title: 'Catch ideas before they disappear',
+        body: 'Use the diamond button to save any lyric, title, concept, or fragment to Spark Bank from anywhere in the Lab.',
+        icon: 'spark',
+        actions: [{ id: 'lab.spark-bank', label: 'Open Spark Bank' }],
+      },
+    ],
+    destinations: [
+      {
+        id: 'lab-destination-home',
+        title: 'Creative Lab',
+        body: 'See recent songs, active ideas, and the main ways to begin creating.',
+        icon: 'lab',
+        actions: [{ id: 'lab.home', label: 'Open' }],
+      },
+      {
+        id: 'lab-destination-pad',
+        title: 'Song Pad',
+        body: 'The powerful writing pad for lyrics, rhymes, alternate lines, and song-focused help.',
+        icon: 'song-pad',
+        actions: [{ id: 'lab.pad', label: 'Open' }],
+      },
+      {
+        id: 'lab-destination-songs',
+        title: 'Songs',
+        body: 'The complete record of songs you have written or are still developing.',
+        icon: 'songs',
+        actions: [{ id: 'lab.songs', label: 'Open' }],
+      },
+      {
+        id: 'lab-destination-projects',
+        title: 'Projects',
+        body: 'Sequence songs and view them as a playlist, album list, EP, or another collection.',
+        icon: 'projects',
+        actions: [{ id: 'lab.projects', label: 'Open' }],
+      },
+      {
+        id: 'lab-destination-create',
+        title: 'Create',
+        body: 'Work with specialist agents on lyrics, song improvements, references, and research.',
+        icon: 'workers',
+        actions: [{ id: 'lab.create', label: 'Open' }],
+      },
+      {
+        id: 'lab-destination-sparks',
+        title: 'Spark Bank',
+        body: 'Find, filter, tag, and reuse the strong fragments you captured along the way.',
+        icon: 'spark',
+        actions: [{ id: 'lab.spark-bank', label: 'Open' }],
+      },
+    ],
+    conceptsLabel: 'Use Song Pad well',
+    concepts: [
+      {
+        id: 'lab-concept-rhymes',
+        title: 'Find rhymes without leaving the lyric',
+        body: 'Highlight the last word of a line to see rhyme options while keeping your place in the song.',
+      },
+      {
+        id: 'lab-concept-alternates',
+        title: 'Keep alternate lines beside the original',
+        body: 'Click a written line to store alternate versions right at that line instead of collecting them at the bottom of the pad.',
+      },
+      {
+        id: 'lab-concept-specialists',
+        title: 'Bring in a specialist when useful',
+        body: 'Ask an agent to review a lyric, strengthen a weak section, research references, or help explore a direction without replacing your draft.',
+      },
+      {
+        id: 'lab-concept-sparks',
+        title: 'Spark Bank travels with the Lab',
+        body: 'The diamond button stays available throughout Creative Lab, so a line, title, image, or concept can be captured the moment it arrives.',
       },
     ],
   },

@@ -175,6 +175,7 @@ import {
 } from "@/lib/artist-workspace"
 import { getArtistHqNavActiveState, isConciergeSessionLike, isReusableConciergeSession } from "@/lib/artist-hq-nav-state"
 import { openAgentSessionComposer } from "@/lib/run-agent"
+import { LAB_SPARK_BANK_OPEN_EVENT } from "@/lib/lab-sparks"
 import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
 import { openBrowserSidecarAtom } from "@/atoms/browser-pane"
 
@@ -1986,7 +1987,9 @@ function AppShellContent({
       ? artistGuideHqWorkspace
       : artistGuideTab === 'campaigns'
         ? artistGuideCampaignWorkspace
-        : activeWorkspace
+        : artistGuideTab === 'creative-lab'
+          ? artistGuideLabWorkspace
+          : activeWorkspace
     if (contextualWorkspace) {
       actions.add('workspace.workers')
       actions.add('workspace.workflows')
@@ -2009,7 +2012,14 @@ function AppShellContent({
       actions.add('campaign.essentials')
       actions.add('campaign.release-kit')
     }
-    if (artistGuideLabWorkspace) actions.add('lab.home')
+    if (artistGuideLabWorkspace) {
+      actions.add('lab.home')
+      actions.add('lab.pad')
+      actions.add('lab.songs')
+      actions.add('lab.projects')
+      actions.add('lab.create')
+      actions.add('lab.spark-bank')
+    }
     return actions
   }, [activeWorkspace, activeWorkspaceId, artistGuideCampaignWorkspace, artistGuideHqWorkspace, artistGuideLabWorkspace, artistGuideTab])
 
@@ -2048,12 +2058,14 @@ function AppShellContent({
       ? artistGuideHqWorkspace
       : artistGuideTab === 'campaigns'
         ? artistGuideCampaignWorkspace
-        : activeWorkspace
+        : artistGuideTab === 'creative-lab'
+          ? artistGuideLabWorkspace
+          : activeWorkspace
     const targetWorkspace = action.startsWith('hq.')
       ? artistGuideHqWorkspace
       : action.startsWith('campaign.')
         ? artistGuideCampaignWorkspace
-        : action === 'lab.home'
+        : action.startsWith('lab.')
           ? artistGuideLabWorkspace
           : isContextualWorkspaceAction
             ? contextualWorkspace
@@ -2109,14 +2121,23 @@ function AppShellContent({
       return
     }
 
-    if (action === 'lab.home') {
+    if (action.startsWith('lab.')) {
       if (!artistGuideLabWorkspace) return
       if (window.location.hash.startsWith('#artist-hq/')) {
         window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
         setArtistHqHash('')
       }
       setSessionsNavExpanded(false)
-      navigate(routes.view.lab())
+      if (action === 'lab.pad') navigate(routes.view.lab('pad'))
+      else if (action === 'lab.songs') navigate(routes.view.lab('songs'))
+      else if (action === 'lab.projects') navigate(routes.view.lab('sequence'))
+      else if (action === 'lab.create') navigate(routes.view.agents())
+      else {
+        navigate(routes.view.lab())
+        if (action === 'lab.spark-bank') {
+          window.setTimeout(() => window.dispatchEvent(new Event(LAB_SPARK_BANK_OPEN_EVENT)), 0)
+        }
+      }
       return
     }
 

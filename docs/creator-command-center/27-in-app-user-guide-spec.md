@@ -11,11 +11,12 @@ source_of_truth: true
 
 Replace the top-right `?` documentation dropdown with a large in-app guide called **Artist OS Guide**.
 
-The guide has three tabs:
+The guide has four tabs:
 
 1. **General** — setup, shared concepts, safety, and common actions.
 2. **HQ** — the artist-wide home base and reusable artist knowledge.
 3. **Campaigns** — release planning, unfinished work, approved assets, jobs, and approvals.
+4. **Creative Lab** — songwriting, song organization, project sequencing, specialist creation, and Spark Bank.
 
 This is a fast-start guide, not an exhaustive manual. It should teach enough for a new user to complete setup, understand where work belongs, and begin using Artist OS without leaving the app.
 
@@ -50,7 +51,7 @@ A first-time user should be able to answer these questions in under five minutes
 The panel contains:
 
 1. Sticky header: **Artist OS Guide**, one-line purpose, close button.
-2. Sticky segmented tabs: **General / HQ / Campaigns**.
+2. Sticky segmented tabs: **General / HQ / Campaigns / Creative Lab**.
 3. Tab body with three predictable sections:
    - **Start here** — a short ordered checklist.
    - **Where to go** — compact page/action rows with a direct button.
@@ -63,7 +64,8 @@ Avoid oversized cards, nested boxes, screenshot carousels, long prose, and hover
 
 - From an HQ workspace, first open defaults to **HQ**.
 - From a Campaign workspace, first open defaults to **Campaigns**.
-- From Lab or another workspace, first open defaults to **General**.
+- From a Creative Lab workspace, first open defaults to **Creative Lab**.
+- From another workspace, first open defaults to **General**.
 - After a user manually selects a tab, remember it for the rest of the app session.
 - Reopening the guide returns each tab to the top. Do not preserve deep scroll positions.
 - `Escape` closes the guide. Clicking a guide action closes it and navigates to the destination.
@@ -218,6 +220,20 @@ Avoid oversized cards, nested boxes, screenshot carousels, long prose, and hover
 - **Sensitive execution**  
   Scheduling, posting, outreach, spending, or other external work must show the exact account, content, timing, and required authorization before execution.
 
+## Creative Lab Tab
+
+Creative Lab is where users write lyrics and intelligently save, develop, and plan every song.
+
+### Where to go
+
+- **Song Pad** — a focused writing pad for lyrics, rhymes, alternate lines, and specialist help. Highlight the last word of a line for rhymes; click a written line to store alternatives beside it.
+- **Songs** — the complete record of finished songs and works in progress.
+- **Projects** — sequence songs as a playlist, album, EP, or another collection to judge how the body of work flows.
+- **Create** — discuss songs with specialist agents, strengthen lyrics, explore enhancements, and research references or ideas.
+- **Spark Bank** — use the persistent diamond button to quickly capture any lyric, title, image, concept, or fragment so it is never lost; later find, filter, tag, and reuse it.
+
+Every visible Creative Lab action must first switch to the Lab workspace when needed, then open its actual destination. Opening Spark Bank should reveal the existing bank rather than creating a second idea store.
+
 ## Setup Status
 
 The first version may show status chips only when readiness can be verified through an existing source of truth:
@@ -233,7 +249,7 @@ Do not infer `Ready` merely because a key, model name, or account row exists. If
 Keep guide content data-driven rather than embedding a large manual directly in JSX.
 
 ```ts
-type ArtistGuideTabId = 'general' | 'hq' | 'campaigns'
+type ArtistGuideTabId = 'general' | 'hq' | 'campaigns' | 'creative-lab'
 
 type ArtistGuideActionId =
   | 'settings.ai'
@@ -257,6 +273,12 @@ type ArtistGuideActionId =
   | 'workspace.automations'
   | 'workspace.command'
   | 'app.outputs'
+  | 'lab.home'
+  | 'lab.pad'
+  | 'lab.songs'
+  | 'lab.projects'
+  | 'lab.create'
+  | 'lab.spark-bank'
 
 type ArtistGuideItem = {
   id: string
@@ -296,7 +318,6 @@ The guide is not a directory of utility links. Existing documentation and shortc
 - Documentation for every integration, advanced setting, worker, or workflow.
 - Generic documentation and keyboard-shortcut link lists.
 - Analytics, completion gamification, or a permanent unread badge.
-- A fourth Lab tab. Lab receives a concise General entry until its guide scope warrants a separate decision.
 - Implementing capabilities that the guide discovers are missing.
 
 ## Delivery Slices
@@ -314,7 +335,7 @@ The guide is not a directory of utility links. Existing documentation and shortc
 - Add only readiness checks backed by existing verified state.
 - Add the Command help action.
 
-### Slice 3 — HQ and Campaigns
+### Slice 3 — HQ, Campaigns, and Creative Lab
 
 - Add the grounded page descriptions above.
 - Add contextual default-tab behavior.
@@ -331,11 +352,11 @@ The guide is not a directory of utility links. Existing documentation and shortc
 
 1. The top-right `?` opens the Artist OS Guide instead of the old external-link dropdown.
 2. HQ, Campaign, and other workspaces open the correct contextual tab on first use.
-3. General, HQ, and Campaigns are fully usable by mouse and keyboard.
+3. General, HQ, Campaigns, and Creative Lab are fully usable by mouse and keyboard.
 4. Every visible action navigates to a real current destination and closes the guide.
 5. The guide never teaches hidden HQ Plan navigation.
 6. Setup statuses never report `Ready` without a dependable validation signal.
 7. The copy clearly distinguishes HQ from Campaign, Worker from Workflow from Automation, and Essentials from Release Kit.
 8. The guide contains no peripheral utility-link clutter; its only footer action is `Ask Command`.
 9. The panel remains readable in a compact Electron window without clipped controls or nested page scrolling.
-10. A manual smoke confirms open, close, tab switching, focus return, settings deep links, HQ links, Campaign links, and Ask Command in the running canonical Artist OS build.
+10. A manual smoke confirms open, close, tab switching, focus return, settings deep links, HQ links, Campaign links, Creative Lab links, Spark Bank, and Ask Command in the running canonical Artist OS build.

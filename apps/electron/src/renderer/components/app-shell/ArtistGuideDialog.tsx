@@ -10,11 +10,15 @@ import {
   FlaskConical,
   FolderOutput,
   Gauge,
+  Gem,
   Globe2,
   KeyRound,
   ListChecks,
   LockKeyhole,
+  ListMusic,
   MessageSquareText,
+  Music2,
+  PenLine,
   RadioTower,
   Sparkles,
   Users,
@@ -62,6 +66,10 @@ const GUIDE_ICONS: Record<ArtistGuideIconId, LucideIcon> = {
   calendar: CalendarDays,
   essentials: ListChecks,
   'release-kit': Archive,
+  'song-pad': PenLine,
+  songs: Music2,
+  projects: ListMusic,
+  spark: Gem,
 }
 
 const AI_READINESS_COPY: Record<ArtistGuideAiReadiness, { label: string; className: string }> = {
@@ -109,12 +117,12 @@ export function ArtistGuideDialog({
           className="flex min-h-0 flex-1 flex-col"
         >
           <div className="shrink-0 border-b border-white/[0.055] bg-black/18 px-5 py-3">
-            <TabsList aria-label="Artist OS guide sections" className="grid h-9 w-full grid-cols-3 rounded-[10px] bg-black/30 p-1">
+            <TabsList aria-label="Artist OS guide sections" className="grid h-9 w-full grid-cols-4 rounded-[10px] bg-black/30 p-1">
               {ARTIST_GUIDE_TABS.map((tab) => (
                 <TabsTrigger
                   key={tab.id}
                   value={tab.id}
-                  className="rounded-[7px] text-[12px] font-medium text-white/42 shadow-none data-[state=active]:bg-white/[0.09] data-[state=active]:text-white/88 data-[state=active]:shadow-none"
+                  className="rounded-[7px] px-1 text-[11px] font-medium text-white/42 shadow-none data-[state=active]:bg-white/[0.09] data-[state=active]:text-white/88 data-[state=active]:shadow-none sm:text-[12px]"
                 >
                   {tab.label}
                 </TabsTrigger>

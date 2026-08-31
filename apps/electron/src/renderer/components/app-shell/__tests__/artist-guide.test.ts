@@ -8,8 +8,8 @@ import {
 } from '../artist-guide-content'
 
 describe('Artist OS guide content', () => {
-  it('keeps the guide limited to the three essential tabs', () => {
-    expect(ARTIST_GUIDE_TABS.map((tab) => tab.id)).toEqual(['general', 'hq', 'campaigns'])
+  it('keeps the guide limited to the four essential tabs', () => {
+    expect(ARTIST_GUIDE_TABS.map((tab) => tab.id)).toEqual(['general', 'hq', 'campaigns', 'creative-lab'])
     for (const tab of ARTIST_GUIDE_TABS) {
       expect(tab.start.length).toBeLessThanOrEqual(6)
       expect(tab.destinations.length).toBeLessThanOrEqual(6)
@@ -17,10 +17,10 @@ describe('Artist OS guide content', () => {
     }
   })
 
-  it('uses contextual defaults without treating Lab as a fourth guide tab', () => {
+  it('uses contextual defaults for HQ, Campaigns, and Creative Lab', () => {
     expect(defaultArtistGuideTab('hq')).toBe('hq')
     expect(defaultArtistGuideTab('campaign')).toBe('campaigns')
-    expect(defaultArtistGuideTab('lab')).toBe('general')
+    expect(defaultArtistGuideTab('lab')).toBe('creative-lab')
     expect(defaultArtistGuideTab('general')).toBe('general')
   })
 
@@ -69,6 +69,8 @@ describe('Artist OS guide wiring', () => {
     expect(source).toContain('<ArtistGuideDialog')
     expect(source).toContain('handleArtistGuideAction')
     expect(source).toContain("'campaign.essentials': routes.view.campaign('release-board')")
+    expect(source).toContain("action === 'lab.pad'")
+    expect(source).toContain('LAB_SPARK_BANK_OPEN_EVENT')
     expect(source).toContain("'settings.connections': 'secrets'")
   })
 
@@ -79,4 +81,3 @@ describe('Artist OS guide wiring', () => {
     expect(source).not.toContain('Full documentation')
   })
 })
-
