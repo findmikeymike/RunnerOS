@@ -200,6 +200,7 @@ interface SessionTask {
 }
 
 interface SessionTaskList {
+  schemaVersion: 1
   id: string                    // tasks_<uuid>
   revision: number
   items: SessionTask[]
@@ -487,7 +488,7 @@ Ordered so that no slice ships a deadlock.
 
 **Slice 0 — Own and clear the background boundary.** Running background delegations persist an exact receipt-linked boundary; terminal receipts clear it. The transition is idempotent and handles completion-before-start ordering. Independent of task lists and shippable alone. **Implemented 2026-08-30.**
 
-**Slice 1 — State model.** `packages/shared/src/sessions/session-tasks.ts`, pure functions and invariants, with unit tests. No runtime wiring.
+**Slice 1 — State model.** `packages/shared/src/sessions/session-tasks.ts`, pure functions and invariants, with unit tests. No runtime wiring. **Implemented 2026-08-30.**
 
 **Slice 2 — Persistence.** Session config field, JSONL events, `commitSessionTaskState` with the durable barrier, defensive parse, load-path restore including `in_progress` demotion.
 

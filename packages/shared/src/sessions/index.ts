@@ -107,6 +107,36 @@ export type {
   CreateChatGoalInput,
   EditChatGoalInput,
 } from './chat-goal.ts';
+
+// Host-owned per-session task planning state
+export type {
+  SessionTaskStatus,
+  SessionTaskListSource,
+  SessionTaskDelegationOutcome,
+  SessionTaskDelegation,
+  SessionTask,
+  SessionTaskList,
+  CreateSessionTaskInput,
+  SessionTaskStateErrorCode,
+} from './session-tasks.ts';
+export {
+  SESSION_TASK_LIST_SCHEMA_VERSION,
+  SESSION_TASK_LIST_MAX_ITEMS,
+  SESSION_TASK_MAX_CONTENT_CHARS,
+  SESSION_TASK_MAX_ACTIVE_FORM_CHARS,
+  SESSION_TASK_MAX_SUMMARY_CHARS,
+  SessionTaskStateError,
+  createSessionTaskList,
+  parseSessionTaskList,
+  assertSessionTaskListRevision,
+  appendSessionTasks,
+  startSessionTask,
+  completeSessionTask,
+  abandonSessionTask,
+  reopenSessionTask,
+  delegateSessionTask,
+  settleSessionTaskDelegation,
+} from './session-tasks.ts';
 export {
   CHAT_GOAL_SCHEMA_VERSION,
   CHAT_GOAL_DEFAULT_MAX_ROUNDS,
