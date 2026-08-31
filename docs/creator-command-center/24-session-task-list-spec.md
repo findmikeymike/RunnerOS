@@ -490,7 +490,7 @@ Ordered so that no slice ships a deadlock.
 
 **Slice 1 — State model.** `packages/shared/src/sessions/session-tasks.ts`, pure functions and invariants, with unit tests. No runtime wiring. **Implemented 2026-08-30.**
 
-**Slice 2 — Persistence.** Session config field, JSONL events, `commitSessionTaskState` with the durable barrier, defensive parse, load-path restore including `in_progress` demotion.
+**Slice 2 — Persistence.** Session config field, JSONL events, `commitSessionTaskState` with the durable barrier, defensive parse, load-path restore including `in_progress` demotion. **Implemented 2026-08-30.**
 
 **Slice 3 — Tool and gating.** `update_tasks` handler and tool-def, provider-gated registration, prompt guidance for non-Anthropic providers.
 

@@ -13,6 +13,7 @@ import type { PermissionMode } from '../agent/mode-manager.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 import type { StoredAttachment, MessageRole, ToolStatus, AuthRequestType, AuthStatus, CredentialInputMode, StoredMessage } from '@craft-agent/core/types';
 import type { ChatGoalState } from './chat-goal.ts';
+import type { SessionTaskList } from './session-tasks.ts';
 
 /**
  * Session fields that persist to disk.
@@ -44,6 +45,8 @@ export const SESSION_PERSISTENT_FIELDS = [
   'pendingPlanExecution',
   // Chat-native Goal Mode
   'chatGoal',
+  // Provider-neutral session task list
+  'sessionTasks',
   // Archive
   'isArchived', 'archivedAt',
   // Branching
@@ -249,6 +252,8 @@ export interface SessionConfig {
   };
   /** Current or most recent chat-native Goal. Terminal history lives in session messages. */
   chatGoal?: ChatGoalState;
+  /** Durable provider-neutral task list projected by session tools/adapters. */
+  sessionTasks?: SessionTaskList;
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean;
   /** Whether this session is archived */
@@ -381,6 +386,8 @@ export interface SessionHeader {
   };
   /** Current or most recent chat-native Goal. */
   chatGoal?: ChatGoalState;
+  /** Durable provider-neutral task list. */
+  sessionTasks?: SessionTaskList;
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean;
   /** Whether this session is archived */
@@ -461,6 +468,8 @@ export interface SessionMetadata {
   thinkingLevel?: ThinkingLevel;
   /** Current or most recent chat-native Goal. */
   chatGoal?: ChatGoalState;
+  /** Durable provider-neutral task list. */
+  sessionTasks?: SessionTaskList;
   /** ID of last message user has read - for unread detection */
   lastReadMessageId?: string;
   /** ID of the last final (non-intermediate) assistant message - for unread detection */

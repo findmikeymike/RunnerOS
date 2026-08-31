@@ -107,6 +107,8 @@ import {
   isChatGoalTerminal,
   makeChatGoalEvent,
   parseChatGoalState,
+  recoverSessionTaskListAfterRestart,
+  type SessionTaskList,
   pickSessionFields,
 } from '@craft-agent/shared/sessions'
 import { loadAllSources, loadGlobalSource, getSourcesBySlugs, readGlobalSourcesManifest, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
@@ -119,7 +121,7 @@ import { restoreFiles } from '@craft-agent/shared/utils/bundle-files'
 import { getCredentialManager, isValidUserSecretName, normalizeUserSecretName } from '@craft-agent/shared/credentials'
 import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, type CreateSessionOptions, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
-import { messageToStored, storedToMessage, type AgentMessageNoticeMetadata, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
+import { messageToStored, storedToMessage, type AgentMessageNoticeMetadata, type Message, type SessionTaskEventMetadata, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
 import { loadAllSkills, loadGlobalSkills, loadGlobalSkillBySlug, loadSkillBySlug, setGlobalSkillEnabled, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
 import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
@@ -1529,6 +1531,11 @@ interface ManagedSession {
   launchReceipt?: SessionLaunchReceipt
   /** Current or most recent chat-native Goal. */
   chatGoal?: ChatGoalState
+  /** Durable provider-neutral task list. */
+  sessionTasks?: SessionTaskList
+  /** Advisory task persistence failed; this never blocks chat execution. */
+  sessionTasksDegraded?: boolean
+  sessionTasksError?: string
   /** Model-requested completion/blocking, finalized only after turn settlement. */
   pendingChatGoalUpdate?: UpdateGoalToolInput
   /** Host-issued proposal awaiting a user confirmation action. */
@@ -1801,8 +1808,34 @@ function managedToSession(m: ManagedSession, overrides?: Partial<Session>): Sess
     isProcessing: m.isProcessing,
     sessionFolderPath: getSessionStoragePath(m.workspace.rootPath, m.id),
     supportsBranching: resolveSupportsBranching(m),
+    sessionTasksDegraded: m.sessionTasksDegraded,
+    sessionTasksError: m.sessionTasksError,
     ...overrides,
   } as Session
+}
+
+function applySessionTaskRestartRecovery(
+  stored: StoredSession,
+  recovered: SessionTaskList,
+): void {
+  const timestamp = Date.now()
+  const event: SessionTaskEventMetadata = {
+    type: 'restart-recovered',
+    listId: recovered.id,
+    revision: recovered.revision,
+    timestamp,
+    operation: 'restart-demote-in-progress',
+    snapshot: recovered,
+  }
+  stored.sessionTasks = recovered
+  stored.messages.push({
+    id: generateMessageId(),
+    type: 'info',
+    content: 'Interrupted task returned to pending after restart.',
+    timestamp,
+    displayIntent: 'task-event',
+    taskEvent: event,
+  })
 }
 
 // Performance: Batch IPC delta events to reduce renderer load
@@ -5125,6 +5158,23 @@ user a clickable link to where the thing now lives.`
               chatGoalPersistenceBlocked = true
             }
           }
+          let sessionTasksDegraded = false
+          let sessionTasksError: string | undefined
+          if (meta.sessionTasks?.items.some((item) => item.status === 'in_progress')) {
+            const recovered = recoverSessionTaskListAfterRestart(meta.sessionTasks)
+            try {
+              const stored = loadStoredSession(workspaceRootPath, meta.id)
+              if (!stored) throw new Error('Session could not be loaded for task restart recovery')
+              applySessionTaskRestartRecovery(stored, recovered)
+              await saveStoredSession(stored)
+              meta.sessionTasks = recovered
+            } catch (error) {
+              sessionTasksError = error instanceof Error ? error.message : String(error)
+              sessionLog.error(`Failed to persist task restart recovery for session ${meta.id}:`, error)
+              meta.sessionTasks = undefined
+              sessionTasksDegraded = true
+            }
+          }
           // Create managed session from metadata only (messages lazy-loaded on demand)
           // This dramatically reduces memory usage at startup - messages are loaded
           // when getSession() is called for a specific session
@@ -5132,6 +5182,8 @@ user a clickable link to where the thing now lives.`
             enabledSourceSlugs: undefined,  // Loaded with messages
             workingDirectory: meta.workingDirectory ?? wsDefaultWorkingDir,
             chatGoalPersistenceBlocked,
+            sessionTasksDegraded,
+            sessionTasksError,
           })
 
           // Migration: clear orphaned llmConnection references (e.g., after connection was deleted)
@@ -5645,6 +5697,24 @@ user a clickable link to where the thing now lives.`
   private async loadMessagesFromDisk(managed: ManagedSession): Promise<void> {
     const storedSession = loadStoredSession(managed.workspace.rootPath, managed.id)
     if (storedSession) {
+      if (
+        !managed.sessionTasksDegraded
+        && storedSession.sessionTasks?.items.some((item) => item.status === 'in_progress')
+      ) {
+        const recovered = recoverSessionTaskListAfterRestart(storedSession.sessionTasks)
+        const messageCountBeforeRecovery = storedSession.messages.length
+        try {
+          applySessionTaskRestartRecovery(storedSession, recovered)
+          await saveStoredSession(storedSession)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          sessionLog.error(`Failed to persist lazy task restart recovery for session ${managed.id}:`, error)
+          storedSession.messages.splice(messageCountBeforeRecovery)
+          storedSession.sessionTasks = undefined
+          managed.sessionTasksDegraded = true
+          managed.sessionTasksError = message
+        }
+      }
       managed.messages = (storedSession.messages || []).map(storedToMessage)
       managed.tokenUsage = storedSession.tokenUsage
       managed.lastReadMessageId = storedSession.lastReadMessageId
@@ -5664,6 +5734,9 @@ user a clickable link to where the thing now lives.`
       // Sync transferred session summary state from disk
       managed.transferredSessionSummary = storedSession.transferredSessionSummary
       managed.transferredSessionSummaryApplied = storedSession.transferredSessionSummaryApplied
+      // Full JSONL load may recover task state from the event log when the
+      // compact header is missing or malformed.
+      managed.sessionTasks = managed.sessionTasksDegraded ? undefined : storedSession.sessionTasks
       sessionLog.debug(`Lazy-loaded ${managed.messages.length} messages for session ${managed.id}`)
 
       // Queue recovery: find orphaned queued messages from crash/restart and re-queue them
@@ -8685,6 +8758,91 @@ user a clickable link to where the thing now lives.`
       evidence: input.evidence?.map(item => item.trim()).filter(Boolean),
     }
     return { accepted: true, pending: true, status: input.status }
+  }
+
+  private appendSessionTaskEvent(
+    managed: ManagedSession,
+    next: SessionTaskList,
+    operation: string,
+    type: SessionTaskEventMetadata['type'],
+  ): Message {
+    const timestamp = Date.now()
+    const event: SessionTaskEventMetadata = {
+      type,
+      listId: next.id,
+      revision: next.revision,
+      timestamp,
+      operation,
+      snapshot: next,
+    }
+    const message: Message = {
+      id: generateMessageId(),
+      role: 'info',
+      content: type === 'created' ? 'Task list created.' : 'Task list updated.',
+      timestamp,
+      displayIntent: 'task-event',
+      taskEvent: event,
+    }
+    managed.messages.push(message)
+    return message
+  }
+
+  private async commitSessionTaskState(
+    managed: ManagedSession,
+    next: SessionTaskList,
+    operation: string,
+    eventType: SessionTaskEventMetadata['type'] = managed.sessionTasks ? 'updated' : 'created',
+  ): Promise<SessionTaskList> {
+    await this.ensureMessagesLoaded(managed)
+    const previous = managed.sessionTasks
+    const eventMessage = this.appendSessionTaskEvent(managed, next, operation, eventType)
+    managed.sessionTasks = next
+    managed.sessionTasksDegraded = false
+    managed.sessionTasksError = undefined
+
+    try {
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      managed.sessionTasks = previous
+      managed.messages = managed.messages.filter(item => item.id !== eventMessage.id)
+      managed.sessionTasksDegraded = true
+      managed.sessionTasksError = message
+      sessionLog.error('Session task state persistence failed', {
+        sessionId: managed.id,
+        listId: next.id,
+        revision: next.revision,
+        operation,
+        error: message,
+      })
+      this.sendEvent({
+        type: 'session_tasks_changed',
+        sessionId: managed.id,
+        sessionTasks: previous,
+        degraded: true,
+        error: message,
+      }, managed.workspace.id)
+      throw new Error(`Task list could not be saved; chat remains available: ${message}`)
+    }
+
+    sessionLog.info('Session task state changed', {
+      sessionId: managed.id,
+      listId: next.id,
+      revision: next.revision,
+      operation,
+      source: next.source,
+      itemCounts: next.items.reduce<Record<string, number>>((counts, item) => {
+        counts[item.status] = (counts[item.status] ?? 0) + 1
+        return counts
+      }, {}),
+    })
+    this.sendEvent({
+      type: 'session_tasks_changed',
+      sessionId: managed.id,
+      sessionTasks: next,
+    }, managed.workspace.id)
+    return next
   }
 
   private appendChatGoalEvent(

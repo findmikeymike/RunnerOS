@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'bun:test'
-import type { SessionHeader } from '../types'
-import { getHeaderMetadataSignature, mergeHeaderWithExternalMetadata } from '../persistence-queue'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import type { SessionHeader, StoredSession } from '../types'
+import { SessionPersistenceQueue, getHeaderMetadataSignature, mergeHeaderWithExternalMetadata } from '../persistence-queue'
 
 function makeHeader(overrides: Partial<SessionHeader> = {}): SessionHeader {
   return {
@@ -28,6 +31,34 @@ describe('session persistence header conflict helpers', () => {
     const b = makeHeader({ name: 'A', lastUsedAt: 999, messageCount: 42 })
 
     expect(getHeaderMetadataSignature(a)).toBe(getHeaderMetadataSignature(b))
+  })
+
+  it('rejects an explicit flush when the durable write fails', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'session-persistence-failure-'))
+    const blockedRoot = join(root, 'not-a-directory')
+    writeFileSync(blockedRoot, 'file')
+    const queue = new SessionPersistenceQueue(60_000)
+    const session: StoredSession = {
+      id: 's-failure',
+      workspaceRootPath: blockedRoot,
+      createdAt: 1,
+      lastUsedAt: 1,
+      messages: [],
+      tokenUsage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        contextTokens: 0,
+        costUsd: 0,
+      },
+    }
+
+    try {
+      queue.enqueue(session)
+      await expect(queue.flush(session.id)).rejects.toBeDefined()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('metadata signature changes when metadata changes', () => {

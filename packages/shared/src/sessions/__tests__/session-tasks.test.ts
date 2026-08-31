@@ -11,6 +11,7 @@ import {
   parseSessionTaskList,
   reopenSessionTask,
   settleSessionTaskDelegation,
+  recoverSessionTaskListAfterRestart,
   startSessionTask,
   type SessionTaskStateErrorCode,
 } from '../session-tasks.ts';
@@ -246,5 +247,14 @@ describe('session task-list state', () => {
     expect(assertSessionTaskListRevision(list, list.id, list.revision)).toBe(list);
     expectCode(() => assertSessionTaskListRevision(list, list.id, list.revision + 1), 'stale-revision');
     expectCode(() => assertSessionTaskListRevision(undefined, list.id, list.revision), 'stale-revision');
+  });
+
+  it('demotes interrupted in-progress work exactly once after restart', () => {
+    const active = startSessionTask(createList(), 'task_research', T1);
+    const recovered = recoverSessionTaskListAfterRestart(active, T2);
+
+    expect(recovered.revision).toBe(active.revision + 1);
+    expect(recovered.items.find(item => item.id === 'task_research')?.status).toBe('pending');
+    expect(recoverSessionTaskListAfterRestart(recovered, T2)).toEqual(recovered);
   });
 });

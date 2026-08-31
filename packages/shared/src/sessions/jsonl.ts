@@ -16,6 +16,7 @@ import { debug } from '../utils/debug.ts';
 import { safeJsonParse } from '../utils/files.ts';
 import { pickSessionFields } from './utils.ts';
 import { parseChatGoalState } from './chat-goal.ts';
+import { parseSessionTaskList } from './session-tasks.ts';
 
 // ============================================================
 // Session Path Portability
@@ -75,6 +76,12 @@ function normalizeHeaderPermissionModes<T extends SessionHeader>(header: T): T {
     const parsedGoal = parseChatGoalState(header.chatGoal);
     if (parsedGoal) header.chatGoal = parsedGoal;
     else delete (header as Partial<SessionHeader>).chatGoal;
+  }
+
+  if ('sessionTasks' in header) {
+    const parsedTasks = parseSessionTaskList(header.sessionTasks);
+    if (parsedTasks) header.sessionTasks = parsedTasks;
+    else delete (header as Partial<SessionHeader>).sessionTasks;
   }
 
   return header;
@@ -183,6 +190,24 @@ export function readSessionJsonl(sessionFile: string): StoredSession | null {
     // Expand session path tokens before parsing so embedded paths resolve correctly.
     const expandedMessageLines = lines.slice(1).map(line => expandSessionPath(line, sessionDir));
     const messages = parseMessagesResilient(expandedMessageLines);
+
+    // Header state is primary. A durable task event is the only fallback when
+    // the header is absent or invalid; task state is never re-derived from chat.
+    if (!header.sessionTasks) {
+      for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const taskEvent = messages[index]?.taskEvent;
+        const snapshot = taskEvent?.snapshot;
+        const recovered = parseSessionTaskList(snapshot);
+        if (
+          recovered
+          && taskEvent?.listId === recovered.id
+          && taskEvent.revision === recovered.revision
+        ) {
+          header.sessionTasks = recovered;
+          break;
+        }
+      }
+    }
 
     // Migration: For sessions created before sdkCwd was added, use workingDirectory as fallback.
     // This is correct because the old code used workingDirectory for SDK's cwd parameter.

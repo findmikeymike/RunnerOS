@@ -20,6 +20,7 @@ import type { QueueWorkAction } from '../automations/types'
 import type { CustomEndpointConfig } from '../config/llm-connections'
 import type { SessionLaunchReceipt } from '../sessions/types'
 import type { ChatGoalState, CreateChatGoalInput, EditChatGoalInput } from '../sessions/chat-goal'
+import type { SessionTaskList } from '../sessions/session-tasks'
 import type {
   AuthRequest as SharedAuthRequest,
   CredentialInputMode as SharedCredentialInputMode,
@@ -111,6 +112,11 @@ export interface Session {
   supportsBranching?: boolean
   /** Current or most recent chat-native Goal. */
   chatGoal?: ChatGoalState
+  /** Durable provider-neutral task list. */
+  sessionTasks?: SessionTaskList
+  /** The last task-list persistence attempt failed; chat remains usable. */
+  sessionTasksDegraded?: boolean
+  sessionTasksError?: string
 }
 
 export interface CreateSessionOptions {
@@ -233,12 +239,13 @@ export type SessionEvent =
   | { type: 'goal_state_changed'; sessionId: string; chatGoal?: ChatGoalState }
   | { type: 'goal_creation_proposed'; sessionId: string; proposal: CreateChatGoalInput; confirmationNonce: string }
   | { type: 'goal_event'; sessionId: string; message: Message }
+  | { type: 'session_tasks_changed'; sessionId: string; sessionTasks?: SessionTaskList; degraded?: boolean; error?: string }
 
 export interface SendMessageOptions {
   skillSlugs?: string[]
   badges?: ContentBadge[]
   optimisticMessageId?: string
-  displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task' | 'goal-event'
+  displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task' | 'goal-event' | 'task-event'
   /** Drive a model turn without rendering this system-generated prompt. */
   hidden?: boolean
 }

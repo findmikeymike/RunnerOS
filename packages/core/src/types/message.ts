@@ -264,6 +264,16 @@ export interface ChatGoalEventMetadata {
   summary: string;
 }
 
+export interface SessionTaskEventMetadata {
+  type: 'created' | 'updated' | 'restart-recovered';
+  listId: string;
+  revision: number;
+  timestamp: number;
+  operation: string;
+  /** Validated by the shared session-task parser when restored. */
+  snapshot: unknown;
+}
+
 /**
  * Runtime message type (includes transient fields like isStreaming)
  */
@@ -295,13 +305,15 @@ export interface Message {
   // Content badges for inline display (sources, skills)
   badges?: ContentBadge[];
   // UI-only display intent for internal/user-proxy messages that need custom rendering.
-  displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task' | 'goal-event';
+  displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task' | 'goal-event' | 'task-event';
   // System-generated prompt that drives a turn but must not render as user text.
   hidden?: boolean;
   // Structured metadata for agent-message notices. Avoid parsing trusted actions from text.
   agentMessage?: AgentMessageNoticeMetadata;
   /** Durable chat Goal lifecycle marker. */
   goalEvent?: ChatGoalEventMetadata;
+  /** Durable session-task audit/recovery marker. */
+  taskEvent?: SessionTaskEventMetadata;
   /** Annotation payloads for this message */
   annotations?: AnnotationV1[];
   isError?: boolean;
@@ -391,13 +403,15 @@ export interface StoredMessage {
   /** Content badges for inline display (sources, skills) */
   badges?: ContentBadge[];
   // UI-only display intent for internal/user-proxy messages that need custom rendering.
-  displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task' | 'goal-event';
+  displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task' | 'goal-event' | 'task-event';
   // Persisted internal prompt marker; viewer and desktop grouping both hide it.
   hidden?: boolean;
   // Structured metadata for agent-message notices.
   agentMessage?: AgentMessageNoticeMetadata;
   /** Durable chat Goal lifecycle marker. */
   goalEvent?: ChatGoalEventMetadata;
+  /** Durable session-task audit/recovery marker. */
+  taskEvent?: SessionTaskEventMetadata;
   /** Annotations persisted at message level */
   annotations?: AnnotationV1[];
   // Turn grouping - critical for TurnCard rendering after reload

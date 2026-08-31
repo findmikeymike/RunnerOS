@@ -77,7 +77,9 @@ class SessionPersistenceQueue {
     }
 
     const timer = setTimeout(() => {
-      void this.flush(session.id)
+      // Debounced writes have no caller to surface failures to. Explicit
+      // flushes still reject so durable-barrier callers can fail closed.
+      void this.flush(session.id).catch(() => {})
     }, this.debounceMs)
 
     this.pending.set(session.id, { data: session, timer })
@@ -92,6 +94,7 @@ class SessionPersistenceQueue {
     if (!entry) return
 
     this.pending.delete(sessionId)
+    const priorWrittenSignature = this.lastWrittenHeaderSignature.get(sessionId)
 
     try {
       const { data } = entry
@@ -164,7 +167,10 @@ class SessionPersistenceQueue {
       await rename(tmpFile, filePath)
       debug(`[PersistenceQueue] Wrote session ${sessionId}`)
     } catch (error) {
+      if (priorWrittenSignature === undefined) this.lastWrittenHeaderSignature.delete(sessionId)
+      else this.lastWrittenHeaderSignature.set(sessionId, priorWrittenSignature)
       console.error(`[PersistenceQueue] Failed to write session ${sessionId}:`, error)
+      throw error
     }
   }
 

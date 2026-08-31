@@ -136,6 +136,7 @@ export {
   reopenSessionTask,
   delegateSessionTask,
   settleSessionTaskDelegation,
+  recoverSessionTaskListAfterRestart,
 } from './session-tasks.ts';
 export {
   CHAT_GOAL_SCHEMA_VERSION,

@@ -44,6 +44,7 @@ import { getStatusCategory } from '../statuses/storage.ts';
 import { readSessionHeader, readSessionJsonl } from './jsonl.ts';
 import { sessionPersistenceQueue } from './persistence-queue.ts';
 import { ChatGoalValidationError, parseChatGoalState } from './chat-goal.ts';
+import { parseSessionTaskList, SessionTaskStateError } from './session-tasks.ts';
 
 // Re-export types for convenience
 export type { SessionConfig } from './types.ts';
@@ -561,6 +562,7 @@ export async function updateSessionMetadata(
     | 'isArchived'
     | 'archivedAt'
     | 'chatGoal'
+    | 'sessionTasks'
   >>
 ): Promise<void> {
   const session = loadSession(workspaceRootPath, sessionId);
@@ -589,6 +591,15 @@ export async function updateSessionMetadata(
       const parsedGoal = parseChatGoalState(updates.chatGoal);
       if (!parsedGoal) throw new ChatGoalValidationError('Invalid chat Goal state');
       session.chatGoal = parsedGoal;
+    }
+  }
+  if ('sessionTasks' in updates) {
+    if (updates.sessionTasks === undefined) {
+      delete session.sessionTasks;
+    } else {
+      const parsedTasks = parseSessionTaskList(updates.sessionTasks);
+      if (!parsedTasks) throw new SessionTaskStateError('invalid-list', 'Invalid session task list');
+      session.sessionTasks = parsedTasks;
     }
   }
 

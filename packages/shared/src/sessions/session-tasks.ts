@@ -480,3 +480,26 @@ export function settleSessionTaskDelegation(
     return items;
   }, options.now);
 }
+
+/**
+ * Restore advisory task state after a process restart. Work that was only
+ * claimed by the interrupted process becomes pending again; delegated work is
+ * resolved separately once receipt state is available.
+ */
+export function recoverSessionTaskListAfterRestart(
+  list: SessionTaskList,
+  now?: string,
+): SessionTaskList {
+  const parsed = parseSessionTaskList(list);
+  if (!parsed) fail('invalid-list', 'Task list is invalid');
+  if (!parsed.items.some(item => item.status === 'in_progress')) return parsed;
+  const requestedNow = nowIso(now);
+  const recoveryNow = Date.parse(requestedNow) < Date.parse(parsed.updatedAt)
+    ? parsed.updatedAt
+    : requestedNow;
+  return mutateTaskList(parsed, items => items.map(item => (
+    item.status === 'in_progress'
+      ? { ...item, status: 'pending' as const, updatedAt: recoveryNow }
+      : item
+  )), recoveryNow);
+}

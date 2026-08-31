@@ -29,6 +29,7 @@ export type {
   ToolDisplayMeta,
   AttachmentType,
   AgentMessageNoticeMetadata,
+  SessionTaskEventMetadata,
   MessageAttachment,
   StoredAttachment,
   ContentBadge,

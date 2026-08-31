@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { StoredSession } from '../types.ts'
+import { createSessionTaskList } from '../session-tasks.ts'
 import { getSessionFilePath, loadSession, saveSession, updateSessionMetadata } from '../storage.ts'
 
 function makeTmpDir(): string {
@@ -76,5 +77,67 @@ describe('session metadata persistence', () => {
     writeFileSync(sessionFile, `${lines.join('\n')}\n`)
 
     expect(loadSession(workspaceRoot, 'session-1')?.chatGoal).toBeUndefined()
+  })
+
+  it('round-trips every task status through the session header', async () => {
+    const now = '2026-08-30T12:00:00.000Z'
+    const sessionTasks = createSessionTaskList([
+      { content: 'Pending', status: 'pending' },
+      { content: 'Active', status: 'in_progress' },
+      {
+        content: 'Delegated',
+        status: 'delegated',
+        delegation: {
+          receiptId: 'receipt-1',
+          targetAgentSlug: 'researcher',
+          dispatchedAt: now,
+        },
+      },
+      { content: 'Done', status: 'completed' },
+      { content: 'Dropped', status: 'abandoned' },
+    ], 'native-tool', { id: 'tasks_roundtrip', now })
+
+    await updateSessionMetadata(workspaceRoot, 'session-1', { sessionTasks })
+
+    expect(loadSession(workspaceRoot, 'session-1')?.sessionTasks).toEqual(sessionTasks)
+  })
+
+  it('recovers task state from the latest valid task event when the header is malformed', async () => {
+    const now = '2026-08-30T12:00:00.000Z'
+    const sessionTasks = createSessionTaskList(
+      [{ content: 'Recover me' }],
+      'native-tool',
+      { id: 'tasks_recovery', taskIds: ['task_recovery'], now },
+    )
+    const stored = makeStoredSession(workspaceRoot)
+    stored.sessionTasks = sessionTasks
+    stored.messages.push({
+      id: 'task-event-1',
+      type: 'info',
+      content: 'Task list created.',
+      displayIntent: 'task-event',
+      taskEvent: {
+        type: 'created',
+        listId: sessionTasks.id,
+        revision: sessionTasks.revision,
+        timestamp: Date.parse(now),
+        operation: 'create',
+        snapshot: sessionTasks,
+      },
+    })
+    await saveSession(stored)
+
+    const sessionFile = getSessionFilePath(workspaceRoot, 'session-1')
+    const lines = readFileSync(sessionFile, 'utf8').trimEnd().split('\n')
+    const header = JSON.parse(lines[0]!)
+    header.sessionTasks = { schemaVersion: 1, id: 'bad' }
+    lines[0] = JSON.stringify(header)
+    writeFileSync(sessionFile, `${lines.join('\n')}\n`)
+
+    expect(loadSession(workspaceRoot, 'session-1')?.sessionTasks).toEqual(sessionTasks)
+  })
+
+  it('keeps legacy sessions without task state valid', () => {
+    expect(loadSession(workspaceRoot, 'session-1')?.sessionTasks).toBeUndefined()
   })
 })
