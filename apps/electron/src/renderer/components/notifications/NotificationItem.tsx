@@ -53,7 +53,7 @@ export function NotificationItem({
       ? 'bg-red-500/[0.06] border-l-red-500/40'
       : entry.urgency === 'normal'
         ? 'bg-blue-500/[0.05] border-l-blue-500/40'
-        : 'bg-foreground/[0.02] border-l-foreground/15'
+        : 'border-l-white/15 bg-white/[0.02]'
 
   const title = entry.title ?? (entry.source === 'pulse' ? 'Pulse' : 'Notification')
   const isAcknowledged = !!entry.acknowledgedAt
@@ -61,21 +61,21 @@ export function NotificationItem({
   return (
     <div
       className={cn(
-        'border-l-2 px-3 py-2 text-sm',
+        'border-l-2 px-3 py-2 text-sm text-white',
         urgencyTint,
         isAcknowledged && 'opacity-60',
       )}
     >
       <div className="flex items-start gap-2">
-        <Icon className="h-3.5 w-3.5 mt-0.5 shrink-0 text-foreground/60" />
+        <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/60" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="font-medium text-[13px] truncate">{title}</span>
-            <span className="text-[11px] text-foreground/50 shrink-0">
+            <span className="shrink-0 text-[11px] text-white/50">
               {relativeTime(entry.createdAt)}
             </span>
             {entry.goalSlug && (
-              <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-foreground/8 text-foreground/60 truncate">
+              <span className="truncate rounded bg-white/8 px-1.5 py-0.5 text-[10px] font-medium text-white/60">
                 {entry.goalSlug}
               </span>
             )}
@@ -85,8 +85,8 @@ export function NotificationItem({
               type="button"
               onClick={() => truncated && setExpanded(true)}
               className={cn(
-                'mt-1 block text-left text-[12px] text-foreground/75 whitespace-pre-wrap break-words',
-                truncated && 'cursor-pointer hover:text-foreground',
+                'mt-1 block whitespace-pre-wrap break-words text-left text-[12px] text-white/75',
+                truncated && 'cursor-pointer hover:text-white',
               )}
             >
               {preview}
@@ -100,7 +100,7 @@ export function NotificationItem({
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
                 placeholder={t('notifications.replyPlaceholder')}
-                className="flex-1 h-7 px-2 text-[12px] rounded-md border border-border/40 bg-background/60 outline-none focus:border-accent/60"
+                className="h-7 flex-1 rounded-md border border-white/15 bg-black/40 px-2 text-[12px] text-white outline-none placeholder:text-white/35 focus:border-accent/60"
               />
               <Button
                 size="sm"
@@ -123,7 +123,7 @@ export function NotificationItem({
               <button
                 type="button"
                 onClick={() => onOpenRun(entry.workflowRunId!)}
-                className="px-2 py-0.5 rounded-md text-foreground/70 hover:text-foreground hover:bg-foreground/5"
+                className="rounded-md px-2 py-0.5 text-white/70 hover:bg-white/5 hover:text-white"
               >
                 {t('notifications.openRun')}
               </button>
@@ -132,7 +132,7 @@ export function NotificationItem({
               <button
                 type="button"
                 onClick={() => onAcknowledge(entry.id)}
-                className="px-2 py-0.5 rounded-md text-foreground/70 hover:text-foreground hover:bg-foreground/5"
+                className="rounded-md px-2 py-0.5 text-white/70 hover:bg-white/5 hover:text-white"
               >
                 {t('notifications.acknowledge')}
               </button>
@@ -140,7 +140,7 @@ export function NotificationItem({
             <button
               type="button"
               onClick={() => onClear(entry.id)}
-              className="px-2 py-0.5 rounded-md text-foreground/50 hover:text-foreground/80 hover:bg-foreground/5"
+              className="rounded-md px-2 py-0.5 text-white/50 hover:bg-white/5 hover:text-white/80"
             >
               {t('notifications.dismiss')}
             </button>

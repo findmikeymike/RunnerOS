@@ -34,6 +34,7 @@ import { resolveAgentReferences, describeMissingReferences } from '@/lib/agent-r
 import { skillsAtom } from '@/atoms/skills'
 import { sourcesAtom } from '@/atoms/sources'
 import type { AgentDefinitionDTO } from '../../shared/types'
+import { getAgentCapabilityDisplay } from '@/lib/agent-capability-display'
 
 interface AgentInfoPageProps {
   agentSlug: string
@@ -108,6 +109,7 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
 
   const isActive = activeSlugs.includes(agent.slug)
   const avatar = agent.metadata.avatar?.trim() || '🤖'
+  const skillDisplay = getAgentCapabilityDisplay(agent.slug, agent.metadata.skills ?? [])
 
   const handleToggleActive = async () => {
     try {
@@ -313,17 +315,21 @@ export default function AgentInfoPage({ agentSlug, workspaceId }: AgentInfoPageP
           description="These activate automatically when this worker runs."
         >
           <Info_Table>
-            <Info_Table.Row label="Skills">
-              {agent.metadata.skills && agent.metadata.skills.length > 0 ? (
+            <Info_Table.Row label={skillDisplay.title}>
+              {skillDisplay.items.length > 0 ? (
                 <div className="flex gap-1.5 flex-wrap">
-                  {agent.metadata.skills.map((s) => {
-                    const isMissing = references?.missingSkills.includes(s) ?? false
-                    return (
-                      <Info_Badge key={s} color={isMissing ? 'warning' : 'muted'}>
-                        @{s}{isMissing ? ' (missing)' : ''}
-                      </Info_Badge>
-                    )
-                  })}
+                  {agent.slug === 'persona-agent'
+                    ? skillDisplay.items.map((item) => (
+                        <Info_Badge key={item} color="muted">{item}</Info_Badge>
+                      ))
+                    : skillDisplay.items.map((item) => {
+                        const isMissing = references?.missingSkills.includes(item) ?? false
+                        return (
+                          <Info_Badge key={item} color={isMissing ? 'warning' : 'muted'}>
+                            @{item}{isMissing ? ' (missing)' : ''}
+                          </Info_Badge>
+                        )
+                      })}
                 </div>
               ) : (
                 <span className="text-xs text-foreground/50">none</span>

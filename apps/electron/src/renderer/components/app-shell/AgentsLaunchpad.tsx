@@ -38,6 +38,7 @@ import { defaultWorkerSlugs } from '@/lib/worker-defaults'
 import { CompactPageHeader } from './CompactPageHeader'
 import { getModelsForProviderType } from '@config/llm-connections'
 import { getModelShortName, type ModelDefinition } from '@config/models'
+import { getAgentCapabilityDisplay } from '@/lib/agent-capability-display'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
 import type { AgentDefinitionDTO, ContextDocDTO, LlmConnectionWithStatus } from '../../../shared/types'
 
@@ -607,6 +608,7 @@ function AgentDetailDialog({ agent, workspaceId, onAgentUpdated, onOpenChange }:
   const name = cleanDisplayText(getDisplayName(agent))
   const description = cleanDisplayText(agent.metadata.description)
   const skills = agent.metadata.skills ?? []
+  const skillDisplay = getAgentCapabilityDisplay(agent.slug, skills)
   const tools = agent.metadata.sources ?? []
   const promptDirty = promptDraft !== (agent.systemPrompt || '')
   const handleSavePrompt = async () => {
@@ -702,8 +704,8 @@ function AgentDetailDialog({ agent, workspaceId, onAgentUpdated, onOpenChange }:
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             <CapabilityBlock
               icon={<Zap className="h-3.5 w-3.5" />}
-              title="Skills"
-              items={skills}
+              title={skillDisplay.title}
+              items={skillDisplay.items}
               empty="No bundled skills"
               onAdd={() => setBundlePicker('skills')}
             />

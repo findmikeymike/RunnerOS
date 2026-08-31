@@ -99,6 +99,7 @@ import {
   removeRecentWorkingDir,
 } from './working-directory-history'
 import { CompactPermissionModeSelector } from './CompactPermissionModeSelector'
+import { RENDERER_PRODUCT_VARIANT } from '@/lib/product-identity'
 
 /**
  * Format token count for display (e.g., 1500 -> "1.5k", 200000 -> "200k")
@@ -1756,7 +1757,10 @@ export function FreeFormInput({
           sources={sources}
           workspaceId={workspaceSlug}
           className="pl-5 pr-4 pt-4 pb-3 overflow-y-auto min-h-[88px]"
-          style={{ maxHeight: inputMaxHeight }}
+          style={{
+            maxHeight: inputMaxHeight,
+            caretColor: RENDERER_PRODUCT_VARIANT === 'artist-os' ? 'rgba(255, 255, 255, 0.92)' : undefined,
+          }}
           data-tutorial="chat-input"
           spellCheck={spellCheck}
         />

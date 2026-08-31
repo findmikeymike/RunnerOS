@@ -93,11 +93,11 @@ export function BellMenu({ workspaceId }: BellMenuProps) {
           )}
         </TopBarButton>
       </PopoverTrigger>
-      <PopoverContent align="end" sideOffset={6} className="w-[360px] p-0">
-        <div className="flex items-center justify-between px-3 py-2 border-b border-border/30">
+      <PopoverContent align="end" sideOffset={6} className="w-[360px] p-0 !text-white">
+        <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
           <span className="text-sm font-semibold">{t('notifications.bellTitle')}</span>
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 text-[11px] text-foreground/60 cursor-pointer">
+            <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-white/60">
               <input
                 type="checkbox"
                 checked={showAcknowledged}
@@ -110,7 +110,7 @@ export function BellMenu({ workspaceId }: BellMenuProps) {
               <button
                 type="button"
                 onClick={() => void clearAll()}
-                className="text-[11px] text-foreground/60 hover:text-foreground"
+                className="text-[11px] text-white/60 hover:text-white"
               >
                 {t('notifications.clearAll')}
               </button>
@@ -120,8 +120,8 @@ export function BellMenu({ workspaceId }: BellMenuProps) {
 
         {totalVisible === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
-            <Bell className="h-6 w-6 text-foreground/20" strokeWidth={1.5} />
-            <p className="text-xs text-foreground/50">{t('notifications.empty')}</p>
+            <Bell className="h-6 w-6 text-white/20" strokeWidth={1.5} />
+            <p className="text-xs text-white/50">{t('notifications.empty')}</p>
           </div>
         ) : (
           <div className="max-h-[480px] overflow-y-auto">
@@ -130,10 +130,10 @@ export function BellMenu({ workspaceId }: BellMenuProps) {
               if (list.length === 0) return null
               return (
                 <div key={bucket}>
-                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-foreground/40">
+                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/40">
                     {t(`notifications.urgency.${bucket}`)}
                   </div>
-                  <div className="divide-y divide-border/20">
+                  <div className="divide-y divide-white/10">
                     {list.map((entry) => (
                       <NotificationItem
                         key={entry.id}

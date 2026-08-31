@@ -181,6 +181,16 @@ describe('Artist OS persistent shell chrome', () => {
     expect(workers).not.toContain('onClick={() => setSelectedAgent(agent)}')
   })
 
+  test('keeps Artist OS chat and notification text visible on black surfaces', () => {
+    const input = readFileSync(join(import.meta.dir, '..', 'input', 'FreeFormInput.tsx'), 'utf8')
+    const bell = readFileSync(join(import.meta.dir, '..', '..', 'notifications', 'BellMenu.tsx'), 'utf8')
+    const notification = readFileSync(join(import.meta.dir, '..', '..', 'notifications', 'NotificationItem.tsx'), 'utf8')
+
+    expect(input).toContain("RENDERER_PRODUCT_VARIANT === 'artist-os' ? 'rgba(255, 255, 255, 0.92)' : undefined")
+    expect(bell).toContain('className="w-[360px] p-0 !text-white"')
+    expect(notification).toContain("'border-l-2 px-3 py-2 text-sm text-white'")
+  })
+
   test('routes all major HQ and workspace page headers through the compact system', () => {
     const files = [
       'ArtistCommandCenterHome.tsx',
