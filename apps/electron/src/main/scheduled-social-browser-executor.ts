@@ -42,6 +42,17 @@ export interface ScheduledSocialBrowserExecutorDeps {
   successPollMs?: number
 }
 
+export interface ScheduledSocialApprovalGateDeps {
+  resolveMediaPath?(workspaceRootPath: string, order: ScheduledWorkOrder): string | undefined
+  fingerprintMediaPath?(path: string): string
+  now?(): Date
+}
+
+export interface ApprovedScheduledSocialTuple {
+  platform: NativeSocialPlatform
+  mediaPath?: string
+}
+
 export interface ScheduledSocialBrowserExecutionInput {
   workspaceRootPath: string
   order: ScheduledWorkOrder
@@ -311,7 +322,7 @@ export function resolveScheduledSocialBrowserMediaPath(workspaceRootPath: string
   return undefined
 }
 
-function assertCurrentReleaseKitSocialUseAllowed(workspaceRootPath: string, order: ScheduledWorkOrder): void {
+export function assertCurrentReleaseKitSocialUseAllowed(workspaceRootPath: string, order: ScheduledWorkOrder): void {
   const releaseKitRefs = order.inputRefs.filter((ref) => ref.kind === 'release-kit')
   if (releaseKitRefs.length > 1) throw new Error('Social work has multiple Release Kit media references.')
   const releaseKitRef = releaseKitRefs[0]
@@ -325,7 +336,10 @@ function assertCurrentReleaseKitSocialUseAllowed(workspaceRootPath: string, orde
   assertReleaseKitSocialUseAllowed(item)
 }
 
-function assertApprovedTuple(input: ScheduledSocialBrowserExecutionInput, deps: ScheduledSocialBrowserExecutorDeps): NativeSocialPlatform {
+export function assertApprovedScheduledSocialTuple(
+  input: ScheduledSocialBrowserExecutionInput,
+  deps: ScheduledSocialApprovalGateDeps = {},
+): ApprovedScheduledSocialTuple {
   const { order, preview, approval } = input
   if (order.execution.type !== 'social-publish' || order.type !== 'social-publish') {
     throw new Error('Scheduled work is not a social publish action.')
@@ -337,11 +351,6 @@ function assertApprovedTuple(input: ScheduledSocialBrowserExecutionInput, deps: 
   const action = asRecord(preview.dryRun.action)
   const payload = asRecord(action.payload)
   const options = asRecord(action.options)
-  const plan = asRecord(preview.dryRun.browserPlan)
-  const session = asRecord(plan.browserSession)
-  const verification = asRecord(plan.accountVerification)
-  const expectedInstance = `social-${platform}-${socialBrowserSegment(order.execution.profileId)}`
-  const expectedPartition = `persist:social-${platform}-${socialBrowserSegment(order.execution.profileId)}`
   const mediaPath = resolveApprovedMediaPath(input, deps)
   const mediaDigest = mediaPath ? (deps.fingerprintMediaPath ?? fingerprintScheduledSocialBrowserMedia)(mediaPath) : undefined
   const approvedMedia = Array.isArray(payload.media) ? payload.media : []
@@ -382,22 +391,35 @@ function assertApprovedTuple(input: ScheduledSocialBrowserExecutionInput, deps: 
       throw new Error('Approved YouTube settings no longer match the authoritative work order.')
     }
   }
+  const digest = computeScheduledSocialBrowserActionDigest(preview.dryRun, mediaDigest)
+  if (preview.actionDigest !== digest) throw new Error('Approved social action digest changed before execution.')
+  return { platform, mediaPath }
+}
+
+function assertApprovedTuple(input: ScheduledSocialBrowserExecutionInput, deps: ScheduledSocialBrowserExecutorDeps): NativeSocialPlatform {
+  const { platform } = assertApprovedScheduledSocialTuple(input, deps)
+  if (input.order.execution.type !== 'social-publish') {
+    throw new Error('Scheduled work is not a social publish action.')
+  }
+  const plan = asRecord(input.preview.dryRun.browserPlan)
+  const session = asRecord(plan.browserSession)
+  const verification = asRecord(plan.accountVerification)
+  const expectedInstance = `social-${platform}-${socialBrowserSegment(input.order.execution.profileId)}`
+  const expectedPartition = `persist:social-${platform}-${socialBrowserSegment(input.order.execution.profileId)}`
   if (session.kind !== 'runneros-electron-partition' || session.platform !== platform
-    || session.profile !== order.execution.profileId || session.instanceId !== expectedInstance
+    || session.profile !== input.order.execution.profileId || session.instanceId !== expectedInstance
     || session.partition !== expectedPartition) {
     throw new Error('Approved social preview contains an ambiguous or incorrect browser session.')
   }
   if (verification.requiredBeforeLiveSubmit !== true || verification.verificationTargetKnown !== true
-    || verification.platform !== platform || verification.profile !== order.execution.profileId
+    || verification.platform !== platform || verification.profile !== input.order.execution.profileId
     || (!cleanString(verification.expectedHandle) && !cleanString(verification.expectedAccountUrl))) {
     throw new Error('Approved social preview has no exact account verification target.')
   }
-  const digest = computeScheduledSocialBrowserActionDigest(preview.dryRun, mediaDigest)
-  if (preview.actionDigest !== digest) throw new Error('Approved social action digest changed before browser execution.')
   return platform
 }
 
-function resolveApprovedMediaPath(input: ScheduledSocialBrowserExecutionInput, deps: ScheduledSocialBrowserExecutorDeps): string | undefined {
+function resolveApprovedMediaPath(input: ScheduledSocialBrowserExecutionInput, deps: ScheduledSocialApprovalGateDeps): string | undefined {
   const path = (deps.resolveMediaPath ?? resolveScheduledSocialBrowserMediaPath)(input.workspaceRootPath, input.order)
   if (!path && input.order.execution.type === 'social-publish' && input.order.execution.platform !== 'x') {
     throw new Error(`${input.order.execution.platform} publish requires one exact resolvable media asset.`)

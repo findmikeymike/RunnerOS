@@ -1,9 +1,15 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { basename, extname } from 'node:path'
 import { CraftMcpClient } from '@craft-agent/shared/mcp'
 import { getSourceCredentialManager, loadAllSources, type LoadedSource } from '@craft-agent/shared/sources'
 import type { ScheduledSocialBrowserExecutionInput, ScheduledSocialBrowserExecutionResult } from './scheduled-social-browser-executor'
-import { resolveScheduledSocialBrowserMediaPath } from './scheduled-social-browser-executor'
+import {
+  assertApprovedScheduledSocialTuple,
+  assertCurrentReleaseKitSocialUseAllowed,
+  fingerprintScheduledSocialBrowserMedia,
+  resolveScheduledSocialBrowserMediaPath,
+} from './scheduled-social-browser-executor'
 import {
   ScheduledSocialProviderUnavailableError,
   type ScheduledSocialPreparedRoute,
@@ -23,6 +29,8 @@ export interface ScheduledSocialProviderRuntimeDeps {
   loadSources(workspaceRootPath: string): LoadedSource[]
   getToken(source: LoadedSource): Promise<string | null>
   createMcpClient(config: { transport: 'http'; url: string; headers: Record<string, string> }): McpClientLike
+  resolveMediaPath(workspaceRootPath: string, order: ScheduledSocialBrowserExecutionInput['order']): string | undefined
+  fingerprintMediaPath(path: string): string
   now(): Date
   sleep(ms: number): Promise<void>
   receiptPollMs: number
@@ -34,6 +42,8 @@ const defaultDeps: ScheduledSocialProviderRuntimeDeps = {
   loadSources: loadAllSources,
   getToken: (source) => getSourceCredentialManager().getToken(source),
   createMcpClient: (config) => new CraftMcpClient(config),
+  resolveMediaPath: resolveScheduledSocialBrowserMediaPath,
+  fingerprintMediaPath: fingerprintScheduledSocialBrowserMedia,
   now: () => new Date(),
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   receiptPollMs: 2_000,
@@ -71,7 +81,7 @@ async function prepareTryPost(
       await client.close()
       return undefined
     }
-    const mediaPath = resolveScheduledSocialBrowserMediaPath(input.workspaceRootPath, input.order)
+    const mediaPath = deps.resolveMediaPath(input.workspaceRootPath, input.order)
     const contentType = tryPostContentType(target.platform, mediaPath)
     if (!contentType) {
       await client.close()
@@ -90,7 +100,7 @@ async function prepareTryPost(
       provider: 'trypost',
       execute: async () => {
         try {
-          return await executeTryPost(input, client, account, contentType, mediaPath, deps)
+          return await executeTryPost(input, client, account, contentType, deps)
         } finally {
           await client.close().catch(() => {})
         }
@@ -107,22 +117,25 @@ async function executeTryPost(
   client: McpClientLike,
   account: Record<string, unknown>,
   contentType: string,
-  mediaPath: string | undefined,
   deps: ScheduledSocialProviderRuntimeDeps,
 ): Promise<ScheduledSocialBrowserExecutionResult> {
+  assertCurrentReleaseKitSocialUseAllowed(input.workspaceRootPath, input.order)
+  const { mediaPath: approvedMediaPath } = assertApprovedScheduledSocialTuple(input, deps)
+  const approvedMedia = approvedMediaPath ? readApprovedMedia(input, approvedMediaPath) : undefined
+  // Deliberately do not send executionKey.idempotencyKey until TryPost documents provider-enforced semantics.
   const created = await callMcpJson(client, 'create-post-tool', {
     content: input.order.execution.type === 'social-publish' ? input.order.execution.caption : '',
     platforms: [{ social_account_id: stringField(account, 'id'), content_type: contentType, meta: {} }],
   })
   const postId = firstString(created, ['id', 'post_id'], ['post', 'id'])
   if (!postId) throw new Error('TryPost created a draft without returning a post ID.')
-  if (mediaPath) {
+  if (approvedMediaPath && approvedMedia) {
     const upload = await callMcpJson(client, 'request-media-upload-tool', {})
     const uploadUrl = firstString(upload, ['upload_url'])
     const uploadToken = firstString(upload, ['upload_token'])
     if (!uploadUrl || !uploadToken) throw new Error('TryPost did not return a verifiable upload grant.')
     const form = new FormData()
-    form.append('media', new Blob([readFileSync(mediaPath)], { type: mimeFor(mediaPath) }), basename(mediaPath))
+    form.append('media', new Blob([approvedMedia], { type: mimeFor(approvedMediaPath) }), basename(approvedMediaPath))
     const response = await deps.fetch(uploadUrl, { method: 'POST', body: form })
     if (!response.ok) throw new Error(`TryPost media upload failed (${response.status}).`)
     await callMcpJson(client, 'attach-media-from-upload-tool', { post_id: postId, upload_token: uploadToken })
@@ -139,12 +152,16 @@ async function executeTryPost(
 
 async function pollTryPostReceipt(client: McpClientLike, postId: string, deps: ScheduledSocialProviderRuntimeDeps): Promise<{ externalUrl?: string }> {
   const deadline = Date.now() + deps.receiptTimeoutMs
+  let lastStatus = 'missing'
   while (true) {
     const post = await callMcpJson(client, 'get-post-tool', { post_id: postId })
     const status = firstString(post, ['status'], ['post', 'status'])?.toLowerCase()
+    lastStatus = status || 'missing'
     if (status === 'failed' || status === 'partially_published') throw new Error(`TryPost reported ${status} for ${postId}.`)
     if (status === 'published') return { externalUrl: findUrl(post) }
-    if (Date.now() >= deadline) throw new Error(`TryPost did not confirm publication for ${postId} before the receipt timeout.`)
+    if (Date.now() >= deadline) {
+      throw new Error(`TryPost did not confirm publication for ${postId} before the receipt timeout; last observed status: ${lastStatus}.`)
+    }
     await deps.sleep(deps.receiptPollMs)
   }
 }
@@ -167,14 +184,14 @@ async function preparePostiz(
   }
   const integration = uniqueAccount(asArray(integrations), target.platform, target.handle, ['profile'])
   if (!integration || integration.disabled === true) return undefined
-  const mediaPath = resolveScheduledSocialBrowserMediaPath(input.workspaceRootPath, input.order)
+  const mediaPath = deps.resolveMediaPath(input.workspaceRootPath, input.order)
   if (target.platform === 'instagram' && !mediaPath) return undefined
   if (mediaPath && !postizSupportsMedia(mediaPath)) return undefined
   const settings = postizSettings(target.platform, stringField(integration, 'identifier'), mediaPath)
   if (!settings) return undefined
   return {
     provider: 'postiz',
-    execute: () => executePostiz(input, baseUrl, token, integration, settings, mediaPath, deps),
+    execute: () => executePostiz(input, baseUrl, token, integration, settings, deps),
   }
 }
 
@@ -184,13 +201,16 @@ async function executePostiz(
   token: string,
   integration: Record<string, unknown>,
   settings: Record<string, unknown>,
-  mediaPath: string | undefined,
   deps: ScheduledSocialProviderRuntimeDeps,
 ): Promise<ScheduledSocialBrowserExecutionResult> {
+  assertCurrentReleaseKitSocialUseAllowed(input.workspaceRootPath, input.order)
+  const { mediaPath: approvedMediaPath } = assertApprovedScheduledSocialTuple(input, deps)
+  const approvedMedia = approvedMediaPath ? readApprovedMedia(input, approvedMediaPath) : undefined
+  // Deliberately do not send executionKey.idempotencyKey until Postiz documents provider-enforced semantics.
   let media: Array<{ id: string; path: string }> = []
-  if (mediaPath) {
+  if (approvedMediaPath && approvedMedia) {
     const form = new FormData()
-    form.append('file', new Blob([readFileSync(mediaPath)], { type: mimeFor(mediaPath) }), basename(mediaPath))
+    form.append('file', new Blob([approvedMedia], { type: mimeFor(approvedMediaPath) }), basename(approvedMediaPath))
     const uploaded = await fetchJson(deps.fetch, `${baseUrl}/upload`, token, { method: 'POST', body: form })
     const id = firstString(uploaded, ['id'])
     const path = firstString(uploaded, ['path'])
@@ -229,6 +249,7 @@ async function pollPostizReceipt(
   const startDate = new Date(started - 5 * 60_000).toISOString()
   const endDate = new Date(started + 60 * 60_000).toISOString()
   const deadline = Date.now() + deps.receiptTimeoutMs
+  let lastStatus = 'missing'
   while (true) {
     const response = await fetchJson(deps.fetch, `${baseUrl}/posts?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`, token)
     const posts = asArray(unwrap(response, ['posts']))
@@ -238,10 +259,16 @@ async function pollPostizReceipt(
       return stringField(integration, 'id') === integrationId
         && stringField(post, 'content') === caption
     })
+    if (!exactMatch && fallbackMatches.length > 1) {
+      throw new Error(`Postiz returned an ambiguous publication receipt for ${postId}: ${fallbackMatches.length} posts matched the approved caption and account.`)
+    }
     const match = exactMatch ?? (fallbackMatches.length === 1 ? fallbackMatches[0] : undefined)
+    lastStatus = match ? (firstString(match, ['status', 'state'])?.toLowerCase() || 'receipt-without-live-url') : 'missing'
     const url = match ? firstString(match, ['releaseURL', 'releaseUrl']) : undefined
     if (url) return url
-    if (Date.now() >= deadline) throw new Error(`Postiz did not return a live publication URL for ${postId} before the receipt timeout.`)
+    if (Date.now() >= deadline) {
+      throw new Error(`Postiz did not return a live publication URL for ${postId} before the receipt timeout; last observed status: ${lastStatus}.`)
+    }
     await deps.sleep(deps.receiptPollMs)
   }
 }
@@ -291,6 +318,17 @@ function postizSettings(platform: string, providerIdentifier: string, mediaPath?
 
 function postizSupportsMedia(path: string): boolean {
   return ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.bmp', '.tiff', '.mp4'].includes(extname(path).toLowerCase())
+}
+
+function readApprovedMedia(input: ScheduledSocialBrowserExecutionInput, path: string): ArrayBuffer {
+  const bytes = readFileSync(path)
+  const digest = `sha256:${createHash('sha256').update(bytes).digest('hex')}`
+  if (input.preview.mediaDigest !== digest || input.approval.mediaDigest !== digest) {
+    throw new Error('Approved social media changed while preparing provider execution.')
+  }
+  const uploadBytes = new Uint8Array(bytes.byteLength)
+  uploadBytes.set(bytes)
+  return uploadBytes.buffer
 }
 
 async function callMcpJson(client: McpClientLike, name: string, args: Record<string, unknown>): Promise<unknown> {
