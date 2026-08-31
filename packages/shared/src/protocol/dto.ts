@@ -160,6 +160,25 @@ export interface CreateSessionOptions {
   branchFromMessageId?: string
   /** Parent session ID used together with branchFromMessageId. */
   branchFromSessionId?: string
+  /**
+   * R7 / Plan 01-07: trigger-level subconscious-mode hint. When set to
+   * `"subconscious"`, the agent's PreToolUse pipeline routes write-tool
+   * attempts through `gateWriteAttempt` which creates an Escalation row,
+   * notifies via the registered notifier, and pauses the run until the
+   * user resolves via `approveEscalation` / `rejectEscalation`.
+   *
+   * `"yolo"` bypasses the gate (operator-acknowledged risk). `"default"`
+   * (or undefined) is a no-op — normal workspace permission mode applies.
+   *
+   * This is independent of `permissionMode` above which is the per-
+   * workspace `safe|ask|allow-all` mode.
+   *
+   * The optional `workflowRunId` anchors any created escalation to a
+   * workflow run so the UI can show "Run X paused on tool Y".
+   */
+  subconsciousMode?: 'default' | 'subconscious' | 'yolo'
+  /** Anchor for escalation rows when the session is spawned by a workflow run. */
+  workflowRunId?: string
 }
 
 export interface RemoteSessionTransferPayload {

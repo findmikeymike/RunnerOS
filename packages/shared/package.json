@@ -125,7 +125,9 @@
     "shell-quote": "^1.8.3",
     "@earendil-works/pi-agent-core": "0.84.3",
     "@earendil-works/pi-ai": "0.84.3",
-    "@earendil-works/pi-coding-agent": "0.84.3"
+    "@earendil-works/pi-coding-agent": "0.84.3",
+    "proper-lockfile": "^4.1.2",
+    "systeminformation": "^5.31.6"
   },
   "peerDependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.220",
@@ -133,6 +135,7 @@
     "zod": ">=3.0.0"
   },
   "devDependencies": {
+    "@types/proper-lockfile": "^4.1.4",
     "@types/shell-quote": "^1.7.5",
     "@types/uuid": "^11.0.0"
   }

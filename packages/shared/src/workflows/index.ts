@@ -66,7 +66,19 @@ export {
 
 export {
   fillMissingWorkflowTriggerInputConstraints,
+  buildToolNotEnabledDenial,
+  isSourceAllowed,
   normalizeWorkflowTriggerInputs,
+  parseTriggerToolsetOverride,
+  resolveEnabledToolsets,
+  resolvePermissionMode,
+  TRIGGER_PERMISSION_MODES,
+} from './trigger-inputs.ts';
+export type {
+  PlatformKey,
+  PlatformToolsetConfig,
+  TriggerPermissionMode,
+  TriggerToolsetOverride,
 } from './trigger-inputs.ts';
 
 export type {

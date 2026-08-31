@@ -3069,6 +3069,11 @@ export class SessionManager implements ISessionManager {
   }
 
   private broadcastWorkflowRunUpdated(event: WorkflowRunEvent): void {
+    if (event.type === 'escalation.created') {
+      // A dedicated escalation channel will surface these independently of
+      // workflow run updates. There is no workspace id on this event shape.
+      return
+    }
     const workspaceId = event.type === 'outputs.updated' ? event.workspaceId : event.run.workspaceId
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (workspace) scheduleHqStateContextRefresh(workspace.rootPath)

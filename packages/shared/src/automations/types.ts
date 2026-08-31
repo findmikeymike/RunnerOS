@@ -79,6 +79,19 @@ export interface PromptAction {
    * When omitted, falls back to the workspace default (then DEFAULT_THINKING_LEVEL).
    */
   thinkingLevel?: ThinkingLevel;
+  /**
+   * Per-run permission-mode hint (R7 / Plan 01-07). Forwarded into the
+   * trigger inputs so the workflow runner can configure the escalate-on-
+   * write gate. Accepts the canonical trigger-level union plus the SPEC
+   * alias `"escalate-on-write"` (normalized to `"subconscious"`).
+   */
+  mode?: 'default' | 'subconscious' | 'yolo' | 'escalate-on-write';
+  /**
+   * Escalation policy when `mode === "subconscious"`. `"notify-and-queue"`
+   * (the default) creates a pending escalation row + emits a notification
+   * event the UI/CLI can subscribe to.
+   */
+  onEscalation?: 'notify-and-queue';
 }
 
 /** HTTP method for webhook actions */
@@ -396,6 +409,18 @@ export interface PendingPrompt {
   model?: string;
   /** Thinking level for the created session (falls back to workspace default when omitted) */
   thinkingLevel?: ThinkingLevel;
+  /**
+   * Per-run subconscious-mode hint (R7 / Plan 01-07). Forwarded as
+   * `trigger.permission_mode` when the workflow runner consumes this
+   * prompt. `"escalate-on-write"` is the SPEC alias for `"subconscious"`.
+   */
+  subconsciousMode?: 'default' | 'subconscious' | 'yolo';
+  /**
+   * Escalation policy attached to the prompt. `"notify-and-queue"` is the
+   * default; reserved field so future modes (e.g. `"silent-deny"`) can be
+   * added without a breaking change.
+   */
+  onEscalation?: 'notify-and-queue';
 }
 
 export interface PendingQueuedWork {

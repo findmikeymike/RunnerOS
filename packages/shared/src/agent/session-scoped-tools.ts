@@ -35,7 +35,8 @@ import { createLLMTool, type LLMQueryRequest, type LLMQueryResult } from './llm-
 import { createSpawnSessionTool, type SpawnSessionFn } from './spawn-session-tool.ts';
 import { createBrowserTools, type BrowserPaneFns } from './browser-tools.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
-import { getBrowserToolEnabled } from '../config/storage.ts';
+import { getBrowserToolEnabled, loadStoredConfig } from '../config/storage.ts';
+import { loadSession } from '../sessions/storage.ts';
 
 // Re-export types for backward compatibility
 export type {
@@ -285,13 +286,30 @@ export function getSessionScopedTools(
       }),
     );
 
-    // Add spawn_session — backend-specific (not in registry handler)
+    // Add spawn_session — backend-specific (not in registry handler).
+    //
+    // Isolation hardening (Hermes-ported, MIT — see spawn-session-isolation.ts):
+    //   * getDelegationConfig: reads delegation.{max_spawn_depth, subagent_auto_approve}
+    //     from the user's stored config so the depth gate and auto-approve
+    //     opt-in are reachable from config.json (B1 in the 01-01 review).
+    //   * getParentSourceSlugs: returns this session's enabledSourceSlugs so
+    //     a subagent cannot reach a source the parent itself doesn't have
+    //     access to. Returns undefined when the parent has no explicit
+    //     allowlist (inherit defaults — distinct from "deny all").
     tools.push(
       createSpawnSessionTool({
         sessionId,
         getSpawnSessionFn: () => {
           const callbacks = getSessionScopedToolCallbacks(sessionId);
           return callbacks?.spawnSessionFn;
+        },
+        getDelegationConfig: () => {
+          const stored = loadStoredConfig();
+          return { delegation: stored?.delegation };
+        },
+        getParentSourceSlugs: () => {
+          const session = loadSession(workspaceRootPath, sessionId);
+          return session?.enabledSourceSlugs;
         },
       }),
     );

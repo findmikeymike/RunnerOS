@@ -22,7 +22,8 @@ import { appendAutomationHistoryEntry, compactAutomationHistorySync } from './hi
 import { compactWebhookDeliveryHistorySync } from './delivery-history.ts';
 import { createLogger } from '../utils/debug.ts';
 import { WorkspaceEventBus, type EventPayloadMap, type EventDeliveryResult } from './event-bus.ts';
-import { PromptHandler, QueueWorkHandler, EventLogHandler, WebhookHandler, type AutomationsConfigProvider } from './handlers/index.ts';
+import { PromptHandler, QueueWorkHandler, EventLogHandler, WebhookHandler, ShellHookHandler, AcpSpawnHandler, type AutomationsConfigProvider, type ShellHookOutcome } from './handlers/index.ts';
+import type { DelegateToAcpResult } from '../protocol/acp/spawn-bridge.ts';
 import { type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type PendingQueuedWork, type WebhookActionResult, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
 import { validateAutomationsConfig } from './validation.ts';
 import { matcherMatchesSdk } from './utils.ts';
@@ -85,6 +86,10 @@ export interface AutomationSystemOptions {
   onEventLost?: (events: string[], error: Error) => void;
   /** Called when this process becomes or stops being the active team runner. */
   onRunnerActiveChange?: (active: boolean) => void;
+  /** Called when a shell-hook handler resolves (allow/block/context). */
+  onShellHookResult?: (outcome: ShellHookOutcome) => void;
+  /** Called when an acp-spawn handler completes. */
+  onAcpSpawnResult?: (result: DelegateToAcpResult) => void;
 }
 
 // ============================================================================
@@ -100,6 +105,8 @@ export class AutomationSystem implements AutomationsConfigProvider {
   private queueWorkHandler: QueueWorkHandler | null = null;
   private webhookHandler: WebhookHandler | null = null;
   private eventLogHandler: EventLogHandler | null = null;
+  private shellHookHandler: ShellHookHandler | null = null;
+  private acpSpawnHandler: AcpSpawnHandler | null = null;
   private scheduler: SchedulerService | null = null;
   private fileWatchService: FileWatchService | null = null;
   private pollService: PollService | null = null;
@@ -501,6 +508,58 @@ export class AutomationSystem implements AutomationsConfigProvider {
     });
     this.eventLogHandler.subscribe(this.eventBus);
 
+    // R6: Shell-hook handler. Routes shell-hook actions to the polyglot runner.
+    // We wrap the outcome callback so that any hook-returned `context` string
+    // passes through `assemblePrompt` + `scanForInjection` before reaching an
+    // agent — closes the R6+R2 composition gap (audit blocker B4).
+    this.shellHookHandler = new ShellHookHandler(
+      {
+        workspaceId: this.options.workspaceId,
+        workspaceRootPath: this.options.workspaceRootPath,
+        onHookResult: async (outcome) => {
+          const response = outcome.response as { context?: string; action?: string; message?: string };
+          if (response && typeof response.context === 'string' && response.context.trim().length > 0) {
+            // Lazy import to avoid a hard cycle through agent prompt-builder.
+            const { assemblePrompt, scanForInjection } = await import('../agent/prompt-builder.ts');
+            const assembled = assemblePrompt({ userPrompt: response.context });
+            const scan = scanForInjection(assembled);
+            if (scan.blocked) {
+              log.warn(
+                `[AutomationSystem] shell-hook context blocked by injection scanner ` +
+                  `event=${outcome.event} matcher=${outcome.matcherId ?? '<none>'} ` +
+                  `pattern=${scan.pattern} reason=${scan.reason}`
+              );
+              // Replace the response with a no-op so downstream consumers
+              // never see the unsafe context. The block decision wins.
+              outcome = {
+                ...outcome,
+                response: { action: 'allow', message: 'context blocked by injection scanner' },
+              };
+            }
+          }
+          this.options.onShellHookResult?.(outcome);
+        },
+        onError: (event, err) => {
+          this.options.onError?.(event, err);
+        },
+      },
+      this
+    );
+    this.shellHookHandler.subscribe(this.eventBus);
+
+    // R8: ACP-spawn automation handler. Routes synthetic
+    // `automation:acp-spawn` events to a remote ACP endpoint.
+    this.acpSpawnHandler = new AcpSpawnHandler({
+      workspaceId: this.options.workspaceId,
+      onResult: (result) => {
+        this.options.onAcpSpawnResult?.(result);
+      },
+      onError: (action, err) => {
+        log.warn(`[AutomationSystem] acp-spawn failed for endpoint=${action.acpEndpoint}: ${err.message}`);
+      },
+    });
+    this.acpSpawnHandler.subscribe(this.eventBus);
+
     log.debug(`[AutomationSystem] Handlers created and subscribed`);
   }
 
@@ -896,6 +955,8 @@ export class AutomationSystem implements AutomationsConfigProvider {
     this.promptHandler?.dispose();
     this.queueWorkHandler?.dispose();
     this.webhookHandler?.dispose();
+    this.shellHookHandler?.dispose();
+    this.acpSpawnHandler?.dispose();
     await this.eventLogHandler?.dispose();
 
     // Dispose event bus

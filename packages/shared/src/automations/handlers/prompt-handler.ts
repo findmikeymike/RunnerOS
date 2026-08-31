@@ -12,6 +12,7 @@ import { APP_EVENTS, type AutomationEvent, type PromptAction, type PendingPrompt
 import type { PermissionMode } from '../../agent/mode-types.ts';
 import { matcherMatches, buildPromptEnvFromPayload, expandEnvVars, parsePromptReferences } from '../utils.ts';
 import { deriveAutomationName } from '../name-utils.ts';
+import { assemblePrompt, scanForInjection } from '../../agent/prompt-builder.ts';
 
 const log = createLogger('prompt-handler');
 const EXTERNAL_INPUT_EVENTS = new Set<AutomationEvent>([
@@ -119,11 +120,48 @@ export class PromptHandler implements AutomationHandler {
         // Expand environment variables in the prompt
         const expandedPrompt = expandEnvVars(prompt.prompt, env);
 
+        // Prompt-injection scan (run-time, against the fully-assembled prompt).
+        // Closes Hermes bug #3968 — skill bodies loaded at runtime can carry
+        // injection payloads that the create-time prompt scan would miss.
+        // We have no skill loader here yet (Phase 1 scaffold) so the assembled
+        // prompt is just the expanded user prompt; the scanner still catches
+        // anything env-var expansion injected into the cron prompt itself.
+        // TODO(#3968): thread loadedSkills + contextFiles into assemblePrompt
+        // once the loader lands in this lane. Until then this scan is
+        // incomplete — a malicious skill body would slip through because the
+        // scanner only sees `userPrompt`.
+        const assembled = assemblePrompt({ userPrompt: expandedPrompt });
+        const scan = scanForInjection(assembled);
+        if (scan.blocked) {
+          // Server-side structured log carries the full pattern/reason for
+          // debugging. Do NOT surface that detail to anything user-reachable
+          // — an attacker can iterate against the scanner if they can read
+          // which pattern fired.
+          log.warn(
+            `[PromptHandler] prompt blocked by injection scanner — event=${event} automation=${automationName} matcher=${matcherId ?? '<none>'} pattern=${scan.pattern} reason=${scan.reason}`
+          );
+          continue;
+        }
+
         // Parse references
         const references = parsePromptReferences(expandedPrompt);
 
         // Expand labels
         const expandedLabels = labels?.map(label => expandEnvVars(label, env));
+
+        // R7 / Plan 01-07: subconscious-mode DSL alias normalization.
+        // The DSL accepts `mode: "escalate-on-write"` as a synonym for
+        // `"subconscious"`; both collapse to the trigger-level union.
+        let subconsciousMode: 'default' | 'subconscious' | 'yolo' | undefined;
+        if (prompt.mode === 'escalate-on-write') {
+          subconsciousMode = 'subconscious';
+        } else if (
+          prompt.mode === 'default' ||
+          prompt.mode === 'subconscious' ||
+          prompt.mode === 'yolo'
+        ) {
+          subconsciousMode = prompt.mode;
+        }
 
         pendingPrompts.push({
           sessionId: this.options.sessionId,
@@ -140,6 +178,8 @@ export class PromptHandler implements AutomationHandler {
           llmConnection: prompt.llmConnection,
           model: prompt.model,
           thinkingLevel: prompt.thinkingLevel,
+          subconsciousMode,
+          onEscalation: prompt.onEscalation,
         });
       }
 

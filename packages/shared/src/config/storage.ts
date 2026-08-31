@@ -92,6 +92,16 @@ export interface StoredConfig {
   // once per user (e.g. restoring a previously-removed model to connection
   // lists without re-adding it if the user later removes it deliberately).
   migrationsApplied?: string[];
+  // Subagent delegation safety (see packages/shared/src/agent/spawn-session-isolation.ts).
+  // Ported pattern from Hermes (MIT). Both fields are optional and additive;
+  // omitting them yields the safe defaults (deny + max depth 1).
+  delegation?: {
+    // When true, subagents auto-approve dangerous commands ("once") instead
+    // of the default auto-deny. Every approval is logged. Default: false.
+    subagent_auto_approve?: boolean;
+    // Maximum subagent nesting depth. Clamped to [1, 3]; default 1 (flat).
+    max_spawn_depth?: number;
+  };
 }
 
 const LEGACY_HQ_WORKSPACE_NAMES = new Set([
@@ -386,6 +396,19 @@ export function loadStoredConfig(): StoredConfig | null {
 // - getAnthropicApiKey() → credentialManager.getLlmApiKey(connectionSlug)
 // - getClaudeOAuthToken() → credentialManager.getLlmOAuth(connectionSlug)
 
+// Post-write hooks (e.g. reactive-config cache invalidation). Registered by
+// sibling modules at import time to avoid a hard circular dependency.
+type PostSaveHook = () => void;
+const postSaveHooks = new Set<PostSaveHook>();
+
+/** @internal Register a hook to run synchronously after a successful saveConfig. */
+export function registerPostSaveConfigHook(hook: PostSaveHook): () => void {
+  postSaveHooks.add(hook);
+  return () => {
+    postSaveHooks.delete(hook);
+  };
+}
+
 export function saveConfig(config: StoredConfig): void {
   ensureConfigDir();
 
@@ -402,6 +425,16 @@ export function saveConfig(config: StoredConfig): void {
   // primary config, which on a failed parse is discarded and takes every
   // workspace/connection with it (silent total data loss).
   atomicWriteFileSync(CONFIG_FILE, JSON.stringify(storageConfig, null, 2));
+
+  // Fire post-save hooks (cache invalidation, etc). Errors are swallowed so
+  // an observer bug can't break config writes.
+  for (const hook of postSaveHooks) {
+    try {
+      hook();
+    } catch (err) {
+      debug('[config] post-save hook threw:', err);
+    }
+  }
 }
 
 // Legacy updateApiKey() removed - use setupLlmConnection IPC handler instead.
