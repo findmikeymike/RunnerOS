@@ -84,10 +84,10 @@ Avoid oversized cards, nested boxes, screenshot carousels, long prose, and hover
 ### Start here
 
 1. **Connect an AI model**  
-   Open `Settings → AI`. Add at least one supported provider, verify it, and choose the model you want agents to use.
+   Open `Settings → AI`. Explain that users can connect a GPT or Claude subscription, or connect multiple providers so agents can route stronger models to planning and cheaper models to simple execution.
 
 2. **Connect only the services you use**  
-   Open `Settings → Connections`. Explain that API keys and tools unlock specific abilities; users do not need every integration.
+   Open `Settings → Connections`. Explain that API keys and tools unlock specific abilities, and that some specialists rely on those connections to do things rather than only give advice; users do not need every integration.
 
 3. **Connect artist accounts**  
    Provide separate actions for `Social Accounts`, `Spotify`, and `Ad Accounts`. State that an account must be verified before dependent work can run.
@@ -96,7 +96,7 @@ Avoid oversized cards, nested boxes, screenshot carousels, long prose, and hover
    Open `Settings → Permissions`. Explain in one sentence that reading and drafting can be low-risk while public posts, sends, spending, deletion, and other external actions require the configured approval boundary.
 
 5. **Give agents the artist truth**  
-   Send the user to HQ `Profile`, `Voice`, and `Branding`. Explain that these are reusable instructions and facts agents should use across campaigns.
+   Start with `Brain`, where the user establishes `Profile`, `Voice`, and `Branding` so agents understand them as an artist. Send music, photos, and reusable assets to `Vault` so agents can use them when appropriate.
 
 ### Where to go
 
@@ -112,7 +112,7 @@ Avoid oversized cards, nested boxes, screenshot carousels, long prose, and hover
 ### Common questions
 
 - **Worker, Workflow, or Automation?**  
-  A Worker is a specialist you talk to. A Workflow is a saved sequence. An Automation decides when a repeatable action runs.
+  A Worker is a specialist you talk to. A Workflow is a chain of specialists acting in sequence for long, complex work. An Automation decides when a repeatable action runs.
 
 - **Where did my work go?**  
   Chats preserve the conversation; Outputs hold durable deliverables. Approved campaign assets belong in that campaign's Release Kit.
@@ -121,7 +121,7 @@ Avoid oversized cards, nested boxes, screenshot carousels, long prose, and hover
   It makes the capability available. Permission and approval rules still decide whether an external action may execute.
 
 - **What is Goal Mode?**  
-  A bounded long-running objective inside one chat. It can continue in rounds, but external or public actions still obey approval rules.
+  A bounded long-running objective inside one agent chat. Type `/goal <objective>` or `$goal <objective>`, review the setup, and press **Start Goal**. It can continue in rounds, but external or public actions still obey approval rules.
 
 ## HQ Tab
 

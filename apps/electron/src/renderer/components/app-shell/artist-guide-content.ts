@@ -94,7 +94,7 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
       {
         id: 'setup-ai',
         title: 'Connect an AI model',
-        body: 'Add a provider, verify it, and choose the model your agents should use.',
+        body: 'Use a GPT or Claude subscription, or connect multiple providers so agents can route stronger models to planning and cheaper models to simple execution.',
         icon: 'ai',
         readiness: 'ai',
         actions: [{ id: 'settings.ai', label: 'Open AI' }],
@@ -102,7 +102,7 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
       {
         id: 'setup-connections',
         title: 'Connect the services you use',
-        body: 'Connections unlock specific tools. You do not need to connect every service.',
+        body: 'Connections unlock specific tools, and some specialists rely on them to do things—not just give advice. You do not need to connect every service.',
         icon: 'connection',
         actions: [{ id: 'settings.connections', label: 'Open Connections' }],
       },
@@ -127,7 +127,7 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
       {
         id: 'setup-artist-truth',
         title: 'Give agents the artist truth',
-        body: 'Profile, Voice, and Branding tell every campaign who the artist is and how they should sound.',
+        body: 'Go to Brain to establish Profile, Voice, and Branding so agents understand you as an artist. Add music, photos, and reusable assets to Vault so agents can use them when appropriate.',
         icon: 'brain',
         actions: [
           { id: 'hq.profile', label: 'Profile' },
@@ -185,7 +185,7 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
       {
         id: 'concept-work-types',
         title: 'Worker, Workflow, or Automation?',
-        body: 'A Worker is a specialist you talk to. A Workflow is a saved sequence. An Automation decides when repeatable work runs.',
+        body: 'A Worker is a specialist you talk to. A Workflow is a chain of specialists acting in sequence for long, complex work. An Automation decides when repeatable work runs.',
       },
       {
         id: 'concept-work-location',
@@ -200,7 +200,7 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
       {
         id: 'concept-goal',
         title: 'What is Goal Mode?',
-        body: 'A bounded long-running objective inside one chat. External and public actions still obey approval rules.',
+        body: 'A bounded long-running objective inside one agent chat. Type /goal followed by the objective—or $goal followed by the objective—then review it and press Start Goal. External and public actions still obey approval rules.',
       },
     ],
   },
@@ -448,4 +448,3 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
     ],
   },
 ]
-
