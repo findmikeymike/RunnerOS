@@ -149,7 +149,7 @@ Avoid oversized cards, nested boxes, screenshot carousels, long prose, and hover
 ### Essential concepts
 
 - **HQ versus Campaign**  
-  Put reusable artist identity, relationships, long-term direction, and shared assets in HQ. Put one release's dates, jobs, unfinished work, and approved release assets in its Campaign.
+  HQ is where users handle the big picture: artist-wide direction, long-term planning, relationships, and shared knowledge. A Campaign is the day-to-day home for one individual release—its dates, jobs, team, approvals, and assets.
 
 - **Pulse panels**  
   Spotify, social, and intel panels depend on their connections. Starting a Pulse begins work; it does not mean the result is already complete.

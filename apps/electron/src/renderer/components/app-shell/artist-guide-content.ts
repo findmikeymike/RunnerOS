@@ -308,7 +308,7 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
       {
         id: 'hq-concept-split',
         title: 'HQ versus Campaign',
-        body: 'HQ holds reusable artist identity, relationships, direction, and shared assets. A Campaign holds one release’s execution.',
+        body: 'HQ is where you handle the big picture: artist-wide direction, long-term planning, relationships, and shared knowledge. A Campaign is the day-to-day home for one individual release—its dates, jobs, team, approvals, and assets.',
       },
       {
         id: 'hq-concept-pulses',
