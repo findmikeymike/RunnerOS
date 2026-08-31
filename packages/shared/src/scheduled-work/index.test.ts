@@ -13,10 +13,17 @@ import {
   migrateCampaignCalendarJobs,
   parseScheduledWorkDocResult,
   serializeScheduledWorkBody,
+  stableScheduledWorkAuthorizationStringify,
   summarizeReleaseKitItemUses,
   type ScheduledWorkOrder,
 } from './index.ts'
 import { hqSemanticIntentId } from '../hq-state/intent.ts'
+
+test('authorization serialization is stable across key order and omits undefined fields', () => {
+  const left = { title: 'Post', releaseKitRef: { itemId: 'item-1', sha256: 'a'.repeat(64), label: undefined }, platform: 'x', profileId: 'main', caption: 'Now.', platformOptions: { z: 2, a: 1 }, startAt: '2026-09-01T12:00:00.000Z', timezone: 'UTC' }
+  const right = { timezone: 'UTC', startAt: '2026-09-01T12:00:00.000Z', platformOptions: { a: 1, z: 2 }, caption: 'Now.', profileId: 'main', platform: 'x', releaseKitRef: { sha256: 'a'.repeat(64), itemId: 'item-1' }, title: 'Post' }
+  expect(stableScheduledWorkAuthorizationStringify(left)).toBe(stableScheduledWorkAuthorizationStringify(right))
+})
 
 function calendarWithJob(actionType: 'ask-agent' | 'run-workflow' | 'post-asset' | 'outreach-batch' = 'ask-agent'): CampaignCalendar {
   const payload = actionType === 'run-workflow'

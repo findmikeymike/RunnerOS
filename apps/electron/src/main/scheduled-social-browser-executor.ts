@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { readOutputManifest, resolveOutputAssetPath } from '@craft-agent/shared/outputs'
-import { resolveVerifiedReleaseKitItemPath } from '@craft-agent/shared/release-kit'
+import { assertReleaseKitSocialUseAllowed, loadReleaseKitManifest, resolveVerifiedReleaseKitItemPath } from '@craft-agent/shared/release-kit'
 import type {
   ScheduledSocialActionPreview,
   ScheduledSocialApproval,
@@ -108,6 +108,7 @@ export async function executeScheduledSocialBrowser(
   input: ScheduledSocialBrowserExecutionInput,
   deps: ScheduledSocialBrowserExecutorDeps,
 ): Promise<ScheduledSocialBrowserExecutionResult> {
+  assertCurrentReleaseKitSocialUseAllowed(input.workspaceRootPath, input.order)
   const platform = assertApprovedTuple(input, deps)
   const contract = PLATFORM_CONTRACTS[platform]
   const action = input.preview.dryRun.action as Record<string, unknown>
@@ -308,6 +309,20 @@ export function resolveScheduledSocialBrowserMediaPath(workspaceRootPath: string
     if (resolved) return resolved
   }
   return undefined
+}
+
+function assertCurrentReleaseKitSocialUseAllowed(workspaceRootPath: string, order: ScheduledWorkOrder): void {
+  const releaseKitRefs = order.inputRefs.filter((ref) => ref.kind === 'release-kit')
+  if (releaseKitRefs.length > 1) throw new Error('Social work has multiple Release Kit media references.')
+  const releaseKitRef = releaseKitRefs[0]
+  if (!releaseKitRef) return
+  const item = loadReleaseKitManifest(
+    workspaceRootPath,
+    order.owner.workspaceId,
+    order.owner.campaignId ?? order.owner.workspaceId,
+  ).items.find((candidate) => candidate.id === releaseKitRef.itemId)
+  if (!item) throw new Error(`Release Kit item not found: ${releaseKitRef.itemId}`)
+  assertReleaseKitSocialUseAllowed(item)
 }
 
 function assertApprovedTuple(input: ScheduledSocialBrowserExecutionInput, deps: ScheduledSocialBrowserExecutorDeps): NativeSocialPlatform {

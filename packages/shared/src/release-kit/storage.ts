@@ -175,29 +175,39 @@ export function updateReleaseKitItemUsage(
   itemId: string,
   input: UpdateReleaseKitUsageInput,
 ): ReleaseKitManifest {
-  return withReleaseKitLock(workspaceRootPath, () => {
-    const manifest = loadReleaseKitManifest(workspaceRootPath, workspaceId, campaignId);
-    const current = manifest.items.find((item) => item.id === itemId);
-    if (!current) throw new Error(`Release Kit item not found: ${itemId}`);
-    const now = new Date().toISOString();
-    const usage = normalizeReleaseKitUsage({
-      ...current.usage,
-      ...(input.bestFor !== undefined ? { bestFor: input.bestFor } : {}),
-      ...(input.contentRating !== undefined ? { contentRating: input.contentRating } : {}),
-      ...(input.notes !== undefined ? { notes: input.notes ?? undefined } : {}),
-      ...(input.restrictions !== undefined
-        ? { restrictions: { ...current.usage.restrictions, ...input.restrictions } }
-        : {}),
-      updatedAt: now,
-      updatedBy: 'user',
-    });
-    const next: ReleaseKitManifest = {
-      ...manifest,
-      schemaVersion: 2,
-      updatedAt: now,
-      items: manifest.items.map((item) => item.id === itemId ? { ...item, usage } : item),
-    };
-    return saveReleaseKitManifest(workspaceRootPath, next);
+  return withReleaseKitLock(workspaceRootPath, () => updateReleaseKitItemUsageWhileLocked(
+    workspaceRootPath, workspaceId, campaignId, itemId, input,
+  ));
+}
+
+/** Caller must hold the Release Kit lock. Used to preserve cross-document lock order. */
+export function updateReleaseKitItemUsageWhileLocked(
+  workspaceRootPath: string,
+  workspaceId: string,
+  campaignId: string,
+  itemId: string,
+  input: UpdateReleaseKitUsageInput,
+): ReleaseKitManifest {
+  const manifest = loadReleaseKitManifest(workspaceRootPath, workspaceId, campaignId);
+  const current = manifest.items.find((item) => item.id === itemId);
+  if (!current) throw new Error(`Release Kit item not found: ${itemId}`);
+  const now = new Date().toISOString();
+  const usage = normalizeReleaseKitUsage({
+    ...current.usage,
+    ...(input.bestFor !== undefined ? { bestFor: input.bestFor } : {}),
+    ...(input.contentRating !== undefined ? { contentRating: input.contentRating } : {}),
+    ...(input.notes !== undefined ? { notes: input.notes ?? undefined } : {}),
+    ...(input.restrictions !== undefined
+      ? { restrictions: { ...current.usage.restrictions, ...input.restrictions } }
+      : {}),
+    updatedAt: now,
+    updatedBy: 'user',
+  });
+  return saveReleaseKitManifest(workspaceRootPath, {
+    ...manifest,
+    schemaVersion: 2,
+    updatedAt: now,
+    items: manifest.items.map((item) => item.id === itemId ? { ...item, usage } : item),
   });
 }
 

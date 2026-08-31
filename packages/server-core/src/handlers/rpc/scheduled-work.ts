@@ -31,6 +31,7 @@ import {
   parseScheduledWorkDocResult,
   scheduledWorkMetadata,
   scheduledWorkDefinitionDigest,
+  stableScheduledWorkAuthorizationStringify,
   serializeScheduledWorkBody,
   type ScheduledWorkDocument,
   type ScheduleCampaignWorkInput,
@@ -395,6 +396,9 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           throw new Error('Linked campaign work was not found.')
         }
         if (order.updatedAt !== input.expectedUpdatedAt) throw new Error(`Scheduled work order changed before social approval: ${order.id}`)
+        if (order.authorizationPolicy === 'durable-v1' || order.authorization) {
+          throw new Error('This post was authorized when scheduled and cannot receive a separate manual approval.')
+        }
         if (order.status !== 'needs-approval' || order.execution.type !== 'social-publish' || !order.socialAction) {
           throw new Error('Social work needs a current dry-run before approval.')
         }
@@ -464,7 +468,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           startAt: normalized.startAt,
           timezone: normalized.timezone,
         }
-        const payloadDigest = `sha256:${createHash('sha256').update(stableAuthorizationStringify(definition)).digest('hex')}`
+        const payloadDigest = `sha256:${createHash('sha256').update(stableScheduledWorkAuthorizationStringify(definition)).digest('hex')}`
         const now = new Date().toISOString()
         const authorization: ScheduledWorkAuthorization = {
           id: `scheduled-work-authorization-${requestId}`,
@@ -571,7 +575,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         }
         const changes = socialDefinitionChanges(order.authorization.definition, definition)
         if (changes.length === 0) throw new Error('No changes need confirmation.')
-        const payloadDigest = `sha256:${createHash('sha256').update(stableAuthorizationStringify(definition)).digest('hex')}`
+        const payloadDigest = `sha256:${createHash('sha256').update(stableScheduledWorkAuthorizationStringify(definition)).digest('hex')}`
         const now = new Date().toISOString()
         const authorization: ScheduledWorkAuthorization = {
           id: `scheduled-work-authorization-${order.id}-${Date.now()}`,
@@ -912,8 +916,8 @@ function socialDefinitionChanges(
 ): ScheduledSocialDefinitionChange[] {
   const changes: ScheduledSocialDefinitionChange[] = []
   const add = (field: ScheduledSocialDefinitionChange['field'], previous: unknown, next: unknown) => {
-    const beforeValue = typeof previous === 'string' ? previous : stableAuthorizationStringify(previous ?? null)
-    const afterValue = typeof next === 'string' ? next : stableAuthorizationStringify(next ?? null)
+    const beforeValue = typeof previous === 'string' ? previous : stableScheduledWorkAuthorizationStringify(previous ?? null)
+    const afterValue = typeof next === 'string' ? next : stableScheduledWorkAuthorizationStringify(next ?? null)
     if (beforeValue !== afterValue) changes.push({ field, before: beforeValue, after: afterValue })
   }
   add('title', before.title, after.title)
@@ -1068,14 +1072,6 @@ function stableSocialStringify(value: unknown): string {
   return JSON.stringify(value)
 }
 
-function stableAuthorizationStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableAuthorizationStringify).join(',')}]`
-  if (value && typeof value === 'object') {
-    const record = value as Record<string, unknown>
-    return `{${Object.keys(record).filter((key) => record[key] !== undefined).sort().map((key) => `${JSON.stringify(key)}:${stableAuthorizationStringify(record[key])}`).join(',')}}`
-  }
-  return JSON.stringify(value)
-}
 
 function readArtistCalendar(rootPath: string): ArtistCalendar {
   const doc = loadContextDoc(rootPath, ARTIST_CALENDAR_CONTEXT_SLUG)

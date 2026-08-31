@@ -78,6 +78,7 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.releaseKit.VERIFY,
   RPC_CHANNELS.releaseKit.MIGRATE_LEGACY,
   RPC_CHANNELS.releaseKit.OPEN_FOLDER,
+  RPC_CHANNELS.releaseKit.CHANGED,
 
   // auth — local auth state + native dialogs
   RPC_CHANNELS.auth.LOGOUT,
@@ -200,6 +201,10 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.browserPane.RELOAD,
   RPC_CHANNELS.browserPane.STOP,
   RPC_CHANNELS.browserPane.FOCUS,
+  RPC_CHANNELS.browserPane.DOCK,
+  RPC_CHANNELS.browserPane.UPDATE_DOCK_BOUNDS,
+  RPC_CHANNELS.browserPane.HIDE_SIDECAR,
+  RPC_CHANNELS.browserPane.POP_OUT,
   RPC_CHANNELS.browserPane.SNAPSHOT,
   RPC_CHANNELS.browserPane.CLICK,
   RPC_CHANNELS.browserPane.FILL,
@@ -524,6 +529,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.scheduledWork.DECIDE_CAMPAIGN,
   RPC_CHANNELS.scheduledWork.RESOLVE_CAMPAIGN_OUTPUT,
   RPC_CHANNELS.scheduledWork.APPROVE_CAMPAIGN_SOCIAL,
+  RPC_CHANNELS.scheduledWork.MANAGE_GOAL_RUN,
   RPC_CHANNELS.scheduledWork.SCHEDULE_HQ,
   RPC_CHANNELS.scheduledWork.MIGRATE_CAMPAIGN,
   RPC_CHANNELS.sharedIntel.SHARE,

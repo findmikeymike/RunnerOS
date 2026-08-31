@@ -44,7 +44,9 @@ export function serializeReleaseKitContext(manifest: ReleaseKitManifest): string
     usage: {
       bestFor: item.usage.bestFor,
       contentRating: item.usage.contentRating,
-      notes: item.usage.notes,
+      notes: item.usage.notes && item.usage.notes.length > 280
+        ? `${item.usage.notes.slice(0, 277)}...`
+        : item.usage.notes,
       restrictions: item.usage.restrictions,
       updatedAt: item.usage.updatedAt,
       updatedBy: item.usage.updatedBy,

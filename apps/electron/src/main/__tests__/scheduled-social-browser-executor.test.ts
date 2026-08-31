@@ -1,4 +1,8 @@
 import { describe, expect, test } from 'bun:test'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { materializeReleaseKitItem, resolveReleaseKitItemPath, updateReleaseKitItemUsage } from '@craft-agent/shared/release-kit'
 import type { ScheduledSocialApproval, ScheduledSocialActionPreview, ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import {
   computeScheduledSocialBrowserActionDigest,
@@ -121,6 +125,33 @@ const depsFor = (browserPaneManager: FakeBrowserPaneManager) => ({
 })
 
 describe('executeScheduledSocialBrowser', () => {
+  test('rechecks a Release Kit restriction immediately before touching the browser', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'release-kit-browser-restriction-'))
+    const source = join(root, 'teaser.mp4')
+    writeFileSync(source, 'approved-teaser')
+    const promoted = materializeReleaseKitItem(root, {
+      workspaceId: 'campaign-1', campaignId: 'campaign-1',
+      source: { type: 'upload', originalFileName: 'teaser.mp4' }, sourcePath: source,
+      category: 'video', subtype: 'teaser', promotedBy: 'user',
+    })
+    const mediaPath = resolveReleaseKitItemPath(root, promoted.item.relativePath)
+    const tuple = approvedXTuple('x', mediaPath)
+    tuple.order.inputRefs = [{ kind: 'release-kit', itemId: promoted.item.id, sha256: promoted.item.sha256 }]
+    const action = tuple.preview.dryRun.action as { payload: { media: string[] } }
+    action.payload.media = [mediaPath]
+    updateReleaseKitItemUsage(root, 'campaign-1', 'campaign-1', promoted.item.id, {
+      restrictions: { blockedFromUse: true },
+    })
+    const browser = new FakeBrowserPaneManager()
+
+    await expect(executeScheduledSocialBrowser({ workspaceRootPath: root, ...tuple }, {
+      ...depsFor(browser),
+      resolveMediaPath: () => mediaPath,
+    })).rejects.toThrow(/blocked from use/i)
+    expect(browser.navigations).toEqual([])
+    expect(browser.mutations).toEqual([])
+  })
+
   test('refuses a wrong visible account before changing the draft', async () => {
     const browser = new FakeBrowserPaneManager()
     browser.responses.set('identity:x', [{ loggedIn: true, candidates: [{ handle: '@wrong-account', accountUrl: 'https://x.com/wrong-account' }] }])

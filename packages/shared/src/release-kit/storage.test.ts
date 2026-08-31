@@ -252,6 +252,20 @@ describe('release kit storage', () => {
     expect(serializeReleaseKitContext(manifest)).toContain('needsRightsClearance');
   });
 
+  test('keeps full notes in storage but bounds notes injected into agent context', () => {
+    const workspace = tempWorkspace();
+    const source = join(workspace, 'press.png');
+    writeFileSync(source, 'press');
+    const promoted = promoteOutput(workspace, source, 'output-long-notes', 'images', 'press', false);
+    const notes = 'n'.repeat(600);
+    const manifest = updateReleaseKitItemUsage(workspace, 'workspace-1', 'campaign-1', promoted.item.id, { notes });
+    const context = serializeReleaseKitContext(manifest);
+
+    expect(manifest.items[0]?.usage.notes).toBe(notes);
+    expect(context).toContain(`${'n'.repeat(277)}...`);
+    expect(context).not.toContain(notes);
+  });
+
   test('rejects malformed or unbounded usage metadata', () => {
     const workspace = tempWorkspace();
     const source = join(workspace, 'press.png');

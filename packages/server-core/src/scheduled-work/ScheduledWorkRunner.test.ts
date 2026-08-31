@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { OutputManifest } from '@craft-agent/shared/outputs'
+import { materializeReleaseKitItem, updateReleaseKitItemUsage } from '@craft-agent/shared/release-kit'
 import {
   SCHEDULED_WORK_CONTEXT_SLUG,
   parseScheduledWorkDocResult,
@@ -895,7 +896,14 @@ describe('ScheduledWorkRunner', () => {
 
   test('derives execution attestation from durable schedule authorization without a second click', async () => {
     const root = makeRoot()
-    const releaseKitRef = { itemId: 'kit-1', sha256: 'a'.repeat(64), label: 'Release cover' }
+    const source = join(root, 'release-cover.png')
+    writeFileSync(source, 'release-cover')
+    const released = materializeReleaseKitItem(root, {
+      workspaceId, campaignId: workspaceId,
+      source: { type: 'upload', originalFileName: 'release-cover.png' }, sourcePath: source,
+      category: 'artwork', subtype: 'cover-art', promotedBy: 'user',
+    })
+    const releaseKitRef = { itemId: released.item.id, sha256: released.item.sha256, label: 'Release cover' }
     const definition = {
       title: 'Post Release cover', releaseKitRef, platform: 'x', profileId: 'artist-main',
       caption: 'Out Friday.', startAt: '2026-07-10T14:00:00.000Z', timezone: 'America/Chicago',
@@ -937,6 +945,85 @@ describe('ScheduledWorkRunner', () => {
     await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:02:00.000Z'))
     await waitFor(() => readWork(root).items[0]?.status === 'done')
     expect(executeCalls).toBe(1)
+  })
+
+  test('rechecks Release Kit restrictions in the runner before calling a social adapter', async () => {
+    const root = makeRoot()
+    const source = join(root, 'restricted-cover.png')
+    writeFileSync(source, 'restricted-cover')
+    const released = materializeReleaseKitItem(root, {
+      workspaceId, campaignId: workspaceId,
+      source: { type: 'upload', originalFileName: 'restricted-cover.png' }, sourcePath: source,
+      category: 'artwork', subtype: 'cover-art', promotedBy: 'user',
+    })
+    const payloadDigest = 'payload-restricted'
+    const action = {
+      actionId: 'act_social-restricted', actionDigest: 'sha256:restricted-action',
+      mediaDigest: `sha256:${released.item.sha256}`, platform: 'x', profileId: 'artist-main',
+      preparedAt: '2026-07-10T14:00:00.000Z', payloadDigest, dryRun: { ok: true },
+    }
+    writeWork(root, [buildOrder({
+      id: 'social-restricted', type: 'social-publish', status: 'needs-approval',
+      execution: { type: 'social-publish', platform: 'x', profileId: 'artist-main', caption: 'Do not post.' },
+      inputRefs: [{ kind: 'release-kit', itemId: released.item.id, sha256: released.item.sha256 }],
+      executionKey: { payloadDigest, idempotencyKey: 'idem-restricted' },
+      socialAction: action,
+      socialApproval: {
+        id: 'approval-restricted', approvedAt: '2026-07-10T13:59:00.000Z', expiresAt: '2026-07-10T14:30:00.000Z',
+        actionId: action.actionId, actionDigest: action.actionDigest, mediaDigest: action.mediaDigest,
+        payloadDigest, platform: 'x', profileId: 'artist-main', approvedBy: { type: 'user', clientId: 'test-client' },
+      },
+    })])
+    updateReleaseKitItemUsage(root, workspaceId, workspaceId, released.item.id, {
+      restrictions: { artistLikenessRestricted: true },
+    })
+    let executeCalls = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true, withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'unused' }), startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null, listOutputManifests: () => [],
+      executeSocial: async () => { executeCalls += 1; return { receiptId: 'must-not-run', summary: 'Must not run.' } },
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => readWork(root).items[0]?.status === 'needs-attention')
+    expect(executeCalls).toBe(0)
+    expect(readWork(root).items[0]?.attention?.message).toMatch(/artist-likeness restriction/i)
+  })
+
+  test('moves expired durable authorization to attention before preparation', async () => {
+    const root = makeRoot()
+    const releaseKitRef = { itemId: 'kit-expired', sha256: 'b'.repeat(64) }
+    const definition = {
+      title: 'Expired authorization', releaseKitRef, platform: 'x', profileId: 'artist-main',
+      caption: 'Do not post.', startAt: '2026-07-10T14:00:00.000Z', timezone: 'UTC',
+    }
+    const payloadDigest = `sha256:${createHash('sha256').update(stableAuthorizationJson(definition)).digest('hex')}`
+    writeWork(root, [buildOrder({
+      id: 'social-authorization-expired', title: definition.title, type: 'social-publish', status: 'needs-approval',
+      startAt: definition.startAt, timezone: definition.timezone,
+      execution: { type: 'social-publish', platform: 'x', profileId: 'artist-main', caption: definition.caption },
+      inputRefs: [{ kind: 'release-kit', ...releaseKitRef }],
+      executionKey: { payloadDigest, idempotencyKey: 'idem-authorization-expired' },
+      authorizationPolicy: 'durable-v1',
+      authorization: {
+        id: 'auth-expired', authorizedAt: '2026-07-10T12:00:00.000Z', expiresAt: '2026-07-10T13:59:00.000Z',
+        payloadDigest, authorizedBy: { type: 'user', clientId: 'client-1', source: 'release-kit-ui' }, definition,
+      },
+    })])
+    let prepareCalls = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true, withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'unused' }), startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null, listOutputManifests: () => [],
+      prepareSocial: async () => { prepareCalls += 1; throw new Error('must not prepare') },
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    const saved = readWork(root).items[0]!
+    expect(prepareCalls).toBe(0)
+    expect(saved.status).toBe('needs-attention')
+    expect(saved.attention?.reason).toBe('approval-invalidated')
   })
 
   test('rechecks the runner fence immediately before social execution', async () => {

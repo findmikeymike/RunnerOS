@@ -1,12 +1,14 @@
 import { createCampaignJobRun, type CampaignExternalExecutionReceipt, type CampaignJobRun } from '@craft-agent/shared/campaign-calendar'
 import { createHash, randomUUID } from 'node:crypto'
 import type { OutputManifest } from '@craft-agent/shared/outputs'
+import { assertReleaseKitSocialUseAllowed, loadReleaseKitManifest } from '@craft-agent/shared/release-kit'
 import {
   SCHEDULED_WORK_CONTEXT_SLUG,
   parseScheduledWorkDocResult,
   scheduledWorkMetadata,
   serializeScheduledWorkBody,
   scheduledWorkDefinitionDigest,
+  stableScheduledWorkAuthorizationStringify,
   type ExpectedOutputContract,
   type ScheduledWorkAttention,
   type ScheduledWorkDocument,
@@ -668,6 +670,7 @@ export class ScheduledWorkRunner {
     try {
       if (!this.deps.executeSocial || order.execution.type !== 'social-publish' || !order.socialAction || !order.socialApproval) return
       if (!this.canContinue(workspaceRootPath, capturedFence)) throw new Error('Team runner fence changed before social execution.')
+      assertCurrentReleaseKitSocialUseAllowed(workspaceRootPath, order)
       const result = await this.deps.executeSocial({ workspaceId, workspaceRootPath, order, preview: order.socialAction, approval: order.socialApproval })
       const nowIso = (this.deps.now?.() ?? new Date()).toISOString()
       const receipt: CampaignExternalExecutionReceipt = {
@@ -1276,6 +1279,20 @@ export class ScheduledWorkRunner {
   }
 }
 
+function assertCurrentReleaseKitSocialUseAllowed(workspaceRootPath: string, order: ScheduledWorkOrder): void {
+  const releaseKitRefs = order.inputRefs.filter((ref) => ref.kind === 'release-kit')
+  if (releaseKitRefs.length > 1) throw new Error('Social work has multiple Release Kit media references.')
+  const releaseKitRef = releaseKitRefs[0]
+  if (!releaseKitRef) return
+  const item = loadReleaseKitManifest(
+    workspaceRootPath,
+    order.owner.workspaceId,
+    order.owner.campaignId ?? order.owner.workspaceId,
+  ).items.find((candidate) => candidate.id === releaseKitRef.itemId)
+  if (!item) throw new Error(`Release Kit item not found: ${releaseKitRef.itemId}`)
+  assertReleaseKitSocialUseAllowed(item)
+}
+
 function socialApprovalMatches(order: ScheduledWorkOrder): boolean {
   if (order.execution.type !== 'social-publish' || !order.socialAction || !order.socialApproval) return false
   return order.socialApproval.actionId === order.socialAction.actionId
@@ -1303,8 +1320,8 @@ function durableAuthorizationMatches(order: ScheduledWorkOrder, now: Date): bool
     startAt: order.startAt,
     timezone: order.timezone,
   }
-  const digest = `sha256:${createHash('sha256').update(stableAuthorizationStringify(definition)).digest('hex')}`
-  return stableAuthorizationStringify(order.authorization.definition) === stableAuthorizationStringify(definition)
+  const digest = `sha256:${createHash('sha256').update(stableScheduledWorkAuthorizationStringify(definition)).digest('hex')}`
+  return stableScheduledWorkAuthorizationStringify(order.authorization.definition) === stableScheduledWorkAuthorizationStringify(definition)
     && order.authorization.payloadDigest === digest
     && order.executionKey.payloadDigest === digest
 }
@@ -1334,14 +1351,6 @@ function deriveSocialApproval(order: ScheduledWorkOrder, preview: ScheduledSocia
   }
 }
 
-function stableAuthorizationStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableAuthorizationStringify).join(',')}]`
-  if (value && typeof value === 'object') {
-    const record = value as Record<string, unknown>
-    return `{${Object.keys(record).filter((key) => record[key] !== undefined).sort().map((key) => `${JSON.stringify(key)}:${stableAuthorizationStringify(record[key])}`).join(',')}}`
-  }
-  return JSON.stringify(value)
-}
 
 function activeAgentRunKey(workspaceRootPath: string, orderId: string): string {
   return `${workspaceRootPath}:${orderId}`

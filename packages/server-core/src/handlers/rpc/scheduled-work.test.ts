@@ -402,6 +402,27 @@ describe('scheduled-work RPC handler', () => {
     expect(readCampaignCalendar().items[0]?.scheduledWorkId).toBe(created.order.id)
   })
 
+  test('manual social approval rejects a durable schedule authorization', async () => {
+    seedEmptyCampaignCalendar()
+    const sourcePath = `${workspaceRoot}/source.png`
+    writeFileSync(sourcePath, 'approved-image')
+    const released = materializeReleaseKitItem(workspaceRoot, {
+      workspaceId: workspace.id, campaignId: workspace.id,
+      source: { type: 'upload', originalFileName: 'source.png' }, sourcePath,
+      category: 'artwork', subtype: 'cover-art', promotedBy: 'user',
+    })
+    const { invoke } = await registerServer()
+    const created = await invoke(RPC_CHANNELS.scheduledWork.AUTHORIZE_RELEASE_KIT_SOCIAL, workspace.id, {
+      requestId: 'durable-manual-approval', releaseKitItemId: released.item.id,
+      platform: 'instagram', profileId: 'artist-main', caption: 'Out now.',
+      startAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(), timezone: 'UTC',
+    }) as { order: ScheduledWorkOrder; calendarItem: { id: string } }
+
+    await expect(invoke(RPC_CHANNELS.scheduledWork.APPROVE_CAMPAIGN_SOCIAL, workspace.id, {
+      orderId: created.order.id, calendarItemId: created.calendarItem.id, expectedUpdatedAt: created.order.updatedAt,
+    })).rejects.toThrow(/authorized when scheduled/i)
+  })
+
   test('mutate upserts scheduled-work and broadcasts workspace context changes', async () => {
     const { invoke, pushCalls } = await registerServer()
 

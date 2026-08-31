@@ -19,7 +19,8 @@ import {
   resolveReleaseKitItemPath,
   serializeReleaseKitContext,
   setReleaseKitPrimary,
-  updateReleaseKitItemUsage,
+  updateReleaseKitItemUsageWhileLocked,
+  withReleaseKitLockAsync,
   verifyReleaseKit,
   verifyReleaseKitItem,
   type PromoteToReleaseKitInput,
@@ -48,6 +49,7 @@ import {
   serializeCampaignCalendarBody,
 } from '@craft-agent/shared/campaign-calendar'
 import { OutputService } from '../outputs/OutputService'
+import { withWorkspaceContextLock } from '../scheduled-work/workspace-context-lock'
 
 export interface ReleaseKitServiceOptions {
   onChanged?: (workspaceId: string, manifest: ReleaseKitManifest) => void
@@ -155,17 +157,19 @@ export class ReleaseKitService {
     return manifest
   }
 
-  updateUsage(workspaceId: string, itemId: string, input: UpdateReleaseKitUsageInput): ReleaseKitManifest {
+  async updateUsage(workspaceId: string, itemId: string, input: UpdateReleaseKitUsageInput): Promise<ReleaseKitManifest> {
     const workspace = this.getCampaignWorkspace(workspaceId)
     this.assertWritePermission(workspace.rootPath)
-    this.prepareContextSync(workspace.rootPath)
-    const manifest = updateReleaseKitItemUsage(workspace.rootPath, workspace.id, workspace.id, itemId, input)
-    const item = manifest.items.find((candidate) => candidate.id === itemId)
-    if (item && Object.values(item.usage.restrictions).some(Boolean)) {
-      this.reconcileRestrictedUses(workspace.id, workspace.rootPath, itemId)
-    }
-    this.commitContext(workspace.id, workspace.rootPath, manifest)
-    return manifest
+    return withReleaseKitLockAsync(workspace.rootPath, () => withWorkspaceContextLock(workspace.rootPath, async () => {
+      this.prepareContextSync(workspace.rootPath)
+      const manifest = updateReleaseKitItemUsageWhileLocked(workspace.rootPath, workspace.id, workspace.id, itemId, input)
+      const item = manifest.items.find((candidate) => candidate.id === itemId)
+      if (item && Object.values(item.usage.restrictions).some(Boolean)) {
+        this.reconcileRestrictedUses(workspace.id, workspace.rootPath, itemId)
+      }
+      this.commitContext(workspace.id, workspace.rootPath, manifest)
+      return manifest
+    }))
   }
 
   verify(workspaceId: string): ReturnType<typeof verifyReleaseKit> {

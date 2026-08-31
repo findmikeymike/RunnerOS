@@ -162,7 +162,7 @@ describe('ReleaseKitService source trust', () => {
     expect(existsSync(join(campaignRoot, 'context', 'release-kit', 'CONTEXT.md'))).toBe(true)
   })
 
-  test('keeps reads available while denying every mutation without files.write', () => {
+  test('keeps reads available while denying every mutation without files.write', async () => {
     const campaignRoot = mkdtempSync(join(tmpdir(), 'release-kit-service-campaign-'))
     workspaces.set('campaign-1', {
       id: 'campaign-1', name: 'Campaign', rootPath: campaignRoot, artistWorkspaceScope: 'campaign',
@@ -182,7 +182,7 @@ describe('ReleaseKitService source trust', () => {
     expect(readOnly.getItem('campaign-1', promoted.item.id).item.id).toBe(promoted.item.id)
     expect(readOnly.listUses('campaign-1', promoted.item.id)).toEqual([])
     expect(() => readOnly.setPrimary('campaign-1', promoted.item.id)).toThrow(/files.write denied/i)
-    expect(() => readOnly.updateUsage('campaign-1', promoted.item.id, { notes: 'For launch week.' })).toThrow(/files.write denied/i)
+    await expect(readOnly.updateUsage('campaign-1', promoted.item.id, { notes: 'For launch week.' })).rejects.toThrow(/files.write denied/i)
     expect(() => readOnly.verify('campaign-1')).toThrow(/files.write denied/i)
     expect(() => readOnly.remove('campaign-1', promoted.item.id)).toThrow(/files.write denied/i)
   })
@@ -235,7 +235,7 @@ describe('ReleaseKitService source trust', () => {
     expect(second.manifest.items).toHaveLength(0)
   })
 
-  test('refuses to remove an item still bound to scheduled work and its calendar shell', () => {
+  test('refuses to remove an item still bound to scheduled work and its calendar shell', async () => {
     const campaignRoot = mkdtempSync(join(tmpdir(), 'release-kit-service-campaign-'))
     workspaces.set('campaign-1', {
       id: 'campaign-1', name: 'Campaign', rootPath: campaignRoot, artistWorkspaceScope: 'campaign',
@@ -271,7 +271,7 @@ describe('ReleaseKitService source trust', () => {
       profileId: 'artist',
       status: 'scheduled',
     }])
-    releaseKit.updateUsage('campaign-1', promoted.item.id, { restrictions: { blockedFromUse: true } })
+    await releaseKit.updateUsage('campaign-1', promoted.item.id, { restrictions: { blockedFromUse: true } })
     expect(releaseKit.listUses('campaign-1', promoted.item.id)).toMatchObject([{
       orderId: 'work-1', status: 'needs-attention', attentionMessage: expect.stringContaining('now restricted'),
     }])
@@ -282,7 +282,7 @@ describe('ReleaseKitService source trust', () => {
     expect(releaseKit.get('campaign-1').items.some((candidate) => candidate.id === promoted.item.id)).toBe(true)
   })
 
-  test('updates bounded usage metadata and mirrors it into campaign context', () => {
+  test('updates bounded usage metadata and mirrors it into campaign context', async () => {
     const campaignRoot = mkdtempSync(join(tmpdir(), 'release-kit-service-campaign-'))
     workspaces.set('campaign-1', {
       id: 'campaign-1', name: 'Campaign', rootPath: campaignRoot, artistWorkspaceScope: 'campaign',
@@ -295,7 +295,7 @@ describe('ReleaseKitService source trust', () => {
       source: { type: 'campaign-asset', assetId: asset.id }, category: 'artwork', subtype: 'cover-art',
     }, 'user')
 
-    const manifest = releaseKit.updateUsage('campaign-1', promoted.item.id, {
+    const manifest = await releaseKit.updateUsage('campaign-1', promoted.item.id, {
       bestFor: ['social', 'press'],
       contentRating: 'clean',
       notes: 'Use the square crop on release day.',
