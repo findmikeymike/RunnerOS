@@ -337,6 +337,7 @@ describe('scheduled work documents', () => {
       ...emptyScheduledWorkDocument('campaign-1'),
       items: [
         makeOrder('done-old', 'done', '2026-08-01T12:00:00.000Z'),
+        { ...makeOrder('done-unverified', 'done', '2026-08-02T12:00:00.000Z'), result: undefined },
         makeOrder('future-late', 'scheduled', '2026-10-01T12:00:00.000Z'),
         makeOrder('other-asset', 'scheduled', '2026-09-01T12:00:00.000Z', 'kit-2'),
         { ...makeOrder('deleted', 'scheduled', '2026-09-01T12:00:00.000Z'), deletedAt: '2026-08-10T00:00:00.000Z' },
@@ -347,10 +348,11 @@ describe('scheduled work documents', () => {
     }
 
     expect(listReleaseKitItemUses(work, 'kit-1', new Date('2026-08-20T00:00:00.000Z')).map((order) => order.id)).toEqual([
-      'attention', 'future-soon', 'future-late', 'canceled-new', 'done-old',
+      'attention', 'done-unverified', 'future-soon', 'future-late', 'canceled-new', 'done-old',
     ])
     expect(summarizeReleaseKitItemUses(work, 'kit-1', { now: new Date('2026-08-20T00:00:00.000Z') })).toMatchObject([
       { orderId: 'attention', status: 'needs-attention', attentionMessage: 'Reconnect Instagram.' },
+      { orderId: 'done-unverified', status: 'needs-attention', attentionMessage: expect.stringContaining('receipt is missing') },
       { orderId: 'future-soon', status: 'scheduled' },
       { orderId: 'future-late', status: 'scheduled' },
       { orderId: 'canceled-new', status: 'canceled' },

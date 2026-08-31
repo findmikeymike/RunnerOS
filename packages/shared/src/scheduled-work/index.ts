@@ -433,8 +433,9 @@ export function summarizeReleaseKitItemUses(
       profileId: execution?.profileId,
       startAt: order.startAt,
       timezone: order.timezone,
-      status: releaseKitUseSummaryStatus(order.status),
-      attentionMessage: order.attention?.message,
+      status: releaseKitUseSummaryStatus(order),
+      attentionMessage: order.attention?.message
+        ?? (order.status === 'done' && !receipt ? 'Artist OS could not verify completion because the publishing receipt is missing.' : undefined),
       receipt: receipt ? {
         externalUrl: receipt.externalUrl,
         completedAt: receipt.completedAt,
@@ -671,14 +672,16 @@ function statusFromCampaignStatus(status: CampaignCalendarItemStatus): Scheduled
 }
 
 function releaseKitUseSortGroup(order: ScheduledWorkOrder, nowMs: number): 0 | 1 | 2 {
-  if (order.status === 'needs-attention') return 0
+  if (releaseKitUseSummaryStatus(order) === 'needs-attention') return 0
   if (order.status !== 'done' && order.status !== 'canceled' && Date.parse(order.startAt) >= nowMs) return 1
   return 2
 }
 
-function releaseKitUseSummaryStatus(status: ScheduledWorkStatus): ReleaseKitItemUseSummary['status'] {
+function releaseKitUseSummaryStatus(order: ScheduledWorkOrder): ReleaseKitItemUseSummary['status'] {
+  const { status } = order
   if (status === 'draft' || status === 'waiting' || status === 'needs-setup' || status === 'needs-approval') return 'draft'
-  if (status === 'done' || status === 'needs-attention' || status === 'canceled') return status
+  if (status === 'done') return order.result?.type === 'social-publish' ? 'done' : 'needs-attention'
+  if (status === 'needs-attention' || status === 'canceled') return status
   return 'scheduled'
 }
 
