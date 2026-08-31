@@ -10701,6 +10701,7 @@ user a clickable link to where the thing now lives.`
             admittedRound: admittedGoalState.round,
             completedToolCountAtStart: getCompletedToolUseSummary(managed).count,
             failedToolCountAtStart: getFailedToolUseCount(managed),
+            sessionTaskRevisionAtStart: managed.sessionTasks?.revision ?? 0,
           }
           sessionLog.info('Chat Goal turn admitted', {
             sessionId,
@@ -10739,6 +10740,7 @@ user a clickable link to where the thing now lives.`
             admittedRound: admittedGoalState.round,
             completedToolCountAtStart: getCompletedToolUseSummary(managed).count,
             failedToolCountAtStart: getFailedToolUseCount(managed),
+            sessionTaskRevisionAtStart: managed.sessionTasks?.revision ?? 0,
           }
           sessionLog.info('Chat Goal turn admitted', {
             sessionId,
@@ -10932,6 +10934,7 @@ user a clickable link to where the thing now lives.`
         origin: 'human',
         completedToolCountAtStart: getCompletedToolUseSummary(managed).count,
         failedToolCountAtStart: getFailedToolUseCount(managed),
+        sessionTaskRevisionAtStart: managed.sessionTasks?.revision ?? 0,
       }
       releaseAdmissionLockOnce()
     } catch (err) {
@@ -11781,33 +11784,48 @@ user a clickable link to where the thing now lives.`
       && pendingUpdate.revision === goal.revision
     ) {
       if (pendingUpdate.status === 'complete') {
-        if (goal.doneWhen && !pendingUpdate.evidence?.length) {
-          const paused = pauseChatGoalState(goal, {
-            code: 'needs-decision',
-            message: 'The agent reported completion without evidence for the stated done condition. Review before resuming.',
+        const unfinishedTasks = managed.sessionTasksDegraded
+          ? []
+          : (managed.sessionTasks?.items.filter(item =>
+              item.status === 'pending' || item.status === 'in_progress' || item.status === 'delegated'
+            ) ?? [])
+        if (unfinishedTasks.length > 0) {
+          sessionLog.info('Rejected Chat Goal completion with unfinished session tasks', {
+            sessionId: managed.id,
+            goalId: goal.id,
+            listId: managed.sessionTasks?.id,
+            listRevision: managed.sessionTasks?.revision,
+            unfinishedTaskCount: unfinishedTasks.length,
           })
-          await this.commitChatGoalState(managed, paused, 'paused', paused.stop!.message)
+        } else {
+          if (goal.doneWhen && !pendingUpdate.evidence?.length) {
+            const paused = pauseChatGoalState(goal, {
+              code: 'needs-decision',
+              message: 'The agent reported completion without evidence for the stated done condition. Review before resuming.',
+            })
+            await this.commitChatGoalState(managed, paused, 'paused', paused.stop!.message)
+            return undefined
+          }
+          const completed = completeChatGoalState(goal, {
+            summary: pendingUpdate.summary,
+            evidence: pendingUpdate.evidence,
+          })
+          await this.commitChatGoalState(managed, completed, 'completed', completed.completion!.summary)
           return undefined
         }
-        const completed = completeChatGoalState(goal, {
-          summary: pendingUpdate.summary,
-          evidence: pendingUpdate.evidence,
+      } else {
+        const normalizedBlocker = pendingUpdate.summary.toLowerCase().replace(/\s+/g, ' ').trim()
+        const fingerprint = createHash('sha256').update(normalizedBlocker).digest('hex').slice(0, 24)
+        const audited = recordChatGoalBlocker(goal, {
+          fingerprint,
+          message: pendingUpdate.summary,
         })
-        await this.commitChatGoalState(managed, completed, 'completed', completed.completion!.summary)
-        return undefined
+        if (audited.status === 'blocked') {
+          await this.commitChatGoalState(managed, audited, 'blocked', audited.stop!.message)
+          return undefined
+        }
+        await this.persistChatGoalStateWithoutEvent(managed, audited)
       }
-
-      const normalizedBlocker = pendingUpdate.summary.toLowerCase().replace(/\s+/g, ' ').trim()
-      const fingerprint = createHash('sha256').update(normalizedBlocker).digest('hex').slice(0, 24)
-      const audited = recordChatGoalBlocker(goal, {
-        fingerprint,
-        message: pendingUpdate.summary,
-      })
-      if (audited.status === 'blocked') {
-        await this.commitChatGoalState(managed, audited, 'blocked', audited.stop!.message)
-        return undefined
-      }
-      await this.persistChatGoalStateWithoutEvent(managed, audited)
     }
 
     const currentGoal = managed.chatGoal
@@ -11838,13 +11856,19 @@ user a clickable link to where the thing now lives.`
         .digest('hex')
         .slice(0, 24)
       const madeToolProgress = completedToolCount > settledTurn.completedToolCountAtStart
-      if (!madeToolProgress && fingerprint === managed.chatGoalLastAssistantFingerprint) {
+      const madeTaskProgress = (managed.sessionTasks?.revision ?? 0) !== settledTurn.sessionTaskRevisionAtStart
+      const hasReliableTaskList = Boolean(managed.sessionTasks && !managed.sessionTasksDegraded)
+      const noProgressCandidate = !madeToolProgress
+        && !madeTaskProgress
+        && (hasReliableTaskList || fingerprint === managed.chatGoalLastAssistantFingerprint)
+      if (noProgressCandidate) {
         managed.chatGoalNoProgressTurns = (managed.chatGoalNoProgressTurns ?? 0) + 1
       } else {
         managed.chatGoalNoProgressTurns = 0
       }
       managed.chatGoalLastAssistantFingerprint = fingerprint
-      if ((managed.chatGoalNoProgressTurns ?? 0) >= 1) {
+      const noProgressLimit = hasReliableTaskList ? 2 : 1
+      if ((managed.chatGoalNoProgressTurns ?? 0) >= noProgressLimit) {
         const paused = pauseChatGoalState(currentGoal, {
           code: 'no-progress',
           message: 'Goal paused because two continuation turns produced no new progress.',
@@ -11903,7 +11927,11 @@ user a clickable link to where the thing now lives.`
         this.chatGoalDriver.invalidate(reservation.sessionId)
         return
       }
-      const prompt = buildChatGoalContinuationPrompt(goal, managed.tokenUsage?.totalTokens ?? 0)
+      const prompt = buildChatGoalContinuationPrompt(
+        goal,
+        managed.tokenUsage?.totalTokens ?? 0,
+        managed.sessionTasksDegraded ? undefined : managed.sessionTasks,
+      )
       void this.sendMessage(
         reservation.sessionId,
         prompt,

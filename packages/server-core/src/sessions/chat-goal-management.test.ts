@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { admitChatGoalRound, createChatGoalState, loadSession, pauseChatGoalState } from '@craft-agent/shared/sessions';
+import { admitChatGoalRound, appendSessionTasks, createChatGoalState, createSessionTaskList, loadSession, pauseChatGoalState } from '@craft-agent/shared/sessions';
 import { SessionManager, createManagedSession } from './SessionManager.ts';
-import type { ChatGoalDriver } from './ChatGoalDriver.ts';
+import type { ChatGoalDriver, ChatGoalTurnContext } from './ChatGoalDriver.ts';
 
 describe('SessionManager chat Goal management', () => {
   let root: string;
@@ -242,6 +242,7 @@ describe('SessionManager chat Goal management', () => {
       admittedRound: 1,
       completedToolCountAtStart: 0,
       failedToolCountAtStart: 0,
+      sessionTaskRevisionAtStart: 0,
     };
     managed.messages.push({ id: 'assistant-1', role: 'assistant', content: 'Finished.', timestamp: 200 });
     await manager.requestChatGoalUpdate('session-1', {
@@ -259,6 +260,65 @@ describe('SessionManager chat Goal management', () => {
     expect(loadSession(root, 'session-1')?.chatGoal?.completion?.summary).toBe('Finished the plan.');
   });
 
+  it('keeps a Goal active when completion is claimed with unfinished session tasks', async () => {
+    const managed = installSession();
+    managed.sessionTasks = createSessionTaskList([
+      { content: 'Finish the report', status: 'pending' },
+    ], 'native-tool', { id: 'tasks_1', now: '2026-08-30T00:00:00.000Z' });
+    managed.isProcessing = true;
+    managed.processingGeneration = 1;
+    managed.activeChatGoalTurn = {
+      origin: 'goal-initial',
+      goalId: 'goal-1',
+      goalRevision: 1,
+      admittedRound: 1,
+      completedToolCountAtStart: 0,
+      failedToolCountAtStart: 0,
+      sessionTaskRevisionAtStart: 1,
+    };
+    managed.messages.push({ id: 'assistant-1', role: 'assistant', content: 'Finished.', timestamp: 200 });
+    await manager.requestChatGoalUpdate('session-1', {
+      goalId: 'goal-1',
+      revision: 1,
+      status: 'complete',
+      summary: 'Finished the plan.',
+    });
+
+    await (manager as unknown as {
+      onProcessingStopped(id: string, reason: 'complete'): Promise<void>;
+    }).onProcessingStopped('session-1', 'complete');
+
+    expect(manager.getChatGoal('session-1')?.status).toBe('active');
+    expect(manager.getChatGoal('session-1')?.completion).toBeUndefined();
+    expect(managed.pendingChatGoalUpdate).toBeUndefined();
+  });
+
+  it('does not enforce a stale task list after advisory persistence degrades', async () => {
+    const managed = installSession();
+    managed.sessionTasks = createSessionTaskList([
+      { content: 'Stale unfinished task', status: 'pending' },
+    ], 'native-tool', { id: 'tasks_1', now: '2026-08-30T00:00:00.000Z' });
+    managed.sessionTasksDegraded = true;
+    managed.messages.push({ id: 'assistant-1', role: 'assistant', content: 'Finished.', timestamp: 200 });
+    await manager.requestChatGoalUpdate('session-1', {
+      goalId: 'goal-1',
+      revision: 1,
+      status: 'complete',
+      summary: 'Finished despite the advisory task-store failure.',
+    });
+
+    await (manager as unknown as {
+      settleChatGoalAtIdle(
+        session: typeof managed,
+        reason: 'complete',
+        didReceiveNewFinalMessage: boolean,
+        turn: undefined,
+      ): Promise<unknown>;
+    }).settleChatGoalAtIdle(managed, 'complete', true, undefined);
+
+    expect(manager.getChatGoal('session-1')?.status).toBe('complete');
+  });
+
   it('deduplicates completion and reserves only one continuation', async () => {
     const managed = installSession();
     await manager.flagSession('session-1');
@@ -271,6 +331,7 @@ describe('SessionManager chat Goal management', () => {
       admittedRound: 1,
       completedToolCountAtStart: 0,
       failedToolCountAtStart: 0,
+      sessionTaskRevisionAtStart: 0,
     };
     managed.messages.push({ id: 'assistant-1', role: 'assistant', content: 'More work remains.', timestamp: 200 });
     let dispatches = 0;
@@ -336,6 +397,7 @@ describe('SessionManager chat Goal management', () => {
           admittedRound: number;
           completedToolCountAtStart: number;
           failedToolCountAtStart: number;
+          sessionTaskRevisionAtStart: number;
         },
       ): Promise<ReturnType<ChatGoalDriver['consume']>>;
     }).settleChatGoalAtIdle.bind(manager);
@@ -349,6 +411,7 @@ describe('SessionManager chat Goal management', () => {
       admittedRound: 1,
       completedToolCountAtStart: 0,
       failedToolCountAtStart: 0,
+      sessionTaskRevisionAtStart: 0,
     });
     expect(firstReservation).toBeDefined();
     if (!firstReservation) return;
@@ -366,7 +429,108 @@ describe('SessionManager chat Goal management', () => {
       admittedRound: 2,
       completedToolCountAtStart: 0,
       failedToolCountAtStart: 0,
+      sessionTaskRevisionAtStart: 0,
     });
+
+    expect(manager.getChatGoal(managed.id)?.status).toBe('paused');
+    expect(manager.getChatGoal(managed.id)?.stop?.code).toBe('no-progress');
+  });
+
+  it('treats a session task revision as progress during no-progress detection', async () => {
+    const managed = installSession();
+    managed.chatGoal = { ...managed.chatGoal!, round: 1 };
+    managed.sessionTasks = createSessionTaskList([
+      { content: 'Draft the report', status: 'pending' },
+    ], 'native-tool', { id: 'tasks_1', now: '2026-08-30T00:00:00.000Z' });
+    const settle = (manager as unknown as {
+      settleChatGoalAtIdle(
+        session: typeof managed,
+        reason: 'complete',
+        didReceiveNewFinalMessage: boolean,
+        turn: {
+          origin: 'goal-continuation';
+          goalId: string;
+          goalRevision: number;
+          reservationId: string;
+          admittedRound: number;
+          completedToolCountAtStart: number;
+          failedToolCountAtStart: number;
+          sessionTaskRevisionAtStart: number;
+        },
+      ): Promise<ReturnType<ChatGoalDriver['consume']>>;
+    }).settleChatGoalAtIdle.bind(manager);
+
+    managed.messages.push({ id: 'assistant-1', role: 'assistant', content: 'I am still reviewing the same files.', timestamp: 200 });
+    const firstReservation = await settle(managed, 'complete', true, {
+      origin: 'goal-continuation',
+      goalId: 'goal-1',
+      goalRevision: 1,
+      reservationId: 'prior-reservation-1',
+      admittedRound: 1,
+      completedToolCountAtStart: 0,
+      failedToolCountAtStart: 0,
+      sessionTaskRevisionAtStart: 1,
+    });
+    expect(firstReservation).toBeDefined();
+    if (!firstReservation) return;
+
+    const driver = (manager as unknown as { chatGoalDriver: ChatGoalDriver }).chatGoalDriver;
+    expect(driver.consume(managed.id, firstReservation.id, managed.chatGoal, managed.processingGeneration)).toBeDefined();
+    managed.chatGoal = admitChatGoalRound(managed.chatGoal!);
+    managed.sessionTasks = appendSessionTasks(managed.sessionTasks, [{ content: 'Verify the report', status: 'pending' }]);
+    managed.messages.push({ id: 'assistant-2', role: 'assistant', content: 'I am still reviewing the same files.', timestamp: 300 });
+
+    const secondReservation = await settle(managed, 'complete', true, {
+      origin: 'goal-continuation',
+      goalId: 'goal-1',
+      goalRevision: 1,
+      reservationId: firstReservation.id,
+      admittedRound: 2,
+      completedToolCountAtStart: 0,
+      failedToolCountAtStart: 0,
+      sessionTaskRevisionAtStart: 1,
+    });
+
+    expect(secondReservation).toBeDefined();
+    expect(manager.getChatGoal(managed.id)?.status).toBe('active');
+  });
+
+  it('pauses paraphrased spinning after two rounds with no task or tool progress', async () => {
+    const managed = installSession();
+    managed.chatGoal = { ...managed.chatGoal!, round: 1 };
+    managed.sessionTasks = createSessionTaskList([
+      { content: 'Draft the report', status: 'pending' },
+    ], 'native-tool', { id: 'tasks_1', now: '2026-08-30T00:00:00.000Z' });
+    const settle = (manager as unknown as {
+      settleChatGoalAtIdle(
+        session: typeof managed,
+        reason: 'complete',
+        didReceiveNewFinalMessage: boolean,
+        turn: ChatGoalTurnContext,
+      ): Promise<ReturnType<ChatGoalDriver['consume']>>;
+    }).settleChatGoalAtIdle.bind(manager);
+    const turn = (reservationId: string, admittedRound: number): ChatGoalTurnContext => ({
+      origin: 'goal-continuation',
+      goalId: 'goal-1',
+      goalRevision: 1,
+      reservationId,
+      admittedRound,
+      completedToolCountAtStart: 0,
+      failedToolCountAtStart: 0,
+      sessionTaskRevisionAtStart: 1,
+    });
+
+    managed.messages.push({ id: 'assistant-1', role: 'assistant', content: 'I am still reviewing the files.', timestamp: 200 });
+    const firstReservation = await settle(managed, 'complete', true, turn('prior-reservation-1', 1));
+    expect(firstReservation).toBeDefined();
+    if (!firstReservation) return;
+
+    const driver = (manager as unknown as { chatGoalDriver: ChatGoalDriver }).chatGoalDriver;
+    expect(driver.consume(managed.id, firstReservation.id, managed.chatGoal, managed.processingGeneration)).toBeDefined();
+    managed.chatGoal = admitChatGoalRound(managed.chatGoal!);
+    managed.messages.push({ id: 'assistant-2', role: 'assistant', content: 'I am checking another angle now.', timestamp: 300 });
+
+    await settle(managed, 'complete', true, turn(firstReservation.id, 2));
 
     expect(manager.getChatGoal(managed.id)?.status).toBe('paused');
     expect(manager.getChatGoal(managed.id)?.stop?.code).toBe('no-progress');
