@@ -1,12 +1,14 @@
 import * as React from 'react'
 import {
   Archive,
+  Bell,
   Bot,
   Brain,
   CalendarDays,
   ChevronRight,
   CircleHelp,
   FileCheck2,
+  FileText,
   FlaskConical,
   FolderOutput,
   Gauge,
@@ -20,8 +22,10 @@ import {
   Music2,
   PenLine,
   RadioTower,
+  Settings,
   Sparkles,
   Users,
+  Wrench,
   Workflow,
   Zap,
 } from 'lucide-react'
@@ -70,6 +74,12 @@ const GUIDE_ICONS: Record<ArtistGuideIconId, LucideIcon> = {
   songs: Music2,
   projects: ListMusic,
   spark: Gem,
+  tools: Wrench,
+  skills: Zap,
+  context: FileText,
+  notifications: Bell,
+  settings: Settings,
+  guide: CircleHelp,
 }
 
 const AI_READINESS_COPY: Record<ArtistGuideAiReadiness, { label: string; className: string }> = {
@@ -117,12 +127,12 @@ export function ArtistGuideDialog({
           className="flex min-h-0 flex-1 flex-col"
         >
           <div className="shrink-0 border-b border-white/[0.055] bg-black/18 px-5 py-3">
-            <TabsList aria-label="Artist OS guide sections" className="grid h-9 w-full grid-cols-4 rounded-[10px] bg-black/30 p-1">
+            <TabsList aria-label="Artist OS guide sections" className="grid h-9 w-full grid-cols-5 rounded-[10px] bg-black/30 p-1">
               {ARTIST_GUIDE_TABS.map((tab) => (
                 <TabsTrigger
                   key={tab.id}
                   value={tab.id}
-                  className="rounded-[7px] px-1 text-[11px] font-medium text-white/42 shadow-none data-[state=active]:bg-white/[0.09] data-[state=active]:text-white/88 data-[state=active]:shadow-none sm:text-[12px]"
+                  className="rounded-[7px] px-0.5 text-[10px] font-medium text-white/42 shadow-none data-[state=active]:bg-white/[0.09] data-[state=active]:text-white/88 data-[state=active]:shadow-none sm:text-[11px]"
                 >
                   {tab.label}
                 </TabsTrigger>

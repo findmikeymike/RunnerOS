@@ -8,8 +8,8 @@ import {
 } from '../artist-guide-content'
 
 describe('Artist OS guide content', () => {
-  it('keeps the guide limited to the four essential tabs', () => {
-    expect(ARTIST_GUIDE_TABS.map((tab) => tab.id)).toEqual(['general', 'hq', 'campaigns', 'creative-lab'])
+  it('keeps the guide limited to the five essential tabs', () => {
+    expect(ARTIST_GUIDE_TABS.map((tab) => tab.id)).toEqual(['general', 'hq', 'campaigns', 'creative-lab', 'top-bar'])
     for (const tab of ARTIST_GUIDE_TABS) {
       expect(tab.start.length).toBeLessThanOrEqual(6)
       expect(tab.destinations.length).toBeLessThanOrEqual(6)
@@ -72,6 +72,8 @@ describe('Artist OS guide wiring', () => {
     expect(source).toContain("action === 'lab.pad'")
     expect(source).toContain('LAB_SPARK_BANK_OPEN_EVENT')
     expect(source).toContain("'settings.connections': 'secrets'")
+    expect(source).toContain("action === 'workspace.context'")
+    expect(source).toContain("action === 'app.tools'")
   })
 
   it('keeps the guide footer focused on Command', () => {

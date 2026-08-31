@@ -1,4 +1,4 @@
-export type ArtistGuideTabId = 'general' | 'hq' | 'campaigns' | 'creative-lab'
+export type ArtistGuideTabId = 'general' | 'hq' | 'campaigns' | 'creative-lab' | 'top-bar'
 
 export type ArtistGuideWorkspaceKind = 'general' | 'hq' | 'campaign' | 'lab'
 
@@ -9,6 +9,7 @@ export type ArtistGuideActionId =
   | 'settings.spotify'
   | 'settings.ad-accounts'
   | 'settings.permissions'
+  | 'settings.app'
   | 'hq.home'
   | 'hq.people'
   | 'hq.profile'
@@ -25,6 +26,9 @@ export type ArtistGuideActionId =
   | 'workspace.automations'
   | 'workspace.command'
   | 'app.outputs'
+  | 'app.tools'
+  | 'app.skills'
+  | 'workspace.context'
   | 'lab.home'
   | 'lab.pad'
   | 'lab.songs'
@@ -54,6 +58,12 @@ export type ArtistGuideIconId =
   | 'songs'
   | 'projects'
   | 'spark'
+  | 'tools'
+  | 'skills'
+  | 'context'
+  | 'notifications'
+  | 'settings'
+  | 'guide'
 
 export type ArtistGuideAction = {
   id: ArtistGuideActionId
@@ -563,6 +573,110 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
         id: 'lab-concept-sparks',
         title: 'Spark Bank travels with the Lab',
         body: 'The diamond button stays available throughout Creative Lab, so a line, title, image, or concept can be captured the moment it arrives.',
+      },
+    ],
+  },
+  {
+    id: 'top-bar',
+    label: 'Top Bar',
+    intro: 'Use the top-right controls to add capabilities, find work, catch alerts, and configure Artist OS.',
+    start: [
+      {
+        id: 'topbar-start-library',
+        title: 'Open the tool icon for your Library',
+        body: 'Manage Tools, Skills, and Workspace Context from one menu.',
+        icon: 'tools',
+        actions: [
+          { id: 'app.tools', label: 'Tools' },
+          { id: 'app.skills', label: 'Skills' },
+          { id: 'workspace.context', label: 'Context' },
+        ],
+      },
+      {
+        id: 'topbar-start-outputs',
+        title: 'Find created work in Outputs',
+        body: 'See durable files, reports, media, and receipts created in the workspace you are currently viewing, newest first.',
+        icon: 'outputs',
+        actions: [{ id: 'app.outputs', label: 'Open Outputs' }],
+      },
+      {
+        id: 'topbar-start-bell',
+        title: 'Check the notification bell',
+        body: 'See workspace Pulse alerts and requests that may need your attention.',
+        icon: 'notifications',
+      },
+      {
+        id: 'topbar-start-settings',
+        title: 'Configure Artist OS in Settings',
+        body: 'Manage app behavior, AI providers, connections, accounts, permissions, and other setup.',
+        icon: 'settings',
+        actions: [{ id: 'settings.app', label: 'Open Settings' }],
+      },
+      {
+        id: 'topbar-start-guide',
+        title: 'Return here for the essentials',
+        body: 'The guide icon opens this fast-start guide for General, HQ, Campaigns, Creative Lab, and the top bar.',
+        icon: 'guide',
+      },
+    ],
+    destinations: [
+      {
+        id: 'topbar-destination-tools',
+        title: 'Tools',
+        body: 'See and connect tools, connectors, and apps that give workers additional abilities.',
+        icon: 'tools',
+        actions: [{ id: 'app.tools', label: 'Open' }],
+      },
+      {
+        id: 'topbar-destination-skills',
+        title: 'Skills',
+        body: 'Manage reusable capabilities workers can use, including new workers you create.',
+        icon: 'skills',
+        actions: [{ id: 'app.skills', label: 'Open' }],
+      },
+      {
+        id: 'topbar-destination-context',
+        title: 'Workspace Context',
+        body: 'Add facts, instructions, and documents agents in the current workspace should know.',
+        icon: 'context',
+        actions: [{ id: 'workspace.context', label: 'Open' }],
+      },
+      {
+        id: 'topbar-destination-outputs',
+        title: 'Outputs',
+        body: 'Review durable work created by agents and workflows in the current workspace.',
+        icon: 'outputs',
+        actions: [{ id: 'app.outputs', label: 'Open' }],
+      },
+      {
+        id: 'topbar-destination-settings',
+        title: 'Settings',
+        body: 'Control the app and manage its providers, connections, accounts, and safety rules.',
+        icon: 'settings',
+        actions: [{ id: 'settings.app', label: 'Open' }],
+      },
+    ],
+    conceptsLabel: 'Know what each surface holds',
+    concepts: [
+      {
+        id: 'topbar-concept-library',
+        title: 'Tools, Skills, and Context are different',
+        body: 'Tools connect capabilities. Skills teach workers how to perform reusable jobs. Workspace Context gives selected workers the facts and documents they should know here.',
+      },
+      {
+        id: 'topbar-concept-output-kit',
+        title: 'Outputs versus Release Kit',
+        body: 'Outputs are created work and drafts. A campaign Release Kit holds only the final assets explicitly approved to go out into the world.',
+      },
+      {
+        id: 'topbar-concept-output-scope',
+        title: 'Outputs currently follow the active workspace',
+        body: 'Switching between HQ and a Campaign changes which Outputs appear. A single all-workspaces feed is not available yet.',
+      },
+      {
+        id: 'topbar-concept-notifications',
+        title: 'The bell is not the only approval surface',
+        body: 'The bell currently carries workspace Pulse notifications. Approval requests can also appear in the relevant chat, Campaign, Plan, or workflow run.',
       },
     ],
   },

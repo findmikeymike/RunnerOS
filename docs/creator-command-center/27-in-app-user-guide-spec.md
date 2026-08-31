@@ -11,12 +11,13 @@ source_of_truth: true
 
 Replace the top-right `?` documentation dropdown with a large in-app guide called **Artist OS Guide**.
 
-The guide has four tabs:
+The guide has five tabs:
 
 1. **General** — setup, shared concepts, safety, and common actions.
 2. **HQ** — the artist-wide home base and reusable artist knowledge.
 3. **Campaigns** — release planning, unfinished work, approved assets, jobs, and approvals.
 4. **Creative Lab** — songwriting, song organization, project sequencing, specialist creation, and Spark Bank.
+5. **Top Bar** — Library, Outputs, notifications, Settings, and the guide itself.
 
 This is a fast-start guide, not an exhaustive manual. It should teach enough for a new user to complete setup, understand where work belongs, and begin using Artist OS without leaving the app.
 
@@ -51,7 +52,7 @@ A first-time user should be able to answer these questions in under five minutes
 The panel contains:
 
 1. Sticky header: **Artist OS Guide**, one-line purpose, close button.
-2. Sticky segmented tabs: **General / HQ / Campaigns / Creative Lab**.
+2. Sticky segmented tabs: **General / HQ / Campaigns / Creative Lab / Top Bar**.
 3. Tab body with three predictable sections:
    - **Start here** — a short ordered checklist.
    - **Where to go** — compact page/action rows with a direct button.
@@ -234,6 +235,22 @@ Creative Lab is where users write lyrics and intelligently save, develop, and pl
 
 Every visible Creative Lab action must first switch to the Lab workspace when needed, then open its actual destination. Opening Spark Bank should reveal the existing bank rather than creating a second idea store.
 
+## Top Bar Tab
+
+The Top Bar tab explains the five persistent controls without turning the guide into a utility-link directory.
+
+- **Library / tool icon** — opens Tools, Skills, and Workspace Context. Tools connect capabilities; Skills provide reusable worker methods; Workspace Context stores workspace-specific facts and documents, routed to all workers or selected workers.
+- **Outputs** — currently shows durable artifacts from the active workspace, newest first. It does not yet aggregate HQ and Campaign outputs into one feed.
+- **Notification bell** — currently shows active-workspace Pulse notifications. Approval requests can also appear in chats, Campaign, Plan, and workflow runs.
+- **Settings** — app behavior, AI providers, connections, accounts, permissions, and other configuration.
+- **Guide** — opens this fast-start guide.
+
+### Follow-up product gaps discovered during verification
+
+1. **Global Outputs** should aggregate outputs from HQ and every Campaign, newest first, while clearly labelling workspace and campaign origin. Campaign Release Kit assets remain a separate approved-final layer.
+2. **Workspace Context UI** needs a focused design pass. Its storage, broadcast/targeted routing, import, and agent-prompt injection are implemented, but the current page mixes context documents, goals, memory, social defaults, repository connection, and self-edit configuration in one surface.
+3. **Notification scope** should be decided explicitly. The bell currently carries Pulse notifications, not every approval or attention state in Artist OS.
+
 ## Setup Status
 
 The first version may show status chips only when readiness can be verified through an existing source of truth:
@@ -249,7 +266,7 @@ Do not infer `Ready` merely because a key, model name, or account row exists. If
 Keep guide content data-driven rather than embedding a large manual directly in JSX.
 
 ```ts
-type ArtistGuideTabId = 'general' | 'hq' | 'campaigns' | 'creative-lab'
+type ArtistGuideTabId = 'general' | 'hq' | 'campaigns' | 'creative-lab' | 'top-bar'
 
 type ArtistGuideActionId =
   | 'settings.ai'
@@ -258,6 +275,7 @@ type ArtistGuideActionId =
   | 'settings.spotify'
   | 'settings.ad-accounts'
   | 'settings.permissions'
+  | 'settings.app'
   | 'hq.home'
   | 'hq.people'
   | 'hq.profile'
@@ -273,6 +291,9 @@ type ArtistGuideActionId =
   | 'workspace.automations'
   | 'workspace.command'
   | 'app.outputs'
+  | 'app.tools'
+  | 'app.skills'
+  | 'workspace.context'
   | 'lab.home'
   | 'lab.pad'
   | 'lab.songs'
@@ -335,7 +356,7 @@ The guide is not a directory of utility links. Existing documentation and shortc
 - Add only readiness checks backed by existing verified state.
 - Add the Command help action.
 
-### Slice 3 — HQ, Campaigns, and Creative Lab
+### Slice 3 — HQ, Campaigns, Creative Lab, and Top Bar
 
 - Add the grounded page descriptions above.
 - Add contextual default-tab behavior.
@@ -352,11 +373,11 @@ The guide is not a directory of utility links. Existing documentation and shortc
 
 1. The top-right `?` opens the Artist OS Guide instead of the old external-link dropdown.
 2. HQ, Campaign, and other workspaces open the correct contextual tab on first use.
-3. General, HQ, Campaigns, and Creative Lab are fully usable by mouse and keyboard.
+3. General, HQ, Campaigns, Creative Lab, and Top Bar are fully usable by mouse and keyboard.
 4. Every visible action navigates to a real current destination and closes the guide.
 5. The guide never teaches hidden HQ Plan navigation.
 6. Setup statuses never report `Ready` without a dependable validation signal.
 7. The copy clearly distinguishes HQ from Campaign, Worker from Workflow from Automation, and Essentials from Release Kit.
 8. The guide contains no peripheral utility-link clutter; its only footer action is `Ask Command`.
 9. The panel remains readable in a compact Electron window without clipped controls or nested page scrolling.
-10. A manual smoke confirms open, close, tab switching, focus return, settings deep links, HQ links, Campaign links, Creative Lab links, Spark Bank, and Ask Command in the running canonical Artist OS build.
+10. A manual smoke confirms open, close, tab switching, focus return, settings deep links, HQ links, Campaign links, Creative Lab links, Top Bar links, Spark Bank, and Ask Command in the running canonical Artist OS build.

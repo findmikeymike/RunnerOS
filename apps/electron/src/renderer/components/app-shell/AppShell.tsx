@@ -1982,6 +1982,7 @@ function AppShellContent({
       'settings.spotify',
       'settings.ad-accounts',
       'settings.permissions',
+      'settings.app',
     ])
     const contextualWorkspace = artistGuideTab === 'hq'
       ? artistGuideHqWorkspace
@@ -1996,7 +1997,12 @@ function AppShellContent({
       actions.add('workspace.automations')
       actions.add('workspace.command')
     }
-    if (activeWorkspaceId) actions.add('app.outputs')
+    if (activeWorkspaceId) {
+      actions.add('app.outputs')
+      actions.add('app.tools')
+      actions.add('app.skills')
+      actions.add('workspace.context')
+    }
     if (artistGuideHqWorkspace) {
       actions.add('hq.home')
       actions.add('hq.people')
@@ -2043,6 +2049,7 @@ function AppShellContent({
       'settings.spotify': 'spotify',
       'settings.ad-accounts': 'ad-accounts',
       'settings.permissions': 'permissions',
+      'settings.app': 'app',
     }
     const settingsTarget = settingsByAction[action]
     if (settingsTarget) {
@@ -2147,6 +2154,9 @@ function AppShellContent({
     else if (action === 'workspace.workflows') navigate(routes.view.workflows())
     else if (action === 'workspace.automations') navigate(routes.view.automations())
     else if (action === 'app.outputs') navigate(routes.view.outputs())
+    else if (action === 'app.tools') navigate(routes.view.sources())
+    else if (action === 'app.skills') navigate(routes.view.skills())
+    else if (action === 'workspace.context') navigate(routes.view.workspaceContext())
     else if (action === 'workspace.command') await handleWorkChatClick()
   }, [activeWorkspace, activeWorkspaceId, artistGuideCampaignWorkspace, artistGuideHqWorkspace, artistGuideLabWorkspace, artistGuideTab, handleArtistHQNavClick, handleSettingsClick, handleWorkChatClick, onSelectWorkspace])
 
