@@ -31,6 +31,7 @@ Core Artist HQ and campaign workspace specs live here.
 - [20 Artist Timeline / Unified Calendar](./20-artist-timeline-unified-calendar-spec.md)
 - [21 Bounded Goal Continuation Driver](./21-bounded-goal-continuation-driver-spec.md)
 - [22 Chat-Native Goal Mode](./22-chat-native-goal-mode-spec.md)
+- [24 Session Task List And Delegation Return Path](./24-session-task-list-spec.md)
 
 Current V1 implementation notes:
 
