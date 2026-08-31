@@ -60,6 +60,39 @@ describe('SessionManager task-list persistence', () => {
     expect(loadSession(root, managed.id)?.messages.at(-1)?.taskEvent?.snapshot).toEqual(next)
   })
 
+  it('applies incremental tool operations without replacing authoritative ids', async () => {
+    const managed = installSession()
+    const initialized = await manager.updateSessionTasks(managed.id, {
+      op: 'init',
+      items: ['Research audience', 'Draft rollout', 'Verify assets'],
+    })
+    const firstId = initialized?.items[0]?.id
+    expect(firstId).toStartWith('task_')
+
+    const started = await manager.updateSessionTasks(managed.id, { op: 'start', taskId: firstId })
+    expect(started?.items[0]?.status).toBe('in_progress')
+    const completed = await manager.updateSessionTasks(managed.id, { op: 'done', taskId: firstId })
+    expect(completed?.items[0]?.status).toBe('completed')
+    const appended = await manager.updateSessionTasks(managed.id, { op: 'append', content: 'Send final summary' })
+    expect(appended?.items.at(-1)?.content).toBe('Send final summary')
+    expect(appended?.items[0]?.id).toBe(firstId)
+    expect(await manager.updateSessionTasks(managed.id, { op: 'view' })).toEqual(appended)
+  })
+
+  it('rejects re-init and invalid incremental operations without changing state', async () => {
+    const managed = installSession()
+    const initialized = await manager.updateSessionTasks(managed.id, {
+      op: 'init',
+      items: ['One', 'Two', 'Three'],
+    })
+
+    await expect(manager.updateSessionTasks(managed.id, { op: 'init', items: ['Replacement'] }))
+      .rejects.toMatchObject({ code: 'invalid-list' })
+    await expect(manager.updateSessionTasks(managed.id, { op: 'done', taskId: initialized?.items[0]?.id }))
+      .rejects.toMatchObject({ code: 'invalid-transition' })
+    expect(await manager.updateSessionTasks(managed.id, { op: 'view' })).toEqual(initialized)
+  })
+
   it('rolls back a failed advisory write and leaves the session usable', async () => {
     const managed = installSession()
     const next = createSessionTaskList(
@@ -151,8 +184,8 @@ describe('SessionManager task-list persistence', () => {
       loadSessionsFromDisk(workspaces: ReturnType<typeof workspace>[]): Promise<void>
     }).loadSessionsFromDisk([workspace()])
 
-    const restored = await manager.getSession(stored.id)
-    expect(restored?.sessionTasks?.items[0]?.status).toBe('pending')
+    const restored = await manager.updateSessionTasks(stored.id, { op: 'view' })
+    expect(restored?.items[0]?.status).toBe('pending')
     expect(loadSession(root, stored.id)?.sessionTasks?.items[0]?.status).toBe('pending')
   })
 })

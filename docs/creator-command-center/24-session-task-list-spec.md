@@ -492,7 +492,7 @@ Ordered so that no slice ships a deadlock.
 
 **Slice 2 — Persistence.** Session config field, JSONL events, `commitSessionTaskState` with the durable barrier, defensive parse, load-path restore including `in_progress` demotion. **Implemented 2026-08-30.**
 
-**Slice 3 — Tool and gating.** `update_tasks` handler and tool-def, provider-gated registration, prompt guidance for non-Anthropic providers.
+**Slice 3 — Tool and gating.** `update_tasks` handler and tool-def, provider-gated registration, prompt guidance for non-Anthropic providers. **Implemented 2026-08-30.**
 
 **Slice 4 — Claude adapter.** Intercept `TodoWrite`, project into the store. Claude sessions gain durable state.
 

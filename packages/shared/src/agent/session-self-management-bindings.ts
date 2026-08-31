@@ -543,6 +543,14 @@ export function attachSessionSelfManagementBindings(
     configurable: true,
     enumerable: true,
   });
+
+  Object.defineProperty(context, 'updateSessionTasks', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.updateSessionTasksFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
 }
 
 // ============================================================

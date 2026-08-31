@@ -46,6 +46,7 @@ import { handleSetSessionLabels } from './handlers/set-session-labels.ts';
 import { handleSetSessionStatus } from './handlers/set-session-status.ts';
 import { handleGetSessionInfo } from './handlers/get-session-info.ts';
 import { handleGetGoal, handleCreateGoal, handleUpdateGoal } from './handlers/chat-goal.ts';
+import { handleUpdateTasks } from './handlers/session-tasks.ts';
 import { handleListSessions } from './handlers/list-sessions.ts';
 import { handleListAgents } from './handlers/list-agents.ts';
 import { handleListSkills } from './handlers/list-skills.ts';
@@ -294,6 +295,16 @@ export const UpdateGoalSchema = z.object({
   status: z.enum(['complete', 'blocked']),
   summary: z.string().min(1).max(4_000),
   evidence: z.array(z.string().min(1).max(4_000)).max(20).optional(),
+});
+
+export const UpdateTasksSchema = z.object({
+  op: z.enum(['init', 'start', 'done', 'append', 'drop', 'reopen', 'view']),
+  items: z.array(z.string().min(1).max(200)).max(50).optional()
+    .describe('Task content for init or append. Use imperative phrases.'),
+  taskId: z.string().min(1).optional()
+    .describe('Authoritative task id for start, done, drop, or reopen.'),
+  content: z.string().min(1).max(200).optional()
+    .describe('One task to append. May be used instead of items.'),
 });
 
 export const ListSessionsSchema = z.object({
@@ -1270,6 +1281,14 @@ Call with no arguments to introspect your own session state.`,
 
   update_goal: `Request that the current chat-native Goal be marked complete or blocked. The host audits the request after the turn finishes. Complete requires a concise summary and concrete evidence when the done condition is verifiable. The host derives and audits blocker identity across Goal turns. This tool cannot pause, resume, cancel, clear, or increase budget.`,
 
+  update_tasks: `Maintain the authoritative task list for this chat with incremental operations.
+
+Create a list only when work has at least three distinct steps, when the user gives several tasks at once, or when new multi-step instructions arrive mid-run. Do not create a list for single-step work.
+
+Use init once, start an item immediately before working on it, and mark it done immediately after finishing it. Do not batch status updates. Exactly one item may be in progress. Use append for newly discovered work, drop only for work that is no longer required, reopen before revisiting terminal work, and view to refresh the authoritative list.
+
+The host owns ids, revisions, persistence, and delegation status. Never invent task ids or mark delegated work yourself. The full authoritative list is returned after every call.`,
+
   list_sessions: `List sessions in the workspace. Returns total count + paginated results.
 
 Use filters (status, label, search) to narrow results instead of fetching everything. Default limit is 20 sessions.
@@ -1783,6 +1802,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'get_goal', description: TOOL_DESCRIPTIONS.get_goal, inputSchema: GetGoalSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetGoal },
   { name: 'create_goal', description: TOOL_DESCRIPTIONS.create_goal, inputSchema: CreateGoalSchema, executionMode: 'registry', safeMode: 'allow', handler: handleCreateGoal },
   { name: 'update_goal', description: TOOL_DESCRIPTIONS.update_goal, inputSchema: UpdateGoalSchema, executionMode: 'registry', safeMode: 'allow', handler: handleUpdateGoal },
+  { name: 'update_tasks', description: TOOL_DESCRIPTIONS.update_tasks, inputSchema: UpdateTasksSchema, executionMode: 'registry', safeMode: 'allow', handler: handleUpdateTasks },
   { name: 'list_sessions', description: TOOL_DESCRIPTIONS.list_sessions, inputSchema: ListSessionsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSessions },
   { name: 'list_agents', description: TOOL_DESCRIPTIONS.list_agents, inputSchema: ListAgentsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListAgents },
   { name: 'list_skills', description: TOOL_DESCRIPTIONS.list_skills, inputSchema: ListSkillsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSkills },
@@ -1861,6 +1881,8 @@ export interface SessionToolFilterOptions {
   includeCampaignManagerTools?: boolean;
   /** Include Creative Lab song tools only inside an explicit Lab workspace. */
   includeLabTools?: boolean;
+  /** Include the provider-neutral task tool for non-Anthropic providers. */
+  includeSessionTasks?: boolean;
 }
 
 /**
@@ -1875,6 +1897,7 @@ export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionT
   const includeManagerTools = options?.includeManagerTools ?? false;
   const includeCampaignManagerTools = options?.includeCampaignManagerTools ?? false;
   const includeLabTools = options?.includeLabTools ?? false;
+  const includeSessionTasks = options?.includeSessionTasks ?? false;
 
   return SESSION_TOOL_DEFS.filter(def => {
     if (!includeDeveloperFeedback && def.name === 'send_developer_feedback') {
@@ -1884,6 +1907,7 @@ export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionT
     if (!includeManagerTools && ['get_manager_brief', 'get_artist_context', 'get_campaign_context'].includes(def.name)) return false;
     if (!includeCampaignManagerTools && def.name === 'get_campaign_brief') return false;
     if (!includeLabTools && ['create_lab_song', 'save_lab_lyrics', 'list_lab_songs'].includes(def.name)) return false;
+    if (!includeSessionTasks && def.name === 'update_tasks') return false;
     return true;
   });
 }
@@ -1999,6 +2023,7 @@ export function getToolDefsAsJsonSchema(opts?: {
   includeManagerTools?: boolean;
   includeCampaignManagerTools?: boolean;
   includeLabTools?: boolean;
+  includeSessionTasks?: boolean;
 }): JsonSchemaToolDef[] {
   const prefix = opts?.prefix || '';
   const defs = getSessionToolDefs({
@@ -2007,6 +2032,7 @@ export function getToolDefsAsJsonSchema(opts?: {
     includeManagerTools: opts?.includeManagerTools,
     includeCampaignManagerTools: opts?.includeCampaignManagerTools,
     includeLabTools: opts?.includeLabTools,
+    includeSessionTasks: opts?.includeSessionTasks,
   });
 
   return defs.map(def => {

@@ -2140,6 +2140,7 @@ export function shouldAllowToolInMode(
         includeManagerTools: true,
         includeCampaignManagerTools: true,
         includeLabTools: true,
+        includeSessionTasks: true,
       });
 
       if (safeAllowedSessionTools.has(toolName)) {

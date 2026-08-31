@@ -337,6 +337,9 @@ export interface SessionToolContext {
   /** Request completion or blocking; the host finalizes only after turn settlement. */
   requestChatGoalUpdate?(input: import('./handlers/chat-goal.ts').UpdateGoalToolInput): Promise<unknown>;
 
+  /** Read or incrementally mutate the host-owned task list for this session. */
+  updateSessionTasks?(input: import('./handlers/session-tasks.ts').UpdateTasksToolInput): Promise<unknown>;
+
   /** List sessions in the workspace with pagination. Injected by backend. */
   listSessions?(options?: ListSessionsOptions): ListSessionsResult;
 

@@ -24,5 +24,6 @@ export function getSessionToolProxyDefs(options?: { includeScheduleWork?: boolea
     includeManagerTools: options?.includeManagerTools ?? false,
     includeCampaignManagerTools: options?.includeCampaignManagerTools ?? false,
     includeLabTools: options?.includeLabTools ?? false,
+    includeSessionTasks: true,
   });
 }

@@ -146,6 +146,22 @@ describe('attachSessionSelfManagementBindings', () => {
     expect(ctx.setSessionLabels).toBeDefined();
   });
 
+  it('updateSessionTasks resolves through the lazy host callback', async () => {
+    const ctx = createBaseContext(sessionId);
+    attachSessionSelfManagementBindings(ctx, sessionId);
+    expect(ctx.updateSessionTasks).toBeUndefined();
+
+    registerSessionScopedToolCallbacks(sessionId, {
+      updateSessionTasksFn: async (input) => ({ id: 'tasks_1', revision: 1, operation: input.op }),
+    });
+
+    await expect(ctx.updateSessionTasks!({ op: 'view' })).resolves.toEqual({
+      id: 'tasks_1',
+      revision: 1,
+      operation: 'view',
+    });
+  });
+
   it('scheduleWork resolves through the HNIC callback binding', async () => {
     const ctx = createBaseContext(sessionId);
     attachSessionSelfManagementBindings(ctx, sessionId);

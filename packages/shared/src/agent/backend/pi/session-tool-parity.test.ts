@@ -4,6 +4,9 @@ import { PI_BACKEND_SESSION_TOOL_NAMES } from '../../pi-agent.ts';
 import { getSessionToolProxyDefs } from './session-tool-defs.ts';
 
 describe('Pi backend session tool parity', () => {
+  it('always exposes the provider-neutral update_tasks proxy', () => {
+    expect(getSessionToolProxyDefs().some((tool) => tool.name === 'mcp__session__update_tasks')).toBe(true);
+  });
   it('implements all backend-mode session tools from core registry', () => {
     const missing = [...SESSION_BACKEND_TOOL_NAMES].filter(
       (toolName) => !PI_BACKEND_SESSION_TOOL_NAMES.has(toolName),

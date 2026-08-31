@@ -235,11 +235,15 @@ export {
   handleGetGoal,
   handleCreateGoal,
   handleUpdateGoal,
+  handleUpdateTasks,
 } from './handlers/index.ts';
 
 export type {
   CreateGoalToolInput,
   UpdateGoalToolInput,
+  UpdateTasksOperation,
+  UpdateTasksToolInput,
+  SessionTaskRejectionCode,
 } from './handlers/index.ts';
 
 export type {

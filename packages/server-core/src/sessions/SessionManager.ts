@@ -39,7 +39,7 @@ import {
   type WorkspaceInfo,
 } from '@craft-agent/shared/config'
 import type { ActiveSessionInfo, SessionProcessingStatus } from '@craft-agent/core/types'
-import type { MemoryMutationResult, RecalledMemoryEntry, RecallMemoryResult, RecallMemoryToolInput, CreateGoalToolInput, UpdateGoalToolInput } from '@craft-agent/session-tools-core'
+import type { MemoryMutationResult, RecalledMemoryEntry, RecallMemoryResult, RecallMemoryToolInput, CreateGoalToolInput, UpdateGoalToolInput, UpdateTasksToolInput } from '@craft-agent/session-tools-core'
 import { assertTeamPermission, evaluateTeamRunnerGate, getTeamModeStatus, loadWorkspaceConfig, type WorkspaceSyncArea } from '@craft-agent/shared/workspaces'
 import { detectClobberedWrites, scanProviderConflictedCopies } from '@craft-agent/shared/records'
 import {
@@ -108,6 +108,13 @@ import {
   makeChatGoalEvent,
   parseChatGoalState,
   recoverSessionTaskListAfterRestart,
+  SessionTaskStateError,
+  abandonSessionTask,
+  appendSessionTasks,
+  completeSessionTask,
+  createSessionTaskList,
+  reopenSessionTask,
+  startSessionTask,
   type SessionTaskList,
   pickSessionFields,
 } from '@craft-agent/shared/sessions'
@@ -7379,6 +7386,7 @@ user a clickable link to where the thing now lives.`
         getChatGoalFn: () => managed.chatGoal ?? null,
         proposeChatGoalFn: (input) => this.proposeChatGoal(managed.id, input),
         requestChatGoalUpdateFn: (input) => this.requestChatGoalUpdate(managed.id, input),
+        updateSessionTasksFn: (input) => this.updateSessionTasks(managed.id, input),
         saveMemoryFn: async (input) => {
           const scope = input.scope === 'user' ? 'user' : 'agent'
           if (scope === 'user' && !canDirectlyMutateUserMemory(managed.spawnedFromAgent)) {
@@ -8758,6 +8766,61 @@ user a clickable link to where the thing now lives.`
       evidence: input.evidence?.map(item => item.trim()).filter(Boolean),
     }
     return { accepted: true, pending: true, status: input.status }
+  }
+
+  async updateSessionTasks(
+    sessionId: string,
+    input: UpdateTasksToolInput,
+  ): Promise<SessionTaskList | undefined> {
+    return this.withSessionAdmissionLock(sessionId, async () => {
+      const managed = this.sessions.get(sessionId)
+      if (!managed) throw new Error('Session not found')
+      await this.ensureMessagesLoaded(managed)
+      if (input.op === 'view') return managed.sessionTasks
+
+      const current = managed.sessionTasks
+      let next: SessionTaskList
+      switch (input.op) {
+        case 'init': {
+          if (current) {
+            throw new SessionTaskStateError('invalid-list', 'A task list already exists; update it incrementally')
+          }
+          if (!input.items?.length) {
+            throw new SessionTaskStateError('invalid-task', 'init requires at least one item')
+          }
+          next = createSessionTaskList(input.items.map(content => ({ content })))
+          break
+        }
+        case 'append': {
+          if (!current) throw new SessionTaskStateError('invalid-list', 'Initialize the task list before appending')
+          const contents = [...(input.items ?? []), ...(input.content ? [input.content] : [])]
+          if (contents.length === 0) {
+            throw new SessionTaskStateError('invalid-task', 'append requires items or content')
+          }
+          next = appendSessionTasks(current, contents.map(content => ({ content })))
+          break
+        }
+        case 'start':
+        case 'done':
+        case 'drop':
+        case 'reopen': {
+          if (!current) throw new SessionTaskStateError('invalid-list', 'No task list exists in this session')
+          if (!input.taskId) throw new SessionTaskStateError('task-not-found', `${input.op} requires taskId`)
+          next = input.op === 'start'
+            ? startSessionTask(current, input.taskId)
+            : input.op === 'done'
+              ? completeSessionTask(current, input.taskId)
+              : input.op === 'drop'
+                ? abandonSessionTask(current, input.taskId)
+                : reopenSessionTask(current, input.taskId)
+          break
+        }
+        default:
+          throw new SessionTaskStateError('invalid-list', 'Unsupported task operation')
+      }
+
+      return this.commitSessionTaskState(managed, next, input.op)
+    })
   }
 
   private appendSessionTaskEvent(

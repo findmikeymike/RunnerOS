@@ -51,6 +51,17 @@ describe('session tool filtering helpers', () => {
     expect(getSessionToolNames({ includeScheduleWork: true }).has('schedule_work')).toBe(true);
   });
 
+  it('registers update_tasks only when the non-Anthropic task surface is enabled', () => {
+    expect(getSessionToolNames().has('update_tasks')).toBe(false);
+    expect(getSessionToolNames({ includeSessionTasks: false }).has('update_tasks')).toBe(false);
+    expect(getSessionToolNames({ includeSessionTasks: true }).has('update_tasks')).toBe(true);
+    expect(getToolDefsAsJsonSchema({ includeSessionTasks: true }).some(def => def.name === 'update_tasks')).toBe(true);
+    const taskTool = SESSION_TOOL_DEFS.find(def => def.name === 'update_tasks');
+    expect(taskTool?.description).toContain('at least three distinct steps');
+    expect(taskTool?.description).toContain('Exactly one item may be in progress');
+    expect(taskTool?.safeMode).toBe('allow');
+  });
+
   it('exposes semantic Manager tools only to HNIC while keeping authorized context reads generic', () => {
     const ordinary = getSessionToolNames();
     expect(ordinary.has('get_manager_brief')).toBe(false);
@@ -133,6 +144,7 @@ describe('session tool filtering helpers', () => {
     expect(allowed.has('list_deep_research_runs')).toBe(true);
     expect(allowed.has('get_deep_research_run')).toBe(true);
     expect(allowed.has('message_agent')).toBe(true);
+    expect(getSessionSafeAllowedToolNames({ includeSessionTasks: true }).has('update_tasks')).toBe(true);
 
     expect(blocked.has('source_oauth_trigger')).toBe(true);
     expect(blocked.has('source_credential_prompt')).toBe(true);
