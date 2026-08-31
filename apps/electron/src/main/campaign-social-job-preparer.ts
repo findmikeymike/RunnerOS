@@ -6,7 +6,7 @@ import {
   readOutputManifest,
   resolveOutputAssetPath,
 } from '@craft-agent/shared/outputs'
-import { resolveVerifiedReleaseKitItemPath } from '@craft-agent/shared/release-kit'
+import { loadReleaseKitManifest, resolveVerifiedReleaseKitItemPath } from '@craft-agent/shared/release-kit'
 import type {
   CampaignCalendarItem,
   CampaignScheduledJob,
@@ -182,6 +182,7 @@ export function resolveCampaignSocialMediaPath(input: PrepareInput): string | un
   if (input.item.releaseKitRefs.length > 1) throw new Error('Social post has multiple Release Kit media references.')
   const releaseKitRef = input.item.releaseKitRefs[0]
   if (releaseKitRef) {
+    assertReleaseKitSocialUseAllowed(input.workspaceRootPath, input.workspaceId, input.workspaceId, releaseKitRef.itemId)
     return resolveVerifiedReleaseKitItemPath(
       input.workspaceRootPath,
       input.workspaceId,
@@ -214,6 +215,12 @@ function resolveScheduledSocialMediaPath(workspaceRootPath: string, order: Sched
   if (releaseKitRefs.length > 1) throw new Error('Social work has multiple Release Kit media references.')
   const releaseKitRef = releaseKitRefs[0]
   if (releaseKitRef) {
+    assertReleaseKitSocialUseAllowed(
+      workspaceRootPath,
+      order.owner.workspaceId,
+      order.owner.campaignId ?? order.owner.workspaceId,
+      releaseKitRef.itemId,
+    )
     return resolveVerifiedReleaseKitItemPath(
       workspaceRootPath,
       order.owner.workspaceId,
@@ -234,6 +241,15 @@ function resolveScheduledSocialMediaPath(workspaceRootPath: string, order: Sched
     if (resolved) return resolved
   }
   return undefined
+}
+
+function assertReleaseKitSocialUseAllowed(workspaceRootPath: string, workspaceId: string, campaignId: string, itemId: string): void {
+  const item = loadReleaseKitManifest(workspaceRootPath, workspaceId, campaignId).items.find((candidate) => candidate.id === itemId)
+  if (!item) throw new Error(`Release Kit item not found: ${itemId}`)
+  if (item.status !== 'ready') throw new Error('Release Kit item is not ready for social publishing.')
+  if (item.usage.restrictions.blockedFromUse) throw new Error('This final is blocked from use.')
+  if (item.usage.restrictions.needsRightsClearance) throw new Error('This final still needs rights clearance.')
+  if (item.usage.restrictions.artistLikenessRestricted) throw new Error('This final has an artist-likeness restriction.')
 }
 
 function socialActionDigest(dryRun: Record<string, unknown>, mediaDigest?: string): string {

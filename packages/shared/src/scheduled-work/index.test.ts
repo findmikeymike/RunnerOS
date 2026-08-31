@@ -204,6 +204,26 @@ describe('scheduled work documents', () => {
     expect(result.work.items).toEqual([])
   })
 
+  test('rejects malformed durable authorization records', () => {
+    const order = migrateCampaignCalendarJobs(calendarWithJob('post-asset'), emptyScheduledWorkDocument('campaign-1')).work.items[0]!
+    const body = serializeScheduledWorkBody({
+      ...emptyScheduledWorkDocument('campaign-1'),
+      items: [{ ...order, authorizationPolicy: 'durable-v1', authorization: { approvedBy: { type: 'agent' } } } as never],
+    })
+
+    expect(parseScheduledWorkDocResult({ body }, 'campaign-1').ok).toBe(false)
+  })
+
+  test('rejects social completion without a verifiable receipt shape', () => {
+    const order = migrateCampaignCalendarJobs(calendarWithJob('post-asset'), emptyScheduledWorkDocument('campaign-1')).work.items[0]!
+    const body = serializeScheduledWorkBody({
+      ...emptyScheduledWorkDocument('campaign-1'),
+      items: [{ ...order, status: 'done', result: { type: 'social-publish', receipt: { id: 'missing-proof' } } } as never],
+    })
+
+    expect(parseScheduledWorkDocResult({ body }, 'campaign-1').ok).toBe(false)
+  })
+
   test('applies owner-scoped upsert and cancel mutations', () => {
     const migrated = migrateCampaignCalendarJobs(calendarWithJob(), emptyScheduledWorkDocument('campaign-1'))
     const order = migrated.work.items[0]!

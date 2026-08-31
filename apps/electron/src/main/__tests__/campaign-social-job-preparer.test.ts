@@ -5,7 +5,7 @@ import {
 } from '@craft-agent/shared/campaign-calendar'
 import { executeScheduledSocialWork, prepareCampaignSocialJob, prepareScheduledSocialWork, resolveCampaignSocialMediaPath } from '../campaign-social-job-preparer'
 import type { ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
-import { materializeReleaseKitItem, resolveReleaseKitItemPath } from '@craft-agent/shared/release-kit'
+import { materializeReleaseKitItem, resolveReleaseKitItemPath, updateReleaseKitItemUsage } from '@craft-agent/shared/release-kit'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -30,6 +30,33 @@ describe('prepareCampaignSocialJob', () => {
     expect(resolveCampaignSocialMediaPath(input)).toBe(snapshot)
     writeFileSync(snapshot, 'changed-teaser')
     expect(() => resolveCampaignSocialMediaPath(input)).toThrow(/integrity verification/i)
+  })
+
+  test('rechecks hard Release Kit restrictions before native preparation or execution', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'release-kit-social-restricted-'))
+    const source = join(root, 'teaser.mp4')
+    writeFileSync(source, 'approved-teaser')
+    const promoted = materializeReleaseKitItem(root, {
+      workspaceId: 'campaign-1', campaignId: 'campaign-1',
+      source: { type: 'campaign-asset', assetId: 'asset-1' }, sourcePath: source,
+      category: 'video', subtype: 'teaser', promotedBy: 'user',
+    })
+    updateReleaseKitItemUsage(root, 'campaign-1', 'campaign-1', promoted.item.id, {
+      restrictions: { blockedFromUse: true },
+    })
+    const restrictedOrder: ScheduledWorkOrder = {
+      version: 1, id: 'restricted-social', owner: { scope: 'campaign', workspaceId: 'campaign-1', campaignId: 'campaign-1' },
+      calendarLink: { calendar: 'campaign', itemId: 'restricted-calendar' }, title: 'Post restricted teaser',
+      type: 'social-publish', status: 'needs-approval', startAt: '2026-07-10T14:00:00.000Z', timezone: 'America/Chicago',
+      execution: { type: 'social-publish', platform: 'instagram', profileId: 'artist-main', caption: 'Out now.' },
+      inputRefs: [{ kind: 'release-kit', itemId: promoted.item.id, sha256: promoted.item.sha256 }],
+      approvals: [], runs: [], executionKey: { payloadDigest: 'digest', idempotencyKey: 'key' },
+      createdAt: '2026-07-09T00:00:00.000Z', updatedAt: '2026-07-09T00:00:00.000Z',
+    }
+
+    await expect(prepareScheduledSocialWork({ workspaceRootPath: root, order: restrictedOrder }, {
+      runSocialJson: async () => { throw new Error('must not reach provider') },
+    })).rejects.toThrow(/blocked from use/i)
   })
 
   test('builds an exact Printing Press dry-run from profile and final refs', async () => {

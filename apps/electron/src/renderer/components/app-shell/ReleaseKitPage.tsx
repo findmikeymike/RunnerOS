@@ -6,6 +6,8 @@ import {
   Bot,
   Check,
   ChevronDown,
+  Clock3,
+  ExternalLink,
   File,
   FileWarning,
   FolderOpen,
@@ -15,6 +17,7 @@ import {
   Play,
   Plus,
   Star,
+  Send,
   Trash2,
   Upload,
   Video,
@@ -28,6 +31,7 @@ import type {
   ReleaseKitManifest,
   ReleaseKitSource,
 } from '@craft-agent/shared/release-kit'
+import type { ReleaseKitItemUseSummary } from '@craft-agent/shared/scheduled-work'
 import type { OutputSummaryDTO } from '@/hooks/useOutputs'
 import type { OutputAsset, OutputManifest } from '@craft-agent/shared/outputs'
 import { Button } from '@/components/ui/button'
@@ -45,6 +49,7 @@ import {
 } from './release-kit-status'
 import { toast } from 'sonner'
 import { useAppShellContext } from '@/context/AppShellContext'
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 
 interface ReleaseKitPageProps {
   workspaceId: string
@@ -57,6 +62,10 @@ interface ReleaseKitPageProps {
 
 type AddStage = 'source' | 'item' | 'details'
 type SourceKind = 'upload' | 'campaign-asset' | 'vault-asset' | 'output'
+type AssetDrawerMode = 'details' | 'where' | 'post' | 'when'
+type ReleaseKitSocialProfile = { platform: string; profileId: string; label: string; accountSetId?: string; ready: boolean }
+
+const ReleaseKitInspectContext = React.createContext<(item: ReleaseKitItem) => void>(() => {})
 
 interface SelectedSource {
   source: ReleaseKitSource
@@ -95,6 +104,8 @@ export function ReleaseKitPage({
   const [addOpen, setAddOpen] = React.useState(false)
   const [prefillOutput, setPrefillOutput] = React.useState<OutputSummaryDTO | null>(null)
   const [itemPaths, setItemPaths] = React.useState<Record<string, string>>({})
+  const [selectedItemId, setSelectedItemId] = React.useState<string | null>(null)
+  const selectedItem = manifest?.items.find((item) => item.id === selectedItemId) ?? null
 
   const refresh = React.useCallback(async () => {
     if (!workspaceId) return
@@ -197,14 +208,16 @@ export function ReleaseKitPage({
 
         <main className="min-h-0 flex-1 overflow-y-auto pb-8 pr-1">
           {tab === 'finals' ? (
-            <FinalsGallery
-              manifest={manifest}
-              visibleCategories={visibleCategories}
-              itemPaths={itemPaths}
-              workspaceId={workspaceId}
-              onChanged={setManifest}
-              onAdd={() => setAddOpen(true)}
-            />
+            <ReleaseKitInspectContext.Provider value={(item) => setSelectedItemId(item.id)}>
+              <FinalsGallery
+                manifest={manifest}
+                visibleCategories={visibleCategories}
+                itemPaths={itemPaths}
+                workspaceId={workspaceId}
+                onChanged={setManifest}
+                onAdd={() => setAddOpen(true)}
+              />
+            </ReleaseKitInspectContext.Provider>
           ) : (
             <OutputsTab
               outputs={outputs}
@@ -231,6 +244,14 @@ export function ReleaseKitPage({
           setManifest(next)
           setTab('finals')
         }}
+      />
+      <ReleaseKitAssetDrawer
+        open={Boolean(selectedItem)}
+        item={selectedItem}
+        itemPath={selectedItem ? itemPaths[selectedItem.id] : undefined}
+        workspaceId={workspaceId}
+        onOpenChange={(open) => { if (!open) setSelectedItemId(null) }}
+        onChanged={setManifest}
       />
     </div>
   )
@@ -593,6 +614,202 @@ function OutputsTab({ outputs, loading, error, onOpen, onPromote }: {
   )
 }
 
+function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange, onChanged }: {
+  open: boolean
+  item: ReleaseKitItem | null
+  itemPath?: string
+  workspaceId: string
+  onOpenChange: (open: boolean) => void
+  onChanged: (manifest: ReleaseKitManifest) => void
+}) {
+  const { onOpenFile } = useAppShellContext()
+  const [mode, setMode] = React.useState<AssetDrawerMode>('details')
+  const [uses, setUses] = React.useState<ReleaseKitItemUseSummary[]>([])
+  const [profiles, setProfiles] = React.useState<ReleaseKitSocialProfile[]>([])
+  const [profileKey, setProfileKey] = React.useState('')
+  const [caption, setCaption] = React.useState('')
+  const [date, setDate] = React.useState('')
+  const [time, setTime] = React.useState('10:00')
+  const [notes, setNotes] = React.useState('')
+  const [contentRating, setContentRating] = React.useState<ReleaseKitItem['usage']['contentRating']>('unknown')
+  const [bestFor, setBestFor] = React.useState<ReleaseKitItem['usage']['bestFor']>([])
+  const [restrictions, setRestrictions] = React.useState<ReleaseKitItem['usage']['restrictions']>({ blockedFromUse: false, needsRightsClearance: false, artistLikenessRestricted: false })
+  const [busy, setBusy] = React.useState(false)
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  const itemId = item?.id
+
+  const loadUses = React.useCallback(async () => {
+    if (!itemId) return
+    setUses(await window.electronAPI.listReleaseKitItemUses(workspaceId, itemId))
+  }, [itemId, workspaceId])
+
+  React.useEffect(() => {
+    if (!open || !item) return
+    setMode('details')
+    setNotes(item.usage.notes ?? '')
+    setContentRating(item.usage.contentRating)
+    setBestFor(item.usage.bestFor)
+    setRestrictions(item.usage.restrictions)
+    setCaption('')
+    setProfileKey('')
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    setDate(`${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`)
+    void loadUses().catch((error) => toast.error('Could not load planned uses', { description: error instanceof Error ? error.message : String(error) }))
+  }, [itemId, loadUses, open])
+
+  React.useEffect(() => {
+    if (!open || mode !== 'where') return
+    let active = true
+    void window.electronAPI.listSocialAccounts().then((doctor) => {
+      if (!active) return
+      setProfiles(doctor.platforms.flatMap((group) => group.profiles.map((profile) => ({
+        platform: profile.platform,
+        profileId: profile.profile,
+        label: `${profile.platform} @${profile.profile}`,
+        accountSetId: profile.accountGroup ?? undefined,
+        ready: profile.ready || (profile.localSessionExists && Boolean(profile.accountHandle || profile.accountUrl)),
+      }))))
+    }).catch(() => { if (active) setProfiles([]) })
+    return () => { active = false }
+  }, [mode, open])
+
+  if (!item) return null
+  const selectedProfile = profiles.find((profile) => `${profile.platform}/${profile.profileId}` === profileKey)
+  const planned = uses.filter((use) => use.status !== 'done' && use.status !== 'canceled')
+  const history = uses.filter((use) => use.status === 'done' || use.status === 'canceled')
+  const restrictionMessage = releaseKitScheduleRestriction(item)
+  const eligible = (item.category === 'artwork' || item.category === 'images' || item.category === 'video')
+    && item.status === 'ready' && !restrictionMessage
+
+  const saveDetails = async () => {
+    setBusy(true)
+    try {
+      const manifest = await window.electronAPI.updateReleaseKitUsage(workspaceId, item.id, { notes, contentRating, bestFor, restrictions })
+      onChanged(manifest)
+      toast.success('Asset details saved')
+    } catch (error) {
+      toast.error('Could not save asset details', { description: error instanceof Error ? error.message : String(error) })
+    } finally { setBusy(false) }
+  }
+
+  const schedule = async () => {
+    if (!selectedProfile || !caption.trim() || !date || !time) return
+    setBusy(true)
+    try {
+      const startAt = new Date(`${date}T${time}:00`).toISOString()
+      await window.electronAPI.authorizeReleaseKitSocial(workspaceId, {
+        requestId: `release-kit-${crypto.randomUUID()}`,
+        releaseKitItemId: item.id,
+        platform: selectedProfile.platform,
+        profileId: selectedProfile.profileId,
+        accountSetId: selectedProfile.accountSetId,
+        caption: caption.trim(),
+        startAt,
+        timezone,
+        source: 'release-kit-ui',
+      })
+      await loadUses()
+      setMode('details')
+      toast.success('Post scheduled')
+    } catch (error) {
+      toast.error('Could not schedule post', { description: error instanceof Error ? error.message : String(error) })
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <Drawer direction="right" open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
+      <DrawerContent className="w-[min(480px,94vw)] border-white/[0.07] bg-[#090909] text-white sm:max-w-[480px]">
+        <DrawerHeader className="border-b border-white/[0.06]">
+          <div className="flex items-center gap-2">
+            {mode !== 'details' ? <button type="button" onClick={() => setMode(mode === 'where' ? 'details' : mode === 'post' ? 'where' : 'post')} className="rounded-md p-1 text-white/45 hover:bg-white/[0.06] hover:text-white"><ArrowLeft className="h-4 w-4" /></button> : null}
+            <div>
+              <DrawerTitle className="text-base text-white/86">{mode === 'details' ? item.title : mode === 'where' ? 'Choose an account' : mode === 'post' ? 'Write the post' : 'Choose when'}</DrawerTitle>
+              <DrawerDescription>{mode === 'details' ? `${displaySubtype(item.subtype)}${item.sizeBytes ? ` · ${formatFileSize(item.sizeBytes)}` : ''}` : `Schedule ${item.title}`}</DrawerDescription>
+            </div>
+          </div>
+        </DrawerHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          {mode === 'details' ? (
+            <div className="space-y-6">
+              {(item.category === 'artwork' || item.category === 'images' || item.category === 'video') && itemPath ? (
+                <div className="max-h-56 overflow-hidden rounded-lg bg-white/[0.025]"><img src={thumbnailUrl(itemPath)} alt={item.title} className="h-full max-h-56 w-full object-contain" /></div>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <Button className="bg-[#f97316] text-black hover:bg-[#fb923c]" disabled={!eligible} onClick={() => setMode('where')}><Send className="mr-1.5 h-3.5 w-3.5" />Schedule social post</Button>
+                <Button variant="outline" className="border-white/10 bg-transparent text-white/65" onClick={async () => {
+                  const detail = await window.electronAPI.getReleaseKitItem(workspaceId, item.id)
+                  onOpenFile(detail.absolutePath)
+                }}><ExternalLink className="mr-1.5 h-3.5 w-3.5" />Open file</Button>
+              </div>
+              {!eligible ? <p className="text-xs text-amber-200/75">{restrictionMessage ?? (item.status !== 'ready' ? releaseKitStatusExplanation(item) : 'Social scheduling supports final images and videos.')}</p> : null}
+
+              <DrawerSection title="Details">
+                <div className="flex flex-wrap gap-1.5">
+                  {(['social', 'ads', 'store', 'press', 'delivery'] as const).map((value) => <button key={value} type="button" onClick={() => setBestFor((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value])} className={cn('rounded-full px-2.5 py-1 text-[11px]', bestFor.includes(value) ? 'bg-orange-500/18 text-orange-200' : 'bg-white/[0.045] text-white/42')}>{displaySubtype(value)}</button>)}
+                </div>
+                <select value={contentRating} onChange={(event) => setContentRating(event.target.value as ReleaseKitItem['usage']['contentRating'])} className={INPUT_CLASS}><option value="unknown">Content rating unknown</option><option value="clean">Clean</option><option value="explicit">Explicit</option></select>
+                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={1000} rows={3} placeholder="Notes for agents" className="w-full resize-none rounded-md border border-white/[0.08] bg-white/[0.025] p-3 text-sm text-white/75 outline-none placeholder:text-white/25" />
+                <div className="space-y-2 border-t border-white/[0.06] pt-3">
+                  <RestrictionToggle label="Block from use" checked={restrictions.blockedFromUse} onChange={(checked) => setRestrictions({ ...restrictions, blockedFromUse: checked })} />
+                  <RestrictionToggle label="Needs rights clearance" checked={restrictions.needsRightsClearance} onChange={(checked) => setRestrictions({ ...restrictions, needsRightsClearance: checked })} />
+                  <RestrictionToggle label="Artist likeness restricted" checked={restrictions.artistLikenessRestricted} onChange={(checked) => setRestrictions({ ...restrictions, artistLikenessRestricted: checked })} />
+                </div>
+                <Button size="sm" variant="outline" disabled={busy} className="border-white/10 bg-transparent text-white/65" onClick={() => void saveDetails()}>{busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}Save details</Button>
+              </DrawerSection>
+
+              <DrawerSection title="Planned">{planned.length ? planned.map((use) => <AssetUseRow key={use.orderId} use={use} />) : <EmptyDrawerLine>No posts planned.</EmptyDrawerLine>}</DrawerSection>
+              <DrawerSection title="History">{history.length ? history.map((use) => <AssetUseRow key={use.orderId} use={use} />) : <EmptyDrawerLine>No posting history.</EmptyDrawerLine>}</DrawerSection>
+            </div>
+          ) : mode === 'where' ? (
+            <div className="divide-y divide-white/[0.06] border-y border-white/[0.06]">
+              {profiles.filter((profile) => profile.ready).map((profile) => <button key={`${profile.platform}/${profile.profileId}`} type="button" onClick={() => setProfileKey(`${profile.platform}/${profile.profileId}`)} className={cn('flex w-full items-center justify-between px-2 py-3 text-left', profileKey === `${profile.platform}/${profile.profileId}` && 'bg-white/[0.05]')}><span><span className="block text-sm text-white/78">{profile.label}</span><span className="text-xs text-emerald-200/55">Ready</span></span>{profileKey === `${profile.platform}/${profile.profileId}` ? <Check className="h-4 w-4 text-orange-300" /> : null}</button>)}
+              {!profiles.some((profile) => profile.ready) ? <EmptyDrawerLine>No ready social accounts.</EmptyDrawerLine> : null}
+              <div className="flex justify-end pt-4"><Button disabled={!selectedProfile} onClick={() => setMode('post')}>Next</Button></div>
+            </div>
+          ) : mode === 'post' ? (
+            <div className="space-y-4">
+              <div className="text-xs text-white/42">{selectedProfile?.label}</div>
+              <textarea autoFocus value={caption} onChange={(event) => setCaption(event.target.value)} maxLength={5000} rows={7} placeholder="Write the final caption" className="w-full resize-none rounded-md border border-white/[0.1] bg-white/[0.025] p-3 text-sm text-white/82 outline-none placeholder:text-white/25 focus:border-orange-400/45" />
+              <div className="flex justify-between text-[11px] text-white/30"><span>Caption must be final before scheduling.</span><span>{caption.length}/5000</span></div>
+              <div className="flex justify-end"><Button disabled={!caption.trim()} onClick={() => setMode('when')}>Next</Button></div>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-3"><label className="space-y-1.5 text-xs text-white/42"><span>Date</span><input type="date" value={date} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setDate(event.target.value)} className={INPUT_CLASS} /></label><label className="space-y-1.5 text-xs text-white/42"><span>Time</span><input type="time" value={time} onChange={(event) => setTime(event.target.value)} className={INPUT_CLASS} /></label></div>
+              <div className="flex items-center gap-2 text-xs text-white/42"><Clock3 className="h-3.5 w-3.5" />{timezone}</div>
+              <div className="space-y-2 border-y border-white/[0.06] py-4 text-sm"><SummaryLine label="Asset" value={item.title} /><SummaryLine label="Account" value={selectedProfile?.label ?? ''} /><SummaryLine label="Caption" value={caption} /><SummaryLine label="When" value={`${date} at ${time} · ${timezone}`} /></div>
+              <div className="flex justify-end"><Button disabled={busy || !date || !time} className="bg-[#f97316] text-black hover:bg-[#fb923c]" onClick={() => void schedule()}>{busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}Schedule post</Button></div>
+            </div>
+          )}
+        </div>
+      </DrawerContent>
+    </Drawer>
+  )
+}
+
+function DrawerSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return <section className="space-y-3 border-t border-white/[0.06] pt-4"><h3 className="text-xs font-medium text-white/55">{title}</h3>{children}</section>
+}
+
+function RestrictionToggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return <label className="flex items-center justify-between gap-3 text-xs text-white/55"><span>{label}</span><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="accent-[#f97316]" /></label>
+}
+
+function AssetUseRow({ use }: { use: ReleaseKitItemUseSummary }) {
+  return <div className="flex items-start justify-between gap-3 border-t border-white/[0.05] py-2 first:border-0"><div className="min-w-0"><div className="truncate text-sm text-white/72">{use.title}</div><div className="mt-0.5 text-[11px] text-white/35">{use.platform ? `${use.platform} · ` : ''}{new Date(use.startAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</div>{use.attentionMessage ? <div className="mt-1 text-xs text-orange-200/75">{use.attentionMessage}</div> : null}</div><span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px]', use.status === 'needs-attention' ? 'bg-red-500/12 text-red-200' : use.status === 'done' ? 'bg-emerald-400/10 text-emerald-200' : 'bg-white/[0.05] text-white/45')}>{displaySubtype(use.status)}</span></div>
+}
+
+function EmptyDrawerLine({ children }: { children: React.ReactNode }) { return <div className="text-xs text-white/30">{children}</div> }
+function SummaryLine({ label, value }: { label: string; value: string }) { return <div className="grid grid-cols-[70px_1fr] gap-3"><span className="text-white/32">{label}</span><span className="break-words text-white/72">{value}</span></div> }
+
+function releaseKitScheduleRestriction(item: ReleaseKitItem): string | undefined {
+  if (item.usage.restrictions.blockedFromUse) return 'This final is blocked from use.'
+  if (item.usage.restrictions.needsRightsClearance) return 'This final needs rights clearance.'
+  if (item.usage.restrictions.artistLikenessRestricted) return 'This final has an artist-likeness restriction.'
+  return undefined
+}
+
 function AddFinalDialog({ open, onOpenChange, workspaceId, hqWorkspaceId, outputs, prefillOutput, onAdded }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -878,15 +1095,9 @@ function displaySource(source: ReleaseKitSource): string {
 }
 
 function useOpenReleaseKitItem(workspaceId: string): (item: ReleaseKitItem) => Promise<void> {
-  const { onOpenFile } = useAppShellContext()
-  return React.useCallback(async (item: ReleaseKitItem) => {
-    try {
-      const detail = await window.electronAPI.getReleaseKitItem(workspaceId, item.id)
-      onOpenFile(detail.absolutePath)
-    } catch (error) {
-      toast.error('Could not open final', { description: error instanceof Error ? error.message : String(error) })
-    }
-  }, [onOpenFile, workspaceId])
+  void workspaceId
+  const inspect = React.useContext(ReleaseKitInspectContext)
+  return React.useCallback(async (item: ReleaseKitItem) => inspect(item), [inspect])
 }
 
 

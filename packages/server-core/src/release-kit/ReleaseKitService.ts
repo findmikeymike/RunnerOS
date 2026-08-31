@@ -36,10 +36,17 @@ import {
   SCHEDULED_WORK_CONTEXT_SLUG,
   listReleaseKitItemUses,
   parseScheduledWorkDocResult,
+  scheduledWorkMetadata,
+  serializeScheduledWorkBody,
   summarizeReleaseKitItemUses,
   type ReleaseKitItemUseSummary,
 } from '@craft-agent/shared/scheduled-work'
-import { CAMPAIGN_CALENDAR_CONTEXT_SLUG, parseCampaignCalendarDocResult } from '@craft-agent/shared/campaign-calendar'
+import {
+  CAMPAIGN_CALENDAR_CONTEXT_SLUG,
+  campaignCalendarMetadata,
+  parseCampaignCalendarDocResult,
+  serializeCampaignCalendarBody,
+} from '@craft-agent/shared/campaign-calendar'
 import { OutputService } from '../outputs/OutputService'
 
 export interface ReleaseKitServiceOptions {
@@ -153,6 +160,10 @@ export class ReleaseKitService {
     this.assertWritePermission(workspace.rootPath)
     this.prepareContextSync(workspace.rootPath)
     const manifest = updateReleaseKitItemUsage(workspace.rootPath, workspace.id, workspace.id, itemId, input)
+    const item = manifest.items.find((candidate) => candidate.id === itemId)
+    if (item && Object.values(item.usage.restrictions).some(Boolean)) {
+      this.reconcileRestrictedUses(workspace.id, workspace.rootPath, itemId)
+    }
     this.commitContext(workspace.id, workspace.rootPath, manifest)
     return manifest
   }
@@ -344,6 +355,45 @@ export class ReleaseKitService {
     if (scheduledRefs.length || calendarRefs.length) {
       throw new Error(`Release Kit item is still referenced by ${scheduledRefs.length} scheduled work order(s) and ${calendarRefs.length} calendar item(s). Cancel or remove those references first.`)
     }
+  }
+
+  private reconcileRestrictedUses(workspaceId: string, rootPath: string, itemId: string): void {
+    const scheduled = parseScheduledWorkDocResult(loadContextDoc(rootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, workspaceId)
+    if (!scheduled.ok) throw new Error(`Cannot reconcile restricted Release Kit item while Scheduled Work is invalid: ${scheduled.error}`)
+    const affected = listReleaseKitItemUses(scheduled.work, itemId).filter((order) => (
+      order.status !== 'done' && order.status !== 'canceled' && order.status !== 'needs-attention'
+    ))
+    if (!affected.length) return
+    const calendar = parseCampaignCalendarDocResult(loadContextDoc(rootPath, CAMPAIGN_CALENDAR_CONTEXT_SLUG) ?? undefined, workspaceId)
+    if (!calendar.ok) throw new Error(`Cannot reconcile restricted Release Kit item while Campaign Calendar is invalid: ${calendar.error}`)
+    const now = new Date().toISOString()
+    const affectedIds = new Set(affected.map((order) => order.id))
+    const work = {
+      ...scheduled.work,
+      items: scheduled.work.items.map((order) => affectedIds.has(order.id) ? {
+        ...order,
+        status: 'needs-attention' as const,
+        authorization: undefined,
+        socialApproval: undefined,
+        attention: {
+          reason: 'approval-invalidated' as const,
+          message: 'This final is now restricted. Review the asset and schedule the post again after the restriction is cleared.',
+        },
+        updatedAt: now,
+      } : order),
+      updatedAt: now,
+    }
+    const campaignCalendar = {
+      ...calendar.calendar,
+      items: calendar.calendar.items.map((item) => item.scheduledWorkId && affectedIds.has(item.scheduledWorkId) ? {
+        ...item,
+        status: 'failed' as const,
+        updatedAt: now,
+      } : item),
+      updatedAt: now,
+    }
+    upsertContextDoc(rootPath, { slug: SCHEDULED_WORK_CONTEXT_SLUG, metadata: scheduledWorkMetadata(), body: serializeScheduledWorkBody(work) })
+    upsertContextDoc(rootPath, { slug: CAMPAIGN_CALENDAR_CONTEXT_SLUG, metadata: campaignCalendarMetadata(), body: serializeCampaignCalendarBody(campaignCalendar) })
   }
 
   private recordRemovedLegacyFinal(rootPath: string, item: ReleaseKitItem): void {

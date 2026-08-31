@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test'
+import { createHash } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -127,6 +128,8 @@ function buildOrder(overrides: Partial<ScheduledWorkOrder> = {}): ScheduledWorkO
     reviewDecision: overrides.reviewDecision,
     socialAction: overrides.socialAction,
     socialApproval: overrides.socialApproval,
+    authorization: overrides.authorization,
+    authorizationPolicy: overrides.authorizationPolicy,
     attention: overrides.attention,
     executionKey: overrides.executionKey ?? { payloadDigest: 'digest-1', idempotencyKey: 'idem-1' },
     chain: overrides.chain,
@@ -155,6 +158,15 @@ function buildManifest(id: string, sessionId: string, kind: OutputManifest['kind
     receipts: [],
     links: [],
   }
+}
+
+function stableAuthorizationJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableAuthorizationJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return `{${Object.keys(record).filter((key) => record[key] !== undefined).sort().map((key) => `${JSON.stringify(key)}:${stableAuthorizationJson(record[key])}`).join(',')}}`
+  }
+  return JSON.stringify(value)
 }
 
 function createLock() {
@@ -878,6 +890,52 @@ describe('ScheduledWorkRunner', () => {
     expect(executeCalls).toBe(1)
     expect(completed.result).toMatchObject({ type: 'social-publish', receipt: { id: 'receipt-social-1', approvalId: 'approval-social-1' } })
     await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:03:00.000Z'))
+    expect(executeCalls).toBe(1)
+  })
+
+  test('derives execution attestation from durable schedule authorization without a second click', async () => {
+    const root = makeRoot()
+    const releaseKitRef = { itemId: 'kit-1', sha256: 'a'.repeat(64), label: 'Release cover' }
+    const definition = {
+      title: 'Post Release cover', releaseKitRef, platform: 'x', profileId: 'artist-main',
+      caption: 'Out Friday.', startAt: '2026-07-10T14:00:00.000Z', timezone: 'America/Chicago',
+    }
+    const payloadDigest = `sha256:${createHash('sha256').update(stableAuthorizationJson(definition)).digest('hex')}`
+    writeWork(root, [buildOrder({
+      id: 'social-authorized-1', title: definition.title, type: 'social-publish', status: 'needs-approval',
+      startAt: definition.startAt, timezone: definition.timezone,
+      execution: { type: 'social-publish', platform: 'x', profileId: 'artist-main', caption: definition.caption },
+      inputRefs: [{ kind: 'release-kit', ...releaseKitRef }],
+      executionKey: { payloadDigest, idempotencyKey: 'idem-authorized-1' },
+      authorizationPolicy: 'durable-v1',
+      authorization: {
+        id: 'auth-1', authorizedAt: '2026-07-10T13:00:00.000Z', expiresAt: '2026-07-10T14:30:00.000Z',
+        payloadDigest, authorizedBy: { type: 'user', clientId: 'client-1', source: 'release-kit-ui' }, definition,
+      },
+    })])
+    let executeCalls = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      now: () => new Date('2026-07-10T14:01:00.000Z'),
+      withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'unused' }),
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      prepareSocial: async () => ({
+        actionId: 'act_social-authorized-1', actionDigest: 'sha256:action', mediaDigest: `sha256:${releaseKitRef.sha256}`,
+        platform: 'x', profileId: 'artist-main', preparedAt: '2026-07-10T13:59:00.000Z', payloadDigest, dryRun: { ok: true },
+      }),
+      executeSocial: async () => {
+        executeCalls += 1
+        return { receiptId: 'receipt-authorized-1', summary: 'Published.' }
+      },
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    expect(readWork(root).items[0]?.socialApproval).toMatchObject({ approvedBy: { clientId: 'client-1' }, payloadDigest })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:02:00.000Z'))
+    await waitFor(() => readWork(root).items[0]?.status === 'done')
     expect(executeCalls).toBe(1)
   })
 

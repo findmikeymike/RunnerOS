@@ -19,6 +19,7 @@ import {
   campaignCalendarMetadata,
   parseCampaignCalendarDocResult,
   serializeCampaignCalendarBody,
+  createCampaignCalendarItem,
   type CampaignCalendar,
   type CampaignCalendarItem,
 } from '@craft-agent/shared/campaign-calendar'
@@ -44,6 +45,9 @@ import {
   type ResolveCampaignProducedOutputResult,
   type ApproveCampaignSocialWorkInput,
   type ApproveCampaignSocialWorkResult,
+  type AuthorizeReleaseKitSocialInput,
+  type AuthorizeReleaseKitSocialResult,
+  type ScheduledWorkAuthorization,
   type ScheduleHqWorkInput,
   type ScheduleHqWorkResult,
   type ScheduledWorkMutation,
@@ -61,7 +65,7 @@ import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
 import { assertTeamPermission } from '@craft-agent/shared/workspaces'
-import { resolveVerifiedReleaseKitItemPathWhileLocked, withReleaseKitLockAsync } from '@craft-agent/shared/release-kit'
+import { loadReleaseKitManifest, resolveVerifiedReleaseKitItemPathWhileLocked, withReleaseKitLockAsync } from '@craft-agent/shared/release-kit'
 
 export interface ScheduledWorkMigrationResult {
   updated: boolean
@@ -74,6 +78,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.scheduledWork.GET,
   RPC_CHANNELS.scheduledWork.MUTATE,
   RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN,
+  RPC_CHANNELS.scheduledWork.AUTHORIZE_RELEASE_KIT_SOCIAL,
   RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN_CHAIN,
   RPC_CHANNELS.scheduledWork.CANCEL_CAMPAIGN,
   RPC_CHANNELS.scheduledWork.DECIDE_CAMPAIGN,
@@ -146,6 +151,9 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
     async (_ctx, workspaceId: string, mutation: ScheduledWorkMutation): Promise<ScheduledWorkMutationResult> => {
       const rootPath = resolveRootPath(workspaceId)
       assertTeamPermission(rootPath, 'files.write')
+      if (mutation.operation === 'upsert' && (mutation.order.authorization || mutation.order.authorizationPolicy)) {
+        throw new Error('Durable social authorization can only be minted by the host authorization command.')
+      }
       return withWorkspaceContextLock(rootPath, async () => {
         const parsed = readScheduledWork(rootPath, workspaceId)
         if (!parsed.ok) throw new Error(parsed.error)
@@ -419,6 +427,100 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
   )
 
   server.handle(
+    RPC_CHANNELS.scheduledWork.AUTHORIZE_RELEASE_KIT_SOCIAL,
+    async (ctx, workspaceId: string, input: AuthorizeReleaseKitSocialInput): Promise<AuthorizeReleaseKitSocialResult> => {
+      const rootPath = resolveRootPath(workspaceId)
+      assertTeamPermission(rootPath, 'files.write')
+      assertTeamPermission(rootPath, 'social.publish.approve')
+      return withReleaseKitLockAsync(rootPath, () => withWorkspaceContextLock(rootPath, async () => {
+        const normalized = normalizeReleaseKitSocialInput(input)
+        const manifest = loadReleaseKitManifest(rootPath, workspaceId, workspaceId)
+        const item = manifest.items.find((candidate) => candidate.id === normalized.releaseKitItemId)
+        if (!item) throw new Error(`Release Kit item not found: ${normalized.releaseKitItemId}`)
+        if (item.status !== 'ready') throw new Error('This final must pass integrity verification before it can be scheduled.')
+        const restriction = releaseKitSocialRestriction(item.usage.restrictions)
+        if (restriction) throw new Error(restriction)
+        resolveVerifiedReleaseKitItemPathWhileLocked(rootPath, workspaceId, workspaceId, item.id, item.sha256)
+
+        const startAt = new Date(normalized.startAt)
+        if (startAt.getTime() <= Date.now()) throw new Error('Choose a future publish time.')
+        const localStart = formatInTimezone(normalized.startAt, normalized.timezone)
+        const requestId = normalized.requestId
+        const orderId = `scheduled-work-${requestId}`
+        const calendarItemId = `campaign-item-${requestId}`
+        const releaseKitRef = { itemId: item.id, sha256: item.sha256, label: item.title }
+        const definition: ScheduledWorkAuthorization['definition'] = {
+          title: normalized.title ?? `Post ${item.title}`,
+          releaseKitRef,
+          platform: normalized.platform,
+          profileId: normalized.profileId,
+          accountSetId: normalized.accountSetId,
+          caption: normalized.caption,
+          platformOptions: normalized.platformOptions,
+          startAt: normalized.startAt,
+          timezone: normalized.timezone,
+        }
+        const payloadDigest = `sha256:${createHash('sha256').update(stableAuthorizationStringify(definition)).digest('hex')}`
+        const now = new Date().toISOString()
+        const authorization: ScheduledWorkAuthorization = {
+          id: `scheduled-work-authorization-${requestId}`,
+          authorizedAt: now,
+          expiresAt: new Date(startAt.getTime() + 30 * 60 * 1000).toISOString(),
+          payloadDigest,
+          authorizedBy: { type: 'user', clientId: ctx.clientId, source: normalized.source },
+          definition,
+        }
+        const order: ScheduledWorkDocument['items'][number] = {
+          version: 1,
+          id: orderId,
+          owner: { scope: 'campaign', workspaceId, campaignId: workspaceId },
+          calendarLink: { calendar: 'campaign', itemId: calendarItemId },
+          title: definition.title,
+          type: 'social-publish',
+          status: 'needs-approval',
+          startAt: definition.startAt,
+          timezone: definition.timezone,
+          execution: {
+            type: 'social-publish', platform: definition.platform, profileId: definition.profileId,
+            accountSetId: definition.accountSetId, caption: definition.caption, platformOptions: definition.platformOptions,
+          },
+          inputRefs: [{ kind: 'release-kit', ...releaseKitRef }],
+          approvals: [], runs: [], authorization, authorizationPolicy: 'durable-v1',
+          executionKey: { payloadDigest, idempotencyKey: `${orderId}:${payloadDigest}` },
+          createdAt: now, updatedAt: now,
+        }
+        const calendarItem = createCampaignCalendarItem({
+          id: calendarItemId, campaignId: workspaceId, date: localStart.date, time: localStart.time,
+          timezone: definition.timezone, title: definition.title, kind: 'scheduled-job', status: 'needs-approval',
+          releaseKitRefs: [releaseKitRef], accountSetId: definition.accountSetId,
+          socialProfileRefs: [{ platform: definition.platform, profileId: definition.profileId }], scheduledWorkId: orderId,
+        })
+        assertCampaignScheduleInput(workspaceId, { order, calendarItem }, false, true)
+        await validateScheduleRuntime(deps, rootPath, order)
+
+        const scheduled = readScheduledWork(rootPath, workspaceId)
+        if (!scheduled.ok) throw new Error(scheduled.error)
+        const parsedCalendar = readCampaignCalendar(rootPath, workspaceId)
+        if (!parsedCalendar.ok) throw new Error(parsedCalendar.error)
+        const existingOrder = scheduled.work.items.find((candidate) => candidate.id === order.id)
+        const existingCalendarItem = parsedCalendar.calendar.items.find((candidate) => candidate.id === calendarItem.id)
+        if (existingOrder || existingCalendarItem) {
+          if (!existingOrder || !existingCalendarItem || !sameScheduleIdentity(existingOrder, order)) {
+            throw new Error(`Schedule request id already exists with different details: ${requestId}`)
+          }
+          return { updated: false, work: scheduled.work, order: existingOrder, calendar: parsedCalendar.calendar, calendarItem: existingCalendarItem }
+        }
+        const work = { ...scheduled.work, items: [...scheduled.work.items, order], updatedAt: now }
+        const calendar = { ...parsedCalendar.calendar, items: [...parsedCalendar.calendar.items, calendarItem], updatedAt: now }
+        writeScheduledWork(rootPath, work)
+        writeCampaignCalendar(rootPath, calendar)
+        broadcastChanged(deps, workspaceId, rootPath)
+        return { updated: true, work, order, calendar, calendarItem }
+      }))
+    },
+  )
+
+  server.handle(
     RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN,
     async (_ctx, workspaceId: string, input: ScheduleCampaignWorkInput): Promise<ScheduleCampaignWorkResult> => {
       const rootPath = resolveRootPath(workspaceId)
@@ -632,7 +734,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
   )
 }
 
-function assertCampaignScheduleInput(workspaceId: string, input: ScheduleCampaignWorkInput, allowWaiting = false): void {
+function assertCampaignScheduleInput(workspaceId: string, input: ScheduleCampaignWorkInput, allowWaiting = false, allowHostAuthorization = false): void {
   const { order, calendarItem } = input
   const expectedShellStatus = order.status === 'waiting' ? 'draft' : order.status
   if (order.owner.scope !== 'campaign'
@@ -661,7 +763,42 @@ function assertCampaignScheduleInput(workspaceId: string, input: ScheduleCampaig
     && (order.inputRefs.length !== 1 || order.inputRefs[0]?.kind !== 'release-kit')) {
     throw new Error('Campaign social work requires one exact Release Kit item.')
   }
+  if (order.execution.type === 'social-publish' && !allowHostAuthorization) {
+    throw new Error('Campaign social work must use the host-authorized Release Kit scheduling command.')
+  }
+  if (allowHostAuthorization && (order.authorizationPolicy !== 'durable-v1' || !order.authorization)) {
+    throw new Error('Campaign social authorization is missing.')
+  }
   assertCampaignShellMatchesOrder(order, calendarItem)
+}
+
+function normalizeReleaseKitSocialInput(input: AuthorizeReleaseKitSocialInput): Required<Omit<AuthorizeReleaseKitSocialInput, 'title' | 'accountSetId' | 'platformOptions'>> & Pick<AuthorizeReleaseKitSocialInput, 'title' | 'accountSetId' | 'platformOptions'> {
+  const clean = (value: unknown) => typeof value === 'string' ? value.trim() : ''
+  const requestId = clean(input.requestId)
+  const releaseKitItemId = clean(input.releaseKitItemId)
+  const platform = clean(input.platform).toLowerCase()
+  const profileId = clean(input.profileId)
+  const caption = clean(input.caption)
+  const title = clean(input.title) || undefined
+  const accountSetId = clean(input.accountSetId) || undefined
+  const startAt = clean(input.startAt)
+  const timezone = clean(input.timezone)
+  const source = input.source === 'calendar-ui' ? 'calendar-ui' as const : 'release-kit-ui' as const
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(requestId)) throw new Error('Schedule request id is invalid.')
+  if (!releaseKitItemId || !platform || !profileId || !caption || !startAt || !timezone) throw new Error('Complete the account, caption, date, time, and timezone before scheduling.')
+  if (caption.length > 5_000 || (title?.length ?? 0) > 200) throw new Error('Scheduled post text is too long.')
+  if (Number.isNaN(Date.parse(startAt))) throw new Error('Choose a valid publish time.')
+  const platformOptions = input.platformOptions
+  if (platformOptions !== undefined && (!platformOptions || typeof platformOptions !== 'object' || Array.isArray(platformOptions))) throw new Error('Social platform options are invalid.')
+  if (platformOptions && JSON.stringify(platformOptions).length > 10_000) throw new Error('Social platform options are too large.')
+  return { requestId, releaseKitItemId, title, platform, profileId, accountSetId, caption, platformOptions, startAt, timezone, source }
+}
+
+function releaseKitSocialRestriction(restrictions: { blockedFromUse: boolean; needsRightsClearance: boolean; artistLikenessRestricted: boolean }): string | undefined {
+  if (restrictions.blockedFromUse) return 'This final is blocked from use. Clear the restriction before scheduling it.'
+  if (restrictions.needsRightsClearance) return 'This final needs rights clearance before it can be scheduled.'
+  if (restrictions.artistLikenessRestricted) return 'This final has an artist-likeness restriction and cannot be scheduled to social.'
+  return undefined
 }
 
 function assertCampaignChainInput(workspaceId: string, input: ScheduleCampaignChainInput): void {
@@ -802,6 +939,15 @@ function stableSocialStringify(value: unknown): string {
   if (value && typeof value === 'object') {
     const record = value as Record<string, unknown>
     return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableSocialStringify(record[key])}`).join(',')}}`
+  }
+  return JSON.stringify(value)
+}
+
+function stableAuthorizationStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableAuthorizationStringify).join(',')}]`
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return `{${Object.keys(record).filter((key) => record[key] !== undefined).sort().map((key) => `${JSON.stringify(key)}:${stableAuthorizationStringify(record[key])}`).join(',')}}`
   }
   return JSON.stringify(value)
 }

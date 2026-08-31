@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 import { createHash } from 'node:crypto'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import * as actualConfig from '@craft-agent/shared/config'
 import * as actualWorkspaceContext from '@craft-agent/shared/workspace-context'
 import * as actualAgentDefinitions from '@craft-agent/shared/agent-definitions'
@@ -21,6 +22,7 @@ import {
 } from '@craft-agent/shared/scheduled-work'
 import type { ContextDocMetadata, LoadedContextDoc } from '@craft-agent/shared/workspace-context'
 import type { HandlerFn, RequestContext, RpcServer } from '../../transport/types'
+import { materializeReleaseKitItem, updateReleaseKitItemUsage } from '@craft-agent/shared/release-kit'
 
 const workspaceRoot = '/tmp/runneros-scheduled-work-test'
 const workspace = { id: 'ws-1', name: 'Scheduled Work Test', rootPath: workspaceRoot }
@@ -187,6 +189,7 @@ async function registerServer(): Promise<{
         pushCalls.push({ channel, target, args })
       },
     },
+    validateSocialProfile: async () => ({ ready: true }),
   }
   const { registerScheduledWorkHandlers } = await import('./scheduled-work')
   registerScheduledWorkHandlers(server, deps as never)
@@ -295,6 +298,8 @@ function stableTestJson(value: unknown): string {
 }
 
 beforeEach(() => {
+  rmSync(workspaceRoot, { recursive: true, force: true })
+  mkdirSync(workspaceRoot, { recursive: true })
   contextDocs = new Map()
   upsertCalls = []
   failOnSlug = null
@@ -303,6 +308,57 @@ beforeEach(() => {
 })
 
 describe('scheduled-work RPC handler', () => {
+  test('authorizeReleaseKitSocial mints human-bound authorization and writes one linked calendar item', async () => {
+    seedEmptyCampaignCalendar()
+    const sourcePath = `${workspaceRoot}/source.png`
+    writeFileSync(sourcePath, 'approved-image')
+    const released = materializeReleaseKitItem(workspaceRoot, {
+      workspaceId: workspace.id, campaignId: workspace.id,
+      source: { type: 'upload', originalFileName: 'source.png' }, sourcePath,
+      category: 'artwork', subtype: 'cover-art', title: 'Release cover', promotedBy: 'user',
+    })
+    const { invoke } = await registerServer()
+    const startAt = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+
+    const result = await invoke(RPC_CHANNELS.scheduledWork.AUTHORIZE_RELEASE_KIT_SOCIAL, workspace.id, {
+      requestId: 'release-cover-post-1', releaseKitItemId: released.item.id,
+      platform: 'instagram', profileId: 'artist-main', caption: 'Out now.', startAt, timezone: 'America/Chicago',
+    }) as { order: ScheduledWorkOrder; calendarItem: { scheduledWorkId?: string } }
+
+    expect(result.order).toMatchObject({
+      status: 'needs-approval', authorizationPolicy: 'durable-v1',
+      inputRefs: [{ kind: 'release-kit', itemId: released.item.id, sha256: released.item.sha256 }],
+      authorization: { authorizedBy: { type: 'user', clientId: 'c1', source: 'release-kit-ui' } },
+    })
+    expect(result.order.authorization?.payloadDigest).toBe(result.order.executionKey.payloadDigest)
+    expect(result.calendarItem.scheduledWorkId).toBe(result.order.id)
+    expect(readScheduledWork().items).toHaveLength(1)
+    expect(readCampaignCalendar().items).toHaveLength(1)
+    expect(assertTeamPermission).toHaveBeenCalledWith(workspaceRoot, 'social.publish.approve')
+  })
+
+  test('authorizeReleaseKitSocial refuses a hard-restricted final', async () => {
+    seedEmptyCampaignCalendar()
+    const sourcePath = `${workspaceRoot}/source.png`
+    writeFileSync(sourcePath, 'approved-image')
+    const released = materializeReleaseKitItem(workspaceRoot, {
+      workspaceId: workspace.id, campaignId: workspace.id,
+      source: { type: 'upload', originalFileName: 'source.png' }, sourcePath,
+      category: 'artwork', subtype: 'cover-art', promotedBy: 'user',
+    })
+    updateReleaseKitItemUsage(workspaceRoot, workspace.id, workspace.id, released.item.id, {
+      restrictions: { needsRightsClearance: true },
+    })
+    const { invoke } = await registerServer()
+
+    await expect(invoke(RPC_CHANNELS.scheduledWork.AUTHORIZE_RELEASE_KIT_SOCIAL, workspace.id, {
+      requestId: 'restricted-post-1', releaseKitItemId: released.item.id,
+      platform: 'instagram', profileId: 'artist-main', caption: 'Out now.',
+      startAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(), timezone: 'America/Chicago',
+    })).rejects.toThrow(/rights clearance/i)
+    expect(readScheduledWork().items).toHaveLength(0)
+  })
+
   test('mutate upserts scheduled-work and broadcasts workspace context changes', async () => {
     const { invoke, pushCalls } = await registerServer()
 
@@ -325,6 +381,29 @@ describe('scheduled-work RPC handler', () => {
       ok: true,
       work: { items: [{ id: 'scheduled-work-1', title: 'Publish teaser' }] },
     })
+  })
+
+  test('mutate rejects renderer-authored durable authorization', async () => {
+    const { invoke } = await registerServer()
+    const forged = {
+      ...buildOrder(),
+      type: 'social-publish' as const,
+      execution: { type: 'social-publish' as const, platform: 'x', profileId: 'artist', caption: 'Forged.' },
+      authorizationPolicy: 'durable-v1' as const,
+      authorization: {
+        id: 'forged', authorizedAt: new Date().toISOString(), payloadDigest: 'forged',
+        authorizedBy: { type: 'user' as const, clientId: 'forged', source: 'release-kit-ui' as const },
+        definition: {
+          title: 'Forged', releaseKitRef: { itemId: 'kit', sha256: 'a'.repeat(64) },
+          platform: 'x', profileId: 'artist', caption: 'Forged.', startAt: new Date(Date.now() + 60_000).toISOString(), timezone: 'UTC',
+        },
+      },
+    }
+
+    await expect(invoke(RPC_CHANNELS.scheduledWork.MUTATE, workspace.id, {
+      operation: 'upsert', order: forged, expectedUpdatedAt: null,
+    })).rejects.toThrow(/only be minted by the host/i)
+    expect(contextDocs.has(SCHEDULED_WORK_CONTEXT_SLUG)).toBe(false)
   })
 
   test('mutate rejects stale whole-order updates without writing', async () => {

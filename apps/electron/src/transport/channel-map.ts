@@ -472,6 +472,7 @@ export const CHANNEL_MAP = {
   getScheduledWork: invoke(RPC_CHANNELS.scheduledWork.GET),
   mutateScheduledWork: invoke(RPC_CHANNELS.scheduledWork.MUTATE),
   scheduleCampaignWork: invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN),
+  authorizeReleaseKitSocial: invoke(RPC_CHANNELS.scheduledWork.AUTHORIZE_RELEASE_KIT_SOCIAL),
   scheduleCampaignWorkChain: invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN_CHAIN),
   cancelCampaignWork: invoke(RPC_CHANNELS.scheduledWork.CANCEL_CAMPAIGN),
   decideCampaignWork: invoke(RPC_CHANNELS.scheduledWork.DECIDE_CAMPAIGN),

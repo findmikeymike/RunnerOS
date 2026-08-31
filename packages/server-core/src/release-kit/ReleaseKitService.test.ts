@@ -6,8 +6,8 @@ import { importArtistVaultAssets } from '@craft-agent/shared/artist-vault'
 import { importMissionAssets } from '@craft-agent/shared/mission-assets'
 import { resolveReleaseKitItemPath } from '@craft-agent/shared/release-kit'
 import { writeOutputFinalsRegistry } from '@craft-agent/shared/outputs'
-import { upsertContextDoc } from '@craft-agent/shared/workspace-context'
-import { createCampaignCalendarItem, serializeCampaignCalendarBody } from '@craft-agent/shared/campaign-calendar'
+import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context'
+import { createCampaignCalendarItem, parseCampaignCalendarDocResult, serializeCampaignCalendarBody } from '@craft-agent/shared/campaign-calendar'
 import { serializeScheduledWorkBody, type ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import { ReleaseKitService } from './ReleaseKitService'
 import { OutputService } from '../outputs/OutputService'
@@ -271,6 +271,13 @@ describe('ReleaseKitService source trust', () => {
       profileId: 'artist',
       status: 'scheduled',
     }])
+    releaseKit.updateUsage('campaign-1', promoted.item.id, { restrictions: { blockedFromUse: true } })
+    expect(releaseKit.listUses('campaign-1', promoted.item.id)).toMatchObject([{
+      orderId: 'work-1', status: 'needs-attention', attentionMessage: expect.stringContaining('now restricted'),
+    }])
+    const reconciledCalendar = parseCampaignCalendarDocResult(loadContextDoc(campaignRoot, 'campaign-calendar') ?? undefined, 'campaign-1')
+    expect(reconciledCalendar.ok).toBe(true)
+    expect(reconciledCalendar.calendar.items[0]?.status).toBe('failed')
     expect(() => releaseKit.remove('campaign-1', promoted.item.id)).toThrow(/still referenced/i)
     expect(releaseKit.get('campaign-1').items.some((candidate) => candidate.id === promoted.item.id)).toBe(true)
   })

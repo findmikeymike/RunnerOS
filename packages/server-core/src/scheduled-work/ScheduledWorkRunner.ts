@@ -1,5 +1,5 @@
 import { createCampaignJobRun, type CampaignExternalExecutionReceipt, type CampaignJobRun } from '@craft-agent/shared/campaign-calendar'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import type { OutputManifest } from '@craft-agent/shared/outputs'
 import {
   SCHEDULED_WORK_CONTEXT_SLUG,
@@ -292,13 +292,32 @@ export class ScheduledWorkRunner {
           continue
         }
         if (current.status === 'needs-approval' && current.execution.type === 'social-publish') {
+          if (current.authorizationPolicy === 'durable-v1' && !durableAuthorizationMatches(current, now)) {
+            const persisted = await this.updateOrder(workspaceId, workspaceRootPath, current.id, (order, nowIso) => ({
+              ...order,
+              status: 'needs-attention',
+              socialApproval: undefined,
+              attention: this.buildAttention('approval-invalidated', 'The scheduled post no longer matches what was authorized. Review and schedule it again.'),
+              updatedAt: nowIso,
+            }))
+            if (persisted.updated) result.blocked += 1
+            continue
+          }
           if (!current.socialAction) {
             if (!this.deps.prepareSocial) continue
             try {
               if (!this.canContinue(workspaceRootPath, capturedFence)) continue
               const preview = await this.deps.prepareSocial({ workspaceId, workspaceRootPath, order: current })
               const persisted = await this.updateOrder(workspaceId, workspaceRootPath, current.id, (order, nowIso) => order.status === 'needs-approval' && order.execution.type === 'social-publish'
-                ? { ...order, socialAction: preview, socialApproval: undefined, attention: undefined, updatedAt: nowIso }
+                ? {
+                    ...order,
+                    socialAction: preview,
+                    socialApproval: order.authorizationPolicy === 'durable-v1'
+                      ? deriveSocialApproval(order, preview, nowIso)
+                      : undefined,
+                    attention: undefined,
+                    updatedAt: nowIso,
+                  }
                 : null)
               if (persisted.updated) result.blocked += 1
             } catch (error) {
@@ -1265,6 +1284,63 @@ function socialApprovalMatches(order: ScheduledWorkOrder): boolean {
     && order.socialApproval.payloadDigest === order.executionKey.payloadDigest
     && order.socialApproval.platform === order.execution.platform
     && order.socialApproval.profileId === order.execution.profileId
+}
+
+function durableAuthorizationMatches(order: ScheduledWorkOrder, now: Date): boolean {
+  if (order.execution.type !== 'social-publish' || !order.authorization || order.authorizationPolicy !== 'durable-v1') return false
+  if (order.authorization.expiresAt && Date.parse(order.authorization.expiresAt) <= now.getTime()) return false
+  const refs = order.inputRefs.filter((ref) => ref.kind === 'release-kit')
+  if (refs.length !== 1) return false
+  const releaseKitRef = { itemId: refs[0]!.itemId, sha256: refs[0]!.sha256, label: refs[0]!.label }
+  const definition = {
+    title: order.title,
+    releaseKitRef,
+    platform: order.execution.platform,
+    profileId: order.execution.profileId,
+    accountSetId: order.execution.accountSetId,
+    caption: order.execution.caption,
+    platformOptions: order.execution.platformOptions,
+    startAt: order.startAt,
+    timezone: order.timezone,
+  }
+  const digest = `sha256:${createHash('sha256').update(stableAuthorizationStringify(definition)).digest('hex')}`
+  return stableAuthorizationStringify(order.authorization.definition) === stableAuthorizationStringify(definition)
+    && order.authorization.payloadDigest === digest
+    && order.executionKey.payloadDigest === digest
+}
+
+function deriveSocialApproval(order: ScheduledWorkOrder, preview: ScheduledSocialActionPreview, approvedAt: string): ScheduledSocialApproval {
+  if (!order.authorization || order.execution.type !== 'social-publish' || !durableAuthorizationMatches(order, new Date(approvedAt))) {
+    throw new Error('Durable social authorization is missing or invalid.')
+  }
+  const ref = order.authorization.definition.releaseKitRef
+  if (preview.payloadDigest !== order.authorization.payloadDigest
+    || preview.platform !== order.authorization.definition.platform
+    || preview.profileId !== order.authorization.definition.profileId
+    || preview.mediaDigest !== `sha256:${ref.sha256}`) {
+    throw new Error('Prepared social action does not match the authorized post.')
+  }
+  return {
+    id: `scheduled-social-attestation-${order.id}-${Date.parse(approvedAt)}`,
+    approvedAt,
+    expiresAt: order.authorization.expiresAt ?? new Date(Date.parse(order.startAt) + 30 * 60 * 1000).toISOString(),
+    actionId: preview.actionId,
+    actionDigest: preview.actionDigest,
+    mediaDigest: preview.mediaDigest,
+    payloadDigest: preview.payloadDigest,
+    platform: preview.platform,
+    profileId: preview.profileId,
+    approvedBy: { type: 'user', clientId: order.authorization.authorizedBy.clientId },
+  }
+}
+
+function stableAuthorizationStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableAuthorizationStringify).join(',')}]`
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return `{${Object.keys(record).filter((key) => record[key] !== undefined).sort().map((key) => `${JSON.stringify(key)}:${stableAuthorizationStringify(record[key])}`).join(',')}}`
+  }
+  return JSON.stringify(value)
 }
 
 function activeAgentRunKey(workspaceRootPath: string, orderId: string): string {

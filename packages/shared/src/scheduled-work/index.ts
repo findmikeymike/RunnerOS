@@ -188,6 +188,32 @@ export interface ScheduledSocialApproval {
   approvedBy: { type: 'user'; clientId: string }
 }
 
+/** Durable host-minted authorization for one exact scheduled use. */
+export interface ScheduledWorkAuthorization {
+  id: string
+  authorizedAt: string
+  expiresAt?: string
+  payloadDigest: string
+  authorizedBy: {
+    type: 'user'
+    clientId: string
+    source: 'release-kit-ui' | 'calendar-ui' | 'hnic-confirmation'
+    sessionId?: string
+    userMessageId?: string
+  }
+  definition: {
+    title: string
+    releaseKitRef: { itemId: string; sha256: string; label?: string }
+    platform: string
+    profileId: string
+    accountSetId?: string
+    caption: string
+    platformOptions?: Record<string, unknown>
+    startAt: string
+    timezone: string
+  }
+}
+
 export interface ScheduledWorkOrder {
   version: 1
   id: string
@@ -211,6 +237,8 @@ export interface ScheduledWorkOrder {
   reviewDecision?: ScheduledWorkReviewDecision
   socialAction?: ScheduledSocialActionPreview
   socialApproval?: ScheduledSocialApproval
+  authorization?: ScheduledWorkAuthorization
+  authorizationPolicy?: 'durable-v1'
   attention?: ScheduledWorkAttention
   executionKey: {
     payloadDigest: string
@@ -333,6 +361,22 @@ export interface ApproveCampaignSocialWorkResult {
   calendar: CampaignCalendar
   calendarItem: CampaignCalendarItem
 }
+
+export interface AuthorizeReleaseKitSocialInput {
+  requestId: string
+  releaseKitItemId: string
+  title?: string
+  platform: string
+  profileId: string
+  accountSetId?: string
+  caption: string
+  platformOptions?: Record<string, unknown>
+  startAt: string
+  timezone: string
+  source?: 'release-kit-ui' | 'calendar-ui'
+}
+
+export type AuthorizeReleaseKitSocialResult = ScheduleCampaignWorkResult
 
 export interface ScheduleHqWorkInput {
   requestId: string
@@ -679,6 +723,7 @@ function releaseKitUseSortGroup(order: ScheduledWorkOrder, nowMs: number): 0 | 1
 
 function releaseKitUseSummaryStatus(order: ScheduledWorkOrder): ReleaseKitItemUseSummary['status'] {
   const { status } = order
+  if (status === 'needs-approval' && order.authorizationPolicy === 'durable-v1' && order.authorization) return 'scheduled'
   if (status === 'draft' || status === 'waiting' || status === 'needs-setup' || status === 'needs-approval') return 'draft'
   if (status === 'done') return order.result?.type === 'social-publish' ? 'done' : 'needs-attention'
   if (status === 'needs-attention' || status === 'canceled') return status
@@ -736,6 +781,10 @@ function isScheduledWorkOrder(value: unknown): value is ScheduledWorkOrder {
     && (order.reviewDecision === undefined || isScheduledWorkReviewDecision(order.reviewDecision))
     && (order.socialAction === undefined || isScheduledSocialActionPreview(order.socialAction))
     && (order.socialApproval === undefined || isScheduledSocialApproval(order.socialApproval))
+    && (order.authorization === undefined || isScheduledWorkAuthorization(order.authorization))
+    && (order.authorizationPolicy === undefined || order.authorizationPolicy === 'durable-v1')
+    && (order.authorization === undefined || (order.authorizationPolicy === 'durable-v1' && order.execution?.type === 'social-publish'))
+    && (order.authorizationPolicy === undefined || order.authorization !== undefined)
     && (order.attention === undefined || isScheduledWorkAttention(order.attention))
     && (order.chain === undefined || isScheduledWorkChainLink(order.chain))
     && (order.continuation === undefined || isScheduledWorkContinuation(order.continuation, order))
@@ -870,8 +919,20 @@ function isScheduledWorkResult(value: unknown, type: ScheduledWorkType): value i
     && Array.isArray(result.outputIds)
     && (result.sharedIntelContextSlugs === undefined || (Array.isArray(result.sharedIntelContextSlugs) && result.sharedIntelContextSlugs.every((slug) => Boolean(clean(slug)))))
   if (result.type === 'workflow-run') return Boolean(clean(result.workflowRunId)) && Array.isArray(result.outputIds)
-  if (result.type === 'social-publish') return Boolean(result.receipt && typeof result.receipt === 'object')
+  if (result.type === 'social-publish') return isExternalExecutionReceipt(result.receipt)
   return result.type === 'review' && (result.decision === 'approved' || result.decision === 'changes-requested')
+}
+
+function isExternalExecutionReceipt(value: unknown): value is CampaignExternalExecutionReceipt {
+  if (!value || typeof value !== 'object') return false
+  const receipt = value as Partial<CampaignExternalExecutionReceipt>
+  return Boolean(clean(receipt.id)
+    && receipt.actionType === 'post-asset'
+    && cleanIso(receipt.completedAt)
+    && clean(receipt.payloadDigest)
+    && clean(receipt.approvalId)
+    && (receipt.externalUrl === undefined || clean(receipt.externalUrl))
+    && (receipt.summary === undefined || clean(receipt.summary)))
 }
 
 function isScheduledWorkAttention(value: unknown): value is ScheduledWorkAttention {
@@ -935,6 +996,33 @@ function isScheduledSocialApproval(value: unknown): value is ScheduledSocialAppr
     && clean(approval.profileId)
     && approval.approvedBy?.type === 'user'
     && Boolean(clean(approval.approvedBy.clientId)))
+}
+
+export function isScheduledWorkAuthorization(value: unknown): value is ScheduledWorkAuthorization {
+  if (!value || typeof value !== 'object') return false
+  const authorization = value as Partial<ScheduledWorkAuthorization>
+  const definition = authorization.definition
+  const authorizedBy = authorization.authorizedBy
+  return Boolean(clean(authorization.id)
+    && cleanIso(authorization.authorizedAt)
+    && (authorization.expiresAt === undefined || cleanIso(authorization.expiresAt))
+    && clean(authorization.payloadDigest)
+    && authorizedBy?.type === 'user'
+    && clean(authorizedBy.clientId)
+    && (authorizedBy.source === 'release-kit-ui' || authorizedBy.source === 'calendar-ui' || authorizedBy.source === 'hnic-confirmation')
+    && (authorizedBy.sessionId === undefined || clean(authorizedBy.sessionId))
+    && (authorizedBy.userMessageId === undefined || clean(authorizedBy.userMessageId))
+    && definition
+    && clean(definition.title)
+    && clean(definition.releaseKitRef?.itemId)
+    && /^[a-f0-9]{64}$/i.test(clean(definition.releaseKitRef?.sha256) ?? '')
+    && clean(definition.platform)
+    && clean(definition.profileId)
+    && clean(definition.caption)
+    && cleanIso(definition.startAt)
+    && clean(definition.timezone)
+    && (definition.platformOptions === undefined
+      || (typeof definition.platformOptions === 'object' && !Array.isArray(definition.platformOptions))))
 }
 
 function pickPlatformOptions(payload: Record<string, unknown>): Record<string, unknown> | undefined {

@@ -166,6 +166,8 @@ import type {
   ResolveCampaignProducedOutputResult,
   ApproveCampaignSocialWorkInput,
   ApproveCampaignSocialWorkResult,
+  AuthorizeReleaseKitSocialInput,
+  AuthorizeReleaseKitSocialResult,
   ScheduleHqWorkInput,
   ScheduleHqWorkResult,
   ScheduleCampaignWorkInput,
@@ -189,6 +191,8 @@ export type {
   ResolveCampaignProducedOutputResult,
   ApproveCampaignSocialWorkInput,
   ApproveCampaignSocialWorkResult,
+  AuthorizeReleaseKitSocialInput,
+  AuthorizeReleaseKitSocialResult,
   ScheduleHqWorkInput,
   ScheduleHqWorkResult,
   ScheduleCampaignWorkInput,
@@ -1131,6 +1135,7 @@ export interface ElectronAPI {
   getScheduledWork(workspaceId: string): Promise<ScheduledWorkParseResult>
   mutateScheduledWork(workspaceId: string, mutation: ScheduledWorkMutation): Promise<ScheduledWorkMutationResult>
   scheduleCampaignWork(workspaceId: string, input: ScheduleCampaignWorkInput): Promise<ScheduleCampaignWorkResult>
+  authorizeReleaseKitSocial(workspaceId: string, input: AuthorizeReleaseKitSocialInput): Promise<AuthorizeReleaseKitSocialResult>
   scheduleCampaignWorkChain(workspaceId: string, input: ScheduleCampaignChainInput): Promise<ScheduleCampaignChainResult>
   cancelCampaignWork(workspaceId: string, input: CancelCampaignWorkInput): Promise<CancelCampaignWorkResult>
   decideCampaignWork(workspaceId: string, input: DecideCampaignWorkInput): Promise<DecideCampaignWorkResult>

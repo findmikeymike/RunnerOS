@@ -252,9 +252,23 @@ export function CampaignCalendarPage({
       return
     }
     const input = buildCampaignSchedulePlanFromComposer(draft)
-    const result = 'orders' in input
-      ? await window.electronAPI.scheduleCampaignWorkChain(workspaceId, input)
-      : await window.electronAPI.scheduleCampaignWork(workspaceId, input)
+    const result = draft.type === 'social-publish' && !('orders' in input)
+      ? await window.electronAPI.authorizeReleaseKitSocial(workspaceId, {
+          requestId: draft.requestId,
+          releaseKitItemId: input.order.inputRefs[0]?.kind === 'release-kit' ? input.order.inputRefs[0].itemId : '',
+          title: input.order.title,
+          platform: draft.platform,
+          profileId: draft.profileId,
+          accountSetId: draft.accountSetId || undefined,
+          caption: draft.caption,
+          platformOptions: draft.platformOptions,
+          startAt: input.order.startAt,
+          timezone: draft.timezone,
+          source: 'calendar-ui',
+        })
+      : 'orders' in input
+        ? await window.electronAPI.scheduleCampaignWorkChain(workspaceId, input)
+        : await window.electronAPI.scheduleCampaignWork(workspaceId, input)
     setOptimisticCampaignCalendar(result.calendar)
     setOptimisticScheduledWork(result.work)
     const queuedOrder = 'orders' in result ? result.orders[0] : result.order
@@ -988,6 +1002,8 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
           <div className="mt-1 font-mono text-[9px] text-white/30">{work.socialAction.actionId} · {work.socialAction.actionDigest.slice(0, 20)}...</div>
           {work.socialApproval ? (
             <div className="mt-1.5 text-emerald-100/65">Approved until {formatCompactDateTime(work.socialApproval.expiresAt)}</div>
+          ) : work.authorizationPolicy === 'durable-v1' && work.authorization ? (
+            <div className="mt-1.5 text-emerald-100/65">Authorized when scheduled · publishing will be verified automatically</div>
           ) : work.status === 'needs-approval' ? (
             <button type="button" disabled={busy} onClick={() => {
               setBusy(true)
