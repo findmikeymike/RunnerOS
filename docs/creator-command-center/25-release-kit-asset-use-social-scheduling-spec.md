@@ -94,7 +94,7 @@ This section is deliberately explicit because the prior review correctly identif
 2. `ScheduledWorkInputRef` already supports `{ kind: 'release-kit'; itemId; sha256; label? }`.
 3. `ScheduledWorkOrder` already carries owner, Calendar link, type, status, start time, timezone, execution definition, input refs, approvals, runs, result, attention, payload digest, and idempotency key.
 4. `ScheduledSocialApproval` already binds action, media, payload, platform, and profile digests to `{ type: 'user'; clientId }`.
-5. `campaign-social-job-preparer.ts` and `scheduled-social-browser-executor.ts` already resolve Release Kit media through `resolveVerifiedReleaseKitItemPath` and refuse mismatched hashes.
+5. `campaign-social-job-preparer.ts` and `scheduled-social-browser-executor.ts` already resolve Release Kit media through `resolveVerifiedReleaseKitItemPath` and refuse mismatched hashes. Both live in `apps/electron/src/main/`, not `packages/server-core/`. Social dry-run preparation and browser execution are Electron main-process concerns while order scheduling lives in server-core; this split is deliberate and must be preserved. Do not relocate execution logic into server-core.
 6. `ScheduledWorkRunner` already compares the approved action, media, payload, platform, and profile before execution.
 7. Successful social work already stores a durable external receipt. Uncertain or failed execution already maps to `needs-attention` rather than `done`.
 8. Scheduled Work already links to the existing campaign Calendar item. The unified Calendar does not need another store.
@@ -106,7 +106,7 @@ This section is deliberately explicit because the prior review correctly identif
 1. Release Kit has no asset-detail surface with **Schedule social post**, metadata, planned uses, and history.
 2. Release Kit items have only `category`, `subtype`, and a promotion `note`; they do not have bounded use metadata or enforceable restrictions.
 3. The existing reference scan is private removal protection, not a reusable reverse-lookup API for the UI.
-4. Scheduling is not currently final social authorization. Current social work waits in `needs-approval`, prepares a dry run near execution, and accepts approval only within 30 minutes of `startAt`.
+4. Scheduling is not currently final social authorization. Current social work waits in `needs-approval` and prepares a dry run near execution: `SOCIAL_PREP_WINDOW_MS` (`ScheduledWorkRunner.ts:31`) is 30 minutes and governs when *preparation begins*, not when approval may be accepted. Approval validity is governed separately by `socialApproval.expiresAt`, checked at `ScheduledWorkRunner.ts:312`.
 5. The general Calendar composer tells users that exact approval will be required near publish time. That conflicts with the desired promise that scheduling an exact post authorizes it.
 6. HNIC's `schedule_work` tool currently supports agent tasks and workflow runs only. It cannot stage or authorize native social publishing.
 7. There is no user-visible diff when a scheduled social definition changes.
@@ -317,6 +317,8 @@ interface ReleaseKitUsageMetadata {
 
 Bump `ReleaseKitManifest.schemaVersion` to `2`.
 
+This is a **type-level** change, not a value edit. The field is currently the literal type `schemaVersion: 1` (`packages/shared/src/release-kit/types.ts:44`), so it must widen to `1 | 2`, and every parser and guard comparing `schemaVersion === 1` must accept both. A v1 manifest loads as a valid v2 with the new usage-metadata fields absent; migration is additive and must never rewrite or invalidate an existing manifest on read.
+
 V1 records migrate deterministically:
 
 ```ts
@@ -335,7 +337,9 @@ usage = {
 
 Migration must be idempotent, preserve item IDs/hashes/source/provenance, and use the existing atomic manifest/context-sync path.
 
-The compact `context/release-kit/CONTEXT.md` includes category, subtype, `bestFor`, content rating, advisory notes, and restriction flags. It does not include full technical metadata or file bytes.
+The compact `context/release-kit/CONTEXT.md` **will** include category, subtype, `bestFor`, content rating, advisory notes, and restriction flags. It does not include full technical metadata or file bytes.
+
+Today `serializeReleaseKitContext` (`packages/shared/src/release-kit/manifest-context.ts:32-70`) emits only `id, category, subtype, title, relativePath, mimeType, sha256, status, isPrimary, source`. The usage-metadata fields do not exist yet and are added by this specification.
 
 ## Canonical Planned-Use Model
 
@@ -417,21 +421,30 @@ Do not pretend the existing field already solves schedule-time authorization.
 
 ### Target behavior
 
-Reuse `ScheduledWorkOrder.approvals` for durable schedule-time human authorization. Do not add a third parallel approval registry.
+Durable schedule-time authorization lives in a **new dedicated field** on `ScheduledWorkOrder`, defined in `packages/shared/src/scheduled-work/index.ts` alongside `ScheduledSocialApproval`.
 
-Extend `CampaignScheduleApproval` with host-owned evidence and a compact exact snapshot:
+Do **not** extend `CampaignScheduleApproval` and do **not** reuse the `approvals[]` array. An earlier draft of this specification proposed both. Three verified facts make that wrong:
+
+1. **`CampaignScheduleApproval` has no `approvedBy` field.** Its actual shape (`packages/shared/src/campaign-calendar/index.ts:88`) is `{ id, status, approvedAt?, expiresAt?, payloadDigest?, binding?, notes? }`. The `approvedBy: { type: 'user'; clientId }` that makes agent authorship structurally impossible exists only on `ScheduledSocialApproval` (`scheduled-work/index.ts:188`). Placing durable authorization on a type with no authorizer field would delete the product's central safety property from the exact record meant to carry it.
+2. **`approvals[]` is never structurally validated.** Both the parser (`scheduled-work/index.ts:616`) and the type guard (`:650`) check only `Array.isArray`. No element validator exists. By contrast `isScheduledSocialApproval` (`:848-855`) validates every field including `approvedBy.type === 'user'`. The most safety-critical record in the product must not live in the one array that is accepted unchecked from disk.
+3. **`CampaignScheduleApproval` is shared with legacy calendar machinery** (`CampaignScheduledJobRunner.ts`). Extending it couples new social authorization to the calendar-era job path this specification is meant to supersede.
 
 ```ts
-interface CampaignScheduleApproval {
-  // existing fields remain
-  approvedBy?: {
+/** Durable, human-minted authorization for one scheduled use of an approved asset. */
+export interface ScheduledWorkAuthorization {
+  id: string
+  authorizedAt: string
+  expiresAt?: string
+  /** Host-computed over `definition`. Execution attestation must reproduce this exactly. */
+  payloadDigest: string
+  authorizedBy: {
     type: 'user'
     clientId: string
     source: 'release-kit-ui' | 'calendar-ui' | 'hnic-confirmation'
     sessionId?: string
     userMessageId?: string
   }
-  definition?: {
+  definition: {
     title: string
     releaseKitRef: { itemId: string; sha256: string; label?: string }
     platform: string
@@ -445,7 +458,42 @@ interface CampaignScheduleApproval {
 }
 ```
 
-The host computes `payloadDigest` from this definition. Renderer- or agent-supplied approval objects are discarded; the server mints authorization only after a human-authorized command.
+Added to the order as `authorization?: ScheduledWorkAuthorization`.
+
+**The security boundary is host-only minting, not the type.** `authorizedBy.type: 'user'` and a structural validator prove *shape*, never *origin* — a well-formed authorization object says nothing about who authored it. Structure and origin must be enforced separately:
+
+- **Origin (the real boundary).** Only the server mints a `ScheduledWorkAuthorization`, and only in direct response to an authenticated human command. Any authorization field arriving from the renderer, from a tool call, from an agent, or from an imported/transferred order is **discarded and re-derived**, never trusted or merged. No tool surface accepts an authorization object as input. This is what makes "agents draft, humans authorize" true.
+- **Structure (defence in depth).** Ship `isScheduledWorkAuthorization` in the same commit as the type, modelled on `isScheduledSocialApproval`, and call it from both the order parser and the order type guard — because `approvals[]` shows what happens when a record is accepted from disk unchecked. This catches corruption and hand-edited session files; it does not and cannot establish human origin.
+
+Treating the literal type as the guarantee is the failure mode to avoid: it would let a forged-but-well-formed object pass as authorization.
+
+The host computes `payloadDigest` from `definition` at mint time.
+
+### Relationship to `ScheduledSocialApproval`
+
+Two records coexist on a social order and their relationship must never be ambiguous:
+
+| Record | Minted when | Means |
+| --- | --- | --- |
+| `authorization` | Human clicks Schedule (or confirms to HNIC) | *This human approved these exact details* |
+| `socialApproval` | Runner prepares the dry run near execution | *These exact details were re-verified against the live action* |
+
+**`socialApproval` is always derived from `authorization` and is never independently created for work that has one.** At preparation the runner must confirm that the dry run's `mediaDigest`, `platform`, `profileId`, and caption reproduce the authorized `definition`; any divergence fails the order to `needs-attention` rather than minting a fresh approval.
+
+Without this rule the two records become a second split-brain — the same failure the legacy Finals pointer model produced, relocated into the approval path, where its consequence is posting something the artist never authorized.
+
+### Migration: orders that predate `authorization`
+
+The refuse-to-post rule applies **only to orders created after this feature ships**, and must not retroactively invalidate work a user already approved.
+
+Orders are classified once, at load:
+
+- **New orders** (created on or after the `authorization` field exists) require a valid `authorization`. Reaching execution without one is a defect: fail to `needs-attention` and refuse to post.
+- **Legacy orders** (created before, identifiable by having no `authorization` and a `createdAt` earlier than the migration marker) continue through the existing `socialApproval` path unchanged. They are **not** back-filled with a synthetic authorization — the host cannot manufacture a human authorization after the fact, and inventing one would defeat the boundary this section establishes.
+
+A legacy order that a user **edits** after the migration is re-authorized through the new path, since the edit produces a fresh human authorization for the changed details.
+
+Silently failing an already-approved legacy post on release day would be a worse outcome than the inconsistency it prevents. When the legacy path is retired, surface any remaining legacy orders to the user for explicit re-scheduling rather than cancelling or auto-converting them.
 
 ### Authorization sources
 
@@ -475,7 +523,7 @@ Keep the existing dry-run and `ScheduledSocialApproval` machinery as an executio
 
 At execution time the runner must:
 
-1. re-read the work order and active approved `CampaignScheduleApproval`;
+1. re-read the work order and its `authorization` (`ScheduledWorkAuthorization`), refusing if absent, expired, or failing `isScheduledWorkAuthorization`;
 2. recompute the exact schedule definition digest;
 3. re-read the Release Kit item and restrictions;
 4. verify the pinned item SHA-256 and media fingerprint;

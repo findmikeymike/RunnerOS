@@ -7,6 +7,7 @@ import {
   Check,
   ChevronDown,
   File,
+  FileWarning,
   FolderOpen,
   Image,
   Loader2,
@@ -34,6 +35,14 @@ import { CompactPageHeader } from './CompactPageHeader'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { consumePendingReleaseKitOutput } from '@/lib/release-kit-navigation'
+import {
+  featuredReleaseKitItem,
+  isUnverifiedReleaseKitItem,
+  releaseKitStatusExplanation,
+  releaseKitStatusLabel,
+  releaseKitStatusRingClass,
+  shouldShowPrimaryBadge,
+} from './release-kit-status'
 import { toast } from 'sonner'
 import { useAppShellContext } from '@/context/AppShellContext'
 
@@ -291,7 +300,7 @@ function ReadinessStrip({ manifest }: { manifest: ReleaseKitManifest | null }) {
 }
 
 function AudioPanel({ items, workspaceId, onChanged, onAdd }: FinalCategoryProps) {
-  const featured = featuredItem(items)
+  const featured = featuredReleaseKitItem(items)
   const openItem = useOpenReleaseKitItem(workspaceId)
   return (
     <section className={cn(RELEASE_KIT_SURFACE_CLASS, 'p-3')} style={RELEASE_KIT_SURFACE_STYLE}>
@@ -303,14 +312,15 @@ function AudioPanel({ items, workspaceId, onChanged, onAdd }: FinalCategoryProps
           {items.length ? <span className="rounded-md bg-white/[0.07] px-1.5 py-0.5 text-[10px] font-medium text-white/45">{items.length}</span> : null}
         </div>
         {featured ? (
-          <div className="flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-white/[0.07] bg-black/25 px-3 py-2">
-            <button type="button" onClick={() => void openItem(featured)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f97316] text-white shadow-tinted transition-transform hover:scale-105" title="Open final audio">
+          <div className={cn('flex min-w-0 flex-1 items-center gap-3 rounded-xl border bg-black/25 px-3 py-2', isUnverifiedReleaseKitItem(featured) ? 'border-amber-400/45 ring-1 ring-amber-400/25' : 'border-white/[0.07]')}>
+            <button type="button" onClick={() => void openItem(featured)} className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white shadow-tinted transition-transform hover:scale-105', isUnverifiedReleaseKitItem(featured) ? 'bg-white/20' : 'bg-[#f97316]')} title="Open final audio">
               <Play className="ml-0.5 h-3.5 w-3.5 fill-current" />
             </button>
             <button type="button" onClick={() => void openItem(featured)} className="min-w-0 flex-1 text-left">
               <div className="flex items-center gap-2">
                 <span className="truncate text-sm font-medium text-white/88">{featured.title}</span>
-                {featured.isPrimary ? <PrimaryBadge /> : null}
+                {shouldShowPrimaryBadge(featured) ? <PrimaryBadge /> : null}
+                <StatusBadge item={featured} />
               </div>
               <p className="mt-0.5 truncate text-[11px] text-white/38">{displaySubtype(featured.subtype)} · {displaySource(featured.source)}{featured.sizeBytes ? ` · ${formatFileSize(featured.sizeBytes)}` : ''}</p>
             </button>
@@ -337,7 +347,7 @@ function AudioPanel({ items, workspaceId, onChanged, onAdd }: FinalCategoryProps
 }
 
 function SingleArtPanel({ items, itemPaths, workspaceId, onChanged, onAdd }: FinalCategoryProps & { itemPaths: Record<string, string> }) {
-  const featured = featuredItem(items)
+  const featured = featuredReleaseKitItem(items)
   const openItem = useOpenReleaseKitItem(workspaceId)
   return (
     <section className={cn(RELEASE_KIT_SURFACE_CLASS, 'h-full p-4')} style={RELEASE_KIT_SURFACE_STYLE}>
@@ -346,11 +356,11 @@ function SingleArtPanel({ items, itemPaths, workspaceId, onChanged, onAdd }: Fin
         <MediaHeader category="artwork" title="Single Art" count={items.length} onAdd={onAdd} />
         {featured ? (
           <>
-            <div className="group relative mt-3 aspect-square overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-orange-950/80 via-[#171719] to-[#0d0d0f]">
+            <div className={cn('group relative mt-3 aspect-square overflow-hidden rounded-xl border bg-gradient-to-br from-orange-950/80 via-[#171719] to-[#0d0d0f]', releaseKitStatusRingClass(featured))}>
               <button type="button" onClick={() => void openItem(featured)} className="absolute inset-0 h-full w-full text-left" title="Open Single Art">
-                {itemPaths[featured.id] ? <img src={thumbnailUrl(itemPaths[featured.id]!)} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" /> : <Image className="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 text-white/14" />}
+                {itemPaths[featured.id] ? <img src={thumbnailUrl(itemPaths[featured.id]!)} alt={featured.title} className={cn('h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]', isUnverifiedReleaseKitItem(featured) && 'opacity-45')} /> : <Image className="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 text-white/14" />}
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-14">
-                  <div className="flex items-center gap-2"><span className="truncate text-sm font-medium text-white">{featured.title}</span>{featured.isPrimary ? <PrimaryBadge /> : null}</div>
+                  <div className="flex items-center gap-2"><span className="truncate text-sm font-medium text-white">{featured.title}</span>{shouldShowPrimaryBadge(featured) ? <PrimaryBadge /> : null}<StatusBadge item={featured} /></div>
                   <p className="mt-1 text-[11px] text-white/48">{featured.sizeBytes ? formatFileSize(featured.sizeBytes) : displaySubtype(featured.subtype)}</p>
                 </div>
               </button>
@@ -373,15 +383,16 @@ function VideoPanel({ items, itemPaths, workspaceId, onChanged, onAdd }: FinalCa
         <MediaHeader category="video" title="Videos" count={items.length} onAdd={onAdd} />
         <div className="mt-3 grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8">
           {items.map((item) => (
-            <div key={item.id} className="group relative aspect-[9/16] overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-[#232326] to-[#0b0b0d]">
+            <div key={item.id} className={cn('group relative aspect-[9/16] overflow-hidden rounded-xl border bg-gradient-to-br from-[#232326] to-[#0b0b0d]', releaseKitStatusRingClass(item))}>
               <button type="button" onClick={() => void openItem(item)} className="absolute inset-0 h-full w-full" title={`Open ${item.title}`}>
-                {itemPaths[item.id] ? <img src={thumbnailUrl(itemPaths[item.id]!)} alt="" className="h-full w-full object-cover opacity-80 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-95" /> : null}
-                <span className="absolute left-1/2 top-1/2 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md transition group-hover:scale-110 group-hover:bg-[#f97316]"><Play className="ml-0.5 h-4 w-4 fill-current" /></span>
+                {itemPaths[item.id] ? <img src={thumbnailUrl(itemPaths[item.id]!)} alt={item.title} className={cn('h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]', isUnverifiedReleaseKitItem(item) ? 'opacity-40' : 'opacity-80 group-hover:opacity-95')} /> : null}
+                <span className={cn('absolute left-1/2 top-1/2 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md transition group-hover:scale-110', !isUnverifiedReleaseKitItem(item) && 'group-hover:bg-[#f97316]')}><Play className="ml-0.5 h-4 w-4 fill-current" /></span>
                 <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/65 to-transparent px-3 pb-3 pt-14 text-left">
                   <span className="block truncate text-xs font-medium text-white">{item.title}</span>
                   <span className="mt-1 block text-[10px] text-white/48">{displaySubtype(item.subtype)}</span>
                 </span>
               </button>
+              {isUnverifiedReleaseKitItem(item) ? <span className="absolute left-1.5 top-1.5 z-10"><StatusBadge item={item} /></span> : null}
               <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100"><FinalActions item={item} workspaceId={workspaceId} onChanged={onChanged} surface /></div>
             </div>
           ))}
@@ -401,11 +412,12 @@ function ImagePanel({ items, itemPaths, workspaceId, onChanged, onAdd }: FinalCa
         <MediaHeader category="images" title="Press & Social Images" count={items.length} onAdd={onAdd} />
         <div className="mt-3 grid min-h-[180px] flex-1 grid-flow-col auto-cols-[minmax(150px,220px)] gap-2.5 overflow-x-auto">
           {items.map((item) => (
-            <div key={item.id} className="group relative h-full overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-[#242427] to-[#0d0d0f]">
+            <div key={item.id} className={cn('group relative h-full overflow-hidden rounded-xl border bg-gradient-to-br from-[#242427] to-[#0d0d0f]', releaseKitStatusRingClass(item))}>
               <button type="button" onClick={() => void openItem(item)} className="absolute inset-0 h-full w-full" title={`Open ${item.title}`}>
-                {itemPaths[item.id] ? <img src={thumbnailUrl(itemPaths[item.id]!)} alt="" className="h-full w-full object-cover opacity-80 transition duration-500 group-hover:scale-[1.03] group-hover:opacity-100" /> : <Image className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 text-white/12" />}
+                {itemPaths[item.id] ? <img src={thumbnailUrl(itemPaths[item.id]!)} alt={item.title} className={cn('h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]', isUnverifiedReleaseKitItem(item) ? 'opacity-40' : 'opacity-80 group-hover:opacity-100')} /> : <Image className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 text-white/12" />}
                 <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent px-3 pb-3 pt-10 text-left"><span className="block truncate text-xs font-medium text-white">{item.title}</span></span>
               </button>
+              {isUnverifiedReleaseKitItem(item) ? <span className="absolute left-1.5 top-1.5 z-10"><StatusBadge item={item} /></span> : null}
               <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100"><FinalActions item={item} workspaceId={workspaceId} onChanged={onChanged} surface /></div>
             </div>
           ))}
@@ -459,18 +471,18 @@ function FinalCategory({ category, items, workspaceId, onChanged, onAdd }: {
 function FinalItem({ item, workspaceId, onChanged }: { item: ReleaseKitItem; workspaceId: string; onChanged: (manifest: ReleaseKitManifest) => void }) {
   const openItem = useOpenReleaseKitItem(workspaceId)
   return (
-    <div className="group flex min-w-0 items-center gap-3 rounded-xl border border-white/[0.07] bg-black/20 p-3 hover:border-white/[0.13] hover:bg-white/[0.035]">
+    <div className={cn('group flex min-w-0 items-center gap-3 rounded-xl border bg-black/20 p-3 hover:bg-white/[0.035]', isUnverifiedReleaseKitItem(item) ? 'border-amber-400/45 ring-1 ring-amber-400/25' : 'border-white/[0.07] hover:border-white/[0.13]')}>
       <button type="button" onClick={() => void openItem(item)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.045] text-white/45 hover:text-white/80" title="Open final">
         <CategoryIcon category={item.category} className="h-4 w-4" />
       </button>
       <button type="button" onClick={() => void openItem(item)} className="min-w-0 flex-1 text-left">
         <div className="flex items-center gap-1.5">
           <span className="truncate text-sm font-medium text-white/82">{item.title}</span>
-          {item.isPrimary ? <span className="rounded-[4px] bg-[#f97316]/14 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-[#fb923c]">Primary</span> : null}
+          {shouldShowPrimaryBadge(item) ? <PrimaryBadge /> : null}
         </div>
         <div className="mt-1 flex items-center gap-1.5 text-[11px] text-white/34">
           <span>{displaySubtype(item.subtype)}</span><span>·</span><span>{displaySource(item.source)}</span>
-          {item.status !== 'ready' ? <span className="text-amber-300">· {displaySubtype(item.status)}</span> : null}
+          {isUnverifiedReleaseKitItem(item) ? <StatusBadge item={item} /> : null}
         </div>
       </button>
       <FinalActions item={item} workspaceId={workspaceId} onChanged={onChanged} />
@@ -524,6 +536,20 @@ function FinalActions({ item, workspaceId, onChanged, surface = false }: { item:
 
 function PrimaryBadge() {
   return <span className="shrink-0 rounded-md bg-[#f97316]/16 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-[#fb923c]">Primary</span>
+}
+
+function StatusBadge({ item }: { item: ReleaseKitItem }) {
+  if (!isUnverifiedReleaseKitItem(item)) return null
+  const label = releaseKitStatusLabel(item)
+  return (
+    <span
+      className="flex shrink-0 items-center gap-1 rounded-md bg-amber-400/16 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-amber-300"
+      title={releaseKitStatusExplanation(item)}
+    >
+      <FileWarning className="h-2.5 w-2.5" aria-hidden="true" />
+      {label}
+    </span>
+  )
 }
 
 function OutputsTab({ outputs, loading, error, onOpen, onPromote }: {
@@ -850,9 +876,6 @@ function useOpenReleaseKitItem(workspaceId: string): (item: ReleaseKitItem) => P
   }, [onOpenFile, workspaceId])
 }
 
-function featuredItem(items: ReleaseKitItem[]): ReleaseKitItem | undefined {
-  return items.find((item) => item.isPrimary) ?? items[0]
-}
 
 function thumbnailUrl(path: string): string {
   return `thumbnail://thumb/${encodeURIComponent(path)}`
