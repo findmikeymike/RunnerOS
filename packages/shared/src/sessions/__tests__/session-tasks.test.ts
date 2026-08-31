@@ -12,6 +12,7 @@ import {
   reopenSessionTask,
   settleSessionTaskDelegation,
   recoverSessionTaskListAfterRestart,
+  projectTodoWriteSessionTasks,
   startSessionTask,
   type SessionTaskStateErrorCode,
 } from '../session-tasks.ts';
@@ -256,5 +257,39 @@ describe('session task-list state', () => {
     expect(recovered.revision).toBe(active.revision + 1);
     expect(recovered.items.find(item => item.id === 'task_research')?.status).toBe('pending');
     expect(recoverSessionTaskListAfterRestart(recovered, T2)).toEqual(recovered);
+  });
+
+  it('projects TodoWrite snapshots while preserving matching ids and timestamps', () => {
+    const first = projectTodoWriteSessionTasks(undefined, [
+      { content: 'Research release timing', activeForm: 'Researching release timing', status: 'in_progress' },
+      { content: 'Draft campaign brief', status: 'pending' },
+    ], T0);
+    const second = projectTodoWriteSessionTasks(first, [
+      { content: 'Research release timing', status: 'completed' },
+      { content: 'Draft campaign brief', activeForm: 'Drafting campaign brief', status: 'in_progress' },
+      { content: 'Verify assets', status: 'pending' },
+    ], T1);
+
+    expect(second.source).toBe('todowrite-adapter');
+    expect(second.revision).toBe(first.revision + 1);
+    expect(second.items[0]?.id).toBe(first.items[0]?.id);
+    expect(second.items[0]?.createdAt).toBe(first.items[0]?.createdAt);
+    expect(second.items[2]?.id).toStartWith('task_');
+  });
+
+  it('rejects malformed TodoWrite snapshots and protects delegated host state', () => {
+    expectCode(() => projectTodoWriteSessionTasks(undefined, [
+      { content: 'One', status: 'in_progress' },
+      { content: 'Two', status: 'in_progress' },
+    ]), 'invalid-list');
+
+    const delegated = delegateSessionTask(createList(), 'task_research', {
+      receiptId: 'receipt-1',
+      targetAgentSlug: 'researcher',
+      dispatchedAt: T1,
+    }, T1);
+    expectCode(() => projectTodoWriteSessionTasks(delegated, [
+      { content: 'Draft campaign brief', status: 'pending' },
+    ], T2), 'invalid-list');
   });
 });

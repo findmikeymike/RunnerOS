@@ -494,7 +494,7 @@ Ordered so that no slice ships a deadlock.
 
 **Slice 3 — Tool and gating.** `update_tasks` handler and tool-def, provider-gated registration, prompt guidance for non-Anthropic providers. **Implemented 2026-08-30.**
 
-**Slice 4 — Claude adapter.** Intercept `TodoWrite`, project into the store. Claude sessions gain durable state.
+**Slice 4 — Claude adapter.** Intercept `TodoWrite`, project into the store. Claude sessions gain durable state. **Implemented 2026-08-30.**
 
 **Slice 5 — UI.** Point `turn-utils` at session state; render `delegated` items and outcomes.
 

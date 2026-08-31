@@ -53,6 +53,12 @@ export interface CreateSessionTaskInput {
   delegation?: SessionTaskDelegation;
 }
 
+export interface TodoWriteSessionTaskInput {
+  content: string;
+  activeForm?: string;
+  status: 'pending' | 'in_progress' | 'completed';
+}
+
 export type SessionTaskStateErrorCode =
   | 'invalid-list'
   | 'invalid-task'
@@ -502,4 +508,49 @@ export function recoverSessionTaskListAfterRestart(
       ? { ...item, status: 'pending' as const, updatedAt: recoveryNow }
       : item
   )), recoveryNow);
+}
+
+/** Project Claude's whole-array TodoWrite snapshot into the host-owned store. */
+export function projectTodoWriteSessionTasks(
+  current: SessionTaskList | undefined,
+  todos: TodoWriteSessionTaskInput[],
+  now?: string,
+): SessionTaskList {
+  if (!Array.isArray(todos)) fail('invalid-list', 'TodoWrite todos must be an array');
+  const parsedCurrent = current ? parseSessionTaskList(current) : undefined;
+  if (current && !parsedCurrent) fail('invalid-list', 'Current task list is invalid');
+  if (parsedCurrent?.items.some(item => item.status === 'delegated')) {
+    fail('invalid-list', 'TodoWrite cannot replace host-owned delegated work');
+  }
+  const requestedNow = nowIso(now);
+  const updatedAt = parsedCurrent && Date.parse(requestedNow) < Date.parse(parsedCurrent.updatedAt)
+    ? parsedCurrent.updatedAt
+    : requestedNow;
+  const byContent = new Map(
+    (parsedCurrent?.items ?? []).map(item => [item.content.trim().toLocaleLowerCase('en-US'), item]),
+  );
+  const items = todos.map(todo => {
+    const prior = byContent.get(String(todo.content).trim().toLocaleLowerCase('en-US'));
+    return {
+      id: prior?.id ?? `task_${randomUUID()}`,
+      content: todo.content,
+      activeForm: todo.activeForm,
+      status: todo.status,
+      delegation: undefined,
+      createdAt: prior?.createdAt ?? updatedAt,
+      updatedAt,
+    };
+  });
+  const candidate = {
+    schemaVersion: SESSION_TASK_LIST_SCHEMA_VERSION,
+    id: parsedCurrent?.id ?? `tasks_${randomUUID()}`,
+    revision: (parsedCurrent?.revision ?? 0) + 1,
+    items,
+    createdAt: parsedCurrent?.createdAt ?? updatedAt,
+    updatedAt,
+    source: 'todowrite-adapter' as const,
+  };
+  const parsed = parseSessionTaskList(candidate);
+  if (!parsed) fail('invalid-list', 'TodoWrite task snapshot is invalid');
+  return parsed;
 }

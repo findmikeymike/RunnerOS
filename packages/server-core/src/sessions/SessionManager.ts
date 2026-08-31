@@ -108,6 +108,7 @@ import {
   makeChatGoalEvent,
   parseChatGoalState,
   recoverSessionTaskListAfterRestart,
+  projectTodoWriteSessionTasks,
   SessionTaskStateError,
   abandonSessionTask,
   appendSessionTasks,
@@ -116,6 +117,7 @@ import {
   reopenSessionTask,
   startSessionTask,
   type SessionTaskList,
+  type TodoWriteSessionTaskInput,
   pickSessionFields,
 } from '@craft-agent/shared/sessions'
 import { loadAllSources, loadGlobalSource, getSourcesBySlugs, readGlobalSourcesManifest, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
@@ -12444,6 +12446,29 @@ user a clickable link to where the thing now lives.`
         // before this tool result arrived, reconcile against the terminal
         // passive notice already in the session instead of reopening it.
         reconcileBackgroundAgentToolMessage(managed.messages, resolvedToolMessage)
+
+        const resolvedToolName = resolvedToolMessage.toolName ?? toolName
+        if (resolvedToolName === 'TodoWrite' && !inferredError && !wasAlreadyComplete) {
+          const todos = resolvedToolMessage.toolInput?.todos
+          try {
+            if (!Array.isArray(todos)) throw new Error('TodoWrite input is missing todos')
+            await this.withSessionAdmissionLock(managed.id, async () => {
+              const next = projectTodoWriteSessionTasks(
+                managed.sessionTasks,
+                todos as TodoWriteSessionTaskInput[],
+              )
+              await this.commitSessionTaskState(managed, next, 'todowrite-project')
+            })
+          } catch (error) {
+            // Task metadata is advisory. Never turn a successful Claude tool
+            // call into a failed model turn because projection/persistence failed.
+            sessionLog.error('Failed to project TodoWrite into session task state', {
+              sessionId: managed.id,
+              toolUseId: event.toolUseId,
+              error: error instanceof Error ? error.message : String(error),
+            })
+          }
+        }
 
         // Send event to renderer if: (a) first completion, or (b) result content changed
         // (e.g., safety net auto-completed with empty result, then real result arrived later)

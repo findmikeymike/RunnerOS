@@ -117,6 +117,7 @@ export type {
   SessionTask,
   SessionTaskList,
   CreateSessionTaskInput,
+  TodoWriteSessionTaskInput,
   SessionTaskStateErrorCode,
 } from './session-tasks.ts';
 export {
@@ -137,6 +138,7 @@ export {
   delegateSessionTask,
   settleSessionTaskDelegation,
   recoverSessionTaskListAfterRestart,
+  projectTodoWriteSessionTasks,
 } from './session-tasks.ts';
 export {
   CHAT_GOAL_SCHEMA_VERSION,
