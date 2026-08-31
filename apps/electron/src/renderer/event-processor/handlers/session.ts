@@ -40,6 +40,7 @@ import type {
   AuthCompletedEvent,
   UsageUpdateEvent,
   GoalStateChangedEvent,
+  SessionTasksChangedEvent,
   GoalCreationProposedEvent,
   GoalEvent,
   Effect,
@@ -163,6 +164,24 @@ export function handleGoalStateChanged(
       session: {
         ...state.session,
         chatGoal: event.chatGoal,
+      },
+    },
+    effects: [],
+  }
+}
+
+export function handleSessionTasksChanged(
+  state: SessionState,
+  event: SessionTasksChangedEvent
+): ProcessResult {
+  return {
+    state: {
+      ...state,
+      session: {
+        ...state.session,
+        sessionTasks: event.sessionTasks,
+        sessionTasksDegraded: event.degraded,
+        sessionTasksError: event.error,
       },
     },
     effects: [],

@@ -48,6 +48,7 @@ import {
   handleAuthCompleted,
   handleUsageUpdate,
   handleGoalStateChanged,
+  handleSessionTasksChanged,
   handleGoalCreationProposed,
   handleGoalEvent,
 } from './handlers/session'
@@ -221,6 +222,9 @@ export function processEvent(
 
     case 'goal_state_changed':
       return handleGoalStateChanged(state, event)
+
+    case 'session_tasks_changed':
+      return handleSessionTasksChanged(state, event)
 
     case 'goal_creation_proposed':
       return handleGoalCreationProposed(state, event)

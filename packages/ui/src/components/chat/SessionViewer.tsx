@@ -13,7 +13,7 @@ import type { StoredSession } from '@craft-agent/core'
 import { cn } from '../../lib/utils'
 import { CHAT_LAYOUT, CHAT_CLASSES } from '../../lib/layout'
 import { PlatformProvider, type PlatformActions } from '../../context'
-import { TurnCard } from './TurnCard'
+import { TurnCard, type TodoItem } from './TurnCard'
 import { UserMessageBubble } from './UserMessageBubble'
 import { SystemMessage } from './SystemMessage'
 import {
@@ -27,7 +27,7 @@ export type SessionViewerMode = 'interactive' | 'readonly'
 
 export interface SessionViewerProps {
   /** Session data to display */
-  session: StoredSession
+  session: StoredSession & { sessionTasks?: { items: TodoItem[] } }
   /** View mode - 'readonly' for web viewer, 'interactive' for Electron */
   mode?: SessionViewerMode
   /** Platform-specific actions (file opening, URL handling, etc.) */
@@ -86,8 +86,8 @@ export function SessionViewer({
 }: SessionViewerProps) {
   // Convert StoredMessage[] to Message[] and group into turns
   const turns = useMemo(
-    () => groupMessagesByTurn(session.messages.map(storedToMessage)),
-    [session.messages]
+    () => groupMessagesByTurn(session.messages.map(storedToMessage), session.sessionTasks?.items),
+    [session.messages, session.sessionTasks]
   )
 
   // Track expanded turns (for controlled state)

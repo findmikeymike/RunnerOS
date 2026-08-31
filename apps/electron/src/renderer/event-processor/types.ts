@@ -6,7 +6,7 @@
  */
 
 import type { Session, Message, PermissionRequest, CredentialRequest, TypedError, PermissionMode, SessionStatus, AuthRequest, ToolDisplayMeta } from '../../shared/types'
-import type { ChatGoalState, CreateChatGoalInput } from '@craft-agent/shared/sessions'
+import type { ChatGoalState, CreateChatGoalInput, SessionTaskList } from '@craft-agent/shared/sessions'
 
 /**
  * Streaming state for a session - replaces streamingTextRef
@@ -476,6 +476,14 @@ export interface GoalStateChangedEvent {
   chatGoal?: ChatGoalState
 }
 
+export interface SessionTasksChangedEvent {
+  type: 'session_tasks_changed'
+  sessionId: string
+  sessionTasks?: SessionTaskList
+  degraded?: boolean
+  error?: string
+}
+
 export interface GoalCreationProposedEvent {
   type: 'goal_creation_proposed'
   sessionId: string
@@ -535,6 +543,7 @@ export type AgentEvent =
   | SourceActivatedEvent
   | UsageUpdateEvent
   | GoalStateChangedEvent
+  | SessionTasksChangedEvent
   | GoalCreationProposedEvent
   | GoalEvent
 

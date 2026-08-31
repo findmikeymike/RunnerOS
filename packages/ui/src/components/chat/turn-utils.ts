@@ -110,7 +110,7 @@ export interface AssistantTurn {
   isStreaming: boolean
   isComplete: boolean
   timestamp: number
-  /** Extracted from TodoWrite tool - latest todo state in this turn */
+  /** Authoritative session-level task state, attached only to the latest turn. */
   todos?: TodoItem[]
 }
 
@@ -349,44 +349,6 @@ function calculateActivityDepths(activities: ActivityItem[]): void {
 }
 
 // ============================================================================
-// TodoWrite Extraction
-// ============================================================================
-
-/**
- * Extract todos from TodoWrite tool results in activities.
- * Returns the latest todo state (from the most recent TodoWrite call).
- */
-function extractTodosFromActivities(activities: ActivityItem[]): TodoItem[] | undefined {
-  // Find all TodoWrite tool results, get the latest one
-  const todoWriteActivities = activities
-    .filter(a => a.toolName === 'TodoWrite' && a.status === 'completed' && a.content)
-    .sort((a, b) => b.timestamp - a.timestamp) // Most recent first
-
-  const latestActivity = todoWriteActivities[0]
-  if (!latestActivity) return undefined
-
-  const latestResult = latestActivity.content
-  if (!latestResult) return undefined
-
-  try {
-    // TodoWrite result is typically a success message, but the input contains the todos
-    // We need to get the toolInput which has the todos array
-    const input = latestActivity.toolInput
-    if (input && Array.isArray(input.todos)) {
-      return input.todos.map((todo: { content: string; status: string; activeForm?: string }) => ({
-        content: todo.content,
-        status: todo.status as 'pending' | 'in_progress' | 'completed',
-        activeForm: todo.activeForm,
-      }))
-    }
-  } catch {
-    // Failed to parse, return undefined
-  }
-
-  return undefined
-}
-
-// ============================================================================
 // Main Grouping Function
 // ============================================================================
 
@@ -405,7 +367,7 @@ function extractTodosFromActivities(activities: ActivityItem[]): TodoItem[] | un
  * as the signal: isIntermediate=true means more work coming, isIntermediate=false
  * means final response.
  */
-export function groupMessagesByTurn(messages: Message[]): Turn[] {
+export function groupMessagesByTurn(messages: Message[], sessionTodos?: TodoItem[]): Turn[] {
   // Hidden system-generated messages wake the model but never become transcript
   // turns in desktop or viewer UIs.
   const visibleMessages = compactPassiveAgentNotices(
@@ -427,9 +389,6 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
 
       // Calculate nesting depths for parent-child tool relationships
       calculateActivityDepths(currentTurn.activities)
-
-      // Extract todos from TodoWrite tool results
-      currentTurn.todos = extractTodosFromActivities(currentTurn.activities)
 
       // If interrupted, mark any running activities as error and todos as interrupted
       if (interrupted) {
@@ -703,6 +662,13 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
 
   // Flush any remaining turn
   flushCurrentTurn()
+
+  if (sessionTodos?.length) {
+    const latestAssistantTurn = turns.findLast(
+      (turn): turn is AssistantTurn => turn.type === 'assistant'
+    )
+    if (latestAssistantTurn) latestAssistantTurn.todos = sessionTodos
+  }
 
   return turns
 }

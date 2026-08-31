@@ -3,7 +3,7 @@
  *
  * These tests cover:
  * - groupActivitiesByParent() - Task subagent grouping
- * - extractTodosFromActivities() - TodoWrite parsing (internal, tested via exports)
+ * - session-level task list attachment
  * - computeLastChildSet() - Tree view last-child detection
  * - extractTaskOutputData() - TaskOutput JSON parsing (internal, tested indirectly)
  */
@@ -13,9 +13,11 @@ import {
   groupActivitiesByParent,
   computeLastChildSet,
   isActivityGroup,
+  groupMessagesByTurn,
   type ActivityGroup,
 } from '../turn-utils'
 import type { ActivityItem } from '../TurnCard'
+import type { Message } from '@craft-agent/core'
 
 // ============================================================================
 // Test Helpers
@@ -615,9 +617,7 @@ describe('isActivityGroup', () => {
 // by checking that turns have correct todos extracted
 // ============================================================================
 
-describe('TodoWrite extraction', () => {
-  // These tests verify the todo extraction behavior by creating activities
-  // and checking groupActivitiesByParent doesn't break with TodoWrite activities
+describe('session task rendering', () => {
 
   it('includes TodoWrite activities in flat list (not grouped)', () => {
     resetCounters()
@@ -648,5 +648,41 @@ describe('TodoWrite extraction', () => {
     const group = result[0] as ActivityGroup
     expect(group.children.length).toBe(1)
     expect(group.children[0]!.toolName).toBe('TodoWrite')
+  })
+
+  it('attaches one authoritative task list only to the latest assistant turn', () => {
+    const messages: Message[] = [
+      { id: 'user-1', role: 'user', content: 'First', timestamp: 1 },
+      { id: 'assistant-1', role: 'assistant', content: 'First done', timestamp: 2 },
+      { id: 'user-2', role: 'user', content: 'Second', timestamp: 3 },
+      { id: 'assistant-2', role: 'assistant', content: 'Working', timestamp: 4 },
+    ]
+    const todos = [{ id: 'task-1', content: 'Finish the work', status: 'in_progress' as const }]
+
+    const assistantTurns = groupMessagesByTurn(messages, todos)
+      .filter(turn => turn.type === 'assistant')
+
+    expect(assistantTurns).toHaveLength(2)
+    expect(assistantTurns[0]?.todos).toBeUndefined()
+    expect(assistantTurns[1]?.todos).toEqual(todos)
+  })
+
+  it('does not reconstruct task state from a TodoWrite activity', () => {
+    const messages: Message[] = [
+      { id: 'user-1', role: 'user', content: 'Plan it', timestamp: 1 },
+      {
+        id: 'tool-1',
+        role: 'tool',
+        content: 'Todo list updated',
+        timestamp: 2,
+        toolName: 'TodoWrite',
+        toolStatus: 'completed',
+        toolInput: { todos: [{ content: 'Stale task', status: 'pending' }] },
+      },
+      { id: 'assistant-1', role: 'assistant', content: 'Done', timestamp: 3 },
+    ]
+
+    const assistantTurn = groupMessagesByTurn(messages).find(turn => turn.type === 'assistant')
+    expect(assistantTurn?.todos).toBeUndefined()
   })
 })

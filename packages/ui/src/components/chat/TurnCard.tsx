@@ -221,18 +221,29 @@ export type ActivityType = 'tool' | 'thinking' | 'intermediate' | 'status' | 'pl
 export type AnnotationInteractionMode = 'interactive' | 'tooltip-only'
 
 // ============================================================================
-// Todo Types (for TodoWrite tool visualization)
+// Session task types
 // ============================================================================
 
-export type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'interrupted'
+export type TodoStatus = 'pending' | 'in_progress' | 'delegated' | 'completed' | 'abandoned' | 'interrupted'
+
+export interface TodoDelegation {
+  targetAgentSlug: string
+  childSessionId?: string
+  outcome?: 'succeeded' | 'failed' | 'timeout' | 'abandoned'
+  summary?: string
+}
 
 export interface TodoItem {
+  /** Stable host-owned task id. */
+  id?: string
   /** Task content/description */
   content: string
   /** Current status */
   status: TodoStatus
   /** Present continuous form shown when in_progress (e.g., "Running tests") */
   activeForm?: string
+  /** Delegation details retained after the child settles. */
+  delegation?: TodoDelegation
 }
 
 export interface ActivityItem {
@@ -2658,62 +2669,91 @@ function TodoStatusIcon({ status }: { status: TodoStatus }) {
           <Spinner className={SIZE_CONFIG.spinnerSize} />
         </div>
       )
+    case 'delegated':
+      return <GitBranch className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-info")} />
     case 'completed':
       return <CircleCheck className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-accent")} />
+    case 'abandoned':
     case 'interrupted':
       return <Ban className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-muted-foreground/50")} />
   }
 }
 
 /** Single todo row - styled like ActivityRow */
-function TodoRow({ todo }: { todo: TodoItem }) {
+function TodoRow({
+  todo,
+  onOpenSubagentSession,
+}: {
+  todo: TodoItem
+  onOpenSubagentSession?: (sessionId: string) => void
+}) {
   const displayText = todo.status === 'in_progress' && todo.activeForm
     ? todo.activeForm
     : todo.content
 
   return (
-    <div className={cn(
-      "flex items-center gap-2 py-0.5 text-muted-foreground",
-      SIZE_CONFIG.fontSize,
-      todo.status === 'completed' && "opacity-50"
-    )}>
-      <TodoStatusIcon status={todo.status} />
-      <span className={cn(
-        "truncate flex-1",
-        todo.status === 'completed' && "line-through"
-      )}>
-        {displayText}
-      </span>
+    <div className={cn("flex items-start gap-2 py-0.5 text-muted-foreground", SIZE_CONFIG.fontSize)}>
+      <span className="pt-0.5"><TodoStatusIcon status={todo.status} /></span>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className={cn(
+            "truncate",
+            todo.status === 'completed' && "line-through opacity-50",
+            todo.status === 'abandoned' && "opacity-60"
+          )}>
+            {displayText}
+          </span>
+          {todo.delegation && (
+            todo.delegation.childSessionId && onOpenSubagentSession
+              ? (
+                  <button
+                    type="button"
+                    className="shrink-0 text-info hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    onClick={() => onOpenSubagentSession(todo.delegation!.childSessionId!)}
+                  >
+                    @{todo.delegation.targetAgentSlug}
+                  </button>
+                )
+              : <span className="shrink-0 text-info">@{todo.delegation.targetAgentSlug}</span>
+          )}
+        </div>
+        {todo.delegation?.summary && (
+          <p className="mt-0.5 line-clamp-2 text-muted-foreground/70">
+            {todo.delegation.outcome ? `${todo.delegation.outcome}: ` : ''}{todo.delegation.summary}
+          </p>
+        )}
+      </div>
     </div>
   )
 }
 
 interface TodoListProps {
   todos: TodoItem[]
+  onOpenSubagentSession?: (sessionId: string) => void
 }
 
 /**
- * TodoList - Displays the current state of TodoWrite tool
+ * TodoList - Displays the current host-owned session plan
  * Styled to blend with TurnCard activities
  */
-function TodoList({ todos }: TodoListProps) {
+function TodoList({ todos, onOpenSubagentSession }: TodoListProps) {
   if (todos.length === 0) return null
 
   return (
     <div className="pl-4 pr-2 pt-2.5 pb-1.5 space-y-0.5 border-l-2 border-muted ml-[13px]">
       {/* Header */}
       <div className={cn("text-muted-foreground pb-1", SIZE_CONFIG.fontSize)}>
-        Todo List
+        Current plan
       </div>
       {/* Todo items */}
       {todos.map((todo, index) => (
         <motion.div
-          key={`${todo.content}-${index}`}
+          key={todo.id ?? `${todo.content}-${index}`}
           initial={{ opacity: 0, x: -8 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: index * 0.03 }}
         >
-          <TodoRow todo={todo} />
+          <TodoRow todo={todo} onOpenSubagentSession={onOpenSubagentSession} />
         </motion.div>
       ))}
     </div>
@@ -2894,7 +2934,7 @@ export const TurnCard = React.memo(function TurnCard({
   )
 
   // Don't render if nothing to show and turn is complete
-  if (activities.length === 0 && !response && isComplete) {
+  if (activities.length === 0 && !response && isComplete && !todos?.length) {
     return null
   }
 
@@ -2917,12 +2957,13 @@ export const TurnCard = React.memo(function TurnCard({
       return true
     })
     && !response
+    && !todos?.length
   if (hasNoMeaningfulWork) {
     return null
   }
 
   // Only count non-plan activities for the collapsible section
-  const hasActivities = sortedActivities.length > 0
+  const hasActivities = sortedActivities.length > 0 || Boolean(todos?.length)
 
   // Determine if thinking indicator should show using the phase-based state machine.
   // This properly handles the "gap" state (awaiting) between tool completion and next action,
@@ -2957,21 +2998,21 @@ export const TurnCard = React.memo(function TurnCard({
 
             {/* Step count badge */}
             <span className="-ml-0.5 shrink-0 px-1.5 py-0.5 rounded-[4px] bg-background shadow-minimal text-[10px] font-medium tabular-nums">
-              {activities.length}
+              {activities.length || todos?.length || 0}
             </span>
 
             {/* Preview text with crossfade + inline failure count */}
             <span className="relative flex-1 min-w-0 h-5 flex items-center">
               <AnimatePresence initial={false}>
                 <motion.span
-                  key={previewText}
+                  key={activities.length > 0 ? previewText : 'Current plan'}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.2 }}
                   className="absolute inset-0 truncate"
                 >
-                  {previewText}
+                  {activities.length > 0 ? previewText : 'Current plan'}
                 </motion.span>
               </AnimatePresence>
             </span>
@@ -3096,7 +3137,7 @@ export const TurnCard = React.memo(function TurnCard({
                 </div>
                 {/* TodoList - inside expanded section */}
                 {todos && todos.length > 0 && (
-                  <TodoList todos={todos} />
+                  <TodoList todos={todos} onOpenSubagentSession={onOpenSubagentSession} />
                 )}
               </motion.div>
             )}

@@ -62,6 +62,7 @@ import {
   normalizeFollowUpText,
   type Turn,
   type AssistantTurn,
+  type TodoItem,
   type UserTurn,
   type SystemTurn,
   type AuthRequestTurn,
@@ -143,6 +144,22 @@ function getTurnKey(turn: Turn): string {
   if (turn.type === 'system') return `system-${turn.message.id}`
   if (turn.type === 'auth-request') return `auth-${turn.message.id}`
   return `turn-${turn.turnId}-${turn.timestamp}`
+}
+
+function projectSessionTasks(session: Session): TodoItem[] | undefined {
+  if (!session.sessionTasks?.items.length) return undefined
+  return session.sessionTasks.items.map(task => ({
+    id: task.id,
+    content: task.content,
+    activeForm: task.activeForm,
+    status: task.status,
+    delegation: task.delegation && {
+      targetAgentSlug: task.delegation.targetAgentSlug,
+      childSessionId: task.delegation.childSessionId,
+      outcome: task.delegation.outcome,
+      summary: task.delegation.summary,
+    },
+  }))
 }
 
 interface ChatDisplayProps {
@@ -1486,8 +1503,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Memoize turn grouping - avoids O(n) iteration on every render/keystroke
   const allTurns = React.useMemo(() => {
     if (!session) return []
-    return groupMessagesByTurn(session.messages)
-  }, [session?.messages])
+    return groupMessagesByTurn(session.messages, projectSessionTasks(session))
+  }, [session?.messages, session?.sessionTasks])
 
   // Keep ref in sync for scroll handler
   totalTurnCountRef.current = allTurns.length
