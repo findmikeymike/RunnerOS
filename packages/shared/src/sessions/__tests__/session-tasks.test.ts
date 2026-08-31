@@ -10,6 +10,7 @@ import {
   delegateSessionTask,
   parseSessionTaskList,
   reopenSessionTask,
+  returnSessionTaskToPending,
   settleSessionTaskDelegation,
   recoverSessionTaskListAfterRestart,
   projectTodoWriteSessionTasks,
@@ -212,6 +213,15 @@ describe('session task-list state', () => {
     const completed = completeSessionTask(restarted, 'task_research', T2);
     const reopened = reopenSessionTask(completed, 'task_research', T2);
     expect(reopened.items[0]?.delegation).toBeUndefined();
+  });
+
+  it('returns active work to pending when delegation is refused before receipt creation', () => {
+    const active = startSessionTask(createList(), 'task_research', T1);
+    const pending = returnSessionTaskToPending(active, 'task_research', T2);
+
+    expect(pending.items[0]?.status).toBe('pending');
+    expect(pending.revision).toBe(active.revision + 1);
+    expectCode(() => returnSessionTaskToPending(pending, 'task_research'), 'invalid-transition');
   });
 
   it('parses every status defensively and rejects malformed persisted state', () => {

@@ -110,12 +110,17 @@ import {
   recoverSessionTaskListAfterRestart,
   projectTodoWriteSessionTasks,
   SessionTaskStateError,
+  SESSION_TASK_MAX_SUMMARY_CHARS,
   abandonSessionTask,
   appendSessionTasks,
   completeSessionTask,
   createSessionTaskList,
+  delegateSessionTask,
   reopenSessionTask,
+  returnSessionTaskToPending,
+  settleSessionTaskDelegation,
   startSessionTask,
+  type SessionTaskDelegationOutcome,
   type SessionTaskList,
   type TodoWriteSessionTaskInput,
   pickSessionFields,
@@ -1721,6 +1726,20 @@ function isTerminalAgentMessageStatus(
   return status === 'succeeded' || status === 'failed' || status === 'cancelled' || status === 'timed-out'
 }
 
+function agentMessageStatusToTaskOutcome(
+  status: AgentMessageNoticeMetadata['status'],
+): SessionTaskDelegationOutcome | undefined {
+  if (status === 'succeeded') return 'succeeded'
+  if (status === 'timed-out') return 'timeout'
+  if (status === 'failed' || status === 'cancelled') return 'failed'
+  return undefined
+}
+
+function boundedAgentMessageSummary(summary: string | undefined): string | undefined {
+  const cleaned = summary?.trim()
+  return cleaned ? cleaned.slice(0, SESSION_TASK_MAX_SUMMARY_CHARS) : undefined
+}
+
 function applyTerminalAgentMessageStatus(
   message: Message,
   notice: AgentMessageNoticeMetadata,
@@ -1912,6 +1931,7 @@ export class SessionManager implements ISessionManager {
   private taskOutputIndex: Map<string, string> = new Map()
   private readonly keepBackgroundTasksAlive = resolveKeepBackgroundTasksAlive()
   private readonly chatGoalDriver = new ChatGoalDriver()
+  private readonly scheduledAgentMessageTaskWakes = new Set<string>()
 
   private async acquireSendMessageAdmissionLock(sessionId: string): Promise<() => void> {
     const previous = this.sendMessageAdmissionLocks.get(sessionId) ?? Promise.resolve()
@@ -5272,38 +5292,215 @@ user a clickable link to where the thing now lives.`
     await sessionPersistenceQueue.flush(sessionId)
   }
 
+  private async reconcileTaskAtBackgroundDelegationStart(
+    managed: ManagedSession,
+    message: Message,
+  ): Promise<void> {
+    const notice = message.agentMessage ?? parseBackgroundAgentToolMessage(message)
+    if (!notice?.receiptId || !notice.targetAgentSlug) return
+
+    await this.withSessionAdmissionLock(managed.id, async () => {
+      const current = managed.sessionTasks
+      if (!current) return
+
+      const existing = current.items.find(item => item.delegation?.receiptId === notice.receiptId)
+      let next = current
+      if (!existing) {
+        const active = current.items.find(item => item.status === 'in_progress')
+        if (!active) return
+        next = delegateSessionTask(current, active.id, {
+          receiptId: notice.receiptId!,
+          childSessionId: notice.childSessionId,
+          targetAgentSlug: notice.targetAgentSlug!,
+          dispatchedAt: new Date(message.timestamp).toISOString(),
+        })
+        next = await this.commitSessionTaskState(managed, next, 'delegate-background-task')
+      }
+
+      const outcome = agentMessageStatusToTaskOutcome(notice.status)
+      if (!outcome) return
+      const delegated = next.items.find(item => item.delegation?.receiptId === notice.receiptId)
+      if (!delegated || delegated.status !== 'delegated') return
+      const settled = settleSessionTaskDelegation(next, delegated.id, outcome, {
+        summary: boundedAgentMessageSummary(notice.summary),
+      })
+      await this.commitSessionTaskState(managed, settled, 'settle-background-task')
+    })
+  }
+
+  private async settleTaskFromAgentMessageNotice(
+    managed: ManagedSession,
+    notice: AgentMessageNoticeMetadata,
+  ): Promise<void> {
+    const outcome = agentMessageStatusToTaskOutcome(notice.status)
+    const current = managed.sessionTasks
+    if (!outcome || !current || !notice.receiptId) return
+    const task = current.items.find(item => item.delegation?.receiptId === notice.receiptId)
+    if (!task || task.status !== 'delegated' || !task.delegation) return
+    if (notice.targetAgentSlug && task.delegation.targetAgentSlug !== notice.targetAgentSlug) {
+      sessionLog.warn('Skipped task settlement because receipt agent did not match', {
+        sessionId: managed.id,
+        receiptId: notice.receiptId,
+      })
+      return
+    }
+    const next = settleSessionTaskDelegation(current, task.id, outcome, {
+      summary: boundedAgentMessageSummary(notice.summary),
+    })
+    await this.commitSessionTaskState(managed, next, 'settle-background-task')
+  }
+
+  private async runAgentMessageTaskWake(sessionId: string, receiptId: string): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      sessionLog.info('Skipped background agent task wake', { sessionId, receiptId, reason: 'session-disposed' })
+      return
+    }
+    if (managed.isArchived) {
+      sessionLog.info('Skipped background agent task wake', { sessionId, receiptId, reason: 'session-archived' })
+      return
+    }
+    const goal = managed.chatGoal
+    if (!goal) {
+      sessionLog.info('Skipped background agent task wake', { sessionId, receiptId, reason: 'no-active-goal' })
+      return
+    }
+
+    if (goal.status === 'paused' && goal.stop?.code === 'waiting-external') {
+      try {
+        await this.resumeChatGoal(sessionId, { goalId: goal.id, revision: goal.revision }, { source: 'agent-message' })
+      } catch (error) {
+        sessionLog.info('Skipped background agent task wake', {
+          sessionId,
+          receiptId,
+          reason: error instanceof Error ? error.message : String(error),
+        })
+      }
+      return
+    }
+    if (goal.status !== 'active') {
+      sessionLog.info('Skipped background agent task wake', {
+        sessionId,
+        receiptId,
+        reason: goal.stop?.code === 'user-paused' ? 'goal-paused-by-human' : goal.stop?.code ?? 'inactive-goal',
+      })
+      return
+    }
+    if (managed.isProcessing || managed.messageQueue.length > 0) {
+      sessionLog.info('Skipped background agent task wake', { sessionId, receiptId, reason: 'session-busy' })
+      return
+    }
+
+    await this.withSessionAdmissionLock(sessionId, async () => {
+      const current = this.sessions.get(sessionId)
+      if (!current || current.isArchived || current.isProcessing || current.messageQueue.length > 0) {
+        sessionLog.info('Skipped background agent task wake after admission recheck', {
+          sessionId,
+          receiptId,
+          reason: !current
+            ? 'session-disposed'
+            : current.isArchived
+              ? 'session-archived'
+              : 'session-busy',
+        })
+        return
+      }
+      const reservation = await this.settleChatGoalAtIdle(current, 'complete', true, undefined, true)
+      if (reservation) this.dispatchChatGoalContinuation(reservation)
+      else if (current.chatGoal?.status === 'budget-limited') {
+        sessionLog.info('Skipped background agent task wake', {
+          sessionId,
+          receiptId,
+          reason: current.chatGoal.stop?.code ?? 'round-limit',
+        })
+      }
+    })
+  }
+
+  private scheduleAgentMessageTaskWake(sessionId: string, receiptId: string): void {
+    if (this.scheduledAgentMessageTaskWakes.has(sessionId)) {
+      sessionLog.info('Coalesced background agent task wake', { sessionId, receiptId })
+      return
+    }
+    this.scheduledAgentMessageTaskWakes.add(sessionId)
+    setImmediate(() => {
+      void this.runAgentMessageTaskWake(sessionId, receiptId)
+        .catch(error => sessionLog.error('Background agent task wake failed', {
+          sessionId,
+          receiptId,
+          error: error instanceof Error ? error.message : String(error),
+        }))
+        .finally(() => this.scheduledAgentMessageTaskWakes.delete(sessionId))
+    })
+  }
+
   private async deliverPassiveAgentMessage(
     managed: ManagedSession,
     message: string,
     agentMessage?: AgentMessageNoticeMetadata,
   ): Promise<void> {
-    await this.ensureMessagesLoaded(managed)
+    let wakeReceiptId: string | undefined
+    await this.withSessionAdmissionLock(managed.id, async () => {
+      await this.ensureMessagesLoaded(managed)
+      const terminal = Boolean(agentMessage && isTerminalAgentMessageStatus(agentMessage.status))
+      const classifiedNotice = agentMessage
+        ? { ...agentMessage, wakeEligible: terminal }
+        : undefined
 
-    // A terminal receipt closes the exact message_agent boundary before the
-    // notice is persisted. This is intentionally idempotent and never treats a
-    // start notice as completion.
-    clearBackgroundAgentBoundary(managed.messages, agentMessage)
+      clearBackgroundAgentBoundary(managed.messages, classifiedNotice)
+      if (terminal && classifiedNotice) {
+        try {
+          await this.settleTaskFromAgentMessageNotice(managed, classifiedNotice)
+        } catch (error) {
+          sessionLog.error('Failed to settle session task from agent receipt', {
+            sessionId: managed.id,
+            receiptId: classifiedNotice.receiptId,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
 
-    const passiveMessage: Message = {
-      id: generateMessageId(),
-      role: 'info',
-      content: message,
-      timestamp: this.monotonic(),
-      infoLevel: 'info',
-      displayIntent: 'agent-message-passive',
-      agentMessage,
-    }
+      const duplicateTerminal = terminal && classifiedNotice?.receiptId
+        ? managed.messages.some(candidate => {
+            const candidateNotice = candidate.agentMessage
+            return candidate.displayIntent === 'agent-message-passive'
+              && candidateNotice?.receiptId === classifiedNotice.receiptId
+              && Boolean(candidateNotice && isTerminalAgentMessageStatus(candidateNotice.status))
+          })
+        : false
+      if (duplicateTerminal) {
+        sessionLog.info('Skipped background agent task wake', {
+          sessionId: managed.id,
+          receiptId: classifiedNotice?.receiptId,
+          reason: 'duplicate-receipt',
+        })
+        return
+      }
 
-    managed.messages.push(passiveMessage)
-    this.persistSession(managed)
-    await this.flushSession(managed.id)
+      const passiveMessage: Message = {
+        id: generateMessageId(),
+        role: 'info',
+        content: message,
+        timestamp: this.monotonic(),
+        infoLevel: 'info',
+        displayIntent: 'agent-message-passive',
+        agentMessage: classifiedNotice,
+      }
 
-    this.sendEvent({
-      type: 'user_message',
-      sessionId: managed.id,
-      message: passiveMessage,
-      status: 'accepted',
-    }, managed.workspace.id)
+      managed.messages.push(passiveMessage)
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+
+      this.sendEvent({
+        type: 'user_message',
+        sessionId: managed.id,
+        message: passiveMessage,
+        status: 'accepted',
+      }, managed.workspace.id)
+      if (terminal && classifiedNotice?.receiptId) wakeReceiptId = classifiedNotice.receiptId
+    })
+
+    if (wakeReceiptId) this.scheduleAgentMessageTaskWake(managed.id, wakeReceiptId)
   }
 
   // Flush all pending sessions (call on app quit)
@@ -8846,6 +9043,7 @@ user a clickable link to where the thing now lives.`
       content: type === 'created' ? 'Task list created.' : 'Task list updated.',
       timestamp,
       displayIntent: 'task-event',
+      hidden: true,
       taskEvent: event,
     }
     managed.messages.push(message)
@@ -9000,6 +9198,7 @@ user a clickable link to where the thing now lives.`
   async resumeChatGoal(
     sessionId: string,
     expected: { goalId: string; revision: number },
+    options: { source?: 'user' | 'agent-message' } = {},
   ): Promise<ChatGoalState> {
     let reservation: ChatGoalReservation | undefined
     const authoritative = await this.withSessionAdmissionLock(sessionId, async () => {
@@ -9016,6 +9215,9 @@ user a clickable link to where the thing now lives.`
         throw new Error('Resolve pending authentication, approval, plan handoff, or background work before resuming this Goal')
       }
       const goal = assertChatGoalRevision(managed.chatGoal, expected.goalId, expected.revision)
+      if (options.source === 'agent-message' && goal.stop?.code !== 'waiting-external') {
+        throw new Error('Only a Goal waiting on external work can be resumed by an agent receipt')
+      }
       await this.repairChatGoalPersistenceBlock(managed)
       let next: ChatGoalState
       if (goal.stop?.code === 'ownership-changed') {
@@ -9028,9 +9230,22 @@ user a clickable link to where the thing now lives.`
         await this.commitChatGoalState(managed, next, 'created', 'New Goal activated from the transferred snapshot.')
       } else {
         next = resumeChatGoalState(goal)
-        await this.commitChatGoalState(managed, next, 'resumed', 'Goal resumed by the user.')
+        await this.commitChatGoalState(
+          managed,
+          next,
+          'resumed',
+          options.source === 'agent-message'
+            ? 'Goal resumed after background work completed.'
+            : 'Goal resumed by the user.',
+        )
       }
-      reservation = await this.settleChatGoalAtIdle(managed, 'complete', true, undefined)
+      reservation = await this.settleChatGoalAtIdle(
+        managed,
+        'complete',
+        true,
+        undefined,
+        options.source === 'agent-message',
+      )
       return managed.chatGoal ?? next
     })
     if (reservation) this.dispatchChatGoalContinuation(reservation)
@@ -11533,6 +11748,7 @@ user a clickable link to where the thing now lives.`
     reason: 'complete' | 'interrupted' | 'error' | 'timeout',
     didReceiveNewFinalMessage: boolean,
     settledTurn: ChatGoalTurnContext | undefined,
+    externalReceiptWake = false,
   ): Promise<ChatGoalReservation | undefined> {
     if (managed.isProcessing || managed.messageQueue.length > 0) return undefined
     const goal = managed.chatGoal
@@ -11546,7 +11762,8 @@ user a clickable link to where the thing now lives.`
     const hasPendingApproval = Array.from(this.pendingPermissionRequests.values()).some(request => request.sessionId === managed.id)
     const hasPendingPlan = Boolean(getStoredPendingPlanExecution(managed.workspace.rootPath, managed.id))
     const hasPendingBackgroundWork = managed.messages.some(message => message.role === 'tool' && message.toolStatus === 'backgrounded')
-    const hadNewToolFailure = getFailedToolUseCount(managed) > (settledTurn?.failedToolCountAtStart ?? 0)
+    const hadNewToolFailure = !externalReceiptWake
+      && getFailedToolUseCount(managed) > (settledTurn?.failedToolCountAtStart ?? 0)
     const hasUnresolvedBoundary = hasPendingAuth
       || hasPendingApproval
       || hasPendingPlan
@@ -12446,6 +12663,38 @@ user a clickable link to where the thing now lives.`
         // before this tool result arrived, reconcile against the terminal
         // passive notice already in the session instead of reopening it.
         reconcileBackgroundAgentToolMessage(managed.messages, resolvedToolMessage)
+
+        if (isMessageAgentToolName(resolvedToolMessage.toolName) && resolvedToolMessage.agentMessage?.receiptId) {
+          try {
+            await this.reconcileTaskAtBackgroundDelegationStart(managed, resolvedToolMessage)
+          } catch (error) {
+            // Task metadata is advisory; delegation itself remains valid.
+            sessionLog.error('Failed to link background delegation to session task', {
+              sessionId: managed.id,
+              toolUseId: event.toolUseId,
+              receiptId: resolvedToolMessage.agentMessage.receiptId,
+              error: error instanceof Error ? error.message : String(error),
+            })
+          }
+        }
+
+        if (isMessageAgentToolName(resolvedToolMessage.toolName) && inferredError && !wasAlreadyComplete) {
+          try {
+            await this.withSessionAdmissionLock(managed.id, async () => {
+              const current = managed.sessionTasks
+              const active = current?.items.find(item => item.status === 'in_progress')
+              if (!current || !active) return
+              const next = returnSessionTaskToPending(current, active.id)
+              await this.commitSessionTaskState(managed, next, 'delegation-refused')
+            })
+          } catch (error) {
+            sessionLog.error('Failed to return task to pending after delegation refusal', {
+              sessionId: managed.id,
+              toolUseId: event.toolUseId,
+              error: error instanceof Error ? error.message : String(error),
+            })
+          }
+        }
 
         const resolvedToolName = resolvedToolMessage.toolName ?? toolName
         if (resolvedToolName === 'TodoWrite' && !inferredError && !wasAlreadyComplete) {

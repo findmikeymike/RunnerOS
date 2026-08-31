@@ -498,7 +498,7 @@ Ordered so that no slice ships a deadlock.
 
 **Slice 5 — UI.** Point `turn-utils` at session state; render `delegated` items and outcomes. **Implemented 2026-08-30.**
 
-**Slice 6 — Wake protocol.** Notice classification (on `agentMessage.status`), receipt-to-item resolution keyed by `receiptId` with `targetAgentSlug` as a cross-check, driver wake via the entry paths above, dedup, coalescing, bounds. **Depends on Slice 0 and must ship before Slice 7.**
+**Slice 6 — Wake protocol.** Notice classification (on `agentMessage.status`), receipt-to-item resolution keyed by `receiptId` with `targetAgentSlug` as a cross-check, driver wake via the entry paths above, dedup, coalescing, bounds. **Depends on Slice 0 and must ship before Slice 7. Implemented 2026-08-30.**
 
 **Slice 7 — Goal integration.** Completion enforcement, no-progress signal, task list in the hidden continuation prompt.
 

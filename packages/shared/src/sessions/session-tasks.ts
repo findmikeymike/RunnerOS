@@ -487,6 +487,28 @@ export function settleSessionTaskDelegation(
   }, options.now);
 }
 
+/** Return an active task to pending when delegation was refused before a receipt existed. */
+export function returnSessionTaskToPending(
+  list: SessionTaskList,
+  taskId: string,
+  now?: string,
+): SessionTaskList {
+  return mutateTaskList(list, items => {
+    const index = findTaskIndex(items, taskId);
+    const task = items[index]!;
+    if (task.status !== 'in_progress') {
+      fail('invalid-transition', 'Only an in-progress task can return to pending');
+    }
+    items[index] = {
+      ...task,
+      status: 'pending',
+      delegation: undefined,
+      updatedAt: nowIso(now),
+    };
+    return items;
+  }, now, 'native-tool');
+}
+
 /**
  * Restore advisory task state after a process restart. Work that was only
  * claimed by the interrupted process becomes pending again; delegated work is

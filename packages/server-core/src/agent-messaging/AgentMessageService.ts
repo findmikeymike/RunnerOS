@@ -405,6 +405,8 @@ export class AgentMessageService {
         childSessionId: receipt.childSessionId,
         targetAgentSlug: receipt.targetAgentSlug,
         status: receipt.status,
+        summary: receipt.result?.summary ?? (receipt.error ? `${receipt.error.code}: ${receipt.error.message}` : undefined),
+        wakeEligible: true,
       });
     } catch {
       // Notification is best-effort; the receipt is the durable source of truth.
@@ -429,6 +431,7 @@ export class AgentMessageService {
         childSessionId: receipt.childSessionId,
         targetAgentSlug: receipt.targetAgentSlug,
         status: 'running',
+        wakeEligible: false,
       });
     } catch {
       // Notification is best-effort; the receipt is the durable source of truth.

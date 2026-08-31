@@ -137,6 +137,7 @@ export {
   reopenSessionTask,
   delegateSessionTask,
   settleSessionTaskDelegation,
+  returnSessionTaskToPending,
   recoverSessionTaskListAfterRestart,
   projectTodoWriteSessionTasks,
 } from './session-tasks.ts';

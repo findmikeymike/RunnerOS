@@ -250,6 +250,10 @@ export interface AgentMessageNoticeMetadata {
   childSessionId?: string;
   targetAgentSlug?: string;
   status?: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'timed-out';
+  /** Terminal child result/error summary for parent task resolution. */
+  summary?: string;
+  /** Host classification; running notices are never wake eligible. */
+  wakeEligible?: boolean;
 }
 
 export interface ChatGoalEventMetadata {

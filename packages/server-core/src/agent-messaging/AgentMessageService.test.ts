@@ -293,6 +293,7 @@ describe('AgentMessageService', () => {
       childSessionId: 'child-1',
       targetAgentSlug: 'reviewer',
       status: 'running',
+      wakeEligible: false,
     });
 
     resolveSend?.();
@@ -306,6 +307,7 @@ describe('AgentMessageService', () => {
       childSessionId: 'child-1',
       targetAgentSlug: 'reviewer',
       status: 'succeeded',
+      wakeEligible: true,
     });
   });
 });

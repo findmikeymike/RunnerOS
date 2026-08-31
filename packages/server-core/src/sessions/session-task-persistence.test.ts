@@ -57,7 +57,9 @@ describe('SessionManager task-list persistence', () => {
     }).commitSessionTaskState(managed, next, 'create')
 
     expect(persistedAtEvent).toBe(true)
+    expect(managed.messages.at(-1)?.hidden).toBe(true)
     expect(loadSession(root, managed.id)?.messages.at(-1)?.taskEvent?.snapshot).toEqual(next)
+    expect(loadSession(root, managed.id)?.messages.at(-1)?.hidden).toBe(true)
   })
 
   it('applies incremental tool operations without replacing authoritative ids', async () => {
