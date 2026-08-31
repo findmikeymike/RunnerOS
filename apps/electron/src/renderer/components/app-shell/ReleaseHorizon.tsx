@@ -210,7 +210,6 @@ export function ReleaseHorizon({
             const monthTimelineEntries = timelineEntries.filter((entry) => entry.date.startsWith(`${month.key}-`))
             const monthPlan = plan.months[month.key]
             const displayTitle = monthPlan?.title || monthCampaigns[0]?.name
-            const displayEvent: ArtistReleaseEventType | undefined = monthPlan?.event || (monthCampaigns.length > 0 ? 'release' : undefined)
             const populated = Boolean(displayTitle || monthPlan?.plan || monthPlan?.keyGoal || monthTimelineEntries.length || activeCampaigns.length)
             return (
               <button
@@ -229,9 +228,14 @@ export function ReleaseHorizon({
                   <span className="text-[8px] text-white/20">{month.year}</span>
                 </span>
                 {displayTitle ? (
-                  <span className="absolute inset-x-2 top-1/2 flex -translate-y-1/2 items-center justify-center gap-1.5 text-center">
-                    {displayEvent ? <EventMarker event={displayEvent} /> : null}
-                    <span className="line-clamp-2 text-[9px] font-medium leading-3 text-white/76">{displayTitle}</span>
+                  <span
+                    title={displayTitle}
+                    className={cn(
+                      'absolute inset-x-2 truncate text-left text-[9px] font-normal leading-3 text-white/66',
+                      activeCampaigns.length > 0 ? 'bottom-[17px]' : 'bottom-2',
+                    )}
+                  >
+                    {displayTitle}
                   </span>
                 ) : null}
                 {monthCampaigns.length > (monthPlan ? 0 : 1) ? (
