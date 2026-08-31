@@ -71,6 +71,7 @@ import {
 import {
   MISSION_BRIEF_CONTEXT_SLUG,
   emptyMissionBrief,
+  missionCampaignWindow,
   parseMissionBriefDoc,
   type MissionBrief,
 } from '@/lib/mission-brief'
@@ -94,6 +95,7 @@ import {
   type ReleaseBoardItemStatus,
 } from '@/lib/release-board'
 import { MissionBriefDrawer } from './MissionBriefDrawer'
+import { ReleaseCountdownDial } from './ReleaseCountdownDial'
 
 interface ArtistCommandCenterHomeProps {
   workspaceId: string
@@ -249,6 +251,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
   )
   const title = mission.title || 'Untitled Campaign'
   const focus = mission.timeline || mission.releaseDate || (hasMission ? mission.missionType || 'Campaign active' : 'No brief yet')
+  const campaignWindow = React.useMemo(() => missionCampaignWindow(mission), [mission])
   const refreshAssetManifest = React.useCallback(async () => {
     if (!workspaceId) return
     const manifest = await window.electronAPI.getMissionAssetManifest(workspaceId)
@@ -634,6 +637,14 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
             </>
           }
         />
+
+        <div className="flex justify-end px-2 py-1 sm:px-4">
+          <ReleaseCountdownDial
+            releaseDate={campaignWindow.releaseDate}
+            campaignStartDate={campaignWindow.startDate}
+            onClick={() => setDrawerOpen(true)}
+          />
+        </div>
 
         <ReleaseBoardRow
           board={releaseBoard}

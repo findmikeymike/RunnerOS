@@ -195,6 +195,18 @@ describe('Artist OS persistent shell chrome', () => {
     }
   })
 
+  test('shows the onboarded campaign release countdown below the hero', () => {
+    const campaign = readFileSync(join(import.meta.dir, '..', 'ArtistCommandCenterHome.tsx'), 'utf8')
+    const header = campaign.indexOf('<CompactPageHeader')
+    const countdown = campaign.indexOf('<ReleaseCountdownDial')
+    const board = campaign.indexOf('<ReleaseBoardRow')
+
+    expect(campaign).toContain('missionCampaignWindow(mission)')
+    expect(campaign).toContain('releaseDate={campaignWindow.releaseDate}')
+    expect(countdown).toBeGreaterThan(header)
+    expect(board).toBeGreaterThan(countdown)
+  })
+
   test('creates an empty Lab song from the Songs page before opening the Pad', () => {
     const songs = readFileSync(join(import.meta.dir, '..', 'LabSongsPage.tsx'), 'utf8')
 
