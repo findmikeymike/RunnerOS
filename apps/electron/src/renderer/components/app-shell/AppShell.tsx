@@ -41,6 +41,14 @@ import {
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
 import { TopBar } from "./TopBar"
+import { ArtistGuideDialog } from "./ArtistGuideDialog"
+import {
+  defaultArtistGuideTab,
+  deriveArtistGuideAiReadiness,
+  type ArtistGuideActionId,
+  type ArtistGuideTabId,
+  type ArtistGuideWorkspaceKind,
+} from "./artist-guide-content"
 import { LabSparkDock } from "./LabSparkDock"
 import { WorkspaceRail } from "./WorkspaceRail"
 import { McpIcon } from "../icons/McpIcon"
@@ -157,7 +165,14 @@ import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
 import { useOutputs } from "@/hooks/useOutputs"
-import { findArtistHQWorkspace, isArtistHQWorkspace as getIsArtistHQWorkspace, isLabWorkspace as getIsLabWorkspace } from "@/lib/artist-workspace"
+import {
+  findArtistHQWorkspace,
+  findPrimaryCampaignWorkspace,
+  findPrimaryLabWorkspace,
+  isArtistCampaignWorkspace,
+  isArtistHQWorkspace as getIsArtistHQWorkspace,
+  isLabWorkspace as getIsLabWorkspace,
+} from "@/lib/artist-workspace"
 import { getArtistHqNavActiveState, isConciergeSessionLike, isReusableConciergeSession } from "@/lib/artist-hq-nav-state"
 import { openAgentSessionComposer } from "@/lib/run-agent"
 import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
@@ -590,6 +605,13 @@ function AppShellContent({
   const [showWhatsNew, setShowWhatsNew] = React.useState(false)
   const [releaseNotesContent, setReleaseNotesContent] = React.useState('')
   const [hasUnseenReleaseNotes, setHasUnseenReleaseNotes] = React.useState(false)
+  const [artistGuideOpen, setArtistGuideOpen] = React.useState(false)
+  const [artistGuideTab, setArtistGuideTab] = React.useState<ArtistGuideTabId>('general')
+  const [artistGuidePreferredTab, setArtistGuidePreferredTab] = React.useState<ArtistGuideTabId | null>(null)
+  const [pendingArtistGuideAction, setPendingArtistGuideAction] = React.useState<{
+    action: ArtistGuideActionId
+    workspaceId: string
+  } | null>(null)
 
   // Check for unseen release notes on mount
   useEffect(() => {
@@ -871,6 +893,24 @@ function AppShellContent({
     () => getIsArtistHQWorkspace(activeWorkspace, workspaces),
     [activeWorkspace, workspaces],
   )
+  const artistGuideHqWorkspace = React.useMemo(
+    () => findArtistHQWorkspace(workspaces),
+    [workspaces],
+  )
+  const artistGuideCampaignWorkspace = React.useMemo(
+    () => isArtistCampaignWorkspace(activeWorkspace) ? activeWorkspace : findPrimaryCampaignWorkspace(workspaces),
+    [activeWorkspace, workspaces],
+  )
+  const artistGuideLabWorkspace = React.useMemo(
+    () => getIsLabWorkspace(activeWorkspace, workspaces) ? activeWorkspace : findPrimaryLabWorkspace(workspaces),
+    [activeWorkspace, workspaces],
+  )
+  const artistGuideWorkspaceKind = React.useMemo<ArtistGuideWorkspaceKind>(() => {
+    if (isArtistHQWorkspace) return 'hq'
+    if (getIsLabWorkspace(activeWorkspace, workspaces)) return 'lab'
+    if (isArtistCampaignWorkspace(activeWorkspace)) return 'campaign'
+    return 'general'
+  }, [activeWorkspace, isArtistHQWorkspace, workspaces])
 
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
@@ -1933,6 +1973,169 @@ function AppShellContent({
     navigate(routes.view.settings(subpage))
   }, [])
 
+  const artistGuideAvailableActions = React.useMemo(() => {
+    const actions = new Set<ArtistGuideActionId>([
+      'settings.ai',
+      'settings.connections',
+      'settings.social-accounts',
+      'settings.spotify',
+      'settings.ad-accounts',
+      'settings.permissions',
+    ])
+    const contextualWorkspace = artistGuideTab === 'hq'
+      ? artistGuideHqWorkspace
+      : artistGuideTab === 'campaigns'
+        ? artistGuideCampaignWorkspace
+        : activeWorkspace
+    if (contextualWorkspace) {
+      actions.add('workspace.workers')
+      actions.add('workspace.workflows')
+      actions.add('workspace.automations')
+      actions.add('workspace.command')
+    }
+    if (activeWorkspaceId) actions.add('app.outputs')
+    if (artistGuideHqWorkspace) {
+      actions.add('hq.home')
+      actions.add('hq.people')
+      actions.add('hq.profile')
+      actions.add('hq.voice')
+      actions.add('hq.research')
+      actions.add('hq.branding')
+      actions.add('hq.vault')
+    }
+    if (artistGuideCampaignWorkspace) {
+      actions.add('campaign.home')
+      actions.add('campaign.plan')
+      actions.add('campaign.essentials')
+      actions.add('campaign.release-kit')
+    }
+    if (artistGuideLabWorkspace) actions.add('lab.home')
+    return actions
+  }, [activeWorkspace, activeWorkspaceId, artistGuideCampaignWorkspace, artistGuideHqWorkspace, artistGuideLabWorkspace, artistGuideTab])
+
+  const openArtistGuide = React.useCallback(() => {
+    setArtistGuideTab(artistGuidePreferredTab ?? defaultArtistGuideTab(artistGuideWorkspaceKind))
+    setArtistGuideOpen(true)
+  }, [artistGuidePreferredTab, artistGuideWorkspaceKind])
+
+  const changeArtistGuideTab = React.useCallback((tab: ArtistGuideTabId) => {
+    setArtistGuideTab(tab)
+    setArtistGuidePreferredTab(tab)
+  }, [])
+
+  const handleArtistGuideAction = React.useCallback(async (action: ArtistGuideActionId) => {
+    setArtistGuideOpen(false)
+
+    const settingsByAction: Partial<Record<ArtistGuideActionId, SettingsSubpage>> = {
+      'settings.ai': 'ai',
+      'settings.connections': 'secrets',
+      'settings.social-accounts': 'social-accounts',
+      'settings.spotify': 'spotify',
+      'settings.ad-accounts': 'ad-accounts',
+      'settings.permissions': 'permissions',
+    }
+    const settingsTarget = settingsByAction[action]
+    if (settingsTarget) {
+      handleSettingsClick(settingsTarget)
+      return
+    }
+
+    const isContextualWorkspaceAction = action === 'workspace.workers'
+      || action === 'workspace.workflows'
+      || action === 'workspace.automations'
+      || action === 'workspace.command'
+    const contextualWorkspace = artistGuideTab === 'hq'
+      ? artistGuideHqWorkspace
+      : artistGuideTab === 'campaigns'
+        ? artistGuideCampaignWorkspace
+        : activeWorkspace
+    const targetWorkspace = action.startsWith('hq.')
+      ? artistGuideHqWorkspace
+      : action.startsWith('campaign.')
+        ? artistGuideCampaignWorkspace
+        : action === 'lab.home'
+          ? artistGuideLabWorkspace
+          : isContextualWorkspaceAction
+            ? contextualWorkspace
+            : activeWorkspace
+    if (targetWorkspace && targetWorkspace.id !== activeWorkspaceId) {
+      setPendingArtistGuideAction({ action, workspaceId: targetWorkspace.id })
+      try {
+        await onSelectWorkspace(targetWorkspace.id)
+      } catch (error) {
+        setPendingArtistGuideAction(null)
+        toast.error('Could not open that workspace', {
+          description: error instanceof Error ? error.message : String(error),
+        })
+      }
+      return
+    }
+
+    const hqTabByAction: Partial<Record<ArtistGuideActionId, 'home' | 'profile' | 'voice' | 'network' | 'research' | 'branding'>> = {
+      'hq.home': 'home',
+      'hq.people': 'network',
+      'hq.profile': 'profile',
+      'hq.voice': 'voice',
+      'hq.research': 'research',
+      'hq.branding': 'branding',
+    }
+    const hqTab = hqTabByAction[action]
+    if (hqTab) {
+      handleArtistHQNavClick(hqTab)
+      return
+    }
+
+    if (action === 'hq.vault') {
+      if (!artistGuideHqWorkspace) return
+      navigate(routes.view.vault())
+      return
+    }
+
+    const campaignRouteByAction: Partial<Record<ArtistGuideActionId, ReturnType<typeof routes.view.campaign>>> = {
+      'campaign.home': routes.view.campaign(),
+      'campaign.plan': routes.view.campaign('calendar'),
+      'campaign.essentials': routes.view.campaign('release-board'),
+      'campaign.release-kit': routes.view.campaign('release-kit'),
+    }
+    const campaignRoute = campaignRouteByAction[action]
+    if (campaignRoute) {
+      if (!artistGuideCampaignWorkspace) return
+      if (window.location.hash.startsWith('#artist-hq/')) {
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+        setArtistHqHash('')
+      }
+      setSessionsNavExpanded(false)
+      navigate(campaignRoute)
+      return
+    }
+
+    if (action === 'lab.home') {
+      if (!artistGuideLabWorkspace) return
+      if (window.location.hash.startsWith('#artist-hq/')) {
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+        setArtistHqHash('')
+      }
+      setSessionsNavExpanded(false)
+      navigate(routes.view.lab())
+      return
+    }
+
+    if (!contextualWorkspace) return
+
+    if (action === 'workspace.workers') navigate(routes.view.agents())
+    else if (action === 'workspace.workflows') navigate(routes.view.workflows())
+    else if (action === 'workspace.automations') navigate(routes.view.automations())
+    else if (action === 'app.outputs') navigate(routes.view.outputs())
+    else if (action === 'workspace.command') await handleWorkChatClick()
+  }, [activeWorkspace, activeWorkspaceId, artistGuideCampaignWorkspace, artistGuideHqWorkspace, artistGuideLabWorkspace, artistGuideTab, handleArtistHQNavClick, handleSettingsClick, handleWorkChatClick, onSelectWorkspace])
+
+  React.useEffect(() => {
+    if (!pendingArtistGuideAction || pendingArtistGuideAction.workspaceId !== activeWorkspaceId) return
+    const { action } = pendingArtistGuideAction
+    setPendingArtistGuideAction(null)
+    void handleArtistGuideAction(action)
+  }, [activeWorkspaceId, handleArtistGuideAction, pendingArtistGuideAction])
+
   // Handler for What's New overlay
   const handleWhatsNewClick = useCallback(async () => {
     const content = await window.electronAPI.getReleaseNotes()
@@ -2913,6 +3116,7 @@ function AppShellContent({
           onOpenSkills={handleSkillsClick}
           onOpenWorkspaceContext={() => navigate(routes.view.workspaceContext())}
           onOpenOutputs={handleOutputsClick}
+          onOpenUserGuide={openArtistGuide}
           onOpenKeyboardShortcuts={onOpenKeyboardShortcuts}
           onOpenStoredUserPreferences={onOpenStoredUserPreferences}
           onBack={goBack}
@@ -2938,6 +3142,17 @@ function AppShellContent({
           showHistoryButtons={!usesWorkspaceHeader}
           isCompact={isAutoCompact}
         />
+      {usesWorkspaceHeader ? (
+        <ArtistGuideDialog
+          open={artistGuideOpen}
+          activeTab={artistGuideTab}
+          aiReadiness={deriveArtistGuideAiReadiness(contextValue.llmConnections)}
+          availableActions={artistGuideAvailableActions}
+          onOpenChange={setArtistGuideOpen}
+          onTabChange={changeArtistGuideTab}
+          onAction={handleArtistGuideAction}
+        />
+      ) : null}
       {isLabWorkspace && activeWorkspaceId ? (
         <LabSparkDock workspaceId={activeWorkspaceId} attachToCurrentSong={labPadActive} />
       ) : null}

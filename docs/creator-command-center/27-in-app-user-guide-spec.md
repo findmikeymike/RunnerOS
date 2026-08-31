@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: implemented
 owner: agent
 last_verified: 2026-08-31
 source_of_truth: true

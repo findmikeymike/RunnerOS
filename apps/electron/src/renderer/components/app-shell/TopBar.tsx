@@ -148,6 +148,7 @@ interface TopBarProps {
   onOpenSkills: () => void
   onOpenWorkspaceContext: () => void
   onOpenOutputs: () => void
+  onOpenUserGuide: () => void
   onOpenKeyboardShortcuts: () => void
   onOpenStoredUserPreferences: () => void
   onBack: () => void
@@ -177,6 +178,7 @@ export function TopBar({
   onOpenSkills,
   onOpenWorkspaceContext,
   onOpenOutputs,
+  onOpenUserGuide,
   onOpenKeyboardShortcuts,
   onOpenStoredUserPreferences,
   onBack,
@@ -502,48 +504,66 @@ export function TopBar({
           </StyledDropdownMenuContent>
         </DropdownMenu>
 
-        {/* Help button */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <TopBarButton aria-label={t("menu.helpAndDocs")} className="h-[26px] w-[26px] rounded-lg">
-              <Icons.HelpCircle className="h-4 w-4" strokeWidth={1.5} />
-            </TopBarButton>
-          </DropdownMenuTrigger>
-          <StyledDropdownMenuContent align="end" minWidth="min-w-48">
-            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('sources'))}>
-              <Icons.DatabaseZap className="h-3.5 w-3.5" />
-              <span className="flex-1">{t("sidebar.sources")}</span>
-              <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
-            </StyledDropdownMenuItem>
-            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('skills'))}>
-              <Icons.Zap className="h-3.5 w-3.5" />
-              <span className="flex-1">{t("sidebar.skills")}</span>
-              <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
-            </StyledDropdownMenuItem>
-            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('statuses'))}>
-              <Icons.CheckCircle2 className="h-3.5 w-3.5" />
-              <span className="flex-1">{t("sidebar.statuses")}</span>
-              <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
-            </StyledDropdownMenuItem>
-            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('permissions'))}>
-              <Icons.Settings className="h-3.5 w-3.5" />
-              <span className="flex-1">{t("settings.permissions.title")}</span>
-              <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
-            </StyledDropdownMenuItem>
-            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('automations'))}>
-              <Icons.Webhook className="h-3.5 w-3.5" />
-              <span className="flex-1">{t("sidebar.automations")}</span>
-              <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
-            </StyledDropdownMenuItem>
-            <StyledDropdownMenuSeparator />
-            <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://github.com/findmikeymike/RunnerOS')}>
-              <Icons.ExternalLink className="h-3.5 w-3.5" />
-              <span className="flex-1">{t("menu.allDocumentation")}</span>
-            </StyledDropdownMenuItem>
-          </StyledDropdownMenuContent>
-        </DropdownMenu>
+        {/* Artist OS uses the in-app essentials guide. Other variants retain the docs menu. */}
+        {RENDERER_PRODUCT_VARIANT === 'artist-os' ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <TopBarButton onClick={onOpenUserGuide} aria-label="Open Artist OS Guide" className="h-[26px] w-[26px] rounded-lg">
+                <Icons.HelpCircle className="h-4 w-4" strokeWidth={1.5} />
+              </TopBarButton>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Artist OS Guide</TooltipContent>
+          </Tooltip>
+        ) : (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <TopBarButton aria-label={t("menu.helpAndDocs")} className="h-[26px] w-[26px] rounded-lg">
+                <Icons.HelpCircle className="h-4 w-4" strokeWidth={1.5} />
+              </TopBarButton>
+            </DropdownMenuTrigger>
+            <StyledDropdownMenuContent align="end" minWidth="min-w-48">
+              <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('sources'))}>
+                <Icons.DatabaseZap className="h-3.5 w-3.5" />
+                <span className="flex-1">{t("sidebar.sources")}</span>
+                <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
+              </StyledDropdownMenuItem>
+              <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('skills'))}>
+                <Icons.Zap className="h-3.5 w-3.5" />
+                <span className="flex-1">{t("sidebar.skills")}</span>
+                <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
+              </StyledDropdownMenuItem>
+              <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('statuses'))}>
+                <Icons.CheckCircle2 className="h-3.5 w-3.5" />
+                <span className="flex-1">{t("sidebar.statuses")}</span>
+                <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
+              </StyledDropdownMenuItem>
+              <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('permissions'))}>
+                <Icons.Settings className="h-3.5 w-3.5" />
+                <span className="flex-1">{t("settings.permissions.title")}</span>
+                <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
+              </StyledDropdownMenuItem>
+              <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('automations'))}>
+                <Icons.Webhook className="h-3.5 w-3.5" />
+                <span className="flex-1">{t("sidebar.automations")}</span>
+                <Icons.ExternalLink className="h-3 w-3 text-muted-foreground" />
+              </StyledDropdownMenuItem>
+              <StyledDropdownMenuSeparator />
+              <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://github.com/findmikeymike/RunnerOS')}>
+                <Icons.ExternalLink className="h-3.5 w-3.5" />
+                <span className="flex-1">{t("menu.allDocumentation")}</span>
+              </StyledDropdownMenuItem>
+            </StyledDropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
       )}
+      {isCompact && RENDERER_PRODUCT_VARIANT === 'artist-os' ? (
+        <div className="ml-auto flex shrink-0 items-center pr-3">
+          <TopBarButton onClick={onOpenUserGuide} aria-label="Open Artist OS Guide" className="h-[26px] w-[26px] rounded-lg">
+            <Icons.HelpCircle className="h-4 w-4" strokeWidth={1.5} />
+          </TopBarButton>
+        </div>
+      ) : null}
       </div>
     </div>
   )
