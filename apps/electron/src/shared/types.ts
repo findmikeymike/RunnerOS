@@ -1136,6 +1136,7 @@ export interface ElectronAPI {
   mutateScheduledWork(workspaceId: string, mutation: ScheduledWorkMutation): Promise<ScheduledWorkMutationResult>
   scheduleCampaignWork(workspaceId: string, input: ScheduleCampaignWorkInput): Promise<ScheduleCampaignWorkResult>
   authorizeReleaseKitSocial(workspaceId: string, input: AuthorizeReleaseKitSocialInput): Promise<AuthorizeReleaseKitSocialResult>
+  reauthorizeReleaseKitSocial(workspaceId: string, input: import('@craft-agent/shared/scheduled-work').ReauthorizeReleaseKitSocialInput): Promise<import('@craft-agent/shared/scheduled-work').ReauthorizeReleaseKitSocialResult>
   scheduleCampaignWorkChain(workspaceId: string, input: ScheduleCampaignChainInput): Promise<ScheduleCampaignChainResult>
   cancelCampaignWork(workspaceId: string, input: CancelCampaignWorkInput): Promise<CancelCampaignWorkResult>
   decideCampaignWork(workspaceId: string, input: DecideCampaignWorkInput): Promise<DecideCampaignWorkResult>

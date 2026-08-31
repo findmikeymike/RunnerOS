@@ -378,6 +378,33 @@ export interface AuthorizeReleaseKitSocialInput {
 
 export type AuthorizeReleaseKitSocialResult = ScheduleCampaignWorkResult
 
+export type ScheduledSocialDefinitionChangeField = 'title' | 'asset' | 'account' | 'caption' | 'options' | 'time' | 'timezone'
+
+export interface ScheduledSocialDefinitionChange {
+  field: ScheduledSocialDefinitionChangeField
+  before: string
+  after: string
+}
+
+export interface ReauthorizeReleaseKitSocialInput {
+  orderId: string
+  calendarItemId: string
+  expectedUpdatedAt: string
+  releaseKitItemId: string
+  title: string
+  platform: string
+  profileId: string
+  accountSetId?: string
+  caption: string
+  platformOptions?: Record<string, unknown>
+  startAt: string
+  timezone: string
+}
+
+export interface ReauthorizeReleaseKitSocialResult extends ScheduleCampaignWorkResult {
+  changes: ScheduledSocialDefinitionChange[]
+}
+
 export interface ScheduleHqWorkInput {
   requestId: string
   orders: ScheduledWorkOrder[]

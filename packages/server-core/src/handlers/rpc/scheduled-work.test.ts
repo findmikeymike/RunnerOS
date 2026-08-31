@@ -359,6 +359,49 @@ describe('scheduled-work RPC handler', () => {
     expect(readScheduledWork().items).toHaveLength(0)
   })
 
+  test('reauthorizeReleaseKitSocial reports exact changes and updates the existing linked records', async () => {
+    seedEmptyCampaignCalendar()
+    const sourcePath = `${workspaceRoot}/source.png`
+    writeFileSync(sourcePath, 'approved-image')
+    const released = materializeReleaseKitItem(workspaceRoot, {
+      workspaceId: workspace.id, campaignId: workspace.id,
+      source: { type: 'upload', originalFileName: 'source.png' }, sourcePath,
+      category: 'artwork', subtype: 'cover-art', title: 'Release cover', promotedBy: 'user',
+    })
+    const alternatePath = `${workspaceRoot}/alternate.png`
+    writeFileSync(alternatePath, 'approved-alternate-image')
+    const alternate = materializeReleaseKitItem(workspaceRoot, {
+      workspaceId: workspace.id, campaignId: workspace.id,
+      source: { type: 'upload', originalFileName: 'alternate.png' }, sourcePath: alternatePath,
+      category: 'images', subtype: 'social-image', title: 'Alternate image', promotedBy: 'user',
+    })
+    const { invoke } = await registerServer()
+    const firstStart = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    const created = await invoke(RPC_CHANNELS.scheduledWork.AUTHORIZE_RELEASE_KIT_SOCIAL, workspace.id, {
+      requestId: 'release-cover-edit-1', releaseKitItemId: released.item.id,
+      title: 'First title', platform: 'instagram', profileId: 'artist-main', caption: 'First caption',
+      startAt: firstStart, timezone: 'America/Chicago',
+    }) as { order: ScheduledWorkOrder; calendarItem: { id: string } }
+    const secondStart = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+
+    const result = await invoke(RPC_CHANNELS.scheduledWork.REAUTHORIZE_RELEASE_KIT_SOCIAL, workspace.id, {
+      orderId: created.order.id, calendarItemId: created.calendarItem.id, expectedUpdatedAt: created.order.updatedAt,
+      releaseKitItemId: alternate.item.id, title: 'Second title', platform: 'x', profileId: 'artist-alt', accountSetId: 'social-set',
+      caption: 'Second caption', platformOptions: { replyControl: 'mentioned' }, startAt: secondStart, timezone: 'UTC',
+    }) as { order: ScheduledWorkOrder; changes: Array<{ field: string; before: string; after: string }> }
+
+    expect(result.changes.map((change) => change.field)).toEqual(['title', 'asset', 'account', 'caption', 'options', 'time', 'timezone'])
+    expect(result.order).toMatchObject({
+      id: created.order.id, title: 'Second title', startAt: secondStart,
+      execution: { type: 'social-publish', platform: 'x', profileId: 'artist-alt', caption: 'Second caption' },
+      authorization: { authorizedBy: { type: 'user', source: 'calendar-ui' } },
+    })
+    expect(result.order.authorization?.payloadDigest).not.toBe(created.order.authorization?.payloadDigest)
+    expect(readScheduledWork().items).toHaveLength(1)
+    expect(readCampaignCalendar().items).toHaveLength(1)
+    expect(readCampaignCalendar().items[0]?.scheduledWorkId).toBe(created.order.id)
+  })
+
   test('mutate upserts scheduled-work and broadcasts workspace context changes', async () => {
     const { invoke, pushCalls } = await registerServer()
 

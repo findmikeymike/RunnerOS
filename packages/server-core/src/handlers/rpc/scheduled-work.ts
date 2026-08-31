@@ -47,6 +47,9 @@ import {
   type ApproveCampaignSocialWorkResult,
   type AuthorizeReleaseKitSocialInput,
   type AuthorizeReleaseKitSocialResult,
+  type ReauthorizeReleaseKitSocialInput,
+  type ReauthorizeReleaseKitSocialResult,
+  type ScheduledSocialDefinitionChange,
   type ScheduledWorkAuthorization,
   type ScheduleHqWorkInput,
   type ScheduleHqWorkResult,
@@ -79,6 +82,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.scheduledWork.MUTATE,
   RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN,
   RPC_CHANNELS.scheduledWork.AUTHORIZE_RELEASE_KIT_SOCIAL,
+  RPC_CHANNELS.scheduledWork.REAUTHORIZE_RELEASE_KIT_SOCIAL,
   RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN_CHAIN,
   RPC_CHANNELS.scheduledWork.CANCEL_CAMPAIGN,
   RPC_CHANNELS.scheduledWork.DECIDE_CAMPAIGN,
@@ -521,6 +525,107 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
   )
 
   server.handle(
+    RPC_CHANNELS.scheduledWork.REAUTHORIZE_RELEASE_KIT_SOCIAL,
+    async (ctx, workspaceId: string, input: ReauthorizeReleaseKitSocialInput): Promise<ReauthorizeReleaseKitSocialResult> => {
+      const rootPath = resolveRootPath(workspaceId)
+      assertTeamPermission(rootPath, 'files.write')
+      assertTeamPermission(rootPath, 'social.publish.approve')
+      return withReleaseKitLockAsync(rootPath, () => withWorkspaceContextLock(rootPath, async () => {
+        const scheduled = readScheduledWork(rootPath, workspaceId)
+        if (!scheduled.ok) throw new Error(scheduled.error)
+        const parsedCalendar = readCampaignCalendar(rootPath, workspaceId)
+        if (!parsedCalendar.ok) throw new Error(parsedCalendar.error)
+        const order = scheduled.work.items.find((candidate) => candidate.id === input.orderId && !candidate.deletedAt)
+        const calendarItem = parsedCalendar.calendar.items.find((candidate) => candidate.id === input.calendarItemId && !candidate.deletedAt)
+        if (!order || !calendarItem || calendarItem.scheduledWorkId !== order.id || order.calendarLink.itemId !== calendarItem.id) {
+          throw new Error('Linked campaign work was not found.')
+        }
+        if (order.updatedAt !== input.expectedUpdatedAt) throw new Error(`Scheduled work order changed before reconfirmation: ${order.id}`)
+        if (order.execution.type !== 'social-publish' || order.authorizationPolicy !== 'durable-v1' || !order.authorization) {
+          throw new Error('Only a host-authorized social post can be edited here.')
+        }
+        if (order.status === 'running' || order.status === 'done' || order.status === 'canceled' || order.runs.length > 0) {
+          throw new Error('This post has already started and can no longer be edited.')
+        }
+
+        const normalized = normalizeReleaseKitSocialInput({ ...input, requestId: 'reauthorize', source: 'calendar-ui' })
+        const manifest = loadReleaseKitManifest(rootPath, workspaceId, workspaceId)
+        const item = manifest.items.find((candidate) => candidate.id === normalized.releaseKitItemId)
+        if (!item) throw new Error(`Release Kit item not found: ${normalized.releaseKitItemId}`)
+        if (item.status !== 'ready') throw new Error('This final must pass integrity verification before it can be scheduled.')
+        const restriction = releaseKitSocialRestriction(item.usage.restrictions)
+        if (restriction) throw new Error(restriction)
+        resolveVerifiedReleaseKitItemPathWhileLocked(rootPath, workspaceId, workspaceId, item.id, item.sha256)
+        if (Date.parse(normalized.startAt) <= Date.now()) throw new Error('Choose a future publish time.')
+
+        const definition: ScheduledWorkAuthorization['definition'] = {
+          title: normalized.title ?? order.title,
+          releaseKitRef: { itemId: item.id, sha256: item.sha256, label: item.title },
+          platform: normalized.platform,
+          profileId: normalized.profileId,
+          accountSetId: normalized.accountSetId,
+          caption: normalized.caption,
+          platformOptions: normalized.platformOptions,
+          startAt: normalized.startAt,
+          timezone: normalized.timezone,
+        }
+        const changes = socialDefinitionChanges(order.authorization.definition, definition)
+        if (changes.length === 0) throw new Error('No changes need confirmation.')
+        const payloadDigest = `sha256:${createHash('sha256').update(stableAuthorizationStringify(definition)).digest('hex')}`
+        const now = new Date().toISOString()
+        const authorization: ScheduledWorkAuthorization = {
+          id: `scheduled-work-authorization-${order.id}-${Date.now()}`,
+          authorizedAt: now,
+          expiresAt: new Date(Date.parse(definition.startAt) + 30 * 60 * 1000).toISOString(),
+          payloadDigest,
+          authorizedBy: { type: 'user', clientId: ctx.clientId, source: 'calendar-ui' },
+          definition,
+        }
+        const nextOrder: ScheduledWorkDocument['items'][number] = {
+          ...order,
+          title: definition.title,
+          status: 'needs-approval',
+          startAt: definition.startAt,
+          timezone: definition.timezone,
+          execution: {
+            type: 'social-publish', platform: definition.platform, profileId: definition.profileId,
+            accountSetId: definition.accountSetId, caption: definition.caption, platformOptions: definition.platformOptions,
+          },
+          inputRefs: [{ kind: 'release-kit', ...definition.releaseKitRef }],
+          authorization,
+          socialAction: undefined,
+          socialApproval: undefined,
+          attention: undefined,
+          executionKey: { payloadDigest, idempotencyKey: `${order.id}:${payloadDigest}` },
+          updatedAt: now,
+        }
+        await validateScheduleRuntime(deps, rootPath, nextOrder)
+        const localStart = formatInTimezone(nextOrder.startAt, nextOrder.timezone)
+        const nextCalendarItem: CampaignCalendarItem = {
+          ...calendarItem,
+          title: nextOrder.title,
+          date: localStart.date,
+          time: localStart.time,
+          timezone: nextOrder.timezone,
+          status: 'needs-approval',
+          releaseKitRefs: [definition.releaseKitRef],
+          finalRefs: [], outputRefs: [], assetRefs: [],
+          accountSetId: definition.accountSetId,
+          socialProfileRefs: [{ platform: definition.platform, profileId: definition.profileId }],
+          updatedAt: now,
+        }
+        assertCampaignShellMatchesOrder(nextOrder, nextCalendarItem)
+        const work = { ...scheduled.work, items: scheduled.work.items.map((candidate) => candidate.id === nextOrder.id ? nextOrder : candidate), updatedAt: now }
+        const calendar = { ...parsedCalendar.calendar, items: parsedCalendar.calendar.items.map((candidate) => candidate.id === nextCalendarItem.id ? nextCalendarItem : candidate), updatedAt: now }
+        writeScheduledWork(rootPath, work)
+        writeCampaignCalendar(rootPath, calendar)
+        broadcastChanged(deps, workspaceId, rootPath)
+        return { updated: true, changes, work, order: nextOrder, calendar, calendarItem: nextCalendarItem }
+      }))
+    },
+  )
+
+  server.handle(
     RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN,
     async (_ctx, workspaceId: string, input: ScheduleCampaignWorkInput): Promise<ScheduleCampaignWorkResult> => {
       const rootPath = resolveRootPath(workspaceId)
@@ -799,6 +904,26 @@ function releaseKitSocialRestriction(restrictions: { blockedFromUse: boolean; ne
   if (restrictions.needsRightsClearance) return 'This final needs rights clearance before it can be scheduled.'
   if (restrictions.artistLikenessRestricted) return 'This final has an artist-likeness restriction and cannot be scheduled to social.'
   return undefined
+}
+
+function socialDefinitionChanges(
+  before: ScheduledWorkAuthorization['definition'],
+  after: ScheduledWorkAuthorization['definition'],
+): ScheduledSocialDefinitionChange[] {
+  const changes: ScheduledSocialDefinitionChange[] = []
+  const add = (field: ScheduledSocialDefinitionChange['field'], previous: unknown, next: unknown) => {
+    const beforeValue = typeof previous === 'string' ? previous : stableAuthorizationStringify(previous ?? null)
+    const afterValue = typeof next === 'string' ? next : stableAuthorizationStringify(next ?? null)
+    if (beforeValue !== afterValue) changes.push({ field, before: beforeValue, after: afterValue })
+  }
+  add('title', before.title, after.title)
+  add('asset', before.releaseKitRef, after.releaseKitRef)
+  add('account', { platform: before.platform, profileId: before.profileId, accountSetId: before.accountSetId }, { platform: after.platform, profileId: after.profileId, accountSetId: after.accountSetId })
+  add('caption', before.caption, after.caption)
+  add('options', before.platformOptions, after.platformOptions)
+  add('time', before.startAt, after.startAt)
+  add('timezone', before.timezone, after.timezone)
+  return changes
 }
 
 function assertCampaignChainInput(workspaceId: string, input: ScheduleCampaignChainInput): void {

@@ -492,6 +492,7 @@ export const RPC_CHANNELS = {
     /** Atomically create campaign work and its linked calendar shell. */
     SCHEDULE_CAMPAIGN: 'scheduledWork:scheduleCampaign',
     AUTHORIZE_RELEASE_KIT_SOCIAL: 'scheduledWork:authorizeReleaseKitSocial',
+    REAUTHORIZE_RELEASE_KIT_SOCIAL: 'scheduledWork:reauthorizeReleaseKitSocial',
     /** Create a supported two-step campaign chain and both calendar shells. */
     SCHEDULE_CAMPAIGN_CHAIN: 'scheduledWork:scheduleCampaignChain',
     /** Cancel campaign work and remove its linked calendar shell. */

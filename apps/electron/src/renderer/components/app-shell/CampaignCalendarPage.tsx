@@ -472,6 +472,35 @@ export function CampaignCalendarPage({
     }
   }, [refresh, workspaceId])
 
+  const reauthorizeScheduledSocial = React.useCallback(async (order: ScheduledWorkOrder, edit: { title: string; caption: string; startAt: string; timezone: string }) => {
+    const definition = order.authorization?.definition
+    if (!definition) throw new Error('This post does not have a durable authorization to replace.')
+    try {
+      const result = await window.electronAPI.reauthorizeReleaseKitSocial(workspaceId, {
+        orderId: order.id,
+        calendarItemId: order.calendarLink.itemId,
+        expectedUpdatedAt: order.updatedAt,
+        releaseKitItemId: definition.releaseKitRef.itemId,
+        title: edit.title,
+        platform: definition.platform,
+        profileId: definition.profileId,
+        accountSetId: definition.accountSetId,
+        caption: edit.caption,
+        platformOptions: definition.platformOptions,
+        startAt: edit.startAt,
+        timezone: edit.timezone,
+      })
+      setOptimisticCampaignCalendar(result.calendar)
+      setOptimisticScheduledWork(result.work)
+      toast.success('Post changes confirmed')
+    } catch (error) {
+      setOptimisticCampaignCalendar(null)
+      setOptimisticScheduledWork(null)
+      await refresh()
+      throw error
+    }
+  }, [refresh, workspaceId])
+
   const manageGoalRun = React.useCallback(async (order: ScheduledWorkOrder, operation: 'rearm' | 'pause' | 'cancel') => {
     if (!order.continuation || order.continuation.role !== 'coordinator') return
     let objective: string | undefined
@@ -550,6 +579,7 @@ export function CampaignCalendarPage({
             onReviewDecision={decideScheduledWork}
             onResolveProducedOutput={resolveProducedOutput}
             onApproveSocial={approveScheduledSocial}
+            onReauthorizeSocial={reauthorizeScheduledSocial}
             onManageGoalRun={manageGoalRun}
             onQueueReplacement={(work) => {
               setComposerPrefill({
@@ -615,6 +645,7 @@ function CampaignCalendarSurface({
   onReviewDecision,
   onResolveProducedOutput,
   onApproveSocial,
+  onReauthorizeSocial,
   onManageGoalRun,
   onQueueReplacement,
   onOpenSocialSettings,
@@ -646,6 +677,7 @@ function CampaignCalendarSurface({
   onReviewDecision: (order: ScheduledWorkOrder, decision: 'approved' | 'changes-requested', notes?: string) => Promise<void>
   onResolveProducedOutput: (order: ScheduledWorkOrder, outputId: string) => Promise<void>
   onApproveSocial: (order: ScheduledWorkOrder) => Promise<void>
+  onReauthorizeSocial: (order: ScheduledWorkOrder, edit: { title: string; caption: string; startAt: string; timezone: string }) => Promise<void>
   onManageGoalRun: (order: ScheduledWorkOrder, operation: 'rearm' | 'pause' | 'cancel') => Promise<void>
   onQueueReplacement: (order: ScheduledWorkOrder) => void
   onOpenSocialSettings: (subpage: ConnectionSettingsSubpage) => void
@@ -750,7 +782,7 @@ function CampaignCalendarSurface({
                       </div>
                       {item.notes ? <div className="mt-2 text-xs leading-5 text-white/38">{item.notes}</div> : null}
                       <CampaignCalendarJobDetails item={item} />
-                      {work ? <ScheduledWorkDetails work={work} calendarStatus={item.status} producedOutputIds={producedOutputIds} onOpenSession={onOpenSession} onOpenRun={onOpenRun} onOpenOutput={onOpenOutput} onReviewDecision={onReviewDecision} onResolveProducedOutput={onResolveProducedOutput} onApproveSocial={onApproveSocial} onManageGoalRun={onManageGoalRun} onQueueReplacement={onQueueReplacement} onOpenSocialSettings={onOpenSocialSettings} /> : null}
+                      {work ? <ScheduledWorkDetails work={work} calendarStatus={item.status} producedOutputIds={producedOutputIds} onOpenSession={onOpenSession} onOpenRun={onOpenRun} onOpenOutput={onOpenOutput} onReviewDecision={onReviewDecision} onResolveProducedOutput={onResolveProducedOutput} onApproveSocial={onApproveSocial} onReauthorizeSocial={onReauthorizeSocial} onManageGoalRun={onManageGoalRun} onQueueReplacement={onQueueReplacement} onOpenSocialSettings={onOpenSocialSettings} /> : null}
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
                       {item.status === 'needs-approval' && !item.scheduledWorkId ? (
@@ -874,7 +906,7 @@ function CampaignCalendarJobDetails({ item }: { item: CampaignCalendarItem }) {
   )
 }
 
-function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenSession, onOpenRun, onOpenOutput, onReviewDecision, onResolveProducedOutput, onApproveSocial, onManageGoalRun, onQueueReplacement, onOpenSocialSettings }: {
+function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenSession, onOpenRun, onOpenOutput, onReviewDecision, onResolveProducedOutput, onApproveSocial, onReauthorizeSocial, onManageGoalRun, onQueueReplacement, onOpenSocialSettings }: {
   work: ScheduledWorkOrder
   calendarStatus: CampaignCalendarItemStatus
   producedOutputIds: string[]
@@ -884,6 +916,7 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
   onReviewDecision: (order: ScheduledWorkOrder, decision: 'approved' | 'changes-requested', notes?: string) => Promise<void>
   onResolveProducedOutput: (order: ScheduledWorkOrder, outputId: string) => Promise<void>
   onApproveSocial: (order: ScheduledWorkOrder) => Promise<void>
+  onReauthorizeSocial: (order: ScheduledWorkOrder, edit: { title: string; caption: string; startAt: string; timezone: string }) => Promise<void>
   onManageGoalRun: (order: ScheduledWorkOrder, operation: 'rearm' | 'pause' | 'cancel') => Promise<void>
   onQueueReplacement: (order: ScheduledWorkOrder) => void
   onOpenSocialSettings: (subpage: ConnectionSettingsSubpage) => void
@@ -896,6 +929,11 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
   const [notes, setNotes] = React.useState('')
   const [busy, setBusy] = React.useState(false)
   const [decisionError, setDecisionError] = React.useState<string | null>(null)
+  const [socialEditOpen, setSocialEditOpen] = React.useState(false)
+  const [socialEditTitle, setSocialEditTitle] = React.useState('')
+  const [socialEditCaption, setSocialEditCaption] = React.useState('')
+  const [socialEditDate, setSocialEditDate] = React.useState('')
+  const [socialEditTime, setSocialEditTime] = React.useState('')
   const expectedCalendarStatus = work.reviewDecision?.decision === 'approved' ? 'done' : work.reviewDecision ? 'failed' : undefined
   const needsCalendarRepair = Boolean(expectedCalendarStatus && calendarStatus !== expectedCalendarStatus)
   const connectionSettingsTarget = connectionSettingsSubpageForWork(work)
@@ -904,6 +942,23 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
     : connectionSettingsTarget === 'ad-accounts'
       ? 'Open Ad Accounts'
       : 'Open Social Accounts'
+  const durableDefinition = work.authorizationPolicy === 'durable-v1' ? work.authorization?.definition : undefined
+  const openSocialEdit = () => {
+    if (!durableDefinition) return
+    const local = new Date(durableDefinition.startAt)
+    setSocialEditTitle(durableDefinition.title)
+    setSocialEditCaption(durableDefinition.caption)
+    setSocialEditDate(`${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`)
+    setSocialEditTime(`${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}`)
+    setDecisionError(null)
+    setSocialEditOpen(true)
+  }
+  const editedStartAt = socialEditDate && socialEditTime ? new Date(`${socialEditDate}T${socialEditTime}:00`).toISOString() : ''
+  const socialEditChanges = durableDefinition ? [
+    socialEditTitle.trim() !== durableDefinition.title ? { label: 'Title', before: durableDefinition.title, after: socialEditTitle.trim() } : null,
+    socialEditCaption.trim() !== durableDefinition.caption ? { label: 'Caption', before: durableDefinition.caption, after: socialEditCaption.trim() } : null,
+    editedStartAt && editedStartAt !== durableDefinition.startAt ? { label: 'When', before: formatCompactDateTime(durableDefinition.startAt), after: formatCompactDateTime(editedStartAt) } : null,
+  ].filter((change): change is { label: string; before: string; after: string } => Boolean(change)) : []
   const decide = async (decision: 'approved' | 'changes-requested', decisionNotes = notes) => {
     if (decision === 'changes-requested' && !decisionNotes.trim()) {
       setDecisionError('Explain what needs to change.')
@@ -926,7 +981,7 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
         {latestRun ? <span>Last run {latestRun.status}</span> : null}
       </div>
       {work.attention ? (
-        <div className="mt-2 rounded-[6px] border border-red-300/10 bg-red-300/[0.045] px-2 py-1.5 text-[11px] leading-4 text-red-100/66">
+        <div className="mt-2 rounded-[6px] border border-orange-300/25 bg-orange-400/[0.09] px-2.5 py-2 text-[11px] leading-4 text-orange-50/85">
           {work.attention.message}
         </div>
       ) : null}
@@ -994,6 +1049,33 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
               Repair calendar status
             </button>
           ) : null}
+        </div>
+      ) : null}
+      {durableDefinition && work.status !== 'done' && work.status !== 'running' && work.status !== 'canceled' ? (
+        <div className="mt-2.5 border-t border-white/[0.05] pt-2.5">
+          {!socialEditOpen ? (
+            <button type="button" onClick={openSocialEdit} className="h-7 rounded-[5px] border border-white/[0.09] px-2.5 text-[10px] font-medium text-white/62 hover:bg-white/[0.04]">Edit scheduled post</button>
+          ) : (
+            <div className="space-y-3">
+              <input value={socialEditTitle} onChange={(event) => setSocialEditTitle(event.target.value)} maxLength={200} aria-label="Post title" className="h-9 w-full rounded-[6px] border border-white/[0.09] bg-black/25 px-2.5 text-xs text-white/78 outline-none" />
+              <textarea value={socialEditCaption} onChange={(event) => setSocialEditCaption(event.target.value)} maxLength={5000} rows={4} aria-label="Post caption" className="w-full resize-none rounded-[6px] border border-white/[0.09] bg-black/25 px-2.5 py-2 text-xs text-white/78 outline-none" />
+              <div className="grid grid-cols-2 gap-2">
+                <input type="date" value={socialEditDate} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setSocialEditDate(event.target.value)} aria-label="Post date" className="h-9 rounded-[6px] border border-white/[0.09] bg-black/25 px-2 text-xs text-white/72" />
+                <input type="time" value={socialEditTime} onChange={(event) => setSocialEditTime(event.target.value)} aria-label="Post time" className="h-9 rounded-[6px] border border-white/[0.09] bg-black/25 px-2 text-xs text-white/72" />
+              </div>
+              <div className="text-[10px] text-white/34">{Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'}</div>
+              {socialEditChanges.length ? <div className="space-y-2 rounded-[6px] border border-orange-300/15 bg-orange-300/[0.045] p-2.5">{socialEditChanges.map((change) => <div key={change.label} className="text-[11px]"><div className="font-medium text-orange-100/75">{change.label}</div><div className="mt-0.5 break-words text-white/35 line-through">{change.before}</div><div className="mt-0.5 break-words text-white/72">{change.after}</div></div>)}</div> : <div className="text-[11px] text-white/34">No changes yet.</div>}
+              {decisionError ? <div className="text-[11px] text-red-200/75">{decisionError}</div> : null}
+              <div className="flex gap-2">
+                <button type="button" disabled={busy || socialEditChanges.length === 0 || !socialEditTitle.trim() || !socialEditCaption.trim() || !editedStartAt} onClick={() => {
+                  setBusy(true); setDecisionError(null)
+                  void onReauthorizeSocial(work, { title: socialEditTitle.trim(), caption: socialEditCaption.trim(), startAt: editedStartAt, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' })
+                    .then(() => setSocialEditOpen(false)).catch((error) => setDecisionError(error instanceof Error ? error.message : String(error))).finally(() => setBusy(false))
+                }} className="h-8 rounded-[5px] bg-orange-400 px-3 text-[10px] font-semibold text-black disabled:opacity-35">Confirm changes</button>
+                <button type="button" disabled={busy} onClick={() => { setSocialEditOpen(false); setDecisionError(null) }} className="h-8 px-2 text-[10px] text-white/42">Cancel</button>
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
       {work.execution.type === 'social-publish' && work.socialAction ? (
