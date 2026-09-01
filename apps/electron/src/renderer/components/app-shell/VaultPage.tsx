@@ -22,6 +22,7 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { CompactPageHeader } from './CompactPageHeader'
+import { TrackIntelligenceReviewDialog, type TrackIntelligenceReviewValue } from './TrackIntelligenceReviewDialog'
 import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
 import type {
   VaultAssetKind,
@@ -30,6 +31,7 @@ import type {
   VaultCategory,
   VaultKindHint,
   VaultManifest,
+  TrackIntelligence,
 } from '@craft-agent/shared/artist-vault'
 
 interface VaultPageProps {
@@ -128,6 +130,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
   const [query, setQuery] = React.useState('')
   const [importDraft, setImportDraft] = React.useState<ImportDraft>(emptyImportDraft)
   const [dragActive, setDragActive] = React.useState(false)
+  const [trackReviewAssetId, setTrackReviewAssetId] = React.useState<string | null>(null)
 
   const refresh = React.useCallback(async (foreground = true) => {
     if (!workspaceId) return
@@ -148,7 +151,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
   }, [refresh])
   useWorkspaceSyncRefresh(workspaceId, ['vault', 'context'], () => refresh(false))
 
-  const assets = manifest?.assets ?? []
+  const assets = React.useMemo(() => manifest?.assets ?? [], [manifest])
   const selectedAsset = React.useMemo(
     () => assets.find((asset) => asset.id === selectedAssetId) ?? null,
     [assets, selectedAssetId],
@@ -178,6 +181,10 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
       return haystack.includes(needle)
     })
   }, [categoryAssets, query, selectedKind])
+  const trackReviewAsset = React.useMemo(
+    () => assets.find((asset) => asset.id === trackReviewAssetId) ?? null,
+    [assets, trackReviewAssetId],
+  )
   const selectKind = React.useCallback((kind: VaultAssetKind | 'all') => {
     setSelectedKind(kind)
     setSelectedAssetId(categoryAssets.find((asset) => kind === 'all' || asset.kind === kind)?.id ?? null)
@@ -224,21 +231,56 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
     }
   }, [planImportPaths, selectedCategory, selectedKind])
 
+  const analyzeTrack = React.useCallback(async (asset: VaultAssetRecord, force = false, openReview = true): Promise<boolean> => {
+    if (!workspaceId) return false
+    setBusy(`track:${asset.id}`)
+    try {
+      const result = await window.electronAPI.transcribeArtistVaultTrack(workspaceId, { assetId: asset.id, force })
+      setManifest(result.manifest)
+      if (!result.ok || !result.asset?.trackIntelligence?.draft) {
+        toast.error(result.error ?? 'Track transcription failed', {
+          description: result.blockers?.map((blocker) => blocker.message).join(' '),
+        })
+        return false
+      }
+      if (openReview) {
+        setTrackReviewAssetId(asset.id)
+        toast.success('Lyrics are ready to review')
+      }
+      return true
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+      return false
+    } finally {
+      setBusy(null)
+    }
+  }, [workspaceId])
+
   const confirmImport = React.useCallback(async () => {
     if (!workspaceId || !importDraft.paths.length) return
     setBusy('import')
     try {
       const result = await window.electronAPI.importArtistVaultAssets(workspaceId, importDraft.paths, { kindHint: importDraft.kindHint })
       setManifest(result.manifest)
-      setSelectedAssetId(result.imported[0]?.id ?? selectedAssetId)
+      const firstImported = result.imported[0]
+      setSelectedAssetId(firstImported?.id ?? selectedAssetId)
       setImportDraft(emptyImportDraft)
       toast.success(`Added ${result.imported.length} Vault asset${result.imported.length === 1 ? '' : 's'}`)
+      const tracks = result.imported.filter((asset) => asset.kind === 'master-final' || asset.kind === 'demo')
+      let firstReadyTrackId: string | null = null
+      for (const track of tracks) {
+        if (await analyzeTrack(track, false, false) && !firstReadyTrackId) firstReadyTrackId = track.id
+      }
+      if (firstReadyTrackId) {
+        setTrackReviewAssetId(firstReadyTrackId)
+        toast.success(tracks.length === 1 ? 'Lyrics are ready to review' : `${tracks.length} track drafts are ready to review`)
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setBusy(null)
     }
-  }, [importDraft, selectedAssetId, workspaceId])
+  }, [analyzeTrack, importDraft, selectedAssetId, workspaceId])
 
   const linkFolder = React.useCallback(async () => {
     if (!workspaceId) return
@@ -304,6 +346,26 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
       setBusy(null)
     }
   }, [workspaceId])
+
+  const saveTrackReview = React.useCallback(async (value: TrackIntelligenceReviewValue) => {
+    if (!workspaceId || !trackReviewAsset) return
+    setBusy(`track:${trackReviewAsset.id}`)
+    try {
+      const next = await window.electronAPI.reviewArtistVaultTrack(workspaceId, {
+        assetId: trackReviewAsset.id,
+        draftId: value.revisionId,
+        lyrics: value.lyrics,
+        character: value.character,
+      })
+      setManifest(next)
+      setTrackReviewAssetId(null)
+      toast.success('Track package approved for agents')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(null)
+    }
+  }, [trackReviewAsset, workspaceId])
 
   if (loading) {
     return (
@@ -439,6 +501,8 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
             asset={selectedAsset}
             busy={busy === `asset:${selectedAsset?.id}`}
             onUpdate={updateAsset}
+            onAnalyze={analyzeTrack}
+            onReviewTrack={(assetId) => setTrackReviewAssetId(assetId)}
           />
         </div>
       </div>
@@ -449,6 +513,14 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
         onClose={() => setImportDraft(emptyImportDraft)}
         onConfirm={confirmImport}
       />
+      <TrackIntelligenceReviewDialog
+        open={Boolean(trackReviewAsset)}
+        title={trackReviewAsset?.label ?? 'Track'}
+        intelligence={trackReviewAsset?.trackIntelligence}
+        busy={busy === `track:${trackReviewAsset?.id}`}
+        onClose={() => setTrackReviewAssetId(null)}
+        onSave={saveTrackReview}
+      />
     </div>
   )
 }
@@ -457,10 +529,14 @@ function AssetDetailPanel({
   asset,
   busy,
   onUpdate,
+  onAnalyze,
+  onReviewTrack,
 }: {
   asset: VaultAssetRecord | null
   busy: boolean
   onUpdate: (assetId: string, patch: VaultAssetUpdatePatch) => Promise<void>
+  onAnalyze: (asset: VaultAssetRecord, force?: boolean) => Promise<boolean>
+  onReviewTrack: (assetId: string) => void
 }) {
   const [label, setLabel] = React.useState('')
   const [kind, setKind] = React.useState<VaultAssetKind>('other')
@@ -617,7 +693,20 @@ function AssetDetailPanel({
 
         {asset.category === 'music' && (
           <div className="rounded-[12px] border border-white/[0.055] bg-white/[0.018] p-3">
-            <div className="mb-3 text-[10px] font-medium uppercase tracking-[0.16em] text-white/36">Song Matching</div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/36">Song Package</span>
+              <TrackStatus intelligence={asset.trackIntelligence} />
+            </div>
+            {asset.kind === 'master-final' || asset.kind === 'demo' ? (
+              <div className="mb-3 flex gap-2">
+                {asset.trackIntelligence?.draft || asset.trackIntelligence?.approved ? (
+                  <button type="button" onClick={() => onReviewTrack(asset.id)} className="h-8 flex-1 rounded-[8px] bg-white/[0.07] px-3 text-xs text-white/70 hover:bg-white/[0.1] hover:text-white">Review lyrics</button>
+                ) : null}
+                <button type="button" onClick={() => void onAnalyze(asset, Boolean(asset.trackIntelligence?.approved))} className="h-8 flex-1 rounded-[8px] bg-[#f97316]/15 px-3 text-xs text-[#fb923c] hover:bg-[#f97316]/22">
+                  {asset.trackIntelligence ? 'Re-analyze' : 'Analyze track'}
+                </button>
+              </div>
+            ) : null}
             <div className="grid gap-3">
               <Field label="Genre">
                 <input value={genre} onChange={(event) => setGenre(event.target.value)} placeholder="alt-pop, indie rock, r&b" className={INPUT_CLASS} />
@@ -758,6 +847,15 @@ function AssetRow({ asset, selected, onSelect }: { asset: VaultAssetRecord; sele
       <VisibilityBadge asset={asset} />
     </button>
   )
+}
+
+function TrackStatus({ intelligence }: { intelligence?: TrackIntelligence }) {
+  if (!intelligence) return <span className="text-[10px] text-white/28">Not analyzed</span>
+  if (intelligence.draft) return <span className="text-[10px] text-amber-300/70">Needs review</span>
+  if (intelligence.approved) return <span className="text-[10px] text-emerald-300/70">Approved</span>
+  if (intelligence.status === 'pending') return <span className="text-[10px] text-white/45">Analyzing</span>
+  if (intelligence.status === 'failed') return <span className="text-[10px] text-red-300/70">Needs attention</span>
+  return <span className="text-[10px] text-white/32">{intelligence.status}</span>
 }
 
 function EmptyState({ kind }: { kind: VaultAssetKind | 'all' }) {

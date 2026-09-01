@@ -44,7 +44,7 @@ function manifest(kinds: ManifestFixtureKind[]): MissionAssetManifest {
         relativePath: `assets/${kind}.txt`,
         source: 'copy',
         status: 'available',
-        usableByAgents: true,
+        usableByAgents: fixtureKind !== 'review-needed-lyrics',
         lyrics: fixtureKind === 'approved-lyrics'
           ? { text: 'approved line', reviewRequired: false, status: 'approved' }
           : fixtureKind === 'review-needed-lyrics'
@@ -105,6 +105,9 @@ describe('campaign worker context', () => {
     expect(body).toContain('"mission": "Make outsiders feel understood through emotionally honest music."')
     expect(body).toContain('"commentReplyExamples": "appreciate you. this one felt different."')
     expect(body).toContain('"master": "assets/master.txt"')
+    expect(body).toContain('"lyricsStatus": "approved"')
+    expect(body).not.toContain('approved line')
+    expect(body).not.toContain('assets/lyrics.txt')
   })
 
   test('review-needed lyrics block launch-ready context until approved', () => {
@@ -131,5 +134,7 @@ describe('campaign worker context', () => {
     expect(readiness.nextMove).toBe('Review and approve lyrics.')
     expect(readiness.missing).toContain('Approved lyrics')
     expect(body).toContain('"lyricsStatus": "needs-review"')
+    expect(body).not.toContain('draft line')
+    expect(body).not.toContain('assets/lyrics.txt')
   })
 })

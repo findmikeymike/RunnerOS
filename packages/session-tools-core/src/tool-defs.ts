@@ -89,6 +89,7 @@ import {
   handleGetAssetRecord,
 } from './handlers/release-kit.ts';
 import { handleCreateLabSong, handleSaveLabLyrics, handleListLabSongs } from './handlers/lab-songs.ts';
+import { handleListXEditorialHistory } from './handlers/x-editorial.ts';
 import { handleArtworkCompose } from './handlers/artwork-compose.ts';
 import { handleMediaProviderRequest } from './handlers/media-provider-request.ts';
 import { handleVisualSurface } from './handlers/visual-surface.ts';
@@ -821,6 +822,9 @@ export const ListCampaignOutputsSchema = z.object({ campaignWorkspaceId: z.strin
 export const GetCampaignOutputSchema = z.object({
   campaignWorkspaceId: z.string().min(1).optional(),
   outputId: z.string().min(1),
+});
+export const ListXEditorialHistorySchema = z.object({
+  limit: z.number().int().min(1).max(20).optional().describe('Most recent X slates to return. Defaults to 8, maximum 20.'),
 });
 
 const LabSongStatusSchema = z.enum(['working', 'done']);
@@ -1629,6 +1633,7 @@ Use only when the user clearly approves that exact item as final. Never silently
   list_campaign_outputs: `List durable agent and user work products in a campaign. Outputs are drafts and deliverables with provenance; they are not approved canon until the user promotes an exact file into the Release Kit.`,
 
   get_campaign_output: `Get one campaign Output manifest, including its file assets and provenance. Use this before promoting an Output when the user refers to prior agent work by name or description.`,
+  list_x_editorial_history: `Read recent HQ-owned Daily X Slates, including exact candidate copy, lane, timing, Campaign linkage, and status. Use this before drafting to prevent repetition and schedule fatigue.`,
 
   get_asset_record: `Get one exact registered Campaign Asset or HQ Vault record by id. Use this to inspect metadata, rights, agent usability, and path before using or promoting it.`,
 
@@ -1853,6 +1858,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'list_artist_vault', description: TOOL_DESCRIPTIONS.list_artist_vault, inputSchema: ListArtistVaultSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListArtistVault },
   { name: 'list_campaign_outputs', description: TOOL_DESCRIPTIONS.list_campaign_outputs, inputSchema: ListCampaignOutputsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListCampaignOutputs },
   { name: 'get_campaign_output', description: TOOL_DESCRIPTIONS.get_campaign_output, inputSchema: GetCampaignOutputSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetCampaignOutput },
+  { name: 'list_x_editorial_history', description: TOOL_DESCRIPTIONS.list_x_editorial_history, inputSchema: ListXEditorialHistorySchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListXEditorialHistory },
   { name: 'get_asset_record', description: TOOL_DESCRIPTIONS.get_asset_record, inputSchema: GetAssetRecordSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetAssetRecord },
   { name: 'create_lab_song', description: TOOL_DESCRIPTIONS.create_lab_song, inputSchema: CreateLabSongSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateLabSong },
   { name: 'save_lab_lyrics', description: TOOL_DESCRIPTIONS.save_lab_lyrics, inputSchema: SaveLabLyricsSchema, executionMode: 'registry', safeMode: 'block', handler: handleSaveLabLyrics },

@@ -80,8 +80,8 @@ interface MissionBriefDrawerProps {
   releaseBoard: ReleaseBoard
   onAddAsset: (kindHint: MissionAssetKindHint) => Promise<void>
   onImportAssetPaths: (filePaths: string[], kindHint?: MissionAssetKindHint) => Promise<void>
-  onTranscribeLyrics: () => Promise<void>
-  onSaveLyrics: (lyricsText: string, assetId?: string, sourceAudioAssetId?: string) => Promise<void>
+  onTranscribeLyrics: (audioAssetId?: string, force?: boolean) => Promise<void>
+  onReviewLyrics: () => void
   onOpenAssetsFolder: () => Promise<void>
 }
 
@@ -98,7 +98,7 @@ export function MissionBriefDrawer({
   onAddAsset,
   onImportAssetPaths,
   onTranscribeLyrics,
-  onSaveLyrics,
+  onReviewLyrics,
   onOpenAssetsFolder,
 }: MissionBriefDrawerProps) {
   const closeButtonRef = React.useRef<HTMLButtonElement>(null)
@@ -353,7 +353,7 @@ export function MissionBriefDrawer({
               releaseBoard={releaseBoard}
               onAdd={onAddAsset}
               onTranscribeLyrics={onTranscribeLyrics}
-              onSaveLyrics={onSaveLyrics}
+              onReviewLyrics={onReviewLyrics}
               onDrop={handleDrop}
               onOpenFolder={onOpenAssetsFolder}
             />
@@ -692,7 +692,7 @@ function AssetsSetup({
   releaseBoard,
   onAdd,
   onTranscribeLyrics,
-  onSaveLyrics,
+  onReviewLyrics,
   onDrop,
   onOpenFolder,
 }: {
@@ -700,20 +700,17 @@ function AssetsSetup({
   busy: boolean
   releaseBoard: ReleaseBoard
   onAdd: (kindHint: MissionAssetKindHint) => Promise<void>
-  onTranscribeLyrics: () => Promise<void>
-  onSaveLyrics: (lyricsText: string, assetId?: string, sourceAudioAssetId?: string) => Promise<void>
+  onTranscribeLyrics: (audioAssetId?: string, force?: boolean) => Promise<void>
+  onReviewLyrics: () => void
   onDrop: (event: React.DragEvent<HTMLDivElement>) => void
   onOpenFolder: () => Promise<void>
 }) {
   const files = manifest?.files ?? []
-  const master = firstAsset(files, ['master', 'demo'])
+  const master = latestAsset(files, ['master', 'demo'])
   const lyrics = firstLyricsAsset(files)
-  const lyricsApproved = Boolean(lyrics?.lyrics && !lyrics.lyrics.reviewRequired)
-  const lyricsDraftExists = Boolean(lyrics?.lyrics?.reviewRequired)
-  const [lyricsDraft, setLyricsDraft] = React.useState('')
-  React.useEffect(() => {
-    setLyricsDraft(lyrics?.lyrics?.text ?? '')
-  }, [lyrics?.id, lyrics?.lyrics?.text])
+  const lyricsApproved = files.some((file) => file.status === 'available' && file.kind === 'lyrics' && file.lyrics && !file.lyrics.reviewRequired)
+  const lyricsDraftExists = Boolean(master?.trackIntelligence?.draft)
+    || files.some((file) => file.status === 'available' && file.kind === 'lyrics' && file.lyrics?.reviewRequired)
   const cover = firstAsset(files, ['cover-art'])
   const photos = files.filter((file) => file.status === 'available' && file.kind === 'press-photo').length
   const rawVideo = files.filter((file) => file.status === 'available' && file.kind === 'raw-video').length
@@ -753,7 +750,7 @@ function AssetsSetup({
           <AssetBucket
             icon={FileText}
             label="Lyrics"
-            value={lyricsApproved ? 'Approved' : lyricsDraftExists ? 'Needs review' : lyrics?.label ?? 'Missing'}
+            value={lyricsDraftExists ? 'Needs review' : lyricsApproved ? 'Approved' : lyrics?.label ?? 'Missing'}
             active={lyricsApproved}
             busy={busy}
             onClick={() => onAdd('lyrics')}
@@ -784,31 +781,23 @@ function AssetsSetup({
             </div>
             <button
               type="button"
-              disabled={busy || !master || lyricsApproved}
-              onClick={() => void onTranscribeLyrics()}
+              disabled={busy || !master}
+              onClick={() => void onTranscribeLyrics(master?.id, lyricsApproved)}
               className="inline-flex h-8 shrink-0 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 text-xs font-medium text-white/62 hover:bg-white/[0.07] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-              Transcribe
+              {lyricsApproved ? 'Re-analyze' : 'Transcribe'}
             </button>
           </div>
           {lyrics ? (
-            <div className="mt-3 grid gap-2">
-              <textarea
-                value={lyricsDraft}
-                onChange={(event) => setLyricsDraft(event.target.value)}
-                className="min-h-[140px] w-full resize-y rounded-lg border border-white/[0.07] bg-black/25 px-3 py-2 text-xs leading-5 text-white/72 outline-none placeholder:text-white/22 focus:border-orange-300/45"
-                placeholder="Review or paste approved lyrics..."
-              />
-              <button
-                type="button"
-                disabled={busy || !lyricsDraft.trim()}
-                onClick={() => void onSaveLyrics(lyricsDraft, lyrics.id, master?.id)}
-                className="inline-flex h-8 items-center justify-center rounded-full bg-orange-500 px-3 text-xs font-medium text-black hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Save approved lyrics
-              </button>
-            </div>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onReviewLyrics}
+              className="mt-3 inline-flex h-9 w-full items-center justify-center rounded-[9px] bg-orange-500 px-3 text-xs font-medium text-black hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Review lyrics and song details
+            </button>
           ) : null}
         </div>
       </section>
@@ -882,6 +871,15 @@ function AssetBucket({
 
 function firstAsset(files: MissionAssetRecord[], kinds: MissionAssetRecord['kind'][]): MissionAssetRecord | null {
   return files.find((file) => file.status === 'available' && kinds.includes(file.kind)) ?? null
+}
+
+function latestAsset(files: MissionAssetRecord[], kinds: MissionAssetRecord['kind'][]): MissionAssetRecord | null {
+  return files
+    .filter((file) => file.status === 'available' && kinds.includes(file.kind))
+    .reduce<MissionAssetRecord | null>((latest, file) => {
+      if (!latest) return file
+      return (file.updatedAt || file.createdAt) > (latest.updatedAt || latest.createdAt) ? file : latest
+    }, null)
 }
 
 function firstLyricsAsset(files: MissionAssetRecord[]): MissionAssetRecord | null {

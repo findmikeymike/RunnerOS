@@ -124,6 +124,7 @@ import {
   prepareCampaignSocialJob,
   fingerprintCampaignSocialMediaPath,
   resolveCampaignSocialMediaPath,
+  resolveScheduledSocialMediaPath,
   prepareScheduledSocialWork,
 } from './campaign-social-job-preparer'
 import { executeScheduledSocialBrowser } from './scheduled-social-browser-executor'
@@ -730,10 +731,15 @@ app.whenReady().then(async () => {
             fingerprintMediaPath: fingerprintCampaignSocialMediaPath,
           }))
           sm.setScheduledSocialExecution(
-            (input) => prepareScheduledSocialWork(input, { runSocialJson }),
+            (input) => prepareScheduledSocialWork(input, { runSocialJson, resolveWorkspace: getWorkspaceByNameOrId }),
             (input) => executeScheduledSocialAuto(input, {
-              providerRoutes: createScheduledSocialProviderRoutes(),
-              executeBrowser: (browserInput) => executeScheduledSocialBrowser(browserInput, { browserPaneManager: browserPaneManager! }),
+              providerRoutes: createScheduledSocialProviderRoutes({
+                resolveMediaPath: (rootPath, order) => resolveScheduledSocialMediaPath(rootPath, order, getWorkspaceByNameOrId),
+              }),
+              executeBrowser: (browserInput) => executeScheduledSocialBrowser(browserInput, {
+                browserPaneManager: browserPaneManager!,
+                resolveMediaPath: (rootPath, order) => resolveScheduledSocialMediaPath(rootPath, order, getWorkspaceByNameOrId),
+              }),
               log: (message) => console.info(`[ScheduledSocial] ${message}`),
             }),
           )

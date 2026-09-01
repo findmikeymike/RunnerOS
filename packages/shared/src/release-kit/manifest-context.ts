@@ -35,7 +35,7 @@ export function serializeReleaseKitContext(manifest: ReleaseKitManifest): string
     category: item.category,
     subtype: item.subtype,
     title: item.title,
-    relativePath: item.relativePath,
+    relativePath: item.status === 'ready' ? item.relativePath : undefined,
     mimeType: item.mimeType,
     sha256: item.sha256,
     status: item.status,
@@ -51,6 +51,13 @@ export function serializeReleaseKitContext(manifest: ReleaseKitManifest): string
       updatedAt: item.usage.updatedAt,
       updatedBy: item.usage.updatedBy,
     },
+    trackIntelligence: item.status === 'ready' && item.trackIntelligence ? {
+      hasLyrics: Boolean(item.trackIntelligence.lyrics?.lines.length),
+      lyricLineCount: item.trackIntelligence.lyrics?.lines.length ?? 0,
+      timingStatus: item.trackIntelligence.lyrics?.timingStatus,
+      character: item.trackIntelligence.character,
+      technical: item.trackIntelligence.technical,
+    } : undefined,
   }));
   const lines = CATEGORY_ORDER.map((category) => {
     const categoryItems = manifest.items.filter((item) => item.category === category);

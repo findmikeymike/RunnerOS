@@ -36,6 +36,7 @@ Core Artist HQ and campaign workspace specs live here.
 - [25 Release Kit Asset Use And Social Scheduling Surface](./25-release-kit-asset-use-social-scheduling-spec.md)
 - [26 Agent-Bound Messaging](./26-agent-bound-messaging-spec.md)
 - [27 In-App Artist OS User Guide](./27-in-app-user-guide-spec.md)
+- [28 Track Intelligence: Lyrics, Timing, And Musical Metadata](./28-track-intelligence-spec.md)
 
 Current V1 implementation notes:
 

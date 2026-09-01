@@ -6,6 +6,7 @@ import { routes } from '../../../shared/routes'
 import type { SettingsSubpage } from '../../../shared/settings-registry'
 import {
   SCHEDULED_WORK_CONTEXT_SLUG,
+  isReleaseKitSocialAuthorizationDefinition,
   parseScheduledWorkDocResult,
   type ScheduledWorkDocument,
   type ScheduledWorkOrder,
@@ -475,6 +476,9 @@ export function CampaignCalendarPage({
   const reauthorizeScheduledSocial = React.useCallback(async (order: ScheduledWorkOrder, edit: { title: string; caption: string; startAt: string; timezone: string }) => {
     const definition = order.authorization?.definition
     if (!definition) throw new Error('This post does not have a durable authorization to replace.')
+    if (!isReleaseKitSocialAuthorizationDefinition(definition)) {
+      throw new Error('X Editorial posts must be edited from their Daily X Slate.')
+    }
     try {
       const result = await window.electronAPI.reauthorizeReleaseKitSocial(workspaceId, {
         orderId: order.id,
@@ -942,7 +946,10 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
     : connectionSettingsTarget === 'ad-accounts'
       ? 'Open Ad Accounts'
       : 'Open Social Accounts'
-  const durableDefinition = work.authorizationPolicy === 'durable-v1' ? work.authorization?.definition : undefined
+  const candidateDurableDefinition = work.authorizationPolicy === 'durable-v1' ? work.authorization?.definition : undefined
+  const durableDefinition = candidateDurableDefinition && isReleaseKitSocialAuthorizationDefinition(candidateDurableDefinition)
+    ? candidateDurableDefinition
+    : undefined
   const openSocialEdit = () => {
     if (!durableDefinition) return
     const local = new Date(durableDefinition.startAt)

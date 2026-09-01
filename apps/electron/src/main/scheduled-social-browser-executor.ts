@@ -8,6 +8,7 @@ import type {
   ScheduledSocialApproval,
   ScheduledWorkOrder,
 } from '@craft-agent/shared/scheduled-work'
+import { isXEditorialSocialAuthorizationDefinition } from '@craft-agent/shared/scheduled-work'
 
 export type NativeSocialPlatform = 'x' | 'instagram' | 'tiktok' | 'youtube'
 
@@ -119,7 +120,7 @@ export async function executeScheduledSocialBrowser(
   input: ScheduledSocialBrowserExecutionInput,
   deps: ScheduledSocialBrowserExecutorDeps,
 ): Promise<ScheduledSocialBrowserExecutionResult> {
-  assertCurrentReleaseKitSocialUseAllowed(input.workspaceRootPath, input.order)
+  assertCurrentReleaseKitSocialUseAllowed(input.workspaceRootPath, input.order, deps.resolveMediaPath)
   const platform = assertApprovedTuple(input, deps)
   const contract = PLATFORM_CONTRACTS[platform]
   const action = input.preview.dryRun.action as Record<string, unknown>
@@ -322,11 +323,23 @@ export function resolveScheduledSocialBrowserMediaPath(workspaceRootPath: string
   return undefined
 }
 
-export function assertCurrentReleaseKitSocialUseAllowed(workspaceRootPath: string, order: ScheduledWorkOrder): void {
+export function assertCurrentReleaseKitSocialUseAllowed(
+  workspaceRootPath: string,
+  order: ScheduledWorkOrder,
+  resolveMediaPath?: (workspaceRootPath: string, order: ScheduledWorkOrder) => string | undefined,
+): void {
   const releaseKitRefs = order.inputRefs.filter((ref) => ref.kind === 'release-kit')
   if (releaseKitRefs.length > 1) throw new Error('Social work has multiple Release Kit media references.')
   const releaseKitRef = releaseKitRefs[0]
   if (!releaseKitRef) return
+  const definition = order.authorization?.definition
+  if (definition
+    && isXEditorialSocialAuthorizationDefinition(definition)
+    && definition.releaseKitRef?.campaignId !== order.owner.workspaceId) {
+    if (!resolveMediaPath) throw new Error('Approved X media Campaign cannot be resolved for final verification.')
+    if (!resolveMediaPath(workspaceRootPath, order)) throw new Error('Approved X media could not be resolved for final verification.')
+    return
+  }
   const item = loadReleaseKitManifest(
     workspaceRootPath,
     order.owner.workspaceId,

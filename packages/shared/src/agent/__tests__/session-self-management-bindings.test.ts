@@ -117,6 +117,19 @@ describe('attachSessionSelfManagementBindings', () => {
     unregisterSessionScopedToolCallbacks(sessionId);
   });
 
+  it('binds the X Editorial history reader through the session registry', async () => {
+    const ctx = createBaseContext(sessionId);
+    attachSessionSelfManagementBindings(ctx, sessionId);
+    registerSessionScopedToolCallbacks(sessionId, {
+      listXEditorialHistoryFn: async (input) => ({ ok: true, data: { limit: input.limit } }),
+    });
+
+    await expect(ctx.listXEditorialHistory!({ limit: 5 })).resolves.toEqual({
+      ok: true,
+      data: { limit: 5 },
+    });
+  });
+
   it('absent callback → property is undefined for all 6 fields', () => {
     const ctx = createBaseContext(sessionId);
     attachSessionSelfManagementBindings(ctx, sessionId);

@@ -42,6 +42,7 @@ export interface MissionAssetLyricsMetadata {
   model?: string;
   engine?: string;
   generatedAt?: string;
+  sourceSha256?: string;
   reviewedAt?: string;
 }
 
@@ -59,6 +60,7 @@ export interface MissionAssetRecord {
   usableByAgents: boolean;
   notes?: string;
   lyrics?: MissionAssetLyricsMetadata;
+  trackIntelligence?: TrackIntelligence;
   createdAt: string;
   updatedAt: string;
 }
@@ -109,14 +111,20 @@ export interface MissionAssetScanResult {
 export interface MissionAssetSaveLyricsInput {
   lyricsText: string;
   lyricLines?: MissionLyricsLine[];
+  draftId?: string;
   assetId?: string;
   sourceAudioAssetId?: string;
   transcriptRelativePath?: string;
   model?: string;
   engine?: string;
   generatedAt?: string;
+  sourceSha256?: string;
   reviewRequired?: boolean;
   status?: MissionAssetLyricsMetadata['status'];
+  language?: string;
+  timingSource?: 'alignment' | 'transcription' | 'manual';
+  artistSuppliedText?: boolean;
+  character?: TrackCharacterMetadata;
 }
 
 export interface MissionAssetSaveLyricsResult {
@@ -138,3 +146,4 @@ export interface MissionAssetTranscribeLyricsResult {
   error?: string;
   blockers?: Array<{ code: string; message: string }>;
 }
+import type { TrackCharacterMetadata, TrackIntelligence } from '../artist-vault/types.ts';

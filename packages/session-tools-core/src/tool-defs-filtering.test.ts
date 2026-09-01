@@ -104,6 +104,13 @@ describe('session tool filtering helpers', () => {
     }
   });
 
+  it('exposes X Editorial history as a read-only safe tool', () => {
+    const history = SESSION_TOOL_DEFS.find((candidate) => candidate.name === 'list_x_editorial_history');
+    expect(history?.readOnly).toBe(true);
+    expect(history?.safeMode).toBe('allow');
+    expect(history?.description).toContain('prevent repetition');
+  });
+
   it('exposes Creative Lab tools only when explicitly enabled', () => {
     expect(getSessionToolNames().has('create_lab_song')).toBe(false);
     expect(getSessionToolNames().has('save_lab_lyrics')).toBe(false);

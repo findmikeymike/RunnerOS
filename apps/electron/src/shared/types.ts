@@ -158,6 +158,8 @@ import type { LoadedContextDoc as ContextDocDTO, ContextDocMetadata, ContextDocR
 export type { ContextDocDTO, ContextDocMetadata, ContextDocRouting };
 import type { CampaignCalendar as CampaignCalendarDTO } from '@craft-agent/shared/campaign-calendar';
 export type { CampaignCalendarDTO };
+import type { MutateXEditorialCandidateInput, MutateXEditorialCandidateResult } from '@craft-agent/shared/x-editorial';
+export type { MutateXEditorialCandidateInput, MutateXEditorialCandidateResult };
 import type {
   CancelCampaignWorkInput,
   CancelCampaignWorkResult,
@@ -226,6 +228,10 @@ import type {
   VaultFolderLinkResult,
   VaultKindHint,
   VaultManifest,
+  VaultTrackTranscribeOptions,
+  VaultTrackTranscribeResult,
+  TrackIntelligenceReviewInput,
+  TrackIntelligence,
 } from '@craft-agent/shared/artist-vault';
 export type {
   VaultAssetImportCandidate,
@@ -237,6 +243,10 @@ export type {
   VaultFolderLinkResult,
   VaultKindHint,
   VaultManifest,
+  VaultTrackTranscribeOptions,
+  VaultTrackTranscribeResult,
+  TrackIntelligenceReviewInput,
+  TrackIntelligence,
 };
 
 import type {
@@ -1138,6 +1148,7 @@ export interface ElectronAPI {
   scheduleCampaignWork(workspaceId: string, input: ScheduleCampaignWorkInput): Promise<ScheduleCampaignWorkResult>
   authorizeReleaseKitSocial(workspaceId: string, input: AuthorizeReleaseKitSocialInput): Promise<AuthorizeReleaseKitSocialResult>
   reauthorizeReleaseKitSocial(workspaceId: string, input: import('@craft-agent/shared/scheduled-work').ReauthorizeReleaseKitSocialInput): Promise<import('@craft-agent/shared/scheduled-work').ReauthorizeReleaseKitSocialResult>
+  mutateXEditorialCandidate(workspaceId: string, input: MutateXEditorialCandidateInput): Promise<MutateXEditorialCandidateResult>
   scheduleCampaignWorkChain(workspaceId: string, input: ScheduleCampaignChainInput): Promise<ScheduleCampaignChainResult>
   cancelCampaignWork(workspaceId: string, input: CancelCampaignWorkInput): Promise<CancelCampaignWorkResult>
   decideCampaignWork(workspaceId: string, input: DecideCampaignWorkInput): Promise<DecideCampaignWorkResult>
@@ -1161,6 +1172,8 @@ export interface ElectronAPI {
   importArtistVaultAssets(workspaceId: string, filePaths: string[], options?: VaultAssetImportOptions): Promise<VaultAssetImportResult>
   linkArtistVaultFolder(workspaceId: string, folderPath: string): Promise<VaultFolderLinkResult>
   updateArtistVaultAsset(workspaceId: string, assetId: string, patch: VaultAssetUpdatePatch): Promise<VaultManifest>
+  transcribeArtistVaultTrack(workspaceId: string, options: VaultTrackTranscribeOptions): Promise<VaultTrackTranscribeResult>
+  reviewArtistVaultTrack(workspaceId: string, input: TrackIntelligenceReviewInput): Promise<VaultManifest>
   saveOutputAssetToVault(workspaceId: string, outputId: string, assetId?: string, options?: VaultAssetImportOptions): Promise<VaultAssetImportResult>
   scanArtistVault(workspaceId: string): Promise<VaultAssetScanResult>
   openArtistVaultFolder(workspaceId: string): Promise<boolean>

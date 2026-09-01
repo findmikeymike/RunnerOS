@@ -39,6 +39,8 @@ import { CompactPageHeader } from './CompactPageHeader'
 import { getModelsForProviderType } from '@config/llm-connections'
 import { getModelShortName, type ModelDefinition } from '@config/models'
 import { getAgentCapabilityDisplay } from '@/lib/agent-capability-display'
+import { findArtistHQWorkspace, findPrimaryCampaignWorkspace, isArtistCampaignWorkspace } from '@/lib/artist-workspace'
+import { buildXEditorialCampaignLaunchContext, selectXEditorialCampaignContext } from '@/lib/x-editorial-launch'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
 import type { AgentDefinitionDTO, ContextDocDTO, LlmConnectionWithStatus } from '../../../shared/types'
 
@@ -57,7 +59,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
   const { getDisplayName } = useAgentDisplayNames()
   const skills = useAtomValue(skillsAtom)
   const sources = useAtomValue(sourcesAtom)
-  const { onCreateSession, onInputChange } = useAppShellContext()
+  const { workspaces, onCreateSession, onInputChange, onSelectWorkspace } = useAppShellContext()
   const [libraryOpen, setLibraryOpen] = React.useState(false)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [selectedAgent, setSelectedAgent] = React.useState<AgentDefinitionDTO | null>(null)
@@ -85,16 +87,60 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
     if (!workspaceId || launchingSlug) return
     setLaunchingSlug(agent.slug)
     try {
-      const contextDocs = await window.electronAPI
-        .listWorkspaceContextDocsForAgent(workspaceId, agent.slug)
-        .catch(() => [])
+      const sourceWorkspace = workspaces.find((workspace) => workspace.id === workspaceId)
+      const hqWorkspace = findArtistHQWorkspace(workspaces)
+      const campaignLaunch = agent.slug === 'x-editorial'
+        && isArtistCampaignWorkspace(sourceWorkspace)
+        && Boolean(hqWorkspace)
+      const hqLaunch = agent.slug === 'x-editorial'
+        && sourceWorkspace?.id === hqWorkspace?.id
+      const launchWorkspaceId = campaignLaunch ? hqWorkspace!.id : workspaceId
+      const campaignWorkspaces = hqLaunch
+        ? workspaces.filter((workspace) => isArtistCampaignWorkspace(workspace))
+        : []
+      const primaryCampaign = findPrimaryCampaignWorkspace(workspaces)
+      const [launchSkills, launchSources, hqContextDocs, campaignContextDocs, autoCampaignContexts] = await Promise.all([
+        launchWorkspaceId === workspaceId ? Promise.resolve(skills) : window.electronAPI.getSkills(launchWorkspaceId),
+        launchWorkspaceId === workspaceId ? Promise.resolve(sources) : window.electronAPI.getSources(launchWorkspaceId),
+        window.electronAPI.listWorkspaceContextDocsForAgent(launchWorkspaceId, agent.slug).catch(() => []),
+        campaignLaunch
+          ? window.electronAPI.listWorkspaceContextDocs(workspaceId).catch(() => [])
+          : Promise.resolve([]),
+        Promise.all(campaignWorkspaces.map(async (campaign) => ({
+          id: campaign.id,
+          name: campaign.name,
+          primary: campaign.id === primaryCampaign?.id,
+          docs: await window.electronAPI.listWorkspaceContextDocs(campaign.id).catch(() => []),
+        }))),
+      ])
+      const automaticCampaign = selectXEditorialCampaignContext(autoCampaignContexts)
+      const contextDocs = campaignLaunch
+        ? buildXEditorialCampaignLaunchContext(
+            hqContextDocs,
+            campaignContextDocs,
+            { id: workspaceId, name: sourceWorkspace?.name ?? 'Current Campaign' },
+            { origin: 'pinned', campaignWeight: 'focus' },
+          )
+        : automaticCampaign
+          ? buildXEditorialCampaignLaunchContext(
+              hqContextDocs,
+              automaticCampaign.docs,
+              automaticCampaign.campaign,
+              {
+                origin: 'automatic',
+                campaignWeight: automaticCampaign.weight,
+                releaseDate: automaticCampaign.releaseDate,
+              },
+            )
+        : hqContextDocs
+      if (launchWorkspaceId !== workspaceId) await Promise.resolve(onSelectWorkspace(launchWorkspaceId))
       await openAgentSessionComposer({
         agent,
-        workspaceId,
+        workspaceId: launchWorkspaceId,
         onCreateSession,
         onInputChange,
-        skills,
-        sources,
+        skills: launchSkills,
+        sources: launchSources,
         contextDocs,
       })
       setRecentSlugs((current) => {
@@ -109,7 +155,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
     } finally {
       setLaunchingSlug(null)
     }
-  }, [launchingSlug, onCreateSession, onInputChange, skills, sources, workspaceId])
+  }, [launchingSlug, onCreateSession, onInputChange, onSelectWorkspace, skills, sources, workspaceId, workspaces])
 
   const toggleFavorite = React.useCallback((slug: string) => {
     setFavoriteSlugs((current) => {

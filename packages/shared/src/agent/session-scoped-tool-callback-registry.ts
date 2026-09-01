@@ -207,6 +207,7 @@ export interface SessionScopedToolCallbacks {
   listArtistVaultFn?: (input: undefined) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
   listCampaignOutputsFn?: (input: { campaignWorkspaceId?: string }) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
   getCampaignOutputFn?: (input: { outputId: string; campaignWorkspaceId?: string }) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+  listXEditorialHistoryFn?: (input: { limit?: number }) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
   getAssetRecordFn?: (input: {
     sourceType: 'campaign-asset' | 'vault-asset';
     assetId: string;

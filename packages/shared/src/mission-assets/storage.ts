@@ -40,6 +40,12 @@ import {
   type MissionAssetSaveLyricsResult,
   type MissionAssetScanResult,
 } from './types.ts';
+import { normalizeTrackCharacter } from '../artist-vault/track-intelligence.ts';
+import { hashFileSha256 } from '../utils/hash-file.ts';
+import {
+  missionLyricsProjectionFromTrackIntelligence,
+  reconcileMissionLyricsProjections,
+} from './track-intelligence.ts';
 
 const DEFAULT_DIRECTORIES = [
   'audio/masters',
@@ -112,7 +118,7 @@ function readManifestFile(file: string): { manifest?: MissionAssetManifest; reas
   try {
     const parsed = JSON.parse(readFileSync(file, 'utf-8')) as MissionAssetManifest;
     if (!isMissionAssetManifest(parsed)) return { reason: 'schema mismatch' };
-    return { manifest: parsed, reason: 'ok' };
+    return { manifest: reconcileMissionLyricsProjections(parsed), reason: 'ok' };
   } catch (err) {
     return { reason: err instanceof Error ? err.message : 'parse failed' };
   }
@@ -122,7 +128,7 @@ async function readManifestFileAsync(file: string): Promise<{ manifest?: Mission
   try {
     const parsed = JSON.parse(await readFileAsync(file, 'utf-8')) as MissionAssetManifest;
     if (!isMissionAssetManifest(parsed)) return { reason: 'schema mismatch' };
-    return { manifest: parsed, reason: 'ok' };
+    return { manifest: reconcileMissionLyricsProjections(parsed), reason: 'ok' };
   } catch (err) {
     return { reason: err instanceof Error ? err.message : 'parse failed' };
   }
@@ -164,18 +170,100 @@ export async function saveMissionLyricsAsync(
   workspaceRootPath: string,
   workspaceId: string,
   input: MissionAssetSaveLyricsInput,
+  reviewedByClientId?: string,
 ): Promise<MissionAssetSaveLyricsResult> {
   const lyricsText = input.lyricsText.trim();
-  if (!lyricsText) throw new Error('lyricsText is required');
+  if (!lyricsText && !input.character && input.status !== 'machine') throw new Error('Lyrics or track metadata is required');
   await ensureMissionAssetsFoldersAsync(workspaceRootPath);
   const manifest = await loadMissionAssetManifestForImportAsync(workspaceRootPath, workspaceId);
   const now = new Date().toISOString();
   const sourceAudio = input.sourceAudioAssetId
-    ? manifest.files.find((file) => file.id === input.sourceAudioAssetId)
+    ? manifest.files.find((file) => file.id === input.sourceAudioAssetId && ['master', 'demo'].includes(file.kind))
     : selectMissionAudioForLyrics(manifest);
   const existing = input.assetId
     ? manifest.files.find((file) => file.id === input.assetId && file.kind === 'lyrics')
     : null;
+  if (input.sourceAudioAssetId && !sourceAudio) throw new Error(`Campaign audio asset not found: ${input.sourceAudioAssetId}`);
+  const reviewed = !(input.reviewRequired ?? false);
+  if (reviewed && !reviewedByClientId?.trim()) throw new Error('A human reviewer identity is required to approve track intelligence.');
+  const currentRevision = sourceAudio?.trackIntelligence?.draft ?? sourceAudio?.trackIntelligence?.approved;
+  const expectedDraftId = currentRevision?.id ?? (existing?.lyrics ? `legacy-${existing.id}` : undefined);
+  if (reviewed && expectedDraftId && input.draftId !== expectedDraftId) {
+    throw new Error('This track analysis draft is stale. Reopen the current track package before saving.');
+  }
+  if (reviewed && currentRevision?.provenance.sourceSha256 && sourceAudio) {
+    const sourcePath = sourceAudio.relativePath ? resolve(workspaceRootPath, sourceAudio.relativePath) : sourceAudio.absolutePath;
+    if (!sourcePath || !existsSync(sourcePath) || !statSync(sourcePath).isFile()) throw new Error('The track audio file is missing.');
+    if (hashFileSha256(sourcePath) !== currentRevision.provenance.sourceSha256) {
+      throw new Error('The audio changed after analysis. Re-run transcription before approving lyrics.');
+    }
+  }
+  if (sourceAudio) {
+    const prior = sourceAudio.trackIntelligence;
+    const lyricsChangedWithoutLines = input.lyricLines === undefined
+      && existing?.lyrics?.text !== undefined
+      && existing.lyrics.text.trim() !== lyricsText;
+    const sourceLines = input.lyricLines
+      ?? (lyricsChangedWithoutLines ? undefined : existing?.lyrics?.lyricLines);
+    const lyricLines = sourceLines?.length
+      ? sourceLines.map((line, index) => ({
+        id: `line-${index + 1}`,
+        text: line.text,
+        startMs: Math.max(0, Math.round(line.start_time * 1000)),
+        endMs: Math.max(0, Math.round(line.end_time * 1000)),
+      }))
+      : lyricsText.split(/\r?\n/).map((text, index) => ({ id: `line-${index + 1}`, text: text.trim() })).filter((line) => line.text);
+    const baseRevision = prior?.draft ?? prior?.approved;
+    const character = normalizeTrackCharacter(input.character ?? baseRevision?.character);
+    const revision = {
+      id: reviewed ? (prior?.draft?.id ?? `manual-${randomUUID()}`) : `draft-${randomUUID()}`,
+      lyrics: {
+        lines: lyricLines.map((line, index) => {
+          const approvedLine = prior?.approved?.lyrics?.lines.find((candidate) => candidate.id === line.id);
+          const preserveCorrection = !reviewed && approvedLine?.corrected;
+          return {
+            ...line,
+            text: preserveCorrection ? approvedLine.text : line.text,
+            corrected: preserveCorrection || (reviewed && Boolean(baseRevision?.lyrics?.lines[index] && baseRevision.lyrics.lines[index]?.text !== line.text)),
+          };
+        }),
+        language: input.language ?? baseRevision?.lyrics?.language,
+        timingSource: input.timingSource ?? baseRevision?.lyrics?.timingSource ?? (sourceLines?.length ? 'transcription' : 'manual'),
+        timingStatus: sourceLines?.length ? 'ready' as const : 'needs-alignment' as const,
+        artistSuppliedText: input.artistSuppliedText ?? baseRevision?.lyrics?.artistSuppliedText,
+      },
+      character,
+      technical: baseRevision?.technical,
+      provenance: {
+        ...baseRevision?.provenance,
+        engine: input.engine ?? baseRevision?.provenance.engine,
+        analyzedAt: input.generatedAt ?? baseRevision?.provenance.analyzedAt,
+        processedLocally: input.status === 'machine' ? true : baseRevision?.provenance.processedLocally,
+        transcriptRelativePath: input.transcriptRelativePath ?? baseRevision?.provenance.transcriptRelativePath,
+        sourceSha256: input.status === 'machine'
+          ? input.sourceSha256
+          : baseRevision?.provenance.sourceSha256 ?? (() => {
+            const sourcePath = sourceAudio.relativePath ? resolve(workspaceRootPath, sourceAudio.relativePath) : sourceAudio.absolutePath;
+            return sourcePath && existsSync(sourcePath) ? hashFileSha256(sourcePath) : sourceAudio.sha256;
+          })(),
+      },
+    };
+    sourceAudio.trackIntelligence = reviewed ? {
+      status: 'reviewed',
+      schemaVersion: 1,
+      approved: {
+        ...revision,
+        reviewedAt: now,
+        reviewedBy: { type: 'user', clientId: reviewedByClientId! },
+      },
+    } : {
+      status: 'draft',
+      schemaVersion: 1,
+      approved: prior?.approved,
+      draft: revision,
+    };
+    sourceAudio.updatedAt = now;
+  }
   const relativePath = existing?.relativePath
     ?? await uniqueDestinationRelativePathAsync(
       workspaceRootPath,
@@ -187,19 +275,24 @@ export async function saveMissionLyricsAsync(
   await mkdirAsync(dirname(absolutePath), { recursive: true });
   await writeFileAsync(absolutePath, `${lyricsText}\n`, 'utf-8');
   const { sizeBytes, sha256 } = await sizeAndHashAsync(absolutePath);
-  const lyrics = {
+  const compatibilityMetadata = {
+    ...existing?.lyrics,
     text: lyricsText,
-    lyricLines: input.lyricLines,
     reviewRequired: input.reviewRequired ?? false,
     status: input.status ?? 'approved',
-    sourceAudioAssetId: sourceAudio?.id,
-    sourceAudioPath: sourceAudio?.relativePath ?? sourceAudio?.absolutePath,
-    transcriptRelativePath: input.transcriptRelativePath ?? existing?.lyrics?.transcriptRelativePath,
     model: input.model ?? existing?.lyrics?.model,
-    engine: input.engine ?? existing?.lyrics?.engine,
-    generatedAt: input.generatedAt ?? existing?.lyrics?.generatedAt,
-    reviewedAt: input.reviewRequired ? existing?.lyrics?.reviewedAt : now,
   };
+  const lyrics = sourceAudio
+    ? missionLyricsProjectionFromTrackIntelligence(sourceAudio, compatibilityMetadata)!
+    : {
+      ...compatibilityMetadata,
+      lyricLines: input.lyricLines ?? existing?.lyrics?.lyricLines,
+      transcriptRelativePath: input.transcriptRelativePath ?? existing?.lyrics?.transcriptRelativePath,
+      engine: input.engine ?? existing?.lyrics?.engine,
+      generatedAt: input.generatedAt ?? existing?.lyrics?.generatedAt,
+      sourceSha256: input.sourceSha256 ?? existing?.lyrics?.sourceSha256,
+      reviewedAt: input.reviewRequired ? existing?.lyrics?.reviewedAt : now,
+    };
 
   let lyricsAsset: MissionAssetRecord;
   if (existing) {
@@ -212,7 +305,7 @@ export async function saveMissionLyricsAsync(
       sha256,
       source: input.status === 'machine' ? 'agent-output' : existing.source,
       status: 'available',
-      usableByAgents: true,
+      usableByAgents: !(input.reviewRequired ?? false),
       notes: input.reviewRequired ? 'Machine transcript needs lyric review' : 'Approved lyrics for campaign agents',
       lyrics,
       updatedAt: now,
@@ -229,13 +322,27 @@ export async function saveMissionLyricsAsync(
       sha256,
       source: input.status === 'machine' ? 'agent-output' : 'manual',
       status: 'available',
-      usableByAgents: true,
+      usableByAgents: !(input.reviewRequired ?? false),
       notes: input.reviewRequired ? 'Machine transcript needs lyric review' : 'Approved lyrics for campaign agents',
       lyrics,
       createdAt: now,
       updatedAt: now,
     };
     manifest.files.push(lyricsAsset);
+  }
+
+  if (!(input.reviewRequired ?? false)) {
+    manifest.files = manifest.files.map((file) => {
+      if (file.id === lyricsAsset.id || file.kind !== 'lyrics' || file.status !== 'available') return file;
+      if (sourceAudio && file.lyrics?.sourceAudioAssetId && file.lyrics.sourceAudioAssetId !== sourceAudio.id) return file;
+      return {
+        ...file,
+        status: 'moved',
+        usableByAgents: false,
+        notes: 'Superseded by a newer artist-approved lyric revision',
+        updatedAt: now,
+      };
+    });
   }
 
   manifest.workspaceId = workspaceId;
@@ -677,7 +784,7 @@ function withImportedLyricsMetadata(record: MissionAssetRecord, absolutePath: st
   if (!text) return record;
   return {
     ...record,
-    usableByAgents: true,
+    usableByAgents: false,
     notes: appendNote(record.notes, 'Imported lyrics need review'),
     lyrics: {
       text,
@@ -694,7 +801,7 @@ async function withImportedLyricsMetadataAsync(record: MissionAssetRecord, absol
   if (!text) return record;
   return {
     ...record,
-    usableByAgents: true,
+    usableByAgents: false,
     notes: appendNote(record.notes, 'Imported lyrics need review'),
     lyrics: {
       text,

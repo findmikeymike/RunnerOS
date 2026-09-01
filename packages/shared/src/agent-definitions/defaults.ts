@@ -11,6 +11,7 @@ export const DEFAULT_ACTIVATED_AGENT_SLUGS = [
   'college-radio-agent',
   'spotify-playlist-creator',
   'youtube-intelligence-agent',
+  'x-editorial',
 ] as const
 
 /** Initial Creative Lab team. Applied only when the app creates a new Lab root. */

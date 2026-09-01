@@ -5,6 +5,11 @@ import { join } from 'node:path';
 import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context';
 import { HQ_RECOMMENDATIONS_DIR } from '@craft-agent/shared/hq-state/recommendation-storage';
 import {
+  importMissionAssets,
+  saveMissionLyricsAsync,
+  serializeMissionAssetContext,
+} from '@craft-agent/shared/mission-assets';
+import {
   getArtistContextDetail,
   getAuthorizedWorkspaceContext,
   getLiveManagerBrief,
@@ -150,6 +155,26 @@ describe('Manager context retrieval', () => {
     expect(result.ok).toBe(true);
     expect(document.body).toHaveLength(40);
     expect(document.truncated).toBe(true);
+  });
+
+  test('rebuilds campaign asset context live and withholds stale reviewed lyrics', async () => {
+    const root = workspace();
+    const source = join(root, 'campaign-master.wav');
+    writeFileSync(source, 'audio-v1');
+    const audio = importMissionAssets(root, 'workspace-1', [source], { kindHint: 'master' }).imported[0]!;
+    const reviewed = await saveMissionLyricsAsync(root, 'workspace-1', {
+      sourceAudioAssetId: audio.id,
+      lyricsText: 'approved lyric',
+      lyricLines: [{ text: 'approved lyric', start_time: 0, end_time: 1 }],
+    }, 'client-1');
+    write(root, 'mission-assets', serializeMissionAssetContext(reviewed.manifest));
+    writeFileSync(join(root, audio.relativePath!), 'audio-v2');
+
+    const result = getAuthorizedWorkspaceContext(root, 'worker', { slug: 'mission-assets' });
+
+    expect(result.ok).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('approved lyric');
+    expect(JSON.stringify(result)).toContain('source audio changed');
   });
 
   test('semantic artist lookup normalizes results and never exposes filesystem paths', () => {

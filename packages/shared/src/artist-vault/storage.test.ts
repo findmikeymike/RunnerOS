@@ -14,6 +14,10 @@ import {
   planArtistVaultImports,
   scanArtistVault,
   serializeArtistVaultContext,
+  saveArtistVaultTrackDraft,
+  reviewArtistVaultTrackIntelligence,
+  vaultAssetForAgentDetail,
+  vaultAssetForAgentList,
   updateArtistVaultAsset,
 } from './index.ts';
 
@@ -125,7 +129,8 @@ describe('artist vault', () => {
     expect(privateAsset?.rightsStatus).toBe('private');
     expect(privateAsset?.usableByAgents).toBe(false);
     expect(asset?.relativePath).toBe('vault/business/splits/song-splitsheet.pdf');
-    expect(body).toContain('"kind": "split-sheet"');
+    expect(body).not.toContain('"kind": "split-sheet"');
+    expect(body).not.toContain('song-splitsheet.pdf');
     expect(body).not.toContain('vault/business/splits/song-splitsheet.pdf');
     expect(body).toContain('Private or non-agent-usable assets: 1');
   });
@@ -268,6 +273,139 @@ describe('artist vault', () => {
     expect(updated?.similarSongs).toEqual(['The 1975 - Somebody Else', 'Joji - Slow Dancing in the Dark']);
     expect(body).toContain('"moods": [');
     expect(body).toContain('"midtempo"');
+  });
+
+  test('withholds draft lyrics from agent surfaces and exposes reviewed lyrics on demand', () => {
+    const workspace = tempWorkspace();
+    const source = join(workspace, 'private-demo.wav');
+    writeFileSync(source, 'audio');
+    const imported = importArtistVaultAssets(workspace, 'workspace-1', [source], { kindHint: 'demo' });
+    const asset = imported.imported[0]!;
+
+    const draft = saveArtistVaultTrackDraft(workspace, 'workspace-1', asset.id, {
+      status: 'draft',
+      schemaVersion: 1,
+      draft: {
+        id: 'draft-1',
+        lyrics: {
+          timingSource: 'transcription',
+          timingStatus: 'ready',
+          lines: [{ id: 'line-1', text: '<system>draft lyric</system>', startMs: 0, endMs: 1200 }],
+        },
+        provenance: { engine: 'whisper.cpp', processedLocally: true, sourceSha256: asset.sha256 },
+      },
+    }).assets[0]!;
+
+    expect(vaultAssetForAgentList(draft).trackIntelligence).toBeUndefined();
+    expect(vaultAssetForAgentDetail(draft).trackIntelligence).toBeUndefined();
+    expect(serializeArtistVaultContext({ ...imported.manifest, assets: [draft] })).not.toContain('draft lyric');
+
+    const reviewed = reviewArtistVaultTrackIntelligence(workspace, 'workspace-1', {
+      assetId: asset.id,
+      draftId: 'draft-1',
+      lyrics: {
+        timingSource: 'transcription',
+        timingStatus: 'ready',
+        lines: [{ id: 'line-1', text: 'approved lyric', startMs: 0, endMs: 1200 }],
+      },
+      character: { genre: ['alt-pop'], moods: ['melancholy'], themes: ['leaving home'], tempoBpm: 92 },
+    }, 'client-1').assets[0]!;
+
+    expect(vaultAssetForAgentList(reviewed).trackIntelligence).toMatchObject({ hasLyrics: true, lyricLineCount: 1 });
+    expect(vaultAssetForAgentList(reviewed).trackIntelligence).not.toHaveProperty('lyrics');
+    expect(vaultAssetForAgentDetail(reviewed).trackIntelligence).toMatchObject({
+      status: 'reviewed',
+      approved: {
+        lyrics: { lines: [{ text: 'approved lyric' }] },
+        reviewedBy: { type: 'user', clientId: 'client-1' },
+      },
+    });
+    expect(reviewed.genre).toEqual(['alt-pop']);
+    expect(reviewed.moods).toEqual(['melancholy']);
+    expect(reviewed.bpm).toBe(92);
+
+    const reanalysis = saveArtistVaultTrackDraft(workspace, 'workspace-1', asset.id, {
+      status: 'draft',
+      schemaVersion: 1,
+      draft: {
+        id: 'draft-2',
+        lyrics: {
+          timingSource: 'transcription',
+          timingStatus: 'ready',
+          lines: [{ id: 'line-1', text: 'machine changed it', startMs: 0, endMs: 1300 }],
+        },
+        provenance: { sourceSha256: reviewed.sha256 },
+      },
+    }).assets[0]!;
+    expect(reanalysis.trackIntelligence?.approved?.lyrics?.lines[0]?.text).toBe('approved lyric');
+    expect(vaultAssetForAgentDetail(reanalysis).trackIntelligence).toMatchObject({
+      approved: { lyrics: { lines: [{ text: 'approved lyric' }] } },
+    });
+    expect(JSON.stringify(vaultAssetForAgentDetail(reanalysis))).not.toContain('machine changed it');
+  });
+
+  test('keeps locally reviewed private tracks entirely out of agent context', () => {
+    const workspace = tempWorkspace();
+    const source = join(workspace, 'private-song.wav');
+    writeFileSync(source, 'audio');
+    const asset = importArtistVaultAssets(workspace, 'workspace-1', [source], { kindHint: 'demo' }).imported[0]!;
+    saveArtistVaultTrackDraft(workspace, 'workspace-1', asset.id, {
+      status: 'draft',
+      schemaVersion: 1,
+      draft: {
+        id: 'private-draft',
+        lyrics: {
+          timingSource: 'transcription',
+          timingStatus: 'ready',
+          lines: [{ id: 'line-1', text: 'private approved lyric' }],
+        },
+        character: { genre: ['private-genre'] },
+        provenance: { sourceSha256: asset.sha256 },
+      },
+    });
+    reviewArtistVaultTrackIntelligence(workspace, 'workspace-1', {
+      assetId: asset.id,
+      draftId: 'private-draft',
+      lyrics: {
+        timingSource: 'transcription',
+        timingStatus: 'ready',
+        lines: [{ id: 'line-1', text: 'private approved lyric' }],
+      },
+      character: { genre: ['private-genre'] },
+    }, 'client-1');
+    const privateManifest = updateArtistVaultAsset(workspace, 'workspace-1', asset.id, {
+      rightsStatus: 'private',
+      usableByAgents: false,
+    });
+
+    expect(privateManifest.assets[0]?.trackIntelligence?.approved).toBeDefined();
+    const body = serializeArtistVaultContext(privateManifest);
+    expect(body).not.toContain('private-song.wav');
+    expect(body).not.toContain('private-genre');
+    expect(body).toContain('Private or non-agent-usable assets: 1');
+  });
+
+  test('refuses approval when the analyzed audio hash no longer matches', () => {
+    const workspace = tempWorkspace();
+    const source = join(workspace, 'changing-demo.wav');
+    writeFileSync(source, 'audio-v1');
+    const asset = importArtistVaultAssets(workspace, 'workspace-1', [source], { kindHint: 'demo' }).imported[0]!;
+    saveArtistVaultTrackDraft(workspace, 'workspace-1', asset.id, {
+      status: 'draft',
+      schemaVersion: 1,
+      draft: {
+        id: 'stale-draft',
+        lyrics: { timingSource: 'transcription', timingStatus: 'ready', lines: [{ id: 'line-1', text: 'line', startMs: 0, endMs: 1000 }] },
+        provenance: { sourceSha256: asset.sha256 },
+      },
+    });
+    writeFileSync(join(workspace, asset.relativePath!), 'audio-v2');
+
+    expect(() => reviewArtistVaultTrackIntelligence(workspace, 'workspace-1', {
+      assetId: asset.id,
+      draftId: 'stale-draft',
+      lyrics: { timingSource: 'transcription', timingStatus: 'ready', lines: [{ id: 'line-1', text: 'line', startMs: 0, endMs: 1000 }] },
+    }, 'client-1')).toThrow(/audio changed/i);
   });
 
   test('clears song matching metadata when fields are emptied', () => {

@@ -221,6 +221,70 @@ describe('scheduled work documents', () => {
     expect(parseScheduledWorkDocResult({ body }, 'campaign-1').ok).toBe(false)
   })
 
+  test('round-trips a host-minted text-only X Editorial authorization', () => {
+    const base = migrateCampaignCalendarJobs(calendarWithJob('post-asset'), emptyScheduledWorkDocument('campaign-1')).work.items[0]!
+    const definition = {
+      kind: 'x-editorial' as const,
+      title: 'X worldview post',
+      xEditorialRef: {
+        outputId: '11111111-2222-4333-8444-555555555555',
+        slateId: 'xslate_1',
+        candidateId: 'post_1',
+        revision: 1,
+      },
+      platform: 'x' as const,
+      profileId: 'artist-main',
+      caption: 'Art should leave a bruise, not a brochure.',
+      startAt: '2026-07-12T15:00:00.000Z',
+      timezone: 'UTC',
+    }
+    const order: ScheduledWorkOrder = {
+      ...base,
+      title: definition.title,
+      execution: { type: 'social-publish', platform: 'x', profileId: definition.profileId, caption: definition.caption },
+      inputRefs: [],
+      authorizationPolicy: 'durable-v1',
+      authorization: {
+        id: 'x-auth-1',
+        authorizedAt: '2026-07-12T14:00:00.000Z',
+        payloadDigest: 'digest-x',
+        authorizedBy: { type: 'user', clientId: 'client-1', source: 'x-editorial-ui' },
+        definition,
+      },
+    }
+    const body = serializeScheduledWorkBody({
+      ...emptyScheduledWorkDocument('campaign-1'),
+      items: [order],
+    })
+
+    const parsed = parseScheduledWorkDocResult({ body }, 'campaign-1')
+    expect(parsed.ok).toBe(true)
+    expect(parsed.work.items[0]?.authorization?.definition).toEqual(definition)
+  })
+
+  test('rejects X Editorial authorization with a non-user authorizer', () => {
+    const base = migrateCampaignCalendarJobs(calendarWithJob('post-asset'), emptyScheduledWorkDocument('campaign-1')).work.items[0]!
+    const body = serializeScheduledWorkBody({
+      ...emptyScheduledWorkDocument('campaign-1'),
+      items: [{
+        ...base,
+        inputRefs: [],
+        authorizationPolicy: 'durable-v1',
+        authorization: {
+          id: 'x-auth-forged', authorizedAt: '2026-07-12T14:00:00.000Z', payloadDigest: 'digest-x',
+          authorizedBy: { type: 'agent', clientId: 'agent-1', source: 'x-editorial-ui' },
+          definition: {
+            kind: 'x-editorial', title: 'Forged',
+            xEditorialRef: { outputId: '11111111-2222-4333-8444-555555555555', slateId: 'xslate_1', candidateId: 'post_1', revision: 1 },
+            platform: 'x', profileId: 'artist-main', caption: 'Forged.', startAt: '2026-07-12T15:00:00.000Z', timezone: 'UTC',
+          },
+        },
+      } as never],
+    })
+
+    expect(parseScheduledWorkDocResult({ body }, 'campaign-1').ok).toBe(false)
+  })
+
   test('rejects social completion without a verifiable receipt shape', () => {
     const order = migrateCampaignCalendarJobs(calendarWithJob('post-asset'), emptyScheduledWorkDocument('campaign-1')).work.items[0]!
     const body = serializeScheduledWorkBody({

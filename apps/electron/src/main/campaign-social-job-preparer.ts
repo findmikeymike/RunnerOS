@@ -11,7 +11,7 @@ import type {
   CampaignCalendarItem,
   CampaignScheduledJob,
 } from '@craft-agent/shared/campaign-calendar'
-import type { ScheduledWorkOrder, ScheduledSocialActionPreview, ScheduledSocialApproval } from '@craft-agent/shared/scheduled-work'
+import { isXEditorialSocialAuthorizationDefinition, type ScheduledWorkOrder, type ScheduledSocialActionPreview, type ScheduledSocialApproval } from '@craft-agent/shared/scheduled-work'
 
 type PrepareInput = {
   workspaceId: string
@@ -37,6 +37,12 @@ type PrepareDeps = {
   resolveMediaPath(input: PrepareInput): string | undefined
   fingerprintMediaPath?(path: string): string
 }
+
+type ScheduledWorkspaceResolver = (workspaceId: string) => {
+  id: string
+  rootPath: string
+  artistWorkspaceScope?: string
+} | null | undefined
 
 export async function prepareCampaignSocialJob(input: PrepareInput, deps: PrepareDeps) {
   if (input.job.actionType !== 'post-asset') {
@@ -97,9 +103,9 @@ export async function prepareCampaignSocialJob(input: PrepareInput, deps: Prepar
 export async function prepareScheduledSocialWork(input: {
   workspaceRootPath: string
   order: ScheduledWorkOrder
-}, deps: Pick<PrepareDeps, 'runSocialJson'>): Promise<ScheduledSocialActionPreview> {
+}, deps: Pick<PrepareDeps, 'runSocialJson'> & { resolveWorkspace?: ScheduledWorkspaceResolver }): Promise<ScheduledSocialActionPreview> {
   if (input.order.execution.type !== 'social-publish') throw new Error('Scheduled work is not a social publish action.')
-  const mediaPath = resolveScheduledSocialMediaPath(input.workspaceRootPath, input.order)
+  const mediaPath = resolveScheduledSocialMediaPath(input.workspaceRootPath, input.order, deps.resolveWorkspace)
   if (!mediaPath && input.order.execution.platform !== 'x') throw new Error(`${input.order.execution.platform} post requires one resolvable media asset.`)
   const actionId = `act_${input.order.id}`
   const raw = await deps.runSocialJson([
@@ -138,9 +144,9 @@ export async function executeScheduledSocialWork(input: {
   order: ScheduledWorkOrder
   preview: ScheduledSocialActionPreview
   approval: ScheduledSocialApproval
-}, deps: Pick<PrepareDeps, 'runSocialJson'>): Promise<{ receiptId: string; externalUrl?: string; summary: string }> {
+}, deps: Pick<PrepareDeps, 'runSocialJson'> & { resolveWorkspace?: ScheduledWorkspaceResolver }): Promise<{ receiptId: string; externalUrl?: string; summary: string }> {
   if (input.order.execution.type !== 'social-publish') throw new Error('Scheduled work is not social publish work.')
-  const mediaPath = resolveScheduledSocialMediaPath(input.workspaceRootPath, input.order)
+  const mediaPath = resolveScheduledSocialMediaPath(input.workspaceRootPath, input.order, deps.resolveWorkspace)
   const mediaDigest = mediaPath ? fingerprintCampaignSocialMediaPath(mediaPath) : undefined
   assertScheduledDryRunMatchesOrder(input.preview.dryRun, input.order)
   const actionDigest = socialActionDigest(input.preview.dryRun, mediaDigest)
@@ -210,21 +216,26 @@ export function resolveCampaignSocialMediaPath(input: PrepareInput): string | un
   return undefined
 }
 
-function resolveScheduledSocialMediaPath(workspaceRootPath: string, order: ScheduledWorkOrder): string | undefined {
+export function resolveScheduledSocialMediaPath(
+  workspaceRootPath: string,
+  order: ScheduledWorkOrder,
+  resolveWorkspace?: ScheduledWorkspaceResolver,
+): string | undefined {
   const releaseKitRefs = order.inputRefs.filter((ref) => ref.kind === 'release-kit')
   if (releaseKitRefs.length > 1) throw new Error('Social work has multiple Release Kit media references.')
   const releaseKitRef = releaseKitRefs[0]
   if (releaseKitRef) {
+    const location = resolveScheduledReleaseKitLocation(workspaceRootPath, order, resolveWorkspace)
     assertCurrentReleaseKitSocialUseAllowed(
-      workspaceRootPath,
-      order.owner.workspaceId,
-      order.owner.campaignId ?? order.owner.workspaceId,
+      location.rootPath,
+      location.workspaceId,
+      location.campaignId,
       releaseKitRef.itemId,
     )
     return resolveVerifiedReleaseKitItemPath(
-      workspaceRootPath,
-      order.owner.workspaceId,
-      order.owner.campaignId ?? order.owner.workspaceId,
+      location.rootPath,
+      location.workspaceId,
+      location.campaignId,
       releaseKitRef.itemId,
       releaseKitRef.sha256,
     )
@@ -241,6 +252,29 @@ function resolveScheduledSocialMediaPath(workspaceRootPath: string, order: Sched
     if (resolved) return resolved
   }
   return undefined
+}
+
+function resolveScheduledReleaseKitLocation(
+  workspaceRootPath: string,
+  order: ScheduledWorkOrder,
+  resolveWorkspace?: ScheduledWorkspaceResolver,
+): { rootPath: string; workspaceId: string; campaignId: string } {
+  const definition = order.authorization?.definition
+  const campaignId = definition && isXEditorialSocialAuthorizationDefinition(definition)
+    ? definition.releaseKitRef?.campaignId
+    : order.owner.campaignId
+  if (!campaignId || campaignId === order.owner.workspaceId) {
+    return {
+      rootPath: workspaceRootPath,
+      workspaceId: order.owner.workspaceId,
+      campaignId: order.owner.campaignId ?? order.owner.workspaceId,
+    }
+  }
+  const campaign = resolveWorkspace?.(campaignId)
+  if (!campaign || campaign.id !== campaignId || campaign.artistWorkspaceScope !== 'campaign') {
+    throw new Error(`Campaign workspace not found for approved X media: ${campaignId}`)
+  }
+  return { rootPath: campaign.rootPath, workspaceId: campaign.id, campaignId: campaign.id }
 }
 
 function assertCurrentReleaseKitSocialUseAllowed(workspaceRootPath: string, workspaceId: string, campaignId: string, itemId: string): void {

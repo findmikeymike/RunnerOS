@@ -36,7 +36,7 @@ import { useWorkflows } from '@/hooks/useWorkflows'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { openAgentSessionComposer } from '@/lib/run-agent'
 import { WorkflowRunInputDialog } from '@/pages/WorkflowRunInputDialog'
-import type { MissionAssetKindHint, MissionAssetManifest, WorkflowDTO } from '../../../shared/types'
+import type { MissionAssetKindHint, MissionAssetManifest, TrackIntelligence, WorkflowDTO } from '../../../shared/types'
 import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
 import {
   ARTIST_PROFILE_CONTEXT_SLUG,
@@ -65,11 +65,6 @@ import {
   serializeCampaignWorkerContext,
 } from '@/lib/campaign-worker-context'
 import {
-  MISSION_ASSET_CONTEXT_SLUG,
-  missionAssetContextMetadata,
-  serializeMissionAssetContext,
-} from '@/lib/mission-asset-context'
-import {
   MISSION_BRIEF_CONTEXT_SLUG,
   emptyMissionBrief,
   missionCampaignWindow,
@@ -97,6 +92,7 @@ import {
 } from '@/lib/release-board'
 import { MissionBriefDrawer } from './MissionBriefDrawer'
 import { ReleaseCountdownDial } from './ReleaseCountdownDial'
+import { TrackIntelligenceReviewDialog, type TrackIntelligenceReviewValue } from './TrackIntelligenceReviewDialog'
 
 interface ArtistCommandCenterHomeProps {
   workspaceId: string
@@ -151,6 +147,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
   const [drawerOpen, setDrawerOpen] = React.useState(false)
   const [assetManifest, setAssetManifest] = React.useState<MissionAssetManifest | null>(null)
   const [assetBusy, setAssetBusy] = React.useState(false)
+  const [trackReviewAudioAssetId, setTrackReviewAudioAssetId] = React.useState<string | null>(null)
   const [launchingReleaseItemKey, setLaunchingReleaseItemKey] = React.useState<string | null>(null)
   const [pendingReleaseWorkflow, setPendingReleaseWorkflow] = React.useState<{
     workflow: WorkflowDTO
@@ -283,39 +280,46 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
       try {
         const result = await window.electronAPI.importMissionAssets(workspaceId, filePaths, { kindHint })
         setAssetManifest(result.manifest)
-        await upsert({
-          slug: MISSION_ASSET_CONTEXT_SLUG,
-          metadata: missionAssetContextMetadata(),
-          body: serializeMissionAssetContext(result.manifest),
-        })
         const skipped = result.skipped.length ? ` ${result.skipped.length} skipped.` : ''
         if (result.imported.length === 0) {
           toast.warning(`No campaign vault files added.${skipped}`)
           return
         }
         toast.success(`Added ${result.imported.length} campaign vault file${result.imported.length === 1 ? '' : 's'}.${skipped}`)
+        const importedAudio = result.imported.filter((asset) => asset.kind === 'master' || asset.kind === 'demo')
+        let firstReadyAudioId: string | null = null
+        for (const audio of importedAudio) {
+          const transcription = await window.electronAPI.transcribeMissionAssetLyrics(workspaceId, { audioAssetId: audio.id })
+          setAssetManifest(transcription.manifest)
+          if (transcription.ok) {
+            firstReadyAudioId ??= audio.id
+          } else {
+            toast.error(transcription.error ?? 'Lyrics transcription failed', {
+              description: transcription.blockers?.map((blocker) => blocker.message).join(' '),
+            })
+          }
+        }
+        if (firstReadyAudioId) {
+          setTrackReviewAudioAssetId(firstReadyAudioId)
+          toast.success(importedAudio.length === 1 ? 'Lyrics are ready to review' : `${importedAudio.length} track drafts are ready to review`)
+        }
       } catch (err) {
         toast.error(err instanceof Error ? err.message : String(err))
       } finally {
         setAssetBusy(false)
       }
     },
-    [hasMission, upsert, workspaceId],
+    [hasMission, workspaceId],
   )
 
   const syncMissionAssetContext = React.useCallback(
     async (manifest: MissionAssetManifest) => {
       setAssetManifest(manifest)
-      await upsert({
-        slug: MISSION_ASSET_CONTEXT_SLUG,
-        metadata: missionAssetContextMetadata(),
-        body: serializeMissionAssetContext(manifest),
-      })
     },
-    [upsert],
+    [],
   )
 
-  const transcribeLyrics = React.useCallback(async () => {
+  const transcribeLyrics = React.useCallback(async (audioAssetId?: string, force = false) => {
     if (!hasMission) {
       setDrawerOpen(true)
       toast.info('Create the campaign first, then transcribe lyrics.')
@@ -323,7 +327,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
     }
     setAssetBusy(true)
     try {
-      const result = await window.electronAPI.transcribeMissionAssetLyrics(workspaceId)
+      const result = await window.electronAPI.transcribeMissionAssetLyrics(workspaceId, { audioAssetId, force })
       await syncMissionAssetContext(result.manifest)
       if (!result.ok) {
         toast.error(result.error ?? 'Lyrics transcription failed', {
@@ -331,6 +335,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
         })
         return
       }
+      setTrackReviewAudioAssetId(result.audioAsset?.id ?? audioAssetId ?? null)
       toast.success('Lyrics transcribed. Review and save corrections.')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
@@ -339,23 +344,81 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
     }
   }, [hasMission, syncMissionAssetContext, workspaceId])
 
-  const saveLyrics = React.useCallback(async (lyricsText: string, assetId?: string, sourceAudioAssetId?: string) => {
-    if (!lyricsText.trim()) return
+  const campaignReviewAudio = React.useMemo(
+    () => assetManifest?.files.find((asset) => asset.id === trackReviewAudioAssetId) ?? null,
+    [assetManifest, trackReviewAudioAssetId],
+  )
+  const campaignLyricsAsset = React.useMemo(
+    () => {
+      const available = assetManifest?.files.filter((asset) => asset.kind === 'lyrics' && asset.status === 'available') ?? []
+      return (campaignReviewAudio?.trackIntelligence?.draft
+        ? available.find((asset) => asset.lyrics?.reviewRequired && asset.lyrics.sourceAudioAssetId === campaignReviewAudio.id)
+        : undefined)
+        ?? available.find((asset) => asset.lyrics && !asset.lyrics.reviewRequired && asset.lyrics.sourceAudioAssetId === campaignReviewAudio?.id)
+        ?? available.find((asset) => asset.lyrics?.sourceAudioAssetId === campaignReviewAudio?.id)
+        ?? available[0]
+        ?? null
+    },
+    [assetManifest, campaignReviewAudio],
+  )
+  const campaignReviewIntelligence = React.useMemo<TrackIntelligence | undefined>(() => {
+    if (campaignReviewAudio?.trackIntelligence) return campaignReviewAudio.trackIntelligence
+    if (!campaignLyricsAsset?.lyrics) return undefined
+    const lines = campaignLyricsAsset.lyrics.lyricLines?.map((line, index) => ({
+      id: `line-${index + 1}`,
+      text: line.text,
+      startMs: Math.round(line.start_time * 1000),
+      endMs: Math.round(line.end_time * 1000),
+    })) ?? campaignLyricsAsset.lyrics.text.split(/\r?\n/).map((text, index) => ({ id: `manual-line-${index + 1}`, text }))
+    return {
+      status: 'draft',
+      schemaVersion: 1,
+      draft: {
+        id: `legacy-${campaignLyricsAsset.id}`,
+        lyrics: {
+          lines,
+          timingSource: campaignLyricsAsset.lyrics.lyricLines?.length ? 'transcription' : 'manual',
+          timingStatus: campaignLyricsAsset.lyrics.lyricLines?.length ? 'ready' : 'needs-alignment',
+        },
+        provenance: {
+          engine: campaignLyricsAsset.lyrics.engine,
+          analyzedAt: campaignLyricsAsset.lyrics.generatedAt,
+          processedLocally: campaignLyricsAsset.lyrics.status === 'machine' ? true : undefined,
+        },
+      },
+    }
+  }, [campaignLyricsAsset, campaignReviewAudio])
+
+  const saveTrackReview = React.useCallback(async (value: TrackIntelligenceReviewValue) => {
+    if (!campaignReviewAudio) return
     setAssetBusy(true)
     try {
       const result = await window.electronAPI.saveMissionAssetLyrics(workspaceId, {
-        lyricsText,
-        assetId,
-        sourceAudioAssetId,
+        lyricsText: value.lyrics.lines.map((line) => line.text).filter(Boolean).join('\n'),
+        draftId: value.revisionId,
+        lyricLines: value.lyrics.timingStatus === 'ready'
+          ? value.lyrics.lines.flatMap((line) => line.startMs !== undefined && line.endMs !== undefined ? [{
+            text: line.text,
+            start_time: line.startMs / 1000,
+            end_time: line.endMs / 1000,
+          }] : [])
+          : undefined,
+        assetId: campaignLyricsAsset?.id,
+        sourceAudioAssetId: campaignReviewAudio.id,
+        language: value.lyrics.language,
+        timingSource: value.lyrics.timingSource,
+        artistSuppliedText: value.lyrics.artistSuppliedText,
+        character: value.character,
       })
       await syncMissionAssetContext(result.manifest)
-      toast.success('Approved lyrics saved for agents.')
+      setTrackReviewAudioAssetId(null)
+      toast.success('Track package approved for campaign agents')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     } finally {
       setAssetBusy(false)
     }
-  }, [syncMissionAssetContext, workspaceId])
+  }, [campaignLyricsAsset?.id, campaignReviewAudio, syncMissionAssetContext, workspaceId])
 
   const saveReleaseBoard = React.useCallback(
     async (nextBoard: ReleaseBoard) => {
@@ -716,7 +779,12 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
         onAddAsset={chooseAndImport}
         onImportAssetPaths={importAssetPaths}
         onTranscribeLyrics={transcribeLyrics}
-        onSaveLyrics={saveLyrics}
+        onReviewLyrics={() => {
+          const sourceAudioId = campaignLyricsAsset?.lyrics?.sourceAudioAssetId
+          const audio = assetManifest?.files.find((asset) => asset.id === sourceAudioId)
+            ?? assetManifest?.files.find((asset) => asset.kind === 'master' || asset.kind === 'demo')
+          if (audio) setTrackReviewAudioAssetId(audio.id)
+        }}
         onOpenAssetsFolder={async () => {
           if (!hasMission) {
             setDrawerOpen(true)
@@ -730,6 +798,15 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
             toast.error(err instanceof Error ? err.message : String(err))
           }
         }}
+      />
+
+      <TrackIntelligenceReviewDialog
+        open={Boolean(trackReviewAudioAssetId && campaignReviewIntelligence)}
+        title={campaignReviewAudio?.label ?? mission.title ?? 'Campaign track'}
+        intelligence={campaignReviewIntelligence}
+        busy={assetBusy}
+        onClose={() => setTrackReviewAudioAssetId(null)}
+        onSave={saveTrackReview}
       />
 
       {pendingReleaseWorkflow ? (

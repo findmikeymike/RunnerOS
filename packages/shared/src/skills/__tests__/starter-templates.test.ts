@@ -137,6 +137,18 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     }
   });
 
+  it('includes the artist-specific X Editorial skill and slate contract', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'artist-x-editorial');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('artist-x-editorial');
+    expect(parsed.content).toContain('Campaign Relevance Gate');
+    expect(parsed.content).toContain('artist-x-slate');
+    expect(parsed.content).toContain('never publishes');
+    expect(skill?.files.some(file => file.path === 'references/editorial-lanes.md')).toBe(true);
+    expect(skill?.files.some(file => file.path === 'references/daily-slate-contract.md')).toBe(true);
+  });
+
   it('includes scroll-stopper with its engine reference', () => {
     const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'scroll-stopper');
 

@@ -1,5 +1,8 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId, getWorkspaces } from '@craft-agent/shared/config'
+import { existsSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { relative, resolve } from 'node:path'
 import {
   artistVaultContextMetadata,
   artistVaultContextSlug,
@@ -9,6 +12,9 @@ import {
   linkArtistVaultFolderAsync,
   loadArtistVaultManifest,
   planArtistVaultImports,
+  resolveArtistVaultAssetPath,
+  reviewArtistVaultTrackIntelligence,
+  saveArtistVaultTrackDraft,
   scanArtistVaultAsync,
   serializeArtistVaultContext,
   updateArtistVaultAsset,
@@ -20,6 +26,9 @@ import {
   type VaultKindHint,
   type VaultManifest,
   type VaultAssetScanResult,
+  type TrackIntelligenceReviewInput,
+  type VaultTrackTranscribeOptions,
+  type VaultTrackTranscribeResult,
 } from '@craft-agent/shared/artist-vault'
 import {
   loadAllContextDocs,
@@ -34,6 +43,8 @@ import {
 import type { HandlerDeps } from '../handler-deps'
 import { OutputService } from '../../outputs/OutputService'
 import { refreshHqStateContextDocBestEffort } from '../../hq-state/refresh'
+import { transcribeLyricsLocally } from '../../track-intelligence/LyricsTranscriptionService'
+import { verifiedArtistVaultManifestForAgents } from '../../track-intelligence/agent-visibility'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.artistVault.GET,
@@ -42,6 +53,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.artistVault.IMPORT,
   RPC_CHANNELS.artistVault.LINK_FOLDER,
   RPC_CHANNELS.artistVault.UPDATE_ASSET,
+  RPC_CHANNELS.artistVault.TRANSCRIBE_TRACK,
+  RPC_CHANNELS.artistVault.REVIEW_TRACK,
   RPC_CHANNELS.artistVault.SAVE_OUTPUT_ASSET,
   RPC_CHANNELS.artistVault.SCAN,
   RPC_CHANNELS.artistVault.OPEN_FOLDER,
@@ -79,6 +92,11 @@ function outputService(): OutputService {
   })
 }
 
+function workspaceRelative(workspaceRootPath: string, path?: string | null): string | undefined {
+  if (!path) return undefined
+  return relative(workspaceRootPath, path).replace(/\\/g, '/')
+}
+
 function selectOutputAssetPath(workspaceId: string, outputId: string, assetId?: string): string {
   const service = outputService()
   const output = service.get(workspaceId, outputId)
@@ -96,10 +114,11 @@ function broadcastContextChanged(deps: HandlerDeps, workspaceId: string, docs: L
 }
 
 function mirrorManifestToContext(workspaceRootPath: string, workspaceId: string, manifest: VaultManifest, deps: HandlerDeps): void {
+  const agentManifest = verifiedArtistVaultManifestForAgents(workspaceRootPath, manifest)
   upsertContextDoc(workspaceRootPath, {
     slug: artistVaultContextSlug(),
     metadata: artistVaultContextMetadata(),
-    body: serializeArtistVaultContext(manifest),
+    body: serializeArtistVaultContext(agentManifest),
   })
   refreshHqStateContextDocBestEffort(workspaceRootPath)
   broadcastContextChanged(deps, workspaceId, loadAllContextDocs(workspaceRootPath))
@@ -165,6 +184,118 @@ export function registerArtistVaultHandlers(server: RpcServer, deps: HandlerDeps
       const rootPath = resolveRootPath(workspaceId)
       return withWorkspaceMutex(rootPath, async () => {
         const manifest = updateArtistVaultAsset(rootPath, workspaceId, assetId, patch)
+        mirrorManifestToContext(rootPath, workspaceId, manifest, deps)
+        return manifest
+      })
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.artistVault.TRANSCRIBE_TRACK,
+    async (_ctx, workspaceId: string, options: VaultTrackTranscribeOptions): Promise<VaultTrackTranscribeResult> => {
+      const rootPath = resolveRootPath(workspaceId)
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+      assertTeamPermission(rootPath, 'files.write')
+      return withWorkspaceMutex(rootPath, async () => {
+        let manifest = loadArtistVaultManifest(rootPath, workspaceId)
+        const asset = manifest.assets.find((candidate) => candidate.id === options.assetId)
+        if (!asset) return { ok: false, manifest, error: `Vault asset not found: ${options.assetId}` }
+        if (!['master-final', 'demo', 'beat-instrumental', 'mix-reference'].includes(asset.kind)) {
+          return { ok: false, manifest, asset, error: 'Track Intelligence is available for audio tracks only.' }
+        }
+        if (asset.trackIntelligence?.status === 'reviewed' && !options.force) {
+          return { ok: false, manifest, asset, error: 'Reviewed track lyrics already exist. Choose re-analyze to replace the machine draft.' }
+        }
+        const audioFile = resolveArtistVaultAssetPath(rootPath, asset)
+        if (!audioFile || !existsSync(audioFile)) {
+          return { ok: false, manifest, asset, error: `Audio file is missing: ${asset.relativePath ?? asset.absolutePath ?? asset.id}` }
+        }
+        manifest = saveArtistVaultTrackDraft(rootPath, workspaceId, asset.id, {
+          status: 'pending',
+          schemaVersion: 1,
+        })
+        mirrorManifestToContext(rootPath, workspaceId, manifest, deps)
+
+        try {
+          const outDir = resolve(rootPath, 'vault', '.track-intelligence', asset.id)
+          const payload = await transcribeLyricsLocally({
+            workspaceRootPath: rootPath,
+            audioFile,
+            outDir,
+            model: options.model,
+          })
+          if (!payload.ok) {
+            manifest = saveArtistVaultTrackDraft(rootPath, workspaceId, asset.id, {
+              status: 'failed',
+              schemaVersion: 1,
+              failureReason: payload.error ?? 'Transcription did not return lyrics.',
+            })
+            mirrorManifestToContext(rootPath, workspaceId, manifest, deps)
+            return { ok: false, manifest, asset: manifest.assets.find((candidate) => candidate.id === asset.id), error: payload.error, blockers: payload.blockers }
+          }
+          const approvedLines = new Map((asset.trackIntelligence?.approved?.lyrics?.lines ?? []).map((line) => [line.id, line]))
+          const machineLines: Array<{ text: string; startMs?: number; endMs?: number }> = payload.lyricLines?.length
+            ? payload.lyricLines.map((line) => ({
+              text: line.text,
+              startMs: Math.max(0, Math.round(line.start_time * 1000)),
+              endMs: Math.max(0, Math.round(line.end_time * 1000)),
+            }))
+            : (payload.lyricsText ?? '').split(/\r?\n/).map((text) => ({ text: text.trim() })).filter((line) => line.text)
+          manifest = saveArtistVaultTrackDraft(rootPath, workspaceId, asset.id, {
+            status: 'draft',
+            schemaVersion: 1,
+            draft: {
+              id: `draft-${randomUUID()}`,
+              lyrics: {
+                timingSource: 'transcription',
+                timingStatus: payload.lyricLines?.length ? 'ready' : 'needs-alignment',
+                lines: machineLines.map((line, index) => {
+                  const id = `line-${index + 1}`
+                  const approved = approvedLines.get(id)
+                  return {
+                    id,
+                    text: approved?.corrected ? approved.text : line.text,
+                    startMs: line.startMs,
+                    endMs: line.endMs,
+                    corrected: approved?.corrected,
+                  }
+                }),
+              },
+              character: asset.trackIntelligence?.approved?.character,
+              technical: asset.trackIntelligence?.approved?.technical,
+              provenance: {
+                engine: payload.engine,
+                processedLocally: true,
+                analyzedAt: new Date().toISOString(),
+                transcriptRelativePath: workspaceRelative(rootPath, payload.transcriptJson),
+                sourceSha256: payload.sourceSha256,
+              },
+            },
+          })
+          mirrorManifestToContext(rootPath, workspaceId, manifest, deps)
+          return { ok: true, manifest, asset: manifest.assets.find((candidate) => candidate.id === asset.id) }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          manifest = saveArtistVaultTrackDraft(rootPath, workspaceId, asset.id, {
+            status: 'failed',
+            schemaVersion: 1,
+            failureReason: message,
+          })
+          mirrorManifestToContext(rootPath, workspaceId, manifest, deps)
+          return { ok: false, manifest, asset: manifest.assets.find((candidate) => candidate.id === asset.id), error: message }
+        }
+      })
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.artistVault.REVIEW_TRACK,
+    async (ctx, workspaceId: string, input: TrackIntelligenceReviewInput): Promise<VaultManifest> => {
+      const rootPath = resolveRootPath(workspaceId)
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+      assertTeamPermission(rootPath, 'files.write')
+      return withWorkspaceMutex(rootPath, async () => {
+        const manifest = reviewArtistVaultTrackIntelligence(rootPath, workspaceId, input, ctx.clientId)
         mirrorManifestToContext(rootPath, workspaceId, manifest, deps)
         return manifest
       })

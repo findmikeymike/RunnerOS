@@ -70,6 +70,101 @@ export type VaultKindHint =
   | 'ad-asset'
   | 'any';
 
+export type TrackIntelligenceStatus = 'pending' | 'draft' | 'reviewed' | 'failed' | 'skipped';
+
+export interface TrackLyricWord {
+  text: string;
+  startMs: number;
+  endMs: number;
+}
+
+export interface TrackLyricLine {
+  id: string;
+  text: string;
+  startMs?: number;
+  endMs?: number;
+  words?: TrackLyricWord[];
+  corrected?: boolean;
+}
+
+export interface TrackCharacterMetadata {
+  genre?: string[];
+  subgenre?: string[];
+  energy?: number;
+  tempoBpm?: number;
+  tempoSource?: 'detected' | 'manual';
+  moods?: string[];
+  themes?: string[];
+  notes?: string;
+}
+
+export interface TrackIntelligenceRevision {
+  id: string;
+  lyrics?: {
+    lines: TrackLyricLine[];
+    language?: string;
+    timingSource: 'alignment' | 'transcription' | 'manual';
+    timingStatus: 'ready' | 'needs-alignment';
+    confidence?: number;
+    artistSuppliedText?: boolean;
+  };
+  character?: TrackCharacterMetadata;
+  technical?: {
+    durationMs?: number;
+    sampleRate?: number;
+    channels?: number;
+  };
+  provenance: {
+    engine?: string;
+    engineVersion?: string;
+    processedLocally?: boolean;
+    analyzedAt?: string;
+    transcriptRelativePath?: string;
+    sourceSha256?: string;
+  };
+}
+
+export interface ReviewedTrackIntelligenceRevision extends TrackIntelligenceRevision {
+  reviewedAt: string;
+  reviewedBy: { type: 'user'; clientId: string };
+}
+
+export interface TrackIntelligence {
+  status: TrackIntelligenceStatus;
+  schemaVersion: 1;
+  draft?: TrackIntelligenceRevision;
+  approved?: ReviewedTrackIntelligenceRevision;
+  failureReason?: string;
+}
+
+/** User-editable fields only. The host supplies approval state and reviewer identity. */
+export interface TrackIntelligenceReviewInput {
+  assetId: string;
+  draftId: string;
+  lyrics: {
+    lines: TrackLyricLine[];
+    language?: string;
+    timingSource: 'alignment' | 'transcription' | 'manual';
+    timingStatus: 'ready' | 'needs-alignment';
+    artistSuppliedText?: boolean;
+  };
+  character?: TrackCharacterMetadata;
+}
+
+export interface VaultTrackTranscribeOptions {
+  assetId: string;
+  model?: string;
+  force?: boolean;
+}
+
+export interface VaultTrackTranscribeResult {
+  ok: boolean;
+  manifest: VaultManifest;
+  asset?: VaultAssetRecord;
+  error?: string;
+  blockers?: Array<{ code: string; message: string }>;
+}
+
 export interface VaultAssetRecord {
   id: string;
   category: VaultCategory;
@@ -90,6 +185,7 @@ export interface VaultAssetRecord {
   moods?: string[];
   bpm?: number;
   similarSongs?: string[];
+  trackIntelligence?: TrackIntelligence;
   notes?: string;
   createdAt: string;
   updatedAt: string;

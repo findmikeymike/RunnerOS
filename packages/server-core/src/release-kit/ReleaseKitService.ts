@@ -73,8 +73,20 @@ export class ReleaseKitService {
   }
 
   get(workspaceId: string): ReleaseKitManifest {
+    return this.refreshAgentContext(workspaceId).manifest
+  }
+
+  refreshAgentContext(workspaceId: string): { manifest: ReleaseKitManifest; contextPersisted: boolean } {
     const workspace = this.getCampaignWorkspace(workspaceId)
-    return loadReleaseKitManifest(workspace.rootPath, workspace.id, workspace.id)
+    const verified = verifyReleaseKit(workspace.rootPath, workspace.id, workspace.id).manifest
+    const safeManifest = {
+      ...verified,
+      items: verified.items.map((item) => item.status === 'ready'
+        ? item
+        : { ...item, trackIntelligence: undefined }),
+    }
+    const contextPersisted = this.commitContext(workspace.id, workspace.rootPath, safeManifest)
+    return { manifest: safeManifest, contextPersisted }
   }
 
   getItem(workspaceId: string, itemId: string): ReleaseKitItemDetail {
@@ -125,6 +137,7 @@ export class ReleaseKitService {
       makePrimary: input.makePrimary,
       promotedBy: actor,
       note: input.note,
+      trackIntelligence: resolved.trackIntelligence,
     })
     this.commitContext(workspace.id, workspace.rootPath, result.manifest)
     return result
@@ -254,7 +267,7 @@ export class ReleaseKitService {
     workspaceRootPath: string,
     input: PromoteToReleaseKitInput,
     actor: 'user' | 'agent',
-  ): { path: string; mimeType?: string } {
+  ): { path: string; mimeType?: string; trackIntelligence?: import('@craft-agent/shared/artist-vault').ReviewedTrackIntelligenceRevision } {
     const source = input.source
     if (source.type === 'upload') {
       if (actor !== 'user') throw new Error('Agents cannot promote arbitrary upload paths. Import the file first.')
@@ -271,7 +284,11 @@ export class ReleaseKitService {
       if (!record) throw new Error(`Campaign Asset not found: ${source.assetId}`)
       if (record.status !== 'available') throw new Error(`Campaign Asset is not available: ${source.assetId}`)
       if (!record.usableByAgents) throw new Error('This Campaign Asset is not approved for agent use.')
-      return { path: resolveMissionAssetPath(workspaceRootPath, record), mimeType: record.mimeType }
+      return {
+        path: resolveMissionAssetPath(workspaceRootPath, record),
+        mimeType: record.mimeType,
+        trackIntelligence: record.trackIntelligence?.approved,
+      }
     }
 
     if (source.type === 'vault-asset') {
@@ -280,7 +297,11 @@ export class ReleaseKitService {
       const record = loadArtistVaultManifest(vaultWorkspace.rootPath, vaultWorkspace.id).assets.find((asset) => asset.id === source.assetId)
       if (!record) throw new Error(`HQ Vault asset not found: ${source.assetId}`)
       assertVaultAssetCanEnterReleaseKit(record)
-      return { path: resolveVaultAssetPath(vaultWorkspace.rootPath, record), mimeType: record.mimeType }
+      return {
+        path: resolveVaultAssetPath(vaultWorkspace.rootPath, record),
+        mimeType: record.mimeType,
+        trackIntelligence: record.trackIntelligence?.approved,
+      }
     }
 
     if (source.type === 'legacy-final') throw new Error('Legacy Finals can only be imported by the migration service.')
@@ -297,9 +318,10 @@ export class ReleaseKitService {
     }
   }
 
-  private commitContext(workspaceId: string, workspaceRootPath: string, manifest: ReleaseKitManifest): void {
-    this.syncContext(workspaceRootPath, manifest)
+  private commitContext(workspaceId: string, workspaceRootPath: string, manifest: ReleaseKitManifest): boolean {
+    const contextPersisted = this.syncContext(workspaceRootPath, manifest)
     this.options.onChanged?.(workspaceId, manifest)
+    return contextPersisted
   }
 
   private prepareContextSync(workspaceRootPath: string): void {
@@ -313,7 +335,7 @@ export class ReleaseKitService {
     renameSync(temp, marker)
   }
 
-  private syncContext(workspaceRootPath: string, manifest: ReleaseKitManifest): void {
+  private syncContext(workspaceRootPath: string, manifest: ReleaseKitManifest): boolean {
     const marker = contextSyncMarkerPath(workspaceRootPath)
     try {
       upsertContextDoc(workspaceRootPath, {
@@ -322,6 +344,7 @@ export class ReleaseKitService {
         body: serializeReleaseKitContext(manifest),
       })
       rmSync(marker, { force: true })
+      return true
     } catch (error) {
       try {
         mkdirSync(getReleaseKitRoot(workspaceRootPath), { recursive: true })
@@ -334,6 +357,7 @@ export class ReleaseKitService {
       } catch {
         // The manifest remains canonical even when the repair marker cannot be written.
       }
+      return false
     }
   }
 

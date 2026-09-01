@@ -147,7 +147,16 @@ import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
 import { assertOutputAssetPath, listOutputManifests, readOutput } from '@craft-agent/shared/outputs'
 import { loadMissionAssetManifest } from '@craft-agent/shared/mission-assets'
-import { loadArtistVaultManifest } from '@craft-agent/shared/artist-vault'
+import {
+  loadArtistVaultManifest,
+  vaultAssetForAgentDetail,
+  vaultAssetForAgentList,
+} from '@craft-agent/shared/artist-vault'
+import {
+  refreshVerifiedTrackContextForAgents,
+  verifiedArtistVaultManifestForAgents,
+  verifiedMissionAssetManifestForAgents,
+} from '../track-intelligence/agent-visibility'
 import { ReleaseKitService, releaseKitPlacementFromLegacySlot } from '../release-kit/ReleaseKitService'
 import { scheduledWorkDefinitionDigest, type ExpectedOutputContract, type ScheduledWorkContinuation, type ScheduledWorkInputRef } from '@craft-agent/shared/scheduled-work'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
@@ -233,6 +242,7 @@ import {
   type YouTubeIntelProcessedVideo,
 } from '@craft-agent/shared/shared-intel'
 import { resolveOutputAssetPath, type OutputManifest } from '@craft-agent/shared/outputs'
+import { readXEditorialHistory } from '../x-editorial/history'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels'
@@ -2818,7 +2828,31 @@ export class SessionManager implements ISessionManager {
     }
     const usableSources = sources.filter(isSourceUsable)
     const resolvedSourceSlugs = usableSources.map((s) => s.config.slug)
+    const unsafePersistedContextSlugs = new Set<string>()
+    if (ws.artistWorkspaceScope === 'campaign' || ws.artistWorkspaceScope === 'hq') {
+      const refresh = refreshVerifiedTrackContextForAgents(ws.rootPath, ws.id, ws.artistWorkspaceScope)
+      if (!refresh.ok) {
+        if (refresh.unsafePersistedSlug) unsafePersistedContextSlugs.add(refresh.unsafePersistedSlug)
+        CONSOLE_LOGGER.warn('[track-intelligence] Injected safe empty context after refresh failure', {
+          workspaceId: ws.id,
+          error: refresh.error,
+        })
+      }
+    }
+    if (ws.artistWorkspaceScope === 'campaign') {
+      try {
+        const releaseKitRefresh = new ReleaseKitService().refreshAgentContext(ws.id)
+        if (!releaseKitRefresh.contextPersisted) unsafePersistedContextSlugs.add('release-kit')
+      } catch (error) {
+        unsafePersistedContextSlugs.add('release-kit')
+        CONSOLE_LOGGER.warn('[release-kit] Could not refresh verified context before agent launch', {
+          workspaceId: ws.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
     const contextDocs = loadPromptContextDocsForAgent(ws.rootPath, agent.slug)
+      .filter((doc) => !unsafePersistedContextSlugs.has(doc.slug))
     const [userMemoryEntries, agentMemoryEntries] = await Promise.all([
       loadUserMemoryEntries(),
       loadAgentMemoryEntries(agent.slug),
@@ -3152,6 +3186,7 @@ export class SessionManager implements ISessionManager {
         getBackgroundFenceToken: getWorkspaceBackgroundFenceToken,
         canExecuteSocialAutomatically: canExecuteAutomaticBrowserSocial,
         withLock: withWorkspaceContextLock,
+        resolveWorkspace: getWorkspaceByNameOrId,
         executeAgentTask: async (input) => {
           return this.executePromptAutomation({
             workspaceId: input.workspace.id,
@@ -3205,6 +3240,13 @@ export class SessionManager implements ISessionManager {
           const workspace = getWorkspaceByNameOrId(workspaceId)
           if (workspace) scheduleHqStateContextRefresh(workspace.rootPath)
           this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, docs)
+        },
+        emitOutputsChanged: (workspaceId) => {
+          this.eventSink?.(
+            RPC_CHANNELS.outputs.UPDATED,
+            { to: 'workspace', workspaceId },
+            workspaceId,
+          )
         },
         log: sessionLog,
       })
@@ -3557,6 +3599,7 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'print-agent'
             || a.slug === 'branding-agent'
             || a.slug === 'comms-agent'
+            || a.slug === 'x-editorial'
             || a.slug === 'outreach-agent'
             || a.slug === 'industry-hunter'
             || a.slug === 'college-radio-agent'
@@ -3962,6 +4005,30 @@ Manager judgment:
           ].some(Boolean)
           if (conciergeManagerPromptUpdated) {
             sessionLog.info('[agent-definitions] Upgraded Concierge manager context contract')
+          }
+          const xEditorialAgent = STARTER_AGENTS.find(agent => agent.slug === 'x-editorial')
+          if (xEditorialAgent) {
+            const xEditorialMetadataUpdated = replaceBuiltInAgentMetadata('x-editorial', {
+              trustedWorkerTools: {
+                from: ['start_deep_research', 'list_deep_research_runs', 'get_deep_research_run', 'create_output'],
+                to: xEditorialAgent.metadata.trustedWorkerTools,
+              },
+            }).updated
+            const xEditorialPromptUpdated = [
+              replaceBuiltInAgentPromptText(
+                'x-editorial',
+                '- recent X slates, scheduled X work, and receipts when available',
+                '- recent X slates, scheduled X work, and receipts when available\n\nBefore drafting, call `list_x_editorial_history`. Treat exact past copy, lane balance, timing, Campaign linkage, and posted/scheduled status as the artist-wide fatigue ledger. Rewrite collisions instead of producing a competing slate.',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                'x-editorial',
+                '- From a Campaign, pin that release as context for the run, but remain the same artist-wide X worker and use the same slate history.',
+                '- From a Campaign, pin that release as context for the run, but remain the same artist-wide X worker and use the same slate history.\n- When a Campaign is pinned, pass its exact `campaignWorkspaceId` to `list_release_kit`, `get_release_kit_item`, `list_campaign_outputs`, and `get_campaign_output`. These are read-only context tools; never guess an asset or output.\n- Use `list_artist_vault` for reusable artist-approved career assets and references. Private or agent-disabled material is unavailable by design.',
+              ).updated,
+            ].some(Boolean)
+            if (xEditorialMetadataUpdated || xEditorialPromptUpdated) {
+              sessionLog.info('[agent-definitions] Upgraded X Editorial history and Campaign context tools')
+            }
           }
           const contentDirectorAgent = STARTER_AGENTS.find(agent => agent.slug === 'content-director')
           if (contentDirectorAgent) {
@@ -7648,6 +7715,19 @@ user a clickable link to where the thing now lives.`
         }
         return target
       }
+      const resolveCampaignReadTarget = (requestedWorkspaceId?: string) => {
+        const requested = requestedWorkspaceId?.trim()
+        const agentSlug = managed.spawnedFromAgent?.agentSlug
+        const canReadCampaignContext = agentSlug === CONCIERGE_SLUG || agentSlug === 'x-editorial'
+        if (requested && requested !== managed.workspace.id && !canReadCampaignContext) {
+          throw new Error('This worker cannot read another campaign workspace.')
+        }
+        const target = requested ? getWorkspaceByNameOrId(requested) : managed.workspace
+        if (!target || target.artistWorkspaceScope !== 'campaign') {
+          throw new Error('A campaign workspace is required.')
+        }
+        return target
+      }
 
       // Wire up session self-management tools (set_session_labels, set_session_status, etc.)
       mergeSessionScopedToolCallbacks(managed.id, {
@@ -7824,12 +7904,14 @@ user a clickable link to where the thing now lives.`
         },
         listReleaseKitFn: async (input) => {
           try {
-            const target = resolveReleaseKitTarget(input.campaignWorkspaceId)
+            const target = resolveCampaignReadTarget(input.campaignWorkspaceId)
             const manifest = releaseKitService.get(target.id)
             return {
               ok: true,
               data: {
                 ...manifest,
+                items: manifest.items.filter((item) => item.status === 'ready'),
+                unavailableItemCount: manifest.items.filter((item) => item.status !== 'ready').length,
               },
             }
           } catch (error) {
@@ -7838,7 +7920,7 @@ user a clickable link to where the thing now lives.`
         },
         getReleaseKitItemFn: async (input) => {
           try {
-            const target = resolveReleaseKitTarget(input.campaignWorkspaceId)
+            const target = resolveCampaignReadTarget(input.campaignWorkspaceId)
             return { ok: true, data: releaseKitService.getItem(target.id, input.itemId) }
           } catch (error) {
             return { ok: false, error: error instanceof Error ? error.message : String(error) }
@@ -7883,9 +7965,20 @@ user a clickable link to where the thing now lives.`
         },
         listCampaignAssetsFn: async (input) => {
           try {
-            const target = resolveReleaseKitTarget(input.campaignWorkspaceId)
-            const manifest = loadMissionAssetManifest(target.rootPath, target.id)
-            return { ok: true, data: { workspaceId: target.id, workspaceRootPath: target.rootPath, assets: manifest.files } }
+            const target = resolveCampaignReadTarget(input.campaignWorkspaceId)
+            const manifest = verifiedMissionAssetManifestForAgents(
+              target.rootPath,
+              loadMissionAssetManifest(target.rootPath, target.id),
+            )
+            const assets = manifest.files
+              .filter((asset) => asset.usableByAgents && !asset.lyrics?.reviewRequired)
+              .map((asset) => {
+                const { trackIntelligence, ...base } = asset
+                return trackIntelligence?.approved
+                  ? { ...base, trackIntelligence: { status: 'reviewed' as const, schemaVersion: 1 as const, approved: trackIntelligence.approved } }
+                  : base
+              })
+            return { ok: true, data: { workspaceId: target.id, workspaceRootPath: target.rootPath, assets } }
           } catch (error) {
             return { ok: false, error: error instanceof Error ? error.message : String(error) }
           }
@@ -7894,13 +7987,17 @@ user a clickable link to where the thing now lives.`
           try {
             const hq = findArtistHqWorkspace()
             if (!hq) throw new Error('Artist HQ workspace is not configured.')
-            const manifest = loadArtistVaultManifest(hq.rootPath, hq.id)
+            const manifest = verifiedArtistVaultManifestForAgents(
+              hq.rootPath,
+              loadArtistVaultManifest(hq.rootPath, hq.id),
+            )
             const assets = manifest.assets.filter((asset) => (
               asset.usableByAgents
                 && asset.rightsStatus !== 'private'
+                && asset.rightsStatus !== 'needs-clearance'
                 && asset.status !== 'missing'
                 && asset.status !== 'archived'
-            ))
+            )).map(vaultAssetForAgentList)
             return { ok: true, data: { vaultWorkspaceId: hq.id, workspaceRootPath: hq.rootPath, assets } }
           } catch (error) {
             return { ok: false, error: error instanceof Error ? error.message : String(error) }
@@ -7908,7 +8005,7 @@ user a clickable link to where the thing now lives.`
         },
         listCampaignOutputsFn: async (input) => {
           try {
-            const target = resolveReleaseKitTarget(input.campaignWorkspaceId)
+            const target = resolveCampaignReadTarget(input.campaignWorkspaceId)
             const outputItems = listOutputManifests(target.rootPath).map((output) => ({
               id: output.id,
               title: output.title,
@@ -7927,7 +8024,7 @@ user a clickable link to where the thing now lives.`
         },
         getCampaignOutputFn: async (input) => {
           try {
-            const target = resolveReleaseKitTarget(input.campaignWorkspaceId)
+            const target = resolveCampaignReadTarget(input.campaignWorkspaceId)
             const output = readOutput(target.rootPath, input.outputId)
             if (!output) throw new Error(`Output not found: ${input.outputId}`)
             return { ok: true, data: output }
@@ -7935,21 +8032,47 @@ user a clickable link to where the thing now lives.`
             return { ok: false, error: error instanceof Error ? error.message : String(error) }
           }
         },
+        listXEditorialHistoryFn: async (input) => {
+          try {
+            if (managed.spawnedFromAgent?.agentSlug !== 'x-editorial') {
+              throw new Error('Only X Editorial can read the artist-wide X slate history.')
+            }
+            if (managed.workspace.artistWorkspaceScope !== 'hq') {
+              throw new Error('X Editorial history is owned by Artist HQ.')
+            }
+            return {
+              ok: true,
+              data: readXEditorialHistory(managed.workspace.rootPath, managed.workspace.id, input.limit),
+            }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
+        },
         getAssetRecordFn: async (input) => {
           try {
             if (input.sourceType === 'campaign-asset') {
-              const target = resolveReleaseKitTarget(input.campaignWorkspaceId)
-              const asset = loadMissionAssetManifest(target.rootPath, target.id).files.find((candidate) => candidate.id === input.assetId)
+              const target = resolveCampaignReadTarget(input.campaignWorkspaceId)
+              const asset = verifiedMissionAssetManifestForAgents(
+                target.rootPath,
+                loadMissionAssetManifest(target.rootPath, target.id),
+              ).files.find((candidate) => candidate.id === input.assetId)
               if (!asset) throw new Error(`Campaign Asset not found: ${input.assetId}`)
-              if (!asset.usableByAgents) throw new Error('This Campaign Asset is not approved for agent use.')
-              return { ok: true, data: { workspaceId: target.id, workspaceRootPath: target.rootPath, asset } }
+              if (!asset.usableByAgents || asset.lyrics?.reviewRequired) throw new Error('This Campaign Asset is not approved for agent use.')
+              const { trackIntelligence, ...base } = asset
+              const safeAsset = trackIntelligence?.approved
+                ? { ...base, trackIntelligence: { status: 'reviewed' as const, schemaVersion: 1 as const, approved: trackIntelligence.approved } }
+                : base
+              return { ok: true, data: { workspaceId: target.id, workspaceRootPath: target.rootPath, asset: safeAsset } }
             }
             const hq = getWorkspaceByNameOrId(input.vaultWorkspaceId ?? '')
             if (!hq || hq.artistWorkspaceScope !== 'hq') throw new Error('Artist HQ Vault workspace not found.')
-            const asset = loadArtistVaultManifest(hq.rootPath, hq.id).assets.find((candidate) => candidate.id === input.assetId)
+            const asset = verifiedArtistVaultManifestForAgents(
+              hq.rootPath,
+              loadArtistVaultManifest(hq.rootPath, hq.id),
+            ).assets.find((candidate) => candidate.id === input.assetId)
             if (!asset) throw new Error(`HQ Vault asset not found: ${input.assetId}`)
-            if (!asset.usableByAgents || asset.rightsStatus === 'private') throw new Error('This HQ Vault asset is not approved for agent use.')
-            return { ok: true, data: { vaultWorkspaceId: hq.id, workspaceRootPath: hq.rootPath, asset } }
+            if (!asset.usableByAgents || asset.rightsStatus === 'private' || asset.rightsStatus === 'needs-clearance') throw new Error('This HQ Vault asset is not approved for agent use.')
+            return { ok: true, data: { vaultWorkspaceId: hq.id, workspaceRootPath: hq.rootPath, asset: vaultAssetForAgentDetail(asset) } }
           } catch (error) {
             return { ok: false, error: error instanceof Error ? error.message : String(error) }
           }

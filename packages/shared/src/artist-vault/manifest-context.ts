@@ -2,6 +2,7 @@ import type { ContextDocMetadata } from '../workspace-context/types.ts';
 import { isSafeVaultRelativePath } from './storage.ts';
 import { ARTIST_VAULT_CONTEXT_SLUG } from './types.ts';
 import type { VaultAssetKind, VaultAssetRecord, VaultManifest } from './types.ts';
+import { vaultAssetForAgentList } from './track-intelligence.ts';
 
 export function artistVaultContextMetadata(): ContextDocMetadata {
   return {
@@ -16,9 +17,9 @@ export function artistVaultContextMetadata(): ContextDocMetadata {
 }
 
 export function serializeArtistVaultContext(manifest: VaultManifest): string {
-  const safeManifest: VaultManifest = {
+  const safeManifest = {
     ...manifest,
-    assets: manifest.assets.map(redactPrivateAssetPath),
+    assets: manifest.assets.filter(isAgentUsableAsset).map(vaultAssetForAgentList),
   };
   return [
     'This context lists artist Vault assets. Do not assume files were analyzed. Use tools to inspect specific files only when needed.',
@@ -45,14 +46,6 @@ export function serializeArtistVaultContext(manifest: VaultManifest): string {
 
 export function artistVaultContextSlug(): string {
   return ARTIST_VAULT_CONTEXT_SLUG;
-}
-
-function redactPrivateAssetPath(asset: VaultAssetRecord): VaultAssetRecord {
-  if (isAgentUsableAsset(asset)) return asset;
-  const { relativePath, absolutePath, ...rest } = asset;
-  void relativePath;
-  void absolutePath;
-  return rest;
 }
 
 function keyReadyAssetLines(assets: VaultAssetRecord[]): string[] {

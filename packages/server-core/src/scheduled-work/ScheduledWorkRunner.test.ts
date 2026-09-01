@@ -947,6 +947,159 @@ describe('ScheduledWorkRunner', () => {
     expect(executeCalls).toBe(1)
   })
 
+  test('executes an exactly authorized text-only X Editorial post without inventing media', async () => {
+    const root = makeRoot()
+    const definition = {
+      kind: 'x-editorial' as const,
+      title: 'X worldview post',
+      xEditorialRef: {
+        outputId: '11111111-2222-4333-8444-555555555555',
+        slateId: 'xslate_test_1',
+        candidateId: 'post_1',
+        revision: 1,
+      },
+      platform: 'x' as const,
+      profileId: 'artist-main',
+      caption: 'Art should leave a bruise, not a brochure.',
+      startAt: '2026-07-10T14:00:00.000Z',
+      timezone: 'America/Chicago',
+    }
+    const payloadDigest = `sha256:${createHash('sha256').update(stableAuthorizationJson(definition)).digest('hex')}`
+    writeWork(root, [buildOrder({
+      id: 'social-x-editorial-text-1',
+      owner: { scope: 'hq', workspaceId },
+      calendarLink: { calendar: 'hq', itemId: 'artist-calendar-x-1' },
+      title: definition.title,
+      type: 'social-publish',
+      status: 'needs-approval',
+      startAt: definition.startAt,
+      timezone: definition.timezone,
+      execution: { type: 'social-publish', platform: 'x', profileId: definition.profileId, caption: definition.caption },
+      inputRefs: [],
+      executionKey: { payloadDigest, idempotencyKey: 'idem-x-editorial-text-1' },
+      authorizationPolicy: 'durable-v1',
+      authorization: {
+        id: 'auth-x-editorial-text-1',
+        authorizedAt: '2026-07-10T13:00:00.000Z',
+        expiresAt: '2026-07-10T14:30:00.000Z',
+        payloadDigest,
+        authorizedBy: { type: 'user', clientId: 'client-1', source: 'x-editorial-ui' },
+        definition,
+      },
+    })])
+    let executeCalls = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      now: () => new Date('2026-07-10T14:01:00.000Z'),
+      withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'unused' }),
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      prepareSocial: async () => ({
+        actionId: 'act-x-editorial-text-1',
+        actionDigest: 'sha256:action',
+        platform: 'x',
+        profileId: 'artist-main',
+        preparedAt: '2026-07-10T13:59:00.000Z',
+        payloadDigest,
+        dryRun: { ok: true },
+      }),
+      executeSocial: async ({ preview }) => {
+        executeCalls += 1
+        expect(preview.mediaDigest).toBeUndefined()
+        return { receiptId: 'receipt-x-editorial-text-1', summary: 'Published text post.' }
+      },
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    expect(readWork(root).items[0]?.socialApproval).toMatchObject({
+      approvedBy: { clientId: 'client-1' },
+      payloadDigest,
+    })
+    expect(readWork(root).items[0]?.socialApproval?.mediaDigest).toBeUndefined()
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:02:00.000Z'))
+    await waitFor(() => readWork(root).items[0]?.status === 'done')
+    expect(executeCalls).toBe(1)
+  })
+
+  test('rechecks signed cross-workspace X Editorial media restrictions before execution', async () => {
+    const root = makeRoot()
+    const campaignRoot = makeRoot()
+    const campaignId = 'campaign-x-media'
+    const source = join(campaignRoot, 'lyric-clip.mp4')
+    writeFileSync(source, 'approved-lyric-clip')
+    const released = materializeReleaseKitItem(campaignRoot, {
+      workspaceId: campaignId, campaignId,
+      source: { type: 'upload', originalFileName: 'lyric-clip.mp4' }, sourcePath: source,
+      category: 'video', subtype: 'lyric-clip', promotedBy: 'user',
+    })
+    const releaseKitRef = {
+      itemId: released.item.id,
+      sha256: released.item.sha256,
+      label: released.item.title,
+      campaignId,
+    }
+    const definition = {
+      kind: 'x-editorial' as const,
+      title: 'X lyric clip',
+      xEditorialRef: { outputId: 'output-x', slateId: 'slate-x', candidateId: 'post-x', revision: 1 },
+      releaseKitRef,
+      platform: 'x' as const,
+      profileId: 'artist-main',
+      caption: 'A line worth keeping.',
+      startAt: '2026-07-10T14:00:00.000Z',
+      timezone: 'America/Chicago',
+    }
+    const payloadDigest = `sha256:${createHash('sha256').update(stableAuthorizationJson(definition)).digest('hex')}`
+    writeWork(root, [buildOrder({
+      id: 'social-x-editorial-media-1',
+      owner: { scope: 'hq', workspaceId },
+      calendarLink: { calendar: 'hq', itemId: 'artist-calendar-x-media-1' },
+      title: definition.title,
+      type: 'social-publish',
+      status: 'needs-approval',
+      startAt: definition.startAt,
+      timezone: definition.timezone,
+      execution: { type: 'social-publish', platform: 'x', profileId: definition.profileId, caption: definition.caption },
+      inputRefs: [{ kind: 'release-kit', itemId: releaseKitRef.itemId, sha256: releaseKitRef.sha256, label: releaseKitRef.label }],
+      executionKey: { payloadDigest, idempotencyKey: 'idem-x-editorial-media-1' },
+      authorizationPolicy: 'durable-v1',
+      authorization: {
+        id: 'auth-x-editorial-media-1', authorizedAt: '2026-07-10T13:00:00.000Z', expiresAt: '2026-07-10T14:30:00.000Z',
+        payloadDigest, authorizedBy: { type: 'user', clientId: 'client-1', source: 'x-editorial-ui' }, definition,
+      },
+    })])
+    let executeCalls = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      now: () => new Date('2026-07-10T14:01:00.000Z'),
+      withLock: createLock(),
+      resolveWorkspace: (id) => id === campaignId
+        ? { id: campaignId, rootPath: campaignRoot, artistWorkspaceScope: 'campaign' }
+        : null,
+      executeAgentTask: async () => ({ sessionId: 'unused' }),
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      prepareSocial: async () => ({
+        actionId: 'act-x-editorial-media-1', actionDigest: 'sha256:action', mediaDigest: `sha256:${releaseKitRef.sha256}`,
+        platform: 'x', profileId: 'artist-main', preparedAt: '2026-07-10T13:59:00.000Z', payloadDigest, dryRun: { ok: true },
+      }),
+      executeSocial: async () => { executeCalls += 1; return { receiptId: 'must-not-run', summary: 'Must not run.' } },
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    expect(readWork(root).items[0]?.socialApproval?.mediaDigest).toBe(`sha256:${releaseKitRef.sha256}`)
+    updateReleaseKitItemUsage(campaignRoot, campaignId, campaignId, released.item.id, {
+      restrictions: { blockedFromUse: true },
+    })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:02:00.000Z'))
+    await waitFor(() => readWork(root).items[0]?.status === 'needs-attention')
+    expect(executeCalls).toBe(0)
+    expect(readWork(root).items[0]?.attention?.message).toMatch(/blocked from use/i)
+  })
+
   test('rechecks Release Kit restrictions in the runner before calling a social adapter', async () => {
     const root = makeRoot()
     const source = join(root, 'restricted-cover.png')

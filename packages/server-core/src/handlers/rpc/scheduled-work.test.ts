@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 import { createHash } from 'node:crypto'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import * as actualConfig from '@craft-agent/shared/config'
 import * as actualWorkspaceContext from '@craft-agent/shared/workspace-context'
 import * as actualAgentDefinitions from '@craft-agent/shared/agent-definitions'
@@ -15,6 +15,16 @@ import {
 } from '@craft-agent/shared/campaign-calendar'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import {
+  ARTIST_CALENDAR_CONTEXT_SLUG,
+  parseArtistCalendarDocResult,
+} from '@craft-agent/shared/artist-context'
+import {
+  createOutputBundle,
+  readOutputManifest,
+  resolveOutputAssetPath,
+} from '@craft-agent/shared/outputs'
+import { parseXEditorialSlate, type XEditorialSlate } from '@craft-agent/shared/x-editorial'
+import {
   SCHEDULED_WORK_CONTEXT_SLUG,
   parseScheduledWorkDocResult,
   serializeScheduledWorkBody,
@@ -25,7 +35,9 @@ import type { HandlerFn, RequestContext, RpcServer } from '../../transport/types
 import { materializeReleaseKitItem, updateReleaseKitItemUsage } from '@craft-agent/shared/release-kit'
 
 const workspaceRoot = '/tmp/runneros-scheduled-work-test'
-const workspace = { id: 'ws-1', name: 'Scheduled Work Test', rootPath: workspaceRoot }
+const campaignRoot = '/tmp/runneros-scheduled-work-x-campaign-test'
+const workspace = { id: 'ws-1', name: 'Scheduled Work Test', rootPath: workspaceRoot, artistWorkspaceScope: 'hq' as const }
+const campaignWorkspace = { id: 'campaign-x', name: 'X Campaign', rootPath: campaignRoot, artistWorkspaceScope: 'campaign' as const }
 
 let contextDocs = new Map<string, LoadedContextDoc>()
 let upsertCalls: string[] = []
@@ -36,7 +48,11 @@ const assertTeamPermission = mock((_rootPath: string, _action: string) => ({ all
 mock.module('@craft-agent/shared/config', () => ({
   ...actualConfig,
   getWorkspaceByNameOrId: (workspaceId: string) => (
-    workspaceId === workspace.id ? workspace : actualConfig.getWorkspaceByNameOrId(workspaceId)
+    workspaceId === workspace.id
+      ? workspace
+      : workspaceId === campaignWorkspace.id
+        ? campaignWorkspace
+        : actualConfig.getWorkspaceByNameOrId(workspaceId)
   ),
 }))
 
@@ -166,6 +182,90 @@ function readScheduledWork() {
   const parsed = parseScheduledWorkDocResult(contextDocs.get(SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, workspace.id)
   if (!parsed.ok) throw new Error(parsed.error)
   return parsed.work
+}
+
+function readArtistCalendar() {
+  const parsed = parseArtistCalendarDocResult(contextDocs.get(ARTIST_CALENDAR_CONTEXT_SLUG) ?? undefined)
+  if (!parsed.ok) throw new Error(parsed.error)
+  return parsed.calendar
+}
+
+function seedXEditorialSlate(options?: {
+  scheduledFor?: string | null
+  format?: 'post' | 'thread'
+  text?: string
+  secondCandidate?: { text: string; scheduledFor: string }
+  asset?: { campaignId: string; itemId: string; sha256: string; label: string }
+}) {
+  const scheduledFor = options?.scheduledFor === undefined
+    ? new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    : options.scheduledFor
+  const format = options?.format ?? 'post'
+  const slate: XEditorialSlate = {
+    schemaVersion: 1,
+    slateId: 'xslate_test_1',
+    title: 'Daily X Slate — Test',
+    createdAt: new Date().toISOString(),
+    timezone: 'America/Chicago',
+    profile: { platform: 'x', profileId: 'artist-main' },
+    context: { scope: 'hq', campaignId: null, campaignName: null, campaignWeight: 'none' },
+    research: { summary: 'Artist worldview research.', researchedAt: new Date().toISOString(), sources: [] },
+    candidates: [{
+      id: 'post_1',
+      revision: 1,
+      lane: 'worldview',
+      format,
+      text: options?.text ?? 'Art should leave a bruise, not a brochure.',
+      thread: format === 'thread'
+        ? [options?.text ?? 'Art should leave a bruise, not a brochure.', 'The cleanest idea is not always the truest one.']
+        : null,
+      rationale: 'Matches the artist belief system.',
+      researchBasis: 'artist-truth',
+      sourceIds: [],
+      campaignId: options?.asset?.campaignId ?? null,
+      scheduledFor,
+      timingBasis: 'editorial-default',
+      asset: options?.asset ? { kind: 'release-kit' as const, ...options.asset } : null,
+      status: 'proposed',
+    }, ...(options?.secondCandidate ? [{
+      id: 'post_2',
+      revision: 1,
+      lane: 'worldview' as const,
+      format: 'post' as const,
+      text: options.secondCandidate.text,
+      thread: null,
+      rationale: 'Second candidate for schedule review.',
+      researchBasis: 'artist-truth' as const,
+      sourceIds: [],
+      campaignId: null,
+      scheduledFor: options.secondCandidate.scheduledFor,
+      timingBasis: 'editorial-default' as const,
+      asset: null,
+      status: 'proposed' as const,
+    }] : [])],
+  }
+  const manifest = createOutputBundle(workspaceRoot, {
+    id: '11111111-2222-4333-8444-555555555555',
+    workspaceId: workspace.id,
+    title: slate.title,
+    kind: 'collection',
+    content: `${JSON.stringify(slate, null, 2)}\n`,
+    contentMimeType: 'application/json',
+    origin: { source: 'session', sessionId: 'session-x', agentSlug: 'x-editorial' },
+    approval: { state: 'pending' },
+    tags: ['artist-x-slate'],
+  })
+  return { manifest, slate }
+}
+
+function readPersistedXSlate(outputId: string): XEditorialSlate {
+  const manifest = readOutputManifest(workspaceRoot, outputId)
+  if (!manifest?.primary) throw new Error('X slate output is missing.')
+  const path = resolveOutputAssetPath(workspaceRoot, outputId, manifest.primary.path)
+  if (!path) throw new Error('X slate asset path is invalid.')
+  const parsed = parseXEditorialSlate(readFileSync(path, 'utf-8'))
+  if (!parsed.ok) throw new Error(parsed.error)
+  return parsed.slate
 }
 
 async function registerServer(): Promise<{
@@ -299,7 +399,9 @@ function stableTestJson(value: unknown): string {
 
 beforeEach(() => {
   rmSync(workspaceRoot, { recursive: true, force: true })
+  rmSync(campaignRoot, { recursive: true, force: true })
   mkdirSync(workspaceRoot, { recursive: true })
+  mkdirSync(campaignRoot, { recursive: true })
   contextDocs = new Map()
   upsertCalls = []
   failOnSlug = null
@@ -308,6 +410,191 @@ beforeEach(() => {
 })
 
 describe('scheduled-work RPC handler', () => {
+  test('Daily X Slate approval mints exact text authorization and links HQ Calendar', async () => {
+    const { manifest } = seedXEditorialSlate()
+    const { invoke } = await registerServer()
+
+    const result = await invoke(RPC_CHANNELS.scheduledWork.MUTATE_X_EDITORIAL_CANDIDATE, workspace.id, {
+      action: 'approve',
+      outputId: manifest.id,
+      candidateId: 'post_1',
+      expectedRevision: 1,
+      expectedOutputUpdatedAt: manifest.updatedAt,
+    }) as { slate: XEditorialSlate; scheduledWorkId: string; calendarItemId: string; outputUpdatedAt: string }
+
+    expect(result.slate.candidates[0]).toMatchObject({
+      status: 'scheduled',
+      scheduledWorkId: result.scheduledWorkId,
+      calendarItemId: result.calendarItemId,
+    })
+    const order = readScheduledWork().items[0]
+    expect(order).toMatchObject({
+      owner: { scope: 'hq', workspaceId: workspace.id },
+      status: 'needs-approval',
+      execution: {
+        type: 'social-publish',
+        platform: 'x',
+        profileId: 'artist-main',
+        caption: 'Art should leave a bruise, not a brochure.',
+      },
+      inputRefs: [],
+      authorizationPolicy: 'durable-v1',
+      authorization: {
+        authorizedBy: { type: 'user', clientId: 'c1', source: 'x-editorial-ui' },
+        definition: {
+          kind: 'x-editorial',
+          xEditorialRef: { outputId: manifest.id, slateId: 'xslate_test_1', candidateId: 'post_1', revision: 1 },
+        },
+      },
+    })
+    expect(order?.authorization?.payloadDigest).toBe(order?.executionKey.payloadDigest)
+    expect(readArtistCalendar().events[0]).toMatchObject({
+      id: result.calendarItemId,
+      scheduledWorkId: result.scheduledWorkId,
+      workspaceLinks: [],
+    })
+    expect(readPersistedXSlate(manifest.id).candidates[0]?.status).toBe('scheduled')
+    expect(readOutputManifest(workspaceRoot, manifest.id)?.approval?.state).toBe('approved')
+    expect(assertTeamPermission).toHaveBeenCalledWith(workspaceRoot, 'social.publish.approve')
+  })
+
+  test('Daily X Slate approval pins exact Campaign Release Kit media in the signed authorization', async () => {
+    const sourcePath = `${campaignRoot}/lyric-clip.mp4`
+    writeFileSync(sourcePath, 'approved-lyric-clip')
+    const promoted = materializeReleaseKitItem(campaignRoot, {
+      workspaceId: campaignWorkspace.id,
+      campaignId: campaignWorkspace.id,
+      source: { type: 'campaign-asset', assetId: 'clip-1' },
+      sourcePath,
+      category: 'video',
+      subtype: 'lyric-clip',
+      promotedBy: 'user',
+    })
+    const { manifest } = seedXEditorialSlate({
+      asset: {
+        campaignId: campaignWorkspace.id,
+        itemId: promoted.item.id,
+        sha256: promoted.item.sha256,
+        label: promoted.item.title,
+      },
+    })
+    const { invoke } = await registerServer()
+
+    const result = await invoke(RPC_CHANNELS.scheduledWork.MUTATE_X_EDITORIAL_CANDIDATE, workspace.id, {
+      action: 'approve', outputId: manifest.id, candidateId: 'post_1', expectedRevision: 1,
+      expectedOutputUpdatedAt: manifest.updatedAt,
+    }) as { scheduledWorkId: string }
+
+    const order = readScheduledWork().items.find((candidate) => candidate.id === result.scheduledWorkId)
+    expect(order?.inputRefs).toEqual([{
+      kind: 'release-kit', itemId: promoted.item.id, sha256: promoted.item.sha256, label: promoted.item.title,
+    }])
+    expect(order?.authorization?.definition).toMatchObject({
+      kind: 'x-editorial',
+      releaseKitRef: {
+        campaignId: campaignWorkspace.id,
+        itemId: promoted.item.id,
+        sha256: promoted.item.sha256,
+      },
+    })
+    expect(readArtistCalendar().events[0]?.workspaceLinks).toEqual([{
+      workspaceId: campaignWorkspace.id,
+      role: 'campaign-context',
+      linkedAt: expect.any(String),
+    }])
+  })
+
+  test('editing a scheduled X candidate cancels the old exact schedule and requires reapproval', async () => {
+    const { manifest } = seedXEditorialSlate()
+    const { invoke } = await registerServer()
+    const approved = await invoke(RPC_CHANNELS.scheduledWork.MUTATE_X_EDITORIAL_CANDIDATE, workspace.id, {
+      action: 'approve', outputId: manifest.id, candidateId: 'post_1', expectedRevision: 1,
+      expectedOutputUpdatedAt: manifest.updatedAt,
+    }) as { slate: XEditorialSlate; outputUpdatedAt: string }
+
+    const edited = await invoke(RPC_CHANNELS.scheduledWork.MUTATE_X_EDITORIAL_CANDIDATE, workspace.id, {
+      action: 'edit', outputId: manifest.id, candidateId: 'post_1', expectedRevision: 1,
+      expectedOutputUpdatedAt: approved.outputUpdatedAt,
+      text: 'Art should leave a mark, not read like a brochure.',
+      scheduledFor: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+    }) as { slate: XEditorialSlate }
+
+    expect(edited.slate.candidates[0]).toMatchObject({
+      revision: 2,
+      status: 'proposed',
+      text: 'Art should leave a mark, not read like a brochure.',
+    })
+    expect(edited.slate.candidates[0]?.scheduledWorkId).toBeUndefined()
+    expect(readScheduledWork().items[0]?.status).toBe('canceled')
+    expect(readArtistCalendar().events[0]?.deletedAt).toBeTruthy()
+    expect(readOutputManifest(workspaceRoot, manifest.id)?.approval?.state).toBe('pending')
+  })
+
+  test('Daily X Slate refuses native thread approval without creating schedule records', async () => {
+    const { manifest } = seedXEditorialSlate({ format: 'thread' })
+    const { invoke } = await registerServer()
+
+    await expect(invoke(RPC_CHANNELS.scheduledWork.MUTATE_X_EDITORIAL_CANDIDATE, workspace.id, {
+      action: 'approve', outputId: manifest.id, candidateId: 'post_1', expectedRevision: 1,
+      expectedOutputUpdatedAt: manifest.updatedAt,
+    })).rejects.toThrow(/thread/i)
+    expect(readScheduledWork().items).toHaveLength(0)
+    expect(readArtistCalendar().events).toHaveLength(0)
+    expect(readPersistedXSlate(manifest.id).candidates[0]?.status).toBe('proposed')
+  })
+
+  test('Daily X Slate refuses an over-limit standard post before creating schedule records', async () => {
+    const { manifest } = seedXEditorialSlate({ text: 'x'.repeat(281) })
+    const { invoke } = await registerServer()
+
+    await expect(invoke(RPC_CHANNELS.scheduledWork.MUTATE_X_EDITORIAL_CANDIDATE, workspace.id, {
+      action: 'approve', outputId: manifest.id, candidateId: 'post_1', expectedRevision: 1,
+      expectedOutputUpdatedAt: manifest.updatedAt,
+    })).rejects.toThrow(/Shorten by 1 character/)
+    expect(readScheduledWork().items).toHaveLength(0)
+    expect(readArtistCalendar().events).toHaveLength(0)
+  })
+
+  test('Daily X Slate refuses a second X post in the same minute', async () => {
+    const scheduledFor = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    const { manifest } = seedXEditorialSlate({
+      scheduledFor,
+      secondCandidate: { text: 'A different thought for the same minute.', scheduledFor },
+    })
+    const { invoke } = await registerServer()
+    const first = await invoke(RPC_CHANNELS.scheduledWork.MUTATE_X_EDITORIAL_CANDIDATE, workspace.id, {
+      action: 'approve', outputId: manifest.id, candidateId: 'post_1', expectedRevision: 1,
+      expectedOutputUpdatedAt: manifest.updatedAt,
+    }) as { outputUpdatedAt: string }
+
+    await expect(invoke(RPC_CHANNELS.scheduledWork.MUTATE_X_EDITORIAL_CANDIDATE, workspace.id, {
+      action: 'approve', outputId: manifest.id, candidateId: 'post_2', expectedRevision: 1,
+      expectedOutputUpdatedAt: first.outputUpdatedAt,
+    })).rejects.toThrow(/time slot/i)
+    expect(readScheduledWork().items).toHaveLength(1)
+    expect(readArtistCalendar().events).toHaveLength(1)
+  })
+
+  test('Daily X Slate refuses duplicate normalized copy inside seven days', async () => {
+    const firstTime = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    const secondTime = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString()
+    const { manifest } = seedXEditorialSlate({
+      scheduledFor: firstTime,
+      secondCandidate: { text: '  ART SHOULD LEAVE A BRUISE, NOT A BROCHURE.  ', scheduledFor: secondTime },
+    })
+    const { invoke } = await registerServer()
+    const first = await invoke(RPC_CHANNELS.scheduledWork.MUTATE_X_EDITORIAL_CANDIDATE, workspace.id, {
+      action: 'approve', outputId: manifest.id, candidateId: 'post_1', expectedRevision: 1,
+      expectedOutputUpdatedAt: manifest.updatedAt,
+    }) as { outputUpdatedAt: string }
+
+    await expect(invoke(RPC_CHANNELS.scheduledWork.MUTATE_X_EDITORIAL_CANDIDATE, workspace.id, {
+      action: 'approve', outputId: manifest.id, candidateId: 'post_2', expectedRevision: 1,
+      expectedOutputUpdatedAt: first.outputUpdatedAt,
+    })).rejects.toThrow(/exact X post/i)
+    expect(readScheduledWork().items).toHaveLength(1)
+  })
+
   test('authorizeReleaseKitSocial mints human-bound authorization and writes one linked calendar item', async () => {
     seedEmptyCampaignCalendar()
     const sourcePath = `${workspaceRoot}/source.png`

@@ -119,7 +119,7 @@ async function executeTryPost(
   contentType: string,
   deps: ScheduledSocialProviderRuntimeDeps,
 ): Promise<ScheduledSocialBrowserExecutionResult> {
-  assertCurrentReleaseKitSocialUseAllowed(input.workspaceRootPath, input.order)
+  assertCurrentReleaseKitSocialUseAllowed(input.workspaceRootPath, input.order, deps.resolveMediaPath)
   const { mediaPath: approvedMediaPath } = assertApprovedScheduledSocialTuple(input, deps)
   const approvedMedia = approvedMediaPath ? readApprovedMedia(input, approvedMediaPath) : undefined
   // Deliberately do not send executionKey.idempotencyKey until TryPost documents provider-enforced semantics.
@@ -203,7 +203,7 @@ async function executePostiz(
   settings: Record<string, unknown>,
   deps: ScheduledSocialProviderRuntimeDeps,
 ): Promise<ScheduledSocialBrowserExecutionResult> {
-  assertCurrentReleaseKitSocialUseAllowed(input.workspaceRootPath, input.order)
+  assertCurrentReleaseKitSocialUseAllowed(input.workspaceRootPath, input.order, deps.resolveMediaPath)
   const { mediaPath: approvedMediaPath } = assertApprovedScheduledSocialTuple(input, deps)
   const approvedMedia = approvedMediaPath ? readApprovedMedia(input, approvedMediaPath) : undefined
   // Deliberately do not send executionKey.idempotencyKey until Postiz documents provider-enforced semantics.

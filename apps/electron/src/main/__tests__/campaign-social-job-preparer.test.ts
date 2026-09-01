@@ -3,7 +3,7 @@ import {
   createCampaignCalendarItem,
   createCampaignScheduledJob,
 } from '@craft-agent/shared/campaign-calendar'
-import { executeScheduledSocialWork, prepareCampaignSocialJob, prepareScheduledSocialWork, resolveCampaignSocialMediaPath } from '../campaign-social-job-preparer'
+import { executeScheduledSocialWork, prepareCampaignSocialJob, prepareScheduledSocialWork, resolveCampaignSocialMediaPath, resolveScheduledSocialMediaPath } from '../campaign-social-job-preparer'
 import type { ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import { materializeReleaseKitItem, resolveReleaseKitItemPath, updateReleaseKitItemUsage } from '@craft-agent/shared/release-kit'
 import { mkdtempSync, writeFileSync } from 'node:fs'
@@ -260,6 +260,40 @@ describe('native scheduled social work', () => {
     executionKey: { payloadDigest: 'payload-native-1', idempotencyKey: 'idem-native-1' },
     createdAt: '2026-07-09T00:00:00.000Z', updatedAt: '2026-07-09T00:00:00.000Z',
   }
+
+  test('resolves an HQ-owned X post through its signed Campaign Release Kit reference', () => {
+    const campaignRoot = mkdtempSync(join(tmpdir(), 'x-editorial-campaign-media-'))
+    const source = join(campaignRoot, 'lyric-clip.mp4')
+    writeFileSync(source, 'approved-lyric-clip')
+    const promoted = materializeReleaseKitItem(campaignRoot, {
+      workspaceId: 'campaign-x', campaignId: 'campaign-x',
+      source: { type: 'campaign-asset', assetId: 'clip-1' }, sourcePath: source,
+      category: 'video', subtype: 'lyric-clip', promotedBy: 'user',
+    })
+    const xOrder: ScheduledWorkOrder = {
+      ...order,
+      id: 'x-editorial-media-1',
+      owner: { scope: 'hq', workspaceId: 'hq-1' },
+      inputRefs: [{ kind: 'release-kit', itemId: promoted.item.id, sha256: promoted.item.sha256 }],
+      authorizationPolicy: 'durable-v1',
+      authorization: {
+        id: 'auth-x-media', authorizedAt: '2026-07-09T00:00:00.000Z', payloadDigest: 'digest',
+        authorizedBy: { type: 'user', clientId: 'client', source: 'x-editorial-ui' },
+        definition: {
+          kind: 'x-editorial', title: 'Lyric clip',
+          xEditorialRef: { outputId: 'output-1', slateId: 'slate-1', candidateId: 'post-1', revision: 1 },
+          releaseKitRef: { itemId: promoted.item.id, sha256: promoted.item.sha256, campaignId: 'campaign-x' },
+          platform: 'x', profileId: 'artist-main', caption: 'A line worth keeping.',
+          startAt: order.startAt, timezone: order.timezone,
+        },
+      },
+    }
+    const resolved = resolveScheduledSocialMediaPath('/hq-root', xOrder, (workspaceId) => workspaceId === 'campaign-x'
+      ? { id: 'campaign-x', rootPath: campaignRoot, artistWorkspaceScope: 'campaign' }
+      : null)
+
+    expect(resolved).toBe(resolveReleaseKitItemPath(campaignRoot, promoted.item.relativePath))
+  })
 
   test('prepares the exact action and refuses a delegated result without a real receipt', async () => {
     const dryRun = {

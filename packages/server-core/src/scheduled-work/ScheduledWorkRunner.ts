@@ -9,6 +9,7 @@ import {
   serializeScheduledWorkBody,
   scheduledWorkDefinitionDigest,
   stableScheduledWorkAuthorizationStringify,
+  isXEditorialSocialAuthorizationDefinition,
   type ExpectedOutputContract,
   type ScheduledWorkAttention,
   type ScheduledWorkDocument,
@@ -27,6 +28,7 @@ import {
   type LoadedContextDoc,
 } from '@craft-agent/shared/workspace-context'
 import type { WorkflowRunSnapshot, WorkflowRunState } from '@craft-agent/shared/workflows'
+import { reconcileXEditorialSlateOrder } from '../x-editorial/slate-status'
 
 const ACTIVE_WORKFLOW_STATES = new Set<WorkflowRunState>(['created', 'queued', 'running', 'paused'])
 const START_GRACE_MS = 24 * 60 * 60 * 1000
@@ -37,6 +39,7 @@ export interface ScheduledWorkRunnerDeps {
   getBackgroundFenceToken?(workspaceRootPath: string): string | null
   canExecuteSocialAutomatically?(workspaceRootPath: string): boolean
   withLock<T>(workspaceRootPath: string, fn: () => Promise<T> | T): Promise<T>
+  resolveWorkspace?(workspaceId: string): { id: string; rootPath: string; artistWorkspaceScope?: string } | null | undefined
   executeAgentTask(input: {
     workOrderId: string
     workspace: { id: string; rootPath: string }
@@ -70,6 +73,7 @@ export interface ScheduledWorkRunnerDeps {
   prepareSocial?(input: { workspaceId: string; workspaceRootPath: string; order: ScheduledWorkOrder }): Promise<ScheduledSocialActionPreview>
   executeSocial?(input: { workspaceId: string; workspaceRootPath: string; order: ScheduledWorkOrder; preview: ScheduledSocialActionPreview; approval: ScheduledSocialApproval }): Promise<{ receiptId: string; externalUrl?: string; summary: string }>
   emitContextChanged?(workspaceId: string, docs: LoadedContextDoc[]): void
+  emitOutputsChanged?(workspaceId: string): void
   now?(): Date
   log?: Pick<Console, 'info' | 'warn' | 'error'>
 }
@@ -272,6 +276,7 @@ export class ScheduledWorkRunner {
         this.log.warn(`[ScheduledWork] ${parsed.error}`)
         return { scanned: 0, started: 0, blocked: 0, completed: 0, failed: 0 }
       }
+      await this.reconcileXEditorialOutputs(workspaceId, workspaceRootPath, parsed.work.items)
       const candidates = parsed.work.items
         .filter((order) => this.shouldScanOrder(order, now)
           && !this.activeAgentRuns.has(activeAgentRunKey(workspaceRootPath, order.id)))
@@ -670,7 +675,7 @@ export class ScheduledWorkRunner {
     try {
       if (!this.deps.executeSocial || order.execution.type !== 'social-publish' || !order.socialAction || !order.socialApproval) return
       if (!this.canContinue(workspaceRootPath, capturedFence)) throw new Error('Team runner fence changed before social execution.')
-      assertCurrentReleaseKitSocialUseAllowed(workspaceRootPath, order)
+      assertCurrentReleaseKitSocialUseAllowed(workspaceRootPath, order, this.deps.resolveWorkspace)
       const result = await this.deps.executeSocial({ workspaceId, workspaceRootPath, order, preview: order.socialAction, approval: order.socialApproval })
       const nowIso = (this.deps.now?.() ?? new Date()).toISOString()
       const receipt: CampaignExternalExecutionReceipt = {
@@ -1168,9 +1173,37 @@ export class ScheduledWorkRunner {
         updatedAt: nowIso,
       }
       this.writeWork(workspaceRootPath, nextWork)
+      this.reconcileXEditorialOrder(workspaceId, workspaceRootPath, nextOrder)
       this.deps.emitContextChanged?.(workspaceId, loadAllContextDocs(workspaceRootPath))
       return { updated: true, work: nextWork, order: nextOrder }
     })
+  }
+
+  private async reconcileXEditorialOutputs(
+    workspaceId: string,
+    workspaceRootPath: string,
+    orders: ScheduledWorkOrder[],
+  ): Promise<void> {
+    const relevant = orders.filter((order) => order.authorization?.definition.kind === 'x-editorial')
+    if (relevant.length === 0) return
+    await this.deps.withLock(workspaceRootPath, () => {
+      const current = this.readWork(workspaceRootPath, workspaceId)
+      if (!current.ok) return
+      for (const order of current.work.items) this.reconcileXEditorialOrder(workspaceId, workspaceRootPath, order)
+    })
+  }
+
+  private reconcileXEditorialOrder(
+    workspaceId: string,
+    workspaceRootPath: string,
+    order: ScheduledWorkOrder,
+  ): void {
+    try {
+      const reconciled = reconcileXEditorialSlateOrder(workspaceRootPath, order)
+      if (reconciled.updated) this.deps.emitOutputsChanged?.(workspaceId)
+    } catch (error) {
+      this.log.error(`[ScheduledWork] Daily X Slate status sync failed for ${order.id}: ${errorMessage(error)}`)
+    }
   }
 
   private getCurrentOrder(
@@ -1279,17 +1312,40 @@ export class ScheduledWorkRunner {
   }
 }
 
-function assertCurrentReleaseKitSocialUseAllowed(workspaceRootPath: string, order: ScheduledWorkOrder): void {
+function assertCurrentReleaseKitSocialUseAllowed(
+  workspaceRootPath: string,
+  order: ScheduledWorkOrder,
+  resolveWorkspace?: ScheduledWorkRunnerDeps['resolveWorkspace'],
+): void {
   const releaseKitRefs = order.inputRefs.filter((ref) => ref.kind === 'release-kit')
   if (releaseKitRefs.length > 1) throw new Error('Social work has multiple Release Kit media references.')
   const releaseKitRef = releaseKitRefs[0]
   if (!releaseKitRef) return
+  const definition = order.authorization?.definition
+  const crossWorkspaceCampaignId = definition
+    && isXEditorialSocialAuthorizationDefinition(definition)
+    && definition.releaseKitRef?.campaignId !== order.owner.workspaceId
+      ? definition.releaseKitRef?.campaignId
+      : undefined
+  if (crossWorkspaceCampaignId) {
+    const campaign = resolveWorkspace?.(crossWorkspaceCampaignId)
+    if (!campaign || campaign.id !== crossWorkspaceCampaignId || campaign.artistWorkspaceScope !== 'campaign') {
+      throw new Error(`Campaign workspace not found for approved X media: ${crossWorkspaceCampaignId}`)
+    }
+    const item = loadReleaseKitManifest(campaign.rootPath, campaign.id, campaign.id)
+      .items.find((candidate) => candidate.id === releaseKitRef.itemId)
+    if (!item) throw new Error(`Release Kit item not found: ${releaseKitRef.itemId}`)
+    if (item.sha256 !== releaseKitRef.sha256) throw new Error('Approved X media no longer matches its Release Kit snapshot.')
+    assertReleaseKitSocialUseAllowed(item)
+    return
+  }
   const item = loadReleaseKitManifest(
     workspaceRootPath,
     order.owner.workspaceId,
     order.owner.campaignId ?? order.owner.workspaceId,
   ).items.find((candidate) => candidate.id === releaseKitRef.itemId)
   if (!item) throw new Error(`Release Kit item not found: ${releaseKitRef.itemId}`)
+  if (item.sha256 !== releaseKitRef.sha256) throw new Error('Approved social media no longer matches its Release Kit snapshot.')
   assertReleaseKitSocialUseAllowed(item)
 }
 
@@ -1307,19 +1363,37 @@ function durableAuthorizationMatches(order: ScheduledWorkOrder, now: Date): bool
   if (order.execution.type !== 'social-publish' || !order.authorization || order.authorizationPolicy !== 'durable-v1') return false
   if (order.authorization.expiresAt && Date.parse(order.authorization.expiresAt) <= now.getTime()) return false
   const refs = order.inputRefs.filter((ref) => ref.kind === 'release-kit')
-  if (refs.length !== 1) return false
-  const releaseKitRef = { itemId: refs[0]!.itemId, sha256: refs[0]!.sha256, label: refs[0]!.label }
-  const definition = {
-    title: order.title,
-    releaseKitRef,
-    platform: order.execution.platform,
-    profileId: order.execution.profileId,
-    accountSetId: order.execution.accountSetId,
-    caption: order.execution.caption,
-    platformOptions: order.execution.platformOptions,
-    startAt: order.startAt,
-    timezone: order.timezone,
-  }
+  const authorizedDefinition = order.authorization.definition
+  const definition = isXEditorialSocialAuthorizationDefinition(authorizedDefinition)
+    ? {
+        kind: 'x-editorial' as const,
+        title: order.title,
+        xEditorialRef: authorizedDefinition.xEditorialRef,
+        releaseKitRef: refs[0]
+          ? { itemId: refs[0].itemId, sha256: refs[0].sha256, label: refs[0].label, campaignId: authorizedDefinition.releaseKitRef?.campaignId ?? order.owner.campaignId ?? order.owner.workspaceId }
+          : undefined,
+        platform: 'x' as const,
+        profileId: order.execution.profileId,
+        accountSetId: order.execution.accountSetId,
+        caption: order.execution.caption,
+        platformOptions: order.execution.platformOptions,
+        startAt: order.startAt,
+        timezone: order.timezone,
+      }
+    : refs.length === 1
+      ? {
+          title: order.title,
+          releaseKitRef: { itemId: refs[0]!.itemId, sha256: refs[0]!.sha256, label: refs[0]!.label },
+          platform: order.execution.platform,
+          profileId: order.execution.profileId,
+          accountSetId: order.execution.accountSetId,
+          caption: order.execution.caption,
+          platformOptions: order.execution.platformOptions,
+          startAt: order.startAt,
+          timezone: order.timezone,
+        }
+      : null
+  if (!definition || refs.length > 1 || (isXEditorialSocialAuthorizationDefinition(authorizedDefinition) && Boolean(authorizedDefinition.releaseKitRef) !== Boolean(refs[0]))) return false
   const digest = `sha256:${createHash('sha256').update(stableScheduledWorkAuthorizationStringify(definition)).digest('hex')}`
   return stableScheduledWorkAuthorizationStringify(order.authorization.definition) === stableScheduledWorkAuthorizationStringify(definition)
     && order.authorization.payloadDigest === digest
@@ -1331,10 +1405,11 @@ function deriveSocialApproval(order: ScheduledWorkOrder, preview: ScheduledSocia
     throw new Error('Durable social authorization is missing or invalid.')
   }
   const ref = order.authorization.definition.releaseKitRef
+  const expectedMediaDigest = ref ? `sha256:${ref.sha256}` : undefined
   if (preview.payloadDigest !== order.authorization.payloadDigest
     || preview.platform !== order.authorization.definition.platform
     || preview.profileId !== order.authorization.definition.profileId
-    || preview.mediaDigest !== `sha256:${ref.sha256}`) {
+    || preview.mediaDigest !== expectedMediaDigest) {
     throw new Error('Prepared social action does not match the authorized post.')
   }
   return {

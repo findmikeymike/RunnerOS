@@ -39,13 +39,13 @@ export function campaignWorkerContextMetadata(readiness: CampaignWorkerReadiness
 
 export function getCampaignWorkerReadiness(input: CampaignWorkerContextInput): CampaignWorkerReadiness {
   const files = availableFiles(input.assetManifest)
-  const lyrics = firstLyrics(files)
-  const lyricsNeedsReview = Boolean(lyrics?.lyrics?.reviewRequired)
+  const approvedLyrics = hasApprovedLyrics(files)
+  const lyricsNeedsReview = hasReviewNeededLyrics(files) && !approvedLyrics
   const essentials = {
     campaignBrief: input.mission.status !== 'empty' && Boolean(input.mission.title || input.mission.goal),
     artistProfile: Boolean(input.artistProfile?.artistName || input.artistProfile?.bio || input.artistProfile?.sound),
     master: hasKind(files, ['master', 'demo']),
-    lyrics: Boolean(lyrics?.lyrics && !lyrics.lyrics.reviewRequired),
+    lyrics: approvedLyrics,
     coverArt: hasKind(files, ['cover-art']),
   }
   const missing = [
@@ -68,6 +68,8 @@ export function getCampaignWorkerReadiness(input: CampaignWorkerContextInput): C
 export function serializeCampaignWorkerContext(input: CampaignWorkerContextInput): string {
   const readiness = getCampaignWorkerReadiness(input)
   const files = availableFiles(input.assetManifest)
+  const approvedLyrics = hasApprovedLyrics(files)
+  const lyricsNeedsReview = hasReviewNeededLyrics(files) && !approvedLyrics
   const campaignWindow = missionCampaignWindow(input.mission)
   const payload = {
     campaign: {
@@ -108,10 +110,10 @@ export function serializeCampaignWorkerContext(input: CampaignWorkerContextInput
     },
     assets: {
       master: firstPath(files, ['master', 'demo']),
-      lyrics: firstPath(files, ['lyrics']),
-      lyricsStatus: firstLyrics(files)?.lyrics?.reviewRequired ? 'needs-review' : firstLyrics(files)?.lyrics ? 'approved' : 'missing',
-      lyricsText: firstLyrics(files)?.lyrics?.text ?? null,
-      lyricLines: firstLyrics(files)?.lyrics?.lyricLines ?? null,
+      lyricsStatus: approvedLyrics ? 'approved' : lyricsNeedsReview ? 'needs-review' : 'missing',
+      lyricsAccess: approvedLyrics
+        ? 'Read the live mission-assets context or approved Campaign Asset record before using lyrics.'
+        : null,
       coverArt: firstPath(files, ['cover-art']),
       rawVideoCount: countKinds(files, ['raw-video']),
       finalVideoCount: countKinds(files, ['edited-video', 'final-video']),
@@ -139,7 +141,7 @@ function nextMove(essentials: CampaignWorkerReadiness['essentials'], input: Camp
   if (!essentials.master) return 'Add the master or demo in Campaign Assets.'
   if (!essentials.coverArt) return 'Add cover art in Campaign Assets.'
   if (!input.mission.targetListener && !input.artistProfile?.audience) return 'Add the target listener.'
-  if (!essentials.lyrics && firstLyrics(availableFiles(input.assetManifest))?.lyrics?.reviewRequired) return 'Review and approve lyrics.'
+  if (!essentials.lyrics && hasReviewNeededLyrics(availableFiles(input.assetManifest))) return 'Review and approve lyrics.'
   if (!essentials.lyrics) return 'Add lyrics when available.'
   return 'Ready to launch workers from this campaign context.'
 }
@@ -157,10 +159,22 @@ function firstPath(files: MissionAssetRecord[], kinds: MissionAssetRecord['kind'
   return file?.relativePath ?? file?.absolutePath ?? null
 }
 
-function firstLyrics(files: MissionAssetRecord[]): MissionAssetRecord | null {
-  return files.find((record) => record.kind === 'lyrics' && record.lyrics && !record.lyrics.reviewRequired)
-    ?? files.find((record) => record.kind === 'lyrics' && record.lyrics)
-    ?? null
+function hasApprovedLyrics(files: MissionAssetRecord[]): boolean {
+  return files.some((record) => (
+    (record.kind === 'master' || record.kind === 'demo')
+      && Boolean(record.trackIntelligence?.approved?.lyrics?.lines.length)
+  )) || files.some((record) => (
+    record.kind === 'lyrics'
+      && record.usableByAgents
+      && Boolean(record.lyrics && !record.lyrics.reviewRequired)
+  ))
+}
+
+function hasReviewNeededLyrics(files: MissionAssetRecord[]): boolean {
+  return files.some((record) => (
+    (record.kind === 'master' || record.kind === 'demo')
+      && Boolean(record.trackIntelligence?.draft?.lyrics)
+  )) || files.some((record) => record.kind === 'lyrics' && Boolean(record.lyrics?.reviewRequired))
 }
 
 function countKinds(files: MissionAssetRecord[], kinds: MissionAssetRecord['kind'][]): number {

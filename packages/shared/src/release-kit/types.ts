@@ -61,11 +61,13 @@ export interface ReleaseKitItem {
   promotedAt: string;
   promotedBy: 'user' | 'agent' | 'migration';
   note?: string;
+  /** Immutable reviewed song package captured with this exact byte snapshot. */
+  trackIntelligence?: ReviewedTrackIntelligenceRevision;
   usage: ReleaseKitUsageMetadata;
 }
 
 export interface ReleaseKitManifest {
-  schemaVersion: 1 | 2;
+  schemaVersion: 1 | 2 | 3;
   workspaceId: string;
   campaignId: string;
   updatedAt: string;
@@ -91,6 +93,7 @@ export interface MaterializeReleaseKitItemInput {
   makePrimary?: boolean;
   promotedBy: ReleaseKitItem['promotedBy'];
   note?: string;
+  trackIntelligence?: ReviewedTrackIntelligenceRevision;
 }
 
 export interface PromoteToReleaseKitInput {
@@ -126,3 +129,4 @@ export interface ReleaseKitVerificationResult {
   checked: number;
   changed: ReleaseKitItem[];
 }
+import type { ReviewedTrackIntelligenceRevision } from '../artist-vault/types.ts';

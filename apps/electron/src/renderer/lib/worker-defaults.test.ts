@@ -11,4 +11,10 @@ describe('worker page defaults', () => {
     expect(defaultWorkerSlugs(false)).toContain('spotify-playlist-creator')
     expect(defaultWorkerSlugs(true)).toContain('spotify-playlist-creator')
   })
+
+  test('X Editorial appears once by default in Artist HQ and Campaign workers', () => {
+    expect(defaultWorkerSlugs(false)).toContain('x-editorial')
+    expect(defaultWorkerSlugs(true)).toContain('x-editorial')
+    expect(defaultWorkerSlugs(true).filter((slug) => slug === 'x-editorial')).toHaveLength(1)
+  })
 })

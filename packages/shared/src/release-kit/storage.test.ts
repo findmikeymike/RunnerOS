@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
@@ -196,7 +197,49 @@ describe('release kit storage', () => {
     expect(body).toContain('Primary: cover.png');
   });
 
-  test('migrates V1 manifests in memory without changing asset identity or snapshot trust', () => {
+  test('withholds paths and Track Intelligence for snapshots that are not ready', () => {
+    const workspace = tempWorkspace();
+    const source = join(workspace, 'master.wav');
+    writeFileSync(source, 'master');
+    const promoted = materializeReleaseKitItem(workspace, {
+      workspaceId: 'workspace-1',
+      campaignId: 'campaign-1',
+      source: { type: 'upload', originalFileName: 'master.wav' },
+      sourcePath: source,
+      category: 'audio',
+      subtype: 'master',
+      promotedBy: 'user',
+      trackIntelligence: {
+        id: 'reviewed-1',
+        lyrics: {
+          lines: [{ id: 'line-1', text: 'private draft lyric', startMs: 0, endMs: 1_000 }],
+          timingSource: 'transcription',
+          timingStatus: 'ready',
+        },
+        character: { genre: ['alt-pop'] },
+        provenance: {
+          processedLocally: true,
+          sourceSha256: createHash('sha256').update('master').digest('hex'),
+        },
+        reviewedAt: '2026-08-31T12:00:00.000Z',
+        reviewedBy: { type: 'user', clientId: 'client-1' },
+      },
+    });
+    const unsafePath = promoted.item.relativePath;
+    const unsafeManifest = {
+      ...promoted.manifest,
+      items: promoted.manifest.items.map((item) => ({ ...item, status: 'needs-review' as const })),
+    };
+
+    const body = serializeReleaseKitContext(unsafeManifest);
+
+    expect(body).not.toContain(unsafePath);
+    expect(body).not.toContain('private draft lyric');
+    expect(body).not.toContain('alt-pop');
+    expect(body).not.toContain('trackIntelligence');
+  });
+
+  test('loads V1 manifests without rewriting or changing asset identity and snapshot trust', () => {
     const workspace = tempWorkspace();
     const source = join(workspace, 'cover.png');
     writeFileSync(source, 'cover');
@@ -211,7 +254,7 @@ describe('release kit storage', () => {
 
     const migrated = loadReleaseKitManifest(workspace, 'workspace-1', 'campaign-1');
 
-    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.schemaVersion).toBe(1);
     expect(migrated.items[0]?.id).toBe(promoted.item.id);
     expect(migrated.items[0]?.sha256).toBe(promoted.item.sha256);
     expect(migrated.items[0]?.relativePath).toBe(promoted.item.relativePath);
@@ -243,7 +286,7 @@ describe('release kit storage', () => {
     });
     const usage = manifest.items[0]?.usage;
 
-    expect(manifest.schemaVersion).toBe(2);
+    expect(manifest.schemaVersion).toBe(3);
     expect(usage?.bestFor).toEqual(['social', 'press']);
     expect(usage?.contentRating).toBe('clean');
     expect(usage?.notes).toBe('Best for launch-day posts.');

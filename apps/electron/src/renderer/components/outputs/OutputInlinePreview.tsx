@@ -13,6 +13,8 @@ import { buildRunnerOutputAssetUrl } from '@craft-agent/shared/outputs/web-previ
 import type { OutputAssetDTO, OutputManifestDTO, OutputPreviewMode } from '@/hooks/useOutputs'
 import { findVideoProjectAsset, formatDuration, summarizeVideoProject } from './video-project-output'
 import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
+import { isXEditorialSlateOutput } from '@craft-agent/shared/x-editorial'
+import { XEditorialSlatePreview } from './XEditorialSlatePreview'
 
 const OutputModelPreview = React.lazy(() => import('./OutputModelPreview').then((module) => ({ default: module.OutputModelPreview })))
 const OutputExcalidrawPreview = React.lazy(() => import('./OutputExcalidrawPreview').then((module) => ({ default: module.OutputExcalidrawPreview })))
@@ -286,6 +288,20 @@ export function OutputInlinePreview({
           <StreamingMarkdown content={content} isStreaming={false} mode="minimal" />
         </div>
       </div>
+    )
+  }
+
+  if (mode === 'json' && content && isXEditorialSlateOutput(manifest)) {
+    return (
+      <XEditorialSlatePreview
+        workspaceId={workspaceId}
+        outputId={manifest.id}
+        outputUpdatedAt={manifest.updatedAt ?? manifest.createdAt}
+        content={content}
+        compact={compact}
+        className={className}
+        onPreviewSettled={onPreviewSettled}
+      />
     )
   }
 

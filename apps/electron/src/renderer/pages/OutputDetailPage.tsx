@@ -15,6 +15,7 @@ import { campaignCalendarPrefillForOutput, isAdOutput } from '@/lib/output-final
 import { setPendingCampaignCalendarPrefill } from '@/lib/campaign-calendar'
 import { setPendingReleaseKitOutput } from '@/lib/release-kit-navigation'
 import type { VaultKindHint } from '@craft-agent/shared/artist-vault'
+import { isXEditorialSlateOutput } from '@craft-agent/shared/x-editorial'
 
 interface Props {
   workspaceId: string
@@ -116,6 +117,7 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
   const canSendToCanvas = manifest.kind === 'image' || manifest.kind === 'video' || manifest.kind === 'model'
   const isFinal = Boolean(manifest.finals?.length)
   const canChooseVaultKind = canChooseImageVaultKind(manifest)
+  const isXEditorialSlate = isXEditorialSlateOutput(manifest)
 
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
@@ -133,11 +135,11 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            <Button size="sm" variant="outline" className="border-blue-400/20 bg-blue-400/10 text-white/82 hover:bg-blue-400/15 hover:text-white" onClick={() => scheduleOutputInCampaignCalendar(manifest, currentCampaignId, navigate)}>
+            {!isXEditorialSlate && <Button size="sm" variant="outline" className="border-blue-400/20 bg-blue-400/10 text-white/82 hover:bg-blue-400/15 hover:text-white" onClick={() => scheduleOutputInCampaignCalendar(manifest, currentCampaignId, navigate)}>
               <CalendarClock className="mr-1.5 h-3.5 w-3.5" />
               Schedule
-            </Button>
-            {currentCampaignId ? (
+            </Button>}
+            {!isXEditorialSlate && (currentCampaignId ? (
               <Button size="sm" variant="outline" className="border-emerald-400/20 bg-emerald-400/10 text-white/82 hover:bg-emerald-400/15 hover:text-white" onClick={() => {
                 setPendingReleaseKitOutput(manifest.id)
                 navigate(routes.view.campaign('release-kit'))
@@ -150,7 +152,7 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
                 <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
                 Set as Final
               </Button>
-            )}
+            ))}
             {!currentCampaignId && isFinal && (
               <Button size="sm" variant="outline" className="border-sky-400/20 bg-sky-400/10 text-white/82 hover:bg-sky-400/15 hover:text-white" onClick={() => setFinalAction('primary')}>
                 <Star className="mr-1.5 h-3.5 w-3.5" />
@@ -180,7 +182,7 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
                 Video Studio
               </Button>
             )}
-            {primary && (
+            {!isXEditorialSlate && primary && (
               <>
                 {canChooseVaultKind && (
                   <ImageVaultKindSelect
@@ -215,6 +217,7 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
           />
         </Section>
 
+        {!isXEditorialSlate && <>
         <Section title="Summary">
           <p className="runneros-card px-3 py-2 text-sm leading-6 text-white/68">{manifest.summary || 'No summary provided.'}</p>
         </Section>
@@ -302,6 +305,7 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
             </div>
           </div>
         </Section>
+        </>}
       </div>
       {!currentCampaignId ? <OutputFinalActionDialog
         open={Boolean(finalAction)}

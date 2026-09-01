@@ -422,6 +422,12 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'listXEditorialHistory', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.listXEditorialHistoryFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'getAssetRecord', {
     get() { return getSessionScopedToolCallbacks(sessionId)?.getAssetRecordFn; },
     configurable: true,

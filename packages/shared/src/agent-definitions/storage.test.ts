@@ -1103,6 +1103,72 @@ body
     expect(commsAgent?.systemPrompt).toContain('approval')
   })
 
+  test('starter library includes one approval-gated X Editorial worker for HQ and Campaign context', () => {
+    const xEditorial = STARTER_AGENTS.find((agent) => agent.slug === 'x-editorial')
+
+    expect(xEditorial).toBeDefined()
+    expect(xEditorial?.metadata.name).toBe('X Editorial')
+    expect(xEditorial?.metadata.permissionMode).toBe('ask')
+    expect(xEditorial?.metadata.skills).toEqual(['artist-x-editorial', 'artist-comms-strategist'])
+    expect(xEditorial?.metadata.trustedWorkerTools).toEqual([
+      'start_deep_research',
+      'list_deep_research_runs',
+      'get_deep_research_run',
+      'list_release_kit',
+      'get_release_kit_item',
+      'list_campaign_outputs',
+      'get_campaign_output',
+      'list_artist_vault',
+      'list_x_editorial_history',
+      'create_output',
+    ])
+    expect(xEditorial?.metadata.trustedWorkerTools).not.toContain('publish_social_post')
+    expect(xEditorial?.metadata.trustedWorkerTools).not.toContain('promote_to_release_kit')
+    expect(xEditorial?.metadata.tags).toContain('x')
+    expect(xEditorial?.metadata.tags).toContain('campaigns')
+    expect(DEFAULT_ACTIVATED_AGENT_SLUGS).toContain('x-editorial')
+    expect(xEditorial?.systemPrompt).toContain('artist-profile')
+    expect(xEditorial?.systemPrompt).toContain('artist-voice')
+    expect(xEditorial?.systemPrompt).toContain('artist-branding')
+    expect(xEditorial?.systemPrompt).toContain('start_deep_research')
+    expect(xEditorial?.systemPrompt).toContain('artist-x-slate')
+    expect(xEditorial?.systemPrompt).toContain('same artist-wide X worker')
+    expect(xEditorial?.systemPrompt).toContain('campaignWorkspaceId')
+    expect(xEditorial?.systemPrompt).toContain('list_x_editorial_history')
+    expect(xEditorial?.systemPrompt).toContain('never publish')
+    expect(xEditorial?.systemPrompt).toContain('Nothing posts until the artist approves')
+  })
+
+  test('built-in migration can upgrade an already-seeded X Editorial worker without replacing custom fields', () => {
+    writeGlobalAgent({
+      slug: 'x-editorial',
+      metadata: {
+        name: 'My X Editor',
+        description: 'Custom description.',
+        trustedWorkerTools: ['start_deep_research', 'list_deep_research_runs', 'get_deep_research_run', 'create_output'],
+      },
+      systemPrompt: 'Recent history marker.',
+    }, { globalAgentsDir })
+
+    expect(replaceBuiltInAgentMetadata('x-editorial', {
+      trustedWorkerTools: {
+        from: ['start_deep_research', 'list_deep_research_runs', 'get_deep_research_run', 'create_output'],
+        to: ['start_deep_research', 'list_x_editorial_history', 'create_output'],
+      },
+    }, { globalAgentsDir }).updated).toBe(true)
+    expect(replaceBuiltInAgentPromptText(
+      'x-editorial',
+      'Recent history marker.',
+      'Recent history marker. Read the shared slate history.',
+      { globalAgentsDir },
+    ).updated).toBe(true)
+
+    const upgraded = loadGlobalAgent('x-editorial', { globalAgentsDir })
+    expect(upgraded?.metadata.name).toBe('My X Editor')
+    expect(upgraded?.metadata.trustedWorkerTools).toEqual(['start_deep_research', 'list_x_editorial_history', 'create_output'])
+    expect(upgraded?.systemPrompt).toContain('shared slate history')
+  })
+
   test('starter library includes the Outreach Agent with Zero and Gmail wiring', () => {
     const outreachAgent = STARTER_AGENTS.find((agent) => agent.slug === 'outreach-agent')
 

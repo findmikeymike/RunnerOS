@@ -1,9 +1,18 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { createHash } from 'node:crypto'
+import { readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { loadGlobalAgent, readActivatedAgents } from '@craft-agent/shared/agent-definitions'
 import { loadGlobalWorkflow, readActivatedWorkflows } from '@craft-agent/shared/workflows'
-import { listOutputManifests, readOutputFinalsRegistry } from '@craft-agent/shared/outputs'
+import {
+  listOutputManifests,
+  readOutputFinalsRegistry,
+  readOutputManifest,
+  resolveOutputAssetPath,
+  writeOutputManifest,
+  type OutputAsset,
+  type OutputManifest,
+} from '@craft-agent/shared/outputs'
 import { refreshArtistManagerStateForWorkspaceBestEffort } from '../../hq-state/refresh'
 import { loadArtistVaultManifest } from '@craft-agent/shared/artist-vault'
 import {
@@ -50,6 +59,8 @@ import {
   type AuthorizeReleaseKitSocialResult,
   type ReauthorizeReleaseKitSocialInput,
   type ReauthorizeReleaseKitSocialResult,
+  type ReleaseKitSocialAuthorizationDefinition,
+  type XEditorialSocialAuthorizationDefinition,
   type ScheduledSocialDefinitionChange,
   type ScheduledWorkAuthorization,
   type ScheduleHqWorkInput,
@@ -59,6 +70,7 @@ import {
   type ScheduledWorkParseResult,
   type ManageGoalRunInput,
   type ManageGoalRunResult,
+  isReleaseKitSocialAuthorizationDefinition,
 } from '@craft-agent/shared/scheduled-work'
 import {
   loadAllContextDocs,
@@ -69,7 +81,17 @@ import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
 import { assertTeamPermission } from '@craft-agent/shared/workspaces'
-import { loadReleaseKitManifest, resolveVerifiedReleaseKitItemPathWhileLocked, withReleaseKitLockAsync } from '@craft-agent/shared/release-kit'
+import { loadReleaseKitManifest, resolveVerifiedReleaseKitItemPath, resolveVerifiedReleaseKitItemPathWhileLocked, withReleaseKitLockAsync } from '@craft-agent/shared/release-kit'
+import {
+  isXEditorialSlateOutput,
+  parseXEditorialSlate,
+  stableXEditorialStringify,
+  xStandardPostLengthError,
+  type MutateXEditorialCandidateInput,
+  type MutateXEditorialCandidateResult,
+  type XEditorialCandidate,
+  type XEditorialSlate,
+} from '@craft-agent/shared/x-editorial'
 
 export interface ScheduledWorkMigrationResult {
   updated: boolean
@@ -84,6 +106,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN,
   RPC_CHANNELS.scheduledWork.AUTHORIZE_RELEASE_KIT_SOCIAL,
   RPC_CHANNELS.scheduledWork.REAUTHORIZE_RELEASE_KIT_SOCIAL,
+  RPC_CHANNELS.scheduledWork.MUTATE_X_EDITORIAL_CANDIDATE,
   RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN_CHAIN,
   RPC_CHANNELS.scheduledWork.CANCEL_CAMPAIGN,
   RPC_CHANNELS.scheduledWork.DECIDE_CAMPAIGN,
@@ -104,6 +127,11 @@ function broadcastChanged(deps: HandlerDeps, workspaceId: string, rootPath: stri
   refreshArtistManagerStateForWorkspaceBestEffort(rootPath)
   const wsServerLike = (deps as unknown as { wsServer?: { push?: (...args: unknown[]) => void } })
   wsServerLike.wsServer?.push?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, loadAllContextDocs(rootPath))
+}
+
+function broadcastOutputChanged(deps: HandlerDeps, workspaceId: string): void {
+  const wsServerLike = (deps as unknown as { wsServer?: { push?: (...args: unknown[]) => void } })
+  wsServerLike.wsServer?.push?.(RPC_CHANNELS.outputs.UPDATED, { to: 'workspace', workspaceId }, workspaceId)
 }
 
 function readScheduledWork(rootPath: string, workspaceId: string): ScheduledWorkParseResult {
@@ -457,7 +485,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         const orderId = `scheduled-work-${requestId}`
         const calendarItemId = `campaign-item-${requestId}`
         const releaseKitRef = { itemId: item.id, sha256: item.sha256, label: item.title }
-        const definition: ScheduledWorkAuthorization['definition'] = {
+        const definition: ReleaseKitSocialAuthorizationDefinition = {
           title: normalized.title ?? `Post ${item.title}`,
           releaseKitRef,
           platform: normalized.platform,
@@ -548,6 +576,9 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         if (order.execution.type !== 'social-publish' || order.authorizationPolicy !== 'durable-v1' || !order.authorization) {
           throw new Error('Only a host-authorized social post can be edited here.')
         }
+        if (!isReleaseKitSocialAuthorizationDefinition(order.authorization.definition)) {
+          throw new Error('X Editorial posts must be edited from their Daily X Slate.')
+        }
         if (order.status === 'running' || order.status === 'done' || order.status === 'canceled' || order.runs.length > 0) {
           throw new Error('This post has already started and can no longer be edited.')
         }
@@ -562,7 +593,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         resolveVerifiedReleaseKitItemPathWhileLocked(rootPath, workspaceId, workspaceId, item.id, item.sha256)
         if (Date.parse(normalized.startAt) <= Date.now()) throw new Error('Choose a future publish time.')
 
-        const definition: ScheduledWorkAuthorization['definition'] = {
+        const definition: ReleaseKitSocialAuthorizationDefinition = {
           title: normalized.title ?? order.title,
           releaseKitRef: { itemId: item.id, sha256: item.sha256, label: item.title },
           platform: normalized.platform,
@@ -771,6 +802,197 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
   )
 
   server.handle(
+    RPC_CHANNELS.scheduledWork.MUTATE_X_EDITORIAL_CANDIDATE,
+    async (ctx, workspaceId: string, input: MutateXEditorialCandidateInput): Promise<MutateXEditorialCandidateResult> => {
+      const rootPath = resolveRootPath(workspaceId)
+      assertTeamPermission(rootPath, 'files.write')
+      if (input.action === 'approve') assertTeamPermission(rootPath, 'social.publish.approve')
+
+      return withWorkspaceContextLock(rootPath, async () => {
+        const loaded = loadXEditorialSlateOutput(rootPath, workspaceId, input.outputId)
+        const candidate = loaded.slate.candidates.find((entry) => entry.id === input.candidateId)
+        if (!candidate) throw new Error(`Daily X Slate candidate was not found: ${input.candidateId}`)
+
+        if (loaded.manifest.updatedAt !== input.expectedOutputUpdatedAt) {
+          const idempotent = (input.action === 'approve'
+            && candidate.revision === input.expectedRevision
+            && Boolean(candidate.scheduledWorkId && candidate.calendarItemId))
+            || (input.action === 'skip'
+              && candidate.revision === input.expectedRevision
+              && candidate.status === 'skipped')
+          if (idempotent) {
+            return {
+              slate: loaded.slate,
+              outputUpdatedAt: loaded.manifest.updatedAt,
+              scheduledWorkId: candidate.scheduledWorkId,
+              calendarItemId: candidate.calendarItemId,
+            }
+          }
+          throw new Error('Daily X Slate changed before this decision. Reload it and try again.')
+        }
+        if (candidate.revision !== input.expectedRevision) {
+          throw new Error('This post changed before your decision. Review the latest revision.')
+        }
+        if (candidate.status === 'posted') throw new Error('A published post can no longer be changed from the slate.')
+
+        if (input.action === 'edit' || input.action === 'skip') {
+          const canceled = cancelXEditorialCandidateSchedule(rootPath, workspaceId, candidate)
+          const nextCandidate = input.action === 'skip'
+            ? {
+                ...candidate,
+                status: 'skipped' as const,
+                scheduledWorkId: undefined,
+                calendarItemId: undefined,
+                receipt: undefined,
+                attentionMessage: undefined,
+              }
+            : editXEditorialCandidate(candidate, input.text, input.scheduledFor)
+          const nextSlate = replaceXEditorialCandidate(loaded.slate, nextCandidate)
+          const persisted = persistXEditorialSlateOutput(rootPath, loaded, nextSlate)
+          if (canceled) broadcastChanged(deps, workspaceId, rootPath)
+          broadcastOutputChanged(deps, workspaceId)
+          return { slate: nextSlate, outputUpdatedAt: persisted.updatedAt }
+        }
+
+        assertXEditorialCandidateApprovable(loaded.slate, candidate)
+        const verifiedAsset = candidate.asset ? verifyXEditorialReleaseKitAsset(candidate.asset) : undefined
+
+        const idSeed = stableXEditorialStringify({
+          workspaceId,
+          outputId: loaded.manifest.id,
+          slateId: loaded.slate.slateId,
+          candidateId: candidate.id,
+          revision: candidate.revision,
+        })
+        const idSuffix = createHash('sha256').update(idSeed).digest('hex').slice(0, 24)
+        const orderId = `scheduled-work-x-${idSuffix}`
+        const calendarItemId = `artist-calendar-x-${idSuffix}`
+        const now = new Date().toISOString()
+        const definition: XEditorialSocialAuthorizationDefinition = {
+          kind: 'x-editorial',
+          title: xEditorialOrderTitle(candidate),
+          xEditorialRef: {
+            outputId: loaded.manifest.id,
+            slateId: loaded.slate.slateId,
+            candidateId: candidate.id,
+            revision: candidate.revision,
+          },
+          releaseKitRef: verifiedAsset
+            ? {
+                itemId: verifiedAsset.item.id,
+                sha256: verifiedAsset.item.sha256,
+                label: verifiedAsset.item.title,
+                campaignId: verifiedAsset.workspace.id,
+              }
+            : undefined,
+          platform: 'x',
+          profileId: loaded.slate.profile.profileId,
+          caption: candidate.text,
+          startAt: candidate.scheduledFor!,
+          timezone: loaded.slate.timezone,
+        }
+        const payloadDigest = `sha256:${createHash('sha256').update(stableScheduledWorkAuthorizationStringify(definition)).digest('hex')}`
+        const authorization: ScheduledWorkAuthorization = {
+          id: `scheduled-work-authorization-${idSuffix}`,
+          authorizedAt: now,
+          expiresAt: new Date(Date.parse(definition.startAt) + 30 * 60 * 1000).toISOString(),
+          payloadDigest,
+          authorizedBy: { type: 'user', clientId: ctx.clientId, source: 'x-editorial-ui' },
+          definition,
+        }
+        const order: ScheduledWorkDocument['items'][number] = {
+          version: 1,
+          id: orderId,
+          owner: { scope: 'hq', workspaceId },
+          calendarLink: { calendar: 'hq', itemId: calendarItemId },
+          title: definition.title,
+          intentId: `x-editorial:${loaded.slate.slateId}:${candidate.id}:${candidate.revision}`,
+          type: 'social-publish',
+          status: 'needs-approval',
+          startAt: definition.startAt,
+          timezone: definition.timezone,
+          execution: {
+            type: 'social-publish',
+            platform: 'x',
+            profileId: definition.profileId,
+            caption: definition.caption,
+          },
+          inputRefs: verifiedAsset
+            ? [{ kind: 'release-kit', itemId: verifiedAsset.item.id, sha256: verifiedAsset.item.sha256, label: verifiedAsset.item.title }]
+            : [],
+          approvals: [],
+          runs: [],
+          authorization,
+          authorizationPolicy: 'durable-v1',
+          executionKey: { payloadDigest, idempotencyKey: `${orderId}:${payloadDigest}` },
+          createdAt: now,
+          updatedAt: now,
+        }
+        await validateScheduleRuntime(deps, rootPath, order)
+
+        const scheduled = readScheduledWork(rootPath, workspaceId)
+        if (!scheduled.ok) throw new Error(scheduled.error)
+        const artistCalendar = readArtistCalendar(rootPath)
+        const existingOrder = scheduled.work.items.find((entry) => entry.id === order.id && !entry.deletedAt)
+        if (existingOrder && !sameXEditorialSchedule(existingOrder, order)) {
+          throw new Error('This Daily X Slate approval conflicts with an existing scheduled post.')
+        }
+        assertNoXEditorialScheduleConflict(scheduled.work, order)
+        const existingEvent = artistCalendar.events.find((event) => event.id === calendarItemId && !event.deletedAt)
+        if (existingEvent && existingEvent.scheduledWorkId !== orderId) {
+          throw new Error('This Daily X Slate approval conflicts with an existing Calendar event.')
+        }
+        const resolvedOrder = existingOrder ?? order
+        const resolvedEvent = existingEvent ?? xEditorialCalendarEvent(resolvedOrder, candidate, now)
+        const work = existingOrder ? scheduled.work : {
+          ...scheduled.work,
+          items: [...scheduled.work.items, order],
+          updatedAt: now,
+        }
+        const calendar = existingEvent ? artistCalendar : {
+          ...artistCalendar,
+          events: [...artistCalendar.events, resolvedEvent],
+          updatedAt: now,
+        }
+        if (!existingOrder) writeScheduledWork(rootPath, work)
+        if (!existingEvent) writeArtistCalendar(rootPath, calendar)
+
+        const nextCandidate: XEditorialCandidate = {
+          ...candidate,
+          status: resolvedOrder.status === 'done'
+            ? 'posted'
+            : resolvedOrder.status === 'needs-attention'
+              ? 'needs-attention'
+              : 'scheduled',
+          scheduledWorkId: resolvedOrder.id,
+          calendarItemId: resolvedEvent.id,
+          receipt: resolvedOrder.status === 'done' && resolvedOrder.result?.type === 'social-publish'
+            ? {
+                id: resolvedOrder.result.receipt.id,
+                externalUrl: resolvedOrder.result.receipt.externalUrl,
+                summary: resolvedOrder.result.receipt.summary ?? 'Published to X.',
+                completedAt: resolvedOrder.result.receipt.completedAt,
+              }
+            : undefined,
+          attentionMessage: resolvedOrder.status === 'needs-attention'
+            ? resolvedOrder.attention?.message ?? 'This scheduled post needs attention.'
+            : undefined,
+        }
+        const nextSlate = replaceXEditorialCandidate(loaded.slate, nextCandidate)
+        const persisted = persistXEditorialSlateOutput(rootPath, loaded, nextSlate)
+        broadcastChanged(deps, workspaceId, rootPath)
+        broadcastOutputChanged(deps, workspaceId)
+        return {
+          slate: nextSlate,
+          outputUpdatedAt: persisted.updatedAt,
+          scheduledWorkId: resolvedOrder.id,
+          calendarItemId: resolvedEvent.id,
+        }
+      })
+    },
+  )
+
+  server.handle(
     RPC_CHANNELS.scheduledWork.SCHEDULE_HQ,
     async (_ctx, workspaceId: string, input: ScheduleHqWorkInput): Promise<ScheduleHqWorkResult> => {
       const rootPath = resolveRootPath(workspaceId)
@@ -911,8 +1133,8 @@ function releaseKitSocialRestriction(restrictions: { blockedFromUse: boolean; ne
 }
 
 function socialDefinitionChanges(
-  before: ScheduledWorkAuthorization['definition'],
-  after: ScheduledWorkAuthorization['definition'],
+  before: ReleaseKitSocialAuthorizationDefinition,
+  after: ReleaseKitSocialAuthorizationDefinition,
 ): ScheduledSocialDefinitionChange[] {
   const changes: ScheduledSocialDefinitionChange[] = []
   const add = (field: ScheduledSocialDefinitionChange['field'], previous: unknown, next: unknown) => {
@@ -1009,6 +1231,314 @@ function assertCampaignShellMatchesOrder(order: ScheduledWorkDocument['items'][n
     || !sameJson(calendarItem.assetRefs, assetRefs)
     || !sameJson(actualSocialProfiles, expectedSocialProfiles)) {
     throw new Error('Campaign Calendar shell does not match the scheduled work order.')
+  }
+}
+
+interface LoadedXEditorialSlateOutput {
+  manifest: OutputManifest
+  slate: XEditorialSlate
+  asset: OutputAsset
+  assetPath: string
+  originalContent: string
+}
+
+function loadXEditorialSlateOutput(
+  rootPath: string,
+  workspaceId: string,
+  outputId: string,
+): LoadedXEditorialSlateOutput {
+  const manifest = readOutputManifest(rootPath, outputId)
+  if (!manifest || manifest.workspaceId !== workspaceId || !isXEditorialSlateOutput(manifest)) {
+    throw new Error('Daily X Slate Output was not found in this workspace.')
+  }
+  const asset = manifest.primary
+    ?? (manifest.preview?.assetId ? manifest.assets.find((candidate) => candidate.id === manifest.preview?.assetId) : undefined)
+  if (!asset || asset.mimeType !== 'application/json') {
+    throw new Error('Daily X Slate must have one JSON primary asset.')
+  }
+  const assetPath = resolveOutputAssetPath(rootPath, manifest.id, asset.path)
+  if (!assetPath) throw new Error('Daily X Slate asset path is invalid.')
+  const originalContent = readFileSync(assetPath, 'utf-8')
+  const parsed = parseXEditorialSlate(originalContent)
+  if (!parsed.ok) throw new Error(`Daily X Slate needs repair: ${parsed.error}`)
+  return { manifest, slate: parsed.slate, asset, assetPath, originalContent }
+}
+
+function replaceXEditorialCandidate(
+  slate: XEditorialSlate,
+  replacement: XEditorialCandidate,
+): XEditorialSlate {
+  const next = {
+    ...slate,
+    candidates: slate.candidates.map((candidate) => candidate.id === replacement.id ? replacement : candidate),
+  }
+  const parsed = parseXEditorialSlate(next)
+  if (!parsed.ok) throw new Error(`Daily X Slate update is invalid: ${parsed.error}`)
+  return parsed.slate
+}
+
+function editXEditorialCandidate(
+  candidate: XEditorialCandidate,
+  text: string,
+  scheduledFor: string | null,
+): XEditorialCandidate {
+  const normalizedText = text.trim()
+  if (!normalizedText) throw new Error('Post text cannot be empty.')
+  if (normalizedText.length > 5_000) throw new Error('Post text is too long.')
+  if (scheduledFor !== null && !Number.isFinite(Date.parse(scheduledFor))) {
+    throw new Error('Suggested publish time is invalid.')
+  }
+  return {
+    ...candidate,
+    revision: candidate.revision + 1,
+    text: normalizedText,
+    thread: candidate.format === 'post'
+      ? null
+      : candidate.thread
+        ? [normalizedText, ...candidate.thread.slice(1)]
+        : null,
+    scheduledFor,
+    status: 'proposed',
+    scheduledWorkId: undefined,
+    calendarItemId: undefined,
+    receipt: undefined,
+    attentionMessage: undefined,
+  }
+}
+
+function assertXEditorialCandidateApprovable(
+  slate: XEditorialSlate,
+  candidate: XEditorialCandidate,
+): void {
+  if (candidate.status !== 'proposed') throw new Error('Only a proposed post can be approved.')
+  if (candidate.format !== 'post') {
+    throw new Error('Native X threads remain draft-only until ordered reply-chain safety is available.')
+  }
+  if (!slate.profile.profileId.trim()) throw new Error('Connect an X account before approving this post.')
+  if (!candidate.scheduledFor || !Number.isFinite(Date.parse(candidate.scheduledFor))) {
+    throw new Error('Choose a publish time before approving this post.')
+  }
+  if (Date.parse(candidate.scheduledFor) <= Date.now()) {
+    throw new Error('Choose a future publish time before approving this post.')
+  }
+  if (!candidate.text.trim()) throw new Error('Post text cannot be empty.')
+  const lengthError = xStandardPostLengthError(candidate.text)
+  if (lengthError) throw new Error(`${lengthError} before approving this standard X post.`)
+}
+
+function verifyXEditorialReleaseKitAsset(asset: NonNullable<XEditorialCandidate['asset']>) {
+  const workspace = getWorkspaceByNameOrId(asset.campaignId)
+  if (!workspace || workspace.artistWorkspaceScope !== 'campaign') {
+    throw new Error('The Campaign owning this X post asset no longer exists.')
+  }
+  const manifest = loadReleaseKitManifest(workspace.rootPath, workspace.id, workspace.id)
+  const item = manifest.items.find((candidate) => candidate.id === asset.itemId)
+  if (!item) throw new Error(`Release Kit item not found: ${asset.itemId}`)
+  if (item.sha256 !== asset.sha256) {
+    throw new Error('This X post asset changed after the slate was drafted. Refresh it from the Campaign Release Kit.')
+  }
+  if (item.status !== 'ready') {
+    throw new Error('This X post asset must pass Release Kit integrity review before approval.')
+  }
+  const restriction = releaseKitSocialRestriction(item.usage.restrictions)
+  if (restriction) throw new Error(restriction)
+  resolveVerifiedReleaseKitItemPath(workspace.rootPath, workspace.id, workspace.id, item.id, item.sha256)
+  return { workspace, item }
+}
+
+function xEditorialOrderTitle(candidate: XEditorialCandidate): string {
+  const prefix = candidate.lane === 'direct-release'
+    ? 'X release post'
+    : candidate.lane === 'campaign-adjacent'
+      ? 'X campaign post'
+      : 'X worldview post'
+  const excerpt = candidate.text.replace(/\s+/g, ' ').trim().slice(0, 72)
+  return excerpt ? `${prefix}: ${excerpt}` : prefix
+}
+
+function xEditorialCalendarEvent(
+  order: ScheduledWorkDocument['items'][number],
+  candidate: XEditorialCandidate,
+  now: string,
+): ArtistCalendarEvent {
+  const local = formatInTimezone(order.startAt, order.timezone)
+  return {
+    id: order.calendarLink.itemId,
+    date: local.date,
+    time: local.time,
+    title: order.title,
+    notes: 'Approved from Daily X Slate.',
+    scheduledWorkId: order.id,
+    workspaceLinks: candidate.campaignId
+      ? [{ workspaceId: candidate.campaignId, role: 'campaign-context', linkedAt: now }]
+      : [],
+    relatedPersonIds: [],
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+function sameXEditorialSchedule(
+  left: ScheduledWorkDocument['items'][number],
+  right: ScheduledWorkDocument['items'][number],
+): boolean {
+  return sameJson({
+    id: left.id,
+    owner: left.owner,
+    calendarLink: left.calendarLink,
+    title: left.title,
+    intentId: left.intentId,
+    type: left.type,
+    startAt: left.startAt,
+    timezone: left.timezone,
+    execution: left.execution,
+    inputRefs: left.inputRefs,
+    authorization: left.authorization,
+    authorizationPolicy: left.authorizationPolicy,
+    executionKey: left.executionKey,
+  }, {
+    id: right.id,
+    owner: right.owner,
+    calendarLink: right.calendarLink,
+    title: right.title,
+    intentId: right.intentId,
+    type: right.type,
+    startAt: right.startAt,
+    timezone: right.timezone,
+    execution: right.execution,
+    inputRefs: right.inputRefs,
+    authorization: right.authorization,
+    authorizationPolicy: right.authorizationPolicy,
+    executionKey: right.executionKey,
+  })
+}
+
+function assertNoXEditorialScheduleConflict(
+  work: ScheduledWorkDocument,
+  proposed: ScheduledWorkDocument['items'][number],
+): void {
+  if (proposed.execution.type !== 'social-publish') return
+  const proposedText = normalizeXEditorialCopy(proposed.execution.caption)
+  const proposedAt = Date.parse(proposed.startAt)
+  for (const existing of work.items) {
+    if (existing.id === proposed.id || existing.deletedAt || existing.status === 'canceled') continue
+    if (existing.execution.type !== 'social-publish') continue
+    if (existing.execution.platform !== 'x' || proposed.execution.platform !== 'x') continue
+    if (existing.execution.profileId !== proposed.execution.profileId) continue
+
+    const existingAt = Date.parse(existing.startAt)
+    if (Number.isFinite(existingAt) && Math.abs(existingAt - proposedAt) < 60_000) {
+      throw new Error('Another X post is already scheduled in this time slot. Choose a different time.')
+    }
+    if (normalizeXEditorialCopy(existing.execution.caption) === proposedText
+      && Number.isFinite(existingAt)
+      && Math.abs(existingAt - proposedAt) <= 7 * 24 * 60 * 60 * 1000) {
+      throw new Error('This exact X post is already scheduled or was posted within the same seven-day window.')
+    }
+  }
+}
+
+function normalizeXEditorialCopy(value: string): string {
+  return value.normalize('NFKC').toLocaleLowerCase('en-US').replace(/\s+/g, ' ').trim()
+}
+
+function cancelXEditorialCandidateSchedule(
+  rootPath: string,
+  workspaceId: string,
+  candidate: XEditorialCandidate,
+): boolean {
+  if (!candidate.scheduledWorkId && !candidate.calendarItemId) return false
+  if (!candidate.scheduledWorkId || !candidate.calendarItemId) {
+    throw new Error('Daily X Slate schedule linkage is incomplete.')
+  }
+  const scheduled = readScheduledWork(rootPath, workspaceId)
+  if (!scheduled.ok) throw new Error(scheduled.error)
+  const calendar = readArtistCalendar(rootPath)
+  const order = scheduled.work.items.find((item) => item.id === candidate.scheduledWorkId && !item.deletedAt)
+  const event = calendar.events.find((item) => item.id === candidate.calendarItemId)
+  if (!order || !event || event.scheduledWorkId !== order.id || order.calendarLink.itemId !== event.id) {
+    throw new Error('Linked X schedule could not be verified.')
+  }
+  if (order.status === 'running' || order.status === 'done') {
+    throw new Error(order.status === 'done'
+      ? 'A published post can no longer be changed from the slate.'
+      : 'This post is publishing now and can no longer be changed safely.')
+  }
+  const alreadyCanceled = order.status === 'canceled' && Boolean(event.deletedAt)
+  if (alreadyCanceled) return false
+  const now = new Date().toISOString()
+  const nextOrder = {
+    ...order,
+    status: 'canceled' as const,
+    socialApproval: undefined,
+    attention: undefined,
+    updatedAt: now,
+  }
+  const nextEvent = { ...event, deletedAt: event.deletedAt ?? now, updatedAt: now }
+  writeScheduledWork(rootPath, {
+    ...scheduled.work,
+    items: scheduled.work.items.map((item) => item.id === nextOrder.id ? nextOrder : item),
+    updatedAt: now,
+  })
+  writeArtistCalendar(rootPath, {
+    ...calendar,
+    events: calendar.events.map((item) => item.id === nextEvent.id ? nextEvent : item),
+    updatedAt: now,
+  })
+  return true
+}
+
+function persistXEditorialSlateOutput(
+  rootPath: string,
+  loaded: LoadedXEditorialSlateOutput,
+  slate: XEditorialSlate,
+): OutputManifest {
+  const parsed = parseXEditorialSlate(slate)
+  if (!parsed.ok) throw new Error(`Daily X Slate update is invalid: ${parsed.error}`)
+  const content = `${JSON.stringify(parsed.slate, null, 2)}\n`
+  const now = monotonicIsoAfter(loaded.manifest.updatedAt)
+  const updatedAsset: OutputAsset = {
+    ...loaded.asset,
+    sizeBytes: Buffer.byteLength(content),
+    sha256: createHash('sha256').update(content).digest('hex'),
+  }
+  const proposedCount = parsed.slate.candidates.filter((candidate) => candidate.status === 'proposed').length
+  const decisionCount = parsed.slate.candidates.filter((candidate) => candidate.status !== 'proposed' && candidate.status !== 'skipped').length
+  const nextManifest: OutputManifest = {
+    ...loaded.manifest,
+    updatedAt: now,
+    primary: loaded.manifest.primary?.id === updatedAsset.id ? updatedAsset : loaded.manifest.primary,
+    assets: loaded.manifest.assets.map((asset) => asset.id === updatedAsset.id ? updatedAsset : asset),
+    approval: proposedCount > 0
+      ? { state: 'pending', note: `${proposedCount} X post${proposedCount === 1 ? '' : 's'} still need review.`, updatedAt: now }
+      : decisionCount > 0
+        ? { state: 'approved', note: 'Every current X candidate has been decided.', updatedAt: now }
+        : { state: 'none', note: 'Every current X candidate was skipped.', updatedAt: now },
+  }
+
+  writeTextAtomically(loaded.assetPath, content)
+  try {
+    writeOutputManifest(rootPath, nextManifest)
+  } catch (error) {
+    writeTextAtomically(loaded.assetPath, loaded.originalContent)
+    throw error
+  }
+  return nextManifest
+}
+
+function monotonicIsoAfter(previous: string): string {
+  const previousMs = Date.parse(previous)
+  return new Date(Math.max(Date.now(), Number.isFinite(previousMs) ? previousMs + 1 : 0)).toISOString()
+}
+
+function writeTextAtomically(path: string, content: string): void {
+  const tmp = `${path}.${process.pid}.${Date.now()}.tmp`
+  try {
+    writeFileSync(tmp, content, 'utf-8')
+    renameSync(tmp, path)
+  } catch (error) {
+    try { rmSync(tmp, { force: true }) } catch { /* best effort */ }
+    throw error
   }
 }
 
@@ -1170,7 +1700,16 @@ async function validateScheduleRuntime(deps: HandlerDeps, rootPath: string, orde
   const vault = loadArtistVaultManifest(rootPath, order.owner.workspaceId)
   for (const ref of order.inputRefs) {
     if (ref.kind === 'release-kit') {
-      resolveVerifiedReleaseKitItemPathWhileLocked(rootPath, order.owner.workspaceId, order.owner.workspaceId, ref.itemId, ref.sha256)
+      const definition = order.authorization?.definition
+      if (definition?.kind === 'x-editorial' && definition.releaseKitRef) {
+        const campaign = getWorkspaceByNameOrId(definition.releaseKitRef.campaignId)
+        if (!campaign || campaign.artistWorkspaceScope !== 'campaign') {
+          throw new Error(`Campaign workspace not found for approved X media: ${definition.releaseKitRef.campaignId}`)
+        }
+        resolveVerifiedReleaseKitItemPath(campaign.rootPath, campaign.id, campaign.id, ref.itemId, ref.sha256)
+      } else {
+        resolveVerifiedReleaseKitItemPathWhileLocked(rootPath, order.owner.workspaceId, order.owner.workspaceId, ref.itemId, ref.sha256)
+      }
     }
     if (ref.kind === 'output' && !outputs.has(ref.outputId)) {
       throw new Error(`Referenced Output was not found: ${ref.outputId}`)

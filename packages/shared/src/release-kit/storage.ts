@@ -61,7 +61,7 @@ export function getReleaseKitManifestPath(workspaceRootPath: string): string {
 
 export function emptyReleaseKitManifest(workspaceId: string, campaignId: string): ReleaseKitManifest {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     workspaceId,
     campaignId,
     updatedAt: '1970-01-01T00:00:00.000Z',
@@ -111,6 +111,14 @@ export function materializeReleaseKitItem(
     try {
       const relativePath = toManifestPath(relative(workspaceRootPath, destination));
       const snapshotInfo = statSync(destination);
+      const snapshotSha256 = hashFileSha256(destination);
+      const approvedSourceSha256 = input.trackIntelligence?.provenance.sourceSha256;
+      if (input.trackIntelligence && !approvedSourceSha256) {
+        throw new Error('Approved Track Intelligence is missing its source-audio hash. Re-run Track Intelligence before promoting it.');
+      }
+      if (approvedSourceSha256 && snapshotSha256 !== approvedSourceSha256) {
+        throw new Error('The source audio changed after its lyrics were approved. Re-run Track Intelligence before promoting it.');
+      }
       const now = new Date().toISOString();
       const item: ReleaseKitItem = {
         id: `kit_${randomUUID()}`,
@@ -123,12 +131,13 @@ export function materializeReleaseKitItem(
         ...(input.mimeType?.trim() ? { mimeType: input.mimeType.trim() } : {}),
         sizeBytes: snapshotInfo.size,
         snapshotMtimeMs: snapshotInfo.mtimeMs,
-        sha256: hashFileSha256(destination),
+        sha256: snapshotSha256,
         status: 'ready',
         isPrimary: Boolean(input.makePrimary),
         promotedAt: now,
         promotedBy: input.promotedBy,
         ...(input.note?.trim() ? { note: input.note.trim().slice(0, 1_000) } : {}),
+        ...(input.trackIntelligence ? { trackIntelligence: input.trackIntelligence } : {}),
         usage: defaultReleaseKitUsage(now, input.promotedBy === 'migration' ? 'migration' : 'system'),
       };
       const nextItems = manifest.items.map((existing) => (
@@ -139,6 +148,7 @@ export function materializeReleaseKitItem(
       nextItems.push(item);
       const nextManifest: ReleaseKitManifest = {
         ...manifest,
+        schemaVersion: 3,
         updatedAt: now,
         items: nextItems,
       };
@@ -205,7 +215,7 @@ export function updateReleaseKitItemUsageWhileLocked(
   });
   return saveReleaseKitManifest(workspaceRootPath, {
     ...manifest,
-    schemaVersion: 2,
+    schemaVersion: 3,
     updatedAt: now,
     items: manifest.items.map((item) => item.id === itemId ? { ...item, usage } : item),
   });
@@ -428,18 +438,19 @@ export function saveReleaseKitManifest(
   workspaceRootPath: string,
   manifest: ReleaseKitManifest,
 ): ReleaseKitManifest {
-  if (!isReleaseKitManifest(manifest)) throw new Error('Refusing to save an invalid Release Kit manifest.');
+  const normalized: ReleaseKitManifest = { ...manifest, schemaVersion: 3 };
+  if (!isReleaseKitManifest(normalized)) throw new Error('Refusing to save an invalid Release Kit manifest.');
   const path = getReleaseKitManifestPath(workspaceRootPath);
   mkdirSync(dirname(path), { recursive: true });
   const tempPath = `${path}.tmp-${process.pid}-${randomUUID()}`;
-  writeFileSync(tempPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  writeFileSync(tempPath, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8');
   try {
     renameSync(tempPath, path);
   } catch (error) {
     rmSync(tempPath, { force: true });
     throw error;
   }
-  return manifest;
+  return normalized;
 }
 
 export function hashFileSha256(path: string): string {
@@ -495,7 +506,7 @@ function parseManifest(body: string): ReleaseKitManifest | null {
     if (!isReleaseKitManifest(parsed)) return null;
     return {
       ...parsed,
-      schemaVersion: 2,
+      schemaVersion: parsed.schemaVersion,
       items: parsed.items.map((item) => ({
         ...item,
         usage: item.usage ?? defaultReleaseKitUsage(item.promotedAt),
@@ -507,7 +518,7 @@ function parseManifest(body: string): ReleaseKitManifest | null {
 }
 
 function isReleaseKitManifest(value: unknown): value is ReleaseKitManifest {
-  if (!isRecord(value) || (value.schemaVersion !== 1 && value.schemaVersion !== 2)) return false;
+  if (!isRecord(value) || (value.schemaVersion !== 1 && value.schemaVersion !== 2 && value.schemaVersion !== 3)) return false;
   const schemaVersion = value.schemaVersion;
   if (typeof value.workspaceId !== 'string' || !value.workspaceId) return false;
   if (typeof value.campaignId !== 'string' || !value.campaignId) return false;
@@ -515,7 +526,7 @@ function isReleaseKitManifest(value: unknown): value is ReleaseKitManifest {
   return Array.isArray(value.items) && value.items.every((item) => isReleaseKitItem(item, schemaVersion));
 }
 
-function isReleaseKitItem(value: unknown, schemaVersion: 1 | 2): value is ReleaseKitItem {
+function isReleaseKitItem(value: unknown, schemaVersion: 1 | 2 | 3): value is ReleaseKitItem {
   if (!isRecord(value)) return false;
   if (typeof value.id !== 'string' || !value.id.startsWith('kit_')) return false;
   if (typeof value.campaignId !== 'string' || !value.campaignId) return false;
@@ -533,7 +544,20 @@ function isReleaseKitItem(value: unknown, schemaVersion: 1 | 2): value is Releas
   if (typeof value.promotedAt !== 'string' || Number.isNaN(Date.parse(value.promotedAt))) return false;
   if (value.promotedBy !== 'user' && value.promotedBy !== 'agent' && value.promotedBy !== 'migration') return false;
   if (value.note !== undefined && typeof value.note !== 'string') return false;
+  if (value.trackIntelligence !== undefined && !isReviewedTrackIntelligenceRevision(value.trackIntelligence)) return false;
   return schemaVersion === 1 ? value.usage === undefined : isReleaseKitUsage(value.usage);
+}
+
+function isReviewedTrackIntelligenceRevision(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.id !== 'string' || !value.id) return false;
+  if (!isRecord(value.provenance)) return false;
+  if (typeof value.reviewedAt !== 'string' || Number.isNaN(Date.parse(value.reviewedAt))) return false;
+  if (!isRecord(value.reviewedBy) || value.reviewedBy.type !== 'user' || typeof value.reviewedBy.clientId !== 'string') return false;
+  if (value.lyrics !== undefined) {
+    if (!isRecord(value.lyrics) || !Array.isArray(value.lyrics.lines)) return false;
+    if (value.lyrics.lines.some((line) => !isRecord(line) || typeof line.id !== 'string' || typeof line.text !== 'string')) return false;
+  }
+  return true;
 }
 
 function normalizeReleaseKitUsage(value: ReleaseKitUsageMetadata): ReleaseKitUsageMetadata {

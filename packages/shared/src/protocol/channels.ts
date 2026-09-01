@@ -493,6 +493,7 @@ export const RPC_CHANNELS = {
     SCHEDULE_CAMPAIGN: 'scheduledWork:scheduleCampaign',
     AUTHORIZE_RELEASE_KIT_SOCIAL: 'scheduledWork:authorizeReleaseKitSocial',
     REAUTHORIZE_RELEASE_KIT_SOCIAL: 'scheduledWork:reauthorizeReleaseKitSocial',
+    MUTATE_X_EDITORIAL_CANDIDATE: 'scheduledWork:mutateXEditorialCandidate',
     /** Create a supported two-step campaign chain and both calendar shells. */
     SCHEDULE_CAMPAIGN_CHAIN: 'scheduledWork:scheduleCampaignChain',
     /** Cancel campaign work and remove its linked calendar shell. */
@@ -537,6 +538,8 @@ export const RPC_CHANNELS = {
     IMPORT: 'artistVault:import',
     LINK_FOLDER: 'artistVault:linkFolder',
     UPDATE_ASSET: 'artistVault:updateAsset',
+    TRANSCRIBE_TRACK: 'artistVault:transcribeTrack',
+    REVIEW_TRACK: 'artistVault:reviewTrack',
     SAVE_OUTPUT_ASSET: 'artistVault:saveOutputAsset',
     SCAN: 'artistVault:scan',
     OPEN_FOLDER: 'artistVault:openFolder',

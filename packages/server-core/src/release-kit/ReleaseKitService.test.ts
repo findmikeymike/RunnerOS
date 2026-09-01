@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { importArtistVaultAssets } from '@craft-agent/shared/artist-vault'
-import { importMissionAssets } from '@craft-agent/shared/mission-assets'
+import { importMissionAssets, saveMissionLyricsAsync } from '@craft-agent/shared/mission-assets'
 import { resolveReleaseKitItemPath } from '@craft-agent/shared/release-kit'
 import { writeOutputFinalsRegistry } from '@craft-agent/shared/outputs'
 import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context'
@@ -29,7 +29,7 @@ function service(): ReleaseKitService {
 }
 
 describe('ReleaseKitService source trust', () => {
-  test('promotes a registered Campaign Asset into an independent snapshot', () => {
+  test('promotes a registered Campaign Asset with reviewed Track Intelligence into an independent snapshot', async () => {
     const campaignRoot = mkdtempSync(join(tmpdir(), 'release-kit-service-campaign-'))
     workspaces.set('campaign-1', {
       id: 'campaign-1',
@@ -40,6 +40,12 @@ describe('ReleaseKitService source trust', () => {
     const source = join(campaignRoot, 'incoming-master.wav')
     writeFileSync(source, 'master-v1')
     const asset = importMissionAssets(campaignRoot, 'campaign-1', [source], { kindHint: 'master' }).imported[0]!
+    await saveMissionLyricsAsync(campaignRoot, 'campaign-1', {
+      sourceAudioAssetId: asset.id,
+      lyricsText: 'drive all night',
+      lyricLines: [{ text: 'drive all night', start_time: 0, end_time: 2.4 }],
+      character: { genre: ['alt-pop'], tempoBpm: 92, themes: ['escape'] },
+    }, 'client-1')
 
     const result = service().promote('campaign-1', {
       source: { type: 'campaign-asset', assetId: asset.id },
@@ -52,6 +58,62 @@ describe('ReleaseKitService source trust', () => {
     writeFileSync(source, 'master-v2')
     expect(readFileSync(snapshot, 'utf8')).toBe('master-v1')
     expect(result.item.source).toEqual({ type: 'campaign-asset', assetId: asset.id })
+    expect(result.item.trackIntelligence).toMatchObject({
+      lyrics: { lines: [{ text: 'drive all night' }] },
+      character: { genre: ['alt-pop'], tempoBpm: 92 },
+      reviewedBy: { type: 'user', clientId: 'client-1' },
+    })
+  })
+
+  test('withholds Track Intelligence from list reads when snapshot bytes change', async () => {
+    const campaignRoot = mkdtempSync(join(tmpdir(), 'release-kit-service-campaign-'))
+    workspaces.set('campaign-1', {
+      id: 'campaign-1', name: 'Campaign', rootPath: campaignRoot, artistWorkspaceScope: 'campaign',
+    })
+    const source = join(campaignRoot, 'listed-master.wav')
+    writeFileSync(source, 'master-v1')
+    const asset = importMissionAssets(campaignRoot, 'campaign-1', [source], { kindHint: 'master' }).imported[0]!
+    await saveMissionLyricsAsync(campaignRoot, 'campaign-1', {
+      sourceAudioAssetId: asset.id,
+      lyricsText: 'do not serve after drift',
+    }, 'client-1')
+    const releaseKit = service()
+    const promoted = releaseKit.promote('campaign-1', {
+      source: { type: 'campaign-asset', assetId: asset.id },
+      category: 'audio',
+      subtype: 'master',
+    }, 'user')
+    writeFileSync(resolveReleaseKitItemPath(campaignRoot, promoted.item.relativePath), 'master-v2')
+
+    const listed = releaseKit.get('campaign-1').items[0]
+
+    expect(listed?.status).toBe('needs-review')
+    expect(listed?.trackIntelligence).toBeUndefined()
+    expect(loadContextDoc(campaignRoot, 'release-kit')?.body).not.toContain('do not serve after drift')
+  })
+
+  test('refuses to pair approved lyrics with campaign audio bytes changed afterward', async () => {
+    const campaignRoot = mkdtempSync(join(tmpdir(), 'release-kit-service-campaign-'))
+    workspaces.set('campaign-1', {
+      id: 'campaign-1',
+      name: 'Campaign',
+      rootPath: campaignRoot,
+      artistWorkspaceScope: 'campaign',
+    })
+    const source = join(campaignRoot, 'incoming-master.wav')
+    writeFileSync(source, 'master-v1')
+    const asset = importMissionAssets(campaignRoot, 'campaign-1', [source], { kindHint: 'master' }).imported[0]!
+    await saveMissionLyricsAsync(campaignRoot, 'campaign-1', {
+      sourceAudioAssetId: asset.id,
+      lyricsText: 'approved against v1',
+    }, 'client-1')
+    writeFileSync(join(campaignRoot, asset.relativePath!), 'master-v2')
+
+    expect(() => service().promote('campaign-1', {
+      source: { type: 'campaign-asset', assetId: asset.id },
+      category: 'audio',
+      subtype: 'master',
+    }, 'user')).toThrow(/audio changed after its lyrics were approved/i)
   })
 
   test('blocks arbitrary agent uploads and private HQ Vault records', () => {
@@ -131,7 +193,7 @@ describe('ReleaseKitService source trust', () => {
     writeFileSync(snapshot, 'cover-b')
 
     expect(() => releaseKit.getItem('campaign-1', promoted.item.id)).toThrow(/integrity verification/i)
-    expect(releaseKit.get('campaign-1').items[0]?.status).toBe('ready')
+    expect(releaseKit.get('campaign-1').items[0]?.status).toBe('needs-review')
     expect(releaseKit.verify('campaign-1').manifest.items[0]?.status).toBe('needs-review')
   })
 
@@ -155,6 +217,7 @@ describe('ReleaseKitService source trust', () => {
     const marker = join(campaignRoot, 'release-kit', '.context-sync-pending.json')
     expect(promoted.item.status).toBe('ready')
     expect(existsSync(marker)).toBe(true)
+    expect(releaseKit.refreshAgentContext('campaign-1').contextPersisted).toBe(false)
 
     rmSync(blockedContextPath, { force: true })
     releaseKit.verify('campaign-1')

@@ -188,6 +188,56 @@ export interface ScheduledSocialApproval {
   approvedBy: { type: 'user'; clientId: string }
 }
 
+export interface ReleaseKitSocialAuthorizationDefinition {
+  /** Missing on legacy durable-v1 records; treated as release-kit-social. */
+  kind?: 'release-kit-social'
+  title: string
+  releaseKitRef: { itemId: string; sha256: string; label?: string }
+  platform: string
+  profileId: string
+  accountSetId?: string
+  caption: string
+  platformOptions?: Record<string, unknown>
+  startAt: string
+  timezone: string
+}
+
+export interface XEditorialSocialAuthorizationDefinition {
+  kind: 'x-editorial'
+  title: string
+  xEditorialRef: {
+    outputId: string
+    slateId: string
+    candidateId: string
+    revision: number
+  }
+  /** Present only when this exact post carries verified campaign media. */
+  releaseKitRef?: { itemId: string; sha256: string; label?: string; campaignId: string }
+  platform: 'x'
+  profileId: string
+  accountSetId?: string
+  caption: string
+  platformOptions?: Record<string, unknown>
+  startAt: string
+  timezone: string
+}
+
+export type ScheduledWorkAuthorizationDefinition =
+  | ReleaseKitSocialAuthorizationDefinition
+  | XEditorialSocialAuthorizationDefinition
+
+export function isXEditorialSocialAuthorizationDefinition(
+  definition: ScheduledWorkAuthorizationDefinition,
+): definition is XEditorialSocialAuthorizationDefinition {
+  return definition.kind === 'x-editorial'
+}
+
+export function isReleaseKitSocialAuthorizationDefinition(
+  definition: ScheduledWorkAuthorizationDefinition,
+): definition is ReleaseKitSocialAuthorizationDefinition {
+  return definition.kind === undefined || definition.kind === 'release-kit-social'
+}
+
 /** Durable host-minted authorization for one exact scheduled use. */
 export interface ScheduledWorkAuthorization {
   id: string
@@ -197,21 +247,11 @@ export interface ScheduledWorkAuthorization {
   authorizedBy: {
     type: 'user'
     clientId: string
-    source: 'release-kit-ui' | 'calendar-ui' | 'hnic-confirmation'
+    source: 'release-kit-ui' | 'calendar-ui' | 'hnic-confirmation' | 'x-editorial-ui'
     sessionId?: string
     userMessageId?: string
   }
-  definition: {
-    title: string
-    releaseKitRef: { itemId: string; sha256: string; label?: string }
-    platform: string
-    profileId: string
-    accountSetId?: string
-    caption: string
-    platformOptions?: Record<string, unknown>
-    startAt: string
-    timezone: string
-  }
+  definition: ScheduledWorkAuthorizationDefinition
 }
 
 export function stableScheduledWorkAuthorizationStringify(value: unknown): string {
@@ -1046,20 +1086,40 @@ export function isScheduledWorkAuthorization(value: unknown): value is Scheduled
     && clean(authorization.payloadDigest)
     && authorizedBy?.type === 'user'
     && clean(authorizedBy.clientId)
-    && (authorizedBy.source === 'release-kit-ui' || authorizedBy.source === 'calendar-ui' || authorizedBy.source === 'hnic-confirmation')
+    && (authorizedBy.source === 'release-kit-ui' || authorizedBy.source === 'calendar-ui' || authorizedBy.source === 'hnic-confirmation' || authorizedBy.source === 'x-editorial-ui')
     && (authorizedBy.sessionId === undefined || clean(authorizedBy.sessionId))
     && (authorizedBy.userMessageId === undefined || clean(authorizedBy.userMessageId))
     && definition
     && clean(definition.title)
-    && clean(definition.releaseKitRef?.itemId)
-    && /^[a-f0-9]{64}$/i.test(clean(definition.releaseKitRef?.sha256) ?? '')
     && clean(definition.platform)
     && clean(definition.profileId)
     && clean(definition.caption)
     && cleanIso(definition.startAt)
     && clean(definition.timezone)
     && (definition.platformOptions === undefined
-      || (typeof definition.platformOptions === 'object' && !Array.isArray(definition.platformOptions))))
+      || (typeof definition.platformOptions === 'object' && !Array.isArray(definition.platformOptions)))
+    && isScheduledWorkAuthorizationDefinition(definition))
+}
+
+function isScheduledWorkAuthorizationDefinition(
+  definition: ScheduledWorkAuthorizationDefinition,
+): boolean {
+  const releaseKitRef = definition.releaseKitRef
+  const releaseKitRefValid = releaseKitRef === undefined || Boolean(
+    clean(releaseKitRef.itemId)
+    && /^[a-f0-9]{64}$/i.test(clean(releaseKitRef.sha256) ?? '')
+    && (!('campaignId' in releaseKitRef) || clean(releaseKitRef.campaignId)),
+  )
+  if (!releaseKitRefValid) return false
+  if (isReleaseKitSocialAuthorizationDefinition(definition)) return Boolean(releaseKitRef)
+  return Boolean(
+    definition.platform === 'x'
+    && clean(definition.xEditorialRef?.outputId)
+    && clean(definition.xEditorialRef?.slateId)
+    && clean(definition.xEditorialRef?.candidateId)
+    && Number.isInteger(definition.xEditorialRef?.revision)
+    && definition.xEditorialRef.revision > 0,
+  )
 }
 
 function pickPlatformOptions(payload: Record<string, unknown>): Record<string, unknown> | undefined {

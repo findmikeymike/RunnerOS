@@ -41,12 +41,17 @@ import {
   type VaultAssetSource,
   type VaultAssetStatus,
   type VaultAssetUpdatePatch,
+  type TrackIntelligence,
+  type TrackIntelligenceReviewInput,
+  type TrackLyricLine,
   type VaultFolderLinkResult,
   type VaultAssetScanResult,
   type VaultManifest,
   type VaultRightsStatus,
   type VaultStorageMode,
 } from './types.ts';
+import { normalizeTrackCharacter } from './track-intelligence.ts';
+import { hashFileSha256 } from '../utils/hash-file.ts';
 
 const DEFAULT_DIRECTORIES = [
   'music/masters-finals',
@@ -250,6 +255,121 @@ export function updateArtistVaultAsset(
   manifest.workspaceId = workspaceId;
   manifest.updatedAt = asset.updatedAt;
   return saveArtistVaultManifest(workspaceRootPath, manifest);
+}
+
+export function resolveArtistVaultAssetPath(
+  workspaceRootPath: string,
+  asset: Pick<VaultAssetRecord, 'relativePath' | 'absolutePath'>,
+): string | null {
+  if (asset.relativePath) {
+    if (!isSafeVaultRelativePath(asset.relativePath)) return null;
+    return resolve(workspaceRootPath, asset.relativePath);
+  }
+  return asset.absolutePath && !asset.absolutePath.includes('\0') ? asset.absolutePath : null;
+}
+
+export function hashArtistVaultAssetFileSha256(workspaceRootPath: string, asset: VaultAssetRecord): string {
+  const path = resolveArtistVaultAssetPath(workspaceRootPath, asset);
+  if (!path || !existsSync(path) || !statSync(path).isFile()) throw new Error('The track audio file is missing.');
+  return hashFileSha256(path);
+}
+
+export function saveArtistVaultTrackDraft(
+  workspaceRootPath: string,
+  workspaceId: string,
+  assetId: string,
+  intelligence: TrackIntelligence,
+): VaultManifest {
+  const manifest = loadArtistVaultManifestForImport(workspaceRootPath, workspaceId);
+  const asset = requireTrackAsset(manifest, assetId);
+  asset.trackIntelligence = {
+    schemaVersion: 1,
+    status: intelligence.status,
+    approved: asset.trackIntelligence?.approved,
+    draft: intelligence.status === 'draft' ? intelligence.draft : undefined,
+    failureReason: intelligence.failureReason,
+  };
+  asset.updatedAt = new Date().toISOString();
+  manifest.updatedAt = asset.updatedAt;
+  return saveArtistVaultManifest(workspaceRootPath, manifest);
+}
+
+export function reviewArtistVaultTrackIntelligence(
+  workspaceRootPath: string,
+  workspaceId: string,
+  input: TrackIntelligenceReviewInput,
+  clientId: string,
+): VaultManifest {
+  const manifest = loadArtistVaultManifestForImport(workspaceRootPath, workspaceId);
+  const asset = requireTrackAsset(manifest, input.assetId);
+  const existing = asset.trackIntelligence;
+  const draft = existing?.draft ?? existing?.approved;
+  if (!draft || draft.id !== input.draftId) throw new Error('This track analysis draft is stale. Reopen the current track package before saving.');
+  const currentSourceSha256 = hashArtistVaultAssetFileSha256(workspaceRootPath, asset);
+  if (!draft.provenance.sourceSha256) {
+    throw new Error('This older track draft is not bound to the audio file. Re-run transcription before approving lyrics.');
+  }
+  if (draft.provenance.sourceSha256 !== currentSourceSha256) {
+    throw new Error('The audio changed after analysis. Re-run transcription before approving lyrics.');
+  }
+  const now = new Date().toISOString();
+  const character = normalizeTrackCharacter(input.character ?? draft.character ?? existing?.approved?.character);
+  const lines = normalizeReviewedLyricLines(input.lyrics.lines, draft.lyrics?.lines);
+
+  asset.trackIntelligence = {
+    status: 'reviewed',
+    schemaVersion: 1,
+    approved: {
+      ...draft,
+      lyrics: {
+        lines,
+        language: input.lyrics.language?.trim() || draft.lyrics?.language,
+        timingSource: input.lyrics.timingSource,
+        timingStatus: input.lyrics.timingStatus,
+        artistSuppliedText: input.lyrics.artistSuppliedText,
+      },
+      character,
+      reviewedAt: now,
+      reviewedBy: { type: 'user', clientId },
+    },
+  };
+  setOptionalStringList(asset, 'genre', character?.genre ?? []);
+  setOptionalStringList(asset, 'moods', character?.moods ?? []);
+  if (character?.tempoBpm) asset.bpm = character.tempoBpm;
+  else delete asset.bpm;
+  asset.updatedAt = now;
+  manifest.updatedAt = now;
+  return saveArtistVaultManifest(workspaceRootPath, manifest);
+}
+
+function requireTrackAsset(manifest: VaultManifest, assetId: string): VaultAssetRecord {
+  const asset = manifest.assets.find((candidate) => candidate.id === assetId);
+  if (!asset) throw new Error(`Vault asset not found: ${assetId}`);
+  if (!['master-final', 'demo', 'beat-instrumental', 'mix-reference'].includes(asset.kind)) {
+    throw new Error('Track Intelligence is available for audio tracks only.');
+  }
+  return asset;
+}
+
+function normalizeReviewedLyricLines(
+  lines: TrackLyricLine[],
+  existing: TrackLyricLine[] | undefined,
+): TrackLyricLine[] {
+  return lines.map((line, index) => {
+    const startMs = typeof line.startMs === 'number' && Number.isFinite(line.startMs) ? Math.max(0, Math.round(line.startMs)) : undefined;
+    const endMs = typeof line.endMs === 'number' && Number.isFinite(line.endMs) && startMs !== undefined ? Math.max(startMs, Math.round(line.endMs)) : undefined;
+    const prior = existing?.find((candidate) => candidate.id === line.id) ?? existing?.[index];
+    const text = line.text.trim();
+    const corrected = Boolean(line.corrected || (prior && prior.text !== text));
+    return {
+      id: line.id.trim() || `line-${index + 1}`,
+      text,
+      startMs,
+      endMs,
+      words: corrected ? undefined : line.words,
+      corrected,
+    };
+  });
 }
 
 export function planArtistVaultImports(
@@ -951,6 +1071,35 @@ function isVaultAssetRecord(value: unknown): value is VaultAssetRecord {
   if (asset.moods !== undefined && !isStringArray(asset.moods)) return false;
   if (asset.similarSongs !== undefined && !isStringArray(asset.similarSongs)) return false;
   if (asset.bpm !== undefined && (typeof asset.bpm !== 'number' || !Number.isFinite(asset.bpm) || asset.bpm <= 0)) return false;
+  if (asset.trackIntelligence !== undefined && !isTrackIntelligence(asset.trackIntelligence)) return false;
+  return true;
+}
+
+function isTrackIntelligence(value: unknown): value is TrackIntelligence {
+  if (!value || typeof value !== 'object') return false;
+  const intelligence = value as Partial<TrackIntelligence>;
+  if (intelligence.schemaVersion !== 1) return false;
+  if (!['pending', 'draft', 'reviewed', 'failed', 'skipped'].includes(intelligence.status ?? '')) return false;
+  if (intelligence.draft !== undefined && !isTrackIntelligenceRevision(intelligence.draft)) return false;
+  if (intelligence.approved !== undefined && !isTrackIntelligenceRevision(intelligence.approved)) return false;
+  return true;
+}
+
+function isTrackIntelligenceRevision(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const revision = value as NonNullable<TrackIntelligence['draft']>;
+  if (typeof revision.id !== 'string' || !revision.id) return false;
+  if (!revision.provenance || typeof revision.provenance !== 'object') return false;
+  if (revision.lyrics !== undefined) {
+    if (!Array.isArray(revision.lyrics.lines)) return false;
+    if (!['alignment', 'transcription', 'manual'].includes(revision.lyrics.timingSource)) return false;
+    if (!['ready', 'needs-alignment'].includes(revision.lyrics.timingStatus)) return false;
+    if (revision.lyrics.lines.some((line) => (
+      !line || typeof line.id !== 'string' || typeof line.text !== 'string'
+      || (line.startMs !== undefined && (typeof line.startMs !== 'number' || !Number.isFinite(line.startMs) || line.startMs < 0))
+      || (line.endMs !== undefined && (typeof line.endMs !== 'number' || !Number.isFinite(line.endMs) || (line.startMs !== undefined && line.endMs < line.startMs)))
+    ))) return false;
+  }
   return true;
 }
 

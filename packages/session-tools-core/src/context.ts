@@ -496,6 +496,7 @@ export interface SessionToolContext {
   listCampaignOutputs?(input: import('./handlers/release-kit.ts').CampaignReleaseKitToolInput): Promise<import('./handlers/release-kit.ts').ReleaseKitToolResult>;
   getCampaignOutput?(input: import('./handlers/release-kit.ts').GetCampaignOutputToolInput): Promise<import('./handlers/release-kit.ts').ReleaseKitToolResult>;
   getAssetRecord?(input: import('./handlers/release-kit.ts').GetAssetRecordToolInput): Promise<import('./handlers/release-kit.ts').ReleaseKitToolResult>;
+  listXEditorialHistory?(input: import('./handlers/x-editorial.ts').ListXEditorialHistoryToolInput): Promise<import('./handlers/x-editorial.ts').XEditorialHistoryToolResult>;
 
   /**
    * Apply a validated visual surface operation to the current session Canvas.
