@@ -317,6 +317,13 @@ describe('phase4 backend abstraction APIs', () => {
       baseUrl: 'https://my-anthropic-proxy.internal/v1',
       customEndpoint: { api: 'anthropic-messages' },
     })).toEqual({ providerType: 'pi_compat', piAuthProvider: 'anthropic', customEndpoint: { api: 'anthropic-messages' } });
+
+    expect(resolveSetupTestConnectionHint({
+      provider: 'pi',
+      baseUrl: 'https://gateway.example.com/v1',
+      piAuthProvider: 'omniroute',
+      customEndpoint: { api: 'openai-completions' },
+    })).toEqual({ providerType: 'pi_compat', piAuthProvider: 'omniroute', customEndpoint: { api: 'openai-completions' } });
   });
 
   it('fetchBackendModels dispatches for pi provider', async () => {

@@ -98,6 +98,7 @@ const ANTHROPIC_PRESETS: Preset[] = [
   { key: 'openai-us', label: 'OpenAI US', url: 'https://us.api.openai.com/v1', placeholder: 'sk-...' },
   { key: 'google', label: 'Google AI Studio', url: 'https://generativelanguage.googleapis.com/v1beta', placeholder: 'AIza...' },
   { key: 'openrouter', label: 'OpenRouter', url: 'https://openrouter.ai/api/v1', placeholder: 'sk-or-...' },
+  { key: 'omniroute', label: 'OmniRoute Gateway', url: '', placeholder: 'OmniRoute inference key' },
   { key: 'azure-openai-responses', label: 'Azure OpenAI', url: '', placeholder: 'Paste your key here...' },
   { key: 'amazon-bedrock', label: 'Amazon Bedrock', url: 'https://bedrock-runtime.us-east-1.amazonaws.com', placeholder: 'AKIA...' },
   { key: 'groq', label: 'Groq', url: 'https://api.groq.com/openai/v1', placeholder: 'gsk_...' },
@@ -218,6 +219,7 @@ export function ApiKeyInput({
 
   const isPiApiKeyFlow = providerType === 'pi_api_key'
   const isBedrock = activePreset === 'amazon-bedrock'
+  const isOmniRoute = activePreset === 'omniroute'
   // Hide endpoint/model fields for providers with well-known endpoints handled by the SDK
   const DEFAULT_ENDPOINT_PROVIDERS = new Set(['anthropic', 'openai', 'pi', 'google'])
   const isDefaultProviderPreset = DEFAULT_ENDPOINT_PROVIDERS.has(activePreset)
@@ -377,6 +379,11 @@ export function ApiKeyInput({
 
     const parsedModels = parseModelList(connectionDefaultModel)
 
+    if (isOmniRoute && !effectiveBaseUrl) {
+      setModelError(t('apiSetup.omniroute.endpointRequired'))
+      return
+    }
+
     const isUsingDefaultEndpoint = isDefaultProviderPreset || !effectiveBaseUrl
     const requiresModel = !isDefaultProviderPreset && !!effectiveBaseUrl
     if (requiresModel && parsedModels.length === 0) {
@@ -385,10 +392,12 @@ export function ApiKeyInput({
     }
 
     // Include custom endpoint protocol when user configured a custom base URL
-    const isCustomEndpoint = activePreset === 'custom' && !!effectiveBaseUrl
-    const customEndpoint = isCustomEndpoint ? { api: customApi } : undefined
+    const isCustomEndpoint = (activePreset === 'custom' || isOmniRoute) && !!effectiveBaseUrl
+    const customEndpoint = isCustomEndpoint
+      ? { api: isOmniRoute ? 'openai-completions' as const : customApi }
+      : undefined
     const resolvedPiAuthProvider = isCustomEndpoint
-      ? (customApi === 'anthropic-messages' ? 'anthropic' : 'openai')
+      ? (isOmniRoute ? 'omniroute' : (customApi === 'anthropic-messages' ? 'anthropic' : 'openai'))
       : effectivePiAuthProvider
 
     onSubmit({
@@ -486,7 +495,7 @@ export function ApiKeyInput({
               type="text"
               value={baseUrl}
               onChange={(e) => handleBaseUrlChange(e.target.value)}
-              placeholder="https://your-api-endpoint.com"
+              placeholder={isOmniRoute ? t('apiSetup.omniroute.endpointPlaceholder') : 'https://your-api-endpoint.com'}
               className="border-0 bg-transparent shadow-none"
               disabled={isDisabled}
             />
@@ -797,9 +806,11 @@ export function ApiKeyInput({
           <p className="text-xs text-foreground/30">
             Comma-separated list. The first model is the default. The last is used for summarization.
           </p>
-          {(activePreset === 'custom' || !activePreset) && (
+          {(activePreset === 'custom' || activePreset === 'omniroute' || !activePreset) && (
             <p className="text-xs text-foreground/30">
-              Required for custom endpoints. Use the provider-specific model ID.
+              {isOmniRoute
+                ? t('apiSetup.omniroute.modelHelp')
+                : 'Required for custom endpoints. Use the provider-specific model ID.'}
             </p>
           )}
         </div>

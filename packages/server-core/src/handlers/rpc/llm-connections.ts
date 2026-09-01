@@ -8,7 +8,7 @@ import {
   validateStoredBackendConnection,
 } from '@craft-agent/shared/agent/backend'
 import { getModelRefreshService } from '@craft-agent/server-core/model-fetchers'
-import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName, validateSetupTestInput, setupTestRequiresApiKey, isLoopbackBaseUrl } from '@craft-agent/server-core/domain'
+import { parseTestConnectionError, createBuiltInConnection, validateModelList, piAuthProviderDisplayName, validateSetupTestInput, setupTestRequiresApiKey, isLoopbackBaseUrl, validateOmniRouteEndpoint } from '@craft-agent/server-core/domain'
 import { getWorkspaceOrThrow, buildBackendHostRuntimeContext } from '@craft-agent/server-core/handlers'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -52,6 +52,12 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   server.handle(RPC_CHANNELS.settings.SETUP_LLM_CONNECTION, async (_ctx, setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }> => {
     try {
       const manager = getCredentialManager()
+      let effectiveBaseUrl = setup.baseUrl
+      if (setup.piAuthProvider === 'omniroute') {
+        const endpoint = validateOmniRouteEndpoint(setup.baseUrl ?? undefined)
+        if (!endpoint.valid) return { success: false, error: endpoint.error }
+        effectiveBaseUrl = endpoint.baseUrl
+      }
 
       // Ensure connection exists in config
       let connection = getLlmConnection(setup.slug)
@@ -65,14 +71,14 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
           return { success: false, error: 'Connection not found. Cannot re-authenticate a non-existent connection.' }
         }
         // Create connection with appropriate defaults based on slug
-        connection = createBuiltInConnection(setup.slug, setup.baseUrl)
+        connection = createBuiltInConnection(setup.slug, effectiveBaseUrl)
         isNewConnection = true
       }
 
       const updates: Partial<LlmConnection> = {}
-      const hasConfiguredBaseUrl = !!setup.baseUrl?.trim()
+      const hasConfiguredBaseUrl = !!effectiveBaseUrl?.trim()
       if (setup.baseUrl !== undefined) {
-        updates.baseUrl = setup.baseUrl?.trim() || undefined
+        updates.baseUrl = effectiveBaseUrl?.trim() || undefined
 
         // Only mutate providerType for API key connections (not OAuth connections)
         if (isAnthropicProvider(connection.providerType) && connection.authType !== 'oauth') {
@@ -110,16 +116,19 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         // Route custom OpenAI/Anthropic-compatible endpoints through PiAgent.
         updates.providerType = 'pi_compat'
         // Local loopback endpoints (Ollama, LM Studio) don't need API keys.
-        updates.authType = (isLoopbackBaseUrl(setup.baseUrl ?? undefined) && !setup.credential)
+        updates.authType = (isLoopbackBaseUrl(effectiveBaseUrl ?? undefined) && !setup.credential)
           ? 'none'
           : 'api_key_with_endpoint'
-        if (isLoopbackBaseUrl(setup.baseUrl ?? undefined)) {
+        if (setup.piAuthProvider === 'omniroute') {
+          updates.piAuthProvider = 'omniroute'
+          updates.name = 'OmniRoute'
+        } else if (isLoopbackBaseUrl(effectiveBaseUrl ?? undefined)) {
           // Local models use the OpenAI protocol but aren't "OpenAI".
           // Leave piAuthProvider unset → generic icon in the selector.
           updates.name = 'Local Model'
         } else {
           // Remote custom endpoints: keep provider hint for correct icon.
-          updates.piAuthProvider = customEndpoint.api === 'anthropic-messages' ? 'anthropic' : 'openai'
+          updates.piAuthProvider = setup.piAuthProvider ?? (customEndpoint.api === 'anthropic-messages' ? 'anthropic' : 'openai')
         }
       } else if (setup.baseUrl !== undefined) {
         // Base URL was explicitly updated without custom protocol config.
@@ -299,20 +308,27 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // and validate credentials via runMiniCompletion(). Same code path as actual chat.
   server.handle(RPC_CHANNELS.settings.TEST_LLM_CONNECTION_SETUP, async (_ctx, params: import('@craft-agent/shared/protocol').TestLlmConnectionParams): Promise<import('@craft-agent/shared/protocol').TestLlmConnectionResult> => {
     const { provider, apiKey, baseUrl, model, piAuthProvider, customEndpoint } = params
+    let effectiveBaseUrl = baseUrl
+    if (piAuthProvider === 'omniroute') {
+      const endpoint = validateOmniRouteEndpoint(baseUrl)
+      if (!endpoint.valid) return { success: false, error: endpoint.error }
+      effectiveBaseUrl = endpoint.baseUrl
+      if (!model?.trim()) return { success: false, error: 'OmniRoute model or fallback-combo ID is required.' }
+    }
     const trimmedKey = apiKey?.trim() ?? ''
-    const allowEmptyApiKey = !setupTestRequiresApiKey(baseUrl)
+    const allowEmptyApiKey = !setupTestRequiresApiKey(effectiveBaseUrl)
 
     if (!trimmedKey && !allowEmptyApiKey) {
       return { success: false, error: 'API key is required' }
     }
 
-    const setupValidation = validateSetupTestInput({ provider, baseUrl, piAuthProvider })
+    const setupValidation = validateSetupTestInput({ provider, baseUrl: effectiveBaseUrl, piAuthProvider })
     if (!setupValidation.valid) {
       return { success: false, error: setupValidation.error }
     }
 
-    const hint = resolveSetupTestConnectionHint({ provider, baseUrl, piAuthProvider, customEndpoint })
-    deps.platform.logger?.info(`[testLlmConnectionSetup] Testing: provider=${provider}${piAuthProvider ? ` piAuth=${piAuthProvider}` : ''}${baseUrl ? ` baseUrl=${baseUrl}` : ''} hasCustomEndpoint=${!!customEndpoint} hintProvider=${hint.providerType}`)
+    const hint = resolveSetupTestConnectionHint({ provider, baseUrl: effectiveBaseUrl, piAuthProvider, customEndpoint })
+    deps.platform.logger?.info(`[testLlmConnectionSetup] Testing: provider=${provider}${piAuthProvider ? ` piAuth=${piAuthProvider}` : ''}${effectiveBaseUrl ? ` baseUrl=${effectiveBaseUrl}` : ''} hasCustomEndpoint=${!!customEndpoint} hintProvider=${hint.providerType}`)
 
     const startedAt = Date.now()
     try {
@@ -323,7 +339,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
         apiKey: trimmedKey,
         allowEmptyApiKey,
         model: testModel,
-        baseUrl,
+        baseUrl: effectiveBaseUrl,
         timeoutMs: 75000,
         hostRuntime: buildBackendHostRuntimeContext(deps.platform),
         connection: hint,

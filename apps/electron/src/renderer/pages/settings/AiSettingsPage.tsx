@@ -143,7 +143,11 @@ function getConnectionProviderLabel(connection: LlmConnectionWithStatus): string
     if (connection.piAuthProvider === 'openai-codex') return 'GPT/Codex'
     return 'Runner backend'
   }
-  if (provider === 'pi_compat') return 'OpenAI-compatible endpoint'
+  if (provider === 'pi_compat') {
+    return connection.piAuthProvider
+      ? (PI_AUTH_PROVIDER_LABELS[connection.piAuthProvider] ?? 'OpenAI-compatible endpoint')
+      : 'OpenAI-compatible endpoint'
+  }
   return provider || 'AI provider'
 }
 
@@ -214,6 +218,7 @@ const PI_AUTH_PROVIDER_LABELS: Record<string, string> = {
   'openai-codex': 'GPT/Codex',
   google: 'Google AI Studio',
   openrouter: 'OpenRouter',
+  omniroute: 'OmniRoute',
   'azure-openai-responses': 'Azure OpenAI',
   'amazon-bedrock': 'Amazon Bedrock',
   groq: 'Groq',
@@ -838,7 +843,9 @@ export default function AiSettingsPage() {
       apiKey,
       baseUrl: connection.baseUrl,
       connectionDefaultModel: modelStr,
-      activePreset: isCustomEndpointConnection ? 'custom' : (connection.piAuthProvider || undefined),
+      activePreset: isCustomEndpointConnection
+        ? (connection.piAuthProvider === 'omniroute' ? 'omniroute' : 'custom')
+        : (connection.piAuthProvider || undefined),
       models: modelIds,
       customApi: connection.customEndpoint?.api,
     })
@@ -1056,7 +1063,7 @@ export default function AiSettingsPage() {
                         label: conn.name,
                         description: conn.providerType === 'anthropic' ? 'Anthropic API' :
                                      conn.providerType === 'pi' ? 'Runner Backend' :
-                                     conn.providerType === 'pi_compat' ? 'Runner Backend Compatible' :
+                                     conn.providerType === 'pi_compat' ? (conn.piAuthProvider === 'omniroute' ? 'OmniRoute' : 'Runner Backend Compatible') :
                                      conn.providerType || 'Unknown',
                       }))}
                     />

@@ -84,6 +84,49 @@ export function isLoopbackBaseUrl(baseUrl?: string): boolean {
 }
 
 /**
+ * Normalize the friendly OmniRoute server URL to its OpenAI-compatible base.
+ * A bare origin becomes `/v1`; explicit reverse-proxy paths are preserved.
+ */
+export function normalizeOmniRouteBaseUrl(baseUrl?: string): string | undefined {
+  const trimmed = baseUrl?.trim()
+  if (!trimmed) return undefined
+
+  try {
+    const url = new URL(trimmed)
+    if (url.pathname === '' || url.pathname === '/') {
+      url.pathname = '/v1'
+    }
+    return url.toString().replace(/\/$/, '')
+  } catch {
+    return trimmed
+  }
+}
+
+/**
+ * Named external gateways get stricter transport validation than arbitrary
+ * custom endpoints because the product presents them as trusted presets.
+ */
+export function validateOmniRouteEndpoint(baseUrl?: string): { valid: true; baseUrl: string } | { valid: false; error: string } {
+  const normalized = normalizeOmniRouteBaseUrl(baseUrl)
+  if (!normalized) {
+    return { valid: false, error: 'OmniRoute server URL is required.' }
+  }
+
+  try {
+    const url = new URL(normalized)
+    if (url.username || url.password) {
+      return { valid: false, error: 'OmniRoute credentials must use the API key field, not the server URL.' }
+    }
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopbackBaseUrl(normalized))) {
+      return { valid: false, error: 'Remote OmniRoute servers must use HTTPS. HTTP is allowed only for localhost.' }
+    }
+    return { valid: true, baseUrl: normalized }
+  } catch {
+    return { valid: false, error: 'Enter a valid OmniRoute server URL.' }
+  }
+}
+
+/**
  * Setup tests require API keys for non-local endpoints, but local loopback
  * endpoints may be keyless.
  */
@@ -145,6 +188,7 @@ const PI_AUTH_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   'openai-codex': 'OpenAI',
   google: 'Google AI Studio',
   openrouter: 'OpenRouter',
+  omniroute: 'OmniRoute',
   'azure-openai-responses': 'Azure OpenAI',
   'amazon-bedrock': 'Amazon Bedrock',
   groq: 'Groq',
