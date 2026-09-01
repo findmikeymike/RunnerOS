@@ -203,6 +203,8 @@ describe('Artist OS persistent shell chrome', () => {
     expect(workflows).toContain('tone="orange"')
     expect(workflows).toContain('Workflow library')
     expect(workflows).not.toContain('bg-violet')
+    expect(workflows).toContain('folder.workflows.map((workflow)')
+    expect(workflows).not.toContain('function WorkflowFolderCard')
     expect(automations).toContain("title={workTab ? 'Work' : title}")
     expect(automations).toContain("tone={workTab ? 'orange' : 'blue'}")
     expect(tabs).toContain("{ id: 'workers', label: 'Workers'")

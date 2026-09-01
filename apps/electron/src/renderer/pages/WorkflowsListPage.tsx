@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, ChevronRight, CircleMinus, Folder, History, Info, Pencil, Play, Plus, Radio, Search, Trash2, X, Workflow as WorkflowIcon } from 'lucide-react'
+import { CircleMinus, Folder, History, Info, Pencil, Play, Plus, Search, Trash2, X, Workflow as WorkflowIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -68,7 +68,6 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
   const [deepResearchDepth, setDeepResearchDepth] = React.useState<'quick' | 'standard' | 'deep'>('standard')
   const [deepResearchSourceSlugs, setDeepResearchSourceSlugs] = React.useState<string[]>([])
   const [deepResearchStarting, setDeepResearchStarting] = React.useState(false)
-  const [selectedFolderId, setSelectedFolderId] = React.useState<WorkflowFolderId | null>(null)
   const [libraryOpen, setLibraryOpen] = React.useState(false)
   const [infoOpen, setInfoOpen] = React.useState(false)
   const rankedDeepResearchSources = React.useMemo(
@@ -87,10 +86,6 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
   const workflowFolders = React.useMemo(
     () => groupWorkflowsIntoFolders(allWorkflows, activeSlugSet),
     [activeSlugSet, allWorkflows],
-  )
-  const selectedFolder = React.useMemo(
-    () => enabledWorkflowFolders.find((folder) => folder.id === selectedFolderId) ?? null,
-    [enabledWorkflowFolders, selectedFolderId],
   )
   const selectedDeepResearchSources = React.useMemo(
     () => rankedDeepResearchSources.filter((source) => deepResearchSourceSlugs.includes(source.config.slug)),
@@ -303,61 +298,34 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
               Manage library
             </button>
           </div>
-        ) : selectedFolder ? (
-          <div className="space-y-4">
-            <button
-              type="button"
-              onClick={() => setSelectedFolderId(null)}
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/62 transition-colors hover:bg-white/[0.06] hover:text-white"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Categories
-            </button>
-
-            <WorkflowSection title={selectedFolder.title} count={selectedFolder.workflows.length}>
-              <div className="mb-4 rounded-[16px] border border-white/[0.07] bg-white/[0.025] px-4 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Folder className="h-4 w-4 text-[#fed7aa]/80" />
-                      <h3 className="truncate text-sm font-semibold text-white">{selectedFolder.title}</h3>
-                    </div>
-                    <p className="mt-1 text-xs leading-5 text-white/45">{selectedFolder.description}</p>
-                  </div>
-                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-medium text-emerald-200/80">
-                    <Radio className="h-3 w-3" />
-                    {selectedFolder.workflows.length} enabled
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                {selectedFolder.workflows.map((wf) => (
-                  <WorkflowCard
-                    key={wf.slug}
-                    workflow={wf}
-                    active={activeSlugSet.has(wf.slug)}
-                    lastRun={lastRunBySlug.get(wf.slug)}
-                    onOpen={() => setDetailWorkflow(wf)}
-                    onRun={() => setRunDialogWorkflow(wf)}
-                    onActivate={() => void handleActivate(wf)}
-                  />
-                ))}
-              </div>
-            </WorkflowSection>
-          </div>
         ) : (
-          <WorkflowSection title="Enabled workflow categories" count={activeWorkflows.length}>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {enabledWorkflowFolders.map((folder) => (
-                <WorkflowFolderCard
-                  key={folder.id}
-                  folder={folder}
-                  onSelect={() => setSelectedFolderId(folder.id)}
-                />
-              ))}
-            </div>
-          </WorkflowSection>
+          <div className="space-y-6">
+            {enabledWorkflowFolders.map((folder) => (
+              <section key={folder.id}>
+                <div className="mb-4 flex items-center gap-3">
+                  <span className="inline-flex h-[22px] shrink-0 items-center gap-1.5 rounded-full bg-white/92 px-2">
+                    <h2 className="text-[9px] font-semibold uppercase tracking-[0.14em] text-black/85">{folder.title}</h2>
+                    <span className="text-[9px] font-medium text-black/45">{folder.workflows.length}</span>
+                  </span>
+                  <div className="h-px flex-1 bg-white/[0.07]" />
+                </div>
+                <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+                  {folder.workflows.map((workflow) => (
+                    <WorkflowCard
+                      key={workflow.slug}
+                      workflow={workflow}
+                      lastRun={lastRunBySlug.get(workflow.slug)}
+                      onOpen={() => setDetailWorkflow(workflow)}
+                      onRun={() => setRunDialogWorkflow(workflow)}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
+            <p className="pb-1 text-right text-[11px] text-white/28">
+              {activeWorkflows.length} enabled {activeWorkflows.length === 1 ? 'workflow' : 'workflows'}
+            </p>
+          </div>
         )}
       </div>
 
@@ -674,132 +642,43 @@ function getWorkflowFolderId(workflow: WorkflowDTO): WorkflowFolderId {
   return 'other'
 }
 
-function WorkflowSection({ title, count, suffix, children }: { title: string; count: number; suffix?: string; children: React.ReactNode }) {
-  return (
-    <section>
-      <div className="mb-3 flex items-center gap-3">
-        <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-white/42">{title}</h2>
-        <div className="h-px flex-1 bg-white/[0.06]" />
-        <span className="text-[11px] text-white/32">{count}{suffix ? ` ${suffix}` : ''}</span>
-      </div>
-      {children}
-    </section>
-  )
-}
-
-function WorkflowFolderCard({
-  folder,
-  onSelect,
-}: {
-  folder: WorkflowFolder
-  onSelect: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className="group relative flex min-h-[112px] items-start gap-3 rounded-[14px] border border-white/[0.07] bg-white/[0.03] p-3 text-left transition-colors hover:border-white/[0.13] hover:bg-white/[0.055]"
-    >
-      {folder.activeCount > 0 ? (
-        <span
-          className="absolute right-3 top-3 inline-flex h-6 w-6 items-center justify-center rounded-full border border-emerald-300/20 bg-emerald-400/10 text-emerald-200/85"
-          title={`${folder.activeCount} enabled workflow${folder.activeCount === 1 ? '' : 's'}`}
-          aria-label={`${folder.activeCount} enabled workflow${folder.activeCount === 1 ? '' : 's'}`}
-        >
-          <Radio className="h-3.5 w-3.5" />
-        </span>
-      ) : null}
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.08] bg-black/20 text-white/58">
-        <Folder className="h-4 w-4" />
-      </span>
-      <span className="min-w-0 flex-1 pr-8">
-        <span className="flex items-center gap-2">
-          <span className="truncate text-sm font-semibold text-white">{folder.title}</span>
-          <span className="rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5 text-[11px] text-white/42">
-            {folder.workflows.length}
-          </span>
-        </span>
-        <span className="mt-1 line-clamp-2 block text-[11.5px] leading-[17px] text-white/48">{folder.description}</span>
-        {folder.activeCount > 0 ? (
-          <span className="mt-3 block text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-200/55">
-            Enabled inside
-          </span>
-        ) : null}
-      </span>
-      <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-white/30 transition-transform group-hover:translate-x-0.5" />
-    </button>
-  )
-}
-
 function WorkflowCard({
   workflow,
-  active,
   lastRun,
   onOpen,
   onRun,
-  onActivate,
 }: {
   workflow: WorkflowDTO
-  active: boolean
   lastRun?: WorkflowRunDTO
   onOpen: () => void
   onRun: () => void
-  onActivate: () => void
 }) {
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') return
-        event.preventDefault()
-        onOpen()
-      }}
-      className="group relative overflow-hidden rounded-[13px] border border-white/[0.07] bg-white/[0.035] p-3 text-left shadow-thin transition-all duration-200 hover:-translate-y-0.5 hover:border-white/[0.13] hover:bg-white/[0.055] hover:shadow-middle"
-    >
-      <div className="flex items-start gap-2">
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation()
-            onOpen()
-          }}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] border border-white/[0.08] bg-gradient-to-br from-white/[0.10] to-white/[0.035] font-mono text-[8px] font-semibold uppercase tracking-[0.08em] text-[#fed7aa] shadow-xs"
-          aria-label={`Open ${workflow.metadata.name}`}
-        >
+    <div className="group relative min-h-[88px]">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="relative flex min-h-[88px] w-full items-start gap-3 overflow-hidden rounded-[12px] bg-white/[0.055] px-3 py-3 pr-14 text-left shadow-minimal backdrop-blur-md transition-colors hover:bg-white/[0.075] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/55"
+        aria-label={`Open ${workflow.metadata.name}`}
+      >
+        <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-gradient-to-br from-[#fb923c] to-[#f97316] font-mono text-[8px] font-bold uppercase tracking-[0.06em] text-neutral-950">
           {getWorkflowInitials(workflow)}
-        </button>
-        <div className="min-w-0 flex-1">
-          <button type="button" onClick={(event) => {
-            event.stopPropagation()
-            onOpen()
-          }} className="block max-w-full truncate text-left text-sm font-semibold text-white hover:text-[#fed7aa]">
-            {workflow.metadata.name}
-          </button>
-        </div>
-        <span className="rounded-full border border-white/[0.09] bg-black/20 px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-white/50">
-          {active ? 'enabled' : 'disabled'}
         </span>
-      </div>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[14px] font-semibold tracking-tight text-white">
+            {workflow.metadata.name}
+          </span>
+          <span className="mt-1 block line-clamp-2 text-[11.5px] leading-[17px] text-neutral-300/76">
+            {workflow.metadata.description}
+          </span>
+          {lastRun ? <span className="mt-1.5 block"><RunStateDot state={lastRun.state} /></span> : null}
+        </span>
+      </button>
 
-      <p className="mt-2 line-clamp-2 min-h-9 text-[11.5px] leading-[18px] text-white/62">{workflow.metadata.description}</p>
-
-      <div className="mt-2.5 flex items-center justify-between gap-3">
-        <div>{lastRun ? <RunStateDot state={lastRun.state} /> : <span />}</div>
-        <div className="flex items-center gap-1">
-          {active ? (
-            <IconAction label="Run" onClick={onRun}><Play className="h-3.5 w-3.5" /></IconAction>
-          ) : (
-            <button type="button" onClick={(event) => {
-              event.stopPropagation()
-              onActivate()
-            }} className="inline-flex h-6 items-center gap-1 rounded-[7px] border border-[#fb923c]/18 bg-[#f97316]/12 px-2 text-[10.5px] font-medium text-[#fed7aa] hover:bg-[#f97316]/20">
-              <Plus className="h-3 w-3" />
-              Enable
-            </button>
-          )}
-        </div>
+      <div className="absolute right-2.5 top-2.5 z-10 rounded-[8px] bg-[#0f1011]/90 p-0.5 opacity-70 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <IconAction label={`Run ${workflow.metadata.name}`} onClick={onRun}>
+          <Play className="h-3.5 w-3.5" />
+        </IconAction>
       </div>
     </div>
   )
