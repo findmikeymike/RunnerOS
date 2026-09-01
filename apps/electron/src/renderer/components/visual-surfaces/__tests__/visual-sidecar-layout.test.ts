@@ -27,4 +27,12 @@ describe('visual sidecar layout', () => {
     expect(panel).toContain('<VisualSidecarResizeHandle')
     expect(handle).toContain('data-testid="visual-sidecar-resize-handle"')
   })
+
+  it('explains the Canvas icon on hover and keyboard focus', () => {
+    const toggle = readFileSync(join(import.meta.dir, '..', 'VisualSurfaceToggle.tsx'), 'utf8')
+
+    expect(toggle).toContain('<TooltipTrigger asChild>')
+    expect(toggle).toContain('<TooltipContent side="top" className="text-xs">')
+    expect(toggle).toContain('{actionLabel} — view agent outputs')
+  })
 })

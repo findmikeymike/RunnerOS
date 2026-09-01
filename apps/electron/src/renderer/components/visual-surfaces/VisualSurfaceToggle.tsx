@@ -3,6 +3,7 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { Check, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import type { OutputSummaryDTO } from '@/hooks/useOutputs'
 import {
@@ -40,7 +41,8 @@ export function VisualSurfaceToggle({ workspaceId, sessionId, latestOutput }: Vi
 
   const isOpen = !!sessionId && visualSidecar.activeSurface?.sessionId === sessionId
   const isDisabled = !workspaceId || !sessionId
-  const title = `Open canvas. Right-click to change view mode. Current: ${MODE_LABELS[mode]}`
+  const actionLabel = isOpen ? 'Close Canvas' : 'Open Canvas'
+  const ariaLabel = `${actionLabel}. Right-click to change view mode. Current: ${MODE_LABELS[mode]}`
 
   const handleToggle = React.useCallback(() => {
     if (!workspaceId || !sessionId) return
@@ -73,28 +75,34 @@ export function VisualSurfaceToggle({ workspaceId, sessionId, latestOutput }: Vi
 
   return (
     <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-      <PopoverAnchor asChild>
-        <Button
-          type="button"
-          size="sm"
-          variant={isOpen ? 'secondary' : 'ghost'}
-          disabled={isDisabled}
-          aria-pressed={isOpen}
-          aria-label={title}
-          title={title}
-          className={cn(
-            'h-7 w-7 shrink-0 rounded-[8px] p-0',
-            isOpen
-              ? 'border border-sky-300/25 bg-sky-400/14 text-sky-100 hover:bg-sky-400/20'
-              : 'border border-white/[0.08] bg-white/[0.045] text-white/64 hover:bg-white/[0.08] hover:text-white',
-          )}
-          onClick={handleToggle}
-          onContextMenu={handleContextMenu}
-          onKeyDown={handleKeyDown}
-        >
-          <Eye className="h-3.5 w-3.5" />
-        </Button>
-      </PopoverAnchor>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverAnchor asChild>
+            <Button
+              type="button"
+              size="sm"
+              variant={isOpen ? 'secondary' : 'ghost'}
+              disabled={isDisabled}
+              aria-pressed={isOpen}
+              aria-label={ariaLabel}
+              className={cn(
+                'h-7 w-7 shrink-0 rounded-[8px] p-0',
+                isOpen
+                  ? 'border border-sky-300/25 bg-sky-400/14 text-sky-100 hover:bg-sky-400/20'
+                  : 'border border-white/[0.08] bg-white/[0.045] text-white/64 hover:bg-white/[0.08] hover:text-white',
+              )}
+              onClick={handleToggle}
+              onContextMenu={handleContextMenu}
+              onKeyDown={handleKeyDown}
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </Button>
+          </PopoverAnchor>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {actionLabel} — view agent outputs
+        </TooltipContent>
+      </Tooltip>
       <PopoverContent
         side="top"
         align="start"
