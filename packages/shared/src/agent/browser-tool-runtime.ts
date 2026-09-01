@@ -622,6 +622,28 @@ async function verifySelectResult(args: {
 }
 
 
+/**
+ * Capture a screenshot for visual fallback. Best-effort: a failure here must never
+ * mask the underlying result the caller is already returning.
+ */
+async function captureFallbackScreenshot(fns: BrowserPaneFns): Promise<BrowserCommandImage | undefined> {
+  try {
+    const result = await fns.screenshot({ format: 'jpeg' });
+    const buf = result.imageBuffer;
+    if (!buf || buf.length === 0) return undefined;
+    return { data: buf.toString('base64'), mimeType: 'image/jpeg', sizeBytes: buf.length };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Ref-taking commands. A stale `@eN` here is recoverable by re-snapshotting. */
+const REF_COMMANDS = new Set(['click', 'fill', 'select', 'focus']);
+
+function isStaleRefError(error: unknown): boolean {
+  return error instanceof Error && /Element @\S+ not found/.test(error.message);
+}
+
 export async function executeBrowserToolCommand(args: {
   command: string | string[];
   fns: BrowserPaneFns;
@@ -633,7 +655,7 @@ export async function executeBrowserToolCommand(args: {
     if (args.command.length === 0) {
       throw new Error('Missing command. Use "--help" to see supported browser_tool commands.');
     }
-    return executeSingleCommand(args);
+    return executeSingleCommandWithRefRecovery(args);
   }
 
   // String mode: existing behavior unchanged
@@ -647,7 +669,64 @@ export async function executeBrowserToolCommand(args: {
     return executeBatchCommands({ ...args, commands });
   }
 
-  return executeSingleCommand(args);
+  return executeSingleCommandWithRefRecovery(args);
+}
+
+/**
+ * Run one command, recovering once from a stale element ref.
+ *
+ * Pages re-render constantly, so a `@eN` captured by an earlier snapshot routinely
+ * goes stale between snapshot and action. Previously this returned a dead end that
+ * the model had to reason its way out of. Now we re-snapshot and retry the same
+ * command once — refs are regenerated positionally, so the retry usually resolves.
+ *
+ * If it still fails, attach a screenshot so the model can switch to visual
+ * targeting (click-at) rather than repeating a failing ref.
+ */
+async function executeSingleCommandWithRefRecovery(args: {
+  command: string | string[];
+  fns: BrowserPaneFns;
+  sessionId: string;
+  platform?: NodeJS.Platform;
+}): Promise<BrowserCommandResult> {
+  const parts = Array.isArray(args.command) ? args.command : tokenizeCommand(args.command.trim());
+  const cmd = parts[0]?.toLowerCase();
+
+  try {
+    return await executeSingleCommand(args);
+  } catch (error) {
+    if (!cmd || !REF_COMMANDS.has(cmd) || !isStaleRefError(error)) throw error;
+
+    // Refresh refs, then retry the identical command exactly once.
+    try {
+      await args.fns.snapshot();
+    } catch {
+      throw error; // Re-snapshot failed; surface the original, more useful error.
+    }
+
+    try {
+      const retried = await executeSingleCommand(args);
+      return {
+        ...retried,
+        output: `(element ref was stale — re-snapshotted and retried)\n${retried.output}`,
+      };
+    } catch (retryError) {
+      if (!isStaleRefError(retryError)) throw retryError;
+      const image = await captureFallbackScreenshot(args.fns);
+      const message = retryError instanceof Error ? retryError.message : String(retryError);
+      return {
+        output: [
+          message,
+          '',
+          'Re-snapshotted and retried once; the ref is still unresolved.',
+          'The page likely changed structurally. Run "snapshot" for current refs, or use the',
+          'attached screenshot with "click-at <x> <y>" if the element has no accessible role.',
+        ].join('\n'),
+        appendReleaseHint: false,
+        image,
+      };
+    }
+  }
 }
 
 async function executeBatchCommands(args: {
@@ -662,7 +741,7 @@ async function executeBatchCommands(args: {
 
   for (let i = 0; i < args.commands.length; i++) {
     const command = args.commands[i]!;
-    const result = await executeSingleCommand({ ...args, command });
+    const result = await executeSingleCommandWithRefRecovery({ ...args, command });
 
     outputs.push(result.output);
     if (result.image) lastImage = result.image;
@@ -918,6 +997,12 @@ async function executeSingleCommand(args: {
         lines.push('No accessibility elements were detected on this view.');
         lines.push('This can happen on canvas-heavy/custom UIs. Try: evaluate <js>, click-at <x> <y>, type <text>, screenshot --annotated.');
       }
+
+      // The accessibility tree cannot describe this page usefully, and it is not a
+      // security challenge. Attach a screenshot so the model can fall back to visual
+      // targeting with click-at instead of being left with an unusable ref list.
+      const visualFallback = await captureFallbackScreenshot(fns);
+      return { output: lines.join('\n'), appendReleaseHint: true, image: visualFallback };
     }
 
     return { output: lines.join('\n'), appendReleaseHint: true };
