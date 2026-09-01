@@ -48,7 +48,7 @@ import type {
   MissionAssetManifest,
   MissionAssetRecord,
 } from '../../../shared/types'
-import type { ReleaseBoard } from '@/lib/release-board'
+import { isReleaseBoardItemIncluded, type ReleaseBoard } from '@/lib/release-board'
 
 const missionTypes: MissionType[] = ['single', 'ep', 'album', 'other']
 const missionFieldClass = 'w-full rounded-lg border border-white/[0.07] bg-black/25 px-3 py-2 text-sm text-white/78 outline-none placeholder:text-white/22 focus:border-orange-300/45'
@@ -717,7 +717,7 @@ function AssetsSetup({
   const refs = files.filter((file) => file.status === 'available' && ['moodboard-image', 'audio-reference'].includes(file.kind)).length
   const toCreate = releaseBoard.categories
     .flatMap((category) => category.items.map((item) => ({ category: category.label, item })))
-    .filter(({ item }) => ['canvas', 'lyric-clips', 'viral-clips', 'ugc-clips', 'lyric-video', 'ad-creatives'].includes(item.id))
+    .filter(({ item }) => isReleaseBoardItemIncluded(item) && ['canvas', 'lyric-clips', 'viral-clips', 'ugc-clips', 'lyric-video', 'ad-creatives'].includes(item.id))
 
   return (
     <div className="grid gap-4">

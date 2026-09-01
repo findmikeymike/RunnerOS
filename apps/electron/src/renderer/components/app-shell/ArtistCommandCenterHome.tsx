@@ -1,9 +1,11 @@
 import * as React from 'react'
+import { useAtomValue } from 'jotai'
 import {
   ArrowRight,
   Bot,
   Check,
   CheckCircle2,
+  ChevronDown,
   Circle,
   ClipboardCheck,
   Disc3,
@@ -38,6 +40,7 @@ import { openAgentSessionComposer } from '@/lib/run-agent'
 import { WorkflowRunInputDialog } from '@/pages/WorkflowRunInputDialog'
 import type { MissionAssetKindHint, MissionAssetManifest, TrackIntelligence, WorkflowDTO } from '../../../shared/types'
 import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
+import { sessionMetaMapAtom } from '@/atoms/sessions'
 import {
   ARTIST_PROFILE_CONTEXT_SLUG,
   parseArtistProfileDocResult,
@@ -76,19 +79,22 @@ import {
   buildReleaseBoardItemActionPrompt,
   buildReleaseBoardWorkflowInputs,
   buildDefaultReleaseBoard,
+  getReleaseBoardActionLabel,
   getBoardTotals,
   getCategoryProgress,
   getReleaseBoardItemAction,
+  findReleaseBoardWorkerSession,
+  isReleaseBoardItemIncluded,
+  linkReleaseBoardItemSession,
   mergeReleaseBoardWithAssets,
   parseReleaseBoardDoc,
   releaseBoardMetadata,
   serializeReleaseBoardBody,
+  setReleaseBoardItemIncluded,
   toggleReleaseBoardItem,
-  updateReleaseBoardItemStatus,
   type ReleaseBoard,
   type ReleaseBoardCategory,
   type ReleaseBoardItem,
-  type ReleaseBoardItemStatus,
 } from '@/lib/release-board'
 import { MissionBriefDrawer } from './MissionBriefDrawer'
 import { ReleaseCountdownDial } from './ReleaseCountdownDial'
@@ -160,6 +166,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
   const { docs, loading, upsert } = useWorkspaceContext(workspaceId)
   const { allAgents } = useAgents(workspaceId)
   const { allWorkflows } = useWorkflows(workspaceId)
+  const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const {
     onCreateSession,
     onInputChange,
@@ -476,9 +483,16 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
     [releaseBoard, saveReleaseBoard],
   )
 
-  const setReleaseItemStatus = React.useCallback(
-    (categoryId: ReleaseBoardCategory['id'], itemId: string, status: ReleaseBoardItemStatus) => {
-      void saveReleaseBoard(updateReleaseBoardItemStatus(releaseBoard, categoryId, itemId, status))
+  const linkReleaseItemSession = React.useCallback(
+    (categoryId: ReleaseBoardCategory['id'], itemId: string, sessionId: string) => {
+      void saveReleaseBoard(linkReleaseBoardItemSession(releaseBoard, categoryId, itemId, sessionId))
+    },
+    [releaseBoard, saveReleaseBoard],
+  )
+
+  const setReleaseItemIncluded = React.useCallback(
+    (categoryId: ReleaseBoardCategory['id'], itemId: string, included: boolean) => {
+      void saveReleaseBoard(setReleaseBoardItemIncluded(releaseBoard, categoryId, itemId, included))
     },
     [releaseBoard, saveReleaseBoard],
   )
@@ -487,8 +501,32 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
     category: ReleaseBoardCategory,
     item: ReleaseBoardItem,
   ) => {
+    if (item.linkedSessionId) {
+      if (window.location.hash.startsWith('#artist-hq/')) {
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+      }
+      navigate(routes.view.allSessions(item.linkedSessionId))
+      return
+    }
     const action = getReleaseBoardItemAction(category.id, item.id)
     if (!action) return
+    if (item.status === 'in-progress' && action.kind === 'agent') {
+      const recoveredSessionId = findReleaseBoardWorkerSession({
+        sessions: sessionMetaMap.values(),
+        workspaceId,
+        agentSlug: action.targetSlug,
+        campaignTitle: mission.title || 'Untitled Campaign',
+        itemLabel: item.label,
+      })
+      if (recoveredSessionId) {
+        linkReleaseItemSession(category.id, item.id, recoveredSessionId)
+        if (window.location.hash.startsWith('#artist-hq/')) {
+          window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+        }
+        navigate(routes.view.allSessions(recoveredSessionId))
+        return
+      }
+    }
     if (!hasMission) {
       setDrawerOpen(true)
       toast.info('Create the campaign first, then start an asset worker.')
@@ -529,7 +567,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
         if (!agent) {
           throw new Error(`${action.targetName} is not installed in the worker library.`)
         }
-        await openAgentSessionComposer({
+        const session = await openAgentSessionComposer({
           agent,
           workspaceId,
           onCreateSession,
@@ -540,6 +578,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
           draftInput: campaignBrief,
           autoSendDraft: true,
         })
+        linkReleaseItemSession(category.id, item.id, session.id)
       }
       toast.success(`${action.targetName} started`, {
         description: `Creating ${item.label.toLowerCase()} for this campaign.`,
@@ -560,7 +599,9 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
     onCreateSession,
     onInputChange,
     onSendMessage,
+    sessionMetaMap,
     skills,
+    linkReleaseItemSession,
     transcribeLyrics,
     workspaceId,
   ])
@@ -709,8 +750,9 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
                 board={releaseBoard}
                 launchingItemKey={launchingReleaseItemKey}
                 onLaunchItem={launchReleaseItem}
-                onSetItemStatus={setReleaseItemStatus}
+                onSetItemIncluded={setReleaseItemIncluded}
                 onToggleItem={toggleReleaseItem}
+                onAddAsset={chooseAndImport}
               />
             </div>
           </div>
@@ -873,7 +915,7 @@ function ReleaseReadinessSummary({
   const percentComplete = totals.total > 0 ? Math.round((totals.done / totals.total) * 100) : 0
   const nextNeeded = board.categories
     .flatMap((category) => category.items.map((item) => ({ category, item })))
-    .find(({ item }) => item.status === 'needed')
+    .find(({ item }) => isReleaseBoardItemIncluded(item) && item.status === 'needed')
 
   return (
     <CommandCard className="flex min-h-[112px] items-center gap-5 p-4 sm:p-5">
@@ -906,14 +948,16 @@ function ReleaseBoardWorkspace({
   board,
   launchingItemKey,
   onLaunchItem,
-  onSetItemStatus,
+  onSetItemIncluded,
   onToggleItem,
+  onAddAsset,
 }: {
   board: ReleaseBoard
   launchingItemKey: string | null
   onLaunchItem: (category: ReleaseBoardCategory, item: ReleaseBoardItem) => void
-  onSetItemStatus: (categoryId: ReleaseBoardCategory['id'], itemId: string, status: ReleaseBoardItemStatus) => void
+  onSetItemIncluded: (categoryId: ReleaseBoardCategory['id'], itemId: string, included: boolean) => void
   onToggleItem: (categoryId: ReleaseBoardCategory['id'], itemId: string) => void
+  onAddAsset: (kindHint: MissionAssetKindHint) => Promise<void>
 }) {
   return (
     <section className="grid gap-3 py-1">
@@ -928,8 +972,9 @@ function ReleaseBoardWorkspace({
             layout={layout}
             launchingItemKey={launchingItemKey}
             onLaunchItem={onLaunchItem}
-            onSetItemStatus={onSetItemStatus}
+            onSetItemIncluded={onSetItemIncluded}
             onToggleItem={onToggleItem}
+            onAddAsset={onAddAsset}
           />
         ))}
     </section>
@@ -967,15 +1012,17 @@ function ReleaseBoardBand({
   layout,
   launchingItemKey,
   onLaunchItem,
-  onSetItemStatus,
+  onSetItemIncluded,
   onToggleItem,
+  onAddAsset,
 }: {
   categories: ReleaseBoardCategory[]
   layout: 'two' | 'promotion'
   launchingItemKey: string | null
   onLaunchItem: (category: ReleaseBoardCategory, item: ReleaseBoardItem) => void
-  onSetItemStatus: (categoryId: ReleaseBoardCategory['id'], itemId: string, status: ReleaseBoardItemStatus) => void
+  onSetItemIncluded: (categoryId: ReleaseBoardCategory['id'], itemId: string, included: boolean) => void
   onToggleItem: (categoryId: ReleaseBoardCategory['id'], itemId: string) => void
+  onAddAsset: (kindHint: MissionAssetKindHint) => Promise<void>
 }) {
   return (
     <article
@@ -1006,8 +1053,9 @@ function ReleaseBoardBand({
             category={category}
             launchingItemKey={launchingItemKey}
             onLaunchItem={onLaunchItem}
-            onSetItemStatus={onSetItemStatus}
+            onSetItemIncluded={onSetItemIncluded}
             onToggleItem={onToggleItem}
+            onAddAsset={onAddAsset}
           />
         ))}
       </div>
@@ -1019,20 +1067,29 @@ function ReleaseBoardSection({
   category,
   launchingItemKey,
   onLaunchItem,
-  onSetItemStatus,
+  onSetItemIncluded,
   onToggleItem,
+  onAddAsset,
 }: {
   category: ReleaseBoardCategory
   launchingItemKey: string | null
   onLaunchItem: (category: ReleaseBoardCategory, item: ReleaseBoardItem) => void
-  onSetItemStatus: (categoryId: ReleaseBoardCategory['id'], itemId: string, status: ReleaseBoardItemStatus) => void
+  onSetItemIncluded: (categoryId: ReleaseBoardCategory['id'], itemId: string, included: boolean) => void
   onToggleItem: (categoryId: ReleaseBoardCategory['id'], itemId: string) => void
+  onAddAsset: (kindHint: MissionAssetKindHint) => Promise<void>
 }) {
   const Icon = releaseCategoryIcons[category.id] || CheckCircle2
   const iconColor = releaseCategoryIconColors[category.id] || 'text-white/58'
   const progress = getCategoryProgress(category)
   const allDone = progress.total > 0 && progress.done === progress.total
   const progressPercent = progress.total > 0 ? (progress.done / progress.total) * 100 : 0
+  const [moreOpen, setMoreOpen] = React.useState(false)
+  const [actionChoiceItemId, setActionChoiceItemId] = React.useState<string | null>(null)
+  const activeItems = category.items.filter(isReleaseBoardItemIncluded)
+  const optionalItems = category.items.filter((item) => item.tier !== 'core')
+  const actionChoiceItem = activeItems.find((item) => item.id === actionChoiceItemId) ?? null
+  const actionChoice = actionChoiceItem ? getReleaseBoardItemAction(category.id, actionChoiceItem.id) : null
+  const actionChoiceUploadHint = actionChoiceItem ? releaseBoardUploadHint(actionChoiceItem) : null
 
   return (
     <section className="min-w-0 p-3">
@@ -1053,12 +1110,23 @@ function ReleaseBoardSection({
           <div className="h-full bg-gradient-to-r from-[#ff9700] to-[#ef2b10] transition-all duration-300" style={{ width: `${progressPercent}%` }} />
         </div>
         <div className={cn('mt-2 grid gap-1', category.id === 'promotion' && 'md:grid-cols-2 lg:grid-cols-3')}>
-          {category.items.map((item) => {
+          {activeItems.map((item) => {
             const done = item.status === 'done'
             const skipped = item.status === 'skipped'
             const action = getReleaseBoardItemAction(category.id, item.id)
+            const uploadHint = releaseBoardUploadHint(item)
+            const canOpenWorkerChat = Boolean(item.linkedSessionId || (item.status === 'in-progress' && action?.kind === 'agent'))
             const itemKey = `${category.id}:${item.id}`
             const launching = launchingItemKey === itemKey
+            const statusLabel = item.status === 'in-progress'
+              ? 'In progress'
+              : item.status === 'review'
+                ? 'Review'
+                : done
+                  ? item.linkedAssetId ? 'Approved' : 'Done'
+                  : skipped
+                    ? 'N/A'
+                    : 'Missing'
             return (
               <div key={item.id} className="flex min-h-7 items-center gap-1.5 rounded-md bg-black/[0.35] px-2 py-1 ring-1 ring-white/[0.035] transition-colors hover:bg-white/[0.03]">
                 <button
@@ -1088,27 +1156,42 @@ function ReleaseBoardSection({
                     {item.linkedAssetId ? <span className="h-1 w-1 shrink-0 rounded-full bg-orange-300/80" title="Matched from campaign vault" /> : null}
                   </div>
                 </div>
-                {done ? (
-                  <span className="text-[7px] font-semibold uppercase tracking-[0.1em] text-orange-200/62">Done</span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => onSetItemStatus(category.id, item.id, skipped ? 'needed' : 'skipped')}
-                    title={skipped ? 'Restore this item' : 'Mark this item not applicable'}
-                    aria-label={skipped ? `Restore ${item.label}` : `Mark ${item.label} not applicable`}
-                    className="rounded-full px-1 py-0.5 text-[7px] font-semibold uppercase tracking-[0.1em] text-white/25 transition-colors hover:bg-white/[0.06] hover:text-white/58"
-                  >
-                    {skipped ? 'N/A' : 'Skip'}
-                  </button>
-                )}
-                {action ? (
+                {canOpenWorkerChat ? (
                   <button
                     type="button"
                     onClick={() => onLaunchItem(category, item)}
+                    title={`Open the ${item.label} worker chat`}
+                    className={cn(
+                      'shrink-0 rounded-sm text-[7px] font-semibold uppercase tracking-[0.08em] transition-colors hover:text-white/78',
+                      done ? 'text-orange-200/62' : item.status === 'review' ? 'text-amber-200/70' : 'text-sky-200/60',
+                    )}
+                  >
+                    {statusLabel}
+                  </button>
+                ) : (
+                  <span className={cn(
+                    'shrink-0 text-[7px] font-semibold uppercase tracking-[0.08em]',
+                    done ? 'text-orange-200/62' : item.status === 'review' ? 'text-amber-200/70' : item.status === 'in-progress' ? 'text-sky-200/60' : 'text-white/24',
+                  )}>{statusLabel}</span>
+                )}
+                {action || uploadHint ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (canOpenWorkerChat) {
+                        onLaunchItem(category, item)
+                      } else if (action && uploadHint) {
+                        setActionChoiceItemId(item.id)
+                      } else if (action) {
+                        onLaunchItem(category, item)
+                      } else if (uploadHint) {
+                        void onAddAsset(uploadHint)
+                      }
+                    }}
                     disabled={launchingItemKey !== null}
-                    title={`Cue ${action.targetName}`}
-                    aria-label={`Cue ${action.targetName} for ${item.label}`}
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/[0.07] text-white/62 ring-1 ring-white/[0.10] transition-colors hover:bg-gradient-to-br hover:from-[#ff7a00] hover:to-[#ef2b10] hover:text-white disabled:cursor-wait disabled:opacity-35"
+                    title={canOpenWorkerChat ? `Open the ${item.label} worker chat` : action && uploadHint ? `Choose how to handle ${item.label}` : action ? `${getReleaseBoardActionLabel(action)}: ${item.label}` : `Add file: ${item.label}`}
+                    aria-label={canOpenWorkerChat ? `Open the ${item.label} worker chat` : action && uploadHint ? `Choose an action for ${item.label}` : action ? `${getReleaseBoardActionLabel(action)} for ${item.label}` : `Add file for ${item.label}`}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/[0.07] text-white/58 ring-1 ring-white/[0.08] transition-colors hover:bg-gradient-to-br hover:from-[#ff7a00] hover:to-[#ef2b10] hover:text-white disabled:cursor-wait disabled:opacity-35"
                   >
                     {launching ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Play className="h-2.5 w-2.5 fill-current" />}
                   </button>
@@ -1117,9 +1200,99 @@ function ReleaseBoardSection({
             )
           })}
         </div>
+        {optionalItems.length > 0 ? (
+          <div className="mt-2 border-t border-white/[0.06] pt-2">
+            <button
+              type="button"
+              onClick={() => setMoreOpen((open) => !open)}
+              aria-expanded={moreOpen}
+              className="inline-flex items-center gap-1.5 text-[9px] font-medium text-white/34 transition-colors hover:text-white/62"
+            >
+              <ChevronDown className={cn('h-3 w-3 transition-transform', moreOpen && 'rotate-180')} />
+              More options
+              <span className="text-white/20">{optionalItems.length}</span>
+            </button>
+            {moreOpen ? (
+              <div className={cn('mt-2 grid gap-1', category.id === 'promotion' && 'md:grid-cols-2')}>
+                {optionalItems.map((item) => {
+                  const included = isReleaseBoardItemIncluded(item)
+                  return (
+                    <div key={item.id} className="flex min-h-7 items-center gap-2 rounded-md bg-white/[0.018] px-2 py-1 ring-1 ring-white/[0.035]">
+                      <div className="min-w-0 flex-1">
+                        <p className={cn('truncate text-[10px] font-normal', included ? 'text-white/58' : 'text-white/44')}>{item.label}</p>
+                      </div>
+                      <span className="text-[7px] uppercase tracking-[0.08em] text-white/20">
+                        {included ? 'Added' : item.tier === 'conditional' ? 'When needed' : 'Optional'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onSetItemIncluded(category.id, item.id, !included)}
+                        className="inline-flex h-6 items-center rounded-md bg-white/[0.06] px-2 text-[8px] font-medium text-white/58 ring-1 ring-white/[0.08] hover:bg-white/[0.10] hover:text-white"
+                      >
+                        {included ? 'Remove' : 'Add'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
+      <Dialog open={Boolean(actionChoiceItem)} onOpenChange={(open) => !open && setActionChoiceItemId(null)}>
+        <DialogContent className="border-white/[0.08] bg-[#070707] text-white shadow-modal-small sm:max-w-[390px]">
+          <DialogHeader className="pr-8">
+            <DialogTitle className="text-base font-medium text-white/88">{actionChoiceItem?.label}</DialogTitle>
+            <DialogDescription className="text-xs text-white/38">
+              Use a specialist or add an existing approved file.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 pt-1">
+            {actionChoice ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!actionChoiceItem) return
+                  setActionChoiceItemId(null)
+                  onLaunchItem(category, actionChoiceItem)
+                }}
+                className="flex items-center justify-between rounded-lg bg-white/[0.055] px-3 py-2.5 text-left ring-1 ring-white/[0.08] transition-colors hover:bg-white/[0.09]"
+              >
+                <span>
+                  <span className="block text-xs font-medium text-white/82">Use {actionChoice.targetName}</span>
+                  <span className="mt-0.5 block text-[10px] text-white/36">Open the right specialist with this campaign already in context.</span>
+                </span>
+                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-white/40" />
+              </button>
+            ) : null}
+            {actionChoiceUploadHint ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setActionChoiceItemId(null)
+                  void onAddAsset(actionChoiceUploadHint)
+                }}
+                className="flex items-center justify-between rounded-lg bg-white/[0.035] px-3 py-2.5 text-left ring-1 ring-white/[0.06] transition-colors hover:bg-white/[0.075]"
+              >
+                <span>
+                  <span className="block text-xs font-medium text-white/72">Add existing file</span>
+                  <span className="mt-0.5 block text-[10px] text-white/32">Use work that is already finished.</span>
+                </span>
+                <Plus className="h-3.5 w-3.5 shrink-0 text-white/36" />
+              </button>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   )
+}
+
+function releaseBoardUploadHint(item: ReleaseBoardItem): MissionAssetKindHint | null {
+  if (item.id === 'master') return 'master'
+  if (item.id === 'cover-art') return 'cover-art'
+  if (item.id === 'press-photos') return 'any'
+  return null
 }
 
 function EmptyCardLine({ title, detail }: { title: string; detail: string }) {

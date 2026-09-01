@@ -5,12 +5,16 @@ import {
   buildReleaseBoardItemActionPrompt,
   buildReleaseBoardWorkflowInputs,
   buildDefaultReleaseBoard,
+  findReleaseBoardWorkerSession,
+  getReleaseBoardActionLabel,
   getBoardTotals,
   getReleaseBoardItemAction,
+  linkReleaseBoardItemSession,
   mergeReleaseBoardWithAssets,
   parseReleaseBoardDoc,
   parseReleaseBoardDocResult,
   serializeReleaseBoardBody,
+  setReleaseBoardItemIncluded,
   toggleReleaseBoardItem,
   updateReleaseBoardItemStatus,
 } from './release-board'
@@ -27,28 +31,48 @@ describe('release board utilities', () => {
       'setup',
       'promotion',
     ])
-    expect(getBoardTotals(board)).toEqual({ done: 0, total: 26 })
+    expect(getBoardTotals(board)).toEqual({ done: 0, total: 21 })
     expect(board.categories.find((category) => category.id === 'music')?.label).toBe('Foundation')
     expect(board.categories.find((category) => category.id === 'music')?.items.map((item) => item.label)).toEqual([
       'Master File',
-      'Clean Version',
       'Lyrics',
       'Creative World',
-      'Campaign Branding',
+      'Branding',
+      'Clean Version',
+      'Instrumental',
+      'Stems',
+      'Record Doctor Review',
     ])
     expect(board.categories.find((category) => category.id === 'content')?.items.map((item) => item.label)).toEqual([
       'Idea Generation',
       'Lyric Clips',
+      'Performance Clips',
       'Viral Clips',
       'UGC Clips',
+      'Merch Clips',
       'Video Extras',
+      'Memes',
     ])
     expect(board.categories.find((category) => category.id === 'setup')?.items.map((item) => item.label)).toEqual([
       'Distributor Upload',
       'Pre-Save Link',
-      'Credits and Metadata',
+      'Credits & Metadata',
       'Social Rollout',
+      'Rights & Splits',
+      'Final Release QA',
+      'DSP Pitch',
+      'EPK / Press Kit',
     ])
+  })
+
+  test('counts only core and explicitly activated optional items', () => {
+    const board = buildDefaultReleaseBoard('workspace-1')
+    const withUgc = setReleaseBoardItemIncluded(board, 'content', 'ugc-clips', true)
+    const withoutUgc = setReleaseBoardItemIncluded(withUgc, 'content', 'ugc-clips', false)
+
+    expect(getBoardTotals(board)).toEqual({ done: 0, total: 21 })
+    expect(getBoardTotals(withUgc)).toEqual({ done: 0, total: 22 })
+    expect(getBoardTotals(withoutUgc)).toEqual({ done: 0, total: 21 })
   })
 
   test('round-trips through a workspace context doc body', () => {
@@ -83,25 +107,20 @@ describe('release board utilities', () => {
     expect(missing.ok || missing.error).toContain('updatedAt')
   })
 
-  test('adds new tasks as not applicable when loading an existing campaign', () => {
-    const addedItemIds = new Set([
-      'song-world',
-      'release-identity',
-      'announcement',
-      'social-schedule',
-      'video-production',
-      'paid-campaign',
-      'college-radio',
-      'influencer-campaign',
-      'ig-trending',
-      'artist-playlist',
-    ])
+  test('migrates old campaigns without losing completed options or inflating missing work', () => {
+    const removedNewCoreIds = new Set(['performance-clips', 'rights-splits', 'release-qa'])
     const legacyBoard = buildDefaultReleaseBoard('workspace-1')
     legacyBoard.categories = legacyBoard.categories.map((category) => ({
       ...category,
       items: category.items
-        .filter((item) => !addedItemIds.has(item.id))
-        .map((item) => ({ ...item, status: 'done' as const })),
+        .filter((item) => !removedNewCoreIds.has(item.id))
+        .map((item) => {
+          const legacy = { ...item } as Partial<typeof item>
+          delete legacy.tier
+          delete legacy.included
+          legacy.status = item.id === 'ugc-clips' ? 'done' : 'needed'
+          return legacy as typeof item
+        }),
     }))
 
     const parsed = parseReleaseBoardDoc({
@@ -113,10 +132,11 @@ describe('release board utilities', () => {
     } as ContextDocDTO)
 
     expect(parsed).not.toBeNull()
-    expect(getBoardTotals(parsed!)).toEqual({ done: 17, total: 17 })
-    expect(itemStatus(parsed!, 'music', 'song-world')).toBe('skipped')
-    expect(itemStatus(parsed!, 'promotion', 'college-radio')).toBe('skipped')
-    expect(parsed!.categories.find((category) => category.id === 'setup')?.items.some((item) => item.id === 'announcement')).toBe(false)
+    expect(itemStatus(parsed!, 'content', 'ugc-clips')).toBe('done')
+    expect(parsed!.categories.find((category) => category.id === 'content')?.items.find((item) => item.id === 'ugc-clips')?.included).toBe(true)
+    expect(parsed!.categories.find((category) => category.id === 'promotion')?.items.find((item) => item.id === 'influencer-campaign')?.included).toBe(false)
+    expect(itemStatus(parsed!, 'content', 'performance-clips')).toBe('skipped')
+    expect(itemStatus(parsed!, 'setup', 'rights-splits')).toBe('skipped')
   })
 
   test('marks asset-backed items done when matching files exist', () => {
@@ -148,6 +168,13 @@ describe('release board utilities', () => {
     expect(itemStatus(merged, 'content', 'lyric-clips')).toBe('needed')
   })
 
+  test('does not treat a generic press document as a completed press list', () => {
+    const board = buildDefaultReleaseBoard('workspace-1')
+    const merged = mergeReleaseBoardWithAssets(board, manifestWith('press-doc'))
+
+    expect(itemStatus(merged, 'promotion', 'press-list')).toBe('needed')
+  })
+
   test('does not override skipped items from asset auto-fill', () => {
     const board = updateReleaseBoardItemStatus(buildDefaultReleaseBoard('workspace-1'), 'visuals', 'cover-art', 'skipped')
     const merged = mergeReleaseBoardWithAssets(board, manifestWith('cover-art'))
@@ -162,6 +189,40 @@ describe('release board utilities', () => {
 
     expect(itemStatus(done, 'setup', 'presave')).toBe('done')
     expect(itemStatus(needed, 'setup', 'presave')).toBe('needed')
+  })
+
+  test('persists the worker chat linked to an in-progress item', () => {
+    const linked = linkReleaseBoardItemSession(
+      buildDefaultReleaseBoard('workspace-1'),
+      'content',
+      'lyric-clips',
+      'session-lyric-clips',
+    )
+    const body = serializeReleaseBoardBody(linked)
+    const parsed = parseReleaseBoardDoc({ body })
+    const item = parsed?.categories
+      .find((category) => category.id === 'content')
+      ?.items.find((candidate) => candidate.id === 'lyric-clips')
+
+    expect(item?.status).toBe('in-progress')
+    expect(item?.linkedSessionId).toBe('session-lyric-clips')
+  })
+
+  test('recovers the newest matching legacy worker chat without crossing campaigns', () => {
+    const sessions = [
+      { id: 'wrong-campaign', workspaceId: 'workspace-1', spawnedFromAgent: { agentSlug: 'lyric-video-agent', agentName: 'Lyric Visuals' }, preview: 'Create Lyric Clips for the Midnight campaign.', createdAt: 400 },
+      { id: 'old-match', workspaceId: 'workspace-1', spawnedFromAgent: { agentSlug: 'lyric-video-agent', agentName: 'Lyric Visuals' }, preview: 'Create the Lyric Clips deliverable for the Angelina campaign.', createdAt: 100 },
+      { id: 'new-match', workspaceId: 'workspace-1', spawnedFromAgent: { agentSlug: 'lyric-video-agent', agentName: 'Lyric Visuals' }, preview: 'I want to work on Lyric Clips for my Angelina campaign.', createdAt: 200 },
+      { id: 'wrong-worker', workspaceId: 'workspace-1', spawnedFromAgent: { agentSlug: 'content-genius', agentName: 'Content Genius' }, preview: 'I want to work on Lyric Clips for my Angelina campaign.', createdAt: 500 },
+    ]
+
+    expect(findReleaseBoardWorkerSession({
+      sessions,
+      workspaceId: 'workspace-1',
+      agentSlug: 'lyric-video-agent',
+      campaignTitle: 'Angelina',
+      itemLabel: 'Lyric Clips',
+    })).toBe('new-match')
   })
 
   test('restores a skipped item to needed before it can be completed', () => {
@@ -186,18 +247,18 @@ describe('release board utilities', () => {
       targetSlug: 'comms-agent',
     })
     expect(getReleaseBoardItemAction('content', 'viral-clips')?.targetSlug).toBe('scroll-stopper')
+    expect(getReleaseBoardItemAction('content', 'performance-clips')?.targetSlug).toBe('raw-video-editor')
     expect(getReleaseBoardItemAction('content', 'idea-generation')).toMatchObject({
       kind: 'workflow',
       targetSlug: 'content-mastermind',
-    })
-    expect(getReleaseBoardItemAction('promotion', 'playlist-targets')).toMatchObject({
-      kind: 'agent',
-      targetSlug: 'industry-hunter',
     })
     expect(getReleaseBoardItemAction('promotion', 'press-list')).toMatchObject({
       kind: 'agent',
       targetSlug: 'industry-hunter',
     })
+    expect(getReleaseBoardItemAction('promotion', 'playlist-targets')?.targetSlug).toBe('playlisting-power-up')
+    expect(getReleaseBoardActionLabel(getReleaseBoardItemAction('music', 'lyrics')!)).toBe('Transcribe')
+    expect(getReleaseBoardActionLabel(getReleaseBoardItemAction('content', 'idea-generation')!)).toBe('Run workflow')
   })
 
   test('keeps every release-board action wired to an installed target', () => {
@@ -214,7 +275,7 @@ describe('release board utilities', () => {
     }
   })
 
-  test('builds a campaign-scoped, non-public worker brief', () => {
+  test('builds a collaborative, campaign-scoped kickoff instead of a blind work order', () => {
     const action = getReleaseBoardItemAction('visuals', 'cover-art')
     expect(action).not.toBeNull()
 
@@ -228,7 +289,30 @@ describe('release board utilities', () => {
     expect(prompt).toContain('Coming Home')
     expect(prompt).toContain('Single Art')
     expect(prompt).toContain('existing Artist HQ and campaign context')
-    expect(prompt).toContain('Do not publish')
+    expect(prompt).toContain('Where is the most intelligent place to start?')
+    expect(prompt).toContain('Ask me only the key questions that would materially improve the direction.')
+    expect(prompt).toContain('outputs I can review and iterate on in Artist OS and Canvas')
+    expect(prompt).toContain('without my exact approval')
+    expect(prompt).not.toContain('Create the "Single Art" deliverable')
+  })
+
+  test('frames every worker and workflow lane as artist intent', () => {
+    const board = buildDefaultReleaseBoard('workspace-1')
+    for (const category of board.categories) {
+      for (const item of category.items) {
+        const action = getReleaseBoardItemAction(category.id, item.id)
+        if (!action || action.kind === 'tool') continue
+        const prompt = buildReleaseBoardItemActionPrompt({
+          campaignTitle: 'Angelina',
+          categoryLabel: category.label,
+          itemLabel: item.label,
+          action,
+        })
+        expect(action.instruction.startsWith('I want')).toBe(true)
+        expect(prompt.startsWith(`I want to work on "${item.label}"`)).toBe(true)
+        expect(prompt).toContain('Where is the most intelligent place to start?')
+      }
+    }
   })
 
   test('builds required workflow inputs from campaign context', () => {

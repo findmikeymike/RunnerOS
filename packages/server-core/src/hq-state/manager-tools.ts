@@ -20,6 +20,7 @@ import {
   parseMissionBriefDocResult,
   parseReleaseBoardDocResult,
   getBoardTotals,
+  isReleaseBoardItemIncluded,
   MISSION_BRIEF_CONTEXT_SLUG,
   RELEASE_BOARD_CONTEXT_SLUG,
 } from '@craft-agent/shared/artist-context';
@@ -353,7 +354,7 @@ export function getCampaignContextDetail(
   if (include.has('readiness')) {
     const result = parseReleaseBoardDocResult(loadContextDoc(workspace.rootPath, RELEASE_BOARD_CONTEXT_SLUG));
     sections.readiness = result.ok
-      ? { totals: getBoardTotals(result.board), nextMissing: result.board.categories.flatMap((category) => category.items.filter((item) => item.status === 'needed').map((item) => ({ id: item.id, label: cap(item.label, 180), category: category.label }))).slice(0, limit) }
+      ? { totals: getBoardTotals(result.board), nextMissing: result.board.categories.flatMap((category) => category.items.filter((item) => isReleaseBoardItemIncluded(item) && item.status === 'needed').map((item) => ({ id: item.id, label: cap(item.label, 180), category: category.label }))).slice(0, limit) }
       : { unavailable: true, error: result.error };
   }
   if (include.has('calendar')) {
