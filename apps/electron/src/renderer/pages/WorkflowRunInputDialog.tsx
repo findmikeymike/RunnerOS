@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { CalendarClock, ChevronDown, FolderOpen, Repeat2 } from 'lucide-react'
+import { CalendarClock, ChevronDown, FolderOpen, Repeat2, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import {
@@ -48,9 +48,12 @@ interface Props {
   initialInputs?: Record<string, unknown>
   /** Called only after the run exists. Failures must not strand the user before navigation. */
   onStarted?: (run: WorkflowRunDTO) => void | Promise<void>
+  /** Optional fast escape hatch for prefilled reruns that need a fresh planning conversation. */
+  onManagerSetup?: () => void
+  managerSetupBusy?: boolean
 }
 
-export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspaceId, initialInputs, onStarted }: Props) {
+export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspaceId, initialInputs, onStarted, onManagerSetup, managerSetupBusy = false }: Props) {
   const { t } = useTranslation()
   const { navigate } = useNavigation()
   const { workspaces } = useAppShellContext()
@@ -262,6 +265,20 @@ export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspace
         ) : (
           <>
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+          {onManagerSetup ? (
+            <button
+              type="button"
+              onClick={onManagerSetup}
+              disabled={managerSetupBusy}
+              className="mb-4 flex w-full items-start gap-2.5 rounded-[9px] bg-white/[0.03] px-3 py-2.5 text-left hover:bg-white/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/35 disabled:cursor-wait disabled:opacity-55"
+            >
+              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-200/65" />
+              <span>
+                <span className="block text-[11.5px] font-medium text-white/68">{managerSetupBusy ? 'Opening Artist Manager…' : 'Set up with Artist Manager'}</span>
+                <span className="mt-0.5 block text-[10.5px] leading-4 text-white/36">Rethink the goal, assets, or timing before rerunning.</span>
+              </span>
+            </button>
+          ) : null}
           {inputs.length === 0 && (
             <p className="rounded-[9px] bg-white/[0.035] px-3 py-3 text-xs text-white/48">{t('workflows.run.noInputs')}</p>
           )}

@@ -200,9 +200,15 @@ export function buildActiveWorkItems(input: BuildActiveWorkItemsInput): ActiveWo
 
   for (const order of orders) {
     if (representedOrders.has(order.id)) continue
-    const section = scheduledSection(order)
-    if (!section) continue
     const links = latestOrderLinks(order)
+    const hasLinkedTarget = Boolean(links.workflowRunId || links.sessionId)
+    const hasAvailableTarget = Boolean(
+      (links.workflowRunId && availableWorkflowRunIds.has(links.workflowRunId))
+      || (links.sessionId && availableSessionIds.has(links.sessionId)),
+    )
+    const missingSource = hasLinkedTarget && !hasAvailableTarget
+    const section = missingSource ? 'attention' : scheduledSection(order)
+    if (!section) continue
     const openTarget = links.workflowRunId && availableWorkflowRunIds.has(links.workflowRunId)
       ? { kind: 'workflow-run' as const, id: links.workflowRunId }
       : links.sessionId && availableSessionIds.has(links.sessionId)
@@ -220,11 +226,13 @@ export function buildActiveWorkItems(input: BuildActiveWorkItemsInput): ActiveWo
         : order.execution.type === 'agent-task'
           ? order.execution.agentSlug.replace(/-/g, ' ')
           : undefined,
-      statusLabel: scheduledStatusLabel(order),
+      statusLabel: missingSource ? 'Missing source' : scheduledStatusLabel(order),
       cadenceLabel: 'Once',
       sortAt: order.startAt,
       updatedAt: order.updatedAt,
-      attentionReason: order.attention?.message,
+      attentionReason: missingSource
+        ? 'The linked run or worker session is no longer available. Open the scheduled item to review or remove it.'
+        : order.attention?.message,
       openTarget,
     })
   }

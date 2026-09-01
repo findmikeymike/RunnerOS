@@ -74,7 +74,10 @@ function ActiveRow({ item, onOpen }: { item: ActiveWorkItem; onOpen: () => void 
           </span>
         ) : null}
       </span>
-      <span className="hidden shrink-0 text-[10.5px] text-white/36 sm:block">{when || item.statusLabel}</span>
+      <span className="shrink-0 text-[10.5px] text-white/36">
+        <span className="sm:hidden">{item.statusLabel}</span>
+        <span className="hidden sm:inline">{when || item.statusLabel}</span>
+      </span>
       {item.cadenceLabel ? (
         <span className="hidden shrink-0 rounded-full bg-white/[0.05] px-2 py-1 text-[9.5px] font-medium text-white/40 md:block">
           {item.cadenceLabel}
@@ -266,6 +269,9 @@ export function ActiveWorkPage({ automationId, onSendAutomationToWorkspace }: { 
               <Clock3 className="h-4 w-4" />
             </div>
             <p className="max-w-md text-[13px] text-white/52">Nothing active yet. Run a worker or workflow now, schedule something for later, or create an automation.</p>
+            <div className="mt-4">
+              <ActiveWorkAddMenu label="Add work" prominent />
+            </div>
           </div>
         ) : (
           <div className="space-y-7 pb-10">

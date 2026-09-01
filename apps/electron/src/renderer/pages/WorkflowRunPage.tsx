@@ -9,7 +9,7 @@ import { StructuredInput } from '@/components/app-shell/input/StructuredInput'
 import { routes } from '../../shared/routes'
 import { useWorkflowRuns } from '@/hooks/useWorkflowRuns'
 import { useAgents } from '@/hooks/useAgents'
-import { WorkflowRunInputDialog } from './WorkflowRunInputDialog'
+import { WorkflowLaunchDialog } from '@/components/workflows/WorkflowLaunchDialog'
 import type { AdminApprovalResponse, PermissionResponse, StructuredInputState, StructuredResponse } from '@/components/app-shell/input/structured/types'
 import type {
   CredentialResponse,
@@ -307,12 +307,13 @@ export default function WorkflowRunPage({ runId, workspaceId }: Props) {
       </div>
 
       {workflow && (
-        <WorkflowRunInputDialog
+        <WorkflowLaunchDialog
           open={rerunOpen}
           onOpenChange={setRerunOpen}
           workflow={workflow}
           workspaceId={workspaceId}
           initialInputs={run.trigger?.inputs ?? {}}
+          initialMode="manual"
         />
       )}
       </div>

@@ -19,6 +19,7 @@ interface WorkflowLaunchDialogProps {
   onStarted?: (run: WorkflowRunDTO) => void | Promise<void>
   onManagerSessionStarted?: (sessionId: string) => void | Promise<void>
   contextHint?: string
+  initialMode?: 'choice' | 'manual'
 }
 
 export function WorkflowLaunchDialog({
@@ -30,6 +31,7 @@ export function WorkflowLaunchDialog({
   onStarted,
   onManagerSessionStarted,
   contextHint,
+  initialMode = 'choice',
 }: WorkflowLaunchDialogProps) {
   const {
     activeAgents = [],
@@ -41,7 +43,7 @@ export function WorkflowLaunchDialog({
     workspaces,
   } = useAppShellContext()
   const workspace = resolveWorkflowLaunchWorkspace(workspaces, workspaceId)
-  const [mode, setMode] = React.useState<'choice' | 'manual'>('choice')
+  const [mode, setMode] = React.useState<'choice' | 'manual'>(initialMode)
   const [openingManager, setOpeningManager] = React.useState(false)
 
   const workspaceKind = isArtistHQWorkspace(workspace ?? undefined, workspaces) ? 'hq' : 'campaign'
@@ -54,8 +56,8 @@ export function WorkflowLaunchDialog({
   )
 
   React.useEffect(() => {
-    if (open) setMode('choice')
-  }, [open, workflow.slug])
+    if (open) setMode(initialMode)
+  }, [initialMode, open, workflow.slug])
 
   const handleOpenManager = React.useCallback(async () => {
     if (openingManager) return
@@ -170,6 +172,8 @@ export function WorkflowLaunchDialog({
         workspaceId={workspaceId}
         initialInputs={initialInputs}
         onStarted={onStarted}
+        onManagerSetup={initialMode === 'manual' ? () => void handleOpenManager() : undefined}
+        managerSetupBusy={openingManager}
       />
     </>
   )
@@ -193,7 +197,7 @@ function LaunchChoice({
       type="button"
       onClick={onClick}
       disabled={busy}
-      className="w-full rounded-[12px] bg-white/[0.04] px-4 py-3 text-left transition-colors hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-60"
+      className="w-full rounded-[12px] bg-white/[0.04] px-4 py-3 text-left transition-colors hover:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/35 disabled:cursor-not-allowed disabled:opacity-60"
     >
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-[9px] bg-white/[0.06] text-white/62">

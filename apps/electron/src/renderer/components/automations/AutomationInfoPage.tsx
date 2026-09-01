@@ -25,7 +25,7 @@ import { AutomationTestPanel } from './AutomationTestPanel'
 import { AutomationEventTimeline } from './AutomationEventTimeline'
 import { PhaseBadge } from './PhaseBadge'
 import { getEventDisplayName, getPermissionDisplayName, flattenConditions, type AutomationListItem, type ExecutionEntry, type TestResult } from './types'
-import { describeCron, computeNextRuns } from './utils'
+import { describeCron, computeNextRuns, formatNextRun } from './utils'
 import { ExternalTriggerSection } from './ExternalTriggerSection'
 import { TickHistoryPanel } from '@/components/pulses/TickHistoryPanel'
 
@@ -60,7 +60,7 @@ export function AutomationInfoPage({
 }: AutomationInfoPageProps) {
   const { t } = useTranslation()
   const workspace = useActiveWorkspace()
-  const nextRuns = automation.cron ? computeNextRuns(automation.cron) : []
+  const nextRuns = automation.cron ? computeNextRuns(automation.cron, 3, automation.timezone) : []
   const editActions = workspace?.rootPath ? (
     <EditPopover
       trigger={<EditButton />}
@@ -143,8 +143,7 @@ export function AutomationInfoPage({
                         const spansYears = nextRuns.length > 1 && nextRuns[0].getFullYear() !== nextRuns[nextRuns.length - 1].getFullYear()
                         return nextRuns.map((date, i) => (
                           <span key={i} className="text-sm text-foreground/70">
-                            {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(spansYears && { year: 'numeric' }) })}{' '}
-                            {date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                            {formatNextRun(date, spansYears, automation.timezone)}
                           </span>
                         ))
                       })()}

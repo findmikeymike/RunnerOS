@@ -104,6 +104,9 @@ describe('buildActiveWorkItems', () => {
     })
 
     expect(items[0]?.openTarget).toEqual({ kind: 'scheduled-work', id: 'order-1' })
+    expect(items[0]?.section).toBe('attention')
+    expect(items[0]?.statusLabel).toBe('Missing source')
+    expect(items[0]?.attentionReason).toContain('review or remove')
   })
 
   test('does not open a hidden session from a persisted scheduled-work link', () => {
@@ -119,6 +122,7 @@ describe('buildActiveWorkItems', () => {
     })
 
     expect(items[0]?.openTarget).toEqual({ kind: 'scheduled-work', id: 'order-1' })
+    expect(items[0]?.statusLabel).toBe('Missing source')
   })
 
   test('shows only the latest unresolved automation failure', () => {

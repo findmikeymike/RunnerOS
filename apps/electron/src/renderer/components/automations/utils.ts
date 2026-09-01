@@ -53,11 +53,32 @@ export function describeCron(cron: string): string {
 /**
  * Compute the next N run times for a cron expression using croner.
  */
-export function computeNextRuns(cron: string, count: number = 3): Date[] {
+export function computeNextRuns(cron: string, count: number = 3, timezone?: string): Date[] {
   try {
-    const job = new Cron(cron)
+    const job = new Cron(cron, timezone ? { timezone } : undefined)
     return job.nextRuns(count)
   } catch {
     return []
+  }
+}
+
+export function formatNextRun(date: Date, spansYears: boolean, timezone?: string): string {
+  try {
+    const timeZoneOption = timezone ? { timeZone: timezone } : {}
+    const day = date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      ...(spansYears && { year: 'numeric' }),
+      ...timeZoneOption,
+    })
+    const time = date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      ...timeZoneOption,
+    })
+    return `${day} ${time}`
+  } catch {
+    return date.toISOString()
   }
 }
