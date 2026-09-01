@@ -24,6 +24,7 @@ import {
   composerDefinitionDigest,
   composerReviewSentence,
   createScheduledWorkComposerDraft,
+  applyWorkflowRunComposerPrefill,
   selectScheduledWorkComposerType,
   validateComposerDraft,
   validateComposerSection,
@@ -43,6 +44,12 @@ export interface ScheduledWorkComposerEntry {
   title?: string
   inputRefs?: ScheduledWorkInputRef[]
   suggestedType?: ScheduledWorkComposerType
+  workflow?: {
+    slug: string
+    name: string
+    digest: string
+    triggerInputs: Record<string, unknown>
+  }
 }
 
 export interface ScheduledWorkComposerProps {
@@ -755,16 +762,18 @@ function visibleSections(draft: ScheduledWorkComposerDraft, allowFollowUps: bool
 function initialSection(entry: ScheduledWorkComposerEntry): ComposerSection {
   if (entry.mode === 'job' && !entry.suggestedType) return 'what'
   if (entry.suggestedType === 'event') return 'inputs'
+  if (entry.suggestedType === 'workflow-run' && entry.workflow) return 'inputs'
   if (entry.suggestedType) return 'runner'
   return 'what'
 }
 
 function createEntryDraft(entry: ScheduledWorkComposerEntry): ScheduledWorkComposerDraft {
-  return createScheduledWorkComposerDraft(
+  const draft = createScheduledWorkComposerDraft(
     entry.mode === 'job' && !entry.suggestedType
       ? { ...entry, suggestedType: 'agent-task' }
       : entry,
   )
+  return applyWorkflowRunComposerPrefill(draft, entry.workflow, entry.title)
 }
 
 function sectionTitle(section: ComposerSection, draft: ScheduledWorkComposerDraft): string {

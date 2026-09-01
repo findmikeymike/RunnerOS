@@ -49,10 +49,13 @@ describe('workflow launcher prompt helpers', () => {
       workspaceName: 'Angelina',
       workspaceRootPath: '/tmp',
       seededInputNames: ['lyrics', 'master_audio'],
+      seededInputs: { lyrics: 'Approved lyrics', master_audio: '/vault/angelina.wav' },
     })
     expect(docs.map((item) => item.slug)).toEqual(['artist-profile', 'workflow-launch-context'])
     expect(docs[1]?.body).toContain('The artist is asking for setup help, not blind execution.')
-    expect(docs[1]?.body).toContain('Already available from the launch surface: lyrics, master_audio.')
+    expect(docs[1]?.body).toContain('lyrics: Approved lyrics')
+    expect(docs[1]?.body).toContain('master_audio: /vault/angelina.wav')
+    expect(docs[1]?.body).toContain('Run now, Schedule once, or Repeat automatically')
   })
 
   test('creates a human setup draft instead of a blind command', () => {
@@ -60,10 +63,24 @@ describe('workflow launcher prompt helpers', () => {
       workspaceKind: 'campaign',
       workspaceName: 'Angelina',
       seededInputNames: ['lyrics'],
+      seededInputs: { lyrics: 'Approved lyrics' },
     })
     expect(draft).toContain('I want to set up the Lyric Clips workflow')
-    expect(draft).toContain('Inputs already seeded from the UI: lyrics.')
+    expect(draft).toContain('lyrics: Approved lyrics')
     expect(draft).toContain('ask only the key questions')
+    expect(draft).toContain('exactly three choices')
     expect(draft).toContain('Do not start the workflow')
+  })
+
+  test('does not silently truncate exact seeded workflow inputs', () => {
+    const lyrics = `start-${'verse '.repeat(240)}-end`
+    const draft = createWorkflowSetupDraft(workflow(), {
+      workspaceKind: 'campaign',
+      workspaceName: 'Angelina',
+      seededInputs: { lyrics },
+    })
+
+    expect(draft).toContain(lyrics)
+    expect(draft).toContain('-end')
   })
 })

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ChevronDown, FolderOpen } from 'lucide-react'
+import { CalendarClock, ChevronDown, FolderOpen, Repeat2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import {
@@ -11,11 +11,14 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { ScheduledWorkComposer, type ScheduledWorkComposerEntry } from '@/components/calendar/ScheduledWorkComposer'
+import { AutomationWorkDialog } from '@/components/automations/AutomationWorkDialog'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../shared/routes'
 import { useWorkflowRuns } from '@/hooks/useWorkflowRuns'
 import { useOutputs } from '@/hooks/useOutputs'
 import { useAppShellContext } from '@/context/AppShellContext'
+import { isArtistHQWorkspace } from '@/lib/artist-workspace'
 import { cn } from '@/lib/utils'
 import {
   humanizeWorkflowInputName,
@@ -25,6 +28,12 @@ import {
   workflowNumberMax,
   workflowOutputAssetPath,
 } from '@/lib/workflow-input-presentation'
+import {
+  buildCampaignSchedulePlanFromComposer,
+  buildHqSchedulePlanFromComposer,
+  composerDefinitionDigest,
+  type ScheduledWorkComposerDraft,
+} from '@/lib/scheduled-work-composer'
 import type { VaultAssetRecord } from '@craft-agent/shared/artist-vault'
 import type { ReleaseKitItem } from '@craft-agent/shared/release-kit'
 import type { WorkflowTriggerInput } from '@craft-agent/shared/workflows'
@@ -47,7 +56,9 @@ export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspace
   const { workspaces } = useAppShellContext()
   const { start } = useWorkflowRuns(workspaceId)
   const { outputs, loading: outputsLoading, getOutput } = useOutputs(workspaceId)
-  const workspaceRootPath = workspaces.find((workspace) => workspace.id === workspaceId)?.rootPath
+  const workspace = workspaces.find((candidate) => candidate.id === workspaceId)
+  const workspaceRootPath = workspace?.rootPath
+  const isHq = isArtistHQWorkspace(workspace, workspaces)
   const inputs = React.useMemo(() => workflow.metadata.trigger.inputs ?? [], [workflow.metadata.trigger.inputs])
   const groupedInputs = React.useMemo(() => orderWorkflowInputs(inputs), [inputs])
 
@@ -74,6 +85,33 @@ export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspace
   const [vaultAssets, setVaultAssets] = React.useState<VaultAssetRecord[]>([])
   const [releaseKitItems, setReleaseKitItems] = React.useState<ReleaseKitItem[]>([])
   const [assetsLoading, setAssetsLoading] = React.useState(false)
+  const [actionChoiceOpen, setActionChoiceOpen] = React.useState(false)
+  const [scheduleOpen, setScheduleOpen] = React.useState(false)
+  const [automationTriggerOpen, setAutomationTriggerOpen] = React.useState(false)
+  const [automationFlowOpen, setAutomationFlowOpen] = React.useState(false)
+  const [preparedInputs, setPreparedInputs] = React.useState<Record<string, unknown> | null>(null)
+
+  const workflowPrefill = React.useMemo<ScheduledWorkComposerEntry['workflow']>(() => ({
+    slug: workflow.slug,
+    name: workflow.metadata.name,
+    digest: composerDefinitionDigest({ metadata: workflow.metadata, body: workflow.body }),
+    triggerInputs: preparedInputs ?? {},
+  }), [preparedInputs, workflow])
+
+  const scheduleEntry = React.useMemo<ScheduledWorkComposerEntry | null>(() => {
+    if (!workspace || !preparedInputs) return null
+    const now = new Date()
+    return {
+      owner: isHq
+        ? { scope: 'hq', workspaceId }
+        : { scope: 'campaign', workspaceId, campaignId: workspaceId },
+      date: [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-'),
+      mode: 'job',
+      title: workflow.metadata.name,
+      suggestedType: 'workflow-run',
+      workflow: workflowPrefill,
+    }
+  }, [isHq, preparedInputs, workflow.metadata.name, workflowPrefill, workspace, workspaceId])
 
   React.useEffect(() => {
     if (open) {
@@ -81,7 +119,18 @@ export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspace
       setSubmitting(false)
       setMoreOpen(false)
       setFieldError(null)
+      setActionChoiceOpen(false)
+      setScheduleOpen(false)
+      setAutomationTriggerOpen(false)
+      setAutomationFlowOpen(false)
+      setPreparedInputs(null)
+      return
     }
+    setActionChoiceOpen(false)
+    setScheduleOpen(false)
+    setAutomationTriggerOpen(false)
+    setAutomationFlowOpen(false)
+    setPreparedInputs(null)
   }, [open, buildInitialFormValues])
 
   React.useEffect(() => {
@@ -123,22 +172,28 @@ export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspace
     setFieldError((current) => current?.inputName === name ? null : current)
   }, [])
 
-  const handleSubmit = async () => {
+  const preparePayload = React.useCallback((): Record<string, unknown> | null => {
     const validationError = validateWorkflowInputValues(inputs, values)
     if (validationError) {
       setFieldError(validationError)
       if (groupedInputs.optional.some((input) => input.name === validationError.inputName)) setMoreOpen(true)
       window.setTimeout(() => document.getElementById(`workflow-input-${validationError.inputName}`)?.focus(), 0)
-      return
+      return null
     }
+    const payload: Record<string, unknown> = {}
+    for (const input of inputs) {
+      const value = values[input.name]
+      if (!input.required && (value === '' || value == null)) continue
+      payload[input.name] = value
+    }
+    return payload
+  }, [groupedInputs.optional, inputs, values])
+
+  const handleSubmit = async () => {
+    const payload = preparePayload()
+    if (!payload) return
     setSubmitting(true)
     try {
-      const payload: Record<string, unknown> = {}
-      for (const i of inputs) {
-        const value = values[i.name]
-        if (!i.required && (value === '' || value == null)) continue
-        payload[i.name] = value
-      }
       const created = await start(workflow.slug, payload)
       try {
         await onStarted?.(created)
@@ -156,15 +211,57 @@ export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspace
     }
   }
 
+  const openScheduleChoice = React.useCallback(() => {
+    const payload = preparePayload()
+    if (!payload) return
+    setPreparedInputs(payload)
+    setActionChoiceOpen(true)
+  }, [preparePayload])
+
+  const submitScheduledWork = React.useCallback(async (draft: ScheduledWorkComposerDraft) => {
+    if (draft.type !== 'workflow-run') throw new Error('Scheduled workflow setup changed unexpectedly.')
+    if (draft.owner.scope === 'hq') {
+      await window.electronAPI.scheduleHqWork(workspaceId, buildHqSchedulePlanFromComposer(draft))
+    } else {
+      const plan = buildCampaignSchedulePlanFromComposer(draft)
+      if ('orders' in plan) await window.electronAPI.scheduleCampaignWorkChain(workspaceId, plan)
+      else await window.electronAPI.scheduleCampaignWork(workspaceId, plan)
+    }
+    toast.success(`${workflow.metadata.name} scheduled`)
+    onOpenChange(false)
+  }, [onOpenChange, workflow.metadata.name, workspaceId])
+
+  const openScheduleOnce = React.useCallback(() => {
+    setActionChoiceOpen(false)
+    setScheduleOpen(true)
+  }, [])
+
+  const openRepeat = React.useCallback(() => {
+    setActionChoiceOpen(false)
+    setAutomationFlowOpen(true)
+    setAutomationTriggerOpen(true)
+  }, [])
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={open && !scheduleOpen && !automationFlowOpen} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[82vh] w-[min(600px,calc(100vw-24px))] max-w-none flex-col gap-0 overflow-hidden border-white/[0.08] bg-[#090909] p-0 text-white max-sm:h-[100dvh] max-sm:max-h-none max-sm:w-screen max-sm:rounded-none">
         <DialogHeader className="shrink-0 border-b border-white/[0.07] px-5 py-4 pr-12">
-          <DialogTitle className="text-white">{t('workflows.run.title', { name: workflow.metadata.name })}</DialogTitle>
-          <DialogDescription className="text-white/48">{workflow.metadata.description}</DialogDescription>
+          <DialogTitle className="text-white">{actionChoiceOpen ? `Schedule ${workflow.metadata.name}` : t('workflows.run.title', { name: workflow.metadata.name })}</DialogTitle>
+          <DialogDescription className="text-white/48">{actionChoiceOpen ? 'Choose a one-time run or make it repeat automatically.' : workflow.metadata.description}</DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+        {actionChoiceOpen ? (
+          <div className="space-y-2 p-4">
+            <WorkflowActionChoice icon={CalendarClock} title="Once" description="Choose a date and time for one future run." onClick={openScheduleOnce} />
+            <WorkflowActionChoice icon={Repeat2} title="Repeat or trigger" description="Run on a schedule, file change, webhook, URL change, or message." onClick={openRepeat} />
+            <div className="pt-2">
+              <Button variant="ghost" className="text-white/52 hover:text-white" onClick={() => setActionChoiceOpen(false)}>Back</Button>
+            </div>
+          </div>
+        ) : (
+          <>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
           {inputs.length === 0 && (
             <p className="rounded-[9px] bg-white/[0.035] px-3 py-3 text-xs text-white/48">{t('workflows.run.noInputs')}</p>
           )}
@@ -195,12 +292,36 @@ export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspace
           <Button variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => onOpenChange(false)} disabled={submitting}>
             {t('common.cancel')}
           </Button>
-          <Button className="border border-[#fb923c]/25 bg-[#f97316]/18 text-white/90 hover:bg-[#f97316]/26" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? t('workflows.run.starting') : t('workflows.run.run')}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="border-white/[0.08] bg-white/[0.035] text-white/66 hover:bg-white/[0.07] hover:text-white" onClick={openScheduleChoice} disabled={submitting}>Schedule</Button>
+            <Button className="border border-[#fb923c]/25 bg-[#f97316]/18 text-white/90 hover:bg-[#f97316]/26" onClick={handleSubmit} disabled={submitting}>
+              {submitting ? t('workflows.run.starting') : 'Run now'}
+            </Button>
+          </div>
         </div>
+        </>
+        )}
       </DialogContent>
     </Dialog>
+    {scheduleEntry ? (
+      <ScheduledWorkComposer
+        open={open && scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        entry={scheduleEntry}
+        allowedTypes={['workflow-run']}
+        onSubmit={submitScheduledWork}
+      />
+    ) : null}
+    <AutomationWorkDialog
+      open={open && automationTriggerOpen}
+      onOpenChange={setAutomationTriggerOpen}
+      onFlowOpenChange={setAutomationFlowOpen}
+      workflowPrefill={preparedInputs ? workflowPrefill : undefined}
+      suggestedName={`${workflow.metadata.name} repeat`}
+      onCreated={() => onOpenChange(false)}
+      workspaceId={workspaceId}
+    />
+    </>
   )
 }
 
@@ -209,6 +330,34 @@ interface WorkflowAssetOption {
   label: string
   value: string
   outputId?: string
+}
+
+function WorkflowActionChoice({
+  icon: Icon,
+  title,
+  description,
+  onClick,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  description: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex w-full items-center gap-3 rounded-[10px] bg-white/[0.035] px-4 py-3.5 text-left transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/35"
+    >
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-[8px] bg-white/[0.055] text-white/55 group-hover:text-orange-200/85">
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-white/84">{title}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-white/42">{description}</span>
+      </span>
+    </button>
+  )
 }
 
 function FriendlyWorkflowField({

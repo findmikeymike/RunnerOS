@@ -5,6 +5,7 @@ import {
   buildCampaignScheduleFromComposer,
   buildCampaignSchedulePlanFromComposer,
   buildAutomationQueueWorkAction,
+  applyWorkflowRunComposerPrefill,
   createScheduledWorkComposerDraft,
   selectScheduledWorkComposerType,
   validateComposerDraft,
@@ -96,6 +97,27 @@ describe('scheduled work composer drafts', () => {
   test('binds workflow definitions with a stable digest', () => {
     expect(composerDefinitionDigest({ steps: [{ id: 'write', agent: 'writer' }], name: 'Launch' }))
       .toBe(composerDefinitionDigest({ name: 'Launch', steps: [{ agent: 'writer', id: 'write' }] }))
+  })
+
+  test('preserves exact workflow inputs when scheduling an existing workflow', () => {
+    const initial = createScheduledWorkComposerDraft({ ...defaults, title: 'Lyric clips', suggestedType: 'workflow-run' })
+    const inputs = { lyrics: 'Approved lyrics', master_audio: '/vault/angelina.wav', clips: 4 }
+    const result = applyWorkflowRunComposerPrefill(initial, {
+      slug: 'lyric-clips',
+      name: 'Lyric Clips',
+      digest: 'workflow-digest',
+      triggerInputs: inputs,
+    })
+
+    expect(result).toMatchObject({
+      type: 'workflow-run',
+      title: 'Lyric clips',
+      workflowSlug: 'lyric-clips',
+      workflowName: 'Lyric Clips',
+      workflowDigest: 'workflow-digest',
+      triggerInputs: inputs,
+    })
+    expect(result.type === 'workflow-run' && result.triggerInputs).not.toBe(inputs)
   })
 
   test('builds one typed work order and linked campaign shell', () => {

@@ -73,6 +73,7 @@ export function WorkflowLaunchDialog({
         workspaceName,
         workspaceRootPath: workspace?.rootPath,
         seededInputNames,
+        seededInputs: initialInputs,
         contextHint,
       })
       const session = await openAgentSessionComposer({
@@ -86,7 +87,7 @@ export function WorkflowLaunchDialog({
         sources: enabledSources,
         contextDocs: launchContext,
         agentCatalog: activeAgents.filter((agent) => agent.slug !== manager.slug),
-        draftInput: createWorkflowSetupDraft(workflow, { workspaceKind, workspaceName, seededInputNames, contextHint }),
+        draftInput: createWorkflowSetupDraft(workflow, { workspaceKind, workspaceName, seededInputNames, seededInputs: initialInputs, contextHint }),
       })
       await onManagerSessionStarted?.(session.id)
       opened = true
@@ -111,6 +112,7 @@ export function WorkflowLaunchDialog({
     seededInputNames,
     workflow,
     contextHint,
+    initialInputs,
     workspace?.rootPath,
     workspaceId,
     workspaceKind,

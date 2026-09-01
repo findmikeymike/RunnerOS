@@ -31,6 +31,16 @@ function formatInputList(workflow: WorkflowDTO): string[] {
   return lines
 }
 
+function formatSeededInputs(inputs: Record<string, unknown> | undefined): string | null {
+  if (!inputs) return null
+  const lines = Object.entries(inputs).flatMap(([key, value]) => {
+    if (typeof value === 'string') return [`- ${key}: ${value}`]
+    if (typeof value === 'number' || typeof value === 'boolean') return [`- ${key}: ${String(value)}`]
+    return []
+  })
+  return lines.length > 0 ? `Inputs already seeded from the UI:\n${lines.join('\n')}` : null
+}
+
 export function buildWorkflowLaunchContextDocs(
   contextDocs: ContextDocDTO[],
   workflow: WorkflowDTO,
@@ -39,6 +49,7 @@ export function buildWorkflowLaunchContextDocs(
     workspaceName: string
     workspaceRootPath?: string
     seededInputNames?: string[]
+    seededInputs?: Record<string, unknown>
     contextHint?: string
   },
 ): ContextDocDTO[] {
@@ -58,13 +69,16 @@ export function buildWorkflowLaunchContextDocs(
       `Workspace: ${workflowScopeLabel(options.workspaceKind, options.workspaceName)}.`,
       workflow.metadata.description ? `Goal: ${workflow.metadata.description}` : null,
       ...formatInputList(workflow),
-      options.seededInputNames && options.seededInputNames.length > 0
-        ? `Already available from the launch surface: ${options.seededInputNames.join(', ')}.`
-        : null,
+      formatSeededInputs(options.seededInputs)
+        ?? (options.seededInputNames && options.seededInputNames.length > 0
+          ? `Already available from the launch surface: ${options.seededInputNames.join(', ')}.`
+          : null),
       options.contextHint ?? null,
       'The artist is asking for setup help, not blind execution.',
       'Use the existing workspace context first. Ask only for missing decisions, assets, or approvals.',
       'Do not run, schedule, automate, publish, spend money, or send outreach until the artist explicitly chooses that next step.',
+      'When setup is clear, present exactly three choices: Run now, Schedule once, or Repeat automatically.',
+      'After explicit confirmation, use start_workflow for Run now or schedule_work for Schedule once / Repeat automatically, preserving this workflow slug and the exact agreed trigger inputs.',
     ].filter(Boolean).join('\n\n'),
     path: workspaceRootPath ? `${workspaceRootPath}/context/${WORKFLOW_LAUNCH_CONTEXT_SLUG}/CONTEXT.md` : `context/${WORKFLOW_LAUNCH_CONTEXT_SLUG}/CONTEXT.md`,
     workspaceRootPath,
@@ -78,6 +92,7 @@ export function createWorkflowSetupDraft(
     workspaceKind: 'hq' | 'campaign'
     workspaceName: string
     seededInputNames?: string[]
+    seededInputs?: Record<string, unknown>
     contextHint?: string
   },
 ): string {
@@ -93,12 +108,13 @@ export function createWorkflowSetupDraft(
     `I want to set up the ${workflow.metadata.name} workflow in ${scope}.`,
     workflow.metadata.description ? workflow.metadata.description : null,
     'Use the workspace context and any approved assets that are already available before asking me to repeat anything.',
-    options.seededInputNames && options.seededInputNames.length > 0
-      ? `Inputs already seeded from the UI: ${options.seededInputNames.join(', ')}.`
-      : null,
+    formatSeededInputs(options.seededInputs)
+      ?? (options.seededInputNames && options.seededInputNames.length > 0
+        ? `Inputs already seeded from the UI: ${options.seededInputNames.join(', ')}.`
+        : null),
     options.contextHint ?? null,
     missingPrompt,
-    'Help me think through the strongest setup, ask only the key questions you still need, then let me decide whether to run it now or schedule it.',
+    'Help me think through the strongest setup, ask only the key questions you still need, then give me exactly three choices: Run now, Schedule once, or Repeat automatically.',
     'Do not start the workflow, schedule it, automate it, or take any public action until I explicitly confirm.',
   ].filter(Boolean).join('\n\n')
 }

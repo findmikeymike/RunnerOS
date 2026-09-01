@@ -94,6 +94,13 @@ export interface ComposerDefaults {
   suggestedType?: ScheduledWorkComposerType
 }
 
+export interface WorkflowRunComposerPrefill {
+  slug: string
+  name: string
+  digest: string
+  triggerInputs: Record<string, unknown>
+}
+
 export function createScheduledWorkComposerDraft(defaults: ComposerDefaults): ScheduledWorkComposerDraft {
   const base: ComposerBase = {
     requestId: crypto.randomUUID(),
@@ -107,6 +114,22 @@ export function createScheduledWorkComposerDraft(defaults: ComposerDefaults): Sc
     notes: '',
   }
   return draftForType(base, defaults.suggestedType ?? 'event', defaults.inputRefs ?? [])
+}
+
+export function applyWorkflowRunComposerPrefill(
+  draft: ScheduledWorkComposerDraft,
+  prefill: WorkflowRunComposerPrefill | undefined,
+  title?: string,
+): ScheduledWorkComposerDraft {
+  if (draft.type !== 'workflow-run' || !prefill) return draft
+  return {
+    ...draft,
+    title: title || draft.title || prefill.name,
+    workflowSlug: prefill.slug,
+    workflowName: prefill.name,
+    workflowDigest: prefill.digest,
+    triggerInputs: { ...prefill.triggerInputs },
+  }
 }
 
 export function selectScheduledWorkComposerType(

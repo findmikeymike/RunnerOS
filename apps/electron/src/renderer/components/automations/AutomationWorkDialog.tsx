@@ -3,7 +3,7 @@ import { CalendarClock, FileSearch, Link2, MessageSquare, Webhook } from 'lucide
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { ScheduledWorkComposer } from '@/components/calendar/ScheduledWorkComposer'
+import { ScheduledWorkComposer, type ScheduledWorkComposerEntry } from '@/components/calendar/ScheduledWorkComposer'
 import { Switch } from '@/components/ui/switch'
 import { useActiveWorkspace, useAppShellContext } from '@/context/AppShellContext'
 import { isArtistHQWorkspace } from '@/lib/artist-workspace'
@@ -32,11 +32,19 @@ export interface AutomationWorkDialogProps {
   trigger?: React.ReactNode
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  workflowPrefill?: ScheduledWorkComposerEntry['workflow']
+  suggestedName?: string
+  onFlowOpenChange?: (open: boolean) => void
+  onCreated?: () => void
+  workspaceId?: string
 }
 
-export function AutomationWorkDialog({ trigger, open, onOpenChange }: AutomationWorkDialogProps) {
-  const workspace = useActiveWorkspace()
+export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPrefill, suggestedName, onFlowOpenChange, onCreated, workspaceId }: AutomationWorkDialogProps) {
+  const activeWorkspace = useActiveWorkspace()
   const { workspaces } = useAppShellContext()
+  const workspace = workspaceId
+    ? workspaces.find((candidate) => candidate.id === workspaceId)
+    : activeWorkspace
   const [internalTriggerOpen, setInternalTriggerOpen] = React.useState(false)
   const [composerOpen, setComposerOpen] = React.useState(false)
   const [event, setEvent] = React.useState<WorkTrigger>('SchedulerTick')
@@ -57,6 +65,14 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange }: Automation
     if (open === undefined) setInternalTriggerOpen(nextOpen)
     onOpenChange?.(nextOpen)
   }, [onOpenChange, open])
+
+  React.useEffect(() => {
+    onFlowOpenChange?.(triggerOpen || composerOpen)
+  }, [composerOpen, onFlowOpenChange, triggerOpen])
+
+  React.useEffect(() => {
+    if (triggerOpen && suggestedName) setName(suggestedName)
+  }, [suggestedName, triggerOpen])
 
   const isHq = isArtistHQWorkspace(workspace ?? undefined, workspaces)
   const owner = React.useMemo(() => workspace
@@ -86,7 +102,8 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange }: Automation
     const matcher = buildMatcher({ event, name, cron, timezone, watchPath, watchGlob, webhookSlug, secretEnv, pollUrl, pollIntervalSec, messageMatcher, action })
     await window.electronAPI.createAutomationFromTemplate(workspace.id, event, matcher)
     toast.success('Tracked-work automation created', { description: `${name.trim()} will queue ${draft.title.trim()} when it fires.` })
-  }, [cron, event, messageMatcher, name, pollIntervalSec, pollUrl, secretEnv, showOnCalendar, timezone, watchGlob, watchPath, webhookSlug, workspace])
+    onCreated?.()
+  }, [cron, event, messageMatcher, name, onCreated, pollIntervalSec, pollUrl, secretEnv, showOnCalendar, timezone, watchGlob, watchPath, webhookSlug, workspace])
 
   const today = React.useMemo(() => {
     const now = new Date()
@@ -175,8 +192,15 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange }: Automation
         <ScheduledWorkComposer
           open={composerOpen}
           onOpenChange={setComposerOpen}
-          entry={{ owner, date: today }}
-          allowedTypes={allowedTypes}
+          entry={{
+            owner,
+            date: today,
+            mode: workflowPrefill ? 'job' : undefined,
+            title: workflowPrefill?.name,
+            suggestedType: workflowPrefill ? 'workflow-run' : undefined,
+            workflow: workflowPrefill,
+          }}
+          allowedTypes={workflowPrefill ? ['workflow-run'] : allowedTypes}
           allowFollowUps={!isHq && showOnCalendar}
           timingMode="triggered"
           onSubmit={submit}
