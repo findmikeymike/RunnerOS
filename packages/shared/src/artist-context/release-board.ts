@@ -1,5 +1,6 @@
 import type { MissionAssetManifest } from '../mission-assets/types.ts'
 import type { ContextDocMetadata, LoadedContextDoc } from '../workspace-context/types.ts'
+import { RELEASE_MANAGER_AGENT_SLUG } from '../agent-definitions/defaults.ts'
 
 export const RELEASE_BOARD_CONTEXT_SLUG = 'release-board'
 
@@ -167,17 +168,47 @@ const ITEM_ACTIONS: Record<string, ReleaseBoardItemAction> = {
     targetName: 'Video Director',
     instruction: 'I want to find the strongest production-ready visualizer concept using the approved master, artwork, and campaign world. Do not begin paid generation until I approve the direction.',
   },
+  'setup:distributor': {
+    kind: 'agent',
+    targetSlug: RELEASE_MANAGER_AGENT_SLUG,
+    targetName: 'Release Manager',
+    instruction: 'I want to prepare the exact distributor delivery for this release, verify the package and metadata first, and clearly separate what is ready from what still blocks submission. Do not submit or accept provider terms without my exact approval.',
+  },
+  'setup:presave': {
+    kind: 'agent',
+    targetSlug: RELEASE_MANAGER_AGENT_SLUG,
+    targetName: 'Release Manager',
+    instruction: 'I want to create the correct pre-save or smart-link path for this release. First verify the release identity, provider requirements, artwork, destinations, date, and whether a delivered URI or UPC is required. Do not publish the page without my exact approval.',
+  },
   'setup:metadata': {
     kind: 'agent',
-    targetSlug: 'comms-agent',
-    targetName: 'Comms Agent',
-    instruction: 'I want a fact-checked credits and release-metadata packet built from the saved campaign materials, with every missing or unverified field made obvious.',
+    targetSlug: RELEASE_MANAGER_AGENT_SLUG,
+    targetName: 'Release Manager',
+    instruction: 'I want a fact-checked credits and delivery-metadata packet built from the saved campaign materials, with verified, artist-confirmed, missing, and conflicting fields kept distinct.',
   },
   'setup:social-schedule': {
     kind: 'agent',
     targetSlug: 'social-publisher',
     targetName: 'Social Publisher',
     instruction: 'I want to shape the complete social rollout, including the launch announcement, from this campaign\'s approved Finals and release timeline. We can draft and validate freely, but nothing should be scheduled or published without my exact approval.',
+  },
+  'setup:rights-splits': {
+    kind: 'agent',
+    targetSlug: RELEASE_MANAGER_AGENT_SLUG,
+    targetName: 'Release Manager',
+    instruction: 'I want to build and verify the release rights and splits packet, keeping composition ownership separate from master ownership and exposing every missing agreement, sample, feature, contributor, or clearance instead of guessing.',
+  },
+  'setup:release-qa': {
+    kind: 'agent',
+    targetSlug: RELEASE_MANAGER_AGENT_SLUG,
+    targetName: 'Release Manager',
+    instruction: 'I want a final evidence-backed release QA across the exact Release Kit, metadata, rights, delivery status, dates, links, and launch dependencies. Tell me what is machine-verified, what still needs a human check, and every blocker before calling it ready.',
+  },
+  'setup:dsp-pitch': {
+    kind: 'agent',
+    targetSlug: RELEASE_MANAGER_AGENT_SLUG,
+    targetName: 'Release Manager',
+    instruction: 'I want the strongest truthful DSP editorial pitch for this release, starting with Spotify for Artists. Use the song and campaign truth, show the exact pitch and provider fields, and do not submit it without my exact approval.',
   },
   'setup:epk': {
     kind: 'agent',
@@ -584,7 +615,12 @@ function normalizeReleaseBoard(
       items: fallbackCategory.items.map((fallbackItem) => {
         const existingItem = existingCategory?.items?.find((item) => item.id === fallbackItem.id)
         if (existingItem) {
-          const status = normalizeStatus(existingItem.status)
+          const persistedStatus = normalizeStatus(existingItem.status)
+          const status = fallbackItem.tier === 'core'
+            && persistedStatus === 'skipped'
+            && !existingItem.updatedAt
+            ? 'needed'
+            : persistedStatus
           return {
             ...existingItem,
             ...fallbackItem,
@@ -594,12 +630,9 @@ function normalizeReleaseBoard(
               : existingItem.included === true || status === 'done' || status === 'in-progress' || status === 'review',
           }
         }
-        return {
-          ...fallbackItem,
-          // Existing campaigns gain access to new checklist items without
-          // having their historical completion totals silently reduced.
-          status: 'skipped' as const,
-        }
+        return fallbackItem.tier === 'core'
+          ? { ...fallbackItem, status: 'needed' as const }
+          : fallbackItem
       }),
     }
   })

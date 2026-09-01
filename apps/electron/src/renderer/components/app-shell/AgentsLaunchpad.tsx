@@ -1622,6 +1622,10 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
     return 'Brand & Story'
   }
 
+  if (slug === 'artist-os-release-manager') {
+    return 'Release Operations'
+  }
+
   if (slug === 'persona-agent' || slug === 'content-genius' || slug === 'record-doctor' || slug === 'art-director') {
     return 'Creative'
   }
@@ -1663,6 +1667,7 @@ function agentDomainRank(domain: string) {
     'Content Creation',
     'Socials',
     'Promotion',
+    'Release Operations',
     'Outreach',
     'Merch',
     'Research',

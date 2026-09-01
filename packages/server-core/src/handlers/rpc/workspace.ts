@@ -91,15 +91,36 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
       deps.platform.logger.warn?.(`[workflows] Failed to auto-activate starters in new workspace: ${(err as Error).message}`)
     }
     try {
-      if (!rootExistedBeforeAdd && workspace.artistWorkspaceScope === 'lab') {
+      if (!rootExistedBeforeAdd && !workspace.remoteServer) {
         const {
           initialAgentSlugsForWorkspace,
+          isReleaseManagerDefinition,
+          loadGlobalAgent,
+          RELEASE_MANAGER_AGENT_SLUG,
+          STARTER_AGENTS,
           writeActivatedAgents,
         } = await import('@craft-agent/shared/agent-definitions')
-        writeActivatedAgents(workspace.rootPath, [...initialAgentSlugsForWorkspace(workspace.artistWorkspaceScope, rootExistedBeforeAdd)])
+        const initialAgentSlugs = initialAgentSlugsForWorkspace(workspace.artistWorkspaceScope, rootExistedBeforeAdd).filter((agentSlug) => {
+          const installed = loadGlobalAgent(agentSlug)
+          if (!installed) return false
+          if (agentSlug !== RELEASE_MANAGER_AGENT_SLUG) return true
+          return isReleaseManagerDefinition(installed)
+        })
+        if (initialAgentSlugs.length > 0) {
+          writeActivatedAgents(workspace.rootPath, [...initialAgentSlugs])
+          const { loadGlobalSkillBySlug, setGlobalSkillEnabled } = await import('@craft-agent/shared/skills')
+          for (const agentSlug of initialAgentSlugs) {
+            const agent = STARTER_AGENTS.find(candidate => candidate.slug === agentSlug)
+            for (const skillSlug of agent?.metadata.skills ?? []) {
+              if (loadGlobalSkillBySlug(skillSlug)) {
+                setGlobalSkillEnabled(workspace.rootPath, skillSlug, true)
+              }
+            }
+          }
+        }
       }
     } catch (err) {
-      deps.platform.logger.warn?.(`[agents] Failed to activate the new Creative Lab team: ${(err as Error).message}`)
+      deps.platform.logger.warn?.(`[agents] Failed to activate the new workspace team: ${(err as Error).message}`)
     }
     deps.platform.logger.info(`Created workspace "${name}" at ${rootPath}${remoteServer ? ` (remote: ${remoteServer.url})` : ''}`)
     if (workspace.artistWorkspaceScope === 'campaign') {

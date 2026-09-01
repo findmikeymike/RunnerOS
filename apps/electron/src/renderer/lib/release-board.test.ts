@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { STARTER_AGENTS } from '@craft-agent/shared/agent-definitions/starter-templates'
+import { RELEASE_MANAGER_AGENT_SLUG } from '@craft-agent/shared/agent-definitions/defaults'
 import { STARTER_WORKFLOWS } from '@craft-agent/shared/workflows/starter-templates'
 import {
   buildReleaseBoardItemActionPrompt,
@@ -107,7 +108,7 @@ describe('release board utilities', () => {
     expect(missing.ok || missing.error).toContain('updatedAt')
   })
 
-  test('migrates old campaigns without losing completed options or inflating missing work', () => {
+  test('migrates newly introduced core items as honestly needed while preserving completed options', () => {
     const removedNewCoreIds = new Set(['performance-clips', 'rights-splits', 'release-qa'])
     const legacyBoard = buildDefaultReleaseBoard('workspace-1')
     legacyBoard.categories = legacyBoard.categories.map((category) => ({
@@ -135,7 +136,28 @@ describe('release board utilities', () => {
     expect(itemStatus(parsed!, 'content', 'ugc-clips')).toBe('done')
     expect(parsed!.categories.find((category) => category.id === 'content')?.items.find((item) => item.id === 'ugc-clips')?.included).toBe(true)
     expect(parsed!.categories.find((category) => category.id === 'promotion')?.items.find((item) => item.id === 'influencer-campaign')?.included).toBe(false)
-    expect(itemStatus(parsed!, 'content', 'performance-clips')).toBe('skipped')
+    expect(itemStatus(parsed!, 'content', 'performance-clips')).toBe('needed')
+    expect(itemStatus(parsed!, 'setup', 'rights-splits')).toBe('needed')
+    expect(itemStatus(parsed!, 'setup', 'release-qa')).toBe('needed')
+    expect(getBoardTotals(parsed!)).toEqual({ done: 1, total: 22 })
+  })
+
+  test('preserves an explicit timestamped N/A decision during migration', () => {
+    const skipped = updateReleaseBoardItemStatus(
+      buildDefaultReleaseBoard('workspace-1'),
+      'setup',
+      'rights-splits',
+      'skipped',
+    )
+
+    const parsed = parseReleaseBoardDoc({
+      slug: 'release-board',
+      metadata: { name: 'Release Board', routing: { mode: 'broadcast' }, enabled: true },
+      body: serializeReleaseBoardBody(skipped),
+      path: '/tmp/context/release-board',
+      workspaceRootPath: '/tmp/workspace',
+    } as ContextDocDTO)
+
     expect(itemStatus(parsed!, 'setup', 'rights-splits')).toBe('skipped')
   })
 
@@ -242,10 +264,12 @@ describe('release board utilities', () => {
     expect(getReleaseBoardItemAction('music', 'song-world')?.targetSlug).toBe('world-builder')
     expect(getReleaseBoardItemAction('visuals', 'cover-art')?.targetSlug).toBe('art-director')
     expect(getReleaseBoardItemAction('visuals', 'canvas')?.targetSlug).toBe('hypermotion-agent')
-    expect(getReleaseBoardItemAction('setup', 'metadata')).toMatchObject({
-      kind: 'agent',
-      targetSlug: 'comms-agent',
-    })
+    for (const itemId of ['distributor', 'presave', 'metadata', 'rights-splits', 'release-qa', 'dsp-pitch']) {
+      expect(getReleaseBoardItemAction('setup', itemId)).toMatchObject({
+        kind: 'agent',
+        targetSlug: RELEASE_MANAGER_AGENT_SLUG,
+      })
+    }
     expect(getReleaseBoardItemAction('content', 'viral-clips')?.targetSlug).toBe('scroll-stopper')
     expect(getReleaseBoardItemAction('content', 'performance-clips')?.targetSlug).toBe('raw-video-editor')
     expect(getReleaseBoardItemAction('content', 'idea-generation')).toMatchObject({

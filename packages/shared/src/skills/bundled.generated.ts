@@ -5396,6 +5396,289 @@ Read \`references/brand-house.md\` for the full house framework and quality chec
     ],
   },
   {
+    slug: "artist-os-dsp-editorial-pitch",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: artist-os-dsp-editorial-pitch
+description: Draft and prepare evidence-grounded Spotify and DSP editorial pitches from the artist, song, and campaign truth, then guide approval-gated submission through a verified account when supported.
+---
+
+# DSP Editorial Pitch
+
+## Job
+
+Create the strongest truthful editorial pitch for the exact release. Start with Spotify for
+Artists in V1. Treat other DSPs as separate provider surfaces with their own current fields and
+rules.
+
+## Inputs
+
+Pull before asking the artist to repeat themselves:
+
+- Artist HQ Profile, Voice, Branding, and relevant audience/geography evidence;
+- Campaign brief, song world, approved lyrics, master metadata, release date, and rollout plan;
+- verified collaborators, credits, hometown/market facts, and promotional support;
+- current provider form, field limits, account identity, and submission status when visible.
+
+Do not invent genre, mood, instruments, location, biography, collaborator support, marketing
+commitments, audience size, playlist history, press, radio, tour, budget, or cultural relevance.
+
+## Pitch method
+
+1. State the song's clearest human premise in one sentence.
+2. Identify the specific sonic and emotional features supported by the song evidence.
+3. Explain what makes this release distinct for the artist, not generically "authentic."
+4. Add only verified campaign activity that helps an editor understand the release context.
+5. Make the pitch concise, concrete, and easy to advocate for internally.
+
+Provide one recommended pitch. Add an alternate only when a genuinely different editorial angle
+exists. Do not spray ten versions.
+
+## Submission
+
+Before any provider action, verify the exact artist account and release. Read the current visible
+form instead of assuming old field names or character limits. Show the exact final fields and ask
+for current approval.
+
+A prepared pitch is not submitted. A clicked form without visible confirmation is uncertain.
+Call submission complete only with a provider confirmation or exact human confirmation recorded
+against the same pitch revision.
+
+## Output
+
+Create a Campaign-scoped \`DSP Editorial Pitch\` Output containing the recommended pitch, evidence
+used, missing facts, provider/account, form-specific fields, submission state, and next approval.
+`,
+      },
+    ],
+  },
+  {
+    slug: "artist-os-release-operations",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: artist-os-release-operations
+description: Prepare and audit music-release delivery, distributor handoffs, pre-save setup, release identifiers, territories, dates, and provider completion evidence. Use for release operations; do not use to invent audio, rights facts, or provider receipts.
+---
+
+# Music Release Operations
+
+## Purpose
+
+Turn saved Campaign truth and approved assets into an exact, reviewable release-delivery packet.
+Keep preparation, submission, and live status separate.
+
+## Source order
+
+Use the strongest available evidence in this order:
+
+1. Approved Release Kit items and their current integrity/status.
+2. Saved Campaign brief, Calendar, Campaign Assets, and Outputs.
+3. Artist HQ Profile and artist-confirmed facts.
+4. Direct answers from the artist.
+
+Never infer a missing identifier, ownership field, date, territory, URL, provider account, or
+submission state.
+
+## Delivery packet
+
+Collect and label:
+
+- artist and primary artist spelling;
+- release title, track title, version, and release type;
+- release date, original release date when applicable, timezone, territories, and stores;
+- label name, copyright lines, explicit status, genres, language, and recording year;
+- contributor roles and credits;
+- ISRC and UPC/EAN as existing, provider-assigned, or missing;
+- exact master and artwork records;
+- lyrics and metadata readiness;
+- distributor/provider and verified account identity;
+- missing facts, conflicts, blockers, and next approval.
+
+Use these states precisely:
+
+- \`prepared\` — packet exists for review.
+- \`ready to submit\` — required evidence is present; no provider action has happened.
+- \`submitted\` — provider receipt or exact human confirmation exists.
+- \`live\` — the result is visibly available at a verified URL.
+- \`blocked\` — name the missing fact, asset, account, clearance, or provider step.
+
+## Distributor work
+
+Start with an evidence matrix. Do not open a provider workflow until the package is coherent.
+When a connected provider path exists, inspect the exact account first and build a dry-run or
+submission preview. Show every externally meaningful field before asking for approval.
+
+Never accept terms, select monetization options, change a date, submit, replace delivered audio,
+or remove a release without exact current approval. A browser draft is not a submission. A
+submission without a durable provider receipt remains uncertain.
+
+## Pre-save work
+
+Confirm which provider and release identity the page will use. A pre-save may require a delivered
+release, UPC, store URI, or provider-side match; do not invent one. Prepare the title, artwork,
+destination stores, release date, URL slug, tracking fields, and post-release redirect.
+
+Call it complete only after the exact public URL opens and represents the correct release.
+
+## Output
+
+Create one Campaign-scoped markdown Output in Canvas when useful. Include verified facts,
+missing facts, provider/account, exact next action, approval required, and current completion
+state. Keep secrets, passwords, cookies, and tokens out of the Output.
+`,
+      },
+    ],
+  },
+  {
+    slug: "artist-os-release-package-qa",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: artist-os-release-package-qa
+description: Run an evidence-backed final QA of a music release package across approved assets, metadata, rights, dates, delivery, links, and launch dependencies. Use before release submission or launch; do not treat model judgment as proof.
+---
+
+# Release Package QA
+
+## Standard
+
+Audit what exists, what is verified, what conflicts, and what still blocks release. Read the exact
+Campaign Release Kit, Campaign Assets, Outputs, Calendar, and Essentials state. Never substitute
+file names, old Outputs, or a model summary for current evidence.
+
+## Checks
+
+### Package identity
+
+- artist, release, track, and version names agree;
+- release date, timezone, territories, and provider state agree;
+- identifiers and copyright lines are present or explicitly provider-assigned.
+
+### Assets
+
+- required Release Kit items exist and are currently available;
+- approved items have not drifted, moved, or entered needs-review;
+- the exact master, artwork, lyrics, photos, and videos belong to this Campaign;
+- known provider format requirements are checked only when objective metadata is available.
+
+Do not claim audio sounds correct, artwork is visually correct, or a file meets an unobserved
+technical specification. State what was machine-checked and what still needs human playback or
+visual review.
+
+### Rights and metadata
+
+- credits and contributor spellings are internally consistent;
+- composition and master ownership are separately accounted for;
+- samples, features, licenses, and pending clearances are exposed;
+- explicit/language/version fields are consistent across delivery materials.
+
+### Launch dependencies
+
+- distributor status is known;
+- pre-save or destination link is verified when required;
+- DSP pitch, social rollout, and campaign dates do not contradict delivery timing;
+- anything awaiting approval names the exact owner and next action.
+
+## Verdict
+
+Use only:
+
+- \`READY\` — no blocking failure remains, with evidence listed.
+- \`READY WITH HUMAN CHECKS\` — machine-verifiable checks pass and named playback/visual checks remain.
+- \`BLOCKED\` — one or more named release blockers remain.
+
+Warnings never silently become passes. A Release Kit item marked available is not automatically
+rights-cleared or provider-submitted.
+
+## Output
+
+Create one Campaign-scoped \`Final Release QA\` markdown Output in Canvas with a compact table:
+check, status, evidence, blocker/owner, next action. End with the exact verdict and what would
+change it. Never mark the Essentials item done merely because the report was created.
+`,
+      },
+    ],
+  },
+  {
+    slug: "artist-os-rights-and-credits",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: artist-os-rights-and-credits
+description: Build an evidence-labeled music rights, ownership, contributor, credits, and split packet for a release. Use for operational rights readiness, not legal advice or invented clearance.
+---
+
+# Music Rights And Credits
+
+## Boundary
+
+Organize facts, expose gaps, and prepare a packet the artist and relevant professionals can
+review. Do not provide legal conclusions, interpret contracts as counsel, or claim clearance
+because a field was filled in.
+
+## Keep two ledgers
+
+Never merge these:
+
+1. **Composition** — writers, publishers, PROs, IPI/CAE numbers, and composition shares.
+2. **Master recording** — recording owner, featured artists, producer/master participation,
+   label, and master ownership shares when tracked.
+
+For every person or entity, capture only verified or artist-confirmed values:
+
+- legal name and credited name;
+- role;
+- email/contact path when needed for confirmation;
+- PRO and IPI/CAE when known;
+- publisher or self-published status;
+- composition share and/or master share;
+- confirmation state and evidence source.
+
+## Clearance flags
+
+Explicitly ask about or flag:
+
+- samples and interpolations;
+- beats, loops, stems, or licensed source material;
+- featured performers and side artists;
+- producer, mixer, engineer, and session-player agreements;
+- cover-song or derivative-work status;
+- artwork, photo, video, name, logo, and likeness permissions;
+- conflicting credit spellings or ownership claims.
+
+Unknown is not clear. Silence is not permission.
+
+## Validation
+
+- Check composition shares and master shares independently.
+- Show totals and any over/under allocation.
+- A 100% total proves only arithmetic, not agreement.
+- Do not mint ISRC, UPC, IPI/CAE, PRO, publisher, or legal-name data.
+- Do not expose private identifiers beyond the review surface that needs them.
+
+## Output
+
+Create a \`Rights & Credits Packet\` with four sections:
+
+1. Verified facts
+2. Artist-confirmed facts awaiting documentation
+3. Missing or conflicting facts
+4. Exact confirmations, signatures, or professional review still required
+
+The packet may be marked \`prepared\` or \`ready for confirmation\`. Marking the Essentials item
+complete requires the artist's review plus evidence for every material blocker, not the model's
+confidence.
+`,
+      },
+    ],
+  },
+  {
     slug: "artist-typography-taste",
     files: [
       {

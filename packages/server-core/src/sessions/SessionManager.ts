@@ -3604,8 +3604,13 @@ export class SessionManager implements ISessionManager {
           CONCIERGE_SLUG,
           SETUP_CONCIERGE_SLUG,
           SOCIAL_PUBLISHER_SLUG,
+          RELEASE_MANAGER_AGENT_SLUG,
           DEFAULT_ACTIVATED_AGENT_SLUGS,
+          getGlobalAgentDir,
+          isReleaseManagerDefinition,
+          loadGlobalAgent,
         } = await import('@craft-agent/shared/agent-definitions')
+        const releaseManagerActivationMarker = join(getGlobalAgentDir(RELEASE_MANAGER_AGENT_SLUG), '.initial-hq-campaign-activation-v1')
         const { seeded } = seedGlobalLibraryIfEmpty(STARTER_AGENTS)
         if (seeded > 0) {
           sessionLog.info(`[agent-definitions] Seeded ${seeded} starter agent(s) into global library`)
@@ -3614,7 +3619,7 @@ export class SessionManager implements ISessionManager {
         // (sidebar pin + future Rooms coordinator), Concierge (top-level
         // Chat nav entry), Setup Concierge, Social Publisher, TryPost, Postiz, Hypermotion, Video Director, Lottie Animation,
         // Video Editor, Lyric Video, Content Genius, Scroll Stopper, Anticipation Director, Content Director, promotion helpers, Shopify, Print Agent,
-        // Outreach, Industry Hunter, Art Director, World Builder, Record Doctor,
+        // Release Manager, Outreach, Industry Hunter, Art Director, World Builder, Record Doctor,
         // Reverse Magic, Legendary Writer, Reference Master, and Update System Agent.
         const required = STARTER_AGENTS.filter(
           (a) => a.slug === ORCHESTRATOR_SLUG
@@ -3646,6 +3651,7 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'shopify-agent'
             || a.slug === 'print-agent'
             || a.slug === 'branding-agent'
+            || a.slug === RELEASE_MANAGER_AGENT_SLUG
             || a.slug === 'comms-agent'
             || a.slug === 'x-editorial'
             || a.slug === 'outreach-agent'
@@ -3683,6 +3689,41 @@ export class SessionManager implements ISessionManager {
           const { ensured: skillsEnsured } = ensureRequiredGlobalSkills([...STARTER_SKILLS, ...BUNDLED_STARTER_SKILLS])
           if (skillsEnsured > 0) {
             sessionLog.info(`[skills] Seeded ${skillsEnsured} built-in skill(s) into global library`)
+          }
+          const releaseManagerAgent = STARTER_AGENTS.find(agent => agent.slug === RELEASE_MANAGER_AGENT_SLUG)
+          const releaseManagerSkillSlugs = releaseManagerAgent?.metadata.skills ?? []
+          const installedReleaseManager = loadGlobalAgent(RELEASE_MANAGER_AGENT_SLUG)
+          const releaseManagerActivationPending = !existsSync(releaseManagerActivationMarker)
+          const releaseManagerIdentityValid = isReleaseManagerDefinition(installedReleaseManager)
+          const missingReleaseManagerSkills = releaseManagerSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
+          if (releaseManagerActivationPending && releaseManagerAgent && releaseManagerIdentityValid && missingReleaseManagerSkills.length === 0) {
+            const { getWorkspaces } = await import('@craft-agent/shared/config')
+            const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
+            let updatedWorkspaces = 0
+            for (const ws of getWorkspaces()) {
+              if (ws.remoteServer || (ws.artistWorkspaceScope !== 'hq' && ws.artistWorkspaceScope !== 'campaign')) continue
+              let workspaceUpdated = false
+              if (!readActivatedAgents(ws.rootPath).active.includes(RELEASE_MANAGER_AGENT_SLUG)) {
+                setAgentActive(ws.rootPath, RELEASE_MANAGER_AGENT_SLUG, true)
+                workspaceUpdated = true
+              }
+              const enabledSkills = new Set(listEnabledGlobalSkillSlugs(ws.rootPath))
+              for (const slug of releaseManagerSkillSlugs) {
+                if (!enabledSkills.has(slug)) {
+                  setGlobalSkillEnabled(ws.rootPath, slug, true)
+                  workspaceUpdated = true
+                }
+              }
+              if (workspaceUpdated) updatedWorkspaces += 1
+            }
+            if (updatedWorkspaces > 0) {
+              sessionLog.info(`[agent-definitions] Activated Release Manager in ${updatedWorkspaces} HQ/Campaign workspace(s)`)
+            }
+            await writeFile(releaseManagerActivationMarker, `${new Date().toISOString()}\n`, 'utf8')
+          } else if (releaseManagerActivationPending && installedReleaseManager && !releaseManagerIdentityValid) {
+            sessionLog.error('[agent-definitions] Reserved Artist OS Release Manager identity is occupied; existing workspaces were not modified')
+          } else if (releaseManagerActivationPending && installedReleaseManager && missingReleaseManagerSkills.length > 0) {
+            sessionLog.warn(`[agent-definitions] Release Manager skill bundle incomplete: ${missingReleaseManagerSkills.join(', ')}`)
           }
           if (anticipationEngineWasMissing && loadGlobalSkillBySlug('anticipation-engine')) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')

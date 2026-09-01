@@ -26,7 +26,7 @@ import {
   removeBuiltInAgentSkills,
 } from './storage.ts'
 import { STARTER_AGENTS } from './starter-templates.ts'
-import { DEFAULT_ACTIVATED_AGENT_SLUGS, LAB_DEFAULT_ACTIVATED_AGENT_SLUGS, initialAgentSlugsForWorkspace } from './defaults.ts'
+import { RELEASE_MANAGER_AGENT_SLUG, DEFAULT_ACTIVATED_AGENT_SLUGS, LAB_DEFAULT_ACTIVATED_AGENT_SLUGS, initialAgentSlugsForWorkspace, isReleaseManagerDefinition } from './defaults.ts'
 import { SOCIAL_PUBLISHER_SLUG } from './types.ts'
 import { BUNDLED_STARTER_SKILLS, STARTER_SKILLS } from '../skills/index.ts'
 import * as publicAgentDefinitions from './index.ts'
@@ -841,7 +841,9 @@ body
     ])
     expect(initialAgentSlugsForWorkspace('lab', false)).toEqual(LAB_DEFAULT_ACTIVATED_AGENT_SLUGS)
     expect(initialAgentSlugsForWorkspace('lab', true)).toEqual([])
-    expect(initialAgentSlugsForWorkspace('campaign', false)).toEqual([])
+    expect(initialAgentSlugsForWorkspace('campaign', false)).toEqual([RELEASE_MANAGER_AGENT_SLUG])
+    expect(initialAgentSlugsForWorkspace('hq', false)).toEqual([RELEASE_MANAGER_AGENT_SLUG])
+    expect(initialAgentSlugsForWorkspace('general', false)).toEqual([])
   })
 
   test('Outreach Agent accepts a verified College Radio packet and keeps send approval exact', () => {
@@ -1120,6 +1122,33 @@ body
     expect(commsAgent?.systemPrompt).toContain('artist-branding')
     expect(commsAgent?.systemPrompt).toContain('artist-intel-report')
     expect(commsAgent?.systemPrompt).toContain('approval')
+  })
+
+  test('starter library includes one approval-gated Release Manager for release-ready work', () => {
+    const releaseManager = STARTER_AGENTS.find((agent) => agent.slug === RELEASE_MANAGER_AGENT_SLUG)
+
+    expect(releaseManager).toBeDefined()
+    expect(releaseManager?.metadata.name).toBe('Release Manager')
+    expect(releaseManager?.metadata.permissionMode).toBe('ask')
+    expect(releaseManager?.metadata.skills).toEqual([
+      'artist-os-release-operations',
+      'artist-os-rights-and-credits',
+      'artist-os-release-package-qa',
+      'artist-os-dsp-editorial-pitch',
+    ])
+    expect(releaseManager?.metadata.optionalSources).toEqual(['printing-press-social', 'google-drive', 'gmail'])
+    expect(releaseManager?.metadata.trustedWorkerTools).toContain('list_release_kit')
+    expect(releaseManager?.metadata.trustedWorkerTools).toContain('create_output')
+    expect(releaseManager?.metadata.trustedWorkerTools).not.toContain('publish_social_post')
+    expect(DEFAULT_ACTIVATED_AGENT_SLUGS).not.toContain(RELEASE_MANAGER_AGENT_SLUG)
+    expect(isReleaseManagerDefinition(releaseManager)).toBe(true)
+    expect(isReleaseManagerDefinition({
+      slug: RELEASE_MANAGER_AGENT_SLUG,
+      metadata: { name: 'Release Manager', skills: ['custom-release-skill'] },
+    })).toBe(false)
+    expect(releaseManager?.systemPrompt).toContain('composition ownership separate from master ownership')
+    expect(releaseManager?.systemPrompt).toContain('without exact current approval')
+    expect(releaseManager?.systemPrompt).toContain('prepared, ready to submit, submitted, live, blocked, or execution uncertain')
   })
 
   test('starter library includes one approval-gated X Editorial worker for HQ and Campaign context', () => {

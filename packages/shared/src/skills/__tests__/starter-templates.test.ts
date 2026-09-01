@@ -112,6 +112,14 @@ describe('STARTER_SKILLS', () => {
     expect(parsed.content).toContain('edl.json');
     expect(parsed.content).toContain('MIT licensed');
   });
+
+  it('ships the focused Release Manager skill bundle', () => {
+    const slugs = BUNDLED_STARTER_SKILLS.map(skill => skill.slug);
+    expect(slugs).toContain('artist-os-release-operations');
+    expect(slugs).toContain('artist-os-rights-and-credits');
+    expect(slugs).toContain('artist-os-release-package-qa');
+    expect(slugs).toContain('artist-os-dsp-editorial-pitch');
+  });
 });
 
 describe('BUNDLED_STARTER_SKILLS', () => {

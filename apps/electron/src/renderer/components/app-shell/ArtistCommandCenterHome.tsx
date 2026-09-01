@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { RELEASE_MANAGER_AGENT_SLUG, isReleaseManagerDefinition } from '@craft-agent/shared/agent-definitions/defaults'
 import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
 import { CompactPageHeader } from './CompactPageHeader'
@@ -91,10 +92,11 @@ import {
   releaseBoardMetadata,
   serializeReleaseBoardBody,
   setReleaseBoardItemIncluded,
-  toggleReleaseBoardItem,
+  updateReleaseBoardItemStatus,
   type ReleaseBoard,
   type ReleaseBoardCategory,
   type ReleaseBoardItem,
+  type ReleaseBoardItemStatus,
 } from '@/lib/release-board'
 import { MissionBriefDrawer } from './MissionBriefDrawer'
 import { ReleaseCountdownDial } from './ReleaseCountdownDial'
@@ -476,9 +478,9 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
     })
   }, [hasMission, inheritedArtistProfileLoading, loading, upsert, workerContextBody, workerReadiness, workspaceId])
 
-  const toggleReleaseItem = React.useCallback(
-    (categoryId: ReleaseBoardCategory['id'], itemId: string) => {
-      void saveReleaseBoard(toggleReleaseBoardItem(releaseBoard, categoryId, itemId))
+  const setReleaseItemStatus = React.useCallback(
+    (categoryId: ReleaseBoardCategory['id'], itemId: string, status: ReleaseBoardItemStatus) => {
+      void saveReleaseBoard(updateReleaseBoardItemStatus(releaseBoard, categoryId, itemId, status))
     },
     [releaseBoard, saveReleaseBoard],
   )
@@ -567,6 +569,11 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
         if (!agent) {
           throw new Error(`${action.targetName} is not installed in the worker library.`)
         }
+        if (action.targetSlug === RELEASE_MANAGER_AGENT_SLUG) {
+          if (!isReleaseManagerDefinition(agent)) {
+            throw new Error('The reserved Artist OS Release Manager identity is occupied by another worker. Rename that custom worker, then restart Artist OS.')
+          }
+        }
         const session = await openAgentSessionComposer({
           agent,
           workspaceId,
@@ -580,8 +587,8 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
         })
         linkReleaseItemSession(category.id, item.id, session.id)
       }
-      toast.success(`${action.targetName} started`, {
-        description: `Creating ${item.label.toLowerCase()} for this campaign.`,
+      toast.success(`${action.targetName} opened`, {
+        description: `Ready to work through ${item.label.toLowerCase()} for this campaign.`,
       })
     } catch (err) {
       toast.error(`Could not start ${action.targetName}`, {
@@ -751,7 +758,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
                 launchingItemKey={launchingReleaseItemKey}
                 onLaunchItem={launchReleaseItem}
                 onSetItemIncluded={setReleaseItemIncluded}
-                onToggleItem={toggleReleaseItem}
+                onSetItemStatus={setReleaseItemStatus}
                 onAddAsset={chooseAndImport}
               />
             </div>
@@ -949,14 +956,14 @@ function ReleaseBoardWorkspace({
   launchingItemKey,
   onLaunchItem,
   onSetItemIncluded,
-  onToggleItem,
+  onSetItemStatus,
   onAddAsset,
 }: {
   board: ReleaseBoard
   launchingItemKey: string | null
   onLaunchItem: (category: ReleaseBoardCategory, item: ReleaseBoardItem) => void
   onSetItemIncluded: (categoryId: ReleaseBoardCategory['id'], itemId: string, included: boolean) => void
-  onToggleItem: (categoryId: ReleaseBoardCategory['id'], itemId: string) => void
+  onSetItemStatus: (categoryId: ReleaseBoardCategory['id'], itemId: string, status: ReleaseBoardItemStatus) => void
   onAddAsset: (kindHint: MissionAssetKindHint) => Promise<void>
 }) {
   return (
@@ -973,7 +980,7 @@ function ReleaseBoardWorkspace({
             launchingItemKey={launchingItemKey}
             onLaunchItem={onLaunchItem}
             onSetItemIncluded={onSetItemIncluded}
-            onToggleItem={onToggleItem}
+            onSetItemStatus={onSetItemStatus}
             onAddAsset={onAddAsset}
           />
         ))}
@@ -1013,7 +1020,7 @@ function ReleaseBoardBand({
   launchingItemKey,
   onLaunchItem,
   onSetItemIncluded,
-  onToggleItem,
+  onSetItemStatus,
   onAddAsset,
 }: {
   categories: ReleaseBoardCategory[]
@@ -1021,7 +1028,7 @@ function ReleaseBoardBand({
   launchingItemKey: string | null
   onLaunchItem: (category: ReleaseBoardCategory, item: ReleaseBoardItem) => void
   onSetItemIncluded: (categoryId: ReleaseBoardCategory['id'], itemId: string, included: boolean) => void
-  onToggleItem: (categoryId: ReleaseBoardCategory['id'], itemId: string) => void
+  onSetItemStatus: (categoryId: ReleaseBoardCategory['id'], itemId: string, status: ReleaseBoardItemStatus) => void
   onAddAsset: (kindHint: MissionAssetKindHint) => Promise<void>
 }) {
   return (
@@ -1054,7 +1061,7 @@ function ReleaseBoardBand({
             launchingItemKey={launchingItemKey}
             onLaunchItem={onLaunchItem}
             onSetItemIncluded={onSetItemIncluded}
-            onToggleItem={onToggleItem}
+            onSetItemStatus={onSetItemStatus}
             onAddAsset={onAddAsset}
           />
         ))}
@@ -1068,14 +1075,14 @@ function ReleaseBoardSection({
   launchingItemKey,
   onLaunchItem,
   onSetItemIncluded,
-  onToggleItem,
+  onSetItemStatus,
   onAddAsset,
 }: {
   category: ReleaseBoardCategory
   launchingItemKey: string | null
   onLaunchItem: (category: ReleaseBoardCategory, item: ReleaseBoardItem) => void
   onSetItemIncluded: (categoryId: ReleaseBoardCategory['id'], itemId: string, included: boolean) => void
-  onToggleItem: (categoryId: ReleaseBoardCategory['id'], itemId: string) => void
+  onSetItemStatus: (categoryId: ReleaseBoardCategory['id'], itemId: string, status: ReleaseBoardItemStatus) => void
   onAddAsset: (kindHint: MissionAssetKindHint) => Promise<void>
 }) {
   const Icon = releaseCategoryIcons[category.id] || CheckCircle2
@@ -1085,9 +1092,11 @@ function ReleaseBoardSection({
   const progressPercent = progress.total > 0 ? (progress.done / progress.total) * 100 : 0
   const [moreOpen, setMoreOpen] = React.useState(false)
   const [actionChoiceItemId, setActionChoiceItemId] = React.useState<string | null>(null)
+  const [statusChoiceItemId, setStatusChoiceItemId] = React.useState<string | null>(null)
   const activeItems = category.items.filter(isReleaseBoardItemIncluded)
   const optionalItems = category.items.filter((item) => item.tier !== 'core')
   const actionChoiceItem = activeItems.find((item) => item.id === actionChoiceItemId) ?? null
+  const statusChoiceItem = activeItems.find((item) => item.id === statusChoiceItemId) ?? null
   const actionChoice = actionChoiceItem ? getReleaseBoardItemAction(category.id, actionChoiceItem.id) : null
   const actionChoiceUploadHint = actionChoiceItem ? releaseBoardUploadHint(actionChoiceItem) : null
 
@@ -1131,13 +1140,19 @@ function ReleaseBoardSection({
               <div key={item.id} className="flex min-h-7 items-center gap-1.5 rounded-md bg-black/[0.35] px-2 py-1 ring-1 ring-white/[0.035] transition-colors hover:bg-white/[0.03]">
                 <button
                   type="button"
-                  onClick={() => onToggleItem(category.id, item.id)}
+                  onClick={() => {
+                    if (done || skipped) {
+                      onSetItemStatus(category.id, item.id, 'needed')
+                    } else {
+                      setStatusChoiceItemId(item.id)
+                    }
+                  }}
                   aria-label={
                     skipped
                       ? `Restore ${item.label} as needed`
                       : done
                         ? `Mark ${item.label} as needed`
-                        : `Mark ${item.label} as done`
+                        : `Review the status of ${item.label}`
                   }
                   className={cn(
                     'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors',
@@ -1281,6 +1296,53 @@ function ReleaseBoardSection({
                 <Plus className="h-3.5 w-3.5 shrink-0 text-white/36" />
               </button>
             ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(statusChoiceItem)} onOpenChange={(open) => !open && setStatusChoiceItemId(null)}>
+        <DialogContent className="border-white/[0.08] bg-[#070707] text-white shadow-modal-small sm:max-w-[410px]">
+          <DialogHeader className="pr-8">
+            <DialogTitle className="text-base font-medium text-white/88">{statusChoiceItem?.label}</DialogTitle>
+            <DialogDescription className="text-xs leading-5 text-white/42">
+              Use Review while checking the work. Confirm Done only after you have verified the real asset, link, receipt, or manual completion.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 pt-1">
+            {statusChoiceItem?.status !== 'review' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!statusChoiceItem) return
+                  onSetItemStatus(category.id, statusChoiceItem.id, 'review')
+                  setStatusChoiceItemId(null)
+                }}
+                className="rounded-lg bg-white/[0.04] px-3 py-2.5 text-left text-xs font-medium text-white/72 ring-1 ring-white/[0.07] transition-colors hover:bg-white/[0.08]"
+              >
+                Mark ready for review
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                if (!statusChoiceItem) return
+                onSetItemStatus(category.id, statusChoiceItem.id, 'done')
+                setStatusChoiceItemId(null)
+              }}
+              className="rounded-lg bg-gradient-to-r from-[#ff7a00] to-[#ef2b10] px-3 py-2.5 text-left text-xs font-medium text-white transition-opacity hover:opacity-90"
+            >
+              Confirm done
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!statusChoiceItem) return
+                onSetItemStatus(category.id, statusChoiceItem.id, 'skipped')
+                setStatusChoiceItemId(null)
+              }}
+              className="px-3 py-2 text-left text-[10px] font-medium text-white/34 transition-colors hover:text-white/62"
+            >
+              Not applicable to this release
+            </button>
           </div>
         </DialogContent>
       </Dialog>
