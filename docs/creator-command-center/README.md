@@ -39,6 +39,7 @@ Core Artist HQ and campaign workspace specs live here.
 - [28 Track Intelligence: Lyrics, Timing, And Musical Metadata](./28-track-intelligence-spec.md)
 - [29 X Editorial System](./29-x-editorial-system-spec.md)
 - [30 Release Manager And Essentials Execution](./30-release-manager-essentials-execution-spec.md)
+- [31 Catalog And Royalty Reconciliation](./31-catalog-royalty-reconciliation-spec.md)
 
 Current V1 implementation notes:
 
