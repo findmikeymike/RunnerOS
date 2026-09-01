@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,6 +10,11 @@ import {
   saveMissionLyricsAsync,
   serializeMissionAssetContext,
 } from '@craft-agent/shared/mission-assets';
+import {
+  materializeReleaseKitItem,
+  resolveReleaseKitItemPath,
+  serializeReleaseKitContext,
+} from '@craft-agent/shared/release-kit';
 import {
   getArtistContextDetail,
   getAuthorizedWorkspaceContext,
@@ -175,6 +181,46 @@ describe('Manager context retrieval', () => {
     expect(result.ok).toBe(true);
     expect(JSON.stringify(result)).not.toContain('approved lyric');
     expect(JSON.stringify(result)).toContain('source audio changed');
+  });
+
+  test('rebuilds Release Kit context live and withholds stale snapshot data', () => {
+    const root = workspace();
+    const source = join(root, 'release-master.wav');
+    writeFileSync(source, 'master-v1');
+    const promoted = materializeReleaseKitItem(root, {
+      workspaceId: 'workspace-1',
+      campaignId: 'workspace-1',
+      source: { type: 'upload', originalFileName: 'release-master.wav' },
+      sourcePath: source,
+      category: 'audio',
+      subtype: 'master',
+      promotedBy: 'user',
+      trackIntelligence: {
+        id: 'reviewed-1',
+        lyrics: {
+          lines: [{ id: 'line-1', text: 'stale lyric', startMs: 0, endMs: 1_000 }],
+          timingSource: 'transcription',
+          timingStatus: 'ready',
+        },
+        character: { genre: ['alt-pop'] },
+        provenance: {
+          processedLocally: true,
+          sourceSha256: createHash('sha256').update('master-v1').digest('hex'),
+        },
+        reviewedAt: '2026-08-31T12:00:00.000Z',
+        reviewedBy: { type: 'user', clientId: 'client-1' },
+      },
+    });
+    write(root, 'release-kit', serializeReleaseKitContext(promoted.manifest));
+    writeFileSync(resolveReleaseKitItemPath(root, promoted.item.relativePath), 'master-v2');
+
+    const result = getAuthorizedWorkspaceContext(root, 'worker', { slug: 'release-kit' });
+
+    expect(result.ok).toBe(true);
+    expect(JSON.stringify(result)).toContain('needs-review');
+    expect(JSON.stringify(result)).not.toContain(promoted.item.relativePath);
+    expect(JSON.stringify(result)).not.toContain('alt-pop');
+    expect(JSON.stringify(result)).not.toContain('trackIntelligence');
   });
 
   test('semantic artist lookup normalizes results and never exposes filesystem paths', () => {
