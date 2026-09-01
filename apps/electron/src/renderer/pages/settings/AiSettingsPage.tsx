@@ -994,7 +994,6 @@ export default function AiSettingsPage() {
                     <InfoExplainer text="Connect APIs like Codex, OpenRouter, or local models. Runner uses these to power your chat and workers." />
                   </div>
                 }
-                description="Connect accounts to access different AI models."
               >
                 <SettingsCard>
                   {llmConnections.length === 0 ? (

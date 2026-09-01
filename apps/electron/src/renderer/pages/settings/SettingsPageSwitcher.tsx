@@ -2,7 +2,6 @@ import {
   AppWindow,
   Brain,
   BriefcaseBusiness,
-  ChevronRight,
   KeyRound,
   MessageCircle,
   Sparkles,
@@ -15,6 +14,13 @@ import { cn } from '@/lib/utils'
 interface SettingsPageSwitcherProps {
   activeSubpage: SettingsSubpage
 }
+
+const CONNECTION_PAGES: Array<{ id: SettingsSubpage; label: string }> = [
+  { id: 'secrets', label: 'Services' },
+  { id: 'social-accounts', label: 'Social Accounts' },
+  { id: 'spotify', label: 'Spotify' },
+  { id: 'ad-accounts', label: 'Ad Accounts' },
+]
 
 type SettingsGroup = {
   id: string
@@ -40,12 +46,7 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
     description: 'Apps and services',
     icon: KeyRound,
     landing: 'secrets',
-    pages: [
-      { id: 'secrets', label: 'Services' },
-      { id: 'social-accounts', label: 'Social Accounts' },
-      { id: 'spotify', label: 'Spotify' },
-      { id: 'ad-accounts', label: 'Ad Accounts' },
-    ],
+    pages: CONNECTION_PAGES,
   },
   {
     id: 'messaging',
@@ -97,7 +98,6 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
 
 export function SettingsPageSwitcher({ activeSubpage }: SettingsPageSwitcherProps) {
   const activeGroup = SETTINGS_GROUPS.find((group) => group.pages.some((page) => page.id === activeSubpage)) ?? SETTINGS_GROUPS[0]!
-  const activePageLabel = activeGroup.pages.find((page) => page.id === activeSubpage)?.label ?? activeGroup.label
 
   return (
     <div className="w-full overflow-hidden rounded-[18px] border border-white/[0.07] bg-[#08080a]/94 p-2 shadow-middle backdrop-blur-xl">
@@ -120,7 +120,7 @@ export function SettingsPageSwitcher({ activeSubpage }: SettingsPageSwitcherProp
               <span className={cn(
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border transition-colors',
                 selected
-                  ? 'border-orange-300/20 bg-orange-400/13 text-orange-200'
+                  ? 'border-[#f05a28]/45 bg-[#e65320]/38 text-[#ffc0a3]'
                   : 'border-white/[0.055] bg-white/[0.025] text-white/36 group-hover:text-white/62',
               )}>
                 <Icon className="h-4 w-4" />
@@ -134,12 +134,17 @@ export function SettingsPageSwitcher({ activeSubpage }: SettingsPageSwitcherProp
         })}
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-white/[0.055] px-1 pt-2">
-        <div className="mr-1 hidden items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-white/28 sm:flex">
-          <span>{activeGroup.label}</span>
-          <ChevronRight className="h-3 w-3" />
-          <span className="text-white/46">{activePageLabel}</span>
-        </div>
+    </div>
+  )
+}
+
+export function SettingsGroupTabs({ activeSubpage }: SettingsPageSwitcherProps) {
+  const activeGroup = SETTINGS_GROUPS.find((group) => group.pages.some((page) => page.id === activeSubpage)) ?? SETTINGS_GROUPS[0]!
+  if (activeGroup.pages.length <= 1) return null
+
+  return (
+    <div className="relative z-[100] mt-8 -mb-12 pointer-events-auto">
+      <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-[11px] bg-white/[0.035] p-1 font-sans normal-case tracking-normal">
         {activeGroup.pages.map((page) => {
           const selected = page.id === activeSubpage
           return (
@@ -148,10 +153,10 @@ export function SettingsPageSwitcher({ activeSubpage }: SettingsPageSwitcherProp
               type="button"
               onClick={() => navigate(routes.view.settings(page.id))}
               className={cn(
-                'h-7 rounded-full px-3 text-[11px] font-medium transition-colors',
+                'h-8 rounded-[8px] px-3 text-[12px] font-semibold transition-colors',
                 selected
-                  ? 'bg-white/[0.09] text-white'
-                  : 'bg-white/[0.02] text-white/42 hover:bg-white/[0.05] hover:text-white/72',
+                  ? 'bg-[#e65320]/45 text-white shadow-minimal'
+                  : 'text-white/52 hover:bg-white/[0.05] hover:text-white/82',
               )}
             >
               {page.label}

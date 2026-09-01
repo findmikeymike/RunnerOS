@@ -22,4 +22,14 @@ describe('Google Gmail connection UI', () => {
     expect(source).toContain('gmail.readonly · gmail.compose')
     expect(source).toContain('Read selected mail; create drafts and send only after approval')
   })
+
+  it('keeps the services page compact and hides the raw secret list by default', () => {
+    expect(settings).not.toContain('Keys and services</h1>')
+    expect(settings).toContain('Refresh')
+    expect(settings).toContain('Saved secrets')
+    expect(settings).toContain('aria-expanded={savedSecretsOpen}')
+    expect(settings).toContain("savedSecretsOpen ? (")
+    expect(settings).toContain('space-y-2 px-6 pb-8 pt-2')
+    expect(settings).toContain('className="!border-0 shadow-none"')
+  })
 })

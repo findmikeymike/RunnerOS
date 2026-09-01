@@ -10,7 +10,6 @@ import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { LoadedSource, SourceCredentialScopeResult, UserSecretSummary, ZeroStatus } from '../../../shared/types'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { navigate, routes } from '@/lib/navigate'
-import { PRODUCT_NAME } from '@/lib/product-identity'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -769,6 +768,7 @@ export default function SecretsSettingsPage() {
   const [accessMessage, setAccessMessage] = React.useState('Only the workspace Owner can view or change saved keys and connected service credentials.')
   const [gmailScope, setGmailScope] = React.useState<SourceCredentialScopeResult | null>(null)
   const [gmailConnectionError, setGmailConnectionError] = React.useState<string | null>(null)
+  const [savedSecretsOpen, setSavedSecretsOpen] = React.useState(false)
 
   const services = React.useMemo(
     () => SERVICES.filter((service) => service.group === selectedGroup),
@@ -1145,29 +1145,16 @@ export default function SecretsSettingsPage() {
     <div className="flex h-full flex-col">
       <PanelHeader />
       <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 pt-4">
-          <div className="rounded-[18px] border border-white/[0.07] bg-white/[0.025] p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h1 className="text-2xl font-semibold text-white">Keys and services</h1>
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-white/48">
-                  Choose a category, connect the service, then save and test the setup. Keys are stored in {PRODUCT_NAME} encrypted credential storage.
-                </p>
-              </div>
-              <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-                {loading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="mr-2 h-3.5 w-3.5" />}
-                Refresh
-              </Button>
-            </div>
+        <div className="mx-auto w-full max-w-[1600px] space-y-2 px-6 pb-8 pt-2">
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+              {loading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="mr-2 h-3.5 w-3.5" />}
+              Refresh
+            </Button>
           </div>
 
           <SettingsSection
-            title={
-              <div className="flex items-center gap-2">
-                Services
-                <InfoExplainer text="Add API keys to enable agent integrations for promotion, commerce, video generation, and more." />
-              </div>
-            }
+            title="Services"
           >
             <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
               <SettingsCard className="self-start">
@@ -1208,7 +1195,7 @@ export default function SecretsSettingsPage() {
                   const expanded = service.id !== 'google-workspace' && expandedServiceId === service.id
                   const zeroPrivateKeyPreset = presets.find((preset) => preset.name === 'ZERO_PRIVATE_KEY')
                   return (
-                    <SettingsCard key={service.id}>
+                    <SettingsCard key={service.id} className="!border-0 shadow-none">
                       <div className="p-3">
                         <div className="flex items-center justify-between gap-4">
                           <div className="min-w-0">
@@ -1509,28 +1496,32 @@ export default function SecretsSettingsPage() {
             </div>
             </SettingsSection>
 
-            <SettingsSection
-              title={
-                <div className="flex items-center gap-2">
-                  All Saved Secrets
-                  <InfoExplainer text="A raw view of all keys you have securely stored in your environment." />
+            <SettingsCard className="mt-8 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setSavedSecretsOpen((open) => !open)}
+                aria-expanded={savedSecretsOpen}
+                className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-white/[0.025]"
+              >
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <KeyRound className="h-3.5 w-3.5 shrink-0 text-white/38" />
+                  <span className="text-sm font-medium text-white/68">Saved secrets</span>
+                  <span className="text-xs text-white/30">{secrets.length}</span>
                 </div>
-              }
-              className="mt-8"
-            >
-              <SettingsCard>
-                <div className="divide-y divide-white/[0.06]">
+                <ChevronDown className={`h-4 w-4 shrink-0 text-white/34 transition-transform ${savedSecretsOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {savedSecretsOpen ? (
+                <div className="divide-y divide-white/[0.06] border-t border-white/[0.06]">
                   {secrets.length === 0 ? (
                     <div className="p-4 text-sm text-white/38">No secrets saved.</div>
                   ) : secrets.map((secret) => (
-                    <div key={secret.name} className="flex items-center justify-between gap-3 p-4 hover:bg-white/[0.015] transition-colors">
+                    <div key={secret.name} className="flex items-center justify-between gap-3 p-4 transition-colors hover:bg-white/[0.015]">
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2 text-sm font-medium">
-                          <KeyRound className="h-3.5 w-3.5 text-white/45" />
-                          <span>{secret.name}</span>
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/80" />
+                        <div className="flex items-center gap-2 text-sm font-medium text-white/74">
+                          <span className="truncate">{secret.name}</span>
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400/80" />
                         </div>
-                        <div className="mt-1 text-xs text-white/35 font-mono">{secret.maskedValue}</div>
+                        <div className="mt-1 font-mono text-xs text-white/35">{secret.maskedValue}</div>
                       </div>
                       <Button variant="ghost" size="sm" onClick={() => remove(secret.name)} className="hover:bg-red-500/10 hover:text-red-400">
                         <Trash2 className="h-3.5 w-3.5" />
@@ -1538,8 +1529,8 @@ export default function SecretsSettingsPage() {
                     </div>
                   ))}
                 </div>
-              </SettingsCard>
-            </SettingsSection>
+              ) : null}
+            </SettingsCard>
           </div>
         </ScrollArea>
     </div>
@@ -1563,7 +1554,7 @@ function StatusIcon({ status, serviceId }: { status: ServiceStatus; serviceId: s
   ) : optional ? (
     <Info className="h-3.5 w-3.5 text-white/28" />
   ) : (
-    <span className="text-[13px] font-semibold leading-none text-amber-300">!</span>
+    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/[0.07] text-[12px] font-semibold leading-none text-red-300/80">!</span>
   )
 
   return (

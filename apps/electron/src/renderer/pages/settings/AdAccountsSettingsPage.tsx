@@ -4,7 +4,6 @@ import {
   BadgeDollarSign,
   CheckCircle2,
   Copy,
-  ExternalLink,
   Loader2,
   LogIn,
   Plus,
@@ -16,7 +15,7 @@ import {
 import { toast } from 'sonner'
 import { openBrowserSidecarAtom, setBrowserInstancesAtom } from '@/atoms/browser-pane'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
-import { SettingsCard, SettingsCardContent, SettingsSection } from '@/components/settings'
+import { SettingsCard, SettingsSection } from '@/components/settings'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -27,7 +26,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { navigate, routes } from '@/lib/navigate'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type {
   AdBrowserAccountStatus,
@@ -52,6 +50,7 @@ export default function AdAccountsSettingsPage() {
   const [profile, setProfile] = React.useState('')
   const [label, setLabel] = React.useState('')
   const [accountId, setAccountId] = React.useState('')
+  const [addOpen, setAddOpen] = React.useState(false)
   const [pendingDelete, setPendingDelete] = React.useState<AdBrowserAccountStatus | null>(null)
   const [busy, setBusy] = React.useState<string | null>('load')
 
@@ -85,6 +84,7 @@ export default function AdAccountsSettingsPage() {
       setProfile('')
       setLabel('')
       setAccountId('')
+      setAddOpen(false)
       await load()
       toast.success('Ad account added')
     } catch (error) {
@@ -152,34 +152,28 @@ export default function AdAccountsSettingsPage() {
     <div className="flex h-full flex-col">
       <PanelHeader />
       <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-6 p-6">
+        <div className="space-y-5 p-6">
           <SettingsSection
             title="Ad Accounts"
-            description="Saved, isolated dashboard logins for Ad Runner. API keys and OAuth connections remain in Services."
+            description="Connect the ad dashboards your team uses."
             action={(
-              <div className="flex gap-2">
-                <Button type="button" size="sm" variant="ghost" className="border border-white/10 bg-white/[0.04] text-white/68 hover:bg-white/[0.08] hover:text-white" onClick={() => navigate(routes.view.settings('secrets'))}>
-                  <ExternalLink className="h-3.5 w-3.5" /> Services
-                </Button>
-                <Button type="button" size="sm" variant="secondary" className="border border-white/10 bg-white/[0.05] text-white/72 hover:bg-white/[0.09] hover:text-white" onClick={load} disabled={busy === 'load'}>
-                  {busy === 'load' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />} Refresh
-                </Button>
-              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                aria-label="Refresh ad accounts"
+                title="Refresh"
+                className="h-8 w-8 p-0 text-white/42 hover:bg-white/[0.06] hover:text-white/76"
+                onClick={load}
+                disabled={busy === 'load'}
+              >
+                {busy === 'load' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
+              </Button>
             )}
           >
-            <div className="space-y-3">
+            <div className="space-y-2">
               {accounts.length === 0 && busy !== 'load' ? (
-                <SettingsCard>
-                  <SettingsCardContent>
-                    <div className="flex items-start gap-3">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-400/12 text-orange-200"><BadgeDollarSign className="h-4 w-4" /></span>
-                      <div>
-                        <p className="text-sm font-semibold text-white/86">No ad dashboard accounts connected</p>
-                        <p className="mt-1 text-xs leading-5 text-white/42">Add Meta or Google Ads, then log in once through the controlled browser. Spotify Ads Manager is connected under Spotify.</p>
-                      </div>
-                    </div>
-                  </SettingsCardContent>
-                </SettingsCard>
+                <p className="rounded-xl bg-white/[0.025] px-4 py-5 text-sm text-white/46">Add Meta Ads or Google Ads to connect its dashboard.</p>
               ) : null}
 
               {accounts.map((account) => (
@@ -195,10 +189,21 @@ export default function AdAccountsSettingsPage() {
             </div>
           </SettingsSection>
 
-          <SettingsSection title="Add Ad Account" description="Use one isolated profile per dashboard account selection. Create another profile when the same login manages a different client account.">
-            <SettingsCard>
-              <SettingsCardContent>
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {accounts.length > 0 && !addOpen ? (
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-[8px] px-2 text-xs font-medium text-white/42 transition-colors hover:bg-white/[0.04] hover:text-white/72"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add ad account
+            </button>
+          ) : null}
+
+          {accounts.length === 0 || addOpen ? (
+            <SettingsSection title="Add Ad Account">
+              <SettingsCard className="!border-0 shadow-none">
+                <div className="grid gap-3 p-3 md:grid-cols-2">
                   <Field label="Provider">
                     <select value={provider} onChange={(event) => setProvider(event.target.value as AdBrowserProvider)} className={inputClass}>
                       <option value="meta-ads">Meta Ads</option>
@@ -208,22 +213,30 @@ export default function AdAccountsSettingsPage() {
                   <Field label="Local Account Name">
                     <input value={profile} placeholder={PROVIDERS[provider].defaultProfile} onChange={(event) => setProfile(event.target.value)} className={inputClass} />
                   </Field>
-                  <Field label="Display Label">
-                    <input value={label} placeholder={PROVIDERS[provider].label} onChange={(event) => setLabel(event.target.value)} className={inputClass} />
-                  </Field>
-                  <Field label="Account ID (optional)">
-                    <input value={accountId} placeholder="Auto-detected when possible" onChange={(event) => setAccountId(event.target.value)} className={inputClass} />
-                  </Field>
                 </div>
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <p className="text-[11px] leading-4 text-white/32">Agents attach this login with <span className="font-mono text-white/50">{provider}/{profile.trim() || PROVIDERS[provider].defaultProfile}</span>.</p>
-                  <Button type="button" onClick={addAccount} disabled={busy === 'add'} className="shrink-0 bg-white text-black hover:bg-white/90">
-                    {busy === 'add' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add Account
+                <details className="mx-3 border-t border-white/[0.055] py-2 text-xs text-white/40">
+                  <summary className="cursor-pointer select-none py-1 hover:text-white/68">Optional details</summary>
+                  <div className="grid gap-3 pb-2 pt-2 md:grid-cols-2">
+                    <Field label="Display Label">
+                      <input value={label} placeholder={PROVIDERS[provider].label} onChange={(event) => setLabel(event.target.value)} className={inputClass} />
+                    </Field>
+                    <Field label="Account ID">
+                      <input value={accountId} placeholder="Auto-detected when possible" onChange={(event) => setAccountId(event.target.value)} className={inputClass} />
+                    </Field>
+                  </div>
+                </details>
+                <div className="flex items-center justify-end gap-2 px-3 pb-3 pt-1">
+                  {accounts.length > 0 ? (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setAddOpen(false)} className="text-white/42 hover:text-white/72">Cancel</Button>
+                  ) : null}
+                  <Button type="button" onClick={addAccount} disabled={busy === 'add'} className="bg-white text-black hover:bg-white/90">
+                    {busy === 'add' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    Add Account
                   </Button>
                 </div>
-              </SettingsCardContent>
-            </SettingsCard>
-          </SettingsSection>
+              </SettingsCard>
+            </SettingsSection>
+          ) : null}
 
           <DeleteAdAccountDialog account={pendingDelete} busy={Boolean(pendingDelete && busy === accountKey(pendingDelete, 'delete'))} onCancel={() => setPendingDelete(null)} onConfirm={remove} />
         </div>
@@ -244,28 +257,27 @@ function AdAccountCard({ account, busy, onOpen, onVerify, onDelete }: { account:
     }
   }
   return (
-    <SettingsCard divided={false}>
-      <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-400/12 text-orange-200"><BadgeDollarSign className="h-4 w-4" /></span>
+    <SettingsCard divided={false} className="!border-0 bg-[#0d0d0f] shadow-none">
+      <div className="flex min-h-[68px] flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[#e65320]/32 text-[#ffc0a3]"><BadgeDollarSign className="h-3.5 w-3.5" /></span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="truncate text-sm font-semibold text-white/86">{account.label}</p>
               <StatusPill account={account} />
             </div>
-            <p className="mt-0.5 text-[11px] text-white/38">{provider.purpose}</p>
-            <p className="mt-1 font-mono text-[11px] text-white/38">{account.provider}/{account.profile}{account.accountId ? ` · ${formatAccountId(account.provider, account.accountId)}` : ''}</p>
+            <p className="mt-0.5 truncate text-xs text-white/34">{provider.purpose}{account.accountId ? ` · ${formatAccountId(account.provider, account.accountId)}` : ''}</p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" variant="secondary" className="border border-white/15 bg-white text-black hover:bg-white/90" onClick={onOpen} disabled={accountBusy}>
+        <div className="flex flex-wrap items-center gap-1.5 lg:justify-end">
+          <Button type="button" size="sm" variant="secondary" className="h-8 min-w-[92px] border-0 bg-white text-black hover:bg-white/90" onClick={onOpen} disabled={accountBusy}>
             {busy === accountKey(account, 'login') ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />} {account.ready ? 'Open' : 'Connect'}
           </Button>
-          <Button type="button" size="sm" variant="secondary" className="border border-amber-300/25 bg-amber-400/10 text-amber-100 hover:bg-amber-400/16 hover:text-amber-50" onClick={onVerify} disabled={accountBusy}>
+          <Button type="button" size="sm" variant="ghost" className="h-8 px-2.5 text-xs text-white/48 hover:bg-white/[0.055] hover:text-white/76" onClick={onVerify} disabled={accountBusy}>
             {busy === accountKey(account, 'verify') ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />} Verify
           </Button>
-          <Button type="button" size="sm" variant="ghost" className="border border-white/10 bg-white/[0.04] text-white/68 hover:bg-white/[0.08] hover:text-white" onClick={copyRef}><Copy className="h-3.5 w-3.5" /> Copy Ref</Button>
-          <Button type="button" size="sm" variant="ghost" className="border border-red-300/15 bg-red-400/[0.06] text-red-200/75 hover:bg-red-400/12 hover:text-red-100" onClick={onDelete} disabled={accountBusy}><Trash2 className="h-3.5 w-3.5" /> Delete</Button>
+          <Button type="button" size="sm" variant="ghost" aria-label="Copy ad account reference" title="Copy account reference" className="h-8 w-8 p-0 text-white/30 hover:bg-white/[0.055] hover:text-white/68" onClick={copyRef}><Copy className="h-3.5 w-3.5" /></Button>
+          <Button type="button" size="sm" variant="ghost" aria-label="Delete ad account" title="Delete account" className="h-8 w-8 p-0 text-white/26 hover:bg-red-400/[0.08] hover:text-red-200/80" onClick={onDelete} disabled={accountBusy}><Trash2 className="h-3.5 w-3.5" /></Button>
         </div>
       </div>
     </SettingsCard>

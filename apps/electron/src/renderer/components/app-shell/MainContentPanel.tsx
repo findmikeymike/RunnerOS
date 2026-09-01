@@ -74,7 +74,7 @@ import { AGENDA_LABEL } from './agenda-utils'
 import { CommunityPage } from './CommunityPage'
 import { VaultPage } from './VaultPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
-import { SettingsPageSwitcher } from '@/pages/settings/SettingsPageSwitcher'
+import { SettingsGroupTabs, SettingsPageSwitcher } from '@/pages/settings/SettingsPageSwitcher'
 import {
   AGENT_EVENTS,
   APP_EVENTS,
@@ -95,6 +95,7 @@ import { ChevronDown, ChevronRight, Plus, Sparkles, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { CompactPageHeader } from './CompactPageHeader'
 import { ArtistManagerCreateLink, type ArtistManagerCreationKind } from './ArtistManagerCreateLink'
+import { WorkPageTabs, type WorkPageTab } from './WorkPageTabs'
 import { MISSION_BRIEF_CONTEXT_SLUG, missionCampaignWindow, missionReleaseDateKey, parseMissionBriefDoc } from '@/lib/mission-brief'
 import type { HqCampaignSummary } from '@/lib/artist-hq-home-feed'
 
@@ -415,6 +416,7 @@ export function MainContentPanel({
         <div className="shrink-0 px-6 pt-5">
           <div className="mx-auto w-full max-w-[1600px]">
             <SettingsPageSwitcher activeSubpage={navState.subpage} />
+            <SettingsGroupTabs activeSubpage={navState.subpage} />
           </div>
         </div>
         <div className="min-h-0 flex-1">
@@ -680,6 +682,7 @@ export function MainContentPanel({
         <ResourceRows
           label="Automation layer"
           title="Automations"
+          workTab="automations"
           description="Scheduled, event, and agentic routines configured for this workspace."
           automations={automations}
           workspaceId={activeWorkspaceId || undefined}
@@ -807,6 +810,7 @@ type ResourceRowsProps = {
   workspaceRootPath?: string
   loading?: boolean
   error?: string | null
+  workTab?: WorkPageTab
   onDeleteSource?: (sourceSlug: string) => void
   onDeleteSkill?: (skillSlug: string) => void
   onDeleteAutomation?: (automationId: string) => void
@@ -839,6 +843,7 @@ function ResourceRows({
   workspaceRootPath,
   loading,
   error,
+  workTab,
   onDeleteSource,
   onDeleteSkill,
   onDeleteAutomation,
@@ -970,10 +975,10 @@ function ResourceRows({
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="mx-auto flex min-h-full max-w-[1600px] flex-col px-5 py-4 xl:px-8 xl:py-5">
         <CompactPageHeader
-          eyebrow={label}
-          title={title}
-          tone="blue"
-          className="mb-6"
+          eyebrow={workTab ? 'Team' : label}
+          title={workTab ? 'Work' : title}
+          tone={workTab ? 'orange' : 'blue'}
+          className="mb-4"
           actions={automations || (addEditConfig && addLabel) ? (
             <>
                 {automations ? (
@@ -1008,8 +1013,10 @@ function ResourceRows({
           ) : undefined}
         />
 
+        {workTab ? <WorkPageTabs active={workTab} className="mb-4" /> : null}
+
         {managerCreationKind ? (
-          <div className="-mt-3 mb-4 flex justify-end px-1">
+          <div className="mb-4 flex justify-end px-1">
             <ArtistManagerCreateLink kind={managerCreationKind} workspaceId={workspaceId} />
           </div>
         ) : null}

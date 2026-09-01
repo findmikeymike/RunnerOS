@@ -16,7 +16,7 @@ import {
 import { toast } from 'sonner'
 import { openBrowserSidecarAtom, setBrowserInstancesAtom } from '@/atoms/browser-pane'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
-import { SettingsCard, SettingsCardContent, SettingsSection } from '@/components/settings'
+import { SettingsCard, SettingsSection } from '@/components/settings'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -47,6 +47,7 @@ export default function SpotifySettingsPage() {
   const setBrowserInstances = useSetAtom(setBrowserInstancesAtom)
   const [doctor, setDoctor] = React.useState<SocialAccountsDoctorResult | null>(null)
   const [newProfile, setNewProfile] = React.useState('')
+  const [addOpen, setAddOpen] = React.useState(false)
   const [pendingDelete, setPendingDelete] = React.useState<SocialAccountProfileStatus | null>(null)
   const [busy, setBusy] = React.useState<string | null>('load')
 
@@ -91,6 +92,7 @@ export default function SpotifySettingsPage() {
         accountGroup: 'Spotify',
       })
       setNewProfile('')
+      setAddOpen(false)
       await load()
       toast.success('Spotify account added')
     } catch (error) {
@@ -167,41 +169,26 @@ export default function SpotifySettingsPage() {
     <div className="flex h-full flex-col">
       <PanelHeader />
       <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-6 p-6">
+        <div className="space-y-5 p-6">
           <SettingsSection
             title="Spotify"
-            description="Connect Spotify once for artist analytics, playlist creation, and Spotify Ads Manager. Each capability keeps its own login check under the same isolated account."
+            description="Connect artist data, playlists, and ads separately for each account."
             action={(
               <Button
                 type="button"
                 size="sm"
-                variant="secondary"
-                className="border border-white/10 bg-white/[0.05] text-white/72 hover:bg-white/[0.09] hover:text-white"
+                variant="ghost"
+                aria-label="Refresh Spotify accounts"
+                title="Refresh"
+                className="h-8 w-8 p-0 text-white/42 hover:bg-white/[0.06] hover:text-white/76"
                 onClick={load}
                 disabled={busy === 'load'}
               >
                 {busy === 'load' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
-                Refresh
               </Button>
             )}
           >
-            <div className="space-y-3">
-              {profiles.length === 0 && busy !== 'load' ? (
-                <SettingsCard>
-                  <SettingsCardContent>
-                    <div className="flex items-start gap-3">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1ED760]/12 text-[#1ED760]">
-                        <Music2 className="h-4 w-4" />
-                      </span>
-                      <div>
-                        <p className="text-sm font-semibold text-white/86">No Spotify account connected</p>
-                        <p className="mt-1 text-xs leading-5 text-white/42">Add an account, then connect the Spotify surfaces you use in the controlled browser.</p>
-                      </div>
-                    </div>
-                  </SettingsCardContent>
-                </SettingsCard>
-              ) : null}
-
+            <div className="space-y-2">
               {profiles.map((profile) => (
                 <SpotifyAccountCard
                   key={profile.profile}
@@ -212,41 +199,54 @@ export default function SpotifySettingsPage() {
                   onDelete={() => setPendingDelete(profile)}
                 />
               ))}
+              {profiles.length === 0 && busy !== 'load' ? (
+                <p className="rounded-xl bg-white/[0.025] px-4 py-5 text-sm text-white/46">Add a Spotify account to connect its tools.</p>
+              ) : null}
             </div>
           </SettingsSection>
 
-          <SettingsSection
-            title={profiles.length ? 'Add Another Spotify Account' : 'Add Spotify Account'}
-            description="Use a short local name so agents can select the correct saved login."
-          >
-            <SettingsCard>
-              <SettingsCardContent>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                  <label className="min-w-0 flex-1 space-y-1">
-                    <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-white/34">Account Name</span>
-                    <input
-                      value={newProfile}
-                      placeholder={DEFAULT_PROFILE}
-                      onChange={(event) => setNewProfile(event.target.value)}
-                      className="h-9 w-full rounded-md border border-white/10 bg-white/[0.035] px-3 text-sm text-white outline-none placeholder:text-white/22"
-                    />
-                    <span className="block text-[11px] leading-4 text-white/32">
-                      Agents use this account as spotify/{newProfile.trim() || (profiles.length === 0 ? DEFAULT_PROFILE : 'your-account-name')}.
-                    </span>
-                  </label>
-                  <Button
-                    type="button"
-                    onClick={addAccount}
-                    disabled={busy === 'add'}
-                    className="bg-white text-black hover:bg-white/90 sm:w-auto"
-                  >
-                    {busy === 'add' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                    Add Account
-                  </Button>
+          {profiles.length > 0 && !addOpen ? (
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-[8px] px-2 text-xs font-medium text-white/42 transition-colors hover:bg-white/[0.04] hover:text-white/72"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add Spotify account
+            </button>
+          ) : null}
+
+          {profiles.length === 0 || addOpen ? (
+            <SettingsSection title="Add Spotify Account">
+              <SettingsCard className="!border-0 shadow-none">
+                <div className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center">
+                  <input
+                    aria-label="Spotify account name"
+                    value={newProfile}
+                    placeholder={profiles.length === 0 ? DEFAULT_PROFILE : 'Account name'}
+                    onChange={(event) => setNewProfile(event.target.value)}
+                    className="h-9 min-w-0 flex-1 rounded-[8px] border border-white/[0.07] bg-white/[0.035] px-3 text-sm text-white outline-none placeholder:text-white/24 focus:border-white/15"
+                  />
+                  <div className="flex items-center gap-2">
+                    {profiles.length > 0 ? (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setAddOpen(false)} className="text-white/42 hover:text-white/72">
+                        Cancel
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      onClick={addAccount}
+                      disabled={busy === 'add'}
+                      className="bg-white text-black hover:bg-white/90"
+                    >
+                      {busy === 'add' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                      Add Account
+                    </Button>
+                  </div>
                 </div>
-              </SettingsCardContent>
-            </SettingsCard>
-          </SettingsSection>
+              </SettingsCard>
+            </SettingsSection>
+          ) : null}
 
           <DeleteSpotifyDialog
             profile={pendingDelete}
@@ -285,59 +285,60 @@ function SpotifyAccountCard({
   }
 
   return (
-    <SettingsCard divided={false}>
-      <div className="space-y-3 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <SettingsCard divided={false} className="!border-0 bg-[#0d0d0f] shadow-none">
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1ED760]/12 text-[#1ED760]">
-              <Music2 className="h-4 w-4" />
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[#1ED760]/10 text-[#1ED760]/85">
+              <Music2 className="h-3.5 w-3.5" />
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate text-sm font-semibold text-white/86">{profile.profile}</p>
                 <SpotifyStatusPill profile={profile} />
               </div>
-              <p className="mt-0.5 truncate font-mono text-[11px] text-white/38">spotify/{profile.profile}</p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex items-center gap-1">
             <Button
               type="button"
               size="sm"
-              variant="secondary"
-              className="border border-amber-300/25 bg-amber-400/10 text-amber-100 hover:bg-amber-400/16 hover:text-amber-50"
+              variant="ghost"
+              className="h-8 gap-1.5 px-2.5 text-xs text-white/50 hover:bg-white/[0.055] hover:text-white/78"
               onClick={onVerify}
               disabled={accountBusy}
             >
               {busy === `${profile.profile}:verify` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-              Verify Account
+              Verify
             </Button>
             <Button
               type="button"
               size="sm"
               variant="ghost"
-              className="border border-white/10 bg-white/[0.04] text-white/68 hover:bg-white/[0.08] hover:text-white"
+              aria-label="Copy account reference"
+              title="Copy account reference"
+              className="h-8 w-8 p-0 text-white/34 hover:bg-white/[0.055] hover:text-white/70"
               onClick={copyAgentRef}
             >
               <Copy className="h-3.5 w-3.5" />
-              Copy Ref
             </Button>
             <Button
               type="button"
               size="sm"
               variant="ghost"
-              className="border border-red-300/15 bg-red-400/[0.06] text-red-200/75 hover:bg-red-400/12 hover:text-red-100"
+              aria-label="Delete Spotify account"
+              title="Delete account"
+              className="h-8 w-8 p-0 text-white/28 hover:bg-red-400/[0.08] hover:text-red-200/80"
               onClick={onDelete}
               disabled={accountBusy}
             >
               <Trash2 className="h-3.5 w-3.5" />
-              Delete
             </Button>
           </div>
         </div>
 
-        <div className="grid gap-2 lg:grid-cols-3">
-          <SpotifyCapabilityCard
+        <div className="divide-y divide-white/[0.055] border-t border-white/[0.055]">
+          <SpotifyCapabilityRow
             label="Spotify for Artists"
             purpose="Artist analytics"
             capability={capabilities?.artists}
@@ -345,7 +346,7 @@ function SpotifyAccountCard({
             disabled={accountBusy}
             onOpen={() => onLogin('artists')}
           />
-          <SpotifyCapabilityCard
+          <SpotifyCapabilityRow
             label="Spotify Web Player"
             purpose="Playlist creation"
             capability={capabilities?.webPlayer}
@@ -353,7 +354,7 @@ function SpotifyAccountCard({
             disabled={accountBusy}
             onOpen={() => onLogin('web-player')}
           />
-          <SpotifyCapabilityCard
+          <SpotifyCapabilityRow
             label="Spotify Ads Manager"
             purpose="Paid campaign dashboard"
             capability={capabilities?.adsManager}
@@ -367,7 +368,7 @@ function SpotifyAccountCard({
   )
 }
 
-function SpotifyCapabilityCard({
+function SpotifyCapabilityRow({
   label,
   purpose,
   capability,
@@ -385,16 +386,18 @@ function SpotifyCapabilityCard({
   const ready = capability?.ready === true
   const checked = capability != null
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-white/[0.07] bg-black/20 p-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
-        <p className="truncate text-xs font-medium text-white/78">{label}</p>
-        <p className="mt-0.5 truncate text-[11px] text-white/38">{purpose}</p>
+    <div className="flex min-h-[58px] flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center">
+      <div className="min-w-0 flex-1 sm:flex sm:items-baseline sm:gap-3">
+        <p className="truncate text-sm font-medium text-white/78">{label}</p>
+        <p className="mt-0.5 truncate text-xs text-white/34 sm:mt-0">{purpose}</p>
+      </div>
+      <div className="flex items-center justify-between gap-3 sm:justify-end">
         <span
           className={ready
-            ? 'mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-200'
+            ? 'inline-flex min-w-[94px] items-center gap-1.5 text-xs font-medium text-emerald-200/80'
             : checked
-              ? 'mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-amber-200'
-              : 'mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-white/42'}
+              ? 'inline-flex min-w-[94px] items-center gap-1.5 text-xs font-medium text-amber-200/70'
+              : 'inline-flex min-w-[94px] items-center gap-1.5 text-xs font-medium text-white/34'}
           title={capability?.message}
         >
           {ready
@@ -402,20 +405,22 @@ function SpotifyCapabilityCard({
             : checked
               ? <XCircle className="h-3.5 w-3.5" />
               : <CircleDashed className="h-3.5 w-3.5" />}
-          {ready ? 'Ready' : checked ? statusLabel(capability.status) : 'Not checked'}
+          {ready ? 'Connected' : checked ? statusLabel(capability.status) : 'Not connected'}
         </span>
+        <Button
+          type="button"
+          size="sm"
+          variant={ready ? 'ghost' : 'secondary'}
+          className={ready
+            ? 'h-8 min-w-[88px] shrink-0 text-white/52 hover:bg-white/[0.055] hover:text-white/78'
+            : 'h-8 min-w-[88px] shrink-0 bg-white text-black hover:bg-white/90 disabled:text-black/50'}
+          onClick={onOpen}
+          disabled={disabled}
+        >
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
+          {ready ? 'Open' : 'Connect'}
+        </Button>
       </div>
-      <Button
-        type="button"
-        size="sm"
-        variant="secondary"
-        className="shrink-0 border border-white/15 bg-white text-black hover:bg-white/90 disabled:text-black/50"
-        onClick={onOpen}
-        disabled={disabled}
-      >
-        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
-        {ready ? 'Open' : 'Connect'}
-      </Button>
     </div>
   )
 }

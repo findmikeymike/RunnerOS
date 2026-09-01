@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useSetAtom } from 'jotai'
-import { CheckCircle2, ChevronDown, ChevronRight, Copy, Loader2, LogIn, Plus, RefreshCcw, Save, ShieldCheck, Trash2, XCircle } from 'lucide-react'
+import { CheckCircle2, ChevronDown, ChevronRight, Copy, Loader2, LogIn, Pencil, Plus, RefreshCcw, Save, ShieldCheck, Trash2, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { SettingsCard, SettingsCardContent, SettingsSection } from '@/components/settings'
+import { SettingsCard, SettingsSection } from '@/components/settings'
 import { openBrowserSidecarAtom, setBrowserInstancesAtom } from '@/atoms/browser-pane'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type {
@@ -61,6 +61,7 @@ export default function SocialAccountsSettingsPage() {
   const [loginPlan, setLoginPlan] = React.useState<SocialAccountCommandResult | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<SocialAccountProfileStatus | null>(null)
   const [newGroupName, setNewGroupName] = React.useState('')
+  const [addSetOpen, setAddSetOpen] = React.useState(false)
   const [localGroups, setLocalGroups] = React.useState<string[]>([])
   const [activeGroup, setActiveGroup] = React.useState<string | null>(null)
   const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(() => new Set())
@@ -193,6 +194,7 @@ export default function SocialAccountsSettingsPage() {
   const cancelEdit = () => {
     setDraft(activeGroup ? { ...EMPTY_DRAFT, accountGroup: activeGroup } : EMPTY_DRAFT)
     setEditingRef(null)
+    setActiveGroup(null)
   }
 
   const addAccountSet = () => {
@@ -203,6 +205,7 @@ export default function SocialAccountsSettingsPage() {
     }
     setLocalGroups((prev) => prev.includes(name) ? prev : [...prev, name])
     setNewGroupName('')
+    setAddSetOpen(false)
     openEditor(name)
   }
 
@@ -286,54 +289,33 @@ export default function SocialAccountsSettingsPage() {
     <div className="flex h-full flex-col">
       <PanelHeader />
       <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-6 p-6">
+        <div className="space-y-5 p-6">
           <SettingsSection
             title="Social Accounts"
-            description="Create an account set for each persona or brand, then add platform accounts beneath it. Spotify has its own tab under Connections."
+            description="Keep each artist or brand's social accounts together."
             action={
               <Button
                 type="button"
                 size="sm"
-                variant="secondary"
-                className="border border-white/10 bg-white/[0.05] text-white/72 hover:bg-white/[0.09] hover:text-white"
+                variant="ghost"
+                aria-label="Refresh social accounts"
+                title="Refresh"
+                className="h-8 w-8 p-0 text-white/42 hover:bg-white/[0.06] hover:text-white/76"
                 onClick={load}
                 disabled={busy === 'load'}
               >
                 {busy === 'load' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
-                Refresh
               </Button>
             }
           >
-            <SettingsCard>
-              <SettingsCardContent>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                  <Field label="New Account Set" value={newGroupName} placeholder="Music Fan Page" onChange={setNewGroupName} />
-                  <Button
-                    type="button"
-                    onClick={addAccountSet}
-                    className="bg-white text-black hover:bg-white/90 sm:w-auto"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Set
-                  </Button>
-                </div>
-              </SettingsCardContent>
-            </SettingsCard>
-          </SettingsSection>
-
-          <SettingsSection title="Account Sets" description="Use the set name or exact platform/profile reference with @social-publisher. Writes still require approval.">
             <div className="space-y-3">
               {accountSetGroups.length === 0 ? (
-                <SettingsCard>
-                  <SettingsCardContent>
-                    <p className="text-sm text-white/46">No account sets yet.</p>
-                  </SettingsCardContent>
-                </SettingsCard>
+                <p className="rounded-xl bg-white/[0.025] px-4 py-5 text-sm text-white/46">Add an account set, then connect its social profiles.</p>
               ) : accountSetGroups.map((group) => {
                 const collapsed = collapsedGroups.has(group.name)
                 const editingThisGroup = activeGroup === group.name
                 return (
-                  <SettingsCard key={group.name} divided={false}>
+                  <SettingsCard key={group.name} divided={false} className="!border-0 bg-[#0d0d0f] shadow-none">
                     <button
                       type="button"
                       onClick={() => toggleGroup(group.name)}
@@ -353,8 +335,8 @@ export default function SocialAccountsSettingsPage() {
                       </span>
                     </button>
                     {!collapsed && (
-                      <div className="border-t border-white/[0.055] px-4 py-3">
-                        <div className="space-y-2.5">
+                      <div className="border-t border-white/[0.055]">
+                        <div className="divide-y divide-white/[0.055]">
                           {group.profiles.map((profile) => (
                             <ProfileRow
                               key={`${profile.platform}:${profile.profile}`}
@@ -377,16 +359,14 @@ export default function SocialAccountsSettingsPage() {
                             />
                           ) : null}
                           {!editingThisGroup && (
-                            <Button
+                            <button
                               type="button"
-                              size="sm"
-                              variant="secondary"
-                              className="border border-white/10 bg-white/[0.05] text-white/78 hover:bg-white/[0.09] hover:text-white"
+                              className="m-2 inline-flex h-8 items-center gap-1.5 rounded-[8px] px-2 text-xs font-medium text-white/42 transition-colors hover:bg-white/[0.04] hover:text-white/72"
                               onClick={() => openEditor(group.name)}
                             >
                               <Plus className="h-3.5 w-3.5" />
-                              Add Another Platform Account
-                            </Button>
+                              Add account
+                            </button>
                           )}
                         </div>
                       </div>
@@ -397,16 +377,47 @@ export default function SocialAccountsSettingsPage() {
             </div>
           </SettingsSection>
 
-          {loginPlan?.browserPlan && (
-            <SettingsSection title="Login Browser" description={loginPlan.browserInstanceId ? `Opened browser ${loginPlan.browserInstanceId}. Log in manually, then refresh or verify status.` : 'Use this delegated plan with Runner browser tools.'}>
-              <SettingsCard>
-                <SettingsCardContent>
-                  <pre className="max-h-64 overflow-auto rounded-md bg-black/35 p-3 text-[11px] leading-5 text-white/68">
-                    {JSON.stringify(loginPlan.browserPlan, null, 2)}
-                  </pre>
-                </SettingsCardContent>
+          {!addSetOpen && accountSetGroups.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setAddSetOpen(true)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-[8px] px-2 text-xs font-medium text-white/42 transition-colors hover:bg-white/[0.04] hover:text-white/72"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add account set
+            </button>
+          ) : null}
+
+          {accountSetGroups.length === 0 || addSetOpen ? (
+            <SettingsSection title="Add Account Set">
+              <SettingsCard className="!border-0 shadow-none">
+                <div className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center">
+                  <input
+                    aria-label="Account set name"
+                    value={newGroupName}
+                    placeholder="Artist or brand name"
+                    onChange={(event) => setNewGroupName(event.target.value)}
+                    className="h-9 min-w-0 flex-1 rounded-[8px] border border-white/[0.07] bg-white/[0.035] px-3 text-sm text-white outline-none placeholder:text-white/24 focus:border-white/15"
+                  />
+                  <div className="flex items-center gap-2">
+                    {accountSetGroups.length > 0 ? (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setAddSetOpen(false)} className="text-white/42 hover:text-white/72">Cancel</Button>
+                    ) : null}
+                    <Button type="button" onClick={addAccountSet} className="bg-white text-black hover:bg-white/90">
+                      <Plus className="h-4 w-4" />
+                      Add Set
+                    </Button>
+                  </div>
+                </div>
               </SettingsCard>
             </SettingsSection>
+          ) : null}
+
+          {loginPlan?.browserPlan && (
+            <details className="rounded-[10px] bg-white/[0.025] px-3 py-2 text-xs text-white/42">
+              <summary className="cursor-pointer select-none hover:text-white/68">Login details</summary>
+              <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-black/35 p-3 text-[11px] leading-5 text-white/58">{JSON.stringify(loginPlan.browserPlan, null, 2)}</pre>
+            </details>
           )}
           <DeleteProfileDialog
             profile={pendingDelete}
@@ -436,7 +447,7 @@ function AccountEditor({
   onCancel: () => void
 }) {
   return (
-    <div className="rounded-lg border border-white/[0.07] bg-white/[0.025] p-3">
+    <div className="bg-white/[0.018] p-3">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[150px_1fr_1fr_1.3fr_auto]">
         <label className="space-y-1">
           <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-white/34">Platform</span>
@@ -456,7 +467,6 @@ function AccountEditor({
           value={draft.profile}
           placeholder="theinstaban"
           disabled={editing}
-          hint={`Agent uses this as ${draft.platform}/theinstaban.`}
           onChange={(profile) => onDraftChange({ profile })}
         />
         <Field label="Handle" value={draft.handle} placeholder="@yourhandle" onChange={(handle) => onDraftChange({ handle })} />
@@ -471,17 +481,15 @@ function AccountEditor({
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : editing ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
             Save
           </Button>
-          {editing && (
-            <Button
-              type="button"
-              variant="outline"
-              className="border-white/12 bg-white/[0.04] text-white/78 hover:bg-white/[0.08] hover:text-white"
-              onClick={onCancel}
-              disabled={busy}
-            >
-              Cancel
-            </Button>
-          )}
+          <Button
+            type="button"
+            variant="ghost"
+            className="text-white/44 hover:bg-white/[0.05] hover:text-white/72"
+            onClick={onCancel}
+            disabled={busy}
+          >
+            Cancel
+          </Button>
         </div>
       </div>
     </div>
@@ -593,85 +601,79 @@ function ProfileRow({
     }
   }
   return (
-    <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
-        <div className="min-w-0">
+    <div className="flex min-h-[64px] flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <span className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-[9px] bg-white/[0.055] px-2 text-[10px] font-semibold uppercase text-white/50">
+          {platformShortLabel(profile.platform)}
+        </span>
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-white/[0.06] px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/52">
-              {platformLabel(profile.platform)}
-            </span>
-            <span className="text-sm font-semibold text-white/86">{profile.profile}</span>
+            <span className="truncate text-sm font-semibold text-white/84">{profile.accountHandle || profile.profile}</span>
             <StatusPill profile={profile} />
           </div>
-          <div className="mt-2 grid gap-2 text-xs text-white/42 md:grid-cols-[minmax(130px,0.8fr)_minmax(120px,0.8fr)_minmax(180px,1.6fr)]">
-            <span className="truncate font-mono text-white/58" title={agentRef}>{agentRef}</span>
-            <span className="truncate" title={profile.accountHandle || 'No handle'}>{profile.accountHandle || 'No handle'}</span>
-            <span className="truncate" title={profile.accountUrl || 'No account URL'}>{profile.accountUrl || 'No account URL'}</span>
-          </div>
-          <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/40">
-            {profile.message || profile.profileStatus || 'Unknown status'}
+          <p className="mt-0.5 truncate text-xs text-white/34" title={profile.accountUrl || agentRef}>
+            {platformLabel(profile.platform)}{profile.accountHandle && profile.accountHandle !== profile.profile ? ` · ${profile.profile}` : ''}
           </p>
+          {!profile.ready && profile.message ? <p className="mt-1 line-clamp-1 text-xs text-white/34">{profile.message}</p> : null}
         </div>
-        <div className="flex flex-col gap-2 xl:items-end">
-          <div className="flex flex-wrap gap-2 xl:flex-nowrap xl:justify-end">
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 lg:justify-end">
             <Button
               type="button"
               size="sm"
               variant="secondary"
               onClick={onLogin}
               disabled={statusBusy}
-              className="border border-white/15 bg-white text-black hover:bg-white/90 disabled:text-black/50"
+              className="h-8 min-w-[92px] border-0 bg-white text-black hover:bg-white/90 disabled:text-black/50"
             >
               {loginBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
-              {`Open ${platformLabel(profile.platform)} Login`}
+              {profile.ready ? 'Open' : 'Connect'}
             </Button>
             <Button
               type="button"
               size="sm"
-              variant="secondary"
-              className="border border-amber-300/25 bg-amber-400/10 text-amber-100 hover:bg-amber-400/16 hover:text-amber-50"
+              variant="ghost"
+              className="h-8 px-2.5 text-xs text-white/48 hover:bg-white/[0.055] hover:text-white/76"
               onClick={onVerify}
               disabled={statusBusy}
             >
               {verifyBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-              Verify Login
+              Verify
             </Button>
-          </div>
-          <div className="flex flex-wrap gap-2 xl:justify-end">
             <Button
               type="button"
               size="sm"
               variant="ghost"
-              className="border border-white/10 bg-white/[0.04] text-white/68 hover:bg-white/[0.08] hover:text-white"
+              title="Copy account reference"
+              className="h-8 w-8 p-0 text-white/30 hover:bg-white/[0.055] hover:text-white/68"
               onClick={copyAgentRef}
               aria-label="Copy agent reference"
             >
               <Copy className="h-3.5 w-3.5" />
-              Copy Ref
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="border-white/12 bg-white/[0.04] text-white/78 hover:bg-white/[0.08] hover:text-white"
-              onClick={onEdit}
-            >
-              Edit Details
             </Button>
             <Button
               type="button"
               size="sm"
               variant="ghost"
-              className="border border-red-300/15 bg-red-400/[0.06] text-red-200/75 hover:bg-red-400/12 hover:text-red-100"
+              aria-label="Edit social profile"
+              title="Edit account"
+              className="h-8 w-8 p-0 text-white/30 hover:bg-white/[0.055] hover:text-white/68"
+              onClick={onEdit}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              title="Delete account"
+              className="h-8 w-8 p-0 text-white/26 hover:bg-red-400/[0.08] hover:text-red-200/80"
               onClick={onDelete}
               disabled={statusBusy}
               aria-label="Delete social profile"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              Delete
             </Button>
-          </div>
-        </div>
       </div>
     </div>
   )
@@ -692,6 +694,13 @@ function StatusPill({ profile }: { profile: SocialAccountProfileStatus }) {
 
 function platformLabel(platform: SocialPlatform) {
   return PLATFORMS.find((item) => item.id === platform)?.label ?? platform
+}
+
+function platformShortLabel(platform: SocialPlatform) {
+  if (platform === 'instagram') return 'IG'
+  if (platform === 'youtube') return 'YT'
+  if (platform === 'tiktok') return 'TT'
+  return 'X'
 }
 
 function statusLabel(status: string | null) {
