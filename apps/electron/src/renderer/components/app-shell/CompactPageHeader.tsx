@@ -38,6 +38,7 @@ export function CompactPageHeader({
   actions,
   eyebrowAccessory,
   borderless = false,
+  compact = false,
   className,
   titleClassName,
 }: {
@@ -49,6 +50,7 @@ export function CompactPageHeader({
   backgroundImage?: string | null
   dimBackgroundImage?: boolean
   borderless?: boolean
+  compact?: boolean
   className?: string
   titleClassName?: string
 }) {
@@ -57,14 +59,18 @@ export function CompactPageHeader({
   return (
     <header
       className={cn(
-        'relative min-h-[154px] overflow-hidden rounded-[22px]',
+        'relative overflow-hidden rounded-[22px]',
+        compact ? 'min-h-[112px]' : 'min-h-[154px]',
         !borderless && 'border',
         colors.surface,
         className,
       )}
     >
       <div className="absolute inset-0" style={{ background: GLOBAL_HERO_BACKGROUND }} />
-      <div className="relative z-10 flex min-h-[154px] items-center justify-between gap-5 px-6 py-5">
+      <div className={cn(
+        'relative z-10 flex items-center justify-between gap-5 px-6',
+        compact ? 'min-h-[112px] py-4' : 'min-h-[154px] py-5',
+      )}>
         <div className="min-w-0 self-end">
           <div className="flex items-center gap-1.5">
             <p className={cn('text-[9px] font-medium uppercase tracking-[0.18em]', colors.eyebrow)}>{eyebrow}</p>

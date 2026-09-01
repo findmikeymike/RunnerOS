@@ -649,10 +649,10 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
       },
       {
         id: 'lab-start-create',
-        title: 'Create with specialists',
+        title: 'Work with specialists',
         body: 'Discuss songs, strengthen lyrics, explore enhancements, and research ideas with the right specialist agents.',
         icon: 'workers',
-        actions: [{ id: 'lab.create', label: 'Open Create' }],
+        actions: [{ id: 'lab.create', label: 'Open Work' }],
       },
       {
         id: 'lab-start-spark',
@@ -693,7 +693,7 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
       },
       {
         id: 'lab-destination-create',
-        title: 'Create',
+        title: 'Work',
         body: 'Work with specialist agents on lyrics, song improvements, references, and research.',
         icon: 'workers',
         actions: [{ id: 'lab.create', label: 'Open' }],

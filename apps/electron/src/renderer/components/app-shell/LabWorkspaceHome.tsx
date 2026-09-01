@@ -1,11 +1,8 @@
 import * as React from 'react'
 import {
   ArrowRight,
-  Bot,
   Clock3,
   FileText,
-  FlaskConical,
-  MessageSquare,
   Newspaper,
   PenLine,
   Search,
@@ -34,12 +31,12 @@ function SectionTitle({
   meta?: string
 }) {
   return (
-    <div className="mb-3 flex items-center justify-between border-b border-white/[0.04] pb-2.5">
+    <div className="mb-4 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <Icon className="h-3 w-3 text-white/40" />
-        <h3 className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/60">{title}</h3>
+        <Icon className="h-4 w-4 text-orange-400/70" />
+        <h2 className="text-sm font-semibold text-white/82">{title}</h2>
       </div>
-      {meta ? <span className="text-[8px] font-medium uppercase tracking-widest text-white/30">{meta}</span> : null}
+      {meta ? <span className="text-xs font-medium text-white/36">{meta}</span> : null}
     </div>
   )
 }
@@ -52,13 +49,13 @@ function LabCard({
   className?: string
 }) {
   return (
-    <section className={cn('rounded-2xl border border-white/[0.04] bg-[#0A0A0A] p-4 shadow-minimal', className)}>
+    <section className={cn('rounded-2xl border border-white/[0.045] bg-[#111111] p-5 shadow-minimal', className)}>
       {children}
     </section>
   )
 }
 
-function ActionTile({
+function QuickAction({
   icon: Icon,
   title,
   detail,
@@ -73,18 +70,27 @@ function ActionTile({
     <button
       type="button"
       onClick={onClick}
-      className="group min-w-0 rounded-xl border border-white/[0.045] bg-white/[0.012] p-3 text-left transition-colors hover:border-white/[0.09] hover:bg-white/[0.035]"
+      className="group flex min-w-0 items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.035]"
     >
-      <span className="mb-3 flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.05] bg-white/[0.02]">
-        <Icon className="h-4 w-4 text-white/45 group-hover:text-[#fdba74]" />
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-orange-500/[0.09]">
+        <Icon className="h-4 w-4 text-orange-300/70 transition-colors group-hover:text-orange-200" />
       </span>
-      <span className="block truncate text-sm font-medium text-white/82">{title}</span>
-      <span className="mt-1 block text-xs leading-5 text-white/38">{detail}</span>
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-semibold text-white/80">{title}</span>
+        <span className="mt-0.5 block truncate text-xs text-white/38">{detail}</span>
+      </span>
+      <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-white/20 transition-transform group-hover:translate-x-0.5 group-hover:text-white/48" />
     </button>
   )
 }
 
-export function LabWorkspaceHome({ workspaceId, workspaceName }: LabWorkspaceHomeProps) {
+function formatSongDate(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Recently edited'
+  return `Edited ${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+}
+
+export function LabWorkspaceHome({ workspaceId }: LabWorkspaceHomeProps) {
   const [songs, setSongs] = React.useState<LabUiSong[]>([])
   const [sparks, setSparks] = React.useState<LabUiSpark[]>([])
   const { activeAgents } = useAgents(workspaceId, { includeSystemVisibleAgents: false })
@@ -115,89 +121,111 @@ export function LabWorkspaceHome({ workspaceId, workspaceName }: LabWorkspaceHom
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="flex w-full flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
         <CompactPageHeader
-          eyebrow={workspaceName || 'Creative Workspace'}
+          eyebrow="Creative Lab"
           title="The Lab"
           tone="orange"
+          compact
           actions={
-            <>
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => navigate(routes.view.agents())}
+                className="hidden text-xs font-medium text-white/62 transition-colors hover:text-white/86 sm:inline-flex"
+              >
+                {labTeam.length} specialists ready
+              </button>
                 <button
                   type="button"
                   onClick={() => navigate(routes.view.lab('pad'))}
-                  className="inline-flex h-9 items-center gap-2 rounded-full bg-white/90 px-5 text-xs font-medium text-black transition-transform hover:scale-[1.02] active:scale-95"
+                  className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-5 text-xs font-semibold text-black shadow-sm transition-transform hover:scale-[1.02] active:scale-95"
                 >
                   Open Pad
                   <ArrowRight className="h-3.5 w-3.5" />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => navigate(routes.view.lab('songs'))}
-                  className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.025] px-4 text-xs font-medium text-white/70 hover:bg-white/[0.05]"
-                >
-                  Songs
-                </button>
-            </>
+            </div>
           }
         />
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <ActionTile icon={PenLine} title="Song Pad" detail="Write loose, then shape the structure." onClick={() => navigate(routes.view.lab('pad'))} />
-          <ActionTile icon={FileText} title="Songs" detail="Browse drafts by collection, focus, and status." onClick={() => navigate(routes.view.lab('songs'))} />
-          <ActionTile icon={Search} title="Research" detail="Collect references, stories, and concepts." onClick={() => navigate(routes.view.agents('reference-master'))} />
+        <div className="grid overflow-hidden rounded-xl border border-white/[0.045] bg-[#0D0D0D] md:grid-cols-3 md:divide-x md:divide-white/[0.045]">
+          <QuickAction icon={PenLine} title="Song Pad" detail="Write and shape a song" onClick={() => navigate(routes.view.lab('pad'))} />
+          <QuickAction icon={FileText} title="Songs" detail="Browse your catalog" onClick={() => navigate(routes.view.lab('songs'))} />
+          <QuickAction icon={Search} title="Research" detail="Find references and ideas" onClick={() => navigate(routes.view.agents('reference-master'))} />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <LabCard>
-            <SectionTitle icon={Clock3} title="Recent Songs" meta={String(recentSongs.length)} />
-            <div className="space-y-2">
-              {recentSongs.map((song) => (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.7fr)_minmax(280px,1fr)]">
+          <LabCard className="min-h-[248px]">
+            <SectionTitle icon={Clock3} title="Continue writing" meta={recentSongs.length ? `${songs.length} songs` : undefined} />
+            <div className="divide-y divide-white/[0.045]">
+              {recentSongs.map((song, index) => (
                 <button
                   key={song.id}
                   type="button"
                   onClick={() => navigate(routes.view.lab('pad', song.id))}
-                  className="w-full rounded-xl border border-white/[0.04] bg-white/[0.012] px-3 py-3 text-left transition-colors hover:bg-white/[0.035]"
+                  className={cn(
+                    'group flex w-full items-center gap-4 px-1 text-left transition-colors hover:bg-white/[0.025]',
+                    index === 0 ? 'py-5' : 'py-3.5',
+                  )}
                 >
-                  <p className="truncate text-sm font-medium text-white/82">{song.title}</p>
-                  <p className="mt-1 truncate text-xs text-white/36">{song.project} · {song.status}</p>
+                  <span className="h-8 w-1 shrink-0 rounded-full" style={{ backgroundColor: song.color }} />
+                  <span className="min-w-0 flex-1">
+                    <span className={cn('block truncate font-semibold text-white/88', index === 0 ? 'text-xl' : 'text-sm')}>{song.title}</span>
+                    <span className="mt-1 block truncate text-xs text-white/40">
+                      {song.project} · {song.status} · {formatSongDate(song.updatedAt)}
+                    </span>
+                  </span>
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.035] text-white/38 transition-colors group-hover:bg-white/[0.08] group-hover:text-white/80">
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </span>
                 </button>
               ))}
-              {recentSongs.length === 0 ? <p className="px-1 py-3 text-xs text-white/34">No songs yet.</p> : null}
+              {recentSongs.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(routes.view.lab('pad'))}
+                  className="group flex w-full items-center justify-between py-8 text-left"
+                >
+                  <span>
+                    <span className="block text-base font-semibold text-white/78">Start your first song</span>
+                    <span className="mt-1 block text-sm text-white/38">Open a clean pad and capture the idea while it is fresh.</span>
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-white/28 transition-transform group-hover:translate-x-1 group-hover:text-white/70" />
+                </button>
+              ) : null}
             </div>
           </LabCard>
 
-          <LabCard>
-            <SectionTitle icon={Newspaper} title="Sparks" meta={String(sparks.length)} />
-            <div className="space-y-2">
+          <LabCard className="min-h-[248px]">
+            <SectionTitle icon={Newspaper} title="Spark bank" meta={sparks.length ? String(sparks.length) : undefined} />
+            <div className="divide-y divide-white/[0.045]">
               {recentSparks.map((spark) => (
                 <button
                   key={spark.id}
                   type="button"
                   onClick={openLabSparkBank}
-                  className="flex w-full items-center gap-2 rounded-xl border border-white/[0.04] bg-white/[0.012] px-3 py-3 text-left transition-colors hover:bg-white/[0.035]"
+                  className="group flex w-full items-center gap-3 py-3.5 text-left"
                 >
-                  <Sparkles className="h-3.5 w-3.5 shrink-0 text-white/32" />
-                  <span className="truncate text-sm font-medium text-white/72">{spark.text}</span>
+                  <Sparkles className="h-3.5 w-3.5 shrink-0 text-orange-300/58" />
+                  <span className="truncate text-sm font-medium text-white/68 transition-colors group-hover:text-white/88">{spark.text}</span>
                 </button>
               ))}
-              {recentSparks.length === 0 ? <p className="px-1 py-3 text-xs text-white/34">Saved ideas will appear here.</p> : null}
+              {recentSparks.length === 0 ? (
+                <button type="button" onClick={openLabSparkBank} className="group flex w-full items-center gap-3 py-8 text-left">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-500/[0.08]">
+                    <Sparkles className="h-4 w-4 text-orange-300/62" />
+                  </span>
+                  <span>
+                    <span className="block text-sm font-semibold text-white/72">Catch what matters</span>
+                    <span className="mt-1 block text-xs text-white/36">Save lines, titles, and ideas here.</span>
+                  </span>
+                </button>
+              ) : null}
             </div>
-          </LabCard>
-
-          <LabCard>
-            <SectionTitle icon={Bot} title="Lab Team" meta={`${labTeam.length} active`} />
-            <div className="rounded-xl border border-white/[0.03] bg-white/[0.012] p-4">
-              <p className="text-sm font-medium text-white/75">{labTeam.length ? 'Your creative team is ready' : 'No workers active'}</p>
-              <p className="mt-1 text-xs leading-5 text-white/38">
-                Activate only the specialists you want available in this Lab.
-              </p>
-              <button
-                type="button"
-                onClick={() => navigate(routes.view.agents())}
-                className="mt-4 inline-flex h-8 items-center gap-2 rounded-full border border-white/[0.07] bg-white/[0.025] px-3 text-xs font-medium text-white/62 hover:bg-white/[0.05]"
-              >
-                Workers
+            {recentSparks.length > 0 ? (
+              <button type="button" onClick={openLabSparkBank} className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-orange-200/68 hover:text-orange-100">
+                View all sparks
                 <ArrowRight className="h-3 w-3" />
               </button>
-            </div>
+            ) : null}
           </LabCard>
         </div>
       </div>

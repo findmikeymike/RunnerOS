@@ -63,6 +63,13 @@ describe('Artist OS persistent shell chrome', () => {
     expect(styles).toContain('.artist-os-main-canvas .bg-\\[\\#050505\\]')
   })
 
+  test('lets Context and Outputs fill the main app canvas', () => {
+    const panelSlot = readFileSync(join(import.meta.dir, '..', 'PanelSlot.tsx'), 'utf8')
+
+    expect(panelSlot).toContain("navState?.navigator === 'outputs'")
+    expect(panelSlot).toContain("navState?.navigator === 'workspaceContext'")
+  })
+
   test('uses the global compact page header for HQ', () => {
     const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
     const compactHeader = readFileSync(join(import.meta.dir, '..', 'CompactPageHeader.tsx'), 'utf8')
@@ -375,6 +382,10 @@ describe('Artist OS persistent shell chrome', () => {
     expect(home).toContain('loadLabUiSparks')
     expect(home).toContain('openLabSparkBank')
     expect(home).toContain('LAB_DEFAULT_WORKER_SLUGS')
+    expect(home).toContain('title="Continue writing"')
+    expect(home).toContain('title="Spark bank"')
+    expect(home).toContain('compact')
+    expect(home).not.toContain('title="Lab Team"')
     expect(main).toContain('labOnly={isLabWorkspace(activeWorkspace, workspaces)}')
     expect(home).toContain("routes.view.agents('reference-master')")
     expect(home).not.toContain('song.rememberText')

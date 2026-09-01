@@ -72,6 +72,8 @@ export function PanelSlot({
     || navState?.navigator === 'agents'
     || navState?.navigator === 'automations'
     || navState?.navigator === 'workflows'
+    || navState?.navigator === 'outputs'
+    || navState?.navigator === 'workspaceContext'
     || navState?.navigator === 'settings'
 
   const handleClose = useCallback(() => {

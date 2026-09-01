@@ -2814,7 +2814,7 @@ function AppShellContent({
         },
         {
           id: "nav:create",
-          title: "Create",
+          title: "Work",
           icon: Sparkles,
           variant: "ghost",
           onClick: () => toggleMainNavGroup('work'),
