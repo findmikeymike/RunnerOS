@@ -38,7 +38,7 @@ import { useAgents } from '@/hooks/useAgents'
 import { useWorkflows } from '@/hooks/useWorkflows'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { openAgentSessionComposer } from '@/lib/run-agent'
-import { WorkflowRunInputDialog } from '@/pages/WorkflowRunInputDialog'
+import { WorkflowLaunchDialog } from '@/components/workflows/WorkflowLaunchDialog'
 import type { MissionAssetKindHint, MissionAssetManifest, TrackIntelligence, WorkflowDTO } from '../../../shared/types'
 import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
 import { sessionMetaMapAtom } from '@/atoms/sessions'
@@ -889,7 +889,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
       />
 
       {pendingReleaseWorkflow ? (
-        <WorkflowRunInputDialog
+        <WorkflowLaunchDialog
           open
           onOpenChange={(open) => {
             if (!open) setPendingReleaseWorkflow(null)
@@ -897,6 +897,14 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
           workflow={pendingReleaseWorkflow.workflow}
           workspaceId={workspaceId}
           initialInputs={pendingReleaseWorkflow.initialInputs}
+          contextHint="This launch came from the campaign essentials board. Use the campaign context and any approved assets already attached before asking me to repeat anything."
+          onManagerSessionStarted={(sessionId) => {
+            linkReleaseItemSession(
+              pendingReleaseWorkflow.categoryId,
+              pendingReleaseWorkflow.itemId,
+              sessionId,
+            )
+          }}
           onStarted={async (run) => {
             await saveReleaseBoard(linkReleaseBoardItemWorkflowRun(
               releaseBoard,

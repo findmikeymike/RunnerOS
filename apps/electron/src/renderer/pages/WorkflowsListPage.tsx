@@ -19,7 +19,7 @@ import { useWorkflows } from '@/hooks/useWorkflows'
 import { useWorkflowRuns } from '@/hooks/useWorkflowRuns'
 import { useDeepResearchRuns } from '@/hooks/useDeepResearchRuns'
 import { useAtomValue } from 'jotai'
-import { WorkflowRunInputDialog } from './WorkflowRunInputDialog'
+import { WorkflowLaunchDialog } from '@/components/workflows/WorkflowLaunchDialog'
 import type { LoadedSource, WorkflowDTO, WorkflowRunDTO, WorkflowRunState } from '../../shared/types'
 import { CompactPageHeader } from '@/components/app-shell/CompactPageHeader'
 import { ArtistManagerCreateLink } from '@/components/app-shell/ArtistManagerCreateLink'
@@ -60,7 +60,7 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
   const { start: startDeepResearch } = useDeepResearchRuns(workspaceId)
   const sources = useAtomValue(sourcesAtom)
   const usableSources = React.useMemo(() => sources.filter(isUsableSource), [sources])
-  const [runDialogWorkflow, setRunDialogWorkflow] = React.useState<WorkflowDTO | null>(null)
+  const [launchWorkflow, setLaunchWorkflow] = React.useState<WorkflowDTO | null>(null)
   const [detailWorkflow, setDetailWorkflow] = React.useState<WorkflowDTO | null>(null)
   const [deepResearchOpen, setDeepResearchOpen] = React.useState(false)
   const [deepResearchTopic, setDeepResearchTopic] = React.useState('')
@@ -316,7 +316,7 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
                       workflow={workflow}
                       lastRun={lastRunBySlug.get(workflow.slug)}
                       onOpen={() => setDetailWorkflow(workflow)}
-                      onRun={() => setRunDialogWorkflow(workflow)}
+                      onRun={() => setLaunchWorkflow(workflow)}
                     />
                   ))}
                 </div>
@@ -340,11 +340,11 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
       />
       <WorkflowInfoDialog open={infoOpen} onOpenChange={setInfoOpen} />
 
-      {runDialogWorkflow && (
-        <WorkflowRunInputDialog
-          open={!!runDialogWorkflow}
-          onOpenChange={(open) => { if (!open) setRunDialogWorkflow(null) }}
-          workflow={runDialogWorkflow}
+      {launchWorkflow && (
+        <WorkflowLaunchDialog
+          open={!!launchWorkflow}
+          onOpenChange={(open) => { if (!open) setLaunchWorkflow(null) }}
+          workflow={launchWorkflow}
           workspaceId={workspaceId}
         />
       )}
@@ -454,7 +454,7 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
           active={activeSlugSet.has(detailWorkflow.slug)}
           lastRun={lastRunBySlug.get(detailWorkflow.slug)}
           onOpenChange={(open) => { if (!open) setDetailWorkflow(null) }}
-          onRun={() => setRunDialogWorkflow(detailWorkflow)}
+          onRun={() => setLaunchWorkflow(detailWorkflow)}
           onEdit={() => navigate(routes.view.workflowEdit(detailWorkflow.slug))}
           onDelete={() => void handleDelete(detailWorkflow)}
           onActivate={() => void handleActivate(detailWorkflow)}

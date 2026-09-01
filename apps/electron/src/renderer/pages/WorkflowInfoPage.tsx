@@ -7,7 +7,7 @@ import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../shared/routes'
 import { useWorkflowRuns } from '@/hooks/useWorkflowRuns'
 import { useWorkflows } from '@/hooks/useWorkflows'
-import { WorkflowRunInputDialog } from './WorkflowRunInputDialog'
+import { WorkflowLaunchDialog } from '@/components/workflows/WorkflowLaunchDialog'
 import { RunStateDot } from './WorkflowsListPage'
 import type { WorkflowDTO } from '../../shared/types'
 
@@ -21,7 +21,7 @@ export default function WorkflowInfoPage({ workflowSlug, workspaceId }: Props) {
   const { navigate } = useNavigation()
   const [workflow, setWorkflow] = React.useState<WorkflowDTO | null>(null)
   const [loadError, setLoadError] = React.useState<string | null>(null)
-  const [runDialogOpen, setRunDialogOpen] = React.useState(false)
+  const [launchOpen, setLaunchOpen] = React.useState(false)
   const { runs } = useWorkflowRuns(workspaceId)
   const { activeSlugs, loading: workflowsLoading, setActive } = useWorkflows(workspaceId)
 
@@ -109,7 +109,7 @@ export default function WorkflowInfoPage({ workflowSlug, workspaceId }: Props) {
                   <CircleMinus className="h-3.5 w-3.5 mr-1.5" />
                   {t('workflows.list.deactivate')}
                 </Button>
-                <Button size="sm" className="border border-[#fb923c]/25 bg-[#f97316]/18 text-white/90 hover:bg-[#f97316]/26" onClick={() => setRunDialogOpen(true)}>
+                <Button size="sm" className="border border-[#fb923c]/25 bg-[#f97316]/18 text-white/90 hover:bg-[#f97316]/26" onClick={() => setLaunchOpen(true)}>
                   <Play className="h-3.5 w-3.5 mr-1.5" />
                   {t('workflows.list.run')}
                 </Button>
@@ -177,10 +177,10 @@ export default function WorkflowInfoPage({ workflowSlug, workspaceId }: Props) {
         </Section>
       </div>
 
-      {runDialogOpen && (
-        <WorkflowRunInputDialog
-          open={runDialogOpen}
-          onOpenChange={setRunDialogOpen}
+      {launchOpen && (
+        <WorkflowLaunchDialog
+          open={launchOpen}
+          onOpenChange={setLaunchOpen}
           workflow={workflow}
           workspaceId={workspaceId}
         />
