@@ -16,8 +16,51 @@ export interface DiscoverOmniRouteModelsOptions {
   fetchImpl?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 }
 
-const MAX_RESPONSE_CHARS = 5_000_000
+const MAX_RESPONSE_BYTES = 5_000_000
 const MAX_MODELS = 5_000
+const MAX_MODEL_NAME_CHARS = 256
+
+function truncateModelName(value: string): string {
+  const trimmed = value.trim()
+  if (trimmed.length <= MAX_MODEL_NAME_CHARS) return trimmed
+
+  const end = /[\uD800-\uDBFF]/.test(trimmed[MAX_MODEL_NAME_CHARS - 1] ?? '')
+    ? MAX_MODEL_NAME_CHARS - 1
+    : MAX_MODEL_NAME_CHARS
+  return trimmed.slice(0, end)
+}
+
+async function readBoundedResponseText(response: Response): Promise<string> {
+  const contentLength = Number(response.headers.get('content-length'))
+  if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_BYTES) {
+    throw new Error('OmniRoute model catalog is too large to load safely.')
+  }
+
+  if (!response.body) return ''
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  const parts: string[] = []
+  let bytesRead = 0
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      bytesRead += value.byteLength
+      if (bytesRead > MAX_RESPONSE_BYTES) {
+        await reader.cancel()
+        throw new Error('OmniRoute model catalog is too large to load safely.')
+      }
+      parts.push(decoder.decode(value, { stream: true }))
+    }
+    parts.push(decoder.decode())
+    return parts.join('')
+  } finally {
+    reader.releaseLock()
+  }
+}
 
 function finitePositive(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
@@ -52,13 +95,10 @@ export async function discoverOmniRouteModels(options: DiscoverOmniRouteModelsOp
       signal: controller.signal,
     })
 
-    const text = await response.text()
-    if (text.length > MAX_RESPONSE_CHARS) {
-      throw new Error('OmniRoute model catalog is too large to load safely.')
-    }
     if (!response.ok) {
       throw new Error(`OmniRoute model discovery failed (${response.status}).`)
     }
+    const text = await readBoundedResponseText(response)
 
     let payload: unknown
     try {
@@ -106,7 +146,7 @@ export async function discoverOmniRouteModels(options: DiscoverOmniRouteModelsOp
       seen.add(id)
       models.push({
         id,
-        name: nameCandidate.trim() || id,
+        name: truncateModelName(nameCandidate) || id,
         costInput: readPrice(pricing.input),
         costOutput: readPrice(pricing.output),
         contextWindow: finitePositive(record.context_length) || finitePositive(record.max_context_window_tokens),

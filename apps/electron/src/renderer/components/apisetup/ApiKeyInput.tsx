@@ -557,6 +557,9 @@ export function ApiKeyInput({
           {omniDiscoveryError && (
             <p className="text-xs text-destructive">{omniDiscoveryError}</p>
           )}
+          <p className="text-xs leading-relaxed text-foreground/40">
+            {t('apiSetup.omniroute.dataNotice')}
+          </p>
         </div>
       )}
 

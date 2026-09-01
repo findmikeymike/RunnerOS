@@ -58,4 +58,42 @@ describe('discoverOmniRouteModels', () => {
       fetchImpl,
     })).resolves.toHaveLength(1)
   })
+
+  it('rejects oversized catalogs before or while buffering the response', async () => {
+    const declaredOversizeFetch = async () => new Response('{"data":[]}', {
+      status: 200,
+      headers: { 'content-length': '5000001' },
+    })
+    await expect(discoverOmniRouteModels({
+      baseUrl: 'https://gateway.example.com',
+      apiKey: 'key',
+      fetchImpl: declaredOversizeFetch,
+    })).rejects.toThrow('too large')
+
+    const streamedOversizeFetch = async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(3_000_000))
+        controller.enqueue(new Uint8Array(2_000_001))
+        controller.close()
+      },
+    }), { status: 200 })
+    await expect(discoverOmniRouteModels({
+      baseUrl: 'https://gateway.example.com',
+      apiKey: 'key',
+      fetchImpl: streamedOversizeFetch,
+    })).rejects.toThrow('too large')
+  })
+
+  it('caps untrusted model display names', async () => {
+    const fetchImpl = async () => new Response(JSON.stringify({
+      data: [{ id: 'auto', name: `Model ${'x'.repeat(400)}` }],
+    }), { status: 200 })
+
+    const models = await discoverOmniRouteModels({
+      baseUrl: 'https://gateway.example.com',
+      apiKey: 'key',
+      fetchImpl,
+    })
+    expect(models[0].name.length).toBe(256)
+  })
 })

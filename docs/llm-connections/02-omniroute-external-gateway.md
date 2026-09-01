@@ -26,6 +26,8 @@ model or executes a user-defined fallback combo.
 - A bare server origin is normalized to `/v1`.
 - Remote servers require HTTPS; HTTP is accepted only for loopback development.
 - The key uses the existing encrypted LLM credential manager.
+- Connection setup states plainly that the configured server receives prompts,
+  context, and files sent through it.
 - The connection is tested through the same Pi custom-endpoint subprocess path
   used by real chats before it is saved.
 - The OpenAI-compatible protocol is fixed; users are not asked to choose it.
@@ -42,7 +44,8 @@ model or executes a user-defined fallback combo.
 ## Discovery boundary
 
 Model discovery uses a dedicated main-process RPC contract with an eight-second
-timeout, redirect rejection, response and item caps, and no credential logging.
+timeout, redirect rejection, streamed byte and item caps, bounded display names,
+and no credential logging.
 Artist OS intentionally does not infer image support from combo metadata because
 that metadata is not reliable enough to grant a capability safely.
 

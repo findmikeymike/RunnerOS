@@ -13,6 +13,7 @@
   "apiSetup.modelTier.fastDesc": "摘要和工具",
   "apiSetup.omniroute.endpointPlaceholder": "https://your-omniroute-server.com/v1",
   "apiSetup.omniroute.endpointRequired": "需要填写 OmniRoute 服务器 URL。",
+  "apiSetup.omniroute.dataNotice": "此服务器会接收通过此连接发送的提示词以及任何上下文或文件。",
   "apiSetup.omniroute.loadModels": "加载模型和路由",
   "apiSetup.omniroute.modelHelp": "请输入 OmniRoute 控制面板中的模型或回退组合 ID。",
   "apiSetup.pasteAuthCode": "在此粘贴授权码",
