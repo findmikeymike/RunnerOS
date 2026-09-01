@@ -40,6 +40,7 @@ Core Artist HQ and campaign workspace specs live here.
 - [29 X Editorial System](./29-x-editorial-system-spec.md)
 - [30 Release Manager And Essentials Execution](./30-release-manager-essentials-execution-spec.md)
 - [31 Catalog And Royalty Reconciliation](./31-catalog-royalty-reconciliation-spec.md)
+- [32 Computer Use Provider Strategy](./32-computer-use-provider-strategy-spec.md)
 
 Current V1 implementation notes:
 
