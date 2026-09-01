@@ -404,7 +404,7 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
         icon: 'brain',
         actions: [
           { id: 'hq.branding', label: 'Branding' },
-          { id: 'hq.research', label: 'Intel Docs' },
+          { id: 'hq.research', label: 'Signals' },
         ],
       },
       {
@@ -469,7 +469,7 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
       {
         id: 'hq-destination-brain',
         title: 'Brain',
-        body: 'Profile, Voice, Intel Docs, Branding, and Vault are the reusable artist truth.',
+        body: 'Profile, Voice, Branding, and Vault hold the reusable artist truth. Signals tracks outside intelligence.',
         icon: 'brain',
         actions: [
           { id: 'hq.profile', label: 'Profile' },

@@ -40,10 +40,10 @@ export const CHAT_LAYOUT = {
   containerPadding: 'px-5 py-8',
 
   /** Vertical spacing between messages/turns */
-  messageSpacing: 'space-y-2.5',
+  messageSpacing: 'space-y-4',
 
   /** Extra padding for user messages (visual separation from AI responses) */
-  userMessagePadding: 'pt-4 pb-2',
+  userMessagePadding: 'pt-5 pb-3',
 
   /** Bottom branding area padding */
   brandingPadding: 'pt-16 pb-24',

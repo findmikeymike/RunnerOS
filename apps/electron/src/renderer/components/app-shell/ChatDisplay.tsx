@@ -11,6 +11,7 @@ import {
   ExternalLink,
   Image as ImageIcon,
   Info,
+  Diamond,
   X,
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
@@ -24,6 +25,9 @@ import { Markdown, CollapsibleMarkdownProvider, StreamingMarkdown, type RenderMo
 import { AnimatedCollapsibleContent } from "@/components/ui/collapsible"
 import {
   Spinner,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
   parseReadResult,
   parseBashResult,
   parseGrepResult,
@@ -1640,7 +1644,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const skipScrollToBottom = isSessionSwitchForScroll && isSearchActive
 
   return (
-    <div ref={zoneRef} className="flex h-full flex-col min-w-0" data-focus-zone="chat">
+    <div ref={zoneRef} className="runner-chat-surface flex h-full flex-col min-w-0" data-focus-zone="chat">
       {session ? (
         <div className="flex flex-1 flex-col min-h-0 min-w-0 relative">
           {/* Content layer */}
@@ -2099,12 +2103,34 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             sessionStatuses={sessionStatuses}
             currentSessionStatus={session.sessionStatus || 'todo'}
             onSessionStatusChange={onSessionStatusChange}
-            afterStateSlot={
+            infoSlot={
               <VisualSurfaceToggle
                 workspaceId={currentWorkspaceId}
                 sessionId={session.id}
                 latestOutput={latestSessionVisualOutput}
               />
+            }
+            beforeInfoSlot={
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Save nugget and share useful intel with workers"
+                    aria-busy={isSharingIntel}
+                    onClick={handleShareIntel}
+                    disabled={isInputDisabled || !currentWorkspaceId || session.messages.length === 0 || isSharingIntel}
+                    className={cn(
+                      'inline-flex h-7 w-7 items-center justify-center rounded-lg bg-orange-500/14 text-orange-300 transition-colors',
+                      'hover:bg-orange-500/24 hover:text-orange-200 disabled:cursor-not-allowed disabled:opacity-35',
+                    )}
+                  >
+                    {isSharingIntel ? <Spinner className="h-3.5 w-3.5" /> : <Diamond className="h-3.5 w-3.5" />}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  Take recent chat gems and share to right agents
+                </TooltipContent>
+              </Tooltip>
             }
             beforeInputSlot={<ChatGoalControls session={session} />}
             inputProps={{
@@ -2146,9 +2172,6 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               followUpItems: followUpInputItems,
               onFollowUpClick: handleFollowUpChipClick,
               onFollowUpIndexClick: handleFollowUpIndexClick,
-              onShareIntel: handleShareIntel,
-              shareIntelBusy: isSharingIntel,
-              shareIntelDisabled: !currentWorkspaceId || session.messages.length === 0,
             }}
           />
           </div>
@@ -2446,7 +2469,7 @@ function MessageBubble({
   if (message.role === 'assistant') {
     return (
       <div className="flex justify-start group">
-        <div className="runner-chat-response relative max-w-[90%] pl-6 pr-4 py-3 text-white/78 break-words min-w-0 select-text">
+        <div className="runner-chat-response relative max-w-[90%] pl-6 pr-4 py-3 text-[15px] leading-7 text-white/82 break-words min-w-0 select-text">
           {/* Pop-out button - visible on hover */}
           {onPopOut && !message.isStreaming && (
             <button

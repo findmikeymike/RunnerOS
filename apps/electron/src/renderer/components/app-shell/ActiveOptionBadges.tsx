@@ -82,6 +82,10 @@ export interface ActiveOptionBadgesProps {
   onSessionStatusChange?: (stateId: string) => void
   /** Optional control shown directly after the session state badge. */
   afterStateSlot?: React.ReactNode
+  /** Optional control shown immediately before the session info button. */
+  beforeInfoSlot?: React.ReactNode
+  /** Optional replacement for the developer-facing session info button. */
+  infoSlot?: React.ReactNode
   /** Additional CSS classes */
   className?: string
 }
@@ -111,6 +115,8 @@ export function ActiveOptionBadges({
   currentSessionStatus,
   onSessionStatusChange,
   afterStateSlot,
+  beforeInfoSlot,
+  infoSlot,
   className,
 }: ActiveOptionBadgesProps) {
   // Resolve session label entries to their config objects + parsed values.
@@ -149,7 +155,7 @@ export function ActiveOptionBadges({
   const stackRef = useDynamicStack({ gap: 8, minVisible: 20, reservedStart: 0 })
 
   // Only render if badges or tasks are active
-  if (!permissionMode && tasks.length === 0 && !hasState && !hasStackContent) {
+  if (!permissionMode && tasks.length === 0 && !hasState && !hasStackContent && !beforeInfoSlot && !infoSlot) {
     return null
   }
 
@@ -230,9 +236,10 @@ export function ActiveOptionBadges({
 
       </div>
 
-      {/* Right side: Files popover button */}
-      <div className="shrink-0">
-        <FilesPopoverButton sessionId={sessionId} sessionFolderPath={sessionFolderPath} />
+      {/* Right side: contextual actions and session info */}
+      <div className="flex shrink-0 items-center gap-1.5">
+        {beforeInfoSlot}
+        {infoSlot ?? <FilesPopoverButton sessionId={sessionId} sessionFolderPath={sessionFolderPath} />}
       </div>
     </div>
   )

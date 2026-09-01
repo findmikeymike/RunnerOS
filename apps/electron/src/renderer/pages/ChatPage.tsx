@@ -668,7 +668,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
 
       return (
         <>
-          <div className="h-full flex flex-col">
+          <div className="runner-chat-page h-full flex flex-col">
             {chatHeader}
             <div className="flex-1 flex flex-col min-h-0">
               <ChatDisplay
@@ -728,7 +728,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
 
     // Session truly doesn't exist
     return (
-      <div className="h-full flex flex-col">
+      <div className="runner-chat-page h-full flex flex-col">
         <PanelHeader  title={t('chat.session')} leadingAction={leadingAction} rightSidebarButton={rightSidebarButton} />
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
           <AlertCircle className="h-10 w-10" />
@@ -740,7 +740,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
 
   return (
     <>
-      <div className="h-full flex flex-col">
+      <div className="runner-chat-page h-full flex flex-col">
         {chatHeader}
         <div className="flex-1 flex flex-col min-h-0">
           <ChatDisplay

@@ -2495,7 +2495,7 @@ export function ResponseCard({
             data-search-root="response"
             onMouseDown={handleSelectionPointerDown}
             onMouseUp={handleTextSelection}
-            className="runner-chat-response pl-[22px] pr-[16px] py-3 text-sm text-white/78"
+            className="runner-chat-response pl-[22px] pr-[16px] py-3 text-[15px] leading-7 text-white/82"
           >
             <div ref={contentLayerRef} className="relative">
               <Markdown
@@ -2625,7 +2625,7 @@ export function ResponseCard({
           data-search-root="response"
           onMouseDown={handleSelectionPointerDown}
           onMouseUp={handleTextSelection}
-          className="runner-chat-response pl-[22px] pr-4 py-3 text-sm text-white/78"
+          className="runner-chat-response pl-[22px] pr-4 py-3 text-[15px] leading-7 text-white/82"
         >
           <div ref={contentLayerRef} className="relative">
             <Markdown

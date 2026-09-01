@@ -1690,8 +1690,36 @@ html.dark[data-scenic] .fullscreen-overlay-background {
   padding: 6px 8px;
 }
 
+.runner-chat-page,
+.runner-chat-surface {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.012) 52%, rgba(255, 255, 255, 0.02));
+  backdrop-filter: blur(20px) saturate(112%);
+  -webkit-backdrop-filter: blur(20px) saturate(112%);
+}
+
+.runner-chat-page .runner-chat-surface {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 .runner-chat-response {
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(255, 255, 255, 0.82);
+  background: transparent;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.runner-chat-user-bubble {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.052) 58%, rgba(255, 255, 255, 0.072));
+  backdrop-filter: blur(24px) saturate(138%);
+  -webkit-backdrop-filter: blur(24px) saturate(138%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.075),
+    0 12px 34px rgba(0, 0, 0, 0.16);
 }
 
 .runner-chat-response :is(p, li, span, div, strong, h1, h2, h3, h4, h5, h6) {

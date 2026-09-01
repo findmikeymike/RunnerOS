@@ -527,8 +527,8 @@ export function UserMessageBubble({
           (#616 follow-up). */}
       <div
         className={cn(
-          "max-w-[80%] rounded-[16px] border border-white/[0.07] bg-white/[0.045] text-white/78 shadow-none break-words min-w-0 select-text [&_p]:m-0",
-          compactMode ? "px-4 py-2" : "px-5 py-3.5"
+          "runner-chat-user-bubble max-w-[80%] rounded-[16px] text-white/86 break-words min-w-0 select-text [&_p]:m-0",
+          compactMode ? "px-4 py-2.5" : "px-5 py-4"
         )}
       >
         {showQueued && (
@@ -548,7 +548,7 @@ export function UserMessageBubble({
               mode="minimal"
               onUrlClick={onUrlClick}
               onFileClick={onFileClick}
-              className="text-sm text-white/78 [&_a]:text-[#a9a5ff] [&_a]:underline [&_code]:bg-white/10 [&_p]:whitespace-pre-wrap"
+              className="text-[15px] leading-7 text-white/86 [&_a]:text-[#b9b6ff] [&_a]:underline [&_code]:bg-white/10 [&_p]:whitespace-pre-wrap"
             >
               {displayContent}
             </Markdown>

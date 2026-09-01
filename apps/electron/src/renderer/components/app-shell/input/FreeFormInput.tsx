@@ -10,7 +10,6 @@ import {
   Check,
   DatabaseZap,
   Folder,
-  Share2,
   ChevronDown,
   AlertCircle,
   X,
@@ -246,12 +245,6 @@ export interface FreeFormInputProps {
   onConnectionChange?: (connectionSlug: string) => void
   /** When true, the session's locked connection has been removed */
   connectionUnavailable?: boolean
-  /** Internal context share action: distill this chat into targeted worker intel. */
-  onShareIntel?: () => void
-  /** Whether the internal context share action is currently running. */
-  shareIntelBusy?: boolean
-  /** Disable the internal context share action. */
-  shareIntelDisabled?: boolean
 }
 
 /**
@@ -308,9 +301,6 @@ export function FreeFormInput({
   currentConnection,
   onConnectionChange,
   connectionUnavailable = false,
-  onShareIntel,
-  shareIntelBusy = false,
-  shareIntelDisabled = false,
 }: FreeFormInputProps) {
   const { t } = useTranslation()
 
@@ -2003,33 +1993,6 @@ export function FreeFormInput({
 
           {/* Right side: Model + Send - never shrink so they're always visible */}
           <div className="flex items-center gap-1 shrink-0">
-          {!compactMode && onShareIntel && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Share useful intel with workers"
-                  aria-busy={shareIntelBusy}
-                  onClick={onShareIntel}
-                  disabled={disabled || shareIntelDisabled || shareIntelBusy}
-                  className={cn(
-                    "input-toolbar-btn inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-foreground/55 transition-colors hover:bg-foreground/5 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35",
-                    shareIntelBusy && "text-foreground/80",
-                  )}
-                >
-                  {shareIntelBusy ? (
-                    <Spinner className="h-3.5 w-3.5" />
-                  ) : (
-                    <Share2 className="h-3.5 w-3.5" />
-                  )}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-[260px] text-xs">
-                Share useful intel from this chat with the right workers
-              </TooltipContent>
-            </Tooltip>
-          )}
-
           {/* 5. Model/Connection Selector - Hidden in compact mode (EditPopover embedding) */}
           {!compactMode && (
           <DropdownMenu open={modelDropdownOpen} onOpenChange={(open) => setModelDropdownOpen(isProcessing ? false : open)}>

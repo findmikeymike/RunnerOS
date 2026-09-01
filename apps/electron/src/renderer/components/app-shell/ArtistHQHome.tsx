@@ -5,13 +5,15 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Diamond,
   ExternalLink,
   FileText,
   ImagePlus,
   Info,
+  Library,
+  Maximize2,
   MessageSquareText,
   Mic,
-  Music2,
   Pencil,
   Play,
   Plus,
@@ -26,10 +28,11 @@ import {
 } from 'lucide-react'
 import { useAtomValue } from 'jotai'
 import { toast } from 'sonner'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
+import { DocumentFormattedMarkdownOverlay, Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
 import { resolvePulseExecutionTarget, type PulseExecutionTarget } from '@/lib/pulse-execution'
+import { appendSignalNugget, formatSignalDate, readableSignalBody, signalDocumentDate } from '@/lib/artist-signals'
 import {
   createWeeklyManagerCheckInMatcher,
   isWeeklyManagerCheckInAutomation,
@@ -50,7 +53,14 @@ import {
 } from '@/lib/artist-hq-proactive'
 import { parseAutomationsConfig, type AutomationListItem } from '@/components/automations/types'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+} from '@/components/ui/styled-dropdown'
 import { Switch } from '@/components/ui/switch'
+import { Info_Markdown } from '@/components/info'
 import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { ScheduledWorkComposer, type ScheduledWorkComposerEntry } from '@/components/calendar/ScheduledWorkComposer'
 import { StateOfPlayRefreshButton } from './StateOfPlayControls'
@@ -157,7 +167,6 @@ import {
   serializeArtistIntelConfigBody,
   serializeArtistIntelReportBody,
   type ArtistIntelConfig,
-  type ArtistIntelRun,
   type ArtistIntelSource,
   YOUTUBE_INTELLIGENCE_AGENT_SLUG,
 } from '@/lib/artist-intel'
@@ -194,7 +203,7 @@ interface ArtistHQHomeProps {
   onDeleteAgendaTask?: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
 }
 
-type ArtistHQTab = 'home' | 'profile' | 'voice' | 'calendar' | 'network' | 'research' | 'branding'
+type ArtistHQTab = 'home' | 'profile' | 'voice' | 'calendar' | 'network' | 'signals' | 'branding'
 type NetworkDraft = {
   name: string
   category: ArtistNetworkCategory
@@ -215,6 +224,15 @@ type CalendarEditDraft = CalendarDraft & {
 type ProfileDraft = Omit<ArtistProfile, 'version' | 'updatedAt'>
 type BrandingDraft = Omit<ArtistBranding, 'version' | 'updatedAt'>
 type VoiceDraft = Omit<ArtistVoice, 'version' | 'updatedAt'>
+type SignalLibraryItem = {
+  key: string
+  kind: 'output' | 'context'
+  title: string
+  summary: string
+  date?: string
+  output?: OutputSummaryDTO
+  body?: string
+}
 
 const HQ_HASH_PREFIX = '#artist-hq/'
 const SHOW_HQ_BANNER_FILTER = false
@@ -225,6 +243,7 @@ const INSTAGRAM_SYNC_AUTOMATION_NAME = 'Weekly Instagram Growth Snapshot'
 const INSTAGRAM_SYNC_CRON = '20 9 * * 1'
 const INTEL_SYNC_AUTOMATION_NAME = 'Weekly YouTube Intel Pulse'
 const INTEL_SYNC_CRON = '0 10 * * 1'
+const SIGNAL_NUGGETS_CONTEXT_SLUG = 'artist-signal-nuggets'
 const YOUTUBE_RESEARCH_AGENT_SLUG = 'youtube-research-agent'
 const GOOGLE_CALENDAR_SOURCE_SLUG = 'google-calendar'
 function googleCalendarSyncMessage(result: { synced: number; deleted?: number }): string {
@@ -317,6 +336,13 @@ export function ArtistHQHome({
   const [draftOpen, setDraftOpen] = React.useState(false)
   const [intelConfigOpen, setIntelConfigOpen] = React.useState(false)
   const [intelBusy, setIntelBusy] = React.useState(false)
+  const [selectedSignalKey, setSelectedSignalKey] = React.useState<string | null>(null)
+  const [selectedSignalContent, setSelectedSignalContent] = React.useState('')
+  const [selectedSignalText, setSelectedSignalText] = React.useState('')
+  const [signalContentLoading, setSignalContentLoading] = React.useState(false)
+  const [signalFullscreenOpen, setSignalFullscreenOpen] = React.useState(false)
+  const [signalNuggetBusy, setSignalNuggetBusy] = React.useState(false)
+  const signalReaderRef = React.useRef<HTMLDivElement | null>(null)
   const [categoryDraft, setCategoryDraft] = React.useState('')
   const [selectedPersonId, setSelectedPersonId] = React.useState<string | null>(null)
   const [selectedDate, setSelectedDate] = React.useState(todayKey)
@@ -348,7 +374,7 @@ export function ArtistHQHome({
   const [hqRefreshBusy, setHqRefreshBusy] = React.useState(false)
   const googleAutoSyncInFlightRef = React.useRef(false)
   const { docs, loading, upsert, refresh: refreshContext } = useWorkspaceContext(workspaceId)
-  const { outputs, loading: outputsLoading } = useOutputs(workspaceId)
+  const { outputs, loading: outputsLoading, getOutput } = useOutputs(workspaceId)
   const profileResult = React.useMemo(
     () => parseArtistProfileDocResult(docs.find((doc) => doc.slug === ARTIST_PROFILE_CONTEXT_SLUG)),
     [docs],
@@ -468,12 +494,53 @@ export function ArtistHQHome({
     sources,
   })
   const researchDocs = React.useMemo(
-    () => docs.filter((doc) => /research|report|intel|analysis/i.test(`${doc.slug} ${doc.metadata.name} ${doc.metadata.description ?? ''}`)),
+    () => docs.filter((doc) => (
+      doc.slug === SIGNAL_NUGGETS_CONTEXT_SLUG
+      || (
+        doc.slug !== ARTIST_INTEL_CONFIG_CONTEXT_SLUG
+        && doc.slug !== ARTIST_INTEL_REPORT_CONTEXT_SLUG
+        && /research|report|intel|analysis/i.test(`${doc.slug} ${doc.metadata.name} ${doc.metadata.description ?? ''}`)
+      )
+    )),
     [docs],
   )
   const researchOutputs = React.useMemo(
     () => outputs.filter(isResearchOutput),
     [outputs],
+  )
+  const signalLibraryItems = React.useMemo<SignalLibraryItem[]>(() => {
+    const outputItems = researchOutputs.map((output) => ({
+      key: `output:${output.id}`,
+      kind: 'output' as const,
+      title: output.title,
+      summary: output.summary || output.origin?.agentName || 'Intelligence report',
+      date: output.completedAt || output.updatedAt || output.createdAt,
+      output,
+    }))
+    const contextItems = researchDocs.map((doc) => ({
+      key: `context:${doc.slug}`,
+      kind: 'context' as const,
+      title: doc.metadata.name,
+      summary: doc.metadata.description || 'Saved intelligence',
+      date: signalDocumentDate(doc.body),
+      body: readableSignalBody(doc.body),
+    }))
+    const reportFallback = !intelReport.outputId && (intelReport.title || intelReport.summary)
+      ? [{
+          key: 'context:latest-intel-summary',
+          kind: 'context' as const,
+          title: intelReport.title || 'Latest intelligence brief',
+          summary: intelReport.summary || 'Latest intelligence brief',
+          date: intelReport.generatedAt || intelReport.updatedAt,
+          body: `# ${intelReport.title || 'Latest intelligence brief'}\n\n${intelReport.summary || 'The latest run has not produced a written summary yet.'}`,
+        }]
+      : []
+    return [...outputItems, ...reportFallback, ...contextItems]
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+  }, [intelReport.generatedAt, intelReport.outputId, intelReport.summary, intelReport.title, intelReport.updatedAt, researchDocs, researchOutputs])
+  const selectedSignalItem = React.useMemo(
+    () => signalLibraryItems.find((item) => item.key === selectedSignalKey) ?? signalLibraryItems[0] ?? null,
+    [selectedSignalKey, signalLibraryItems],
   )
   const activeCalendarEvents = React.useMemo(
     () => calendar.events.filter((event) => !event.deletedAt),
@@ -777,6 +844,50 @@ export function ArtistHQHome({
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
+
+  React.useEffect(() => {
+    if (selectedSignalKey && signalLibraryItems.some((item) => item.key === selectedSignalKey)) return
+    setSelectedSignalKey(signalLibraryItems[0]?.key ?? null)
+  }, [selectedSignalKey, signalLibraryItems])
+
+  React.useEffect(() => {
+    let cancelled = false
+    setSelectedSignalText('')
+    if (!selectedSignalItem) {
+      setSelectedSignalContent('')
+      setSignalContentLoading(false)
+      return
+    }
+    if (selectedSignalItem.kind === 'context') {
+      setSelectedSignalContent(selectedSignalItem.body || selectedSignalItem.summary)
+      setSignalContentLoading(false)
+      return
+    }
+
+    const output = selectedSignalItem.output
+    if (!output) return
+    const fallback = output.preview?.inlineText || output.summary || 'This report has no readable text preview.'
+    setSelectedSignalContent(fallback)
+    setSignalContentLoading(true)
+    void getOutput(output.id)
+      .then(async (manifest) => {
+        const assetId = output.preview?.assetId || manifest?.primaryAssetId || manifest?.primary?.id
+        if (output.preview?.inlineText) return output.preview.inlineText
+        return window.electronAPI.readOutputAssetText(workspaceId, output.id, assetId)
+      })
+      .then((content) => {
+        if (!cancelled && content.trim()) setSelectedSignalContent(content)
+      })
+      .catch(() => {
+        // Keep the manifest summary visible when the primary asset is not text.
+      })
+      .finally(() => {
+        if (!cancelled) setSignalContentLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [getOutput, selectedSignalItem, workspaceId])
 
   React.useEffect(() => {
     if (!selectedPersonId) return
@@ -1150,6 +1261,59 @@ export function ArtistHQHome({
     workspaceName,
     youtubeIntelligenceAgent,
   ])
+
+  const captureSignalSelection = React.useCallback(() => {
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+      setSelectedSignalText('')
+      return
+    }
+    const range = selection.getRangeAt(0)
+    const commonNode = range.commonAncestorContainer
+    const commonElement = commonNode.nodeType === Node.ELEMENT_NODE
+      ? commonNode as Element
+      : commonNode.parentElement
+    if (!commonElement || !signalReaderRef.current?.contains(commonElement)) {
+      setSelectedSignalText('')
+      return
+    }
+    setSelectedSignalText(selection.toString().trim().slice(0, 4000))
+  }, [])
+
+  const saveSignalNugget = React.useCallback(async () => {
+    if (!selectedSignalText || !selectedSignalItem || signalNuggetBusy) return
+    setSignalNuggetBusy(true)
+    try {
+      const existing = docs.find((doc) => doc.slug === SIGNAL_NUGGETS_CONTEXT_SLUG)
+      const amendedAt = new Date().toISOString()
+      await upsert({
+        slug: SIGNAL_NUGGETS_CONTEXT_SLUG,
+        metadata: {
+          name: 'Signal Nuggets',
+          description: 'Selected intelligence worth carrying into future artist and campaign work.',
+          routing: { mode: 'broadcast' },
+          delivery: 'on-demand',
+          enabled: true,
+        },
+        body: appendSignalNugget(existing?.body, {
+          text: selectedSignalText,
+          sourceTitle: selectedSignalItem.title,
+          sourceKey: selectedSignalItem.key,
+          amendedAt,
+        }),
+        expectedBody: existing?.body ?? null,
+      })
+      setSelectedSignalText('')
+      window.getSelection()?.removeAllRanges()
+      toast.success('Saved to Signal Nuggets')
+    } catch (error) {
+      toast.error('Could not save this nugget', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setSignalNuggetBusy(false)
+    }
+  }, [docs, selectedSignalItem, selectedSignalText, signalNuggetBusy, upsert])
 
   const transitionHqRecommendation = React.useCallback(async (
     recommendationId: string,
@@ -1605,6 +1769,11 @@ export function ArtistHQHome({
           title: 'Network',
           label: 'Contacts',
         }
+      case 'signals':
+        return {
+          title: 'Signals',
+          label: 'Intelligence',
+        }
       case 'profile':
         return {
           title: 'Profile',
@@ -1648,10 +1817,12 @@ export function ArtistHQHome({
           className={tab === 'home' ? "after:pointer-events-none after:absolute after:inset-0 after:z-[9] after:rounded-[inherit] after:ring-2 after:ring-inset after:ring-[#050505] after:content-['']" : undefined}
           actions={
             <>
-              <div className="hidden min-w-0 text-right sm:block">
-                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/38">Next</p>
-                <p className="mt-1 max-w-48 truncate text-[11px] font-medium text-white/72">{nextDate}</p>
-              </div>
+              {tab !== 'signals' ? (
+                <div className="hidden min-w-0 text-right sm:block">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/38">Next</p>
+                  <p className="mt-1 max-w-48 truncate text-[11px] font-medium text-white/72">{nextDate}</p>
+                </div>
+              ) : null}
               {tab === 'home' ? (
                 <>
                   <button
@@ -1697,7 +1868,7 @@ export function ArtistHQHome({
         {tab === 'home' && (
           <div id="hq-home-operations" className="space-y-3">
             <HQCard className="overflow-hidden p-0">
-              <div id="hq-home-details" className="grid grid-cols-1 divide-y divide-white/[0.055] lg:grid-cols-3 lg:divide-x lg:divide-y-0">
+              <div id="hq-home-details" className="grid grid-cols-1 divide-y divide-white/[0.055] lg:grid-cols-2 lg:divide-x lg:divide-y-0">
                 <SpotifyPulseCard
                   snapshot={spotifySnapshot}
                   history={spotifyHistory}
@@ -1723,18 +1894,6 @@ export function ArtistHQHome({
                   onManage={() => navigate(routes.view.settings('social-accounts'))}
                 />
 
-                <IntelPulseCard
-                  config={intelConfig}
-                  report={intelReport}
-                  configError={intelConfigResult.ok ? null : intelConfigResult.error}
-                  reportError={intelReportResult.ok ? null : intelReportResult.error}
-                  busy={intelBusy}
-                  agentReady={Boolean(youtubeIntelligenceAgent)}
-                  scheduled={intelSyncActive}
-                  onToggle={toggleIntelPulse}
-                  onRun={runIntelPulse}
-                  onEdit={() => setIntelConfigOpen(true)}
-                />
               </div>
             </HQCard>
 
@@ -1781,7 +1940,7 @@ export function ArtistHQHome({
                 >
                   <span className="flex min-w-0 items-center gap-2.5">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#f97316]" />
-                    <span className="truncate text-sm font-medium tracking-tight text-white/88">Workers &amp; signals</span>
+                    <span className="truncate text-sm font-medium tracking-tight text-white/88">Active work</span>
                   </span>
                   <span className="flex items-center gap-2 text-[9px] uppercase tracking-[0.14em] text-white/48">
                     {workerItems.length} active
@@ -1790,24 +1949,8 @@ export function ArtistHQHome({
                 </button>
               </HQCard>
               {homeUtilitiesOpen ? (
-                <div id="hq-home-utilities" className="grid grid-cols-1 gap-3 pt-1 xl:grid-cols-[1.2fr_0.8fr]">
+                <div id="hq-home-utilities" className="pt-1">
                   <WorkersSummaryCard workerItems={workerItems} />
-                  <PulseSummaryCard
-                    spotifyValue={spotifyIsPublicApi
-                      ? formatMetric(spotifySnapshot?.metrics.popularity)
-                      : formatMetric(spotifySnapshot?.metrics.streams)}
-                    spotifyMeta={spotifySnapshot ? spotifySnapshot.snapshotDate : 'Needs setup'}
-                    spotifyActive={spotifySyncActive}
-                    spotifyBusy={spotifySyncBusy}
-                    intelValue={`${intelConfig.sources.length} channel${intelConfig.sources.length === 1 ? '' : 's'}`}
-                    intelMeta={intelReport.generatedAt ? formatShortDate(intelReport.generatedAt) : 'Not run'}
-                    intelActive={intelSyncActive}
-                    intelBusy={intelBusy}
-                    onToggleSpotify={toggleSpotifySync}
-                    onToggleIntel={toggleIntelPulse}
-                    onRunIntel={runIntelPulse}
-                    intelRunDisabled={!youtubeIntelligenceAgent || intelConfig.sources.length === 0 || intelReport.status === 'queued'}
-                  />
                 </div>
               ) : null}
             </section>
@@ -1819,7 +1962,7 @@ export function ArtistHQHome({
           <HQCard>
             <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
-                <SectionTitle icon={UserRound} title="Profile" meta={`${profilePercent}% complete`} compact />
+                <SectionTitle icon={UserRound} title="Profile" meta={`${profilePercent}% complete`} compact bright />
                 <p className="mt-2 max-w-2xl text-xs leading-5 text-white/42">
                   Global context every worker should know before touching campaigns, content, research, ads, or outreach.
                 </p>
@@ -1848,7 +1991,7 @@ export function ArtistHQHome({
           <HQCard>
             <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
-                <SectionTitle icon={MessageSquareText} title="Voice" meta={`${voicePercent}% complete`} compact />
+                <SectionTitle icon={MessageSquareText} title="Voice" meta={`${voicePercent}% complete`} compact bright />
                 <p className="mt-2 max-w-2xl text-xs leading-5 text-white/42">
                   This is routed into posting and content workers so captions, hooks, ads, and replies sound like the artist.
                 </p>
@@ -2052,7 +2195,7 @@ export function ArtistHQHome({
           <HQCard>
             <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
-                <SectionTitle icon={Sparkles} title="Branding" meta={`${brandingPercent}% complete`} compact />
+                <SectionTitle icon={Sparkles} title="Branding" meta={`${brandingPercent}% complete`} compact bright />
                 <p className="mt-2 max-w-2xl text-xs leading-5 text-white/42">
                   Brand DNA for positioning, mythology, campaign ideas, creative direction, and future branding workers.
                 </p>
@@ -2077,36 +2220,158 @@ export function ArtistHQHome({
           </HQCard>
         )}
 
-        {tab === 'research' && (
-          <HQCard>
-            <SectionTitle icon={FileText} title="Research Reports" meta={loading || outputsLoading ? 'loading' : `${researchDocs.length + researchOutputs.length}`} />
-            {researchDocs.length === 0 && researchOutputs.length === 0 ? (
-              <EmptyLine title="No research reports yet" detail="Research, Spotify analysis, YouTube intel, and trend reports will live here." />
-            ) : (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                {researchOutputs.map((output) => (
-                  <button
-                    key={output.id}
-                    type="button"
-                    onClick={() => navigate(routes.view.output(output.id))}
-                    className="rounded-[14px] border border-white/[0.05] bg-black/20 p-3 text-left transition-colors hover:bg-white/[0.035]"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="truncate text-sm font-medium text-white/78">{output.title}</div>
-                      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-white/24" />
-                    </div>
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/40">{output.summary || output.origin?.agentName || output.kind}</p>
-                  </button>
-                ))}
-                {researchDocs.map((doc) => (
-                  <div key={doc.slug} className="rounded-[14px] border border-white/[0.05] bg-black/20 p-3">
-                    <div className="truncate text-sm font-medium text-white/78">{doc.metadata.name}</div>
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/40">{doc.metadata.description || doc.body}</p>
-                  </div>
-                ))}
+        {tab === 'signals' && (
+          <section className="space-y-3" aria-label="Signals intelligence reader">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+              <div className="flex min-w-0 items-center gap-2.5 text-[11px] text-white/42">
+                <span className={cn('h-1.5 w-1.5 rounded-full', intelSyncActive ? 'bg-emerald-300' : 'bg-white/24')} />
+                <span>{intelSyncActive ? 'Weekly intelligence active' : 'Weekly intelligence paused'}</span>
+                {intelReport.generatedAt ? <span className="hidden sm:inline">· Last run {formatSignalDate(intelReport.generatedAt)}</span> : null}
               </div>
-            )}
-          </HQCard>
+              <div className="flex items-center gap-2">
+                <label className="inline-flex h-8 items-center gap-2 rounded-[9px] bg-white/[0.035] px-2.5 text-[11px] text-white/58">
+                  Weekly
+                  <Switch checked={intelSyncActive} onCheckedChange={() => { void toggleIntelPulse() }} disabled={intelBusy} />
+                </label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setIntelConfigOpen(true)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] bg-white/[0.035] text-white/48 transition-colors hover:bg-white/[0.07] hover:text-white/82"
+                      aria-label="Edit intelligence sources"
+                    >
+                      <SlidersHorizontal className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">Edit sources</TooltipContent>
+                </Tooltip>
+                <button
+                  type="button"
+                  onClick={() => { void runIntelPulse() }}
+                  disabled={intelBusy || !youtubeIntelligenceAgent || intelConfig.sources.length === 0 || intelReport.status === 'queued'}
+                  className="inline-flex h-8 items-center gap-2 rounded-[9px] bg-white/90 px-3 text-[11px] font-semibold text-black transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {intelBusy || intelReport.status === 'queued' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 fill-current" />}
+                  Run intelligence
+                </button>
+              </div>
+            </div>
+
+            <div className="relative min-h-[520px] overflow-hidden rounded-[20px] bg-[#111214]/88 shadow-strong ring-1 ring-white/[0.07] backdrop-blur-2xl">
+              <div
+                className="pointer-events-none absolute inset-0 opacity-90"
+                style={{
+                  backgroundImage: 'radial-gradient(90% 68% at 50% 116%, rgba(249,115,22,0.12) 0%, rgba(249,115,22,0.025) 44%, transparent 72%), linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.012) 44%, rgba(0,0,0,0.14) 100%)',
+                }}
+              />
+              <div className="relative flex min-h-[520px] flex-col">
+                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/[0.055] px-5 py-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.16em] text-white/34">
+                      <Radio className="h-3 w-3 text-orange-300/75" />
+                      {selectedSignalItem?.kind === 'output' ? 'Intelligence report' : 'Saved intelligence'}
+                    </div>
+                    <h2 className="mt-2 truncate text-[18px] font-medium tracking-tight text-white/90">
+                      {selectedSignalItem?.title || 'Signals'}
+                    </h2>
+                    {selectedSignalItem ? (
+                      <p className="mt-1 line-clamp-1 max-w-3xl text-xs leading-5 text-white/42">
+                        {selectedSignalItem.summary}{selectedSignalItem.date ? ` · ${formatSignalDate(selectedSignalItem.date)}` : ''}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {selectedSignalText ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => { void saveSignalNugget() }}
+                            disabled={signalNuggetBusy}
+                            className="inline-flex h-8 items-center gap-2 rounded-[9px] bg-orange-500/14 px-2.5 text-[11px] font-medium text-orange-200 transition-colors hover:bg-orange-500/22 disabled:opacity-40"
+                          >
+                            {signalNuggetBusy ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Diamond className="h-3.5 w-3.5" />}
+                            Save selection
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs">Add to the dated Signal Nuggets document</TooltipContent>
+                      </Tooltip>
+                    ) : null}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex h-8 items-center gap-2 rounded-[9px] bg-white/[0.04] px-2.5 text-[11px] text-white/58 transition-colors hover:bg-white/[0.075] hover:text-white/86"
+                        >
+                          <Library className="h-3.5 w-3.5" />
+                          Library
+                          <ChevronDown className="h-3 w-3" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <StyledDropdownMenuContent align="end" className="w-80">
+                        {signalLibraryItems.length ? signalLibraryItems.map((item) => (
+                          <StyledDropdownMenuItem key={item.key} onClick={() => setSelectedSignalKey(item.key)} className="flex-col items-start gap-0.5 py-2.5">
+                            <span className="w-full truncate text-xs text-white/82">{item.title}</span>
+                            <span className="w-full truncate text-[10px] text-white/36">{item.date ? formatSignalDate(item.date) : item.summary}</span>
+                          </StyledDropdownMenuItem>
+                        )) : (
+                          <StyledDropdownMenuItem disabled>No reports yet</StyledDropdownMenuItem>
+                        )}
+                      </StyledDropdownMenuContent>
+                    </DropdownMenu>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => setSignalFullscreenOpen(true)}
+                          disabled={!selectedSignalContent}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] bg-white/[0.04] text-white/48 transition-colors hover:bg-white/[0.075] hover:text-white/86 disabled:opacity-30"
+                          aria-label="Read full report"
+                        >
+                          <Maximize2 className="h-3.5 w-3.5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">Read full report</TooltipContent>
+                    </Tooltip>
+                    {selectedSignalItem?.output ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => navigate(routes.view.output(selectedSignalItem.output!.id))}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] bg-white/[0.04] text-white/48 transition-colors hover:bg-white/[0.075] hover:text-white/86"
+                            aria-label="Open source output"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs">Open source output</TooltipContent>
+                      </Tooltip>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div ref={signalReaderRef} onMouseUp={captureSignalSelection} className="min-h-0 flex-1 overflow-y-auto px-1 py-5 selection:bg-orange-400/30">
+                  {signalContentLoading ? (
+                    <div className="flex h-72 items-center justify-center text-white/34">
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    </div>
+                  ) : selectedSignalContent ? (
+                    <Info_Markdown className="mx-auto max-w-[900px] px-6 pb-10 text-[14px] leading-7 text-white/70 [&_h1]:text-[24px] [&_h2]:mt-8 [&_h2]:text-[17px] [&_p]:leading-7">
+                      {selectedSignalContent}
+                    </Info_Markdown>
+                  ) : (
+                    <div className="flex h-72 flex-col items-center justify-center px-6 text-center">
+                      <Radio className="h-5 w-5 text-orange-300/60" />
+                      <p className="mt-3 text-sm font-medium text-white/72">No intelligence reports yet</p>
+                      <p className="mt-1 text-xs text-white/36">Run intelligence to create the first brief.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
         )}
       </div>
       {selectedPerson ? (
@@ -2121,6 +2386,12 @@ export function ArtistHQHome({
           disabled={!networkResult.ok}
         />
       ) : null}
+      <DocumentFormattedMarkdownOverlay
+        content={selectedSignalContent}
+        isOpen={signalFullscreenOpen}
+        onClose={() => setSignalFullscreenOpen(false)}
+        typeBadge={{ label: 'Signals', icon: Radio }}
+      />
       <IntelConfigDialog
         open={intelConfigOpen}
         config={intelConfig}
@@ -2167,19 +2438,21 @@ function SectionTitle({
   title,
   meta,
   compact,
+  bright,
 }: {
   icon: React.ComponentType<{ className?: string }>
   title: string
   meta?: string
   compact?: boolean
+  bright?: boolean
 }) {
   return (
     <div className={cn('flex items-center justify-between gap-3', compact ? '' : 'mb-3 pb-1')}>
       <div className="flex items-center gap-2">
-        <Icon className="h-3 w-3 text-white/58" />
-        <h3 className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/76">{title}</h3>
+        <Icon className={cn('h-3 w-3', bright ? 'text-white/78' : 'text-white/58')} />
+        <h3 className={cn('text-[9px] font-medium uppercase tracking-[0.15em]', bright ? 'text-white/92' : 'text-white/76')}>{title}</h3>
       </div>
-      {meta ? <span className="text-[8px] font-medium uppercase tracking-widest text-white/48">{meta}</span> : null}
+      {meta ? <span className={cn('text-[8px] font-medium uppercase tracking-widest', bright ? 'text-white/64' : 'text-white/48')}>{meta}</span> : null}
     </div>
   )
 }
@@ -2875,196 +3148,6 @@ function openHqStateEntity(entity: HqStateEntityRef): void {
   window.location.hash = '#artist-hq/calendar'
 }
 
-function IntelActivityChart({ runs }: { runs: ArtistIntelRun[] }) {
-  const recentRuns = runs.slice(0, 8).reverse()
-  const values = recentRuns.map((run) => run.nuggetCount ?? run.videoCount ?? 1)
-  const max = Math.max(1, ...values)
-
-  if (recentRuns.length === 0) {
-    return (
-      <div className="mt-auto">
-        <div className="flex h-12 items-end gap-1.5" aria-label="No Intel Pulse runs yet">
-          {[20, 34, 27, 48, 31, 56, 39, 46].map((height, index) => (
-            <span
-              key={`${height}-${index}`}
-              className="min-w-0 flex-1 rounded-t-[3px] bg-white/[0.055]"
-              style={{ height: `${height}%` }}
-            />
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="mt-auto">
-      <div className="flex h-12 items-end gap-1.5" aria-label={`Intel Pulse activity across ${recentRuns.length} recent runs`}>
-        {recentRuns.map((run, index) => {
-          const value = values[index] ?? 1
-          const height = Math.max(14, (value / max) * 100)
-          return (
-            <span
-              key={run.id}
-              title={`${formatShortDate(run.generatedAt)} · ${value} ${run.nuggetCount !== undefined ? 'nuggets' : run.videoCount !== undefined ? 'videos' : 'run'}`}
-              className={cn(
-                'min-w-0 flex-1 rounded-t-[3px]',
-                run.status === 'ready'
-                  ? 'bg-[#f97316]/90'
-                  : run.status === 'failed'
-                    ? 'bg-[#f97316]/35'
-                    : 'bg-white/20',
-              )}
-              style={{ height: `${height}%` }}
-            />
-          )
-        })}
-      </div>
-      <div className="mt-2 flex items-center justify-between text-[9px] text-white/24">
-        <span>{formatShortDate(recentRuns[0]?.generatedAt ?? '')}</span>
-        <span>{formatShortDate(recentRuns[recentRuns.length - 1]?.generatedAt ?? '')}</span>
-      </div>
-    </div>
-  )
-}
-
-function IntelPulseCard({
-  config,
-  report,
-  configError,
-  reportError,
-  busy,
-  agentReady,
-  scheduled,
-  onToggle,
-  onRun,
-  onEdit,
-}: {
-  config: ArtistIntelConfig
-  report: ReturnType<typeof parseArtistIntelReportDocResult>['report']
-  configError: string | null
-  reportError: string | null
-  busy: boolean
-  agentReady: boolean
-  scheduled: boolean
-  onToggle: () => void
-  onRun: () => void
-  onEdit: () => void
-}) {
-  const [detailsOpen, setDetailsOpen] = React.useState(false)
-  const latestRun = report.runs[0]
-  const videoCount = report.videoCount ?? latestRun?.videoCount
-  const nuggetCount = report.nuggetCount ?? latestRun?.nuggetCount
-  const latestLabel = report.generatedAt ? formatShortDate(report.generatedAt) : 'not run'
-  const running = report.status === 'queued'
-  const statusLabel = report.status === 'queued'
-    ? 'Running'
-    : report.status === 'ready'
-      ? 'Ready'
-      : report.status === 'failed'
-        ? 'Needs check'
-        : config.enabled ? scheduled ? 'Scheduled' : 'Manual' : 'Off'
-
-  return (
-    <section className="min-w-0 p-4">
-      <div
-        className="group relative flex h-[184px] flex-col rounded-[14px] border border-white/[0.06] bg-[#0F0F10] p-4 transition-colors hover:border-white/[0.12] hover:bg-[#121213]"
-      >
-          <button
-            type="button"
-            aria-label="Open Intel Pulse analysis"
-            onClick={() => setDetailsOpen(true)}
-            className="absolute inset-0 z-0 cursor-pointer rounded-[14px] outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#f97316]/70"
-          />
-          <div className="pointer-events-none relative z-[1] flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="truncate text-[9px] font-medium uppercase tracking-[0.15em] text-[#f97316]">
-                <span className="text-white/52">Intel Pulse</span>
-                <span className="text-white/24"> · </span>
-                Research captured
-              </p>
-              <p className="mt-1.5 text-[28px] font-medium leading-none tracking-[-0.04em] text-white/90">
-                {formatMetric(nuggetCount ?? videoCount)}
-              </p>
-            </div>
-            <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
-              <button
-                type="button"
-                onClick={onEdit}
-                title="Edit Intel channels"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.07] bg-white/[0.02] text-white/28 transition-colors hover:text-white/65"
-                aria-label="Edit Intel channels"
-              >
-                <SlidersHorizontal className="h-3.5 w-3.5" />
-              </button>
-              <PulseRunControls
-                active={scheduled}
-                busy={busy}
-                runDisabled={running || !agentReady || config.sources.length === 0}
-                manualLabel="Run Intel Pulse now — manual"
-                weeklyLabel="Weekly Intel auto-run"
-                activeClassName="border-[#f97316]/40 bg-[#f97316]/14 text-[#f97316]"
-                onRun={onRun}
-                onToggle={onToggle}
-              />
-            </div>
-          </div>
-          <div className="pointer-events-none relative z-[1] mt-auto">
-            <IntelActivityChart runs={report.runs} />
-          </div>
-      </div>
-
-      <PulseDetailsDialog
-        open={detailsOpen}
-        onOpenChange={setDetailsOpen}
-        title="Intel Pulse"
-        description={`${statusLabel} · ${latestLabel}`}
-      >
-        {report.title || report.summary ? (
-          <div className="rounded-[12px] border border-white/[0.06] bg-[#0F0F10] p-4">
-            {report.title ? <p className="text-sm font-medium text-white/86">{report.title}</p> : null}
-            {report.summary ? <p className="mt-2 text-xs leading-5 text-white/52">{report.summary}</p> : null}
-          </div>
-        ) : null}
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[12px] border border-white/[0.06] bg-white/[0.06] sm:grid-cols-3">
-          <SignalStat label="Channels" value={String(config.sources.length)} />
-          <SignalStat label="Videos" value={formatMetric(videoCount)} />
-          <SignalStat label="Nuggets" value={formatMetric(nuggetCount)} />
-          <SignalStat label="Lookback" value={`${config.sinceDays} days`} />
-          <SignalStat label="Cadence" value={config.cadence} />
-          <SignalStat label="Latest run" value={latestLabel} />
-        </div>
-        <PulseDetailSection title="Watched channels" empty="No Intel channels configured.">
-          {config.sources.map((source) => (
-            <PulseDetailRow key={source.id} label={source.name} value={`${source.priority} priority`} />
-          ))}
-        </PulseDetailSection>
-        <PulseDetailSection title="Recent analysis" empty="No Intel analysis runs yet.">
-          {report.runs.slice(0, 8).map((run) => (
-            <PulseDetailRow
-              key={run.id}
-              label={run.title ?? run.summary ?? formatShortDate(run.generatedAt)}
-              value={`${run.status} · ${formatMetric(run.nuggetCount ?? run.videoCount)}`}
-            />
-          ))}
-        </PulseDetailSection>
-        {report.outputId || report.sessionId ? (
-          <button
-            type="button"
-            onClick={() => report.outputId
-              ? navigate(routes.view.output(report.outputId))
-              : navigate(routes.view.allSessions(report.sessionId!))}
-            className="inline-flex h-9 items-center gap-2 self-start rounded-[9px] border border-white/[0.09] bg-white/[0.035] px-3 text-xs text-white/68 hover:bg-white/[0.07] hover:text-white/90"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            Open full report
-          </button>
-        ) : null}
-        {configError || reportError ? <PulseDetailNotice>{configError || reportError}</PulseDetailNotice> : null}
-      </PulseDetailsDialog>
-    </section>
-  )
-}
-
 function SocialPulseCard({
   doctor,
   snapshot,
@@ -3509,133 +3592,6 @@ function WorkersSummaryCard({ workerItems }: { workerItems: HqHomeWorkerItem[] }
   )
 }
 
-function PulseSummaryCard({
-  spotifyValue,
-  spotifyMeta,
-  spotifyActive,
-  spotifyBusy,
-  intelValue,
-  intelMeta,
-  intelActive,
-  intelBusy,
-  intelRunDisabled,
-  onToggleSpotify,
-  onToggleIntel,
-  onRunIntel,
-}: {
-  spotifyValue: string
-  spotifyMeta: string
-  spotifyActive: boolean
-  spotifyBusy: boolean
-  intelValue: string
-  intelMeta: string
-  intelActive: boolean
-  intelBusy: boolean
-  intelRunDisabled: boolean
-  onToggleSpotify: () => void
-  onToggleIntel: () => void
-  onRunIntel: () => void
-}) {
-  return (
-    <HQCard className="p-0">
-      <div className="border-b border-white/[0.045] px-4 py-3">
-        <SectionTitle icon={Radio} title="Signals" meta="weekly" compact />
-      </div>
-      <div className="divide-y divide-white/[0.045]">
-        <PulseSummaryRow
-          icon={Music2}
-          title="Spotify"
-          value={spotifyValue}
-          meta={spotifyMeta}
-          active={spotifyActive}
-          busy={spotifyBusy}
-          onToggle={onToggleSpotify}
-        />
-        <PulseSummaryRow
-          icon={Radio}
-          title="YouTube Intel"
-          value={intelValue}
-          meta={intelMeta}
-          active={intelActive}
-          busy={intelBusy}
-          onToggle={onToggleIntel}
-          actionLabel="Run"
-          actionDisabled={intelRunDisabled || intelBusy}
-          onAction={onRunIntel}
-        />
-      </div>
-    </HQCard>
-  )
-}
-
-function PulseSummaryRow({
-  icon: Icon,
-  title,
-  value,
-  meta,
-  active,
-  busy,
-  onToggle,
-  actionLabel,
-  actionDisabled,
-  onAction,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  title: string
-  value: string
-  meta: string
-  active: boolean
-  busy: boolean
-  onToggle: () => void
-  actionLabel?: string
-  actionDisabled?: boolean
-  onAction?: () => void
-}) {
-  return (
-    <div className="flex min-h-[62px] items-center gap-3 px-4 py-2.5">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-white/[0.055] bg-white/[0.02]">
-        <Icon className="h-3.5 w-3.5 text-white/42" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-white/72">{title}</span>
-          <span className={cn('h-1.5 w-1.5 rounded-full', active ? 'bg-emerald-300' : 'bg-white/22')} />
-        </div>
-        <div className="mt-0.5 flex min-w-0 items-center gap-2 text-[10px] text-white/30">
-          <span className="truncate">{value}</span>
-          <span aria-hidden="true">·</span>
-          <span className="truncate">{meta}</span>
-        </div>
-      </div>
-      {actionLabel && onAction ? (
-        <button
-          type="button"
-          onClick={onAction}
-          disabled={actionDisabled}
-          className="h-7 rounded-[7px] border border-white/[0.07] px-2.5 text-[10px] font-semibold text-white/55 transition-colors hover:bg-white/[0.045] disabled:cursor-not-allowed disabled:opacity-35"
-        >
-          {actionLabel}
-        </button>
-      ) : null}
-      <button
-        type="button"
-        onClick={onToggle}
-        disabled={busy}
-        className={cn(
-          'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] border transition-colors',
-          active
-            ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-300'
-            : 'border-white/[0.07] bg-white/[0.02] text-white/32 hover:text-white/62',
-          busy && 'cursor-wait opacity-60',
-        )}
-        aria-label={active ? `Pause ${title}` : `Activate ${title}`}
-      >
-        <RefreshCw className={cn('h-3 w-3', busy && 'animate-spin')} />
-      </button>
-    </div>
-  )
-}
-
 function CompactEmptyRow({ title, action, onClick }: { title: string; action: string; onClick: () => void }) {
   return (
     <div className="flex min-h-10 items-center justify-between gap-3 rounded-[8px] border border-dashed border-white/[0.055] px-3">
@@ -3815,7 +3771,7 @@ function ProfileField({
 }) {
   return (
     <label className={cn('block rounded-[14px] border border-white/[0.05] bg-black/20 p-3', wide && 'lg:col-span-2')}>
-      <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">{label}</span>
+      <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.16em] text-white/78">{label}</span>
       {children}
     </label>
   )
@@ -4209,7 +4165,7 @@ function Input({ value, onChange, placeholder }: { value: string; onChange: (val
       value={value}
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
-      className="h-9 rounded-[10px] border border-white/[0.06] bg-black/25 px-3 text-xs text-white/75 outline-none placeholder:text-white/28 focus:border-white/16"
+      className="h-9 w-full rounded-[10px] border border-white/[0.06] bg-black/25 px-3 text-xs text-white/75 outline-none placeholder:text-white/28 focus:border-white/16"
     />
   )
 }
@@ -4448,9 +4404,10 @@ function readTabFromHash(): ArtistHQTab {
   const raw = window.location.hash.startsWith(HQ_HASH_PREFIX)
     ? window.location.hash.slice(HQ_HASH_PREFIX.length)
     : ''
+  if (raw === 'research') return 'signals'
   return isArtistHQTab(raw) ? raw : 'home'
 }
 
 function isArtistHQTab(value: string): value is ArtistHQTab {
-  return value === 'home' || value === 'profile' || value === 'voice' || value === 'calendar' || value === 'network' || value === 'research' || value === 'branding'
+  return value === 'home' || value === 'profile' || value === 'voice' || value === 'calendar' || value === 'network' || value === 'signals' || value === 'branding'
 }

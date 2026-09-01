@@ -4,7 +4,7 @@ import type { ManagerBriefV1, ManagerSourceHealth } from '@craft-agent/shared/hq
 import { cn } from '@/lib/utils'
 
 export type ManagerSourceSurface =
-  | { kind: 'hq'; tab: 'home' | 'profile' | 'calendar' | 'network' | 'research' }
+  | { kind: 'hq'; tab: 'home' | 'profile' | 'calendar' | 'network' | 'signals' }
   | { kind: 'vault' }
   | { kind: 'outputs' }
   | { kind: 'campaign'; workspaceId: string }
@@ -18,7 +18,7 @@ export function managerSourceSurface(source: string): ManagerSourceSurface | nul
   if (source === 'artist-profile') return { kind: 'hq', tab: 'profile' }
   if (source === 'artist-calendar' || source === 'scheduled-work') return { kind: 'hq', tab: 'calendar' }
   if (source === 'artist-network' || source === 'artist-community') return { kind: 'hq', tab: 'network' }
-  if (source.startsWith('shared-intel')) return { kind: 'hq', tab: 'research' }
+  if (source.startsWith('shared-intel')) return { kind: 'hq', tab: 'signals' }
   if (source === 'artist-vault') return { kind: 'vault' }
   if (source === 'outputs') return { kind: 'outputs' }
   if (source === 'artist-release-horizon' || source === 'artist-spotify-snapshot' || source === 'artist-instagram-snapshot') {

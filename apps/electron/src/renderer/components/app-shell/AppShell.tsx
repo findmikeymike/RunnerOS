@@ -25,6 +25,7 @@ import {
   ListTodo,
   Inbox,
   Brain,
+  Radio,
   FileText,
   Globe,
   FlaskConical,
@@ -1749,7 +1750,7 @@ function AppShellContent({
     if (!isSessionsNavigation(navState)) navigate(routes.view.allSessions())
   }, [navState])
 
-  const handleArtistHQNavClick = useCallback((tab: 'home' | 'profile' | 'voice' | 'calendar' | 'network' | 'research' | 'branding') => {
+  const handleArtistHQNavClick = useCallback((tab: 'home' | 'profile' | 'voice' | 'calendar' | 'network' | 'signals' | 'branding') => {
     const hqWorkspace = findArtistHQWorkspace(workspaces)
     if (!hqWorkspace) {
       toast.error('No HQ workspace found')
@@ -2097,12 +2098,12 @@ function AppShellContent({
       return
     }
 
-    const hqTabByAction: Partial<Record<ArtistGuideActionId, 'home' | 'profile' | 'voice' | 'network' | 'research' | 'branding'>> = {
+    const hqTabByAction: Partial<Record<ArtistGuideActionId, 'home' | 'profile' | 'voice' | 'network' | 'signals' | 'branding'>> = {
       'hq.home': 'home',
       'hq.people': 'network',
       'hq.profile': 'profile',
       'hq.voice': 'voice',
-      'hq.research': 'research',
+      'hq.research': 'signals',
       'hq.branding': 'branding',
     }
     const hqTab = hqTabByAction[action]
@@ -2430,6 +2431,9 @@ function AppShellContent({
     || (isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/calendar')
   const peopleActive = isCommunityNavigation(navState)
     || (isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/network')
+  const signalsActive = isArtistHQWorkspace
+    && isSessionsNavigation(navState)
+    && ['#artist-hq/signals', '#artist-hq/research'].includes(artistHqHash)
   const workActive = isAgentsNavigation(navState)
     || isAutomationsNavigation(navState)
     || isWorkflowsNavigation(navState)
@@ -2437,7 +2441,7 @@ function AppShellContent({
   const brainActive = isArtistHQWorkspace
     && (
       vaultActive
-      || (isSessionsNavigation(navState) && ['#artist-hq/profile', '#artist-hq/voice', '#artist-hq/research', '#artist-hq/branding'].includes(artistHqHash))
+      || (isSessionsNavigation(navState) && ['#artist-hq/profile', '#artist-hq/voice', '#artist-hq/branding'].includes(artistHqHash))
     )
 
   const unifiedSidebarItems = React.useMemo((): KeyboardSidebarItem[] => {
@@ -2480,6 +2484,7 @@ function AppShellContent({
       result.push({ id: 'nav:plan', type: 'nav', action: () => handleArtistHQNavClick('calendar') })
     }
     result.push({ id: 'nav:people', type: 'nav', action: () => handleArtistHQNavClick('network') })
+    result.push({ id: 'nav:signals', type: 'nav', action: () => handleArtistHQNavClick('signals') })
     result.push({ id: 'nav:work', type: 'nav', action: () => toggleMainNavGroup('work') })
     if (workExpanded) {
       result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
@@ -2490,7 +2495,6 @@ function AppShellContent({
     if (brainExpanded) {
       result.push({ id: 'nav:profile', type: 'nav', action: () => handleArtistHQNavClick('profile') })
       result.push({ id: 'nav:voice', type: 'nav', action: () => handleArtistHQNavClick('voice') })
-      result.push({ id: 'nav:research', type: 'nav', action: () => handleArtistHQNavClick('research') })
       result.push({ id: 'nav:branding', type: 'nav', action: () => handleArtistHQNavClick('branding') })
       result.push({ id: 'nav:vault', type: 'nav', action: () => navigate(routes.view.vault()) })
     }
@@ -2946,6 +2950,13 @@ function AppShellContent({
         onClick: () => handleArtistHQNavClick('network'),
       },
       {
+        id: "nav:signals",
+        title: "Signals",
+        icon: Radio,
+        variant: signalsActive ? "default" : "ghost",
+        onClick: () => handleArtistHQNavClick('signals'),
+      },
+      {
         id: "nav:work",
         title: "Work",
         icon: Bot,
@@ -3015,13 +3026,6 @@ function AppShellContent({
             onClick: () => handleArtistHQNavClick('voice'),
           },
           {
-            id: "nav:research",
-            title: "Intel Docs",
-            icon: Layers,
-            variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/research' ? "default" : "ghost",
-            onClick: () => handleArtistHQNavClick('research'),
-          },
-          {
             id: "nav:branding",
             title: "Branding",
             icon: Sparkles,
@@ -3038,7 +3042,7 @@ function AppShellContent({
         ],
       },
     ]
-  }, [artistHqHash, automations.length, brainActive, brainExpanded, campaignCalendarActive, campaignHomeActive, campaignReleaseBoardActive, campaignReleaseKitActive, handleAgentsClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleCampaignReleaseBoardClick, handleCampaignReleaseKitClick, handleChatHistoryToggle, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, isLabWorkspace, labHomeActive, labPadActive, labSequenceActive, labSessionsActive, labSongsActive, navState, openAddAutomation, peopleActive, planActive, sessionsNavExpanded, t, toggleMainNavGroup, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
+  }, [artistHqHash, automations.length, brainActive, brainExpanded, campaignCalendarActive, campaignHomeActive, campaignReleaseBoardActive, campaignReleaseKitActive, handleAgentsClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleCampaignReleaseBoardClick, handleCampaignReleaseKitClick, handleChatHistoryToggle, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, isLabWorkspace, labHomeActive, labPadActive, labSequenceActive, labSessionsActive, labSongsActive, navState, openAddAutomation, peopleActive, planActive, sessionsNavExpanded, signalsActive, t, toggleMainNavGroup, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
 
   const sidebarSessionHistory = React.useMemo(() => {
     if (!sessionsNavExpanded || !workChatActive) return null

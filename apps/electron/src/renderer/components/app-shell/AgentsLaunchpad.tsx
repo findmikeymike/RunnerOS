@@ -267,7 +267,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
               <button
                 type="button"
                 onClick={() => setCreateOpen(true)}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/68 transition-colors hover:bg-white/[0.06]"
+                className="inline-flex h-9 items-center gap-2 rounded-full bg-gradient-to-r from-[#ff8a00] to-[#ef2b10] px-4 text-xs font-medium text-white shadow-middle transition-all hover:brightness-110"
               >
                 <Plus className="h-3.5 w-3.5" />
                 New worker
@@ -275,7 +275,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
               <button
                 type="button"
                 onClick={() => setLibraryOpen(true)}
-                className="inline-flex h-9 items-center gap-2 rounded-full bg-orange-500/85 px-4 text-xs font-medium text-white transition-colors hover:bg-orange-500"
+                className="inline-flex h-9 items-center gap-2 rounded-full bg-white/90 px-4 text-xs font-medium text-black transition-colors hover:bg-white"
               >
                 <Settings2 className="h-3.5 w-3.5" />
                 Manage library
@@ -357,14 +357,14 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
                     className="group/category mb-3 flex w-full items-center gap-3 text-left"
                     aria-expanded={!collapsed}
                   >
-                    <span className="inline-flex h-7 shrink-0 items-center gap-2 rounded-full bg-white/[0.055] px-2.5 transition-colors group-hover/category:bg-white/[0.075]">
+                    <span className="inline-flex h-7 shrink-0 items-center gap-2 rounded-full bg-white/92 px-2.5 transition-colors group-hover/category:bg-white">
                       {collapsed ? (
-                        <ChevronRight className="h-3 w-3 shrink-0 text-white/42 transition-colors group-hover/category:text-orange-200/80" />
+                        <ChevronRight className="h-3 w-3 shrink-0 text-black/55 transition-colors group-hover/category:text-black/80" />
                       ) : (
-                        <ChevronDown className="h-3 w-3 shrink-0 text-white/42 transition-colors group-hover/category:text-orange-200/80" />
+                        <ChevronDown className="h-3 w-3 shrink-0 text-black/55 transition-colors group-hover/category:text-black/80" />
                       )}
-                      <h2 className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/72">{domain}</h2>
-                      <span className="text-[10px] font-medium text-white/34">{agents.length}</span>
+                      <h2 className="text-[10px] font-semibold uppercase tracking-[0.15em] text-black/85">{domain}</h2>
+                      <span className="text-[10px] font-medium text-black/45">{agents.length}</span>
                     </span>
                     <div className="h-px flex-1 bg-white/[0.07]" />
                   </button>

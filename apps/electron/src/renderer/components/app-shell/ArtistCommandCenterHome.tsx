@@ -104,19 +104,21 @@ function SectionTitle({
   icon: Icon,
   title,
   meta,
+  iconClassName,
 }: {
   icon: React.ComponentType<{ className?: string }>
   title: string
   meta?: string
+  iconClassName?: string
 }) {
   return (
     <div className="mb-3 flex items-center justify-between border-b border-white/[0.04] pb-2.5">
       <div className="flex items-center gap-2">
-        <Icon className="h-3 w-3 text-white/40" />
-        <h3 className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/60">{title}</h3>
+        <Icon className={cn('h-3.5 w-3.5', iconClassName ?? 'text-orange-300')} />
+        <h3 className="text-[11px] font-medium uppercase tracking-[0.13em] text-white/88">{title}</h3>
       </div>
       {meta ? (
-        <span className="text-[8px] font-medium uppercase tracking-widest text-white/30">
+        <span className="text-[9px] font-medium uppercase tracking-widest text-white/46">
           {meta}
         </span>
       ) : null}
@@ -714,12 +716,12 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
           </div>
         ) : (
           <>
-            <div className="grid items-stretch gap-3 md:grid-cols-[minmax(0,1fr)_116px]">
+            <div className="grid items-stretch gap-3 md:grid-cols-[minmax(0,1fr)_148px]">
               <ReleaseReadinessSummary
                 board={releaseBoard}
                 onOpen={() => navigate(routes.view.campaign('release-board'))}
               />
-              <div className="flex min-h-[112px] items-center justify-center rounded-2xl border border-white/[0.04] bg-[#0A0A0A]">
+              <div className="flex min-h-[148px] items-center justify-center rounded-2xl border border-white/[0.04] bg-[#0A0A0A]">
                 <ReleaseCountdownDial
                   releaseDate={campaignWindow.releaseDate}
                   campaignStartDate={campaignWindow.startDate}
@@ -739,7 +741,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
               />
 
               <CommandCard>
-                <SectionTitle icon={Bot} title="Active Workers" meta="Quiet" />
+                <SectionTitle icon={Bot} title="Active Workers" meta="Quiet" iconClassName="text-orange-400" />
 
                 <div className="rounded-xl border border-white/[0.03] bg-white/[0.012] p-4">
                   <div className="flex items-start gap-3">
@@ -755,7 +757,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
               </CommandCard>
 
               <CommandCard>
-                <SectionTitle icon={ShieldCheck} title="Approvals" meta="None" />
+                <SectionTitle icon={ShieldCheck} title="Approvals" meta="None" iconClassName="text-red-400" />
                 <EmptyCardLine
                   title="No pending approvals"
                   detail={hasMission ? 'Approvals will appear when workflows create review points.' : 'Create a campaign before approval workflows matter.'}
@@ -849,6 +851,15 @@ const releaseCategoryIcons: Record<ReleaseBoardCategory['id'], React.ComponentTy
   content: ClipboardCheck,
   promotion: Megaphone,
   team: CheckCircle2,
+}
+
+const releaseCategoryIconColors: Record<ReleaseBoardCategory['id'], string> = {
+  music: 'text-[#ffd22e]',
+  visuals: 'text-[#ffad1f]',
+  content: 'text-[#ff7a16]',
+  setup: 'text-[#f4511e]',
+  promotion: 'text-[#ef2b10]',
+  team: 'text-[#ef2b10]',
 }
 
 function ReleaseReadinessSummary({
@@ -1018,6 +1029,7 @@ function ReleaseBoardSection({
   onToggleItem: (categoryId: ReleaseBoardCategory['id'], itemId: string) => void
 }) {
   const Icon = releaseCategoryIcons[category.id] || CheckCircle2
+  const iconColor = releaseCategoryIconColors[category.id] || 'text-white/58'
   const progress = getCategoryProgress(category)
   const allDone = progress.total > 0 && progress.done === progress.total
   const progressPercent = progress.total > 0 ? (progress.done / progress.total) * 100 : 0
@@ -1027,14 +1039,14 @@ function ReleaseBoardSection({
       <div>
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/[0.035] ring-1 ring-white/[0.065]">
-              <Icon className={cn('h-3 w-3', allDone ? 'text-orange-200/80' : 'text-white/58')} />
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/[0.035] ring-1 ring-white/[0.065]">
+              <Icon className={cn('h-3.5 w-3.5', allDone ? 'opacity-95' : 'opacity-80', iconColor)} />
             </span>
             <div className="min-w-0">
-              <h3 className="truncate text-[11px] font-medium text-white/90">{category.label}</h3>
+              <h3 className="truncate text-[13px] font-medium text-white/90">{category.label}</h3>
             </div>
           </div>
-          <span className={cn('shrink-0 text-[8px] font-semibold', allDone ? 'text-orange-200/80' : 'text-white/34')}>{progress.done}/{progress.total}</span>
+          <span className={cn('shrink-0 text-[9px] font-semibold', allDone ? 'text-orange-200/80' : 'text-white/34')}>{progress.done}/{progress.total}</span>
         </div>
 
         <div className="mt-2 h-px overflow-hidden bg-white/[0.08]">
@@ -1072,19 +1084,19 @@ function ReleaseBoardSection({
                 </button>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <p className={cn('truncate text-[9px] font-normal', skipped ? 'text-white/24 line-through' : done ? 'text-white/46' : 'text-white/58')}>{item.label}</p>
+                    <p className={cn('truncate text-[11px] font-normal', skipped ? 'text-white/24 line-through' : done ? 'text-white/46' : 'text-white/62')}>{item.label}</p>
                     {item.linkedAssetId ? <span className="h-1 w-1 shrink-0 rounded-full bg-orange-300/80" title="Matched from campaign vault" /> : null}
                   </div>
                 </div>
                 {done ? (
-                  <span className="text-[6px] font-semibold uppercase tracking-[0.1em] text-orange-200/62">Done</span>
+                  <span className="text-[7px] font-semibold uppercase tracking-[0.1em] text-orange-200/62">Done</span>
                 ) : (
                   <button
                     type="button"
                     onClick={() => onSetItemStatus(category.id, item.id, skipped ? 'needed' : 'skipped')}
                     title={skipped ? 'Restore this item' : 'Mark this item not applicable'}
                     aria-label={skipped ? `Restore ${item.label}` : `Mark ${item.label} not applicable`}
-                    className="rounded-full px-1 py-0.5 text-[6px] font-semibold uppercase tracking-[0.1em] text-white/25 transition-colors hover:bg-white/[0.06] hover:text-white/58"
+                    className="rounded-full px-1 py-0.5 text-[7px] font-semibold uppercase tracking-[0.1em] text-white/25 transition-colors hover:bg-white/[0.06] hover:text-white/58"
                   >
                     {skipped ? 'N/A' : 'Skip'}
                   </button>
@@ -1138,8 +1150,8 @@ function TeamCard({
     <CommandCard>
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Users className="h-3 w-3 text-white/40" />
-          <h3 className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/60">Team</h3>
+          <Users className="h-3.5 w-3.5 text-amber-300" />
+          <h3 className="text-[11px] font-medium uppercase tracking-[0.13em] text-white/88">Team</h3>
         </div>
         <button
           type="button"
