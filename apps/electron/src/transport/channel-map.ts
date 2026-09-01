@@ -444,6 +444,7 @@ export const CHANNEL_MAP = {
   duplicateAutomation: invoke(RPC_CHANNELS.automations.DUPLICATE),
   deleteAutomation: invoke(RPC_CHANNELS.automations.DELETE),
   createAutomationFromTemplate: invoke(RPC_CHANNELS.automations.CREATE_FROM_TEMPLATE),
+  replaceAutomation: invoke(RPC_CHANNELS.automations.REPLACE),
   getTriggerServerInfo: invoke(RPC_CHANNELS.automations.GET_TRIGGER_SERVER_INFO),
 
   // Agent definitions (saved agent personas — global library + per-workspace activation)

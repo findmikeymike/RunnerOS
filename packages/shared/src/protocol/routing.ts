@@ -497,6 +497,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.automations.GET_LAST_EXECUTED,
   RPC_CHANNELS.automations.REPLAY,
   RPC_CHANNELS.automations.CREATE_FROM_TEMPLATE,
+  RPC_CHANNELS.automations.REPLACE,
   RPC_CHANNELS.automations.GET_TRIGGER_SERVER_INFO,
   RPC_CHANNELS.automations.CHANGED,
 

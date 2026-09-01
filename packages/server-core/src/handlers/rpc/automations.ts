@@ -81,6 +81,16 @@ export function uniqueWebhookSlug(base: string, matchers: Record<string, unknown
   }
 }
 
+export function replacementAutomationMatcher(
+  current: Record<string, unknown>,
+  replacement: Record<string, unknown>,
+  generateId: () => string,
+): Record<string, unknown> {
+  const cloned = JSON.parse(JSON.stringify(replacement)) as Record<string, unknown>
+  cloned.id = typeof current.id === 'string' && current.id ? current.id : generateId()
+  return cloned
+}
+
 // Shared helper: resolve workspace, read automations.json, validate matcher, mutate, write back
 interface AutomationsConfigJson { automations?: Record<string, Record<string, unknown>[]>; [key: string]: unknown }
 async function withAutomationMatcher(workspaceId: string, eventName: string, matcherIndex: number, mutate: (matchers: Record<string, unknown>[], index: number, config: AutomationsConfigJson, genId: () => string) => void) {
@@ -129,6 +139,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.automations.GET_LAST_EXECUTED,
   RPC_CHANNELS.automations.REPLAY,
   RPC_CHANNELS.automations.CREATE_FROM_TEMPLATE,
+  RPC_CHANNELS.automations.REPLACE,
   RPC_CHANNELS.automations.GET_TRIGGER_SERVER_INFO,
 ] as const
 
@@ -415,6 +426,19 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
       }
 
       await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+    })
+  })
+
+  // Replace in one validated write so a failed update cannot delete the working automation.
+  server.handle(RPC_CHANNELS.automations.REPLACE, async (
+    _ctx,
+    workspaceId: string,
+    eventName: string,
+    matcherIndex: number,
+    matcher: Record<string, unknown>,
+  ) => {
+    await withAutomationMatcher(workspaceId, eventName, matcherIndex, (matchers, idx, _config, generateId) => {
+      matchers[idx] = replacementAutomationMatcher(matchers[idx]!, matcher, generateId)
     })
   })
 

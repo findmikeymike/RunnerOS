@@ -20,6 +20,7 @@ import {
   INDUSTRY_OUTREACH_PIPELINE_SLUG,
   MERCH_PRODUCT_BUILDER_SLUG,
   PAID_CAMPAIGN_BUILDER_SLUG,
+  WEEKLY_SIGNAL_SCAN_SLUG,
   STARTER_WORKFLOWS,
   STARTER_WORKFLOW_SLUGS,
 } from './starter-templates.ts';
@@ -527,6 +528,11 @@ describe('serializeWorkflow', () => {
             requireToolUse: true,
             minOutputChars: 50,
             maxAgentMessages: 2,
+            requiredOutput: {
+              kind: 'report',
+              title: 'Research packet',
+              requirePrimary: true,
+            },
           },
         },
         { id: 'draft', agent: 'writer', input: 'Use this:\n\n{{steps.research.output.title}}' },
@@ -576,6 +582,9 @@ describe('serializeWorkflow', () => {
     expect(parseWorkflowFile([...base, '    completion:', '      requireToolUse: yes', '---'].join('\n'))).toBeNull();
     expect(parseWorkflowFile([...base, '    completion:', '      minOutputChars: -1', '---'].join('\n'))).toBeNull();
     expect(parseWorkflowFile([...base, '    completion:', '      maxAgentMessages: 21', '---'].join('\n'))).toBeNull();
+    expect(parseWorkflowFile([...base, '    completion:', '      requiredOutput:', '        kind: unknown', '---'].join('\n'))).toBeNull();
+    expect(parseWorkflowFile([...base, '    completion:', '      requiredOutput:', '        kind: report', '        title: ""', '---'].join('\n'))).toBeNull();
+    expect(parseWorkflowFile([...base, '    completion:', '      requiredOutput:', '        kind: report', '        requirePrimary: yes', '---'].join('\n'))).toBeNull();
     expect(parseWorkflowFile([...base, '    completion:', '      requireToolsUse: true', '---'].join('\n'))).toBeNull();
   });
 
@@ -888,6 +897,40 @@ describe('activation manifest', () => {
 // ---------------------------------------------------------------------------
 
 describe('seedGlobalWorkflowLibraryIfEmpty', () => {
+  test('Weekly Signal Scan parses as an HQ-only bounded four-step workflow', () => {
+    const workflow = STARTER_WORKFLOWS.find((item) => item.slug === WEEKLY_SIGNAL_SCAN_SLUG)
+
+    expect(workflow).toBeDefined()
+    const parsed = parseWorkflowFile(serializeWorkflow(workflow!.metadata, workflow!.body))
+    expect(parsed).not.toBeNull()
+    expect(parsed?.metadata.steps.map((step) => step.agent)).toEqual([
+      'youtube-intelligence-agent',
+      'signal-scout-agent',
+      'signal-scout-agent',
+      'signal-analyst-agent',
+    ])
+    expect(parsed?.metadata.steps[1]?.input).toContain('Maximum 8 retained items total')
+    expect(parsed?.metadata.steps[2]?.input).toContain('Maximum 8 retained items total')
+    expect(parsed?.metadata.steps[0]?.completion?.requireToolUse).toBe(true)
+    expect(parsed?.metadata.steps.slice(0, 3).map((step) => step.completion?.requiredOutput?.title)).toEqual([
+      'Weekly YouTube Intelligence Report',
+      'Weekly Platform Signal Packet',
+      'Weekly Industry Signal Packet',
+    ])
+    expect(parsed?.metadata.steps.at(-1)?.input).toContain('<untrusted-collector-packet lane="youtube">')
+    expect(parsed?.metadata.steps.at(-1)?.input).toContain('If every lane is unavailable')
+    expect(parsed?.metadata.steps.at(-1)?.input).toContain('Recommend no more than three actions')
+    expect(parsed?.metadata.outputs).toMatchObject({
+      mode: 'final-step',
+      kind: 'report',
+      title: 'Weekly Signal Brief',
+      primary: { from: 'step-output', step: 'synthesize' },
+    })
+    expect(ENSURED_STARTER_WORKFLOW_SLUGS).toContain(WEEKLY_SIGNAL_SCAN_SLUG)
+    expect(HQ_DEFAULT_WORKFLOW_SLUGS).toContain(WEEKLY_SIGNAL_SCAN_SLUG)
+    expect(CAMPAIGN_DEFAULT_WORKFLOW_SLUGS).not.toContain(WEEKLY_SIGNAL_SCAN_SLUG)
+  })
+
   test('Content Mastermind starter parses with the lean four-agent contract', () => {
     const workflow = STARTER_WORKFLOWS.find((item) => item.slug === CONTENT_MASTERMIND_SLUG)
 

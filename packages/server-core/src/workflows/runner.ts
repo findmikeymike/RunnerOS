@@ -45,6 +45,7 @@ import {
   type WorkflowStepExecutionReceipt,
 } from '@craft-agent/shared/workflows';
 import { OutputService } from '../outputs/OutputService';
+import type { OutputManifest } from '@craft-agent/shared/outputs';
 import {
   assemblePrompt,
   scanForInjection,
@@ -124,6 +125,8 @@ export interface WorkflowRunnerDeps {
   getLastAssistantText: (sessionId: string) => string;
   /** Count tool results recorded in a step session. Used for explicit completion gates. */
   getSessionToolUseCount?: (sessionId: string) => number;
+  /** List concrete Output bundles created by a step session. */
+  getSessionOutputs?: (workspaceId: string, sessionId: string) => OutputManifest[];
   /**
    * Hard-abort a running session. Wraps `SessionManager.forceAbort` /
    * the `UserStop` lifecycle hook (see `packages/shared/CLAUDE.md` for
@@ -147,6 +150,8 @@ export interface WorkflowRunnerDeps {
   createDefaultWorkflowOutput?: (run: WorkflowRunSnapshot) => Promise<WorkflowRunSnapshot> | WorkflowRunSnapshot;
   /** Optional override for tests/hosts; default uses OutputService.markWorkflowOutputError. */
   markWorkflowOutputError?: (run: WorkflowRunSnapshot, err: unknown) => Promise<WorkflowRunSnapshot> | WorkflowRunSnapshot;
+  /** Run host-owned completion side effects after the default Output is finalized. */
+  postProcessSucceededRun?: (run: WorkflowRunSnapshot) => Promise<void> | void;
   /** Emit a runner event for renderer subscribers. No-op safe. */
   emit?: (event: WorkflowRunEvent) => void;
 }
@@ -643,6 +648,12 @@ export class WorkflowRunner {
         const prev = active.snapshot.steps[j]!;
         if (prev.state === 'succeeded') {
           stepsCtx[prev.id] = { output: prev.output };
+        } else if (prev.state === 'failed') {
+          const code = prev.error?.code ?? 'unknown-error';
+          const message = prev.error?.message ?? 'No error detail was recorded.';
+          stepsCtx[prev.id] = {
+            output: `[Workflow lane unavailable: ${prev.id} failed (${code}). ${message}]`,
+          };
         }
       }
 
@@ -751,6 +762,7 @@ export class WorkflowRunner {
 
     if (active.snapshot.state === 'succeeded') {
       await this.finalizeDefaultOutput(active);
+      if (!active.snapshot.outputError) await this.finalizeRunPostProcessing(active);
     }
 
     // Release concurrency slot + active map entry.
@@ -866,7 +878,7 @@ export class WorkflowRunner {
       if (active.abort.signal.aborted) return;
 
       const rawOutput = this.deps.getLastAssistantText(session.id);
-      this.validateCompletion(stepRecord, stepDef, session.id, rawOutput);
+      this.validateCompletion(active.snapshot.workspaceId, stepRecord, stepDef, session.id, rawOutput);
       if (!stepDef.outputSchema) {
         stepRecord.output = rawOutput;
         return;
@@ -934,6 +946,11 @@ export class WorkflowRunner {
     if (completion.requireToolUse) {
       lines.push('- You must use at least one available tool before the step can complete.');
     }
+    if (completion.requiredOutput) {
+      const title = completion.requiredOutput.title ? ` titled "${completion.requiredOutput.title}"` : '';
+      const primary = completion.requiredOutput.requirePrimary ? ' with a readable primary asset' : '';
+      lines.push(`- You must create one ${completion.requiredOutput.kind} Output${title}${primary}; text in the final answer does not substitute for it.`);
+    }
     if (completion.maxAgentMessages !== undefined) {
       lines.push(`- You may delegate to at most ${completion.maxAgentMessages} agent${completion.maxAgentMessages === 1 ? '' : 's'} across this workflow step, including retries.`);
     }
@@ -948,6 +965,7 @@ export class WorkflowRunner {
   }
 
   private validateCompletion(
+    workspaceId: string,
     stepRecord: WorkflowRunStep,
     stepDef: WorkflowStep,
     sessionId: string,
@@ -976,6 +994,29 @@ export class WorkflowRunner {
         'completion-tool-use-required',
         'Step completion requires at least one tool use, but none were recorded.',
       );
+    }
+    if (completion.requiredOutput) {
+      if (!this.deps.getSessionOutputs) {
+        throw new StepAttemptError(
+          'completion-output-check-unavailable',
+          'Step completion requires an Output check, but the workflow host did not provide one.',
+        );
+      }
+      const required = completion.requiredOutput;
+      const matchingOutput = this.deps.getSessionOutputs(workspaceId, sessionId)
+        .find((output) => (
+          output.origin.sessionId === sessionId
+          && output.kind === required.kind
+          && (required.title === undefined || output.title.trim() === required.title)
+          && (!required.requirePrimary || Boolean(output.primary))
+        ));
+      if (!matchingOutput) {
+        const title = required.title ? ` titled "${required.title}"` : '';
+        throw new StepAttemptError(
+          'completion-required-output-missing',
+          `Step completion requires a ${required.kind} Output${title}${required.requirePrimary ? ' with a readable primary asset' : ''}.`,
+        );
+      }
     }
 
     stepRecord.completion.satisfied = true;
@@ -1086,6 +1127,24 @@ export class WorkflowRunner {
       } catch (markErr) {
         // eslint-disable-next-line no-console
         console.error(`[WorkflowRunner] failed to record output error for run ${active.snapshot.id}:`, markErr);
+      }
+    }
+  }
+
+  private async finalizeRunPostProcessing(active: ActiveRun): Promise<void> {
+    if (!this.deps.postProcessSucceededRun) return;
+    try {
+      await this.deps.postProcessSucceededRun(this.cloneSnapshot(active.snapshot));
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`[WorkflowRunner] post-processing failed for run ${active.snapshot.id}:`, err);
+      try {
+        const next = await this.markWorkflowOutputError(active.snapshot, err);
+        active.snapshot = this.cloneSnapshot(next);
+        this.emitEvent({ type: 'run.updated', run: this.cloneSnapshot(active.snapshot) });
+      } catch (markErr) {
+        // eslint-disable-next-line no-console
+        console.error(`[WorkflowRunner] failed to record post-processing error for run ${active.snapshot.id}:`, markErr);
       }
     }
   }

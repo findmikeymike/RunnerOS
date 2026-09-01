@@ -85,6 +85,12 @@ export interface WorkflowStepCompletionContract {
   requireToolUse?: boolean;
   /** Maximum delegated agent messages allowed for this workflow step across all attempts. */
   maxAgentMessages?: number;
+  /** Require a concrete Output bundle from this step session before accepting completion. */
+  requiredOutput?: {
+    kind: OutputKind;
+    title?: string;
+    requirePrimary?: boolean;
+  };
 }
 
 /**

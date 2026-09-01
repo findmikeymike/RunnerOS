@@ -76,6 +76,8 @@ const BUILTIN_VISIBLE_AGENT_SLUGS = [
   'college-radio-agent',
   'youtube-research-agent',
   'youtube-intelligence-agent',
+  'signal-scout-agent',
+  'signal-analyst-agent',
 ] as const
 const inFlightRefreshes = new Map<string, Promise<void>>()
 const mountedWorkspaceKeys = new Map<string, number>()

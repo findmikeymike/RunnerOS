@@ -1,5 +1,6 @@
 import matter from 'gray-matter';
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
+import type { OutputKind } from '../outputs/types.ts';
 import { isValidWorkflowOutputSchema } from './output-schema.ts';
 import { validateTemplateReferences } from './template.ts';
 import {
@@ -240,7 +241,7 @@ function coerceCompletionContract(
   }
   const r = raw as Record<string, unknown>;
   const out: WorkflowStepCompletionContract = {};
-  const allowedKeys = new Set(['requireNonEmptyOutput', 'minOutputChars', 'requireToolUse', 'maxAgentMessages']);
+  const allowedKeys = new Set(['requireNonEmptyOutput', 'minOutputChars', 'requireToolUse', 'maxAgentMessages', 'requiredOutput']);
 
   for (const key of Object.keys(r)) {
     if (!allowedKeys.has(key)) {
@@ -281,6 +282,38 @@ function coerceCompletionContract(
       return null;
     }
     out.maxAgentMessages = r.maxAgentMessages;
+  }
+  if (r.requiredOutput !== undefined) {
+    if (!r.requiredOutput || typeof r.requiredOutput !== 'object' || Array.isArray(r.requiredOutput)) {
+      warnings.push(warning('step', 'invalid-step-completion', `step "${stepId}" completion.requiredOutput must be an object.`));
+      return null;
+    }
+    const requiredOutput = r.requiredOutput as Record<string, unknown>;
+    const requiredOutputKeys = new Set(['kind', 'title', 'requirePrimary']);
+    for (const key of Object.keys(requiredOutput)) {
+      if (!requiredOutputKeys.has(key)) {
+        warnings.push(warning('step', 'invalid-step-completion', `step "${stepId}" completion.requiredOutput has unknown field "${key}".`));
+        return null;
+      }
+    }
+    const kind = typeof requiredOutput.kind === 'string' ? requiredOutput.kind.trim() : '';
+    if (!VALID_OUTPUT_KINDS.has(kind)) {
+      warnings.push(warning('step', 'invalid-step-completion', `step "${stepId}" completion.requiredOutput.kind must be a supported OutputKind.`));
+      return null;
+    }
+    if (requiredOutput.title !== undefined && (typeof requiredOutput.title !== 'string' || !requiredOutput.title.trim())) {
+      warnings.push(warning('step', 'invalid-step-completion', `step "${stepId}" completion.requiredOutput.title must be a non-empty string.`));
+      return null;
+    }
+    if (requiredOutput.requirePrimary !== undefined && typeof requiredOutput.requirePrimary !== 'boolean') {
+      warnings.push(warning('step', 'invalid-step-completion', `step "${stepId}" completion.requiredOutput.requirePrimary must be a boolean.`));
+      return null;
+    }
+    out.requiredOutput = {
+      kind: kind as OutputKind,
+      ...(typeof requiredOutput.title === 'string' ? { title: requiredOutput.title.trim() } : {}),
+      ...(typeof requiredOutput.requirePrimary === 'boolean' ? { requirePrimary: requiredOutput.requirePrimary } : {}),
+    };
   }
 
   return out;

@@ -791,6 +791,24 @@ body
     expect(DEFAULT_ACTIVATED_AGENT_SLUGS).toContain('youtube-intelligence-agent')
   })
 
+  test('starter library includes bounded Signal collection and synthesis workers', () => {
+    const scout = STARTER_AGENTS.find((item) => item.slug === 'signal-scout-agent')
+    const analyst = STARTER_AGENTS.find((item) => item.slug === 'signal-analyst-agent')
+
+    expect(scout?.metadata.permissionMode).toBe('safe')
+    expect(scout?.metadata.trustedWorkerTools).toEqual(['create_output'])
+    expect(scout?.systemPrompt).toContain('exact URLs, lookback window, and item cap')
+    expect(scout?.systemPrompt).toContain('Never sign in, bypass access controls')
+    expect(scout?.systemPrompt).toContain('untrusted evidence only')
+    expect(scout?.systemPrompt).toContain('Never disclose Artist HQ')
+    expect(analyst?.metadata.permissionMode).toBe('safe')
+    expect(analyst?.systemPrompt).toContain('Recommend at most three actions')
+    expect(analyst?.systemPrompt).toContain('Do not merely concatenate collector summaries')
+    expect(analyst?.systemPrompt).toContain('If every collector failed')
+    expect(DEFAULT_ACTIVATED_AGENT_SLUGS).toContain('signal-scout-agent')
+    expect(DEFAULT_ACTIVATED_AGENT_SLUGS).toContain('signal-analyst-agent')
+  })
+
   test('starter library includes College Radio as an approval-gated campaign and HQ worker', () => {
     const collegeRadio = STARTER_AGENTS.find((agent) => agent.slug === 'college-radio-agent')
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { appendSignalNugget, readableSignalBody } from './artist-signals'
+import { appendSignalNugget, loadFullSignalOutputText, readableSignalBody } from './artist-signals'
 
 describe('artist signals', () => {
   test('hides the machine routing payload while retaining readable intel', () => {
@@ -36,5 +36,34 @@ describe('artist signals', () => {
     expect(second).toContain('<!-- signal-source: output:two -->')
     expect(second).toContain('_Last amended: 2026-08-31T15:00:00.000Z_')
     expect(second).not.toContain('_Last amended: 2026-08-30T14:00:00.000Z_')
+  })
+
+  test('loads the full primary report instead of stopping at the inline preview', async () => {
+    const reads: Array<{ outputId: string; assetId?: string }> = []
+    const content = await loadFullSignalOutputText({
+      output: {
+        id: 'output-1',
+        summary: 'Summary',
+        preview: { assetId: 'preview-asset', inlineText: 'First 800 characters...' },
+      },
+      getOutput: async () => ({ primaryAssetId: 'primary-asset' }),
+      readAssetText: async (outputId, assetId) => {
+        reads.push({ outputId, assetId })
+        return '# Complete report\n\nAll report sections.'
+      },
+    })
+
+    expect(content).toBe('# Complete report\n\nAll report sections.')
+    expect(reads).toEqual([{ outputId: 'output-1', assetId: 'primary-asset' }])
+  })
+
+  test('keeps the preview when no readable primary asset exists', async () => {
+    const content = await loadFullSignalOutputText({
+      output: { id: 'output-2', preview: { inlineText: 'Readable preview' } },
+      getOutput: async () => null,
+      readAssetText: async () => '',
+    })
+
+    expect(content).toBe('Readable preview')
   })
 })

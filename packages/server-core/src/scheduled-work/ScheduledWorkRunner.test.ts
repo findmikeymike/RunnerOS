@@ -697,6 +697,19 @@ describe('ScheduledWorkRunner', () => {
     })])
 
     let workflowState: WorkflowRunSnapshot['state'] = 'running'
+    const workflowManifest: OutputManifest = {
+      ...buildManifest('out-1', 'session-youtube'),
+      origin: {
+        source: 'workflow',
+        workflowRunId: 'run-1',
+        workflowSlug: 'weekly-content',
+        workflowName: 'Weekly content',
+        stepId: 'youtube-intel',
+        sessionId: 'session-youtube',
+        agentSlug: 'youtube-intelligence-agent',
+        agentName: 'YouTube Intelligence Agent',
+      },
+    }
     const runner = new ScheduledWorkRunner({
       canRunBackgroundWork: () => true,
       withLock: createLock(),
@@ -716,7 +729,7 @@ describe('ScheduledWorkRunner', () => {
         finalOutputId: workflowState === 'succeeded' ? 'out-final' : undefined,
         completedAt: workflowState === 'succeeded' ? '2026-07-10T14:02:00.000Z' : undefined,
       }),
-      listOutputManifests: () => [],
+      listOutputManifests: () => [workflowManifest],
     })
 
     await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
@@ -731,6 +744,55 @@ describe('ScheduledWorkRunner', () => {
     expect(saved.status).toBe('done')
     expect(saved.result).toEqual({ type: 'workflow-run', workflowRunId: 'run-1', outputIds: ['out-1', 'out-final'] })
     expect(saved.runs.at(-1)?.status).toBe('done')
+  })
+
+  test('does not mark a workflow done when workflow finalization records an error', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder({
+      id: 'workflow-postprocess-failure',
+      type: 'workflow-run',
+      status: 'running',
+      execution: {
+        type: 'workflow-run',
+        workflowSlug: 'weekly-signal-scan',
+        workflowDigest: 'digest-signals',
+        triggerInputs: {},
+      },
+      runs: [{
+        id: 'run-entry-signals',
+        jobId: 'workflow-postprocess-failure',
+        status: 'running',
+        startedAt: '2026-07-10T14:01:00.000Z',
+        workflowRunId: 'run-signals',
+      }],
+    })])
+
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'unused' }),
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => ({
+        id: 'run-signals',
+        workflowSlug: 'weekly-signal-scan',
+        workspaceId,
+        state: 'succeeded',
+        trigger: { type: 'manual', inputs: {}, firedAt: '2026-07-10T14:01:00.000Z' },
+        workflowSnapshot: { metadata: { name: 'Weekly Signal Scan', steps: [] }, body: '# body' } as unknown as WorkflowRunSnapshot['workflowSnapshot'],
+        steps: [],
+        createdAt: '2026-07-10T14:01:00.000Z',
+        updatedAt: '2026-07-10T14:02:00.000Z',
+        completedAt: '2026-07-10T14:02:00.000Z',
+        outputIds: ['out-intel'],
+        outputError: 'Signal routing failed.',
+      }),
+      listOutputManifests: () => [buildManifest('out-intel', 'session-intel')],
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:02:10.000Z'))
+    const saved = readWork(root).items[0]!
+    expect(saved.status).toBe('needs-attention')
+    expect(saved.attention).toMatchObject({ reason: 'execution-failed', message: 'Signal routing failed.' })
   })
 
   test('moves failed workflow polls to needs-attention and names the failed step', async () => {

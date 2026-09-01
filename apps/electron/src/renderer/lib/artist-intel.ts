@@ -4,6 +4,9 @@ import type { QueueWorkAction } from '@craft-agent/shared/automations'
 export const ARTIST_INTEL_CONFIG_CONTEXT_SLUG = 'artist-intel-config'
 export const ARTIST_INTEL_REPORT_CONTEXT_SLUG = 'artist-intel-report'
 export const YOUTUBE_INTELLIGENCE_AGENT_SLUG = 'youtube-intelligence-agent'
+export const SIGNAL_SCOUT_AGENT_SLUG = 'signal-scout-agent'
+export const SIGNAL_ANALYST_AGENT_SLUG = 'signal-analyst-agent'
+export const WEEKLY_SIGNAL_SCAN_SLUG = 'weekly-signal-scan'
 
 export interface ArtistIntelSource {
   id: string
@@ -284,6 +287,29 @@ export function createIntelQueueWorkAction(workspaceName: string, brief: string)
       permissionMode: 'safe',
       expectedOutput: { requirement: 'required', kind: 'report', title: 'Weekly YouTube Intelligence Report' },
       postProcess: 'youtube-intelligence',
+    },
+  }
+}
+
+export function createSignalScanQueueWorkAction(
+  workspaceName: string,
+  workflowDigest: string,
+  config: Pick<ArtistIntelConfig, 'sinceDays'>,
+): QueueWorkAction {
+  return {
+    type: 'queue-work',
+    ownerScope: 'hq',
+    calendarVisibility: 'hidden',
+    title: `Weekly Signal Scan - ${workspaceName}`,
+    intentId: 'artist-hq:weekly-signal-scan',
+    execution: {
+      type: 'workflow-run',
+      workflowSlug: WEEKLY_SIGNAL_SCAN_SLUG,
+      workflowDigest,
+      triggerInputs: {
+        artist_name: workspaceName,
+        lookback_days: config.sinceDays,
+      },
     },
   }
 }

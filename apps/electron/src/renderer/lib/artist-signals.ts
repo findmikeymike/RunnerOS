@@ -1,5 +1,31 @@
 import { parseSharedIntelNote } from '@craft-agent/shared/shared-intel'
 
+interface SignalOutputTextRef {
+  id: string
+  summary?: string
+  preview?: { assetId?: string; inlineText?: string }
+}
+
+interface SignalOutputManifestRef {
+  primaryAssetId?: string
+  primary?: { id?: string }
+}
+
+export async function loadFullSignalOutputText(input: {
+  output: SignalOutputTextRef
+  getOutput: (outputId: string) => Promise<SignalOutputManifestRef | null>
+  readAssetText: (outputId: string, assetId?: string) => Promise<string>
+}): Promise<string> {
+  const fallback = input.output.preview?.inlineText
+    || input.output.summary
+    || 'This report has no readable text preview.'
+  const manifest = await input.getOutput(input.output.id)
+  const assetId = manifest?.primaryAssetId || manifest?.primary?.id || input.output.preview?.assetId
+  if (!assetId) return fallback
+  const content = await input.readAssetText(input.output.id, assetId)
+  return content.trim() || fallback
+}
+
 export function signalDocumentDate(body: string): string | undefined {
   const sharedIntel = parseSharedIntelNote(body)
   if (sharedIntel?.updatedAt) return sharedIntel.updatedAt

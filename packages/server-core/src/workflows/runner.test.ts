@@ -21,7 +21,7 @@ import {
   type WorkflowRunSnapshot,
 } from '@craft-agent/shared/workflows';
 import { writeAgentMessageReceipt } from '@craft-agent/shared/agent-messaging';
-import { readOutput } from '@craft-agent/shared/outputs';
+import { readOutput, type OutputManifest } from '@craft-agent/shared/outputs';
 import {
   WorkflowRunner,
   type WorkflowRunEvent,
@@ -1068,6 +1068,33 @@ describe('WorkflowRunner', () => {
     }
   });
 
+  test('run post-processing executes after Output finalization and records failures', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const h = makeHarness({ stepOutputs: ['STEP_ONE_OUT', 'STEP_TWO_OUT'] });
+    let finalOutputSeen: string | undefined;
+    h.deps.postProcessSucceededRun = (run) => {
+      finalOutputSeen = run.finalOutputId;
+      throw new Error('Signal routing failed.');
+    };
+    try {
+      const runner = new WorkflowRunner(h.deps);
+      await runner.start({
+        workflow: makeWorkflow(),
+        workspaceId: WORKSPACE_ID,
+        triggerInputs: { topic: 'post-process' },
+      });
+
+      await waitFor(() => lastCompleted(h.events) !== undefined);
+      const completed = lastCompleted(h.events)!;
+      expect(finalOutputSeen).toBe(completed.finalOutputId);
+      expect(completed.state).toBe('succeeded');
+      expect(completed.outputError).toBe('Signal routing failed.');
+      expect(readRun(workspaceRoot, completed.id)?.outputError).toBe('Signal routing failed.');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   test('step throws: run fails, second step is never run, error recorded', async () => {
     const h = makeHarness();
     const runner = new WorkflowRunner(h.deps);
@@ -1109,7 +1136,7 @@ describe('WorkflowRunner', () => {
             input: 'Research {{trigger.topic}}',
             onFailure: 'continue',
           },
-          { id: 'second', agent: 'writer', input: 'Write fallback' },
+          { id: 'second', agent: 'writer', input: 'Write fallback from {{steps.first.output}}' },
         ],
       }),
       workspaceId: WORKSPACE_ID,
@@ -1124,7 +1151,10 @@ describe('WorkflowRunner', () => {
     expect(completed.steps[0]!.error).toEqual({ code: 'step-threw', message: 'recoverable' });
     expect(completed.steps[1]!.state).toBe('succeeded');
     expect(completed.steps[1]!.output).toBe('RECOVERED');
-    expect(h.promptsSent.map((p) => p.prompt.split('\n\n---\n\n')[0])).toEqual(['Research t', 'Write fallback']);
+    expect(h.promptsSent.map((p) => p.prompt.split('\n\n---\n\n')[0])).toEqual([
+      'Research t',
+      'Write fallback from [Workflow lane unavailable: first failed (step-threw). recoverable]',
+    ]);
 
     expect(findUpdatedDetail(h.events, 'step.failed')).toMatchObject({
       kind: 'step.failed',
@@ -1535,6 +1565,78 @@ describe('WorkflowRunner', () => {
       toolUseCount: 1,
       satisfied: true,
     });
+  });
+
+  test('completion contract rejects prose when the required concrete Output is missing', async () => {
+    const h = makeHarness({ stepOutputs: ['I created the complete report.'] });
+    h.deps.getSessionOutputs = () => [];
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [{
+          id: 'first',
+          agent: 'researcher',
+          input: 'Research {{trigger.topic}}',
+          completion: {
+            requiredOutput: {
+              kind: 'report',
+              title: 'Weekly YouTube Intelligence Report',
+              requirePrimary: true,
+            },
+          },
+        }],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'output gate' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    const completed = lastCompleted(h.events)!;
+    expect(completed.state).toBe('failed');
+    expect(completed.steps[0]!.error?.code).toBe('completion-required-output-missing');
+    expect(h.promptsSent[0]!.prompt).toContain('text in the final answer does not substitute for it');
+  });
+
+  test('completion contract accepts an exact Output with a primary asset', async () => {
+    const h = makeHarness({ stepOutputs: ['Report summary for downstream synthesis.'] });
+    h.deps.getSessionOutputs = (workspaceId, sessionId) => [{
+      id: '11111111-1111-4111-8111-111111111111',
+      workspaceId,
+      title: 'Weekly YouTube Intelligence Report',
+      kind: 'report',
+      status: 'published',
+      summary: 'Report',
+      origin: { source: 'workflow', sessionId },
+      assets: [{ id: 'primary', role: 'primary', path: 'report.md', mimeType: 'text/markdown' }],
+      primary: { id: 'primary', role: 'primary', path: 'report.md', mimeType: 'text/markdown' },
+      createdAt: '2026-08-31T00:00:00.000Z',
+      updatedAt: '2026-08-31T00:00:00.000Z',
+    } as OutputManifest];
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [{
+          id: 'first',
+          agent: 'researcher',
+          input: 'Research {{trigger.topic}}',
+          completion: {
+            requiredOutput: {
+              kind: 'report',
+              title: 'Weekly YouTube Intelligence Report',
+              requirePrimary: true,
+            },
+          },
+        }],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'output gate' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    expect(lastCompleted(h.events)!.state).toBe('succeeded');
+    expect(lastCompleted(h.events)!.steps[0]!.completion?.satisfied).toBe(true);
   });
 
   test('recovery marks orphaned running runs interrupted', () => {

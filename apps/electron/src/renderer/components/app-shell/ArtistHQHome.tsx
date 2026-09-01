@@ -32,13 +32,14 @@ import { DocumentFormattedMarkdownOverlay, Tooltip, TooltipContent, TooltipTrigg
 import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
 import { resolvePulseExecutionTarget, type PulseExecutionTarget } from '@/lib/pulse-execution'
-import { appendSignalNugget, formatSignalDate, readableSignalBody, signalDocumentDate } from '@/lib/artist-signals'
+import { appendSignalNugget, formatSignalDate, loadFullSignalOutputText, readableSignalBody, signalDocumentDate } from '@/lib/artist-signals'
 import {
   createWeeklyManagerCheckInMatcher,
   isWeeklyManagerCheckInAutomation,
 } from '@/lib/weekly-manager-check-in'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { useAgents } from '@/hooks/useAgents'
+import { useWorkflows } from '@/hooks/useWorkflows'
 import { useOutputs, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import { skillsAtom } from '@/atoms/skills'
@@ -71,7 +72,7 @@ import { ReleaseHorizon } from './ReleaseHorizon'
 import { ManagerKnowledgePanel, type ManagerSourceSurface } from './ManagerKnowledgePanel'
 import { ArtistManagerVoiceDialog } from './ArtistManagerVoiceDialog'
 import { useArtistManagerVoice } from '@/hooks/useArtistManagerVoice'
-import { buildCampaignSchedulePlanFromComposer, buildHqSchedulePlanFromComposer, type ScheduledWorkComposerDraft } from '@/lib/scheduled-work-composer'
+import { buildCampaignSchedulePlanFromComposer, buildHqSchedulePlanFromComposer, composerDefinitionDigest, type ScheduledWorkComposerDraft } from '@/lib/scheduled-work-composer'
 import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult, type ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import {
   CalendarMonthGrid,
@@ -156,18 +157,16 @@ import {
   ARTIST_INTEL_CONFIG_CONTEXT_SLUG,
   ARTIST_INTEL_REPORT_CONTEXT_SLUG,
   artistIntelConfigMetadata,
-  artistIntelReportMetadata,
-  createQueuedIntelRun,
-  createIntelRunPrompt,
-  createIntelQueueWorkAction,
-  createScheduledIntelRunPrompt,
+  createSignalScanQueueWorkAction,
   isValidYouTubeChannelUrl,
   parseArtistIntelConfigDocResult,
   parseArtistIntelReportDocResult,
   serializeArtistIntelConfigBody,
-  serializeArtistIntelReportBody,
+  SIGNAL_ANALYST_AGENT_SLUG,
+  SIGNAL_SCOUT_AGENT_SLUG,
   type ArtistIntelConfig,
   type ArtistIntelSource,
+  WEEKLY_SIGNAL_SCAN_SLUG,
   YOUTUBE_INTELLIGENCE_AGENT_SLUG,
 } from '@/lib/artist-intel'
 import type { SocialAccountsDoctorResult } from '../../../shared/types'
@@ -241,7 +240,8 @@ const SPOTIFY_SYNC_AUTOMATION_NAME = 'Weekly Spotify Snapshot'
 const SPOTIFY_SYNC_CRON = '0 9 * * 1'
 const INSTAGRAM_SYNC_AUTOMATION_NAME = 'Weekly Instagram Growth Snapshot'
 const INSTAGRAM_SYNC_CRON = '20 9 * * 1'
-const INTEL_SYNC_AUTOMATION_NAME = 'Weekly YouTube Intel Pulse'
+const INTEL_SYNC_AUTOMATION_NAME = 'Weekly Signal Scan'
+const LEGACY_INTEL_SYNC_AUTOMATION_NAME = 'Weekly YouTube Intel Pulse'
 const INTEL_SYNC_CRON = '0 10 * * 1'
 const SIGNAL_NUGGETS_CONTEXT_SLUG = 'artist-signal-nuggets'
 const YOUTUBE_RESEARCH_AGENT_SLUG = 'youtube-research-agent'
@@ -327,7 +327,16 @@ export function ArtistHQHome({
     workspaceDefaultLlmConnection,
     workspaces,
   } = useAppShellContext()
-  const { activeAgents: workspaceActiveAgents, allAgents } = useAgents(workspaceId)
+  const {
+    activeAgents: workspaceActiveAgents,
+    allAgents,
+    setActive: setAgentActive,
+  } = useAgents(workspaceId)
+  const {
+    allWorkflows,
+    activeSlugs: activeWorkflowSlugs,
+    setActive: setWorkflowActive,
+  } = useWorkflows(workspaceId)
   const skills = useAtomValue(skillsAtom)
   const sources = useAtomValue(sourcesAtom)
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
@@ -473,6 +482,33 @@ export function ArtistHQHome({
       .find((agent) => agent.slug === YOUTUBE_INTELLIGENCE_AGENT_SLUG),
     [allAgents, shellActiveAgents, workspaceActiveAgents],
   )
+  const signalScoutAgent = React.useMemo(
+    () => [...shellActiveAgents, ...workspaceActiveAgents, ...allAgents]
+      .find((agent) => agent.slug === SIGNAL_SCOUT_AGENT_SLUG),
+    [allAgents, shellActiveAgents, workspaceActiveAgents],
+  )
+  const signalAnalystAgent = React.useMemo(
+    () => [...shellActiveAgents, ...workspaceActiveAgents, ...allAgents]
+      .find((agent) => agent.slug === SIGNAL_ANALYST_AGENT_SLUG),
+    [allAgents, shellActiveAgents, workspaceActiveAgents],
+  )
+  const signalScanWorkflow = React.useMemo(
+    () => allWorkflows.find((workflow) => workflow.slug === WEEKLY_SIGNAL_SCAN_SLUG) ?? null,
+    [allWorkflows],
+  )
+  const signalScanWorkflowDigest = React.useMemo(
+    () => signalScanWorkflow
+      ? composerDefinitionDigest({ metadata: signalScanWorkflow.metadata, body: signalScanWorkflow.body })
+      : '',
+    [signalScanWorkflow],
+  )
+  const signalWorkersReady = Boolean(
+    youtubeIntelligenceAgent
+    && signalScoutAgent
+    && signalAnalystAgent
+    && signalScanWorkflow
+    && signalScanWorkflowDigest,
+  )
   const spotifyAnalyst = React.useMemo(
     () => [...shellActiveAgents, ...workspaceActiveAgents, ...allAgents]
       .find((agent) => agent.slug === 'spotify-analyst'),
@@ -538,6 +574,7 @@ export function ArtistHQHome({
     return [...outputItems, ...reportFallback, ...contextItems]
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
   }, [intelReport.generatedAt, intelReport.outputId, intelReport.summary, intelReport.title, intelReport.updatedAt, researchDocs, researchOutputs])
+  const latestSignalDate = signalLibraryItems[0]?.date ?? intelReport.generatedAt
   const selectedSignalItem = React.useMemo(
     () => signalLibraryItems.find((item) => item.key === selectedSignalKey) ?? signalLibraryItems[0] ?? null,
     [selectedSignalKey, signalLibraryItems],
@@ -869,12 +906,11 @@ export function ArtistHQHome({
     const fallback = output.preview?.inlineText || output.summary || 'This report has no readable text preview.'
     setSelectedSignalContent(fallback)
     setSignalContentLoading(true)
-    void getOutput(output.id)
-      .then(async (manifest) => {
-        const assetId = output.preview?.assetId || manifest?.primaryAssetId || manifest?.primary?.id
-        if (output.preview?.inlineText) return output.preview.inlineText
-        return window.electronAPI.readOutputAssetText(workspaceId, output.id, assetId)
-      })
+    void loadFullSignalOutputText({
+      output,
+      getOutput,
+      readAssetText: (outputId, assetId) => window.electronAPI.readOutputAssetText(workspaceId, outputId, assetId),
+    })
       .then((content) => {
         if (!cancelled && content.trim()) setSelectedSignalContent(content)
       })
@@ -1169,6 +1205,32 @@ export function ArtistHQHome({
     })
   }, [upsert])
 
+  const ensureSignalScanReady = React.useCallback(async () => {
+    if (!signalScanWorkflow || !signalScanWorkflowDigest) {
+      throw new Error('Weekly Signal Scan is not installed yet. Restart Artist OS once to finish the upgrade.')
+    }
+    if (!youtubeIntelligenceAgent || !signalScoutAgent || !signalAnalystAgent) {
+      throw new Error('Signal workers are not installed yet. Restart Artist OS once to finish the upgrade.')
+    }
+
+    // Workspace manifests are individual files, so activate sequentially to avoid lost updates.
+    await setAgentActive(YOUTUBE_INTELLIGENCE_AGENT_SLUG, true)
+    await setAgentActive(SIGNAL_SCOUT_AGENT_SLUG, true)
+    await setAgentActive(SIGNAL_ANALYST_AGENT_SLUG, true)
+    if (!activeWorkflowSlugs.includes(WEEKLY_SIGNAL_SCAN_SLUG)) {
+      await setWorkflowActive(WEEKLY_SIGNAL_SCAN_SLUG, true)
+    }
+  }, [
+    activeWorkflowSlugs,
+    setAgentActive,
+    setWorkflowActive,
+    signalAnalystAgent,
+    signalScanWorkflow,
+    signalScanWorkflowDigest,
+    signalScoutAgent,
+    youtubeIntelligenceAgent,
+  ])
+
   const toggleIntelPulse = React.useCallback(async () => {
     if (!intelConfigResult.ok) {
       toast.error(intelConfigResult.error)
@@ -1177,17 +1239,18 @@ export function ArtistHQHome({
     setIntelBusy(true)
     try {
       const nextScheduled = !intelSyncActive
+      if (nextScheduled) await ensureSignalScanReady()
       await saveIntelConfig({
         ...intelConfig,
         enabled: nextScheduled,
         cadence: nextScheduled ? 'weekly' : intelConfig.cadence,
       })
       if (intelSyncAutomation && nextScheduled && isLegacyIntelSyncAutomation(intelSyncAutomation)) {
-        await window.electronAPI.deleteAutomation(workspaceId, intelSyncAutomation.event, intelSyncAutomation.matcherIndex)
-        await window.electronAPI.createAutomationFromTemplate(
+        await window.electronAPI.replaceAutomation(
           workspaceId,
-          'SchedulerTick',
-          createIntelSyncMatcher(workspaceName || 'Artist HQ'),
+          intelSyncAutomation.event,
+          intelSyncAutomation.matcherIndex,
+          createIntelSyncMatcher(workspaceName || 'Artist HQ', signalScanWorkflowDigest, intelConfig),
         )
       } else if (intelSyncAutomation) {
         await window.electronAPI.setAutomationEnabled(
@@ -1200,7 +1263,7 @@ export function ArtistHQHome({
         await window.electronAPI.createAutomationFromTemplate(
           workspaceId,
           'SchedulerTick',
-          createIntelSyncMatcher(workspaceName || 'Artist HQ'),
+          createIntelSyncMatcher(workspaceName || 'Artist HQ', signalScanWorkflowDigest, intelConfig),
         )
       }
       await refreshAutomations()
@@ -1210,42 +1273,29 @@ export function ArtistHQHome({
     } finally {
       setIntelBusy(false)
     }
-  }, [intelConfig, intelConfigResult, intelSyncActive, intelSyncAutomation, refreshAutomations, saveIntelConfig, workspaceId, workspaceName])
+  }, [ensureSignalScanReady, intelConfig, intelConfigResult, intelSyncActive, intelSyncAutomation, refreshAutomations, saveIntelConfig, signalScanWorkflowDigest, workspaceId, workspaceName])
 
   const runIntelPulse = React.useCallback(async () => {
     if (!workspaceId || !intelConfigResult.ok) return
-    if (!youtubeIntelligenceAgent) {
-      toast.error('YouTube Intelligence Agent is not installed in this workspace')
+    if (!signalWorkersReady) {
+      toast.error('Signal Scan is not installed in this workspace yet')
       return
     }
     setIntelBusy(true)
     try {
-      const config = intelConfig.enabled ? intelConfig : { ...intelConfig, enabled: true }
-      if (!intelConfig.enabled) {
-        await saveIntelConfig(config)
-      }
-      const generatedAt = new Date().toISOString()
+      await ensureSignalScanReady()
       const result = await window.electronAPI.testAutomation({
         workspaceId,
-        automationName: 'Manual YouTube Intel Pulse',
-        actions: [createIntelQueueWorkAction(workspaceName || 'Artist HQ', createIntelRunPrompt(config, workspaceName || 'Artist HQ'))],
+        automationName: 'Manual Signal Scan',
+        actions: [createSignalScanQueueWorkAction(workspaceName || 'Artist HQ', signalScanWorkflowDigest, intelConfig)],
         permissionMode: 'safe',
-        labels: ['youtube', 'intel', 'artist-hq', 'manual'],
+        labels: ['signals', 'intel', 'artist-hq', 'manual'],
       })
       const queued = result.actions.find((action) => action.type === 'queue-work')
       if (!queued || !queued.success || !queued.workOrderIds?.[0]) throw new Error(queued?.error || 'Intel work was not queued.')
-      await upsert({
-        slug: ARTIST_INTEL_REPORT_CONTEXT_SLUG,
-        metadata: artistIntelReportMetadata(),
-        body: serializeArtistIntelReportBody(createQueuedIntelRun(intelReport, {
-          workOrderId: queued.workOrderIds[0],
-          sourceCount: config.sources.length,
-          generatedAt,
-        })),
-      })
-      toast.success('Intel Pulse started')
+      toast.success('Signal Scan started')
     } catch (error) {
-      toast.error('Failed to start Intel Pulse', {
+      toast.error('Failed to start Signal Scan', {
         description: error instanceof Error ? error.message : String(error),
       })
     } finally {
@@ -1254,12 +1304,11 @@ export function ArtistHQHome({
   }, [
     intelConfig,
     intelConfigResult,
-    intelReport,
-    saveIntelConfig,
-    upsert,
+    ensureSignalScanReady,
+    signalScanWorkflowDigest,
+    signalWorkersReady,
     workspaceId,
     workspaceName,
-    youtubeIntelligenceAgent,
   ])
 
   const captureSignalSelection = React.useCallback(() => {
@@ -2226,7 +2275,9 @@ export function ArtistHQHome({
               <div className="flex min-w-0 items-center gap-2.5 text-[11px] text-white/42">
                 <span className={cn('h-1.5 w-1.5 rounded-full', intelSyncActive ? 'bg-emerald-300' : 'bg-white/24')} />
                 <span>{intelSyncActive ? 'Weekly intelligence active' : 'Weekly intelligence paused'}</span>
-                {intelReport.generatedAt ? <span className="hidden sm:inline">· Last run {formatSignalDate(intelReport.generatedAt)}</span> : null}
+                {latestSignalDate ? (
+                  <span className="hidden sm:inline">· Latest {formatSignalDate(latestSignalDate)}</span>
+                ) : null}
               </div>
               <div className="flex items-center gap-2">
                 <label className="inline-flex h-8 items-center gap-2 rounded-[9px] bg-white/[0.035] px-2.5 text-[11px] text-white/58">
@@ -2244,15 +2295,15 @@ export function ArtistHQHome({
                       <SlidersHorizontal className="h-3.5 w-3.5" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">Edit sources</TooltipContent>
+                  <TooltipContent side="top" className="text-xs">Edit YouTube channels</TooltipContent>
                 </Tooltip>
                 <button
                   type="button"
                   onClick={() => { void runIntelPulse() }}
-                  disabled={intelBusy || !youtubeIntelligenceAgent || intelConfig.sources.length === 0 || intelReport.status === 'queued'}
+                  disabled={intelBusy || !signalWorkersReady}
                   className="inline-flex h-8 items-center gap-2 rounded-[9px] bg-white/90 px-3 text-[11px] font-semibold text-black transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {intelBusy || intelReport.status === 'queued' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 fill-current" />}
+                  {intelBusy ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 fill-current" />}
                   Run intelligence
                 </button>
               </div>
@@ -2398,23 +2449,36 @@ export function ArtistHQHome({
         onOpenChange={setIntelConfigOpen}
         onSave={async (nextConfig) => {
           try {
+            const nextScheduled = nextConfig.enabled && nextConfig.cadence === 'weekly'
+            if (nextScheduled) {
+              await ensureSignalScanReady()
+            }
             await saveIntelConfig(nextConfig)
-            if (intelSyncAutomation) {
+            if (nextScheduled) {
+              if (intelSyncAutomation) {
+                await window.electronAPI.replaceAutomation(
+                  workspaceId,
+                  intelSyncAutomation.event,
+                  intelSyncAutomation.matcherIndex,
+                  createIntelSyncMatcher(workspaceName || 'Artist HQ', signalScanWorkflowDigest, nextConfig),
+                )
+              } else {
+                await window.electronAPI.createAutomationFromTemplate(
+                  workspaceId,
+                  'SchedulerTick',
+                  createIntelSyncMatcher(workspaceName || 'Artist HQ', signalScanWorkflowDigest, nextConfig),
+                )
+              }
+            } else if (intelSyncAutomation) {
               await window.electronAPI.setAutomationEnabled(
                 workspaceId,
                 intelSyncAutomation.event,
                 intelSyncAutomation.matcherIndex,
-                nextConfig.enabled && nextConfig.cadence === 'weekly',
-              )
-            } else if (nextConfig.enabled && nextConfig.cadence === 'weekly') {
-              await window.electronAPI.createAutomationFromTemplate(
-                workspaceId,
-                'SchedulerTick',
-                createIntelSyncMatcher(workspaceName || 'Artist HQ'),
+                false,
               )
             }
             await refreshAutomations()
-            toast.success('Intel channels saved')
+            toast.success('Signal settings saved')
             setIntelConfigOpen(false)
           } catch (error) {
             toast.error(error instanceof Error ? error.message : String(error))
@@ -4342,15 +4406,19 @@ function createInstagramSyncMatcher(executionTarget: PulseExecutionTarget = {}):
   }
 }
 
-function createIntelSyncMatcher(workspaceName: string): Record<string, unknown> {
+function createIntelSyncMatcher(
+  workspaceName: string,
+  workflowDigest: string,
+  config: Pick<ArtistIntelConfig, 'sinceDays'>,
+): Record<string, unknown> {
   return {
     name: INTEL_SYNC_AUTOMATION_NAME,
     cron: INTEL_SYNC_CRON,
     timezone: getLocalTimezone(),
     permissionMode: 'safe',
-    labels: ['youtube', 'intel', 'artist-hq', 'scheduled'],
+    labels: ['signals', 'intel', 'artist-hq', 'scheduled'],
     actions: [
-      createIntelQueueWorkAction(workspaceName, createScheduledIntelRunPrompt(workspaceName)),
+      createSignalScanQueueWorkAction(workspaceName, workflowDigest, config),
     ],
   }
 }
@@ -4377,11 +4445,13 @@ function isInstagramSyncAutomation(automation: AutomationListItem): boolean {
 
 function isIntelSyncAutomation(automation: AutomationListItem): boolean {
   if (automation.event !== 'SchedulerTick') return false
-  if (automation.name === INTEL_SYNC_AUTOMATION_NAME) return true
+  if (automation.name === INTEL_SYNC_AUTOMATION_NAME || automation.name === LEGACY_INTEL_SYNC_AUTOMATION_NAME) return true
   return automation.actions.some((action) => (
     (action.type === 'queue-work'
-      && action.execution.type === 'agent-task'
-      && action.execution.agentSlug === YOUTUBE_INTELLIGENCE_AGENT_SLUG)
+      && ((action.execution.type === 'workflow-run'
+        && action.execution.workflowSlug === WEEKLY_SIGNAL_SCAN_SLUG)
+        || (action.execution.type === 'agent-task'
+          && action.execution.agentSlug === YOUTUBE_INTELLIGENCE_AGENT_SLUG)))
     || (action.type === 'prompt'
       && action.agentSlug === YOUTUBE_RESEARCH_AGENT_SLUG
       && /artist-intel-config|youtube intel pulse/i.test(action.prompt))
@@ -4389,7 +4459,13 @@ function isIntelSyncAutomation(automation: AutomationListItem): boolean {
 }
 
 function isLegacyIntelSyncAutomation(automation: AutomationListItem): boolean {
-  return automation.actions.some((action) => action.type === 'prompt' && action.agentSlug === YOUTUBE_RESEARCH_AGENT_SLUG)
+  return automation.name === LEGACY_INTEL_SYNC_AUTOMATION_NAME
+    || automation.actions.some((action) => (
+      (action.type === 'queue-work'
+        && action.execution.type === 'agent-task'
+        && action.execution.agentSlug === YOUTUBE_INTELLIGENCE_AGENT_SLUG)
+      || (action.type === 'prompt' && action.agentSlug === YOUTUBE_RESEARCH_AGENT_SLUG)
+    ))
 }
 
 function getLocalTimezone(): string {

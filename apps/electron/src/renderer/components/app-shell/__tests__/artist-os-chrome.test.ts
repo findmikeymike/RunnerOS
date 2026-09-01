@@ -134,6 +134,10 @@ describe('Artist OS persistent shell chrome', () => {
     expect(hq).toContain('aria-label="Signals intelligence reader"')
     expect(hq).toContain('Save selection')
     expect(hq).toContain('SIGNAL_NUGGETS_CONTEXT_SLUG')
+    expect(hq).toContain('WEEKLY_SIGNAL_SCAN_SLUG')
+    expect(hq).toContain('createSignalScanQueueWorkAction')
+    expect(hq).toContain("automationName: 'Manual Signal Scan'")
+    expect(hq).toContain("const INTEL_SYNC_AUTOMATION_NAME = 'Weekly Signal Scan'")
   })
 
   test('keeps the HQ Plan page available while hiding its navigation entry behind a flag', () => {

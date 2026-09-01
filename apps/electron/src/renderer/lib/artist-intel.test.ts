@@ -6,6 +6,7 @@ import {
   createIntelRunPrompt,
   createIntelQueueWorkAction,
   createScheduledIntelRunPrompt,
+  createSignalScanQueueWorkAction,
   emptyArtistIntelConfig,
   emptyArtistIntelReport,
   isValidYouTubeChannelUrl,
@@ -88,6 +89,26 @@ describe('artist-intel', () => {
       permissionMode: 'safe',
       expectedOutput: { requirement: 'required', kind: 'report', title: 'Weekly YouTube Intelligence Report' },
       postProcess: 'youtube-intelligence',
+    })
+  })
+
+  test('builds hidden unified signal work pinned to the installed workflow', () => {
+    const action = createSignalScanQueueWorkAction('Artist HQ', 'workflow-digest', { sinceDays: 7 })
+
+    expect(action).toMatchObject({
+      type: 'queue-work',
+      ownerScope: 'hq',
+      calendarVisibility: 'hidden',
+      intentId: 'artist-hq:weekly-signal-scan',
+      execution: {
+        type: 'workflow-run',
+        workflowSlug: 'weekly-signal-scan',
+        workflowDigest: 'workflow-digest',
+        triggerInputs: {
+          artist_name: 'Artist HQ',
+          lookback_days: 7,
+        },
+      },
     })
   })
 

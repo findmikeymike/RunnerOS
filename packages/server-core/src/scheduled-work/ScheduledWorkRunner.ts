@@ -764,12 +764,22 @@ export class ScheduledWorkRunner {
     }
     if (ACTIVE_WORKFLOW_STATES.has(run.state)) return 'running'
     if (run.state === 'succeeded') {
+      if (run.outputError) {
+        await this.finishWithAttention(
+          workspaceId,
+          workspaceRootPath,
+          order.id,
+          this.buildAttention('execution-failed', run.outputError),
+        )
+        return 'failed'
+      }
+      const outputIds = uniqueOutputIds(run)
       await this.finishWorkflowDone(
         workspaceId,
         workspaceRootPath,
         order.id,
         run.id,
-        uniqueOutputIds(run),
+        outputIds,
       )
       return 'done'
     }
