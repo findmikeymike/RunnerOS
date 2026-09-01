@@ -187,17 +187,26 @@ describe('Artist OS persistent shell chrome', () => {
     expect(planItem).not.toContain('expandable: true')
   })
 
-  test('uses the unified compact gradient header for Workers, Workflows, and Automations', () => {
+  test('uses one compact Work header with in-page Workers, Workflows, and Automations tabs', () => {
+    const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
     const workers = readFileSync(join(import.meta.dir, '..', 'AgentsLaunchpad.tsx'), 'utf8')
     const workflows = readFileSync(join(import.meta.dir, '..', '..', '..', 'pages', 'WorkflowsListPage.tsx'), 'utf8')
     const automations = readFileSync(join(import.meta.dir, '..', 'MainContentPanel.tsx'), 'utf8')
+    const tabs = readFileSync(join(import.meta.dir, '..', 'WorkPageTabs.tsx'), 'utf8')
     const compactHeader = readFileSync(join(import.meta.dir, '..', 'CompactPageHeader.tsx'), 'utf8')
 
     expect(workers).toContain('tone="orange"')
     expect(workers).toContain('className="mb-4"')
     expect(workers).not.toContain('!min-h-[112px]')
-    expect(workflows).toContain('tone="violet"')
-    expect(automations).toContain('tone="blue"')
+    expect(workers).toContain("title={labOnly ? 'Workers' : 'Work'}")
+    expect(workflows).toContain('title="Work"')
+    expect(workflows).toContain('tone="orange"')
+    expect(automations).toContain("title={workTab ? 'Work' : title}")
+    expect(automations).toContain("tone={workTab ? 'orange' : 'blue'}")
+    expect(tabs).toContain("{ id: 'workers', label: 'Workers'")
+    expect(tabs).toContain("{ id: 'workflows', label: 'Workflows'")
+    expect(tabs).toContain("{ id: 'automations', label: 'Automations'")
+    expect(shell).toContain("result.push({ id: 'nav:work', type: 'nav', action: handleAgentsClick })")
     expect(compactHeader.split('border-orange-100/[0.12]').length - 1).toBe(5)
   })
 

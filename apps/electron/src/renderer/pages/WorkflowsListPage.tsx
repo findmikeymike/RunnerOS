@@ -23,6 +23,7 @@ import { WorkflowRunInputDialog } from './WorkflowRunInputDialog'
 import type { LoadedSource, WorkflowDTO, WorkflowRunDTO, WorkflowRunState } from '../../shared/types'
 import { CompactPageHeader } from '@/components/app-shell/CompactPageHeader'
 import { ArtistManagerCreateLink } from '@/components/app-shell/ArtistManagerCreateLink'
+import { WorkPageTabs } from '@/components/app-shell/WorkPageTabs'
 
 interface WorkflowsListPageProps {
   workspaceId: string
@@ -210,10 +211,10 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="mx-auto min-h-full w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
         <CompactPageHeader
-          eyebrow="Routines"
-          title={t('sidebar.workflows')}
-          tone="violet"
-          className="mb-6"
+          eyebrow="Team"
+          title="Work"
+          tone="orange"
+          className="mb-4"
           eyebrowAccessory={
                 <button
                   type="button"
@@ -263,7 +264,9 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
           }
         />
 
-        <div className="-mt-3 mb-4 flex justify-end px-1">
+        <WorkPageTabs active="workflows" className="mb-4" />
+
+        <div className="mb-4 flex justify-end px-1">
           <ArtistManagerCreateLink kind="workflow" workspaceId={workspaceId} />
         </div>
 

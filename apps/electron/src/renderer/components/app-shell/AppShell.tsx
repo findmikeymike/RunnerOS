@@ -21,7 +21,6 @@ import {
   Search,
   Plus,
   Trash2,
-  Zap,
   ListTodo,
   Inbox,
   Brain,
@@ -35,7 +34,6 @@ import {
   Briefcase,
   Bot,
   MessageSquare,
-  Workflow as WorkflowIcon,
   Sparkles,
   Users,
 } from "lucide-react"
@@ -2481,12 +2479,7 @@ function AppShellContent({
       result.push({ id: 'nav:release-board', type: 'nav', action: handleCampaignReleaseBoardClick })
       result.push({ id: 'nav:release-kit', type: 'nav', action: handleCampaignReleaseKitClick })
       result.push({ id: 'nav:chat', type: 'nav', action: handleWorkChatClick })
-      result.push({ id: 'nav:work', type: 'nav', action: () => toggleMainNavGroup('work') })
-      if (workExpanded) {
-        result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
-        result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
-        result.push({ id: 'nav:automations', type: 'nav', action: () => navigate(routes.view.automations()) })
-      }
+      result.push({ id: 'nav:work', type: 'nav', action: handleAgentsClick })
       return result
     }
 
@@ -2497,12 +2490,7 @@ function AppShellContent({
     }
     result.push({ id: 'nav:people', type: 'nav', action: () => handleArtistHQNavClick('network') })
     result.push({ id: 'nav:signals', type: 'nav', action: () => handleArtistHQNavClick('signals') })
-    result.push({ id: 'nav:work', type: 'nav', action: () => toggleMainNavGroup('work') })
-    if (workExpanded) {
-      result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
-      result.push({ id: 'nav:automations', type: 'nav', action: () => navigate(routes.view.automations()) })
-      result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
-    }
+    result.push({ id: 'nav:work', type: 'nav', action: handleAgentsClick })
     result.push({ id: 'nav:brain', type: 'nav', action: () => toggleMainNavGroup('brain') })
     if (brainExpanded) {
       result.push({ id: 'nav:profile', type: 'nav', action: () => handleArtistHQNavClick('profile') })
@@ -2512,7 +2500,7 @@ function AppShellContent({
     }
 
     return result
-  }, [brainExpanded, handleAgentsClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleCampaignReleaseBoardClick, handleCampaignReleaseKitClick, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, isArtistHQWorkspace, isLabWorkspace, toggleMainNavGroup, workExpanded])
+  }, [brainExpanded, handleAgentsClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleCampaignReleaseBoardClick, handleCampaignReleaseKitClick, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleWorkChatClick, isArtistHQWorkspace, isLabWorkspace, toggleMainNavGroup, workExpanded])
 
   const sidebarProjectGroups = React.useMemo(() => {
     const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
@@ -2883,38 +2871,7 @@ function AppShellContent({
           title: "Work",
           icon: Briefcase,
           variant: workActive ? "default" : "ghost",
-          onClick: () => toggleMainNavGroup('work'),
-          onToggle: () => toggleMainNavGroup('work'),
-          expandable: true,
-          expanded: workExpanded,
-          items: workExpanded ? [
-            {
-              id: "nav:agents",
-              title: "Workers",
-              icon: Bot,
-              variant: isAgentsNavigation(navState) ? "default" : "ghost",
-              onClick: handleAgentsClick,
-            },
-            {
-              id: "nav:workflows",
-              title: t("sidebar.workflows"),
-              icon: WorkflowIcon,
-              variant: (isWorkflowsNavigation(navState) || isWorkflowRunNavigation(navState)) ? "default" : "ghost",
-              onClick: () => navigate(routes.view.workflows()),
-            },
-            {
-              id: "nav:automations",
-              title: t("sidebar.automations"),
-              label: String(automations.length),
-              icon: ListTodo,
-              variant: isAutomationsNavigation(navState) ? "default" : "ghost",
-              onClick: () => navigate(routes.view.automations()),
-              contextMenu: {
-                type: 'automations' as const,
-                onAddAutomation: openAddAutomation,
-              },
-            },
-          ] : [],
+          onClick: handleAgentsClick,
         },
         {
           id: "nav:chat",
@@ -2962,35 +2919,9 @@ function AppShellContent({
       {
         id: "nav:work",
         title: "Work",
-        icon: Bot,
+        icon: Briefcase,
         variant: workActive ? "default" : "ghost",
-        expandable: true,
-        expanded: workExpanded,
-        onToggle: () => toggleMainNavGroup('work'),
-        onClick: () => toggleMainNavGroup('work'),
-        items: [
-          {
-            id: "nav:agents",
-            title: "Workers",
-            icon: Users,
-            variant: isAgentsNavigation(navState) ? "default" : "ghost",
-            onClick: handleAgentsClick,
-          },
-          {
-            id: "nav:automations",
-            title: "Automations",
-            icon: Zap,
-            variant: isAutomationsNavigation(navState) ? "default" : "ghost",
-            onClick: () => navigate(routes.view.automations()),
-          },
-          {
-            id: "nav:workflows",
-            title: "Workflows",
-            icon: Layers,
-            variant: isWorkflowsNavigation(navState) ? "default" : "ghost",
-            onClick: () => navigate(routes.view.workflows()),
-          },
-        ],
+        onClick: handleAgentsClick,
       },
       {
         id: "nav:work-chat",
@@ -3045,7 +2976,7 @@ function AppShellContent({
         ],
       },
     ]
-  }, [artistHqHash, automations.length, brainActive, brainExpanded, campaignCalendarActive, campaignHomeActive, campaignReleaseBoardActive, campaignReleaseKitActive, handleAgentsClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleCampaignReleaseBoardClick, handleCampaignReleaseKitClick, handleChatHistoryToggle, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, isLabWorkspace, labHomeActive, labPadActive, labSequenceActive, labSongsActive, navState, openAddAutomation, peopleActive, planActive, sessionsNavExpanded, signalsActive, t, toggleMainNavGroup, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
+  }, [artistHqHash, brainActive, brainExpanded, campaignCalendarActive, campaignHomeActive, campaignReleaseBoardActive, campaignReleaseKitActive, handleAgentsClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleCampaignReleaseBoardClick, handleCampaignReleaseKitClick, handleChatHistoryToggle, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, isLabWorkspace, labHomeActive, labPadActive, labSequenceActive, labSongsActive, navState, peopleActive, planActive, sessionsNavExpanded, signalsActive, toggleMainNavGroup, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
 
   const sidebarSessionHistory = React.useMemo(() => {
     if (!sessionsNavExpanded || !workChatActive) return null

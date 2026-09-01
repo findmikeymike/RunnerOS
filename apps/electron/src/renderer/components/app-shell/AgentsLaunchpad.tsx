@@ -37,6 +37,7 @@ import { cn } from '@/lib/utils'
 import { defaultWorkerSlugs, LAB_DEFAULT_WORKER_SLUGS } from '@/lib/worker-defaults'
 import { CompactPageHeader } from './CompactPageHeader'
 import { ArtistManagerCreateLink } from './ArtistManagerCreateLink'
+import { WorkPageTabs } from './WorkPageTabs'
 import { getModelsForProviderType } from '@config/llm-connections'
 import { getModelShortName, type ModelDefinition } from '@config/models'
 import { getAgentCapabilityDisplay } from '@/lib/agent-capability-display'
@@ -270,7 +271,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
       <div className="mx-auto min-h-full w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
         <CompactPageHeader
           eyebrow="Team"
-          title="Workers"
+          title={labOnly ? 'Workers' : 'Work'}
           tone="orange"
           className="mb-4"
           actions={
@@ -297,8 +298,10 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
           }
         />
 
+        {!labOnly ? <WorkPageTabs active="workers" className="mb-4" /> : null}
+
         {!labOnly ? (
-          <div className="-mt-1 mb-3 flex justify-end px-1">
+          <div className="mb-3 flex justify-end px-1">
             <ArtistManagerCreateLink kind="worker" workspaceId={workspaceId} />
           </div>
         ) : null}
