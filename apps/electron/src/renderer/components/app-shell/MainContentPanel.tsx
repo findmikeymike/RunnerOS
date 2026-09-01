@@ -94,6 +94,7 @@ import { TemplatesGalleryDialog } from '@/components/automations/TemplatesGaller
 import { ChevronDown, ChevronRight, Plus, Sparkles, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { CompactPageHeader } from './CompactPageHeader'
+import { ArtistManagerCreateLink, type ArtistManagerCreationKind } from './ArtistManagerCreateLink'
 import { MISSION_BRIEF_CONTEXT_SLUG, missionCampaignWindow, missionReleaseDateKey, parseMissionBriefDoc } from '@/lib/mission-brief'
 import type { HqCampaignSummary } from '@/lib/artist-hq-home-feed'
 
@@ -677,6 +678,7 @@ export function MainContentPanel({
           title="Automations"
           description="Scheduled, event, and agentic routines configured for this workspace."
           automations={automations}
+          workspaceId={activeWorkspaceId || undefined}
           workspaceRootPath={activeWorkspace?.rootPath}
           onDeleteAutomation={onDeleteAutomation}
           onToggleAutomation={onToggleAutomation}
@@ -933,6 +935,11 @@ function ResourceRows({
     return null
   }, [automations, skills, sourceFilter, sources, workspaceRootPath])
   const addLabel = sources ? 'Add tool' : skills ? 'Add skill' : automations ? 'Add automation' : null
+  const managerCreationKind: ArtistManagerCreationKind | null = skills
+    ? 'skill'
+    : automations
+      ? 'automation'
+      : null
 
   if (loading) {
     return (
@@ -996,6 +1003,12 @@ function ResourceRows({
             </>
           ) : undefined}
         />
+
+        {managerCreationKind ? (
+          <div className="-mt-3 mb-4 flex justify-end px-1">
+            <ArtistManagerCreateLink kind={managerCreationKind} workspaceId={workspaceId} />
+          </div>
+        ) : null}
 
         {rows.length === 0 ? (
           automations ? (

@@ -22,6 +22,7 @@ import { useAtomValue } from 'jotai'
 import { WorkflowRunInputDialog } from './WorkflowRunInputDialog'
 import type { LoadedSource, WorkflowDTO, WorkflowRunDTO, WorkflowRunState } from '../../shared/types'
 import { CompactPageHeader } from '@/components/app-shell/CompactPageHeader'
+import { ArtistManagerCreateLink } from '@/components/app-shell/ArtistManagerCreateLink'
 
 interface WorkflowsListPageProps {
   workspaceId: string
@@ -261,6 +262,10 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
             </>
           }
         />
+
+        <div className="-mt-3 mb-4 flex justify-end px-1">
+          <ArtistManagerCreateLink kind="workflow" workspaceId={workspaceId} />
+        </div>
 
         {loading ? (
           <div className="flex h-full items-center justify-center text-sm text-white/50">{t('common.loading')}</div>

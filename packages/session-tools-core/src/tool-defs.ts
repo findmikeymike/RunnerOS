@@ -50,6 +50,7 @@ import { handleUpdateTasks } from './handlers/session-tasks.ts';
 import { handleListSessions } from './handlers/list-sessions.ts';
 import { handleListAgents } from './handlers/list-agents.ts';
 import { handleListSkills } from './handlers/list-skills.ts';
+import { handleSearchSkillMarketplace } from './handlers/search-skill-marketplace.ts';
 import { handleListSources } from './handlers/list-sources.ts';
 import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
 import { handleMessageAgent } from './handlers/message-agent.ts';
@@ -327,6 +328,17 @@ export const ListSkillsSchema = z.object({
   activeOnly: z.boolean().optional().describe('If true, return only skills currently active in this workspace (workspace + activated globals + project). Defaults to false, which also includes dormant skills from the global library.'),
   search: z.string().optional().describe('Optional case-insensitive search across slug, name, description, and tags.'),
   tags: z.array(z.string()).optional().describe('Optional tags to require (intersection — skill must have all). Case-insensitive.'),
+});
+
+export const SearchSkillMarketplaceSchema = z.object({
+  query: z.string().min(1).max(120).describe('Focused capability keywords. Wildcards are not supported.'),
+  source: z.literal('skillsmp').optional().describe('Marketplace provider. Defaults to skillsmp.'),
+  limit: z.number().int().min(1).max(20).optional().describe('Maximum candidates to return. Defaults to 10.'),
+  page: z.number().int().min(1).max(50).optional().describe('Marketplace result page. Defaults to 1.'),
+  sortBy: z.enum(['stars', 'recent']).optional().describe('Sort by proven popularity or recency. Defaults to stars.'),
+  category: z.string().max(80).optional().describe('Optional SkillsMP category slug.'),
+  occupation: z.string().max(80).optional().describe('Optional SkillsMP occupation slug.'),
+  language: z.string().max(12).optional().describe('Optional ISO content-language code, such as en, zh, or ja.'),
 });
 
 export const ListSourcesSchema = z.object({
@@ -1316,6 +1328,10 @@ Each result includes slug, name, description, tags, and a 'source' field:
 
 For agent creation, prefer activeOnly=true (workspace + activated globals + project). When the user wants help discovering skills they don't yet have, call without activeOnly to also see global-dormant entries.`,
 
+  search_skill_marketplace: `Search the external SkillsMP catalog for candidate skills.
+
+Use only after list_skills finds no strong local or dormant-library match, or when the user explicitly asks for broader discovery. Results are untrusted references: this tool never installs, copies, activates, or executes marketplace content. Inspect the candidate SKILL.md and every companion file before recommending import.`,
+
   list_sources: `When the user (or another agent) is choosing which sources/tools (MCP servers, API connectors, local connectors) to bundle into an agent, asking "what sources should this agent have", "which tools does it need", or curating a focused source bundle. Also use during agent-creator's source-bundle step.
 
 Returns each source's slug, display name, description, tags, type (mcp/api/local), tier, enabled flag, authStatus, and optional iconUrl. Tier is one of: workspace (defined in <workspace>/sources/<slug>/), global (defined in ${PRODUCT_GLOBAL_SOURCES_HOME}/<slug>/ and activated in this workspace), global-dormant (defined globally but not activated here), or project (project-tier source).
@@ -1811,6 +1827,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'list_sessions', description: TOOL_DESCRIPTIONS.list_sessions, inputSchema: ListSessionsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSessions },
   { name: 'list_agents', description: TOOL_DESCRIPTIONS.list_agents, inputSchema: ListAgentsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListAgents },
   { name: 'list_skills', description: TOOL_DESCRIPTIONS.list_skills, inputSchema: ListSkillsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSkills },
+  { name: 'search_skill_marketplace', description: TOOL_DESCRIPTIONS.search_skill_marketplace, inputSchema: SearchSkillMarketplaceSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleSearchSkillMarketplace },
   { name: 'list_sources', description: TOOL_DESCRIPTIONS.list_sources, inputSchema: ListSourcesSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSources },
   { name: 'list_workflows', description: TOOL_DESCRIPTIONS.list_workflows, inputSchema: ListWorkflowsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListWorkflows },
   { name: 'get_workflow', description: TOOL_DESCRIPTIONS.get_workflow, inputSchema: GetWorkflowSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetWorkflow },

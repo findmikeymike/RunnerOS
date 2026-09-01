@@ -33,6 +33,20 @@ node tools/ads-operator/bin/ads-operator.mjs setup-plan --platform meta --goal <
 - Use `setup-plan --platform meta` before browser-guided campaign setup.
 - Require explicit user approval in the current conversation before any live Meta Ads change.
 
+## Analysis Defaults
+
+When reviewing an account, check for:
+
+- Overspend, low-return spend, or spend concentrated in too few campaigns.
+- Ad sets that are not spending, learning-limited, or delivery-limited.
+- Broken pixel, conversion signal, catalog, or feed paths.
+- Creative fatigue, audience overlap, or targeting conflicts.
+- Campaigns, ad sets, or ads whose objective no longer matches the release goal.
+
+If Meta OAuth succeeds but the official source still refuses access, explain
+plainly that the Business account may not yet be eligible for Meta's Ads MCP
+rollout, then offer the browser/export route instead of dead-ending setup.
+
 ## Safety
 
 - Start read-only.

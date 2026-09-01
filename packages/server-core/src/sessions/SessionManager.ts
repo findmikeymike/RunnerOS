@@ -3701,6 +3701,18 @@ export class SessionManager implements ISessionManager {
               sessionLog.info(`[skills] Updated ${slug} to Spotify browser and packaged execution paths`)
             }
           }
+          const metaAdsSkillMd = BUNDLED_STARTER_SKILLS
+            .find(skill => skill.slug === 'meta-ads')
+            ?.files.find(file => file.path === 'SKILL.md')
+            ?.content
+          if (metaAdsSkillMd && replaceRequiredGlobalSkillFileIfHashMatches(
+            'meta-ads',
+            'SKILL.md',
+            '62fa07b3dcdc31d1b48ce344307439ade8a7ea57b65a42b278d6ce87c087c99a',
+            metaAdsSkillMd,
+          ).updated) {
+            sessionLog.info('[skills] Added Meta Ads diagnostics and eligibility fallback')
+          }
           const recordDoctorHandoffSkillMd = BUNDLED_STARTER_SKILLS
             .find(skill => skill.slug === 'record-doctor-handoff')
             ?.files.find(file => file.path === 'SKILL.md')

@@ -86,6 +86,8 @@ export { handleListSessions } from './list-sessions.ts';
 export type { ListSessionsArgs } from './list-sessions.ts';
 export { handleListAgents } from './list-agents.ts';
 export type { ListAgentsArgs } from './list-agents.ts';
+export { handleSearchSkillMarketplace } from './search-skill-marketplace.ts';
+export type { SearchSkillMarketplaceArgs } from './search-skill-marketplace.ts';
 export { handleListSources } from './list-sources.ts';
 export type { ListSourcesArgs } from './list-sources.ts';
 export {

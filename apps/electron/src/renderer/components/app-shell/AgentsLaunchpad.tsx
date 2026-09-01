@@ -36,6 +36,7 @@ import { openAgentSessionComposer } from '@/lib/run-agent'
 import { cn } from '@/lib/utils'
 import { defaultWorkerSlugs } from '@/lib/worker-defaults'
 import { CompactPageHeader } from './CompactPageHeader'
+import { ArtistManagerCreateLink } from './ArtistManagerCreateLink'
 import { getModelsForProviderType } from '@config/llm-connections'
 import { getModelShortName, type ModelDefinition } from '@config/models'
 import { getAgentCapabilityDisplay } from '@/lib/agent-capability-display'
@@ -282,6 +283,10 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
             </>
           }
         />
+
+        <div className="-mt-1 mb-3 flex justify-end px-1">
+          <ArtistManagerCreateLink kind="worker" workspaceId={workspaceId} />
+        </div>
 
         <div className="mb-5 flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative min-w-0 flex-1 lg:max-w-xl">

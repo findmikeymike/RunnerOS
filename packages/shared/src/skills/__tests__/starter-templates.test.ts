@@ -2,6 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import matter from 'gray-matter';
 import { STARTER_SKILLS } from '../starter-templates.ts';
 import { BUNDLED_STARTER_SKILLS } from '../bundled.generated.ts';
+import { CREATOR_SYSTEM_SKILL_SLUGS } from '../system.ts';
 
 describe('STARTER_SKILLS', () => {
   it('has unique kebab-case slugs', () => {
@@ -55,6 +56,17 @@ describe('STARTER_SKILLS', () => {
     expect(slugs).toContain('agent-creator');
     expect(slugs).toContain('automation-creator');
     expect(slugs).toContain('workflow-creator');
+  });
+
+  it('includes a read-only skill scout for Artist Manager', () => {
+    const scout = STARTER_SKILLS.find(s => s.slug === 'skill-scout');
+    expect(scout).toBeDefined();
+    const parsed = matter(getSkillMd(scout!));
+    expect(parsed.data.tools).toContain('list_skills');
+    expect(parsed.data.tools).toContain('search_skill_marketplace');
+    expect(parsed.content).toContain('Search is discovery, not authorization.');
+    expect(parsed.content).not.toContain('npx skills add');
+    expect(CREATOR_SYSTEM_SKILL_SLUGS).toContain('skill-scout');
   });
 
   it('includes the hidden RunnerOS self-edit starter skill', () => {
@@ -390,6 +402,15 @@ describe('BUNDLED_STARTER_SKILLS', () => {
       expect(parsed.data.name).toBe(slug);
       expect(parsed.content).toContain(slug === 'ad-library-intel' ? 'Ad Library Intel Packet' : 'Ads Agent');
     }
+  });
+
+  it('keeps Meta Ads diagnostics and eligibility fallback in the bundled skill', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'meta-ads');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.content).toContain('## Analysis Defaults');
+    expect(parsed.content).toContain('learning-limited');
+    expect(parsed.content).toContain("may not yet be eligible for Meta's Ads MCP");
   });
 
   it('bundles music-specific Meta conversion and visual hook doctrine', () => {

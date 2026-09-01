@@ -194,6 +194,7 @@ export {
   handleSendDeveloperFeedback,
   // Agent catalog
   handleListAgents,
+  handleSearchSkillMarketplace,
   handleListSources,
   // Workflows
   handleListWorkflows,
@@ -237,6 +238,8 @@ export {
   handleUpdateGoal,
   handleUpdateTasks,
 } from './handlers/index.ts';
+
+export type { SearchSkillMarketplaceArgs } from './handlers/index.ts';
 
 export type {
   CreateGoalToolInput,
