@@ -8,6 +8,7 @@ import {
   applyWorkflowRunComposerPrefill,
   createScheduledWorkComposerDraft,
   selectScheduledWorkComposerType,
+  scheduledWorkComposerSections,
   validateComposerDraft,
   validateComposerSection,
 } from './scheduled-work-composer'
@@ -118,6 +119,12 @@ describe('scheduled work composer drafts', () => {
       triggerInputs: inputs,
     })
     expect(result.type === 'workflow-run' && result.triggerInputs).not.toBe(inputs)
+  })
+
+  test('starts a locked workflow schedule without redundant chooser steps', () => {
+    const draft = createScheduledWorkComposerDraft({ ...defaults, suggestedType: 'workflow-run' })
+    expect(scheduledWorkComposerSections(draft, true, 'scheduled', true)).toEqual(['inputs', 'timing', 'then', 'safeguards'])
+    expect(scheduledWorkComposerSections(draft, false, 'triggered', true)).toEqual(['inputs', 'safeguards'])
   })
 
   test('builds one typed work order and linked campaign shell', () => {

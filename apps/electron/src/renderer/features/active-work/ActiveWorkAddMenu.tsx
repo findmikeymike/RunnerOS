@@ -90,7 +90,7 @@ export function ActiveWorkAddMenu() {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-white/[0.06] px-3 text-[10.5px] font-medium text-white/64 hover:bg-white/[0.09] hover:text-white/86">
+          <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-white/[0.06] px-3 text-[10.5px] font-medium text-white/64 hover:bg-white/[0.09] hover:text-white/86 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/35">
             <Plus className="h-3 w-3" />
             Add
           </button>
@@ -151,7 +151,7 @@ function RunChoice({
   onClick: () => void
 }) {
   return (
-    <button type="button" onClick={onClick} className="group flex w-full items-center gap-3 rounded-[10px] bg-white/[0.04] px-3 py-3 text-left hover:bg-white/[0.07]">
+    <button type="button" onClick={onClick} className="group flex w-full items-center gap-3 rounded-[10px] bg-white/[0.04] px-3 py-3 text-left hover:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/35">
       <span className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-white/[0.06] text-white/54">
         <Icon className="h-4 w-4" />
       </span>

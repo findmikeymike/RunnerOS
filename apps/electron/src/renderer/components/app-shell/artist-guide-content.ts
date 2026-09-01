@@ -333,9 +333,9 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
         actions: [{ id: 'workspace.workflows', label: 'Open' }],
       },
       {
-        id: 'general-automations',
-        title: 'Automations',
-        body: 'Trigger or schedule work that should repeat.',
+        id: 'general-active-work',
+        title: 'Active',
+        body: 'See what is running, coming next, repeating, or waiting for you.',
         icon: 'automation',
         actions: [{ id: 'workspace.automations', label: 'Open' }],
       },
@@ -456,7 +456,7 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
         actions: [
           { id: 'workspace.workers', label: 'Workers' },
           { id: 'workspace.workflows', label: 'Workflows' },
-          { id: 'workspace.automations', label: 'Automations' },
+          { id: 'workspace.automations', label: 'Active' },
         ],
       },
       {
@@ -586,7 +586,7 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
         actions: [
           { id: 'workspace.workers', label: 'Workers' },
           { id: 'workspace.workflows', label: 'Workflows' },
-          { id: 'workspace.automations', label: 'Automations' },
+          { id: 'workspace.automations', label: 'Active' },
         ],
       },
       {

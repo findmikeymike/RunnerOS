@@ -15,7 +15,7 @@ import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import { isArtistHQWorkspace } from '@/lib/artist-workspace'
 import { navigate, routes } from '@/lib/navigate'
 import { cn } from '@/lib/utils'
-import { buildActiveWorkItems } from './build-active-work-items'
+import { buildActiveWorkItems, visibleRecurringItems } from './build-active-work-items'
 import { ActiveWorkAddMenu } from './ActiveWorkAddMenu'
 import type { ActiveWorkItem, ActiveWorkSection } from './types'
 
@@ -54,7 +54,7 @@ function ActiveRow({ item, onOpen }: { item: ActiveWorkItem; onOpen: () => void 
       type="button"
       onClick={onOpen}
       className={cn(
-        'group flex min-h-[54px] w-full items-center gap-3 rounded-[10px] bg-white/[0.035] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.055] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-orange-400/55',
+        'group flex min-h-[54px] w-full items-center gap-2 rounded-[10px] bg-white/[0.035] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/40 motion-reduce:transition-none sm:gap-3',
         item.section === 'attention' && 'bg-amber-400/[0.045] hover:bg-amber-400/[0.07]',
         item.section === 'running' && 'bg-orange-500/[0.045] hover:bg-orange-500/[0.07]',
       )}
@@ -76,11 +76,11 @@ function ActiveRow({ item, onOpen }: { item: ActiveWorkItem; onOpen: () => void 
       </span>
       <span className="hidden shrink-0 text-[10.5px] text-white/36 sm:block">{when || item.statusLabel}</span>
       {item.cadenceLabel ? (
-        <span className="shrink-0 rounded-full bg-white/[0.05] px-2 py-1 text-[9.5px] font-medium text-white/40">
+        <span className="hidden shrink-0 rounded-full bg-white/[0.05] px-2 py-1 text-[9.5px] font-medium text-white/40 md:block">
           {item.cadenceLabel}
         </span>
       ) : null}
-      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-white/24 transition-transform group-hover:translate-x-0.5 group-hover:text-white/48" />
+      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-white/24 transition-transform group-hover:translate-x-0.5 group-hover:text-white/48 motion-reduce:transform-none motion-reduce:transition-none" />
     </button>
   )
 }
@@ -98,11 +98,9 @@ function ActiveSection({
   const [showPaused, setShowPaused] = React.useState(false)
   const meta = SECTION_META[section]
   const Icon = meta.icon
-  const activeItems = section === 'recurring' && !showPaused
-    ? items.filter((item) => item.statusLabel !== 'Paused')
-    : items
-  const visible = section === 'up-next' && !showAll ? activeItems.slice(0, 6) : activeItems
   const pausedCount = section === 'recurring' ? items.filter((item) => item.statusLabel === 'Paused').length : 0
+  const activeItems = section === 'recurring' ? visibleRecurringItems(items, showPaused) : items
+  const visible = section === 'up-next' && !showAll ? activeItems.slice(0, 6) : activeItems
 
   if (items.length === 0) return null
 
@@ -118,12 +116,12 @@ function ActiveSection({
         {visible.map((item) => <ActiveRow key={item.id} item={item} onOpen={() => onOpen(item)} />)}
       </div>
       {section === 'up-next' && activeItems.length > 6 ? (
-        <button type="button" onClick={() => setShowAll((value) => !value)} className="mt-2 px-1 text-[10.5px] text-white/38 hover:text-white/68">
+        <button type="button" onClick={() => setShowAll((value) => !value)} className="mt-2 rounded px-1 text-[10.5px] text-white/38 hover:text-white/68 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/35">
           {showAll ? 'Show less' : `View all scheduled work (${activeItems.length})`}
         </button>
       ) : null}
-      {section === 'recurring' && pausedCount > 0 ? (
-        <button type="button" onClick={() => setShowPaused((value) => !value)} className="mt-2 px-1 text-[10.5px] text-white/38 hover:text-white/68">
+      {section === 'recurring' && pausedCount > 2 ? (
+        <button type="button" onClick={() => setShowPaused((value) => !value)} className="mt-2 rounded px-1 text-[10.5px] text-white/38 hover:text-white/68 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/35">
           {showPaused ? 'Hide paused' : `Show paused (${pausedCount})`}
         </button>
       ) : null}
@@ -149,19 +147,26 @@ export function ActiveWorkPage({ automationId, onSendAutomationToWorkspace }: { 
   const { docs, loading: contextLoading, error: contextError } = useWorkspaceContext(activeWorkspaceId)
   const [executionMap, setExecutionMap] = React.useState<Map<string, ExecutionEntry[]>>(new Map())
   const [historyLoading, setHistoryLoading] = React.useState(false)
+  const [historyError, setHistoryError] = React.useState<string | null>(null)
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId)
 
   React.useEffect(() => {
     let cancelled = false
     if (!getAutomationHistory || automations.length === 0) {
       setExecutionMap(new Map())
+      setHistoryError(null)
       return () => { cancelled = true }
     }
     setExecutionMap(new Map())
+    setHistoryError(null)
     setHistoryLoading(true)
-    void Promise.all(automations.map(async (automation) => [automation.id, await getAutomationHistory(automation.id)] as const))
-      .then((entries) => {
-        if (!cancelled) setExecutionMap(new Map(entries))
+    void Promise.allSettled(automations.map(async (automation) => [automation.id, await getAutomationHistory(automation.id)] as const))
+      .then((results) => {
+        if (cancelled) return
+        const entries = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
+        const failedCount = results.length - entries.length
+        setExecutionMap(new Map(entries))
+        setHistoryError(failedCount > 0 ? `${failedCount} automation ${failedCount === 1 ? 'history' : 'histories'} could not be loaded.` : null)
       })
       .finally(() => {
         if (!cancelled) setHistoryLoading(false)
@@ -188,6 +193,12 @@ export function ActiveWorkPage({ automationId, onSendAutomationToWorkspace }: { 
   if (selectedAutomation) {
     return (
       <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
+        {historyError ? (
+          <div className="mx-auto mt-4 flex w-[min(960px,calc(100%-2rem))] items-start gap-2 rounded-[10px] bg-amber-400/[0.055] px-3 py-2.5 text-[11px] text-amber-100/65">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            Automation history is incomplete. {historyError}
+          </div>
+        ) : null}
         <AutomationInfoPage
           automation={selectedAutomation}
           executions={executionMap.get(selectedAutomation.id) ?? []}
@@ -227,7 +238,7 @@ export function ActiveWorkPage({ automationId, onSendAutomationToWorkspace }: { 
   const grouped = new Map<ActiveWorkSection, ActiveWorkItem[]>(SECTION_ORDER.map((section) => [section, []]))
   for (const item of items) grouped.get(item.section)?.push(item)
   const loading = runsLoading || contextLoading || historyLoading
-  const sourceError = runsError || contextError || (!scheduled.ok ? scheduled.error : null)
+  const sourceError = runsError || contextError || (!scheduled.ok ? scheduled.error : null) || historyError
 
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
@@ -247,7 +258,7 @@ export function ActiveWorkPage({ automationId, onSendAutomationToWorkspace }: { 
 
         {loading && items.length === 0 ? (
           <div className="space-y-2">
-            {[0, 1, 2].map((index) => <div key={index} className="h-[54px] animate-pulse rounded-[10px] bg-white/[0.035]" />)}
+            {[0, 1, 2].map((index) => <div key={index} className="h-[54px] animate-pulse rounded-[10px] bg-white/[0.035] motion-reduce:animate-none" />)}
           </div>
         ) : items.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center pb-20 text-center">

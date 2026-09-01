@@ -132,6 +132,24 @@ export function applyWorkflowRunComposerPrefill(
   }
 }
 
+export function scheduledWorkComposerSections(
+  draft: ScheduledWorkComposerDraft,
+  allowFollowUps: boolean,
+  timingMode: 'scheduled' | 'triggered',
+  workflowLocked = false,
+): ScheduledWorkComposerSection[] {
+  if (draft.type === 'event') return timingMode === 'triggered' ? ['inputs'] : ['inputs', 'timing']
+  const sections: ScheduledWorkComposerSection[] = draft.type === 'workflow-run' && workflowLocked
+    ? ['inputs']
+    : draft.type === 'agent-task'
+      ? ['what', 'inputs', 'runner']
+      : ['what', 'runner', 'inputs']
+  if (timingMode === 'scheduled') sections.push('timing')
+  if (allowFollowUps && draft.type !== 'social-publish') sections.push('then')
+  sections.push('safeguards')
+  return sections
+}
+
 export function selectScheduledWorkComposerType(
   draft: ScheduledWorkComposerDraft,
   type: ScheduledWorkComposerType,

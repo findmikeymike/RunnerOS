@@ -25,6 +25,7 @@ import {
   composerReviewSentence,
   createScheduledWorkComposerDraft,
   applyWorkflowRunComposerPrefill,
+  scheduledWorkComposerSections,
   selectScheduledWorkComposerType,
   validateComposerDraft,
   validateComposerSection,
@@ -36,6 +37,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import { humanizeWorkflowInputName } from '@/lib/workflow-input-presentation'
 
 export interface ScheduledWorkComposerEntry {
   owner: ScheduledWorkOwner
@@ -93,6 +95,7 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
   const { activeAgents, loading: agentsLoading } = useAgents(entry.owner.workspaceId)
   const { activeWorkflows, loading: workflowsLoading } = useWorkflows(entry.owner.workspaceId)
   const { outputs, loading: outputsLoading } = useOutputs(entry.owner.workspaceId)
+  const workflowLocked = Boolean(entry.workflow)
 
   React.useEffect(() => {
     if (!open) return
@@ -153,7 +156,7 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
     const submittedDraft = timingMode === 'triggered' && draft.type !== 'event'
       ? withCurrentTiming(draft)
       : draft
-    const invalidSection = visibleSections(submittedDraft, allowFollowUps, timingMode).find(candidate => (
+    const invalidSection = scheduledWorkComposerSections(submittedDraft, allowFollowUps, timingMode, workflowLocked).find(candidate => (
       validateSection(submittedDraft, candidate, activeAgents, activeWorkflows, profiles)
     ))
     const validationError = invalidSection
@@ -174,10 +177,10 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
     } finally {
       setBusy(false)
     }
-  }, [activeAgents, activeWorkflows, allowFollowUps, draft, onOpenChange, onSubmit, profiles, timingMode])
+  }, [activeAgents, activeWorkflows, allowFollowUps, draft, onOpenChange, onSubmit, profiles, timingMode, workflowLocked])
 
   const queueOptions = QUEUE_OPTIONS.filter((option) => option.type !== 'event' && (!allowedTypes || allowedTypes.includes(option.type)))
-  const sections = visibleSections(draft, allowFollowUps, timingMode)
+  const sections = scheduledWorkComposerSections(draft, allowFollowUps, timingMode, workflowLocked)
   const activeSection = sections.includes(section) ? section : sections[0]
   const activeIndex = Math.max(0, sections.indexOf(activeSection))
   const isLastSection = activeIndex === sections.length - 1
@@ -469,7 +472,7 @@ function WorkflowInputs({ draft, onChange }: {
   return (
     <div className="space-y-3">
       {(workflow.metadata.trigger.inputs ?? []).map((input) => (
-        <Field key={input.name} label={input.name} hint={input.description}>
+        <Field key={input.name} label={humanizeWorkflowInputName(input.name)} hint={input.description}>
           {input.type === 'boolean' ? (
             <label className="flex h-10 items-center gap-2 text-sm text-white/68">
               <input type="checkbox" checked={Boolean(draft.triggerInputs[input.name])} onChange={(event) => onChange({ ...draft, triggerInputs: { ...draft.triggerInputs, [input.name]: event.target.checked } })} />
@@ -746,17 +749,6 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 function EmptyLine({ icon: Icon = FileOutput, children }: { icon?: React.ComponentType<{ className?: string }>; children: React.ReactNode }) {
   return <div className="flex min-h-12 items-center gap-2 border-y border-white/[0.06] px-2 text-xs text-white/38"><Icon className="h-4 w-4" />{children}</div>
-}
-
-function visibleSections(draft: ScheduledWorkComposerDraft, allowFollowUps: boolean, timingMode: 'scheduled' | 'triggered'): ComposerSection[] {
-  if (draft.type === 'event') return timingMode === 'triggered' ? ['inputs'] : ['inputs', 'timing']
-  const sections: ComposerSection[] = draft.type === 'agent-task'
-    ? ['what', 'inputs', 'runner']
-    : ['what', 'runner', 'inputs']
-  if (timingMode === 'scheduled') sections.push('timing')
-  if (allowFollowUps && draft.type !== 'social-publish') sections.push('then')
-  sections.push('safeguards')
-  return sections
 }
 
 function initialSection(entry: ScheduledWorkComposerEntry): ComposerSection {

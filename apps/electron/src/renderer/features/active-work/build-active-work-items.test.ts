@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import type { AutomationListItem } from '@/components/automations/types'
-import { buildActiveWorkItems } from './build-active-work-items'
+import { buildActiveWorkItems, visibleRecurringItems } from './build-active-work-items'
 
 const order = (overrides: Partial<ScheduledWorkOrder>): ScheduledWorkOrder => ({
   version: 1,
@@ -36,6 +36,18 @@ const automation = (overrides: Partial<AutomationListItem> = {}): AutomationList
 })
 
 describe('buildActiveWorkItems', () => {
+  test('keeps an all-paused recurring section visible while collapsing mixed large lists', () => {
+    const paused = Array.from({ length: 3 }, (_, index) => ({
+      id: `paused-${index}`,
+      statusLabel: 'Paused',
+    })) as ReturnType<typeof buildActiveWorkItems>
+    expect(visibleRecurringItems(paused, false)).toHaveLength(3)
+    expect(visibleRecurringItems([
+      ...paused,
+      { id: 'active', statusLabel: 'Active' },
+    ] as ReturnType<typeof buildActiveWorkItems>, false).map((item) => item.id)).toEqual(['active'])
+  })
+
   test('classifies current, upcoming, attention, and recurring work', () => {
     const items = buildActiveWorkItems({
       workspaceId: 'workspace-1',
@@ -77,6 +89,36 @@ describe('buildActiveWorkItems', () => {
     expect(items).toHaveLength(1)
     expect(items[0]?.source).toBe('workflow-run')
     expect(items[0]?.subtitle).toBe('Make lyric clips')
+  })
+
+  test('falls back to scheduled work when a persisted run link is stale', () => {
+    const items = buildActiveWorkItems({
+      workspaceId: 'workspace-1',
+      sessions: [],
+      workflowRuns: [],
+      scheduledWork: [order({
+        status: 'needs-attention',
+        runs: [{ id: 'job-1', jobId: 'job', startedAt: '2026-09-01T01:00:00.000Z', status: 'failed', workflowRunId: 'missing-run' }],
+      })],
+      automations: [],
+    })
+
+    expect(items[0]?.openTarget).toEqual({ kind: 'scheduled-work', id: 'order-1' })
+  })
+
+  test('does not open a hidden session from a persisted scheduled-work link', () => {
+    const items = buildActiveWorkItems({
+      workspaceId: 'workspace-1',
+      sessions: [{ id: 'hidden-session', workspaceId: 'workspace-1', hidden: true }],
+      workflowRuns: [],
+      scheduledWork: [order({
+        status: 'needs-attention',
+        runs: [{ id: 'job-1', jobId: 'job', startedAt: '2026-09-01T01:00:00.000Z', status: 'failed', sessionId: 'hidden-session' }],
+      })],
+      automations: [],
+    })
+
+    expect(items[0]?.openTarget).toEqual({ kind: 'scheduled-work', id: 'order-1' })
   })
 
   test('shows only the latest unresolved automation failure', () => {

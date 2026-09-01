@@ -34,6 +34,12 @@ export interface BuildActiveWorkItemsInput {
   describeCron?: (cron: string) => string
 }
 
+export function visibleRecurringItems(items: ActiveWorkItem[], showPaused: boolean): ActiveWorkItem[] {
+  const pausedCount = items.filter((item) => item.statusLabel === 'Paused').length
+  if (showPaused || pausedCount <= 2 || pausedCount === items.length) return items
+  return items.filter((item) => item.statusLabel !== 'Paused')
+}
+
 const ATTENTION_STATUS = new Set(['needs-setup', 'needs-approval', 'awaiting-review', 'needs-attention'])
 
 function asIso(timestamp: number | undefined): string | undefined {
@@ -134,6 +140,12 @@ export function buildActiveWorkItems(input: BuildActiveWorkItemsInput): ActiveWo
   ))
   const orderByWorkflowRun = new Map<string, ScheduledWorkOrder>()
   const orderBySession = new Map<string, ScheduledWorkOrder>()
+  const availableWorkflowRunIds = new Set(input.workflowRuns
+    .filter((run) => run.workspaceId === input.workspaceId)
+    .map((run) => run.id))
+  const availableSessionIds = new Set(input.sessions
+    .filter((session) => session.workspaceId === input.workspaceId && !session.hidden)
+    .map((session) => session.id))
   for (const order of orders) {
     const links = latestOrderLinks(order)
     if (links.workflowRunId) orderByWorkflowRun.set(links.workflowRunId, order)
@@ -191,9 +203,9 @@ export function buildActiveWorkItems(input: BuildActiveWorkItemsInput): ActiveWo
     const section = scheduledSection(order)
     if (!section) continue
     const links = latestOrderLinks(order)
-    const openTarget = links.workflowRunId
+    const openTarget = links.workflowRunId && availableWorkflowRunIds.has(links.workflowRunId)
       ? { kind: 'workflow-run' as const, id: links.workflowRunId }
-      : links.sessionId
+      : links.sessionId && availableSessionIds.has(links.sessionId)
         ? { kind: 'session' as const, id: links.sessionId }
         : { kind: 'scheduled-work' as const, id: order.id }
     items.push({
