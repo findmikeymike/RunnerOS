@@ -2,6 +2,7 @@ import type { EventSink } from '@craft-agent/server-core/transport'
 import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput, WorkspaceMigrationRuntimeLease } from '@craft-agent/server-core/handlers'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import { withAgentDefinitionsLibraryMutex } from '../handlers/rpc/agent-definitions'
+import { migrateInitialReleaseManagerActivation, preserveReleaseManagerActivationChoices, releaseManagerActivationNeedsWork } from './release-manager-activation'
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
 import { basename, dirname, join } from 'path'
 import { existsSync } from 'fs'
@@ -3779,11 +3780,15 @@ export class SessionManager implements ISessionManager {
           SOCIAL_PUBLISHER_SLUG,
           RELEASE_MANAGER_AGENT_SLUG,
           DEFAULT_ACTIVATED_AGENT_SLUGS,
+          ensureBuiltInAgentSkillsForSlug,
           getGlobalAgentDir,
+          hasReleaseManagerIdentity,
           isReleaseManagerDefinition,
           loadGlobalAgent,
         } = await import('@craft-agent/shared/agent-definitions')
-        const releaseManagerActivationMarker = join(getGlobalAgentDir(RELEASE_MANAGER_AGENT_SLUG), '.initial-hq-campaign-activation-v1')
+        const releaseManagerAgentDir = getGlobalAgentDir(RELEASE_MANAGER_AGENT_SLUG)
+        const legacyReleaseManagerActivationMarker = join(releaseManagerAgentDir, '.initial-hq-campaign-activation-v1')
+        const releaseManagerActivationState = join(dirname(releaseManagerAgentDir), '.migrations', 'release-manager-activation-v1.json')
         const { seeded } = seedGlobalLibraryIfEmpty(STARTER_AGENTS)
         if (seeded > 0) {
           sessionLog.info(`[agent-definitions] Seeded ${seeded} starter agent(s) into global library`)
@@ -3865,38 +3870,49 @@ export class SessionManager implements ISessionManager {
           }
           const releaseManagerAgent = STARTER_AGENTS.find(agent => agent.slug === RELEASE_MANAGER_AGENT_SLUG)
           const releaseManagerSkillSlugs = releaseManagerAgent?.metadata.skills ?? []
-          const installedReleaseManager = loadGlobalAgent(RELEASE_MANAGER_AGENT_SLUG)
-          const releaseManagerActivationPending = !existsSync(releaseManagerActivationMarker)
+          let installedReleaseManager = loadGlobalAgent(RELEASE_MANAGER_AGENT_SLUG)
+          if (releaseManagerAgent && hasReleaseManagerIdentity(installedReleaseManager) && ensureBuiltInAgentSkillsForSlug(
+            RELEASE_MANAGER_AGENT_SLUG,
+            releaseManagerSkillSlugs,
+          ).updated) {
+            sessionLog.info('[agent-definitions] Updated Release Manager skill bundle')
+            installedReleaseManager = loadGlobalAgent(RELEASE_MANAGER_AGENT_SLUG)
+          }
+          const releaseManagerActivationPending = releaseManagerActivationNeedsWork(
+            releaseManagerActivationState,
+            legacyReleaseManagerActivationMarker,
+          )
           const releaseManagerIdentityValid = isReleaseManagerDefinition(installedReleaseManager)
           const missingReleaseManagerSkills = releaseManagerSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
-          if (releaseManagerActivationPending && releaseManagerAgent && releaseManagerIdentityValid && missingReleaseManagerSkills.length === 0) {
+          if (releaseManagerAgent && releaseManagerIdentityValid && missingReleaseManagerSkills.length === 0) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
-            let updatedWorkspaces = 0
-            for (const ws of getWorkspaces()) {
-              if (ws.remoteServer || (ws.artistWorkspaceScope !== 'hq' && ws.artistWorkspaceScope !== 'campaign')) continue
-              let workspaceUpdated = false
-              if (!readActivatedAgents(ws.rootPath).active.includes(RELEASE_MANAGER_AGENT_SLUG)) {
-                setAgentActive(ws.rootPath, RELEASE_MANAGER_AGENT_SLUG, true)
-                workspaceUpdated = true
-              }
-              const enabledSkills = new Set(listEnabledGlobalSkillSlugs(ws.rootPath))
-              for (const slug of releaseManagerSkillSlugs) {
-                if (!enabledSkills.has(slug)) {
-                  setGlobalSkillEnabled(ws.rootPath, slug, true)
-                  workspaceUpdated = true
-                }
-              }
-              if (workspaceUpdated) updatedWorkspaces += 1
+            const activation = migrateInitialReleaseManagerActivation({
+              stateFile: releaseManagerActivationState,
+              legacyMarkerFile: legacyReleaseManagerActivationMarker,
+              workspaces: getWorkspaces(),
+              agentSlug: RELEASE_MANAGER_AGENT_SLUG,
+              skillSlugs: releaseManagerSkillSlugs,
+              isAgentActive: ws => readActivatedAgents(ws.rootPath).active.includes(RELEASE_MANAGER_AGENT_SLUG),
+              activateAgent: ws => setAgentActive(ws.rootPath, RELEASE_MANAGER_AGENT_SLUG, true),
+              enabledSkillSlugs: ws => listEnabledGlobalSkillSlugs(ws.rootPath),
+              enableSkill: (ws, slug) => setGlobalSkillEnabled(ws.rootPath, slug, true),
+              warn: (message, error) => sessionLog.warn(`[agent-definitions] ${message}:`, error as Error),
+            })
+            if (activation.updatedWorkspaceIds.length > 0) {
+              sessionLog.info(`[agent-definitions] Activated Release Manager in ${activation.updatedWorkspaceIds.length} HQ/Campaign workspace(s)`)
             }
-            if (updatedWorkspaces > 0) {
-              sessionLog.info(`[agent-definitions] Activated Release Manager in ${updatedWorkspaces} HQ/Campaign workspace(s)`)
+            if (activation.migratedLegacyMarker) {
+              sessionLog.info('[agent-definitions] Migrated Release Manager activation state outside the agent directory')
             }
-            await writeFile(releaseManagerActivationMarker, `${new Date().toISOString()}\n`, 'utf8')
           } else if (releaseManagerActivationPending && installedReleaseManager && !releaseManagerIdentityValid) {
             sessionLog.error('[agent-definitions] Reserved Artist OS Release Manager identity is occupied; existing workspaces were not modified')
           } else if (releaseManagerActivationPending && installedReleaseManager && missingReleaseManagerSkills.length > 0) {
             sessionLog.warn(`[agent-definitions] Release Manager skill bundle incomplete: ${missingReleaseManagerSkills.join(', ')}`)
+          } else if (releaseManagerActivationPending && !installedReleaseManager) {
+            const { getWorkspaces } = await import('@craft-agent/shared/config')
+            preserveReleaseManagerActivationChoices(releaseManagerActivationState, getWorkspaces())
+            sessionLog.debug('[agent-definitions] Release Manager is not installed; preserved current workspace activation choices')
           }
           if (anticipationEngineWasMissing && loadGlobalSkillBySlug('anticipation-engine')) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')
@@ -3926,6 +3942,22 @@ export class SessionManager implements ISessionManager {
             if (updated) {
               sessionLog.info('[skills] Updated built-in workflow-creator skill')
             }
+          }
+          const rawVideoEditorSkillMd = STARTER_SKILLS
+            .find(skill => skill.slug === 'raw-video-editor')
+            ?.files.find(file => file.path === 'SKILL.md')
+            ?.content
+          const rawVideoEditorSkillHashes = [
+            'c2011a2b172b299a236debf60fb42a4112ebea560436d300143a301a0e1b7bee',
+            '54b9bf9a1bc95b3d7bef0819986c988a88b54f541f1abf8ae8297dfb53900dd2',
+          ]
+          if (rawVideoEditorSkillMd && rawVideoEditorSkillHashes.some(expectedHash => replaceRequiredGlobalSkillFileIfHashMatches(
+            'raw-video-editor',
+            'SKILL.md',
+            expectedHash,
+            rawVideoEditorSkillMd,
+          ).updated)) {
+            sessionLog.info('[skills] Added deterministic song-master synchronization to Raw Video Editor')
           }
           const squadSkillMd = BUNDLED_STARTER_SKILLS
             .find(skill => skill.slug === 'squad')
@@ -4247,6 +4279,42 @@ export class SessionManager implements ISessionManager {
           }
           if (ensureBuiltInAgentSkillsForSlug(CONCIERGE_SLUG, CONCIERGE_SYSTEM_SKILL_SLUGS).updated) {
             sessionLog.info('[agent-definitions] Ensured Concierge has self-edit system skill')
+          }
+          const rawVideoEditorDirectionSkillUpdated = ensureBuiltInAgentSkillsForSlug(
+            'raw-video-editor',
+            ['raw-video-editor', 'raw-video-edit-direction'],
+          ).updated
+          const rawVideoEditorDirectionPromptUpdated = replaceBuiltInAgentPromptText(
+            'raw-video-editor',
+            'Use the `raw-video-editor` skill. Your job is post-production, not AI video generation.',
+            'Use the `raw-video-edit-direction` skill to choose the editorial mode, then use `raw-video-editor` for technical execution. Your job is post-production, not AI video generation.',
+          ).updated
+          const rawVideoEditorPromptUpdated = replaceBuiltInAgentPromptText(
+            'raw-video-editor',
+            '9. Self-check `render-report.json`, cut boundaries, captions, audio pops, aspect ratio, and duration before presenting the result.',
+            '9. When performance footage includes faint playback and a clean master exists, run `sync-master <camera-video> <master-audio> --analyze-only --json`, then render only after its confidence gate passes. Never pass `--force` unless the user explicitly requests a manual preview after reviewing the proposed timing.\n10. Self-check `render-report.json` or the master-sync report, cut boundaries, captions, audio pops, aspect ratio, and duration before presenting the result.',
+          ).updated
+          const rawVideoEditorForceGuidanceUpdated = replaceBuiltInAgentPromptText(
+            'raw-video-editor',
+            '9. When performance footage includes faint playback and a clean master exists, run `sync-master <camera-video> <master-audio> --analyze-only --json`, then render only after its confidence gate passes.',
+            '9. When performance footage includes faint playback and a clean master exists, run `sync-master <camera-video> <master-audio> --analyze-only --json`, then render only after its confidence gate passes. Never pass `--force` unless the user explicitly requests a manual preview after reviewing the proposed timing.',
+          ).updated
+          const rawVideoEditorMetadataUpdated = replaceBuiltInAgentMetadata('raw-video-editor', {
+            greeting: {
+              from: 'Drop me a folder of raw footage and tell me the target platform, length, pacing, and moments to keep or cut.',
+              to: 'Drop me raw footage and tell me the target platform, length, pacing, and moments to keep. For performance footage, include the clean song master when you have it.',
+            },
+            inputs: {
+              from: 'A folder of existing video/audio files, desired platform/aspect ratio, target runtime, pacing direction, must-keep moments, must-cut moments, caption style, and brand/editing notes.',
+              to: 'Existing video/audio files, desired platform/aspect ratio, target runtime, pacing direction, must-keep and must-cut moments, caption style, brand/editing notes, and an optional clean song master for performance sync.',
+            },
+            outputs: {
+              from: 'An edit folder with inventory, packed transcript, EDL, preview/final MP4 paths, self-check notes, and clear limits when source media or transcription is missing.',
+              to: 'An edit folder with inventory, packed transcript, EDL, preview/final MP4 paths, optional master-sync report and synchronized preview, self-check notes, and clear limits when source media or transcription is missing.',
+            },
+          }).updated
+          if (rawVideoEditorDirectionSkillUpdated || rawVideoEditorDirectionPromptUpdated || rawVideoEditorPromptUpdated || rawVideoEditorForceGuidanceUpdated || rawVideoEditorMetadataUpdated) {
+            sessionLog.info('[agent-definitions] Updated existing Raw Video Editor editing direction and song-master synchronization')
           }
           const signalScoutOldRules = `Collection rules:
 1. Read the browser tools guide, then use browser_tool for public pages and public RSS/Atom feeds.

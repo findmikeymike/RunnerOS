@@ -946,14 +946,19 @@ body
     expect(rawVideoAgent?.metadata.visualAgent).toBe(true)
     expect(rawVideoAgent?.metadata.permissionMode).toBe('ask')
     expect(rawVideoAgent?.metadata.skills).toContain('raw-video-editor')
+    expect(rawVideoAgent?.metadata.skills).toContain('raw-video-edit-direction')
     expect(rawVideoAgent?.metadata.sources).toContain('raw-video-editor')
     expect(rawVideoAgent?.metadata.sources).toContain('video-studio')
     expect(rawVideoAgent?.metadata.tags).toContain('raw-footage')
     expect(rawVideoAgent?.systemPrompt).toContain('post-production, not AI video generation')
     expect(rawVideoAgent?.systemPrompt).toContain('Preserve originals')
     expect(rawVideoAgent?.systemPrompt).toContain('raw-video-editor')
+    expect(rawVideoAgent?.systemPrompt).toContain('raw-video-edit-direction')
     expect(rawVideoAgent?.systemPrompt).toContain('takes_packed.md')
     expect(rawVideoAgent?.systemPrompt).toContain('edl.json')
+    expect(rawVideoAgent?.systemPrompt).toContain('sync-master')
+    expect(rawVideoAgent?.systemPrompt).toContain('confidence gate')
+    expect(rawVideoAgent?.systemPrompt).toContain('Never pass `--force`')
   })
 
   test('starter library includes Content Genius with captions and overlays', () => {
@@ -1536,6 +1541,71 @@ body
     expect(ensureBuiltInAgentSkillsForSlug('concierge', ['runneros-self-edit'], { globalAgentsDir }).updated).toBe(true)
     expect(loadGlobalAgent('concierge', { globalAgentsDir })!.metadata.skills).toEqual(['agent-creator', 'runneros-self-edit'])
     expect(loadGlobalAgent('orchestrator', { globalAgentsDir })!.metadata.skills).toEqual(['agent-creator'])
+  })
+
+  test('can add editorial direction to an existing Raw Video Editor without replacing its other skills', () => {
+    writeGlobalAgent(
+      {
+        slug: 'raw-video-editor',
+        metadata: { name: 'Raw Video Editor', description: 'Edits footage.', skills: ['raw-video-editor', 'custom-editing-skill'] },
+        systemPrompt: 'Customized editing body.',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(ensureBuiltInAgentSkillsForSlug('raw-video-editor', ['raw-video-edit-direction'], { globalAgentsDir }).updated).toBe(true)
+    const migrated = loadGlobalAgent('raw-video-editor', { globalAgentsDir })!
+    expect(migrated.metadata.skills).toEqual(['raw-video-editor', 'custom-editing-skill', 'raw-video-edit-direction'])
+    expect(migrated.systemPrompt).toBe('Customized editing body.')
+  })
+
+  test('can narrowly update the shipped Raw Video Editor prompt', () => {
+    writeGlobalAgent(
+      {
+        slug: 'raw-video-editor',
+        metadata: { name: 'Raw Video Editor', description: 'Edits footage.', skills: ['raw-video-editor'] },
+        systemPrompt: 'Before. Never force a weak match. After.',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(replaceBuiltInAgentPromptText(
+      'raw-video-editor',
+      'Never force a weak match.',
+      'Never force without explicit user instruction.',
+      { globalAgentsDir },
+    ).updated).toBe(true)
+    expect(loadGlobalAgent('raw-video-editor', { globalAgentsDir })!.systemPrompt).toBe(
+      'Before. Never force without explicit user instruction. After.',
+    )
+  })
+
+  test('can add future skills to an existing Release Manager without replacing its customizations', () => {
+    writeGlobalAgent(
+      {
+        slug: RELEASE_MANAGER_AGENT_SLUG,
+        metadata: {
+          name: 'Release Manager',
+          description: 'Coordinates releases.',
+          skills: ['artist-os-release-operations', 'custom-release-skill'],
+        },
+        systemPrompt: 'Customized release body.',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(ensureBuiltInAgentSkillsForSlug(
+      RELEASE_MANAGER_AGENT_SLUG,
+      ['artist-os-release-operations', 'artist-os-rights-and-credits'],
+      { globalAgentsDir },
+    ).updated).toBe(true)
+    const migrated = loadGlobalAgent(RELEASE_MANAGER_AGENT_SLUG, { globalAgentsDir })!
+    expect(migrated.metadata.skills).toEqual([
+      'artist-os-release-operations',
+      'custom-release-skill',
+      'artist-os-rights-and-credits',
+    ])
+    expect(migrated.systemPrompt).toBe('Customized release body.')
   })
 
   test('ensureBuiltInAgentSkills still applies shared skills to both built-ins', () => {

@@ -4,6 +4,7 @@ import { join } from 'node:path'
 
 describe('Essentials workspace', () => {
   const source = readFileSync(join(import.meta.dir, 'ArtistCommandCenterHome.tsx'), 'utf8')
+  const workflowDialogSource = readFileSync(join(import.meta.dir, '../../pages/WorkflowRunInputDialog.tsx'), 'utf8')
 
   test('keeps optional release plays behind progressive disclosure', () => {
     expect(source).toContain('More options')
@@ -19,8 +20,13 @@ describe('Essentials workspace', () => {
     expect(source).toContain('Add existing file')
     expect(source).toContain('item.linkedSessionId')
     expect(source).toContain("item.status === 'in-progress' && action?.kind === 'agent'")
-    expect(source).toContain('Open the ${item.label} worker chat')
+    expect(source).toContain('Open the ${item.label} work')
     expect(source).toContain('routes.view.allSessions(item.linkedSessionId)')
+    expect(source).toContain('routes.view.workflowRun(item.linkedWorkflowRunId)')
+    expect(source).toContain('linkReleaseBoardItemWorkflowRun')
+    expect(source).toContain('linkReleaseBoardItemToolReview')
+    expect(source).toContain('onStarted={async (run) => {')
+    expect(source).toContain('setTrackReviewAudioAssetId(item.linkedToolReviewAssetId)')
     expect(source).toContain('findReleaseBoardWorkerSession')
     expect(source).toContain("{included ? 'Remove' : 'Add'}")
     expect(source).toContain("? 'In progress'")
@@ -35,5 +41,16 @@ describe('Essentials workspace', () => {
     expect(source).not.toContain('>Transcribe<')
     expect(source).not.toContain('Mark this item not applicable')
     expect(source).not.toContain('Remove ${item.label} from this release')
+  })
+
+  test('records workflow ownership only after the run exists and still navigates if linking fails', () => {
+    const runCreatedAt = workflowDialogSource.indexOf('const created = await start(workflow.slug, payload)')
+    const linkStartedAt = workflowDialogSource.indexOf('await onStarted?.(created)')
+    const navigateAt = workflowDialogSource.indexOf('navigate(routes.view.workflowRun(created.id))')
+
+    expect(runCreatedAt).toBeGreaterThan(-1)
+    expect(linkStartedAt).toBeGreaterThan(runCreatedAt)
+    expect(navigateAt).toBeGreaterThan(linkStartedAt)
+    expect(workflowDialogSource).toContain("toast.error('Workflow started, but its originating item could not be linked.'")
   })
 })

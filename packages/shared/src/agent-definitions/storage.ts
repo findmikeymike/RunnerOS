@@ -635,7 +635,7 @@ export function ensureBuiltInAgentSkillsForSlug(
   requiredSkills: ReadonlyArray<string>,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'raw-video-editor', 'artist-os-release-manager']);
   if (!builtIns.has(slug)) return { updated: false };
 
   const loaded = loadGlobalAgent(slug, options);
@@ -780,7 +780,7 @@ export function replaceBuiltInAgentPromptText(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'social-publisher', 'industry-hunter', 'college-radio-agent', 'outreach-agent', 'record-doctor', 'x-editorial', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent', 'art-director', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'trypost-agent', 'content-director', 'print-agent', 'signal-scout-agent', 'signal-analyst-agent']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'social-publisher', 'industry-hunter', 'college-radio-agent', 'outreach-agent', 'record-doctor', 'x-editorial', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent', 'art-director', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'trypost-agent', 'content-director', 'print-agent', 'signal-scout-agent', 'signal-analyst-agent', 'raw-video-editor']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
   if (

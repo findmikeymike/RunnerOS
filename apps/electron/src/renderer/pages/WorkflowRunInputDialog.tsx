@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../shared/routes'
 import { useWorkflowRuns } from '@/hooks/useWorkflowRuns'
-import type { WorkflowDTO } from '../../shared/types'
+import type { WorkflowDTO, WorkflowRunDTO } from '../../shared/types'
 
 interface Props {
   open: boolean
@@ -22,9 +22,11 @@ interface Props {
   workspaceId: string
   /** Pre-fill form fields (used by the Rerun button on the Run page). */
   initialInputs?: Record<string, unknown>
+  /** Called only after the run exists. Failures must not strand the user before navigation. */
+  onStarted?: (run: WorkflowRunDTO) => void | Promise<void>
 }
 
-export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspaceId, initialInputs }: Props) {
+export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspaceId, initialInputs, onStarted }: Props) {
   const { t } = useTranslation()
   const { navigate } = useNavigation()
   const { start } = useWorkflowRuns(workspaceId)
@@ -73,6 +75,13 @@ export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspace
         payload[i.name] = value
       }
       const created = await start(workflow.slug, payload)
+      try {
+        await onStarted?.(created)
+      } catch (err) {
+        toast.error('Workflow started, but its originating item could not be linked.', {
+          description: err instanceof Error ? err.message : String(err),
+        })
+      }
       onOpenChange(false)
       navigate(routes.view.workflowRun(created.id))
     } catch (err) {

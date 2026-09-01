@@ -87,6 +87,8 @@ import {
   findReleaseBoardWorkerSession,
   isReleaseBoardItemIncluded,
   linkReleaseBoardItemSession,
+  linkReleaseBoardItemToolReview,
+  linkReleaseBoardItemWorkflowRun,
   mergeReleaseBoardWithAssets,
   parseReleaseBoardDoc,
   releaseBoardMetadata,
@@ -162,6 +164,8 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
   const [pendingReleaseWorkflow, setPendingReleaseWorkflow] = React.useState<{
     workflow: WorkflowDTO
     initialInputs: Record<string, unknown>
+    categoryId: ReleaseBoardCategory['id']
+    itemId: string
   } | null>(null)
   const lastAutoSavedReleaseBoardBody = React.useRef<string | null>(null)
   const lastAutoSavedWorkerContextBody = React.useRef<string | null>(null)
@@ -334,7 +338,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
     if (!hasMission) {
       setDrawerOpen(true)
       toast.info('Create the campaign first, then transcribe lyrics.')
-      return
+      return null
     }
     setAssetBusy(true)
     try {
@@ -344,12 +348,14 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
         toast.error(result.error ?? 'Lyrics transcription failed', {
           description: result.blockers?.map((blocker) => blocker.message).join(' '),
         })
-        return
+        return result
       }
       setTrackReviewAudioAssetId(result.audioAsset?.id ?? audioAssetId ?? null)
       toast.success('Lyrics transcribed. Review and save corrections.')
+      return result
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
+      return null
     } finally {
       setAssetBusy(false)
     }
@@ -510,8 +516,19 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
       navigate(routes.view.allSessions(item.linkedSessionId))
       return
     }
+    if (item.linkedWorkflowRunId) {
+      navigate(routes.view.workflowRun(item.linkedWorkflowRunId))
+      return
+    }
     const action = getReleaseBoardItemAction(category.id, item.id)
     if (!action) return
+    if (action.kind === 'tool' && item.linkedToolReviewAssetId) {
+      const reviewAssetExists = assetManifest?.files.some((asset) => asset.id === item.linkedToolReviewAssetId)
+      if (reviewAssetExists) {
+        setTrackReviewAudioAssetId(item.linkedToolReviewAssetId)
+        return
+      }
+    }
     if (item.status === 'in-progress' && action.kind === 'agent') {
       const recoveredSessionId = findReleaseBoardWorkerSession({
         sessions: sessionMetaMap.values(),
@@ -548,7 +565,11 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
         if (action.targetSlug !== 'transcribe-lyrics') {
           throw new Error(`${action.targetName} is not available.`)
         }
-        await transcribeLyrics()
+        const result = await transcribeLyrics()
+        const reviewAssetId = result?.ok ? result.audioAsset?.id : null
+        if (reviewAssetId) {
+          await saveReleaseBoard(linkReleaseBoardItemToolReview(releaseBoard, category.id, item.id, reviewAssetId))
+        }
         return
       }
       if (action.kind === 'workflow') {
@@ -560,6 +581,8 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
         setPendingReleaseWorkflow({
           workflow,
           initialInputs: buildReleaseBoardWorkflowInputs(action, campaignBrief),
+          categoryId: category.id,
+          itemId: item.id,
         })
         return
       } else {
@@ -600,6 +623,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
   }, [
     allAgents,
     allWorkflows,
+    assetManifest?.files,
     enabledSources,
     hasMission,
     mission.title,
@@ -607,6 +631,8 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
     onInputChange,
     onSendMessage,
     sessionMetaMap,
+    releaseBoard,
+    saveReleaseBoard,
     skills,
     linkReleaseItemSession,
     transcribeLyrics,
@@ -829,7 +855,9 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
         releaseBoard={releaseBoard}
         onAddAsset={chooseAndImport}
         onImportAssetPaths={importAssetPaths}
-        onTranscribeLyrics={transcribeLyrics}
+        onTranscribeLyrics={async (...args) => {
+          await transcribeLyrics(...args)
+        }}
         onReviewLyrics={() => {
           const sourceAudioId = campaignLyricsAsset?.lyrics?.sourceAudioAssetId
           const audio = assetManifest?.files.find((asset) => asset.id === sourceAudioId)
@@ -869,6 +897,14 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
           workflow={pendingReleaseWorkflow.workflow}
           workspaceId={workspaceId}
           initialInputs={pendingReleaseWorkflow.initialInputs}
+          onStarted={async (run) => {
+            await saveReleaseBoard(linkReleaseBoardItemWorkflowRun(
+              releaseBoard,
+              pendingReleaseWorkflow.categoryId,
+              pendingReleaseWorkflow.itemId,
+              run.id,
+            ))
+          }}
         />
       ) : null}
 
@@ -1124,7 +1160,12 @@ function ReleaseBoardSection({
             const skipped = item.status === 'skipped'
             const action = getReleaseBoardItemAction(category.id, item.id)
             const uploadHint = releaseBoardUploadHint(item)
-            const canOpenWorkerChat = Boolean(item.linkedSessionId || (item.status === 'in-progress' && action?.kind === 'agent'))
+            const canOpenLinkedWork = Boolean(
+              item.linkedSessionId
+              || item.linkedWorkflowRunId
+              || item.linkedToolReviewAssetId
+              || (item.status === 'in-progress' && action?.kind === 'agent'),
+            )
             const itemKey = `${category.id}:${item.id}`
             const launching = launchingItemKey === itemKey
             const statusLabel = item.status === 'in-progress'
@@ -1171,11 +1212,11 @@ function ReleaseBoardSection({
                     {item.linkedAssetId ? <span className="h-1 w-1 shrink-0 rounded-full bg-orange-300/80" title="Matched from campaign vault" /> : null}
                   </div>
                 </div>
-                {canOpenWorkerChat ? (
+                {canOpenLinkedWork ? (
                   <button
                     type="button"
                     onClick={() => onLaunchItem(category, item)}
-                    title={`Open the ${item.label} worker chat`}
+                    title={`Open the ${item.label} work`}
                     className={cn(
                       'shrink-0 rounded-sm text-[7px] font-semibold uppercase tracking-[0.08em] transition-colors hover:text-white/78',
                       done ? 'text-orange-200/62' : item.status === 'review' ? 'text-amber-200/70' : 'text-sky-200/60',
@@ -1193,7 +1234,7 @@ function ReleaseBoardSection({
                   <button
                     type="button"
                     onClick={() => {
-                      if (canOpenWorkerChat) {
+                      if (canOpenLinkedWork) {
                         onLaunchItem(category, item)
                       } else if (action && uploadHint) {
                         setActionChoiceItemId(item.id)
@@ -1204,8 +1245,8 @@ function ReleaseBoardSection({
                       }
                     }}
                     disabled={launchingItemKey !== null}
-                    title={canOpenWorkerChat ? `Open the ${item.label} worker chat` : action && uploadHint ? `Choose how to handle ${item.label}` : action ? `${getReleaseBoardActionLabel(action)}: ${item.label}` : `Add file: ${item.label}`}
-                    aria-label={canOpenWorkerChat ? `Open the ${item.label} worker chat` : action && uploadHint ? `Choose an action for ${item.label}` : action ? `${getReleaseBoardActionLabel(action)} for ${item.label}` : `Add file for ${item.label}`}
+                    title={canOpenLinkedWork ? `Open the ${item.label} work` : action && uploadHint ? `Choose how to handle ${item.label}` : action ? `${getReleaseBoardActionLabel(action)}: ${item.label}` : `Add file: ${item.label}`}
+                    aria-label={canOpenLinkedWork ? `Open the ${item.label} work` : action && uploadHint ? `Choose an action for ${item.label}` : action ? `${getReleaseBoardActionLabel(action)} for ${item.label}` : `Add file for ${item.label}`}
                     className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/[0.07] text-white/58 ring-1 ring-white/[0.08] transition-colors hover:bg-gradient-to-br hover:from-[#ff7a00] hover:to-[#ef2b10] hover:text-white disabled:cursor-wait disabled:opacity-35"
                   >
                     {launching ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Play className="h-2.5 w-2.5 fill-current" />}

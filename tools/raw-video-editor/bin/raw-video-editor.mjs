@@ -3,6 +3,11 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import {
+  MASTER_SYNC_MIN_CONFIDENCE,
+  analyzeMasterSync,
+  renderMasterSync,
+} from './audio-sync.mjs';
 
 const args = process.argv.slice(2);
 const command = args[0] || 'help';
@@ -127,6 +132,11 @@ function edlPath(inputDir) {
 
 function packedPath(inputDir) {
   return join(editDirFor(inputDir), 'takes_packed.md');
+}
+
+function masterSyncReportPath(videoPath) {
+  const stem = basename(videoPath, extname(videoPath));
+  return join(dirname(videoPath), 'edit', `${stem}.master-sync.json`);
 }
 
 function inspect(inputDir) {
@@ -378,6 +388,94 @@ function render(inputDir) {
   return report;
 }
 
+function syncMaster(videoInput, masterInput) {
+  if (!videoInput || !masterInput) {
+    fail('sync-master requires both a camera video and the clean master audio.');
+  }
+  if (!commandOk('ffmpeg')) fail('ffmpeg is required. Install FFmpeg first.');
+  if (!commandOk('ffprobe')) fail('ffprobe is required. Install FFmpeg first.');
+  const videoPath = resolve(videoInput);
+  const masterPath = resolve(masterInput);
+  const videoInfo = probe(videoPath);
+  const masterInfo = probe(masterPath);
+  if (!videoInfo.ok) fail('Could not inspect the camera video.', { detail: videoInfo.error });
+  if (!masterInfo.ok) fail('Could not inspect the master audio.', { detail: masterInfo.error });
+  if (!videoInfo.hasVideo) fail('The camera input must contain a video stream.');
+  if (!videoInfo.hasAudio) fail('The camera video has no scratch audio to match against the master.');
+  if (!masterInfo.hasAudio) fail('The selected master file has no audio stream.');
+
+  const minConfidence = Math.min(0.95, Math.max(
+    MASTER_SYNC_MIN_CONFIDENCE,
+    seconds(opt('--min-confidence', String(MASTER_SYNC_MIN_CONFIDENCE)), MASTER_SYNC_MIN_CONFIDENCE),
+  ));
+  const cameraMix = Math.min(1, Math.max(0, seconds(opt('--camera-mix', '0'), 0)));
+  const masterOffsetMs = seconds(opt('--master-offset-ms', '0'), 0);
+  const reportPath = masterSyncReportPath(videoPath);
+  const analyzeOnly = hasFlag('--analyze-only');
+  const force = hasFlag('--force');
+  const output = resolve(opt('--out', join(dirname(videoPath), 'edit', `${basename(videoPath, extname(videoPath))}-synced.mp4`)));
+  if (!analyzeOnly && (output === videoPath || output === masterPath)) {
+    fail('Refusing to overwrite source media. Choose a different --out path.');
+  }
+  const analysis = analyzeMasterSync(videoPath, masterPath, { minConfidence });
+  ensureDir(dirname(reportPath));
+
+  const report = {
+    ok: analysis.accepted,
+    status: analysis.accepted ? 'matched' : 'needs-review',
+    videoPath,
+    masterPath,
+    output: analyzeOnly ? null : output,
+    reportPath,
+    analyzeOnly,
+    forced: force && !analysis.accepted,
+    cameraMix,
+    masterOffsetMs,
+    analysis,
+    guidance: analysis.accepted
+      ? 'The master match cleared the automatic confidence gate.'
+      : 'The match is weak or ambiguous. Review the files, use a manual offset, or explicitly force only after checking the proposed timing.',
+  };
+  writeJsonAtomic(reportPath, report);
+
+  if (analyzeOnly) return report;
+  if (!analysis.accepted && !force) {
+    fail('Automatic master sync refused a weak or ambiguous match.', {
+      reportPath,
+      confidence: analysis.confidence,
+      minConfidence,
+    });
+  }
+
+  ensureDir(dirname(output));
+  renderMasterSync({
+    videoPath,
+    masterPath,
+    outputPath: output,
+    videoDuration: videoInfo.duration,
+    masterDuration: masterInfo.duration,
+    analysis,
+    cameraMix,
+    masterOffsetMs,
+  });
+  const outputInfo = probe(output);
+  if (!outputInfo.ok || !outputInfo.hasVideo || !outputInfo.hasAudio || outputInfo.duration <= 0) {
+    fail('The synchronized preview failed output verification.', { output, outputInfo });
+  }
+  report.status = analysis.accepted ? 'rendered' : 'rendered-forced';
+  report.outputDuration = outputInfo.duration;
+  report.outputHasVideo = outputInfo.hasVideo;
+  report.outputHasAudio = outputInfo.hasAudio;
+  report.checks = [
+    'source video preserved',
+    'output contains video',
+    'output contains synchronized master audio',
+    analysis.accepted ? 'automatic confidence gate passed' : 'render forced for manual review',
+  ];
+  writeJsonAtomic(reportPath, report);
+  return report;
+}
+
 function usage() {
   return {
     ok: true,
@@ -390,6 +488,7 @@ function usage() {
       '  raw-video-editor transcribe <footage-dir> [--model base] [--language en] --json',
       '  raw-video-editor plan <footage-dir> [--max-duration 45] [--aspect 9:16] [--caption "..."] --json',
       '  raw-video-editor render <footage-dir> [--out edit/preview.mp4] --json',
+      '  raw-video-editor sync-master <camera-video> <master-audio> [--out edit/synced.mp4] [--camera-mix 0] [--analyze-only] --json',
     ],
   };
 }
@@ -411,6 +510,12 @@ if (command === 'doctor') {
   print(makePlan(positional(0) || process.cwd()));
 } else if (command === 'render') {
   print(render(positional(0) || process.cwd()));
+} else if (command === 'sync-master') {
+  try {
+    print(syncMaster(positional(0), positional(1)));
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
 } else {
   print(usage());
 }

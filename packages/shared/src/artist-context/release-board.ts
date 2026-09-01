@@ -17,6 +17,8 @@ export interface ReleaseBoardItem {
   assetKinds?: MissionAssetKind[]
   linkedAssetId?: string
   linkedSessionId?: string
+  linkedWorkflowRunId?: string
+  linkedToolReviewAssetId?: string
   notes?: string
   updatedAt?: string
 }
@@ -569,6 +571,54 @@ export function linkReleaseBoardItemSession(
         items: category.items.map((item) => (
           item.id === itemId
             ? { ...item, status: 'in-progress' as const, linkedSessionId: sessionId, updatedAt: now }
+            : item
+        )),
+      }
+    }),
+  }
+}
+
+export function linkReleaseBoardItemWorkflowRun(
+  board: ReleaseBoard,
+  categoryId: ReleaseBoardCategory['id'],
+  itemId: string,
+  workflowRunId: string,
+): ReleaseBoard {
+  const now = new Date().toISOString()
+  return {
+    ...board,
+    updatedAt: now,
+    categories: board.categories.map((category) => {
+      if (category.id !== categoryId) return category
+      return {
+        ...category,
+        items: category.items.map((item) => (
+          item.id === itemId
+            ? { ...item, status: 'in-progress' as const, linkedWorkflowRunId: workflowRunId, updatedAt: now }
+            : item
+        )),
+      }
+    }),
+  }
+}
+
+export function linkReleaseBoardItemToolReview(
+  board: ReleaseBoard,
+  categoryId: ReleaseBoardCategory['id'],
+  itemId: string,
+  reviewAssetId: string,
+): ReleaseBoard {
+  const now = new Date().toISOString()
+  return {
+    ...board,
+    updatedAt: now,
+    categories: board.categories.map((category) => {
+      if (category.id !== categoryId) return category
+      return {
+        ...category,
+        items: category.items.map((item) => (
+          item.id === itemId
+            ? { ...item, status: 'review' as const, linkedToolReviewAssetId: reviewAssetId, updatedAt: now }
             : item
         )),
       }

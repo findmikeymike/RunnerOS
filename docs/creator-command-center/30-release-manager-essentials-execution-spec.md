@@ -83,9 +83,12 @@ Migration rules:
 - UI strikethrough is reserved for a real N/A decision.
 
 Status changes are explicit: the row control opens a quiet choice for `review`, confirmed `done`,
-or `not applicable`. Starting a worker creates `in-progress`; it never becomes done merely because
-a chat or Output exists. Confirming done is the artist's timestamped manual attestation that the
-real asset, link, receipt, or manual provider step was checked.
+or `not applicable`. Starting a worker or successfully creating a workflow run creates
+`in-progress`, and the row keeps the exact chat or run link. A successful lyrics transcription
+creates `review` and keeps the exact audio review target. Merely opening workflow setup changes
+nothing. No item becomes done merely because a chat, run, tool result, or Output exists.
+Confirming done is the artist's timestamped manual attestation that the real asset, link, receipt,
+or manual provider step was checked.
 
 ## Worker Contract
 
@@ -153,4 +156,5 @@ the provider UI. It must label that result manual and never claim submission.
 4. Release Manager and all four skills are installed and initially activated only for existing
    Artist HQ and Campaign workspaces, without overriding later user deactivation.
 5. Every Release Board action resolves to a shipped worker or workflow.
-6. Focused Release Board, starter-agent, starter-skill, and typecheck suites pass.
+6. Worker chats, workflow runs, and tool review targets reopen from the originating Essentials row.
+7. Focused Release Board, starter-agent, starter-skill, and typecheck suites pass.

@@ -798,6 +798,7 @@ This workflow is inspired by Browser Use \`video-use\`, which is MIT licensed. I
 9. Add short audio fades at cut boundaries to avoid pops.
 10. Apply subtitles last so overlays do not cover them.
 11. Self-check preview renders before presenting them: cut boundaries, first/last seconds, caption readability, audio pops, aspect framing, and final duration.
+12. When a clean song master and camera scratch playback are available, use deterministic master synchronization rather than aligning by eye. Never force a weak match without explicit review.
 
 ## Workflow
 
@@ -868,7 +869,23 @@ Use FFmpeg or Runner Video Studio tools. Prefer simple, reliable renders first:
 - Burn captions last.
 - Export \`edit/preview.mp4\`, then \`edit/final.mp4\` after approval.
 
-### 6. Verify
+### 6. Synchronize a song master
+
+For performance footage shot while the song played quietly in the room, analyze before rendering:
+
+\`\`\`bash
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs sync-master <camera-video> <master-audio> --analyze-only --json
+\`\`\`
+
+If the report clears the confidence gate, render the review copy:
+
+\`\`\`bash
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs sync-master <camera-video> <master-audio> --out <footage-dir>/edit/<name>-synced.mp4 --json
+\`\`\`
+
+The command compares several points across the take, estimates start offset and clock drift, and writes \`edit/<video>.master-sync.json\`. It fails closed when the camera audio does not contain a confident match. Use \`--camera-mix 0.1\` only when room sound is intentionally wanted. Use \`--master-offset-ms\` for a reviewed manual nudge; do not use \`--force\` as a shortcut around a weak match.
+
+### 7. Verify
 
 Before calling the edit done:
 - Check output duration with \`ffprobe\`.
@@ -883,6 +900,42 @@ Before calling the edit done:
 Return final path, preview/final status, runtime, aspect ratio, what was cut, known limitations, and the next suggested edit pass.
 `;
 
+const RAW_VIDEO_EDIT_DIRECTION_SKILL = `---
+name: raw-video-edit-direction
+description: Choose the right editorial approach for existing footage. Use with Raw Video Editor to distinguish performance or music-led edits from interviews, talking-head clips, and general BTS or event footage before deciding pacing, moment selection, or audio treatment.
+---
+
+# Raw Video Edit Direction
+
+Choose the edit mode from the user's actual request and footage. Do not assume every video belongs to a song.
+
+## Performance or music-led footage
+
+Use this mode when the user wants a filmed performance, lip-sync, or lyric-led performance clip aligned to a supplied song master.
+
+- If picture and lips or performance must align with the master, use the Raw Video Editor's confidence-gated master-sync workflow before cutting.
+- Read available song and campaign context for structure, energy, mood, and important lyric moments.
+- Treat tempo and energy as direction, not a formula: higher energy can support denser cuts and more motion; intimate passages usually benefit from longer takes. Use contrast so choruses, drops, and climaxes feel larger than surrounding sections.
+- Favor convincing performance, emotional truth, clean movement, and strong opening images over cutting on every beat.
+
+## Spoken footage
+
+Use this mode for interviews, podcasts, talking heads, explanations, and other speech-led work.
+
+- Build from the transcript and the requested runtime. Find the strongest ideas, clearest phrases, emotional turns, and necessary context.
+- Remove repetition and dead space without changing meaning or making speech feel unnaturally rushed.
+- Do not run song-master sync or force music-video pacing unless the user explicitly asks for it.
+
+## General footage
+
+Use this mode for BTS, events, montages, tutorials, demos, and mixed visual material.
+
+- Find the clearest visual story and strongest moments for the requested purpose.
+- Preserve useful natural sound. Treat supplied music as a bed unless visible performance must synchronize to it.
+
+Before rendering, state the selected mode and give the user a short plan covering structure, pacing, best moments, audio treatment, and target runtime. Ask only for decisions that the footage and existing context cannot answer.
+`;
+
 export const STARTER_SKILLS: StarterSkill[] = [
   { slug: 'agent-creator', files: [{ path: 'SKILL.md', content: AGENT_CREATOR_SKILL }] },
   { slug: 'automation-creator', files: [{ path: 'SKILL.md', content: AUTOMATION_CREATOR_SKILL }] },
@@ -892,6 +945,7 @@ export const STARTER_SKILLS: StarterSkill[] = [
   { slug: 'artist-os-guide', files: [{ path: 'SKILL.md', content: ARTIST_OS_GUIDE_SKILL }] },
   { slug: 'runneros-self-edit', files: [{ path: 'SKILL.md', content: RUNNEROS_SELF_EDIT_SKILL }] },
   { slug: 'raw-video-editor', files: [{ path: 'SKILL.md', content: RAW_VIDEO_EDITOR_SKILL }] },
+  { slug: 'raw-video-edit-direction', files: [{ path: 'SKILL.md', content: RAW_VIDEO_EDIT_DIRECTION_SKILL }] },
 ];
 
 export { SYSTEM_GLOBAL_SKILL_SLUGS } from './system.ts';

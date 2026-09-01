@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'bun:test';
+import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join, relative, sep } from 'node:path';
 import matter from 'gray-matter';
 import { STARTER_SKILLS } from '../starter-templates.ts';
 import { BUNDLED_STARTER_SKILLS } from '../bundled.generated.ts';
@@ -110,7 +113,19 @@ describe('STARTER_SKILLS', () => {
     expect(parsed.content).toContain('ffprobe');
     expect(parsed.content).toContain('takes_packed.md');
     expect(parsed.content).toContain('edl.json');
+    expect(parsed.content).toContain('sync-master');
+    expect(parsed.content).toContain('confidence gate');
     expect(parsed.content).toContain('MIT licensed');
+  });
+
+  it('includes compact mode direction for raw footage edits', () => {
+    const skill = STARTER_SKILLS.find(s => s.slug === 'raw-video-edit-direction');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('raw-video-edit-direction');
+    expect(parsed.content).toContain('Performance or music-led footage');
+    expect(parsed.content).toContain('Spoken footage');
+    expect(parsed.content).toContain('Do not assume every video belongs to a song');
   });
 
   it('ships the focused Release Manager skill bundle', () => {
@@ -128,6 +143,40 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     if (!f) throw new Error('Missing SKILL.md');
     return f.content;
   }
+
+  it('matches every bundled source file exactly after generator normalization', () => {
+    const bundledDir = fileURLToPath(new URL('../bundled/', import.meta.url));
+    const sourceFiles = new Map<string, string>();
+
+    function walk(skillSlug: string, directory: string): void {
+      for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+        const absolutePath = join(directory, entry.name);
+        if (entry.isDirectory()) {
+          walk(skillSlug, absolutePath);
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        const relativePath = relative(join(bundledDir, skillSlug), absolutePath).split(sep).join('/');
+        const normalized = readFileSync(absolutePath, 'utf8')
+          .replace(/\r\n?/g, '\n')
+          .replace(/[ \t]+$/gm, '');
+        sourceFiles.set(`${skillSlug}/${relativePath}`, normalized);
+      }
+    }
+
+    for (const entry of readdirSync(bundledDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (entry.isDirectory()) walk(entry.name, join(bundledDir, entry.name));
+    }
+
+    const generatedFiles = new Map<string, string>(
+      BUNDLED_STARTER_SKILLS.flatMap(skill => (
+        skill.files.map(file => [`${skill.slug}/${file.path}`, file.content] as const)
+      )),
+    );
+
+    expect([...generatedFiles.keys()].sort()).toEqual([...sourceFiles.keys()].sort());
+    for (const [path, content] of sourceFiles) expect(generatedFiles.get(path), path).toBe(content);
+  });
 
   it('every bundled skill parses to valid SKILL.md frontmatter', () => {
     for (const skill of BUNDLED_STARTER_SKILLS) {

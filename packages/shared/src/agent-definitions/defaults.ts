@@ -6,10 +6,16 @@ export const RELEASE_MANAGER_SKILL_SLUGS = [
   'artist-os-dsp-editorial-pitch',
 ] as const
 
+export function hasReleaseManagerIdentity(
+  agent: { slug: string; metadata: { name: string } } | null | undefined,
+): agent is { slug: string; metadata: { name: string } } {
+  return agent != null && agent.slug === RELEASE_MANAGER_AGENT_SLUG && agent.metadata.name === 'Release Manager'
+}
+
 export function isReleaseManagerDefinition(
   agent: { slug: string; metadata: { name: string; skills?: string[] } } | null | undefined,
 ): boolean {
-  if (!agent || agent.slug !== RELEASE_MANAGER_AGENT_SLUG || agent.metadata.name !== 'Release Manager') return false
+  if (!hasReleaseManagerIdentity(agent)) return false
   const installedSkills = new Set(agent.metadata.skills ?? [])
   return RELEASE_MANAGER_SKILL_SLUGS.every(slug => installedSkills.has(slug))
 }

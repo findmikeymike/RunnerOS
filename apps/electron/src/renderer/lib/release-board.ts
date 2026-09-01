@@ -11,6 +11,8 @@ export {
   getReleaseBoardItemAction,
   isReleaseBoardItemIncluded,
   linkReleaseBoardItemSession,
+  linkReleaseBoardItemToolReview,
+  linkReleaseBoardItemWorkflowRun,
   mergeReleaseBoardWithAssets,
   parseReleaseBoardDoc,
   parseReleaseBoardDocResult,

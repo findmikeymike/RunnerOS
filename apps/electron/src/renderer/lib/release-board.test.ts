@@ -11,6 +11,8 @@ import {
   getBoardTotals,
   getReleaseBoardItemAction,
   linkReleaseBoardItemSession,
+  linkReleaseBoardItemToolReview,
+  linkReleaseBoardItemWorkflowRun,
   mergeReleaseBoardWithAssets,
   parseReleaseBoardDoc,
   parseReleaseBoardDocResult,
@@ -228,6 +230,37 @@ describe('release board utilities', () => {
 
     expect(item?.status).toBe('in-progress')
     expect(item?.linkedSessionId).toBe('session-lyric-clips')
+  })
+
+  test('persists workflow runs and tool reviews at the status they actually reached', () => {
+    const withRun = linkReleaseBoardItemWorkflowRun(
+      buildDefaultReleaseBoard('workspace-1'),
+      'content',
+      'idea-generation',
+      'run-content-mastermind',
+    )
+    const withReview = linkReleaseBoardItemToolReview(
+      withRun,
+      'music',
+      'lyrics',
+      'audio-master-1',
+    )
+    const parsed = parseReleaseBoardDoc({ body: serializeReleaseBoardBody(withReview) })
+    const workflowItem = parsed?.categories
+      .find((category) => category.id === 'content')
+      ?.items.find((candidate) => candidate.id === 'idea-generation')
+    const toolItem = parsed?.categories
+      .find((category) => category.id === 'music')
+      ?.items.find((candidate) => candidate.id === 'lyrics')
+
+    expect(workflowItem).toMatchObject({
+      status: 'in-progress',
+      linkedWorkflowRunId: 'run-content-mastermind',
+    })
+    expect(toolItem).toMatchObject({
+      status: 'review',
+      linkedToolReviewAssetId: 'audio-master-1',
+    })
   })
 
   test('recovers the newest matching legacy worker chat without crossing campaigns', () => {
