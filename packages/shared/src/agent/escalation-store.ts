@@ -7,10 +7,11 @@
  * Mode — Unapproved Write Detection") and SPEC §R7 in
  * `.planning/phases/01-orchestration-backbone/01-SPEC.md`.
  *
- * Backing store: `bun:sqlite` (built into Bun, no extra dependency). DB file
- * lives at `${CONFIG_DIR}/escalations.db`, sibling to other RunnerOS on-disk
- * artifacts. A factory function `getEscalationStore(path?)` is provided so
- * tests can inject an in-memory or temp-file DB for isolation.
+ * Backing store: the runtime's built-in synchronous SQLite implementation
+ * (`bun:sqlite` in Bun, `node:sqlite` in Electron/Node). DB file lives at
+ * `${CONFIG_DIR}/escalations.db`, sibling to other RunnerOS on-disk artifacts.
+ * A factory function `getEscalationStore(path?)` is provided so tests can
+ * inject an in-memory or temp-file DB for isolation.
  *
  * Pause/resume contract:
  *   The store knows nothing about the agent runtime. It only persists rows
@@ -21,13 +22,38 @@
  *   instantiate in tests.
  */
 
-import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, chmodSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { CONFIG_DIR } from '../config/paths.ts';
 import { createLogger } from '../utils/debug.ts';
 
 const log = createLogger('escalation-store');
+
+interface SqliteStatement {
+  all(...params: unknown[]): unknown[];
+  get(...params: unknown[]): unknown;
+  run(...params: unknown[]): unknown;
+}
+
+interface SqliteDatabase {
+  exec(sql: string): unknown;
+  prepare(sql: string): SqliteStatement;
+  close(): void;
+}
+
+type SqliteDatabaseConstructor = new (path: string) => SqliteDatabase;
+
+function resolveSqliteDatabaseConstructor(): SqliteDatabaseConstructor {
+  if (process.versions.bun) {
+    const moduleId = ['bun', 'sqlite'].join(':');
+    const sqlite = require(moduleId) as { Database: SqliteDatabaseConstructor };
+    return sqlite.Database;
+  }
+
+  const moduleId = ['node', 'sqlite'].join(':');
+  const sqlite = require(moduleId) as { DatabaseSync: SqliteDatabaseConstructor };
+  return sqlite.DatabaseSync;
+}
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -177,7 +203,7 @@ function rowToEscalation(r: Row): Escalation {
 // ---------------------------------------------------------------------------
 
 class SqliteEscalationStore implements EscalationStore {
-  private readonly db: Database;
+  private readonly db: SqliteDatabase;
   private readonly listeners = new Set<EscalationListener>();
 
   constructor(dbPath: string) {
@@ -187,6 +213,7 @@ class SqliteEscalationStore implements EscalationStore {
         mkdirSync(parent, { recursive: true });
       }
     }
+    const Database = resolveSqliteDatabaseConstructor();
     this.db = new Database(dbPath);
     this.db.exec('PRAGMA journal_mode = WAL;');
     this.db.exec(SCHEMA);
