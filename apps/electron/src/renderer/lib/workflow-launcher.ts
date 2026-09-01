@@ -3,6 +3,13 @@ import type { ContextDocDTO, WorkflowDTO } from '../../shared/types'
 
 const WORKFLOW_LAUNCH_CONTEXT_SLUG = 'workflow-launch-context'
 
+export function resolveWorkflowLaunchWorkspace<T extends { id: string }>(
+  workspaces: readonly T[],
+  workspaceId: string,
+): T | undefined {
+  return workspaces.find((workspace) => workspace.id === workspaceId)
+}
+
 function workflowScopeLabel(workspaceKind: 'hq' | 'campaign', workspaceName: string): string {
   return workspaceKind === 'hq'
     ? `Artist HQ workspace "${workspaceName}"`

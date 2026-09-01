@@ -3,10 +3,10 @@ import { Sparkles, SlidersHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { useActiveWorkspace, useAppShellContext } from '@/context/AppShellContext'
+import { useAppShellContext } from '@/context/AppShellContext'
 import { isArtistHQWorkspace } from '@/lib/artist-workspace'
 import { openAgentSessionComposer } from '@/lib/run-agent'
-import { buildWorkflowLaunchContextDocs, createWorkflowSetupDraft } from '@/lib/workflow-launcher'
+import { buildWorkflowLaunchContextDocs, createWorkflowSetupDraft, resolveWorkflowLaunchWorkspace } from '@/lib/workflow-launcher'
 import { WorkflowRunInputDialog } from '@/pages/WorkflowRunInputDialog'
 import type { WorkflowDTO, WorkflowRunDTO } from '../../../shared/types'
 
@@ -40,7 +40,7 @@ export function WorkflowLaunchDialog({
     onSendMessage,
     workspaces,
   } = useAppShellContext()
-  const workspace = useActiveWorkspace()
+  const workspace = resolveWorkflowLaunchWorkspace(workspaces, workspaceId)
   const [mode, setMode] = React.useState<'choice' | 'manual'>('choice')
   const [openingManager, setOpeningManager] = React.useState(false)
 

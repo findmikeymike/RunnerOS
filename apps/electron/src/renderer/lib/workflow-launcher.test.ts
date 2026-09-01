@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { ContextDocDTO, WorkflowDTO } from '../../shared/types'
-import { buildWorkflowLaunchContextDocs, createWorkflowSetupDraft } from './workflow-launcher'
+import { buildWorkflowLaunchContextDocs, createWorkflowSetupDraft, resolveWorkflowLaunchWorkspace } from './workflow-launcher'
 
 function workflow(overrides: Partial<WorkflowDTO> = {}): WorkflowDTO {
   return {
@@ -38,6 +38,11 @@ function doc(slug: string): ContextDocDTO {
 }
 
 describe('workflow launcher prompt helpers', () => {
+  test('resolves launch context from the requested workspace instead of the active one', () => {
+    const workspaces = [{ id: 'hq', name: 'HQ' }, { id: 'campaign-2', name: 'Second Campaign' }]
+    expect(resolveWorkflowLaunchWorkspace(workspaces, 'campaign-2')).toEqual(workspaces[1])
+  })
+
   test('adds one manager-facing launch context doc without replacing workspace docs', () => {
     const docs = buildWorkflowLaunchContextDocs([doc('artist-profile')], workflow(), {
       workspaceKind: 'campaign',
