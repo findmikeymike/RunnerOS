@@ -32,6 +32,7 @@ A WorkflowRunner is ~300–500 LOC of plain TypeScript on top of our existing se
 | [`04-implementation-plan.md`](./04-implementation-plan.md) | Phased build plan. Phase 1 is shippable in ~1 week. Each phase has scope + success criteria. |
 | [`05-examples.md`](./05-examples.md) | Concrete sample `WORKFLOW.md` files showing realistic uses. |
 | [`06-recovery-plan.md`](./06-recovery-plan.md) | Recovery contract for interrupted runs and rerun-from-step. |
+| [`07-active-work-dashboard-and-launcher-spec.md`](./07-active-work-dashboard-and-launcher-spec.md) | Current Artist OS plan for the unified Work tabs, Active dashboard, and guided/manual workflow launcher. |
 
 ## Status
 
@@ -42,6 +43,12 @@ the main session list by default and are opened from the Run page inspector
 when needed. The implementation plan remains useful for follow-up work, but
 the current runtime surface is defined by [`01-spec.md`](./01-spec.md) and
 [`02-runtime.md`](./02-runtime.md).
+
+For Artist OS navigation and launch UX, the current authority is
+[`07-active-work-dashboard-and-launcher-spec.md`](./07-active-work-dashboard-and-launcher-spec.md).
+It supersedes the older standalone Workflows/Automations navigation and raw
+input-modal portions of [`03-ux.md`](./03-ux.md) without changing runtime or
+storage contracts.
 
 ## Hard non-goals (current runtime)
 
