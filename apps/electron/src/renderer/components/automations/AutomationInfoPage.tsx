@@ -41,6 +41,7 @@ export interface AutomationInfoPageProps {
   onTest?: () => void
   onDuplicate?: () => void
   onDelete?: () => void
+  onSendToWorkspace?: () => void
   onReplay?: (automationId: string, event: string) => void
   className?: string
 }
@@ -53,6 +54,7 @@ export function AutomationInfoPage({
   onTest,
   onDuplicate,
   onDelete,
+  onSendToWorkspace,
   onReplay,
   className,
 }: AutomationInfoPageProps) {
@@ -80,6 +82,7 @@ export function AutomationInfoPage({
             onTest={onTest}
             onDuplicate={onDuplicate}
             onDelete={onDelete}
+            onSendToWorkspace={onSendToWorkspace}
           />
         }
       />

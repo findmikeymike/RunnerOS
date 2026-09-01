@@ -29,13 +29,15 @@ const TRIGGERS: Array<{
 const INPUT_CLASS = 'h-9 w-full rounded-[6px] border border-border/50 bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-foreground/25'
 
 export interface AutomationWorkDialogProps {
-  trigger: React.ReactNode
+  trigger?: React.ReactNode
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function AutomationWorkDialog({ trigger }: AutomationWorkDialogProps) {
+export function AutomationWorkDialog({ trigger, open, onOpenChange }: AutomationWorkDialogProps) {
   const workspace = useActiveWorkspace()
   const { workspaces } = useAppShellContext()
-  const [triggerOpen, setTriggerOpen] = React.useState(false)
+  const [internalTriggerOpen, setInternalTriggerOpen] = React.useState(false)
   const [composerOpen, setComposerOpen] = React.useState(false)
   const [event, setEvent] = React.useState<WorkTrigger>('SchedulerTick')
   const [name, setName] = React.useState('')
@@ -50,6 +52,11 @@ export function AutomationWorkDialog({ trigger }: AutomationWorkDialogProps) {
   const [messageMatcher, setMessageMatcher] = React.useState('')
   const [showOnCalendar, setShowOnCalendar] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
+  const triggerOpen = open ?? internalTriggerOpen
+  const setTriggerOpen = React.useCallback((nextOpen: boolean) => {
+    if (open === undefined) setInternalTriggerOpen(nextOpen)
+    onOpenChange?.(nextOpen)
+  }, [onOpenChange, open])
 
   const isHq = isArtistHQWorkspace(workspace ?? undefined, workspaces)
   const owner = React.useMemo(() => workspace
@@ -71,7 +78,7 @@ export function AutomationWorkDialog({ trigger }: AutomationWorkDialogProps) {
     setError(null)
     setTriggerOpen(false)
     setComposerOpen(true)
-  }, [cron, event, messageMatcher, name, pollIntervalSec, pollUrl, secretEnv, watchGlob, watchPath, webhookSlug])
+  }, [cron, event, messageMatcher, name, pollIntervalSec, pollUrl, secretEnv, setTriggerOpen, watchGlob, watchPath, webhookSlug])
 
   const submit = React.useCallback(async (draft: ScheduledWorkComposerDraft) => {
     if (!workspace || draft.type === 'event') return
@@ -89,7 +96,7 @@ export function AutomationWorkDialog({ trigger }: AutomationWorkDialogProps) {
   return (
     <>
       <Dialog open={triggerOpen} onOpenChange={setTriggerOpen}>
-        <DialogTrigger asChild>{trigger}</DialogTrigger>
+        {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
         <DialogContent className="w-[min(560px,calc(100vw-24px))] max-w-none gap-0 overflow-hidden p-0">
           <DialogHeader className="border-b border-border/40 px-5 py-4 pr-12">
             <DialogTitle className="text-base">Queue tracked work</DialogTitle>

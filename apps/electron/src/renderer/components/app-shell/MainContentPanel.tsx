@@ -680,7 +680,12 @@ export function MainContentPanel({
     }
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <ActiveWorkPage automationId={navState.details?.automationId} />
+        <ActiveWorkPage
+          automationId={navState.details?.automationId}
+          onSendAutomationToWorkspace={hasOtherWorkspaces
+            ? (automationId) => openSendDialog('automation', new Set([automationId]))
+            : undefined}
+        />
       </Panel>
     )
   }

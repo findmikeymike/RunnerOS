@@ -1,16 +1,14 @@
 import * as React from 'react'
 import { useAtomValue } from 'jotai'
-import { AlertTriangle, ArrowRight, Bot, CalendarClock, Clock3, Plus, Repeat2, Sparkles, Workflow } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Bot, CalendarClock, Clock3, Repeat2, Workflow } from 'lucide-react'
 import { parseScheduledWorkDocResult, SCHEDULED_WORK_CONTEXT_SLUG } from '@craft-agent/shared/scheduled-work'
 import { automationsAtom } from '@/atoms/automations'
 import { sessionMetaMapAtom } from '@/atoms/sessions'
 import { AutomationInfoPage } from '@/components/automations/AutomationInfoPage'
-import { TemplatesGalleryDialog } from '@/components/automations/TemplatesGalleryDialog'
 import type { ExecutionEntry } from '@/components/automations/types'
 import { describeCron } from '@/components/automations/utils'
 import { CompactPageHeader } from '@/components/app-shell/CompactPageHeader'
 import { WorkPageTabs } from '@/components/app-shell/WorkPageTabs'
-import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { useWorkflowRuns } from '@/hooks/useWorkflowRuns'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
@@ -18,6 +16,7 @@ import { isArtistHQWorkspace } from '@/lib/artist-workspace'
 import { navigate, routes } from '@/lib/navigate'
 import { cn } from '@/lib/utils'
 import { buildActiveWorkItems } from './build-active-work-items'
+import { ActiveWorkAddMenu } from './ActiveWorkAddMenu'
 import type { ActiveWorkItem, ActiveWorkSection } from './types'
 
 const SECTION_META: Record<ActiveWorkSection, { title: string; icon: React.ComponentType<{ className?: string }> }> = {
@@ -132,7 +131,7 @@ function ActiveSection({
   )
 }
 
-export function ActiveWorkPage({ automationId }: { automationId?: string }) {
+export function ActiveWorkPage({ automationId, onSendAutomationToWorkspace }: { automationId?: string; onSendAutomationToWorkspace?: (automationId: string) => void }) {
   const {
     activeWorkspaceId,
     workspaces,
@@ -151,9 +150,6 @@ export function ActiveWorkPage({ automationId }: { automationId?: string }) {
   const [executionMap, setExecutionMap] = React.useState<Map<string, ExecutionEntry[]>>(new Map())
   const [historyLoading, setHistoryLoading] = React.useState(false)
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId)
-  const automationEditConfig = activeWorkspace?.rootPath
-    ? getEditConfig('automation-config', activeWorkspace.rootPath)
-    : null
 
   React.useEffect(() => {
     let cancelled = false
@@ -200,6 +196,7 @@ export function ActiveWorkPage({ automationId }: { automationId?: string }) {
           onTest={onTestAutomation ? () => onTestAutomation(selectedAutomation.id) : undefined}
           onDuplicate={onDuplicateAutomation ? () => onDuplicateAutomation(selectedAutomation.id) : undefined}
           onDelete={onDeleteAutomation ? () => onDeleteAutomation(selectedAutomation.id) : undefined}
+          onSendToWorkspace={onSendAutomationToWorkspace ? () => onSendAutomationToWorkspace(selectedAutomation.id) : undefined}
           onReplay={onReplayAutomation}
         />
       </div>
@@ -238,28 +235,7 @@ export function ActiveWorkPage({ automationId }: { automationId?: string }) {
         <CompactPageHeader eyebrow="Team" title="Work" tone="orange" className="mb-4" />
         <div className="mb-6 flex items-center justify-between gap-3">
           <WorkPageTabs active="active" />
-          <div className="flex items-center gap-2">
-            <TemplatesGalleryDialog
-              trigger={(
-                <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-[8px] px-2.5 text-[10.5px] text-white/42 hover:bg-white/[0.045] hover:text-white/70">
-                  <Sparkles className="h-3 w-3" />
-                  Templates
-                </button>
-              )}
-            />
-            {automationEditConfig ? (
-              <EditPopover
-                align="end"
-                trigger={(
-                  <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-white/[0.045] px-2.5 text-[10.5px] text-white/52 hover:bg-white/[0.07] hover:text-white/78">
-                    <Plus className="h-3 w-3" />
-                    Add automation
-                  </button>
-                )}
-                {...automationEditConfig}
-              />
-            ) : null}
-          </div>
+          <ActiveWorkAddMenu />
         </div>
 
         {sourceError ? (

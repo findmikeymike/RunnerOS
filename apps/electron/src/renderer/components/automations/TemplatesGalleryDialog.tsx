@@ -35,12 +35,19 @@ import {
 interface TemplatesGalleryDialogProps {
   /** Optional custom trigger element. Defaults to a "+ From template" button. */
   trigger?: React.ReactNode
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function TemplatesGalleryDialog({ trigger }: TemplatesGalleryDialogProps) {
-  const [open, setOpen] = React.useState(false)
+export function TemplatesGalleryDialog({ trigger, open, onOpenChange }: TemplatesGalleryDialogProps) {
+  const [internalOpen, setInternalOpen] = React.useState(false)
   const [pending, setPending] = React.useState<string | null>(null)
   const workspace = useActiveWorkspace()
+  const dialogOpen = open ?? internalOpen
+  const setDialogOpen = React.useCallback((nextOpen: boolean) => {
+    if (open === undefined) setInternalOpen(nextOpen)
+    onOpenChange?.(nextOpen)
+  }, [onOpenChange, open])
 
   const handlePick = React.useCallback(async (template: AutomationTemplate) => {
     if (!workspace?.id) return
@@ -54,7 +61,7 @@ export function TemplatesGalleryDialog({ trigger }: TemplatesGalleryDialogProps)
       toast.success(`Added: ${template.title}`, {
         description: template.setupHint,
       })
-      setOpen(false)
+      setDialogOpen(false)
     } catch (err) {
       toast.error('Failed to add template', {
         description: err instanceof Error ? err.message : String(err),
@@ -62,7 +69,7 @@ export function TemplatesGalleryDialog({ trigger }: TemplatesGalleryDialogProps)
     } finally {
       setPending(null)
     }
-  }, [workspace?.id])
+  }, [setDialogOpen, workspace?.id])
 
   const groups = React.useMemo(() => {
     const byCategory: Record<AutomationTemplate['category'], AutomationTemplate[]> = {
@@ -77,8 +84,8 @@ export function TemplatesGalleryDialog({ trigger }: TemplatesGalleryDialogProps)
   }, [])
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {open === undefined ? <DialogTrigger asChild>
         {trigger ?? (
           <button
             type="button"
@@ -88,7 +95,7 @@ export function TemplatesGalleryDialog({ trigger }: TemplatesGalleryDialogProps)
             From template
           </button>
         )}
-      </DialogTrigger>
+      </DialogTrigger> : null}
       <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Add automation from template</DialogTitle>
