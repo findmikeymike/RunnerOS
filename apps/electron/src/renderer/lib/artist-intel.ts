@@ -28,8 +28,9 @@ export interface ArtistIntelConfig {
 
 export interface ArtistIntelRun {
   id: string
-  status: 'queued' | 'ready' | 'failed'
+  status: 'queued' | 'ready' | 'partial' | 'failed'
   sessionId?: string
+  workflowRunId?: string
   workOrderId?: string
   outputId?: string
   title?: string
@@ -37,11 +38,19 @@ export interface ArtistIntelRun {
   generatedAt: string
   videoCount?: number
   nuggetCount?: number
+  lanes?: ArtistIntelLane[]
+}
+
+export interface ArtistIntelLane {
+  id: 'youtube' | 'platform' | 'industry'
+  status: 'ready' | 'unavailable'
+  itemCount?: number
+  message?: string
 }
 
 export interface ArtistIntelReport {
   version: 1
-  status: 'idle' | 'queued' | 'ready' | 'failed'
+  status: 'idle' | 'queued' | 'ready' | 'partial' | 'failed'
   title?: string
   summary?: string
   sessionId?: string
@@ -50,6 +59,7 @@ export interface ArtistIntelReport {
   sourceCount: number
   videoCount?: number
   nuggetCount?: number
+  lanes?: ArtistIntelLane[]
   runs: ArtistIntelRun[]
   updatedAt: string
 }
@@ -133,7 +143,7 @@ export function artistIntelConfigMetadata(): ContextDocMetadata {
 export function artistIntelReportMetadata(): ContextDocMetadata {
   return {
     name: 'Artist Intel Report',
-    description: 'Latest HQ YouTube Intel Pulse run status and report summary.',
+    description: 'Latest HQ Signal Scan status, lane results, and report summary.',
     routing: { mode: 'broadcast' },
     enabled: true,
   }
@@ -231,7 +241,7 @@ export function serializeArtistIntelConfigBody(config: ArtistIntelConfig): strin
 
 export function serializeArtistIntelReportBody(report: ArtistIntelReport): string {
   return [
-    'Latest HQ Intel Pulse report status. The linked session contains the full working run.',
+    'Latest HQ Signal Scan status. The linked session contains the full working run.',
     '',
     '```json',
     JSON.stringify(normalizeIntelReport(report), null, 2),
@@ -317,19 +327,20 @@ export function createSignalScanQueueWorkAction(
   workflowDigest: string,
   config: Pick<ArtistIntelConfig, 'sinceDays'>,
 ): QueueWorkAction {
+  const lookbackDays = clamp(Number.isInteger(config.sinceDays) ? config.sinceDays : 7, 1, 14)
   return {
     type: 'queue-work',
     ownerScope: 'hq',
     calendarVisibility: 'hidden',
     title: `Weekly Signal Scan - ${workspaceName}`,
-    intentId: 'artist-hq:weekly-signal-scan',
+    intentId: 'artist-hq-weekly-signal-scan',
     execution: {
       type: 'workflow-run',
       workflowSlug: WEEKLY_SIGNAL_SCAN_SLUG,
       workflowDigest,
       triggerInputs: {
         artist_name: workspaceName,
-        lookback_days: config.sinceDays,
+        lookback_days: lookbackDays,
       },
     },
   }
@@ -347,7 +358,7 @@ export function createQueuedIntelRun(report: ArtistIntelReport, input: {
     status: 'queued',
     sessionId: input.sessionId,
     workOrderId: input.workOrderId,
-    title: 'YouTube Intel Pulse queued',
+    title: 'Signal Scan queued',
     summary: `Watching ${input.sourceCount} configured channel${input.sourceCount === 1 ? '' : 's'}.`,
     generatedAt,
   }
@@ -386,14 +397,14 @@ function normalizeIntelConfig(config: Partial<ArtistIntelConfig>): ArtistIntelCo
     enabled: Boolean(config.enabled),
     cadence: config.cadence === 'manual' ? 'manual' : 'weekly',
     maxPerChannel: 1,
-    sinceDays: clamp(sinceDays, 1, 30),
+    sinceDays: clamp(sinceDays, 1, 14),
     sources: sources.length ? sources : DEFAULT_ARTIST_INTEL_SOURCES,
     updatedAt: clean(config.updatedAt) || new Date().toISOString(),
   }
 }
 
 function normalizeIntelReport(report: Partial<ArtistIntelReport>): ArtistIntelReport {
-  const status = report.status === 'queued' || report.status === 'ready' || report.status === 'failed'
+  const status = report.status === 'queued' || report.status === 'ready' || report.status === 'partial' || report.status === 'failed'
     ? report.status
     : 'idle'
   return {
@@ -407,6 +418,7 @@ function normalizeIntelReport(report: Partial<ArtistIntelReport>): ArtistIntelRe
     sourceCount: Number.isInteger(report.sourceCount) ? Math.max(0, Number(report.sourceCount)) : 0,
     videoCount: Number.isInteger(report.videoCount) ? Math.max(0, Number(report.videoCount)) : undefined,
     nuggetCount: Number.isInteger(report.nuggetCount) ? Math.max(0, Number(report.nuggetCount)) : undefined,
+    lanes: normalizeLanes(report.lanes),
     runs: normalizeRuns(report.runs),
     updatedAt: clean(report.updatedAt) || new Date().toISOString(),
   }
@@ -421,11 +433,12 @@ function normalizeRuns(value: unknown): ArtistIntelRun[] {
 }
 
 function normalizeRun(run: Partial<ArtistIntelRun>, index: number): ArtistIntelRun {
-  const status = run.status === 'ready' || run.status === 'failed' ? run.status : 'queued'
+  const status = run.status === 'ready' || run.status === 'partial' || run.status === 'failed' ? run.status : 'queued'
   return {
     id: clean(run.id) || `run-${index + 1}`,
     status,
     sessionId: clean(run.sessionId),
+    workflowRunId: clean(run.workflowRunId),
     workOrderId: clean(run.workOrderId),
     outputId: clean(run.outputId),
     title: clean(run.title),
@@ -433,7 +446,28 @@ function normalizeRun(run: Partial<ArtistIntelRun>, index: number): ArtistIntelR
     generatedAt: clean(run.generatedAt) || new Date().toISOString(),
     videoCount: Number.isInteger(run.videoCount) ? Math.max(0, Number(run.videoCount)) : undefined,
     nuggetCount: Number.isInteger(run.nuggetCount) ? Math.max(0, Number(run.nuggetCount)) : undefined,
+    lanes: normalizeLanes(run.lanes),
   }
+}
+
+function normalizeLanes(value: unknown): ArtistIntelLane[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const seen = new Set<ArtistIntelLane['id']>()
+  const lanes = value.flatMap((raw) => {
+    if (!raw || typeof raw !== 'object') return []
+    const lane = raw as Partial<ArtistIntelLane>
+    if (lane.id !== 'youtube' && lane.id !== 'platform' && lane.id !== 'industry') return []
+    if (seen.has(lane.id)) return []
+    if (lane.status !== 'ready' && lane.status !== 'unavailable') return []
+    seen.add(lane.id)
+    return [{
+      id: lane.id,
+      status: lane.status,
+      itemCount: Number.isInteger(lane.itemCount) ? Math.max(0, Number(lane.itemCount)) : undefined,
+      message: clean(lane.message),
+    }]
+  })
+  return lanes.length ? lanes.slice(0, 3) : undefined
 }
 
 function normalizeSource(source: Partial<ArtistIntelSource>, index: number): ArtistIntelSource {

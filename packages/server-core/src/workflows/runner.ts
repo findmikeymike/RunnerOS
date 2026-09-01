@@ -649,11 +649,11 @@ export class WorkflowRunner {
         const prev = active.snapshot.steps[j]!;
         if (prev.state === 'succeeded') {
           stepsCtx[prev.id] = { output: prev.output };
-        } else if (prev.state === 'failed') {
+        } else if (prev.state === 'failed' || prev.state === 'skipped') {
           const code = prev.error?.code ?? 'unknown-error';
           const message = prev.error?.message ?? 'No error detail was recorded.';
           stepsCtx[prev.id] = {
-            output: `[Workflow lane unavailable: ${prev.id} failed (${code}). ${message}]`,
+            output: `[Workflow lane unavailable: ${prev.id} ${prev.state} (${code}). ${message}]`,
           };
         }
       }

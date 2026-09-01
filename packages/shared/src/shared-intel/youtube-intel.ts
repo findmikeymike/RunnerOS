@@ -2,7 +2,7 @@ import type { SharedIntelAgentCatalogEntry, SharedIntelCandidate } from './types
 
 export const YOUTUBE_INTEL_FENCE = 'youtube-intel'
 
-export type YouTubeIntelCategory =
+export type IntelCategory =
   | 'branding'
   | 'content'
   | 'rollout'
@@ -10,6 +10,8 @@ export type YouTubeIntelCategory =
   | 'outreach'
   | 'creative'
   | 'operations'
+
+export type YouTubeIntelCategory = IntelCategory
 
 export interface YouTubeIntelNugget {
   category: YouTubeIntelCategory
@@ -32,7 +34,7 @@ export interface YouTubeIntelReportData {
   processedVideos: YouTubeIntelProcessedVideo[]
 }
 
-const CATEGORY_TARGETS: Record<YouTubeIntelCategory, string[]> = {
+const CATEGORY_TARGETS: Record<IntelCategory, string[]> = {
   branding: ['branding-agent', 'world-builder'],
   content: ['content-genius', 'scroll-stopper', 'social-publisher'],
   rollout: ['ads-strategist', 'ad-creative-agent', 'college-radio-agent'],
@@ -54,9 +56,13 @@ export function parseYouTubeIntelReportData(markdown: string): YouTubeIntelRepor
   try {
     const parsed = JSON.parse(match[1]) as { version?: unknown; nuggets?: unknown; processedVideos?: unknown }
     if (parsed.version !== 1 || !Array.isArray(parsed.nuggets) || !Array.isArray(parsed.processedVideos)) return null
+    const nuggets = parsed.nuggets.map(parseNugget).filter((item): item is YouTubeIntelNugget => Boolean(item)).slice(0, 8)
+    const processedVideos = parsed.processedVideos.map(parseProcessedVideo).filter((item): item is YouTubeIntelProcessedVideo => Boolean(item)).slice(0, 20)
+    if (parsed.nuggets.length > 0 && nuggets.length === 0) return null
+    if (parsed.processedVideos.length > 0 && processedVideos.length === 0) return null
     return {
-      nuggets: parsed.nuggets.map(parseNugget).filter((item): item is YouTubeIntelNugget => Boolean(item)).slice(0, 8),
-      processedVideos: parsed.processedVideos.map(parseProcessedVideo).filter((item): item is YouTubeIntelProcessedVideo => Boolean(item)).slice(0, 20),
+      nuggets,
+      processedVideos,
     }
   } catch {
     return null
@@ -67,15 +73,28 @@ export function buildYouTubeIntelCandidates(
   nuggets: YouTubeIntelNugget[],
   catalog: SharedIntelAgentCatalogEntry[],
 ): SharedIntelCandidate[] {
+  return buildCategorizedIntelCandidates(nuggets, catalog, ['youtube-intelligence'])
+}
+
+export function buildCategorizedIntelCandidates(
+  nuggets: Array<Pick<YouTubeIntelNugget, 'category' | 'title' | 'summary' | 'whyItMatters' | 'evidence' | 'sourceUrls'>>,
+  catalog: SharedIntelAgentCatalogEntry[],
+  sourceTags: string[],
+): SharedIntelCandidate[] {
   const active = new Set(catalog.filter((agent) => agent.active !== false).map((agent) => agent.slug))
   return nuggets.flatMap((nugget) => {
-    const targetAgents = CATEGORY_TARGETS[nugget.category].filter((slug) => active.has(slug))
+    const categoryTargets = CATEGORY_TARGETS[nugget.category].filter((slug) => active.has(slug))
+    const targetAgents = categoryTargets.length > 0
+      ? categoryTargets
+      : active.has('signal-analyst-agent')
+        ? ['signal-analyst-agent']
+        : []
     if (targetAgents.length === 0) return []
     return [{
       title: nugget.title,
       summary: nugget.summary,
       whyItMatters: nugget.whyItMatters,
-      tags: ['youtube-intelligence', nugget.category],
+      tags: [...sourceTags, nugget.category],
       targetAgents,
       confidence: 'high' as const,
       evidence: [nugget.evidence, ...nugget.sourceUrls].filter(Boolean).join(' | '),

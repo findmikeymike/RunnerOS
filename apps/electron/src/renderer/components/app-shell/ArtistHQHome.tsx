@@ -32,7 +32,7 @@ import { DocumentFormattedMarkdownOverlay, Tooltip, TooltipContent, TooltipTrigg
 import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
 import { resolvePulseExecutionTarget, type PulseExecutionTarget } from '@/lib/pulse-execution'
-import { appendSignalNugget, formatSignalDate, loadFullSignalOutputText, readableSignalBody, signalDocumentDate } from '@/lib/artist-signals'
+import { appendSignalNugget, formatSignalDate, loadFullSignalOutputText, readableSignalBody, signalDocumentDate, signalFreshness } from '@/lib/artist-signals'
 import {
   createWeeklyManagerCheckInMatcher,
   isWeeklyManagerCheckInAutomation,
@@ -83,6 +83,7 @@ import {
 } from './CalendarMonthGrid'
 import {
   HQ_STATE_CONTEXT_SLUG,
+  hqNormalizeSemanticIntentId,
   parseHqStateOfPlay,
   type HqStateOfPlay,
   type HqStateAttentionItem,
@@ -247,6 +248,11 @@ const INTEL_SYNC_CRON = '0 10 * * 1'
 const SIGNAL_NUGGETS_CONTEXT_SLUG = 'artist-signal-nuggets'
 const YOUTUBE_RESEARCH_AGENT_SLUG = 'youtube-research-agent'
 const GOOGLE_CALENDAR_SOURCE_SLUG = 'google-calendar'
+function signalLaneLabel(lane: 'youtube' | 'platform' | 'industry'): string {
+  if (lane === 'youtube') return 'YouTube'
+  if (lane === 'platform') return 'Platform updates'
+  return 'Industry desk'
+}
 function googleCalendarSyncMessage(result: { synced: number; deleted?: number }): string {
   const deleted = result.deleted ?? 0
   const parts = [
@@ -478,6 +484,17 @@ export function ArtistHQHome({
     [docs],
   )
   const intelReport = intelReportResult.report
+  const intelReportError = intelReportResult.ok ? undefined : intelReportResult.error
+  const latestSignalOrder = React.useMemo(
+    () => scheduledWorkResult.work.items
+      .filter((order) => !order.deletedAt && hqNormalizeSemanticIntentId(order.intentId) === 'artist-hq-weekly-signal-scan')
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0],
+    [scheduledWorkResult.work.items],
+  )
+  const latestSignalFreshness = React.useMemo(
+    () => signalFreshness(intelReport.generatedAt),
+    [intelReport.generatedAt],
+  )
   const youtubeIntelligenceAgent = React.useMemo(
     () => [...shellActiveAgents, ...workspaceActiveAgents, ...allAgents]
       .find((agent) => agent.slug === YOUTUBE_INTELLIGENCE_AGENT_SLUG),
@@ -510,6 +527,57 @@ export function ArtistHQHome({
     && signalScanWorkflow
     && signalScanWorkflowDigest,
   )
+  const signalWorkActive = latestSignalOrder?.status === 'scheduled' || latestSignalOrder?.status === 'running'
+  const signalRunDisabledReason = !intelConfigResult.ok
+    ? 'Signal settings need attention before a scan can run.'
+    : signalWorkActive
+      ? 'A Signal Scan is already queued or running.'
+      : !signalWorkersReady
+      ? 'Signal workers or the Weekly Signal Scan workflow are not installed yet. Restart Artist OS to finish the upgrade.'
+      : undefined
+  const signalNotice = React.useMemo(() => {
+    if (!intelReportResult.ok) {
+      return { tone: 'error' as const, title: 'Signal status could not be read', detail: intelReportError }
+    }
+    if (latestSignalOrder?.status === 'needs-attention' || latestSignalOrder?.status === 'needs-setup') {
+      return {
+        tone: 'error' as const,
+        title: 'Latest Signal Scan needs attention',
+        detail: latestSignalOrder.attention?.message || 'The scan did not complete. Run it again when the required worker or source is available.',
+      }
+    }
+    if (latestSignalOrder?.status === 'scheduled' || latestSignalOrder?.status === 'running') {
+      return {
+        tone: 'running' as const,
+        title: latestSignalOrder.status === 'running' ? 'Signal Scan is running' : 'Signal Scan is queued',
+        detail: 'YouTube, platform, and industry lanes are being collected before one brief is assembled.',
+      }
+    }
+    const unavailable = intelReport.lanes?.filter((lane) => lane.status === 'unavailable') ?? []
+    if (intelReport.status === 'failed') {
+      return {
+        tone: 'error' as const,
+        title: 'Latest Signal Scan was unavailable',
+        detail: unavailable.map((lane) => `${signalLaneLabel(lane.id)}: ${lane.message || 'collector unavailable'}`).join(' · ') || 'No collector lane returned usable intelligence.',
+      }
+    }
+    if (intelReport.status === 'partial') {
+      const ready = intelReport.lanes?.filter((lane) => lane.status === 'ready').length ?? 0
+      return {
+        tone: 'partial' as const,
+        title: `Partial brief · ${ready} of 3 lanes completed`,
+        detail: unavailable.map((lane) => `${signalLaneLabel(lane.id)}: ${lane.message || 'collector unavailable'}`).join(' · '),
+      }
+    }
+    if (latestSignalFreshness?.status === 'stale') {
+      return {
+        tone: 'stale' as const,
+        title: `Latest brief is ${latestSignalFreshness.ageDays} days old`,
+        detail: 'Run intelligence to refresh the decisions and recommendations on this page.',
+      }
+    }
+    return null
+  }, [intelReport.lanes, intelReport.status, intelReportError, intelReportResult.ok, latestSignalFreshness, latestSignalOrder])
   const spotifyAnalyst = React.useMemo(
     () => [...shellActiveAgents, ...workspaceActiveAgents, ...allAgents]
       .find((agent) => agent.slug === 'spotify-analyst'),
@@ -959,12 +1027,12 @@ export function ArtistHQHome({
   }, [branding])
 
   React.useEffect(() => {
-    if (intelReport.status !== 'queued') return
+    if (intelReport.status !== 'queued' && !signalWorkActive) return
     const interval = window.setInterval(() => {
       refreshContext()
     }, 10000)
     return () => window.clearInterval(interval)
-  }, [intelReport.status, refreshContext])
+  }, [intelReport.status, refreshContext, signalWorkActive])
 
   const refreshAutomations = React.useCallback(async () => {
     try {
@@ -1288,6 +1356,10 @@ export function ArtistHQHome({
 
   const runIntelPulse = React.useCallback(async () => {
     if (!workspaceId || !intelConfigResult.ok) return
+    if (signalWorkActive) {
+      toast.info('A Signal Scan is already queued or running')
+      return
+    }
     if (!signalWorkersReady) {
       toast.error('Signal Scan is not installed in this workspace yet')
       return
@@ -1304,6 +1376,7 @@ export function ArtistHQHome({
       })
       const queued = result.actions.find((action) => action.type === 'queue-work')
       if (!queued || !queued.success || !queued.workOrderIds?.[0]) throw new Error(queued?.error || 'Intel work was not queued.')
+      await refreshContext()
       toast.success('Signal Scan started')
     } catch (error) {
       toast.error('Failed to start Signal Scan', {
@@ -1316,8 +1389,10 @@ export function ArtistHQHome({
     intelConfig,
     intelConfigResult,
     ensureSignalScanReady,
+    refreshContext,
     signalScanWorkflowDigest,
     signalWorkersReady,
+    signalWorkActive,
     workspaceId,
     workspaceName,
   ])
@@ -2289,6 +2364,8 @@ export function ArtistHQHome({
                 {latestSignalDate ? (
                   <span className="hidden sm:inline">· Latest {formatSignalDate(latestSignalDate)}</span>
                 ) : null}
+                {latestSignalFreshness?.status === 'aging' ? <span className="text-amber-200/60">· Aging</span> : null}
+                {latestSignalFreshness?.status === 'stale' ? <span className="text-orange-200/70">· Stale</span> : null}
               </div>
               <div className="flex items-center gap-2">
                 <label className="inline-flex h-8 items-center gap-2 rounded-[9px] bg-white/[0.035] px-2.5 text-[11px] text-white/58">
@@ -2308,17 +2385,47 @@ export function ArtistHQHome({
                   </TooltipTrigger>
                   <TooltipContent side="top" className="text-xs">Edit YouTube channels</TooltipContent>
                 </Tooltip>
-                <button
-                  type="button"
-                  onClick={() => { void runIntelPulse() }}
-                  disabled={intelBusy || !signalWorkersReady}
-                  className="inline-flex h-8 items-center gap-2 rounded-[9px] bg-white/90 px-3 text-[11px] font-semibold text-black transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {intelBusy ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 fill-current" />}
-                  Run intelligence
-                </button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex">
+                      <button
+                        type="button"
+                        onClick={() => { void runIntelPulse() }}
+                        disabled={intelBusy || Boolean(signalRunDisabledReason)}
+                        className="inline-flex h-8 items-center gap-2 rounded-[9px] bg-white/90 px-3 text-[11px] font-semibold text-black transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {intelBusy ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 fill-current" />}
+                        Run intelligence
+                      </button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs text-xs">
+                    {signalRunDisabledReason || 'Run the YouTube, platform, and industry collectors now.'}
+                  </TooltipContent>
+                </Tooltip>
               </div>
             </div>
+
+            {signalNotice ? (
+              <div
+                aria-live="polite"
+                className={cn(
+                  'flex items-start gap-2.5 rounded-[12px] px-3.5 py-2.5 text-xs',
+                  signalNotice.tone === 'error' && 'bg-red-500/[0.09] text-red-100/82',
+                  signalNotice.tone === 'partial' && 'bg-amber-400/[0.08] text-amber-50/76',
+                  signalNotice.tone === 'stale' && 'bg-orange-400/[0.08] text-orange-50/74',
+                  signalNotice.tone === 'running' && 'bg-white/[0.035] text-white/64',
+                )}
+              >
+                {signalNotice.tone === 'running'
+                  ? <RefreshCw className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
+                  : <Radio className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+                <div className="min-w-0">
+                  <div className="font-medium text-current">{signalNotice.title}</div>
+                  {signalNotice.detail ? <div className="mt-0.5 line-clamp-2 text-current opacity-65" title={signalNotice.detail}>{signalNotice.detail}</div> : null}
+                </div>
+              </div>
+            ) : null}
 
             <div className="relative min-h-[520px] overflow-hidden rounded-[20px] bg-[#111214]/88 shadow-strong ring-1 ring-white/[0.07] backdrop-blur-2xl">
               <div
@@ -3486,7 +3593,7 @@ function IntelConfigDialog({
               <input
                 type="number"
                 min={1}
-                max={30}
+                max={14}
                 value={sinceDays}
                 onChange={(event) => setSinceDays(Number(event.target.value))}
                 className="h-10 w-full rounded-[10px] border border-white/[0.09] bg-[#202429] px-3 text-sm text-white/82 outline-none focus:border-violet-400/45"

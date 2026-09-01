@@ -29,7 +29,7 @@ import {
   type ScheduledWorkOrder,
 } from '@craft-agent/shared/scheduled-work'
 import { loadGlobalWorkflow, readActivatedWorkflows } from '@craft-agent/shared/workflows'
-import { hqSemanticIntentId } from '@craft-agent/shared/hq-state'
+import { hqNormalizeSemanticIntentId, hqSemanticIntentId } from '@craft-agent/shared/hq-state'
 import { loadAllContextDocs, loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context'
 import { withWorkspaceContextLock } from './workspace-context-lock'
 
@@ -42,7 +42,7 @@ export interface AutomationWorkQueueDeps {
   emitContextChanged?(workspaceId: string, docs: ReturnType<typeof loadAllContextDocs>): void
 }
 
-const WEEKLY_SIGNAL_INTENT_ID = 'artist-hq:weekly-signal-scan'
+const WEEKLY_SIGNAL_INTENT_ID = 'artist-hq-weekly-signal-scan'
 const ARTIST_INTEL_CONFIG_SLUG = 'artist-intel-config'
 
 export async function queueAutomationWork(
@@ -53,7 +53,7 @@ export async function queueAutomationWork(
 ): Promise<AutomationWorkQueueResult> {
   const built = buildTriggeredWork(workspaceId, pending)
   return withWorkspaceContextLock(workspaceRootPath, async () => {
-    if (!runtimeConfigAllowsAction(workspaceRootPath, pending.action)) {
+    if (!runtimeConfigAllowsAction(workspaceRootPath, pending)) {
       return { orderIds: [], calendarItemIds: [] }
     }
     validateAction(workspaceRootPath, pending.action)
@@ -63,6 +63,16 @@ export async function queueAutomationWork(
     )
     if (!parsedWork.ok) throw new Error(parsedWork.error)
     const currentWork = parsedWork.work ?? emptyScheduledWorkDocument(workspaceId)
+    if (isWeeklySignalAction(pending.action)) {
+      const activeSignalOrder = currentWork.items.find((order) => (
+        !order.deletedAt
+        && hqNormalizeSemanticIntentId(order.intentId) === WEEKLY_SIGNAL_INTENT_ID
+        && (order.status === 'scheduled' || order.status === 'running')
+      ))
+      if (activeSignalOrder) {
+        return { orderIds: [activeSignalOrder.id], calendarItemIds: [] }
+      }
+    }
     for (const order of built.orders) {
       const existing = currentWork.items.find((candidate) => candidate.id === order.id)
       if (existing && scheduledWorkDefinitionDigest(identity(existing)) !== scheduledWorkDefinitionDigest(identity(order))) {
@@ -121,8 +131,9 @@ export async function queueAutomationWork(
   })
 }
 
-function runtimeConfigAllowsAction(workspaceRootPath: string, action: QueueWorkAction): boolean {
-  if (action.intentId !== WEEKLY_SIGNAL_INTENT_ID) return true
+function runtimeConfigAllowsAction(workspaceRootPath: string, pending: PendingQueuedWork): boolean {
+  if (!isWeeklySignalAction(pending.action)) return true
+  if (pending.eventKey.startsWith('test:')) return true
   const body = loadContextDoc(workspaceRootPath, ARTIST_INTEL_CONFIG_SLUG)?.body
   if (!body) return false
   const fenced = body.match(/```json\s*([\s\S]*?)```/i)?.[1]
@@ -136,6 +147,10 @@ function runtimeConfigAllowsAction(workspaceRootPath: string, action: QueueWorkA
   } catch {
     return false
   }
+}
+
+function isWeeklySignalAction(action: QueueWorkAction): boolean {
+  return hqNormalizeSemanticIntentId(action.intentId) === WEEKLY_SIGNAL_INTENT_ID
 }
 
 function buildTriggeredWork(workspaceId: string, pending: PendingQueuedWork) {

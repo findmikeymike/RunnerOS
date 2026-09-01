@@ -1939,6 +1939,58 @@ describe('WorkflowRunner', () => {
     expect(originalOnDisk?.resumedByRunId).toBe(rerun.id);
   });
 
+  test('rerun from a later step exposes skipped failed lanes as unavailable', async () => {
+    const h = makeHarness({ stepOutputs: ['PARTIAL_SYNTHESIS'] });
+    const runner = new WorkflowRunner(h.deps);
+    const now = new Date().toISOString();
+    const workflow = makeWorkflow({
+      steps: [
+        { id: 'collector', agent: 'researcher', input: 'Collect {{trigger.topic}}', onFailure: 'continue' },
+        { id: 'synthesize', agent: 'writer', input: 'Synthesize {{steps.collector.output}}' },
+      ],
+    });
+    const original: WorkflowRunSnapshot = {
+      id: FAILED_RUN_ID,
+      workflowSlug: workflow.slug,
+      workspaceId: WORKSPACE_ID,
+      state: 'failed',
+      trigger: { type: 'manual', inputs: { topic: 'rerun' }, firedAt: now },
+      workflowSnapshot: { metadata: workflow.metadata, body: workflow.body },
+      steps: [
+        {
+          id: 'collector',
+          state: 'failed',
+          attempts: 1,
+          error: { code: 'step-threw', message: 'collector offline' },
+          completedAt: now,
+        },
+        {
+          id: 'synthesize',
+          state: 'failed',
+          attempts: 1,
+          error: { code: 'step-threw', message: 'synthesis failed' },
+          completedAt: now,
+        },
+      ],
+      createdAt: now,
+      updatedAt: now,
+      completedAt: now,
+    };
+    writeRun(workspaceRoot, original);
+
+    const rerun = await runner.rerunFromStep({
+      workspaceId: WORKSPACE_ID,
+      runId: original.id,
+      stepId: 'synthesize',
+    });
+
+    expect(rerun.steps[0]!.state).toBe('skipped');
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    expect(lastCompleted(h.events)?.state).toBe('succeeded');
+    expect(h.promptsSent).toHaveLength(1);
+    expect(h.promptsSent[0]!.prompt).toContain('Workflow lane unavailable: collector skipped (rerun-skipped-prior-step)');
+  });
+
   test('start rejects missing step agents before persisting a running run', async () => {
     const h = makeHarness({ unavailableAgentSlugs: ['writer'] });
     const runner = new WorkflowRunner(h.deps);

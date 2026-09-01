@@ -176,6 +176,84 @@ describe('queueAutomationWork', () => {
     expect(loadContextDoc(workspaceRoot, SCHEDULED_WORK_CONTEXT_SLUG)).toBeNull()
   })
 
+  test('manual Signal runs bypass the weekly-enabled guard', async () => {
+    const workspaceRoot = root()
+    upsertContextDoc(workspaceRoot, {
+      slug: 'artist-intel-config',
+      metadata: { name: 'Signal config', routing: { mode: 'broadcast' }, enabled: true },
+      body: '```json\n{"version":1,"enabled":false,"cadence":"manual"}\n```',
+    })
+    const result = await queueAutomationWork(workspaceId, workspaceRoot, {
+      matcherId: 'manual-signal-scan',
+      automationName: 'Manual Signal Scan',
+      event: 'SchedulerTick',
+      eventTimestamp: Date.parse('2026-07-10T14:00:00.000Z'),
+      eventKey: 'test:1720620000000',
+      action: {
+        type: 'queue-work',
+        ownerScope: 'hq',
+        calendarVisibility: 'hidden',
+        title: 'Weekly Signal Scan',
+        intentId: 'artist-hq:weekly-signal-scan',
+        execution: {
+          type: 'agent-task',
+          agentSlug: 'youtube-intel',
+          brief: 'Run the manually requested Signal scan.',
+          permissionMode: 'safe',
+          expectedOutput: { requirement: 'none' },
+        },
+      },
+    })
+
+    expect(result.orderIds).toHaveLength(1)
+  })
+
+  test('collapses overlapping Signal runs onto the active order', async () => {
+    const workspaceRoot = root()
+    upsertContextDoc(workspaceRoot, {
+      slug: 'artist-intel-config',
+      metadata: { name: 'Signal config', routing: { mode: 'broadcast' }, enabled: true },
+      body: '```json\n{"version":1,"enabled":true,"cadence":"weekly"}\n```',
+    })
+    const pending: PendingQueuedWork = {
+      matcherId: 'weekly-signal-scan',
+      automationName: 'Weekly Signal Scan',
+      event: 'SchedulerTick',
+      eventTimestamp: Date.parse('2026-07-10T14:00:00.000Z'),
+      eventKey: 'SchedulerTick:1720620000000',
+      action: {
+        type: 'queue-work',
+        ownerScope: 'hq',
+        calendarVisibility: 'hidden',
+        title: 'Weekly Signal Scan',
+        intentId: 'artist-hq:weekly-signal-scan',
+        execution: {
+          type: 'agent-task',
+          agentSlug: 'youtube-intel',
+          brief: 'Run the weekly Signal scan.',
+          permissionMode: 'safe',
+          expectedOutput: { requirement: 'none' },
+        },
+      },
+    }
+
+    const first = await queueAutomationWork(workspaceId, workspaceRoot, pending)
+    const second = await queueAutomationWork(workspaceId, workspaceRoot, {
+      ...pending,
+      eventTimestamp: pending.eventTimestamp + 60_000,
+      eventKey: 'SchedulerTick:1720620060000',
+      action: {
+        ...pending.action,
+        intentId: 'artist-hq-weekly-signal-scan',
+      },
+    })
+    const work = parseScheduledWorkDocResult(loadContextDoc(workspaceRoot, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, workspaceId)
+    if (!work.ok) throw new Error(work.error)
+
+    expect(second).toEqual(first)
+    expect(work.work.items).toHaveLength(1)
+  })
+
   test('weekly Signal automation proceeds to normal validation when current settings enable it', async () => {
     const workspaceRoot = root()
     upsertContextDoc(workspaceRoot, {

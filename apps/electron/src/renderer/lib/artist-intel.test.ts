@@ -101,7 +101,7 @@ describe('artist-intel', () => {
       type: 'queue-work',
       ownerScope: 'hq',
       calendarVisibility: 'hidden',
-      intentId: 'artist-hq:weekly-signal-scan',
+      intentId: 'artist-hq-weekly-signal-scan',
       execution: {
         type: 'workflow-run',
         workflowSlug: 'weekly-signal-scan',
@@ -111,6 +111,15 @@ describe('artist-intel', () => {
           lookback_days: 7,
         },
       },
+    })
+  })
+
+  test('caps legacy lookback settings to the workflow ceiling', () => {
+    const action = createSignalScanQueueWorkAction('Artist HQ', 'workflow-digest', { sinceDays: 30 })
+
+    expect(action.execution).toMatchObject({
+      type: 'workflow-run',
+      triggerInputs: { lookback_days: 14 },
     })
   })
 
@@ -179,5 +188,31 @@ describe('artist-intel', () => {
     expect(result.ok).toBe(true)
     expect(result.report.videoCount).toBe(4)
     expect(result.report.runs[0]?.videoCount).toBe(4)
+  })
+
+  test('retains partial lane truth and drops duplicate or invalid lanes', () => {
+    const result = parseArtistIntelReportDocResult(makeDoc([
+      '```json',
+      JSON.stringify({
+        version: 1,
+        status: 'partial',
+        sourceCount: 12,
+        lanes: [
+          { id: 'youtube', status: 'ready', itemCount: 2 },
+          { id: 'industry', status: 'unavailable', message: 'Feed timed out.' },
+          { id: 'industry', status: 'ready' },
+          { id: 'unknown', status: 'ready' },
+        ],
+        runs: [],
+        updatedAt: '2026-08-31T00:00:00.000Z',
+      }),
+      '```',
+    ].join('\n')))
+
+    expect(result.report.status).toBe('partial')
+    expect(result.report.lanes).toEqual([
+      { id: 'youtube', status: 'ready', itemCount: 2, message: undefined },
+      { id: 'industry', status: 'unavailable', itemCount: undefined, message: 'Feed timed out.' },
+    ])
   })
 })

@@ -47,6 +47,20 @@ export function formatSignalDate(value: string): string {
   }).format(date)
 }
 
+export function signalFreshness(
+  value: string | undefined,
+  now = new Date(),
+): { status: 'fresh' | 'aging' | 'stale'; ageDays: number } | null {
+  if (!value) return null
+  const generatedAt = new Date(value)
+  if (Number.isNaN(generatedAt.getTime())) return null
+  const ageDays = Math.max(0, Math.floor((now.getTime() - generatedAt.getTime()) / 86_400_000))
+  return {
+    status: ageDays <= 8 ? 'fresh' : ageDays <= 14 ? 'aging' : 'stale',
+    ageDays,
+  }
+}
+
 export function appendSignalNugget(
   currentBody: string | undefined,
   input: { text: string; sourceTitle: string; sourceKey: string; amendedAt: string },

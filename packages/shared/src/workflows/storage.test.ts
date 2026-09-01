@@ -911,6 +911,11 @@ describe('seedGlobalWorkflowLibraryIfEmpty', () => {
     ])
     expect(parsed?.metadata.steps[1]?.input).toContain('Maximum 8 retained items total')
     expect(parsed?.metadata.steps[2]?.input).toContain('Maximum 8 retained items total')
+    expect(parsed?.metadata.steps[1]?.input).toContain('"lane":"platform"')
+    expect(parsed?.metadata.steps[2]?.input).toContain('"lane":"industry"')
+    expect(parsed?.metadata.steps[1]?.input).not.toContain('Return the same compact packet')
+    expect(parsed?.metadata.steps[2]?.input).not.toContain('Return the same compact packet')
+    expect(parsed?.metadata.steps.every((step) => step.completion?.maxAgentMessages === 0)).toBe(true)
     expect(parsed?.metadata.steps[0]?.completion?.requireToolUse).toBe(true)
     expect(parsed?.metadata.steps.slice(0, 3).map((step) => step.completion?.requiredOutput?.title)).toEqual([
       'Weekly YouTube Intelligence Report',

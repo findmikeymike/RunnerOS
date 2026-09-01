@@ -235,12 +235,17 @@ import {
 } from '@craft-agent/shared/memory'
 import {
   buildSharedIntelDocs,
+  buildSignalIntelCandidates,
   buildYouTubeIntelCandidates,
   isSharedIntelContextSlug,
   parseSharedIntelNote,
+  parseSignalIntelReportData,
   parseYouTubeIntelReportData,
   type ExistingSharedIntelDoc,
   type SharedIntelAgentCatalogEntry,
+  type SignalIntelLane,
+  type SignalIntelReportData,
+  type YouTubeIntelReportData,
   type YouTubeIntelProcessedVideo,
 } from '@craft-agent/shared/shared-intel'
 import { resolveOutputAssetPath, type OutputManifest } from '@craft-agent/shared/outputs'
@@ -315,6 +320,14 @@ function buildScheduledWorkAgentPrompt(
 function buildArtistIntelReportContext(input: {
   reportOutput: OutputManifest
   sessionId: string
+  workflowRunId?: string
+  status?: 'ready' | 'partial' | 'failed'
+  lanes?: Array<{
+    id: 'youtube' | 'platform' | 'industry'
+    status: 'ready' | 'unavailable'
+    itemCount?: number
+    message?: string
+  }>
   videoCount: number
   nuggetCount: number
   sourceCount: number
@@ -324,18 +337,20 @@ function buildArtistIntelReportContext(input: {
   const previous = parseFencedJson(input.existing?.body) as { runs?: unknown[]; sourceCount?: number } | null
   const run = {
     id: `run-${input.reportOutput.id}`,
-    status: 'ready',
+    status: input.status ?? 'ready',
     sessionId: input.sessionId,
+    ...(input.workflowRunId ? { workflowRunId: input.workflowRunId } : {}),
     outputId: input.reportOutput.id,
     title: input.reportOutput.title,
     summary: input.reportOutput.summary,
     generatedAt: input.reportOutput.completedAt ?? input.reportOutput.updatedAt,
     videoCount: input.videoCount,
     nuggetCount: input.nuggetCount,
+    ...(input.lanes ? { lanes: input.lanes } : {}),
   }
   const report = {
     version: 1,
-    status: 'ready',
+    status: input.status ?? 'ready',
     title: input.reportOutput.title,
     summary: input.reportOutput.summary,
     sessionId: input.sessionId,
@@ -343,6 +358,7 @@ function buildArtistIntelReportContext(input: {
     sourceCount: input.sourceCount || (Number.isInteger(previous?.sourceCount) ? Number(previous?.sourceCount) : 0),
     videoCount: input.videoCount,
     nuggetCount: input.nuggetCount,
+    ...(input.lanes ? { lanes: input.lanes } : {}),
     generatedAt: run.generatedAt,
     updatedAt: now,
     runs: [run, ...(Array.isArray(previous?.runs) ? previous.runs : []).filter((item) => (item as { outputId?: unknown })?.outputId !== input.reportOutput.id)].slice(0, 10),
@@ -351,11 +367,11 @@ function buildArtistIntelReportContext(input: {
     slug: 'artist-intel-report',
     metadata: {
       name: 'Artist Intel Report',
-      description: 'Latest HQ YouTube Intel Pulse run status and report summary.',
+      description: 'Latest HQ Signal Scan status, lane results, and report summary.',
       routing: { mode: 'broadcast' as const },
       enabled: true,
     },
-    body: ['Latest HQ Intel Pulse report and reusable Output.', '', '```json', JSON.stringify(report, null, 2), '```'].join('\n'),
+    body: ['Latest HQ Signal Scan report and reusable Output.', '', '```json', JSON.stringify(report, null, 2), '```'].join('\n'),
   }
 }
 
@@ -3280,27 +3296,179 @@ export class SessionManager implements ISessionManager {
   ): Promise<void> {
     signal.throwIfAborted()
     if (run.workflowSlug !== WEEKLY_SIGNAL_SCAN_SLUG) return
-    const youtubeStep = run.steps.find((step) => step.id === 'youtube-intel')
-    // This lane may fail without blocking useful platform and industry intelligence.
-    if (youtubeStep?.state !== 'succeeded') return
     const workspace = getWorkspaceByNameOrId(run.workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${run.workspaceId}`)
-    const reportOutput = findExactWorkflowStepOutput(
-      listOutputManifests(workspace.rootPath),
-      run,
-      'youtube-intel',
-      'Weekly YouTube Intelligence Report',
-    )
-    if (!reportOutput) throw new Error('YouTube Intelligence completed without the required report Output.')
-    if (!reportOutput.primary) throw new Error('YouTube Intelligence completed without a readable report Output.')
+    const outputs = listOutputManifests(workspace.rootPath)
+    const reportOutput = outputs.find((output) => (
+      output.id === run.finalOutputId
+      && output.kind === 'report'
+      && output.title.trim() === 'Weekly Signal Brief'
+      && output.origin.source === 'workflow'
+      && output.origin.workflowRunId === run.id
+    ))
+    if (!reportOutput?.primary) throw new Error('Weekly Signal Scan completed without a readable Weekly Signal Brief Output.')
     const sessionId = reportOutput.origin.sessionId
-    if (!sessionId) throw new Error('YouTube Intelligence report is missing its source session.')
-    await this.postProcessYouTubeIntelReport({
-      workspaceId: run.workspaceId,
-      workspaceRootPath: workspace.rootPath,
-      sessionId,
-      reportOutput,
-      signal,
+      ?? run.steps.find((step) => step.id === 'synthesize')?.sessionId
+    if (!sessionId) throw new Error('Weekly Signal Brief is missing its source session.')
+
+    type LaneResult = {
+      id: 'youtube' | SignalIntelLane
+      status: 'ready' | 'unavailable'
+      message?: string
+      itemCount?: number
+      output?: OutputManifest
+      youtubeData?: YouTubeIntelReportData
+      signalData?: SignalIntelReportData
+    }
+    const laneResults: LaneResult[] = []
+    const laneDefinitions = [
+      { id: 'youtube' as const, stepId: 'youtube-intel', title: 'Weekly YouTube Intelligence Report' },
+      { id: 'platform' as const, stepId: 'platform-watch', title: 'Weekly Platform Signal Packet' },
+      { id: 'industry' as const, stepId: 'industry-desk', title: 'Weekly Industry Signal Packet' },
+    ]
+    for (const definition of laneDefinitions) {
+      signal.throwIfAborted()
+      const step = run.steps.find((candidate) => candidate.id === definition.stepId)
+      if (step?.state !== 'succeeded') {
+        laneResults.push({
+          id: definition.id,
+          status: 'unavailable',
+          message: step?.error?.message || `The ${definition.id} collector did not complete.`,
+        })
+        continue
+      }
+      const output = findExactWorkflowStepOutput(outputs, run, definition.stepId, definition.title)
+      if (!output?.primary) {
+        laneResults.push({
+          id: definition.id,
+          status: 'unavailable',
+          message: `The ${definition.id} collector did not produce its required readable packet.`,
+        })
+        continue
+      }
+      const reportPath = resolveOutputAssetPath(workspace.rootPath, output.id, output.primary.path)
+      if (!reportPath) {
+        laneResults.push({ id: definition.id, status: 'unavailable', message: `The ${definition.id} packet path is invalid.` })
+        continue
+      }
+      let markdown: string
+      try {
+        markdown = await readFile(reportPath, 'utf8')
+      } catch (error) {
+        laneResults.push({
+          id: definition.id,
+          status: 'unavailable',
+          message: `The ${definition.id} packet could not be read: ${error instanceof Error ? error.message : String(error)}`,
+        })
+        continue
+      }
+      if (definition.id === 'youtube') {
+        const youtubeData = parseYouTubeIntelReportData(markdown)
+        laneResults.push(youtubeData
+          ? { id: definition.id, status: 'ready', itemCount: youtubeData.nuggets.length, output, youtubeData }
+          : { id: definition.id, status: 'unavailable', message: 'The YouTube packet was missing valid processing metadata.' })
+      } else {
+        const signalData = parseSignalIntelReportData(markdown, definition.id)
+        laneResults.push(signalData
+          ? { id: definition.id, status: 'ready', itemCount: signalData.items.length, output, signalData }
+          : { id: definition.id, status: 'unavailable', message: `The ${definition.id} packet was missing valid signal metadata.` })
+      }
+    }
+
+    await withWorkspaceContextLock(workspace.rootPath, async () => {
+      signal.throwIfAborted()
+      const activeAgents = loadActivatedAgents(workspace.rootPath)
+      const agentCatalog: SharedIntelAgentCatalogEntry[] = activeAgents.map((agent) => ({
+        slug: agent.slug,
+        name: agent.metadata.name,
+        description: agent.metadata.description,
+        inputs: agent.metadata.inputs,
+        outputs: agent.metadata.outputs,
+        tags: agent.metadata.tags ?? [],
+        visualAgent: agent.metadata.visualAgent,
+        active: true,
+      }))
+      let existingNotes: ExistingSharedIntelDoc[] = loadAllContextDocs(workspace.rootPath)
+        .filter((doc) => isSharedIntelContextSlug(doc.slug))
+        .flatMap((doc) => {
+          const note = parseSharedIntelNote(doc.body)
+          return note ? [{ slug: doc.slug, note }] : []
+        })
+      const writtenSlugs: string[] = []
+      for (const lane of laneResults) {
+        if (lane.status !== 'ready') continue
+        const candidates = lane.youtubeData
+          ? buildYouTubeIntelCandidates(lane.youtubeData.nuggets, agentCatalog)
+          : lane.signalData
+            ? buildSignalIntelCandidates(lane.signalData, agentCatalog)
+            : []
+        const findingCount = lane.youtubeData?.nuggets.length ?? lane.signalData?.items.length ?? 0
+        if (findingCount > 0 && candidates.length === 0) {
+          throw new Error(`Weekly ${lane.id} intelligence found usable items, but none matched active destination agents.`)
+        }
+      }
+      const routeLane = (lane: LaneResult) => {
+        if (lane.status !== 'ready' || !lane.output) return
+        const candidates = lane.youtubeData
+          ? buildYouTubeIntelCandidates(lane.youtubeData.nuggets, agentCatalog)
+          : lane.signalData
+            ? buildSignalIntelCandidates(lane.signalData, agentCatalog)
+            : []
+        const docs = buildSharedIntelDocs({
+          sessionId: lane.output.origin.sessionId ?? sessionId,
+          sourceAgentSlug: lane.id === 'youtube' ? 'youtube-intelligence-agent' : 'signal-scout-agent',
+          sourceAgentName: lane.id === 'youtube' ? 'YouTube Intelligence Agent' : 'Signal Scout',
+          messages: [],
+          candidates,
+          agentCatalog,
+          existingNotes,
+        })
+        for (const doc of docs) {
+          upsertContextDoc(workspace.rootPath, {
+            slug: doc.slug,
+            metadata: {
+              name: `Shared Intel - ${doc.note.title}`,
+              description: `Weekly ${lane.id} intelligence for ${doc.targetAgents.map((agent) => agent.name).join(', ')}.`,
+              routing: { mode: 'targeted', agents: doc.note.targetAgents },
+              enabled: true,
+            },
+            body: doc.body,
+          })
+          existingNotes = [
+            ...existingNotes.filter((item) => item.slug !== doc.slug),
+            { slug: doc.slug, note: doc.note },
+          ]
+          writtenSlugs.push(doc.slug)
+        }
+      }
+      for (const lane of laneResults) routeLane(lane)
+
+      const youtubeData = laneResults.find((lane) => lane.id === 'youtube')?.youtubeData
+      if (youtubeData) {
+        upsertContextDoc(workspace.rootPath, buildArtistIntelStateContext(
+          loadContextDoc(workspace.rootPath, 'artist-intel-state')?.body,
+          youtubeData.processedVideos,
+        ))
+      }
+      const readyLaneCount = laneResults.filter((lane) => lane.status === 'ready').length
+      const status = readyLaneCount === laneResults.length ? 'ready' : readyLaneCount > 0 ? 'partial' : 'failed'
+      upsertContextDoc(workspace.rootPath, buildArtistIntelReportContext({
+        reportOutput,
+        sessionId,
+        workflowRunId: run.id,
+        status,
+        lanes: laneResults.map((lane) => ({
+          id: lane.id,
+          status: lane.status,
+          itemCount: lane.itemCount,
+          message: lane.message,
+        })),
+        videoCount: youtubeData?.processedVideos.length ?? 0,
+        nuggetCount: writtenSlugs.length,
+        sourceCount: artistIntelSourceCount(loadContextDoc(workspace.rootPath, 'artist-intel-config')?.body) + 7,
+        existing: loadContextDoc(workspace.rootPath, 'artist-intel-report'),
+      }))
+      this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, run.workspaceId, loadAllContextDocs(workspace.rootPath))
     })
   }
 
@@ -5218,6 +5386,14 @@ user a clickable link to where the thing now lives.`
             [
               'Produce the complete final report. Keep only findings that change or sharpen a decision for this artist. Recommend no more than three actions for this week.',
               'Produce the complete final report. Keep only findings that change or sharpen a decision for this artist. Recommend no more than three actions for this week. Name each unavailable lane. If every lane is unavailable, report that the scan was unavailable and do not invent findings.',
+            ],
+            [
+              'Create one report Output titled "Weekly Platform Signal Packet" tagged signal-source-packet and weekly-signals. Return the same compact packet in your final response for Signal Analyst.',
+              'Create one report Output titled "Weekly Platform Signal Packet" tagged signal-source-packet and weekly-signals. Include the same compact packet in your final response for Signal Analyst.\n\nEnd both with a fenced signal-intel JSON block using exactly this shape:\n```signal-intel\n{"version":1,"lane":"platform","items":[{"category":"content","title":"...","summary":"...","whyItMatters":"...","evidence":"...","sourceUrls":["https://..."]}]}\n```\nUse only these categories: branding, content, rollout, audience, outreach, creative, operations. Keep at most 8 items. Use an empty items array when nothing qualifies.',
+            ],
+            [
+              'Create one report Output titled "Weekly Industry Signal Packet" tagged signal-source-packet and weekly-signals. Return the same compact packet in your final response for Signal Analyst.',
+              'Create one report Output titled "Weekly Industry Signal Packet" tagged signal-source-packet and weekly-signals. Include the same compact packet in your final response for Signal Analyst.\n\nEnd both with a fenced signal-intel JSON block using exactly this shape:\n```signal-intel\n{"version":1,"lane":"industry","items":[{"category":"operations","title":"...","summary":"...","whyItMatters":"...","evidence":"...","sourceUrls":["https://..."]}]}\n```\nUse only these categories: branding, content, rollout, audience, outreach, creative, operations. Keep at most 8 items. Use an empty items array when nothing qualifies.',
             ],
           ]],
           [INDUSTRY_OUTREACH_PIPELINE_SLUG, [

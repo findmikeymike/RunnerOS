@@ -32,6 +32,8 @@ describe('YouTube intel report parsing', () => {
   it('rejects malformed, unsupported, or unsourced nuggets', () => {
     const bad = '```youtube-intel\n{"version":1,"nuggets":[{"category":"finance","title":"x"}]}\n```'
     expect(parseYouTubeIntelNuggets(bad)).toEqual([])
+    const allInvalid = '```youtube-intel\n{"version":1,"processedVideos":[],"nuggets":[{"category":"content","title":"x","summary":"x","whyItMatters":"x","evidence":"x","sourceUrls":["file:///tmp/source"]}]}\n```'
+    expect(parseYouTubeIntelReportData(allInvalid)).toBeNull()
   })
 
   it('accepts a no-new-videos report without nuggets', () => {

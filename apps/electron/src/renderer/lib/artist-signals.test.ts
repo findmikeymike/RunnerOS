@@ -1,7 +1,16 @@
 import { describe, expect, test } from 'bun:test'
-import { appendSignalNugget, loadFullSignalOutputText, readableSignalBody } from './artist-signals'
+import { appendSignalNugget, loadFullSignalOutputText, readableSignalBody, signalFreshness } from './artist-signals'
 
 describe('artist signals', () => {
+  test('classifies fresh, aging, and stale signal briefs', () => {
+    const now = new Date('2026-09-01T12:00:00.000Z')
+
+    expect(signalFreshness('2026-08-26T12:00:00.000Z', now)).toEqual({ status: 'fresh', ageDays: 6 })
+    expect(signalFreshness('2026-08-20T12:00:00.000Z', now)).toEqual({ status: 'aging', ageDays: 12 })
+    expect(signalFreshness('2026-08-01T12:00:00.000Z', now)).toEqual({ status: 'stale', ageDays: 31 })
+    expect(signalFreshness('not-a-date', now)).toBeNull()
+  })
+
   test('hides the machine routing payload while retaining readable intel', () => {
     const body = [
       '```json shared-intel',
