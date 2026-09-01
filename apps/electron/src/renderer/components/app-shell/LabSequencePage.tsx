@@ -3,13 +3,13 @@ import {
   ArrowDownUp,
   ChevronDown,
   GripVertical,
-  Music2,
   PenLine,
   Plus,
   Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CompactPageHeader } from './CompactPageHeader'
+import { LabCollectionPicker } from './LabCollectionPicker'
 import { navigate, routes } from '@/lib/navigate'
 import {
   createLabUiSong,
@@ -87,7 +87,7 @@ export function LabSequencePage({ workspaceId, workspaceName }: LabSequencePageP
   const activeSequence = sequencePages.find((page) => page.id === activeSequenceId) ?? sequencePages[0]
   const poolSongs = poolOrder.map((id) => songsById.get(id)).filter(Boolean) as LabUiSong[]
   const sequenceSongs = (activeSequence?.songIds ?? []).map((id) => songsById.get(id)).filter(Boolean) as LabUiSong[]
-  const projects = Array.from(new Set(songs.map((song) => song.project)))
+  const collections = Array.from(new Set(['Loose Singles', ...songs.map((song) => song.project)]))
 
   const updateActiveSequence = (updater: (songIds: string[]) => string[]) => {
     setSequencePages((prev) => prev.map((page) => (
@@ -198,19 +198,15 @@ export function LabSequencePage({ workspaceId, workspaceName }: LabSequencePageP
           <aside className="flex min-h-0 flex-col gap-3">
             <section className="rounded-2xl border border-white/[0.05] bg-[#0A0A0A]">
               <div className="flex items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#fb923c]/12 text-[#fdba74]">
-                    <Music2 className="h-3.5 w-3.5" />
-                  </span>
-                  <h2 className="text-sm font-semibold text-white/84">Add song</h2>
-                </div>
+                <h2 className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/58">Add song</h2>
                 <button
                   type="button"
                   onClick={() => setAddOpen((open) => !open)}
-                  className="flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.06] text-white/38 hover:bg-white/[0.04] hover:text-white/70"
+                  aria-expanded={addOpen}
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-white/[0.04] text-white/46 transition-colors hover:bg-white/[0.07] hover:text-white/78"
                   title={addOpen ? 'Close add song' : 'Open add song'}
                 >
-                  <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', addOpen && 'rotate-180')} />
+                  <Plus className={cn('h-3.5 w-3.5 transition-transform', addOpen && 'rotate-45')} />
                 </button>
               </div>
               {addOpen ? (
@@ -224,11 +220,10 @@ export function LabSequencePage({ workspaceId, workspaceName }: LabSequencePageP
                     placeholder="Song title"
                     className={INPUT_CLASS}
                   />
-                  <input
+                  <LabCollectionPicker
                     value={draftProject}
-                    onChange={(event) => setDraftProject(event.target.value)}
-                    placeholder="Project"
-                    className={INPUT_CLASS}
+                    collections={collections}
+                    onChange={setDraftProject}
                   />
                   <div className="flex items-center gap-2 px-1">
                     {LAB_PROJECT_COLORS.slice(0, 4).map((color) => (
@@ -236,7 +231,7 @@ export function LabSequencePage({ workspaceId, workspaceName }: LabSequencePageP
                         key={color}
                         type="button"
                         onClick={() => setDraftColor(color)}
-                        title="Choose project color"
+                        title="Choose song color"
                         className={cn(
                           'h-3.5 w-3.5 rounded-full border transition-transform hover:scale-110',
                           draftColor === color ? 'border-white/70 ring-2 ring-white/10' : 'border-white/10',

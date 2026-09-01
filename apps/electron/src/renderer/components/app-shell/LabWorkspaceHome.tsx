@@ -141,7 +141,7 @@ export function LabWorkspaceHome({ workspaceId, workspaceName }: LabWorkspaceHom
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <ActionTile icon={PenLine} title="Song Pad" detail="Write loose, then shape the structure." onClick={() => navigate(routes.view.lab('pad'))} />
-          <ActionTile icon={FileText} title="Songs" detail="Browse drafts by project, focus, and status." onClick={() => navigate(routes.view.lab('songs'))} />
+          <ActionTile icon={FileText} title="Songs" detail="Browse drafts by collection, focus, and status." onClick={() => navigate(routes.view.lab('songs'))} />
           <ActionTile icon={Search} title="Research" detail="Collect references, stories, and concepts." onClick={() => navigate(routes.view.agents('reference-master'))} />
         </div>
 

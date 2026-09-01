@@ -34,19 +34,36 @@ interface AgentLibraryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   workspaceId: string | null | undefined
+  defaultVisibleSlugs?: readonly string[]
+  includeSystemVisibleAgents?: boolean
+  allowedAgentSlugs?: readonly string[]
 }
 
-export function AgentLibraryDialog({ open, onOpenChange, workspaceId }: AgentLibraryDialogProps) {
-  const { allAgents, activeSlugs, setActive } = useAgents(workspaceId)
+export function AgentLibraryDialog({
+  open,
+  onOpenChange,
+  workspaceId,
+  defaultVisibleSlugs,
+  includeSystemVisibleAgents = true,
+  allowedAgentSlugs,
+}: AgentLibraryDialogProps) {
+  const { allAgents, activeSlugs, setActive } = useAgents(workspaceId, {
+    defaultVisibleSlugs,
+    includeSystemVisibleAgents,
+  })
   const { getDisplayName, setDisplayName } = useAgentDisplayNames()
   const [query, setQuery] = React.useState('')
   const [createOpen, setCreateOpen] = React.useState(false)
+  const allowedAgentSet = React.useMemo(
+    () => allowedAgentSlugs ? new Set<string>(allowedAgentSlugs) : null,
+    [allowedAgentSlugs],
+  )
 
   const sortedAgents = React.useMemo(() => {
     return allAgents
-      .filter((a) => !isSystemAgent(a.slug))
+      .filter((a) => !isSystemAgent(a.slug) && (!allowedAgentSet || allowedAgentSet.has(a.slug)))
       .sort((a, b) => getDisplayName(a).localeCompare(getDisplayName(b)))
-  }, [allAgents, getDisplayName])
+  }, [allAgents, allowedAgentSet, getDisplayName])
 
   const filteredAgents = React.useMemo(() => {
     if (!query.trim()) return sortedAgents
@@ -82,15 +99,17 @@ export function AgentLibraryDialog({ open, onOpenChange, workspaceId }: AgentLib
               onChange={(e) => setQuery(e.target.value)}
               className="h-10 w-full rounded-[12px] border border-white/[0.08] bg-white/[0.035] pl-9 pr-3 text-sm text-white outline-none placeholder:text-white/28 focus:border-[#fb923c]/40"
             />
-            <button
-              type="button"
-              onClick={() => setCreateOpen(true)}
-              className="absolute right-1.5 top-1/2 inline-flex h-7 -translate-y-1/2 items-center gap-1.5 rounded-[9px] border border-[#fb923c]/24 bg-[#f97316]/18 px-2.5 text-[11px] font-medium text-[#fed7aa] transition-colors hover:bg-[#f97316]/28 hover:text-white"
-              title="Create a new worker from scratch"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              New
-            </button>
+            {!allowedAgentSet ? (
+              <button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                className="absolute right-1.5 top-1/2 inline-flex h-7 -translate-y-1/2 items-center gap-1.5 rounded-[9px] border border-[#fb923c]/24 bg-[#f97316]/18 px-2.5 text-[11px] font-medium text-[#fed7aa] transition-colors hover:bg-[#f97316]/28 hover:text-white"
+                title="Create a new worker from scratch"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                New
+              </button>
+            ) : null}
           </div>
 
           <div className="max-h-[54vh] min-w-0 space-y-2 overflow-y-auto overflow-x-hidden pr-1">
@@ -112,7 +131,7 @@ export function AgentLibraryDialog({ open, onOpenChange, workspaceId }: AgentLib
           </div>
 
           <p className="border-t border-white/[0.06] pt-3 text-[11px] text-white/34">
-            {filteredActiveCount(activeSet, allAgents)} of {allAgents.filter((agent) => !isSystemAgent(agent.slug)).length} active in this workspace.
+            {filteredActiveCount(activeSet, sortedAgents)} of {sortedAgents.length} active in this workspace.
           </p>
         </div>
       </DialogContent>

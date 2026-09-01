@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { defaultWorkerSlugs } from './worker-defaults'
+import { defaultWorkerSlugs, LAB_DEFAULT_WORKER_SLUGS } from './worker-defaults'
 
 describe('worker page defaults', () => {
   test('College Radio appears by default in Artist HQ and Campaign workers', () => {
@@ -16,5 +16,26 @@ describe('worker page defaults', () => {
     expect(defaultWorkerSlugs(false)).toContain('x-editorial')
     expect(defaultWorkerSlugs(true)).toContain('x-editorial')
     expect(defaultWorkerSlugs(true).filter((slug) => slug === 'x-editorial')).toHaveLength(1)
+  })
+
+  test('Campaign workers include the creative concept directors by default', () => {
+    expect(defaultWorkerSlugs(true)).toContain('anticipation-director')
+    expect(defaultWorkerSlugs(true)).toContain('content-director')
+  })
+
+  test('Update System Agent is an HQ-only default worker', () => {
+    expect(defaultWorkerSlugs(false)).toContain('update-system-agent')
+    expect(defaultWorkerSlugs(true)).not.toContain('update-system-agent')
+  })
+
+  test('Lab defaults stay bounded to the songwriting roster', () => {
+    expect(LAB_DEFAULT_WORKER_SLUGS).toEqual([
+      'the-excavator',
+      'reverse-magic',
+      'hooker',
+      'legendary-writer',
+      'reference-master',
+      'record-doctor',
+    ])
   })
 })

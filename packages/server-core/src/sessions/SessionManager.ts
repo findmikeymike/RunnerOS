@@ -3778,6 +3778,7 @@ export class SessionManager implements ISessionManager {
           CONCIERGE_SLUG,
           SETUP_CONCIERGE_SLUG,
           SOCIAL_PUBLISHER_SLUG,
+          SONG_DIRECTOR_SLUG,
           RELEASE_MANAGER_AGENT_SLUG,
           DEFAULT_ACTIVATED_AGENT_SLUGS,
           ensureBuiltInAgentSkillsForSlug,
@@ -3798,12 +3799,13 @@ export class SessionManager implements ISessionManager {
         // Chat nav entry), Setup Concierge, Social Publisher, TryPost, Postiz, Hypermotion, Video Director, Lottie Animation,
         // Video Editor, Lyric Video, Content Genius, Scroll Stopper, Anticipation Director, Content Director, promotion helpers, Shopify, Print Agent,
         // Release Manager, Outreach, Industry Hunter, Art Director, World Builder, Record Doctor,
-        // Reverse Magic, Legendary Writer, Reference Master, and Update System Agent.
+        // Song Director, Reverse Magic, Legendary Writer, Reference Master, and Update System Agent.
         const required = STARTER_AGENTS.filter(
           (a) => a.slug === ORCHESTRATOR_SLUG
             || a.slug === CONCIERGE_SLUG
             || a.slug === SETUP_CONCIERGE_SLUG
             || a.slug === SOCIAL_PUBLISHER_SLUG
+            || a.slug === SONG_DIRECTOR_SLUG
             || a.slug === 'trypost-agent'
             || a.slug === 'postiz-agent'
             || a.slug === 'hypermotion-agent'
@@ -4441,6 +4443,12 @@ Manager judgment:
                   to: recordDoctorAgent.metadata.outputs,
                 },
               }).updated,
+              replaceBuiltInAgentMetadata('record-doctor', {
+                description: {
+                  from: 'Have your song reviewed by a Grammy-winning, multi-platinum producer and songwriter for an unbiased, credible expert perspective before release.',
+                  to: recordDoctorAgent.metadata.description,
+                },
+              }).updated,
               replaceBuiltInAgentPromptText(
                 'record-doctor',
                 'Your job is to prepare a clean producer-review submission for mikeymikemusic@gmail.com. You help the artist submit a song for vetting, feedback, production enhancement, mix/arrangement notes, hit-potential review, or release-readiness feedback. You do not quote pricing, negotiate terms, promise outcomes, or imply the producer has accepted the work.',
@@ -4463,7 +4471,7 @@ Manager judgment:
               ).updated,
             ].some(Boolean)
             if (recordDoctorUpdated) {
-              sessionLog.info('[agent-definitions] Hardened Record Doctor recipient privacy')
+              sessionLog.info('[agent-definitions] Refined Record Doctor metadata and recipient privacy')
             }
           }
           const printAgent = STARTER_AGENTS.find(agent => agent.slug === 'print-agent')

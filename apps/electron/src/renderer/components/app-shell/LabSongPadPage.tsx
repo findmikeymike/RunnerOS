@@ -65,6 +65,7 @@ import type {
   LabSongLineSource,
 } from '@craft-agent/shared/lab'
 import type { AgentDefinitionDTO, ProsodyLookupResult, ProsodyRhymeItem } from '../../../shared/types'
+import { LabCollectionPicker } from './LabCollectionPicker'
 
 interface LabSongPadPageProps {
   workspaceId?: string
@@ -705,7 +706,7 @@ function roleForSection(section: SongSection): LabWorkerRole | null {
   return null
 }
 
-export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, workspaceName }: LabSongPadPageProps) {
+export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId }: LabSongPadPageProps) {
   const activeWorkerRunIdRef = React.useRef(0)
   const prosodyLookupRunIdRef = React.useRef(0)
   const sentFlashTimerRef = React.useRef<number | null>(null)
@@ -744,6 +745,10 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
   const { activeAgents, loading: agentsLoading } = useAgents(workspaceId, {
     includeSystemVisibleAgents: false,
   })
+  const collections = React.useMemo(
+    () => Array.from(new Set(['Loose Singles', ...loadLabUiSongs(workspaceId).map((song) => song.project), project])),
+    [activeSongId, project, workspaceId],
+  )
 
   React.useEffect(() => {
     setLabHydrated(false)
@@ -1277,11 +1282,11 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
             <div className="flex items-center gap-2 rounded-xl bg-black/15 px-3 py-2 text-xs text-white/45 backdrop-blur-md">
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: projectColor }} />
               <Music2 className="h-3.5 w-3.5" />
-              <input
+              <LabCollectionPicker
                 value={project}
-                onChange={(event) => setProject(event.target.value)}
-                className="w-20 border-0 bg-transparent text-xs text-white/55 outline-none sm:w-28"
-                placeholder={workspaceName || 'Project'}
+                collections={collections}
+                onChange={setProject}
+                compact
               />
             </div>
 

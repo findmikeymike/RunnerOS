@@ -1289,7 +1289,8 @@ body
 
     expect(recordDoctor).toBeDefined()
     expect(recordDoctor?.metadata.name).toBe('Record Doctor')
-    expect(recordDoctor?.metadata.description).toBe('Have your song reviewed by a Grammy-winning, multi-platinum producer and songwriter for an unbiased, credible expert perspective before release.')
+    expect(recordDoctor?.metadata.description).toBe('Have your song reviewed by a Grammy-winning, multi-platinum producer and songwriter for an unbiased, credible perspective before release.')
+    expect(recordDoctor?.metadata.description).not.toContain('expert')
     expect(recordDoctor?.metadata.description).not.toContain('@')
     expect(recordDoctor?.metadata.outputs).not.toContain('@')
     expect(recordDoctor?.metadata.permissionMode).toBe('ask')
@@ -1345,6 +1346,20 @@ body
     expect(migrated.systemPrompt).toContain('Recipient privacy is absolute')
   })
 
+  test('built-in migration removes expert from the shipped Record Doctor description', () => {
+    const recordDoctor = STARTER_AGENTS.find((agent) => agent.slug === 'record-doctor')!
+    const oldDescription = 'Have your song reviewed by a Grammy-winning, multi-platinum producer and songwriter for an unbiased, credible expert perspective before release.'
+    writeGlobalAgent({
+      ...recordDoctor,
+      metadata: { ...recordDoctor.metadata, description: oldDescription },
+    }, { globalAgentsDir })
+
+    expect(replaceBuiltInAgentMetadata('record-doctor', {
+      description: { from: oldDescription, to: recordDoctor.metadata.description },
+    }, { globalAgentsDir }).updated).toBe(true)
+    expect(loadGlobalAgent('record-doctor', { globalAgentsDir })?.metadata.description).toBe(recordDoctor.metadata.description)
+  })
+
   test('starter library includes Reverse Magic as a Lab lyric worker', () => {
     const reverseMagic = STARTER_AGENTS.find((agent) => agent.slug === 'reverse-magic')
 
@@ -1357,6 +1372,17 @@ body
     expect(reverseMagic?.systemPrompt).toContain('reverse-engineer why a song feels powerful')
     expect(reverseMagic?.systemPrompt).toContain('Do not reproduce or closely paraphrase copyrighted lyrics')
     expect(reverseMagic?.systemPrompt).toContain('Genius API')
+  })
+
+  test('starter library includes Song Director as the bounded Lab coordinator', () => {
+    const songDirector = STARTER_AGENTS.find((agent) => agent.slug === 'song-director')
+
+    expect(songDirector).toBeDefined()
+    expect(songDirector?.metadata.name).toBe('Song Director')
+    expect(songDirector?.metadata.trustedWorkerTools).toContain('message_agent')
+    expect(songDirector?.systemPrompt).toContain('the head of the Artist OS Lab writing room')
+    expect(songDirector?.systemPrompt).toContain('`legendary-writer`')
+    expect(songDirector?.systemPrompt).toContain('Never spray the same task across the whole room')
   })
 
   test('starter library includes Legendary Writer with Yoga of Songwriting skill', () => {

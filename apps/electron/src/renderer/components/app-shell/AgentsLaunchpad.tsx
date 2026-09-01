@@ -34,7 +34,7 @@ import { sourcesAtom } from '@/atoms/sources'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { openAgentSessionComposer } from '@/lib/run-agent'
 import { cn } from '@/lib/utils'
-import { defaultWorkerSlugs } from '@/lib/worker-defaults'
+import { defaultWorkerSlugs, LAB_DEFAULT_WORKER_SLUGS } from '@/lib/worker-defaults'
 import { CompactPageHeader } from './CompactPageHeader'
 import { ArtistManagerCreateLink } from './ArtistManagerCreateLink'
 import { getModelsForProviderType } from '@config/llm-connections'
@@ -48,14 +48,23 @@ import type { AgentDefinitionDTO, ContextDocDTO, LlmConnectionWithStatus } from 
 interface AgentsLaunchpadProps {
   workspaceId: string | null | undefined
   includeCampaignDefaultWorkers?: boolean
+  labOnly?: boolean
 }
 
 type WorkerDirectoryView = 'all' | 'recent' | 'favorites'
 
-export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = false }: AgentsLaunchpadProps) {
-  const defaultVisibleSlugs = defaultWorkerSlugs(includeCampaignDefaultWorkers)
+export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = false, labOnly = false }: AgentsLaunchpadProps) {
+  const defaultVisibleSlugs = labOnly
+    ? LAB_DEFAULT_WORKER_SLUGS
+    : defaultWorkerSlugs(includeCampaignDefaultWorkers)
+  const allowedAgentSlugs = labOnly ? LAB_DEFAULT_WORKER_SLUGS : undefined
+  const allowedAgentSet = React.useMemo(
+    () => allowedAgentSlugs ? new Set<string>(allowedAgentSlugs) : null,
+    [allowedAgentSlugs],
+  )
   const { activeAgents, allAgents, loading } = useAgents(workspaceId, {
     defaultVisibleSlugs,
+    includeSystemVisibleAgents: !labOnly,
   })
   const { getDisplayName } = useAgentDisplayNames()
   const skills = useAtomValue(skillsAtom)
@@ -172,6 +181,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
     const visibleAgents = dedupeLaunchpadAgents(activeAgents.filter((a) => (
       !isSystemAgent(a.slug)
       && !isHiddenFromWorkerHome(a.slug)
+      && (!allowedAgentSet || allowedAgentSet.has(a.slug))
     )))
     const orch = visibleAgents.find((a) => a.slug === ORCHESTRATOR_SLUG)
     const defaultOrder = new Map(defaultVisibleSlugs.map((slug, index) => [slug, index]))
@@ -187,6 +197,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
         agent.slug,
         getDisplayName(agent),
         agent.metadata.description,
+        labOnly,
       )
       const bucket = groups.get(domain) ?? []
       bucket.push(agent)
@@ -195,7 +206,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
 
     return Array.from(groups.entries())
       .sort(([a], [b]) => agentDomainRank(a) - agentDomainRank(b) || a.localeCompare(b))
-  }, [activeAgents, defaultVisibleSlugs, getDisplayName])
+  }, [activeAgents, allowedAgentSet, defaultVisibleSlugs, getDisplayName, labOnly])
 
   const domains = React.useMemo(() => grouped.map(([domain]) => domain), [grouped])
 
@@ -264,14 +275,16 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
           className="mb-4"
           actions={
             <>
-              <button
-                type="button"
-                onClick={() => setCreateOpen(true)}
-                className="inline-flex h-9 items-center gap-2 rounded-full bg-gradient-to-r from-[#ff8a00] to-[#ef2b10] px-4 text-xs font-medium text-white shadow-middle transition-all hover:brightness-110"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                New worker
-              </button>
+              {!labOnly ? (
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen(true)}
+                  className="inline-flex h-9 items-center gap-2 rounded-full bg-gradient-to-r from-[#ff8a00] to-[#ef2b10] px-4 text-xs font-medium text-white shadow-middle transition-all hover:brightness-110"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  New worker
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setLibraryOpen(true)}
@@ -284,9 +297,11 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
           }
         />
 
-        <div className="-mt-1 mb-3 flex justify-end px-1">
-          <ArtistManagerCreateLink kind="worker" workspaceId={workspaceId} />
-        </div>
+        {!labOnly ? (
+          <div className="-mt-1 mb-3 flex justify-end px-1">
+            <ArtistManagerCreateLink kind="worker" workspaceId={workspaceId} />
+          </div>
+        ) : null}
 
         <div className="mb-5 flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative min-w-0 flex-1 lg:max-w-xl">
@@ -354,17 +369,17 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
                   <button
                     type="button"
                     onClick={() => toggleDomain(domain)}
-                    className="group/category mb-3 flex w-full items-center gap-3 text-left"
+                    className="group/category mb-4 flex w-full items-center gap-3 text-left"
                     aria-expanded={!collapsed}
                   >
-                    <span className="inline-flex h-7 shrink-0 items-center gap-2 rounded-full bg-white/92 px-2.5 transition-colors group-hover/category:bg-white">
+                    <span className="inline-flex h-[22px] shrink-0 items-center gap-1.5 rounded-full bg-white/92 px-2 transition-colors group-hover/category:bg-white">
                       {collapsed ? (
-                        <ChevronRight className="h-3 w-3 shrink-0 text-black/55 transition-colors group-hover/category:text-black/80" />
+                        <ChevronRight className="h-2.5 w-2.5 shrink-0 text-black/55 transition-colors group-hover/category:text-black/80" />
                       ) : (
-                        <ChevronDown className="h-3 w-3 shrink-0 text-black/55 transition-colors group-hover/category:text-black/80" />
+                        <ChevronDown className="h-2.5 w-2.5 shrink-0 text-black/55 transition-colors group-hover/category:text-black/80" />
                       )}
-                      <h2 className="text-[10px] font-semibold uppercase tracking-[0.15em] text-black/85">{domain}</h2>
-                      <span className="text-[10px] font-medium text-black/45">{agents.length}</span>
+                      <h2 className="text-[9px] font-semibold uppercase tracking-[0.14em] text-black/85">{domain}</h2>
+                      <span className="text-[9px] font-medium text-black/45">{agents.length}</span>
                     </span>
                     <div className="h-px flex-1 bg-white/[0.07]" />
                   </button>
@@ -400,6 +415,9 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
         open={libraryOpen}
         onOpenChange={setLibraryOpen}
         workspaceId={workspaceId}
+        defaultVisibleSlugs={defaultVisibleSlugs}
+        includeSystemVisibleAgents={!labOnly}
+        allowedAgentSlugs={allowedAgentSlugs}
       />
 
       <AgentEditDialog
@@ -1609,7 +1627,13 @@ function isContextDocVisibleToAgent(doc: ContextDocDTO, agentSlug: string) {
   return doc.metadata.routing.agents.includes(agentSlug)
 }
 
-function getAgentDomain(tags: string[] | undefined, slug: string, name: string, description?: string) {
+function getAgentDomain(tags: string[] | undefined, slug: string, name: string, description?: string, labOnly = false) {
+  if (labOnly) {
+    if (slug === 'the-excavator' || slug === 'reverse-magic') return 'Inspiration'
+    if (slug === 'legendary-writer' || slug === 'hooker' || slug === 'reference-master') return 'Writing'
+    if (slug === 'record-doctor') return 'Song Development'
+  }
+
   if (slug === 'setup-concierge') {
     return 'Command'
   }
@@ -1632,6 +1656,14 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
 
   if (slug === 'anticipation-director' || slug === 'content-director') {
     return 'Content Creation'
+  }
+
+  if (slug === 'x-editorial') {
+    return 'Socials'
+  }
+
+  if (slug === 'update-system-agent') {
+    return 'Operators'
   }
 
   if (slug === 'youtube-research-agent' || slug === 'youtube-intelligence-agent' || slug === 'spotify-analyst') {
@@ -1662,6 +1694,9 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
 
 function agentDomainRank(domain: string) {
   const order = [
+    'Inspiration',
+    'Writing',
+    'Song Development',
     'Creative',
     'Brand & Story',
     'Content Creation',
@@ -1680,7 +1715,7 @@ function agentDomainRank(domain: string) {
 }
 
 function isSystemAgent(slug: string) {
-  return slug === CONCIERGE_SLUG || slug === ORCHESTRATOR_SLUG || slug === 'update-system-agent'
+  return slug === CONCIERGE_SLUG || slug === ORCHESTRATOR_SLUG
 }
 
 function isHiddenFromWorkerHome(slug: string) {

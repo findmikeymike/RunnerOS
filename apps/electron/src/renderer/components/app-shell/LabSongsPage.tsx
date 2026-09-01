@@ -6,7 +6,7 @@ import {
   CircleDot,
   Clock3,
   FileText,
-  Folder,
+  ListMusic,
   Pencil,
   PenLine,
   Plus,
@@ -16,7 +16,15 @@ import {
 } from 'lucide-react'
 import { navigate, routes } from '@/lib/navigate'
 import { cn } from '@/lib/utils'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { CompactPageHeader } from './CompactPageHeader'
+import { LabCollectionPicker } from './LabCollectionPicker'
 import {
   createLabUiSong,
   deleteLabUiSong,
@@ -89,7 +97,7 @@ function SongRow({
       </button>
 
       <span className="inline-flex min-w-0 items-center gap-2 text-xs text-white/48">
-        <Folder className="h-3.5 w-3.5 shrink-0 text-white/28" />
+        <ListMusic className="h-3.5 w-3.5 shrink-0 text-white/28" />
         <span className="truncate">{song.project}</span>
       </span>
 
@@ -151,10 +159,10 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
   const [songs, setSongs] = React.useState<SongRecord[]>([])
   const [addSongOpen, setAddSongOpen] = React.useState(false)
   const [draftTitle, setDraftTitle] = React.useState('')
-  const [draftTag, setDraftTag] = React.useState('')
+  const [draftCollection, setDraftCollection] = React.useState('Loose Singles')
   const [editingSongId, setEditingSongId] = React.useState<string | null>(null)
   const [editTitle, setEditTitle] = React.useState('')
-  const [editProject, setEditProject] = React.useState('')
+  const [editCollection, setEditCollection] = React.useState('')
 
   const refreshSongs = React.useCallback(() => {
     setSongs(loadLabUiSongs(workspaceId).map((song) => ({
@@ -174,8 +182,8 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
     return subscribeLabSongs(refreshSongs)
   }, [refreshSongs, workspaceId])
 
-  const projects = React.useMemo(
-    () => Array.from(new Set(songs.map((song) => song.project))),
+  const collections = React.useMemo(
+    () => Array.from(new Set(['Loose Singles', ...songs.map((song) => song.project)])),
     [songs],
   )
 
@@ -207,16 +215,16 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
 
     createLabUiSong(workspaceId, {
       title,
-      project: draftTag.trim() || 'Loose Singles',
+      project: draftCollection.trim() || 'Loose Singles',
       color: LAB_PROJECT_COLORS[songs.length % LAB_PROJECT_COLORS.length],
       notes: '',
     })
     setDraftTitle('')
-    setDraftTag('')
+    setDraftCollection('Loose Singles')
     setFilterPreset('all')
     setQuery('')
     setAddSongOpen(false)
-  }, [draftTag, draftTitle, songs.length, workspaceId])
+  }, [draftCollection, draftTitle, songs.length, workspaceId])
 
   const updateSong = React.useCallback((songId: string, patch: Partial<Pick<SongRecord, 'focused' | 'status'>>) => {
     const song = loadLabUiSongs(workspaceId).find((item) => item.id === songId)
@@ -235,7 +243,7 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
   const startEditingSong = React.useCallback((song: SongRecord) => {
     setEditingSongId(song.id)
     setEditTitle(song.title)
-    setEditProject(song.project)
+    setEditCollection(song.project)
     setAddSongOpen(false)
   }, [])
 
@@ -247,10 +255,10 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
     upsertLabUiSong(workspaceId, {
       ...song,
       title,
-      project: editProject.trim() || 'Loose Singles',
+      project: editCollection.trim() || 'Loose Singles',
     })
     setEditingSongId(null)
-  }, [editProject, editTitle, editingSongId, workspaceId])
+  }, [editCollection, editTitle, editingSongId, workspaceId])
 
   const deleteSong = React.useCallback((song: SongRecord) => {
     const confirmed = window.confirm(
@@ -307,12 +315,11 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
               />
             </label>
             <label className="min-w-0 flex-1">
-              <span className="mb-1.5 block text-[9px] font-medium uppercase tracking-[0.15em] text-white/38">Tag</span>
-              <input
-                value={draftTag}
-                onChange={(event) => setDraftTag(event.target.value)}
-                placeholder="Tag (optional)"
-                className="h-10 w-full rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 text-sm text-white/80 outline-none placeholder:text-white/25 focus:border-[#fb923c]/35"
+                <span className="mb-1.5 block text-[9px] font-medium uppercase tracking-[0.15em] text-white/38">Collection</span>
+              <LabCollectionPicker
+                value={draftCollection}
+                collections={collections}
+                onChange={setDraftCollection}
               />
             </label>
             <div className="flex shrink-0 gap-2">
@@ -321,7 +328,7 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
                 onClick={() => {
                   setAddSongOpen(false)
                   setDraftTitle('')
-                  setDraftTag('')
+                  setDraftCollection('Loose Singles')
                 }}
                 className="h-10 rounded-full border border-white/[0.07] px-4 text-xs font-medium text-white/52 hover:bg-white/[0.04]"
               >
@@ -338,40 +345,48 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
           </form>
         ) : null}
 
-        {editingSongId ? (
-          <form
-            onSubmit={saveEditedSong}
-            className="flex flex-col gap-3 rounded-2xl border border-white/[0.08] bg-[#0A0A0A] p-4 shadow-minimal sm:flex-row sm:items-end"
-            aria-label="Edit song"
-          >
-            <label className="min-w-0 flex-1">
-              <span className="mb-1.5 block text-[9px] font-medium uppercase tracking-[0.15em] text-white/38">Title</span>
-              <input
-                autoFocus
-                value={editTitle}
-                onChange={(event) => setEditTitle(event.target.value)}
-                className="h-10 w-full rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 text-sm text-white/80 outline-none focus:border-[#fb923c]/35"
-              />
-            </label>
-            <label className="min-w-0 flex-1">
-              <span className="mb-1.5 block text-[9px] font-medium uppercase tracking-[0.15em] text-white/38">Project / tag</span>
-              <input
-                value={editProject}
-                onChange={(event) => setEditProject(event.target.value)}
-                placeholder="Loose Singles"
-                className="h-10 w-full rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 text-sm text-white/80 outline-none placeholder:text-white/25 focus:border-[#fb923c]/35"
-              />
-            </label>
-            <div className="flex shrink-0 gap-2">
-              <button type="button" onClick={() => setEditingSongId(null)} className="h-10 rounded-full border border-white/[0.07] px-4 text-xs font-medium text-white/52 hover:bg-white/[0.04]">
-                Cancel
-              </button>
-              <button type="submit" disabled={!editTitle.trim()} className="h-10 rounded-full bg-white/90 px-5 text-xs font-medium text-black disabled:cursor-not-allowed disabled:opacity-35">
-                Save changes
-              </button>
-            </div>
-          </form>
-        ) : null}
+        <Dialog
+          open={Boolean(editingSongId)}
+          onOpenChange={(open) => {
+            if (!open) setEditingSongId(null)
+          }}
+        >
+          <DialogContent className="w-[min(460px,calc(100vw-2rem))] border-white/[0.08] bg-[#0C0C0D] p-0 text-white shadow-modal-small">
+            <DialogHeader className="border-b border-white/[0.06] px-5 py-4 pr-12">
+              <DialogTitle className="text-base font-medium">Edit song</DialogTitle>
+              <DialogDescription className="text-xs text-white/38">
+                Update how this song appears across the Lab.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={saveEditedSong} className="flex flex-col gap-4 px-5 pb-5" aria-label="Edit song">
+              <label className="min-w-0">
+                <span className="mb-1.5 block text-[10px] font-medium text-white/52">Title</span>
+                <input
+                  autoFocus
+                  value={editTitle}
+                  onChange={(event) => setEditTitle(event.target.value)}
+                  className="h-10 w-full rounded-lg border border-white/[0.07] bg-white/[0.035] px-3 text-sm text-white/86 outline-none focus:border-[#fb923c]/40"
+                />
+              </label>
+              <label className="min-w-0">
+                <span className="mb-1.5 block text-[10px] font-medium text-white/52">Collection</span>
+                <LabCollectionPicker
+                  value={editCollection}
+                  collections={collections}
+                  onChange={setEditCollection}
+                />
+              </label>
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setEditingSongId(null)} className="h-9 rounded-full px-4 text-xs font-medium text-white/52 hover:bg-white/[0.04]">
+                  Cancel
+                </button>
+                <button type="submit" disabled={!editTitle.trim()} className="h-9 rounded-full bg-white/90 px-5 text-xs font-medium text-black disabled:cursor-not-allowed disabled:opacity-35">
+                  Save changes
+                </button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         <section className="overflow-x-auto rounded-2xl border border-white/[0.04] bg-[#0A0A0A] shadow-minimal">
           <div className="flex items-center justify-between gap-3 border-b border-white/[0.04] p-4">
@@ -387,8 +402,8 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
                 <option value="working">Working</option>
                 <option value="done">Done</option>
                 <option value="focused">Focused</option>
-                {projects.map((project) => (
-                  <option key={project} value={`project:${project}`}>Project: {project}</option>
+                {collections.map((collection) => (
+                  <option key={collection} value={`project:${collection}`}>Collection: {collection}</option>
                 ))}
                 <option value="sort:recent">Recently edited</option>
                 <option value="sort:newest">Newest first</option>
@@ -411,7 +426,7 @@ export function LabSongsPage({ workspaceId, workspaceName }: LabSongsPageProps) 
 
           <div className="grid grid-cols-[minmax(0,1fr)_150px_120px_180px] gap-4 border-b border-white/[0.035] px-4 py-2 text-[9px] font-medium uppercase tracking-[0.16em] text-white/30">
             <span>Song</span>
-            <span>Project</span>
+            <span>Collection</span>
             <span>Status</span>
             <span className="text-right">Edited</span>
           </div>

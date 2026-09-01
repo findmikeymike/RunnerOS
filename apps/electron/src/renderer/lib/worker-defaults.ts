@@ -6,6 +6,10 @@ export const BASE_DEFAULT_WORKER_SLUGS = [
   'x-editorial',
 ] as const
 
+export const HQ_DEFAULT_WORKER_SLUGS = [
+  'update-system-agent',
+] as const
+
 export const CAMPAIGN_DEFAULT_WORKER_SLUGS = [
   'content-genius',
   'scroll-stopper',
@@ -27,5 +31,5 @@ export { LAB_DEFAULT_ACTIVATED_AGENT_SLUGS as LAB_DEFAULT_WORKER_SLUGS } from '@
 export function defaultWorkerSlugs(includeCampaignWorkers: boolean): readonly string[] {
   return includeCampaignWorkers
     ? [...BASE_DEFAULT_WORKER_SLUGS, ...CAMPAIGN_DEFAULT_WORKER_SLUGS]
-    : BASE_DEFAULT_WORKER_SLUGS
+    : [...BASE_DEFAULT_WORKER_SLUGS, ...HQ_DEFAULT_WORKER_SLUGS]
 }

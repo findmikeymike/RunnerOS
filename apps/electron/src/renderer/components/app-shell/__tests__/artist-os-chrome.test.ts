@@ -48,6 +48,9 @@ describe('Artist OS persistent shell chrome', () => {
 
     expect(shell).toMatch(/id: "nav:chat",\s+title: "Command",\s+label:[\s\S]*?icon: Sparkles/)
     expect(shell).toMatch(/id: "nav:work-chat",\s+title: "Command",\s+label:[\s\S]*?icon: Sparkles/)
+    expect(shell).not.toContain('title: "Chat"')
+    expect(shell).toContain('SONG_DIRECTOR_SLUG')
+    expect(shell).toContain("{isLabWorkspace ? 'New Command' : 'New Chat'}")
   })
 
   test('keeps the black canvas scoped to Artist OS main content', () => {
@@ -202,18 +205,31 @@ describe('Artist OS persistent shell chrome', () => {
     expect(workers).toContain('{description}')
     expect(workers).toContain('space-y-6')
     expect(workers).toContain('group/category')
+    expect(workers).toContain('group/category mb-4')
+    expect(workers).toContain('h-[22px]')
+    expect(workers).toContain('defaultVisibleSlugs={defaultVisibleSlugs}')
+    expect(workers).toContain('includeSystemVisibleAgents: !labOnly')
+    expect(workers).toContain('allowedAgentSet.has(a.slug)')
+    expect(workers).toContain('allowedAgentSlugs={allowedAgentSlugs}')
+    expect(workers).toContain("slug === 'the-excavator' || slug === 'reverse-magic') return 'Inspiration'")
+    expect(workers).toContain("slug === 'legendary-writer' || slug === 'hooker' || slug === 'reference-master') return 'Writing'")
+    expect(workers).toContain("if (slug === 'record-doctor') return 'Song Development'")
+    expect(workers).toContain("if (slug === 'x-editorial')")
+    expect(workers).toContain("return 'Socials'")
     expect(workers).toContain('text-white/72')
     expect(workers).not.toContain('<MessageSquare')
     expect(workers).not.toContain('onClick={() => setSelectedAgent(agent)}')
   })
 
   test('keeps Artist OS chat and notification text visible on black surfaces', () => {
+    const chat = readFileSync(join(import.meta.dir, '..', 'ChatDisplay.tsx'), 'utf8')
     const input = readFileSync(join(import.meta.dir, '..', 'input', 'FreeFormInput.tsx'), 'utf8')
     const agentHeader = readFileSync(join(import.meta.dir, '..', 'ChatAgentHeader.tsx'), 'utf8')
     const bell = readFileSync(join(import.meta.dir, '..', '..', 'notifications', 'BellMenu.tsx'), 'utf8')
     const notification = readFileSync(join(import.meta.dir, '..', '..', 'notifications', 'NotificationItem.tsx'), 'utf8')
 
     expect(input).toContain("RENDERER_PRODUCT_VARIANT === 'artist-os' ? 'rgba(255, 255, 255, 0.92)' : undefined")
+    expect(chat).toContain('runner-chat-response relative max-w-[90%] pl-6 pr-4 py-3 text-[13.5px] leading-[25px]')
     expect(agentHeader).toContain('bg-[#111112]/82')
     expect(agentHeader).toContain('radial-gradient(90%_145%_at_50%_125%')
     expect(agentHeader).toContain('min-h-[50px]')
@@ -316,15 +332,23 @@ describe('Artist OS persistent shell chrome', () => {
 
   test('creates an empty Lab song from the Songs page before opening the Pad', () => {
     const songs = readFileSync(join(import.meta.dir, '..', 'LabSongsPage.tsx'), 'utf8')
+    const pad = readFileSync(join(import.meta.dir, '..', 'LabSongPadPage.tsx'), 'utf8')
+    const collectionPicker = readFileSync(join(import.meta.dir, '..', 'LabCollectionPicker.tsx'), 'utf8')
 
     expect(songs).toContain('createLabUiSong')
     expect(songs).toContain('placeholder="Song title"')
-    expect(songs).toContain('placeholder="Tag (optional)"')
+    expect(songs).toContain('LabCollectionPicker')
+    expect(songs).toContain('Collection: {collection}')
     expect(songs).toContain('Add to Songs')
-    expect(songs).toContain('project: draftTag.trim() || \'Loose Singles\'')
+    expect(songs).toContain("project: draftCollection.trim() || 'Loose Singles'")
     expect(songs).toContain('onClick={() => setAddSongOpen(true)}')
     expect(songs).toContain('deleteLabUiSong')
     expect(songs).toContain('Save changes')
+    expect(songs).toContain('open={Boolean(editingSongId)}')
+    expect(songs).toContain('Update how this song appears across the Lab.')
+    expect(pad).toContain('<LabCollectionPicker')
+    expect(collectionPicker).toContain('New collection...')
+    expect(collectionPicker).toContain("const DEFAULT_COLLECTION = 'Loose Singles'")
   })
 
   test('keeps Spark capture available across the Lab with a searchable bank', () => {
@@ -343,11 +367,15 @@ describe('Artist OS persistent shell chrome', () => {
   })
 
   test('connects Lab Home to the canonical Spark Bank and bounded songwriting team', () => {
+    const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
     const home = readFileSync(join(import.meta.dir, '..', 'LabWorkspaceHome.tsx'), 'utf8')
+    const main = readFileSync(join(import.meta.dir, '..', 'MainContentPanel.tsx'), 'utf8')
 
+    expect(shell).not.toContain('title: "Drafts"')
     expect(home).toContain('loadLabUiSparks')
     expect(home).toContain('openLabSparkBank')
     expect(home).toContain('LAB_DEFAULT_WORKER_SLUGS')
+    expect(main).toContain('labOnly={isLabWorkspace(activeWorkspace, workspaces)}')
     expect(home).toContain("routes.view.agents('reference-master')")
     expect(home).not.toContain('song.rememberText')
   })
@@ -379,6 +407,9 @@ describe('Artist OS persistent shell chrome', () => {
     expect(sequence).toContain('removeLabSequencePage')
     expect(sequence).toContain('Songs stay in your library.')
     expect(sequence).toContain('Delete sequence page')
+    expect(sequence).toContain('aria-expanded={addOpen}')
+    expect(sequence).toContain("addOpen && 'rotate-45'")
+    expect(sequence).not.toContain('<Music2')
   })
 
   test('lets writers persist Focus and Status directly from the Songs list', () => {

@@ -239,7 +239,7 @@ function renderContentWithBadges(
         mode="minimal"
         onUrlClick={onUrlClick}
         onFileClick={onFileClick}
-        className="text-sm [&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap"
+        className="text-[13.5px] leading-[25px] [&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap"
       >
         {content}
       </Markdown>
@@ -263,7 +263,7 @@ function renderContentWithBadges(
             mode="minimal"
             onUrlClick={onUrlClick}
             onFileClick={onFileClick}
-            className="inline text-sm [&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap [&_p]:inline"
+            className="inline text-[13.5px] leading-[25px] [&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap [&_p]:inline"
           >
             {textBefore}
           </Markdown>
@@ -299,7 +299,7 @@ function renderContentWithBadges(
           mode="minimal"
           onUrlClick={onUrlClick}
           onFileClick={onFileClick}
-          className="inline text-sm [&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap [&_p]:inline"
+          className="inline text-[13.5px] leading-[25px] [&_a]:underline [&_code]:bg-foreground/10 [&_p]:whitespace-pre-wrap [&_p]:inline"
         >
           {textAfter}
         </Markdown>
@@ -308,7 +308,7 @@ function renderContentWithBadges(
   }
 
   // Use <p> to match Markdown's block-level line-height behavior
-  return <p className="text-sm">{elements}</p>
+  return <p className="text-[13.5px] leading-[25px]">{elements}</p>
 }
 
 export interface UserMessageBubbleProps {
@@ -527,7 +527,7 @@ export function UserMessageBubble({
           (#616 follow-up). */}
       <div
         className={cn(
-          "runner-chat-user-bubble max-w-[80%] rounded-[16px] text-white/86 break-words min-w-0 select-text [&_p]:m-0",
+          "runner-chat-user-bubble max-w-[80%] rounded-[16px] text-[13.5px] leading-[25px] text-white/86 break-words min-w-0 select-text [&_p]:m-0",
           compactMode ? "px-4 py-2.5" : "px-5 py-4"
         )}
       >
@@ -548,7 +548,7 @@ export function UserMessageBubble({
               mode="minimal"
               onUrlClick={onUrlClick}
               onFileClick={onFileClick}
-              className="text-[15px] leading-7 text-white/86 [&_a]:text-[#b9b6ff] [&_a]:underline [&_code]:bg-white/10 [&_p]:whitespace-pre-wrap"
+              className="text-[13.5px] leading-[25px] text-white/86 [&_a]:text-[#b9b6ff] [&_a]:underline [&_code]:bg-white/10 [&_p]:whitespace-pre-wrap"
             >
               {displayContent}
             </Markdown>
