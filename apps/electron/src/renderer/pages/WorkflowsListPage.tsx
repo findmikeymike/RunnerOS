@@ -215,59 +215,63 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
           title="Work"
           tone="orange"
           className="mb-4"
-          eyebrowAccessory={
+        />
+
+        <WorkPageTabs active="workflows" className="mb-3" />
+
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] px-1 pb-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-sm font-medium text-white/74">Workflow library</h2>
                 <button
                   type="button"
                   onClick={() => setInfoOpen(true)}
-                  className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.035] text-white/46 transition-colors hover:bg-white/[0.07] hover:text-white/80"
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-full text-white/34 transition-colors hover:bg-white/[0.05] hover:text-white/70"
                   aria-label="What are workflows?"
                   title="What are workflows?"
                 >
-                  <Info className="h-2.5 w-2.5" />
+                  <Info className="h-3 w-3" />
                 </button>
-          }
-          actions={
-            <>
-              <button
-                type="button"
-                onClick={() => setDeepResearchOpen(true)}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/68 transition-colors hover:bg-white/[0.06]"
-              >
-                <Search className="h-3.5 w-3.5" />
-                Deep Research
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate(routes.view.recentRuns())}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/68 transition-colors hover:bg-white/[0.06]"
-              >
-                <History className="h-3.5 w-3.5" />
-                {t('sidebar.workflows.recentRuns')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setLibraryOpen(true)}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-[#fb923c]/25 bg-[#f97316]/14 px-4 text-xs font-medium text-[#fed7aa] transition-colors hover:bg-[#f97316]/22"
-              >
-                <Folder className="h-3.5 w-3.5" />
-                Manage library
-              </button>
-              <button
-                type="button"
-                onClick={handleNew}
-                className="inline-flex h-9 items-center gap-2 rounded-full bg-violet-500/85 px-4 text-xs font-medium text-white transition-colors hover:bg-violet-500"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                {t('workflows.list.new')}
-              </button>
-            </>
-          }
-        />
+              </div>
+              <ArtistManagerCreateLink kind="workflow" workspaceId={workspaceId} className="mt-1" />
+            </div>
+          </div>
 
-        <WorkPageTabs active="workflows" className="mb-4" />
-
-        <div className="mb-4 flex justify-end px-1">
-          <ArtistManagerCreateLink kind="workflow" workspaceId={workspaceId} />
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <button
+              type="button"
+              onClick={() => setDeepResearchOpen(true)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-[8px] px-2.5 text-[11px] font-medium text-white/48 transition-colors hover:bg-white/[0.045] hover:text-white/76"
+            >
+              <Search className="h-3.5 w-3.5 text-white/38" />
+              Deep Research
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(routes.view.recentRuns())}
+              className="inline-flex h-8 items-center gap-1.5 rounded-[8px] px-2.5 text-[11px] font-medium text-white/48 transition-colors hover:bg-white/[0.045] hover:text-white/76"
+            >
+              <History className="h-3.5 w-3.5 text-white/38" />
+              {t('sidebar.workflows.recentRuns')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setLibraryOpen(true)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.035] px-3 text-[11px] font-medium text-white/64 transition-colors hover:bg-white/[0.065] hover:text-white/86"
+            >
+              <Folder className="h-3.5 w-3.5" />
+              Manage library
+            </button>
+            <button
+              type="button"
+              onClick={handleNew}
+              className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-gradient-to-r from-[#f97316] to-[#ef3e16] px-3 text-[11px] font-semibold text-white shadow-minimal transition-[filter,transform] hover:brightness-110 active:translate-y-px"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t('workflows.list.new')}
+            </button>
+          </div>
         </div>
 
         {loading ? (

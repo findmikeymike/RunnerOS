@@ -201,6 +201,8 @@ describe('Artist OS persistent shell chrome', () => {
     expect(workers).toContain("title={labOnly ? 'Workers' : 'Work'}")
     expect(workflows).toContain('title="Work"')
     expect(workflows).toContain('tone="orange"')
+    expect(workflows).toContain('Workflow library')
+    expect(workflows).not.toContain('bg-violet')
     expect(automations).toContain("title={workTab ? 'Work' : title}")
     expect(automations).toContain("tone={workTab ? 'orange' : 'blue'}")
     expect(tabs).toContain("{ id: 'workers', label: 'Workers'")
