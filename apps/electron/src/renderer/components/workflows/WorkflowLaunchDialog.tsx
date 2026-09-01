@@ -8,7 +8,7 @@ import { isArtistHQWorkspace } from '@/lib/artist-workspace'
 import { openAgentSessionComposer } from '@/lib/run-agent'
 import { buildWorkflowLaunchContextDocs, createWorkflowSetupDraft } from '@/lib/workflow-launcher'
 import { WorkflowRunInputDialog } from '@/pages/WorkflowRunInputDialog'
-import type { WorkflowDTO, WorkflowRunDTO } from '../../shared/types'
+import type { WorkflowDTO, WorkflowRunDTO } from '../../../shared/types'
 
 interface WorkflowLaunchDialogProps {
   open: boolean
