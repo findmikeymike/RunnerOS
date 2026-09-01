@@ -22,7 +22,7 @@ import { WsRpcClient, type TransportConnectionState } from '../transport/client'
 import { RoutedClient } from '../transport/routed-client'
 import { buildClientApi } from '../transport/build-api'
 import { CHANNEL_MAP } from '../transport/channel-map'
-import { createCallbackServer } from '@craft-agent/shared/auth/callback-server'
+import { createCallbackServer, validateOAuthCallback } from '@craft-agent/shared/auth/callback-server'
 import { CHATGPT_OAUTH_CONFIG } from '@craft-agent/shared/auth/chatgpt-oauth-config'
 import {
   CLIENT_OPEN_EXTERNAL,
@@ -318,6 +318,9 @@ client.onConnectionStateChanged((state) => {
     })
     flowId = startResult.flowId
     state = startResult.state
+    if (!flowId || !state) {
+      throw new Error('OAuth flow did not return its verification state.')
+    }
 
     // 3. Open browser for user consent (local — must open on the user's machine, not remote server)
     await shell.openExternal(startResult.authUrl)
@@ -325,21 +328,15 @@ client.onConnectionStateChanged((state) => {
     // 4. Wait for OAuth provider to redirect to our callback server
     const callback = await callbackServer.promise
 
-    // 5. Check for errors from the provider
-    if (callback.query.error) {
-      const error = callback.query.error_description || callback.query.error
+    // 5. Validate the one-time state nonce before accepting any callback data.
+    const validated = validateOAuthCallback(callback, state)
+    if ('error' in validated) {
       await client.invoke('oauth:cancel', { flowId, state })
-      return { success: false, error }
-    }
-
-    const code = callback.query.code
-    if (!code) {
-      await client.invoke('oauth:cancel', { flowId, state })
-      return { success: false, error: 'No authorization code received' }
+      return { success: false, error: validated.error }
     }
 
     // 6. Send code to server for token exchange + credential storage
-    const result = await client.invoke('oauth:complete', { flowId, code, state })
+    const result = await client.invoke('oauth:complete', { flowId, code: validated.code, state })
     return { success: result.success, error: result.error, email: result.email }
   } catch (err) {
     // Clean up server-side flow on error

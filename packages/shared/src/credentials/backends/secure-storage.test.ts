@@ -83,4 +83,27 @@ describe('SecureStorageBackend', () => {
     await expect(reader.get({ type: 'source_apikey', workspaceId: 'ws-test', sourceId: 'source-a' })).resolves.toMatchObject({ value: 'secret-a' });
     await expect(reader.get({ type: 'source_apikey', workspaceId: 'ws-test', sourceId: 'source-b' })).resolves.toMatchObject({ value: 'secret-b' });
   });
+
+  test('persists OAuth account metadata inside the encrypted store', async () => {
+    const backend = new SecureStorageBackend();
+    const id = { type: 'source_oauth' as const, workspaceId: 'ws-test', sourceId: 'gmail' };
+    await backend.set(id, {
+      value: 'access-token',
+      refreshToken: 'refresh-token',
+      accountEmail: 'artist@example.com',
+      oauthScopes: [
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/gmail.compose',
+      ],
+    });
+
+    await expect(new SecureStorageBackend().get(id)).resolves.toMatchObject({
+      value: 'access-token',
+      refreshToken: 'refresh-token',
+      accountEmail: 'artist@example.com',
+    });
+    const encrypted = readFileSync(join(sandboxHome, '.craft-agent', 'credentials.enc'), 'utf8');
+    expect(encrypted).not.toContain('access-token');
+    expect(encrypted).not.toContain('artist@example.com');
+  });
 });

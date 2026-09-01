@@ -20,7 +20,7 @@ import {
   buildSessionCookie,
   buildLogoutCookie,
 } from './auth'
-import { generateCallbackPage } from '@craft-agent/shared/auth'
+import { generateCallbackPage, OAUTH_CALLBACK_PAGE_HEADERS } from '@craft-agent/shared/auth'
 import type { PlatformServices } from '../runtime/platform'
 
 // ---------------------------------------------------------------------------
@@ -291,23 +291,22 @@ export function createWebuiHandler(options: WebuiHandlerOptions): WebuiHandler {
       const code = url.searchParams.get('code')
       const state = url.searchParams.get('state')
       const error = url.searchParams.get('error')
-      const errorDescription = url.searchParams.get('error_description')
 
       if (error) {
         const flow = state ? options.oauthCallbackDeps.flowStore.getByState(state) : null
         if (flow && state) options.oauthCallbackDeps.flowStore.remove(state)
-        const errorMsg = errorDescription || error
-        logger.warn(`[webui] OAuth callback error: ${errorMsg}`)
+        const errorMsg = error === 'access_denied' ? 'Access was denied.' : 'Authorization failed.'
+        logger.warn(`[webui] OAuth callback error: ${error}`)
         return new Response(generateCallbackPage({ title: 'Authorization Failed', isSuccess: false, errorDetail: errorMsg }), {
           status: 200,
-          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+          headers: OAUTH_CALLBACK_PAGE_HEADERS,
         })
       }
 
       if (!code || !state) {
         return new Response(generateCallbackPage({ title: 'Authorization Failed', isSuccess: false, errorDetail: 'Missing code or state parameter' }), {
           status: 400,
-          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+          headers: OAUTH_CALLBACK_PAGE_HEADERS,
         })
       }
 
@@ -327,12 +326,12 @@ export function createWebuiHandler(options: WebuiHandlerOptions): WebuiHandler {
         if (result.success) {
           return new Response(generateCallbackPage({ title: 'Authorization Successful', isSuccess: true }), {
             status: 200,
-            headers: { 'Content-Type': 'text/html; charset=utf-8' },
+            headers: OAUTH_CALLBACK_PAGE_HEADERS,
           })
         } else {
           return new Response(generateCallbackPage({ title: 'Authorization Failed', isSuccess: false, errorDetail: result.error }), {
             status: 200,
-            headers: { 'Content-Type': 'text/html; charset=utf-8' },
+            headers: OAUTH_CALLBACK_PAGE_HEADERS,
           })
         }
       } catch (err) {
@@ -340,7 +339,7 @@ export function createWebuiHandler(options: WebuiHandlerOptions): WebuiHandler {
         logger.error(`[webui] OAuth callback failed: ${msg}`)
         return new Response(generateCallbackPage({ title: 'Authorization Failed', isSuccess: false, errorDetail: msg }), {
           status: 200,
-          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+          headers: OAUTH_CALLBACK_PAGE_HEADERS,
         })
       }
     }

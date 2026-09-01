@@ -219,8 +219,17 @@ async function buildCredentialScopeResult(source: LoadedSource): Promise<SourceC
       ? {
         googleAdsDeveloperTokenConfigured: Boolean(googleAdsCredential.developerToken?.trim()),
         googleAdsLoginCustomerIdConfigured: Boolean(googleAdsCredential.loginCustomerId?.trim()),
+        accountEmail: effectiveCredential?.accountEmail,
+        oauthScopes: effectiveCredential?.oauthScopes,
+        expiresAt: effectiveCredential?.expiresAt,
       }
-      : undefined,
+      : effectiveCredential
+        ? {
+          accountEmail: effectiveCredential.accountEmail,
+          oauthScopes: effectiveCredential.oauthScopes,
+          expiresAt: effectiveCredential.expiresAt,
+        }
+        : undefined,
   }
 }
 

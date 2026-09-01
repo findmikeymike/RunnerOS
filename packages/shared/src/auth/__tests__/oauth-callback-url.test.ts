@@ -28,7 +28,7 @@ describe('callbackUrl support in OAuth prepare functions', () => {
 
     it('falls back to callbackPort when callbackUrl not provided', () => {
       const result = prepareGoogleOAuth({ callbackPort: 6477, ...TEST_CREDS })
-      expect(result.redirectUri).toBe('http://localhost:6477/callback')
+      expect(result.redirectUri).toBe('http://127.0.0.1:6477/callback')
     })
 
     it('callbackUrl takes precedence over callbackPort', () => {

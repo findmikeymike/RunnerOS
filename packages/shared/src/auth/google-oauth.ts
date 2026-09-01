@@ -38,6 +38,8 @@ function getGoogleClientSecretEnv(): string {
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo';
+const GMAIL_PROFILE_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/profile';
+const GOOGLE_REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
 
 /**
  * Predefined scope sets for common Google services
@@ -46,7 +48,6 @@ export const GOOGLE_SERVICE_SCOPES: Record<GoogleService, string[]> = {
   gmail: [
     'https://www.googleapis.com/auth/gmail.readonly', // Read messages and threads
     'https://www.googleapis.com/auth/gmail.compose', // Create drafts
-    'https://www.googleapis.com/auth/userinfo.email',
   ],
   calendar: [
     'https://www.googleapis.com/auth/calendar.events', // Manage events without full calendar access
@@ -135,7 +136,7 @@ async function exchangeCodeForTokens(
   redirectUri: string,
   clientId: string,
   clientSecret: string
-): Promise<{ accessToken: string; refreshToken?: string; expiresIn?: number }> {
+): Promise<{ accessToken: string; refreshToken?: string; expiresIn?: number; scopes: string[] }> {
   const params = new URLSearchParams({
     client_id: clientId,
     client_secret: clientSecret,
@@ -151,29 +152,61 @@ async function exchangeCodeForTokens(
     body: params.toString(),
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Token exchange failed: ${errorText}`);
-  }
+  if (!response.ok) throw new Error(classifyGoogleOAuthHttpError(response.status, await safeGoogleErrorCode(response)));
 
   const data = (await response.json()) as {
     access_token: string;
     refresh_token?: string;
     expires_in?: number;
+    scope?: string;
   };
 
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
     expiresIn: data.expires_in,
+    scopes: data.scope?.split(/\s+/).filter(Boolean) ?? [],
   };
+}
+
+async function safeGoogleErrorCode(response: Response): Promise<string | undefined> {
+  try {
+    const data = await response.json() as { error?: string };
+    return typeof data.error === 'string' ? data.error : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function classifyGoogleOAuthHttpError(status: number, code?: string): string {
+  if (code === 'invalid_grant') return 'Google authorization expired or was revoked. Reconnect Gmail.';
+  if (code === 'invalid_client') return 'Google OAuth client configuration is invalid.';
+  if (code === 'access_denied') return 'Google access was denied.';
+  if (status >= 500) return 'Google is temporarily unavailable. Try again shortly.';
+  return 'Google authorization failed. Reconnect and try again.';
+}
+
+export function toGoogleOAuthUserError(error: unknown): string {
+  const message = error instanceof Error ? error.message : '';
+  const safeMessages = [
+    'Google authorization expired or was revoked.',
+    'Google OAuth client configuration is invalid.',
+    'Google access was denied.',
+    'Google is temporarily unavailable.',
+    'Google authorization failed.',
+    'Google did not grant every required',
+    'Google did not return an account email.',
+    'Google OAuth not configured.',
+  ];
+  if (safeMessages.some((prefix) => message.startsWith(prefix))) return message;
+  return 'Could not reach Google. Check your connection and try again.';
 }
 
 /**
  * Get user email from access token
  */
-async function getUserEmail(accessToken: string): Promise<string> {
-  const response = await fetch(GOOGLE_USERINFO_URL, {
+async function getUserEmail(accessToken: string, service?: GoogleService): Promise<string> {
+  const response = await fetch(service === 'gmail' ? GMAIL_PROFILE_URL : GOOGLE_USERINFO_URL, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
@@ -181,8 +214,28 @@ async function getUserEmail(accessToken: string): Promise<string> {
     throw new Error('Failed to get user info');
   }
 
-  const data = (await response.json()) as { email: string };
-  return data.email;
+  const data = (await response.json()) as { email?: string; emailAddress?: string };
+  const email = service === 'gmail' ? data.emailAddress : data.email;
+  if (!email) throw new Error('Google did not return an account email.');
+  return email;
+}
+
+export async function revokeGoogleToken(token: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(GOOGLE_REVOKE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token }).toString(),
+    });
+  } catch {
+    throw new Error('Google could not be reached to revoke access.');
+  }
+  // Google returns 400 for an already-invalid token. Locally disconnecting is
+  // still correct because there is no remaining usable grant to revoke.
+  if (!response.ok && response.status !== 400) {
+    throw new Error('Google could not be reached to revoke access.');
+  }
 }
 
 /**
@@ -217,15 +270,18 @@ export async function refreshGoogleToken(
     refresh_token: refreshToken,
   });
 
-  const response = await fetch(GOOGLE_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params.toString(),
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to refresh Google token');
+  let response: Response;
+  try {
+    response = await fetch(GOOGLE_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+  } catch {
+    throw new Error('Could not reach Google. Check your connection and try again.');
   }
+
+  if (!response.ok) throw new Error(classifyGoogleOAuthHttpError(response.status, await safeGoogleErrorCode(response)));
 
   const data = (await response.json()) as {
     access_token: string;
@@ -257,12 +313,7 @@ export function isGoogleOAuthConfigured(clientId?: string, clientSecret?: string
 export function getGoogleScopes(options: GoogleOAuthOptions): string[] {
   // Custom scopes take precedence
   if (options.scopes && options.scopes.length > 0) {
-    // Ensure userinfo.email is included for email retrieval
-    const emailScope = 'https://www.googleapis.com/auth/userinfo.email';
-    if (!options.scopes.includes(emailScope)) {
-      return [...options.scopes, emailScope];
-    }
-    return options.scopes;
+    return [...new Set(options.scopes)];
   }
 
   // Use predefined service scopes
@@ -298,7 +349,7 @@ export function prepareGoogleOAuth(options: PrepareGoogleOAuthOptions): Prepared
 
   if (!isGoogleOAuthConfigured(clientId, clientSecret)) {
     throw new Error(
-      'Google OAuth not configured. Provide clientId and clientSecret in source config, ' +
+      'Google OAuth not configured. Add the client ID and secret in Settings, ' +
       'or set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET environment variables.'
     );
   }
@@ -306,8 +357,11 @@ export function prepareGoogleOAuth(options: PrepareGoogleOAuthOptions): Prepared
   const scopes = getGoogleScopes(options);
   const pkce = generatePKCE();
   const state = generateState();
+  if (!options.callbackUrl && !Number.isInteger(options.callbackPort)) {
+    throw new Error('Google authorization failed. Reconnect and try again.');
+  }
   const redirectUri = options.callbackUrl
-    ?? `http://localhost:${options.callbackPort}/callback`;
+    ?? `http://127.0.0.1:${options.callbackPort}/callback`;
 
   const authUrl = new URL(GOOGLE_AUTH_URL);
   authUrl.searchParams.set('client_id', clientId);
@@ -329,6 +383,8 @@ export function prepareGoogleOAuth(options: PrepareGoogleOAuthOptions): Prepared
     clientSecret,
     redirectUri,
     provider: 'google',
+    requestedScopes: scopes,
+    googleService: options.service,
   };
 }
 
@@ -338,6 +394,9 @@ export function prepareGoogleOAuth(options: PrepareGoogleOAuthOptions): Prepared
  */
 export async function exchangeGoogleOAuth(params: OAuthExchangeParams): Promise<OAuthExchangeResult> {
   try {
+    if (!params.code.trim() || params.code.length > 4096) {
+      throw new Error('Google authorization failed. Reconnect and try again.');
+    }
     const tokens = await exchangeCodeForTokens(
       params.code,
       params.codeVerifier,
@@ -346,7 +405,24 @@ export async function exchangeGoogleOAuth(params: OAuthExchangeParams): Promise<
       params.clientSecret || ''
     );
 
-    const email = await getUserEmail(tokens.accessToken);
+    const expectedScopes = params.expectedScopes ?? [];
+    // OAuth allows the token response to omit `scope` when it is unchanged
+    // from the authorization request. Use the exact state-bound request set.
+    const grantedScopes = tokens.scopes.length > 0 ? tokens.scopes : expectedScopes;
+    const missingScopes = expectedScopes.filter((scope) => !grantedScopes.includes(scope));
+    if (missingScopes.length > 0) {
+      throw new Error('Google did not grant every required Gmail permission. Reconnect and approve both Gmail permissions.');
+    }
+
+    // Account metadata is useful for display, but it must not discard an
+    // otherwise valid, correctly scoped OAuth grant when Google profile lookup
+    // is temporarily unavailable. Gmail operations authenticate with the token.
+    let email: string | undefined;
+    try {
+      email = await getUserEmail(tokens.accessToken, params.googleService);
+    } catch {
+      email = undefined;
+    }
 
     return {
       success: true,
@@ -356,11 +432,12 @@ export async function exchangeGoogleOAuth(params: OAuthExchangeParams): Promise<
       email,
       oauthClientId: params.clientId,
       oauthClientSecret: params.clientSecret,
+      grantedScopes,
     };
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Google OAuth exchange failed',
+      error: toGoogleOAuthUserError(error),
     };
   }
 }
@@ -398,7 +475,7 @@ export async function startGoogleOAuth(
       return {
         success: false,
         error:
-          'Google OAuth not configured. Provide clientId and clientSecret in source config, ' +
+          'Google OAuth not configured. Add the Google OAuth client ID and secret in Settings, ' +
           'or set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET environment variables.',
       };
     }
@@ -449,11 +526,11 @@ export async function startGoogleOAuth(
         String(callback.query.error_description ?? '').toLowerCase().includes('verif');
       const error = isAccessBlocked
         ? 'Google has blocked this app (not yet verified).\n\n' +
-          'To fix this, add your own Google OAuth credentials to the source config:\n' +
-          '  "googleOAuthClientId": "...",\n' +
-          '  "googleOAuthClientSecret": "..."\n\n' +
+          'To fix this, add your Google OAuth credentials in Settings.\n\n' +
           'See: https://console.cloud.google.com/apis/credentials'
-        : callback.query.error_description || callback.query.error;
+        : callback.query.error === 'access_denied'
+          ? 'Google access was denied.'
+          : 'Google sign-in failed. Reconnect and try again.';
       return { success: false, error };
     }
 
@@ -470,7 +547,13 @@ export async function startGoogleOAuth(
     const tokens = await exchangeCodeForTokens(code, pkce.verifier, redirectUri, clientId, clientSecret);
 
     // Get user email
-    const email = await getUserEmail(tokens.accessToken);
+    const grantedScopes = tokens.scopes.length > 0 ? tokens.scopes : scopes;
+    const missingScopes = scopes.filter((scope) => !grantedScopes.includes(scope));
+    if (missingScopes.length > 0) {
+      return { success: false, error: 'Google did not grant every required permission. Reconnect and approve the requested permissions.' };
+    }
+
+    const email = await getUserEmail(tokens.accessToken, options.service);
 
     return {
       success: true,
@@ -485,7 +568,7 @@ export async function startGoogleOAuth(
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error during Google OAuth',
+      error: toGoogleOAuthUserError(error),
     };
   }
 }

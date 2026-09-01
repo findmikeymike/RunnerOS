@@ -1,12 +1,12 @@
 import { createServer as createHttpServer, type Server } from 'http';
+import { randomInt } from 'crypto';
 import { URL } from 'url';
-import { generateCallbackPage, type AppType } from './callback-page.ts';
+import { generateCallbackPage, OAUTH_CALLBACK_PAGE_HEADERS, type AppType } from './callback-page.ts';
 
 // Re-export for backwards compatibility
 export { generateCallbackPage, type AppType } from './callback-page.ts';
 
-const START_PORT = 6477;
-const MAX_PORT_ATTEMPTS = 100;
+const DEFAULT_CALLBACK_TIMEOUT_MS = 5 * 60 * 1000;
 
 export interface CallbackPayload {
   // For now just the query params. In the future we may extend this with other request properties.
@@ -20,6 +20,26 @@ export interface CallbackServer {
   close: () => void | Promise<void>;
 }
 
+export function validateOAuthCallback(
+  payload: CallbackPayload,
+  expectedState: string,
+): { code: string } | { error: string } {
+  const returnedState = payload.query.state;
+  if (!returnedState || returnedState !== expectedState) {
+    throw new Error('Authorization callback could not be verified. Reconnect and try again.');
+  }
+
+  if (payload.query.error) {
+    if (payload.query.error === 'access_denied') return { error: 'Access was denied.' };
+    return { error: 'Authorization failed. Reconnect and try again.' };
+  }
+
+  if (!payload.query.code) {
+    throw new Error('The authorization provider did not return a code.');
+  }
+  return { code: payload.query.code };
+}
+
 /**
  * Attempt to bind an HTTP server to the given port.
  * Resolves on success, rejects on error (e.g. EADDRINUSE).
@@ -27,9 +47,7 @@ export interface CallbackServer {
 function tryBind(server: Server, port: number): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     server.once('error', reject);
-    // Use 'localhost' consistently for both the bind address and the URL
-    // that callers construct (avoids subtle mismatches between 127.0.0.1 and localhost).
-    server.listen(port, 'localhost', () => {
+    server.listen(port, '127.0.0.1', () => {
       server.removeListener('error', reject);
       resolve();
     });
@@ -44,15 +62,13 @@ export interface CreateCallbackServerOptions {
   port?: number;
   /** URL paths to accept as callbacks. Default: ['/callback', '/oauth/callback']. */
   callbackPaths?: string[];
+  /** Maximum time to wait for the browser callback. */
+  timeoutMs?: number;
 }
 
 /**
- * Creates an OAuth callback server by binding directly to a port in the range
- * START_PORT .. START_PORT + MAX_PORT_ATTEMPTS - 1.
- *
- * Unlike a check-then-bind approach, this eliminates the TOCTOU race condition
- * by attempting to bind the real server on each candidate port. If the port is
- * already in use (EADDRINUSE), the server is closed and the next port is tried.
+ * Creates an OAuth callback server on 127.0.0.1. Unless a provider requires a
+ * fixed port, the OS assigns a random available port atomically.
  */
 export async function createCallbackServer(options?: CreateCallbackServerOptions): Promise<CallbackServer> {
   const appType = options?.appType ?? 'terminal';
@@ -63,6 +79,7 @@ export async function createCallbackServer(options?: CreateCallbackServerOptions
   let boundPort: number | null = null;
   let resolveCallback: ((payload: CallbackPayload) => void) | null = null;
   let rejectCallback: ((error: Error) => void) | null = null;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
 
   const callbackPromise = new Promise<CallbackPayload>((resolve, reject) => {
     resolveCallback = resolve;
@@ -73,10 +90,16 @@ export async function createCallbackServer(options?: CreateCallbackServerOptions
   // any requests can arrive (the browser isn't opened until after we return).
   const requestHandler = async (req: import('http').IncomingMessage, res: import('http').ServerResponse) => {
     try {
-      const url = new URL(req.url || '/', `http://localhost:${boundPort}`);
+      if (req.method !== 'GET') {
+        res.writeHead(405, { Allow: 'GET' });
+        res.end('Method not allowed');
+        return;
+      }
+
+      const url = new URL(req.url || '/', `http://127.0.0.1:${boundPort}`);
 
       if (!allowedPaths.has(url.pathname)) {
-        res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.writeHead(404, OAUTH_CALLBACK_PAGE_HEADERS);
         res.end('Not found');
         return;
       }
@@ -98,12 +121,14 @@ export async function createCallbackServer(options?: CreateCallbackServerOptions
       const html = generateCallbackPage({
         title: hasError ? 'Authorization Failed' : 'Authorization Complete',
         isSuccess: hasCode && !hasError,
-        errorDetail: query.error_description || query.error,
+        errorDetail: hasError
+          ? query.error === 'access_denied' ? 'Google access was denied.' : 'Authorization failed. Return to the app and try again.'
+          : undefined,
         appType,
         deeplinkUrl: (hasCode && !hasError) ? deeplinkUrl : undefined,
       });
 
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(200, OAUTH_CALLBACK_PAGE_HEADERS);
       res.end(html);
 
       if (server) {
@@ -112,7 +137,10 @@ export async function createCallbackServer(options?: CreateCallbackServerOptions
       }
 
       if (resolveCallback) {
+        if (timeout) clearTimeout(timeout);
         resolveCallback(payload);
+        resolveCallback = null;
+        rejectCallback = null;
       }
     } catch (error) {
       const html = generateCallbackPage({
@@ -122,11 +150,14 @@ export async function createCallbackServer(options?: CreateCallbackServerOptions
         appType,
       });
 
-      res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(500, OAUTH_CALLBACK_PAGE_HEADERS);
       res.end(html);
 
       if (rejectCallback) {
+        if (timeout) clearTimeout(timeout);
         rejectCallback(error instanceof Error ? error : new Error(String(error)));
+        resolveCallback = null;
+        rejectCallback = null;
       }
     } finally {
       if (server) {
@@ -136,50 +167,57 @@ export async function createCallbackServer(options?: CreateCallbackServerOptions
     }
   };
 
-  // Port selection: fixed port (options.port) or scan default range.
-  const fixedPort = options?.port;
-  const portStart = fixedPort ?? START_PORT;
-  const portAttempts = fixedPort != null ? 1 : MAX_PORT_ATTEMPTS;
+  const candidatePorts = options?.port !== undefined
+    ? [options.port]
+    : process.versions.bun
+      ? Array.from({ length: 12 }, () => randomInt(49_152, 65_536))
+      : [0];
 
-  for (let i = 0; i < portAttempts; i++) {
-    const port = portStart + i;
+  let bindError: Error | null = null;
+  for (const candidatePort of candidatePorts) {
     const candidate = createHttpServer(requestHandler);
-
     try {
-      await tryBind(candidate, port);
-      // Bind succeeded — wire up the error handler for runtime errors
-      // and propagate them to the callback promise.
+      await tryBind(candidate, candidatePort);
       server = candidate;
-      boundPort = port;
-      server.on('error', (err) => {
-        rejectCallback?.(err instanceof Error ? err : new Error(String(err)));
-      });
       break;
-    } catch (err: unknown) {
-      // Port in use — close the candidate and try the next one
+    } catch (err) {
       candidate.close();
-      const isAddressInUse =
-        err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'EADDRINUSE';
-      if (!isAddressInUse) {
-        // Unexpected error (e.g. permission denied) — propagate immediately
-        throw err instanceof Error ? err : new Error(String(err));
-      }
+      bindError = err instanceof Error ? err : new Error(String(err));
     }
   }
 
-  if (server === null || boundPort === null) {
-    if (fixedPort != null) {
-      throw new Error(`Port ${fixedPort} is already in use`);
-    }
-    throw new Error(`No available port found in range ${START_PORT}-${START_PORT + MAX_PORT_ATTEMPTS - 1}`);
+  if (!server) {
+    throw bindError ?? new Error('Failed to start OAuth callback server');
   }
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    server.close();
+    throw new Error('OAuth callback server did not expose a local port');
+  }
+  boundPort = address.port;
+  server.on('error', (err) => {
+    rejectCallback?.(err instanceof Error ? err : new Error(String(err)));
+  });
 
-  const callbackUrl = `http://localhost:${boundPort}`;
+  timeout = setTimeout(() => {
+    server?.close();
+    server = null;
+    rejectCallback?.(new Error('Authorization timed out. Reconnect and try again.'));
+    resolveCallback = null;
+    rejectCallback = null;
+  }, options?.timeoutMs ?? DEFAULT_CALLBACK_TIMEOUT_MS);
+  timeout.unref?.();
+
+  const callbackUrl = `http://127.0.0.1:${boundPort}`;
 
   return {
     promise: callbackPromise,
     url: callbackUrl,
     close: () => {
+      if (timeout) {
+        clearTimeout(timeout);
+        timeout = null;
+      }
       if (server) {
         server.close();
         server = null;

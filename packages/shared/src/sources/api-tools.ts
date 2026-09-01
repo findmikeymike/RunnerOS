@@ -18,6 +18,25 @@ import { isMultiHeaderCredential } from './credential-manager.ts';
 export type { ApiCredential, BasicAuthCredential } from './credential-manager.ts';
 
 const API_FETCH_TIMEOUT_MS = 120_000;
+const GMAIL_LIST_PATHS = new Set(['/users/me/messages', '/users/me/threads']);
+
+export function validateGmailReadRequest(
+  configName: string,
+  method: string,
+  path: string,
+  params: Record<string, unknown> | undefined,
+  intent: string | undefined,
+): string | null {
+  if (configName !== 'gmail' || method !== 'GET') return null;
+  const normalizedPath = path.replace(/\/+$/, '');
+  if (!GMAIL_LIST_PATHS.has(normalizedPath)) return null;
+  const maxResults = Number(params?.maxResults);
+  if (!intent?.trim()) return 'Describe the user-requested Gmail inspection in _intent.';
+  if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 25) {
+    return 'Gmail list requests must set maxResults between 1 and 25. Bulk inbox crawling is disabled.';
+  }
+  return null;
+}
 
 /**
  * Build an Authorization header value for bearer-style authentication.
@@ -236,6 +255,14 @@ export function createApiTool(
       const { path, method, params, _intent } = args;
 
       try {
+        const gmailReadError = validateGmailReadRequest(config.name, method, path, params, _intent);
+        if (gmailReadError) {
+          return {
+            content: [{ type: 'text' as const, text: gmailReadError }],
+            isError: true,
+          };
+        }
+
         // Resolve credential - if it's a token getter function, call it to get fresh token
         const resolvedCredential: ApiCredential = isTokenGetter(credential)
           ? await credential()
@@ -244,7 +271,15 @@ export function createApiTool(
         const url = buildUrl(config.baseUrl, path, method, params, config.auth, resolvedCredential);
         const headers = buildHeaders(config.auth, resolvedCredential, config.defaultHeaders);
 
-        debug(`[api-tools] ${config.name}: ${method} ${url}`);
+        const safeUrl = (() => {
+          try {
+            const parsed = new URL(url);
+            return `${parsed.origin}${parsed.pathname}`;
+          } catch {
+            return config.baseUrl;
+          }
+        })();
+        debug(`[api-tools] ${config.name}: ${method} ${safeUrl}`);
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), API_FETCH_TIMEOUT_MS);
@@ -262,13 +297,13 @@ export function createApiTool(
             fetchOptions.body = params._rawBody;
             (fetchOptions.headers as Record<string, string>)['Content-Type'] =
               typeof params._contentType === 'string' ? params._contentType : 'text/plain';
-            debug(`[api-tools] ${config.name}: raw body (${(fetchOptions.headers as Record<string, string>)['Content-Type']}): ${params._rawBody.substring(0, 200)}`);
+            debug(`[api-tools] ${config.name}: raw body (${(fetchOptions.headers as Record<string, string>)['Content-Type']}), length=${params._rawBody.length}`);
           } else {
             fetchOptions.body = JSON.stringify(params);
           }
         }
 
-        debug(`[api-tools] ${config.name}: headers=${JSON.stringify(fetchOptions.headers)}, bodyLength=${fetchOptions.body ? String(fetchOptions.body).length : 0}`);
+        debug(`[api-tools] ${config.name}: headerNames=${Object.keys(fetchOptions.headers as Record<string, string>).filter((name) => name.toLowerCase() !== 'authorization').join(',')}, bodyLength=${fetchOptions.body ? String(fetchOptions.body).length : 0}`);
 
         let response: Response;
         let buffer: Buffer;
@@ -299,11 +334,13 @@ export function createApiTool(
         // Check for error responses first (errors are always text)
         if (!response.ok) {
           const text = buffer.toString('utf-8');
-          debug(`[api-tools] ${config.name} error ${response.status}: ${text.substring(0, 200)}`);
+          debug(`[api-tools] ${config.name} error ${response.status}`);
           return {
             content: [{
               type: 'text' as const,
-              text: `API Error ${response.status}: ${text}`,
+              text: config.name === 'gmail'
+                ? `Gmail API error ${response.status}. Reconnect Gmail or check the requested action.`
+                : `API Error ${response.status}: ${text}`,
             }],
             isError: true,
           };
@@ -326,9 +363,14 @@ export function createApiTool(
         return { content: [{ type: 'text' as const, text: buffer.toString('utf-8') }] };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        debug(`[api-tools] ${config.name} request failed: ${message}`);
+        debug(`[api-tools] ${config.name} request failed${config.name === 'gmail' ? '' : `: ${message}`}`);
         return {
-          content: [{ type: 'text' as const, text: `Request failed: ${message}` }],
+          content: [{
+            type: 'text' as const,
+            text: config.name === 'gmail'
+              ? 'Gmail request failed. Reconnect Gmail or check the requested action.'
+              : `Request failed: ${message}`,
+          }],
           isError: true,
         };
       }

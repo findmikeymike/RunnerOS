@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertCircle, CheckCircle2, ChevronDown, ExternalLink, Info, KeyRound, Loader2, RefreshCcw, Save, Trash2, WalletCards } from 'lucide-react'
+import { AlertCircle, CheckCircle2, ChevronDown, ExternalLink, Info, KeyRound, Loader2, LogOut, Mail, RefreshCcw, Save, Trash2, WalletCards } from 'lucide-react'
 import { toast } from 'sonner'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { SettingsCard, SettingsSection } from '@/components/settings'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
-import type { LoadedSource, UserSecretSummary, ZeroStatus } from '../../../shared/types'
+import type { LoadedSource, SourceCredentialScopeResult, UserSecretSummary, ZeroStatus } from '../../../shared/types'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { navigate, routes } from '@/lib/navigate'
 import { PRODUCT_NAME } from '@/lib/product-identity'
@@ -641,8 +641,8 @@ export const SERVICES: SecretService[] = [
   {
     id: 'google-workspace',
     group: 'Workspace',
-    title: 'Google Workspace',
-    description: 'Foundation credentials for Calendar sync, Gmail actions, Drive file context, People contacts, and future Google MCP tools. OAuth tokens are stored encrypted after sign-in.',
+    title: 'Google',
+    description: 'Connect your Google account to use Gmail in Artist OS.',
     presetNames: ['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'GOOGLE_WORKSPACE_PRIMARY_CALENDAR_ID'],
     optionalPresetNames: ['GOOGLE_WORKSPACE_PRIMARY_CALENDAR_ID'],
   },
@@ -767,6 +767,8 @@ export default function SecretsSettingsPage() {
   const [zeroImportOpen, setZeroImportOpen] = React.useState(false)
   const [canManageSecrets, setCanManageSecrets] = React.useState<boolean | null>(null)
   const [accessMessage, setAccessMessage] = React.useState('Only the workspace Owner can view or change saved keys and connected service credentials.')
+  const [gmailScope, setGmailScope] = React.useState<SourceCredentialScopeResult | null>(null)
+  const [gmailConnectionError, setGmailConnectionError] = React.useState<string | null>(null)
 
   const services = React.useMemo(
     () => SERVICES.filter((service) => service.group === selectedGroup),
@@ -787,6 +789,7 @@ export default function SecretsSettingsPage() {
     setSecrets([])
     setZero(null)
     setSources([])
+    setGmailScope(null)
     try {
       if (!activeWorkspaceId) {
         setAccessMessage('Select an active workspace to manage saved keys and connected service credentials.')
@@ -798,14 +801,17 @@ export default function SecretsSettingsPage() {
       setAccessMessage('Only the workspace Owner can view or change saved keys and connected service credentials.')
       setCanManageSecrets(canManage)
       if (!canManage) return
-      const [secretRows, zeroStatus, sourceRows] = await Promise.all([
+      const [secretRows, zeroStatus, sourceRows, nextGmailScope] = await Promise.all([
         window.electronAPI.listSecrets(activeWorkspaceId),
         window.electronAPI.getZeroStatus(activeWorkspaceId),
         window.electronAPI.getSources(activeWorkspaceId).catch(() => [] as LoadedSource[]),
+        window.electronAPI.getSourceCredentialScope(activeWorkspaceId, 'gmail').catch(() => null),
       ])
       setSecrets(secretRows)
       setZero(zeroStatus)
       setSources(sourceRows)
+      setGmailScope(nextGmailScope)
+      if (nextGmailScope?.hasEffectiveCredential) setGmailConnectionError(null)
     } catch (error) {
       setAccessMessage('Owner access could not be verified, so keys and connected services remain hidden.')
       setCanManageSecrets(false)
@@ -817,6 +823,64 @@ export default function SecretsSettingsPage() {
     }
   }, [activeWorkspaceId])
 
+  const connectGmail = React.useCallback(async () => {
+    if (!activeWorkspaceId) return
+    setBusyServiceId('google-workspace')
+    setGmailConnectionError(null)
+    try {
+      const result = await window.electronAPI.performOAuth({ sourceSlug: 'gmail', credentialScope: 'workspace' })
+      if (!result.success) {
+        const message = result.error || 'Google sign-in failed. Try connecting again.'
+        setGmailConnectionError(message)
+        toast.error(message)
+        return
+      }
+
+      let nextScope: SourceCredentialScopeResult | null = null
+      for (const delayMs of [0, 100, 250, 500, 1000]) {
+        if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
+        nextScope = await window.electronAPI
+          .getSourceCredentialScope(activeWorkspaceId, 'gmail')
+          .catch(() => null)
+        if (nextScope?.hasEffectiveCredential) break
+      }
+
+      if (!nextScope?.hasEffectiveCredential) {
+        const message = 'Google approved access, but Artist OS could not save the connection. Try connecting again.'
+        setGmailConnectionError(message)
+        toast.error(message)
+        return
+      }
+
+      setGmailScope(nextScope)
+      toast.success(`Google connected${result.email ? ` as ${result.email}` : ''}`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setGmailConnectionError(message)
+      toast.error('Could not connect Google', {
+        description: message,
+      })
+    } finally {
+      setBusyServiceId(null)
+    }
+  }, [activeWorkspaceId, load])
+
+  const disconnectGmail = React.useCallback(async () => {
+    setBusyServiceId('google-workspace')
+    try {
+      const result = await window.electronAPI.oauthRevoke('gmail')
+      if (result.warning) toast.warning('Google disconnected locally', { description: result.warning })
+      else toast.success('Google disconnected and access revoked')
+      await load()
+    } catch (error) {
+      toast.error('Could not disconnect Google', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setBusyServiceId(null)
+    }
+  }, [load])
+
   React.useEffect(() => {
     void load()
   }, [load])
@@ -827,6 +891,13 @@ export default function SecretsSettingsPage() {
       void load()
     })
   }, [load])
+
+  React.useEffect(() => {
+    if (!window.electronAPI?.onSourcesChanged) return
+    return window.electronAPI.onSourcesChanged((workspaceId) => {
+      if (workspaceId === activeWorkspaceId) void load()
+    })
+  }, [activeWorkspaceId, load])
 
   const openSource = React.useCallback((preset: SecretPreset) => {
     if (preset.setupUrl) {
@@ -1103,7 +1174,11 @@ export default function SecretsSettingsPage() {
                 <div className="space-y-1 p-2">
                   {SECRET_GROUPS.map((group) => {
                     const groupServices = SERVICES.filter((service) => service.group === group)
-                    const readyCount = groupServices.filter((service) => serviceStatus(service, savedByName, sourceBySlug, draftValues) === 'ready').length
+                    const readyCount = groupServices.filter((service) => (
+                      service.id === 'google-workspace'
+                        ? gmailScope?.hasEffectiveCredential === true
+                        : serviceStatus(service, savedByName, sourceBySlug, draftValues) === 'ready'
+                    )).length
                     return (
                       <button
                         key={group}
@@ -1125,10 +1200,12 @@ export default function SecretsSettingsPage() {
               <div className="space-y-3">
                 {services.map((service) => {
                   const presets = service.presetNames.map((name) => PRESET_BY_NAME.get(name)).filter(Boolean) as SecretPreset[]
-                  const status = serviceStatus(service, savedByName, sourceBySlug, draftValues)
+                  const status = service.id === 'google-workspace'
+                    ? gmailScope?.hasEffectiveCredential ? 'ready' : 'needs'
+                    : serviceStatus(service, savedByName, sourceBySlug, draftValues)
                   const managedPreset = presets.find((preset) => preset.storage === 'managed-source')
                   const busy = busyServiceId === service.id
-                  const expanded = expandedServiceId === service.id
+                  const expanded = service.id !== 'google-workspace' && expandedServiceId === service.id
                   const zeroPrivateKeyPreset = presets.find((preset) => preset.name === 'ZERO_PRIVATE_KEY')
                   return (
                     <SettingsCard key={service.id}>
@@ -1143,7 +1220,7 @@ export default function SecretsSettingsPage() {
                             </div>
                             <p className="mt-1 line-clamp-1 max-w-3xl text-xs leading-4 text-white/38">{service.description}</p>
                           </div>
-                          {managedPreset ? (
+                          {service.id === 'google-workspace' ? null : managedPreset ? (
                             <div className="flex shrink-0 items-center gap-2">
                               <button
                                 type="button"
@@ -1183,7 +1260,53 @@ export default function SecretsSettingsPage() {
                           ) : null}
                         </div>
 
-                        {service.id === 'zero' ? (
+                        {service.id === 'google-workspace' ? (
+                          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[12px] bg-white/[0.025] px-4 py-3">
+                            {gmailScope?.hasEffectiveCredential ? (
+                              <div className="flex min-w-0 items-center gap-2.5">
+                                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-400/12 text-emerald-300">
+                                  <CheckCircle2 className="h-4 w-4" />
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-emerald-200">You're connected</p>
+                                  {gmailScope.metadata?.accountEmail ? (
+                                    <p className="truncate text-xs text-white/42">{gmailScope.metadata.accountEmail}</p>
+                                  ) : null}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm text-white/52">Connect once, then Artist OS can use Gmail when you ask.</p>
+                                {gmailConnectionError ? (
+                                  <p className="mt-1.5 text-xs leading-5 text-amber-300/80">{gmailConnectionError}</p>
+                                ) : null}
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              {gmailScope?.hasEffectiveCredential ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void disconnectGmail()}
+                                  disabled={busy}
+                                  className="inline-flex h-8 items-center gap-1.5 rounded-[8px] px-3 text-xs font-medium text-white/42 transition-colors hover:bg-white/[0.045] hover:text-white/70 disabled:opacity-50"
+                                >
+                                  <LogOut className="h-3.5 w-3.5" />
+                                  Disconnect
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => void connectGmail()}
+                                  disabled={busy}
+                                  className="inline-flex h-9 items-center gap-2 rounded-[9px] bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-white/90 disabled:opacity-40"
+                                >
+                                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                                  Connect Google
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ) : service.id === 'zero' ? (
                           <div className="mt-4 space-y-3">
                             <div className="rounded-[12px] border border-white/[0.06] bg-black/20 p-4">
                               <div className="flex items-start justify-between gap-4">

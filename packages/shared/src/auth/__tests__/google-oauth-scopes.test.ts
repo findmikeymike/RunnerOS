@@ -7,8 +7,13 @@ describe('Google OAuth scope defaults', () => {
     expect(getGoogleScopes({ service: 'gmail' })).toEqual([
       'https://www.googleapis.com/auth/gmail.readonly',
       'https://www.googleapis.com/auth/gmail.compose',
-      'https://www.googleapis.com/auth/userinfo.email',
     ])
+  })
+
+  it('does not silently add identity or broader Gmail scopes', () => {
+    expect(getGoogleScopes({
+      scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+    })).toEqual(['https://www.googleapis.com/auth/gmail.readonly'])
   })
 
   it('uses event-level Calendar access by default', () => {

@@ -396,7 +396,8 @@ export interface ApiSourceConfig {
   googleScopes?: string[]; // Custom scopes (overrides googleService)
   // User-provided OAuth credentials (for OSS users who create their own Google Cloud project)
   googleOAuthClientId?: string; // User's Google OAuth Client ID
-  googleOAuthClientSecret?: string; // User's Google OAuth Client Secret
+  /** @deprecated Plaintext source secrets are ignored; use encrypted Settings or environment configuration. */
+  googleOAuthClientSecret?: string;
 
   // Slack OAuth fields (used when provider is 'slack')
   // Uses user_scope for user authentication (posts as the user, not a bot)

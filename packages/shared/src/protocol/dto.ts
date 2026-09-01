@@ -516,6 +516,9 @@ export interface SourceCredentialScopeResult {
   metadata?: {
     googleAdsDeveloperTokenConfigured?: boolean
     googleAdsLoginCustomerIdConfigured?: boolean
+    accountEmail?: string
+    oauthScopes?: string[]
+    expiresAt?: number
   }
 }
 

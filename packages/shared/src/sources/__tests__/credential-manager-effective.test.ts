@@ -28,6 +28,14 @@ const fakeCredentialManager = {
   delete: async (id: CredentialId): Promise<boolean> => {
     return fakeStore.delete(keyOf(id));
   },
+  list: async (filter?: Partial<CredentialId>): Promise<CredentialId[]> => {
+    return [...fakeStore.keys()].map((key) => {
+      const [type, workspaceId, sourceId] = key.split('::');
+      return { type, workspaceId, sourceId } as CredentialId;
+    }).filter((id) => Object.entries(filter ?? {}).every(([name, value]) => (
+      id[name as keyof CredentialId] === value
+    )));
+  },
 };
 
 mock.module('../../credentials/index.ts', () => ({
@@ -240,6 +248,36 @@ describe('SourceCredentialManager runtime credential helpers', () => {
     );
 
     await expect(credManager.getToken(source)).resolves.toBeNull();
+  });
+
+  test('disconnect removes every local copy of a shared Gmail OAuth grant', async () => {
+    const source = makeSource({ workspaceId: 'ws-A', tier: 'global', slug: 'gmail', type: 'api' });
+    source.config.provider = 'google';
+    source.config.api = {
+      baseUrl: 'https://gmail.googleapis.com/gmail/v1',
+      authType: 'oauth',
+      googleService: 'gmail',
+    };
+    await fakeCredentialManager.set(
+      { type: 'source_oauth', workspaceId: 'ws-A', sourceId: 'gmail' },
+      { value: 'workspace-token' },
+    );
+    await fakeCredentialManager.set(
+      { type: 'source_oauth', workspaceId: GLOBAL_WORKSPACE_ID, sourceId: 'gmail' },
+      { value: 'global-token' },
+    );
+    await fakeCredentialManager.set(
+      { type: 'source_oauth', workspaceId: 'ws-B', sourceId: 'gmail' },
+      { value: 'other-workspace-token' },
+    );
+    await fakeCredentialManager.set(
+      { type: 'source_oauth', workspaceId: 'ws-B', sourceId: 'google-drive' },
+      { value: 'drive-token' },
+    );
+
+    await expect(credManager.deleteEffective(source)).resolves.toBe(true);
+    expect([...fakeStore.keys()].filter((key) => key.endsWith('::gmail'))).toEqual([]);
+    expect([...fakeStore.values()].map((credential) => credential.value)).toEqual(['drive-token']);
   });
 });
 

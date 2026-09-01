@@ -38,6 +38,7 @@ import {
   prepareGoogleOAuth,
   exchangeGoogleOAuth,
   refreshGoogleToken,
+  GOOGLE_SERVICE_SCOPES,
   type GoogleOAuthResult,
   type GoogleOAuthOptions,
 } from '../auth/google-oauth.ts';
@@ -131,9 +132,8 @@ export function findReusableGoogleOAuthClientConfig(
   const sourceApi = source.config.api;
   const direct = {
     clientId: sourceApi?.googleOAuthClientId?.trim(),
-    clientSecret: sourceApi?.googleOAuthClientSecret?.trim(),
   };
-  if (direct.clientId && direct.clientSecret) return direct;
+  if (direct.clientId) return direct;
 
   const service = googleServiceForSource(source);
   const workspacesDir = join(configDir, 'workspaces');
@@ -155,7 +155,6 @@ export function findReusableGoogleOAuthClientConfig(
               baseUrl?: unknown;
               googleService?: unknown;
               googleOAuthClientId?: unknown;
-              googleOAuthClientSecret?: unknown;
             };
           };
           if (parsed.provider !== 'google') continue;
@@ -167,8 +166,7 @@ export function findReusableGoogleOAuthClientConfig(
           if (candidateService !== service) continue;
 
           const clientId = typeof api?.googleOAuthClientId === 'string' ? api.googleOAuthClientId.trim() : '';
-          const clientSecret = typeof api?.googleOAuthClientSecret === 'string' ? api.googleOAuthClientSecret.trim() : '';
-          if (clientId && clientSecret) return { clientId, clientSecret };
+          if (clientId) return { clientId };
         } catch {
           // Ignore malformed workspace source configs.
         }
@@ -179,6 +177,24 @@ export function findReusableGoogleOAuthClientConfig(
   }
 
   return {};
+}
+
+/** Resolve the desktop OAuth client without ever copying secrets into source files. */
+export async function resolveGoogleOAuthClientConfig(
+  source: LoadedSource,
+  loadUserSecret: (name: string) => Promise<string | null> = (name) => getCredentialManager().getUserSecret(name),
+  configDir = CONFIG_DIR,
+): Promise<GoogleOAuthClientConfig> {
+  const sourceConfig = findReusableGoogleOAuthClientConfig(source, configDir);
+  return {
+    clientId:
+      sourceConfig.clientId
+      || await loadUserSecret('GOOGLE_OAUTH_CLIENT_ID')
+      || process.env.GOOGLE_OAUTH_CLIENT_ID,
+    clientSecret:
+      await loadUserSecret('GOOGLE_OAUTH_CLIENT_SECRET')
+      || process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+  };
 }
 
 function parseGoogleAdsCredentialValue(value: string | null | undefined): GoogleAdsCredentialValue {
@@ -447,6 +463,21 @@ export class SourceCredentialManager {
     return deleted;
   }
 
+  /** Delete the credential currently used by a source, including a shared
+   * Google credential inherited from another workspace. */
+  async deleteEffective(source: LoadedSource): Promise<boolean> {
+    if (!isSharedGoogleSource(source)) return this.delete(source);
+
+    const manager = getCredentialManager();
+    const ids = await manager.list({ type: 'source_oauth' });
+    let deleted = false;
+    for (const id of ids) {
+      if (id.sourceId !== source.config.slug) continue;
+      deleted = (await manager.delete(id)) || deleted;
+    }
+    return deleted;
+  }
+
   /**
    * Get token value for a source (convenience method)
    * Returns null if no credential exists or if expired
@@ -697,7 +728,7 @@ export class SourceCredentialManager {
           }
         }
 
-        const oauthClientConfig = findReusableGoogleOAuthClientConfig(source);
+        const oauthClientConfig = await resolveGoogleOAuthClientConfig(source);
 
         prepared = prepareGoogleOAuth({
           service,
@@ -830,10 +861,12 @@ export class SourceCredentialManager {
 
     await this.save(source, {
       value,
-      refreshToken: result.refreshToken,
+      refreshToken: result.refreshToken ?? existing?.refreshToken,
       expiresAt: result.expiresAt,
       clientId: result.oauthClientId,
       clientSecret: result.oauthClientSecret,
+      accountEmail: result.email,
+      oauthScopes: result.grantedScopes,
       ...(opts?.override === true || existing?.override === true ? { override: true } : {}),
     });
 
@@ -975,11 +1008,12 @@ export class SourceCredentialManager {
       const serviceName = service || 'Google API';
       callbacks.onStatus(`Starting ${serviceName} OAuth flow...`);
 
+      const oauthClientConfig = await resolveGoogleOAuthClientConfig(source);
       const options: GoogleOAuthOptions = {
         service,
         scopes,
         appType: 'electron',
-        ...findReusableGoogleOAuthClientConfig(source),
+        ...oauthClientConfig,
         sessionContext,
       };
 
@@ -996,6 +1030,8 @@ export class SourceCredentialManager {
         expiresAt: result.expiresAt,
         clientId: result.clientId,
         clientSecret: result.clientSecret,
+        accountEmail: result.email,
+        oauthScopes: scopes ?? (service ? GOOGLE_SERVICE_SCOPES[service] : undefined),
       });
 
       // Mark source as authenticated in config.json
@@ -1284,8 +1320,7 @@ export class SourceCredentialManager {
       const response = await fetch(url, fetchOptions);
 
       if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        throw new Error(`Renew endpoint returned ${response.status}: ${errorText.slice(0, 200)}`);
+        throw new Error(`Renew endpoint returned ${response.status}`);
       }
 
       const json = await response.json() as Record<string, unknown>;
@@ -1320,7 +1355,7 @@ export class SourceCredentialManager {
       return newToken;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      debug(`[SourceCredentialManager] Renew endpoint refresh failed for ${source.config.slug}:`, error);
+      debug(`[SourceCredentialManager] Renew endpoint refresh failed for ${source.config.slug}: ${errorMsg}`);
       this.markSourceNeedsReauth(source, `Token refresh failed: ${errorMsg}`);
       return null;
     }

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId, getWorkspaces } from '@craft-agent/shared/config'
 import { loadAllSources, loadGlobalSource, getSourceCredentialManager, getSourcesBySlugs, readGlobalSourcesManifest } from '@craft-agent/shared/sources'
-import { createPendingFlow } from '@craft-agent/shared/auth'
+import { createPendingFlow, revokeGoogleToken } from '@craft-agent/shared/auth'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { syncGoogleAdsCredentialCache } from './google-ads-credential-cache'
@@ -61,6 +61,9 @@ export async function completeOAuthFlow(opts: {
   if (opts.workspaceId != null) {
     if (flow.workspaceId !== opts.workspaceId) throw new Error('Workspace mismatch')
   }
+  // Consume the one-time state nonce before network I/O so concurrent/replayed
+  // callbacks cannot exchange a second code against the same authorization.
+  flowStore.remove(state)
   const workspace = getWorkspaceByNameOrId(flow.workspaceId)
   if (!workspace) throw new Error(`Workspace not found: ${flow.workspaceId}`)
   const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
@@ -80,11 +83,11 @@ export async function completeOAuthFlow(opts: {
       clientId: flow.clientId,
       clientSecret: flow.clientSecret,
       redirectUri: flow.redirectUri,
+      expectedScopes: flow.requestedScopes,
+      googleService: flow.googleService,
     },
     { override: flow.credentialScope === 'workspace-override' },
   )
-
-  flowStore.remove(state)
 
   // If this was triggered from a session auth card, complete it
   if (flow.sessionId && flow.authRequestId) {
@@ -163,6 +166,8 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
       clientSecret: prepared.clientSecret,
       tokenEndpoint: prepared.tokenEndpoint,
       provider: prepared.provider,
+      requestedScopes: prepared.requestedScopes,
+      googleService: prepared.googleService,
       ownerClientId: ctx.clientId,
       workspaceId: ctx.workspaceId,
       sourceSlug,
@@ -240,10 +245,10 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
   })
 
   // ── oauth:revoke ─────────────────────────────────────────────
-  server.handle(RPC_CHANNELS.oauth.REVOKE, async (ctx, args: {
+  server.handle(RPC_CHANNELS.oauth.REVOKE, async (ctx, args: string | {
     sourceSlug: string
   }) => {
-    const { sourceSlug } = args
+    const sourceSlug = typeof args === 'string' ? args : args.sourceSlug
 
     if (!ctx.workspaceId) {
       throw new Error('No workspace bound to this client')
@@ -261,7 +266,19 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
       throw new Error(`Source not found: ${sourceSlug}`)
     }
 
-    await credManager.delete(source)
+    const credential = await credManager.loadEffective(source)
+    let revokedRemotely = true
+    let warning: string | undefined
+    if (source.config.provider === 'google' && credential) {
+      try {
+        await revokeGoogleToken(credential.refreshToken || credential.value)
+      } catch {
+        revokedRemotely = false
+        warning = 'Local Google credentials were removed, but Google could not confirm remote revocation. Retry revoke from your Google Account if needed.'
+      }
+    }
+
+    await credManager.deleteEffective(source)
     await syncGoogleAdsCredentialCache(source)
     credManager.markSourceNeedsReauth(source, 'Signed out by user')
 
@@ -270,6 +287,6 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
     pushTyped(server, RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId: ctx.workspaceId }, ctx.workspaceId, revokeSources)
 
     log.info(`[OAuth] Revoked credentials for ${sourceSlug}`)
-    return { success: true }
+    return { success: true, revokedRemotely, warning }
   })
 }

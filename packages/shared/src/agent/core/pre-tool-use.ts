@@ -699,6 +699,59 @@ const EXACT_APPROVAL_SESSION_TOOLS = new Set([
   'set_release_kit_primary',
 ]);
 
+type GmailMutationKind = 'send' | 'draft' | 'unknown';
+
+function normalizeGmailPath(rawPath: unknown): string {
+  let pathname: string;
+  try {
+    pathname = new URL(String(rawPath ?? ''), 'https://gmail.googleapis.com/').pathname;
+  } catch {
+    pathname = String(rawPath ?? '').split(/[?#]/, 1)[0] ?? '';
+  }
+
+  try {
+    pathname = decodeURIComponent(pathname);
+  } catch {
+    // Keep malformed escapes unchanged; unknown mutations still prompt below.
+  }
+
+  return pathname
+    .replace(/\\/g, '/')
+    .replace(/\/{2,}/g, '/')
+    .replace(/\/+$/, '')
+    .toLowerCase();
+}
+
+export function classifyGmailMutation(
+  toolName: string,
+  input: Record<string, unknown>,
+): GmailMutationKind | null {
+  const normalizedTool = toolName.toLowerCase();
+  if (!normalizedTool.includes('api_gmail')) return null;
+
+  const method = String(input.method ?? 'GET').toUpperCase();
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return null;
+
+  const path = normalizeGmailPath(input.path);
+  if (method === 'POST' && (
+    path.endsWith('/users/me/drafts/send')
+    || path.endsWith('/users/me/messages/send')
+  )) return 'send';
+
+  // gmail.compose permits local draft work. Keep the draft workflow quick,
+  // while all unrecognized Gmail mutations fail closed into approval.
+  if (method === 'POST' && path.endsWith('/users/me/drafts')) return 'draft';
+  if ((method === 'PUT' || method === 'DELETE') && /\/users\/me\/drafts\/[^/]+$/.test(path)) {
+    return 'draft';
+  }
+
+  return 'unknown';
+}
+
+export function isGmailSendAction(toolName: string, input: Record<string, unknown>): boolean {
+  return classifyGmailMutation(toolName, input) === 'send';
+}
+
 const EXTERNAL_OPERATOR_MUTATION_TOKENS = [
   'click', 'type', 'fill', 'paste', 'upload', 'press', 'key', 'drag',
   'select', 'submit', 'send', 'post', 'publish', 'comment', 'message',
@@ -965,6 +1018,25 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
   // 6. ASK MODE PROMPT DECISION
   // ============================================================
   const normalizedSessionTool = normalizeTrustedWorkerToolName(toolName);
+  const gmailMutation = classifyGmailMutation(toolName, input);
+  if (gmailMutation === 'send') {
+    return {
+      type: 'prompt',
+      promptType: 'api_mutation',
+      description: `Approve sending this exact Gmail message now\n${JSON.stringify(input)}`,
+      command: `POST ${String(input.path ?? '')}`,
+      modifiedInput: wasModified ? currentInput : undefined,
+    };
+  }
+  if (gmailMutation === 'unknown') {
+    return {
+      type: 'prompt',
+      promptType: 'api_mutation',
+      description: `Approve this exact Gmail change now\n${JSON.stringify(input)}`,
+      command: `${String(input.method ?? 'POST').toUpperCase()} ${String(input.path ?? '')}`,
+      modifiedInput: wasModified ? currentInput : undefined,
+    };
+  }
   if (EXACT_APPROVAL_SESSION_TOOLS.has(normalizedSessionTool)) {
     return {
       type: 'prompt',

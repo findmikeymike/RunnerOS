@@ -1,7 +1,29 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import * as actualConfig from '@craft-agent/shared/config';
+import * as actualWorkspaces from '@craft-agent/shared/workspaces';
+
+const TEST_WORKSPACE = {
+  id: 'workspace-1',
+  name: 'OAuth Test Workspace',
+  rootPath: join(tmpdir(), 'craft-webui-oauth-workspace'),
+};
+
+mock.module('@craft-agent/shared/config', () => ({
+  ...actualConfig,
+  getWorkspaceByNameOrId: (workspaceId: string) => (
+    workspaceId === TEST_WORKSPACE.id
+      ? TEST_WORKSPACE
+      : actualConfig.getWorkspaceByNameOrId(workspaceId)
+  ),
+}));
+
+mock.module('@craft-agent/shared/workspaces', () => ({
+  ...actualWorkspaces,
+  assertTeamPermission: () => {},
+}));
 
 import { createWebuiHandler } from '../http-server';
 
@@ -48,6 +70,7 @@ describe('WebUI /api/oauth/callback', () => {
       expiresAt: Date.now() + 60_000,
     };
     const flows = new Map([[flow.state, flow]]);
+    let exchangeCount = 0;
 
     const handler = createWebuiHandler({
       webuiDir: createTestWebuiDir(),
@@ -67,7 +90,10 @@ describe('WebUI /api/oauth/callback', () => {
         },
       },
       credManager: {
-        exchangeAndStore: async () => ({ success: true, email: 'gyula@craft.do' }),
+        exchangeAndStore: async () => {
+          exchangeCount += 1;
+          return { success: true, email: 'gyula@craft.do' };
+        },
       },
       sessionManager: {
         completeAuthRequest: async () => {},
@@ -83,6 +109,13 @@ describe('WebUI /api/oauth/callback', () => {
       expect(response.status).toBe(200);
       expect(await response.text()).toContain('Authorization Successful');
       expect(flows.has('inner-state-123')).toBe(false);
+
+      const replay = await handler.fetch(
+        new Request('http://127.0.0.1/api/oauth/callback?code=auth-code-123&state=inner-state-123'),
+      );
+      expect(replay.status).toBe(200);
+      expect(await replay.text()).toContain('Authorization Failed');
+      expect(exchangeCount).toBe(1);
     } finally {
       handler.dispose();
     }
@@ -128,6 +161,48 @@ describe('WebUI /api/oauth/callback', () => {
       expect(response.status).toBe(200);
       expect(await response.text()).toContain('Authorization Failed');
       expect(flows.has('inner-state-456')).toBe(false);
+    } finally {
+      handler.dispose();
+    }
+  });
+
+  it('does not reflect provider error descriptions into executable HTML', async () => {
+    const handler = createWebuiHandler({
+      webuiDir: createTestWebuiDir(),
+      secret: 'test-secret',
+      password: 'test-password',
+      wsProtocol: 'wss',
+      wsPort: 9100,
+      getHealthCheck: () => ({ status: 'ok' }),
+      logger,
+    });
+
+    handler.setOAuthCallbackDeps({
+      flowStore: {
+        getByState: () => null,
+        remove: () => {},
+      },
+      credManager: {
+        exchangeAndStore: async () => ({ success: true }),
+      },
+      sessionManager: {
+        completeAuthRequest: async () => {},
+      },
+      pushSourcesChanged: () => {},
+    });
+
+    try {
+      const payload = '<img src=x onerror=oauthAttack()>';
+      const response = await handler.fetch(new Request(
+        `http://127.0.0.1/api/oauth/callback?error=server_error&error_description=${encodeURIComponent(payload)}`,
+      ));
+      const html = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(html).toContain('Authorization failed.');
+      expect(html).not.toContain(payload);
+      expect(html).not.toContain('<img src=x');
+      expect(response.headers.get('content-security-policy')).toContain("default-src 'none'");
     } finally {
       handler.dispose();
     }

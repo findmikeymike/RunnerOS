@@ -8,6 +8,23 @@ import { RUNNER_WORDMARK_HTML } from '../branding.ts';
 
 export type AppType = 'terminal' | 'electron';
 
+export const OAUTH_CALLBACK_PAGE_HEADERS = {
+  'Content-Type': 'text/html; charset=utf-8',
+  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'Cache-Control': 'no-store',
+} as const;
+
+export function escapeCallbackHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 /**
  * Generate a minimal, clean callback page matching the app's design system.
  * Logo at top, status message in a card below.
@@ -22,20 +39,13 @@ export function generateCallbackPage(options: {
   const { title, isSuccess, errorDetail, deeplinkUrl } = options;
 
   // Status message based on success/error
-  const statusMessage = isSuccess
-    ? 'Authorization successful'
+  const statusMessage = escapeCallbackHtml(isSuccess
+    ? 'Authorization received'
     : errorDetail
       ? `Authorization failed: ${errorDetail}`
-      : 'Authorization failed';
-
-  // Generate deeplink redirect and auto-close for success
-  const autoCloseScript = isSuccess
-    ? `
-    setTimeout(() => {
-      ${deeplinkUrl ? `window.location.href = '${deeplinkUrl}';` : ''}
-      window.close();
-    }, 1500);`
-    : '';
+      : 'Authorization failed');
+  const safeTitle = escapeCallbackHtml(title);
+  const safeDeeplinkUrl = deeplinkUrl ? escapeCallbackHtml(deeplinkUrl) : undefined;
 
 
   return `<!DOCTYPE html>
@@ -43,7 +53,7 @@ export function generateCallbackPage(options: {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Runner - ${title}</title>
+  <title>Runner - ${safeTitle}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -174,10 +184,9 @@ export function generateCallbackPage(options: {
     <div class="card">
       <div class="status">${statusMessage}</div>
     </div>
-    <div class="hint">${isSuccess ? 'You can now return to the application.' : 'Please close this window and try again.'}</div>
-    ${deeplinkUrl ? `<a href="${deeplinkUrl}" class="return-link">Runner</a>` : ''}
+    <div class="hint">${isSuccess ? 'Return to the application while it finishes connecting.' : 'Please close this window and try again.'}</div>
+    ${safeDeeplinkUrl ? `<a href="${safeDeeplinkUrl}" class="return-link">Runner</a>` : ''}
   </div>
-  <script>${autoCloseScript}</script>
 </body>
 </html>`;
 }

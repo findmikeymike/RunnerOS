@@ -8,7 +8,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
-import { AlertCircle, KeyRound } from 'lucide-react'
+import { AlertCircle, KeyRound, LogOut } from 'lucide-react'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceMenu } from '@/components/app-shell/SourceMenu'
 import { Button } from '@/components/ui/button'
@@ -443,6 +443,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
   const [credentialScope, setCredentialScope] = useState<SourceCredentialScopeResult | null>(null)
   const [credentialDialogMode, setCredentialDialogMode] = useState<CredentialDialogMode | null>(null)
+  const [disconnecting, setDisconnecting] = useState(false)
   const isMountedRef = useRef(false)
 
   useEffect(() => {
@@ -645,6 +646,22 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
     void loadSource(false)
   }, [loadSource])
 
+  const handleOAuthDisconnect = useCallback(async () => {
+    setDisconnecting(true)
+    try {
+      const result = await window.electronAPI.oauthRevoke(sourceSlug)
+      if (result.warning) toast.warning('Gmail disconnected locally', { description: result.warning })
+      else toast.success('Gmail disconnected and Google access revoked')
+      await loadSource(false)
+    } catch (err) {
+      toast.error('Could not disconnect Gmail', {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    } finally {
+      setDisconnecting(false)
+    }
+  }, [loadSource, sourceSlug])
+
   // Get source name for header
   const sourceName = source?.config.name || sourceSlug
   const credentialAction = useMemo(() => {
@@ -667,7 +684,9 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
           ? 'Connect Google Ads'
           : source.config.slug === 'youtube-research'
             ? 'Connect YouTube Research'
-            : 'Set credentials',
+            : source.config.slug === 'gmail'
+              ? credentialScope.hasEffectiveCredential ? 'Reconnect Gmail' : 'Connect Gmail'
+              : 'Set credentials',
         onClick: () => setCredentialDialogMode('workspace' as const),
       }
     }
@@ -741,6 +760,19 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
                     {credentialAction.label}
                   </Button>
                 )}
+                {source.config.slug === 'gmail' && credentialScope?.hasEffectiveCredential && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={disconnecting}
+                    onClick={() => void handleOAuthDisconnect()}
+                    className="h-8 gap-1.5 rounded-[9px] px-2.5 text-[11px] text-white/52 hover:bg-white/[0.06] hover:text-white"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    {disconnecting ? 'Disconnecting...' : 'Disconnect & revoke'}
+                  </Button>
+                )}
                 <EditPopover
                   trigger={<EditButton />}
                   {...getEditConfig('source-config', source.folderPath)}
@@ -765,6 +797,29 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
               <Info_Table.Row label={t('common.type')} value={source.config.type.toUpperCase()} />
               <Info_Table.Row label={t('sourceInfo.tier')} value={getSourceTierLabel(source, t)} />
               <Info_Table.Row label={t('sourceInfo.credsScope')} value={getCredentialScopeLabel(source, credentialScope, t)} />
+              {source.config.slug === 'gmail' && (
+                <>
+                  <Info_Table.Row
+                    label="Status"
+                    value={credentialScope?.hasEffectiveCredential ? 'Connected' : 'Not connected'}
+                  />
+                  {credentialScope?.metadata?.accountEmail && (
+                    <Info_Table.Row label="Google account" value={credentialScope.metadata.accountEmail} />
+                  )}
+                  <Info_Table.Row
+                    label="Gmail permissions"
+                    value={credentialScope?.metadata?.oauthScopes?.length
+                      ? credentialScope.metadata.oauthScopes
+                        .map((scope) => scope.replace('https://www.googleapis.com/auth/', ''))
+                        .join(' · ')
+                      : 'gmail.readonly · gmail.compose'}
+                  />
+                  <Info_Table.Row
+                    label="Use"
+                    value="Read selected mail; create drafts and send only after approval"
+                  />
+                </>
+              )}
               {sourceUrl && (
                 <Info_Table.Row label={t('common.url')}>
                   <button

@@ -22,6 +22,8 @@ export interface PendingOAuthFlow {
   clientSecret?: string;
   tokenEndpoint: string;
   provider: OAuthProvider;
+  requestedScopes?: string[];
+  googleService?: import('../sources/types.ts').GoogleService;
 
   // Binding fields — validated on oauth:complete
   ownerClientId: string;

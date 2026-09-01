@@ -895,7 +895,7 @@ export interface ElectronAPI {
 
   // OAuth (server-owned credentials, client-orchestrated flow)
   performOAuth(args: { sourceSlug: string; sessionId?: string; authRequestId?: string; credentialScope?: 'workspace' | 'global' | 'workspace-override' }): Promise<{ success: boolean; error?: string; email?: string }>
-  oauthRevoke(sourceSlug: string): Promise<{ success: boolean }>
+  oauthRevoke(sourceSlug: string): Promise<{ success: boolean; revokedRemotely?: boolean; warning?: string }>
 
   // Session content search (full-text search via ripgrep)
   searchSessionContent(workspaceId: string, query: string, searchId?: string): Promise<SessionSearchResult[]>

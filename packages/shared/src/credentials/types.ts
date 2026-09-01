@@ -98,6 +98,10 @@ export interface StoredCredential {
   clientSecret?: string;
   /** Token type (e.g., "Bearer") */
   tokenType?: string;
+  /** Non-secret account label returned by the OAuth provider. */
+  accountEmail?: string;
+  /** Scopes confirmed by the OAuth provider for this stored grant. */
+  oauthScopes?: string[];
   /** Where the credential came from: stored OAuth/import flow, or read-only env fallback. */
   source?: 'native' | 'cli' | 'environment';
   /**

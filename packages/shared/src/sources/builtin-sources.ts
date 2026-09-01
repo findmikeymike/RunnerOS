@@ -1085,7 +1085,6 @@ export function getGmailSource(workspaceId: string, workspaceRootPath: string): 
       googleScopes: [
         'https://www.googleapis.com/auth/gmail.readonly',
         'https://www.googleapis.com/auth/gmail.compose',
-        'https://www.googleapis.com/auth/userinfo.email',
       ],
     },
     tagline: 'Draft artist outreach, inspect requested threads, and prepare approval-gated fan or partner emails.',
@@ -1108,7 +1107,9 @@ export function getGmailSource(workspaceId: string, workspaceRootPath: string): 
         'Rules:',
         '- Do not send email without explicit approval.',
         '- Prefer drafts over sends.',
-        '- Do not bulk-read inbox content by default.',
+        '- Read only messages or threads the user deliberately requests.',
+        '- Message/thread lists require _intent and maxResults from 1 to 25; bulk inbox crawling is disabled.',
+        '- Sending always triggers a host approval for the exact recipient and message, even in Execute mode.',
       ].join('\n'),
     },
     isBuiltin: true,

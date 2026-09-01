@@ -1,10 +1,14 @@
-import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { OAUTH_RELAY_CALLBACK_URL, isOAuthRelayState } from '../../auth/oauth-relay.ts';
-import { findReusableGoogleOAuthClientConfig, SourceCredentialManager } from '../credential-manager.ts';
+import {
+  findReusableGoogleOAuthClientConfig,
+  resolveGoogleOAuthClientConfig,
+  SourceCredentialManager,
+} from '../credential-manager.ts';
 import type { LoadedSource, FolderSourceConfig } from '../types.ts';
 
 function createApiSource(overrides: Partial<FolderSourceConfig> = {}): LoadedSource {
@@ -55,8 +59,11 @@ function createMcpSource(overrides: Partial<FolderSourceConfig> = {}): LoadedSou
 
 describe('SourceCredentialManager.prepareOAuth relay wrapping', () => {
   const credManager = new SourceCredentialManager();
+  let originalClientSecret: string | undefined;
 
   beforeEach(() => {
+    originalClientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'secure-test-client-secret';
     globalThis.fetch = mock((input: string | URL | Request) => {
       const url = typeof input === 'string'
         ? input
@@ -71,6 +78,14 @@ describe('SourceCredentialManager.prepareOAuth relay wrapping', () => {
       }
       return Promise.resolve(new Response('Not Found', { status: 404 }));
     }) as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    if (originalClientSecret === undefined) {
+      delete process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+    } else {
+      process.env.GOOGLE_OAUTH_CLIENT_SECRET = originalClientSecret;
+    }
   });
 
   it('uses the provided WebUI redirect URI when no Runner relay is configured', async () => {
@@ -125,8 +140,58 @@ describe('SourceCredentialManager.prepareOAuth relay wrapping', () => {
   });
 });
 
-describe('findReusableGoogleOAuthClientConfig', () => {
-  it('reuses matching Google service OAuth client config from another workspace source', () => {
+describe('Google OAuth client configuration', () => {
+  it('uses OAuth client credentials saved through secure Settings', async () => {
+    const requested: string[] = [];
+    const result = await resolveGoogleOAuthClientConfig(
+      createApiSource({
+        api: {
+          baseUrl: 'https://gmail.googleapis.com/',
+          authType: 'oauth',
+          googleService: 'gmail',
+        },
+      }),
+      async (name) => {
+        requested.push(name);
+        return name === 'GOOGLE_OAUTH_CLIENT_ID' ? 'settings-client-id' : 'settings-client-secret';
+      },
+      join(tmpdir(), `missing-google-oauth-config-${Date.now()}`),
+    );
+
+    expect(result).toEqual({
+      clientId: 'settings-client-id',
+      clientSecret: 'settings-client-secret',
+    });
+    expect(requested).toEqual(['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET']);
+  });
+
+  it('never reads the Google client secret from plaintext source config', async () => {
+    const requested: string[] = [];
+    const result = await resolveGoogleOAuthClientConfig(
+      createApiSource({
+        api: {
+          baseUrl: 'https://gmail.googleapis.com/',
+          authType: 'oauth',
+          googleService: 'gmail',
+          googleOAuthClientId: 'public-client-id',
+          googleOAuthClientSecret: 'plaintext-secret-that-must-be-ignored',
+        },
+      }),
+      async (name) => {
+        requested.push(name);
+        return name === 'GOOGLE_OAUTH_CLIENT_SECRET' ? 'secure-client-secret' : null;
+      },
+      join(tmpdir(), `missing-google-oauth-config-${Date.now()}`),
+    );
+
+    expect(result).toEqual({
+      clientId: 'public-client-id',
+      clientSecret: 'secure-client-secret',
+    });
+    expect(requested).toEqual(['GOOGLE_OAUTH_CLIENT_SECRET']);
+  });
+
+  it('reuses only the non-secret client ID from another workspace source', () => {
     const configDir = join(tmpdir(), `runneros-google-oauth-config-${Date.now()}`);
     const sourceDir = join(configDir, 'workspaces', 'campaign-a', 'sources', 'google-calendar');
     mkdirSync(sourceDir, { recursive: true });
@@ -152,7 +217,6 @@ describe('findReusableGoogleOAuthClientConfig', () => {
 
       expect(result).toEqual({
         clientId: 'shared-client-id',
-        clientSecret: 'shared-client-secret',
       });
     } finally {
       rmSync(configDir, { recursive: true, force: true });

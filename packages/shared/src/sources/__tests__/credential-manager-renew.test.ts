@@ -186,6 +186,22 @@ describe('refreshApiRenew via refresh()', () => {
     expect(await credManager.refresh(source)).toBeNull();
   });
 
+  test('does not copy provider response bodies into refresh errors', async () => {
+    mockGet.mockImplementationOnce(() => Promise.resolve({
+      value: 'old-token', expiresAt: Date.now() - 60_000,
+    }));
+    mockFetchText('sensitive-provider-body access_token=do-not-log', 500);
+    let reauthError = '';
+    credManager.markSourceNeedsReauth = ((_source, errorMessage) => {
+      reauthError = errorMessage;
+    }) as typeof credManager.markSourceNeedsReauth;
+
+    expect(await credManager.refresh(createRenewSource())).toBeNull();
+    expect(reauthError).toBe('Token refresh failed: Renew endpoint returned 500');
+    expect(reauthError).not.toContain('sensitive-provider-body');
+    expect(reauthError).not.toContain('access_token');
+  });
+
   test('uses fallbackTtlSecs when response has no expiry', async () => {
     mockGet.mockImplementationOnce(() => Promise.resolve({
       value: 'old-token', expiresAt: Date.now() - 60_000,

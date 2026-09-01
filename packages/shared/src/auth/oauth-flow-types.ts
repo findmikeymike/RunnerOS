@@ -23,6 +23,10 @@ export interface PreparedOAuthFlow {
   clientSecret?: string      // Google requires client_secret for Desktop apps
   redirectUri: string        // provider-specific redirect URI used in auth URL + token exchange
   provider: OAuthProvider
+  /** Scopes requested by this exact flow, retained server-side for grant validation. */
+  requestedScopes?: string[]
+  /** Google service used to select the correct account-profile endpoint. */
+  googleService?: import('../sources/types.ts').GoogleService
 }
 
 /**
@@ -36,6 +40,8 @@ export interface OAuthExchangeParams {
   clientId: string
   clientSecret?: string
   redirectUri: string
+  expectedScopes?: string[]
+  googleService?: import('../sources/types.ts').GoogleService
 }
 
 /**
@@ -53,5 +59,7 @@ export interface OAuthExchangeResult {
   oauthClientId?: string
   /** OAuth client_secret for storage (Google needs it for refresh) */
   oauthClientSecret?: string
+  /** Scopes Google confirmed for this authorization response. */
+  grantedScopes?: string[]
   error?: string
 }
