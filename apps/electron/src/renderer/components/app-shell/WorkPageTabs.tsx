@@ -2,7 +2,7 @@ import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { navigate, routes, type Route } from '@/lib/navigate'
 
-export type WorkPageTab = 'workers' | 'workflows' | 'automations'
+export type WorkPageTab = 'workers' | 'workflows' | 'active'
 
 interface WorkPageTabsProps {
   active: WorkPageTab
@@ -12,7 +12,7 @@ interface WorkPageTabsProps {
 const TABS: Array<{ id: WorkPageTab; label: string; route: () => Route }> = [
   { id: 'workers', label: 'Workers', route: () => routes.view.agents() },
   { id: 'workflows', label: 'Workflows', route: () => routes.view.workflows() },
-  { id: 'automations', label: 'Automations', route: () => routes.view.automations() },
+  { id: 'active', label: 'Active', route: () => routes.view.automations() },
 ]
 
 export const WorkPageTabs: React.FC<WorkPageTabsProps> = ({ active, className }) => (

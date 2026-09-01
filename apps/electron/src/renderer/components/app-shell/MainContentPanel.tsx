@@ -98,6 +98,7 @@ import { ArtistManagerCreateLink, type ArtistManagerCreationKind } from './Artis
 import { WorkPageTabs, type WorkPageTab } from './WorkPageTabs'
 import { MISSION_BRIEF_CONTEXT_SLUG, missionCampaignWindow, missionReleaseDateKey, parseMissionBriefDoc } from '@/lib/mission-brief'
 import type { HqCampaignSummary } from '@/lib/artist-hq-home-feed'
+import { ActiveWorkPage } from '@/features/active-work/ActiveWorkPage'
 
 export interface MainContentPanelProps {
   /** Whether both sidebar and navigator are hidden (focus mode / CMD+.) */
@@ -679,19 +680,7 @@ export function MainContentPanel({
     }
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <ResourceRows
-          label="Automation layer"
-          title="Automations"
-          workTab="automations"
-          description="Scheduled, event, and agentic routines configured for this workspace."
-          automations={automations}
-          workspaceId={activeWorkspaceId || undefined}
-          workspaceRootPath={activeWorkspace?.rootPath}
-          onDeleteAutomation={onDeleteAutomation}
-          onToggleAutomation={onToggleAutomation}
-          onTestAutomation={onTestAutomation}
-          onDuplicateAutomation={onDuplicateAutomation}
-        />
+        <ActiveWorkPage automationId={navState.details?.automationId} />
       </Panel>
     )
   }
