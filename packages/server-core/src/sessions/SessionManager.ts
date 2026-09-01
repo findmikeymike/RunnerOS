@@ -163,6 +163,7 @@ import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
+import { findExactWorkflowStepOutput } from '../workflows/step-output'
 import {
   CampaignScheduledJobRunner,
   type CampaignExternalJobPreparer,
@@ -3275,21 +3276,21 @@ export class SessionManager implements ISessionManager {
 
   private async postProcessCompletedWorkflowRun(
     run: import('@craft-agent/shared/workflows').WorkflowRunSnapshot,
+    signal: AbortSignal,
   ): Promise<void> {
+    signal.throwIfAborted()
     if (run.workflowSlug !== WEEKLY_SIGNAL_SCAN_SLUG) return
     const youtubeStep = run.steps.find((step) => step.id === 'youtube-intel')
     // This lane may fail without blocking useful platform and industry intelligence.
     if (youtubeStep?.state !== 'succeeded') return
     const workspace = getWorkspaceByNameOrId(run.workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${run.workspaceId}`)
-    const reportOutput = listOutputManifests(workspace.rootPath).find((output) => (
-      output.kind === 'report'
-      && output.origin.source === 'workflow'
-      && output.origin.workflowRunId === run.id
-      && output.origin.stepId === 'youtube-intel'
-      && output.origin.sessionId === youtubeStep.sessionId
-      && output.title.trim() === 'Weekly YouTube Intelligence Report'
-    ))
+    const reportOutput = findExactWorkflowStepOutput(
+      listOutputManifests(workspace.rootPath),
+      run,
+      'youtube-intel',
+      'Weekly YouTube Intelligence Report',
+    )
     if (!reportOutput) throw new Error('YouTube Intelligence completed without the required report Output.')
     if (!reportOutput.primary) throw new Error('YouTube Intelligence completed without a readable report Output.')
     const sessionId = reportOutput.origin.sessionId
@@ -3299,6 +3300,7 @@ export class SessionManager implements ISessionManager {
       workspaceRootPath: workspace.rootPath,
       sessionId,
       reportOutput,
+      signal,
     })
   }
 
@@ -3307,16 +3309,19 @@ export class SessionManager implements ISessionManager {
     workspaceRootPath: string
     sessionId: string
     reportOutput: OutputManifest
+    signal?: AbortSignal
   }): Promise<{ sharedIntelContextSlugs?: string[] }> {
     const { reportOutput } = input
     if (!reportOutput.primary) throw new Error('YouTube Intelligence completed without a readable report Output.')
     const reportPath = resolveOutputAssetPath(input.workspaceRootPath, reportOutput.id, reportOutput.primary.path)
     if (!reportPath) throw new Error('YouTube Intelligence report Output path is invalid.')
     const markdown = await readFile(reportPath, 'utf8')
+    input.signal?.throwIfAborted()
     const reportData = parseYouTubeIntelReportData(markdown)
     if (!reportData) throw new Error('YouTube Intelligence report did not contain valid processing metadata and categorized nuggets.')
 
     return withWorkspaceContextLock(input.workspaceRootPath, async () => {
+      input.signal?.throwIfAborted()
       const activeAgents = loadActivatedAgents(input.workspaceRootPath)
       const agentCatalog: SharedIntelAgentCatalogEntry[] = activeAgents.map((agent) => ({
         slug: agent.slug,
@@ -5207,6 +5212,9 @@ user a clickable link to where the thing now lives.`
             ['YOUTUBE INTELLIGENCE:\n{{steps.youtube-intel.output}}', 'YOUTUBE INTELLIGENCE:\n<untrusted-collector-packet lane="youtube">\n{{steps.youtube-intel.output}}\n</untrusted-collector-packet>'],
             ['OFFICIAL PLATFORM UPDATES:\n{{steps.platform-watch.output}}', 'OFFICIAL PLATFORM UPDATES:\n<untrusted-collector-packet lane="platform">\n{{steps.platform-watch.output}}\n</untrusted-collector-packet>'],
             ['MUSIC-INDUSTRY DESK:\n{{steps.industry-desk.output}}', 'MUSIC-INDUSTRY DESK:\n<untrusted-collector-packet lane="industry">\n{{steps.industry-desk.output}}\n</untrusted-collector-packet>'],
+            ['{{steps.youtube-intel.output}}\n</untrusted-collector-packet>', '{{steps.youtube-intel.output | escape}}\n</untrusted-collector-packet>'],
+            ['{{steps.platform-watch.output}}\n</untrusted-collector-packet>', '{{steps.platform-watch.output | escape}}\n</untrusted-collector-packet>'],
+            ['{{steps.industry-desk.output}}\n</untrusted-collector-packet>', '{{steps.industry-desk.output | escape}}\n</untrusted-collector-packet>'],
             [
               'Produce the complete final report. Keep only findings that change or sharpen a decision for this artist. Recommend no more than three actions for this week.',
               'Produce the complete final report. Keep only findings that change or sharpen a decision for this artist. Recommend no more than three actions for this week. Name each unavailable lane. If every lane is unavailable, report that the scan was unavailable and do not invent findings.',
@@ -5406,7 +5414,7 @@ user a clickable link to where the thing now lives.`
           if (!ws) throw new Error(`Workspace not found: ${wsId}`)
           return ws.rootPath
         },
-        postProcessSucceededRun: (run) => this.postProcessCompletedWorkflowRun(run),
+        postProcessSucceededRun: (run, signal) => this.postProcessCompletedWorkflowRun(run, signal),
         emit: (event) => this.broadcastWorkflowRunUpdated(event),
       })
 

@@ -1107,8 +1107,8 @@ export interface ElectronAPI {
   deleteAutomation(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
   /** Append a fully-formed matcher under the given event. Server assigns id and de-dupes WebhookReceive slugs. */
   createAutomationFromTemplate(workspaceId: string, eventName: string, matcher: Record<string, unknown>): Promise<void>
-  /** Atomically replace an existing matcher while preserving its stable id. */
-  replaceAutomation(workspaceId: string, eventName: string, matcherIndex: number, matcher: Record<string, unknown>): Promise<void>
+  /** Atomically replace the expected matcher by stable id while preserving its identity. */
+  replaceAutomation(workspaceId: string, eventName: string, automationId: string, expectedMatcher: Record<string, unknown>, matcher: Record<string, unknown>): Promise<void>
   /** Live status of the inbound webhook trigger HTTP server (port and URL). */
   getTriggerServerInfo(): Promise<{ enabled: boolean; url: string | null }>
 

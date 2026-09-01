@@ -9,7 +9,7 @@
 
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -528,6 +528,62 @@ describe('WorkflowRunner', () => {
     expect(onDisk).not.toBeNull();
     expect(onDisk!.state).toBe('succeeded');
     expect(onDisk!.steps[1]!.output).toBe('STEP_TWO_OUT');
+  });
+
+  test('Weekly Signal Scan carries one failed lane into a useful partial synthesis', async () => {
+    const template = STARTER_WORKFLOWS.find((workflow) => workflow.slug === 'weekly-signal-scan')!;
+    const metadata = structuredClone(template.metadata);
+    for (const step of metadata.steps) {
+      step.retries = 0;
+      step.completion = { requireNonEmptyOutput: true, minOutputChars: 1 };
+    }
+    const workflow: LoadedWorkflow = { ...template, metadata, path: '/tmp/weekly-signal-scan', source: 'global' };
+    const h = makeHarness({ stepOutputs: ['unused', 'platform evidence', 'industry evidence', 'partial brief'] });
+    h.setStepBehavior(0, async () => { throw new Error('YouTube unavailable'); });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow,
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { artist_name: 'Artist', lookback_days: 7 },
+    });
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const completed = lastCompleted(h.events)!;
+    expect(completed.state).toBe('succeeded');
+    expect(completed.steps[0]!.state).toBe('failed');
+    expect(completed.steps[1]!.state).toBe('succeeded');
+    expect(h.promptsSent.at(-1)!.prompt).toContain('Workflow lane unavailable: youtube-intel failed');
+    expect(h.promptsSent.at(-1)!.prompt).toContain('platform evidence');
+    expect(h.promptsSent.at(-1)!.prompt).toContain('industry evidence');
+  });
+
+  test('Weekly Signal Scan names every unavailable collector lane without inventing packets', async () => {
+    const template = STARTER_WORKFLOWS.find((workflow) => workflow.slug === 'weekly-signal-scan')!;
+    const metadata = structuredClone(template.metadata);
+    for (const step of metadata.steps) {
+      step.retries = 0;
+      step.completion = { requireNonEmptyOutput: true, minOutputChars: 1 };
+    }
+    const workflow: LoadedWorkflow = { ...template, metadata, path: '/tmp/weekly-signal-scan', source: 'global' };
+    const h = makeHarness({ stepOutputs: ['unused', 'unused', 'unused', 'scan unavailable'] });
+    h.setStepBehavior(0, async () => { throw new Error('YouTube unavailable'); });
+    h.setStepBehavior(1, async () => { throw new Error('Platform unavailable'); });
+    h.setStepBehavior(2, async () => { throw new Error('Industry unavailable'); });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow,
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { artist_name: 'Artist', lookback_days: 7 },
+    });
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const synthesisPrompt = h.promptsSent.at(-1)!.prompt;
+    expect(lastCompleted(h.events)!.state).toBe('succeeded');
+    expect(synthesisPrompt).toContain('Workflow lane unavailable: youtube-intel failed');
+    expect(synthesisPrompt).toContain('Workflow lane unavailable: platform-watch failed');
+    expect(synthesisPrompt).toContain('Workflow lane unavailable: industry-desk failed');
   });
 
   test('creates a default output from the final succeeded workflow step', async () => {
@@ -1095,6 +1151,61 @@ describe('WorkflowRunner', () => {
     }
   });
 
+  test('does not persist success until Output finalization and post-processing finish', async () => {
+    const h = makeHarness({ stepOutputs: ['STEP_ONE_OUT', 'STEP_TWO_OUT'] });
+    let releasePostProcessing: (() => void) | undefined;
+    const postProcessingGate = new Promise<void>((resolve) => {
+      releasePostProcessing = resolve;
+    });
+    h.deps.postProcessSucceededRun = async () => {
+      await postProcessingGate;
+    };
+    const runner = new WorkflowRunner(h.deps);
+    const start = await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'finalization-race' },
+    });
+
+    await waitFor(() => readRun(workspaceRoot, start.id)?.finalOutputId !== undefined);
+    const duringPostProcessing = readRun(workspaceRoot, start.id);
+    expect(duringPostProcessing?.state).toBe('running');
+    expect(lastCompleted(h.events)).toBeUndefined();
+
+    releasePostProcessing!();
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    expect(readRun(workspaceRoot, start.id)?.state).toBe('succeeded');
+  });
+
+  test('cancellation during post-processing cannot be overwritten by success', async () => {
+    const h = makeHarness({ stepOutputs: ['STEP_ONE_OUT', 'STEP_TWO_OUT'] });
+    let releasePostProcessing: (() => void) | undefined;
+    const postProcessingGate = new Promise<void>((resolve) => {
+      releasePostProcessing = resolve;
+    });
+    let contextWritten = false;
+    h.deps.postProcessSucceededRun = async (_run, signal) => {
+      await postProcessingGate;
+      signal.throwIfAborted();
+      contextWritten = true;
+    };
+    const runner = new WorkflowRunner(h.deps);
+    const start = await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'cancel-finalization-race' },
+    });
+
+    await waitFor(() => readRun(workspaceRoot, start.id)?.finalOutputId !== undefined);
+    await runner.cancel(WORKSPACE_ID, start.id);
+    releasePostProcessing!();
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    expect(lastCompleted(h.events)?.state).toBe('cancelled');
+    expect(readRun(workspaceRoot, start.id)?.state).toBe('cancelled');
+    expect(contextWritten).toBe(false);
+  });
+
   test('step throws: run fails, second step is never run, error recorded', async () => {
     const h = makeHarness();
     const runner = new WorkflowRunner(h.deps);
@@ -1600,8 +1711,12 @@ describe('WorkflowRunner', () => {
 
   test('completion contract accepts an exact Output with a primary asset', async () => {
     const h = makeHarness({ stepOutputs: ['Report summary for downstream synthesis.'] });
+    const outputId = '11111111-1111-4111-8111-111111111111';
+    const outputDir = join(workspaceRoot, 'outputs', outputId);
+    mkdirSync(outputDir, { recursive: true });
+    writeFileSync(join(outputDir, 'report.md'), '# Report');
     h.deps.getSessionOutputs = (workspaceId, sessionId) => [{
-      id: '11111111-1111-4111-8111-111111111111',
+      id: outputId,
       workspaceId,
       title: 'Weekly YouTube Intelligence Report',
       kind: 'report',
@@ -1637,6 +1752,90 @@ describe('WorkflowRunner', () => {
     await waitFor(() => lastCompleted(h.events) !== undefined);
     expect(lastCompleted(h.events)!.state).toBe('succeeded');
     expect(lastCompleted(h.events)!.steps[0]!.completion?.satisfied).toBe(true);
+  });
+
+  test('completion contract rejects an Output whose primary asset is missing', async () => {
+    const h = makeHarness({ stepOutputs: ['Report summary for downstream synthesis.'] });
+    h.deps.getSessionOutputs = (workspaceId, sessionId) => [{
+      id: '22222222-2222-4222-8222-222222222222',
+      workspaceId,
+      title: 'Weekly YouTube Intelligence Report',
+      kind: 'report',
+      status: 'published',
+      summary: 'Report',
+      origin: { source: 'workflow', sessionId },
+      assets: [{ id: 'primary', role: 'primary', path: 'missing.md', mimeType: 'text/markdown' }],
+      primary: { id: 'primary', role: 'primary', path: 'missing.md', mimeType: 'text/markdown' },
+      createdAt: '2026-08-31T00:00:00.000Z',
+      updatedAt: '2026-08-31T00:00:00.000Z',
+    } as OutputManifest];
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [{
+          id: 'first',
+          agent: 'researcher',
+          input: 'Research {{trigger.topic}}',
+          completion: {
+            requiredOutput: {
+              kind: 'report',
+              title: 'Weekly YouTube Intelligence Report',
+              requirePrimary: true,
+            },
+          },
+        }],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'output gate' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    expect(lastCompleted(h.events)!.state).toBe('failed');
+    expect(lastCompleted(h.events)!.steps[0]!.error?.code).toBe('completion-required-output-missing');
+  });
+
+  test('completion contract rejects a readable directory as a primary asset', async () => {
+    const h = makeHarness({ stepOutputs: ['Report summary for downstream synthesis.'] });
+    const outputId = '33333333-3333-4333-8333-333333333333';
+    mkdirSync(join(workspaceRoot, 'outputs', outputId, 'report-dir'), { recursive: true });
+    h.deps.getSessionOutputs = (workspaceId, sessionId) => [{
+      id: outputId,
+      workspaceId,
+      title: 'Weekly YouTube Intelligence Report',
+      kind: 'report',
+      status: 'published',
+      summary: 'Report',
+      origin: { source: 'workflow', sessionId },
+      assets: [{ id: 'primary', role: 'primary', path: 'report-dir', mimeType: 'text/markdown' }],
+      primary: { id: 'primary', role: 'primary', path: 'report-dir', mimeType: 'text/markdown' },
+      createdAt: '2026-08-31T00:00:00.000Z',
+      updatedAt: '2026-08-31T00:00:00.000Z',
+    } as OutputManifest];
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [{
+          id: 'first',
+          agent: 'researcher',
+          input: 'Research {{trigger.topic}}',
+          completion: {
+            requiredOutput: {
+              kind: 'report',
+              title: 'Weekly YouTube Intelligence Report',
+              requirePrimary: true,
+            },
+          },
+        }],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'output gate' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    expect(lastCompleted(h.events)!.state).toBe('failed');
+    expect(lastCompleted(h.events)!.steps[0]!.error?.code).toBe('completion-required-output-missing');
   });
 
   test('recovery marks orphaned running runs interrupted', () => {

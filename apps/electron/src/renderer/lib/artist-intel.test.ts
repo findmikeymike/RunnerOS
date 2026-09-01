@@ -12,7 +12,9 @@ import {
   isValidYouTubeChannelUrl,
   parseArtistIntelConfigDocResult,
   parseArtistIntelReportDocResult,
+  saveIntelConfigWithAutomationRollback,
   serializeArtistIntelConfigBody,
+  type ArtistIntelConfig,
 } from './artist-intel'
 
 function makeDoc(body: string) {
@@ -118,6 +120,20 @@ describe('artist-intel', () => {
     expect(isValidYouTubeChannelUrl('https://youtube.com/channel/UCabc123')).toBe(true)
     expect(isValidYouTubeChannelUrl('https://youtu.be/abc123')).toBe(false)
     expect(isValidYouTubeChannelUrl('https://example.com/@channel')).toBe(false)
+  })
+
+  test('restores Signal settings when the automation mutation fails', async () => {
+    const previousConfig = emptyArtistIntelConfig()
+    const nextConfig = { ...previousConfig, enabled: true, cadence: 'weekly' as const }
+    const saved: ArtistIntelConfig[] = []
+
+    await expect(saveIntelConfigWithAutomationRollback({
+      previousConfig,
+      nextConfig,
+      saveConfig: async (config) => { saved.push(config) },
+      mutateAutomation: async () => { throw new Error('stale automation') },
+    })).rejects.toThrow('stale automation')
+    expect(saved).toEqual([nextConfig, previousConfig])
   })
 
   test('adds queued runs without dropping history', () => {

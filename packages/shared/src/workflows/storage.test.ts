@@ -1076,6 +1076,21 @@ describe('ensureRequiredWorkflows', () => {
     expect(loadGlobalWorkflow('required', opts())).not.toBeNull();
   });
 
+  test('backs up and repairs a malformed required workflow', () => {
+    const dir = join(libDir, 'required');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'WORKFLOW.md'), 'truncated: [', 'utf-8');
+
+    const res = ensureRequiredWorkflows(
+      [{ slug: 'required', metadata: minimalMeta(), body: 'Recovered body' }],
+      opts(),
+    );
+
+    expect(res.ensured).toBe(1);
+    expect(loadGlobalWorkflow('required', opts())?.body).toBe('Recovered body');
+    expect(readdirSync(dir).some((name) => name.startsWith('WORKFLOW.md.broken-'))).toBe(true);
+  });
+
   test('respects tombstones (deleted workflows do not come back)', () => {
     writeGlobalWorkflow({ slug: 'goner', metadata: minimalMeta(), body: '' }, opts());
     deleteGlobalWorkflow('goner', [workspace], opts());

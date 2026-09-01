@@ -237,6 +237,8 @@ export interface AutomationListItem {
   event: AutomationTrigger
   /** Index of this matcher within its event array in automations.json (for write-back) */
   matcherIndex: number
+  /** Exact persisted matcher used for optimistic concurrency on edits. */
+  rawMatcher?: Record<string, unknown>
   /** Display name (user-set or auto-derived) */
   name: string
   /** Human-readable summary */
@@ -580,6 +582,7 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
         id: matcher.id ?? `${eventName}-${index}`,
         event,
         matcherIndex: matcherIdx,
+        rawMatcher: JSON.parse(JSON.stringify(matcher)) as Record<string, unknown>,
         name: deriveAutomationName(eventName, matcher),
         summary: deriveAutomationSummary(eventName, matcher),
         enabled: matcher.enabled !== false,

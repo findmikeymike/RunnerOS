@@ -42,15 +42,21 @@ export interface AutomationWorkQueueDeps {
   emitContextChanged?(workspaceId: string, docs: ReturnType<typeof loadAllContextDocs>): void
 }
 
+const WEEKLY_SIGNAL_INTENT_ID = 'artist-hq:weekly-signal-scan'
+const ARTIST_INTEL_CONFIG_SLUG = 'artist-intel-config'
+
 export async function queueAutomationWork(
   workspaceId: string,
   workspaceRootPath: string,
   pending: PendingQueuedWork,
   deps: AutomationWorkQueueDeps = {},
 ): Promise<AutomationWorkQueueResult> {
-  validateAction(workspaceRootPath, pending.action)
   const built = buildTriggeredWork(workspaceId, pending)
   return withWorkspaceContextLock(workspaceRootPath, async () => {
+    if (!runtimeConfigAllowsAction(workspaceRootPath, pending.action)) {
+      return { orderIds: [], calendarItemIds: [] }
+    }
+    validateAction(workspaceRootPath, pending.action)
     const parsedWork = parseScheduledWorkDocResult(
       loadContextDoc(workspaceRootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined,
       workspaceId,
@@ -113,6 +119,23 @@ export async function queueAutomationWork(
         : built.orders.map((order) => order.calendarLink.itemId),
     }
   })
+}
+
+function runtimeConfigAllowsAction(workspaceRootPath: string, action: QueueWorkAction): boolean {
+  if (action.intentId !== WEEKLY_SIGNAL_INTENT_ID) return true
+  const body = loadContextDoc(workspaceRootPath, ARTIST_INTEL_CONFIG_SLUG)?.body
+  if (!body) return false
+  const fenced = body.match(/```json\s*([\s\S]*?)```/i)?.[1]
+  const start = body.indexOf('{')
+  const end = body.lastIndexOf('}')
+  const json = fenced?.trim() || (start >= 0 && end > start ? body.slice(start, end + 1) : '')
+  if (!json) return false
+  try {
+    const config = JSON.parse(json) as Record<string, unknown>
+    return config.version === 1 && config.enabled === true && config.cadence === 'weekly'
+  } catch {
+    return false
+  }
 }
 
 function buildTriggeredWork(workspaceId: string, pending: PendingQueuedWork) {

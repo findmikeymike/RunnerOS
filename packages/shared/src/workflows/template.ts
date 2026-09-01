@@ -8,10 +8,12 @@
  *   {{steps.<id>.output.<dot.path>}}
  *   {{run.id}}
  *   {{run.startedAt}}
+ *   {{steps.<id>.output | escape}}
  *
  * Rules per `docs/workflows/01-spec.md`:
  *   - Unknown references resolve to '' and emit a warning.
- *   - No expressions, no filters, no loops.
+ *   - No expressions or loops. The only filter is `escape`, for embedding
+ *     untrusted text inside a structural prompt boundary.
  *   - Resolution is pure — no I/O.
  */
 
@@ -39,6 +41,28 @@ function stringify(value: unknown): string {
   }
 }
 
+function escapePromptBoundary(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+function parseExpression(expr: string):
+  | { ok: true; path: string; filter?: 'escape' }
+  | { ok: false; reason: string } {
+  const segments = expr.split('|').map((segment) => segment.trim());
+  if (segments.length > 2 || !segments[0]) return { ok: false, reason: `invalid template expression "{{${expr}}}"` };
+  if (segments.length === 1) return { ok: true, path: segments[0] };
+  if (segments[1] !== 'escape') return { ok: false, reason: `unknown template filter "${segments[1] ?? ''}"` };
+  return { ok: true, path: segments[0], filter: 'escape' };
+}
+
+function formatResolvedValue(value: unknown, filter: 'escape' | undefined): string {
+  const text = stringify(value);
+  return filter === 'escape' ? escapePromptBoundary(text) : text;
+}
+
 function dotWalk(root: unknown, parts: string[]): { ok: true; value: unknown } | { ok: false } {
   let cur: unknown = root;
   for (const p of parts) {
@@ -50,7 +74,9 @@ function dotWalk(root: unknown, parts: string[]): { ok: true; value: unknown } |
 }
 
 function resolveToken(expr: string, ctx: TemplateContext): { ok: true; value: string } | { ok: false; reason: string } {
-  const parts = expr.split('.').map((p) => p.trim()).filter(Boolean);
+  const parsed = parseExpression(expr);
+  if (!parsed.ok) return parsed;
+  const parts = parsed.path.split('.').map((p) => p.trim()).filter(Boolean);
   if (parts.length === 0) return { ok: false, reason: `empty token "{{${expr}}}"` };
 
   const head = parts[0];
@@ -62,7 +88,7 @@ function resolveToken(expr: string, ctx: TemplateContext): { ok: true; value: st
     if (!ctx.trigger || !(field in ctx.trigger)) {
       return { ok: false, reason: `unknown trigger field "${field}"` };
     }
-    return { ok: true, value: stringify(ctx.trigger[field]) };
+    return { ok: true, value: formatResolvedValue(ctx.trigger[field], parsed.filter) };
   }
 
   if (head === 'run') {
@@ -74,7 +100,7 @@ function resolveToken(expr: string, ctx: TemplateContext): { ok: true; value: st
       return { ok: false, reason: `unknown run field "${field}"` };
     }
     if (!ctx.run) return { ok: false, reason: `run context not available` };
-    return { ok: true, value: stringify(ctx.run[field]) };
+    return { ok: true, value: formatResolvedValue(ctx.run[field], parsed.filter) };
   }
 
   if (head === 'steps') {
@@ -84,10 +110,10 @@ function resolveToken(expr: string, ctx: TemplateContext): { ok: true; value: st
     }
     const step = ctx.steps?.[stepId];
     if (!step) return { ok: false, reason: `unknown step "${stepId}"` };
-    if (parts.length === 3) return { ok: true, value: stringify(step.output) };
+    if (parts.length === 3) return { ok: true, value: formatResolvedValue(step.output, parsed.filter) };
     const walked = dotWalk(step.output, parts.slice(3));
     if (!walked.ok) return { ok: false, reason: `unknown path "${parts.slice(3).join('.')}" in step "${stepId}" output` };
-    return { ok: true, value: stringify(walked.value) };
+    return { ok: true, value: formatResolvedValue(walked.value, parsed.filter) };
   }
 
   return { ok: false, reason: `unrecognized token root "${head}"` };
@@ -124,7 +150,12 @@ export function validateTemplateReferences(
   for (const m of matches) {
     const rawExpr = m[1] ?? '';
     const expr = rawExpr.trim();
-    const parts = expr.split('.').map((p) => p.trim()).filter(Boolean);
+    const parsed = parseExpression(expr);
+    if (!parsed.ok) {
+      errors.push(parsed.reason);
+      continue;
+    }
+    const parts = parsed.path.split('.').map((p) => p.trim()).filter(Boolean);
     const head = parts[0];
     if (!head) {
       errors.push(`empty token "{{${expr}}}"`);

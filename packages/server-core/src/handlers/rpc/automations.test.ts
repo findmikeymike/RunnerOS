@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { beginPromptAutomation, replacementAutomationMatcher, uniqueWebhookSlug } from './automations'
+import { beginPromptAutomation, findAutomationMatcherIndexByIdentity, replacementAutomationMatcher, uniqueWebhookSlug } from './automations'
 
 describe('automation RPC helpers', () => {
   test('gives duplicated webhook automations a valid unique slug', () => {
@@ -27,6 +27,30 @@ describe('automation RPC helpers', () => {
       cron: '0 10 * * 1',
     })
     expect(replacement).toEqual({ name: 'Weekly Signal Scan', cron: '0 10 * * 1' })
+  })
+
+  test('targets automation replacement by stable identity and rejects a stale revision', () => {
+    const matchers = [
+      { id: 'first1', name: 'Different job' },
+      { id: 'signal1', name: 'Weekly Signal Scan', enabled: true },
+    ]
+    const expected = { id: 'signal1', name: 'Weekly Signal Scan', enabled: true }
+
+    expect(findAutomationMatcherIndexByIdentity(matchers, 'signal1', expected)).toBe(1)
+    expect(() => findAutomationMatcherIndexByIdentity(
+      [{ id: 'signal1', name: 'Weekly Signal Scan', enabled: false }],
+      'signal1',
+      expected,
+    )).toThrow('changed since this screen loaded')
+  })
+
+  test('matches one legacy automation by exact revision without trusting its stale array index', () => {
+    const expected = { name: 'Legacy Signal Scan', cron: '0 9 * * 1' }
+    expect(findAutomationMatcherIndexByIdentity(
+      [{ name: 'Other' }, expected],
+      'SchedulerTick-0',
+      expected,
+    )).toBe(1)
   })
 
   test('returns a prompt automation start without waiting for the model turn', async () => {

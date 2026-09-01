@@ -819,9 +819,12 @@ export class OutputService {
     };
   }
 
-  createDefaultWorkflowOutput(run: WorkflowRunSnapshot): WorkflowRunSnapshot {
+  createDefaultWorkflowOutput(
+    run: WorkflowRunSnapshot,
+    options: { allowRunningFinalization?: boolean } = {},
+  ): WorkflowRunSnapshot {
     if (run.finalOutputId) return run;
-    if (run.state !== 'succeeded') return run;
+    if (run.state !== 'succeeded' && !(options.allowRunningFinalization && run.state === 'running')) return run;
     const outputMode = run.workflowSnapshot.metadata.outputs?.mode ?? 'final-step';
     if (outputMode !== 'final-step') return run;
 

@@ -22,6 +22,7 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto';
+import { accessSync, constants, statSync } from 'node:fs';
 import type { CreateSessionOptions } from '@craft-agent/shared/protocol';
 import {
   appendOutputSchemaInstruction,
@@ -45,7 +46,7 @@ import {
   type WorkflowStepExecutionReceipt,
 } from '@craft-agent/shared/workflows';
 import { OutputService } from '../outputs/OutputService';
-import type { OutputManifest } from '@craft-agent/shared/outputs';
+import { resolveOutputAssetPath, type OutputManifest } from '@craft-agent/shared/outputs';
 import {
   assemblePrompt,
   scanForInjection,
@@ -151,7 +152,7 @@ export interface WorkflowRunnerDeps {
   /** Optional override for tests/hosts; default uses OutputService.markWorkflowOutputError. */
   markWorkflowOutputError?: (run: WorkflowRunSnapshot, err: unknown) => Promise<WorkflowRunSnapshot> | WorkflowRunSnapshot;
   /** Run host-owned completion side effects after the default Output is finalized. */
-  postProcessSucceededRun?: (run: WorkflowRunSnapshot) => Promise<void> | void;
+  postProcessSucceededRun?: (run: WorkflowRunSnapshot, signal: AbortSignal) => Promise<void> | void;
   /** Emit a runner event for renderer subscribers. No-op safe. */
   emit?: (event: WorkflowRunEvent) => void;
 }
@@ -749,21 +750,20 @@ export class WorkflowRunner {
       }
     }
 
-    // Final state.
+    // Failed/cancelled runs can become terminal immediately. Successful runs
+    // stay running until their canonical Output and host post-processing have
+    // finished, so external pollers cannot observe a premature success.
     if (active.abort.signal.aborted) {
       active.snapshot.state = 'cancelled';
     } else if (failed) {
       active.snapshot.state = 'failed';
     } else {
-      active.snapshot.state = 'succeeded';
+      await this.finalizeDefaultOutput(active);
+      if (!active.snapshot.outputError) await this.finalizeRunPostProcessing(active);
+      active.snapshot.state = active.abort.signal.aborted ? 'cancelled' : 'succeeded';
     }
     active.snapshot.completedAt = new Date().toISOString();
     this.touch(active);
-
-    if (active.snapshot.state === 'succeeded') {
-      await this.finalizeDefaultOutput(active);
-      if (!active.snapshot.outputError) await this.finalizeRunPostProcessing(active);
-    }
 
     // Release concurrency slot + active map entry.
     this.releaseActiveRun(active);
@@ -1003,13 +1003,15 @@ export class WorkflowRunner {
         );
       }
       const required = completion.requiredOutput;
-      const matchingOutput = this.deps.getSessionOutputs(workspaceId, sessionId)
-        .find((output) => (
+      const matchingOutputs = this.deps.getSessionOutputs(workspaceId, sessionId)
+        .filter((output) => (
           output.origin.sessionId === sessionId
           && output.kind === required.kind
           && (required.title === undefined || output.title.trim() === required.title)
-          && (!required.requirePrimary || Boolean(output.primary))
         ));
+      const matchingOutput = required.requirePrimary
+        ? matchingOutputs.find((output) => this.hasReadablePrimaryAsset(workspaceId, output))
+        : matchingOutputs[0];
       if (!matchingOutput) {
         const title = required.title ? ` titled "${required.title}"` : '';
         throw new StepAttemptError(
@@ -1020,6 +1022,19 @@ export class WorkflowRunner {
     }
 
     stepRecord.completion.satisfied = true;
+  }
+
+  private hasReadablePrimaryAsset(workspaceId: string, output: OutputManifest): boolean {
+    if (!output.primary) return false;
+    const root = this.deps.getWorkspaceRootPath(workspaceId);
+    const assetPath = resolveOutputAssetPath(root, output.id, output.primary.path);
+    if (!assetPath) return false;
+    try {
+      accessSync(assetPath, constants.R_OK);
+      return statSync(assetPath).isFile();
+    } catch {
+      return false;
+    }
   }
 
   private async sendMessageWithOptionalTimeout(
@@ -1134,8 +1149,9 @@ export class WorkflowRunner {
   private async finalizeRunPostProcessing(active: ActiveRun): Promise<void> {
     if (!this.deps.postProcessSucceededRun) return;
     try {
-      await this.deps.postProcessSucceededRun(this.cloneSnapshot(active.snapshot));
+      await this.deps.postProcessSucceededRun(this.cloneSnapshot(active.snapshot), active.abort.signal);
     } catch (err) {
+      if (active.abort.signal.aborted) return;
       // eslint-disable-next-line no-console
       console.error(`[WorkflowRunner] post-processing failed for run ${active.snapshot.id}:`, err);
       try {
@@ -1155,7 +1171,7 @@ export class WorkflowRunner {
       getWorkspaceRootPath: this.deps.getWorkspaceRootPath,
       emitOutputsUpdated: (workspaceId) => this.emitEvent({ type: 'outputs.updated', workspaceId }),
     });
-    return service.createDefaultWorkflowOutput(run);
+    return service.createDefaultWorkflowOutput(run, { allowRunningFinalization: true });
   }
 
   private markWorkflowOutputError(

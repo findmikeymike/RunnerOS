@@ -91,15 +91,39 @@ export function replacementAutomationMatcher(
   return cloned
 }
 
+export function findAutomationMatcherIndexByIdentity(
+  matchers: Record<string, unknown>[],
+  automationId: string,
+  expectedMatcher: Record<string, unknown>,
+): number {
+  const expectedRevision = JSON.stringify(expectedMatcher)
+  let index = matchers.findIndex((matcher) => matcher.id === automationId)
+  if (index < 0 && expectedMatcher.id === undefined) {
+    const legacyMatches = matchers
+      .map((matcher, matcherIndex) => JSON.stringify(matcher) === expectedRevision ? matcherIndex : -1)
+      .filter((matcherIndex) => matcherIndex >= 0)
+    if (legacyMatches.length === 1) index = legacyMatches[0]!
+  }
+  if (index < 0) throw new Error('Automation no longer exists. Refresh and try again.')
+  if (JSON.stringify(matchers[index]) !== expectedRevision) {
+    throw new Error('Automation changed since this screen loaded. Refresh and review the latest settings.')
+  }
+  return index
+}
+
 // Shared helper: resolve workspace, read automations.json, validate matcher, mutate, write back
 interface AutomationsConfigJson { automations?: Record<string, Record<string, unknown>[]>; [key: string]: unknown }
-async function withAutomationMatcher(workspaceId: string, eventName: string, matcherIndex: number, mutate: (matchers: Record<string, unknown>[], index: number, config: AutomationsConfigJson, genId: () => string) => void) {
+async function withAutomationEvent<T>(
+  workspaceId: string,
+  eventName: string,
+  mutate: (matchers: Record<string, unknown>[], config: AutomationsConfigJson, genId: () => string) => T,
+): Promise<T> {
   const workspace = getWorkspaceByNameOrId(workspaceId)
   if (!workspace) throw new Error('Workspace not found')
   const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
   assertTeamPermission(workspace.rootPath, 'team.settings.update')
 
-  await withConfigMutex(workspace.rootPath, async () => {
+  return withConfigMutex(workspace.rootPath, async () => {
     const { resolveAutomationsConfigPath, generateShortId } = await import('@craft-agent/shared/automations/resolve-config-path')
     const configPath = resolveAutomationsConfigPath(workspace.rootPath)
 
@@ -108,11 +132,8 @@ async function withAutomationMatcher(workspaceId: string, eventName: string, mat
 
     const eventMap = config.automations ?? {}
     const matchers = eventMap[eventName]
-    if (!Array.isArray(matchers) || matcherIndex < 0 || matcherIndex >= matchers.length) {
-      throw new Error(`Invalid automation reference: ${eventName}[${matcherIndex}]`)
-    }
-
-    mutate(matchers, matcherIndex, config, generateShortId)
+    if (!Array.isArray(matchers)) throw new Error(`Invalid automation event: ${eventName}`)
+    const result = mutate(matchers, config, generateShortId)
 
     // Backfill missing IDs on all matchers before writing
     for (const eventMatchers of Object.values(eventMap)) {
@@ -126,6 +147,21 @@ async function withAutomationMatcher(workspaceId: string, eventName: string, mat
     if (!validation.valid) throw new Error(`Invalid automation: ${validation.errors.join('; ')}`)
 
     await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+    return result
+  })
+}
+
+async function withAutomationMatcher(
+  workspaceId: string,
+  eventName: string,
+  matcherIndex: number,
+  mutate: (matchers: Record<string, unknown>[], index: number, config: AutomationsConfigJson, genId: () => string) => void,
+): Promise<void> {
+  await withAutomationEvent(workspaceId, eventName, (matchers, config, generateId) => {
+    if (matcherIndex < 0 || matcherIndex >= matchers.length) {
+      throw new Error(`Invalid automation reference: ${eventName}[${matcherIndex}]`)
+    }
+    mutate(matchers, matcherIndex, config, generateId)
   })
 }
 
@@ -434,10 +470,12 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
     _ctx,
     workspaceId: string,
     eventName: string,
-    matcherIndex: number,
+    automationId: string,
+    expectedMatcher: Record<string, unknown>,
     matcher: Record<string, unknown>,
   ) => {
-    await withAutomationMatcher(workspaceId, eventName, matcherIndex, (matchers, idx, _config, generateId) => {
+    await withAutomationEvent(workspaceId, eventName, (matchers, _config, generateId) => {
+      const idx = findAutomationMatcherIndexByIdentity(matchers, automationId, expectedMatcher)
       matchers[idx] = replacementAutomationMatcher(matchers[idx]!, matcher, generateId)
     })
   })

@@ -54,6 +54,27 @@ export interface ArtistIntelReport {
   updatedAt: string
 }
 
+export async function saveIntelConfigWithAutomationRollback(input: {
+  previousConfig: ArtistIntelConfig
+  nextConfig: ArtistIntelConfig
+  saveConfig: (config: ArtistIntelConfig) => Promise<void>
+  mutateAutomation: () => Promise<void>
+}): Promise<void> {
+  await input.saveConfig(input.nextConfig)
+  try {
+    await input.mutateAutomation()
+  } catch (automationError) {
+    try {
+      await input.saveConfig(input.previousConfig)
+    } catch (rollbackError) {
+      const automationMessage = automationError instanceof Error ? automationError.message : String(automationError)
+      const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+      throw new Error(`Automation update failed (${automationMessage}) and Signal settings could not be restored (${rollbackMessage}).`)
+    }
+    throw automationError
+  }
+}
+
 export type ArtistIntelConfigParseResult =
   | { ok: true; config: ArtistIntelConfig }
   | { ok: false; config: ArtistIntelConfig; error: string }

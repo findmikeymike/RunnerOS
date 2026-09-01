@@ -5,9 +5,10 @@ import { join } from 'node:path'
 import type { PendingQueuedWork } from '@craft-agent/shared/automations'
 import { CAMPAIGN_CALENDAR_CONTEXT_SLUG, parseCampaignCalendarDocResult } from '@craft-agent/shared/campaign-calendar'
 import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult, scheduledWorkDefinitionDigest } from '@craft-agent/shared/scheduled-work'
-import { loadContextDoc } from '@craft-agent/shared/workspace-context'
+import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context'
 import * as actualAgentDefinitions from '@craft-agent/shared/agent-definitions'
 import { queueAutomationWork } from './AutomationWorkQueue'
+import { withWorkspaceContextLock } from './workspace-context-lock'
 
 mock.module('@craft-agent/shared/agent-definitions', () => ({
   ...actualAgentDefinitions,
@@ -141,5 +142,115 @@ describe('queueAutomationWork', () => {
       calendarVisibility: 'hidden',
       type: 'agent-task',
     })
+  })
+
+  test('stale weekly Signal automation cannot queue work when current settings are off', async () => {
+    const workspaceRoot = root()
+    upsertContextDoc(workspaceRoot, {
+      slug: 'artist-intel-config',
+      metadata: { name: 'Signal config', routing: { mode: 'broadcast' }, enabled: true },
+      body: '```json\n{"version":1,"enabled":false,"cadence":"manual"}\n```',
+    })
+    const result = await queueAutomationWork(workspaceId, workspaceRoot, {
+      matcherId: 'weekly-signal-scan',
+      automationName: 'Weekly Signal Scan',
+      event: 'SchedulerTick',
+      eventTimestamp: Date.parse('2026-07-10T14:00:00.000Z'),
+      eventKey: 'SchedulerTick:1720620000000',
+      action: {
+        type: 'queue-work',
+        ownerScope: 'hq',
+        calendarVisibility: 'hidden',
+        title: 'Weekly Signal Scan',
+        intentId: 'artist-hq:weekly-signal-scan',
+        execution: {
+          type: 'workflow-run',
+          workflowSlug: 'weekly-signal-scan',
+          workflowDigest: 'stale-digest',
+          triggerInputs: {},
+        },
+      },
+    })
+
+    expect(result).toEqual({ orderIds: [], calendarItemIds: [] })
+    expect(loadContextDoc(workspaceRoot, SCHEDULED_WORK_CONTEXT_SLUG)).toBeNull()
+  })
+
+  test('weekly Signal automation proceeds to normal validation when current settings enable it', async () => {
+    const workspaceRoot = root()
+    upsertContextDoc(workspaceRoot, {
+      slug: 'artist-intel-config',
+      metadata: { name: 'Signal config', routing: { mode: 'broadcast' }, enabled: true },
+      body: '```json\n{"version":1,"enabled":true,"cadence":"weekly"}\n```',
+    })
+    const pending: PendingQueuedWork = {
+      matcherId: 'weekly-signal-scan',
+      automationName: 'Weekly Signal Scan',
+      event: 'SchedulerTick',
+      eventTimestamp: Date.parse('2026-07-10T14:00:00.000Z'),
+      eventKey: 'SchedulerTick:1720620000000',
+      action: {
+        type: 'queue-work',
+        ownerScope: 'hq',
+        calendarVisibility: 'hidden',
+        title: 'Weekly Signal Scan',
+        intentId: 'artist-hq:weekly-signal-scan',
+        execution: {
+          type: 'workflow-run',
+          workflowSlug: 'weekly-signal-scan',
+          workflowDigest: 'stale-digest',
+          triggerInputs: {},
+        },
+      },
+    }
+
+    await expect(queueAutomationWork(workspaceId, workspaceRoot, pending)).rejects.toThrow(/not active/i)
+  })
+
+  test('concurrent Signal disable wins before queued work is persisted', async () => {
+    const workspaceRoot = root()
+    const writeConfig = (enabled: boolean, cadence: 'manual' | 'weekly') => upsertContextDoc(workspaceRoot, {
+      slug: 'artist-intel-config',
+      metadata: { name: 'Signal config', routing: { mode: 'broadcast' }, enabled: true },
+      body: `\`\`\`json\n${JSON.stringify({ version: 1, enabled, cadence })}\n\`\`\``,
+    })
+    writeConfig(true, 'weekly')
+
+    let releaseDisable!: () => void
+    let disableLockEntered!: () => void
+    const disableReady = new Promise<void>((resolve) => { disableLockEntered = resolve })
+    const disableGate = new Promise<void>((resolve) => { releaseDisable = resolve })
+    const disable = withWorkspaceContextLock(workspaceRoot, async () => {
+      disableLockEntered()
+      await disableGate
+      writeConfig(false, 'manual')
+    })
+    await disableReady
+
+    const queued = queueAutomationWork(workspaceId, workspaceRoot, {
+      matcherId: 'weekly-signal-scan',
+      automationName: 'Weekly Signal Scan',
+      event: 'SchedulerTick',
+      eventTimestamp: Date.parse('2026-07-10T14:00:00.000Z'),
+      eventKey: 'SchedulerTick:1720620000000',
+      action: {
+        type: 'queue-work',
+        ownerScope: 'hq',
+        calendarVisibility: 'hidden',
+        title: 'Weekly Signal Scan',
+        intentId: 'artist-hq:weekly-signal-scan',
+        execution: {
+          type: 'workflow-run',
+          workflowSlug: 'weekly-signal-scan',
+          workflowDigest: 'stale-digest',
+          triggerInputs: {},
+        },
+      },
+    })
+    releaseDisable()
+    await disable
+
+    expect(await queued).toEqual({ orderIds: [], calendarItemIds: [] })
+    expect(loadContextDoc(workspaceRoot, SCHEDULED_WORK_CONTEXT_SLUG)).toBeNull()
   })
 })

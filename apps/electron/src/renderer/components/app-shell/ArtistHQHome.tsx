@@ -161,6 +161,7 @@ import {
   isValidYouTubeChannelUrl,
   parseArtistIntelConfigDocResult,
   parseArtistIntelReportDocResult,
+  saveIntelConfigWithAutomationRollback,
   serializeArtistIntelConfigBody,
   SIGNAL_ANALYST_AGENT_SLUG,
   SIGNAL_SCOUT_AGENT_SLUG,
@@ -1240,32 +1241,42 @@ export function ArtistHQHome({
     try {
       const nextScheduled = !intelSyncActive
       if (nextScheduled) await ensureSignalScanReady()
-      await saveIntelConfig({
+      const nextConfig = {
         ...intelConfig,
         enabled: nextScheduled,
         cadence: nextScheduled ? 'weekly' : intelConfig.cadence,
-      })
-      if (intelSyncAutomation && nextScheduled && isLegacyIntelSyncAutomation(intelSyncAutomation)) {
-        await window.electronAPI.replaceAutomation(
-          workspaceId,
-          intelSyncAutomation.event,
-          intelSyncAutomation.matcherIndex,
-          createIntelSyncMatcher(workspaceName || 'Artist HQ', signalScanWorkflowDigest, intelConfig),
-        )
-      } else if (intelSyncAutomation) {
-        await window.electronAPI.setAutomationEnabled(
-          workspaceId,
-          intelSyncAutomation.event,
-          intelSyncAutomation.matcherIndex,
-          nextScheduled,
-        )
-      } else if (nextScheduled) {
-        await window.electronAPI.createAutomationFromTemplate(
-          workspaceId,
-          'SchedulerTick',
-          createIntelSyncMatcher(workspaceName || 'Artist HQ', signalScanWorkflowDigest, intelConfig),
-        )
       }
+      await saveIntelConfigWithAutomationRollback({
+        previousConfig: intelConfig,
+        nextConfig,
+        saveConfig: saveIntelConfig,
+        mutateAutomation: async () => {
+          const currentMatcher = intelSyncAutomation ? requireAutomationMatcher(intelSyncAutomation) : null
+          if (intelSyncAutomation && nextScheduled && isLegacyIntelSyncAutomation(intelSyncAutomation)) {
+            await window.electronAPI.replaceAutomation(
+              workspaceId,
+              intelSyncAutomation.event,
+              intelSyncAutomation.id,
+              currentMatcher!,
+              createIntelSyncMatcher(workspaceName || 'Artist HQ', signalScanWorkflowDigest, nextConfig),
+            )
+          } else if (intelSyncAutomation) {
+            await window.electronAPI.replaceAutomation(
+              workspaceId,
+              intelSyncAutomation.event,
+              intelSyncAutomation.id,
+              currentMatcher!,
+              { ...currentMatcher!, enabled: nextScheduled },
+            )
+          } else if (nextScheduled) {
+            await window.electronAPI.createAutomationFromTemplate(
+              workspaceId,
+              'SchedulerTick',
+              createIntelSyncMatcher(workspaceName || 'Artist HQ', signalScanWorkflowDigest, nextConfig),
+            )
+          }
+        },
+      })
       await refreshAutomations()
       toast.success(nextScheduled ? 'Weekly Intel auto-run enabled' : 'Weekly Intel auto-run paused')
     } catch (error) {
@@ -2453,30 +2464,39 @@ export function ArtistHQHome({
             if (nextScheduled) {
               await ensureSignalScanReady()
             }
-            await saveIntelConfig(nextConfig)
-            if (nextScheduled) {
-              if (intelSyncAutomation) {
-                await window.electronAPI.replaceAutomation(
-                  workspaceId,
-                  intelSyncAutomation.event,
-                  intelSyncAutomation.matcherIndex,
-                  createIntelSyncMatcher(workspaceName || 'Artist HQ', signalScanWorkflowDigest, nextConfig),
-                )
-              } else {
-                await window.electronAPI.createAutomationFromTemplate(
-                  workspaceId,
-                  'SchedulerTick',
-                  createIntelSyncMatcher(workspaceName || 'Artist HQ', signalScanWorkflowDigest, nextConfig),
-                )
-              }
-            } else if (intelSyncAutomation) {
-              await window.electronAPI.setAutomationEnabled(
-                workspaceId,
-                intelSyncAutomation.event,
-                intelSyncAutomation.matcherIndex,
-                false,
-              )
-            }
+            await saveIntelConfigWithAutomationRollback({
+              previousConfig: intelConfig,
+              nextConfig,
+              saveConfig: saveIntelConfig,
+              mutateAutomation: async () => {
+                const currentMatcher = intelSyncAutomation ? requireAutomationMatcher(intelSyncAutomation) : null
+                if (nextScheduled) {
+                  if (intelSyncAutomation) {
+                    await window.electronAPI.replaceAutomation(
+                      workspaceId,
+                      intelSyncAutomation.event,
+                      intelSyncAutomation.id,
+                      currentMatcher!,
+                      createIntelSyncMatcher(workspaceName || 'Artist HQ', signalScanWorkflowDigest, nextConfig),
+                    )
+                  } else {
+                    await window.electronAPI.createAutomationFromTemplate(
+                      workspaceId,
+                      'SchedulerTick',
+                      createIntelSyncMatcher(workspaceName || 'Artist HQ', signalScanWorkflowDigest, nextConfig),
+                    )
+                  }
+                } else if (intelSyncAutomation) {
+                  await window.electronAPI.replaceAutomation(
+                    workspaceId,
+                    intelSyncAutomation.event,
+                    intelSyncAutomation.id,
+                    currentMatcher!,
+                    { ...currentMatcher!, enabled: false },
+                  )
+                }
+              },
+            })
             await refreshAutomations()
             toast.success('Signal settings saved')
             setIntelConfigOpen(false)
@@ -4466,6 +4486,13 @@ function isLegacyIntelSyncAutomation(automation: AutomationListItem): boolean {
         && action.execution.agentSlug === YOUTUBE_INTELLIGENCE_AGENT_SLUG)
       || (action.type === 'prompt' && action.agentSlug === YOUTUBE_RESEARCH_AGENT_SLUG)
     ))
+}
+
+function requireAutomationMatcher(automation: AutomationListItem): Record<string, unknown> {
+  if (!automation.rawMatcher) {
+    throw new Error('Automation revision is unavailable. Refresh and try again.')
+  }
+  return automation.rawMatcher
 }
 
 function getLocalTimezone(): string {

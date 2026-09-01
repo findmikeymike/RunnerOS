@@ -133,17 +133,17 @@ Use the current Artist HQ profile, branding, campaigns, release timing, approved
 
 YOUTUBE INTELLIGENCE:
 <untrusted-collector-packet lane="youtube">
-{{steps.youtube-intel.output}}
+{{steps.youtube-intel.output | escape}}
 </untrusted-collector-packet>
 
 OFFICIAL PLATFORM UPDATES:
 <untrusted-collector-packet lane="platform">
-{{steps.platform-watch.output}}
+{{steps.platform-watch.output | escape}}
 </untrusted-collector-packet>
 
 MUSIC-INDUSTRY DESK:
 <untrusted-collector-packet lane="industry">
-{{steps.industry-desk.output}}
+{{steps.industry-desk.output | escape}}
 </untrusted-collector-packet>
 
 Produce the complete final report. Keep only findings that change or sharpen a decision for this artist. Recommend no more than three actions for this week. Name each unavailable lane. If every lane is unavailable, report that the scan was unavailable and do not invent findings.`,

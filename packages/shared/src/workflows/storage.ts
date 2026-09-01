@@ -418,9 +418,21 @@ export function ensureRequiredWorkflows(
     if (tombstoned.has(w.slug)) continue;
     const dir = getGlobalWorkflowDir(w.slug, options);
     const file = join(dir, WORKFLOW_FILE);
-    if (existsSync(file)) continue;
+    if (existsSync(file) && loadGlobalWorkflow(w.slug, options)) continue;
     mkdirSync(dir, { recursive: true });
-    writeFileSync(file, serializeWorkflow(w.metadata, w.body), 'utf-8');
+    if (existsSync(file)) {
+      const backup = `${file}.broken-${Date.now()}`;
+      renameSync(file, backup);
+    }
+    const serialized = serializeWorkflow(w.metadata, w.body);
+    const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
+    try {
+      writeFileSync(temp, serialized, 'utf-8');
+      renameSync(temp, file);
+    } catch (error) {
+      rmSync(temp, { force: true });
+      throw error;
+    }
     ensured += 1;
   }
   return { ensured };
