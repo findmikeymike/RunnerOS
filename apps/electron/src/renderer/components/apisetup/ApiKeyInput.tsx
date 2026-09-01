@@ -141,6 +141,7 @@ const COMPAT_ANTHROPIC_DEFAULTS = 'claude-opus-4-7, claude-sonnet-4-6, claude-ha
 const COMPAT_OPENAI_DEFAULTS = 'openai/gpt-5.2-codex, openai/gpt-5.1-codex-mini'
 const COMPAT_MINIMAX_DEFAULTS = 'MiniMax-M2.5, MiniMax-M2.5-highspeed'
 const COMPAT_KIMI_DEFAULTS = 'k2p5, kimi-k2-thinking'
+const DEFAULT_ENDPOINT_PROVIDERS = new Set(['anthropic', 'openai', 'pi', 'google'])
 
 function getPresetsForProvider(providerType: 'anthropic' | 'openai' | 'pi' | 'google' | 'pi_api_key'): Preset[] {
   if (providerType === 'pi_api_key') return ANTHROPIC_PRESETS
@@ -195,6 +196,7 @@ export function ApiKeyInput({
   const [connectionDefaultModel, setConnectionDefaultModel] = useState(initialValues?.connectionDefaultModel ?? '')
   const [customApi, setCustomApi] = useState<CustomEndpointApi>(initialValues?.customApi ?? 'openai-completions')
   const [modelError, setModelError] = useState<string | null>(null)
+  const [omniDiscoveryError, setOmniDiscoveryError] = useState<string | null>(null)
 
   // Bedrock auth state
   const [bedrockAuthMethod, setBedrockAuthMethod] = useState<'iam_credentials' | 'environment'>('iam_credentials')
@@ -221,7 +223,6 @@ export function ApiKeyInput({
   const isBedrock = activePreset === 'amazon-bedrock'
   const isOmniRoute = activePreset === 'omniroute'
   // Hide endpoint/model fields for providers with well-known endpoints handled by the SDK
-  const DEFAULT_ENDPOINT_PROVIDERS = new Set(['anthropic', 'openai', 'pi', 'google'])
   const isDefaultProviderPreset = DEFAULT_ENDPOINT_PROVIDERS.has(activePreset)
 
   // Provider-specific placeholders from the active preset
@@ -235,7 +236,7 @@ export function ApiKeyInput({
   // Fetch Pi SDK models when a provider is selected in pi_api_key flow.
   // Returns all models sorted by cost (expensive-first) for the searchable tier dropdowns.
   const loadPiModels = useCallback(async (provider: string) => {
-    if (!isPiApiKeyFlow || !provider || provider === 'custom' || DEFAULT_ENDPOINT_PROVIDERS.has(provider)) {
+    if (!isPiApiKeyFlow || !provider || provider === 'custom' || provider === 'omniroute' || DEFAULT_ENDPOINT_PROVIDERS.has(provider)) {
       setPiModels([])
       return
     }
@@ -257,11 +258,39 @@ export function ApiKeyInput({
     } finally {
       setPiModelsLoading(false)
     }
-  }, [isPiApiKeyFlow])
+  }, [initialPreset, initialValues?.models, isPiApiKeyFlow])
 
   useEffect(() => {
     loadPiModels(activePreset)
   }, [activePreset, loadPiModels])
+
+  const loadOmniRouteModels = useCallback(async () => {
+    setPiModelsLoading(true)
+    setOmniDiscoveryError(null)
+    try {
+      const result = await window.electronAPI.discoverOmniRouteModels({
+        baseUrl: baseUrl.trim(),
+        apiKey: apiKey.trim(),
+      })
+      if (!result.success) {
+        setPiModels([])
+        setOmniDiscoveryError(result.error || 'OmniRoute model discovery failed.')
+        return
+      }
+
+      setPiModels(result.models)
+      const tiers = resolveTierModels(result.models, initialValues?.models, 'omniroute')
+      setBestModel(tiers.best)
+      setDefaultModel(tiers.default_)
+      setCheapModel(tiers.cheap)
+      hydratedTierProviderRef.current = 'omniroute'
+    } catch (error) {
+      setPiModels([])
+      setOmniDiscoveryError(error instanceof Error ? error.message : 'OmniRoute model discovery failed.')
+    } finally {
+      setPiModelsLoading(false)
+    }
+  }, [apiKey, baseUrl, initialValues?.models])
 
   // Whether to show 3 tier dropdowns instead of text input
   const hasPiModels = isPiApiKeyFlow && piModels.length > 0 && !isDefaultProviderPreset && activePreset !== 'custom' && !isBedrock
@@ -276,7 +305,9 @@ export function ApiKeyInput({
     } else {
       setBaseUrl(preset.url)
     }
+    setPiModels([])
     setModelError(null)
+    setOmniDiscoveryError(null)
     // Pre-fill recommended model for Ollama; clear for all others
     // (Default provider presets hide the field entirely, others default to provider model IDs when empty)
     if (preset.key === 'ollama') {
@@ -296,6 +327,10 @@ export function ApiKeyInput({
 
   const handleBaseUrlChange = (value: string) => {
     setBaseUrl(value)
+    if (isOmniRoute) {
+      setPiModels([])
+      setOmniDiscoveryError(null)
+    }
     const presetKey = getPresetForUrl(value, presets)
     const currentPresetObj = presets.find(p => p.key === activePreset)
     const nextPresetState = resolvePresetStateForBaseUrlChange({
@@ -339,8 +374,9 @@ export function ApiKeyInput({
         baseUrl: baseUrl.trim() || undefined,
         connectionDefaultModel: bestModel,
         models,
-        piAuthProvider: effectivePiAuthProvider,
+        piAuthProvider: isOmniRoute ? 'omniroute' : effectivePiAuthProvider,
         modelSelectionMode: 'userDefined3Tier',
+        ...(isOmniRoute ? { customEndpoint: { api: 'openai-completions' as const } } : {}),
       })
       return
     }
@@ -502,6 +538,26 @@ export function ApiKeyInput({
           </div>
         )}
       </div>
+      )}
+
+      {isOmniRoute && (
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={loadOmniRouteModels}
+            disabled={isDisabled || piModelsLoading || !baseUrl.trim()}
+            className={cn(
+              "inline-flex h-8 items-center gap-2 rounded-md bg-foreground/[0.06] px-3 text-xs font-medium text-foreground/70 transition-colors",
+              "hover:bg-foreground/[0.1] hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+            )}
+          >
+            {piModelsLoading && <Loader2 className="size-3.5 animate-spin" />}
+            {piModelsLoading ? t('apiSetup.loadingModels') : t('apiSetup.omniroute.loadModels')}
+          </button>
+          {omniDiscoveryError && (
+            <p className="text-xs text-destructive">{omniDiscoveryError}</p>
+          )}
+        </div>
       )}
 
       {/* Protocol Toggle — visible as soon as Custom preset is selected */}
@@ -739,7 +795,11 @@ export function ApiKeyInput({
                       </div>
                       <CommandPrimitive.List className="max-h-[240px] overflow-y-auto p-1">
                         {piModels
-                          .filter(m => m.name.toLowerCase().includes(tierFilter.toLowerCase()))
+                          .filter((model) => {
+                            const query = tierFilter.toLowerCase()
+                            return model.name.toLowerCase().includes(query) || model.id.toLowerCase().includes(query)
+                          })
+                          .slice(0, 250)
                           .map((model) => (
                             <CommandPrimitive.Item
                               key={model.id}

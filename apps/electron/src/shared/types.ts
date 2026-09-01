@@ -2,7 +2,11 @@
 // Protocol re-exports (channels, DTOs, events, wire types)
 // =============================================================================
 export * from '@craft-agent/shared/protocol'
-import type { WorkflowAttentionDTO } from '@craft-agent/shared/protocol'
+import type {
+  DiscoverOmniRouteModelsParams,
+  DiscoverOmniRouteModelsResult,
+  WorkflowAttentionDTO,
+} from '@craft-agent/shared/protocol'
 
 // =============================================================================
 // Package re-exports (convenience for renderer imports)
@@ -824,6 +828,7 @@ export interface ElectronAPI {
   getPiApiKeyProviders(): Promise<Array<{ key: string; label: string; placeholder: string }>>
   getPiProviderBaseUrl(provider: string): Promise<string | undefined>
   getPiProviderModels(provider: string): Promise<{ models: Array<{ id: string; name: string; costInput: number; costOutput: number; contextWindow: number; reasoning: boolean }>; totalCount: number }>
+  discoverOmniRouteModels(params: DiscoverOmniRouteModelsParams): Promise<DiscoverOmniRouteModelsResult>
 
   // Session-specific model (overrides global)
   getSessionModel(sessionId: string, workspaceId: string): Promise<string | null>

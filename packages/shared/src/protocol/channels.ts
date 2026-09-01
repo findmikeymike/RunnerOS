@@ -197,6 +197,7 @@ export const RPC_CHANNELS = {
     SET_DEFAULT: 'LLM_Connection:setDefault',
     SET_WORKSPACE_DEFAULT: 'LLM_Connection:setWorkspaceDefault',
     REFRESH_MODELS: 'LLM_Connection:refreshModels',
+    DISCOVER_OMNIROUTE_MODELS: 'LLM_Connection:discoverOmniRouteModels',
     CHANGED: 'LLM_Connection:changed',
   },
   chatgpt: {

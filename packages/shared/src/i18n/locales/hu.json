@@ -13,6 +13,7 @@
   "apiSetup.modelTier.fastDesc": "összefoglalás & segédeszköz",
   "apiSetup.omniroute.endpointPlaceholder": "https://sajat-omniroute-szerver.hu/v1",
   "apiSetup.omniroute.endpointRequired": "Az OmniRoute szerver URL-je kötelező.",
+  "apiSetup.omniroute.loadModels": "Modellek és útvonalak betöltése",
   "apiSetup.omniroute.modelHelp": "Add meg az OmniRoute irányítópultján található modell- vagy tartalék kombináció azonosítóját.",
   "apiSetup.pasteAuthCode": "Ide illessze be az engedélyezési kódját",
   "apiSetup.searchModels": "Modellek keresése...",

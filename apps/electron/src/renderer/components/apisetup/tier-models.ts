@@ -13,6 +13,11 @@ const PROVIDER_PREFERRED_TIERS: Record<string, { best: string; default_: string;
     default_: 'pi/deepseek/deepseek-v4-pro',
     cheap: 'pi/openrouter/owl-alpha',
   },
+  omniroute: {
+    best: 'auto/best',
+    default_: 'auto',
+    cheap: 'auto/fast',
+  },
 }
 
 function pickProviderTierDefaults(

@@ -13,6 +13,7 @@
   "apiSetup.modelTier.fastDesc": "Zusammenfassung & Hilfsfunktionen",
   "apiSetup.omniroute.endpointPlaceholder": "https://dein-omniroute-server.de/v1",
   "apiSetup.omniroute.endpointRequired": "Die OmniRoute-Server-URL ist erforderlich.",
+  "apiSetup.omniroute.loadModels": "Modelle und Routen laden",
   "apiSetup.omniroute.modelHelp": "Gib eine Modell- oder Fallback-Combo-ID aus deinem OmniRoute-Dashboard ein.",
   "apiSetup.pasteAuthCode": "Autorisierungscode hier einfügen",
   "apiSetup.searchModels": "Modelle suchen...",

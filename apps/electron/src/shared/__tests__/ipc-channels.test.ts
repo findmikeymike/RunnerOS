@@ -13,6 +13,7 @@ function flattenValues(obj: Record<string, unknown>): string[] {
 const EXPECTED_CHANNELS: string[] = [
   "LLM_Connection:changed",
   "LLM_Connection:delete",
+  "LLM_Connection:discoverOmniRouteModels",
   "LLM_Connection:get",
   "LLM_Connection:getApiKey",
   "LLM_Connection:list",
@@ -56,6 +57,7 @@ const EXPECTED_CHANNELS: string[] = [
   "automations:getHistory",
   "automations:getLastExecuted",
   "automations:getTriggerServerInfo",
+  "automations:replace",
   "automations:replay",
   "automations:setEnabled",
   "automations:test",

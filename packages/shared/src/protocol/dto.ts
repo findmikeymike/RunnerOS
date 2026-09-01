@@ -460,6 +460,24 @@ export interface TestLlmConnectionResult {
   error?: string
 }
 
+export interface DiscoverOmniRouteModelsParams {
+  baseUrl: string
+  apiKey: string
+}
+
+export interface DiscoverOmniRouteModelsResult {
+  success: boolean
+  models: Array<{
+    id: string
+    name: string
+    costInput: number
+    costOutput: number
+    contextWindow: number
+    reasoning: boolean
+  }>
+  error?: string
+}
+
 // ---------------------------------------------------------------------------
 // Source / skill types
 // ---------------------------------------------------------------------------

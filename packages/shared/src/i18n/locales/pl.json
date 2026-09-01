@@ -13,6 +13,7 @@
   "apiSetup.modelTier.fastDesc": "podsumowania i narzędzia",
   "apiSetup.omniroute.endpointPlaceholder": "https://twoj-serwer-omniroute.pl/v1",
   "apiSetup.omniroute.endpointRequired": "Adres URL serwera OmniRoute jest wymagany.",
+  "apiSetup.omniroute.loadModels": "Wczytaj modele i trasy",
   "apiSetup.omniroute.modelHelp": "Wpisz identyfikator modelu lub kombinacji awaryjnej z panelu OmniRoute.",
   "apiSetup.pasteAuthCode": "Wklej tutaj swój kod autoryzacyjny",
   "apiSetup.searchModels": "Szukaj modeli...",

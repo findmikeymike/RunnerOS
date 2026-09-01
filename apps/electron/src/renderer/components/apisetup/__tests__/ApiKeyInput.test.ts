@@ -12,6 +12,21 @@ const MODELS = [
 ]
 
 describe('ApiKeyInput tier hydration helpers', () => {
+  it('uses OmniRoute auto routes when the gateway advertises them', () => {
+    const models = [
+      { id: 'provider/model', name: 'Provider model', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: false },
+      { id: 'auto/fast', name: 'Fast', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: false },
+      { id: 'auto', name: 'Auto', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: false },
+      { id: 'auto/best', name: 'Best', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: true },
+    ]
+
+    expect(resolveTierModels(models, undefined, 'omniroute')).toEqual({
+      best: 'auto/best',
+      default_: 'auto',
+      cheap: 'auto/fast',
+    })
+  })
+
   it('uses curated OpenRouter defaults when available', () => {
     const models = [
       { id: 'pi/x-ai/grok-4', name: 'Grok 4', costInput: 3, costOutput: 15, contextWindow: 256000, reasoning: true },

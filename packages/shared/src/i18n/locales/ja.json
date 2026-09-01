@@ -13,6 +13,7 @@
   "apiSetup.modelTier.fastDesc": "要約・ユーティリティ向け",
   "apiSetup.omniroute.endpointPlaceholder": "https://your-omniroute-server.com/v1",
   "apiSetup.omniroute.endpointRequired": "OmniRoute サーバー URL は必須です。",
+  "apiSetup.omniroute.loadModels": "モデルとルートを読み込む",
   "apiSetup.omniroute.modelHelp": "OmniRoute ダッシュボードのモデル ID またはフォールバックコンボ ID を入力してください。",
   "apiSetup.pasteAuthCode": "認証コードをここに貼り付けてください",
   "apiSetup.searchModels": "モデルを検索...",

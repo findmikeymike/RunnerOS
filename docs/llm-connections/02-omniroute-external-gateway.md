@@ -20,8 +20,9 @@ model or executes a user-defined fallback combo.
 ## V1 connection contract
 
 - User selects `OmniRoute Gateway` in Settings > AI.
-- User provides the server URL, an inference-only Bearer key, and one or more
-  model/combo IDs from the OmniRoute dashboard.
+- User provides the server URL and an inference-only Bearer key.
+- Artist OS loads the server's model and route catalog through authenticated
+  `GET /v1/models`; manual model IDs remain available as a fallback.
 - A bare server origin is normalized to `/v1`.
 - Remote servers require HTTPS; HTTP is accepted only for loopback development.
 - The key uses the existing encrypted LLM credential manager.
@@ -38,11 +39,12 @@ model or executes a user-defined fallback combo.
 - Do not add a second agent, skill, memory, or approval system.
 - Do not claim the exact upstream model or cost unless OmniRoute reports it.
 
-## Next isolated slice
+## Discovery boundary
 
-Add authenticated `GET /v1/models` discovery so users can select models and
-combos instead of copying IDs. This should use a dedicated main-process IPC
-contract and land only after concurrent protocol/preload edits are clear.
+Model discovery uses a dedicated main-process RPC contract with an eight-second
+timeout, redirect rejection, response and item caps, and no credential logging.
+Artist OS intentionally does not infer image support from combo metadata because
+that metadata is not reliable enough to grant a capability safely.
 
 Live release proof must cover streaming chat, tool calls, cancellation, image
 input for an explicitly image-capable route, provider fallback, and sanitized
