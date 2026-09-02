@@ -300,6 +300,7 @@ export type {
   GetCampaignContextInput,
   ListWorkspaceContextInput,
   GetWorkspaceContextInput,
+  SearchArtistNetworkInput,
   ManagerContextToolResult,
 } from './handlers/index.ts';
 
@@ -310,6 +311,7 @@ export {
   handleGetCampaignContext,
   handleListWorkspaceContext,
   handleGetWorkspaceContext,
+  handleSearchArtistNetwork,
 } from './handlers/index.ts';
 
 export type {
@@ -433,6 +435,7 @@ export {
   GetCampaignContextSchema,
   ListWorkspaceContextSchema,
   GetWorkspaceContextSchema,
+  SearchArtistNetworkSchema,
   SaveMemorySchema,
   UpdateMemorySchema,
   ForgetMemorySchema,

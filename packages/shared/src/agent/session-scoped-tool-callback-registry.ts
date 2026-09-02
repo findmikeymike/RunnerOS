@@ -159,6 +159,9 @@ export interface SessionScopedToolCallbacks {
   getWorkspaceContextFn?: (
     input: import('@craft-agent/session-tools-core').GetWorkspaceContextInput,
   ) => Promise<import('@craft-agent/session-tools-core').ManagerContextToolResult>;
+  searchArtistNetworkFn?: (
+    input: import('@craft-agent/session-tools-core').SearchArtistNetworkInput,
+  ) => Promise<import('@craft-agent/session-tools-core').ManagerContextToolResult>;
   /** Create a workflow in the global library (used by the workflow-creator skill's create_workflow tool). */
   createWorkflowFn?: (
     input: import('@craft-agent/session-tools-core').CreateWorkflowToolInput,

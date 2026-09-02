@@ -7,6 +7,7 @@ import {
   handleGetManagerBrief,
   handleGetWorkspaceContext,
   handleListWorkspaceContext,
+  handleSearchArtistNetwork,
   type ManagerContextToolResult,
 } from './manager-context.ts';
 
@@ -43,6 +44,7 @@ describe('manager context handlers', () => {
       getCampaignContext: callback,
       listWorkspaceContext: callback,
       getWorkspaceContext: callback,
+      searchArtistNetwork: callback,
     });
     for (const result of await Promise.all([
       handleGetManagerBrief(ctx, {}),
@@ -51,6 +53,7 @@ describe('manager context handlers', () => {
       handleGetCampaignContext(ctx, { select: 'next-future' }),
       handleListWorkspaceContext(ctx, {}),
       handleGetWorkspaceContext(ctx, { slug: 'artist-profile' }),
+      handleSearchArtistNetwork(ctx, { query: 'sync' }),
     ])) {
       expect(result.isError).toBe(false);
       expect(text(result)).toContain('"marker": "authorized"');
@@ -63,5 +66,11 @@ describe('manager context handlers', () => {
     }), { slug: 'private-notes' });
     expect(result.isError).toBe(true);
     expect(text(result)).toContain('unauthorized');
+  });
+
+  test('network search fails closed without its bounded backend callback', async () => {
+    const result = await handleSearchArtistNetwork(context(), { query: 'sync' });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain('search_artist_network is not available');
   });
 });

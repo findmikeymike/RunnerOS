@@ -321,6 +321,11 @@ describe('delivery-aware context routing', () => {
       body: 'legacy',
     });
     upsertContextDoc(workspace, {
+      slug: 'artist-network',
+      metadata: { name: 'Artist Network', routing: { mode: 'broadcast' }, enabled: true },
+      body: 'legacy contact library without a delivery field',
+    });
+    upsertContextDoc(workspace, {
       slug: 'always-writer',
       metadata: {
         name: 'Always Writer',
@@ -366,6 +371,7 @@ describe('delivery-aware context routing', () => {
   test('authorization includes on-demand docs but never disabled docs', () => {
     expect(loadAuthorizedContextDocsForAgent(workspace, 'writer').map((d) => d.slug)).toEqual([
       'always-writer',
+      'artist-network',
       'demand-writer',
       'legacy-broadcast',
       'private-writer',
@@ -384,6 +390,7 @@ describe('delivery-aware context routing', () => {
     const authorized = loadAuthorizedContextDocsForAgent(workspace, CONCIERGE_SLUG);
     expect(authorized.map((d) => d.slug)).toEqual([
       'always-writer',
+      'artist-network',
       'demand-writer',
       'legacy-broadcast',
     ]);
@@ -418,6 +425,7 @@ describe('delivery-aware context routing', () => {
   test('legacy loader behavior is unchanged until migration', () => {
     expect(loadActiveContextDocsForAgent(workspace, CONCIERGE_SLUG).map((d) => d.slug)).toEqual([
       'always-writer',
+      'artist-network',
       'demand-writer',
       'legacy-broadcast',
       'private-writer',

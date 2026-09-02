@@ -13,6 +13,7 @@ export {
   emptyArtistNetwork,
   linkNetworkPersonToWorkspace,
   networkPeopleForWorkspace,
+  normalizeArtistNetworkEmail,
   parseArtistNetworkDoc,
   parseArtistNetworkDocResult,
   serializeArtistNetworkBody,

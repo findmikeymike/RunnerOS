@@ -312,6 +312,12 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'searchArtistNetwork', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.searchArtistNetworkFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'createWorkflow', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.createWorkflowFn;

@@ -39,8 +39,9 @@ export interface ArtistNetworkPerson {
   id: string;
   name: string;
   category: ArtistNetworkCategory;
+  starred?: boolean;
+  email?: string;
   role?: string;
-  contact?: string;
   socials?: string;
   location?: string;
   relationship?: ArtistNetworkRelationship;
@@ -66,27 +67,29 @@ export type ArtistNetworkParseResult =
   | { ok: false; network: ArtistNetwork; error: string };
 
 export const NETWORK_CATEGORIES: ArtistNetworkCategoryDefinition[] = [
-  { id: 'key', label: 'Key' },
-  { id: 'music', label: 'Music' },
   { id: 'collaborators', label: 'Collaborators' },
-  { id: 'djs', label: 'DJs' },
-  { id: 'producers', label: 'Producers' },
-  { id: 'press', label: 'Press' },
-  { id: 'playlist-curators', label: 'Playlist Curators' },
-  { id: 'influencers', label: 'Influencers' },
-  { id: 'design', label: 'Design' },
-  { id: 'video', label: 'Video' },
-  { id: 'venues', label: 'Venues' },
-  { id: 'brands', label: 'Brands' },
-  { id: 'fans-vips', label: 'Fans / VIPs' },
+  { id: 'ar', label: 'A&R' },
+  { id: 'managers', label: 'Managers' },
+  { id: 'marketing', label: 'Marketing' },
+  { id: 'press-media', label: 'Press & Media' },
+  { id: 'djs-curators', label: 'DJs & Curators' },
+  { id: 'creative-team', label: 'Creative Team' },
+  { id: 'venues-promoters', label: 'Venues & Promoters' },
+  { id: 'brands-partners', label: 'Brands & Partners' },
   { id: 'other', label: 'Other' },
 ];
+
+const LEGACY_NETWORK_CATEGORY_IDS = new Set([
+  'key', 'music', 'collaborators', 'djs', 'producers', 'press', 'playlist-curators',
+  'influencers', 'design', 'video', 'venues', 'brands', 'fans-vips', 'other',
+]);
 
 export function artistNetworkMetadata(): ContextDocMetadata {
   return {
     name: 'Artist Network',
     description: 'Global people, contacts, and relationship context for the artist.',
     routing: { mode: 'broadcast' },
+    delivery: 'on-demand',
     enabled: true,
   };
 }
@@ -94,7 +97,7 @@ export function artistNetworkMetadata(): ContextDocMetadata {
 export function emptyArtistNetwork(): ArtistNetwork {
   return {
     version: 1,
-    categories: NETWORK_CATEGORIES,
+    categories: NETWORK_CATEGORIES.map((category) => ({ ...category })),
     people: [],
     updatedAt: new Date().toISOString(),
   };
@@ -128,12 +131,17 @@ export function parseArtistNetworkDocResult(
         error: 'Artist Network JSON has an unsupported shape.',
       };
     }
+    const people = parsed.people.filter(isPerson).map(normalizePerson);
+    const savedCategories = normalizeCategories(parsed.categories);
+    const categories = people.length === 0 && isLegacyDefaultCategoryList(savedCategories)
+      ? NETWORK_CATEGORIES.map((category) => ({ ...category }))
+      : savedCategories;
     return {
       ok: true,
       network: {
         version: 1,
-        categories: normalizeCategories(parsed.categories),
-        people: parsed.people.filter(isPerson).map(normalizePerson),
+        categories,
+        people,
         updatedAt:
           typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
       },
@@ -160,7 +168,7 @@ export function createNetworkPerson(input: {
   name: string;
   category: ArtistNetworkCategory;
   role?: string;
-  contact?: string;
+  email?: string;
   notes?: string;
   canHelpWith?: string;
   tags?: string;
@@ -171,8 +179,9 @@ export function createNetworkPerson(input: {
     id: `person-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
     name: input.name.trim(),
     category: input.category,
+    starred: false,
     role: normalizeInlineText(input.role),
-    contact: normalizeInlineText(input.contact),
+    email: normalizeArtistNetworkEmail(input.email),
     notes: normalizeInlineText(input.notes),
     canHelpWith: normalizeInlineText(input.canHelpWith),
     relationship: 'new',
@@ -191,7 +200,7 @@ export function updateNetworkPerson(
     name: string;
     category: ArtistNetworkCategory;
     role?: string;
-    contact?: string;
+    email?: string;
     notes?: string;
     canHelpWith?: string;
     tags?: string;
@@ -203,7 +212,7 @@ export function updateNetworkPerson(
     name: input.name.trim(),
     category: input.category,
     role: normalizeInlineText(input.role),
-    contact: normalizeInlineText(input.contact),
+    email: normalizeArtistNetworkEmail(input.email),
     notes: normalizeInlineText(input.notes),
     canHelpWith: normalizeInlineText(input.canHelpWith),
     tags: parseTags(input.tags),
@@ -273,8 +282,9 @@ function normalizePerson(person: ArtistNetworkPerson): ArtistNetworkPerson {
   return {
     ...person,
     name: person.name.trim(),
+    starred: person.starred === true,
+    email: normalizeArtistNetworkEmail(person.email),
     role: normalizeInlineText(person.role),
-    contact: normalizeInlineText(person.contact),
     socials: normalizeInlineText(person.socials),
     location: normalizeInlineText(person.location),
     relationship: normalizeRelationship(person.relationship),
@@ -289,6 +299,12 @@ function normalizePerson(person: ArtistNetworkPerson): ArtistNetworkPerson {
     createdAt: typeof person.createdAt === 'string' ? person.createdAt : new Date().toISOString(),
     updatedAt: typeof person.updatedAt === 'string' ? person.updatedAt : new Date().toISOString(),
   };
+}
+
+export function normalizeArtistNetworkEmail(value: unknown): string | undefined {
+  const normalized = normalizeInlineText(value);
+  if (!normalized) return undefined;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : undefined;
 }
 
 function normalizeGoogleSync(value: unknown): GooglePeopleSyncState | undefined {
@@ -310,21 +326,26 @@ function normalizeRelationship(value: unknown): ArtistNetworkRelationship {
     : 'new';
 }
 
-/** Built-in categories always win; user categories are merged in after. */
+/** Defaults seed new networks only. Saved lists stay user-controlled. */
 function normalizeCategories(categories: unknown): ArtistNetworkCategoryDefinition[] {
-  const customCategories = Array.isArray(categories)
+  const savedCategories = Array.isArray(categories)
     ? categories.filter(isCategory).map((category) => ({
       id: slugify(category.id),
       label: category.label.replace(/\s+/g, ' ').trim(),
     }))
-    : [];
+    : NETWORK_CATEGORIES;
 
   const merged = new Map<string, ArtistNetworkCategoryDefinition>();
-  for (const category of [...NETWORK_CATEGORIES, ...customCategories]) {
+  for (const category of savedCategories) {
     if (!category.id || !category.label) continue;
     merged.set(category.id, category);
   }
   return [...merged.values()];
+}
+
+function isLegacyDefaultCategoryList(categories: ArtistNetworkCategoryDefinition[]): boolean {
+  return categories.length === LEGACY_NETWORK_CATEGORY_IDS.size
+    && categories.every((category) => LEGACY_NETWORK_CATEGORY_IDS.has(category.id));
 }
 
 function isCategory(value: unknown): value is ArtistNetworkCategoryDefinition {

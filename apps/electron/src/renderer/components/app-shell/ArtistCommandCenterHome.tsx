@@ -712,7 +712,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
                 name,
                 category: item.category,
                 role: item.role,
-                contact: item.contact,
+                email: item.email,
                 notes: item.notes,
                 canHelpWith: input.canHelpWith,
                 tags: item.tags.join(', '),
@@ -1458,7 +1458,7 @@ function TeamCard({
             <span
               key={person.id}
               className="group inline-flex max-w-full items-center gap-1 rounded-full border border-orange-300/15 bg-orange-500/14 px-2 py-1 text-[11px] font-medium text-orange-100/86"
-              title={person.canHelpWith || person.role || person.contact || 'Release helper'}
+              title={person.canHelpWith || person.role || person.email || 'Release helper'}
             >
               <span className="max-w-[150px] truncate">{person.name}</span>
               <button
@@ -1617,7 +1617,7 @@ function TeamPickerDialog({
                   >
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium text-white/80">{person.name}</span>
-                      <span className="mt-0.5 block truncate text-[11px] text-white/38">{person.canHelpWith || person.role || person.contact || 'No role added'}</span>
+                      <span className="mt-0.5 block truncate text-[11px] text-white/38">{person.canHelpWith || person.role || person.email || 'No role added'}</span>
                     </span>
                     <span className={cn(
                       'shrink-0 rounded-full px-2 py-1 text-[10px] font-medium',

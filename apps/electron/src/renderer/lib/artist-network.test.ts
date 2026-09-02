@@ -51,6 +51,7 @@ describe('artist network utilities', () => {
       name: 'Sarah Kim',
       category: 'press',
       role: 'PR',
+      email: 'sarah@example.com',
       tags: 'press, launch',
     }), {
       workspaceId: 'campaign-1',
@@ -62,6 +63,7 @@ describe('artist network utilities', () => {
       categories: [{ id: 'press', label: 'Press' }],
       people: [{
         ...person,
+        starred: true,
         google: {
           resourceName: 'people/c123',
           syncStatus: 'synced',
@@ -77,6 +79,8 @@ describe('artist network utilities', () => {
     expect(networkPeopleForWorkspace(result.network.people, 'campaign-1')).toHaveLength(1)
     expect(result.network.people[0]?.workspaceLinks[0]?.role).toBe('PR contact')
     expect(result.network.people[0]?.google?.resourceName).toBe('people/c123')
+    expect(result.network.people[0]?.starred).toBe(true)
+    expect(result.network.people[0]?.email).toBe('sarah@example.com')
   })
 
   test('normalizes workspace links on creation', () => {

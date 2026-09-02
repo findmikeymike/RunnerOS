@@ -16,8 +16,6 @@ describe('Pulse run controls', () => {
     expect(controls).toContain('aria-pressed={active}')
     expect(source).toContain('manualLabel="Run Spotify Pulse now — manual"')
     expect(source).toContain('weeklyLabel="Weekly Spotify auto-run"')
-    expect(source).toContain('manualLabel="Run Intel Pulse now — manual"')
-    expect(source).toContain('weeklyLabel="Weekly Intel auto-run"')
     expect(source).toContain('manualLabel="Run Instagram Insights now — manual"')
     expect(source).toContain('weeklyLabel="Weekly Instagram Insights auto-run"')
   })
@@ -33,28 +31,26 @@ describe('Pulse run controls', () => {
     expect(toggle).not.toContain('const nextEnabled = !intelConfig.enabled')
   })
 
-  test('groups all three pulse panels inside one card with thin responsive dividers', () => {
+  test('uses two compact independent glass pulse panels', () => {
     const source = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
     const start = source.indexOf('<div id="hq-home-operations"')
     const end = source.indexOf('<ReleaseHorizon', start)
     const pulseGroup = source.slice(start, end)
 
-    expect(pulseGroup).toContain('<HQCard className="overflow-hidden p-0">')
-    expect(pulseGroup).toContain('divide-y divide-white/[0.055]')
-    expect(pulseGroup).toContain('lg:divide-x lg:divide-y-0')
+    expect(pulseGroup).toContain('id="hq-home-details" className="grid grid-cols-1 gap-3 lg:grid-cols-2"')
+    expect(pulseGroup).not.toContain('<HQCard className="overflow-hidden p-0">')
     expect(pulseGroup).toContain('<SpotifyPulseCard')
-    expect(pulseGroup).toContain('<IntelPulseCard')
     expect(pulseGroup).toContain('<SocialPulseCard')
   })
 
-  test('orders Spotify, Social, Intel and aligns their graphic panels', () => {
+  test('orders Spotify before Social and aligns their compact panels', () => {
     const source = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
     const start = source.indexOf('<div id="hq-home-operations"')
     const end = source.indexOf('<ReleaseHorizon', start)
     const pulseGroup = source.slice(start, end)
 
     expect(pulseGroup.indexOf('<SpotifyPulseCard')).toBeLessThan(pulseGroup.indexOf('<SocialPulseCard'))
-    expect(pulseGroup.indexOf('<SocialPulseCard')).toBeLessThan(pulseGroup.indexOf('<IntelPulseCard'))
-    expect(source.match(/flex h-\[184px\] flex-col rounded-\[14px\]/g)).toHaveLength(3)
+    expect(pulseGroup).not.toContain('<IntelPulseCard')
+    expect(source.match(/flex h-\[132px\] flex-col overflow-hidden rounded-\[16px\]/g)).toHaveLength(2)
   })
 })

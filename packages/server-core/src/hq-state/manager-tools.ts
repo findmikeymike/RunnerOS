@@ -307,8 +307,44 @@ export function getArtistContextDetail(
       source = ARTIST_NETWORK_CONTEXT_SLUG;
       const parsed = parseArtistNetworkDocResult(bySlug.get(source));
       if (!parsed.ok) warning = parsed.error;
-      const query = input.query?.trim().toLowerCase();
-      data = { people: parsed.network.people.filter((person) => !query || [person.name, person.role, person.category, person.canHelpWith, ...(person.tags ?? [])].join(' ').toLowerCase().includes(query)).slice(0, limit).map((person) => ({ id: person.id, name: cap(person.name, 120), category: person.category, role: cap(person.role, 120), location: cap(person.location, 120), relationship: person.relationship, lastTouch: person.lastTouch, canHelpWith: cap(person.canHelpWith, 300), tags: person.tags.slice(0, 12), notes: cap(person.notes, 400) })) };
+      const queryTerms = input.query?.trim().toLowerCase().split(/\s+/).filter(Boolean) ?? [];
+      const rankedPeople = parsed.network.people
+        .map((person) => ({ person, ...scoreNetworkPerson(person, queryTerms) }))
+        .filter((candidate) => queryTerms.length === 0 || candidate.matchedTerms > 0)
+        .sort((left, right) => (
+          right.matchedTerms - left.matchedTerms
+          || right.score - left.score
+          || Number(Boolean(right.person.starred)) - Number(Boolean(left.person.starred))
+          || left.person.name.localeCompare(right.person.name)
+        ));
+      const candidates = rankedPeople
+        .slice(0, limit)
+        .map(({ person }) => ({
+          id: cap(person.id, 120),
+          name: cap(person.name, 120),
+          email: cap(person.email, 200),
+          category: cap(person.category, 120),
+          starred: person.starred === true,
+          role: cap(person.role, 120),
+          location: cap(person.location, 120),
+          relationship: person.relationship,
+          lastTouch: cap(person.lastTouch, 40),
+          canHelpWith: cap(person.canHelpWith, 300),
+          tags: person.tags.slice(0, 12).map((tag) => cap(tag, 80)).filter(Boolean),
+          notes: cap(person.notes, 400),
+          campaignLinks: person.workspaceLinks.slice(0, 6).map((link) => ({
+            workspaceId: cap(link.workspaceId, 160),
+            workspaceName: cap(link.workspaceName, 160),
+            role: cap(link.role, 120),
+            notes: cap(link.notes, 300),
+          })),
+        }));
+      const people = fitNetworkSearchResults(candidates);
+      data = {
+        people,
+        matchedCount: rankedPeople.length,
+        truncated: rankedPeople.length > people.length,
+      };
       updatedAt = parsed.network.updatedAt;
       break;
     }
@@ -407,7 +443,9 @@ export function listAuthorizedWorkspaceContext(
       name: doc.metadata.name,
       description: doc.metadata.description,
       routing: doc.metadata.routing.mode === 'broadcast' ? 'broadcast' : `targeted:${doc.metadata.routing.agents.join(',')}`,
-      delivery: doc.metadata.delivery ?? 'legacy',
+      delivery: doc.slug === ARTIST_NETWORK_CONTEXT_SLUG
+        ? 'on-demand'
+        : doc.metadata.delivery ?? 'legacy',
       private: doc.metadata.private === true,
       bodyChars: doc.body.length,
     }));
@@ -447,7 +485,9 @@ export function getAuthorizedWorkspaceContext(
       slug: doc.slug,
       name: doc.metadata.name,
       description: doc.metadata.description,
-      delivery: doc.metadata.delivery ?? 'legacy',
+      delivery: doc.slug === ARTIST_NETWORK_CONTEXT_SLUG
+        ? 'on-demand'
+        : doc.metadata.delivery ?? 'legacy',
       private: doc.metadata.private === true,
       truncated: body.length < liveBody.length,
       body,
@@ -538,6 +578,56 @@ function bounded(value: ManagerContextToolResult): ManagerContextToolResult {
   const json = JSON.stringify(value);
   if (json.length <= MANAGER_RESULT_MAX_CHARS) return value;
   return { ok: false, error: `Normalized result exceeded the ${MANAGER_RESULT_MAX_CHARS}-character safety bound. Narrow the query or lower the limit.` };
+}
+
+function scoreNetworkPerson(
+  person: ReturnType<typeof parseArtistNetworkDocResult>['network']['people'][number],
+  queryTerms: string[],
+): { matchedTerms: number; score: number } {
+  if (queryTerms.length === 0) return { matchedTerms: 0, score: 0 };
+  const name = person.name.toLowerCase();
+  const email = person.email?.toLowerCase() ?? '';
+  const strongFields = [person.role, person.category, person.canHelpWith, ...person.tags]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  const contextFields = [
+    person.relationship,
+    person.notes,
+    ...person.workspaceLinks.flatMap((link) => [link.workspaceName, link.role, link.notes]),
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  const termScores = queryTerms.map((term) => {
+    if (name === term) return 120;
+    if (email === term) return 115;
+    if (name.includes(term)) return 90;
+    if (email.includes(term)) return 85;
+    if (strongFields.includes(term)) return 60;
+    if (contextFields.includes(term)) return 35;
+    return 0;
+  });
+  return {
+    matchedTerms: termScores.filter((score) => score > 0).length,
+    score: termScores.reduce<number>((total, score) => total + score, 0),
+  };
+}
+
+function fitNetworkSearchResults<T>(people: T[]): T[] {
+  const fitted: T[] = [];
+  for (const person of people) {
+    const next = [...fitted, person];
+    const projected = JSON.stringify({
+      ok: true,
+      topic: 'network',
+      source: ARTIST_NETWORK_CONTEXT_SLUG,
+      updatedAt: '0000-00-00T00:00:00.000Z',
+      warning: 'x'.repeat(500),
+      data: { people: next, matchedCount: people.length, truncated: true },
+    });
+    if (projected.length > MANAGER_RESULT_MAX_CHARS) break;
+    fitted.push(person);
+  }
+  return fitted;
 }
 
 function missing(source: string, error: string): ManagerContextToolResult {

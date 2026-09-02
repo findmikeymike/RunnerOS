@@ -168,6 +168,7 @@ export {
   handleGetCampaignContext,
   handleListWorkspaceContext,
   handleGetWorkspaceContext,
+  handleSearchArtistNetwork,
 } from './manager-context.ts';
 export type {
   GetManagerBriefInput,
@@ -176,6 +177,7 @@ export type {
   GetCampaignContextInput,
   ListWorkspaceContextInput,
   GetWorkspaceContextInput,
+  SearchArtistNetworkInput,
   ManagerContextToolResult,
 } from './manager-context.ts';
 

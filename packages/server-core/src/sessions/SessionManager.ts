@@ -4391,6 +4391,84 @@ Manager judgment:
           if (conciergeManagerPromptUpdated) {
             sessionLog.info('[agent-definitions] Upgraded Concierge manager context contract')
           }
+          const oldManagerNetworkGuidance = `  - Connect advice to mission, year trajectory, campaign focus, and observed
+    momentum only when the available evidence supports the connection.
+  - Never describe stale analytics as current, turn totals into growth without`
+          const newManagerNetworkGuidance = `  - Connect advice to mission, year trajectory, campaign focus, and observed
+    momentum only when the available evidence supports the connection.
+  - When a current song, release, campaign, or opportunity plausibly matches a
+    person in Artist Network, use \`search_artist_network\` and
+    surface at most two strong connections grounded in their saved role, notes,
+    tags, relationship, or \`canHelpWith\` context. Offer outreach as an optional
+    next step, then hand drafting or delivery to \`@comms-agent\` or
+    \`@outreach-agent\`. A saved email is not permission to send.
+  - Never describe stale analytics as current, turn totals into growth without`
+          const managerNetworkPromptUpdated = replaceBuiltInAgentPromptText(
+            CONCIERGE_SLUG,
+            oldManagerNetworkGuidance,
+            newManagerNetworkGuidance,
+          ).updated
+          const commsNetworkPromptUpdated = [
+            replaceBuiltInAgentPromptText(
+              'comms-agent',
+              '- `artist-intel-report`\n- active release, campaign, calendar, people, community, and vault context when available',
+              '- `artist-intel-report`\n- `artist-network`\n- active release, campaign, calendar, community, and vault context when available',
+            ).updated,
+            replaceBuiltInAgentPromptText(
+              'comms-agent',
+              '- One clean ask. Every message needs a clear CTA, reply request, link, or decision.',
+              '- One clean ask. Every message needs a clear CTA, reply request, link, or decision.\n- When a song, release, campaign, or opportunity creates a credible fit with a saved Artist Network person, use their email, role, relationship, `canHelpWith`, notes, and tags to suggest or draft for at most a few relevant contacts. State the saved evidence for the fit and never invent a connection.\n- Use `search_artist_network` with a specific query when Network context is relevant. Do not request or preload the full contact list.',
+            ).updated,
+          ].some(Boolean)
+          const outreachNetworkPromptUpdated = replaceBuiltInAgentPromptText(
+            'outreach-agent',
+            '- Sender identity/context\n\nEmail discovery with Zero/Tomba:',
+            '- Sender identity/context\n\nSaved Artist Network intake:\n- A saved Artist Network person and email are first-class warm-contact intake.\n- Use `search_artist_network` with a specific query when the user has not already selected the person. Do not request or preload the full contact list.\n- Use saved role, relationship, `canHelpWith`, notes, tags, and campaign links for relevant personalization without inventing facts.\n- If a usable email is already saved, do not run Zero/Tomba lookup. Ask only for missing context that changes the message.\n\nEmail discovery with Zero/Tomba:',
+          ).updated
+          const priorNetworkPromptUpdates = [
+            replaceBuiltInAgentPromptText(
+              CONCIERGE_SLUG,
+              'use `get_artist_context` with topic `network` and',
+              'use `search_artist_network` and',
+            ).updated,
+            replaceBuiltInAgentPromptText(
+              'comms-agent',
+              '- When a song, release, campaign, or opportunity creates a credible fit with a saved Artist Network person, use their email, role, relationship, `canHelpWith`, notes, and tags to suggest or draft for at most a few relevant contacts. State the saved evidence for the fit and never invent a connection.',
+              '- When a song, release, campaign, or opportunity creates a credible fit with a saved Artist Network person, use their email, role, relationship, `canHelpWith`, notes, and tags to suggest or draft for at most a few relevant contacts. State the saved evidence for the fit and never invent a connection.\n- Use `search_artist_network` with a specific query when Network context is relevant. Do not request or preload the full contact list.',
+            ).updated,
+            replaceBuiltInAgentPromptText(
+              'outreach-agent',
+              '- A saved Artist Network person and email are first-class warm-contact intake.\n- Use saved role, relationship, `canHelpWith`, notes, tags, and campaign links for relevant personalization without inventing facts.',
+              '- A saved Artist Network person and email are first-class warm-contact intake.\n- Use `search_artist_network` with a specific query when the user has not already selected the person. Do not request or preload the full contact list.\n- Use saved role, relationship, `canHelpWith`, notes, tags, and campaign links for relevant personalization without inventing facts.',
+            ).updated,
+          ].some(Boolean)
+          const commsAgent = STARTER_AGENTS.find(agent => agent.slug === 'comms-agent')
+          const outreachAgent = STARTER_AGENTS.find(agent => agent.slug === 'outreach-agent')
+          const networkAgentMetadataUpdated = [
+            commsAgent ? replaceBuiltInAgentMetadata('comms-agent', {
+              inputs: {
+                from: 'Artist HQ Profile, Voice, Branding cards, Intel reports, release/campaign context, audience segment, offer/news, links, facts, approvals, and send channel.',
+                to: commsAgent.metadata.inputs,
+              },
+            }).updated : false,
+            outreachAgent ? replaceBuiltInAgentMetadata('outreach-agent', {
+              description: {
+                from: "Find anyone's email via LinkedIn URL, research the person for personalized outreach, draft and send high rapport email.",
+                to: outreachAgent.metadata.description,
+              },
+              greeting: {
+                from: 'Send me the person name and LinkedIn URL. I will find the email, confirm it, research the person, then work with you on the outreach angle before any send.',
+                to: outreachAgent.metadata.greeting,
+              },
+              inputs: {
+                from: 'Person name, LinkedIn profile URL, outreach goal, relationship context, offer/ask, sender identity, artist/team context, and approval to send.',
+                to: outreachAgent.metadata.inputs,
+              },
+            }).updated : false,
+          ].some(Boolean)
+          if (managerNetworkPromptUpdated || commsNetworkPromptUpdated || outreachNetworkPromptUpdated || priorNetworkPromptUpdates || networkAgentMetadataUpdated) {
+            sessionLog.info('[agent-definitions] Added Artist Network opportunity routing to existing manager and outreach agents')
+          }
           const xEditorialAgent = STARTER_AGENTS.find(agent => agent.slug === 'x-editorial')
           if (xEditorialAgent) {
             const xEditorialMetadataUpdated = replaceBuiltInAgentMetadata('x-editorial', {
@@ -8213,6 +8291,16 @@ user a clickable link to where the thing now lives.`
           managed.spawnedFromAgent?.agentSlug ?? null,
           input,
         ),
+        searchArtistNetworkFn: async (input) => {
+          const hq = findArtistHqWorkspace()
+          return hq
+            ? getArtistContextDetail(
+              hq.rootPath,
+              managed.spawnedFromAgent?.agentSlug ?? null,
+              { topic: 'network', query: input.query, limit: input.limit },
+            )
+            : { ok: false, error: 'Artist HQ workspace is not configured.' }
+        },
         setSessionLabelsFn: (sessionId: string | undefined, labels: string[]) => {
           this.setSessionLabels(sessionId ?? managed.id, labels)
         },

@@ -296,6 +296,17 @@ describe('attachSessionSelfManagementBindings', () => {
     expect(callsB).toEqual(['from-B']); // B was called
   });
 
+  it('binds bounded Artist Network search for every provider path', async () => {
+    const ctx = createBaseContext(sessionId);
+    attachSessionSelfManagementBindings(ctx, sessionId);
+    registerSessionScopedToolCallbacks(sessionId, {
+      searchArtistNetworkFn: async (input) => ({ ok: true, query: input.query, people: [] }),
+    });
+
+    await expect(ctx.searchArtistNetwork!({ query: 'automotive sync', limit: 5 }))
+      .resolves.toEqual({ ok: true, query: 'automotive sync', people: [] });
+  });
+
   it('getSessionInfo defaults to current session ID when called without arg', () => {
     const ctx = createBaseContext(sessionId);
     attachSessionSelfManagementBindings(ctx, sessionId);

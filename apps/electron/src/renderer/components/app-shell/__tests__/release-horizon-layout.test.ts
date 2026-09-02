@@ -11,6 +11,8 @@ describe('Release Horizon month planning UI', () => {
     expect(source).not.toContain('top-1/2 flex -translate-y-1/2 items-center justify-center')
     expect(source).toContain('absolute left-2 top-2 flex items-baseline gap-1.5')
     expect(source).not.toContain('title="Month plan saved"')
+    expect(source).toContain('bg-white/[0.032]')
+    expect(source).toContain('backdrop-blur-2xl')
   })
 
   test('opens a large presentation view before exposing the structured editor', () => {

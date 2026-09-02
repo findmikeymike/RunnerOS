@@ -238,6 +238,133 @@ describe('Manager context retrieval', () => {
     expect(JSON.stringify(result)).not.toContain(root);
   });
 
+  test('network lookup returns saved outreach context and matches notes', () => {
+    const root = workspace();
+    write(root, 'artist-network', jsonBody({
+      version: 1,
+      categories: [{ id: 'marketing', label: 'Marketing' }],
+      people: [{
+        id: 'person-1',
+        name: 'Jone Tanny',
+        category: 'marketing',
+        starred: true,
+        email: 'jone@example.com',
+        role: 'Creative marketing',
+        relationship: 'warm',
+        canHelpWith: 'Brand partnerships and sync',
+        notes: 'Connected to Ford and Lincoln for sync.',
+        tags: ['automotive', 'sync'],
+        workspaceLinks: [{
+          workspaceId: 'campaign-night-drive',
+          workspaceName: 'Night Drive',
+          role: 'Sync contact',
+          notes: 'Possible automotive placement.',
+          linkedAt: '2026-09-01T00:00:00.000Z',
+        }],
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T00:00:00.000Z',
+      }],
+      updatedAt: '2026-09-01T00:00:00.000Z',
+    }));
+
+    const result = getArtistContextDetail(root, 'concierge', {
+      topic: 'network',
+      query: 'Ford sync',
+    }) as { ok: boolean; data?: { people?: Array<Record<string, unknown>> } };
+
+    expect(result.ok).toBe(true);
+    expect(result.data?.people).toEqual([expect.objectContaining({
+      name: 'Jone Tanny',
+      email: 'jone@example.com',
+      starred: true,
+      canHelpWith: 'Brand partnerships and sync',
+      notes: 'Connected to Ford and Lincoln for sync.',
+      campaignLinks: [expect.objectContaining({
+        workspaceId: 'campaign-night-drive',
+        workspaceName: 'Night Drive',
+      })],
+    })]);
+  });
+
+  test('network lookup tolerates an extra query term and ranks coverage above starring', () => {
+    const root = workspace();
+    write(root, 'artist-network', jsonBody({
+      version: 1,
+      categories: [{ id: 'marketing', label: 'Marketing' }],
+      people: [
+        {
+          id: 'person-weak',
+          name: 'Aaron Other',
+          category: 'marketing',
+          starred: true,
+          role: 'General opportunity scouting',
+          tags: [],
+          workspaceLinks: [],
+        },
+        {
+          id: 'person-strong',
+          name: 'Jone Tanny',
+          category: 'marketing',
+          starred: false,
+          role: 'Creative marketing',
+          canHelpWith: 'Brand partnerships and sync',
+          notes: 'Connected to Ford and Lincoln for automotive placements.',
+          tags: ['automotive', 'sync'],
+          workspaceLinks: [],
+        },
+      ],
+    }));
+
+    const result = getArtistContextDetail(root, 'concierge', {
+      topic: 'network',
+      query: 'automotive brand sync opportunity',
+    }) as { ok: boolean; data?: { people?: Array<{ name: string }> } };
+
+    expect(result.ok).toBe(true);
+    expect(result.data?.people?.map((person) => person.name)).toEqual([
+      'Jone Tanny',
+      'Aaron Other',
+    ]);
+  });
+
+  test('network lookup returns the best fitting subset instead of failing the result bound', () => {
+    const root = workspace();
+    const large = 'x'.repeat(2_000);
+    write(root, 'artist-network', jsonBody({
+      version: 1,
+      categories: [{ id: 'marketing', label: 'Marketing' }],
+      people: Array.from({ length: 20 }, (_, index) => ({
+        id: `person-${index}`,
+        name: `Sync Contact ${String(index).padStart(2, '0')}`,
+        category: 'marketing',
+        role: 'Sync',
+        canHelpWith: large,
+        notes: large,
+        tags: Array.from({ length: 12 }, () => large),
+        workspaceLinks: Array.from({ length: 12 }, (_, linkIndex) => ({
+          workspaceId: `campaign-${index}-${linkIndex}-${large}`,
+          workspaceName: large,
+          role: large,
+          notes: large,
+          linkedAt: '2026-09-01T00:00:00.000Z',
+        })),
+      })),
+    }));
+
+    const result = getArtistContextDetail(root, 'concierge', {
+      topic: 'network',
+      query: 'sync',
+      limit: 20,
+    }) as { ok: boolean; data?: { people?: unknown[]; matchedCount?: number; truncated?: boolean } };
+
+    expect(result.ok).toBe(true);
+    expect(result.data?.people?.length).toBeGreaterThan(0);
+    expect(result.data?.people?.length).toBeLessThan(20);
+    expect(result.data?.matchedCount).toBe(20);
+    expect(result.data?.truncated).toBe(true);
+    expect(JSON.stringify(result).length).toBeLessThanOrEqual(12_000);
+  });
+
   test('retrieves branding and voice as bounded HQ detail instead of guessing from the compact brief', () => {
     const root = workspace();
     write(root, 'artist-branding', jsonBody({ version: 1, creativeDna: 'Beautiful damage and defiant tenderness.', updatedAt: '2026-08-29T00:00:00.000Z' }));

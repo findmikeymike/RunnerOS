@@ -28,6 +28,7 @@ export interface GetCampaignContextInput {
 }
 export interface ListWorkspaceContextInput { query?: string; limit?: number }
 export interface GetWorkspaceContextInput { slug: string; maxChars?: number }
+export interface SearchArtistNetworkInput { query: string; limit?: number }
 
 export type ManagerContextToolResult = { ok: boolean; error?: string; [key: string]: unknown };
 
@@ -68,4 +69,8 @@ export function handleListWorkspaceContext(ctx: SessionToolContext, input: ListW
 
 export function handleGetWorkspaceContext(ctx: SessionToolContext, input: GetWorkspaceContextInput): Promise<ToolResult> {
   return invoke(ctx.getWorkspaceContext, input, 'get_workspace_context is not available in this context.');
+}
+
+export function handleSearchArtistNetwork(ctx: SessionToolContext, input: SearchArtistNetworkInput): Promise<ToolResult> {
+  return invoke(ctx.searchArtistNetwork, input, 'search_artist_network is not available in this context.');
 }

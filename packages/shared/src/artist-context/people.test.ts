@@ -15,11 +15,14 @@ import {
 } from './calendar.ts';
 import {
   NETWORK_CATEGORIES,
+  artistNetworkMetadata,
   createNetworkCategory,
   createNetworkPerson,
+  emptyArtistNetwork,
   linkNetworkPersonToWorkspace,
   networkPeopleForWorkspace,
   parseArtistNetworkDocResult,
+  serializeArtistNetworkBody,
   updateNetworkPerson,
 } from './network.ts';
 
@@ -206,6 +209,13 @@ describe('artist calendar', () => {
 });
 
 describe('artist network', () => {
+  test('is globally searchable but never injected into every agent prompt', () => {
+    expect(artistNetworkMetadata()).toEqual(expect.objectContaining({
+      routing: { mode: 'broadcast' },
+      delivery: 'on-demand',
+    }));
+  });
+
   test('rejects a wrong version or a non-array people field', () => {
     expect(parseArtistNetworkDocResult(doc(json({ version: 2, people: [] }))).ok).toBe(false);
     expect(parseArtistNetworkDocResult(doc(json({ version: 1, people: 'no' }))).ok).toBe(false);
@@ -237,9 +247,47 @@ describe('artist network', () => {
       ),
     );
     expect(result.network.people[0]?.relationship).toBe('new');
+    expect(result.network.people[0]?.starred).toBe(false);
   });
 
-  test('built-in categories survive a doc that tries to override them', () => {
+  test('does not misclassify a legacy generic contact value as email', () => {
+    const result = parseArtistNetworkDocResult(
+      doc(json({
+        version: 1,
+        people: [{
+          id: 'p1',
+          name: 'Jone Tanny',
+          category: 'marketing',
+          contact: '4438808116',
+          tags: ['sync'],
+        }],
+      })),
+    );
+    expect(result.network.people[0]?.email).toBeUndefined();
+  });
+
+  test('drops malformed email values at the shared data boundary', () => {
+    const created = createNetworkPerson({
+      name: 'Jone Tanny',
+      category: 'marketing',
+      email: 'not-an-email',
+    });
+    expect(created.email).toBeUndefined();
+
+    const result = parseArtistNetworkDocResult(doc(json({
+      version: 1,
+      people: [{
+        id: 'p1',
+        name: 'Jone Tanny',
+        category: 'marketing',
+        email: 'also-not-an-email',
+        tags: [],
+      }],
+    })));
+    expect(result.network.people[0]?.email).toBeUndefined();
+  });
+
+  test('saved categories remain user-controlled without restoring deleted defaults', () => {
     const result = parseArtistNetworkDocResult(
       doc(
         json({
@@ -253,8 +301,54 @@ describe('artist network', () => {
       ),
     );
     const ids = result.network.categories.map((category) => category.id);
-    for (const builtin of NETWORK_CATEGORIES) expect(ids).toContain(builtin.id);
+    expect(ids).not.toContain('collaborators');
     expect(result.network.categories.find((c) => c.id === 'custom-cat')?.label).toBe('My Cat');
+  });
+
+  test('new networks start with useful music-industry categories', () => {
+    expect(emptyArtistNetwork().categories.map((category) => category.label)).toEqual([
+      'Collaborators',
+      'A&R',
+      'Managers',
+      'Marketing',
+      'Press & Media',
+      'DJs & Curators',
+      'Creative Team',
+      'Venues & Promoters',
+      'Brands & Partners',
+      'Other',
+    ]);
+  });
+
+  test('deleting every category survives serialization and reload', () => {
+    const body = serializeArtistNetworkBody({
+      version: 1,
+      categories: [],
+      people: [],
+      updatedAt: '2026-09-01T00:00:00.000Z',
+    });
+    expect(parseArtistNetworkDocResult(doc(body)).network.categories).toEqual([]);
+  });
+
+  test('upgrades the old untouched empty starter list without changing active networks', () => {
+    const legacyCategories = [
+      'key', 'music', 'collaborators', 'djs', 'producers', 'press', 'playlist-curators',
+      'influencers', 'design', 'video', 'venues', 'brands', 'fans-vips', 'other',
+    ].map((id) => ({ id, label: id }));
+    const emptyResult = parseArtistNetworkDocResult(doc(json({
+      version: 1,
+      categories: legacyCategories,
+      people: [],
+    })));
+    expect(emptyResult.network.categories).toEqual(NETWORK_CATEGORIES);
+
+    const activeResult = parseArtistNetworkDocResult(doc(json({
+      version: 1,
+      categories: legacyCategories,
+      people: [{ id: 'p1', name: 'Dana', category: 'press', tags: [] }],
+    })));
+    expect(activeResult.network.categories.map((category) => category.id)).toContain('press');
+    expect(activeResult.network.people[0]?.category).toBe('press');
   });
 
   test('new categories slugify and disambiguate on collision', () => {
@@ -268,11 +362,14 @@ describe('artist network', () => {
     const person = createNetworkPerson({
       name: '  Dana Reed ',
       category: 'key',
+      email: ' dana@example.com ',
       tags: 'manager, , press ',
     });
     expect(person.name).toBe('Dana Reed');
+    expect(person.email).toBe('dana@example.com');
     expect(person.tags).toEqual(['manager', 'press']);
     expect(person.relationship).toBe('new');
+    expect(person.starred).toBe(false);
 
     const linked = linkNetworkPersonToWorkspace(person, { workspaceId: 'ws-1', role: 'owner' });
     const relinked = linkNetworkPersonToWorkspace(linked, { workspaceId: 'ws-1', role: 'editor' });

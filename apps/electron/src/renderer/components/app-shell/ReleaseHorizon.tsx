@@ -159,7 +159,7 @@ export function ReleaseHorizon({
   }
 
   return (
-    <section className="overflow-hidden rounded-[14px] border border-white/[0.055] bg-[#0d0e0f]">
+    <section className="overflow-hidden rounded-[18px] border border-white/[0.075] bg-white/[0.032] shadow-[inset_0_1px_0_rgba(255,255,255,0.045),0_22px_60px_rgba(0,0,0,0.16)] backdrop-blur-2xl">
       <div className="flex flex-col gap-4 border-b border-white/[0.055] px-5 py-4 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[9px] font-medium uppercase tracking-[0.18em] text-white/34">
@@ -217,10 +217,10 @@ export function ReleaseHorizon({
                 type="button"
                 onClick={() => openMonth(month.key)}
                 className={cn(
-                  'group relative aspect-square min-h-[86px] rounded-[9px] border p-2 text-left transition-colors',
+                  'group relative aspect-square min-h-[86px] rounded-[10px] border p-2 text-left transition-colors',
                   populated
-                    ? 'border-[#ff5a00]/42 bg-[#ff5a00]/[0.085] hover:bg-[#ff5a00]/[0.13]'
-                    : 'border-white/[0.045] bg-white/[0.018] hover:border-white/[0.10] hover:bg-white/[0.035]',
+                    ? 'border-[#ff5a00]/55 bg-white/[0.022] hover:bg-white/[0.045]'
+                    : 'border-white/[0.05] bg-white/[0.022] hover:border-white/[0.11] hover:bg-white/[0.045]',
                 )}
               >
                 <span className="absolute left-2 top-2 flex items-baseline gap-1.5">

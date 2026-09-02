@@ -439,8 +439,10 @@ export function shouldInjectContextDoc(
 ): boolean {
   if (!canAgentAccessContextDoc(doc, agentSlug)) return false;
   const normalizedAgentSlug = normalizeAgentSlug(agentSlug);
-  const delivery = doc.metadata.delivery
-    ?? (normalizedAgentSlug === CONCIERGE_SLUG ? 'on-demand' : 'always');
+  const delivery = doc.slug === 'artist-network'
+    ? 'on-demand'
+    : doc.metadata.delivery
+      ?? (normalizedAgentSlug === CONCIERGE_SLUG ? 'on-demand' : 'always');
   return delivery === 'always';
 }
 

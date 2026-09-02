@@ -22,6 +22,7 @@ import {
   Search,
   SlidersHorizontal,
   Sparkles,
+  Star,
   Trash2,
   UserRound,
   X,
@@ -60,6 +61,12 @@ import {
   StyledDropdownMenuContent,
   StyledDropdownMenuItem,
 } from '@/components/ui/styled-dropdown'
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  StyledContextMenuContent,
+  StyledContextMenuItem,
+} from '@/components/ui/styled-context-menu'
 import { Switch } from '@/components/ui/switch'
 import { Info_Markdown } from '@/components/info'
 import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
@@ -105,6 +112,7 @@ import {
   createNetworkCategory,
   artistNetworkMetadata,
   createNetworkPerson,
+  normalizeArtistNetworkEmail,
   parseArtistNetworkDocResult,
   serializeArtistNetworkBody,
   updateNetworkPerson,
@@ -209,7 +217,7 @@ type NetworkDraft = {
   name: string
   category: ArtistNetworkCategory
   role: string
-  contact: string
+  email: string
   canHelpWith: string
   tags: string
   notes: string
@@ -264,9 +272,9 @@ function googleCalendarSyncMessage(result: { synced: number; deleted?: number })
 
 const emptyNetworkDraft: NetworkDraft = {
   name: '',
-  category: 'key',
+  category: 'collaborators',
   role: '',
-  contact: '',
+  email: '',
   canHelpWith: '',
   tags: '',
   notes: '',
@@ -349,7 +357,11 @@ export function ArtistHQHome({
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const [tab, setTab] = React.useState<ArtistHQTab>(() => readTabFromHash())
   const [query, setQuery] = React.useState('')
+  const [selectedNetworkCategory, setSelectedNetworkCategory] = React.useState<ArtistNetworkCategory | null>(null)
   const [draftOpen, setDraftOpen] = React.useState(false)
+  const [categoryFormOpen, setCategoryFormOpen] = React.useState(false)
+  const [editingCategoryId, setEditingCategoryId] = React.useState<string | null>(null)
+  const [categoryEditDraft, setCategoryEditDraft] = React.useState('')
   const [intelConfigOpen, setIntelConfigOpen] = React.useState(false)
   const [intelBusy, setIntelBusy] = React.useState(false)
   const [selectedSignalKey, setSelectedSignalKey] = React.useState<string | null>(null)
@@ -1791,6 +1803,14 @@ export function ArtistHQHome({
       toast.error('Add a name first.')
       return
     }
+    if (!network.categories.some((category) => category.id === draft.category)) {
+      toast.error('Add or choose a category first.')
+      return
+    }
+    if (draft.email.trim() && !normalizeArtistNetworkEmail(draft.email)) {
+      toast.error('Enter a valid email address.')
+      return
+    }
     const person = createNetworkPerson(draft)
     const nextNetwork: ArtistNetwork = {
       version: 1,
@@ -1800,7 +1820,7 @@ export function ArtistHQHome({
     }
     try {
       await saveNetwork(nextNetwork)
-      setDraft(emptyNetworkDraft)
+      setDraft({ ...emptyNetworkDraft, category: nextNetwork.categories[0]?.id ?? '' })
       setDraftOpen(false)
       toast.success('Person added to Network')
     } catch (err) {
@@ -1823,12 +1843,84 @@ export function ArtistHQHome({
     try {
       await saveNetwork(nextNetwork)
       setCategoryDraft('')
+      setCategoryFormOpen(false)
       setDraft((value) => ({ ...value, category: nextCategory.id }))
       toast.success('Category added')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     }
   }, [categoryDraft, network.categories, network.people, saveNetwork])
+
+  const saveCategoryEdit = React.useCallback(async (categoryId: string) => {
+    const label = categoryEditDraft.replace(/\s+/g, ' ').trim()
+    if (!label) {
+      toast.error('Name the category first.')
+      return
+    }
+    const duplicate = network.categories.some((category) => (
+      category.id !== categoryId && category.label.toLowerCase() === label.toLowerCase()
+    ))
+    if (duplicate) {
+      toast.error('That category already exists.')
+      return
+    }
+    const nextNetwork: ArtistNetwork = {
+      version: 1,
+      categories: network.categories.map((category) => (
+        category.id === categoryId ? { ...category, label } : category
+      )),
+      people: network.people,
+      updatedAt: new Date().toISOString(),
+    }
+    try {
+      await saveNetwork(nextNetwork)
+      setEditingCategoryId(null)
+      setCategoryEditDraft('')
+      toast.success('Category updated')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }, [categoryEditDraft, network.categories, network.people, saveNetwork])
+
+  const deleteCategory = React.useCallback(async (categoryId: string) => {
+    const category = network.categories.find((item) => item.id === categoryId)
+    if (!category) return
+
+    let nextCategories = network.categories.filter((item) => item.id !== categoryId)
+    const assignedCount = network.people.filter((person) => person.category === categoryId).length
+    let fallback = nextCategories.find((item) => item.id === 'other') ?? nextCategories[0]
+    if (assignedCount > 0 && !fallback) {
+      fallback = { id: 'other', label: 'Other' }
+      nextCategories = [fallback]
+    }
+    const nextPeople = fallback
+      ? network.people.map((person) => (
+          person.category === categoryId
+            ? { ...person, category: fallback.id, updatedAt: new Date().toISOString() }
+            : person
+        ))
+      : network.people
+    const nextNetwork: ArtistNetwork = {
+      version: 1,
+      categories: nextCategories,
+      people: nextPeople,
+      updatedAt: new Date().toISOString(),
+    }
+    try {
+      await saveNetwork(nextNetwork)
+      const nextCategoryId = fallback?.id ?? nextCategories[0]?.id ?? ''
+      setDraft((value) => value.category === categoryId ? { ...value, category: nextCategoryId } : value)
+      setEditDraft((value) => value.category === categoryId ? { ...value, category: nextCategoryId } : value)
+      setSelectedNetworkCategory((value) => value === categoryId ? null : value)
+      setEditingCategoryId(null)
+      setCategoryEditDraft('')
+      toast.success(assignedCount > 0
+        ? `${category.label} deleted · ${assignedCount} ${assignedCount === 1 ? 'person' : 'people'} moved to ${fallback?.label}`
+        : `${category.label} deleted`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }, [network.categories, network.people, saveNetwork])
 
   const openPerson = React.useCallback((person: ArtistNetworkPerson) => {
     setSelectedPersonId(person.id)
@@ -1839,6 +1931,10 @@ export function ArtistHQHome({
     if (!selectedPerson) return
     if (!editDraft.name.trim()) {
       toast.error('Add a name first.')
+      return
+    }
+    if (editDraft.email.trim() && !normalizeArtistNetworkEmail(editDraft.email)) {
+      toast.error('Enter a valid email address.')
       return
     }
     const nextNetwork: ArtistNetwork = {
@@ -1874,19 +1970,43 @@ export function ArtistHQHome({
     }
   }, [network.categories, network.people, saveNetwork, selectedPerson])
 
+  const togglePersonStar = React.useCallback(async (person: ArtistNetworkPerson) => {
+    const starred = !person.starred
+    const nextNetwork: ArtistNetwork = {
+      version: 1,
+      categories: network.categories,
+      people: network.people.map((item) => (
+        item.id === person.id ? { ...item, starred, updatedAt: new Date().toISOString() } : item
+      )),
+      updatedAt: new Date().toISOString(),
+    }
+    try {
+      await saveNetwork(nextNetwork)
+      toast.success(starred ? `${person.name} starred` : `${person.name} unstarred`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }, [network.categories, network.people, saveNetwork])
+
   const filteredPeople = React.useMemo(() => {
     const needle = query.trim().toLowerCase()
-    if (!needle) return network.people
-    return network.people.filter((person) => [
-      person.name,
-      person.role,
-      person.contact,
-      person.location,
-      person.canHelpWith,
-      person.notes,
-      ...person.tags,
-    ].filter(Boolean).join(' ').toLowerCase().includes(needle))
-  }, [network.people, query])
+    return network.people.filter((person) => {
+      if (selectedNetworkCategory && person.category !== selectedNetworkCategory) return false
+      if (!needle) return true
+      return [
+        person.name,
+        person.role,
+        person.email,
+        person.location,
+        person.canHelpWith,
+        person.notes,
+        ...person.tags,
+      ].filter(Boolean).join(' ').toLowerCase().includes(needle)
+    }).sort((left, right) => (
+      Number(Boolean(right.starred)) - Number(Boolean(left.starred))
+      || left.name.localeCompare(right.name)
+    ))
+  }, [network.people, query, selectedNetworkCategory])
 
   const artistName = profile.artistName || workspaceName || 'Artist HQ'
   const nextDate = hqHeaderNextLabel(hqState?.nextMove.title, thisWeekItems)
@@ -1948,7 +2068,8 @@ export function ArtistHQHome({
           backgroundImage={tab === 'home' ? bannerImageDataUrl : null}
           dimBackgroundImage={SHOW_HQ_BANNER_FILTER}
           borderless={tab === 'home'}
-          titleClassName={tab === 'home' ? 'text-[50px]' : undefined}
+          hero={tab === 'home'}
+          titleClassName={tab === 'home' ? 'text-[52px]' : undefined}
           className={tab === 'home' ? "after:pointer-events-none after:absolute after:inset-0 after:z-[9] after:rounded-[inherit] after:ring-2 after:ring-inset after:ring-[#050505] after:content-['']" : undefined}
           actions={
             <>
@@ -2002,8 +2123,7 @@ export function ArtistHQHome({
 
         {tab === 'home' && (
           <div id="hq-home-operations" className="space-y-3">
-            <HQCard className="overflow-hidden p-0">
-              <div id="hq-home-details" className="grid grid-cols-1 divide-y divide-white/[0.055] lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+              <div id="hq-home-details" className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                 <SpotifyPulseCard
                   snapshot={spotifySnapshot}
                   history={spotifyHistory}
@@ -2030,7 +2150,6 @@ export function ArtistHQHome({
                 />
 
               </div>
-            </HQCard>
 
             <ReleaseHorizon
               campaigns={campaignWorkspaces}
@@ -2251,69 +2370,212 @@ export function ArtistHQHome({
               }}
             />
             <HQCard>
-            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/28" />
-                  <input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search people..."
-                    className="h-9 w-52 rounded-full border border-white/[0.06] bg-black/20 pl-8 pr-3 text-xs text-white/75 outline-none placeholder:text-white/28 focus:border-white/16"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setDraftOpen((value) => !value)}
-                  className="inline-flex h-9 items-center gap-2 rounded-full bg-white/90 px-4 text-xs font-medium text-black"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add Person
-                </button>
-              </div>
-            </div>
-
-            <div className="mb-4 flex flex-col gap-2 rounded-[14px] border border-white/[0.05] bg-black/20 p-3 sm:flex-row sm:items-center">
-              <Input value={categoryDraft} onChange={setCategoryDraft} placeholder="New category name" />
-              <button
-                type="button"
-                onClick={addCategory}
-                disabled={!networkResult.ok}
-                className="h-9 shrink-0 rounded-[10px] border border-white/[0.08] px-3 text-xs font-medium text-white/65 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Add Category
-              </button>
-            </div>
-
-            {draftOpen && (
-              <div className="mb-4 rounded-[16px] border border-white/[0.06] bg-white/[0.025] p-3">
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
-                  <Input value={draft.name} onChange={(name) => setDraft((value) => ({ ...value, name }))} placeholder="Name" />
-                  <select
-                    value={draft.category}
-                    onChange={(event) => setDraft((value) => ({ ...value, category: event.target.value as ArtistNetworkCategory }))}
-                    className="h-9 rounded-[10px] border border-white/[0.06] bg-black/30 px-3 text-xs text-white/75 outline-none"
-                  >
-                    {network.categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
-                  </select>
-                  <Input value={draft.role} onChange={(role) => setDraft((value) => ({ ...value, role }))} placeholder="Role" />
-                  <Input value={draft.contact} onChange={(contact) => setDraft((value) => ({ ...value, contact }))} placeholder="Contact" />
-                  <button type="button" onClick={addPerson} disabled={!networkResult.ok} className="h-9 rounded-[10px] bg-[#f97316]/80 px-3 text-xs font-medium text-white hover:bg-[#f97316] disabled:cursor-not-allowed disabled:opacity-40">
-                    Save
-                  </button>
-                </div>
-                <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
-                  <Input value={draft.canHelpWith} onChange={(canHelpWith) => setDraft((value) => ({ ...value, canHelpWith }))} placeholder="Can help with" />
-                  <Input value={draft.tags} onChange={(tags) => setDraft((value) => ({ ...value, tags }))} placeholder="Tags, comma separated" />
-                </div>
-                <textarea
-                  value={draft.notes}
-                  onChange={(event) => setDraft((value) => ({ ...value, notes: event.target.value }))}
-                  placeholder="Notes, how they can help, last context..."
-                  className="mt-2 min-h-[70px] w-full rounded-[10px] border border-white/[0.06] bg-black/25 px-3 py-2 text-xs leading-5 text-white/75 outline-none placeholder:text-white/28 focus:border-white/16"
+            <div className="mb-4 flex w-full items-center justify-end gap-2">
+              <div className="relative min-w-0 flex-1 sm:flex-none">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/28" />
+                <input
+                  aria-label="Search people"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search people..."
+                  className="h-9 w-full rounded-full bg-white/[0.045] pl-8 pr-3 text-xs text-white/75 outline-none placeholder:text-white/28 transition-colors focus:bg-white/[0.07] sm:w-56"
                 />
               </div>
+              <button
+                type="button"
+                onClick={() => setCategoryFormOpen((value) => !value)}
+                aria-expanded={categoryFormOpen}
+                className="inline-flex h-9 shrink-0 items-center rounded-full bg-white/[0.055] px-3.5 text-xs font-medium text-white/62 transition-colors hover:bg-white/[0.09] hover:text-white/82"
+              >
+                Categories
+              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Add person"
+                    aria-expanded={draftOpen}
+                    onClick={() => {
+                      const category = selectedNetworkCategory
+                        ?? (network.categories.some((item) => item.id === draft.category) ? draft.category : network.categories[0]?.id)
+                        ?? ''
+                      setDraft({ ...emptyNetworkDraft, category })
+                      setDraftOpen(true)
+                    }}
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/90 text-black transition-colors hover:bg-white"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Add person</TooltipContent>
+              </Tooltip>
+            </div>
+
+            {categoryFormOpen && (
+              <div className="mb-4 max-w-2xl rounded-[14px] bg-white/[0.035] p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[11px] font-medium text-white/62">Categories</span>
+                  <button
+                    type="button"
+                    aria-label="Close categories"
+                    onClick={() => {
+                      setCategoryDraft('')
+                      setEditingCategoryId(null)
+                      setCategoryEditDraft('')
+                      setCategoryFormOpen(false)
+                    }}
+                    className="grid h-7 w-7 place-items-center rounded-[8px] text-white/34 transition-colors hover:bg-white/[0.06] hover:text-white/70"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="mt-2 flex max-w-sm items-center gap-2">
+                  <Input
+                    autoFocus
+                    value={categoryDraft}
+                    onChange={setCategoryDraft}
+                    placeholder="New category"
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') void addCategory()
+                      if (event.key === 'Escape') setCategoryDraft('')
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={addCategory}
+                    disabled={!networkResult.ok || !categoryDraft.trim()}
+                    className="h-9 shrink-0 rounded-[9px] bg-white/90 px-3 text-xs font-medium text-black transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Add
+                  </button>
+                </div>
+                <div className="mt-3 grid gap-1.5 sm:grid-cols-2">
+                  {network.categories.map((category) => {
+                    const count = network.people.filter((person) => person.category === category.id).length
+                    const editing = editingCategoryId === category.id
+                    return (
+                      <div key={category.id} className="flex h-9 min-w-0 items-center gap-2 rounded-[9px] bg-black/20 px-2.5">
+                        {editing ? (
+                          <>
+                            <input
+                              autoFocus
+                              aria-label={`Rename ${category.label}`}
+                              value={categoryEditDraft}
+                              onChange={(event) => setCategoryEditDraft(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') void saveCategoryEdit(category.id)
+                                if (event.key === 'Escape') {
+                                  setEditingCategoryId(null)
+                                  setCategoryEditDraft('')
+                                }
+                              }}
+                              className="min-w-0 flex-1 bg-transparent text-xs text-white/80 outline-none"
+                            />
+                            <button type="button" onClick={() => saveCategoryEdit(category.id)} className="text-[10px] font-medium text-white/65 hover:text-white">Save</button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="min-w-0 flex-1 truncate text-xs text-white/66">{category.label}</span>
+                            <span className="text-[10px] tabular-nums text-white/24">{count}</span>
+                            <button
+                              type="button"
+                              aria-label={`Rename ${category.label}`}
+                              onClick={() => {
+                                setEditingCategoryId(category.id)
+                                setCategoryEditDraft(category.label)
+                              }}
+                              className="grid h-7 w-7 place-items-center rounded-[7px] text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/65"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`Delete ${category.label}`}
+                              onClick={() => deleteCategory(category.id)}
+                              className="grid h-7 w-7 place-items-center rounded-[7px] text-white/24 transition-colors hover:bg-red-500/10 hover:text-red-300/75"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             )}
+
+            <Dialog
+              open={draftOpen}
+              onOpenChange={(open) => {
+                setDraftOpen(open)
+                if (!open) {
+                  setDraft({
+                    ...emptyNetworkDraft,
+                    category: selectedNetworkCategory ?? network.categories[0]?.id ?? '',
+                  })
+                }
+              }}
+            >
+              <DialogContent className="w-[min(560px,calc(100vw-2rem))] max-w-[560px] border-white/[0.08] bg-[#0C0D0E] p-0 text-white shadow-modal-small">
+                <DialogHeader className="border-b border-white/[0.06] px-5 py-4 pr-14 text-left">
+                  <DialogTitle className="text-lg font-medium tracking-[-0.02em]">Add person</DialogTitle>
+                  <DialogDescription className="text-xs text-white/38">
+                    {network.categories.find((category) => category.id === draft.category)?.label ?? 'Choose a category'}
+                  </DialogDescription>
+                </DialogHeader>
+                <form
+                  className="space-y-3 p-5"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void addPerson()
+                  }}
+                >
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Input autoFocus value={draft.name} onChange={(name) => setDraft((value) => ({ ...value, name }))} placeholder="Name" />
+                    <select
+                      value={draft.category}
+                      onChange={(event) => setDraft((value) => ({ ...value, category: event.target.value as ArtistNetworkCategory }))}
+                      className="h-9 rounded-[10px] border border-white/[0.06] bg-black/30 px-3 text-xs text-white/75 outline-none"
+                    >
+                      {network.categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
+                    </select>
+                    <Input value={draft.role} onChange={(role) => setDraft((value) => ({ ...value, role }))} placeholder="Role" />
+                    <Input type="email" value={draft.email} onChange={(email) => setDraft((value) => ({ ...value, email }))} placeholder="Email" />
+                    <Input value={draft.canHelpWith} onChange={(canHelpWith) => setDraft((value) => ({ ...value, canHelpWith }))} placeholder="Can help with" />
+                    <Input value={draft.tags} onChange={(tags) => setDraft((value) => ({ ...value, tags }))} placeholder="Tags, comma separated" />
+                  </div>
+                  <textarea
+                    value={draft.notes}
+                    onChange={(event) => setDraft((value) => ({ ...value, notes: event.target.value }))}
+                    placeholder="Notes"
+                    className="min-h-[84px] w-full rounded-[10px] border border-white/[0.06] bg-black/25 px-3 py-2 text-xs leading-5 text-white/75 outline-none placeholder:text-white/28 focus:border-white/16"
+                  />
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDraft({
+                          ...emptyNetworkDraft,
+                          category: selectedNetworkCategory ?? network.categories[0]?.id ?? '',
+                        })
+                        setDraftOpen(false)
+                      }}
+                      className="h-9 rounded-[9px] px-3 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.05] hover:text-white/78"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!networkResult.ok || network.categories.length === 0 || !draft.name.trim()}
+                      className="h-9 rounded-[9px] bg-white/90 px-4 text-xs font-medium text-black transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Add person
+                    </button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
 
             {!networkResult.ok ? (
               <div className="mb-4 rounded-[14px] border border-red-400/20 bg-red-500/10 p-3 text-xs leading-5 text-red-100/80">
@@ -2321,7 +2583,21 @@ export function ArtistHQHome({
               </div>
             ) : null}
 
-              <NetworkBoard categories={network.categories} people={filteredPeople} onSelectPerson={openPerson} />
+              <NetworkBoard
+                categories={network.categories}
+                allPeople={network.people}
+                people={filteredPeople}
+                selectedCategoryId={selectedNetworkCategory}
+                onToggleCategory={(categoryId) => {
+                  setSelectedNetworkCategory((value) => value === categoryId ? null : categoryId)
+                }}
+                onAddToCategory={(categoryId) => {
+                  setDraft({ ...emptyNetworkDraft, category: categoryId })
+                  setDraftOpen(true)
+                }}
+                onSelectPerson={openPerson}
+                onTogglePersonStar={togglePersonStar}
+              />
             </HQCard>
           </>
         )}
@@ -2763,9 +3039,9 @@ function SpotifyPulseCard({
     : '--'
 
   return (
-    <section className="min-w-0 p-4">
+    <section className="min-w-0">
       <div
-        className="group relative flex h-[184px] flex-col rounded-[14px] border border-white/[0.06] bg-[#0F0F10] p-4 transition-colors hover:border-white/[0.12] hover:bg-[#121213]"
+        className="group relative flex h-[132px] flex-col overflow-hidden rounded-[16px] border border-white/[0.075] bg-white/[0.035] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.045),0_18px_50px_rgba(0,0,0,0.18)] backdrop-blur-2xl transition-colors hover:bg-white/[0.05]"
       >
           <button
             type="button"
@@ -2781,7 +3057,7 @@ function SpotifyPulseCard({
                 {headlineLabel}{!publicApi && snapshot?.windowDays ? ` · ${snapshot.windowDays} days` : ''}
               </p>
               <div className="mt-1.5 flex flex-wrap items-end gap-2">
-                <p className="truncate text-[28px] font-medium leading-none tracking-[-0.04em] text-white/90">
+                <p className="truncate text-[24px] font-medium leading-none tracking-[-0.03em] text-white/90">
                   {formatMetric(headlineValue)}
                 </p>
                 {!publicApi ? <SpotifyGrowthBadge growth={growth} /> : null}
@@ -2922,8 +3198,8 @@ function SpotifyPerformanceChart({
     const area = `${line} L ${width} ${height} L 0 ${height} Z`
 
     return (
-      <div className="mt-auto pt-4">
-        <svg viewBox={`0 0 ${width} ${height}`} className="h-[58px] w-full overflow-visible" role="img" aria-label={`${chartLabel} trend`}>
+      <div className="mt-auto pt-2">
+        <svg viewBox={`0 0 ${width} ${height}`} className="h-[34px] w-full overflow-visible" role="img" aria-label={`${chartLabel} trend`}>
           <defs>
             <linearGradient id="spotify-pulse-area" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#f97316" stopOpacity="0.34" />
@@ -2934,7 +3210,7 @@ function SpotifyPerformanceChart({
           <path d={line} fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           <circle cx={points.at(-1)!.x} cy={points.at(-1)!.y} r="3" fill="#f97316" />
         </svg>
-        <div className="mt-1 flex items-center justify-between text-[9px] text-white/27">
+        <div className="mt-0.5 flex items-center justify-between text-[8px] text-white/25">
           <span>{formatShortDate(trend[0]!.date)}</span>
           <span>{chartLabel}</span>
           <span>{formatShortDate(trend.at(-1)!.date)}</span>
@@ -2946,25 +3222,24 @@ function SpotifyPerformanceChart({
   const tracks = (snapshot?.tracks ?? [])
     .filter((track): track is typeof track & { streams: number } => typeof track.streams === 'number')
     .sort((left, right) => right.streams - left.streams)
-    .slice(0, 3)
+    .slice(0, 2)
   const maxTrackStreams = Math.max(1, ...tracks.map((track) => track.streams))
 
   return tracks.length > 0 ? (
-    <div className="mt-auto space-y-1.5 pt-4" aria-label="Top tracks this period">
+    <div className="mt-auto space-y-1 pt-2" aria-label="Top tracks this period">
       {tracks.map((track) => (
         <div key={`${track.id ?? track.name}-${track.streams}`} className="grid grid-cols-[minmax(0,1fr)_48px] items-center gap-2">
-          <div className="relative h-5 overflow-hidden rounded-[5px] bg-white/[0.035]">
+          <div className="relative h-4 overflow-hidden rounded-[5px] bg-white/[0.035]">
             <span className="absolute inset-y-0 left-0 rounded-[5px] bg-[#f97316]/95" style={{ width: `${Math.max(8, (track.streams / maxTrackStreams) * 100)}%` }} />
-            <span className="relative block truncate px-2 pt-[3px] text-[9px] text-white/58">{track.name}</span>
+            <span className="relative block truncate px-2 pt-[2px] text-[8px] text-white/62">{track.name}</span>
           </div>
           <span className="text-right text-[9px] tabular-nums text-white/38">{formatMetric(track.streams)}</span>
         </div>
       ))}
-      <p className="pt-0.5 text-[8px] uppercase tracking-[0.12em] text-white/22">Top tracks · current period</p>
     </div>
   ) : (
-    <div className="mt-auto pt-5 text-[9px] leading-4 text-white/28">
-      Baseline captured. The next comparable run unlocks the growth chart.
+    <div className="mt-auto pt-2 text-[9px] leading-4 text-white/28">
+      Baseline captured
     </div>
   )
 }
@@ -3098,15 +3373,14 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
 
   if (!state) {
     return (
-      <HQCard className="p-3.5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <HQCard className="border-white/[0.07] bg-white/[0.03] p-3.5 backdrop-blur-xl">
+        <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <Sparkles className="h-3.5 w-3.5 text-[#f97316]/80" />
-              <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/42">State of Play</span>
+              <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/42">This week</span>
             </div>
-            <p className="mt-1.5 text-sm font-medium text-white/72">No HQ brief generated yet</p>
-            <p className="mt-1 truncate text-xs text-white/34">Add artist context or sync a source to generate the first brief.</p>
+            <p className="mt-1.5 text-sm font-medium text-white/72">No priorities yet</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <StateOfPlayRefreshButton busy={refreshBusy} onRefresh={onRefresh} size="md" />
@@ -3123,36 +3397,48 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
     )
   }
 
+  const thisWeekItems = userFacingHqAttention(state.attention).slice(0, 2)
+
   return (
     <>
-      <HQCard className="px-4 py-3">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-2.5">
+      <HQCard className="overflow-hidden border-white/[0.075] bg-white/[0.032] p-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl">
+        <div className="flex h-10 items-center justify-between gap-4 border-b border-white/[0.055] px-4">
+          <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/42">This week</span>
+          <button
+            type="button"
+            onClick={() => setDetailsOpen(true)}
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[7px] px-2 text-[10px] font-medium text-white/42 transition-colors hover:bg-white/[0.05] hover:text-white/75"
+          >
+            Manager
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <div className="divide-y divide-white/[0.05]">
+          <div className="flex min-h-12 items-center gap-3 px-4 py-2.5">
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#f97316]" />
-            <h2 className="truncate text-sm font-medium tracking-tight text-white/88">{state.nextMove.title}</h2>
+            <div className="min-w-0 flex-1">
+              <p className="text-[9px] font-medium uppercase tracking-[0.12em] text-white/28">Next move</p>
+              <h2 className="mt-0.5 truncate text-sm font-medium tracking-tight text-white/88">{state.nextMove.title}</h2>
+            </div>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
                   aria-label="Why this is recommended"
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white/38 transition-colors hover:bg-white/[0.05] hover:text-white/75"
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white/30 transition-colors hover:bg-white/[0.05] hover:text-white/70"
                 >
                   <Info className="h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent className="max-w-[320px] text-xs leading-5">
-                {state.nextMove.why}
-              </TooltipContent>
+              <TooltipContent className="max-w-[320px] text-xs leading-5">{state.nextMove.why}</TooltipContent>
             </Tooltip>
           </div>
-          <button
-            type="button"
-            onClick={() => setDetailsOpen(true)}
-            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-[8px] px-2.5 text-xs font-medium text-white/58 transition-colors hover:bg-black/20 hover:text-white/85"
-          >
-            Manager
-            <ChevronRight className="h-3.5 w-3.5" />
-          </button>
+          {thisWeekItems.map((item) => (
+            <div key={`${item.kind}-${item.source}-${item.text}`} className="flex min-h-10 items-center gap-3 px-4 py-2">
+              <span className="h-1 w-1 shrink-0 rounded-full bg-white/28" />
+              <p className="line-clamp-1 text-xs text-white/54">{item.text}</p>
+            </div>
+          ))}
         </div>
       </HQCard>
 
@@ -3375,9 +3661,9 @@ function SocialPulseCard({
   const followerDelta = snapshot?.metrics.followerDelta
 
   return (
-    <section className="min-w-0 p-4">
+    <section className="min-w-0">
       <div
-        className="group relative flex h-[184px] flex-col rounded-[14px] border border-white/[0.06] bg-[#0F0F10] p-4 transition-colors hover:border-white/[0.12] hover:bg-[#121213]"
+        className="group relative flex h-[132px] flex-col overflow-hidden rounded-[16px] border border-white/[0.075] bg-white/[0.035] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.045),0_18px_50px_rgba(0,0,0,0.18)] backdrop-blur-2xl transition-colors hover:bg-white/[0.05]"
       >
           <button
             type="button"
@@ -3392,7 +3678,7 @@ function SocialPulseCard({
                 <span className="text-white/24"> · </span>
                 Follower change
               </p>
-              <p className="mt-1.5 text-[28px] font-medium leading-none tracking-[-0.04em] text-white/90">
+              <p className="mt-1.5 text-[24px] font-medium leading-none tracking-[-0.03em] text-white/90">
                 {formatSignedMetric(followerDelta)}
               </p>
             </div>
@@ -3457,12 +3743,12 @@ function SocialPulseCard({
 function InstagramGrowthChart({ history }: { history: ArtistInstagramGrowthPoint[] }) {
   const maxMagnitude = Math.max(1, ...history.map((point) => Math.abs(point.followerDelta)))
   return (
-    <div className="relative mt-auto h-14" aria-label={history.length > 0 ? 'Instagram follower growth history' : 'No Instagram growth history yet'}>
+    <div className="relative mt-auto h-9" aria-label={history.length > 0 ? 'Instagram follower growth history' : 'No Instagram growth history yet'}>
       <span className="absolute inset-x-0 top-1/2 h-px bg-white/[0.08]" />
       {history.length > 0 ? (
         <div className="absolute inset-0 flex gap-1.5">
           {history.map((point) => {
-            const height = Math.max(8, (Math.abs(point.followerDelta) / maxMagnitude) * 46)
+            const height = Math.max(8, (Math.abs(point.followerDelta) / maxMagnitude) * 42)
             return (
               <div key={point.date} className="relative min-w-0 flex-1">
                 <span
@@ -3482,7 +3768,7 @@ function InstagramGrowthChart({ history }: { history: ArtistInstagramGrowthPoint
           })}
         </div>
       ) : (
-        <span className="absolute bottom-1 left-0 text-[9px] text-white/28">Run once to capture a baseline</span>
+        <span className="absolute bottom-0 left-0 text-[9px] text-white/28">No baseline yet</span>
       )}
     </div>
   )
@@ -4170,15 +4456,61 @@ function HqWorkLink({ label, onClick }: { label: string; onClick: () => void }) 
 
 function NetworkBoard({
   categories,
+  allPeople,
   people,
+  selectedCategoryId,
+  onToggleCategory,
+  onAddToCategory,
   onSelectPerson,
+  onTogglePersonStar,
 }: {
   categories: ArtistNetworkCategoryDefinition[]
+  allPeople: ArtistNetworkPerson[]
   people: ArtistNetworkPerson[]
+  selectedCategoryId: ArtistNetworkCategory | null
+  onToggleCategory: (categoryId: ArtistNetworkCategory) => void
+  onAddToCategory: (categoryId: ArtistNetworkCategory) => void
   onSelectPerson: (person: ArtistNetworkPerson) => void
+  onTogglePersonStar: (person: ArtistNetworkPerson) => void
 }) {
   return (
-    <div className="space-y-8">
+    <div>
+      <div className="mb-7 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" aria-label="People categories">
+        {categories.map((category) => {
+          const count = allPeople.filter((person) => person.category === category.id).length
+          const selected = selectedCategoryId === category.id
+          return (
+            <div
+              key={category.id}
+              className={cn(
+                'group flex h-11 min-w-0 items-center rounded-[10px] transition-colors',
+                selected
+                  ? 'bg-[#f97316]/14 shadow-[inset_0_0_0_1px_rgba(249,115,22,0.46)]'
+                  : 'bg-white/[0.035] hover:bg-white/[0.07]',
+              )}
+            >
+              <button
+                type="button"
+                aria-pressed={selected}
+                onClick={() => onToggleCategory(category.id)}
+                className="flex h-full min-w-0 flex-1 items-center gap-2 pl-3 text-left"
+              >
+                <span className={cn('min-w-0 flex-1 truncate text-xs font-medium', selected ? 'text-orange-100/90' : 'text-white/62 group-hover:text-white/82')}>{category.label}</span>
+                <span className={cn('text-[10px] tabular-nums', selected ? 'text-orange-100/55' : 'text-white/25')}>{count}</span>
+              </button>
+              <button
+                type="button"
+                aria-label={`Add person to ${category.label}`}
+                onClick={() => onAddToCategory(category.id)}
+                className="mr-1 grid h-8 w-8 shrink-0 place-items-center rounded-[8px] text-[#f97316]/60 transition-colors hover:bg-black/15 hover:text-[#f97316]"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+      <div className="space-y-8">
       {categories.map((category) => {
         const categoryPeople = people.filter((person) => person.category === category.id)
         if (categoryPeople.length === 0) return null
@@ -4189,66 +4521,63 @@ function NetworkBoard({
               <div className="h-px flex-1 bg-gradient-to-r from-white/[0.08] to-transparent" />
               <span className="rounded-full bg-white/[0.03] px-2 py-0.5 text-[10px] tabular-nums text-white/30">{categoryPeople.length}</span>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="flex flex-wrap gap-2">
               {categoryPeople.map((person) => (
-                <PersonCard key={person.id} person={person} onClick={() => onSelectPerson(person)} />
+                <PersonCard
+                  key={person.id}
+                  person={person}
+                  onClick={() => onSelectPerson(person)}
+                  onToggleStar={() => onTogglePersonStar(person)}
+                />
               ))}
             </div>
           </section>
         )
       })}
       {people.length === 0 ? (
-        <EmptyLine title="No people yet" detail="Add the real humans around the artist: DJs, producers, curators, collaborators, press, brands, and VIPs." />
+        <EmptyLine
+          title={selectedCategoryId ? `No people in ${categories.find((category) => category.id === selectedCategoryId)?.label ?? 'this category'}` : 'No people yet'}
+          detail="Use a category + to add someone."
+        />
       ) : null}
+      </div>
     </div>
   )
 }
 
-function PersonCard({ person, onClick }: { person: ArtistNetworkPerson; onClick: () => void }) {
+function PersonCard({
+  person,
+  onClick,
+  onToggleStar,
+}: {
+  person: ArtistNetworkPerson
+  onClick: () => void
+  onToggleStar: () => void
+}) {
   return (
-    <button 
-      type="button" 
-      onClick={onClick} 
-      className="group flex flex-col justify-between rounded-[14px] border border-white/[0.04] bg-white/[0.015] p-3 text-left transition-all hover:bg-white/[0.03] hover:border-white/[0.08] hover:shadow-middle hover:-translate-y-0.5"
-    >
-      <div className="flex items-start justify-between gap-2 w-full">
-        <div className="flex items-center justify-center h-8 w-8 rounded-full bg-gradient-to-br from-white/10 to-white/5 border border-white/10 shrink-0">
-          <UserRound className="h-4 w-4 text-white/60" />
-        </div>
-        {person.relationship && person.relationship !== 'new' ? (
-          <span className={cn(
-            "rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em]",
-            person.relationship === 'vip' ? "bg-purple-500/10 text-purple-300" :
-            person.relationship === 'strong' ? "bg-orange-500/10 text-orange-300" :
-            "bg-blue-500/10 text-blue-300"
-          )}>
-            {person.relationship}
-          </span>
-        ) : null}
-      </div>
-      
-      <div className="mt-3 w-full">
-        <div className="truncate text-sm font-semibold text-white/80 group-hover:text-white transition-colors">{person.name}</div>
-        <div className="mt-0.5 truncate text-[11px] text-white/40">{person.role || person.contact || 'No role added'}</div>
-      </div>
-      
-      {person.tags.length > 0 ? (
-        <div className="mt-3 flex w-full flex-wrap gap-1.5 overflow-hidden h-[20px]">
-          {person.tags.slice(0, 3).map(tag => (
-            <span key={tag} className="inline-flex items-center rounded-[6px] bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-medium text-white/40">
-              {tag}
-            </span>
-          ))}
-          {person.tags.length > 3 && (
-            <span className="inline-flex items-center rounded-[6px] bg-white/[0.02] px-1.5 py-0.5 text-[9px] font-medium text-white/30">
-              +{person.tags.length - 3}
-            </span>
-          )}
-        </div>
-      ) : (
-        <div className="mt-3 h-[20px]" />
-      )}
-    </button>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <button
+          type="button"
+          onClick={onClick}
+          className="group flex h-12 w-fit min-w-[150px] max-w-[220px] items-center justify-center rounded-[9px] bg-white/[0.035] px-4 text-center transition-colors hover:bg-white/[0.065]"
+        >
+          <div className="min-w-0">
+            <div className={cn(
+              'truncate text-xs font-medium transition-colors',
+              person.starred ? 'text-[#f97316]' : 'text-white/76 group-hover:text-white/92',
+            )}>{person.name}</div>
+            <div className="mt-0.5 truncate text-[10px] text-white/35">{person.role || person.email || 'No details yet'}</div>
+          </div>
+        </button>
+      </ContextMenuTrigger>
+      <StyledContextMenuContent minWidth="min-w-32">
+        <StyledContextMenuItem onSelect={onToggleStar}>
+          <Star className={person.starred ? 'fill-[#f97316] text-[#f97316]' : 'text-white/45'} />
+          {person.starred ? 'Unstar person' : 'Star person'}
+        </StyledContextMenuItem>
+      </StyledContextMenuContent>
+    </ContextMenu>
   )
 }
 
@@ -4293,7 +4622,7 @@ function PersonDetailPanel({
           {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
         </select>
         <Input value={draft.role} onChange={(role) => onChange({ ...draft, role })} placeholder="Role" />
-        <Input value={draft.contact} onChange={(contact) => onChange({ ...draft, contact })} placeholder="Contact" />
+        <Input type="email" value={draft.email} onChange={(email) => onChange({ ...draft, email })} placeholder="Email" />
         <Input value={draft.canHelpWith} onChange={(canHelpWith) => onChange({ ...draft, canHelpWith })} placeholder="Can help with" />
         <Input value={draft.tags} onChange={(tags) => onChange({ ...draft, tags })} placeholder="Tags, comma separated" />
         <textarea
@@ -4350,9 +4679,19 @@ function ContextBadges({
   )
 }
 
-function Input({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
+function Input({
+  value,
+  onChange,
+  placeholder,
+  ...inputProps
+}: {
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'placeholder'>) {
   return (
     <input
+      {...inputProps}
       value={value}
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
@@ -4377,7 +4716,7 @@ function personToDraft(person: ArtistNetworkPerson): NetworkDraft {
     name: person.name,
     category: person.category,
     role: person.role ?? '',
-    contact: person.contact ?? '',
+    email: person.email ?? '',
     canHelpWith: person.canHelpWith ?? '',
     tags: person.tags.join(', '),
     notes: person.notes ?? '',

@@ -80,6 +80,7 @@ describe('session tool filtering helpers', () => {
     expect(ordinary.has('get_campaign_brief')).toBe(false);
     expect(ordinary.has('list_workspace_context')).toBe(true);
     expect(ordinary.has('get_workspace_context')).toBe(true);
+    expect(ordinary.has('search_artist_network')).toBe(true);
 
     const manager = getSessionToolNames({ includeManagerTools: true });
     expect(manager.has('get_manager_brief')).toBe(true);
@@ -97,11 +98,19 @@ describe('session tool filtering helpers', () => {
       'get_campaign_context',
       'list_workspace_context',
       'get_workspace_context',
+      'search_artist_network',
     ]) {
       const def = SESSION_TOOL_DEFS.find((candidate) => candidate.name === name);
       expect(def?.readOnly).toBe(true);
       expect(def?.safeMode).toBe('allow');
     }
+  });
+
+  it('keeps Artist Network lookup bounded and discoverable without prompt injection', () => {
+    const def = SESSION_TOOL_DEFS.find((candidate) => candidate.name === 'search_artist_network');
+    expect(def?.description).toContain('full contact list is never injected');
+    expect(def?.inputSchema.safeParse({ query: '' }).success).toBe(false);
+    expect(def?.inputSchema.safeParse({ query: 'automotive sync', limit: 5 }).success).toBe(true);
   });
 
   it('exposes X Editorial history as a read-only safe tool', () => {

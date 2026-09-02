@@ -427,6 +427,8 @@ export interface SessionToolContext {
   listWorkspaceContext?(input: import('./handlers/manager-context.ts').ListWorkspaceContextInput): Promise<import('./handlers/manager-context.ts').ManagerContextToolResult>;
   /** Read one authorized workspace context document with a hard body bound. */
   getWorkspaceContext?(input: import('./handlers/manager-context.ts').GetWorkspaceContextInput): Promise<import('./handlers/manager-context.ts').ManagerContextToolResult>;
+  /** Search the global Artist Network without injecting or returning the full contact list. */
+  searchArtistNetwork?(input: import('./handlers/manager-context.ts').SearchArtistNetworkInput): Promise<import('./handlers/manager-context.ts').ManagerContextToolResult>;
 
   /**
    * Create a workflow in the global workflow library and optionally activate it
