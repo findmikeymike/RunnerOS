@@ -499,29 +499,14 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
  */
 export function getComputerUseSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
   const copilotComputerUsePath = getCopilotComputerUseMcpPath();
-  const workflowGuide = copilotComputerUsePath
-    ? [
-        'Workflow:',
-        '1. Call `list_apps` to confirm the target app is available.',
-        '2. Call `get_window_state` before every meaningful UI action.',
-        '3. Prefer element indexes from the observed accessibility tree. Use coordinates only when needed.',
-        '4. Use `click`, `set_text`, `insert_text`, `type_chars`, `key_chord`, `scroll`, `drag`, `select_option`, or `secondary_action` based on the observed state.',
-        '5. Ask the user before submit, send, purchase, delete, credential entry, system settings changes, or any irreversible action.',
-      ]
-    : [
-        'Workflow:',
-        '1. Call `computer_use_status` first.',
-        '2. Call `computer_use_list_apps` and `computer_use_list_windows` to find the target.',
-        '3. Call `computer_use_observe_window` before every meaningful UI action.',
-        '4. Prefer semantic targets from the observed accessibility tree. Use coordinates only when needed.',
-        '5. Ask the user before submit, send, purchase, delete, credential entry, or any irreversible action.',
-      ];
+  const provider = copilotComputerUsePath ? 'copilot-computer-use' : 'background-computer-use';
+  const workflowGuide = getComputerUseWorkflowGuide(provider);
   const config: FolderSourceConfig = {
     id: 'builtin-computer-use',
     name: 'Computer Use',
     slug: COMPUTER_USE_SLUG,
     enabled: true,
-    provider: copilotComputerUsePath ? 'copilot-computer-use' : 'background-computer-use',
+    provider,
     type: 'mcp',
     mcp: {
       transport: 'stdio',
@@ -551,6 +536,30 @@ export function getComputerUseSource(workspaceId: string, workspaceRootPath: str
     },
     isBuiltin: true,
   };
+}
+
+export function getComputerUseWorkflowGuide(
+  provider: 'copilot-computer-use' | 'background-computer-use',
+): string[] {
+  return provider === 'copilot-computer-use'
+    ? [
+        'Workflow:',
+        '1. Call `list_apps` to confirm the target app is available.',
+        '2. Call `get_window_state` before every meaningful UI action.',
+        '3. Prefer element indexes from the observed accessibility tree. Use coordinates only when needed.',
+        '4. Use `click`, `set_text`, `insert_text`, `type_chars`, `key_chord`, `scroll`, `drag`, `select_option`, or `secondary_action` based on the observed state.',
+        '5. Ask the user before submit, send, purchase, delete, credential entry, system settings changes, or any irreversible action.',
+        '6. After an action, call `get_window_state` again. If the action reported success but the expected change did not happen, stop and tell the user — do not retry the same action.',
+      ]
+    : [
+        'Workflow:',
+        '1. Call `computer_use_status` first. Only proceed when it reports state "ready". If it reports "degraded" or "unavailable", relay its remedy to the user and stop — a degraded runtime can accept actions and silently do nothing.',
+        '2. Call `computer_use_list_apps` and `computer_use_list_windows` to find the target.',
+        '3. Call `computer_use_observe_window` before every meaningful UI action.',
+        '4. Prefer semantic targets from the observed accessibility tree. Use coordinates only when needed.',
+        '5. Ask the user before submit, send, purchase, delete, credential entry, or any irreversible action.',
+        '6. After an action, observe again. If the action reported success but the expected change did not happen, stop and tell the user — do not retry the same action.',
+      ];
 }
 
 /**

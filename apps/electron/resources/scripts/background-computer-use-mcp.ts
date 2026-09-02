@@ -118,7 +118,7 @@ const cursorSchema = {
 const tools: Tool[] = [
   {
     name: 'computer_use_status',
-    description: 'Check whether the local BackgroundComputerUse macOS runtime is running and permissioned.',
+    description: 'Check whether the local BackgroundComputerUse macOS runtime can actually drive windows. Returns state "ready", "degraded" (running but cannot observe applications — usually a revoked macOS permission), or "unavailable" (not running), each with a remedy. Do not attempt UI actions unless the state is "ready": in a degraded runtime, actions can report success while silently doing nothing.',
     inputSchema: objectSchema({}),
   },
   {
@@ -292,15 +292,99 @@ function args(request: unknown): JsonObject {
   return ((request as { params?: { arguments?: JsonObject } }).params?.arguments ?? {}) as JsonObject;
 }
 
+/**
+ * Report whether computer use can actually drive a window, not merely whether
+ * the runtime answers HTTP.
+ *
+ * The failure that matters here is silent. macOS 14.5 introduced an
+ * authorization check that turned equivalent SkyLight private-API calls into
+ * no-ops for window managers — the calls still reported success while doing
+ * nothing. A reachable runtime whose Accessibility or Screen Recording
+ * permission was revoked (commonly after an OS update) looks healthy to
+ * /health and /v1/bootstrap while being unable to observe or act on anything.
+ *
+ * Enumerating windows is the cheapest read-only proof that those permissions
+ * are genuinely granted. We deliberately do NOT probe by clicking or typing:
+ * a synthetic action to test liveness is itself a side effect on the user's
+ * machine.
+ *
+ * Returns `ready`, `degraded` (reachable but cannot observe), or `unavailable`
+ * (runtime not reachable at all), each with an actionable remedy.
+ */
+export async function computerUseStatus(
+  request: (path: string, body?: JsonObject) => Promise<unknown> = requestRuntime,
+): Promise<JsonObject> {
+  let health: unknown;
+  let bootstrap: unknown;
+  try {
+    [health, bootstrap] = await Promise.all([
+      request('/health'),
+      request('/v1/bootstrap'),
+    ]);
+  } catch (error) {
+    return {
+      state: 'unavailable',
+      manifestPath: MANIFEST_PATH,
+      detail: error instanceof Error ? error.message : String(error),
+      remedy: 'The BackgroundComputerUse runtime is not running. Start it with tools/background-computer-use/script/start.sh, then retry.',
+    };
+  }
+
+  // Capability probe: can we actually see windows? This is what distinguishes a
+  // permissioned runtime from one that is merely alive.
+  let windowCount: number | undefined;
+  try {
+    const apps = await request('/v1/list_apps', {});
+    windowCount = countObservableEntries(apps);
+  } catch (error) {
+    return {
+      state: 'degraded',
+      manifestPath: MANIFEST_PATH,
+      health,
+      bootstrap,
+      detail: error instanceof Error ? error.message : String(error),
+      remedy: PERMISSION_REMEDY,
+    };
+  }
+
+  if (!windowCount) {
+    return {
+      state: 'degraded',
+      manifestPath: MANIFEST_PATH,
+      health,
+      bootstrap,
+      detail: 'The runtime is reachable but reported no observable applications.',
+      remedy: PERMISSION_REMEDY,
+    };
+  }
+
+  return { state: 'ready', manifestPath: MANIFEST_PATH, observableApps: windowCount, health, bootstrap };
+}
+
+const PERMISSION_REMEDY = [
+  'The runtime is running but cannot observe any application, which almost always means a macOS permission was revoked — this often happens after an OS update.',
+  'Grant BackgroundComputerUse both Accessibility and Screen Recording in System Settings > Privacy & Security, then restart the runtime.',
+  'Do not attempt UI actions until this reports ready: events may be silently discarded while reporting success.',
+].join(' ');
+
+/** Count entries in a list response without assuming the exact payload shape. */
+export function countObservableEntries(payload: unknown): number {
+  if (Array.isArray(payload)) return payload.length;
+  if (payload && typeof payload === 'object') {
+    return Math.max(
+      0,
+      ...Object.values(payload as JsonObject)
+        .filter(Array.isArray)
+        .map((value) => value.length),
+    );
+  }
+  return 0;
+}
+
 async function call(name: string, input: JsonObject): Promise<unknown> {
   switch (name) {
-    case 'computer_use_status': {
-      const [health, bootstrap] = await Promise.all([
-        requestRuntime('/health'),
-        requestRuntime('/v1/bootstrap'),
-      ]);
-      return { manifestPath: MANIFEST_PATH, health, bootstrap };
-    }
+    case 'computer_use_status':
+      return computerUseStatus();
     case 'computer_use_list_apps':
       return requestRuntime('/v1/list_apps', {});
     case 'computer_use_list_windows':
@@ -330,18 +414,20 @@ async function call(name: string, input: JsonObject): Promise<unknown> {
   }
 }
 
-const server = new Server(
-  { name: 'background-computer-use', version: '1.0.0' },
-  { capabilities: { tools: {} } },
-);
+if (import.meta.main) {
+  const server = new Server(
+    { name: 'background-computer-use', version: '1.0.0' },
+    { capabilities: { tools: {} } },
+  );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  try {
-    return ok(await call(request.params.name, args(request)));
-  } catch (error) {
-    return fail(error);
-  }
-});
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    try {
+      return ok(await call(request.params.name, args(request)));
+    } catch (error) {
+      return fail(error);
+    }
+  });
 
-await server.connect(new StdioServerTransport());
+  await server.connect(new StdioServerTransport());
+}

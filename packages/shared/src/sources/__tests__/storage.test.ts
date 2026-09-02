@@ -30,6 +30,7 @@ const originalConfigDir = process.env.CRAFT_CONFIG_DIR;
 process.env.CRAFT_PRODUCT_VARIANT = 'artist-os';
 process.env.CRAFT_CONFIG_DIR = sandboxArtistRoot;
 const storage = await import(`../storage.ts?global-sources-storage-test=${process.pid}-${Date.now()}`);
+const { getComputerUseWorkflowGuide } = await import('../builtin-sources.ts');
 if (originalProductVariant === undefined) delete process.env.CRAFT_PRODUCT_VARIANT;
 else process.env.CRAFT_PRODUCT_VARIANT = originalProductVariant;
 if (originalConfigDir === undefined) delete process.env.CRAFT_CONFIG_DIR;
@@ -443,6 +444,13 @@ describe('loadAllSources', () => {
     expect(found!.config.mcp?.args).toEqual([]);
     expect(found!.config.mcp?.command).toContain('computer-use-mcp');
     expect(found!.guide?.raw).toContain('get_window_state');
+    expect(found!.guide?.raw).toContain('expected change did not happen');
+  });
+
+  test('requires a ready health probe before using the vendored computer-use fallback', () => {
+    const guide = getComputerUseWorkflowGuide('background-computer-use').join('\n');
+    expect(guide).toContain('Only proceed when it reports state "ready"');
+    expect(guide).toContain('expected change did not happen');
   });
 
   test('ignores stale workspace computer-use copies and keeps the built-in source authoritative', () => {
