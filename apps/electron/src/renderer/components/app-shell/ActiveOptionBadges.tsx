@@ -145,6 +145,9 @@ export function ActiveOptionBadges({
   const effectiveStateId = currentSessionStatus || 'todo'
   const resolvedState = sessionStatuses.length > 0 ? getState(effectiveStateId, sessionStatuses) : undefined
   const hasState = !!resolvedState
+  // Artist OS promotes the bounded Goal control beside permission mode. The
+  // generic session workflow status remains available from the chat header.
+  const showStateBadge = RENDERER_PRODUCT_VARIANT !== 'artist-os' && hasState
 
   // Show the stacking container when there are labels (state badge is now rendered standalone on the left)
   const hasStackContent = hasLabels
@@ -175,7 +178,7 @@ export function ActiveOptionBadges({
         )}
 
         {/* State Badge — standalone on the left, after Mode */}
-        {hasState && resolvedState && (
+        {showStateBadge && resolvedState && (
           <div className="shrink-0">
             <StateBadge
               state={resolvedState}
@@ -473,7 +476,7 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
 
   // Mode-specific styling using CSS variables (theme-aware)
   // - safe (Explore): foreground at 60% opacity - subtle, read-only feel
-  // - ask (Ask to Edit): info color - amber, prompts for edits
+  // - ask (Ask to Edit): neutral in Artist OS so Goal remains the intentional accent
   // - allow-all (Auto): accent color - orange, full autonomy
   const modeStyles: Record<PermissionMode, { className: string; shadowVar: string }> = {
     'safe': {
@@ -481,8 +484,10 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
       shadowVar: 'var(--foreground-rgb)',
     },
     'ask': {
-      className: 'border border-[#fb923c]/25 bg-[#fb923c]/12 text-[#fed7aa] hover:bg-[#fb923c]/18 hover:text-white',
-      shadowVar: 'var(--info-rgb)',
+      className: RENDERER_PRODUCT_VARIANT === 'artist-os'
+        ? 'border border-white/[0.08] bg-white/[0.045] text-white/64 hover:bg-white/[0.08] hover:text-white'
+        : 'border border-[#fb923c]/25 bg-[#fb923c]/12 text-[#fed7aa] hover:bg-[#fb923c]/18 hover:text-white',
+      shadowVar: RENDERER_PRODUCT_VARIANT === 'artist-os' ? 'var(--foreground-rgb)' : 'var(--info-rgb)',
     },
     'allow-all': {
       className: 'border border-[#fb923c]/28 bg-[#fb923c]/14 text-[#fed7aa] hover:bg-[#fb923c]/20 hover:text-white',

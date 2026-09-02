@@ -25,10 +25,12 @@ interface GoalOpenDetail {
   objective?: string
   proposal?: CreateChatGoalInput
   confirmationNonce?: string
+  intent?: 'open-controls' | 'quick-start'
 }
 
 interface ChatGoalControlsProps {
   session: Session
+  defaultExpanded?: boolean
 }
 
 export function parseChatGoalCommand(message: string): string | null | undefined {
@@ -55,13 +57,90 @@ const STATUS_TONE: Record<ChatGoalState['status'], string> = {
   cancelled: 'text-white/48',
 }
 
+const BADGE_TONE: Record<ChatGoalState['status'], string> = {
+  active: 'border-orange-400/20 bg-orange-500/10 text-orange-200/90',
+  paused: 'border-amber-400/18 bg-amber-400/[0.08] text-amber-200/85',
+  blocked: 'border-orange-400/25 bg-orange-500/12 text-orange-200',
+  'budget-limited': 'border-amber-400/22 bg-amber-400/10 text-amber-200/90',
+  complete: 'border-emerald-400/18 bg-emerald-400/[0.08] text-emerald-200/85',
+  cancelled: 'border-white/[0.08] bg-white/[0.045] text-white/52',
+}
+
+function goalBadgeLabel(goal?: ChatGoalState): string {
+  if (!goal) return 'Goal'
+  if (goal.completion?.taskVerification === 'skipped-degraded') return 'Check goal'
+  switch (goal.status) {
+    case 'active': return `Goal ${goal.round}/${goal.maxRounds}`
+    case 'paused': return 'Goal paused'
+    case 'blocked': return 'Needs you'
+    case 'budget-limited': return 'Goal limit'
+    case 'complete': return 'Goal done'
+    case 'cancelled': return 'Goal stopped'
+  }
+}
+
+export function buildGoalCommandDraft(draft = ''): string {
+  const content = draft.trimStart()
+  if (/^(?:\/goal|\$goal)(?:\s|$)/i.test(content)) return draft
+  return content ? `$goal ${content}` : '$goal '
+}
+
+export function ChatGoalBadge({
+  session,
+  draft,
+  onDraftChange,
+}: {
+  session: Session
+  draft?: string
+  onDraftChange?: (value: string) => void
+}) {
+  const goal = session.chatGoal
+  const label = goalBadgeLabel(goal)
+
+  const openGoal = React.useCallback(() => {
+    if (goal) {
+      window.dispatchEvent(new CustomEvent<GoalOpenDetail>('craft:open-goal', {
+        detail: { sessionId: session.id, intent: 'open-controls' },
+      }))
+      return
+    }
+
+    onDraftChange?.(buildGoalCommandDraft(draft))
+    queueMicrotask(() => {
+      window.dispatchEvent(new CustomEvent('craft:focus-input', {
+        detail: { sessionId: session.id },
+      }))
+    })
+  }, [draft, goal, onDraftChange, session.id])
+
+  return (
+    <button
+      type="button"
+      aria-label={goal ? `Open Goal controls: ${label}` : 'Write a Goal in chat'}
+      onClick={openGoal}
+      disabled={!goal && !onDraftChange}
+      className={cn(
+        'inline-flex h-7 items-center gap-1.5 rounded-[8px] border px-2 text-[11px] font-medium transition-colors',
+        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-orange-300/40 disabled:cursor-not-allowed disabled:opacity-40',
+        goal
+          ? BADGE_TONE[goal.status]
+          : 'border-white/[0.08] bg-white/[0.045] text-white/64 hover:bg-white/[0.08] hover:text-white',
+      )}
+    >
+      <Target className="h-3.5 w-3.5" aria-hidden="true" />
+      <span>{label}</span>
+      {goal ? <ChevronDown className="h-3 w-3 opacity-55" aria-hidden="true" /> : null}
+    </button>
+  )
+}
+
 function goalCommand<T>(sessionId: string, command: Parameters<typeof window.electronAPI.sessionCommand>[1]) {
   return window.electronAPI.sessionCommand(sessionId, command) as Promise<T>
 }
 
-export function ChatGoalControls({ session }: ChatGoalControlsProps) {
+export function ChatGoalControls({ session, defaultExpanded = false }: ChatGoalControlsProps) {
   const goal = session.chatGoal
-  const [expanded, setExpanded] = React.useState(false)
+  const [expanded, setExpanded] = React.useState(defaultExpanded)
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [mode, setMode] = React.useState<EditorMode>('create')
   const [objective, setObjective] = React.useState('')
@@ -71,6 +150,7 @@ export function ChatGoalControls({ session }: ChatGoalControlsProps) {
   const [confirmationNonce, setConfirmationNonce] = React.useState<string | null>(null)
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const quickStartObjectiveRef = React.useRef<string | null>(null)
 
   const openEditor = React.useCallback((nextMode: EditorMode, input?: CreateChatGoalInput, nonce?: string) => {
     const source = input ?? (nextMode === 'create' ? undefined : goal)
@@ -96,11 +176,68 @@ export function ChatGoalControls({ session }: ChatGoalControlsProps) {
     setDialogOpen(true)
   }, [goal, session.tokenUsage?.totalTokens])
 
+  const runAction = React.useCallback(async (action: () => Promise<unknown>) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await action()
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Goal action failed'
+      setError(message)
+      toast.error(message)
+    } finally {
+      setBusy(false)
+    }
+  }, [])
+
+  const quickStartGoal = React.useCallback((nextObjective: string) => {
+    quickStartObjectiveRef.current = nextObjective
+    void runAction(async () => {
+      try {
+        const prepared = await goalCommand<{ proposal: CreateChatGoalInput; confirmationNonce: string }>(session.id, {
+          type: 'goalPrepare',
+          proposal: { objective: nextObjective },
+        })
+        takePendingChatGoalSetup(session.id)
+        await goalCommand(session.id, {
+          type: 'goalCreate',
+          confirmationNonce: prepared.confirmationNonce,
+          initialMessage: prepared.proposal.objective,
+        })
+      } finally {
+        quickStartObjectiveRef.current = null
+      }
+    })
+  }, [runAction, session.id])
+
   React.useEffect(() => {
     const applyOpen = (detail: GoalOpenDetail) => {
       if (!detail || detail.sessionId !== session.id) return
 
+      if (detail.intent === 'quick-start' && detail.objective) {
+        if (goal && goal.status !== 'complete' && goal.status !== 'cancelled') {
+          setExpanded(true)
+          toast.info('This chat already has a Goal. Edit or stop it before starting another.')
+        } else {
+          quickStartGoal(detail.objective)
+        }
+        return
+      }
+
+      if (detail.intent === 'open-controls') {
+        if (goal) {
+          setExpanded(true)
+        } else {
+          openEditor('create')
+        }
+        return
+      }
+
       if (detail.proposal && detail.confirmationNonce) {
+        if (quickStartObjectiveRef.current) {
+          takePendingChatGoalSetup(session.id)
+          return
+        }
         openEditor('create', detail.proposal, detail.confirmationNonce)
         return
       }
@@ -125,21 +262,7 @@ export function ChatGoalControls({ session }: ChatGoalControlsProps) {
 
     window.addEventListener('craft:open-goal', onOpen)
     return () => window.removeEventListener('craft:open-goal', onOpen)
-  }, [goal, openEditor, session.id])
-
-  const runAction = React.useCallback(async (action: () => Promise<unknown>) => {
-    setBusy(true)
-    setError(null)
-    try {
-      await action()
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : 'Goal action failed'
-      setError(message)
-      toast.error(message)
-    } finally {
-      setBusy(false)
-    }
-  }, [])
+  }, [goal, openEditor, quickStartGoal, session.id])
 
   const prepareGoal = async () => {
     if (!objective.trim()) {
@@ -269,7 +392,7 @@ export function ChatGoalControls({ session }: ChatGoalControlsProps) {
 
   return (
     <>
-      {goal && (
+      {goal && expanded && (
         <section
           aria-label="Chat Goal"
           className="mb-1.5 rounded-[10px] border border-white/[0.08] bg-white/[0.035] px-3 py-2"

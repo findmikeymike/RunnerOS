@@ -11,7 +11,6 @@ import {
   XCircle,
   Circle,
   MessageCircleDashed,
-  FileText,
   ArrowUpRight,
   Ban,
   Copy,
@@ -927,6 +926,9 @@ function TreeViewConnector({ depth }: { depth: number; isLastChild?: boolean }) 
 /** Single activity row in expanded view */
 function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, displayMode = 'detailed', onOpenSubagentSession }: ActivityRowProps) {
   const depth = activity.depth || 0
+  const activityTextClass = displayMode === 'informative'
+    ? 'text-[11px] text-muted-foreground/55'
+    : SIZE_CONFIG.fontSize
 
   // Intermediate messages (LLM commentary) - render with dashed circle icon
   // Show "Thinking" while streaming, stripped markdown content when complete
@@ -940,7 +942,7 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, 
         <div
           className={cn(
             "group/row flex items-center gap-2 py-0.5 text-foreground/75 flex-1 min-w-0",
-            SIZE_CONFIG.fontSize
+            activityTextClass
           )}
           onClick={onOpenDetails && isComplete ? onOpenDetails : undefined}
         >
@@ -989,7 +991,7 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, 
         <div
           className={cn(
             "flex items-center gap-2 py-0.5 text-muted-foreground flex-1 min-w-0",
-            SIZE_CONFIG.fontSize
+            activityTextClass
           )}
         >
           <div className={cn(SIZE_CONFIG.iconSize, "flex items-center justify-center shrink-0")}>
@@ -1055,7 +1057,7 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, 
       <div
         className={cn(
           "group/row flex items-center gap-2 py-0.5 text-muted-foreground flex-1 min-w-0",
-          SIZE_CONFIG.fontSize
+          activityTextClass
         )}
         onClick={onOpenDetails && isComplete ? onOpenDetails : undefined}
       >
@@ -1294,6 +1296,9 @@ function ActivityGroupRow({ group, expandedGroups: externalExpandedGroups, onExp
   const subagentType = group.parent.toolInput?.subagent_type as string | undefined
   const isComplete = group.parent.status === 'completed' || group.parent.status === 'error'
   const hasError = group.parent.status === 'error'
+  const activityTextClass = displayMode === 'informative'
+    ? 'text-[11px] text-muted-foreground/55'
+    : SIZE_CONFIG.fontSize
 
   return (
     <motion.div
@@ -1307,7 +1312,7 @@ function ActivityGroupRow({ group, expandedGroups: externalExpandedGroups, onExp
         className={cn(
           "group/row flex items-center gap-2 py-0.5 rounded-md cursor-pointer text-muted-foreground",
           "hover:text-foreground transition-colors",
-          SIZE_CONFIG.fontSize
+          activityTextClass
         )}
         onClick={toggleExpanded}
       >
@@ -2512,48 +2517,12 @@ export function ResponseCard({
           {/* Footer with actions - hidden in compact mode */}
           {!compactMode && (
             <div className={cn(
-              "pl-4 pr-2.5 flex items-center justify-between",
+              "pl-4 pr-2.5 flex items-center justify-end",
               isPlan ? "py-2 border-t border-white/[0.06] bg-white/[0.025]" : "py-1.5 bg-transparent",
               SIZE_CONFIG.fontSize
             )}>
-              {/* Left side - Copy, View as Markdown, Annotation hint */}
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={handleCopy}
-                  aria-label={copied ? t("common.copied") : t("common.copy")}
-                  title={copied ? t("common.copied") : t("common.copy")}
-                  className={cn(
-                    "inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors select-none",
-                    copied ? "text-success" : "text-white/42 hover:text-white/84",
-                    "hover:bg-white/[0.07] focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  )}
-                >
-                  {copied ? (
-                    <Check className={SIZE_CONFIG.iconSize} />
-                  ) : (
-                    <Copy className={SIZE_CONFIG.iconSize} />
-                  )}
-                </button>
-                {onPopOut && (
-                  <button
-                    type="button"
-                    onClick={onPopOut}
-                    aria-label="View as Markdown"
-                    title="View as Markdown"
-                    className={cn(
-                      "inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors select-none",
-                      "text-white/42 hover:text-white/84",
-                      "hover:bg-white/[0.07] focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    )}
-                  >
-                    <FileText className={SIZE_CONFIG.iconSize} />
-                  </button>
-                )}
-              </div>
-
               {/* Right side */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 {!isPlan && responseAction && (
                   <button
                     type="button"
@@ -2586,6 +2555,23 @@ export function ResponseCard({
                     />
                   </div>
                 )}
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  aria-label={copied ? t("common.copied") : t("common.copy")}
+                  title={copied ? t("common.copied") : t("common.copy")}
+                  className={cn(
+                    "inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors select-none",
+                    copied ? "text-success" : "text-white/42 hover:text-white/84",
+                    "hover:bg-white/[0.07] focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  )}
+                >
+                  {copied ? (
+                    <Check className={SIZE_CONFIG.iconSize} />
+                  ) : (
+                    <Copy className={SIZE_CONFIG.iconSize} />
+                  )}
+                </button>
                 {onBranch && <BranchDropdown onBranch={onBranch} />}
               </div>
             </div>
@@ -2979,9 +2965,8 @@ export const TurnCard = React.memo(function TurnCard({
           <button
             onClick={toggleExpanded}
             className={cn(
-              "flex items-center gap-2 w-full pl-2.5 pr-1.5 py-1.5 rounded-[8px] text-left",
-              SIZE_CONFIG.fontSize,
-              "text-muted-foreground",
+              "flex items-center gap-2 w-full pl-2.5 pr-1.5 rounded-[8px] text-left",
+              displayMode === 'informative' ? 'py-1 text-[11px] text-muted-foreground/55' : `py-1.5 ${SIZE_CONFIG.fontSize} text-muted-foreground`,
               "hover:bg-muted/50 transition-colors",
               "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             )}
@@ -2997,12 +2982,17 @@ export const TurnCard = React.memo(function TurnCard({
             </motion.div>
 
             {/* Step count badge */}
-            <span className="-ml-0.5 shrink-0 px-1.5 py-0.5 rounded-[4px] bg-background shadow-minimal text-[10px] font-medium tabular-nums">
+            <span className={cn(
+              '-ml-0.5 shrink-0 rounded-[4px] tabular-nums',
+              displayMode === 'informative'
+                ? 'min-w-[20px] bg-white/[0.04] px-1 py-0 text-center text-[9px] font-normal text-white/38'
+                : 'bg-background px-1.5 py-0.5 text-[10px] font-medium shadow-minimal',
+            )}>
               {activities.length || todos?.length || 0}
             </span>
 
             {/* Preview text with crossfade + inline failure count */}
-            <span className="relative flex-1 min-w-0 h-5 flex items-center">
+            <span className={cn('relative flex-1 min-w-0 flex items-center', displayMode === 'informative' ? 'h-4' : 'h-5')}>
               <AnimatePresence initial={false}>
                 <motion.span
                   key={activities.length > 0 ? previewText : 'Current plan'}
@@ -3127,7 +3117,10 @@ export const TurnCard = React.memo(function TurnCard({
                         duration: 0.3,
                         ease: "easeOut"
                       }}
-                      className={cn("flex items-center gap-2 py-0.5 text-muted-foreground/70", SIZE_CONFIG.fontSize)}
+                      className={cn(
+                        'flex items-center gap-2 py-0.5 text-muted-foreground/70',
+                        displayMode === 'informative' ? 'text-[11px] text-muted-foreground/50' : SIZE_CONFIG.fontSize,
+                      )}
                     >
                       <Spinner className={SIZE_CONFIG.spinnerSize} />
                       <span>{isBuffering ? 'Preparing response...' : 'Thinking...'}</span>

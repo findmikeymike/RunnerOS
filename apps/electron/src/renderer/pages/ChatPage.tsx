@@ -639,7 +639,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     <ChatAgentHeader
       name={agentHeaderIdentity.name}
       description={agentHeaderIdentity.description}
-      avatar={agentHeaderIdentity.avatar}
       menu={titleMenu}
       leadingAction={leadingAction}
       rightSidebarButton={rightSidebarButton}

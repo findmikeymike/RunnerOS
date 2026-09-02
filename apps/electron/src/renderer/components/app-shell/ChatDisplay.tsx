@@ -95,7 +95,8 @@ import {
 } from "@/atoms/visual-surfaces"
 import { VisualSurfacePanel } from "@/components/visual-surfaces/VisualSurfacePanel"
 import { VisualSurfaceToggle } from "@/components/visual-surfaces/VisualSurfaceToggle"
-import { ChatGoalControls, parseChatGoalCommand } from "./input/ChatGoalControls"
+import { ChatGoalBadge, ChatGoalControls, parseChatGoalCommand } from "./input/ChatGoalControls"
+import { RENDERER_PRODUCT_VARIANT } from "@/lib/product-identity"
 
 // ============================================================================
 // CSS Custom Highlight API helper
@@ -1311,8 +1312,17 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const handleSubmit = (message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => {
     const goalObjective = parseChatGoalCommand(message)
     if (goalObjective !== undefined && session) {
+      if (!goalObjective) {
+        queueMicrotask(() => {
+          onInputChange?.('$goal ')
+          window.dispatchEvent(new CustomEvent('craft:focus-input', {
+            detail: { sessionId: session.id },
+          }))
+        })
+        return
+      }
       window.dispatchEvent(new CustomEvent('craft:open-goal', {
-        detail: { sessionId: session.id, objective: goalObjective || undefined },
+        detail: { sessionId: session.id, objective: goalObjective, intent: 'quick-start' },
       }))
       return
     }
@@ -1881,6 +1891,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                       <TurnCard
                         sessionId={session.id}
                         sessionFolderPath={session.sessionFolderPath}
+                        displayMode={RENDERER_PRODUCT_VARIANT === 'artist-os' ? 'informative' : 'detailed'}
                         hasActiveFollowUpAnnotations={pendingFollowUpAnnotations.length > 0}
                         turnId={turn.turnId}
                         activities={turn.activities}
@@ -2103,6 +2114,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             sessionStatuses={sessionStatuses}
             currentSessionStatus={session.sessionStatus || 'todo'}
             onSessionStatusChange={onSessionStatusChange}
+            afterStateSlot={RENDERER_PRODUCT_VARIANT === 'artist-os' ? (
+              <ChatGoalBadge session={session} draft={inputValue} onDraftChange={onInputChange} />
+            ) : undefined}
             infoSlot={
               <VisualSurfaceToggle
                 workspaceId={currentWorkspaceId}
@@ -2586,10 +2600,14 @@ function MessageBubble({
     }[level]
     const Icon = config.icon
 
+    const quietArtistInfo = RENDERER_PRODUCT_VARIANT === 'artist-os' && level === 'info'
     return (
-      <div className={cn('flex items-center gap-2 px-3 py-1 text-[13px] select-none', config.className)}>
-        <div className="w-3 h-3 flex items-center justify-center shrink-0">
-          <Icon className="w-3 h-3" />
+      <div className={cn(
+        'flex items-center gap-2 select-none',
+        quietArtistInfo ? 'px-3 py-0.5 text-[11px] text-muted-foreground/50' : `px-3 py-1 text-[13px] ${config.className}`,
+      )}>
+        <div className={cn('flex items-center justify-center shrink-0', quietArtistInfo ? 'h-2.5 w-2.5' : 'h-3 w-3')}>
+          <Icon className={quietArtistInfo ? 'h-2.5 w-2.5' : 'h-3 w-3'} />
         </div>
         <span className="whitespace-pre-wrap">{message.content}</span>
       </div>
