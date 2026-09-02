@@ -110,14 +110,48 @@ export function getCuaDriverMcpPath(): string | null {
   return candidates.find((candidate) => isRunnableFile(candidate)) ?? null;
 }
 
+const CUA_DRIVER_STARTUP_PROBE_TTL_MS = 30_000;
+let cuaDriverStartupProbeCache: {
+  candidate: string;
+  checkedAt: number;
+  startable: boolean;
+} | null = null;
+
 function canStartCuaDriver(candidate: string): boolean {
+  const now = Date.now();
+  if (
+    cuaDriverStartupProbeCache?.candidate === candidate
+    && now - cuaDriverStartupProbeCache.checkedAt < CUA_DRIVER_STARTUP_PROBE_TTL_MS
+  ) {
+    return cuaDriverStartupProbeCache.startable;
+  }
+
   const result = spawnSync(candidate, ['--version'], {
     encoding: 'utf8',
     stdio: 'ignore',
     timeout: 2_000,
   });
-  return result.status === 0 && !result.error;
+  const startable = result.status === 0 && !result.error;
+  cuaDriverStartupProbeCache = { candidate, checkedAt: now, startable };
+  return startable;
 }
+
+export const CUA_DRIVER_GUIDE_TOOL_NAMES = [
+  'health_report',
+  'list_apps',
+  'list_windows',
+  'get_window_state',
+  'click',
+  'type_text',
+  'set_value',
+  'press_key',
+  'hotkey',
+  'scroll',
+  'drag',
+  'invoke_menu',
+  'set_window_frame',
+  'verify_state',
+] as const;
 
 export type ComputerUseProvider =
   | 'cua-driver'
@@ -140,9 +174,11 @@ export function selectComputerUseProvider(input: {
   bunCommand?: string;
   cuaDriverFromOverride?: boolean;
 }): ComputerUseProviderSelection {
-  const rejectedCuaReason = input.cuaDriverPath && !input.cuaDriverStartable
-    ? 'cua-driver was found but failed its startup probe; '
-    : '';
+  const rejectedCuaReason = input.cuaDriverFromOverride && !input.cuaDriverPath
+    ? 'the explicit CRAFT_CUA_DRIVER_MCP override was missing or not executable; '
+    : input.cuaDriverPath && !input.cuaDriverStartable
+      ? 'cua-driver was found but failed its startup probe; '
+      : '';
 
   if (input.cuaDriverPath && input.cuaDriverStartable) {
     return {

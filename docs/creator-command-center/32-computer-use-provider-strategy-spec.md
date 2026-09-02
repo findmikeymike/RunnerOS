@@ -77,7 +77,7 @@ Verified at `last_verified`.
 
 `getComputerUseSource()` in `packages/shared/src/sources/builtin-sources.ts` resolves one of three providers at call time:
 
-- **`cua-driver`** — preferred after a bounded `--version` startup probe succeeds. Discovery honors the authoritative `CRAFT_CUA_DRIVER_MCP` override, then checks `~/.local/bin`, the macOS application bundle, and `PATH`.
+- **`cua-driver`** — preferred after a bounded `--version` startup probe succeeds. The result is cached by binary path for 30 seconds so repeated source loads do not repeatedly block the event loop. Discovery honors the authoritative `CRAFT_CUA_DRIVER_MCP` override, then checks `~/.local/bin`, the macOS application bundle, and `PATH`.
 - **`copilot-computer-use`** — second choice when GitHub Copilot's `computer-use-mcp` binary is found. Detected by `getCopilotComputerUseMcpPath()`, which probes `CRAFT_COPILOT_COMPUTER_USE_MCP` and three `node_modules/@github/copilot-<platform>-<arch>/prebuilds/` locations.
 - **`background-computer-use`** — fallback. Runs `bun run <script>` against the vendored Swift runtime via the MCP bridge.
 
@@ -154,6 +154,7 @@ That is the agent-side counterpart to the silent no-op: the host cannot always d
 | --- | --- |
 | No provider found | Source reports unavailable with install guidance; agents see it as unusable rather than failing mid-task |
 | Preferred provider present but won't start | Fall through to the next provider and log the fallthrough; never fail hard when a working fallback exists |
+| Explicit CUA override is missing or not executable | Fall through safely and name the rejected override in the provider-selection log |
 | Provider changes between sessions | Workflow guide is regenerated per call, so tool names stay correct automatically |
 | Accessibility/Screen Recording revoked | `degraded` with the specific permission and where to re-grant it |
 | Runtime reachable but events are no-ops | Cannot be detected host-side; the agent's observe-after-act rule is the mitigation |
@@ -183,12 +184,14 @@ Slices 1 and 2 are worth doing whether or not `cua-driver` is ever adopted.
 - with none present, the source reports unavailable rather than throwing
 - `CRAFT_CUA_DRIVER_MCP` overrides discovery
 - the selected provider and reason are logged
+- repeated loads reuse the recent startup-probe result for the same binary path
 
 ### Workflow guide correctness
 
 - the guide names **only** tools the selected provider actually exposes
 - no guide references a tool from a different provider's vocabulary
 - the observe-before-act and ask-before-irreversible rules are present for every provider
+- an opt-in live contract test can compare the guide vocabulary with an installed `cua-driver`
 
 ### Health
 
@@ -214,6 +217,6 @@ Verified directly against the codebase on `last_verified`: three-way provider se
 
 Verified against upstream sources: `background-computer-use` provenance and divergence; `trycua/cua-driver` maintenance status, MIT license, install locations, CLI, and MCP documentation; AGPL licensing on Open Interpreter and Skyvern; absence of a public Apple equivalent to `SLEventPostToPid` in macOS 15/26 release notes; and the macOS 14.5 SkyLight authorization regression affecting yabai.
 
-Verified locally with CUA Driver 0.23.2: the binary starts, exposes 56 MCP tools, and uses an implicit lifecycle session for MCP transport. Its exact guide vocabulary was checked against the live catalog.
+Verified locally with CUA Driver 0.23.2: the binary starts, exposes 56 MCP tools, and uses an implicit lifecycle session for MCP transport. The opt-in live contract test confirms every tool taught by the guide exists in that catalog.
 
 **Still requires manual runtime proof on this Mac:** Accessibility and Screen Recording are not yet granted to CUA Driver, so a real read-only app/window observation and background action smoke test have not passed. Canvas-heavy application behavior also remains workflow-specific and unproven.

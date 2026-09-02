@@ -38,6 +38,7 @@ const {
   getComputerUseSource,
   getComputerUseWorkflowGuide,
   getCuaDriverMcpPath,
+  CUA_DRIVER_GUIDE_TOOL_NAMES,
   selectComputerUseProvider,
 } = await import('../builtin-sources.ts');
 if (originalProductVariant === undefined) delete process.env.CRAFT_PRODUCT_VARIANT;
@@ -462,7 +463,8 @@ describe('loadAllSources', () => {
 
   test('prefers a runnable explicit cua-driver override and uses its MCP vocabulary', () => {
     const fakeCuaDriver = join(sandboxHome, 'cua-driver');
-    writeFileSync(fakeCuaDriver, '#!/bin/sh\nexit 0\n');
+    const probeLog = join(sandboxHome, 'cua-driver-probes');
+    writeFileSync(fakeCuaDriver, `#!/bin/sh\nprintf x >> '${probeLog}'\nexit 0\n`);
     chmodSync(fakeCuaDriver, 0o755);
     const previousOverride = process.env.CRAFT_CUA_DRIVER_MCP;
     process.env.CRAFT_CUA_DRIVER_MCP = fakeCuaDriver;
@@ -478,6 +480,8 @@ describe('loadAllSources', () => {
       expect(guide).toContain('verify_state');
       expect(guide).not.toContain('computer_use_status');
       expect(guide).not.toContain('set_text');
+      getComputerUseSource('test-workspace', makeWorkspace());
+      expect(readFileSync(probeLog, 'utf8')).toBe('x');
     } finally {
       if (previousOverride === undefined) delete process.env.CRAFT_CUA_DRIVER_MCP;
       else process.env.CRAFT_CUA_DRIVER_MCP = previousOverride;
@@ -493,6 +497,27 @@ describe('loadAllSources', () => {
     } finally {
       if (previousOverride === undefined) delete process.env.CRAFT_CUA_DRIVER_MCP;
       else process.env.CRAFT_CUA_DRIVER_MCP = previousOverride;
+    }
+  });
+
+  test('reports an invalid explicit override before falling back', () => {
+    const fallback = selectComputerUseProvider({
+      cuaDriverPath: null,
+      cuaDriverStartable: false,
+      cuaDriverFromOverride: true,
+      copilotPath: '/computer-use-mcp',
+      vendoredScriptPath: '/background.ts',
+    });
+
+    expect(fallback.provider).toBe('copilot-computer-use');
+    expect(fallback.reason).toContain('explicit CRAFT_CUA_DRIVER_MCP override');
+    expect(fallback.reason).toContain('missing or not executable');
+  });
+
+  test('keeps the cua-driver guide vocabulary explicit and narrow', () => {
+    const guide = getComputerUseWorkflowGuide('cua-driver').join('\n');
+    for (const toolName of CUA_DRIVER_GUIDE_TOOL_NAMES) {
+      expect(guide).toContain(`\`${toolName}\``);
     }
   });
 
