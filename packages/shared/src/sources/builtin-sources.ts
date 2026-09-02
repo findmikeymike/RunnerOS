@@ -5,6 +5,7 @@
  */
 
 import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { delimiter } from 'node:path';
 import { join, resolve } from 'node:path';
@@ -89,6 +90,99 @@ function getCopilotComputerUseMcpPath(): string | null {
     join(process.env.CRAFT_APP_ROOT || '', 'node_modules', `@github/copilot-${platformArch}`, 'prebuilds', platformArch, executable),
   ].filter(Boolean);
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
+export function getCuaDriverMcpPath(): string | null {
+  const executable = process.platform === 'win32' ? 'cua-driver.exe' : 'cua-driver';
+  const override = process.env.CRAFT_CUA_DRIVER_MCP?.trim();
+  if (override) {
+    return isRunnableFile(override) ? override : null;
+  }
+
+  const candidates = [
+    join(homedir(), '.local', 'bin', executable),
+    ...(process.platform === 'darwin'
+      ? [join('/Applications', 'CuaDriver.app', 'Contents', 'MacOS', 'cua-driver')]
+      : []),
+    findExecutableOnPath(executable) ?? '',
+  ].filter(Boolean);
+
+  return candidates.find((candidate) => isRunnableFile(candidate)) ?? null;
+}
+
+function canStartCuaDriver(candidate: string): boolean {
+  const result = spawnSync(candidate, ['--version'], {
+    encoding: 'utf8',
+    stdio: 'ignore',
+    timeout: 2_000,
+  });
+  return result.status === 0 && !result.error;
+}
+
+export type ComputerUseProvider =
+  | 'cua-driver'
+  | 'copilot-computer-use'
+  | 'background-computer-use';
+
+export interface ComputerUseProviderSelection {
+  provider: ComputerUseProvider;
+  command: string;
+  args: string[];
+  available: boolean;
+  reason: string;
+}
+
+export function selectComputerUseProvider(input: {
+  cuaDriverPath: string | null;
+  cuaDriverStartable: boolean;
+  copilotPath: string | null;
+  vendoredScriptPath: string | null;
+  bunCommand?: string;
+  cuaDriverFromOverride?: boolean;
+}): ComputerUseProviderSelection {
+  const rejectedCuaReason = input.cuaDriverPath && !input.cuaDriverStartable
+    ? 'cua-driver was found but failed its startup probe; '
+    : '';
+
+  if (input.cuaDriverPath && input.cuaDriverStartable) {
+    return {
+      provider: 'cua-driver',
+      command: input.cuaDriverPath,
+      args: ['mcp'],
+      available: true,
+      reason: input.cuaDriverFromOverride
+        ? 'selected the explicit CRAFT_CUA_DRIVER_MCP override'
+        : 'selected the installed maintained cua-driver',
+    };
+  }
+
+  if (input.copilotPath) {
+    return {
+      provider: 'copilot-computer-use',
+      command: input.copilotPath,
+      args: [],
+      available: true,
+      reason: `${rejectedCuaReason}selected the installed Copilot computer-use MCP`,
+    };
+  }
+
+  if (input.vendoredScriptPath) {
+    return {
+      provider: 'background-computer-use',
+      command: input.bunCommand || 'bun',
+      args: ['run', input.vendoredScriptPath],
+      available: true,
+      reason: `${rejectedCuaReason}selected the bundled BackgroundComputerUse fallback`,
+    };
+  }
+
+  return {
+    provider: 'background-computer-use',
+    command: input.bunCommand || 'bun',
+    args: [],
+    available: false,
+    reason: `${rejectedCuaReason}no runnable computer-use provider was found`,
+  };
 }
 
 function getFieldTheoryScriptPath(): string {
@@ -498,26 +592,39 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
  * session when an agent/session explicitly enables the `computer-use` source.
  */
 export function getComputerUseSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const cuaDriverPath = getCuaDriverMcpPath();
   const copilotComputerUsePath = getCopilotComputerUseMcpPath();
-  const provider = copilotComputerUsePath ? 'copilot-computer-use' : 'background-computer-use';
-  const workflowGuide = getComputerUseWorkflowGuide(provider);
+  const computerUseScriptPath = getComputerUseScriptPath();
+  const selection = selectComputerUseProvider({
+    cuaDriverPath,
+    cuaDriverStartable: Boolean(cuaDriverPath && canStartCuaDriver(cuaDriverPath)),
+    cuaDriverFromOverride: Boolean(process.env.CRAFT_CUA_DRIVER_MCP?.trim()),
+    copilotPath: copilotComputerUsePath,
+    vendoredScriptPath: existsSync(computerUseScriptPath) ? computerUseScriptPath : null,
+    bunCommand: process.env.CRAFT_BUN || 'bun',
+  });
+  console.info(`[Computer Use] provider=${selection.provider}; ${selection.reason}`);
+  const workflowGuide = getComputerUseWorkflowGuide(selection.provider);
   const config: FolderSourceConfig = {
     id: 'builtin-computer-use',
     name: 'Computer Use',
     slug: COMPUTER_USE_SLUG,
     enabled: true,
-    provider,
+    provider: selection.provider,
     type: 'mcp',
     mcp: {
       transport: 'stdio',
-      command: copilotComputerUsePath ?? (process.env.CRAFT_BUN || 'bun'),
-      args: copilotComputerUsePath ? [] : ['run', getComputerUseScriptPath()],
+      command: selection.command,
+      args: selection.args,
       authType: 'none',
     },
     tagline: 'Inspect and control local macOS app windows with screenshot-backed tools.',
     icon: '🖥️',
-    isAuthenticated: true,
-    connectionStatus: 'connected',
+    isAuthenticated: selection.available,
+    connectionStatus: selection.available ? 'connected' : 'failed',
+    connectionError: selection.available
+      ? undefined
+      : 'No runnable computer-use provider was found. Install cua-driver or repair the bundled runtime.',
   };
 
   return {
@@ -539,8 +646,21 @@ export function getComputerUseSource(workspaceId: string, workspaceRootPath: str
 }
 
 export function getComputerUseWorkflowGuide(
-  provider: 'copilot-computer-use' | 'background-computer-use',
+  provider: ComputerUseProvider,
 ): string[] {
+  if (provider === 'cua-driver') {
+    return [
+      'Workflow:',
+      '1. Call `health_report` first. Proceed only when Accessibility, Screen Recording, accessibility capability, and screen-capture capability pass; otherwise relay the reported remedy and stop.',
+      '2. Call `list_apps` and `list_windows` to resolve the exact target process and window.',
+      '3. Call `get_window_state` before every meaningful UI action and ground on both its structured elements and screenshot.',
+      '4. Prefer the observed `element_token`. Use `click`, `type_text`, `set_value`, `press_key`, `hotkey`, `scroll`, `drag`, `invoke_menu`, or `set_window_frame` only when the observed state supports it.',
+      '5. Ask the user before submit, send, purchase, delete, credential entry, system settings changes, or any irreversible action.',
+      '6. After an action, use `verify_state` when the expected result is expressible; otherwise call `get_window_state` again. If success was reported but the expected change did not happen, stop and tell the user — do not retry the same action.',
+      '7. The MCP transport owns an implicit lifecycle session. Do not create extra sessions for ordinary work.',
+    ];
+  }
+
   return provider === 'copilot-computer-use'
     ? [
         'Workflow:',

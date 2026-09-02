@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll, mock } from 'bun:test';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, readdirSync } from 'fs';
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, readdirSync } from 'fs';
 import * as os from 'os';
 import { tmpdir } from 'os';
 import { join, resolve, sep } from 'path';
@@ -27,10 +27,19 @@ mock.module('os', () => ({
 
 const originalProductVariant = process.env.CRAFT_PRODUCT_VARIANT;
 const originalConfigDir = process.env.CRAFT_CONFIG_DIR;
+const originalPath = process.env.PATH;
+const originalCuaDriverOverride = process.env.CRAFT_CUA_DRIVER_MCP;
 process.env.CRAFT_PRODUCT_VARIANT = 'artist-os';
 process.env.CRAFT_CONFIG_DIR = sandboxArtistRoot;
+process.env.PATH = '/usr/bin:/bin';
+process.env.CRAFT_CUA_DRIVER_MCP = join(sandboxHome, 'missing-cua-driver');
 const storage = await import(`../storage.ts?global-sources-storage-test=${process.pid}-${Date.now()}`);
-const { getComputerUseWorkflowGuide } = await import('../builtin-sources.ts');
+const {
+  getComputerUseSource,
+  getComputerUseWorkflowGuide,
+  getCuaDriverMcpPath,
+  selectComputerUseProvider,
+} = await import('../builtin-sources.ts');
 if (originalProductVariant === undefined) delete process.env.CRAFT_PRODUCT_VARIANT;
 else process.env.CRAFT_PRODUCT_VARIANT = originalProductVariant;
 if (originalConfigDir === undefined) delete process.env.CRAFT_CONFIG_DIR;
@@ -61,6 +70,10 @@ const {
 } = storage;
 
 afterAll(() => {
+  if (originalPath === undefined) delete process.env.PATH;
+  else process.env.PATH = originalPath;
+  if (originalCuaDriverOverride === undefined) delete process.env.CRAFT_CUA_DRIVER_MCP;
+  else process.env.CRAFT_CUA_DRIVER_MCP = originalCuaDriverOverride;
   try {
     rmSync(sandboxHome, { recursive: true, force: true });
   } catch {
@@ -445,6 +458,85 @@ describe('loadAllSources', () => {
     expect(found!.config.mcp?.command).toContain('computer-use-mcp');
     expect(found!.guide?.raw).toContain('get_window_state');
     expect(found!.guide?.raw).toContain('expected change did not happen');
+  });
+
+  test('prefers a runnable explicit cua-driver override and uses its MCP vocabulary', () => {
+    const fakeCuaDriver = join(sandboxHome, 'cua-driver');
+    writeFileSync(fakeCuaDriver, '#!/bin/sh\nexit 0\n');
+    chmodSync(fakeCuaDriver, 0o755);
+    const previousOverride = process.env.CRAFT_CUA_DRIVER_MCP;
+    process.env.CRAFT_CUA_DRIVER_MCP = fakeCuaDriver;
+
+    try {
+      expect(getCuaDriverMcpPath()).toBe(fakeCuaDriver);
+      const found = getComputerUseSource('test-workspace', makeWorkspace());
+      const guide = found.guide?.raw ?? '';
+      expect(found.config.provider).toBe('cua-driver');
+      expect(found.config.mcp?.command).toBe(fakeCuaDriver);
+      expect(found.config.mcp?.args).toEqual(['mcp']);
+      expect(guide).toContain('health_report');
+      expect(guide).toContain('verify_state');
+      expect(guide).not.toContain('computer_use_status');
+      expect(guide).not.toContain('set_text');
+    } finally {
+      if (previousOverride === undefined) delete process.env.CRAFT_CUA_DRIVER_MCP;
+      else process.env.CRAFT_CUA_DRIVER_MCP = previousOverride;
+    }
+  });
+
+  test('treats an explicit cua-driver override as authoritative', () => {
+    const previousOverride = process.env.CRAFT_CUA_DRIVER_MCP;
+    process.env.CRAFT_CUA_DRIVER_MCP = join(sandboxHome, 'missing-explicit-cua-driver');
+
+    try {
+      expect(getCuaDriverMcpPath()).toBeNull();
+    } finally {
+      if (previousOverride === undefined) delete process.env.CRAFT_CUA_DRIVER_MCP;
+      else process.env.CRAFT_CUA_DRIVER_MCP = previousOverride;
+    }
+  });
+
+  test('selects providers in cua-driver, Copilot, vendored order', () => {
+    expect(selectComputerUseProvider({
+      cuaDriverPath: '/cua-driver',
+      cuaDriverStartable: true,
+      copilotPath: '/computer-use-mcp',
+      vendoredScriptPath: '/background.ts',
+    }).provider).toBe('cua-driver');
+
+    expect(selectComputerUseProvider({
+      cuaDriverPath: null,
+      cuaDriverStartable: false,
+      copilotPath: '/computer-use-mcp',
+      vendoredScriptPath: '/background.ts',
+    }).provider).toBe('copilot-computer-use');
+
+    expect(selectComputerUseProvider({
+      cuaDriverPath: null,
+      cuaDriverStartable: false,
+      copilotPath: null,
+      vendoredScriptPath: '/background.ts',
+    }).provider).toBe('background-computer-use');
+  });
+
+  test('falls through when cua-driver cannot start and reports total unavailability', () => {
+    const fallback = selectComputerUseProvider({
+      cuaDriverPath: '/broken-cua-driver',
+      cuaDriverStartable: false,
+      copilotPath: '/computer-use-mcp',
+      vendoredScriptPath: '/background.ts',
+    });
+    expect(fallback.provider).toBe('copilot-computer-use');
+    expect(fallback.reason).toContain('failed its startup probe');
+
+    const unavailable = selectComputerUseProvider({
+      cuaDriverPath: null,
+      cuaDriverStartable: false,
+      copilotPath: null,
+      vendoredScriptPath: null,
+    });
+    expect(unavailable.available).toBe(false);
+    expect(unavailable.reason).toContain('no runnable computer-use provider');
   });
 
   test('requires a ready health probe before using the vendored computer-use fallback', () => {

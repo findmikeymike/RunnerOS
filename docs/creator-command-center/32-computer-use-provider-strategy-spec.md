@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: implemented
 owner: agent
 last_verified: 2026-09-01
 source_of_truth: true
@@ -14,7 +14,7 @@ Read this first.
 
 ### What this is
 
-Artist OS controls native macOS apps through a **Computer Use** MCP source. Today it picks between two providers at startup. This adds a third — `cua-driver` — as the preferred option, and hardens the failure path that all three share.
+Artist OS controls native macOS apps through a **Computer Use** MCP source. It now prefers `cua-driver`, falls back to Copilot computer use, and retains the vendored Swift runtime as the final fallback.
 
 ### The one fact that shapes everything
 
@@ -46,11 +46,11 @@ Current detection cannot catch this. `readBaseUrl()` only checks that the runtim
 
 ### What already exists (do not rebuild)
 
-The provider abstraction is already correct:
+The provider abstraction remains deliberately small:
 
 ```ts
 // packages/shared/src/sources/builtin-sources.ts
-provider: copilotComputerUsePath ? 'copilot-computer-use' : 'background-computer-use'
+provider: selection.provider
 ```
 
 - `provider` is typed as an open `string` — adding a value needs no type change
@@ -75,28 +75,31 @@ Verified at `last_verified`.
 
 ### Provider selection
 
-`getComputerUseSource()` in `packages/shared/src/sources/builtin-sources.ts` resolves one of two providers at call time:
+`getComputerUseSource()` in `packages/shared/src/sources/builtin-sources.ts` resolves one of three providers at call time:
 
-- **`copilot-computer-use`** — preferred when GitHub Copilot's `computer-use-mcp` binary is found. Detected by `getCopilotComputerUseMcpPath()`, which probes `CRAFT_COPILOT_COMPUTER_USE_MCP` and three `node_modules/@github/copilot-<platform>-<arch>/prebuilds/` locations.
+- **`cua-driver`** — preferred after a bounded `--version` startup probe succeeds. Discovery honors the authoritative `CRAFT_CUA_DRIVER_MCP` override, then checks `~/.local/bin`, the macOS application bundle, and `PATH`.
+- **`copilot-computer-use`** — second choice when GitHub Copilot's `computer-use-mcp` binary is found. Detected by `getCopilotComputerUseMcpPath()`, which probes `CRAFT_COPILOT_COMPUTER_USE_MCP` and three `node_modules/@github/copilot-<platform>-<arch>/prebuilds/` locations.
 - **`background-computer-use`** — fallback. Runs `bun run <script>` against the vendored Swift runtime via the MCP bridge.
+
+The source logs the chosen provider and reason. If no provider is usable, it reports a failed connection instead of deferring failure until an agent tries to act.
 
 ### Tool vocabularies
 
 They are not interchangeable:
 
-| Copilot | Vendored Swift bridge |
-| --- | --- |
-| `list_apps` | `computer_use_list_apps`, `computer_use_list_windows` |
-| `get_window_state` | `computer_use_observe_window` |
-| `click`, `set_text`, `insert_text`, `type_chars`, `key_chord`, `scroll`, `drag`, `select_option`, `secondary_action` | `computer_use_click`, `computer_use_type_text`, `computer_use_set_value`, `computer_use_press_key`, `computer_use_scroll`, `computer_use_drag`, `computer_use_perform_secondary_action`, `computer_use_resize`, `computer_use_set_window_frame`, `computer_use_status` |
+| CUA Driver | Copilot | Vendored Swift bridge |
+| --- | --- | --- |
+| `health_report`, `list_apps`, `list_windows` | `list_apps` | `computer_use_list_apps`, `computer_use_list_windows` |
+| `get_window_state`, `verify_state` | `get_window_state` | `computer_use_observe_window` |
+| `click`, `type_text`, `set_value`, `press_key`, `hotkey`, `scroll`, `drag`, `invoke_menu`, `set_window_frame` | `click`, `set_text`, `insert_text`, `type_chars`, `key_chord`, `scroll`, `drag`, `select_option`, `secondary_action` | `computer_use_click`, `computer_use_type_text`, `computer_use_set_value`, `computer_use_press_key`, `computer_use_scroll`, `computer_use_drag`, `computer_use_perform_secondary_action`, `computer_use_resize`, `computer_use_set_window_frame`, `computer_use_status` |
 
 ### Vendored package provenance
 
-Vendored 2026-05-02 from `actuallyepic/background-computer-use` (commit `066cf1e8a` in this repo). Deliberately copied rather than submoduled — the reasoning is recorded in that commit and remains sound.
+Vendored 2026-05-02 from `actuallyepic/background-computer-use` at upstream SHA `dcf55a3feee557ebdcda4afa6241c82dc6abdd8c` (commit `066cf1e8a` in this repo). Deliberately copied rather than submoduled — the reasoning is recorded in that commit and remains sound.
 
-**No upstream SHA was recorded**, and the local copy has diverged beyond the two documented Swift-toolchain tweaks: `script/build_and_run.sh` was simplified and its release-build branch removed. That divergence is why the only upstream bugfix since (`52116ac`, "Fix default runtime build path") does not apply here.
+`tools/background-computer-use/UPSTREAM.md` records the provenance and local changes. `Package.swift` moved from Swift tools 6.2 to 6.1 at vendoring, then to 6.0 later. `script/build_and_run.sh` is byte-identical to the vendored upstream SHA; the later upstream build-path fix is applicable but optional because Artist OS does not use the affected release-build path.
 
-Upstream has **two** commits since vendoring, neither of which is worth taking: the build-path fix does not apply, and "Add installable computer use skill" is packaging for other people's agent setups and would introduce a Python dependency.
+Upstream has **two** commits since vendoring. The build-path fix is optional because its release-build branch is unused; "Add installable computer use skill" is packaging for other agent setups and would introduce an unnecessary Python dependency.
 
 ---
 
@@ -117,7 +120,7 @@ Resolution order, first match wins:
 2. **`copilot-computer-use`** — existing preference, background-capable
 3. **`background-computer-use`** — vendored Swift fallback
 
-Detection follows the existing pattern: an explicit env override first, then known install locations, then `null`. Add `CRAFT_CUA_DRIVER_MCP` as the override so a user can point at a custom build without code changes.
+Detection follows the existing pattern: an explicit env override first, then known install locations, then `null`. `CRAFT_CUA_DRIVER_MCP` is authoritative when set, so users and tests can force a specific build without silently falling through to a different CUA installation.
 
 Selection is resolved once per `getComputerUseSource()` call and must be **logged with the chosen provider and the reason** — an artist reporting "computer use isn't working" needs that line to be answerable.
 
@@ -158,15 +161,15 @@ That is the agent-side counterpart to the silent no-op: the host cannot always d
 
 ## Implementation Slices
 
-**Slice 1 — Provenance.** Add `tools/background-computer-use/UPSTREAM.md`: repo URL, vendored commit SHA, date, and the local divergence (Swift 6.2→6.1 tweaks **and** the simplified `build_and_run.sh`). No behavior change. Do this first — it is five minutes and it is the thing that made this investigation slow.
+**Slice 1 — Provenance (complete).** Added `tools/background-computer-use/UPSTREAM.md` with the verified upstream SHA, date, and actual local divergence. It also corrects the earlier mistaken claim that `build_and_run.sh` was locally simplified.
 
-**Slice 2 — Health probe.** Extend the status path to distinguish `ready` / `degraded` / `unavailable` with a window-enumeration check and actionable permission messaging. Benefits all providers, including today's.
+**Slice 2 — Health probe (complete).** The vendored status path distinguishes `ready` / `degraded` / `unavailable` with a read-only application-enumeration capability probe and actionable permission messaging.
 
-**Slice 3 — `cua-driver` detection.** Add `getCuaDriverMcpPath()` following the Copilot pattern, plus the `CRAFT_CUA_DRIVER_MCP` override.
+**Slice 3 — `cua-driver` detection (complete).** Added `getCuaDriverMcpPath()`, authoritative `CRAFT_CUA_DRIVER_MCP` override handling, known-location discovery, and a bounded startup probe.
 
-**Slice 4 — Three-way selection.** Replace the ternary with ordered resolution; add the third `workflowGuide` branch with `cua-driver`'s tool vocabulary; log the selection and reason.
+**Slice 4 — Three-way selection (complete).** Replaced the ternary with ordered resolution, added the CUA-specific workflow guide using the verified live tool catalog, and logged selection/fallthrough reasons.
 
-**Slice 5 — Agent rule.** Add the observe-after-act instruction to the shared guide.
+**Slice 5 — Agent rule (complete).** Added observe-after-act instructions to both existing provider guides and the new CUA guide.
 
 Slices 1 and 2 are worth doing whether or not `cua-driver` is ever adopted.
 
@@ -207,13 +210,10 @@ Slices 1 and 2 are worth doing whether or not `cua-driver` is ever adopted.
 
 ## Verification Status
 
-Verified directly against the codebase on `last_verified`: provider ternary and detection helper, the 7 non-test provider references, both tool vocabularies, the manifest-existence check in `readBaseUrl()`, and the `computer_use_status` implementation calling only `/health` and `/v1/bootstrap`.
+Verified directly against the codebase on `last_verified`: three-way provider selection, startup fallthrough, unavailable state, provider-specific guides, the read-only capability probe, and the shared observe-after-act rule.
 
-Verified against upstream sources: `background-computer-use` last push 2026-05-05 with 2 commits since vendoring and 0 open issues; `trycua/cua-driver` maintenance status and MIT license; AGPL licensing on Open Interpreter and Skyvern; absence of a public Apple equivalent to `SLEventPostToPid` in macOS 15/26 release notes; the macOS 14.5 SkyLight authorization regression affecting yabai.
+Verified against upstream sources: `background-computer-use` provenance and divergence; `trycua/cua-driver` maintenance status, MIT license, install locations, CLI, and MCP documentation; AGPL licensing on Open Interpreter and Skyvern; absence of a public Apple equivalent to `SLEventPostToPid` in macOS 15/26 release notes; and the macOS 14.5 SkyLight authorization regression affecting yabai.
 
-**Not verified — confirm before Slice 3:**
+Verified locally with CUA Driver 0.23.2: the binary starts, exposes 56 MCP tools, and uses an implicit lifecycle session for MCP transport. Its exact guide vocabulary was checked against the live catalog.
 
-- `cua-driver`'s exact MCP tool names and argument shapes (needed for the Slice 4 workflow guide)
-- Its install path and binary name once installed, which determines the detection probe
-- Whether its background guarantee holds on the macOS version Artist OS actually targets
-- Its documented limitation that canvas-heavy apps break the background guarantee — assess whether that affects any real Artist OS workflow
+**Still requires manual runtime proof on this Mac:** Accessibility and Screen Recording are not yet granted to CUA Driver, so a real read-only app/window observation and background action smoke test have not passed. Canvas-heavy application behavior also remains workflow-specific and unproven.
