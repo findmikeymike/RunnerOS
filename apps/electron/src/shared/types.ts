@@ -575,6 +575,20 @@ export interface ArtistManagerVoiceProviderStatus {
   ready: boolean
 }
 
+export type ChatDictationPermission = 'granted' | 'denied' | 'restricted' | 'not-determined' | 'unknown'
+
+export interface ChatDictationResult {
+  ok: boolean
+  transcript?: string
+  error?: string
+}
+
+export interface ChatDictationAvailability {
+  available: boolean
+  modelInstalled: boolean
+  error?: string
+}
+
 export interface ElectronAPI {
   /** Stable identity for this renderer window, used to arbitrate native sidecar ownership. */
   readonly webContentsId: number
@@ -1369,6 +1383,9 @@ export interface ElectronAPI {
   getArtistManagerVoiceProxyInfo(): Promise<ArtistManagerVoiceProxyInfo>
   getArtistManagerVoiceProviderStatus(): Promise<ArtistManagerVoiceProviderStatus>
   createArtistManagerVoiceAssemblyToken(): Promise<string>
+  getChatDictationAvailability(): Promise<ChatDictationAvailability>
+  requestChatDictationAccess(): Promise<ChatDictationPermission>
+  transcribeChatDictation(input: { audioData: Uint8Array; mimeType: string }): Promise<ChatDictationResult>
   onOutputsUpdated(callback: (workspaceId: string) => void): () => void
 
   // Notifications (bell entries from pulses + future system sources)

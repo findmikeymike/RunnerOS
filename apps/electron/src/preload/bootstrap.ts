@@ -483,6 +483,9 @@ client.onConnectionStateChanged((state) => {
 ;(api as ElectronAPI).getArtistManagerVoiceProxyInfo = () => ipcRenderer.invoke('__artist-manager-voice:proxy-info')
 ;(api as ElectronAPI).getArtistManagerVoiceProviderStatus = () => ipcRenderer.invoke('__artist-manager-voice:provider-status')
 ;(api as ElectronAPI).createArtistManagerVoiceAssemblyToken = () => ipcRenderer.invoke('__artist-manager-voice:assembly-token')
+;(api as ElectronAPI).getChatDictationAvailability = () => ipcRenderer.invoke('__chat-dictation:availability')
+;(api as ElectronAPI).requestChatDictationAccess = () => ipcRenderer.invoke('__chat-dictation:request-access')
+;(api as ElectronAPI).transcribeChatDictation = (input) => ipcRenderer.invoke('__chat-dictation:transcribe', input)
 
 // webUtils.getPathForFile: returns the absolute OS path of a File object obtained
 // from <input type="file"> or OS drag-drop. Returns null for Files fabricated from

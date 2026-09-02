@@ -26,7 +26,10 @@ publish:
 mac:
   icon: resources/artist-os-icon.icns
   artifactName: Artist-OS-${version}-${arch}.${ext}
-  extendInfo: null
+  extendInfo:
+    # Artist OS does not receive Runner's Assets.car in afterPack; retain its .icns fallback.
+    CFBundleIconName: null
+    NSMicrophoneUsageDescription: Artist OS uses your microphone only when you choose dictation in chat.
 
 win:
   icon: resources/artist-os-icon.ico

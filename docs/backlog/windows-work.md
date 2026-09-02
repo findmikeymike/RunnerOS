@@ -41,6 +41,11 @@ Verified against `codex/artist-os-licensing` at `440bfe602`.
 
 ## Capability Work
 
+- [ ] Finish and certify chat dictation on Windows 11 x64:
+  - package the Whisper/FFmpeg runtime listed above and verify first-use `base.en` model download;
+  - verify Chromium microphone permission, recording, cancellation, two-minute cutoff, and transcript insertion;
+  - verify temporary recordings are deleted after success, failure, session switch, and app quit;
+  - add a clean-machine smoke using the packaged NSIS build with no system FFmpeg or Whisper installation.
 - [ ] Bundle or explicitly mark unsupported the Windows x64 Printify CLI. Only the macOS ARM64 binary is currently present.
 - [ ] Generate one compatibility inventory covering every visible agent, source, tool, and native runtime.
 - [ ] Add a packaged-mode doctor contract that distinguishes missing binary, invalid binary, missing credentials, wrong account, and provider failure.

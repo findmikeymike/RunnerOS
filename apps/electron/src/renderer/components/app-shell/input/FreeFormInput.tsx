@@ -13,6 +13,7 @@ import {
   ChevronDown,
   AlertCircle,
   X,
+  Mic,
 } from 'lucide-react'
 import { Icon_Folder, Spinner } from '@craft-agent/ui'
 
@@ -99,6 +100,7 @@ import {
 } from './working-directory-history'
 import { CompactPermissionModeSelector } from './CompactPermissionModeSelector'
 import { RENDERER_PRODUCT_VARIANT } from '@/lib/product-identity'
+import { appendDictationTranscript, useChatDictation } from './useChatDictation'
 
 /**
  * Format token count for display (e.g., 1500 -> "1.5k", 200000 -> "200k")
@@ -616,6 +618,22 @@ export function FreeFormInput({
   // Merge refs for RichTextInput
   const internalInputRef = React.useRef<RichTextInputHandle>(null)
   const richInputRef = externalInputRef || internalInputRef
+
+  const handleDictationTranscript = React.useCallback((transcript: string) => {
+    const nextInput = appendDictationTranscript(inputRef.current, transcript)
+    setInput(nextInput)
+    syncToParent(nextInput)
+    requestAnimationFrame(() => {
+      richInputRef.current?.focus()
+      richInputRef.current?.setSelectionRange(nextInput.length, nextInput.length)
+    })
+  }, [richInputRef, syncToParent])
+
+  const dictation = useChatDictation({
+    sessionId,
+    onTranscript: handleDictationTranscript,
+    onError: (message) => toast.error('Dictation unavailable', { description: message }),
+  })
 
   // Track last caret position for focus restoration (e.g., after permission mode popover closes)
   const lastCaretPositionRef = React.useRef<number | null>(null)
@@ -2256,6 +2274,45 @@ export function FreeFormInput({
             )
           })()}
 
+          {RENDERER_PRODUCT_VARIANT === 'artist-os' && !compactMode && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  aria-label={dictation.state === 'recording' ? 'Stop dictation' : 'Dictate a message'}
+                  className={cn(
+                    'h-7 shrink-0 rounded-full text-foreground/55 hover:bg-foreground/8 hover:text-foreground',
+                    dictation.state === 'recording' && 'w-auto gap-1.5 bg-orange-500/12 px-2 text-orange-300 hover:bg-orange-500/18 hover:text-orange-200',
+                  )}
+                  disabled={disabled || isProcessing || dictation.state === 'starting' || dictation.state === 'transcribing'}
+                  onClick={() => dictation.state === 'recording' ? dictation.stop() : void dictation.start()}
+                >
+                  {dictation.state === 'starting' || dictation.state === 'transcribing' ? (
+                    <Spinner className="h-3.5 w-3.5" />
+                  ) : dictation.state === 'recording' ? (
+                    <>
+                      <Square className="h-2.5 w-2.5 fill-current" />
+                      <span className="text-[11px] tabular-nums">{formatDictationTime(dictation.elapsedSeconds)}</span>
+                    </>
+                  ) : (
+                    <Mic className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {dictation.state === 'recording'
+                  ? 'Stop and transcribe'
+                  : dictation.state === 'starting'
+                    ? 'Preparing microphone…'
+                  : dictation.state === 'transcribing'
+                    ? 'Transcribing locally…'
+                    : 'Dictate a message'}
+              </TooltipContent>
+            </Tooltip>
+          )}
+
           {/* 6. Send/Stop Button - Always show stop when processing */}
           {isProcessing ? (
             <Button
@@ -2286,6 +2343,12 @@ export function FreeFormInput({
       </div>
     </form>
   )
+}
+
+function formatDictationTime(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
 type AppFileBucket = {
@@ -2431,8 +2494,21 @@ function AppFileAttachmentPicker({
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onBrowseComputer}>Browse Computer</Button>
-          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>Done</Button>
+          <Button
+            type="button"
+            onClick={onBrowseComputer}
+            className="bg-white text-black hover:bg-white/88"
+          >
+            Browse Computer
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            className="bg-white/[0.07] text-white/78 hover:bg-white/[0.12] hover:text-white"
+          >
+            Done
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

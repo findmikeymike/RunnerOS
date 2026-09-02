@@ -19,6 +19,13 @@ export interface LocalLyricsTranscriptionResult {
   error?: string
 }
 
+export interface LocalLyricsTranscriptionRuntimeStatus {
+  available: boolean
+  modelInstalled: boolean
+  blockers?: Array<{ code: string; message: string }>
+  error?: string
+}
+
 interface LyricsTranscriberPayload {
   ok: boolean
   engine?: string
@@ -28,6 +35,40 @@ interface LyricsTranscriberPayload {
   transcript_json?: string
   blockers?: Array<{ code: string; message: string }>
   error?: string
+}
+
+export async function inspectLyricsTranscriptionRuntime(input: {
+  workspaceRootPath: string
+  model?: string
+}): Promise<LocalLyricsTranscriptionRuntimeStatus> {
+  const model = input.model ?? 'base.en'
+  const bin = lyricsTranscriberBin(input.workspaceRootPath)
+  if (!existsSync(bin)) {
+    return { available: false, modelInstalled: false, error: `Lyrics Transcriber CLI is missing: ${bin}` }
+  }
+
+  let doctor: LyricsTranscriberPayload
+  try {
+    doctor = await runLyricsTranscriber(bin, ['doctor', '--model', model])
+  } catch (error) {
+    doctor = parseTranscriberError(error, 'Lyrics transcription setup is incomplete.')
+  }
+
+  const blockers = doctor.blockers ?? []
+  const modelInstalled = !blockers.some((blocker) => blocker.code === 'missing_model')
+  const onlyMissingModel = !doctor.ok
+    && blockers.length > 0
+    && blockers.every((blocker) => blocker.code === 'missing_model')
+  const available = doctor.ok || onlyMissingModel
+
+  return {
+    available,
+    modelInstalled,
+    blockers: blockers.length > 0 ? blockers : undefined,
+    error: available
+      ? undefined
+      : doctor.error ?? (blockers.map((blocker) => blocker.message).join(' ') || 'Local transcription tools are unavailable.'),
+  }
 }
 
 export async function transcribeLyricsLocally(input: {
