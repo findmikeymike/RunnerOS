@@ -2297,7 +2297,7 @@ export function FreeFormInput({
                       <span className="text-[11px] tabular-nums">{formatDictationTime(dictation.elapsedSeconds)}</span>
                     </>
                   ) : (
-                    <Mic className="h-4 w-4" />
+                    <Mic className="h-4 w-4 text-zinc-300" />
                   )}
                 </Button>
               </TooltipTrigger>
