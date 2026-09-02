@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { resolveHqCampaignFocus, type HqCampaignSummary } from '@/lib/artist-hq-home-feed'
-import { rollingMonthKeys, type TimelineEntry } from '@craft-agent/shared/hq-state'
+import { dateKeyInTimezone, rollingMonthKeys, type TimelineEntry } from '@craft-agent/shared/hq-state'
 import type {
   ArtistReleaseEventType,
   ArtistReleaseHorizon,
@@ -64,7 +64,9 @@ export function ReleaseHorizon({
   onSaveMonthPlan: (monthKey: string, value: ArtistReleaseMonthPlan | null) => Promise<void>
 }) {
   const months = React.useMemo(() => buildRollingMonths(new Date(), timelineTimezone), [timelineTimezone])
+  const todayKey = React.useMemo(() => currentDateKey(new Date(), timelineTimezone), [timelineTimezone])
   const focus = React.useMemo(() => resolveHqCampaignFocus(campaigns), [campaigns])
+  const focusCountdown = React.useMemo(() => daysUntilLabel(focus?.campaign.releaseDate, todayKey), [focus, todayKey])
   const [selectedMonthKey, setSelectedMonthKey] = React.useState<string | null>(null)
   const [monthDraft, setMonthDraft] = React.useState<ArtistReleaseMonthPlan>(EMPTY_MONTH_PLAN)
   const [monthEditMode, setMonthEditMode] = React.useState(false)
@@ -190,6 +192,7 @@ export function ReleaseHorizon({
               <span className="mt-1 flex items-center gap-1.5">
                 <span className="max-w-64 truncate text-sm font-medium text-white/82">{focus.campaign.name}</span>
                 {focus.dateLabel ? <span className="shrink-0 text-[10px] text-white/34">{focus.dateLabel}</span> : null}
+                {focusCountdown ? <span className="shrink-0 rounded-full bg-[#ff5a00]/15 px-1.5 py-0.5 text-[9px] font-medium text-[#ff8a4c]">{focusCountdown}</span> : null}
                 <ArrowUpRight className="h-3 w-3 shrink-0 text-white/22 transition-colors group-hover:text-white/60" />
               </span>
             </button>
@@ -202,67 +205,17 @@ export function ReleaseHorizon({
         </div>
       </div>
 
-      <div className="overflow-x-auto p-3">
-        <div className="grid min-w-[1040px] grid-cols-12 gap-1.5">
-          {months.map((month) => {
-            const monthCampaigns = campaignsForMonth(campaigns, month.key)
-            const activeCampaigns = campaignsActiveInMonth(campaigns, month.key)
-            const monthTimelineEntries = timelineEntries.filter((entry) => entry.date.startsWith(`${month.key}-`))
-            const monthPlan = plan.months[month.key]
-            const displayTitle = monthPlan?.title || monthCampaigns[0]?.name
-            const populated = Boolean(displayTitle || monthPlan?.plan || monthPlan?.keyGoal || monthTimelineEntries.length || activeCampaigns.length)
-            return (
-              <button
-                key={month.key}
-                type="button"
-                onClick={() => openMonth(month.key)}
-                className={cn(
-                  'group relative aspect-square min-h-[86px] rounded-[10px] border p-2 text-left transition-colors',
-                  populated
-                    ? 'border-[#ff5a00]/55 bg-white/[0.022] hover:bg-white/[0.045]'
-                    : 'border-white/[0.05] bg-white/[0.022] hover:border-white/[0.11] hover:bg-white/[0.045]',
-                )}
-              >
-                <span className="absolute left-2 top-2 flex items-baseline gap-1.5">
-                  <span className={cn('text-[10px] font-medium uppercase tracking-[0.12em]', populated ? 'text-[#ff6a00]' : 'text-white/48')}>{month.label}</span>
-                  <span className="text-[8px] text-white/20">{month.year}</span>
-                </span>
-                {displayTitle ? (
-                  <span
-                    title={displayTitle}
-                    className={cn(
-                      'absolute inset-x-2 truncate text-left text-[9px] font-normal leading-3 text-white/66',
-                      activeCampaigns.length > 0 ? 'bottom-[17px]' : 'bottom-2',
-                    )}
-                  >
-                    {displayTitle}
-                  </span>
-                ) : null}
-                {monthCampaigns.length > (monthPlan ? 0 : 1) ? (
-                  <span className="absolute right-2 top-2 text-[8px] text-white/25">
-                    +{monthCampaigns.length - (monthPlan ? 0 : 1)}
-                  </span>
-                ) : null}
-                {activeCampaigns.length > 0 ? (
-                  <span className="absolute inset-x-2 bottom-2 flex flex-col gap-1" aria-label={`${activeCampaigns.length} active campaign${activeCampaigns.length === 1 ? '' : 's'}`}>
-                    {activeCampaigns.slice(0, 2).map((campaign) => (
-                      <span
-                        key={campaign.id}
-                        title={campaign.name}
-                        className={cn(
-                          'h-[2px] w-full rounded-full',
-                          campaign.releaseDate?.startsWith(`${month.key}-`) ? 'bg-white/80' : 'bg-[#ff5a00]/70',
-                        )}
-                      />
-                    ))}
-                  </span>
-                ) : null}
-              </button>
-            )
-          })}
-        </div>
+      <div className="px-4 pb-3 pt-2">
+        <HorizonTrack
+          months={months}
+          campaigns={campaigns}
+          plan={plan}
+          timelineEntries={timelineEntries}
+          todayKey={todayKey}
+          onOpenMonth={openMonth}
+          onOpenCampaign={onOpenCampaign}
+        />
       </div>
-
       <Dialog open={Boolean(selectedMonthKey)} onOpenChange={(open) => { if (!open) setSelectedMonthKey(null) }}>
         <DialogContent className="max-h-[86vh] overflow-y-auto border-white/[0.08] bg-[#101112] p-0 sm:max-w-3xl">
           <div className="border-b border-white/[0.06] px-7 py-6 pr-14">
@@ -467,6 +420,222 @@ export function ReleaseHorizon({
       </Dialog>
     </section>
   )
+}
+
+/**
+ * Continuous timeline. The near term is zoomed so the next few months read at
+ * useful resolution; the far term compresses so an empty year stays quiet
+ * instead of rendering as a row of empty boxes.
+ */
+const NEAR_MONTHS = 4
+const NEAR_WEIGHT = 2
+const FAR_WEIGHT = 1
+
+interface TrackMonth extends ReleaseMonth {
+  left: number
+  width: number
+}
+
+function layoutTrackMonths(months: ReleaseMonth[]): TrackMonth[] {
+  const weights = months.map((_, index) => (index < NEAR_MONTHS ? NEAR_WEIGHT : FAR_WEIGHT))
+  const total = weights.reduce((sum, weight) => sum + weight, 0)
+  let cursor = 0
+  return months.map((month, index) => {
+    const width = (weights[index]! / total) * 100
+    const left = cursor
+    cursor += width
+    return { ...month, left, width }
+  })
+}
+
+function daysInMonth(key: string): number {
+  const [year, month] = key.split('-').map(Number)
+  return new Date(year!, month!, 0).getDate()
+}
+
+/** Percent position for a YYYY-MM-DD key, or null when outside the window. */
+function trackPosition(dateKey: string | undefined, months: TrackMonth[]): number | null {
+  if (!dateKey) return null
+  const month = months.find((candidate) => dateKey.startsWith(`${candidate.key}-`))
+  if (!month) return null
+  const day = Number(dateKey.slice(8, 10)) || 1
+  const fraction = (day - 1) / daysInMonth(month.key)
+  return month.left + month.width * fraction
+}
+
+function clampTrackPosition(dateKey: string | undefined, months: TrackMonth[]): number | null {
+  if (!dateKey) return null
+  const exact = trackPosition(dateKey, months)
+  if (exact !== null) return exact
+  const first = months[0]!.key
+  const last = months.at(-1)!.key
+  if (dateKey < `${first}-01`) return 0
+  if (dateKey > `${last}-31`) return 100
+  return null
+}
+
+function HorizonTrack({
+  months,
+  campaigns,
+  plan,
+  timelineEntries,
+  todayKey,
+  onOpenMonth,
+  onOpenCampaign,
+}: {
+  months: ReleaseMonth[]
+  campaigns: HqCampaignSummary[]
+  plan: ArtistReleaseHorizon
+  timelineEntries: TimelineEntry[]
+  todayKey: string
+  onOpenMonth: (monthKey: string) => void
+  onOpenCampaign?: (workspaceId: string) => void
+}) {
+  const track = React.useMemo(() => layoutTrackMonths(months), [months])
+  const today = trackPosition(todayKey, track)
+  const spans = React.useMemo(() => campaigns.flatMap((campaign) => {
+    const start = campaign.startDate ?? campaign.releaseDate
+    const finish = campaign.finishDate ?? campaign.releaseDate
+    const from = clampTrackPosition(start, track)
+    const to = clampTrackPosition(finish, track)
+    if (from === null || to === null || to - from < 0.4) return []
+    return [{ id: campaign.id, name: campaign.name, from, to }]
+  }), [campaigns, track])
+  const releases = React.useMemo(() => {
+    const placed = campaigns
+      .flatMap((campaign) => {
+        const at = trackPosition(campaign.releaseDate, track)
+        return at === null ? [] : [{ id: campaign.id, name: campaign.name, date: campaign.releaseDate!, at }]
+      })
+      .sort((left, right) => left.at - right.at)
+    // Alternate label side when two releases would collide.
+    let previous = -Infinity
+    let flip = false
+    return placed.map((release) => {
+      flip = release.at - previous < 9 ? !flip : false
+      previous = release.at
+      return { ...release, below: flip }
+    })
+  }, [campaigns, track])
+  const undated = campaigns.filter((campaign) => !campaign.releaseDate).length
+  const pastReleases = campaigns.filter((campaign) => campaign.releaseDate && campaign.releaseDate < `${months[0]!.key}-01`).length
+
+  return (
+    <div className="relative h-[124px] min-w-0 select-none" data-testid="horizon-track">
+      {track.map((month) => {
+        const monthPlan = plan.months[month.key]
+        const populated = Boolean(
+          monthPlan?.title || monthPlan?.plan || monthPlan?.keyGoal
+          || timelineEntries.some((entry) => entry.date.startsWith(`${month.key}-`))
+          || campaignsActiveInMonth(campaigns, month.key).length,
+        )
+        const isJanuary = month.key.endsWith('-01')
+        const showYear = isJanuary || month === track[0]
+        return (
+          <button
+            key={month.key}
+            type="button"
+            onClick={() => onOpenMonth(month.key)}
+            title={monthPlan?.title ? `${month.label}: ${monthPlan.title}` : `${month.label} ${month.year}`}
+            aria-label={`Open ${month.label} ${month.year}`}
+            style={{ left: `${month.left}%`, width: `${month.width}%` }}
+            className="group absolute inset-y-0 rounded-[8px] transition-colors hover:bg-white/[0.035] focus-visible:outline-none focus-visible:bg-white/[0.045]"
+          >
+            <span className="absolute left-0 top-[60px] h-[9px] w-px bg-white/[0.14]" aria-hidden="true" />
+            <span className="absolute bottom-2 left-2 flex items-baseline gap-1 whitespace-nowrap">
+              <span className={cn(
+                'text-[10px] font-medium uppercase tracking-[0.12em]',
+                populated ? 'text-[#ff6a00]' : 'text-white/38 group-hover:text-white/70',
+              )}>
+                {month.label}
+              </span>
+              {showYear ? <span className="text-[8px] text-white/22">{isJanuary && month !== track[0] ? `’${month.year.slice(2)}` : month.year}</span> : null}
+            </span>
+            {monthPlan?.title ? (
+              <span
+                className="absolute left-2 top-[72px] h-1.5 w-1.5 rounded-[2px] bg-[#ff5a00]"
+                aria-hidden="true"
+              />
+            ) : null}
+          </button>
+        )
+      })}
+
+      <div className="pointer-events-none absolute inset-x-0 top-[64px] h-px bg-white/[0.12]" aria-hidden="true" />
+
+      {spans.map((span) => (
+        <button
+          key={`span-${span.id}`}
+          type="button"
+          onClick={() => onOpenCampaign?.(span.id)}
+          disabled={!onOpenCampaign}
+          title={span.name}
+          aria-label={`Open ${span.name}`}
+          style={{ left: `${span.from}%`, width: `${Math.max(0.6, span.to - span.from)}%` }}
+          className="absolute top-[60px] h-[9px] rounded-full bg-[#ff5a00]/25 transition-colors hover:bg-[#ff5a00]/45 disabled:cursor-default"
+        />
+      ))}
+
+      {releases.map((release) => (
+        <button
+          key={`release-${release.id}`}
+          type="button"
+          onClick={() => onOpenCampaign?.(release.id)}
+          disabled={!onOpenCampaign}
+          style={{ left: `${release.at}%` }}
+          className="group absolute top-0 h-[124px] w-0 disabled:cursor-default"
+          aria-label={`${release.name}, ${formatDate(release.date)}`}
+        >
+          <span className="absolute left-0 top-[64px] h-[11px] w-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#050505] bg-white transition-transform group-hover:scale-125" />
+          <span className={cn(
+            'absolute left-0 flex -translate-x-1/2 flex-col items-center whitespace-nowrap',
+            release.below ? 'top-[76px]' : 'top-[24px]',
+          )}>
+            <span className="max-w-[140px] truncate text-[11px] font-medium text-white/88">{release.name}</span>
+            <span className="text-[9px] text-white/38">{formatDate(release.date)}</span>
+          </span>
+        </button>
+      ))}
+
+      {today !== null ? (
+        <div
+          className="pointer-events-none absolute inset-y-0"
+          style={{ left: `${today}%` }}
+          aria-label="Today"
+        >
+          <span className="absolute inset-y-0 left-0 w-px bg-white/55" />
+          <span className="absolute left-1.5 top-2 text-[9px] font-medium uppercase tracking-[0.14em] text-white/70">Today</span>
+        </div>
+      ) : null}
+
+      {undated > 0 || pastReleases > 0 ? (
+        <span className="pointer-events-none absolute right-2 top-2 text-[9px] text-white/28">
+          {[
+            pastReleases > 0 ? `${pastReleases} released` : null,
+            undated > 0 ? `${undated} undated` : null,
+          ].filter(Boolean).join(' · ')}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+function currentDateKey(now: Date, timezone?: string): string {
+  const referenceTimezone = timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+  return dateKeyInTimezone(now.toISOString(), referenceTimezone) ?? now.toISOString().slice(0, 10)
+}
+
+function daysUntilLabel(dateKey: string | undefined, todayKey: string): string | null {
+  if (!dateKey) return null
+  const toDays = (key: string) => {
+    const [year, month, day] = key.split('-').map(Number)
+    return Math.round(Date.UTC(year!, month! - 1, day!) / 86_400_000)
+  }
+  const delta = toDays(dateKey) - toDays(todayKey)
+  if (delta === 0) return 'today'
+  if (delta === 1) return 'tomorrow'
+  if (delta > 1 && delta <= 90) return `in ${delta} days`
+  return null
 }
 
 function buildRollingMonths(now = new Date(), timezone?: string): ReleaseMonth[] {

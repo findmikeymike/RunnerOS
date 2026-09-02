@@ -6,7 +6,7 @@ describe('Pulse run controls', () => {
   test('separates manual Play from the smaller weekly auto-run control', () => {
     const source = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
     const start = source.indexOf('function PulseRunControls')
-    const end = source.indexOf('function SpotifyPulseCard')
+    const end = source.indexOf('function LiveWorkChip')
     const controls = source.slice(start, end)
 
     expect(controls).toContain('<Play className="h-3 w-3 fill-current" />')
@@ -31,26 +31,28 @@ describe('Pulse run controls', () => {
     expect(toggle).not.toContain('const nextEnabled = !intelConfig.enabled')
   })
 
-  test('uses two compact independent glass pulse panels', () => {
+  test('renders one four-tile signals strip instead of two pulse cards', () => {
     const source = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
     const start = source.indexOf('<div id="hq-home-operations"')
     const end = source.indexOf('<ReleaseHorizon', start)
-    const pulseGroup = source.slice(start, end)
+    const home = source.slice(start, end)
 
-    expect(pulseGroup).toContain('id="hq-home-details" className="grid grid-cols-1 gap-3 lg:grid-cols-2"')
-    expect(pulseGroup).not.toContain('<HQCard className="overflow-hidden p-0">')
-    expect(pulseGroup).toContain('<SpotifyPulseCard')
-    expect(pulseGroup).toContain('<SocialPulseCard')
+    expect(home).toContain('<ManagerAskBar')
+    expect(home).toContain('<SignalsStrip')
+    expect(home.indexOf('<ManagerAskBar')).toBeLessThan(home.indexOf('<SignalsStrip'))
+    expect(home).not.toContain('<SpotifyPulseCard')
+    expect(home).not.toContain('<SocialPulseCard')
+    expect(source).toContain('grid grid-cols-2 gap-2 lg:grid-cols-4')
+    expect(source.match(/<SignalTile\n/g)).toHaveLength(4)
+    expect(source).not.toContain('flex h-[132px] flex-col overflow-hidden rounded-[16px]')
   })
 
-  test('orders Spotify before Social and aligns their compact panels', () => {
+  test('shows honest pre-baseline copy instead of a blank card', () => {
     const source = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
-    const start = source.indexOf('<div id="hq-home-operations"')
-    const end = source.indexOf('<ReleaseHorizon', start)
-    const pulseGroup = source.slice(start, end)
 
-    expect(pulseGroup.indexOf('<SpotifyPulseCard')).toBeLessThan(pulseGroup.indexOf('<SocialPulseCard'))
-    expect(pulseGroup).not.toContain('<IntelPulseCard')
-    expect(source.match(/flex h-\[132px\] flex-col overflow-hidden rounded-\[16px\]/g)).toHaveLength(2)
+    expect(source).toContain('First read ${weeklyCronLabel(SPOTIFY_SYNC_CRON)}')
+    expect(source).toContain('First read ${weeklyCronLabel(INSTAGRAM_SYNC_CRON)}')
+    expect(source).toContain("'Run Spotify Pulse to start'")
+    expect(source).toContain("{empty ? '—' : value}")
   })
 })

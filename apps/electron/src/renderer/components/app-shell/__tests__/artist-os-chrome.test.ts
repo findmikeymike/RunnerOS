@@ -479,15 +479,17 @@ describe('Artist OS persistent shell chrome', () => {
     expect(hq).toContain('bg-white/[0.035] p-3.5')
   })
 
-  test('places the quieter next move below the Release Horizon and uses vivid orange Pulse accents', () => {
+  test('places the quieter next move below the Release Horizon and lifts active work into the hero', () => {
     const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
     const releaseHorizon = hq.indexOf('<ReleaseHorizon')
     const nextMove = hq.indexOf('<StateOfPlayPanel')
-    const workers = hq.indexOf('>Active work</span>')
+    const liveChip = hq.indexOf('<LiveWorkChip items={workerItems} />')
 
     expect(releaseHorizon).toBeGreaterThan(-1)
     expect(nextMove).toBeGreaterThan(releaseHorizon)
-    expect(workers).toBeGreaterThan(nextMove)
+    expect(liveChip).toBeGreaterThan(-1)
+    expect(liveChip).toBeLessThan(releaseHorizon)
+    expect(hq).not.toContain('>Active work</span>')
     expect(hq).toContain('text-sm font-medium tracking-tight text-white/88')
     expect(hq).toContain('text-[#f97316]')
   })
@@ -499,16 +501,17 @@ describe('Artist OS persistent shell chrome', () => {
     expect(hq).not.toContain('PIN_HQ_PULSES_TO_BOTTOM')
     expect(hq).not.toContain('className="flex min-h-[calc(100dvh-176px)] flex-col"')
     expect(hq).toContain('id="hq-home-operations" className="space-y-3"')
-    expect(hq).toContain('id="hq-home-details" className="grid grid-cols-1 gap-3 lg:grid-cols-2"')
-    expect(hq).toContain('group relative flex h-[132px] flex-col overflow-hidden rounded-[16px]')
+    expect(hq).toContain('<div id="hq-home-details">')
+    expect(hq).toContain('<SignalsStrip')
+    expect(hq).toContain('group relative flex h-[104px] min-w-0 flex-col overflow-hidden rounded-[14px]')
     expect(hq).toContain('bg-white/[0.035] p-3.5')
     expect(hq).toContain('backdrop-blur-2xl')
     expect(hq).not.toContain('border border-[#f97316]/35')
-    expect(hq).toContain('aria-label="Open Spotify Pulse analysis"')
-    expect(hq).toContain('aria-label="Open Social Pulse analysis"')
+    expect(hq).toContain('ariaLabel="Open Spotify Pulse analysis"')
+    expect(hq).toContain('ariaLabel="Open Social Pulse analysis"')
     expect(hq).toContain('<PulseDetailsDialog')
     expect(hq).not.toContain('mt-3 grid grid-cols-3 gap-2 rounded-[12px] bg-black/20 py-3')
-    expect(hq).toContain('>Active work</span>')
+    expect(hq).toContain('placeholder="Tell your manager what you need…"')
     expect(hq).toContain('h-1.5 w-1.5 shrink-0 rounded-full bg-[#f97316]')
     expect(hq).toContain('>This week</span>')
     expect(hq).toContain('userFacingHqAttention(state.attention).slice(0, 2)')
@@ -523,7 +526,7 @@ describe('Artist OS persistent shell chrome', () => {
       'utf8',
     )
     const operations = hq.indexOf('id="hq-home-operations"')
-    const spotify = hq.indexOf('<SpotifyPulseCard', operations)
+    const spotify = hq.indexOf('<SignalsStrip', operations)
 
     expect(operations).toBeGreaterThan(-1)
     expect(spotify).toBeGreaterThan(operations)
@@ -537,8 +540,9 @@ describe('Artist OS persistent shell chrome', () => {
 
   test('orders Spotify before Social and keeps Social focused on Instagram analytics', () => {
     const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
-    const spotify = hq.indexOf('<SpotifyPulseCard')
-    const social = hq.indexOf('<SocialPulseCard')
+    const strip = hq.slice(hq.indexOf('function SignalsStrip'), hq.indexOf('function SignalTile'))
+    const spotify = strip.indexOf("label={spotifyPublicApi ? 'Popularity' : 'Streams'}")
+    const social = strip.indexOf('label="Instagram"')
     const intel = hq.indexOf('<IntelPulseCard')
 
     expect(spotify).toBeGreaterThan(-1)
