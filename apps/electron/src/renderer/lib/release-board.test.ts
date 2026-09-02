@@ -333,24 +333,29 @@ describe('release board utilities', () => {
   })
 
   test('builds a collaborative, campaign-scoped kickoff instead of a blind work order', () => {
-    const action = getReleaseBoardItemAction('visuals', 'cover-art')
+    const action = getReleaseBoardItemAction('content', 'lyric-clips')
     expect(action).not.toBeNull()
 
     const prompt = buildReleaseBoardItemActionPrompt({
-      campaignTitle: 'Coming Home',
-      categoryLabel: 'Visuals',
-      itemLabel: 'Single Art',
+      campaignTitle: 'Angelina',
+      categoryLabel: 'Content',
+      itemLabel: 'Lyric Clips',
       action: action!,
     })
 
-    expect(prompt).toContain('Coming Home')
-    expect(prompt).toContain('Single Art')
+    expect(prompt).toContain('I want to work on "Lyric Clips" for my "Angelina" campaign.')
+    expect(prompt).toContain('strongest possible lyric-led visuals')
     expect(prompt).toContain('existing Artist HQ and campaign context')
-    expect(prompt).toContain('Where is the most intelligent place to start?')
-    expect(prompt).toContain('Ask me only the key questions that would materially improve the direction.')
-    expect(prompt).toContain('outputs I can review and iterate on in Artist OS and Canvas')
+    expect(prompt).toContain("Let's get a great plan together before we create anything.")
+    expect(prompt).toContain('Start by talking the direction through with me.')
+    expect(prompt).toContain('Ask any key guidance questions that would help us make it great.')
+    expect(prompt).toContain("Once we agree on the direction, let's begin.")
+    expect(prompt).toContain('Do not start producing the deliverable before that.')
     expect(prompt).toContain('without my exact approval')
-    expect(prompt).not.toContain('Create the "Single Art" deliverable')
+    expect(prompt).not.toContain('Create the "Lyric Clips" deliverable')
+    expect(prompt).not.toContain('Release Board lane')
+    expect(prompt).not.toContain('durable, reviewable Runner Output')
+    expect(prompt).not.toContain('marked done')
   })
 
   test('frames every worker and workflow lane as artist intent', () => {
@@ -367,7 +372,9 @@ describe('release board utilities', () => {
         })
         expect(action.instruction.startsWith('I want')).toBe(true)
         expect(prompt.startsWith(`I want to work on "${item.label}"`)).toBe(true)
-        expect(prompt).toContain('Where is the most intelligent place to start?')
+        expect(prompt).toContain("Let's get a great plan together before we create anything.")
+        expect(prompt).toContain('Start by talking the direction through with me.')
+        expect(prompt).toContain('Do not start producing the deliverable before that.')
       }
     }
   })

@@ -348,13 +348,15 @@ export function buildReleaseBoardItemActionPrompt(input: {
   return [
     `I want to work on "${input.itemLabel}" for my "${input.campaignTitle}" campaign.`,
     '',
+    'Let\'s get a great plan together before we create anything.',
+    '',
     input.action.instruction,
     '',
-    `This sits in the ${input.categoryLabel} area of my Essentials board. Please use the existing Artist HQ and campaign context before asking me to repeat anything already saved.`,
+    'Use the existing Artist HQ and campaign context before asking me to repeat anything already saved.',
     '',
-    'Where is the most intelligent place to start? Ask me only the key questions that would materially improve the direction. If the saved context already answers them, recommend the strongest first move instead.',
+    'Start by talking the direction through with me. Ask any key guidance questions that would help us make it great. If the saved context already answers them, recommend the strongest direction instead.',
     '',
-    'Once we agree on the direction, I want durable outputs I can review and iterate on in Artist OS and Canvas. Keep me clear on what would still remain before this Essentials item is truly done.',
+    'Once we agree on the direction, let\'s begin. Do not start producing the deliverable before that.',
     'Nothing should be published, sent, booked, purchased, or put into motion publicly without my exact approval.',
   ].join('\n')
 }
