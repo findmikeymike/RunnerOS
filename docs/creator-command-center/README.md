@@ -42,6 +42,9 @@ Core Artist HQ and campaign workspace specs live here.
 - [31 Catalog And Royalty Reconciliation](./31-catalog-royalty-reconciliation-spec.md)
 - [32 Computer Use Provider Strategy](./32-computer-use-provider-strategy-spec.md)
 - [33 Automations: Input-Aware Setup And The One List](./33-automations-input-aware-setup-spec.md)
+- [35 Guided Social Variant Sets](./35-social-video-repurposing-spec.md)
+- [36 Capability Evolution Engine](./36-capability-evolution-engine-spec.md)
+- [37 Model Fallback Chain](./37-model-fallback-chain-spec.md)
 
 Current V1 implementation notes:
 
