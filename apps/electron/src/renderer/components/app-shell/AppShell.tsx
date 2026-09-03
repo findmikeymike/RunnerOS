@@ -54,6 +54,7 @@ import { McpIcon } from "../icons/McpIcon"
 import { cn } from "@/lib/utils"
 import { isMac } from "@/lib/platform"
 import { RENDERER_PRODUCT_VARIANT } from "@/lib/product-identity"
+import { ARTIST_OS_PERMISSION_MODES } from "./input/artist-permission-modes"
 import { Button } from "@/components/ui/button"
 import { HeaderIconButton } from "@/components/ui/HeaderIconButton"
 import { Separator } from "@/components/ui/separator"
@@ -1173,7 +1174,8 @@ function AppShellContent({
       const currentOptions = contextValue.sessionOptions.get(effectiveSessionId)
       const currentMode = currentOptions?.permissionMode ?? 'ask'
       // Cycle through enabled permission modes
-      const modes = enabledModes.length >= 2 ? enabledModes : ['safe', 'ask', 'allow-all'] as PermissionMode[]
+      const configuredModes = enabledModes.length >= 2 ? enabledModes : ['safe', 'ask', 'allow-all'] as PermissionMode[]
+      const modes = RENDERER_PRODUCT_VARIANT === 'artist-os' ? ARTIST_OS_PERMISSION_MODES : configuredModes
       const currentIndex = modes.indexOf(currentMode)
       // If current mode not in enabled list, jump to first enabled mode
       const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % modes.length
@@ -1711,7 +1713,7 @@ function AppShellContent({
     activeSessionWorkingDirectory,
     labels: displayLabelConfigs,
     onSessionLabelsChange: handleSessionLabelsChange,
-    enabledModes,
+    enabledModes: RENDERER_PRODUCT_VARIANT === 'artist-os' ? ARTIST_OS_PERMISSION_MODES : enabledModes,
     sessionStatuses: effectiveSessionStatuses,
     onSessionSourcesChange: handleSessionSourcesChange,
     rightSidebarButton: null,

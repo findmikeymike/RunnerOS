@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { SlashCommandMenu, DEFAULT_SLASH_COMMAND_GROUPS, type SlashCommandId } from '@/components/ui/slash-command-menu'
-import { ChevronDown, Info } from 'lucide-react'
+import { Check, ChevronDown, Info, ShieldCheck, Zap } from 'lucide-react'
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from '@craft-agent/shared/agent/modes'
 import type { BackgroundTask } from './ActiveTasksBar'
 import { LabelIcon, LabelValueTypeIcon } from '@/components/ui/label-icon'
@@ -19,6 +19,11 @@ import { SessionStatusMenu } from '@/components/ui/session-status-menu'
 import { MetadataBadge } from '@/components/ui/metadata-badge'
 import { SessionInfoPopover } from './SessionInfoPopover'
 import { RENDERER_PRODUCT_VARIANT } from '@/lib/product-identity'
+import {
+  ARTIST_OS_PERMISSION_MODES,
+  ARTIST_OS_PERMISSION_MODE_COPY,
+  normalizeArtistPermissionMode,
+} from './input/artist-permission-modes'
 
 // These tags route and organize the automated weekly manager session. They
 // remain attached to the session, but are implementation metadata rather than
@@ -473,6 +478,8 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
 
   // Get config for current mode (use optimistic state for instant UI update)
   const config = PERMISSION_MODE_CONFIG[optimisticMode]
+  const artistMode = normalizeArtistPermissionMode(optimisticMode)
+  const artistCopy = ARTIST_OS_PERMISSION_MODE_COPY[artistMode]
 
   // Mode-specific styling using CSS variables (theme-aware)
   // - safe (Explore): foreground at 60% opacity - subtle, read-only feel
@@ -502,14 +509,19 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
         <button
           type="button"
           data-tutorial="permission-mode-dropdown"
+          aria-label={`Permission mode: ${RENDERER_PRODUCT_VARIANT === 'artist-os' ? artistCopy.label : config.displayName}`}
           className={cn(
             "h-7 pl-2 pr-1.5 text-[11px] font-medium rounded-[8px] flex items-center gap-1.5 shadow-tinted outline-none select-none",
             currentStyle.className
           )}
           style={{ '--shadow-color': currentStyle.shadowVar } as React.CSSProperties}
         >
-          <PermissionModeIcon mode={optimisticMode} className="h-3 w-3" />
-          <span>{t(`mode.${optimisticMode}`)}</span>
+          {RENDERER_PRODUCT_VARIANT === 'artist-os'
+            ? artistMode === 'ask'
+              ? <ShieldCheck className="h-3 w-3" />
+              : <Zap className="h-3 w-3" />
+            : <PermissionModeIcon mode={optimisticMode} className="h-3 w-3" />}
+          <span>{RENDERER_PRODUCT_VARIANT === 'artist-os' ? artistCopy.shortLabel : t(`mode.${optimisticMode}`)}</span>
           <ChevronDown className="h-3 w-3 opacity-60" />
         </button>
       </PopoverTrigger>
@@ -529,12 +541,40 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange, sessio
           }
         }}
       >
-        <SlashCommandMenu
-          commandGroups={DEFAULT_SLASH_COMMAND_GROUPS}
-          activeCommands={activeCommands}
-          onSelect={handleSelect}
-          showFilter
-        />
+        {RENDERER_PRODUCT_VARIANT === 'artist-os' ? (
+          <div className="w-[270px] p-1.5">
+            {ARTIST_OS_PERMISSION_MODES.map((mode) => {
+              const copy = ARTIST_OS_PERMISSION_MODE_COPY[mode as 'ask' | 'allow-all']
+              const selected = artistMode === mode
+              const Icon = mode === 'ask' ? ShieldCheck : Zap
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => handleSelect(mode)}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-[7px] px-3 py-2.5 text-left transition-colors',
+                    selected ? 'bg-white/[0.07]' : 'hover:bg-white/[0.045]',
+                  )}
+                >
+                  <Icon className={cn('h-4 w-4 shrink-0', mode === 'allow-all' ? 'text-orange-300' : 'text-white/60')} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[12px] font-medium text-white/88">{copy.label}</span>
+                    <span className="mt-0.5 block text-[10.5px] leading-4 text-white/38">{copy.description}</span>
+                  </span>
+                  {selected ? <Check className="h-3.5 w-3.5 shrink-0 text-white/65" /> : null}
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <SlashCommandMenu
+            commandGroups={DEFAULT_SLASH_COMMAND_GROUPS}
+            activeCommands={activeCommands}
+            onSelect={handleSelect}
+            showFilter
+          />
+        )}
       </PopoverContent>
     </Popover>
   )

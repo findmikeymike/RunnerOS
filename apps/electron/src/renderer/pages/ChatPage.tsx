@@ -23,7 +23,8 @@ import { useAppShellContext, usePendingPermission, usePendingCredential, useSess
 import { rendererPerf } from '@/lib/perf'
 import { routes } from '@/lib/navigate'
 import { coerceInputText } from '@/lib/input-text'
-import { productDeepLink } from '@/lib/product-identity'
+import { productDeepLink, RENDERER_PRODUCT_VARIANT } from '@/lib/product-identity'
+import { normalizeArtistPermissionMode } from '@/components/app-shell/input/artist-permission-modes'
 import { deriveSessionMessagesLoadState, formatSessionLoadFailure } from '@/lib/session-load'
 import { ensureSessionMessagesLoadedAtom, forceSessionMessagesReloadAtom, loadedSessionsAtom, sessionMetaMapAtom } from '@/atoms/sessions'
 import { getSessionTitle } from '@/utils/session'
@@ -91,6 +92,15 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     setOption,
     setPermissionMode,
   } = useSessionOptionsFor(sessionId)
+  const permissionMode = RENDERER_PRODUCT_VARIANT === 'artist-os'
+    ? normalizeArtistPermissionMode(sessionOpts.permissionMode)
+    : sessionOpts.permissionMode
+
+  React.useEffect(() => {
+    if (RENDERER_PRODUCT_VARIANT === 'artist-os' && sessionOpts.permissionMode === 'safe') {
+      setPermissionMode('ask')
+    }
+  }, [sessionOpts.permissionMode, setPermissionMode])
 
   // Use per-session atom for isolated updates
   const session = useSessionData(sessionId)
@@ -685,7 +695,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 onRespondToCredential={onRespondToCredential}
                 thinkingLevel={sessionOpts.thinkingLevel}
                 onThinkingLevelChange={(level) => setOption('thinkingLevel', level)}
-                permissionMode={sessionOpts.permissionMode}
+                permissionMode={permissionMode}
                 onPermissionModeChange={setPermissionMode}
                 enabledModes={enabledModes}
                 inputValue={inputValue}
@@ -761,7 +771,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             onRespondToCredential={onRespondToCredential}
             thinkingLevel={sessionOpts.thinkingLevel}
             onThinkingLevelChange={(level) => setOption('thinkingLevel', level)}
-            permissionMode={sessionOpts.permissionMode}
+            permissionMode={permissionMode}
             onPermissionModeChange={setPermissionMode}
             enabledModes={enabledModes}
             inputValue={inputValue}

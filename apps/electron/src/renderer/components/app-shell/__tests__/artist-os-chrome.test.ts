@@ -298,6 +298,21 @@ describe('Artist OS persistent shell chrome', () => {
     expect(badges).toContain("RENDERER_PRODUCT_VARIANT === 'artist-os'")
   })
 
+  test('uses two honest artist-facing action modes while preserving real permission wiring', () => {
+    const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
+    const badges = readFileSync(join(import.meta.dir, '..', 'ActiveOptionBadges.tsx'), 'utf8')
+    const compact = readFileSync(join(import.meta.dir, '..', 'input', 'CompactPermissionModeSelector.tsx'), 'utf8')
+    const chatPage = readFileSync(join(import.meta.dir, '..', '..', '..', 'pages', 'ChatPage.tsx'), 'utf8')
+
+    expect(shell).toContain("RENDERER_PRODUCT_VARIANT === 'artist-os' ? ARTIST_OS_PERMISSION_MODES")
+    expect(badges).toContain('ARTIST_OS_PERMISSION_MODES.map')
+    expect(badges).toContain("onClick={() => handleSelect(mode)}")
+    expect(compact).toContain("? ARTIST_OS_PERMISSION_MODES")
+    expect(chatPage).toContain('normalizeArtistPermissionMode(sessionOpts.permissionMode)')
+    expect(chatPage).toContain("setPermissionMode('ask')")
+    expect(chatPage).toContain('permissionMode={permissionMode}')
+  })
+
   test('routes all major HQ and workspace page headers through the compact system', () => {
     const files = [
       'ArtistCommandCenterHome.tsx',

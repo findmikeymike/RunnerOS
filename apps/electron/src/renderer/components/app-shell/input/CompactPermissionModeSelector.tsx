@@ -14,6 +14,12 @@ import {
   PERMISSION_MODE_ORDER,
   type PermissionMode,
 } from '@craft-agent/shared/agent/modes'
+import { RENDERER_PRODUCT_VARIANT } from '@/lib/product-identity'
+import {
+  ARTIST_OS_PERMISSION_MODES,
+  ARTIST_OS_PERMISSION_MODE_COPY,
+  normalizeArtistPermissionMode,
+} from './artist-permission-modes'
 
 // ============================================================================
 // Mode Icon (same SVG pattern as ActiveOptionBadges.PermissionModeIcon)
@@ -84,13 +90,18 @@ export function CompactPermissionModeSelector({
 
   const config = PERMISSION_MODE_CONFIG[optimisticMode]
   const style = MODE_STYLES[optimisticMode]
+  const artistMode = normalizeArtistPermissionMode(optimisticMode)
+  const artistCopy = ARTIST_OS_PERMISSION_MODE_COPY[artistMode]
+  const visibleModes = RENDERER_PRODUCT_VARIANT === 'artist-os'
+    ? ARTIST_OS_PERMISSION_MODES
+    : PERMISSION_MODE_ORDER
 
   return (
     <Drawer open={open} onOpenChange={setOpen}>
       <DrawerTrigger asChild>
         <button
           type="button"
-          aria-label={`Permission mode: ${config.displayName}`}
+          aria-label={`Permission mode: ${RENDERER_PRODUCT_VARIANT === 'artist-os' ? artistCopy.label : config.displayName}`}
           className={cn(
             "h-7 pl-2 pr-2.5 text-xs font-medium rounded-[6px] flex items-center gap-1.5 shadow-tinted outline-none select-none shrink-0",
             style.className,
@@ -98,7 +109,7 @@ export function CompactPermissionModeSelector({
           style={{ '--shadow-color': style.shadowVar } as React.CSSProperties}
         >
           <ModeIcon mode={optimisticMode} className="h-3.5 w-3.5" />
-          <span>{config.shortName}</span>
+          <span>{RENDERER_PRODUCT_VARIANT === 'artist-os' ? artistCopy.shortLabel : config.shortName}</span>
         </button>
       </DrawerTrigger>
 
@@ -108,9 +119,14 @@ export function CompactPermissionModeSelector({
         </DrawerHeader>
 
         <div className="px-4 pb-6 flex flex-col gap-1">
-          {PERMISSION_MODE_ORDER.map((mode) => {
+          {visibleModes.map((mode) => {
             const modeConfig = PERMISSION_MODE_CONFIG[mode]
-            const isSelected = mode === optimisticMode
+            const isSelected = RENDERER_PRODUCT_VARIANT === 'artist-os'
+              ? mode === artistMode
+              : mode === optimisticMode
+            const modeCopy = RENDERER_PRODUCT_VARIANT === 'artist-os'
+              ? ARTIST_OS_PERMISSION_MODE_COPY[mode as 'ask' | 'allow-all']
+              : null
             return (
               <DrawerClose asChild key={mode}>
                 <button
@@ -125,8 +141,8 @@ export function CompactPermissionModeSelector({
                     <ModeIcon mode={mode} className="h-5 w-5" />
                   </span>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium">{modeConfig.displayName}</div>
-                    <div className="text-xs text-muted-foreground">{modeConfig.description}</div>
+                    <div className="text-sm font-medium">{modeCopy?.label ?? modeConfig.displayName}</div>
+                    <div className="text-xs text-muted-foreground">{modeCopy?.description ?? modeConfig.description}</div>
                   </div>
                   {isSelected && (
                     <Check className="h-4 w-4 shrink-0 text-foreground/60" />
