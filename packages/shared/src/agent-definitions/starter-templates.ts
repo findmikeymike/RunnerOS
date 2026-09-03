@@ -685,7 +685,7 @@ Memory rule: save durable Video Director collaboration preferences with \`scope:
     slug: 'lottie-animation-agent',
     metadata: {
       name: 'Lottie Animation Agent',
-      description: 'Create lightweight web and app animations.',
+      description: 'Creates, edits, previews, and verifies production-ready Lottie JSON animations using the official diffusionstudio/lottie Skia player harness.',
       avatar: 'L',
       permissionMode: 'ask',
       thinkingLevel: 'high',

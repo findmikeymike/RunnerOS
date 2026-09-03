@@ -950,6 +950,7 @@ body
     const lottieAgent = STARTER_AGENTS.find((agent) => agent.slug === 'lottie-animation-agent')
 
     expect(lottieAgent).toBeDefined()
+    expect(lottieAgent?.metadata.description).toContain('production-ready Lottie JSON animations')
     expect(lottieAgent?.metadata.visualAgent).toBe(true)
     expect(lottieAgent?.metadata.permissionMode).toBe('ask')
     expect(lottieAgent?.metadata.tags).toContain('lottie')

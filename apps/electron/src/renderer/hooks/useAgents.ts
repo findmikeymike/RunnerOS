@@ -56,6 +56,7 @@ const BUILTIN_VISIBLE_AGENT_SLUGS = [
   'content-genius',
   'scroll-stopper',
   'video-director',
+  'lottie-animation-agent',
   'video-editor-agent',
   'raw-video-editor',
   'ads-strategist',

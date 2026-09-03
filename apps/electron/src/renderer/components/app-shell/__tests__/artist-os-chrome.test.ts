@@ -241,6 +241,7 @@ describe('Artist OS persistent shell chrome', () => {
 
   test('makes the Workers directory chat-first without hiding worker descriptions', () => {
     const workers = readFileSync(join(import.meta.dir, '..', 'AgentsLaunchpad.tsx'), 'utf8')
+    const useAgents = readFileSync(join(import.meta.dir, '..', '..', '..', 'hooks', 'useAgents.ts'), 'utf8')
 
     expect(workers).toContain('placeholder="Search workers by name or capability"')
     expect(workers).toContain("type WorkerDirectoryView = 'all' | 'recent' | 'favorites'")
@@ -263,6 +264,7 @@ describe('Artist OS persistent shell chrome', () => {
     expect(workers).toContain("return 'Socials'")
     expect(workers).toContain('text-white/72')
     expect(workers).not.toContain('<MessageSquare')
+    expect(useAgents).toContain("'lottie-animation-agent'")
     expect(workers).not.toContain('onClick={() => setSelectedAgent(agent)}')
   })
 
