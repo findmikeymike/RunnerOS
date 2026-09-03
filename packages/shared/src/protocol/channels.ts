@@ -649,6 +649,7 @@ export const RPC_CHANNELS = {
     CREATE_SOCIAL_VARIANT_SET: 'outputs:createSocialVariantSet',
     START_SOCIAL_VARIANT_SET: 'outputs:startSocialVariantSet',
     ARCHIVE_SOCIAL_VARIANT: 'outputs:archiveSocialVariant',
+    REBIND_SOCIAL_VARIANT_SET: 'outputs:rebindSocialVariantSet',
     DELETE: 'outputs:delete',
     PROMOTE_TO_FINAL: 'outputs:promoteToFinal',
     REMOVE_FROM_FINAL: 'outputs:removeFromFinal',

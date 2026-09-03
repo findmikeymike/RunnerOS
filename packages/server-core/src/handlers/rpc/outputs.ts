@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
-import type { ArchiveSocialVariantRequest, CreateSocialVariantSetRequest, OutputFinalPointer, OutputManifest, OutputSummary, PromoteOutputToFinalInput, RemoveOutputFromFinalInput, StartSocialVariantSetRequest } from '@craft-agent/shared/outputs';
+import type { ArchiveSocialVariantRequest, CreateSocialVariantSetRequest, OutputFinalPointer, OutputManifest, OutputSummary, PromoteOutputToFinalInput, RebindSocialVariantSetRequest, RemoveOutputFromFinalInput, StartSocialVariantSetRequest } from '@craft-agent/shared/outputs';
 import { validateRunnerVideoProject } from '@craft-agent/shared/video';
 import type { VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
 import type { ApplyVisualSurfaceEventResult, VisualSurfaceEventInput, VisualSurfaceEventRecord } from '@craft-agent/shared/visual-surface-events';
@@ -20,6 +20,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.outputs.CREATE_SOCIAL_VARIANT_SET,
   RPC_CHANNELS.outputs.START_SOCIAL_VARIANT_SET,
   RPC_CHANNELS.outputs.ARCHIVE_SOCIAL_VARIANT,
+  RPC_CHANNELS.outputs.REBIND_SOCIAL_VARIANT_SET,
   RPC_CHANNELS.outputs.DELETE,
   RPC_CHANNELS.outputs.PROMOTE_TO_FINAL,
   RPC_CHANNELS.outputs.REMOVE_FROM_FINAL,
@@ -200,6 +201,23 @@ export function registerOutputsHandlers(server: RpcServer, deps: HandlerDeps): v
       const { assertTeamPermission } = await import('@craft-agent/shared/workspaces');
       assertTeamPermission(resolveRootPath(workspaceId), 'files.write');
       return socialVariantServiceFor(server, deps).archiveVariant(workspaceId, input);
+    },
+  );
+
+  server.handle(
+    RPC_CHANNELS.outputs.REBIND_SOCIAL_VARIANT_SET,
+    async (_ctx, workspaceId: string, input: RebindSocialVariantSetRequest): Promise<OutputManifest> => {
+      assertLocalWorkspace(workspaceId, 'Continue social variants');
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces');
+      assertTeamPermission(resolveRootPath(workspaceId), 'files.write');
+      const current = serviceFor(server).get(workspaceId, input.outputId);
+      if (!current?.socialVariantSet) throw new Error(`Social Variant Set not found: ${input.outputId}`);
+      const originalSession = await deps.sessionManager.getSession(current.socialVariantSet.editorSessionId);
+      if (originalSession) throw new Error('The original Raw Video Editor session is still available. Open it instead.');
+      const session = await deps.sessionManager.getSession(input.editorSessionId);
+      if (!session || session.workspaceId !== workspaceId) throw new Error('Replacement Raw Video Editor session does not belong to this workspace.');
+      if (session.spawnedFromAgent?.agentSlug !== 'raw-video-editor') throw new Error('Social Variant Sets require a Raw Video Editor session.');
+      return socialVariantServiceFor(server, deps).rebindEditor(workspaceId, input);
     },
   );
 

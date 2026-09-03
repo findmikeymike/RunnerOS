@@ -376,6 +376,19 @@ describe('Artist OS persistent shell chrome', () => {
     expect(releaseKit).toContain('aspect-[9/16]')
   })
 
+  test('keeps social video Variant Sets discoverable and resumable', () => {
+    const releaseKit = readFileSync(join(import.meta.dir, '..', 'ReleaseKitPage.tsx'), 'utf8')
+    const outputs = readFileSync(join(import.meta.dir, '..', '..', 'outputs', 'OutputsListPanel.tsx'), 'utf8')
+
+    expect(releaseKit).toContain("'finals' | 'variants' | 'outputs'")
+    expect(releaseKit).toContain('>Variants</TabButton>')
+    expect(releaseKit).toContain('getSessionMessages(set.editorSessionId)')
+    expect(releaseKit).toContain('rebindSocialVariantSet')
+    expect(releaseKit).toContain('preserve every ready version')
+    expect(outputs).toContain("'all' | 'variants'")
+    expect(outputs).toContain("output.socialVariantSetSummary")
+  })
+
   test('creates an empty Lab song from the Songs page before opening the Pad', () => {
     const songs = readFileSync(join(import.meta.dir, '..', 'LabSongsPage.tsx'), 'utf8')
     const pad = readFileSync(join(import.meta.dir, '..', 'LabSongPadPage.tsx'), 'utf8')

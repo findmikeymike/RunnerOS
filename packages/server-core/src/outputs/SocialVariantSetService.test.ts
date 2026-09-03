@@ -338,4 +338,47 @@ describe('SocialVariantSetService', () => {
       variantId: variant.id,
     })).rejects.toThrow('Expected revision 3, found 6');
   });
+
+  test('rebinds a live set to a replacement editor with a revision fence', async () => {
+    const instance = service();
+    const created = await instance.create(WORKSPACE_ID, { ...request(), requestedByClientId: 'client-1' });
+    const rebound = await instance.rebindEditor(WORKSPACE_ID, {
+      outputId: created.id,
+      expectedRevision: 1,
+      editorSessionId: 'replacement-editor',
+    });
+    expect(rebound.socialVariantSet).toMatchObject({ revision: 2, editorSessionId: 'replacement-editor' });
+    expect(rebound.origin).toMatchObject({ sessionId: 'replacement-editor', agentSlug: 'raw-video-editor' });
+    await expect(instance.rebindEditor(WORKSPACE_ID, {
+      outputId: created.id,
+      expectedRevision: 1,
+      editorSessionId: 'another-editor',
+    })).rejects.toThrow('Expected revision 1, found 2');
+
+    const readyCandidate = await instance.create(WORKSPACE_ID, {
+      ...request({ variantsPerSource: 1 }),
+      requestedByClientId: 'client-1',
+    });
+    const started = await instance.start(WORKSPACE_ID, readyCandidate.id, 1);
+    const readyPath = join(root, 'renders', 'ready.mp4');
+    mkdirSync(join(root, 'renders'), { recursive: true });
+    writeFileSync(readyPath, 'ready-render');
+    const ready = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+      outputId: readyCandidate.id,
+      expectedRevision: 2,
+      sourceId: started.socialVariantSet!.sources[0]!.id,
+      destinationIndex: 0,
+      title: 'Ready cut',
+      hook: 'Open immediately.',
+      editorialMode: 'direct',
+      editorialIntent: 'Use the strongest moment.',
+      filePath: readyPath,
+    });
+    expect(ready.socialVariantSet?.status).toBe('ready');
+    await expect(instance.rebindEditor(WORKSPACE_ID, {
+      outputId: ready.id,
+      expectedRevision: ready.socialVariantSet!.revision,
+      editorSessionId: 'replacement-editor',
+    })).rejects.toThrow('ready Variant Set cannot be continued');
+  });
 });

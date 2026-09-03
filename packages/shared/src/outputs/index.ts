@@ -51,6 +51,7 @@ export type {
   StartSocialVariantSetRequest,
   RecordSocialVariantResultRequest,
   ArchiveSocialVariantRequest,
+  RebindSocialVariantSetRequest,
 } from './social-variants.ts';
 
 export {

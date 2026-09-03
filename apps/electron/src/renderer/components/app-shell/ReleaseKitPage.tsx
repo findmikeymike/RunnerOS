@@ -53,6 +53,9 @@ import { useAppShellContext } from '@/context/AppShellContext'
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { releaseKitRepurposeRestriction } from '@/lib/release-kit-repurpose'
 import { SocialVariantSetupDrawer, type SocialVariantSetupSource } from '@/components/social-variants/SocialVariantSetupDrawer'
+import { openVideoRepurposeSession } from '@/lib/video-repurpose-launch'
+import { sendAgentDraft } from '@/lib/run-agent'
+import { navigate, routes } from '@/lib/navigate'
 
 interface ReleaseKitPageProps {
   workspaceId: string
@@ -103,13 +106,49 @@ export function ReleaseKitPage({
   const [manifest, setManifest] = React.useState<ReleaseKitManifest | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
-  const [tab, setTab] = React.useState<'finals' | 'outputs'>('finals')
+  const [tab, setTab] = React.useState<'finals' | 'variants' | 'outputs'>('finals')
   const [addOpen, setAddOpen] = React.useState(false)
   const [prefillOutput, setPrefillOutput] = React.useState<OutputSummaryDTO | null>(null)
   const [itemPaths, setItemPaths] = React.useState<Record<string, string>>({})
   const [selectedItemId, setSelectedItemId] = React.useState<string | null>(null)
   const [variantSetupSourceId, setVariantSetupSourceId] = React.useState<string | null>(null)
   const selectedItem = manifest?.items.find((item) => item.id === selectedItemId) ?? null
+  const { onCreateSession, onInputChange, onSendMessage, skills, enabledSources, activeAgents } = useAppShellContext()
+  const variantOutputs = React.useMemo(() => outputs.filter((output) => Boolean(output.socialVariantSetSummary)), [outputs])
+
+  const continueVariantSet = React.useCallback(async (output: OutputSummaryDTO) => {
+    const detail = await window.electronAPI.getOutput(workspaceId, output.id)
+    const set = detail?.socialVariantSet
+    if (!detail || !set) throw new Error('Variant Set is unavailable.')
+    const existing = await window.electronAPI.getSessionMessages(set.editorSessionId)
+    if (existing) {
+      navigate(routes.view.allSessions(set.editorSessionId))
+      return
+    }
+    const replacement = await openVideoRepurposeSession({
+      workspaceId,
+      activeAgents,
+      skills,
+      sources: enabledSources,
+      onCreateSession,
+      onInputChange,
+      onSendMessage,
+      autoSendDraft: false,
+      navigateOnCreate: false,
+    })
+    const rebound = await window.electronAPI.rebindSocialVariantSet(workspaceId, {
+      outputId: detail.id,
+      expectedRevision: set.revision,
+      editorSessionId: replacement.id,
+    })
+    const revision = rebound.socialVariantSet?.revision
+    await sendAgentDraft(onSendMessage, replacement.id, [
+      `Continue Variant Set ${detail.id}${revision ? ` at revision ${revision}` : ''}.`,
+      'Read the saved set with get_social_variant_set, preserve every ready version, and finish only missing or failed versions.',
+      'Creation is already authorized. Do not ask for another plan approval, and do not post or schedule anything.',
+    ].join(' '), 'Raw Video Editor')
+    navigate(routes.view.allSessions(replacement.id))
+  }, [activeAgents, enabledSources, onCreateSession, onInputChange, onSendMessage, skills, workspaceId])
 
   const refresh = React.useCallback(async () => {
     if (!workspaceId) return
@@ -214,6 +253,7 @@ export function ReleaseKitPage({
         <div className="flex shrink-0 items-center justify-between border-b border-white/[0.07] px-1 pb-3 pt-1">
           <div className="inline-flex rounded-xl border border-white/[0.07] bg-white/[0.025] p-1 backdrop-blur-md">
             <TabButton active={tab === 'finals'} onClick={() => setTab('finals')}>Finals</TabButton>
+            <TabButton active={tab === 'variants'} onClick={() => setTab('variants')}>Variants</TabButton>
             <TabButton active={tab === 'outputs'} onClick={() => setTab('outputs')}>Outputs</TabButton>
           </div>
           <span className="text-xs font-medium text-white/34"><span className="text-white/75">{manifest?.items.filter((item) => item.status === 'ready').length ?? 0}</span> approved</span>
@@ -233,6 +273,14 @@ export function ReleaseKitPage({
                 onAdd={() => setAddOpen(true)}
               />
             </ReleaseKitInspectContext.Provider>
+          ) : tab === 'variants' ? (
+            <VariantsTab
+              outputs={variantOutputs}
+              loading={outputsLoading}
+              error={outputsError}
+              onOpen={onOutputClick}
+              onContinue={(output) => void continueVariantSet(output).catch((cause) => toast.error('Could not continue variants', { description: cause instanceof Error ? cause.message : String(cause) }))}
+            />
           ) : (
             <OutputsTab
               outputs={outputs}
@@ -638,6 +686,53 @@ function OutputsTab({ outputs, loading, error, onOpen, onPromote }: {
       ))}
     </div>
   )
+}
+
+function VariantsTab({ outputs, loading, error, onOpen, onContinue }: {
+  outputs: OutputSummaryDTO[]
+  loading: boolean
+  error: string | null
+  onOpen: (id: string) => void
+  onContinue: (output: OutputSummaryDTO) => void
+}) {
+  if (loading) return <Centered><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading variants</Centered>
+  if (error) return <Centered>{error}</Centered>
+  if (!outputs.length) return <Centered>No video variants yet. Create them from an approved video in Finals.</Centered>
+  return (
+    <div className="mx-auto grid max-w-[1120px] gap-3 md:grid-cols-2">
+      {outputs.map((output) => {
+        const set = output.socialVariantSetSummary!
+        const needsAccount = set.attention?.code === 'account-unavailable'
+        const complete = set.readyCount >= set.requestedCount && set.failedCount === 0 && set.requestedCount > 0
+        return (
+          <article key={output.id} className="rounded-[16px] bg-white/[0.035] p-4 ring-1 ring-white/[0.055]">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-orange-500/[0.09] text-orange-200/75"><Scissors className="h-4 w-4" /></div>
+              <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onOpen(output.id)}>
+                <div className="truncate text-sm font-medium text-white/82">{output.title}</div>
+                <div className="mt-1 text-xs text-white/38">
+                  {set.readyCount} / {set.requestedCount} ready{set.failedCount ? ` · ${set.failedCount} needs attention` : ''} · {set.sourceCount} source{set.sourceCount === 1 ? '' : 's'}
+                </div>
+              </button>
+              <span className={cn(
+                'rounded-[6px] px-2 py-1 text-[10px] font-medium',
+                complete ? 'bg-emerald-400/10 text-emerald-200/75' : needsAccount ? 'bg-amber-400/10 text-amber-200/80' : 'bg-white/[0.05] text-white/45',
+              )}>{complete ? 'Ready' : needsAccount ? 'Needs account' : displayVariantStatus(set.status)}</span>
+            </div>
+            {set.attention?.message ? <p className="mt-3 line-clamp-2 text-xs leading-5 text-amber-100/48">{set.attention.message}</p> : null}
+            <div className="mt-4 flex gap-2">
+              <Button size="sm" className="h-8 bg-[#f97316] px-3 text-xs text-black hover:bg-[#fb923c]" onClick={() => onOpen(output.id)}><Play className="mr-1.5 h-3.5 w-3.5" />Review</Button>
+              {!complete && set.status !== 'archived' ? <Button size="sm" variant="ghost" className="h-8 px-3 text-xs text-white/55 hover:bg-white/[0.06] hover:text-white" onClick={() => onContinue(output)}>Continue</Button> : null}
+            </div>
+          </article>
+        )
+      })}
+    </div>
+  )
+}
+
+function displayVariantStatus(status: string): string {
+  return status.replace(/-/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase())
 }
 
 function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange, onChanged, onCreateVariants }: {

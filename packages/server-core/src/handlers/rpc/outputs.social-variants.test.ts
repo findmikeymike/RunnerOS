@@ -63,12 +63,13 @@ function context(): RequestContext {
   return { clientId: 'real-client', workspaceId: WORKSPACE_ID, webContentsId: 1 };
 }
 
-function deps(sessionWorkspaceId = WORKSPACE_ID): HandlerDeps {
+function deps(sessionWorkspaceId = WORKSPACE_ID, missingSessionIds = new Set<string>()): HandlerDeps {
   return {
     sessionManager: {
-      async getSession() {
+      async getSession(sessionId: string) {
+        if (missingSessionIds.has(sessionId)) return null;
         return {
-          id: 'editor-session',
+          id: sessionId,
           workspaceId: sessionWorkspaceId,
           workspaceName: 'Artist HQ',
           lastMessageAt: 0,
@@ -117,5 +118,46 @@ describe('social variant Output RPC', () => {
       destinationIntents: [{ platform: 'x', accountRole: 'primary', mode: 'standard' }],
       variantsPerSource: 1,
     })).rejects.toThrow(/does not belong/);
+  });
+
+  test('validates and binds a replacement editor session', async () => {
+    const { handlers, server } = harness();
+    const { registerOutputsHandlers } = await import('./outputs');
+    const missing = new Set<string>();
+    registerOutputsHandlers(server, deps(WORKSPACE_ID, missing));
+    const create = handlers.get(RPC_CHANNELS.outputs.CREATE_SOCIAL_VARIANT_SET)!;
+    const rebind = handlers.get(RPC_CHANNELS.outputs.REBIND_SOCIAL_VARIANT_SET)!;
+    const created = await create(context(), WORKSPACE_ID, {
+      editorSessionId: 'editor-session',
+      sourceSelections: [{ origin: 'output', sourceId: SOURCE_OUTPUT_ID, assetId: 'video' }],
+      destinationIntents: [{ platform: 'x', accountRole: 'primary', mode: 'standard' }],
+      variantsPerSource: 1,
+    }) as OutputManifest;
+    missing.add('editor-session');
+    const rebound = await rebind(context(), WORKSPACE_ID, {
+      outputId: created.id,
+      expectedRevision: 1,
+      editorSessionId: 'replacement-editor',
+    }) as OutputManifest;
+    expect(rebound.socialVariantSet).toMatchObject({ revision: 2, editorSessionId: 'replacement-editor' });
+  });
+
+  test('refuses to replace an editor session that still exists', async () => {
+    const { handlers, server } = harness();
+    const { registerOutputsHandlers } = await import('./outputs');
+    registerOutputsHandlers(server, deps());
+    const create = handlers.get(RPC_CHANNELS.outputs.CREATE_SOCIAL_VARIANT_SET)!;
+    const rebind = handlers.get(RPC_CHANNELS.outputs.REBIND_SOCIAL_VARIANT_SET)!;
+    const created = await create(context(), WORKSPACE_ID, {
+      editorSessionId: 'editor-session',
+      sourceSelections: [{ origin: 'output', sourceId: SOURCE_OUTPUT_ID, assetId: 'video' }],
+      destinationIntents: [{ platform: 'x', accountRole: 'primary', mode: 'standard' }],
+      variantsPerSource: 1,
+    }) as OutputManifest;
+    await expect(rebind(context(), WORKSPACE_ID, {
+      outputId: created.id,
+      expectedRevision: 1,
+      editorSessionId: 'replacement-editor',
+    })).rejects.toThrow('original Raw Video Editor session is still available');
   });
 });

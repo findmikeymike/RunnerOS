@@ -92,9 +92,11 @@ export interface SocialVariantSetSummary {
   scope: SocialVariantSetManifest['scope'];
   campaignId?: string;
   sourceCount: number;
+  requestedCount: number;
   variantCount: number;
   readyCount: number;
   failedCount: number;
+  attention?: SocialVariantSetManifest['attention'];
   updatedAt: string;
 }
 
@@ -137,6 +139,12 @@ export interface ArchiveSocialVariantRequest {
   outputId: string;
   expectedRevision: number;
   variantId: string;
+}
+
+export interface RebindSocialVariantSetRequest {
+  outputId: string;
+  expectedRevision: number;
+  editorSessionId: string;
 }
 
 const SHA256 = /^[a-f0-9]{64}$/i;
@@ -359,9 +367,11 @@ export function toSocialVariantSetSummary(value: SocialVariantSetManifest): Soci
     scope: value.scope,
     campaignId: value.campaignId,
     sourceCount: value.sources.length,
+    requestedCount: value.request.totalRequested,
     variantCount: value.variants.length,
     readyCount: value.variants.filter((variant) => variant.state === 'ready').length,
     failedCount: value.variants.filter((variant) => variant.state === 'failed').length,
+    attention: value.attention,
     updatedAt: value.updatedAt,
   };
 }

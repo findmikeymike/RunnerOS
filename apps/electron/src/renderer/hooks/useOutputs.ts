@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react'
 import { useAtom } from 'jotai'
 import { outputsStateAtomFamily, type OutputsState } from '@/atoms/outputs'
-import type { SocialVariantSetManifest } from '@craft-agent/shared/outputs'
+import type { SocialVariantSetManifest, SocialVariantSetSummary } from '@craft-agent/shared/outputs'
 
 export const OUTPUT_RPC_CHANNELS = {
   LIST: 'outputs:list',
@@ -123,6 +123,7 @@ export interface OutputSummaryDTO {
   bundlePath?: string
   directoryPath?: string
   path?: string
+  socialVariantSetSummary?: SocialVariantSetSummary
 }
 
 export interface OutputManifestDTO extends OutputSummaryDTO {
@@ -198,7 +199,11 @@ function coerceSummary(raw: unknown): OutputSummaryDTO | null {
   if (!raw || typeof raw !== 'object') return null
   const value = raw as Record<string, unknown>
   if (typeof value.id !== 'string' || typeof value.title !== 'string') return null
-  return value as unknown as OutputSummaryDTO
+  const summary = value as unknown as OutputSummaryDTO
+  return {
+    ...summary,
+    socialVariantSetSummary: value.socialVariantSet as SocialVariantSetSummary | undefined,
+  }
 }
 
 function coerceManifest(raw: unknown): OutputManifestDTO | null {
@@ -212,6 +217,7 @@ function coerceManifest(raw: unknown): OutputManifestDTO | null {
     assets: Array.isArray(value.assets) ? value.assets as OutputAssetDTO[] : [],
     receipts: Array.isArray(value.receipts) ? value.receipts as OutputReceiptDTO[] : [],
     links: Array.isArray(value.links) ? value.links as OutputLinkDTO[] : [],
+    socialVariantSet: value.socialVariantSet as SocialVariantSetManifest | undefined,
   }
 }
 

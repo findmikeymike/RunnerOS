@@ -94,9 +94,11 @@ describe('social variant set validation', () => {
       scope: 'campaign',
       campaignId: 'campaign-1',
       sourceCount: 1,
+      requestedCount: 2,
       variantCount: 1,
       readyCount: 1,
       failedCount: 0,
+      attention: undefined,
       updatedAt: '2026-09-02T12:01:00.000Z',
     });
   });

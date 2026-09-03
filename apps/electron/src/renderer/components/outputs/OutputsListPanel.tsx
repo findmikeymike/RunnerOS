@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Box, CheckCircle2, FileText, Image, Link2, PackageCheck, ReceiptText, Search, Star } from 'lucide-react'
+import { Box, CheckCircle2, FileText, Image, Link2, PackageCheck, ReceiptText, Scissors, Search, Star } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { EntityRow } from '@/components/ui/entity-row'
 import { Input } from '@/components/ui/input'
@@ -36,14 +36,16 @@ export function OutputsListPanel({
   const { navigate } = useNavigation()
   const { promoteToFinal, removeFromFinal } = useOutputs(workspaceId)
   const [query, setQuery] = React.useState('')
+  const [filter, setFilter] = React.useState<'all' | 'variants'>('all')
   const [finalAction, setFinalAction] = React.useState<{
     output: OutputSummaryDTO
     action: 'promote' | 'primary' | 'remove'
   } | null>(null)
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return outputs
-    return outputs.filter((output) => {
+    const scoped = filter === 'variants' ? outputs.filter((output) => Boolean(output.socialVariantSetSummary)) : outputs
+    if (!q) return scoped
+    return scoped.filter((output) => {
       const haystack = [
         output.title,
         output.summary,
@@ -55,11 +57,19 @@ export function OutputsListPanel({
       ].filter(Boolean).join(' ').toLowerCase()
       return haystack.includes(q)
     })
-  }, [outputs, query])
+  }, [filter, outputs, query])
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="px-3 py-2 border-b border-border/30">
+        {!currentCampaignId ? (
+          <div className="mb-2 flex gap-1">
+            <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>All</FilterButton>
+            <FilterButton active={filter === 'variants'} onClick={() => setFilter('variants')}>
+              <Scissors className="h-3 w-3" /> Variants
+            </FilterButton>
+          </div>
+        ) : null}
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -77,7 +87,7 @@ export function OutputsListPanel({
           <div className="m-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">{error}</div>
         ) : filtered.length === 0 ? (
           <div className="h-full flex items-center justify-center px-5 text-center text-sm text-muted-foreground">
-            {query ? t('outputsList.emptySearch') : t('outputsList.empty')}
+            {query ? t('outputsList.emptySearch') : filter === 'variants' ? 'No video Variant Sets yet.' : t('outputsList.empty')}
           </div>
         ) : (
           filtered.map((output, index) => (
@@ -126,6 +136,21 @@ export function OutputsListPanel({
         currentCampaignId={currentCampaignId}
       /> : null}
     </div>
+  )
+}
+
+function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'inline-flex h-6 items-center gap-1 rounded-[6px] px-2 text-[11px] transition-colors',
+        active ? 'bg-white/[0.09] text-foreground' : 'text-muted-foreground hover:bg-white/[0.04] hover:text-foreground',
+      )}
+    >
+      {children}
+    </button>
   )
 }
 

@@ -20,6 +20,7 @@ import {
   type ArchiveSocialVariantRequest,
   type OutputManifest,
   type RecordSocialVariantResultRequest,
+  type RebindSocialVariantSetRequest,
   type SocialVariantDestinationIntent,
   type SocialVariantSource,
   type SocialVariantSourceSelection,
@@ -399,6 +400,38 @@ export class SocialVariantSetService {
         summary: status === 'archived'
           ? 'All variants archived.'
           : `${readyCount} variants ready${failedCount ? ` · ${failedCount} failed` : ''}.`,
+        updatedAt: now,
+        socialVariantSet: set,
+      };
+      writeOutputManifest(workspace.rootPath, next);
+      return next;
+    });
+    this.deps.emitOutputsUpdated?.(workspaceId);
+    return updated;
+  }
+
+  async rebindEditor(workspaceId: string, input: RebindSocialVariantSetRequest): Promise<OutputManifest> {
+    const workspace = this.requireWorkspace(workspaceId);
+    if (!input.editorSessionId?.trim()) throw new Error('A replacement Raw Video Editor session is required.');
+    const updated = await withOutputBundleLockAsync(workspace.rootPath, input.outputId, async () => {
+      const current = readOutput(workspace.rootPath, input.outputId);
+      if (!current?.socialVariantSet) throw new Error(`Social Variant Set not found: ${input.outputId}`);
+      if (current.workspaceId !== workspaceId) throw new Error(`Output "${input.outputId}" is not in workspace "${workspaceId}".`);
+      assertSocialVariantSetRevision(current.socialVariantSet, input.expectedRevision);
+      if (!new Set(['queued', 'analyzing', 'rendering', 'partially-ready', 'needs-attention']).has(current.socialVariantSet.status)) {
+        throw new Error(`A ${current.socialVariantSet.status} Variant Set cannot be continued.`);
+      }
+      const now = this.nextTimestamp(current.socialVariantSet.updatedAt);
+      const set = {
+        ...current.socialVariantSet,
+        revision: current.socialVariantSet.revision + 1,
+        editorSessionId: input.editorSessionId.trim(),
+        updatedAt: now,
+      };
+      assertSocialVariantSetManifest(set);
+      const next: OutputManifest = {
+        ...current,
+        origin: { ...current.origin, source: 'session', sessionId: set.editorSessionId, agentSlug: 'raw-video-editor' },
         updatedAt: now,
         socialVariantSet: set,
       };
