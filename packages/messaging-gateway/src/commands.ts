@@ -93,10 +93,8 @@ export class Commands {
     } else {
       await adapter.sendText(
         msg.channelId,
-        'This chat is not connected to an agent yet.\n\n' +
+        'This chat is not connected yet.\n\n' +
         '/pair <code> — redeem a pairing code from the app\n' +
-        '/agents — see who you can connect to\n' +
-        '/bind <agent> — connect to an agent\n' +
         '/help — show all commands',
       )
     }
@@ -394,9 +392,6 @@ export class Commands {
   }
 
   private async handleHelp(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
-    const bindLine = adapter.platform === 'whatsapp'
-      ? '/bind — list recent sessions (then use /bind <number>)\n'
-      : '/bind — pick from recent sessions\n'
     const whatsappHomeLines = adapter.platform === 'whatsapp'
       ? '/workspaces — list Home Gateway workspaces\n' +
         '/where — show current Home Gateway workspace\n' +
@@ -406,14 +401,12 @@ export class Commands {
     await adapter.sendText(
       msg.channelId,
       'Commands:\n' +
-      '/new [name] — create + bind new session\n' +
-      bindLine +
-      '/bind <id> — bind to specific session\n' +
-      '/pair <code> — redeem an app-generated pairing code\n' +
+      '/pair <code> — connect this chat using a code from the app\n' +
+      '/who — show who this chat is connected to\n' +
+      '/reset — start a fresh thread\n' +
+      '/stop — stop what it is doing right now\n' +
       '/unbind — disconnect this chat\n' +
       whatsappHomeLines +
-      '/status — show current binding\n' +
-      '/stop — abort current agent run\n' +
       '/help — show this message',
     )
   }

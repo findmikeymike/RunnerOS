@@ -82,7 +82,7 @@ Slices 1, 2, 4, and 4a are implemented:
 
 ### Remaining
 
-Slice 3 (desktop agent picker), slice 4b (activation catalog refresh, routing hints), slice 5 (team-mode membership, fresh-code rebinding), slice 7 (transport failure visibility). Slice 5 should not lag far behind, because binding chats to HNIC raises the cost of today's channel-only trust model. Slice 6 is dropped by decision.
+Slice 4b (activation catalog refresh, routing hints), slice 5 (team-mode membership, fresh-code rebinding), slice 7 (transport failure visibility). Slice 5 should not lag far behind, because binding chats to HNIC raises the cost of today's channel-only trust model. Slices 3 and 6 are dropped by decision.
 
 ---
 
@@ -375,11 +375,9 @@ Silent failure is the worst outcome for a remote user, who cannot see the app.
 
 ## UI
 
-In the existing Messaging settings pane, each platform's **Connect** flow gains one required step: choose the agent.
+The Connect flow gains **no picker** (see Slice 3). Pairing binds to the Artist Manager.
 
-- Default and first option: **HNIC**.
-- Then any campaign lead the user has access to, and any other permitted agent.
-- After connecting, the row reads `Telegram · HNIC · Connected` with a Change action that mints a new pairing code.
+- The settings row reads `Telegram · Artist Manager · Connected`.
 - Session ids never appear in messaging UI.
 
 ## Migration
@@ -420,7 +418,11 @@ Never log message bodies, pairing codes, plan tokens, or credentials.
 
 **Slice 2 — Session resolution.** `resolveBindingSession()` calling `resolveAgentSessionOptions` + `createSession`, with reuse validation, per-binding serialization, and persistence before dispatch.
 
-**Slice 3 — Pairing picks an agent.** Desktop pairing carries an agent slug; the Connect flow gains the picker; the settings row shows the bound agent.
+**Slice 3 — Pairing picks an agent. DROPPED, deliberately.** Every chat pairs to the Artist Manager. A phone chat is one relationship, not a directory: the manager already holds the catalog and routes to specialists, and asking the artist to choose a worker makes them do the manager's job. Specialists report back through the manager, so there is one thread and no hopping between them.
+
+`/agents` and `/bind <slug>` remain implemented but **unadvertised** — an escape hatch for the rare case where someone wants a dedicated thread with one specialist, at no UI cost. Note that a chat bound this way reaches a real continuing session (full memory, normal back-and-forth), but the specialist cannot call `schedule_work`, which is manager-only.
+
+The case this does not serve is iterating with a specialist *through* the manager: `message_agent` is a bounded handoff that spawns a fresh child per call, so follow-ups do not continue the same specialist conversation. If that ever matters, the fix is a durable child session per specialist — not a picker.
 
 **Slice 4 — Commands.** `/who`, `/agents`, `/bind <agent-slug>`, `/reset`. Remove `/new` and session-id binding. Refuse legacy forms with an explanation.
 
