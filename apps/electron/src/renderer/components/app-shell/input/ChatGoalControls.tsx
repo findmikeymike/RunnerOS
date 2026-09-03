@@ -105,10 +105,11 @@ export function ChatGoalBadge({
       return
     }
 
-    onDraftChange?.(buildGoalCommandDraft(draft))
+    const nextDraft = buildGoalCommandDraft(draft)
+    onDraftChange?.(nextDraft)
     queueMicrotask(() => {
-      window.dispatchEvent(new CustomEvent('craft:focus-input', {
-        detail: { sessionId: session.id },
+      window.dispatchEvent(new CustomEvent('craft:insert-text', {
+        detail: { sessionId: session.id, text: nextDraft },
       }))
     })
   }, [draft, goal, onDraftChange, session.id])

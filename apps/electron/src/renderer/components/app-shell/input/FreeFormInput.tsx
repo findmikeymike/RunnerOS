@@ -91,7 +91,10 @@ import { hasOpenOverlay } from '@/lib/overlay-detection'
 import { ToolbarStatusSlot } from './ToolbarStatusSlot'
 import { buildPlanApprovalMessage } from '../plan-approval-message'
 import { shouldHandleScopedInputEvent } from './input-event-guards'
-import { clearPendingFocusForSession, consumePendingFocusForSession } from './focus-input-events'
+import {
+  clearPendingFocusForSession,
+  consumePendingFocusForSession,
+} from './focus-input-events'
 import { groupConnectedModelProviders } from './model-provider-groups'
 import {
   getRecentWorkingDirs,
@@ -2318,9 +2321,14 @@ export function FreeFormInput({
             <Button
               type="button"
               size="icon"
-              variant="secondary"
+              variant={RENDERER_PRODUCT_VARIANT === 'artist-os' ? 'default' : 'secondary'}
               aria-label={t('chat.stopResponse')}
-              className="send-btn h-7 w-7 rounded-full shrink-0 hover:bg-foreground/15 active:bg-foreground/20 ml-2"
+              className={cn(
+                'send-btn h-7 w-7 shrink-0 rounded-full ml-2',
+                RENDERER_PRODUCT_VARIANT === 'artist-os'
+                  ? 'bg-white text-black hover:bg-white/90 active:bg-white/80'
+                  : 'hover:bg-foreground/15 active:bg-foreground/20',
+              )}
               onClick={() => handleStop(false)}
             >
               <Square className="h-3 w-3 fill-current" />
@@ -2330,7 +2338,11 @@ export function FreeFormInput({
               type="submit"
               size="icon"
               aria-label={t('shortcuts.sendMessage')}
-              className="send-btn h-7 w-7 rounded-full shrink-0 ml-2"
+              className={cn(
+                'send-btn h-7 w-7 shrink-0 rounded-full ml-2',
+                RENDERER_PRODUCT_VARIANT === 'artist-os' &&
+                  'bg-[#f4511e] text-white hover:bg-[#ff5a22] active:bg-[#dc3f18] disabled:bg-[#f4511e] disabled:text-white disabled:opacity-35',
+              )}
               disabled={!hasContent || disabled || disableSend}
               data-tutorial="send-button"
             >

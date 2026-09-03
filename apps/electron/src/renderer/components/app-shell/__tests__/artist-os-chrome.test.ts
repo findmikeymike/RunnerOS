@@ -274,6 +274,10 @@ describe('Artist OS persistent shell chrome', () => {
     const notification = readFileSync(join(import.meta.dir, '..', '..', 'notifications', 'NotificationItem.tsx'), 'utf8')
 
     expect(input).toContain("RENDERER_PRODUCT_VARIANT === 'artist-os' ? 'rgba(255, 255, 255, 0.92)' : undefined")
+    expect(input).toContain("'bg-[#f4511e] text-white hover:bg-[#ff5a22] active:bg-[#dc3f18]")
+    expect(input).toContain("'bg-white text-black hover:bg-white/90 active:bg-white/80'")
+    expect(input).toContain("variant={RENDERER_PRODUCT_VARIANT === 'artist-os' ? 'default' : 'secondary'}")
+    expect(input).toContain("window.addEventListener('craft:insert-text'")
     expect(chat).toContain('runner-chat-response relative max-w-[90%] pl-6 pr-4 py-3 text-[13.5px] leading-[25px]')
     expect(agentHeader).toContain('items-center justify-center')
     expect(agentHeader).toContain('rounded-[10px] border border-[#ff8063]/[0.34]')
