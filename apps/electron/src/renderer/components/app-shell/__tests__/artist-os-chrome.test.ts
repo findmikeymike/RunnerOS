@@ -57,7 +57,8 @@ describe('Artist OS persistent shell chrome', () => {
     const panelSlot = readFileSync(join(import.meta.dir, '..', 'PanelSlot.tsx'), 'utf8')
     const styles = readFileSync(join(import.meta.dir, '..', '..', '..', 'index.css'), 'utf8')
 
-    expect(panelSlot).toContain("RENDERER_PRODUCT_VARIANT === 'artist-os' && 'artist-os-main-canvas'")
+    expect(panelSlot).toContain("const isChatRoute = navState?.navigator === 'sessions' && navState.details?.type === 'session'")
+    expect(panelSlot).toContain("RENDERER_PRODUCT_VARIANT === 'artist-os' && !isChatRoute && 'artist-os-main-canvas'")
     expect(styles).toContain('.artist-os-main-canvas {')
     expect(styles).toContain('background: #050505;')
     expect(styles).toContain('.artist-os-main-canvas .bg-\\[\\#050505\\]')

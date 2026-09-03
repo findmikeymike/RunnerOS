@@ -62,6 +62,7 @@ export function PanelSlot({
   const setFocusedPanel = useSetAtom(focusedPanelIdAtom)
   const parentContext = useAppShellContext()
   const navState = parseRouteToNavigationState(entry.route)
+  const isChatRoute = navState?.navigator === 'sessions' && navState.details?.type === 'session'
   const isCreatorCommandCenter = navState?.navigator === 'sessions'
   const isFullWidthRoute = isCreatorCommandCenter
     || navState?.navigator === 'campaign'
@@ -135,7 +136,7 @@ export function PanelSlot({
               ? 'shadow-panel-focused z-[1]'
               : 'shadow-middle z-0',
           'runneros-glass-panel-strong',
-          RENDERER_PRODUCT_VARIANT === 'artist-os' && 'artist-os-main-canvas',
+          RENDERER_PRODUCT_VARIANT === 'artist-os' && !isChatRoute && 'artist-os-main-canvas',
         )}
         style={{
           // In multi-panel, unfocused panels override --background so all
