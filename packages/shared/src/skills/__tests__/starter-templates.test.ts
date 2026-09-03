@@ -510,11 +510,27 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(parsed.content).toContain('at most three searches');
     expect(parsed.content).toContain('zero-budget.mjs fetch');
     expect(parsed.content).toContain('weekly allowance');
+    expect(parsed.content).toContain('one bounded authorization');
     expect(parsed.content).toContain('Never bypass the guard');
     expect(parsed.content).toContain('Never automatically retry a paid failure');
+    expect(parsed.content).toContain('A domain skill may name one preferred capability slug');
+    expect(parsed.content).toContain('run `zero get` for that exact slug on every run');
     expect(parsed.content).not.toContain('ZERO_AGENT=codex');
     expect(parsed.content).not.toContain('--max-pay 0.50');
     expect(skill!.files.some(file => file.path === 'scripts/zero-budget.mjs')).toBe(true);
+  });
+
+  it('pins the guarded preferred Zero transcript capability in both YouTube skills', () => {
+    for (const slug of ['youtube-research', 'youtube-intelligence']) {
+      const skill = BUNDLED_STARTER_SKILLS.find(item => item.slug === slug);
+      expect(skill).toBeDefined();
+      const parsed = matter(getSkillMd(skill!));
+      expect(parsed.content).toContain('youtube-video-transcript-extractor-70f8ca14');
+      expect(parsed.content).toContain('zero get youtube-video-transcript-extractor-70f8ca14');
+      expect(parsed.content).toContain('--max-pay 0.02');
+      expect(parsed.content).toContain('preflight fails');
+      expect(parsed.content).toMatch(/automatically (?:try|retry)/);
+    }
   });
 
   it('bundles music-specific Meta conversion and visual hook doctrine', () => {

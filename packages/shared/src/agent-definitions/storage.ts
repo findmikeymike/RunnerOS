@@ -713,7 +713,7 @@ export function ensureBuiltInAgentMetadataSlugs(
   required: Partial<Pick<AgentMetadata, 'skills' | 'sources' | 'optionalSources'>>,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'social-publisher', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'trypost-agent', 'print-agent']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'social-publisher', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'youtube-research-agent', 'youtube-intelligence-agent', 'trypost-agent', 'print-agent']);
   if (!builtIns.has(slug)) return { updated: false };
 
   const loaded = loadGlobalAgent(slug, options);
@@ -783,6 +783,8 @@ export function replaceBuiltInAgentMetadata(
     'art-director',
     'spotify-playlist-creator',
     'spotify-analyst',
+    'youtube-research-agent',
+    'youtube-intelligence-agent',
     'trypost-agent',
     'content-director',
     'record-doctor',
@@ -829,7 +831,7 @@ export function replaceBuiltInAgentPromptText(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['anything-agent', 'concierge', 'orchestrator', 'social-publisher', 'industry-hunter', 'college-radio-agent', 'outreach-agent', 'record-doctor', 'x-editorial', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent', 'art-director', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'trypost-agent', 'content-director', 'print-agent', 'signal-scout-agent', 'signal-analyst-agent', 'raw-video-editor']);
+  const builtIns = new Set(['anything-agent', 'concierge', 'orchestrator', 'social-publisher', 'industry-hunter', 'college-radio-agent', 'outreach-agent', 'record-doctor', 'x-editorial', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent', 'art-director', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'youtube-research-agent', 'youtube-intelligence-agent', 'trypost-agent', 'content-director', 'print-agent', 'signal-scout-agent', 'signal-analyst-agent', 'raw-video-editor']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
   if (

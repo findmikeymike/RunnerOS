@@ -30,7 +30,9 @@ node bin/youtube-intelligence.mjs doctor
 node bin/youtube-intelligence.mjs prepare --video "<url-or-id>" --out "<workspace>/youtube-intel/<video-id>"
 ```
 
-Default provider order is cache first, then local `youtube-research`. Supadata is only called when `--allow-paid` is passed.
+Default provider order is cache first, then local `youtube-research` when its optional API key is healthy. When that route is unavailable, use the bundled `zero` skill for the exact missing read-only metadata or transcript operation and pass retrieved transcript text through the transcript-file input. Every Zero GET must use its weekly budget guard. Supadata is only called when `--allow-paid` is passed.
+
+For transcript retrieval through Zero, prefer exact capability `youtube-video-transcript-extractor-70f8ca14`. Before every use, inspect it with `zero get youtube-video-transcript-extractor-70f8ca14 --agent anything-agent --formatted`. Skip marketplace search only when the live result is healthy, its request schema still accepts the needed YouTube video URL or ID, and its price is at most `$0.02`. Run the call through `zero-budget.mjs fetch` with `--max-pay 0.02`, then provide the returned transcript through `--transcript`. Search and vet a replacement only when preflight fails. Never automatically retry a paid failure with another provider.
 
 ```bash
 SUPADATA_API_KEY="..." node bin/youtube-intelligence.mjs prepare --video "<url-or-id>" --provider supadata --allow-paid --out "<workspace>/youtube-intel/<video-id>"

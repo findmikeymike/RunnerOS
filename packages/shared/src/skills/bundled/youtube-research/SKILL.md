@@ -18,7 +18,7 @@ cd tools/youtube-research
 node bin/youtube-research.mjs <command>
 ```
 
-RunnerOS injects `YOUTUBE_API_KEY` after the user connects Tools -> YouTube Research. Treat a connected key as configured, not proven valid, until `doctor` or a real read call succeeds.
+Artist OS injects `YOUTUBE_API_KEY` when the user adds the optional direct YouTube connection. Treat a connected key as configured, not proven valid, until `doctor` or a real read call succeeds.
 
 ## First Checks
 
@@ -27,7 +27,11 @@ cd tools/youtube-research && node bin/youtube-research.mjs doctor
 cd tools/youtube-research && node bin/youtube-research.mjs which "search videos by keyword" --agent
 ```
 
-If auth is missing, tell the user to open Tools -> YouTube Research and save a YouTube Data API key.
+If auth is missing or the direct route is unhealthy, use the bundled `zero` skill for the exact missing read-only YouTube operation. Search narrowly for search, channel uploads, metadata, comments, or transcripts; inspect the provider and schema; then run GET retrieval through the saved weekly Zero allowance. Do not ask before each small retrieval inside that allowance. If Zero is unavailable or has no allowance, explain the two setup choices once: configure Zero or add an optional YouTube Data API key.
+
+For transcript retrieval, prefer exact Zero capability `youtube-video-transcript-extractor-70f8ca14`. Before every use, run `zero get youtube-video-transcript-extractor-70f8ca14 --agent anything-agent --formatted`. Skip marketplace search only when that live preflight says it is healthy, its request schema still accepts the needed YouTube video URL or ID, and its price is at most `$0.02`. Then call it through `zero-budget.mjs fetch` with `--max-pay 0.02`. If preflight fails, search and vet a replacement. If a paid call fails, do not automatically try another paid provider.
+
+Zero does not create or replace a Google API key. It is an alternate paid retrieval route.
 
 ## Core Commands
 

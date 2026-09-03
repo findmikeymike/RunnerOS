@@ -50,6 +50,7 @@ const ALWAYS_REACHABLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.secrets.SAVE,
   RPC_CHANNELS.secrets.DELETE,
   RPC_CHANNELS.secrets.ZERO_STATUS,
+  RPC_CHANNELS.secrets.ZERO_BUDGET_CONFIGURE,
   RPC_CHANNELS.secrets.INSTALL_ZERO,
   RPC_CHANNELS.secrets.INIT_ZERO,
   ...Object.values(RPC_CHANNELS.onboarding),

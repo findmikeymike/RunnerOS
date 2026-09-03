@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useSetAtom } from 'jotai'
-import { CheckCircle2, ChevronDown, ChevronRight, Copy, Loader2, LogIn, Pencil, Plus, RefreshCcw, Save, ShieldCheck, Trash2, XCircle } from 'lucide-react'
+import { CheckCircle2, ChevronDown, ChevronRight, Copy, ExternalLink, Loader2, LogIn, Pencil, Plus, RefreshCcw, Save, ShieldCheck, Trash2, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -15,8 +15,11 @@ import {
 } from '@/components/ui/dialog'
 import { SettingsCard, SettingsSection } from '@/components/settings'
 import { openBrowserSidecarAtom, setBrowserInstancesAtom } from '@/atoms/browser-pane'
+import { useAppShellContext } from '@/context/AppShellContext'
+import { navigate, routes } from '@/lib/navigate'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type {
+  LoadedSource,
   SocialAccountCommandResult,
   SocialAccountProfileStatus,
   SocialAccountsDoctorResult,
@@ -35,6 +38,19 @@ const PLATFORMS: Array<{ id: SocialPlatform; label: string }> = [
   { id: 'youtube', label: 'YouTube' },
 ]
 
+const PUBLISHING_PROVIDERS = [
+  {
+    slug: 'trypost',
+    name: 'TryPost',
+    description: 'Schedule and publish across connected social channels.',
+  },
+  {
+    slug: 'postiz',
+    name: 'Postiz',
+    description: 'Draft, schedule, and publish through Postiz.',
+  },
+] as const
+
 type Draft = {
   accountGroup: string
   platform: SocialPlatform
@@ -52,9 +68,11 @@ const EMPTY_DRAFT: Draft = {
 }
 
 export default function SocialAccountsSettingsPage() {
+  const { activeWorkspaceId } = useAppShellContext()
   const openBrowserSidecar = useSetAtom(openBrowserSidecarAtom)
   const setBrowserInstances = useSetAtom(setBrowserInstancesAtom)
   const [doctor, setDoctor] = React.useState<SocialAccountsDoctorResult | null>(null)
+  const [publishingSources, setPublishingSources] = React.useState<LoadedSource[]>([])
   const [draft, setDraft] = React.useState<Draft>(EMPTY_DRAFT)
   const [editingRef, setEditingRef] = React.useState<{ platform: SocialPlatform; profile: string } | null>(null)
   const [busy, setBusy] = React.useState<string | null>('load')
@@ -100,13 +118,20 @@ export default function SocialAccountsSettingsPage() {
   const load = React.useCallback(async () => {
     setBusy('load')
     try {
-      setDoctor(await window.electronAPI.listSocialAccounts())
+      const [nextDoctor, nextSources] = await Promise.all([
+        window.electronAPI.listSocialAccounts(),
+        activeWorkspaceId
+          ? window.electronAPI.getSources(activeWorkspaceId).catch(() => [] as LoadedSource[])
+          : Promise.resolve([] as LoadedSource[]),
+      ])
+      setDoctor(nextDoctor)
+      setPublishingSources(nextSources)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not load social accounts')
     } finally {
       setBusy(null)
     }
-  }, [])
+  }, [activeWorkspaceId])
 
   const patchProfileStatus = React.useCallback((updated: SocialAccountProfileStatus) => {
     setDoctor((prev) => {
@@ -126,6 +151,13 @@ export default function SocialAccountsSettingsPage() {
   React.useEffect(() => {
     void load()
   }, [load])
+
+  React.useEffect(() => {
+    if (!window.electronAPI?.onSourcesChanged) return
+    return window.electronAPI.onSourcesChanged((workspaceId) => {
+      if (workspaceId === activeWorkspaceId) void load()
+    })
+  }, [activeWorkspaceId, load])
 
   const save = async (accountGroup: string) => {
     const normalizedGroup = accountGroup.trim()
@@ -291,8 +323,28 @@ export default function SocialAccountsSettingsPage() {
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-5 p-6">
           <SettingsSection
-            title="Social Accounts"
-            description="Keep each artist or brand's social accounts together."
+            title="Publishing Connections"
+            description="Use an API service when you want scheduled publishing without opening each social site."
+          >
+            <SettingsCard className="!border-0 bg-[#0d0d0f] shadow-none">
+              {PUBLISHING_PROVIDERS.map((provider) => {
+                const source = publishingSources.find((candidate) => candidate.config.slug === provider.slug)
+                return (
+                  <PublishingConnectionRow
+                    key={provider.slug}
+                    name={provider.name}
+                    description={provider.description}
+                    connected={publishingSourceConnected(source)}
+                    onOpen={() => navigate(routes.view.sourcesMcp(provider.slug))}
+                  />
+                )
+              })}
+            </SettingsCard>
+          </SettingsSection>
+
+          <SettingsSection
+            title="Browser Access"
+            description="You can still post to socials, reply to comments, and keep accounts warm by signing in to each account below."
             action={
               <Button
                 type="button"
@@ -310,7 +362,11 @@ export default function SocialAccountsSettingsPage() {
           >
             <div className="space-y-3">
               {accountSetGroups.length === 0 ? (
-                <p className="rounded-xl bg-white/[0.025] px-4 py-5 text-sm text-white/46">Add an account set, then connect its social profiles.</p>
+                <BrowserAccountSetForm
+                  value={newGroupName}
+                  onChange={setNewGroupName}
+                  onAdd={addAccountSet}
+                />
               ) : accountSetGroups.map((group) => {
                 const collapsed = collapsedGroups.has(group.name)
                 const editingThisGroup = activeGroup === group.name
@@ -384,33 +440,17 @@ export default function SocialAccountsSettingsPage() {
               className="inline-flex h-8 items-center gap-1.5 rounded-[8px] px-2 text-xs font-medium text-white/42 transition-colors hover:bg-white/[0.04] hover:text-white/72"
             >
               <Plus className="h-3.5 w-3.5" />
-              Add account set
+              Add artist or brand
             </button>
           ) : null}
 
-          {accountSetGroups.length === 0 || addSetOpen ? (
-            <SettingsSection title="Add Account Set">
-              <SettingsCard className="!border-0 shadow-none">
-                <div className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center">
-                  <input
-                    aria-label="Account set name"
-                    value={newGroupName}
-                    placeholder="Artist or brand name"
-                    onChange={(event) => setNewGroupName(event.target.value)}
-                    className="h-9 min-w-0 flex-1 rounded-[8px] border border-white/[0.07] bg-white/[0.035] px-3 text-sm text-white outline-none placeholder:text-white/24 focus:border-white/15"
-                  />
-                  <div className="flex items-center gap-2">
-                    {accountSetGroups.length > 0 ? (
-                      <Button type="button" variant="ghost" size="sm" onClick={() => setAddSetOpen(false)} className="text-white/42 hover:text-white/72">Cancel</Button>
-                    ) : null}
-                    <Button type="button" onClick={addAccountSet} className="bg-white text-black hover:bg-white/90">
-                      <Plus className="h-4 w-4" />
-                      Add Set
-                    </Button>
-                  </div>
-                </div>
-              </SettingsCard>
-            </SettingsSection>
+          {accountSetGroups.length > 0 && addSetOpen ? (
+            <BrowserAccountSetForm
+              value={newGroupName}
+              onChange={setNewGroupName}
+              onAdd={addAccountSet}
+              onCancel={() => setAddSetOpen(false)}
+            />
           ) : null}
 
           {loginPlan?.browserPlan && (
@@ -429,6 +469,79 @@ export default function SocialAccountsSettingsPage() {
       </ScrollArea>
     </div>
   )
+}
+
+function PublishingConnectionRow({
+  name,
+  description,
+  connected,
+  onOpen,
+}: {
+  name: string
+  description: string
+  connected: boolean
+  onOpen: () => void
+}) {
+  return (
+    <div className="flex min-h-[58px] items-center justify-between gap-4 px-4 py-3">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-white/86">{name}</span>
+          {connected ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" aria-label={`${name} connected`} /> : null}
+        </div>
+        <p className="mt-0.5 truncate text-xs text-white/38">{description}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] px-2.5 text-xs font-medium text-white/48 transition-colors hover:bg-white/[0.05] hover:text-white/76"
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+        {connected ? 'Manage' : 'Connect'}
+      </button>
+    </div>
+  )
+}
+
+function BrowserAccountSetForm({
+  value,
+  onChange,
+  onAdd,
+  onCancel,
+}: {
+  value: string
+  onChange: (value: string) => void
+  onAdd: () => void
+  onCancel?: () => void
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-[12px] bg-[#0d0d0f] p-3 sm:flex-row sm:items-center">
+      <input
+        aria-label="Artist or brand name"
+        value={value}
+        placeholder="Artist or brand name"
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => { if (event.key === 'Enter') onAdd() }}
+        className="h-9 min-w-0 flex-1 rounded-[8px] border border-white/[0.07] bg-white/[0.025] px-3 text-sm text-white outline-none placeholder:text-white/24 focus:border-white/15"
+      />
+      <div className="flex items-center gap-2">
+        {onCancel ? (
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel} className="text-white/42 hover:text-white/72">Cancel</Button>
+        ) : null}
+        <Button type="button" onClick={onAdd} className="bg-white text-black hover:bg-white/90">
+          <Plus className="h-4 w-4" />
+          Add
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function publishingSourceConnected(source: LoadedSource | undefined): boolean {
+  if (!source?.config.enabled) return false
+  const authType = source.config.mcp?.authType || source.config.api?.authType
+  if (!authType || authType === 'none') return true
+  return source.config.connectionStatus === 'connected' || source.config.connectionStatus === 'untested'
 }
 
 function AccountEditor({

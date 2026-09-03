@@ -1113,6 +1113,7 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.guide?.raw).toContain('zero search');
     expect(sources[0]!.guide?.raw).toContain('zero-budget.mjs fetch');
     expect(sources[0]!.guide?.raw).toContain('weekly allowance');
+    expect(sources[0]!.guide?.raw).toContain('bounded job authorization');
     expect(sources[0]!.guide?.raw).not.toContain('ZERO_AGENT=codex');
   });
 

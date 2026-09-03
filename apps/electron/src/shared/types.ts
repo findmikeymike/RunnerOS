@@ -100,6 +100,15 @@ export type { CredentialHealthStatus, CredentialHealthIssue, CredentialHealthIss
 import type { UserSecretSummary } from '@craft-agent/shared/credentials';
 export type { UserSecretSummary };
 
+export interface ZeroBudgetStatus {
+  configured: boolean
+  weekStart: string
+  weeklyLimitUsd: number | null
+  spentUsd: number
+  remainingUsd: number | null
+  callsThisWeek: number
+}
+
 export interface ZeroStatus {
   installed: boolean
   version?: string
@@ -107,6 +116,8 @@ export interface ZeroStatus {
   walletConfigured: boolean
   walletAddress?: string
   balance?: string
+  budget?: ZeroBudgetStatus
+  budgetError?: string
   error?: string
 }
 
@@ -811,6 +822,7 @@ export interface ElectronAPI {
   onSecretsChanged(callback: () => void): () => void
   testGeniusAccessToken(workspaceId: string, token?: string): Promise<{ success: boolean; error?: string; hits?: number }>
   getZeroStatus(workspaceId: string): Promise<ZeroStatus>
+  configureZeroBudget(workspaceId: string, weeklyLimitUsd: number): Promise<{ success: boolean; budget?: ZeroBudgetStatus; error?: string }>
   installZero(workspaceId: string): Promise<{ success: boolean; error?: string }>
   initZero(workspaceId: string): Promise<{ success: boolean; output?: string; error?: string }>
   fundZero(workspaceId: string, amount?: string): Promise<{ success: boolean; fundingUrl?: string; output?: string; error?: string }>

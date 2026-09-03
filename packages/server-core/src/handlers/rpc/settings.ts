@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { execFile } from 'node:child_process'
-import { dirname } from 'path'
+import { homedir } from 'node:os'
+import { dirname, join } from 'path'
 import { promisify } from 'node:util'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel, resolveSelfEditTarget, updateWorkspaceArtistScope, validateSelfEditRepo, updateWorkspaceRootPath } from '@craft-agent/shared/config'
@@ -69,9 +70,13 @@ async function assertSecretWorkspaceOwner(workspaceId?: string): Promise<{ succe
 }
 
 async function getZeroCliStatus() {
+  const budgetResult = await runZeroBudgetGuard(['status', '--json'])
+  const budgetFields = budgetResult.success
+    ? { budget: budgetResult.budget }
+    : { budgetError: budgetResult.error }
   const zeroPath = await commandExists('zero')
   if (!zeroPath) {
-    return { installed: false, walletConfigured: Boolean(process.env.ZERO_PRIVATE_KEY), error: 'Zero CLI is not installed.' }
+    return { installed: false, walletConfigured: Boolean(process.env.ZERO_PRIVATE_KEY), error: 'Zero CLI is not installed.', ...budgetFields }
   }
 
   let version: string | undefined
@@ -103,7 +108,45 @@ async function getZeroCliStatus() {
     // Balance requires wallet config; keep status non-fatal.
   }
 
-  return { installed: true, version, path: zeroPath, walletConfigured, walletAddress, balance, error }
+  return { installed: true, version, path: zeroPath, walletConfigured, walletAddress, balance, error, ...budgetFields }
+}
+
+type ZeroBudgetStatus = {
+  configured: boolean
+  weekStart: string
+  weeklyLimitUsd: number | null
+  spentUsd: number
+  remainingUsd: number | null
+  callsThisWeek: number
+}
+
+async function runZeroBudgetGuard(args: string[]): Promise<{ success: true; budget: ZeroBudgetStatus } | { success: false; error: string }> {
+  const skillsDir = process.env.CRAFT_PRODUCT_VARIANT === 'artist-os'
+    ? join(dirname(getPreferencesPath()), 'libraries', 'agents', 'skills')
+    : join(homedir(), '.agents', 'skills')
+  const scriptPath = join(skillsDir, 'zero', 'scripts', 'zero-budget.mjs')
+  if (!existsSync(scriptPath)) {
+    return { success: false, error: 'Zero spending guard is not installed yet. Restart Artist OS, then try again.' }
+  }
+  try {
+    const result = await execFileAsync(process.execPath, [scriptPath, ...args], {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      timeout: 10_000,
+    })
+    const payload = JSON.parse(result.stdout) as Partial<ZeroBudgetStatus> & { ok?: boolean; error?: string }
+    if (payload.ok !== true) return { success: false, error: payload.error || 'Zero rejected the spending limit.' }
+    if (typeof payload.configured !== 'boolean'
+      || typeof payload.weekStart !== 'string'
+      || (payload.weeklyLimitUsd !== null && typeof payload.weeklyLimitUsd !== 'number')
+      || typeof payload.spentUsd !== 'number'
+      || (payload.remainingUsd !== null && typeof payload.remainingUsd !== 'number')
+      || typeof payload.callsThisWeek !== 'number') {
+      return { success: false, error: 'Zero returned an invalid spending status.' }
+    }
+    return { success: true, budget: payload as ZeroBudgetStatus }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
+  }
 }
 
 export const HANDLED_CHANNELS = [
@@ -155,6 +198,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.secrets.DELETE,
   RPC_CHANNELS.secrets.TEST_GENIUS,
   RPC_CHANNELS.secrets.ZERO_STATUS,
+  RPC_CHANNELS.secrets.ZERO_BUDGET_CONFIGURE,
   RPC_CHANNELS.secrets.INSTALL_ZERO,
   RPC_CHANNELS.secrets.INIT_ZERO,
   RPC_CHANNELS.secrets.FUND_ZERO,
@@ -247,6 +291,15 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     if (workspaceError) throw new Error(workspaceError.error)
     await applyStoredSecretsToProcessEnv()
     return getZeroCliStatus()
+  })
+
+  server.handle(RPC_CHANNELS.secrets.ZERO_BUDGET_CONFIGURE, async (_ctx, workspaceId?: string, weeklyLimitUsd?: number) => {
+    const workspaceError = await assertSecretWorkspaceOwner(workspaceId)
+    if (workspaceError) return workspaceError
+    if (typeof weeklyLimitUsd !== 'number' || !Number.isFinite(weeklyLimitUsd) || weeklyLimitUsd < 0) {
+      return { success: false, error: 'Weekly spending limit must be zero or a positive dollar amount.' }
+    }
+    return runZeroBudgetGuard(['configure', '--weekly-limit', String(weeklyLimitUsd), '--json'])
   })
 
   server.handle(RPC_CHANNELS.secrets.INSTALL_ZERO, async (_ctx, workspaceId?: string) => {

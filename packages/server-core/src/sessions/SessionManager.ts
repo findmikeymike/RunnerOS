@@ -4523,6 +4523,91 @@ export class SessionManager implements ISessionManager {
           if (ensureBuiltInAgentSkillsForSlug(CONCIERGE_SLUG, CONCIERGE_SYSTEM_SKILL_SLUGS).updated) {
             sessionLog.info('[agent-definitions] Ensured Concierge has self-edit system skill')
           }
+          const youtubeResearchAgent = STARTER_AGENTS.find(agent => agent.slug === 'youtube-research-agent')
+          const youtubeResearchMetadataUpdated = youtubeResearchAgent
+            ? ensureBuiltInAgentMetadataSlugs('youtube-research-agent', {
+                skills: youtubeResearchAgent.metadata.skills,
+                sources: youtubeResearchAgent.metadata.sources,
+                optionalSources: youtubeResearchAgent.metadata.optionalSources,
+              }).updated
+            : false
+          const youtubeResearchPromptUpdated = replaceBuiltInAgentPromptText(
+            'youtube-research-agent',
+            `Auth rules:
+- YouTube Research uses a YouTube Data API key saved in Tools -> YouTube Research.
+- If auth is missing, tell the user to connect YouTube Research in Tools.`,
+            `Retrieval order:
+- Prefer the bundled YouTube Research source when its API key is configured and a live read succeeds.
+- If that source is missing, unauthenticated, quota-limited, or unhealthy, use the bundled Zero skill to find a credible read-only YouTube capability for the exact missing search, channel, metadata, comments, or transcript operation.
+- Run Zero GET calls only through its weekly budget guard. A saved allowance means do not ask before each small retrieval. If Zero is unavailable or no allowance exists, explain the two options once: configure Zero or add an optional YouTube Data API key.
+- Never claim Zero issued a YouTube API key. It is the fallback data route, not Google authentication.`,
+          ).updated
+          const youtubeResearchPreferredTranscriptUpdated = replaceBuiltInAgentPromptText(
+            'youtube-research-agent',
+            `Retrieval order:
+- Prefer the bundled YouTube Research source when its API key is configured and a live read succeeds.
+- If that source is missing, unauthenticated, quota-limited, or unhealthy, use the bundled Zero skill to find a credible read-only YouTube capability for the exact missing search, channel, metadata, comments, or transcript operation.
+- Run Zero GET calls only through its weekly budget guard. A saved allowance means do not ask before each small retrieval. If Zero is unavailable or no allowance exists, explain the two options once: configure Zero or add an optional YouTube Data API key.
+- Never claim Zero issued a YouTube API key. It is the fallback data route, not Google authentication.`,
+            `Retrieval order:
+- Prefer the bundled YouTube Research source when its API key is configured and a live read succeeds.
+- If that source is missing, unauthenticated, quota-limited, or unhealthy, use the bundled Zero skill to find a credible read-only YouTube capability for the exact missing search, channel, metadata, comments, or transcript operation.
+- For transcripts, first inspect exact Zero capability \`youtube-video-transcript-extractor-70f8ca14\`. Skip marketplace search only when the live inspection confirms healthy availability, a fitting video URL or ID schema, and a price at or below $0.02. Run it through the Zero budget guard with \`--max-pay 0.02\`. Search for another transcript capability only when preflight fails, and never automatically retry after a paid failure.
+- Run Zero GET calls only through its weekly budget guard. A saved allowance means do not ask before each small retrieval. If Zero is unavailable or no allowance exists, explain the two options once: configure Zero or add an optional YouTube Data API key.
+- Never claim Zero issued a YouTube API key. It is the fallback data route, not Google authentication.`,
+          ).updated
+          if (youtubeResearchMetadataUpdated || youtubeResearchPromptUpdated || youtubeResearchPreferredTranscriptUpdated) {
+            sessionLog.info('[agent-definitions] Added preferred guarded Zero transcript route to YouTube Research Agent')
+          }
+          const youtubeIntelligenceAgent = STARTER_AGENTS.find(agent => agent.slug === 'youtube-intelligence-agent')
+          const youtubeIntelligenceMetadataUpdated = youtubeIntelligenceAgent
+            ? ensureBuiltInAgentMetadataSlugs('youtube-intelligence-agent', {
+                skills: youtubeIntelligenceAgent.metadata.skills,
+                sources: youtubeIntelligenceAgent.metadata.sources,
+                optionalSources: youtubeIntelligenceAgent.metadata.optionalSources,
+              }).updated
+            : false
+          const youtubeIntelligencePromptUpdated = replaceBuiltInAgentPromptText(
+            'youtube-intelligence-agent',
+            `3. Use youtube-research for channel uploads, video metadata, comments, and transcript acquisition. Its saved YouTube Data API key is available to this source.
+4. Run node bin/youtube-intelligence.mjs doctor before transcript work. Use batch-prepare for channel or multi-video scans.
+5. Default to cache and the local youtube-research transcript path. Never use paid transcript credits unless the user explicitly approved them.
+6. Read artist-intel-state when present. For each configured channel, inspect metadata for only its newest upload.
+7. If that newest video ID matches the channel's saved state, skip the channel without fetching its transcript. Never fall back to an older upload.
+8. If the newest upload is new and inside the requested lookback window, ingest only that one transcript. The weekly maximum is one video per channel.
+9. Prefer source-backed specificity over volume. Exclude generic motivation, unsupported claims, and stories with no reusable mechanism.`,
+            `3. Prefer youtube-research for channel uploads, video metadata, comments, and transcript acquisition when its optional YouTube Data API key is configured and healthy.
+4. If youtube-research is unavailable, use the bundled Zero skill for the exact missing read-only YouTube metadata, latest-upload, comments, or transcript operation. Route every Zero GET through its weekly budget guard; a saved allowance authorizes retrieval without per-call prompts. If neither route is available, report the single setup blocker instead of inventing evidence.
+5. Run node bin/youtube-intelligence.mjs doctor before transcript work. Use batch-prepare for channel or multi-video scans. A transcript retrieved through Zero may be supplied through the tool's transcript-file input.
+6. Default to cache before any paid retrieval. Supadata remains separately approval-gated; never pass \`--allow-paid\` unless the user explicitly approved it.
+7. Read artist-intel-state when present. For each configured channel, inspect metadata for only its newest upload.
+8. If that newest video ID matches the channel's saved state, skip the channel without fetching its transcript. Never fall back to an older video.
+9. If the newest upload is new and inside the requested lookback window, ingest only that one transcript. The weekly maximum is one video per channel.
+10. Prefer source-backed specificity over volume. Exclude generic motivation, unsupported claims, and stories with no reusable mechanism.`,
+          ).updated
+          const youtubeIntelligencePreferredTranscriptUpdated = replaceBuiltInAgentPromptText(
+            'youtube-intelligence-agent',
+            `3. Prefer youtube-research for channel uploads, video metadata, comments, and transcript acquisition when its optional YouTube Data API key is configured and healthy.
+4. If youtube-research is unavailable, use the bundled Zero skill for the exact missing read-only YouTube metadata, latest-upload, comments, or transcript operation. Route every Zero GET through its weekly budget guard; a saved allowance authorizes retrieval without per-call prompts. If neither route is available, report the single setup blocker instead of inventing evidence.
+5. Run node bin/youtube-intelligence.mjs doctor before transcript work. Use batch-prepare for channel or multi-video scans. A transcript retrieved through Zero may be supplied through the tool's transcript-file input.
+6. Default to cache before any paid retrieval. Supadata remains separately approval-gated; never pass \`--allow-paid\` unless the user explicitly approved it.
+7. Read artist-intel-state when present. For each configured channel, inspect metadata for only its newest upload.
+8. If that newest video ID matches the channel's saved state, skip the channel without fetching its transcript. Never fall back to an older video.
+9. If the newest upload is new and inside the requested lookback window, ingest only that one transcript. The weekly maximum is one video per channel.
+10. Prefer source-backed specificity over volume. Exclude generic motivation, unsupported claims, and stories with no reusable mechanism.`,
+            `3. Prefer youtube-research for channel uploads, video metadata, comments, and transcript acquisition when its optional YouTube Data API key is configured and healthy.
+4. If youtube-research is unavailable, use the bundled Zero skill for the exact missing read-only YouTube metadata, latest-upload, comments, or transcript operation. Route every Zero GET through its weekly budget guard; a saved allowance authorizes retrieval without per-call prompts. If neither route is available, report the single setup blocker instead of inventing evidence.
+5. For transcripts through Zero, first inspect exact capability \`youtube-video-transcript-extractor-70f8ca14\`. Skip marketplace search only when its live health, video URL or ID schema, and price at or below $0.02 all pass. Use the budget guard with \`--max-pay 0.02\`; search only when preflight fails and never automatically retry a paid failure.
+6. Run node bin/youtube-intelligence.mjs doctor before transcript work. Use batch-prepare for channel or multi-video scans. A transcript retrieved through Zero may be supplied through the tool's transcript-file input.
+7. Default to cache before any paid retrieval. Supadata remains separately approval-gated; never pass \`--allow-paid\` unless the user explicitly approved it.
+8. Read artist-intel-state when present. For each configured channel, inspect metadata for only its newest upload.
+9. If that newest video ID matches the channel's saved state, skip the channel without fetching its transcript. Never fall back to an older video.
+10. If the newest upload is new and inside the requested lookback window, ingest only that one transcript. The weekly maximum is one video per channel.
+11. Prefer source-backed specificity over volume. Exclude generic motivation, unsupported claims, and stories with no reusable mechanism.`,
+          ).updated
+          if (youtubeIntelligenceMetadataUpdated || youtubeIntelligencePromptUpdated || youtubeIntelligencePreferredTranscriptUpdated) {
+            sessionLog.info('[agent-definitions] Added preferred guarded Zero transcript route to YouTube Intelligence Agent')
+          }
           const rawVideoEditorDirectionSkillUpdated = ensureBuiltInAgentSkillsForSlug(
             'raw-video-editor',
             ['raw-video-editor', 'raw-video-edit-direction', 'social-video-repurposing'],

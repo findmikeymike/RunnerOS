@@ -777,8 +777,14 @@ body
     const youtubeAgent = STARTER_AGENTS.find((agent) => agent.slug === 'youtube-research-agent')
 
     expect(youtubeAgent?.metadata.skills).toContain('youtube-research')
-    expect(youtubeAgent?.metadata.sources).toContain('youtube-research')
+    expect(youtubeAgent?.metadata.skills).toContain('zero')
+    expect(youtubeAgent?.metadata.sources).toBeUndefined()
+    expect(youtubeAgent?.metadata.optionalSources).toEqual(['youtube-research', 'zero'])
     expect(youtubeAgent?.systemPrompt).toContain('node bin/youtube-research.mjs')
+    expect(youtubeAgent?.systemPrompt).toContain('weekly budget guard')
+    expect(youtubeAgent?.systemPrompt).toContain('youtube-video-transcript-extractor-70f8ca14')
+    expect(youtubeAgent?.systemPrompt).toContain('--max-pay 0.02')
+    expect(youtubeAgent?.systemPrompt).toContain('not Google authentication')
     expect(youtubeAgent?.systemPrompt).toContain('You do not publish')
   })
 
@@ -786,9 +792,15 @@ body
     const agent = STARTER_AGENTS.find((item) => item.slug === 'youtube-intelligence-agent')
 
     expect(agent?.metadata.skills).toContain('youtube-intelligence')
-    expect(agent?.metadata.sources).toEqual(expect.arrayContaining(['youtube-intelligence', 'youtube-research']))
+    expect(agent?.metadata.skills).toContain('zero')
+    expect(agent?.metadata.sources).toEqual(['youtube-intelligence'])
+    expect(agent?.metadata.optionalSources).toEqual(['youtube-research', 'zero'])
     expect(agent?.metadata.trustedWorkerTools).toEqual(['create_output'])
     expect(agent?.systemPrompt).toContain('artist-intel-config')
+    expect(agent?.systemPrompt).toContain('weekly budget guard')
+    expect(agent?.systemPrompt).toContain('youtube-video-transcript-extractor-70f8ca14')
+    expect(agent?.systemPrompt).toContain('--max-pay 0.02')
+    expect(agent?.systemPrompt).toContain('transcript-file input')
     expect(agent?.systemPrompt).toContain('```youtube-intel')
     expect(agent?.systemPrompt).toContain('exactly one HQ report Output')
     expect(DEFAULT_ACTIVATED_AGENT_SLUGS).toContain('youtube-intelligence-agent')
@@ -1759,6 +1771,41 @@ body
     expect(loadGlobalAgent('writer', { globalAgentsDir })!.metadata.sources).toEqual(['meta-ads', 'google-ads'])
   })
 
+  test('moves YouTube Research to optional direct access and adds Zero without replacing its prompt', () => {
+    writeGlobalAgent(
+      {
+        slug: 'youtube-research-agent',
+        metadata: {
+          name: 'YouTube Research Agent',
+          description: 'Researches YouTube.',
+          skills: ['youtube-research', 'create-viral-content'],
+          sources: ['youtube-research'],
+        },
+        systemPrompt: 'Custom YouTube research direction.',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(ensureBuiltInAgentMetadataSlugs('youtube-research-agent', {
+      skills: ['youtube-research', 'create-viral-content', 'zero'],
+      optionalSources: ['youtube-research', 'zero'],
+    }, { globalAgentsDir }).updated).toBe(true)
+
+    const migrated = loadGlobalAgent('youtube-research-agent', { globalAgentsDir })!
+    expect(migrated.metadata.skills).toEqual(['youtube-research', 'create-viral-content', 'zero'])
+    expect(migrated.metadata.sources).toBeUndefined()
+    expect(migrated.metadata.optionalSources).toEqual(['youtube-research', 'zero'])
+    expect(migrated.systemPrompt).toBe('Custom YouTube research direction.')
+    expect(replaceBuiltInAgentPromptText(
+      'youtube-research-agent',
+      'Custom YouTube research direction.',
+      'Custom YouTube research direction with Zero fallback.',
+      { globalAgentsDir },
+    ).updated).toBe(true)
+    expect(loadGlobalAgent('youtube-research-agent', { globalAgentsDir })!.systemPrompt)
+      .toBe('Custom YouTube research direction with Zero fallback.')
+  })
+
   test('ensureBuiltInAgentMetadataSlugs upgrades ads specialist research skills', () => {
     writeGlobalAgent(
       {
@@ -2360,4 +2407,3 @@ Body.
     expect(parseAgentFile(md)!.metadata.routing?.bestFor).toHaveLength(6)
   })
 })
-

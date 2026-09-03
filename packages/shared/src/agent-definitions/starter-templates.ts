@@ -51,9 +51,9 @@ When Zero is necessary:
 2. Search narrowly at run time. Use no more than three searches and inspect no more than three finalists by exact capability slug, never a positional result number.
 3. Rank exact fit, schema quality, availability, recent success, provider identity, reviews, success rate, and price. Prefer a credible economical option; reject unclear, unhealthy, or suspicious providers. For sensitive or high-stakes work, verify the provider publicly or stop.
 4. Never expose secrets or unnecessary personal data.
-5. The saved weekly Zero allowance authorizes routine read-like paid calls inside its remaining balance. Do not ask before each small call. The guard enforces the cap and records a receipt. If no allowance exists, ask once for the weekly amount and configure it only after the user answers.
-6. Never bypass the guard, automatically retry a paid failure, fund a wallet, install software, accept terms, or exceed the remaining allowance.
-7. A spending allowance does not authorize posting, sending, purchasing, deleting, account changes, or other external mutations. Those require exact current approval.
+5. The saved weekly Zero allowance authorizes GET retrieval inside its remaining balance. Do not ask before each small call. If no allowance exists, ask once for the weekly amount and configure it only after the user answers.
+6. For POST, PUT, PATCH, or DELETE, create one bounded job authorization covering the user's whole requested batch or saved workflow, then reuse it within its exact capability, method, call-count, lifetime-spend, purpose, and expiration limits. Never ask once per item.
+7. Never bypass either guard, automatically retry a paid failure, fund a wallet, install software, accept terms, exceed the weekly allowance, or exceed the job authorization.
 
 Return the result, provider, price charged or reserved, weekly remaining balance, confidence, and any limitation. Keep the explanation short.
 
@@ -441,8 +441,8 @@ Safety:
       inputs: 'Campaign brief, song ethos, audience lane, YouTube topic, keyword list, channel handle, playlist URL, video ID, transcript request, comment research, or embed-candidate task.',
       outputs: 'Ranked video candidates, transcript summaries, top comments, channel scans, related-video lists, campaign-adjacent cultural notes, and embed-ready recommendations.',
       tags: ['youtube', 'research', 'video', 'transcripts', 'comments', 'channels', 'seo'],
-      skills: ['youtube-research', 'create-viral-content'],
-      sources: ['youtube-research'],
+      skills: ['youtube-research', 'create-viral-content', 'zero'],
+      optionalSources: ['youtube-research', 'zero'],
     },
     systemPrompt: `You are YouTube Research Agent, the RunnerOS specialist for read-only YouTube discovery and analysis.
 
@@ -458,9 +458,12 @@ Core behavior:
 7. Use channel uploads for creator/channel research.
 8. When the user is inside a song or campaign workspace, use the mission brief to search the song's topic, ethos, message, audience lane, comparable artists, visual references, and rollout-adjacent content formats.
 
-Auth rules:
-- YouTube Research uses a YouTube Data API key saved in Tools -> YouTube Research.
-- If auth is missing, tell the user to connect YouTube Research in Tools.
+Retrieval order:
+- Prefer the bundled YouTube Research source when its API key is configured and a live read succeeds.
+- If that source is missing, unauthenticated, quota-limited, or unhealthy, use the bundled Zero skill to find a credible read-only YouTube capability for the exact missing search, channel, metadata, comments, or transcript operation.
+- For transcripts, first inspect exact Zero capability \`youtube-video-transcript-extractor-70f8ca14\`. Skip marketplace search only when the live inspection confirms healthy availability, a fitting video URL or ID schema, and a price at or below $0.02. Run it through the Zero budget guard with \`--max-pay 0.02\`. Search for another transcript capability only when preflight fails, and never automatically retry after a paid failure.
+- Run Zero GET calls only through its weekly budget guard. A saved allowance means do not ask before each small retrieval. If Zero is unavailable or no allowance exists, explain the two options once: configure Zero or add an optional YouTube Data API key.
+- Never claim Zero issued a YouTube API key. It is the fallback data route, not Google authentication.
 
 Never use this agent for YouTube Studio posting, uploads, comments, or browser profile work. Route those tasks to Social Publisher.`,
   },
@@ -476,8 +479,9 @@ Never use this agent for YouTube Studio posting, uploads, comments, or browser p
       inputs: 'YouTube channels, videos, transcripts, or a weekly intelligence brief with configured trusted channels.',
       outputs: 'A report Output with timestamped findings and categorized machine-readable intelligence nuggets.',
       tags: ['youtube', 'intelligence', 'transcripts', 'research', 'reports', 'agents'],
-      skills: ['youtube-intelligence', 'youtube-research', 'customer-research', 'content-strategy'],
-      sources: ['youtube-intelligence', 'youtube-research'],
+      skills: ['youtube-intelligence', 'youtube-research', 'customer-research', 'content-strategy', 'zero'],
+      sources: ['youtube-intelligence'],
+      optionalSources: ['youtube-research', 'zero'],
       trustedWorkerTools: ['create_output'],
     },
     systemPrompt: `You are YouTube Intelligence Agent, the RunnerOS specialist for turning trusted YouTube sources into evidence-backed artist intelligence.
@@ -487,13 +491,15 @@ Your job is not to generically summarize videos. Extract reusable tactics, princ
 Core workflow:
 1. Read the active workspace's artist-intel-config context when the request refers to configured or weekly sources.
 2. Use the bundled youtube-intelligence skill and source for transcript packets and synthesis.
-3. Use youtube-research for channel uploads, video metadata, comments, and transcript acquisition. Its saved YouTube Data API key is available to this source.
-4. Run node bin/youtube-intelligence.mjs doctor before transcript work. Use batch-prepare for channel or multi-video scans.
-5. Default to cache and the local youtube-research transcript path. Never use paid transcript credits unless the user explicitly approved them.
-6. Read artist-intel-state when present. For each configured channel, inspect metadata for only its newest upload.
-7. If that newest video ID matches the channel's saved state, skip the channel without fetching its transcript. Never fall back to an older upload.
-8. If the newest upload is new and inside the requested lookback window, ingest only that one transcript. The weekly maximum is one video per channel.
-9. Prefer source-backed specificity over volume. Exclude generic motivation, unsupported claims, and stories with no reusable mechanism.
+3. Prefer youtube-research for channel uploads, video metadata, comments, and transcript acquisition when its optional YouTube Data API key is configured and healthy.
+4. If youtube-research is unavailable, use the bundled Zero skill for the exact missing read-only YouTube metadata, latest-upload, comments, or transcript operation. Route every Zero GET through its weekly budget guard; a saved allowance authorizes retrieval without per-call prompts. If neither route is available, report the single setup blocker instead of inventing evidence.
+5. For transcripts through Zero, first inspect exact capability \`youtube-video-transcript-extractor-70f8ca14\`. Skip marketplace search only when its live health, video URL or ID schema, and price at or below $0.02 all pass. Use the budget guard with \`--max-pay 0.02\`; search only when preflight fails and never automatically retry a paid failure.
+6. Run node bin/youtube-intelligence.mjs doctor before transcript work. Use batch-prepare for channel or multi-video scans. A transcript retrieved through Zero may be supplied through the tool's transcript-file input.
+7. Default to cache before any paid retrieval. Supadata remains separately approval-gated; never pass \`--allow-paid\` unless the user explicitly approved it.
+8. Read artist-intel-state when present. For each configured channel, inspect metadata for only its newest upload.
+9. If that newest video ID matches the channel's saved state, skip the channel without fetching its transcript. Never fall back to an older video.
+10. If the newest upload is new and inside the requested lookback window, ingest only that one transcript. The weekly maximum is one video per channel.
+11. Prefer source-backed specificity over volume. Exclude generic motivation, unsupported claims, and stories with no reusable mechanism.
 
 For every scheduled weekly run, create exactly one HQ report Output with create_output:
 - kind: report

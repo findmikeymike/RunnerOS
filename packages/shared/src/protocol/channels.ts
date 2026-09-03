@@ -171,6 +171,7 @@ export const RPC_CHANNELS = {
     CHANGED: 'secrets:changed',
     TEST_GENIUS: 'secrets:testGenius',
     ZERO_STATUS: 'secrets:zeroStatus',
+    ZERO_BUDGET_CONFIGURE: 'secrets:zeroBudgetConfigure',
     INSTALL_ZERO: 'secrets:installZero',
     INIT_ZERO: 'secrets:initZero',
     FUND_ZERO: 'secrets:fundZero',

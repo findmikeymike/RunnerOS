@@ -17,7 +17,7 @@ interface ReleaseManagerActivationState {
   completedWorkspaceIds: string[]
 }
 
-interface ReleaseManagerActivationOptions {
+export interface ReleaseManagerActivationOptions {
   stateFile: string
   legacyMarkerFile?: string
   workspaces: ReleaseManagerActivationWorkspace[]
@@ -174,5 +174,31 @@ export function migrateInitialReleaseManagerActivation(
     migratedLegacyMarker,
     updatedWorkspaceIds,
     failedWorkspaceIds,
+  }
+}
+
+// The migration is intentionally agent-agnostic despite its historical name.
+// New built-in Artist OS agents use these aliases so their startup code reads
+// accurately while existing Release Manager imports remain stable.
+export const migrateInitialArtistAgentActivation = migrateInitialReleaseManagerActivation
+export const preserveArtistAgentActivationChoices = preserveReleaseManagerActivationChoices
+
+export function migrateOrPreserveInitialArtistAgentActivation(
+  options: ReleaseManagerActivationOptions & { previouslyInstalled: boolean },
+): ReleaseManagerActivationResult & { preservedExistingChoices: boolean } {
+  if (!existsSync(options.stateFile) && options.previouslyInstalled) {
+    preserveArtistAgentActivationChoices(options.stateFile, options.workspaces)
+    return {
+      complete: true,
+      migratedLegacyMarker: false,
+      updatedWorkspaceIds: [],
+      failedWorkspaceIds: [],
+      preservedExistingChoices: true,
+    }
+  }
+
+  return {
+    ...migrateInitialArtistAgentActivation(options),
+    preservedExistingChoices: false,
   }
 }

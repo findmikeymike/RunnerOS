@@ -29,6 +29,16 @@ describe('connection account settings', () => {
     expect(pageRegistrySource).toContain('spotify: SpotifySettingsPage')
   })
 
+  it('keeps API publishing and browser access together without conflating them', () => {
+    expect(socialSource).toContain('title="Publishing Connections"')
+    expect(socialSource).toContain("slug: 'trypost'")
+    expect(socialSource).toContain("slug: 'postiz'")
+    expect(socialSource).toContain('title="Browser Access"')
+    expect(socialSource).toContain('You can still post to socials, reply to comments, and keep accounts warm by signing in to each account below.')
+    expect(socialSource).toContain('Add artist or brand')
+    expect(socialSource).not.toContain('title="Add Account Set"')
+  })
+
   it('shows all Spotify capabilities under one saved account', () => {
     expect(spotifySource).toContain('function SpotifyCapabilityRow')
     expect(spotifySource).toContain('divide-y divide-white/[0.055]')

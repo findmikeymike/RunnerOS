@@ -80,9 +80,13 @@ describe('permissions craft-agent allowlist sync', () => {
     expect(validateBashCommand('zero get 1 --formatted', patterns).allowed).toBe(true)
     expect(validateBashCommand('zero fetch "https://example.com" --max-pay 0.50 --json', patterns).allowed).toBe(false)
     expect(validateBashCommand('node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs status --json', patterns).allowed).toBe(true)
-    expect(validateBashCommand('node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs fetch --capability example --max-pay 0.10 --read-only --json', patterns).allowed).toBe(true)
+    expect(validateBashCommand('node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs fetch --capability example --max-pay 0.10 --json', patterns).allowed).toBe(true)
+    expect(validateBashCommand('node ~/.artist-os-dev/libraries/agents/skills/zero/scripts/zero-budget.mjs fetch --capability example --max-pay 0.10 --json', patterns).allowed).toBe(true)
+    expect(validateBashCommand('node /home/artist/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs fetch --capability example --max-pay 0.10 --json', patterns).allowed).toBe(true)
     expect(validateBashCommand('node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs configure --weekly-limit 5 --json', patterns).allowed).toBe(false)
-    expect(validateBashCommand('node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs fetch --capability example --max-pay 0.10 --read-only --json && touch /tmp/BAD', patterns).allowed).toBe(false)
+    expect(validateBashCommand('node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs authorize --capability send-email --method POST --max-calls 10 --max-total-pay 1 --expires-in-hours 24 --purpose emails --json', patterns).allowed).toBe(false)
+    expect(validateBashCommand('node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs revoke --authorization zero_auth_example --json', patterns).allowed).toBe(false)
+    expect(validateBashCommand('node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs fetch --capability example --max-pay 0.10 --json && touch /tmp/BAD', patterns).allowed).toBe(false)
 
     expect(validateBashCommand('python3 ~/.agents/skills/college-radio-matcher/match.py --limit 12 --format json', patterns).allowed).toBe(true)
 

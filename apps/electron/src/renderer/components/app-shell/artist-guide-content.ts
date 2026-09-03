@@ -170,7 +170,7 @@ export const ARTIST_GUIDE_CONNECTIONS: ArtistGuideConnection[] = [
   {
     id: 'youtube-research', group: 'Promotion + research', title: 'YouTube Research',
     unlocks: 'Video, channel, transcript, comment, and research lookup for YouTube specialists.',
-    setup: 'Enable YouTube Data API in Google Cloud, create an API key, and save it under YouTube Research.',
+    setup: 'Zero handles this automatically when configured. Optionally add a YouTube Data API key for the direct free-quota route.',
     action: { id: 'settings.connections', label: 'Open Connections' },
   },
   {
@@ -183,19 +183,13 @@ export const ARTIST_GUIDE_CONNECTIONS: ArtistGuideConnection[] = [
     id: 'trypost-provider', group: 'Promotion + research', title: 'TryPost',
     unlocks: 'Drafts, schedules, previews, and approval-gated publishing across TryPost-connected social accounts.',
     setup: 'Create a Personal Access Token in TryPost Settings → API Keys, then connect the TryPost source.',
-    action: { id: 'settings.connections', label: 'Open Connections' },
+    action: { id: 'settings.social-accounts', label: 'Social Accounts' },
   },
   {
     id: 'postiz-provider', group: 'Promotion + research', title: 'Postiz',
     unlocks: 'Drafts, schedules, and approval-gated publishing through connected Postiz channels.',
     setup: 'Create a key in Postiz Settings → Developers → Public API, then connect the Postiz source.',
-    action: { id: 'settings.connections', label: 'Open Connections' },
-  },
-  {
-    id: 'social-publishing', group: 'Promotion + research', title: 'Local Postiz tools',
-    unlocks: 'Optional Postiz credentials for bundled local and Squad social workflows outside the provider agent.',
-    setup: 'Add a Postiz API key and, for self-hosting, the Postiz base URL under Social Publishing Tools.',
-    action: { id: 'settings.connections', label: 'Open Connections' },
+    action: { id: 'settings.social-accounts', label: 'Social Accounts' },
   },
   {
     id: 'resend-email', group: 'Community + commerce', title: 'Community Email',

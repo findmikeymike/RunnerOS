@@ -37,7 +37,7 @@ describe('Keys settings registry', () => {
     }
   })
 
-  test('provider publishing agents have visible managed connection cards', () => {
+  test('provider publishing agents keep managed source connection definitions', () => {
     const managedSlugs = new Set(
       SECRET_PRESETS
         .filter((preset) => preset.storage === 'managed-source')
@@ -51,5 +51,10 @@ describe('Keys settings registry', () => {
         expect(managedSlugs.has(sourceSlug), `${agentSlug} has no Keys setup path for ${sourceSlug}`).toBe(true)
       }
     }
+  })
+
+  test('keeps social publishing providers out of the general services list', () => {
+    expect(SERVICES.some((service) => service.id === 'trypost-provider')).toBe(false)
+    expect(SERVICES.some((service) => service.id === 'postiz-provider')).toBe(false)
   })
 })

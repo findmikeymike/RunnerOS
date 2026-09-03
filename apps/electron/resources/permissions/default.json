@@ -86,8 +86,8 @@
       "comment": "Search and inspect Zero capabilities without paid fetches"
     },
     {
-      "pattern": "^node\\s+(?:~|/Users/[^/]+)/(?:\\.artist-os/libraries/agents/skills|\\.agents/skills|\\.codex/skills)/zero/scripts/zero-budget\\.mjs\\s+(?:status|fetch)\\b",
-      "comment": "Check or use the locally enforced weekly Zero spend allowance for read-like calls"
+      "pattern": "^node\\s+(?:~|/Users/[^/]+|/home/[^/]+|[A-Za-z]:/Users/[^/]+)/(?:\\.artist-os(?:-dev)?/libraries/agents/skills|\\.agents/skills|\\.codex/skills)/zero/scripts/zero-budget\\.mjs\\s+(?:status|fetch)\\b",
+      "comment": "Check or use the locally enforced weekly Zero spend and bounded-action guard"
     },
     {
       "pattern": "^python3\\s+\"?(?:~|/Users/[^/]+)/(?:\\.agents|\\.codex)/skills/college-radio-matcher/match\\.py\"?(?:\\s|$)",

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   migrateInitialReleaseManagerActivation,
+  migrateOrPreserveInitialArtistAgentActivation,
   preserveReleaseManagerActivationChoices,
   releaseManagerActivationNeedsWork,
   type ReleaseManagerActivationWorkspace,
@@ -132,6 +133,33 @@ describe('Release Manager initial activation migration', () => {
     const afterReinstall = harness.run()
     expect(afterReinstall.complete).toBe(true)
     expect(afterReinstall.updatedWorkspaceIds).toEqual([])
+    expect(harness.calls).toEqual([])
+  })
+
+  test('preserves an existing Anything Agent choice instead of reactivating it on startup', () => {
+    const harness = setup()
+    const result = migrateOrPreserveInitialArtistAgentActivation({
+      stateFile: harness.stateFile,
+      workspaces,
+      agentSlug: 'anything-agent',
+      skillSlugs: ['zero'],
+      previouslyInstalled: true,
+      isAgentActive: workspace => harness.active.has(workspace.id),
+      activateAgent: workspace => {
+        harness.calls.push(`agent:${workspace.id}`)
+        harness.active.add(workspace.id)
+      },
+      enabledSkillSlugs: workspace => [...(harness.skills.get(workspace.id) ?? [])],
+      enableSkill: (workspace, skillSlug) => harness.calls.push(`skill:${workspace.id}:${skillSlug}`),
+    })
+
+    expect(result.preservedExistingChoices).toBe(true)
+    expect(result.updatedWorkspaceIds).toEqual([])
+    expect(harness.calls).toEqual([])
+    expect(existsSync(harness.stateFile)).toBe(true)
+
+    const later = harness.run({ agentSlug: 'anything-agent', skillSlugs: ['zero'] })
+    expect(later.updatedWorkspaceIds).toEqual([])
     expect(harness.calls).toEqual([])
   })
 

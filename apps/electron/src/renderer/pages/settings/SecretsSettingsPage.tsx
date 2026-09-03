@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertCircle, CheckCircle2, ChevronDown, ExternalLink, Info, KeyRound, Loader2, LogOut, Mail, RefreshCcw, Save, Trash2, WalletCards } from 'lucide-react'
+import { CheckCircle2, ChevronDown, ExternalLink, Info, KeyRound, Loader2, LogOut, Mail, RefreshCcw, Save, Trash2, WalletCards, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
@@ -56,7 +56,7 @@ export type SecretService = {
   requiredAnyPresetNames?: string[]
 }
 
-type ServiceStatus = 'ready' | 'needs' | 'optional'
+type ServiceStatus = 'ready' | 'needs'
 
 export const SECRET_PRESETS: SecretPreset[] = [
   {
@@ -176,22 +176,6 @@ export const SECRET_PRESETS: SecretPreset[] = [
     sourceSlug: 'postiz',
     sourceType: 'mcp',
     setupLabel: 'Connect source',
-  },
-  {
-    group: 'Promotion',
-    name: 'POSTIZ_API_KEY',
-    label: 'Postiz API key (local tools)',
-    description: 'Used by bundled local/Squad Postiz workflows. The Postiz agent connects separately through the Postiz source.',
-    placeholder: 'Postiz API key',
-    storage: 'env',
-  },
-  {
-    group: 'Promotion',
-    name: 'POSTIZ_BASE_URL',
-    label: 'Postiz URL (local tools)',
-    description: 'Optional self-hosted URL for bundled local/Squad Postiz workflows.',
-    placeholder: 'https://postiz.example.com',
-    storage: 'env',
   },
   {
     group: 'Commerce',
@@ -610,24 +594,10 @@ export const SECRET_PRESETS: SecretPreset[] = [
 
 export const SERVICES: SecretService[] = [
   {
-    id: 'meta-ads',
-    group: 'Promotion',
-    title: 'Meta Ads',
-    description: 'Connect ad account access for Meta reporting, diagnostics, and planned ad work.',
-    presetNames: ['META_ADS_OAUTH'],
-  },
-  {
-    id: 'google-ads',
-    group: 'Promotion',
-    title: 'Google Ads',
-    description: 'Connect Google Ads for account lookup, reports, diagnostics, and campaign planning.',
-    presetNames: ['GOOGLE_ADS_OAUTH'],
-  },
-  {
     id: 'youtube-research',
     group: 'Promotion',
     title: 'YouTube Research',
-    description: 'Let research agents search videos, transcripts, comments, embeds, and channels.',
+    description: 'Optional direct YouTube API access. Intel can use Zero when this is not connected.',
     presetNames: ['YOUTUBE_API_KEY'],
   },
   {
@@ -639,8 +609,8 @@ export const SERVICES: SecretService[] = [
   },
   {
     id: 'google-workspace',
-    group: 'Workspace',
-    title: 'Google',
+    group: 'Essential',
+    title: 'Gmail',
     description: 'Connect your Google account to use Gmail in Artist OS.',
     presetNames: ['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'GOOGLE_WORKSPACE_PRIMARY_CALENDAR_ID'],
     optionalPresetNames: ['GOOGLE_WORKSPACE_PRIMARY_CALENDAR_ID'],
@@ -651,28 +621,6 @@ export const SERVICES: SecretService[] = [
     title: 'Community Email',
     description: 'Connect Resend so Community can send approved fan emails from a verified domain.',
     presetNames: ['RESEND_API_KEY'],
-  },
-  {
-    id: 'social-publishing',
-    group: 'Promotion',
-    title: 'Social Publishing Tools',
-    description: 'Optional Postiz credentials for bundled local/Squad workflows. Connect provider agents from Sources.',
-    presetNames: ['POSTIZ_API_KEY', 'POSTIZ_BASE_URL'],
-    optionalPresetNames: ['POSTIZ_API_KEY', 'POSTIZ_BASE_URL'],
-  },
-  {
-    id: 'trypost-provider',
-    group: 'Promotion',
-    title: 'TryPost Agent',
-    description: 'Provider connection for TryPost drafts, scheduling, and publishing.',
-    presetNames: ['TRYPOST_SOURCE_CONNECTION'],
-  },
-  {
-    id: 'postiz-provider',
-    group: 'Promotion',
-    title: 'Postiz Agent',
-    description: 'Provider connection for Postiz drafts, scheduling, and publishing.',
-    presetNames: ['POSTIZ_SOURCE_CONNECTION'],
   },
   {
     id: 'shopify',
@@ -740,15 +688,19 @@ export const SERVICES: SecretService[] = [
   },
   {
     id: 'zero',
-    group: 'Miscellaneous',
-    title: 'Zero CLI',
-    description: 'Zero lets agents call paid external services. Set up the CLI wallet, then fund it.',
+    group: 'Essential',
+    title: 'Zero',
+    description: 'Lets agents securely use extra services when you need them.',
     presetNames: ['ZERO_PRIVATE_KEY'],
     optionalPresetNames: ['ZERO_PRIVATE_KEY'],
   },
 ]
 
-const SECRET_GROUPS = Array.from(new Set(SERVICES.map((service) => service.group)))
+const ESSENTIAL_SERVICE_IDS = ['google-workspace', 'zero'] as const
+const SECRET_GROUPS = [
+  'Essential',
+  ...Array.from(new Set(SERVICES.map((service) => service.group))).filter((group) => group !== 'Essential'),
+]
 const PRESET_BY_NAME = new Map(SECRET_PRESETS.map((preset) => [preset.name, preset]))
 
 export default function SecretsSettingsPage() {
@@ -763,6 +715,8 @@ export default function SecretsSettingsPage() {
   const [busyServiceId, setBusyServiceId] = React.useState<string | null>(null)
   const [expandedServiceId, setExpandedServiceId] = React.useState<string | null>(null)
   const [zeroAction, setZeroAction] = React.useState<string | null>(null)
+  const [zeroBudgetDraft, setZeroBudgetDraft] = React.useState('')
+  const [zeroDetailsOpen, setZeroDetailsOpen] = React.useState(false)
   const [zeroImportOpen, setZeroImportOpen] = React.useState(false)
   const [canManageSecrets, setCanManageSecrets] = React.useState<boolean | null>(null)
   const [accessMessage, setAccessMessage] = React.useState('Only the workspace Owner can view or change saved keys and connected service credentials.')
@@ -770,10 +724,12 @@ export default function SecretsSettingsPage() {
   const [gmailConnectionError, setGmailConnectionError] = React.useState<string | null>(null)
   const [savedSecretsOpen, setSavedSecretsOpen] = React.useState(false)
 
-  const services = React.useMemo(
-    () => SERVICES.filter((service) => service.group === selectedGroup),
-    [selectedGroup],
-  )
+  const services = React.useMemo(() => {
+    if (selectedGroup !== 'Essential') return SERVICES.filter((service) => service.group === selectedGroup)
+    return ESSENTIAL_SERVICE_IDS
+      .map((id) => SERVICES.find((service) => service.id === id))
+      .filter((service): service is SecretService => Boolean(service))
+  }, [selectedGroup])
   const savedByName = React.useMemo(
     () => new Map(secrets.map((secret) => [secret.name, secret])),
     [secrets],
@@ -809,6 +765,9 @@ export default function SecretsSettingsPage() {
       ])
       setSecrets(secretRows)
       setZero(zeroStatus)
+      setZeroBudgetDraft(zeroStatus.budget?.weeklyLimitUsd === null || zeroStatus.budget?.weeklyLimitUsd === undefined
+        ? ''
+        : String(zeroStatus.budget.weeklyLimitUsd))
       setSources(sourceRows)
       setGmailScope(nextGmailScope)
       if (nextGmailScope?.hasEffectiveCredential) setGmailConnectionError(null)
@@ -1003,6 +962,32 @@ export default function SecretsSettingsPage() {
     }
   }
 
+  const saveZeroBudget = async () => {
+    if (!activeWorkspaceId) return
+    const weeklyLimitUsd = Number(zeroBudgetDraft)
+    if (!Number.isFinite(weeklyLimitUsd) || weeklyLimitUsd < 0) {
+      toast.error('Enter zero or a positive weekly dollar limit')
+      return
+    }
+    setZeroAction('budget')
+    try {
+      const result = await window.electronAPI.configureZeroBudget(activeWorkspaceId, weeklyLimitUsd)
+      if (!result.success || !result.budget) {
+        toast.error(result.error || 'Could not save the Zero weekly limit')
+        return
+      }
+      setZero((current) => current ? { ...current, budget: result.budget, budgetError: undefined } : current)
+      setZeroBudgetDraft(String(result.budget.weeklyLimitUsd ?? ''))
+      toast.success('Zero weekly limit saved')
+    } catch (error) {
+      toast.error('Could not save the Zero weekly limit', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setZeroAction(null)
+    }
+  }
+
   const saveService = async (service: SecretService) => {
     const presets = service.presetNames.map((name) => PRESET_BY_NAME.get(name)).filter(Boolean) as SecretPreset[]
     const managedPreset = presets.find((preset) => preset.storage === 'managed-source')
@@ -1019,7 +1004,7 @@ export default function SecretsSettingsPage() {
       return
     }
     if (changedPresets.length === 0) {
-      toast.info(serviceStatus(service, savedByName, sourceBySlug, draftValues) === 'optional' ? 'Paste a key first.' : 'Nothing new to save.')
+      toast.info(serviceHasAnyCredential(service, savedByName, sourceBySlug, draftValues) ? 'Nothing new to save.' : 'Paste a key first.')
       return
     }
 
@@ -1075,8 +1060,8 @@ export default function SecretsSettingsPage() {
       toast.error(`${service.title} is missing ${missing[0]!.label}`)
       return
     }
-    if (serviceStatus(service, savedByName, sourceBySlug, draftValues) === 'optional') {
-      toast.info(`${service.title} is optional. Add a key when a workflow needs it.`)
+    if (serviceStatus(service, savedByName, sourceBySlug, draftValues) !== 'ready') {
+      toast.info(`Connect ${service.title} before testing it.`)
       return
     }
     const managedPreset = service.presetNames
@@ -1164,6 +1149,8 @@ export default function SecretsSettingsPage() {
                     const readyCount = groupServices.filter((service) => (
                       service.id === 'google-workspace'
                         ? gmailScope?.hasEffectiveCredential === true
+                        : service.id === 'zero'
+                          ? zero?.installed === true && zero.walletConfigured
                         : serviceStatus(service, savedByName, sourceBySlug, draftValues) === 'ready'
                     )).length
                     return (
@@ -1173,11 +1160,13 @@ export default function SecretsSettingsPage() {
                         onClick={() => setSelectedGroup(group)}
                         className={[
                           'flex w-full items-center justify-between rounded-[12px] px-3 py-2 text-left text-sm transition-colors',
-                          selectedGroup === group ? 'bg-white/[0.075] text-white' : 'text-white/58 hover:bg-white/[0.045] hover:text-white/82',
+                          selectedGroup === group
+                            ? group === 'Essential' ? 'bg-[#f05a28]/14 text-[#ff9a62]' : 'bg-white/[0.075] text-white'
+                            : group === 'Essential' ? 'text-[#f68245] hover:bg-[#f05a28]/8 hover:text-[#ffad7d]' : 'text-white/58 hover:bg-white/[0.045] hover:text-white/82',
                         ].join(' ')}
                       >
                         <span>{group}</span>
-                        <span className="text-[11px] text-white/34">{readyCount}/{groupServices.length}</span>
+                        <span className={`text-[11px] ${group === 'Essential' ? 'text-[#f68245]/65' : 'text-white/34'}`}>{readyCount}/{groupServices.length}</span>
                       </button>
                     )
                   })}
@@ -1189,25 +1178,40 @@ export default function SecretsSettingsPage() {
                   const presets = service.presetNames.map((name) => PRESET_BY_NAME.get(name)).filter(Boolean) as SecretPreset[]
                   const status = service.id === 'google-workspace'
                     ? gmailScope?.hasEffectiveCredential ? 'ready' : 'needs'
+                    : service.id === 'zero'
+                      ? zero?.installed && zero.walletConfigured ? 'ready' : 'needs'
                     : serviceStatus(service, savedByName, sourceBySlug, draftValues)
                   const managedPreset = presets.find((preset) => preset.storage === 'managed-source')
                   const busy = busyServiceId === service.id
                   const expanded = service.id !== 'google-workspace' && expandedServiceId === service.id
                   const zeroPrivateKeyPreset = presets.find((preset) => preset.name === 'ZERO_PRIVATE_KEY')
                   return (
-                    <SettingsCard key={service.id} className="!border-0 shadow-none">
+                    <SettingsCard key={service.id} className="!border-0 bg-[#111113] shadow-none">
                       <div className="p-3">
                         <div className="flex items-center justify-between gap-4">
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <h3 className="text-sm font-semibold text-white/90">{service.title}</h3>
-                              {service.id !== 'zero' && (
-                                <StatusIcon status={status} serviceId={service.id} />
-                              )}
+                              <StatusIcon status={status} serviceId={service.id} />
                             </div>
                             <p className="mt-1 line-clamp-1 max-w-3xl text-xs leading-4 text-white/38">{service.description}</p>
                           </div>
-                          {service.id === 'google-workspace' ? null : managedPreset ? (
+                          {service.id === 'google-workspace' ? gmailScope?.hasEffectiveCredential ? (
+                            <div className="flex shrink-0 items-center gap-2">
+                              {gmailScope.metadata?.accountEmail ? (
+                                <span className="max-w-48 truncate text-xs text-white/30">{gmailScope.metadata.accountEmail}</span>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => void disconnectGmail()}
+                                disabled={busy}
+                                className="inline-flex h-8 items-center gap-1.5 rounded-[8px] px-2.5 text-xs font-medium text-white/38 transition-colors hover:bg-white/[0.045] hover:text-white/68 disabled:opacity-50"
+                              >
+                                <LogOut className="h-3.5 w-3.5" />
+                                Disconnect
+                              </button>
+                            </div>
+                          ) : null : managedPreset ? (
                             <div className="flex shrink-0 items-center gap-2">
                               <button
                                 type="button"
@@ -1247,161 +1251,161 @@ export default function SecretsSettingsPage() {
                           ) : null}
                         </div>
 
-                        {service.id === 'google-workspace' ? (
+                        {service.id === 'google-workspace' ? !gmailScope?.hasEffectiveCredential ? (
                           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[12px] bg-white/[0.025] px-4 py-3">
-                            {gmailScope?.hasEffectiveCredential ? (
-                              <div className="flex min-w-0 items-center gap-2.5">
-                                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-400/12 text-emerald-300">
-                                  <CheckCircle2 className="h-4 w-4" />
-                                </span>
-                                <div className="min-w-0">
-                                  <p className="text-sm font-medium text-emerald-200">You're connected</p>
-                                  {gmailScope.metadata?.accountEmail ? (
-                                    <p className="truncate text-xs text-white/42">{gmailScope.metadata.accountEmail}</p>
-                                  ) : null}
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm text-white/52">Connect once, then Artist OS can use Gmail when you ask.</p>
-                                {gmailConnectionError ? (
-                                  <p className="mt-1.5 text-xs leading-5 text-amber-300/80">{gmailConnectionError}</p>
-                                ) : null}
-                              </div>
-                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm text-white/52">Connect once, then Artist OS can use Gmail when you ask.</p>
+                              {gmailConnectionError ? (
+                                <p className="mt-1.5 text-xs leading-5 text-amber-300/80">{gmailConnectionError}</p>
+                              ) : null}
+                            </div>
                             <div className="flex items-center gap-2">
-                              {gmailScope?.hasEffectiveCredential ? (
-                                <button
-                                  type="button"
-                                  onClick={() => void disconnectGmail()}
-                                  disabled={busy}
-                                  className="inline-flex h-8 items-center gap-1.5 rounded-[8px] px-3 text-xs font-medium text-white/42 transition-colors hover:bg-white/[0.045] hover:text-white/70 disabled:opacity-50"
-                                >
-                                  <LogOut className="h-3.5 w-3.5" />
-                                  Disconnect
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => void connectGmail()}
-                                  disabled={busy}
-                                  className="inline-flex h-9 items-center gap-2 rounded-[9px] bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-white/90 disabled:opacity-40"
-                                >
-                                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                                  Connect Google
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => void connectGmail()}
+                                disabled={busy}
+                                className="inline-flex h-9 items-center gap-2 rounded-[9px] bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-white/90 disabled:opacity-40"
+                              >
+                                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                                Connect Google
+                              </button>
                             </div>
                           </div>
-                        ) : service.id === 'zero' ? (
+                        ) : null : service.id === 'zero' ? (
                           <div className="mt-4 space-y-3">
-                            <div className="rounded-[12px] border border-white/[0.06] bg-black/20 p-4">
-                              <div className="flex items-start justify-between gap-4">
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2 text-sm font-medium">
-                                    <WalletCards className="h-4 w-4 text-white/50" />
-                                    <span>Zero Installation</span>
-                                    {zero?.installed ? (
-                                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/80" />
-                                    ) : (
-                                      <AlertCircle className="h-3.5 w-3.5 text-amber-400/80" />
-                                    )}
-                                  </div>
-                                  <div className="mt-2 grid gap-1 text-xs text-white/45">
-                                    <span>{zero?.installed ? `Installed${zero.version ? ` · ${zero.version}` : ''}` : 'Not installed'}</span>
-                                    {zero?.path && <span className="truncate font-mono text-[10px]">{zero.path}</span>}
-                                    <span>{zero?.walletConfigured ? 'Wallet ready' : 'Wallet missing'}</span>
-                                    {zero?.balance && <span className="truncate">{zero.balance}</span>}
-                                    {zero?.error && <span className="text-amber-300/80">{zero.error}</span>}
-                                  </div>
-                                </div>
-                                <div className="flex shrink-0 flex-col gap-2">
-                                  <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-                                    {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
-                                  </Button>
-                                  {!zero?.installed && (
-                                    <Button size="sm" onClick={installZero} disabled={installing}>
-                                      {installing ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                                      Install
-                                    </Button>
-                                  )}
-                                </div>
+                            <div className="flex flex-wrap items-end justify-between gap-3 rounded-[10px] bg-white/[0.025] px-3 py-3">
+                              <div>
+                                <label htmlFor="zero-weekly-limit" className="text-xs font-medium text-white/72">Weekly spending limit</label>
+                                <p className="mt-1 text-[11px] text-white/34">
+                                  {zero?.budget?.configured
+                                    ? `$${zero.budget.spentUsd.toFixed(2)} used · $${(zero.budget.remainingUsd ?? 0).toFixed(2)} left this week`
+                                    : 'Required before Zero can make paid calls.'}
+                                </p>
                               </div>
-                            </div>
-                            <div className="grid gap-2 sm:grid-cols-3">
-                              <button
-                                type="button"
-                                onClick={initZero}
-                                disabled={!zero?.installed || zeroAction !== null}
-                                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-white/[0.08] px-3 text-xs font-medium text-white/76 transition-colors hover:bg-white/[0.12] disabled:opacity-50"
-                              >
-                                {zeroAction === 'init' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <WalletCards className="h-3.5 w-3.5" />}
-                                Setup CLI
-                              </button>
-                              <button
-                                type="button"
-                                onClick={fundZero}
-                                disabled={!zero?.installed || !zero?.walletConfigured || zeroAction !== null}
-                                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-white/[0.06] bg-white/[0.025] px-3 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.045] hover:text-white/74 disabled:opacity-50"
-                              >
-                                {zeroAction === 'fund' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
-                                Fund wallet
-                              </button>
-                              <button
-                                type="button"
-                                onClick={claimZeroWelcome}
-                                disabled={!zero?.installed || !zero?.walletConfigured || zeroAction !== null}
-                                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-white/[0.06] bg-white/[0.025] px-3 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.045] hover:text-white/74 disabled:opacity-50"
-                              >
-                                {zeroAction === 'welcome' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                                Claim welcome
-                              </button>
-                            </div>
-                            {zeroPrivateKeyPreset ? (
-                              <div className="rounded-[10px] border border-white/[0.055] bg-black/20 p-3">
+                              <div className="flex items-center gap-2">
+                                <div className="flex h-8 w-28 items-center rounded-[8px] border border-white/[0.07] bg-black/20 px-2.5 focus-within:border-[#fb923c]/45">
+                                  <span className="text-xs text-white/32">$</span>
+                                  <input
+                                    id="zero-weekly-limit"
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    inputMode="decimal"
+                                    value={zeroBudgetDraft}
+                                    onChange={(event) => setZeroBudgetDraft(event.target.value)}
+                                    placeholder="5.00"
+                                    className="min-w-0 flex-1 bg-transparent px-1.5 text-right text-sm text-white/82 outline-none placeholder:text-white/20"
+                                  />
+                                </div>
                                 <button
                                   type="button"
-                                  onClick={() => setZeroImportOpen((open) => !open)}
-                                  className="flex w-full items-center justify-between gap-3 text-left"
+                                  onClick={saveZeroBudget}
+                                  disabled={zeroAction !== null || zeroBudgetDraft.trim() === '' || Number(zeroBudgetDraft) < 0 || !Number.isFinite(Number(zeroBudgetDraft)) || Number(zeroBudgetDraft) === zero?.budget?.weeklyLimitUsd}
+                                  className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-[#e65320]/45 px-3 text-xs font-medium text-white transition-colors hover:bg-[#e65320]/60 disabled:cursor-not-allowed disabled:opacity-35"
                                 >
-                                  <span className="text-xs font-medium text-white/70">Import wallet private key instead</span>
-                                  <span className="shrink-0 text-[10px] uppercase tracking-[0.12em] text-white/26">
-                                    {savedByName.has(zeroPrivateKeyPreset.name) ? 'Saved' : 'Optional'}
-                                  </span>
-                                  <ChevronDown className={`h-3.5 w-3.5 text-white/38 transition-transform ${zeroImportOpen ? 'rotate-180' : ''}`} />
+                                  {zeroAction === 'budget' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                                  Save
                                 </button>
-                                <AnimateServiceFields open={zeroImportOpen}>
-                                  <div className="flex gap-2">
-                                    <input
-                                      value={draftValues[zeroPrivateKeyPreset.name] ?? ''}
-                                      onChange={(event) => setDraftValues((current) => ({ ...current, [zeroPrivateKeyPreset.name]: event.target.value }))}
-                                      placeholder={savedByName.has(zeroPrivateKeyPreset.name) ? savedPlaceholder(zeroPrivateKeyPreset, savedByName) : zeroPrivateKeyPreset.placeholder}
-                                      type="password"
-                                      className="h-8 min-w-0 flex-1 rounded-[9px] border border-white/[0.07] bg-white/[0.02] px-3 text-sm text-white/82 outline-none placeholder:text-white/22 focus:border-[#fb923c]/45"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => saveService(service)}
-                                      disabled={busy || !draftValues[zeroPrivateKeyPreset.name]?.trim()}
-                                      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] bg-white/[0.08] px-3 text-xs font-medium text-white/76 transition-colors hover:bg-white/[0.12] disabled:opacity-50"
-                                    >
-                                      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                                      Import
-                                    </button>
-                                  </div>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <button type="button" className="mt-2 text-left text-[11px] leading-4 text-white/30 transition-colors hover:text-white/52">
-                                        Guide
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="max-w-[280px] text-xs">
-                                      {zeroPrivateKeyPreset.description}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </AnimateServiceFields>
                               </div>
-                            ) : null}
+                              {zero?.budgetError ? <p className="w-full text-[11px] text-amber-300/75">{zero.budgetError}</p> : null}
+                            </div>
+                            <div className="rounded-[10px] bg-white/[0.018]">
+                              <button
+                                type="button"
+                                aria-expanded={zeroDetailsOpen}
+                                onClick={() => setZeroDetailsOpen((open) => !open)}
+                                className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
+                              >
+                                <span className="text-xs font-medium text-white/58">
+                                  {zero?.installed && zero.walletConfigured ? 'Wallet & setup' : 'Finish setup'}
+                                </span>
+                                <span className="flex items-center gap-2 text-[11px] text-white/32">
+                                  {zero?.balance ? zero.balance : zero?.walletConfigured ? 'Wallet ready' : 'Not connected'}
+                                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${zeroDetailsOpen ? 'rotate-180' : ''}`} />
+                                </span>
+                              </button>
+                              <AnimateServiceFields open={zeroDetailsOpen}>
+                                <div className="space-y-3 px-3 pb-3">
+                                  {zero?.error && !zero.installed ? <p className="text-[11px] text-amber-300/75">Zero needs to be installed before setup.</p> : null}
+                                  <div className="flex flex-wrap gap-2">
+                                    {!zero?.installed ? (
+                                      <button
+                                        type="button"
+                                        onClick={installZero}
+                                        disabled={installing || zeroAction !== null}
+                                        className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-white/[0.08] px-3 text-xs font-medium text-white/72 transition-colors hover:bg-white/[0.12] disabled:opacity-50"
+                                      >
+                                        {installing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <WalletCards className="h-3.5 w-3.5" />}
+                                        Install Zero
+                                      </button>
+                                    ) : !zero.walletConfigured ? (
+                                      <button
+                                        type="button"
+                                        onClick={initZero}
+                                        disabled={zeroAction !== null}
+                                        className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-white/[0.08] px-3 text-xs font-medium text-white/72 transition-colors hover:bg-white/[0.12] disabled:opacity-50"
+                                      >
+                                        {zeroAction === 'init' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <WalletCards className="h-3.5 w-3.5" />}
+                                        Set up Zero
+                                      </button>
+                                    ) : (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={fundZero}
+                                          disabled={zeroAction !== null}
+                                          className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-white/[0.08] px-3 text-xs font-medium text-white/72 transition-colors hover:bg-white/[0.12] disabled:opacity-50"
+                                        >
+                                          {zeroAction === 'fund' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+                                          Add funds
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={claimZeroWelcome}
+                                          disabled={zeroAction !== null}
+                                          className="inline-flex h-8 items-center gap-1.5 rounded-[8px] px-3 text-xs font-medium text-white/42 transition-colors hover:bg-white/[0.045] hover:text-white/68 disabled:opacity-50"
+                                        >
+                                          {zeroAction === 'welcome' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                                          Claim welcome credit
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                  {zeroPrivateKeyPreset ? (
+                                    <div>
+                                      <button
+                                        type="button"
+                                        onClick={() => setZeroImportOpen((open) => !open)}
+                                        className="flex items-center gap-1.5 text-[11px] text-white/30 transition-colors hover:text-white/52"
+                                      >
+                                        Use an existing wallet
+                                        <ChevronDown className={`h-3 w-3 transition-transform ${zeroImportOpen ? 'rotate-180' : ''}`} />
+                                      </button>
+                                      <AnimateServiceFields open={zeroImportOpen}>
+                                        <div className="mt-2 flex gap-2">
+                                          <input
+                                            value={draftValues[zeroPrivateKeyPreset.name] ?? ''}
+                                            onChange={(event) => setDraftValues((current) => ({ ...current, [zeroPrivateKeyPreset.name]: event.target.value }))}
+                                            placeholder={savedByName.has(zeroPrivateKeyPreset.name) ? savedPlaceholder(zeroPrivateKeyPreset, savedByName) : 'Private key'}
+                                            type="password"
+                                            className="h-8 min-w-0 flex-1 rounded-[9px] border border-white/[0.07] bg-black/20 px-3 text-sm text-white/82 outline-none placeholder:text-white/22 focus:border-[#fb923c]/45"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => saveService(service)}
+                                            disabled={busy || !draftValues[zeroPrivateKeyPreset.name]?.trim()}
+                                            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] bg-white/[0.08] px-3 text-xs font-medium text-white/72 transition-colors hover:bg-white/[0.12] disabled:opacity-50"
+                                          >
+                                            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                                            Save
+                                          </button>
+                                        </div>
+                                      </AnimateServiceFields>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </AnimateServiceFields>
+                            </div>
                           </div>
                         ) : managedPreset ? null : (
                           <AnimateServiceFields open={expanded}>
@@ -1547,14 +1551,13 @@ function AnimateServiceFields({ open, children }: { open: boolean; children: Rea
 
 function StatusIcon({ status, serviceId }: { status: ServiceStatus; serviceId: string }) {
   const ready = status === 'ready'
-  const optional = status === 'optional'
-  const label = serviceId === 'google-workspace' && ready ? 'Keys saved' : ready ? 'Ready' : optional ? 'Optional' : 'Needs key'
+  const label = serviceId === 'zero'
+    ? ready ? 'Ready' : 'Needs setup'
+    : serviceId === 'google-workspace' && ready ? 'Keys saved' : ready ? 'Connected' : 'Not connected'
   const icon = ready ? (
-    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/70" />
-  ) : optional ? (
-    <Info className="h-3.5 w-3.5 text-white/28" />
+    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
   ) : (
-    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/[0.07] text-[12px] font-semibold leading-none text-red-300/80">!</span>
+    <XCircle className="h-3.5 w-3.5 text-white/32" />
   )
 
   return (
@@ -1580,7 +1583,7 @@ function serviceStatus(
   draftValues: Record<string, string>,
 ): ServiceStatus {
   const required = requiredPresets(service)
-  if (required.length === 0 && !serviceHasAnyCredential(service, savedByName, sourceBySlug, draftValues)) return 'optional'
+  if (required.length === 0 && !serviceHasAnyCredential(service, savedByName, sourceBySlug, draftValues)) return 'needs'
   return missingRequiredPresets(service, savedByName, sourceBySlug, draftValues).length === 0 ? 'ready' : 'needs'
 }
 
