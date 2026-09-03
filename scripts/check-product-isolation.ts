@@ -113,7 +113,7 @@ function checkStaticBoundaries(repoRoot: string): void {
   assert(runnerBuilder.includes('- craftagents'), 'Runner package protocol is missing');
   assert(artistBuilder.includes('- artistos'), 'Artist OS package protocol is missing');
   assert(!artistBuilder.includes('- craftagents'), 'Artist OS package still registers Runner protocol');
-  assert(artistBuilder.includes('extendInfo: null'), 'Artist OS does not clear Runner macOS icon metadata');
+  assert(artistBuilder.includes('CFBundleIconName: null'), 'Artist OS does not clear Runner macOS icon metadata');
   assert(
     (artistBuilder.match(/artifactName: Artist-OS-/g) ?? []).length >= 5,
     'Artist OS must override root, macOS, Windows, Linux, and DMG artifact names',
