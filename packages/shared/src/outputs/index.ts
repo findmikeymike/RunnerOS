@@ -29,6 +29,7 @@ export {
   assertSocialVariantSetManifest,
   assertSocialVariantSetRevision,
   isSocialVariantSetManifest,
+  isSocialVariantDestinationIntent,
   toSocialVariantSetSummary,
 } from './social-variants.ts';
 
@@ -43,8 +44,11 @@ export type {
   SocialVariantSetStatus,
   SocialVariantSetSummary,
   SocialVariantSource,
+  SocialVariantSourceSelection,
   SocialVariantSourceOrigin,
   SocialVariantState,
+  CreateSocialVariantSetRequest,
+  StartSocialVariantSetRequest,
 } from './social-variants.ts';
 
 export {
@@ -113,5 +117,7 @@ export {
   readOutputManifest,
   readOutput,
   resolveOutputAssetPath,
+  withOutputBundleLock,
+  withOutputBundleLockAsync,
   writeOutputManifest,
 } from './storage.ts';

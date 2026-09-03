@@ -16,6 +16,7 @@ import {
   listOutputs,
   readOutputManifest,
   resolveOutputAssetPath,
+  withOutputBundleLockAsync,
   writeOutputManifest,
 } from './index.ts';
 
@@ -332,6 +333,29 @@ describe('output storage', () => {
     expect(readOutputManifest(workspace, OUTPUT_NEW_ID)).toEqual(b);
     const ids = listOutputManifests(workspace).map((m) => m.id).sort();
     expect(ids).toEqual([OUTPUT_OLD_ID, OUTPUT_NEW_ID].sort());
+  });
+
+  test('serializes manifest writers across independent async callers', async () => {
+    const order: string[] = [];
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolveGate) => { releaseFirst = resolveGate; });
+    const first = withOutputBundleLockAsync(workspace, OUTPUT_OLD_ID, async () => {
+      order.push('first-enter');
+      await firstGate;
+      writeOutputManifest(workspace, manifest(OUTPUT_OLD_ID));
+      order.push('first-exit');
+    });
+    while (!order.includes('first-enter')) await new Promise((resolveWait) => setTimeout(resolveWait, 1));
+    const second = withOutputBundleLockAsync(workspace, OUTPUT_OLD_ID, async () => {
+      order.push('second-enter');
+      writeOutputManifest(workspace, manifest(OUTPUT_OLD_ID, { summary: 'Second writer.' }));
+    });
+    await new Promise((resolveWait) => setTimeout(resolveWait, 30));
+    expect(order).toEqual(['first-enter']);
+    releaseFirst();
+    await Promise.all([first, second]);
+    expect(order).toEqual(['first-enter', 'first-exit', 'second-enter']);
+    expect(readOutputManifest(workspace, OUTPUT_OLD_ID)?.summary).toBe('Second writer.');
   });
 
   test('createOutputBundle leaves no orphaned content.md when manifest validation fails', () => {

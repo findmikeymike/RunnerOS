@@ -65,11 +65,18 @@ export interface SocialVariantSetManifest {
   scope: 'hq' | 'campaign';
   campaignId?: string;
   status: SocialVariantSetStatus;
+  attention?: {
+    code: 'source-unavailable' | 'render-failed' | 'account-unavailable' | 'other';
+    message: string;
+    sourceId?: string;
+    updatedAt: string;
+  };
   editorSessionId: string;
   sources: SocialVariantSource[];
   request: {
     variantsPerSource: number;
     totalRequested: number;
+    destinationIntents: SocialVariantDestinationIntent[];
     direction?: string;
     requestedAt: string;
     requestedBy: { type: 'user'; clientId: string };
@@ -89,6 +96,25 @@ export interface SocialVariantSetSummary {
   readyCount: number;
   failedCount: number;
   updatedAt: string;
+}
+
+export type SocialVariantSourceSelection =
+  | { origin: 'release-kit'; sourceId: string }
+  | { origin: 'vault'; sourceId: string }
+  | { origin: 'output'; sourceId: string; assetId?: string };
+
+export interface CreateSocialVariantSetRequest {
+  editorSessionId: string;
+  sourceSelections: SocialVariantSourceSelection[];
+  destinationIntents: SocialVariantDestinationIntent[];
+  variantsPerSource: number;
+  direction?: string;
+  title?: string;
+}
+
+export interface StartSocialVariantSetRequest {
+  outputId: string;
+  expectedRevision: number;
 }
 
 const SHA256 = /^[a-f0-9]{64}$/i;
@@ -145,6 +171,17 @@ function hasUniqueStrings(values: string[]): boolean {
   return new Set(values).size === values.length;
 }
 
+function socialVariantDestinationKey(value: SocialVariantDestinationIntent): string {
+  return [
+    value.platform,
+    value.accountRole,
+    value.profileId ?? '',
+    value.accountSetId ?? '',
+    value.mode,
+    value.trialRequested === true ? 'trial-requested' : '',
+  ].join('\0');
+}
+
 function isSocialVariantSource(value: unknown): value is SocialVariantSource {
   if (!isRecord(value)) return false;
   return isIdentifier(value.id)
@@ -159,7 +196,7 @@ function isSocialVariantSource(value: unknown): value is SocialVariantSource {
     && RIGHTS_BASES.has(value.rightsBasis as SocialVariantRightsBasis);
 }
 
-function isSocialVariantDestination(value: unknown): value is SocialVariantDestinationIntent {
+export function isSocialVariantDestinationIntent(value: unknown): value is SocialVariantDestinationIntent {
   if (!isRecord(value)) return false;
   if (typeof value.platform !== 'string' || !PLATFORMS.has(value.platform as SocialVariantPlatform)) return false;
   if (typeof value.accountRole !== 'string' || !ACCOUNT_ROLES.has(value.accountRole as SocialAccountRole)) return false;
@@ -176,7 +213,7 @@ function isSocialVariantRecord(value: unknown, sourceIds: ReadonlySet<string>, a
   if (!isIdentifier(value.id) || !isIdentifier(value.sourceId) || !sourceIds.has(value.sourceId)) return false;
   if (!isBoundedString(value.title, 240) || !isBoundedString(value.hook, 500)) return false;
   if (!isBoundedString(value.editorialMode, 120) || !isBoundedString(value.editorialIntent, 1_200)) return false;
-  if (!isSocialVariantDestination(value.destination)) return false;
+  if (!isSocialVariantDestinationIntent(value.destination)) return false;
   if (!isOptionalIdentifier(value.assetId)) return false;
   if (value.sha256 !== undefined && (typeof value.sha256 !== 'string' || !SHA256.test(value.sha256))) return false;
   if (value.durationSeconds !== undefined && (typeof value.durationSeconds !== 'number' || !Number.isFinite(value.durationSeconds) || value.durationSeconds <= 0)) return false;
@@ -203,11 +240,21 @@ export function isSocialVariantSetManifest(value: unknown, assetIds?: ReadonlySe
   if (value.scope === 'campaign' && !value.campaignId) return false;
   if (value.scope === 'hq' && value.campaignId !== undefined) return false;
   if (typeof value.status !== 'string' || !SET_STATUSES.has(value.status as SocialVariantSetStatus)) return false;
+  if (value.attention !== undefined) {
+    if (!isRecord(value.attention)) return false;
+    if (!['source-unavailable', 'render-failed', 'account-unavailable', 'other'].includes(String(value.attention.code))) return false;
+    if (!isBoundedString(value.attention.message, 1_000)) return false;
+    if (!isOptionalIdentifier(value.attention.sourceId) || !isIsoDateString(value.attention.updatedAt)) return false;
+  }
+  if (value.status === 'needs-attention' && value.attention === undefined) return false;
+  if (value.status !== 'needs-attention' && value.attention !== undefined) return false;
   if (!isIdentifier(value.editorSessionId)) return false;
   if (!Array.isArray(value.sources) || value.sources.length < 1 || value.sources.length > SOCIAL_VARIANT_MAX_SOURCES) return false;
   if (!value.sources.every(isSocialVariantSource)) return false;
   const sourceIds = value.sources.map((source) => source.id);
   if (!hasUniqueStrings(sourceIds)) return false;
+  const attentionSourceId = value.attention?.sourceId;
+  if (attentionSourceId !== undefined && (typeof attentionSourceId !== 'string' || !sourceIds.includes(attentionSourceId))) return false;
   const sourceLineageKeys = value.sources.map((source) => `${source.sourceId}\0${source.sha256.toLowerCase()}`);
   if (!hasUniqueStrings(sourceLineageKeys)) return false;
 
@@ -215,6 +262,10 @@ export function isSocialVariantSetManifest(value: unknown, assetIds?: ReadonlySe
   if (!Number.isInteger(value.request.variantsPerSource) || (value.request.variantsPerSource as number) < 1 || (value.request.variantsPerSource as number) > SOCIAL_VARIANT_MAX_PER_SOURCE) return false;
   const expectedTotal = value.sources.length * (value.request.variantsPerSource as number);
   if (!Number.isInteger(value.request.totalRequested) || value.request.totalRequested !== expectedTotal || expectedTotal > SOCIAL_VARIANT_MAX_TOTAL) return false;
+  if (!Array.isArray(value.request.destinationIntents) || value.request.destinationIntents.length < 1 || value.request.destinationIntents.length > 8) return false;
+  if (!value.request.destinationIntents.every(isSocialVariantDestinationIntent)) return false;
+  const destinationKeys = value.request.destinationIntents.map(socialVariantDestinationKey);
+  if (!hasUniqueStrings(destinationKeys)) return false;
   if (!isBoundedString(value.request.direction, 4_000, true)) return false;
   if (!isIsoDateString(value.request.requestedAt)) return false;
   if (!isRecord(value.request.requestedBy) || value.request.requestedBy.type !== 'user' || !isIdentifier(value.request.requestedBy.clientId)) return false;
@@ -222,6 +273,8 @@ export function isSocialVariantSetManifest(value: unknown, assetIds?: ReadonlySe
   if (!Array.isArray(value.variants) || value.variants.length > value.request.totalRequested) return false;
   const sourceIdSet = new Set(sourceIds);
   if (!value.variants.every((variant) => isSocialVariantRecord(variant, sourceIdSet, assetIds))) return false;
+  const destinationKeySet = new Set(destinationKeys);
+  if (!value.variants.every((variant) => destinationKeySet.has(socialVariantDestinationKey(variant.destination)))) return false;
   const variantIds = value.variants.map((variant) => variant.id);
   if (!hasUniqueStrings(variantIds)) return false;
   const perSourceLimit = value.request.variantsPerSource as number;
@@ -255,7 +308,7 @@ export function assertSocialVariantSetRevision(current: SocialVariantSetManifest
 
 export function advanceSocialVariantSetRevision(
   current: SocialVariantSetManifest,
-  patch: Pick<SocialVariantSetManifest, 'status' | 'variants'>,
+  patch: Pick<SocialVariantSetManifest, 'status' | 'variants'> & Pick<Partial<SocialVariantSetManifest>, 'attention'>,
   now = new Date().toISOString(),
 ): SocialVariantSetManifest {
   if (!isIsoDateString(now) || Date.parse(now) <= Date.parse(current.updatedAt)) {
@@ -265,6 +318,7 @@ export function advanceSocialVariantSetRevision(
     ...current,
     status: patch.status,
     variants: patch.variants,
+    attention: patch.attention,
     schemaVersion: 1,
     revision: current.revision + 1,
     id: current.id,

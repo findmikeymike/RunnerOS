@@ -390,11 +390,18 @@ interface SocialVariantSetManifest {
   scope: 'hq' | 'campaign'
   campaignId?: string
   status: SocialVariantSetStatus
+  attention?: {
+    code: 'source-unavailable' | 'render-failed' | 'account-unavailable' | 'other'
+    message: string
+    sourceId?: string
+    updatedAt: string
+  }
   editorSessionId: string
   sources: SocialVariantSource[]
   request: {
     variantsPerSource: number
     totalRequested: number
+    destinationIntents: SocialVariantDestinationIntent[]
     direction?: string
     requestedAt: string
     requestedBy: { type: 'user'; clientId: string }
@@ -406,6 +413,8 @@ interface SocialVariantSetManifest {
 ```
 
 `request.totalRequested` is the hard render ceiling for that click. The agent cannot silently expand the batch.
+
+`request.destinationIntents` durably records the bounded platform/account direction chosen in the setup drawer, including Prepare only intents without a connected profile. A produced variant must use one of those intents.
 
 `scheduledWorkOrderIds` are references only. Scheduled, Posted, and Needs-attention state is derived fresh from canonical Scheduled Work and receipts; it is never copied into a second mutable status.
 

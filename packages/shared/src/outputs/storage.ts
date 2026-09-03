@@ -16,8 +16,10 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
-import { basename, extname, isAbsolute, join, resolve } from 'node:path';
+import { hostname } from 'node:os';
+import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
 import type { CreateOutputBundleInput, OutputAsset, OutputManifest, OutputSummary } from './types.ts';
 import { previewModeForMimeType, summarizeOutputContent, toOutputSummary } from './preview.ts';
 import {
@@ -31,6 +33,9 @@ import {
 
 export const OUTPUTS_DIR = 'outputs';
 export const OUTPUT_MANIFEST_FILE = 'output.json';
+const OUTPUT_LOCK_TIMEOUT_MS = 10_000;
+const OUTPUT_ORPHAN_LOCK_STALE_MS = 24 * 60 * 60 * 1000;
+const outputLockContext = new AsyncLocalStorage<Map<string, string>>();
 
 function slugify(value: string): string {
   const slug = value
@@ -151,11 +156,13 @@ function isManifestAssetPathsSafe(workspaceRootPath: string, manifest: OutputMan
 }
 
 export function createOutputManifest(workspaceRootPath: string, manifest: OutputManifest): void {
-  assertOutputManifest(manifest, manifest.id);
-  assertSafeManifestAssetPaths(workspaceRootPath, manifest);
-  const file = getOutputManifestFile(workspaceRootPath, manifest.id);
-  if (existsSync(file)) throw new Error(`Output manifest already exists: ${manifest.id}`);
-  writeOutputManifest(workspaceRootPath, manifest);
+  withOutputBundleLock(workspaceRootPath, manifest.id, () => {
+    assertOutputManifest(manifest, manifest.id);
+    assertSafeManifestAssetPaths(workspaceRootPath, manifest);
+    const file = getOutputManifestFile(workspaceRootPath, manifest.id);
+    if (existsSync(file)) throw new Error(`Output manifest already exists: ${manifest.id}`);
+    writeOutputManifestUnlocked(workspaceRootPath, manifest);
+  });
 }
 
 /**
@@ -163,6 +170,10 @@ export function createOutputManifest(workspaceRootPath: string, manifest: Output
  * writes to a sibling `.tmp`, then renames within the same filesystem.
  */
 export function writeOutputManifest(workspaceRootPath: string, manifest: OutputManifest): void {
+  withOutputBundleLock(workspaceRootPath, manifest.id, () => writeOutputManifestUnlocked(workspaceRootPath, manifest));
+}
+
+function writeOutputManifestUnlocked(workspaceRootPath: string, manifest: OutputManifest): void {
   assertOutputManifest(manifest, manifest.id);
   assertSafeManifestAssetPaths(workspaceRootPath, manifest);
   const dir = getOutputDir(workspaceRootPath, manifest.id);
@@ -223,6 +234,11 @@ function uniqueOutputSlug(workspaceRootPath: string, desired: string, ownId: str
 export function createOutputBundle(workspaceRootPath: string, input: CreateOutputBundleInput): OutputManifest {
   const id = input.id ?? randomUUID();
   assertValidOutputId(id);
+  return withOutputBundleLock(workspaceRootPath, id, () => createOutputBundleUnlocked(workspaceRootPath, { ...input, id }));
+}
+
+function createOutputBundleUnlocked(workspaceRootPath: string, input: CreateOutputBundleInput & { id: string }): OutputManifest {
+  const id = input.id;
   const createdAt = input.createdAt ?? new Date().toISOString();
   const updatedAt = createdAt;
   const outputDir = getOutputDir(workspaceRootPath, id);
@@ -324,9 +340,133 @@ export function listOutputs(workspaceRootPath: string): OutputSummary[] {
 export function deleteOutput(workspaceRootPath: string, outputId: string): boolean {
   const dir = resolveOutputDir(workspaceRootPath, outputId);
   if (!dir) return false;
-  if (!existsSync(dir)) return false;
-  rmSync(dir, { recursive: true, force: true });
-  return true;
+  return withOutputBundleLock(workspaceRootPath, outputId, () => {
+    if (!existsSync(dir)) return false;
+    rmSync(dir, { recursive: true, force: true });
+    return true;
+  });
+}
+
+function outputLockDir(workspaceRootPath: string, outputId: string): string {
+  assertValidOutputId(outputId);
+  return join(workspaceRootPath, 'context', '.locks', 'outputs', `${outputId}.lock`);
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
+}
+
+function lockOwnerIsAbandoned(path: string): boolean {
+  try {
+    const owner = JSON.parse(readFileSync(join(path, 'owner.json'), 'utf8')) as { pid?: number; hostname?: string };
+    if (owner.hostname !== hostname() || !Number.isInteger(owner.pid) || (owner.pid ?? 0) <= 0) return false;
+    try {
+      process.kill(owner.pid!, 0);
+      return false;
+    } catch (error) {
+      return isNodeError(error) && error.code === 'ESRCH';
+    }
+  } catch {
+    try {
+      return Date.now() - statSync(path).mtimeMs > OUTPUT_ORPHAN_LOCK_STALE_MS;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function liveLockOwner(path: string): { pid: number; hostname: string } | undefined {
+  try {
+    const owner = JSON.parse(readFileSync(join(path, 'owner.json'), 'utf8')) as { pid?: number; hostname?: string };
+    if (owner.hostname !== hostname() || !Number.isInteger(owner.pid) || (owner.pid ?? 0) <= 0) return undefined;
+    process.kill(owner.pid!, 0);
+    return { pid: owner.pid!, hostname: owner.hostname };
+  } catch {
+    return undefined;
+  }
+}
+
+function releaseOutputLock(path: string, ownerPath: string, token: string): void {
+  try {
+    const current = JSON.parse(readFileSync(ownerPath, 'utf8')) as { token?: string };
+    if (current.token === token) rmSync(path, { recursive: true, force: true });
+  } catch {
+    // Never remove a lock whose ownership cannot be proven.
+  }
+}
+
+export function withOutputBundleLock<T>(workspaceRootPath: string, outputId: string, fn: () => T): T {
+  const path = outputLockDir(workspaceRootPath, outputId);
+  if (outputLockContext.getStore()?.has(path)) return fn();
+  const ownerPath = join(path, 'owner.json');
+  const owner = { token: randomUUID(), pid: process.pid, hostname: hostname(), createdAt: new Date().toISOString() };
+  mkdirSync(dirname(path), { recursive: true });
+  const deadline = Date.now() + OUTPUT_LOCK_TIMEOUT_MS;
+  while (true) {
+    try {
+      mkdirSync(path, { recursive: false });
+      try {
+        writeFileSync(ownerPath, JSON.stringify(owner), { encoding: 'utf8', flag: 'wx' });
+      } catch (error) {
+        rmSync(path, { recursive: true, force: true });
+        throw error;
+      }
+      break;
+    } catch (error) {
+      if (!isNodeError(error) || error.code !== 'EEXIST') throw error;
+      if (lockOwnerIsAbandoned(path)) {
+        rmSync(path, { recursive: true, force: true });
+        continue;
+      }
+      const liveOwner = liveLockOwner(path);
+      if (liveOwner?.pid === process.pid) throw new Error(`Output "${outputId}" is busy with another operation in this process.`);
+      if (Date.now() >= deadline) throw new Error(`Timed out waiting for Output lock: ${outputId}`);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
+  const context = new Map(outputLockContext.getStore());
+  context.set(path, owner.token);
+  try {
+    return outputLockContext.run(context, fn);
+  } finally {
+    releaseOutputLock(path, ownerPath, owner.token);
+  }
+}
+
+export async function withOutputBundleLockAsync<T>(workspaceRootPath: string, outputId: string, fn: () => Promise<T>): Promise<T> {
+  const path = outputLockDir(workspaceRootPath, outputId);
+  if (outputLockContext.getStore()?.has(path)) return fn();
+  const ownerPath = join(path, 'owner.json');
+  const owner = { token: randomUUID(), pid: process.pid, hostname: hostname(), createdAt: new Date().toISOString() };
+  mkdirSync(dirname(path), { recursive: true });
+  const deadline = Date.now() + OUTPUT_LOCK_TIMEOUT_MS;
+  while (true) {
+    try {
+      mkdirSync(path, { recursive: false });
+      try {
+        writeFileSync(ownerPath, JSON.stringify(owner), { encoding: 'utf8', flag: 'wx' });
+      } catch (error) {
+        rmSync(path, { recursive: true, force: true });
+        throw error;
+      }
+      break;
+    } catch (error) {
+      if (!isNodeError(error) || error.code !== 'EEXIST') throw error;
+      if (lockOwnerIsAbandoned(path)) {
+        rmSync(path, { recursive: true, force: true });
+        continue;
+      }
+      if (Date.now() >= deadline) throw new Error(`Timed out waiting for Output lock: ${outputId}`);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
+    }
+  }
+  const context = new Map(outputLockContext.getStore());
+  context.set(path, owner.token);
+  try {
+    return await outputLockContext.run(context, fn);
+  } finally {
+    releaseOutputLock(path, ownerPath, owner.token);
+  }
 }
 
 export {

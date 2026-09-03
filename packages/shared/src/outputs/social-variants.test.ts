@@ -48,6 +48,12 @@ function variantSet(overrides: Partial<SocialVariantSetManifest> = {}): SocialVa
     request: {
       variantsPerSource: 2,
       totalRequested: 2,
+      destinationIntents: [{
+        platform: 'instagram',
+        accountRole: 'secondary',
+        profileId: 'profile-1',
+        mode: 'standard',
+      }],
       direction: 'Favor two distinct openings.',
       requestedAt: '2026-09-02T12:00:00.000Z',
       requestedBy: { type: 'user', clientId: 'client-1' },
@@ -177,6 +183,30 @@ describe('social variant set validation', () => {
       status: 'review',
       variants: [{ ...variantSet().variants[0]!, state: 'failed', assetId: undefined, sha256: undefined, failureReason: 'Render failed.' }],
     })).toBe(false);
+    expect(isSocialVariantSetManifest({
+      ...variantSet(),
+      status: 'needs-attention',
+    })).toBe(false);
+    expect(isSocialVariantSetManifest({
+      ...variantSet(),
+      status: 'needs-attention',
+      attention: {
+        code: 'source-unavailable',
+        message: 'The source changed.',
+        sourceId: 'source-1',
+        updatedAt: '2026-09-02T12:02:00.000Z',
+      },
+    })).toBe(true);
+    expect(isSocialVariantSetManifest({
+      ...variantSet(),
+      status: 'needs-attention',
+      attention: {
+        code: 'source-unavailable',
+        message: 'The source changed.',
+        sourceId: 'missing-source',
+        updatedAt: '2026-09-02T12:02:00.000Z',
+      },
+    })).toBe(false);
   });
 
   test('requires exact assets for ready variants and explicit Instagram Trial intent', () => {
@@ -192,6 +222,15 @@ describe('social variant set validation', () => {
       }],
     }))).toBe(false);
     expect(isSocialVariantSetManifest(variantSet({
+      request: {
+        ...variantSet().request,
+        destinationIntents: [{
+          platform: 'instagram',
+          accountRole: 'secondary',
+          mode: 'trial',
+          trialRequested: true,
+        }],
+      },
       variants: [{
         ...variantSet().variants[0]!,
         destination: {
@@ -202,6 +241,24 @@ describe('social variant set validation', () => {
         },
       }],
     }))).toBe(true);
+  });
+
+  test('persists bounded destination intent and rejects unrequested destinations', () => {
+    expect(isSocialVariantSetManifest(variantSet({
+      variants: [{
+        ...variantSet().variants[0]!,
+        destination: { platform: 'x', accountRole: 'secondary', mode: 'standard' },
+      }],
+    }))).toBe(false);
+    expect(isSocialVariantSetManifest(variantSet({
+      request: {
+        ...variantSet().request,
+        destinationIntents: [
+          variantSet().request.destinationIntents[0]!,
+          variantSet().request.destinationIntents[0]!,
+        ],
+      },
+    }))).toBe(false);
   });
 
   test('fences stale updates and only advances mutable progress fields', () => {
@@ -229,7 +286,7 @@ describe('social variant set validation', () => {
 
 describe('social variant Output integration', () => {
   test('persists typed collection Outputs without rewriting normal Outputs', () => {
-    const set = variantSet();
+    const set = variantSet({ updatedAt: '2026-09-02T12:00:00.000Z' });
     const created = createOutputBundle(workspace, {
       id: OUTPUT_ID,
       workspaceId: 'workspace-1',
@@ -249,6 +306,7 @@ describe('social variant Output integration', () => {
       }],
       socialVariantSet: set,
       tags: ['social-variant-set'],
+      createdAt: set.createdAt,
     });
 
     expect(created.schemaVersion).toBe(1);
@@ -282,7 +340,7 @@ describe('social variant Output integration', () => {
       receipts: [],
       links: [],
       context: { scope: 'campaign' as const, campaignId: 'campaign-1' },
-      socialVariantSet: variantSet(),
+      socialVariantSet: variantSet({ updatedAt: '2026-09-02T12:00:00.000Z' }),
     };
     expect(isOutputManifest(base)).toBe(true);
     expect(isOutputManifest({ ...base, workspaceId: 'other-workspace' })).toBe(false);

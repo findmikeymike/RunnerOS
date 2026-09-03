@@ -228,6 +228,7 @@ export function isOutputManifest(value: unknown, expectedOutputId?: string): val
     if (value.kind !== 'collection' || !isSocialVariantSetManifest(value.socialVariantSet, assetIds)) return false;
     if (value.socialVariantSet.id !== value.id) return false;
     if (value.socialVariantSet.workspaceId !== value.workspaceId) return false;
+    if (value.socialVariantSet.createdAt !== value.createdAt || value.socialVariantSet.updatedAt !== value.updatedAt) return false;
     if (value.socialVariantSet.scope !== value.context?.scope) return false;
     if (value.socialVariantSet.campaignId !== value.context?.campaignId) return false;
     if (value.socialVariantSet.editorSessionId !== value.origin.sessionId) return false;

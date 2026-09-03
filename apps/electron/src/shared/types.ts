@@ -347,8 +347,8 @@ import type {
 export type { DeepResearchRunDTO, ReviseDeepResearchPlanInput, StartDeepResearchRunInput };
 
 // Outputs — DTOs match shared output manifests/summaries.
-import type { OutputFinalPointer as OutputFinalPointerDTO, OutputManifest as OutputManifestDTO, OutputSummary as OutputSummaryDTO } from '@craft-agent/shared/outputs';
-export type { OutputFinalPointerDTO, OutputManifestDTO, OutputSummaryDTO };
+import type { CreateSocialVariantSetRequest, OutputFinalPointer as OutputFinalPointerDTO, OutputManifest as OutputManifestDTO, OutputSummary as OutputSummaryDTO, StartSocialVariantSetRequest } from '@craft-agent/shared/outputs';
+export type { CreateSocialVariantSetRequest, OutputFinalPointerDTO, OutputManifestDTO, OutputSummaryDTO, StartSocialVariantSetRequest };
 import type { VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
 export type { VisualBoardSnapshot };
 import type {
@@ -1316,6 +1316,8 @@ export interface ElectronAPI {
   // Outputs
   listOutputs(workspaceId: string): Promise<OutputSummaryDTO[]>
   getOutput(workspaceId: string, outputId: string): Promise<OutputManifestDTO | null>
+  createSocialVariantSet(workspaceId: string, input: CreateSocialVariantSetRequest): Promise<OutputManifestDTO>
+  startSocialVariantSet(workspaceId: string, input: StartSocialVariantSetRequest): Promise<OutputManifestDTO>
   deleteOutput(workspaceId: string, outputId: string): Promise<boolean>
   promoteOutputToFinal(workspaceId: string, input: {
     outputId: string

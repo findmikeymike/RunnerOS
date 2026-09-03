@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
-import type { OutputFinalPointer, OutputManifest, OutputSummary, PromoteOutputToFinalInput, RemoveOutputFromFinalInput } from '@craft-agent/shared/outputs';
+import type { CreateSocialVariantSetRequest, OutputFinalPointer, OutputManifest, OutputSummary, PromoteOutputToFinalInput, RemoveOutputFromFinalInput, StartSocialVariantSetRequest } from '@craft-agent/shared/outputs';
 import { validateRunnerVideoProject } from '@craft-agent/shared/video';
 import type { VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
 import type { ApplyVisualSurfaceEventResult, VisualSurfaceEventInput, VisualSurfaceEventRecord } from '@craft-agent/shared/visual-surface-events';
@@ -12,10 +12,13 @@ import { requestClientOpenPath, requestClientShowInFolder } from '@craft-agent/s
 import { getWorkspaceAllowedDirs, validateFilePath } from '@craft-agent/server-core/handlers';
 import type { HandlerDeps } from '../handler-deps';
 import { OutputService, pushOutputsUpdated, pushWorkflowRunUpdated } from '../../outputs/OutputService';
+import { SocialVariantSetService } from '../../outputs/SocialVariantSetService';
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.outputs.LIST,
   RPC_CHANNELS.outputs.GET,
+  RPC_CHANNELS.outputs.CREATE_SOCIAL_VARIANT_SET,
+  RPC_CHANNELS.outputs.START_SOCIAL_VARIANT_SET,
   RPC_CHANNELS.outputs.DELETE,
   RPC_CHANNELS.outputs.PROMOTE_TO_FINAL,
   RPC_CHANNELS.outputs.REMOVE_FROM_FINAL,
@@ -47,6 +50,14 @@ function serviceFor(server: RpcServer): OutputService {
     getWorkspaceRootPath: resolveRootPath,
     emitOutputsUpdated: (workspaceId) => pushOutputsUpdated(server, workspaceId),
     emitWorkflowRunUpdated: (run) => pushWorkflowRunUpdated(server, run),
+  });
+}
+
+function socialVariantServiceFor(server: RpcServer, deps: HandlerDeps): SocialVariantSetService {
+  return new SocialVariantSetService({
+    getWorkspace: (workspaceId) => getWorkspaceByNameOrId(workspaceId) ?? undefined,
+    emitOutputsUpdated: (workspaceId) => pushOutputsUpdated(server, workspaceId),
+    validateSocialProfile: deps.validateSocialProfile,
   });
 }
 
@@ -140,7 +151,7 @@ async function writeTextAtomic(path: string, content: string): Promise<void> {
   }
 }
 
-export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): void {
+export function registerOutputsHandlers(server: RpcServer, deps: HandlerDeps): void {
   server.handle(
     RPC_CHANNELS.outputs.LIST,
     async (_ctx, workspaceId: string): Promise<OutputSummary[]> => {
@@ -152,6 +163,32 @@ export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): 
     RPC_CHANNELS.outputs.GET,
     async (_ctx, workspaceId: string, outputId: string): Promise<OutputManifest | null> => {
       return serviceFor(server).get(workspaceId, outputId);
+    },
+  );
+
+  server.handle(
+    RPC_CHANNELS.outputs.CREATE_SOCIAL_VARIANT_SET,
+    async (ctx, workspaceId: string, input: CreateSocialVariantSetRequest): Promise<OutputManifest> => {
+      assertLocalWorkspace(workspaceId, 'Create social variants');
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces');
+      assertTeamPermission(resolveRootPath(workspaceId), 'files.write');
+      const session = await deps.sessionManager.getSession(input.editorSessionId);
+      if (!session || session.workspaceId !== workspaceId) throw new Error('Raw Video Editor session does not belong to this workspace.');
+      if (session.spawnedFromAgent?.agentSlug !== 'raw-video-editor') throw new Error('Social Variant Sets require a Raw Video Editor session.');
+      return socialVariantServiceFor(server, deps).create(workspaceId, {
+        ...input,
+        requestedByClientId: ctx.clientId,
+      });
+    },
+  );
+
+  server.handle(
+    RPC_CHANNELS.outputs.START_SOCIAL_VARIANT_SET,
+    async (_ctx, workspaceId: string, input: StartSocialVariantSetRequest): Promise<OutputManifest> => {
+      assertLocalWorkspace(workspaceId, 'Start social variants');
+      const { assertTeamPermission } = await import('@craft-agent/shared/workspaces');
+      assertTeamPermission(resolveRootPath(workspaceId), 'files.write');
+      return socialVariantServiceFor(server, deps).start(workspaceId, input.outputId, input.expectedRevision);
     },
   );
 

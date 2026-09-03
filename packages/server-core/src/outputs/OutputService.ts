@@ -15,6 +15,7 @@ import {
   readOutput,
   readOutputFinalsRegistry,
   removeOutputFromFinalInsideLock,
+  withOutputBundleLock,
   withOutputFinalsRegistryLock,
   resolveGeneratedHtmlPreviewTarget,
   resolveLocalWebPreviewTarget,
@@ -203,6 +204,10 @@ export class OutputService {
 
   recordVisualCapture(input: RecordVisualCaptureInput): RecordVisualCaptureResult {
     const root = this.deps.getWorkspaceRootPath(input.workspaceId);
+    return withOutputBundleLock(root, input.outputId, () => this.recordVisualCaptureWhileLocked(root, input));
+  }
+
+  private recordVisualCaptureWhileLocked(root: string, input: RecordVisualCaptureInput): RecordVisualCaptureResult {
     const output = readOutput(root, input.outputId);
     if (!output) throw new Error(`Output not found: ${input.outputId}`);
     if (output.workspaceId !== input.workspaceId) throw new Error(`Output "${input.outputId}" is not in workspace "${input.workspaceId}".`);

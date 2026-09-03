@@ -616,6 +616,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // outputs — workspace deliverables
   RPC_CHANNELS.outputs.LIST,
   RPC_CHANNELS.outputs.GET,
+  RPC_CHANNELS.outputs.CREATE_SOCIAL_VARIANT_SET,
+  RPC_CHANNELS.outputs.START_SOCIAL_VARIANT_SET,
   RPC_CHANNELS.outputs.DELETE,
   RPC_CHANNELS.outputs.PROMOTE_TO_FINAL,
   RPC_CHANNELS.outputs.REMOVE_FROM_FINAL,
