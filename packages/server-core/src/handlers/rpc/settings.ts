@@ -1,10 +1,10 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { execFile } from 'node:child_process'
-import { homedir } from 'node:os'
 import { dirname, join } from 'path'
 import { promisify } from 'node:util'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel, resolveSelfEditTarget, updateWorkspaceArtistScope, validateSelfEditRepo, updateWorkspaceRootPath } from '@craft-agent/shared/config'
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import { loadStoredConfig } from '@craft-agent/shared/config/storage'
 import { isValidThinkingLevel, normalizeThinkingLevel, THINKING_LEVEL_IDS } from '@craft-agent/shared/agent/thinking-levels'
 import { getCredentialManager, isValidUserSecretName, normalizeUserSecretName } from '@craft-agent/shared/credentials'
@@ -121,10 +121,7 @@ type ZeroBudgetStatus = {
 }
 
 async function runZeroBudgetGuard(args: string[]): Promise<{ success: true; budget: ZeroBudgetStatus } | { success: false; error: string }> {
-  const skillsDir = process.env.CRAFT_PRODUCT_VARIANT === 'artist-os'
-    ? join(dirname(getPreferencesPath()), 'libraries', 'agents', 'skills')
-    : join(homedir(), '.agents', 'skills')
-  const scriptPath = join(skillsDir, 'zero', 'scripts', 'zero-budget.mjs')
+  const scriptPath = join(RUNTIME_IDENTITY.skillsDir, 'zero', 'scripts', 'zero-budget.mjs')
   if (!existsSync(scriptPath)) {
     return { success: false, error: 'Zero spending guard is not installed yet. Restart Artist OS, then try again.' }
   }
