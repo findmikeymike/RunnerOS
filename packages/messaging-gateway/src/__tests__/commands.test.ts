@@ -98,8 +98,26 @@ function makeStore(): BindingStore {
 }
 
 describe('Commands', () => {
-  it('binds to an agent by slug and restricts the channel to that sender', async () => {
+  it('refuses every command except /pair on an unconnected chat', async () => {
+    // Telegram answers a DM from anyone. Without this, a stranger who found the
+    // bot could /bind straight onto a live Artist Manager.
     const store = makeStore()
+    const commands = new Commands(makeSessionManager([]), store, 'ws1')
+    const adapter = makeAdapter('whatsapp', false)
+
+    for (const text of ['/bind concierge', '/agents', '/who', '/reset', '/stop', '/unbind', '/help']) {
+      adapter.sent.length = 0
+      const handled = await commands.handleCommand(adapter, makeMessage(text))
+      expect(handled).toBe(true)
+      expect(store.getAll()).toHaveLength(0)
+      expect(adapter.sent.at(-1)).toContain('/pair')
+    }
+  })
+
+  it('binds to an agent by slug once the chat is connected', async () => {
+    const store = makeStore()
+    // A paired chat: the sender is already authorized here.
+    store.bind('ws1', 'concierge', 'whatsapp', 'chan-1', 'u1')
     const commands = new Commands(makeSessionManager([]), store, 'ws1')
     const adapter = makeAdapter('whatsapp', false)
 
@@ -110,46 +128,36 @@ describe('Commands', () => {
     // No session is created at bind time — one is resolved on the first message.
     expect(binding?.activeSessionId).toBeUndefined()
     expect(binding?.authorizedSenderIds).toEqual(['u1'])
-    expect(store.findByChannel('whatsapp', 'chan-1')).toBeUndefined()
     expect(store.findByChannel('whatsapp', 'chan-1', 'other')).toBeUndefined()
-    expect(adapter.sent.at(-1)).toContain('concierge')
   })
 
   it('refuses an unknown agent slug rather than binding to nothing', async () => {
     const store = makeStore()
+    store.bind('ws1', 'concierge', 'whatsapp', 'chan-1', 'u1')
     const commands = new Commands(makeSessionManager([]), store, 'ws1')
     const adapter = makeAdapter('whatsapp', false)
 
     await commands.handleCommand(adapter, makeMessage('/bind not-an-agent'))
 
-    expect(store.findByChannel('whatsapp', 'chan-1', 'u1')).toBeUndefined()
+    expect(store.findByChannel('whatsapp', 'chan-1', 'u1')?.target.agentSlug).toBe('concierge')
     expect(adapter.sent.at(-1)).toContain('not-an-agent')
   })
 
   it('refuses the removed session-id bind form with an explanation', async () => {
     const store = makeStore()
+    store.bind('ws1', 'concierge', 'whatsapp', 'chan-1', 'u1')
     const commands = new Commands(makeSessionManager([]), store, 'ws1')
     const adapter = makeAdapter('whatsapp', false)
 
     await commands.handleCommand(adapter, makeMessage('/bind 1'))
 
-    expect(store.getAll()).toHaveLength(0)
+    expect(store.findByChannel('whatsapp', 'chan-1', 'u1')?.target.agentSlug).toBe('concierge')
     expect(adapter.sent.at(-1)).toContain('agent')
   })
 
-  it('directs an unbound chat to the agent list when /bind has no argument', async () => {
+  it('lists WhatsApp Home Gateway commands in help for a connected chat', async () => {
     const store = makeStore()
-    const commands = new Commands(makeSessionManager([]), store, 'ws1')
-    const adapter = makeAdapter('whatsapp', false)
-
-    await commands.handleCommand(adapter, makeMessage('/bind'))
-
-    expect(store.getAll()).toHaveLength(0)
-    expect(adapter.sent[0]).toContain('/bind')
-  })
-
-  it('lists WhatsApp Home Gateway commands in help', async () => {
-    const store = makeStore()
+    store.bind('ws1', 'concierge', 'whatsapp', 'chan-1', 'u1')
     const commands = new Commands(makeSessionManager([]), store, 'ws1')
     const adapter = makeAdapter('whatsapp', false)
 

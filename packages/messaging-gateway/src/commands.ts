@@ -82,22 +82,13 @@ export class Commands {
   async handle(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
     const text = msg.text.trim()
 
-    if (text.startsWith('/bind')) {
-      await this.handleBind(adapter, msg)
-    } else if (text.startsWith('/pair')) {
-      await this.handlePair(adapter, msg)
-    } else if (text === '/unbind') {
-      await this.handleUnbind(adapter, msg)
-    } else if (text === '/help') {
-      await this.handleHelp(adapter, msg)
-    } else {
-      await adapter.sendText(
-        msg.channelId,
-        'This chat is not connected yet.\n\n' +
-        '/pair <code> — redeem a pairing code from the app\n' +
-        '/help — show all commands',
-      )
-    }
+    // Commands are handled upstream in `handleCommand`, which refuses anything
+    // but /pair on an unconnected chat. Anything reaching here is plain text or
+    // an unknown command from someone with no binding.
+    await adapter.sendText(
+      msg.channelId,
+      'This chat is not connected. Use /pair <code> with a code from the app.',
+    )
   }
 
   async handleCommand(adapter: PlatformAdapter, msg: IncomingMessage): Promise<boolean> {
@@ -105,6 +96,34 @@ export class Commands {
     if (!text.startsWith('/')) return false
 
     const cmd = text.split(/\s+/)[0]!.toLowerCase()
+
+    // Pairing is the only door into an unconnected chat.
+    //
+    // Telegram bots answer a DM from anyone who finds them (the adapter drops
+    // groups, not strangers). Without this, `/bind concierge` from any stranger
+    // would hand them a live Artist Manager. A pairing code proves possession
+    // of the desktop app; an agent slug is a guess.
+    //
+    // WhatsApp is already narrower — self-chat mode means only the account
+    // owner reaches the gateway — so this changes nothing there.
+    if (cmd !== '/pair') {
+      const bound = this.bindingStore.findByChannel(adapter.platform, msg.channelId, msg.senderId)
+      if (!bound) {
+        this.log.warn('refused command on unconnected chat', {
+          event: 'command_refused_unbound',
+          workspaceId: this.workspaceId,
+          platform: adapter.platform,
+          channelId: msg.channelId,
+          senderId: msg.senderId,
+          command: cmd,
+        })
+        await adapter.sendText(
+          msg.channelId,
+          'This chat is not connected. Use /pair <code> with a code from the app.',
+        )
+        return true
+      }
+    }
 
     this.log.info('handling chat command', {
       event: 'command_received',

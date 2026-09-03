@@ -82,7 +82,7 @@ Slices 1, 2, 4, and 4a are implemented:
 
 ### Remaining
 
-Slice 4b (activation catalog refresh, routing hints) and slice 5 (team-mode membership, fresh-code rebinding). Slice 5 should not lag far behind, because binding chats to HNIC raises the cost of today's channel-only trust model. Slices 3 and 6 are dropped by decision; slices 1, 2, 4, 4a, and 7 are done.
+Slice 4b (activation catalog refresh, routing hints). Slices 3 and 6 are dropped by decision; slice 5's team-mode half is deferred to V2 while its authorization half is done; slices 1, 2, 4, 4a, and 7 are done.
 
 ---
 
@@ -251,9 +251,10 @@ The gateway currently authenticates the *channel*, not the *person*. With bindin
 
 - **`authorizedSenderIds` defaults to the paired sender** and must be non-empty. Messages from other senders on the same channel are ignored with a single explanatory reply, then silently, and are logged.
 - **`/bind` no longer accepts a session id.** It accepts an agent slug or nothing. Listing sessions by id is removed, which eliminates the enumeration-plus-hijack pair.
-- **Rebinding requires a fresh pairing code** issued from the desktop. Knowing an agent slug is not authorization; slugs are guessable and public.
+- **Pairing is the only way to create a binding.** On a chat with no binding, every command except `/pair` is refused. Telegram bots answer a DM from anyone who finds them — the adapter drops group chats, not strangers — so without this, `/bind concierge` from a stranger would hand them a live Artist Manager. A pairing code proves possession of the desktop app; an agent slug is a guess. WhatsApp was already narrower, since self-chat mode means only the account owner reaches the gateway.
+- **`/bind` still works on a connected chat** for the already-authorized sender, as an unadvertised way to switch agents. That is not an escalation: the sender already reaches the manager, which can route to every specialist.
 - **`/new` is removed.** Its job — reach an agent — is what pairing now does.
-- **Team Mode:** binding to an agent requires workspace membership, and binding to a campaign lead requires access to that campaign. Where a permission already exists for the desktop equivalent, reuse it rather than inventing a messaging-specific one.
+- **Team Mode: deferred to V2.** Binding to an agent requiring workspace membership, and binding to a campaign lead requiring campaign access, are real once a workspace has more than one human. V1 has one. See [Team Chat: More Than One Person Per Agent](../v2/team-chat-multi-sender.md).
 
 ## Commands
 

@@ -86,7 +86,7 @@ function makeSessionManager() {
 }
 
 describe('MessagingGateway incoming hook', () => {
-  it('reports pre-route binding state for /bind messages', async () => {
+  it('reports that a refused /bind on an unconnected chat did not bind', async () => {
     const events: IncomingMessageEvent[] = []
     const sessionManager = makeSessionManager()
     const gateway = new MessagingGateway({
@@ -106,7 +106,8 @@ describe('MessagingGateway incoming hook', () => {
     expect(events).toHaveLength(1)
     expect(events[0]!.bound).toBe(false)
     expect(events[0]!.wasBound).toBe(false)
-    expect(events[0]!.boundAfterRoute).toBe(true)
+    // Pairing is the only door: /bind from a stranger must not create a binding.
+    expect(events[0]!.boundAfterRoute).toBe(false)
     expect(sessionManager.sendMessage).not.toHaveBeenCalled()
     await gateway.stop()
   })
