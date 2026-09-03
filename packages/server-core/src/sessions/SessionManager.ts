@@ -3909,6 +3909,7 @@ export class SessionManager implements ISessionManager {
           hasReleaseManagerIdentity,
           isReleaseManagerDefinition,
           loadGlobalAgent,
+          replaceBuiltInAgentMetadata,
           replaceBuiltInAgentPromptText,
         } = await import('@craft-agent/shared/agent-definitions')
         const releaseManagerAgentDir = getGlobalAgentDir(RELEASE_MANAGER_AGENT_SLUG)
@@ -3991,6 +3992,14 @@ export class SessionManager implements ISessionManager {
           anythingAgentBoundedAuthorizationRules,
         ).updated) {
           sessionLog.info('[agent-definitions] Upgraded Anything Agent to bounded job authorization')
+        }
+        if (replaceBuiltInAgentMetadata(ANYTHING_AGENT_SLUG, {
+          description: {
+            from: 'Fallback capability broker. Safely finds and runs outside APIs through Zero when no native connector or specialist fits.',
+            to: 'Connects to thousands of tools, apps, and services to help you do almost anything — a Swiss Army knife for workflows.',
+          },
+        }).updated) {
+          sessionLog.info('[agent-definitions] Simplified Anything Agent user-facing description')
         }
         // Seed built-in creator/meta skills. They are implicit system skills:
         // Concierge and Orchestrator depend on them, so users should not have

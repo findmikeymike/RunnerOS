@@ -850,6 +850,7 @@ body
 
     expect(agent).toBeDefined()
     expect(agent?.metadata.name).toBe('Anything Agent')
+    expect(agent?.metadata.description).toBe('Connects to thousands of tools, apps, and services to help you do almost anything — a Swiss Army knife for workflows.')
     expect(agent?.metadata.permissionMode).toBe('ask')
     expect(agent?.metadata.skills).toEqual(['zero'])
     expect(agent?.metadata.sources).toEqual(['zero'])
@@ -1636,6 +1637,30 @@ body
     const migrated = loadGlobalAgent('anything-agent', { globalAgentsDir })!
     expect(migrated.metadata.skills).toEqual(['custom-skill', 'zero'])
     expect(migrated.systemPrompt).toBe('Custom Anything Agent direction.')
+  })
+
+  test('can update the shipped Anything Agent summary without replacing custom summaries', () => {
+    const oldDescription = 'Fallback capability broker. Safely finds and runs outside APIs through Zero when no native connector or specialist fits.'
+    const newDescription = 'Connects to thousands of tools, apps, and services to help you do almost anything — a Swiss Army knife for workflows.'
+    writeGlobalAgent(
+      {
+        slug: 'anything-agent',
+        metadata: { name: 'Anything Agent', description: oldDescription, skills: ['zero'] },
+        systemPrompt: 'Anything Agent body stays intact.',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(replaceBuiltInAgentMetadata('anything-agent', {
+      description: { from: oldDescription, to: newDescription },
+    }, { globalAgentsDir }).updated).toBe(true)
+    expect(loadGlobalAgent('anything-agent', { globalAgentsDir })!.metadata.description).toBe(newDescription)
+    expect(loadGlobalAgent('anything-agent', { globalAgentsDir })!.systemPrompt).toBe('Anything Agent body stays intact.')
+
+    expect(replaceBuiltInAgentMetadata('anything-agent', {
+      description: { from: oldDescription, to: 'Should not overwrite custom text.' },
+    }, { globalAgentsDir }).updated).toBe(false)
+    expect(loadGlobalAgent('anything-agent', { globalAgentsDir })!.metadata.description).toBe(newDescription)
   })
 
   test('can add direction and repurposing to an existing Raw Video Editor without replacing its other skills', () => {

@@ -768,6 +768,7 @@ export function replaceBuiltInAgentMetadata(
   options?: AgentStorageOptions,
 ): { updated: boolean } {
   const builtIns = new Set([
+    'anything-agent',
     'concierge',
     'orchestrator',
     'social-publisher',

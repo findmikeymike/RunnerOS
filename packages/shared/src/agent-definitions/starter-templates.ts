@@ -31,7 +31,7 @@ export const STARTER_AGENTS: CreateAgentInput[] = [
     slug: ANYTHING_AGENT_SLUG,
     metadata: {
       name: 'Anything Agent',
-      description: 'Fallback capability broker. Safely finds and runs outside APIs through Zero when no native connector or specialist fits.',
+      description: 'Connects to thousands of tools, apps, and services to help you do almost anything — a Swiss Army knife for workflows.',
       avatar: '∞',
       permissionMode: 'ask',
       thinkingLevel: 'high',
