@@ -21,6 +21,33 @@ export type {
 } from './types.ts';
 
 export {
+  SOCIAL_VARIANT_MAX_PER_SOURCE,
+  SOCIAL_VARIANT_MAX_SOURCES,
+  SOCIAL_VARIANT_MAX_TOTAL,
+  SOCIAL_VARIANT_SET_TAG,
+  advanceSocialVariantSetRevision,
+  assertSocialVariantSetManifest,
+  assertSocialVariantSetRevision,
+  isSocialVariantSetManifest,
+  toSocialVariantSetSummary,
+} from './social-variants.ts';
+
+export type {
+  SocialAccountRole,
+  SocialVariantDestinationIntent,
+  SocialVariantMode,
+  SocialVariantPlatform,
+  SocialVariantRecord,
+  SocialVariantRightsBasis,
+  SocialVariantSetManifest,
+  SocialVariantSetStatus,
+  SocialVariantSetSummary,
+  SocialVariantSource,
+  SocialVariantSourceOrigin,
+  SocialVariantState,
+} from './social-variants.ts';
+
+export {
   OUTPUT_SHOW_IN_CANVAS_TAG,
 } from './constants.ts';
 

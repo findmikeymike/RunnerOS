@@ -288,6 +288,7 @@ export function createOutputBundle(workspaceRootPath: string, input: CreateOutpu
     context: input.context,
     approval: input.approval,
     tags: input.tags,
+    socialVariantSet: input.socialVariantSet,
   };
 
   try {

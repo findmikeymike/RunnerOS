@@ -1,3 +1,5 @@
+import type { SocialVariantSetManifest, SocialVariantSetSummary } from './social-variants.ts';
+
 export type OutputKind =
   | 'report'
   | 'document'
@@ -156,6 +158,7 @@ export interface OutputManifest {
   approval?: OutputApproval;
   finals?: OutputFinalPointer[];
   tags?: string[];
+  socialVariantSet?: SocialVariantSetManifest;
 }
 
 export interface OutputSummary {
@@ -180,6 +183,7 @@ export interface OutputSummary {
   receiptCount: number;
   linkCount: number;
   tags?: string[];
+  socialVariantSet?: SocialVariantSetSummary;
 }
 
 export interface CreateOutputBundleInput {
@@ -198,6 +202,8 @@ export interface CreateOutputBundleInput {
   context?: OutputContext;
   approval?: OutputApproval;
   tags?: string[];
+  /** Host-created only. Session tools do not expose this field to agents. */
+  socialVariantSet?: SocialVariantSetManifest;
   createdAt?: string;
   completedAt?: string;
 }

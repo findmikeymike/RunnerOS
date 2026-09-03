@@ -1,4 +1,5 @@
 import type { OutputManifest, OutputPreviewMode, OutputSummary } from './types.ts';
+import { toSocialVariantSetSummary } from './social-variants.ts';
 
 export function summarizeOutputContent(content: string, maxLength = 240): string {
   const normalized = content.replace(/\s+/g, ' ').trim();
@@ -79,5 +80,6 @@ export function toOutputSummary(manifest: OutputManifest): OutputSummary {
     receiptCount: manifest.receipts.length,
     linkCount: manifest.links.length,
     tags: manifest.tags,
+    socialVariantSet: manifest.socialVariantSet ? toSocialVariantSetSummary(manifest.socialVariantSet) : undefined,
   };
 }

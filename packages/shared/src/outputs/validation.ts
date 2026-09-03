@@ -13,6 +13,7 @@ import type {
   OutputReceipt,
   OutputStatus,
 } from './types.ts';
+import { isSocialVariantSetManifest } from './social-variants.ts';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const OUTPUT_KINDS: ReadonlySet<OutputKind> = new Set([
@@ -223,6 +224,19 @@ export function isOutputManifest(value: unknown, expectedOutputId?: string): val
   if (value.context !== undefined && !isOutputContext(value.context)) return false;
   if (value.approval !== undefined && !isOutputApproval(value.approval)) return false;
   if (value.tags !== undefined && !isStringArray(value.tags)) return false;
+  if (value.socialVariantSet !== undefined) {
+    if (value.kind !== 'collection' || !isSocialVariantSetManifest(value.socialVariantSet, assetIds)) return false;
+    if (value.socialVariantSet.id !== value.id) return false;
+    if (value.socialVariantSet.workspaceId !== value.workspaceId) return false;
+    if (value.socialVariantSet.scope !== value.context?.scope) return false;
+    if (value.socialVariantSet.campaignId !== value.context?.campaignId) return false;
+    if (value.socialVariantSet.editorSessionId !== value.origin.sessionId) return false;
+    for (const variant of value.socialVariantSet.variants) {
+      if (variant.state !== 'ready') continue;
+      const asset = value.assets.find((candidate) => candidate.id === variant.assetId);
+      if (!asset?.sha256 || asset.sha256.toLowerCase() !== variant.sha256?.toLowerCase()) return false;
+    }
+  }
   return true;
 }
 
