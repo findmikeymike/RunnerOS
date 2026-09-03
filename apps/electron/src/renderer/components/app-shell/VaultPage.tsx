@@ -13,6 +13,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Scissors,
   ShieldCheck,
   Tags,
   Upload,
@@ -33,6 +34,8 @@ import type {
   VaultManifest,
   TrackIntelligence,
 } from '@craft-agent/shared/artist-vault'
+import { vaultRepurposeRestriction } from '@/lib/release-kit-repurpose'
+import { SocialVariantSetupDrawer, type SocialVariantSetupSource } from '@/components/social-variants/SocialVariantSetupDrawer'
 
 interface VaultPageProps {
   workspaceId: string
@@ -131,6 +134,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
   const [importDraft, setImportDraft] = React.useState<ImportDraft>(emptyImportDraft)
   const [dragActive, setDragActive] = React.useState(false)
   const [trackReviewAssetId, setTrackReviewAssetId] = React.useState<string | null>(null)
+  const [variantSetupSourceId, setVariantSetupSourceId] = React.useState<string | null>(null)
 
   const refresh = React.useCallback(async (foreground = true) => {
     if (!workspaceId) return
@@ -185,6 +189,17 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
     () => assets.find((asset) => asset.id === trackReviewAssetId) ?? null,
     [assets, trackReviewAssetId],
   )
+  const variantSources = React.useMemo<SocialVariantSetupSource[]>(() => assets
+    .filter((asset) => asset.category === 'video')
+    .map((asset) => ({
+      id: asset.id,
+      title: asset.label,
+      detail: formatKind(asset.kind),
+      selection: { origin: 'vault' as const, sourceId: asset.id },
+      absolutePath: asset.absolutePath,
+      sha256: asset.sha256,
+      restriction: vaultRepurposeRestriction(asset),
+    })), [assets])
   const selectKind = React.useCallback((kind: VaultAssetKind | 'all') => {
     setSelectedKind(kind)
     setSelectedAssetId(categoryAssets.find((asset) => kind === 'all' || asset.kind === kind)?.id ?? null)
@@ -503,6 +518,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
             onUpdate={updateAsset}
             onAnalyze={analyzeTrack}
             onReviewTrack={(assetId) => setTrackReviewAssetId(assetId)}
+            onCreateVariants={(assetId) => setVariantSetupSourceId(assetId)}
           />
         </div>
       </div>
@@ -521,6 +537,13 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
         onClose={() => setTrackReviewAssetId(null)}
         onSave={saveTrackReview}
       />
+      <SocialVariantSetupDrawer
+        open={Boolean(variantSetupSourceId)}
+        workspaceId={workspaceId}
+        sources={variantSources}
+        initialSourceId={variantSetupSourceId ?? undefined}
+        onOpenChange={(open) => { if (!open) setVariantSetupSourceId(null) }}
+      />
     </div>
   )
 }
@@ -531,12 +554,14 @@ function AssetDetailPanel({
   onUpdate,
   onAnalyze,
   onReviewTrack,
+  onCreateVariants,
 }: {
   asset: VaultAssetRecord | null
   busy: boolean
   onUpdate: (assetId: string, patch: VaultAssetUpdatePatch) => Promise<void>
   onAnalyze: (asset: VaultAssetRecord, force?: boolean) => Promise<boolean>
   onReviewTrack: (assetId: string) => void
+  onCreateVariants: (assetId: string) => void
 }) {
   const [label, setLabel] = React.useState('')
   const [kind, setKind] = React.useState<VaultAssetKind>('other')
@@ -631,6 +656,19 @@ function AssetDetailPanel({
           <div className="max-w-[240px] truncate text-xs text-white/52">{asset.relativePath ?? asset.absolutePath ?? 'No path'}</div>
         </div>
       </div>
+
+      {asset.category === 'video' ? (
+        <button
+          type="button"
+          disabled={busy || Boolean(vaultRepurposeRestriction(asset))}
+          title={vaultRepurposeRestriction(asset)}
+          onClick={() => onCreateVariants(asset.id)}
+          className="mb-4 inline-flex h-9 w-full items-center justify-center gap-2 rounded-[10px] bg-white/[0.035] text-xs font-medium text-white/66 ring-1 ring-white/[0.07] hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Scissors className="h-3.5 w-3.5" />
+          Create variants
+        </button>
+      ) : null}
 
       <div className="space-y-3">
         <Field label="Label">

@@ -18,6 +18,7 @@ import {
   Plus,
   Star,
   Send,
+  Scissors,
   Trash2,
   Upload,
   Video,
@@ -50,6 +51,8 @@ import {
 import { toast } from 'sonner'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
+import { releaseKitRepurposeRestriction } from '@/lib/release-kit-repurpose'
+import { SocialVariantSetupDrawer, type SocialVariantSetupSource } from '@/components/social-variants/SocialVariantSetupDrawer'
 
 interface ReleaseKitPageProps {
   workspaceId: string
@@ -105,6 +108,7 @@ export function ReleaseKitPage({
   const [prefillOutput, setPrefillOutput] = React.useState<OutputSummaryDTO | null>(null)
   const [itemPaths, setItemPaths] = React.useState<Record<string, string>>({})
   const [selectedItemId, setSelectedItemId] = React.useState<string | null>(null)
+  const [variantSetupSourceId, setVariantSetupSourceId] = React.useState<string | null>(null)
   const selectedItem = manifest?.items.find((item) => item.id === selectedItemId) ?? null
 
   const refresh = React.useCallback(async () => {
@@ -172,6 +176,17 @@ export function ReleaseKitPage({
   const visibleCategories = React.useMemo(() => CATEGORY_ORDER.filter((category) => (
     CORE_CATEGORIES.has(category) || manifest?.items.some((item) => item.category === category)
   )), [manifest])
+  const variantSources = React.useMemo<SocialVariantSetupSource[]>(() => (manifest?.items ?? [])
+    .filter((item) => item.category === 'video')
+    .map((item) => ({
+      id: item.id,
+      title: item.title,
+      detail: displaySubtype(item.subtype),
+      selection: { origin: 'release-kit' as const, sourceId: item.id },
+      absolutePath: itemPaths[item.id],
+      sha256: item.sha256,
+      restriction: releaseKitRepurposeRestriction(item, itemPaths[item.id]),
+    })), [itemPaths, manifest])
 
   if (loading) {
     return <div className="flex h-full items-center justify-center bg-[#070708] text-sm text-white/45"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading Release Kit</div>
@@ -252,6 +267,17 @@ export function ReleaseKitPage({
         workspaceId={workspaceId}
         onOpenChange={(open) => { if (!open) setSelectedItemId(null) }}
         onChanged={setManifest}
+        onCreateVariants={(itemId) => {
+          setSelectedItemId(null)
+          setVariantSetupSourceId(itemId)
+        }}
+      />
+      <SocialVariantSetupDrawer
+        open={Boolean(variantSetupSourceId)}
+        workspaceId={workspaceId}
+        sources={variantSources}
+        initialSourceId={variantSetupSourceId ?? undefined}
+        onOpenChange={(open) => { if (!open) setVariantSetupSourceId(null) }}
       />
     </div>
   )
@@ -614,13 +640,14 @@ function OutputsTab({ outputs, loading, error, onOpen, onPromote }: {
   )
 }
 
-function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange, onChanged }: {
+function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange, onChanged, onCreateVariants }: {
   open: boolean
   item: ReleaseKitItem | null
   itemPath?: string
   workspaceId: string
   onOpenChange: (open: boolean) => void
   onChanged: (manifest: ReleaseKitManifest) => void
+  onCreateVariants: (itemId: string) => void
 }) {
   const { onOpenFile } = useAppShellContext()
   const [mode, setMode] = React.useState<AssetDrawerMode>('details')
@@ -680,6 +707,7 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange
   const restrictionMessage = releaseKitScheduleRestriction(item)
   const eligible = (item.category === 'artwork' || item.category === 'images' || item.category === 'video')
     && item.status === 'ready' && !restrictionMessage
+  const repurposeRestriction = releaseKitRepurposeRestriction(item, itemPath)
 
   const saveDetails = async () => {
     setBusy(true)
@@ -736,6 +764,9 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange
                 <div className="max-h-56 overflow-hidden rounded-lg bg-white/[0.025]"><img src={thumbnailUrl(itemPath)} alt={item.title} className="h-full max-h-56 w-full object-contain" /></div>
               ) : null}
               <div className="flex flex-wrap gap-2">
+                {item.category === 'video' ? (
+                  <Button variant="outline" className="border-white/10 bg-transparent text-white/65 hover:bg-white/[0.05] hover:text-white" disabled={Boolean(repurposeRestriction) || busy} onClick={() => onCreateVariants(item.id)}><Scissors className="mr-1.5 h-3.5 w-3.5" />Create variants</Button>
+                ) : null}
                 <Button className="bg-[#f97316] text-black hover:bg-[#fb923c]" disabled={!eligible} onClick={() => setMode('where')}><Send className="mr-1.5 h-3.5 w-3.5" />Schedule social post</Button>
                 <Button variant="outline" className="border-white/10 bg-transparent text-white/65" onClick={async () => {
                   const detail = await window.electronAPI.getReleaseKitItem(workspaceId, item.id)
@@ -743,6 +774,7 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange
                 }}><ExternalLink className="mr-1.5 h-3.5 w-3.5" />Open file</Button>
               </div>
               {!eligible ? <p className="text-xs text-amber-200/75">{restrictionMessage ?? (item.status !== 'ready' ? releaseKitStatusExplanation(item) : 'Social scheduling supports final images and videos.')}</p> : null}
+              {item.category === 'video' && repurposeRestriction && eligible ? <p className="text-xs text-amber-200/75">{repurposeRestriction}</p> : null}
 
               <DrawerSection title="Details">
                 <div className="flex flex-wrap gap-1.5">

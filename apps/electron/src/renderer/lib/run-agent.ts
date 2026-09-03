@@ -211,6 +211,8 @@ export async function openAgentSessionComposer(params: {
    * composer. Intended for explicit "run this worker" controls.
    */
   autoSendDraft?: boolean
+  /** Keep the current surface visible until a surrounding multi-step launch succeeds. */
+  navigateOnCreate?: boolean
   onSendMessage?: (
     sessionId: string,
     message: string,
@@ -262,10 +264,12 @@ export async function openAgentSessionComposer(params: {
     params.workspaceId,
     buildAgentCreateSessionOptions(params.agent, context),
   )
-  if (window.location.hash.startsWith('#artist-hq/')) {
-    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+  if (params.navigateOnCreate !== false) {
+    if (window.location.hash.startsWith('#artist-hq/')) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+    }
+    navigate(routes.view.allSessions(session.id))
   }
-  navigate(routes.view.allSessions(session.id))
 
   const draft = params.draftInput?.trim()
   if (draft) {
