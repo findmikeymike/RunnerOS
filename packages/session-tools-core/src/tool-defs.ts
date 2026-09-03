@@ -78,6 +78,7 @@ import {
   handleRecallMemory,
 } from './handlers/memory.ts';
 import { handleCreateOutput, handlePromoteOutputToFinal } from './handlers/outputs.ts';
+import { handleGetSocialVariantSet, handleRecordSocialVariantResult } from './handlers/social-variants.ts';
 import {
   handleListReleaseKit,
   handleGetReleaseKitItem,
@@ -793,6 +794,26 @@ export const CreateOutputSchema = z.object({
   tags: z.array(z.string()).optional(),
   showInCanvas: z.boolean().optional().describe('Set true when the user should see this Output in Canvas immediately. The backend marks and pins the same-session Output when Canvas is available.'),
   show_in_canvas: z.boolean().optional().describe('Alias for showInCanvas. Prefer showInCanvas in new calls.'),
+});
+
+export const GetSocialVariantSetSchema = z.object({
+  outputId: z.string().min(1).describe('Durable Variant Set Output id assigned in the kickoff message.'),
+});
+
+export const RecordSocialVariantResultSchema = z.object({
+  outputId: z.string().min(1).describe('Durable Variant Set Output id.'),
+  expectedRevision: z.number().int().positive().describe('Current revision returned by get_social_variant_set. Refresh after every successful write.'),
+  sourceId: z.string().min(1).describe('Pinned source id from the Variant Set.'),
+  destinationIndex: z.number().int().nonnegative().describe('Zero-based destination index from the Variant Set.'),
+  title: z.string().min(1).max(240),
+  hook: z.string().min(1).max(500).describe('What makes this cut earn attention.'),
+  editorialMode: z.string().min(1).max(120).describe('Concrete edit mode used, such as fast-cut performance, intimate close-up, or lyric-led.'),
+  editorialIntent: z.string().min(1).max(1200).describe('Concise explanation of what materially changed and why.'),
+  filePath: z.string().min(1).optional().describe('Rendered video file inside the active workspace.'),
+  failureReason: z.string().min(1).max(1000).optional().describe('Actionable failure for this one variant. Use instead of filePath.'),
+  durationSeconds: z.number().positive().optional(),
+  aspectRatio: z.string().min(1).max(32).optional(),
+  replaceVariantId: z.string().min(1).optional().describe('Failed variant id to retry, or archived variant id after the user explicitly requested a revision. Never replace a ready variant directly.'),
 });
 
 export const PromoteOutputToFinalSchema = z.object({
@@ -1623,6 +1644,14 @@ Use Browser Pane or browser tools, not Canvas, when the user wants to test, debu
 
 Do NOT use this for ordinary chat replies, scratch notes, temporary plans, or files that are not intended as final deliverables. Prefer one concise primary output over dumping every intermediate artifact.`,
 
+  get_social_variant_set: `Read the durable social video Variant Set bound to this Raw Video Editor session.
+
+Use this before rendering and again after every recorded result. It returns the pinned sources, destinations, creative direction, existing variants, and current revision. Render creation is already authorized by the user's Create variants action; do not ask for a second plan approval before making the requested files. Never post from this tool path.`,
+
+  record_social_variant_result: `Record exactly one rendered or failed social video variant into the durable Variant Set bound to this Raw Video Editor session.
+
+Call get_social_variant_set first and use its current revision. Report each result immediately so successful files survive if a later render fails. A ready result requires a workspace-local file and exact pinned source/destination ids. Use replaceVariantId to retry one failed variant, or to replace the exact archived version named by a user's Revise action without changing its source or destination. This creates reviewable files; it never authorizes posting.`,
+
   promote_output_to_final: `Legacy-compatible Output finalization.
 
 For campaign work, this now creates a copied Release Kit snapshot. Prefer \`promote_to_release_kit\` for new work because its category, subtype, source, and Primary behavior are explicit. HQ compatibility pointers remain available for old workflows.
@@ -1874,6 +1903,8 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'forget_memory', description: TOOL_DESCRIPTIONS.forget_memory, inputSchema: ForgetMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleForgetMemory },
   { name: 'recall_memory', description: TOOL_DESCRIPTIONS.recall_memory, inputSchema: RecallMemorySchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleRecallMemory },
   { name: 'create_output', description: TOOL_DESCRIPTIONS.create_output, inputSchema: CreateOutputSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateOutput },
+  { name: 'get_social_variant_set', description: TOOL_DESCRIPTIONS.get_social_variant_set, inputSchema: GetSocialVariantSetSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetSocialVariantSet },
+  { name: 'record_social_variant_result', description: TOOL_DESCRIPTIONS.record_social_variant_result, inputSchema: RecordSocialVariantResultSchema, executionMode: 'registry', safeMode: 'block', handler: handleRecordSocialVariantResult },
   { name: 'promote_output_to_final', description: TOOL_DESCRIPTIONS.promote_output_to_final, inputSchema: PromoteOutputToFinalSchema, executionMode: 'registry', safeMode: 'block', handler: handlePromoteOutputToFinal },
   { name: 'list_release_kit', description: TOOL_DESCRIPTIONS.list_release_kit, inputSchema: ListReleaseKitSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListReleaseKit },
   { name: 'get_release_kit_item', description: TOOL_DESCRIPTIONS.get_release_kit_item, inputSchema: GetReleaseKitItemSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetReleaseKitItem },
@@ -1915,6 +1946,8 @@ export interface SessionToolFilterOptions {
   includeLabTools?: boolean;
   /** Include the provider-neutral task tool for non-Anthropic providers. */
   includeSessionTasks?: boolean;
+  /** Include durable social variant tools only for the bound Raw Video Editor. */
+  includeSocialVariantTools?: boolean;
 }
 
 /**
@@ -1930,6 +1963,7 @@ export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionT
   const includeCampaignManagerTools = options?.includeCampaignManagerTools ?? false;
   const includeLabTools = options?.includeLabTools ?? false;
   const includeSessionTasks = options?.includeSessionTasks ?? false;
+  const includeSocialVariantTools = options?.includeSocialVariantTools ?? false;
 
   return SESSION_TOOL_DEFS.filter(def => {
     if (!includeDeveloperFeedback && def.name === 'send_developer_feedback') {
@@ -1940,6 +1974,7 @@ export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionT
     if (!includeCampaignManagerTools && def.name === 'get_campaign_brief') return false;
     if (!includeLabTools && ['create_lab_song', 'save_lab_lyrics', 'list_lab_songs'].includes(def.name)) return false;
     if (!includeSessionTasks && def.name === 'update_tasks') return false;
+    if (!includeSocialVariantTools && ['get_social_variant_set', 'record_social_variant_result'].includes(def.name)) return false;
     return true;
   });
 }
@@ -2056,6 +2091,7 @@ export function getToolDefsAsJsonSchema(opts?: {
   includeCampaignManagerTools?: boolean;
   includeLabTools?: boolean;
   includeSessionTasks?: boolean;
+  includeSocialVariantTools?: boolean;
 }): JsonSchemaToolDef[] {
   const prefix = opts?.prefix || '';
   const defs = getSessionToolDefs({
@@ -2065,6 +2101,7 @@ export function getToolDefsAsJsonSchema(opts?: {
     includeCampaignManagerTools: opts?.includeCampaignManagerTools,
     includeLabTools: opts?.includeLabTools,
     includeSessionTasks: opts?.includeSessionTasks,
+    includeSocialVariantTools: opts?.includeSocialVariantTools,
   });
 
   return defs.map(def => {

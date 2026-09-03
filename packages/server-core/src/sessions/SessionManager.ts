@@ -41,6 +41,7 @@ import {
 } from '@craft-agent/shared/config'
 import type { ActiveSessionInfo, SessionProcessingStatus } from '@craft-agent/core/types'
 import type { MemoryMutationResult, RecalledMemoryEntry, RecallMemoryResult, RecallMemoryToolInput, CreateGoalToolInput, UpdateGoalToolInput, UpdateTasksToolInput } from '@craft-agent/session-tools-core'
+import { SocialVariantSetService } from '../outputs/SocialVariantSetService'
 import { assertTeamPermission, evaluateTeamRunnerGate, getTeamModeStatus, loadWorkspaceConfig, type WorkspaceSyncArea } from '@craft-agent/shared/workspaces'
 import { detectClobberedWrites, scanProviderConflictedCopies } from '@craft-agent/shared/records'
 import {
@@ -8406,6 +8407,45 @@ user a clickable link to where the thing now lives.`
             stepId: workflow?.stepId,
             output: input,
           })
+        },
+        getSocialVariantSetFn: async (input) => {
+          try {
+            const service = new SocialVariantSetService({
+              getWorkspace: (workspaceId) => workspaceId === managed.workspace.id ? managed.workspace : undefined,
+            })
+            return {
+              ok: true,
+              data: service.getForEditor(
+                managed.workspace.id,
+                input.outputId,
+                managed.id,
+                managed.spawnedFromAgent?.agentSlug,
+              ),
+            }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
+        },
+        recordSocialVariantResultFn: async (input) => {
+          try {
+            const service = new SocialVariantSetService({
+              getWorkspace: (workspaceId) => workspaceId === managed.workspace.id ? managed.workspace : undefined,
+              emitOutputsUpdated: (workspaceId) => {
+                this.eventSink?.(RPC_CHANNELS.outputs.UPDATED, { to: 'workspace', workspaceId }, workspaceId)
+              },
+            })
+            return {
+              ok: true,
+              data: await service.recordResult(
+                managed.workspace.id,
+                managed.id,
+                managed.spawnedFromAgent?.agentSlug,
+                input,
+              ),
+            }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
         },
         promoteOutputToFinalFn: async (input) => {
           if (input.scope === 'campaign') {

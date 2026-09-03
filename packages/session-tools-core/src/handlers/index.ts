@@ -238,6 +238,12 @@ export type {
   CreateOutputLinkInput,
   CreateOutputReceiptInput,
 } from './outputs.ts';
+export { handleGetSocialVariantSet, handleRecordSocialVariantResult } from './social-variants.ts';
+export type {
+  GetSocialVariantSetToolInput,
+  RecordSocialVariantResultToolInput,
+  SocialVariantToolResult,
+} from './social-variants.ts';
 export type {
   SaveMemoryToolInput,
   UpdateMemoryToolInput,

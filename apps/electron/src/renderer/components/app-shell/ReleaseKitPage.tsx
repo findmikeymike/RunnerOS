@@ -141,12 +141,12 @@ export function ReleaseKitPage({
 
   React.useEffect(() => {
     if (outputsLoading) return
-    const pendingOutputId = consumePendingReleaseKitOutput()
-    if (!pendingOutputId) return
-    const output = outputs.find((candidate) => candidate.id === pendingOutputId)
+    const pending = consumePendingReleaseKitOutput()
+    if (!pending) return
+    const output = outputs.find((candidate) => candidate.id === pending.outputId)
     if (!output) return
     setTab('outputs')
-    setPrefillOutput(output)
+    setPrefillOutput({ ...output, ...(pending.assetId ? { primaryAssetId: pending.assetId } : {}) })
     setAddOpen(true)
   }, [outputs, outputsLoading, workspaceId])
 
@@ -888,7 +888,11 @@ function AddFinalDialog({ open, onOpenChange, workspaceId, hqWorkspaceId, output
       const choices = output ? sourceChoicesFromOutput(output) : []
       setSourceKind('output')
       setOutputChoices(choices)
-      if (choices.length === 1) selectSource(choices[0]!)
+      const requested = prefillOutput.primaryAssetId
+        ? choices.find((choice) => choice.source.type === 'output' && choice.source.assetId === prefillOutput.primaryAssetId)
+        : undefined
+      if (requested) selectSource(requested)
+      else if (choices.length === 1) selectSource(choices[0]!)
       else setStage('item')
     }).catch((error) => {
       if (!cancelled) toast.error('Could not load Output files', { description: error instanceof Error ? error.message : String(error) })

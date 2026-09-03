@@ -29,7 +29,7 @@ type OutputsElectronAPI = typeof window.electronAPI & {
   applyVisualSurfaceEvent?: (
     workspaceId: string,
     sessionId: string,
-    input: { action: 'add_image' | 'add_video'; outputId: string },
+    input: { action: 'add_image' | 'add_video' | 'pin_output'; outputId: string },
   ) => Promise<{ ok: boolean; receipt?: string; error?: string }>
   saveOutputAssetToVault?: (workspaceId: string, outputId: string, assetId?: string, options?: { kindHint?: VaultKindHint }) => Promise<{ imported: unknown[]; skipped: Array<{ path: string; reason: string }> }>
 }
@@ -114,10 +114,20 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
   const primary = manifest.primary ?? manifest.assets.find((asset) => asset.role === 'primary') ?? manifest.assets[0]
   const videoProjectAsset = findVideoProjectAsset(manifest)
   const sessionId = manifest.origin.sessionId
-  const canSendToCanvas = manifest.kind === 'image' || manifest.kind === 'video' || manifest.kind === 'model'
+  const canSendToCanvas = manifest.kind === 'image' || manifest.kind === 'video' || manifest.kind === 'model' || Boolean(manifest.socialVariantSet)
   const isFinal = Boolean(manifest.finals?.length)
   const canChooseVaultKind = canChooseImageVaultKind(manifest)
   const isXEditorialSlate = isXEditorialSlateOutput(manifest)
+  const socialVariantActions = manifest.socialVariantSet ? {
+    onUse: (variantId: string) => {
+      const variant = manifest.socialVariantSet?.variants.find((candidate) => candidate.id === variantId)
+      if (!variant?.assetId) return
+      setPendingReleaseKitOutput(manifest.id, variant.assetId)
+      navigate(routes.view.campaign('release-kit'))
+    },
+    onArchive: (variantId: string) => void archiveSocialVariant(workspaceId, manifest, variantId, setManifest),
+    onRevise: (variantId: string) => void reviseSocialVariant(workspaceId, manifest, variantId, setManifest, navigate),
+  } : undefined
 
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
@@ -214,6 +224,7 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
             workspaceId={workspaceId}
             manifest={manifest}
             primary={primary}
+            socialVariantActions={socialVariantActions}
           />
         </Section>
 
@@ -321,6 +332,56 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
       </div>
     </div>
   )
+}
+
+async function archiveSocialVariant(
+  workspaceId: string,
+  manifest: OutputManifestDTO,
+  variantId: string,
+  setManifest: React.Dispatch<React.SetStateAction<OutputManifestDTO | null>>,
+): Promise<OutputManifestDTO | null> {
+  const revision = manifest.socialVariantSet?.revision
+  if (!revision) return null
+  try {
+    const updated = await window.electronAPI.archiveSocialVariant(workspaceId, {
+      outputId: manifest.id,
+      expectedRevision: revision,
+      variantId,
+    })
+    setManifest(updated)
+    toast.success('Variant archived')
+    return updated
+  } catch (error) {
+    toast.error('Could not archive variant', { description: error instanceof Error ? error.message : String(error) })
+    return null
+  }
+}
+
+async function reviseSocialVariant(
+  workspaceId: string,
+  manifest: OutputManifestDTO,
+  variantId: string,
+  setManifest: React.Dispatch<React.SetStateAction<OutputManifestDTO | null>>,
+  navigate: (route: ReturnType<typeof routes.view.allSessions>) => void,
+): Promise<void> {
+  const sessionId = manifest.socialVariantSet?.editorSessionId
+  const variant = manifest.socialVariantSet?.variants.find((candidate) => candidate.id === variantId)
+  if (!sessionId || !variant) return
+  const updated = await archiveSocialVariant(workspaceId, manifest, variantId, setManifest)
+  if (!updated?.socialVariantSet) return
+  const message = [
+    `I want to revise the "${variant.title}" version in Variant Set ${manifest.id}.`,
+    `The version to replace is ${variant.id}; the set is now revision ${updated.socialVariantSet.revision}.`,
+    'Ask me the small number of questions that would materially improve this revision, then create the new cut. Do not post or schedule it.',
+  ].join(' ')
+  try {
+    await window.electronAPI.sendMessage(sessionId, message)
+    navigate(routes.view.allSessions(sessionId))
+  } catch (error) {
+    toast.error('The variant was archived, but the editor could not be reopened', {
+      description: error instanceof Error ? error.message : String(error),
+    })
+  }
 }
 
 function scheduleOutputInCampaignCalendar(

@@ -15,6 +15,7 @@ import { findVideoProjectAsset, formatDuration, summarizeVideoProject } from './
 import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
 import { isXEditorialSlateOutput } from '@craft-agent/shared/x-editorial'
 import { XEditorialSlatePreview } from './XEditorialSlatePreview'
+import { SocialVariantSetPreview } from './SocialVariantSetPreview'
 
 const OutputModelPreview = React.lazy(() => import('./OutputModelPreview').then((module) => ({ default: module.OutputModelPreview })))
 const OutputExcalidrawPreview = React.lazy(() => import('./OutputExcalidrawPreview').then((module) => ({ default: module.OutputExcalidrawPreview })))
@@ -30,6 +31,11 @@ interface OutputInlinePreviewProps {
   className?: string
   compact?: boolean
   onPreviewSettled?: OutputPreviewSettledHandler
+  socialVariantActions?: {
+    onUse?: (variantId: string) => void
+    onRevise?: (variantId: string) => void
+    onArchive?: (variantId: string) => void
+  }
 }
 
 type OutputsElectronAPI = typeof window.electronAPI & {
@@ -44,6 +50,7 @@ export function OutputInlinePreview({
   className,
   compact = false,
   onPreviewSettled,
+  socialVariantActions,
 }: OutputInlinePreviewProps) {
   const { navigate } = useNavigation()
   const previewAsset = resolvePreviewAsset(manifest, primary)
@@ -65,6 +72,7 @@ export function OutputInlinePreview({
   const [syncRevision, setSyncRevision] = React.useState(0)
   useWorkspaceSyncRefresh(workspaceId, ['outputs'], () => setSyncRevision((current) => current + 1))
   const electronAPI = window.electronAPI as OutputsElectronAPI
+
   const hasStaticPreview = Boolean(
     (mode === 'image' || mode === 'video' || mode === 'audio') && dataUrl
     || (mode === 'markdown' || mode === 'json' || mode === 'text' || mode === 'receipt' || mode === 'table' || mode === 'chart' || mode === 'workflow') && content !== null
@@ -125,6 +133,10 @@ export function OutputInlinePreview({
       onPreviewSettled?.('ready')
     }
   }, [assetId, error, hasStaticPreview, mode, onPreviewSettled, presentationPreviewAsset, shouldReadAssetData, shouldReadAssetText, webPreviewTarget])
+
+  if (manifest.socialVariantSet) {
+    return <SocialVariantSetPreview workspaceId={workspaceId} manifest={manifest} compact={compact} {...socialVariantActions} />
+  }
 
   if (shouldShowVideoProjectPreview && videoProjectAsset) {
     return (

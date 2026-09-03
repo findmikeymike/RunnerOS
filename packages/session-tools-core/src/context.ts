@@ -473,6 +473,12 @@ export interface SessionToolContext {
    */
   createOutput?(input: import('./handlers/outputs.ts').CreateOutputToolInput): Promise<import('./handlers/outputs.ts').CreateOutputResult>;
 
+  /** Read the durable variant job bound to this Raw Video Editor session. */
+  getSocialVariantSet?(input: import('./handlers/social-variants.ts').GetSocialVariantSetToolInput): Promise<import('./handlers/social-variants.ts').SocialVariantToolResult>;
+
+  /** Record one rendered or failed variant result into the bound durable job. */
+  recordSocialVariantResult?(input: import('./handlers/social-variants.ts').RecordSocialVariantResultToolInput): Promise<import('./handlers/social-variants.ts').SocialVariantToolResult>;
+
   /** Create a Lab song in the current workspace. */
   createLabSong?(input: import('./handlers/lab-songs.ts').CreateLabSongToolInput): Promise<unknown>;
 

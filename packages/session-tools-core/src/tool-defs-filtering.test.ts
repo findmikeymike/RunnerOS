@@ -130,6 +130,16 @@ describe('session tool filtering helpers', () => {
     expect(labNames.has('list_lab_songs')).toBe(true);
   });
 
+  it('exposes durable social variant tools only to the Raw Video Editor surface', () => {
+    expect(getSessionToolNames().has('get_social_variant_set')).toBe(false);
+    expect(getSessionToolNames().has('record_social_variant_result')).toBe(false);
+    const names = getSessionToolNames({ includeSocialVariantTools: true });
+    expect(names.has('get_social_variant_set')).toBe(true);
+    expect(names.has('record_social_variant_result')).toBe(true);
+    expect(SESSION_TOOL_DEFS.find((def) => def.name === 'get_social_variant_set')?.readOnly).toBe(true);
+    expect(SESSION_TOOL_DEFS.find((def) => def.name === 'record_social_variant_result')?.safeMode).toBe('block');
+  });
+
   it('all canonical session tools declare safeMode metadata', () => {
     for (const def of SESSION_TOOL_DEFS) {
       expect(def.safeMode === 'allow' || def.safeMode === 'block').toBe(true);

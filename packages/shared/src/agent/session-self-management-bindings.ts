@@ -366,6 +366,22 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'getSocialVariantSet', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.getSocialVariantSetFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'recordSocialVariantResult', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.recordSocialVariantResultFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'promoteOutputToFinal', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.promoteOutputToFinalFn;

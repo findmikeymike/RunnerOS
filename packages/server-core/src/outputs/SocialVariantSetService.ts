@@ -1,21 +1,25 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { createReadStream, existsSync, statSync } from 'node:fs';
-import { extname } from 'node:path';
+import { closeSync, constants, createReadStream, existsSync, fstatSync, mkdirSync, openSync, readSync, realpathSync, renameSync, rmSync, statSync, writeSync } from 'node:fs';
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   SOCIAL_VARIANT_MAX_SOURCES,
   SOCIAL_VARIANT_MAX_TOTAL,
   SOCIAL_VARIANT_SET_TAG,
+  OUTPUT_SHOW_IN_CANVAS_TAG,
   advanceSocialVariantSetRevision,
   assertSocialVariantSetManifest,
   assertSocialVariantSetRevision,
   createOutputBundle,
+  getOutputDir,
   isSocialVariantDestinationIntent,
   readOutput,
   resolveOutputAssetPath,
   withOutputBundleLockAsync,
   writeOutputManifest,
   type CreateSocialVariantSetRequest,
+  type ArchiveSocialVariantRequest,
   type OutputManifest,
+  type RecordSocialVariantResultRequest,
   type SocialVariantDestinationIntent,
   type SocialVariantSource,
   type SocialVariantSourceSelection,
@@ -108,7 +112,7 @@ export class SocialVariantSetService {
       summary: `Preparing ${socialVariantSet.request.totalRequested} social video variant${socialVariantSet.request.totalRequested === 1 ? '' : 's'} from ${sources.length} source${sources.length === 1 ? '' : 's'}.`,
       origin: { source: 'session', sessionId: input.editorSessionId, agentSlug: 'raw-video-editor' },
       context: { scope, ...(scope === 'campaign' ? { campaignId: workspaceId } : {}) },
-      tags: [SOCIAL_VARIANT_SET_TAG],
+      tags: [SOCIAL_VARIANT_SET_TAG, OUTPUT_SHOW_IN_CANVAS_TAG],
       socialVariantSet,
       createdAt: now,
     });
@@ -176,10 +180,310 @@ export class SocialVariantSetService {
     return result.output;
   }
 
+  getForEditor(workspaceId: string, outputId: string, editorSessionId: string, activeAgentSlug?: string): OutputManifest {
+    const workspace = this.requireWorkspace(workspaceId);
+    this.assertEditorIdentity(editorSessionId, activeAgentSlug);
+    const output = readOutput(workspace.rootPath, outputId);
+    if (!output?.socialVariantSet) throw new Error(`Social Variant Set not found: ${outputId}`);
+    if (output.workspaceId !== workspaceId || output.socialVariantSet.workspaceId !== workspaceId) {
+      throw new Error(`Social Variant Set is not in workspace "${workspaceId}".`);
+    }
+    if (output.socialVariantSet.editorSessionId !== editorSessionId) {
+      throw new Error('This Variant Set belongs to a different Raw Video Editor session.');
+    }
+    return output;
+  }
+
+  async recordResult(
+    workspaceId: string,
+    editorSessionId: string,
+    activeAgentSlug: string | undefined,
+    input: RecordSocialVariantResultRequest,
+  ): Promise<OutputManifest> {
+    const workspace = this.requireWorkspace(workspaceId);
+    this.assertEditorIdentity(editorSessionId, activeAgentSlug);
+    this.assertResultShape(input);
+    const updated = await withOutputBundleLockAsync(workspace.rootPath, input.outputId, async () => {
+      const current = readOutput(workspace.rootPath, input.outputId);
+      if (!current?.socialVariantSet) throw new Error(`Social Variant Set not found: ${input.outputId}`);
+      const currentSet = current.socialVariantSet;
+      if (current.workspaceId !== workspaceId || currentSet.workspaceId !== workspaceId) {
+        throw new Error(`Social Variant Set is not in workspace "${workspaceId}".`);
+      }
+      if (currentSet.editorSessionId !== editorSessionId) {
+        throw new Error('This Variant Set belongs to a different Raw Video Editor session.');
+      }
+      assertSocialVariantSetRevision(currentSet, input.expectedRevision);
+      if (!['analyzing', 'rendering', 'partially-ready', 'needs-attention', 'archived'].includes(currentSet.status)
+        || (currentSet.status === 'archived' && !input.replaceVariantId)) {
+        throw new Error(`Social Variant Set cannot accept render results from ${currentSet.status}.`);
+      }
+      const source = currentSet.sources.find((candidate) => candidate.id === input.sourceId);
+      if (!source) throw new Error(`Pinned source not found in this Variant Set: ${input.sourceId}`);
+      const destination = currentSet.request.destinationIntents[input.destinationIndex];
+      if (!destination) throw new Error(`Destination index is outside this Variant Set: ${input.destinationIndex}`);
+
+      const replacementIndex = input.replaceVariantId
+        ? currentSet.variants.findIndex((candidate) => candidate.id === input.replaceVariantId)
+        : -1;
+      if (input.replaceVariantId && replacementIndex < 0) throw new Error(`Variant to retry was not found: ${input.replaceVariantId}`);
+      if (replacementIndex >= 0 && !['failed', 'archived'].includes(currentSet.variants[replacementIndex]!.state)) {
+        throw new Error('Only a failed variant or a user-archived revision can be replaced.');
+      }
+      if (replacementIndex >= 0 && currentSet.variants[replacementIndex]!.state === 'archived') {
+        const archived = currentSet.variants[replacementIndex]!;
+        if (archived.sourceId !== source.id || !sameDestination(archived.destination, destination)) {
+          throw new Error('A revision must keep the exact source and destination of the version the user selected.');
+        }
+        if (input.failureReason) {
+          const now = this.nextTimestamp(currentSet.updatedAt);
+          const set = advanceSocialVariantSetRevision(currentSet, {
+            status: 'needs-attention',
+            variants: currentSet.variants,
+            attention: {
+              code: 'render-failed',
+              message: input.failureReason.trim(),
+              sourceId: source.id,
+              updatedAt: now,
+            },
+          }, now);
+          const next: OutputManifest = {
+            ...current,
+            summary: `Revision failed: ${input.failureReason.trim()}`,
+            updatedAt: now,
+            socialVariantSet: set,
+          };
+          writeOutputManifest(workspace.rootPath, next);
+          return next;
+        }
+      }
+      if (replacementIndex < 0 && currentSet.variants.length >= currentSet.request.totalRequested) {
+        throw new Error(`This Variant Set already reached its ${currentSet.request.totalRequested}-render ceiling.`);
+      }
+
+      const ready = Boolean(input.filePath);
+      if (ready) await this.assertPinnedSourceCurrent(workspace, source);
+      const replacedVariant = replacementIndex >= 0 ? currentSet.variants[replacementIndex]! : undefined;
+      const variantId = replacedVariant?.state === 'failed' ? replacedVariant.id : randomUUID();
+      let asset = undefined as OutputManifest['assets'][number] | undefined;
+      let copiedPath: string | undefined;
+      try {
+        if (input.filePath) {
+          const sourcePath = this.assertWorkspaceFile(workspace.rootPath, input.filePath);
+          if (!isVideoAsset(sourcePath)) throw new Error('Variant result must be a supported video file.');
+          const extension = extname(sourcePath).toLowerCase();
+          const relativePath = `variants/${variantId}${extension}`;
+          const finalPath = join(getOutputDir(workspace.rootPath, current.id), relativePath);
+          const tempPath = `${finalPath}.${process.pid}.${randomUUID()}.tmp`;
+          mkdirSync(dirname(finalPath), { recursive: true });
+          this.copyVerifiedWorkspaceFile(workspace.rootPath, sourcePath, tempPath);
+          renameSync(tempPath, finalPath);
+          copiedPath = finalPath;
+          const fileStat = statSync(finalPath);
+          asset = {
+            id: `social-variant-${variantId}`,
+            label: input.title.trim(),
+            role: 'supporting',
+            path: relativePath,
+            mimeType: mimeTypeForVideoPath(finalPath),
+            sizeBytes: fileStat.size,
+            sha256: await hashFileSha256(finalPath),
+          };
+        }
+
+        const variant = {
+          id: variantId,
+          sourceId: source.id,
+          title: input.title.trim(),
+          hook: input.hook.trim(),
+          editorialMode: input.editorialMode.trim(),
+          editorialIntent: input.editorialIntent.trim(),
+          destination,
+          ...(asset ? { assetId: asset.id, sha256: asset.sha256 } : {}),
+          ...(input.durationSeconds !== undefined ? { durationSeconds: input.durationSeconds } : {}),
+          ...(input.aspectRatio?.trim() ? { aspectRatio: input.aspectRatio.trim() } : {}),
+          state: asset ? 'ready' as const : 'failed' as const,
+          ...(!asset ? { failureReason: input.failureReason!.trim() } : {}),
+          scheduledWorkOrderIds: replacementIndex >= 0
+            ? currentSet.variants[replacementIndex]!.scheduledWorkOrderIds
+            : [],
+        };
+        const variants = [...currentSet.variants];
+        if (replacementIndex >= 0) variants[replacementIndex] = variant;
+        else variants.push(variant);
+        const readyCount = variants.filter((candidate) => candidate.state === 'ready').length;
+        const failedCount = variants.filter((candidate) => candidate.state === 'failed').length;
+        const complete = variants.length === currentSet.request.totalRequested;
+        const status = complete && readyCount === currentSet.request.totalRequested
+          ? 'ready' as const
+          : readyCount > 0
+            ? 'partially-ready' as const
+            : failedCount > 0
+              ? 'needs-attention' as const
+              : 'rendering' as const;
+        const now = this.nextTimestamp(currentSet.updatedAt);
+        const set = advanceSocialVariantSetRevision(currentSet, {
+          status,
+          variants,
+          ...(status === 'needs-attention' ? {
+            attention: {
+              code: 'render-failed' as const,
+              message: input.failureReason!.trim(),
+              sourceId: source.id,
+              updatedAt: now,
+            },
+          } : {}),
+        }, now);
+        const assets = replacementIndex >= 0
+          ? current.assets.filter((candidate) => candidate.id !== `social-variant-${variantId}`)
+          : [...current.assets];
+        if (asset) assets.push(asset);
+        const next: OutputManifest = {
+          ...current,
+          assets,
+          summary: `${readyCount} of ${currentSet.request.totalRequested} variants ready${failedCount ? ` · ${failedCount} failed` : ''}.`,
+          updatedAt: now,
+          socialVariantSet: set,
+        };
+        writeOutputManifest(workspace.rootPath, next);
+        return next;
+      } catch (error) {
+        if (copiedPath) rmSync(copiedPath, { force: true });
+        throw error;
+      }
+    });
+    this.deps.emitOutputsUpdated?.(workspaceId);
+    return updated;
+  }
+
+  async archiveVariant(workspaceId: string, input: ArchiveSocialVariantRequest): Promise<OutputManifest> {
+    const workspace = this.requireWorkspace(workspaceId);
+    const updated = await withOutputBundleLockAsync(workspace.rootPath, input.outputId, async () => {
+      const current = readOutput(workspace.rootPath, input.outputId);
+      if (!current?.socialVariantSet) throw new Error(`Social Variant Set not found: ${input.outputId}`);
+      const currentSet = current.socialVariantSet;
+      assertSocialVariantSetRevision(currentSet, input.expectedRevision);
+      const index = currentSet.variants.findIndex((variant) => variant.id === input.variantId);
+      if (index < 0) throw new Error(`Social variant not found: ${input.variantId}`);
+      const selected = currentSet.variants[index]!;
+      if (selected.state === 'archived') return current;
+      if (selected.scheduledWorkOrderIds.length > 0) {
+        throw new Error('This variant has scheduled work. Open that order before archiving it.');
+      }
+      const variants = [...currentSet.variants];
+      variants[index] = { ...selected, state: 'archived' };
+      const active = variants.filter((variant) => variant.state !== 'archived');
+      const readyCount = active.filter((variant) => variant.state === 'ready').length;
+      const failedCount = active.filter((variant) => variant.state === 'failed').length;
+      const status = active.length === 0
+        ? 'archived' as const
+        : readyCount === active.length && active.length === currentSet.request.totalRequested
+          ? 'ready' as const
+          : readyCount > 0
+            ? 'partially-ready' as const
+            : 'needs-attention' as const;
+      const now = this.nextTimestamp(currentSet.updatedAt);
+      const set = advanceSocialVariantSetRevision(currentSet, {
+        status,
+        variants,
+        ...(status === 'needs-attention' ? {
+          attention: {
+            code: 'other' as const,
+            message: failedCount > 0 ? 'Only failed variants remain.' : 'No ready variants remain.',
+            updatedAt: now,
+          },
+        } : {}),
+      }, now);
+      const next: OutputManifest = {
+        ...current,
+        summary: status === 'archived'
+          ? 'All variants archived.'
+          : `${readyCount} variants ready${failedCount ? ` · ${failedCount} failed` : ''}.`,
+        updatedAt: now,
+        socialVariantSet: set,
+      };
+      writeOutputManifest(workspace.rootPath, next);
+      return next;
+    });
+    this.deps.emitOutputsUpdated?.(workspaceId);
+    return updated;
+  }
+
   private requireWorkspace(workspaceId: string): SocialVariantWorkspace {
     const workspace = this.deps.getWorkspace(workspaceId);
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
     return workspace;
+  }
+
+  private assertEditorIdentity(editorSessionId: string, activeAgentSlug?: string): void {
+    if (!editorSessionId.trim()) throw new Error('Raw Video Editor session is required.');
+    if (activeAgentSlug !== 'raw-video-editor') throw new Error('Only the Raw Video Editor can update a Social Variant Set.');
+  }
+
+  private assertResultShape(input: RecordSocialVariantResultRequest): void {
+    if (!input.outputId?.trim() || !input.sourceId?.trim()) throw new Error('Variant Set and pinned source IDs are required.');
+    if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) throw new Error('A valid expected revision is required.');
+    if (!Number.isInteger(input.destinationIndex) || input.destinationIndex < 0) throw new Error('A valid destination index is required.');
+    for (const [label, value, max] of [
+      ['title', input.title, 240],
+      ['hook', input.hook, 500],
+      ['editorialMode', input.editorialMode, 120],
+      ['editorialIntent', input.editorialIntent, 1_200],
+    ] as const) {
+      if (typeof value !== 'string' || !value.trim() || value.length > max || value.includes('\0')) throw new Error(`${label} is invalid.`);
+    }
+    const hasFile = typeof input.filePath === 'string' && input.filePath.trim().length > 0;
+    const hasFailure = typeof input.failureReason === 'string' && input.failureReason.trim().length > 0;
+    if (hasFile === hasFailure) throw new Error('Record exactly one result: a rendered file or a failure reason.');
+    if (input.failureReason && input.failureReason.length > 1_000) throw new Error('failureReason is too long.');
+    if (input.durationSeconds !== undefined && (!Number.isFinite(input.durationSeconds) || input.durationSeconds <= 0)) throw new Error('durationSeconds must be positive.');
+    if (input.aspectRatio !== undefined && (!input.aspectRatio.trim() || input.aspectRatio.length > 32)) throw new Error('aspectRatio is invalid.');
+  }
+
+  private assertWorkspaceFile(workspaceRootPath: string, requestedPath: string): string {
+    const root = realpathSync(resolve(workspaceRootPath));
+    const path = realpathSync(resolve(requestedPath));
+    const relation = relative(root, path);
+    if (relation === '..' || relation.startsWith(`..${sep}`) || isAbsolute(relation)) {
+      throw new Error('Variant result must be inside the current workspace.');
+    }
+    if (!statSync(path).isFile()) throw new Error('Variant result is not a file.');
+    return path;
+  }
+
+  private copyVerifiedWorkspaceFile(workspaceRootPath: string, requestedPath: string, destinationPath: string): void {
+    const verifiedPath = this.assertWorkspaceFile(workspaceRootPath, requestedPath);
+    const before = statSync(verifiedPath);
+    const noFollow = typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0;
+    let sourceFd: number | undefined;
+    let destinationFd: number | undefined;
+    let failure: unknown;
+    try {
+      sourceFd = openSync(verifiedPath, constants.O_RDONLY | noFollow);
+      const opened = fstatSync(sourceFd);
+      if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino) {
+        throw new Error('Variant result changed while it was being secured for import.');
+      }
+      destinationFd = openSync(destinationPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600);
+      const buffer = Buffer.allocUnsafe(1024 * 1024);
+      while (true) {
+        const bytesRead = readSync(sourceFd, buffer, 0, buffer.length, null);
+        if (bytesRead === 0) break;
+        let offset = 0;
+        while (offset < bytesRead) {
+          offset += writeSync(destinationFd, buffer, offset, bytesRead - offset);
+        }
+      }
+    } catch (error) {
+      failure = error;
+    } finally {
+      if (destinationFd !== undefined) closeSync(destinationFd);
+      if (sourceFd !== undefined) closeSync(sourceFd);
+    }
+    if (failure) {
+      rmSync(destinationPath, { force: true });
+      throw failure;
+    }
   }
 
   private requireSupportedScope(workspace: SocialVariantWorkspace): 'hq' | 'campaign' {
@@ -330,6 +634,22 @@ export class SocialVariantSetService {
 
 function isVideoAsset(path: string, mimeType?: string): boolean {
   return mimeType?.toLowerCase().startsWith('video/') === true || VIDEO_EXTENSIONS.has(extname(path).toLowerCase());
+}
+
+function mimeTypeForVideoPath(path: string): string {
+  const extension = extname(path).toLowerCase();
+  if (extension === '.mov') return 'video/quicktime';
+  if (extension === '.webm') return 'video/webm';
+  return 'video/mp4';
+}
+
+function sameDestination(left: SocialVariantDestinationIntent, right: SocialVariantDestinationIntent): boolean {
+  return left.platform === right.platform
+    && left.accountRole === right.accountRole
+    && left.profileId === right.profileId
+    && left.accountSetId === right.accountSetId
+    && left.mode === right.mode
+    && left.trialRequested === right.trialRequested;
 }
 
 function hashFileSha256(path: string): Promise<string> {

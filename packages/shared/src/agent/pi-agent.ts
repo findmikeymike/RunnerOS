@@ -520,6 +520,7 @@ export class PiAgent extends BaseAgent {
       includeCampaignManagerTools: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge'
         && this.config.workspace.artistWorkspaceScope === 'campaign',
       includeLabTools: this.config.workspace.artistWorkspaceScope === 'lab',
+      includeSocialVariantTools: this.config.session?.spawnedFromAgent?.agentSlug === 'raw-video-editor',
     }).filter((tool) => {
       return !isToolBlockedForDelegatedSession(tool.name, delegatedSession);
     });

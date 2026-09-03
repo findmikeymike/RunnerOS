@@ -590,6 +590,7 @@ export const CHANNEL_MAP = {
   getOutput: invoke(RPC_CHANNELS.outputs.GET),
   createSocialVariantSet: invoke(RPC_CHANNELS.outputs.CREATE_SOCIAL_VARIANT_SET),
   startSocialVariantSet: invoke(RPC_CHANNELS.outputs.START_SOCIAL_VARIANT_SET),
+  archiveSocialVariant: invoke(RPC_CHANNELS.outputs.ARCHIVE_SOCIAL_VARIANT),
   deleteOutput: invoke(RPC_CHANNELS.outputs.DELETE),
   promoteOutputToFinal: invoke(RPC_CHANNELS.outputs.PROMOTE_TO_FINAL),
   removeOutputFromFinal: invoke(RPC_CHANNELS.outputs.REMOVE_FROM_FINAL),

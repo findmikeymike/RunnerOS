@@ -158,4 +158,184 @@ describe('SocialVariantSetService', () => {
     expect(persisted?.socialVariantSet?.status).toBe('analyzing');
     expect(updates).toEqual([WORKSPACE_ID]);
   });
+
+  test('ingests ready and failed renders incrementally, then replaces only the failed slot', async () => {
+    const instance = service();
+    const created = await instance.create(WORKSPACE_ID, {
+      ...request(),
+      requestedByClientId: 'client-1',
+    });
+    const started = await instance.start(WORKSPACE_ID, created.id, 1);
+    const sourceId = started.socialVariantSet!.sources[0]!.id;
+    const renderDir = join(root, 'renders');
+    mkdirSync(renderDir, { recursive: true });
+    const firstPath = join(renderDir, 'first.mp4');
+    writeFileSync(firstPath, 'render-one');
+
+    const first = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+      outputId: created.id,
+      expectedRevision: 2,
+      sourceId,
+      destinationIndex: 0,
+      title: 'Chorus first',
+      hook: 'Open on the chorus.',
+      editorialMode: 'chorus-first',
+      editorialIntent: 'Reach the emotional payoff immediately.',
+      filePath: firstPath,
+      durationSeconds: 12,
+      aspectRatio: '9:16',
+    });
+    expect(first.socialVariantSet).toMatchObject({ revision: 3, status: 'partially-ready' });
+    expect(first.assets.find((asset) => asset.id === first.socialVariantSet!.variants[0]!.assetId)?.sha256).toHaveLength(64);
+
+    const failed = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+      outputId: created.id,
+      expectedRevision: 3,
+      sourceId,
+      destinationIndex: 0,
+      title: 'Quiet opening',
+      hook: 'Start on the quiet look.',
+      editorialMode: 'quiet-open',
+      editorialIntent: 'Create contrast before the payoff.',
+      failureReason: 'FFmpeg could not decode the selected segment.',
+    });
+    expect(failed.socialVariantSet).toMatchObject({ revision: 4, status: 'partially-ready' });
+    const failedVariant = failed.socialVariantSet!.variants.find((variant) => variant.state === 'failed')!;
+
+    const retryPath = join(renderDir, 'retry.mp4');
+    writeFileSync(retryPath, 'render-two');
+    const retried = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+      outputId: created.id,
+      expectedRevision: 4,
+      sourceId,
+      destinationIndex: 0,
+      replaceVariantId: failedVariant.id,
+      title: 'Quiet opening',
+      hook: 'Start on the quiet look.',
+      editorialMode: 'quiet-open',
+      editorialIntent: 'Create contrast before the payoff.',
+      filePath: retryPath,
+      durationSeconds: 10,
+      aspectRatio: '9:16',
+    });
+    expect(retried.socialVariantSet).toMatchObject({ revision: 5, status: 'ready' });
+    expect(retried.socialVariantSet!.variants).toHaveLength(2);
+    expect(retried.socialVariantSet!.variants.every((variant) => variant.state === 'ready')).toBe(true);
+  });
+
+  test('rejects result files outside the workspace and sessions other than the bound editor', async () => {
+    const instance = service();
+    const created = await instance.create(WORKSPACE_ID, { ...request(), requestedByClientId: 'client-1' });
+    await instance.start(WORKSPACE_ID, created.id, 1);
+    const sourceId = created.socialVariantSet!.sources[0]!.id;
+    const outsideRoot = mkdtempSync(join(tmpdir(), 'outside-variant-'));
+    const outsidePath = join(outsideRoot, 'render.mp4');
+    writeFileSync(outsidePath, 'outside');
+    const result = {
+      outputId: created.id,
+      expectedRevision: 2,
+      sourceId,
+      destinationIndex: 0,
+      title: 'Outside',
+      hook: 'Outside hook',
+      editorialMode: 'outside',
+      editorialIntent: 'This must not be ingested.',
+      filePath: outsidePath,
+    };
+    await expect(instance.recordResult(WORKSPACE_ID, 'wrong-session', 'raw-video-editor', result)).rejects.toThrow(/different Raw Video Editor session/);
+    await expect(instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', result)).rejects.toThrow(/inside the current workspace/);
+    rmSync(outsideRoot, { recursive: true, force: true });
+  });
+
+  test('archives an unscheduled variant with a revision fence and preserves its asset', async () => {
+    const instance = service();
+    const created = await instance.create(WORKSPACE_ID, {
+      ...request(),
+      variantsPerSource: 1,
+      destinationIntents: [
+        { platform: 'instagram', accountRole: 'primary', mode: 'standard' },
+        { platform: 'tiktok', accountRole: 'secondary', mode: 'standard' },
+      ],
+      requestedByClientId: 'client-1',
+    });
+    const started = await instance.start(WORKSPACE_ID, created.id, 1);
+    const sourceId = started.socialVariantSet!.sources[0]!.id;
+    const renderDir = join(root, 'renders');
+    mkdirSync(renderDir, { recursive: true });
+    const filePath = join(renderDir, 'only.mp4');
+    writeFileSync(filePath, 'render');
+    const rendered = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+      outputId: created.id,
+      expectedRevision: 2,
+      sourceId,
+      destinationIndex: 0,
+      title: 'Only cut',
+      hook: 'Start immediately.',
+      editorialMode: 'direct',
+      editorialIntent: 'Remove the setup.',
+      filePath,
+    });
+    const variant = rendered.socialVariantSet!.variants[0]!;
+
+    const archived = await instance.archiveVariant(WORKSPACE_ID, {
+      outputId: created.id,
+      expectedRevision: 3,
+      variantId: variant.id,
+    });
+    expect(archived.socialVariantSet).toMatchObject({ revision: 4, status: 'archived' });
+    expect(archived.socialVariantSet!.variants[0]!.state).toBe('archived');
+    expect(archived.assets.some((asset) => asset.id === variant.assetId)).toBe(true);
+
+    await expect(instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+      outputId: created.id,
+      expectedRevision: 4,
+      sourceId,
+      destinationIndex: 1,
+      replaceVariantId: variant.id,
+      title: 'Wrong destination',
+      hook: 'Wrong destination.',
+      editorialMode: 'direct',
+      editorialIntent: 'Must remain bound to the original destination.',
+      failureReason: 'Render failed.',
+    })).rejects.toThrow('exact source and destination');
+
+    const failedRevision = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+      outputId: created.id,
+      expectedRevision: 4,
+      sourceId,
+      destinationIndex: 0,
+      replaceVariantId: variant.id,
+      title: 'Only cut revision',
+      hook: 'Start even faster.',
+      editorialMode: 'direct',
+      editorialIntent: 'Tighten the opening.',
+      failureReason: 'FFmpeg failed during the revision.',
+    });
+    expect(failedRevision.socialVariantSet).toMatchObject({ revision: 5, status: 'needs-attention' });
+    expect(failedRevision.socialVariantSet!.variants[0]!.state).toBe('archived');
+    expect(failedRevision.assets.some((asset) => asset.id === variant.assetId)).toBe(true);
+    const revisedPath = join(renderDir, 'revised.mp4');
+    writeFileSync(revisedPath, 'revised-render');
+    const revised = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+      outputId: created.id,
+      expectedRevision: 5,
+      sourceId,
+      destinationIndex: 0,
+      replaceVariantId: variant.id,
+      title: 'Only cut revision',
+      hook: 'Start even faster.',
+      editorialMode: 'direct',
+      editorialIntent: 'Tighten the opening.',
+      filePath: revisedPath,
+    });
+    expect(revised.socialVariantSet).toMatchObject({ revision: 6, status: 'ready' });
+    expect(revised.socialVariantSet!.variants[0]!.id).not.toBe(variant.id);
+    expect(revised.assets.some((asset) => asset.id === variant.assetId)).toBe(true);
+    expect(revised.assets.some((asset) => asset.id === revised.socialVariantSet!.variants[0]!.assetId)).toBe(true);
+    await expect(instance.archiveVariant(WORKSPACE_ID, {
+      outputId: created.id,
+      expectedRevision: 3,
+      variantId: variant.id,
+    })).rejects.toThrow('Expected revision 3, found 6');
+  });
 });

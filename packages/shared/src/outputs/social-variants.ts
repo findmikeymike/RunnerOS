@@ -117,6 +117,28 @@ export interface StartSocialVariantSetRequest {
   expectedRevision: number;
 }
 
+export interface RecordSocialVariantResultRequest {
+  outputId: string;
+  expectedRevision: number;
+  sourceId: string;
+  destinationIndex: number;
+  title: string;
+  hook: string;
+  editorialMode: string;
+  editorialIntent: string;
+  filePath?: string;
+  failureReason?: string;
+  durationSeconds?: number;
+  aspectRatio?: string;
+  replaceVariantId?: string;
+}
+
+export interface ArchiveSocialVariantRequest {
+  outputId: string;
+  expectedRevision: number;
+  variantId: string;
+}
+
 const SHA256 = /^[a-f0-9]{64}$/i;
 const IDENTIFIER = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/;
 const SET_STATUSES = new Set<SocialVariantSetStatus>([

@@ -271,6 +271,7 @@ export function getSessionScopedTools(
       includeManagerTools: agentSlug === 'concierge' && (artistWorkspaceScope === 'hq' || artistWorkspaceScope === 'campaign'),
       includeCampaignManagerTools: agentSlug === 'concierge' && artistWorkspaceScope === 'campaign',
       includeLabTools,
+      includeSocialVariantTools: agentSlug === 'raw-video-editor',
     })
       .filter(def => !isToolBlockedForDelegatedSession(def.name, delegatedSession))
       .filter(def => def.handler !== null) // Skip backend-specific tools (call_llm)

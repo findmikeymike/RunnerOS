@@ -49,6 +49,8 @@ export type {
   SocialVariantState,
   CreateSocialVariantSetRequest,
   StartSocialVariantSetRequest,
+  RecordSocialVariantResultRequest,
+  ArchiveSocialVariantRequest,
 } from './social-variants.ts';
 
 export {

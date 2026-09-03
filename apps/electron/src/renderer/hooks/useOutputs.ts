@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react'
 import { useAtom } from 'jotai'
 import { outputsStateAtomFamily, type OutputsState } from '@/atoms/outputs'
+import type { SocialVariantSetManifest } from '@craft-agent/shared/outputs'
 
 export const OUTPUT_RPC_CHANNELS = {
   LIST: 'outputs:list',
@@ -135,6 +136,7 @@ export interface OutputManifestDTO extends OutputSummaryDTO {
   receipts: OutputReceiptDTO[]
   links: OutputLinkDTO[]
   finals?: OutputFinalPointerDTO[]
+  socialVariantSet?: SocialVariantSetManifest
 }
 
 export interface UseOutputsResult {
