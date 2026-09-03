@@ -2,7 +2,12 @@ import type { EventSink } from '@craft-agent/server-core/transport'
 import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput, WorkspaceMigrationRuntimeLease } from '@craft-agent/server-core/handlers'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import { withAgentDefinitionsLibraryMutex } from '../handlers/rpc/agent-definitions'
-import { migrateInitialReleaseManagerActivation, preserveReleaseManagerActivationChoices, releaseManagerActivationNeedsWork } from './release-manager-activation'
+import {
+  migrateOrPreserveInitialArtistAgentActivation,
+  migrateInitialReleaseManagerActivation,
+  preserveReleaseManagerActivationChoices,
+  releaseManagerActivationNeedsWork,
+} from './release-manager-activation'
 import { withAutomaticSchedulePlacementLock } from '../scheduled-work/AutomaticSchedulePlacementLock'
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
 import { basename, dirname, join } from 'path'
@@ -3899,16 +3904,19 @@ export class SessionManager implements ISessionManager {
           RELEASE_MANAGER_AGENT_SLUG,
           DEFAULT_ACTIVATED_AGENT_SLUGS,
           CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
-          HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
           ensureBuiltInAgentSkillsForSlug,
           getGlobalAgentDir,
           hasReleaseManagerIdentity,
           isReleaseManagerDefinition,
           loadGlobalAgent,
+          replaceBuiltInAgentPromptText,
         } = await import('@craft-agent/shared/agent-definitions')
         const releaseManagerAgentDir = getGlobalAgentDir(RELEASE_MANAGER_AGENT_SLUG)
         const legacyReleaseManagerActivationMarker = join(releaseManagerAgentDir, '.initial-hq-campaign-activation-v1')
         const releaseManagerActivationState = join(dirname(releaseManagerAgentDir), '.migrations', 'release-manager-activation-v1.json')
+        const anythingAgentDir = getGlobalAgentDir(ANYTHING_AGENT_SLUG)
+        const anythingAgentActivationState = join(dirname(anythingAgentDir), '.migrations', 'anything-agent-activation-v1.json')
+        const anythingAgentPreviouslyInstalled = Boolean(loadGlobalAgent(ANYTHING_AGENT_SLUG))
         const { seeded } = seedGlobalLibraryIfEmpty(STARTER_AGENTS)
         if (seeded > 0) {
           sessionLog.info(`[agent-definitions] Seeded ${seeded} starter agent(s) into global library`)
@@ -3971,6 +3979,19 @@ export class SessionManager implements ISessionManager {
         if (ensured > 0) {
           sessionLog.info(`[agent-definitions] Ensured ${ensured} required agent(s)`)
         }
+        const anythingAgentLegacyBudgetRules = `5. The saved weekly Zero allowance authorizes routine read-like paid calls inside its remaining balance. Do not ask before each small call. The guard enforces the cap and records a receipt. If no allowance exists, ask once for the weekly amount and configure it only after the user answers.
+6. Never bypass the guard, automatically retry a paid failure, fund a wallet, install software, accept terms, or exceed the remaining allowance.
+7. A spending allowance does not authorize posting, sending, purchasing, deleting, account changes, or other external mutations. Those require exact current approval.`
+        const anythingAgentBoundedAuthorizationRules = `5. The saved weekly Zero allowance authorizes GET retrieval inside its remaining balance. Do not ask before each small call. If no allowance exists, ask once for the weekly amount and configure it only after the user answers.
+6. For POST, PUT, PATCH, or DELETE, create one bounded job authorization covering the user's whole requested batch or saved workflow, then reuse it within its exact capability, method, call-count, lifetime-spend, purpose, and expiration limits. Never ask once per item.
+7. Never bypass either guard, automatically retry a paid failure, fund a wallet, install software, accept terms, exceed the weekly allowance, or exceed the job authorization.`
+        if (replaceBuiltInAgentPromptText(
+          ANYTHING_AGENT_SLUG,
+          anythingAgentLegacyBudgetRules,
+          anythingAgentBoundedAuthorizationRules,
+        ).updated) {
+          sessionLog.info('[agent-definitions] Upgraded Anything Agent to bounded job authorization')
+        }
         // Seed built-in creator/meta skills. They are implicit system skills:
         // Concierge and Orchestrator depend on them, so users should not have
         // to activate them per workspace.
@@ -3994,13 +4015,61 @@ export class SessionManager implements ISessionManager {
             .find(skill => skill.slug === 'zero')
             ?.files.find(file => file.path === 'SKILL.md')
             ?.content
-          if (zeroSkillMd && replaceRequiredGlobalSkillFileIfHashMatches(
+          const zeroGuardScript = BUNDLED_STARTER_SKILLS
+            .find(skill => skill.slug === 'zero')
+            ?.files.find(file => file.path === 'scripts/zero-budget.mjs')
+            ?.content
+          const zeroSkillHashes = [
+            'd31ce3615622376a5d5f5db387809da94485b9cb6ce38993c0ee07a0ab04fb8e',
+            'ff29cc37879dd30d6c9b778df4f919bb8fbee51e9399b9efa0c0b8d83ece1e73',
+          ]
+          if (zeroSkillMd && zeroSkillHashes.some(expectedHash => replaceRequiredGlobalSkillFileIfHashMatches(
             'zero',
             'SKILL.md',
-            'd31ce3615622376a5d5f5db387809da94485b9cb6ce38993c0ee07a0ab04fb8e',
+            expectedHash,
             zeroSkillMd,
-          ).updated) {
+          ).updated)) {
             sessionLog.info('[skills] Added trusted provider selection and a weekly spend guard to Zero')
+          }
+          if (zeroGuardScript && replaceRequiredGlobalSkillFileIfHashMatches(
+            'zero',
+            'scripts/zero-budget.mjs',
+            '921317ae1fb290bf598ee6d46cce61cd0c86b78362e8aa32c9f544161e22fc88',
+            zeroGuardScript,
+          ).updated) {
+            sessionLog.info('[skills] Upgraded Zero to capability-bound action authorization')
+          }
+          const anythingAgentStarter = STARTER_AGENTS.find(agent => agent.slug === ANYTHING_AGENT_SLUG)
+          const anythingAgentSkillSlugs = anythingAgentStarter?.metadata.skills ?? ['zero']
+          if (ensureBuiltInAgentSkillsForSlug(ANYTHING_AGENT_SLUG, anythingAgentSkillSlugs).updated) {
+            sessionLog.info('[agent-definitions] Restored Anything Agent skill bundle')
+          }
+          const anythingAgent = loadGlobalAgent(ANYTHING_AGENT_SLUG)
+          const missingAnythingAgentSkills = anythingAgentSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
+          if (anythingAgent && missingAnythingAgentSkills.length === 0) {
+            const { getWorkspaces } = await import('@craft-agent/shared/config')
+            const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
+            const workspaces = getWorkspaces()
+            const activation = migrateOrPreserveInitialArtistAgentActivation({
+              stateFile: anythingAgentActivationState,
+              workspaces,
+              agentSlug: ANYTHING_AGENT_SLUG,
+              skillSlugs: anythingAgentSkillSlugs,
+              previouslyInstalled: anythingAgentPreviouslyInstalled,
+              isAgentActive: ws => readActivatedAgents(ws.rootPath).active.includes(ANYTHING_AGENT_SLUG),
+              activateAgent: ws => setAgentActive(ws.rootPath, ANYTHING_AGENT_SLUG, true),
+              enabledSkillSlugs: ws => listEnabledGlobalSkillSlugs(ws.rootPath),
+              enableSkill: (ws, slug) => setGlobalSkillEnabled(ws.rootPath, slug, true),
+              warn: (message, error) => sessionLog.warn(`[agent-definitions] ${message}:`, error as Error),
+            })
+            if (activation.preservedExistingChoices) {
+              sessionLog.debug('[agent-definitions] Preserved existing Anything Agent activation choices')
+            }
+            if (activation.updatedWorkspaceIds.length > 0) {
+              sessionLog.info(`[agent-definitions] Activated Anything Agent in ${activation.updatedWorkspaceIds.length} HQ/Campaign workspace(s)`)
+            }
+          } else if (anythingAgent && missingAnythingAgentSkills.length > 0) {
+            sessionLog.warn(`[agent-definitions] Anything Agent skill bundle incomplete: ${missingAnythingAgentSkills.join(', ')}`)
           }
           const releaseManagerAgent = STARTER_AGENTS.find(agent => agent.slug === RELEASE_MANAGER_AGENT_SLUG)
           const releaseManagerSkillSlugs = releaseManagerAgent?.metadata.skills ?? []
@@ -4057,10 +4126,6 @@ export class SessionManager implements ISessionManager {
             sessionLog.info('[skills] Enabled Anticipation Engine for existing local workspaces')
           }
           const artistDefaultAgentTargets: Array<{ agentSlug: string; scopes: ReadonlySet<string> }> = [
-            ...HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS.map(agentSlug => ({
-              agentSlug,
-              scopes: new Set(['hq', 'campaign']),
-            })),
             ...CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS.map(agentSlug => ({
               agentSlug,
               scopes: new Set(['campaign']),
@@ -9127,6 +9192,7 @@ user a clickable link to where the thing now lives.`
               inputs: agent.metadata.inputs,
               outputs: agent.metadata.outputs,
               tags: agent.metadata.tags ?? [],
+              ...(agent.metadata.routing ? { routing: agent.metadata.routing } : {}),
             }
           })
 

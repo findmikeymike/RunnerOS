@@ -176,6 +176,47 @@ function coerceThinkingLevel(value: unknown, warnings: AgentParseWarning[]): Thi
   return normalizeThinkingLevel(value as ThinkingLevel | 'think');
 }
 
+/** Free-text routing lines. Bounded so a bad definition cannot bloat every prompt. */
+const ROUTING_MAX_ENTRIES = 6;
+const ROUTING_MAX_LENGTH = 160;
+
+/**
+ * Structured routing hints. Malformed entries are dropped with a warning rather
+ * than failing the whole agent — a bad hint should degrade routing, not make
+ * the worker unloadable.
+ */
+function coerceRouting(
+  value: unknown,
+  warnings: AgentParseWarning[],
+): AgentMetadata['routing'] {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    warnings.push(warning('routing', 'invalid-routing', 'routing must be an object.'));
+    return undefined;
+  }
+  const raw = value as Record<string, unknown>;
+  const out: NonNullable<AgentMetadata['routing']> = {};
+  let dropped = 0;
+  for (const key of ['bestFor', 'notFor', 'handsOffTo'] as const) {
+    const list = raw[key];
+    if (list === undefined) continue;
+    if (!Array.isArray(list)) {
+      warnings.push(warning('routing', 'invalid-routing', `routing.${key} must be an array of strings.`));
+      continue;
+    }
+    const clean = list
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0 && entry.length <= ROUTING_MAX_LENGTH);
+    dropped += list.length - clean.length;
+    if (clean.length > 0) out[key] = clean.slice(0, ROUTING_MAX_ENTRIES);
+  }
+  if (dropped > 0) {
+    warnings.push(warning('routing', 'invalid-routing', `routing dropped ${dropped} empty or over-long entr${dropped === 1 ? 'y' : 'ies'}.`));
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 /** Slug rules for capability tags: short, lowercase, hyphenable. Matches @-mention shape. */
 const TAG_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
 const TAG_MAX_COUNT = 8;
@@ -259,6 +300,7 @@ export function parseAgentFile(content: string): { metadata: AgentMetadata; syst
     inputs: typeof data.inputs === 'string' ? data.inputs.trim() || undefined : undefined,
     outputs: typeof data.outputs === 'string' ? data.outputs.trim() || undefined : undefined,
     tags: coerceTags(data.tags, warnings),
+    routing: coerceRouting(data.routing, warnings),
   };
 
   return {
@@ -425,6 +467,13 @@ export function serializeAgent(metadata: AgentMetadata, systemPrompt: string): s
   if (metadata.inputs) data.inputs = metadata.inputs;
   if (metadata.outputs) data.outputs = metadata.outputs;
   if (metadata.tags?.length) data.tags = metadata.tags;
+  if (metadata.routing) {
+    const routing: Record<string, string[]> = {};
+    if (metadata.routing.bestFor?.length) routing.bestFor = metadata.routing.bestFor;
+    if (metadata.routing.notFor?.length) routing.notFor = metadata.routing.notFor;
+    if (metadata.routing.handsOffTo?.length) routing.handsOffTo = metadata.routing.handsOffTo;
+    if (Object.keys(routing).length > 0) data.routing = routing;
+  }
 
   return matter.stringify(systemPrompt.trimEnd() + '\n', data);
 }
@@ -635,7 +684,7 @@ export function ensureBuiltInAgentSkillsForSlug(
   requiredSkills: ReadonlyArray<string>,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'raw-video-editor', 'artist-os-release-manager']);
+  const builtIns = new Set(['anything-agent', 'concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'raw-video-editor', 'artist-os-release-manager']);
   if (!builtIns.has(slug)) return { updated: false };
 
   const loaded = loadGlobalAgent(slug, options);
@@ -780,7 +829,7 @@ export function replaceBuiltInAgentPromptText(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'social-publisher', 'industry-hunter', 'college-radio-agent', 'outreach-agent', 'record-doctor', 'x-editorial', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent', 'art-director', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'trypost-agent', 'content-director', 'print-agent', 'signal-scout-agent', 'signal-analyst-agent', 'raw-video-editor']);
+  const builtIns = new Set(['anything-agent', 'concierge', 'orchestrator', 'social-publisher', 'industry-hunter', 'college-radio-agent', 'outreach-agent', 'record-doctor', 'x-editorial', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent', 'art-director', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'trypost-agent', 'content-director', 'print-agent', 'signal-scout-agent', 'signal-analyst-agent', 'raw-video-editor']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
   if (

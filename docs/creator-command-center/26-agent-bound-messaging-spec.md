@@ -82,7 +82,7 @@ Slices 1, 2, 4, and 4a are implemented:
 
 ### Remaining
 
-Slice 4b (activation catalog refresh, routing hints). Slices 3 and 6 are dropped by decision; slice 5's team-mode half is deferred to V2 while its authorization half is done; slices 1, 2, 4, 4a, and 7 are done.
+Slice 4b's activation catalog refresh, deferred with reasons above. Slices 3 and 6 are dropped by decision; slice 5's team-mode half is deferred to V2 while its authorization half is done; slices 1, 2, 4, 4a, 4b (routing hints), and 7 are done.
 
 ---
 
@@ -429,7 +429,11 @@ The case this does not serve is iterating with a specialist *through* the manage
 
 **Slice 4a — Delegation guards.** Host-side rejection of self-delegation and inactive targets in `AgentMessageService.messageAgent`. Independent of the gateway; ships before an external chat is bound to HNIC.
 
-**Slice 4b — Discovery freshness.** Hidden-context catalog refresh on agent activation, plus optional `AgentRoutingHints` surfaced through `list_agents` and the injected catalog.
+**Slice 4b — Discovery freshness. PARTIALLY DONE.**
+
+Routing hints are implemented: optional `routing.bestFor` / `notFor` / `handsOffTo` on agent metadata, round-tripped through `AGENT.md`, exposed in `list_agents` and the injected catalog, accepted by `create_agent`, and required by the agent-creator interview. Malformed hints are dropped with a warning rather than failing the agent, and entries are capped so one definition cannot bloat every prompt.
+
+The hidden-context catalog refresh on activation is **not** built, and is deliberately deferred. No hidden-context injection mechanism exists in `SessionManager`, so this would mean building one and wiring it from an RPC path that has no session access. The payoff is small: `list_agents` reads the library from disk at call time, so a worker created mid-session is already discoverable the moment anyone asks for it. Revisit only if managers are observed failing to find new workers in practice.
 
 **Slice 5 — Authorization.** Default `authorizedSenderIds` to the paired sender; enforce on inbound; add membership and campaign-access checks; require a fresh pairing code to rebind.
 

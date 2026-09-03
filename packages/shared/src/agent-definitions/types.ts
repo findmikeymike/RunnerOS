@@ -56,6 +56,25 @@ export interface AgentMetadata {
    */
   greeting?: string;
 
+  /**
+   * Structured routing signal for agent-to-agent delegation.
+   *
+   * Routing is otherwise driven by free-text `description` plus `tags`, so a
+   * vague description produces vague routing. These are optional and additive:
+   * an agent without them behaves exactly as before.
+   *
+   * `handsOffTo` is a hint only. It grants no authority and does not
+   * pre-authorize a delegation.
+   */
+  routing?: {
+    /** Concrete jobs this agent is the right owner for. */
+    bestFor?: string[];
+    /** Jobs it is plausibly but wrongly routed for, naming the better owner. */
+    notFor?: string[];
+    /** Slugs it habitually hands off to at a real boundary. */
+    handsOffTo?: string[];
+  };
+
   // ============================================================================
   // Capabilities — declarative I/O contract
   //
@@ -99,7 +118,8 @@ export type AgentParseWarningCode =
   | 'invalid-sources'
   | 'invalid-optional-sources'
   | 'invalid-trusted-worker-tools'
-  | 'invalid-tags';
+  | 'invalid-tags'
+  | 'invalid-routing';
 
 export interface AgentParseWarning {
   field: keyof AgentMetadata;

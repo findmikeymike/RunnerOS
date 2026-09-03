@@ -91,6 +91,7 @@ export function buildAgentCreateSessionOptions(
           outputs: a.metadata.outputs,
           visualAgent: a.metadata.visualAgent,
           tags: a.metadata.tags,
+          routing: a.metadata.routing,
         })),
         {
           userMemoryEntries: context.userMemoryEntries,
@@ -158,6 +159,7 @@ export function buildAgentCreateSessionOptions(
                 outputs: a.metadata.outputs,
                 visualAgent: a.metadata.visualAgent,
                 tags: a.metadata.tags,
+                routing: a.metadata.routing,
               })),
             }
           : {}),

@@ -52,7 +52,7 @@ A complete AGENT.md saved at \`${PORTABLE_AGENTS_ROOT}/agents/<slug>/\`. Mandato
 \`name\`, \`description\`, \`systemPrompt\`. Strongly preferred fields:
 \`avatar\`, \`inputs\`, \`outputs\`, \`tags\`, \`permissionMode\`, \`thinkingLevel\`.
 Optional: \`skills\`, \`sources\`, \`optionalSources\`, \`trustedWorkerTools\`,
-\`model\`, \`llmConnection\`, \`greeting\`.
+\`model\`, \`llmConnection\`, \`greeting\`, \`routing\`.
 
 ## Minimum interview
 
@@ -61,6 +61,7 @@ Don't ask everything at once. Ask the smallest set you need to draft something:
 1. **Purpose** — "What's its job?" (one sentence)
 2. **I/O** — "What does it expect as input? What should it produce?"
 3. **Voice** — "Cautious, neutral, or opinionated?"
+4. **Boundaries** — "What is it the right one for, and what should go to someone else instead?"
 
 That's enough to draft. Ask follow-ups only when ambiguous.
 
@@ -74,6 +75,11 @@ Most fields you can infer:
 - **Thinking level** — \`medium\` for most agents; \`high\` for research/critique/planning; \`low\` only when latency matters.
 - **Trusted worker tools** — only set \`trustedWorkerTools\` for safe internal RunnerOS work the user should not have to babysit, like starting/checking deep research and creating an output doc. Never use it for email, posting, publishing, auth/account connection, spend, delete, send, or external side effects. If the agent needs autonomous research, use only these by default: \`start_deep_research\`, \`list_deep_research_runs\`, \`get_deep_research_run\`, \`create_output\`. Do not include \`approve_deep_research_plan\`, \`revise_deep_research_plan\`, or \`cancel_deep_research_run\`; those stay human-gated.
 - **Tags** — pull 2–4 from the description. Use lowercase, hyphenated.
+- **Routing** — always fill \`routing.bestFor\` and \`routing.notFor\` from the
+  boundaries answer. Two or three concrete jobs each; name the better owner in
+  \`notFor\` where you know it. Other agents route to this one by reading these,
+  so "handles marketing" routes worse than "writes launch-day social copy".
+  Add \`routing.handsOffTo\` only when there is a real handoff boundary.
 
 ## System prompt
 

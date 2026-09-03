@@ -510,6 +510,11 @@ export const CreateAgentSchema = z.object({
     inputs: z.string().optional().describe('One sentence describing expected inputs.'),
     outputs: z.string().optional().describe('One sentence describing produced outputs.'),
     tags: z.array(z.string()).optional().describe('1-8 lowercase capability tags.'),
+    routing: z.object({
+      bestFor: z.array(z.string()).optional().describe('Concrete jobs this agent is the right owner for.'),
+      notFor: z.array(z.string()).optional().describe('Jobs it is plausibly but wrongly routed for; name the better owner.'),
+      handsOffTo: z.array(z.string()).optional().describe('Agent slugs it habitually hands off to at a real boundary. A hint only — grants no authority.'),
+    }).optional().describe('Routing hints other agents read when choosing a specialist. Concrete beats vague.'),
     greeting: z.string().optional().describe('Optional opening line shown in the composer.'),
     model: z.string().optional().describe('Model ID override.'),
     llmConnection: z.string().optional().describe('LLM connection slug.'),
@@ -1471,7 +1476,7 @@ Use this only after walking the user through the agent-creator interview and get
 
 **Inputs:**
 - \`slug\`: kebab-case (1-64 chars). If unsure, derive from the agent name.
-- \`metadata\`: name + description are required; the rest are strongly preferred (avatar, permissionMode, thinkingLevel, visualAgent, inputs, outputs, tags) and free for you to infer sensibly. Use \`sources\` for required tools and \`optionalSources\` for tools that should attach only when connected. Use \`trustedWorkerTools\` only for bounded internal tools the worker may run without babysitting; never include email/post/send tools. Set \`visualAgent: true\` only for agents that should proactively use Canvas for visual/web/media/document artifacts.
+- \`metadata\`: name + description are required; the rest are strongly preferred (avatar, permissionMode, thinkingLevel, visualAgent, inputs, outputs, tags, routing) and free for you to infer sensibly. Use \`sources\` for required tools and \`optionalSources\` for tools that should attach only when connected. Use \`trustedWorkerTools\` only for bounded internal tools the worker may run without babysitting; never include email/post/send tools. Set \`visualAgent: true\` only for agents that should proactively use Canvas for visual/web/media/document artifacts.
 - \`systemPrompt\`: the agent's identity + operating instructions. Required, non-empty.
 - \`activateInWorkspace\` (default true): activate in this workspace immediately so the user sees it.
 - \`overwrite\` (default false): only set true if the user explicitly asked to replace an existing agent.

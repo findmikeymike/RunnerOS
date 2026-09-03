@@ -845,8 +845,8 @@ body
     expect(agent?.systemPrompt).toContain('no healthy native connector')
     expect(agent?.systemPrompt).toContain('weekly Zero allowance')
     expect(agent?.systemPrompt).toContain('Do not ask before each small call')
-    expect(agent?.systemPrompt).toContain('Never bypass the guard')
-    expect(agent?.systemPrompt).toContain('external mutations')
+    expect(agent?.systemPrompt).toContain('Never bypass either guard')
+    expect(agent?.systemPrompt).toContain('bounded job authorization')
   })
 
   test('Creative Lab defaults are bounded and Anything Agent stays in HQ and campaigns', () => {
@@ -1610,6 +1610,22 @@ body
     expect(loadGlobalAgent('orchestrator', { globalAgentsDir })!.metadata.skills).toEqual(['agent-creator'])
   })
 
+  test('can restore Zero to an existing Anything Agent without replacing its custom prompt', () => {
+    writeGlobalAgent(
+      {
+        slug: 'anything-agent',
+        metadata: { name: 'Anything Agent', description: 'Handles gaps.', skills: ['custom-skill'] },
+        systemPrompt: 'Custom Anything Agent direction.',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(ensureBuiltInAgentSkillsForSlug('anything-agent', ['zero'], { globalAgentsDir }).updated).toBe(true)
+    const migrated = loadGlobalAgent('anything-agent', { globalAgentsDir })!
+    expect(migrated.metadata.skills).toEqual(['custom-skill', 'zero'])
+    expect(migrated.systemPrompt).toBe('Custom Anything Agent direction.')
+  })
+
   test('can add direction and repurposing to an existing Raw Video Editor without replacing its other skills', () => {
     writeGlobalAgent(
       {
@@ -1867,6 +1883,18 @@ body
     )
     writeGlobalAgent(
       {
+        slug: 'anything-agent',
+        metadata: {
+          name: 'Anything Agent',
+          description: 'Handles capability gaps.',
+          skills: ['zero'],
+        },
+        systemPrompt: 'Before\nold Zero guard\nAfter',
+      },
+      { globalAgentsDir },
+    )
+    writeGlobalAgent(
+      {
         slug: 'writer',
         metadata: { name: 'Writer', description: 'Writes.' },
         systemPrompt: 'old shipped paragraph',
@@ -1876,6 +1904,8 @@ body
 
     expect(replaceBuiltInAgentPromptText('concierge', 'old shipped paragraph', 'new shipped paragraph', { globalAgentsDir }).updated).toBe(true)
     expect(loadGlobalAgent('concierge', { globalAgentsDir })!.systemPrompt).toBe('Before\nnew shipped paragraph\nAfter')
+    expect(replaceBuiltInAgentPromptText('anything-agent', 'old Zero guard', 'new Zero guard', { globalAgentsDir }).updated).toBe(true)
+    expect(loadGlobalAgent('anything-agent', { globalAgentsDir })!.systemPrompt).toBe('Before\nnew Zero guard\nAfter')
     expect(replaceBuiltInAgentPromptText('writer', 'old shipped paragraph', 'new shipped paragraph', { globalAgentsDir }).updated).toBe(false)
     expect(loadGlobalAgent('writer', { globalAgentsDir })!.systemPrompt).toBe('old shipped paragraph')
   })
@@ -2265,3 +2295,69 @@ body
     expect(migrated).not.toContain('For proposed writes, run a `--dry-run` preview.')
   })
 })
+
+describe('routing hints', () => {
+  test('round-trips through serialize and parse', () => {
+    // The field is whitelisted in both directions, so a save that silently
+    // drops it is the failure mode worth guarding.
+    const md = serializeAgent(
+      {
+        name: 'Radio Outreach',
+        description: 'Pitches college radio.',
+        routing: {
+          bestFor: ['pitching college radio stations'],
+          notFor: ['paid radio ads — use Ad Runner'],
+          handsOffTo: ['outreach-agent'],
+        },
+      },
+      'You pitch college radio.',
+    )
+    expect(md).toContain('routing:')
+
+    const parsed = parseAgentFile(md)
+    expect(parsed!.metadata.routing).toEqual({
+      bestFor: ['pitching college radio stations'],
+      notFor: ['paid radio ads — use Ad Runner'],
+      handsOffTo: ['outreach-agent'],
+    })
+  })
+
+  test('an agent without routing is unchanged', () => {
+    const md = serializeAgent({ name: 'Plain', description: 'No hints.' }, 'Body.')
+    expect(md).not.toContain('routing')
+    expect(parseAgentFile(md)!.metadata.routing).toBeUndefined()
+  })
+
+  test('drops malformed entries instead of failing the whole agent', () => {
+    const md = `---
+name: Messy
+description: Has bad hints.
+routing:
+  bestFor:
+    - '  '
+    - valid job
+    - 12
+  notFor: not-an-array
+---
+Body.
+`
+    const parsed = parseAgentFile(md)
+    // A bad hint should degrade routing, never make the worker unloadable.
+    expect(parsed).not.toBeNull()
+    expect(parsed!.metadata.routing).toEqual({ bestFor: ['valid job'] })
+    expect(parsed!.warnings.some((w) => w.code === 'invalid-routing')).toBe(true)
+  })
+
+  test('caps entry count so one definition cannot bloat every prompt', () => {
+    const md = serializeAgent(
+      {
+        name: 'Verbose',
+        description: 'Too many hints.',
+        routing: { bestFor: Array.from({ length: 20 }, (_, i) => `job ${i}`) },
+      },
+      'Body.',
+    )
+    expect(parseAgentFile(md)!.metadata.routing?.bestFor).toHaveLength(6)
+  })
+})
+
