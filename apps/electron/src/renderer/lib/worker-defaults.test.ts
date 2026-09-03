@@ -18,7 +18,8 @@ describe('worker page defaults', () => {
     expect(defaultWorkerSlugs(true).filter((slug) => slug === 'x-editorial')).toHaveLength(1)
   })
 
-  test('Campaign workers include the creative concept directors by default', () => {
+  test('Campaign workers include the creative concept team by default', () => {
+    expect(defaultWorkerSlugs(true)).toContain('scroll-stopper')
     expect(defaultWorkerSlugs(true)).toContain('anticipation-director')
     expect(defaultWorkerSlugs(true)).toContain('content-director')
   })

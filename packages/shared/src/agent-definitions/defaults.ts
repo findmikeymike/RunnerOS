@@ -38,6 +38,11 @@ export const DEFAULT_ACTIVATED_AGENT_SLUGS = [
   'x-editorial',
 ] as const
 
+/** Workers that must be genuinely active in every Artist OS campaign workspace. */
+export const CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS = [
+  'anticipation-director',
+] as const
+
 /** Initial Creative Lab team. Applied only when the app creates a new Lab root. */
 export const LAB_DEFAULT_ACTIVATED_AGENT_SLUGS = [
   'the-excavator',
@@ -54,6 +59,7 @@ export function initialAgentSlugsForWorkspace(
 ): readonly string[] {
   if (rootAlreadyExisted) return []
   if (scope === 'lab') return LAB_DEFAULT_ACTIVATED_AGENT_SLUGS
-  if (scope === 'hq' || scope === 'campaign') return [RELEASE_MANAGER_AGENT_SLUG]
+  if (scope === 'campaign') return [RELEASE_MANAGER_AGENT_SLUG, ...CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS]
+  if (scope === 'hq') return [RELEASE_MANAGER_AGENT_SLUG]
   return []
 }

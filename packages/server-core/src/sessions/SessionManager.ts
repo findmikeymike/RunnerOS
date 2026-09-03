@@ -3895,6 +3895,7 @@ export class SessionManager implements ISessionManager {
           SONG_DIRECTOR_SLUG,
           RELEASE_MANAGER_AGENT_SLUG,
           DEFAULT_ACTIVATED_AGENT_SLUGS,
+          CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
           ensureBuiltInAgentSkillsForSlug,
           getGlobalAgentDir,
           hasReleaseManagerIdentity,
@@ -4037,6 +4038,40 @@ export class SessionManager implements ISessionManager {
               setGlobalSkillEnabled(ws.rootPath, 'anticipation-engine', true)
             }
             sessionLog.info('[skills] Enabled Anticipation Engine for existing local workspaces')
+          }
+          for (const agentSlug of CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS) {
+            const installedAgent = loadGlobalAgent(agentSlug)
+            const starterAgent = STARTER_AGENTS.find(candidate => candidate.slug === agentSlug)
+            const skillSlugs = starterAgent?.metadata.skills ?? installedAgent?.metadata.skills ?? []
+            const missingSkills = skillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
+            if (!installedAgent || missingSkills.length > 0) {
+              if (missingSkills.length > 0) {
+                sessionLog.warn(`[agent-definitions] ${agentSlug} campaign default skill bundle incomplete: ${missingSkills.join(', ')}`)
+              }
+              continue
+            }
+
+            const { getWorkspaces } = await import('@craft-agent/shared/config')
+            const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
+            let updatedCampaigns = 0
+            for (const ws of getWorkspaces()) {
+              if (ws.remoteServer || ws.artistWorkspaceScope !== 'campaign') continue
+              let updated = false
+              if (!readActivatedAgents(ws.rootPath).active.includes(agentSlug)) {
+                setAgentActive(ws.rootPath, agentSlug, true)
+                updated = true
+              }
+              const enabledSkills = new Set(listEnabledGlobalSkillSlugs(ws.rootPath))
+              for (const skillSlug of skillSlugs) {
+                if (enabledSkills.has(skillSlug)) continue
+                setGlobalSkillEnabled(ws.rootPath, skillSlug, true)
+                updated = true
+              }
+              if (updated) updatedCampaigns += 1
+            }
+            if (updatedCampaigns > 0) {
+              sessionLog.info(`[agent-definitions] Activated ${agentSlug} in ${updatedCampaigns} campaign workspace(s)`)
+            }
           }
           const workflowCreatorSkillMd = STARTER_SKILLS
             .find(skill => skill.slug === 'workflow-creator')

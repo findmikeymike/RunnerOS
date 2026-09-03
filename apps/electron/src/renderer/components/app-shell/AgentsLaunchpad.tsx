@@ -1653,11 +1653,18 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
     return 'Release Operations'
   }
 
-  if (slug === 'persona-agent' || slug === 'content-genius' || slug === 'record-doctor' || slug === 'art-director') {
+  if (
+    slug === 'persona-agent'
+    || slug === 'content-genius'
+    || slug === 'record-doctor'
+    || slug === 'art-director'
+    || slug === 'scroll-stopper'
+    || slug === 'anticipation-director'
+  ) {
     return 'Creative'
   }
 
-  if (slug === 'anticipation-director' || slug === 'content-director') {
+  if (slug === 'content-director') {
     return 'Content Creation'
   }
 

@@ -26,7 +26,7 @@ import {
   removeBuiltInAgentSkills,
 } from './storage.ts'
 import { STARTER_AGENTS } from './starter-templates.ts'
-import { RELEASE_MANAGER_AGENT_SLUG, DEFAULT_ACTIVATED_AGENT_SLUGS, LAB_DEFAULT_ACTIVATED_AGENT_SLUGS, initialAgentSlugsForWorkspace, isReleaseManagerDefinition } from './defaults.ts'
+import { RELEASE_MANAGER_AGENT_SLUG, DEFAULT_ACTIVATED_AGENT_SLUGS, CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS, LAB_DEFAULT_ACTIVATED_AGENT_SLUGS, initialAgentSlugsForWorkspace, isReleaseManagerDefinition } from './defaults.ts'
 import { SOCIAL_PUBLISHER_SLUG } from './types.ts'
 import { BUNDLED_STARTER_SKILLS, STARTER_SKILLS } from '../skills/index.ts'
 import * as publicAgentDefinitions from './index.ts'
@@ -844,7 +844,11 @@ body
     ])
     expect(initialAgentSlugsForWorkspace('lab', false)).toEqual(LAB_DEFAULT_ACTIVATED_AGENT_SLUGS)
     expect(initialAgentSlugsForWorkspace('lab', true)).toEqual([])
-    expect(initialAgentSlugsForWorkspace('campaign', false)).toEqual([RELEASE_MANAGER_AGENT_SLUG])
+    expect(CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['anticipation-director'])
+    expect(initialAgentSlugsForWorkspace('campaign', false)).toEqual([
+      RELEASE_MANAGER_AGENT_SLUG,
+      'anticipation-director',
+    ])
     expect(initialAgentSlugsForWorkspace('hq', false)).toEqual([RELEASE_MANAGER_AGENT_SLUG])
     expect(initialAgentSlugsForWorkspace('general', false)).toEqual([])
   })
