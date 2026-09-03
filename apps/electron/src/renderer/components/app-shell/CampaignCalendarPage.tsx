@@ -555,6 +555,7 @@ export function CampaignCalendarPage({
 
         <div className="grid min-h-[430px] flex-1 grid-cols-1 gap-3 lg:min-h-0 lg:grid-cols-[minmax(0,2.15fr)_minmax(300px,0.85fr)]">
           <CampaignCalendarSurface
+            workspaceId={workspaceId}
             items={activeCalendarItems}
             releaseDate={releaseDate}
             selectedDate={selectedCalendarDate}
@@ -623,6 +624,7 @@ export function CampaignCalendarPage({
 }
 
 function CampaignCalendarSurface({
+  workspaceId,
   items,
   releaseDate,
   selectedDate,
@@ -655,6 +657,7 @@ function CampaignCalendarSurface({
   onOpenSocialSettings,
   onOpenComposer,
 }: {
+  workspaceId: string
   items: CampaignCalendarItem[]
   releaseDate?: string
   selectedDate: string
@@ -694,16 +697,16 @@ function CampaignCalendarSurface({
     try {
       const target = JSON.parse(raw) as { workspaceId?: string; orderId?: string }
       if (target.workspaceId !== workspaceId || !target.orderId) return
-      const item = activeCalendarItems.find((candidate) => candidate.scheduledWorkId === target.orderId)
+      const item = items.find((candidate) => candidate.scheduledWorkId === target.orderId)
       if (!item) return
-      setSelectedCalendarDate(item.date)
-      setVisibleCalendarMonth(parseDateKey(item.date))
+      onSelectDate(item.date)
+      onChangeMonth(parseDateKey(item.date))
       setDetailItemId(item.id)
       sessionStorage.removeItem('artist-os:scheduled-work-focus')
     } catch {
       sessionStorage.removeItem('artist-os:scheduled-work-focus')
     }
-  }, [activeCalendarItems, workspaceId])
+  }, [items, onChangeMonth, onSelectDate, workspaceId])
   const dayMetaByDate = React.useMemo(() => {
     const metaByDate = new Map<string, CalendarMonthDayMeta>()
     for (const item of items) {
