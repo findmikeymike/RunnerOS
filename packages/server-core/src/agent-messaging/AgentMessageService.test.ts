@@ -316,3 +316,81 @@ describe('AgentMessageService', () => {
     });
   });
 });
+
+describe('delegation guards', () => {
+  test('refuses to delegate to the caller\'s own slug', async () => {
+    let created = false;
+    const service = new AgentMessageService(deps({
+      createSession: async () => {
+        created = true;
+        return { id: 'child-1' };
+      },
+    }));
+
+    const result = await service.messageAgent({
+      workspaceId: 'ws',
+      parentSessionId: 'parent',
+      callerAgentSlug: 'researcher',
+      parentPermissionMode: 'ask',
+    }, {
+      agentSlug: 'researcher',
+      task: 'Do the thing.',
+      sourceSlugs: [],
+      permissionMode: 'safe',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('self-delegation');
+    // The loop must be refused before any session or receipt exists.
+    expect(created).toBe(false);
+  });
+
+  test('refuses a target that is not active in the workspace', async () => {
+    let created = false;
+    const service = new AgentMessageService(deps({
+      createSession: async () => {
+        created = true;
+        return { id: 'child-1' };
+      },
+      isAgentActive: (_workspaceId, agentSlug) => agentSlug === 'reviewer',
+    }));
+
+    const result = await service.messageAgent({
+      workspaceId: 'ws',
+      parentSessionId: 'parent',
+      callerAgentSlug: 'researcher',
+      parentPermissionMode: 'ask',
+    }, {
+      agentSlug: 'dormant-worker',
+      task: 'Do the thing.',
+      sourceSlugs: [],
+      permissionMode: 'safe',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('agent-not-active');
+    expect(result.error?.message).toContain('dormant-worker');
+    expect(created).toBe(false);
+  });
+
+  test('allows an active target that is not the caller', async () => {
+    const service = new AgentMessageService(deps({
+      isAgentActive: () => true,
+    }));
+
+    const result = await service.messageAgent({
+      workspaceId: 'ws',
+      parentSessionId: 'parent',
+      callerAgentSlug: 'researcher',
+      parentPermissionMode: 'ask',
+    }, {
+      agentSlug: 'reviewer',
+      task: 'Review this.',
+      sourceSlugs: [],
+      permissionMode: 'safe',
+    });
+
+    expect(result.error?.code).not.toBe('self-delegation');
+    expect(result.error?.code).not.toBe('agent-not-active');
+  });
+});

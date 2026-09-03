@@ -18,6 +18,7 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { FileAttachment, PushTarget } from '@craft-agent/shared/protocol'
 import type { CredentialManager } from '@craft-agent/shared/credentials'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
+import { loadActivatedAgents } from '@craft-agent/shared/agent-definitions'
 import { readFileAttachment } from '@craft-agent/shared/utils'
 import type {
   ISessionManager,
@@ -412,11 +413,20 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
   // IMessagingGatewayRegistry — pairing
   // -------------------------------------------------------------------------
 
-  generatePairingCode(
+  /**
+   * Issue a pairing code for a chat.
+   *
+   * The desktop entry point is a session menu ("connect this session"), but a
+   * chat binds to an *agent* (spec 26). So the session is resolved to the agent
+   * it belongs to, and that agent is what the code carries. A session with no
+   * agent — an ordinary chat window — pairs to the Artist Manager, which is the
+   * spec's default and the only sensible counterpart for a phone.
+   */
+  async generatePairingCode(
     workspaceId: string,
     sessionId: string,
     platform: string,
-  ): { code: string; expiresAt: number; botUsername?: string } {
+  ): Promise<{ code: string; expiresAt: number; botUsername?: string }> {
     if (!isKnownPlatform(platform)) {
       throw new Error(`Unknown messaging platform: ${platform}`)
     }
@@ -424,11 +434,14 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     if (!state.gateway.hasConnectedAdapter(platform)) {
       throw new Error(`${capitalize(platform)} is not connected`)
     }
-    const gen = this.pairing.generate(workspaceId, sessionId, platform)
+    const session = await this.opts.sessionManager.getSession(sessionId).catch(() => null)
+    const agentSlug = session?.spawnedFromAgent?.agentSlug ?? CONCIERGE_SLUG
+    const gen = this.pairing.generate(workspaceId, agentSlug, platform)
     this.log.info('pairing code generated', {
       event: 'pairing_generated',
       workspaceId,
       sessionId,
+      agentSlug,
       platform,
       expiresAt: gen.expiresAt,
     })
@@ -776,6 +789,21 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
           const entry = this.pairing.consume(workspaceId, platform, code)
           if (!entry) return null
           return { workspaceId: entry.workspaceId, agentSlug: entry.agentSlug }
+        },
+      },
+      agentDirectory: {
+        // Read at call time, so a worker created after this gateway started is
+        // immediately offerable in chat.
+        list: async (wsId: string) => {
+          const workspace = this.opts.sessionManager
+            .getWorkspaces()
+            .find((candidate) => candidate.id === wsId)
+          if (!workspace) return []
+          return loadActivatedAgents(workspace.rootPath).map((agent) => ({
+            slug: agent.slug,
+            name: agent.metadata.name,
+            description: agent.metadata.description,
+          }))
         },
       },
       onBindingChanged: () => this.emitBindingChanged(workspaceId),

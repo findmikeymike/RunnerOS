@@ -12,6 +12,7 @@ import { BindingStore } from './binding-store'
 import { Router } from './router'
 import { SessionResolver } from './session-resolver'
 import { Commands, type PairingCodeConsumer } from './commands'
+import type { AgentDirectory } from './commands'
 import { Renderer, type SessionEvent } from './renderer'
 import { PlanTokenRegistry } from './plan-tokens'
 import type {
@@ -38,6 +39,8 @@ const consoleLogger: MessagingLogger = {
 
 export interface GatewayOptions {
   sessionManager: ISessionManager
+  /** Lets `/agents` list who this chat may bind to. */
+  agentDirectory?: AgentDirectory
   workspaceId: string
   /** Absolute path to the messaging storage directory. */
   storageDir: string
@@ -160,6 +163,7 @@ export class MessagingGateway {
       opts.workspaceId,
       opts.pairingConsumer,
       this.log.child({ component: 'commands' }),
+      opts.agentDirectory,
     )
     this.sessionResolver = new SessionResolver(
       opts.sessionManager,

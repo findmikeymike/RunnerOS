@@ -43,6 +43,8 @@ export interface AgentMessageServiceDeps {
   getSessionToolUseSummary: (sessionId: string) => { count: number; names: string[] };
   getWorkspaceRootPath: (workspaceId: string) => string;
   resolveUsableSourceSlugs?: (workspaceId: string, sourceSlugs: string[]) => { usable: string[]; unavailable: string[] };
+  /** Whether the target agent is activated in this workspace. */
+  isAgentActive?: (workspaceId: string, agentSlug: string) => boolean;
   deliverPassiveMessage?: (sessionId: string, message: string, agentMessage?: AgentMessageNoticeMetadata) => Promise<void>;
   now?: () => string;
 }
@@ -174,6 +176,39 @@ export class AgentMessageService {
       createdAt,
       updatedAt: createdAt,
     };
+
+    // Two rules the system prompt states but nothing enforced. The spawn-depth
+    // gate stops runaway recursion; it does not stop A -> A, and nothing stopped
+    // routing work to a worker that is not active here. Both produce a silently
+    // wrong route rather than a loud failure, so they fail closed in code.
+    if (runtime.callerAgentSlug && runtime.callerAgentSlug === input.agentSlug) {
+      return {
+        ok: false,
+        status: 'failed',
+        agentSlug: input.agentSlug,
+        toolUseCount: 0,
+        toolNames: [],
+        durationMs: 0,
+        error: {
+          code: 'self-delegation',
+          message: `Cannot delegate to yourself (${input.agentSlug}). Do the work directly, or pick a different specialist.`,
+        },
+      };
+    }
+    if (this.deps.isAgentActive && !this.deps.isAgentActive(runtime.workspaceId, input.agentSlug)) {
+      return {
+        ok: false,
+        status: 'failed',
+        agentSlug: input.agentSlug,
+        toolUseCount: 0,
+        toolNames: [],
+        durationMs: 0,
+        error: {
+          code: 'agent-not-active',
+          message: `"${input.agentSlug}" is not active in this workspace. Activate it from the Workers page, or choose an active specialist with list_agents.`,
+        },
+      };
+    }
 
     const workspaceRootPath = this.deps.getWorkspaceRootPath(runtime.workspaceId);
     const persist = () => writeAgentMessageReceipt(workspaceRootPath, receipt);

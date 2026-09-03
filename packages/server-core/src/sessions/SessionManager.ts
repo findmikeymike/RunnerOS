@@ -3895,9 +3895,11 @@ export class SessionManager implements ISessionManager {
           SETUP_CONCIERGE_SLUG,
           SOCIAL_PUBLISHER_SLUG,
           SONG_DIRECTOR_SLUG,
+          ANYTHING_AGENT_SLUG,
           RELEASE_MANAGER_AGENT_SLUG,
           DEFAULT_ACTIVATED_AGENT_SLUGS,
           CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
+          HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
           ensureBuiltInAgentSkillsForSlug,
           getGlobalAgentDir,
           hasReleaseManagerIdentity,
@@ -3923,6 +3925,7 @@ export class SessionManager implements ISessionManager {
             || a.slug === SETUP_CONCIERGE_SLUG
             || a.slug === SOCIAL_PUBLISHER_SLUG
             || a.slug === SONG_DIRECTOR_SLUG
+            || a.slug === ANYTHING_AGENT_SLUG
             || a.slug === 'trypost-agent'
             || a.slug === 'postiz-agent'
             || a.slug === 'hypermotion-agent'
@@ -3987,6 +3990,18 @@ export class SessionManager implements ISessionManager {
           if (skillsEnsured > 0) {
             sessionLog.info(`[skills] Seeded ${skillsEnsured} built-in skill(s) into global library`)
           }
+          const zeroSkillMd = BUNDLED_STARTER_SKILLS
+            .find(skill => skill.slug === 'zero')
+            ?.files.find(file => file.path === 'SKILL.md')
+            ?.content
+          if (zeroSkillMd && replaceRequiredGlobalSkillFileIfHashMatches(
+            'zero',
+            'SKILL.md',
+            'd31ce3615622376a5d5f5db387809da94485b9cb6ce38993c0ee07a0ab04fb8e',
+            zeroSkillMd,
+          ).updated) {
+            sessionLog.info('[skills] Added trusted provider selection and a weekly spend guard to Zero')
+          }
           const releaseManagerAgent = STARTER_AGENTS.find(agent => agent.slug === RELEASE_MANAGER_AGENT_SLUG)
           const releaseManagerSkillSlugs = releaseManagerAgent?.metadata.skills ?? []
           let installedReleaseManager = loadGlobalAgent(RELEASE_MANAGER_AGENT_SLUG)
@@ -4041,23 +4056,33 @@ export class SessionManager implements ISessionManager {
             }
             sessionLog.info('[skills] Enabled Anticipation Engine for existing local workspaces')
           }
-          for (const agentSlug of CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS) {
+          const artistDefaultAgentTargets: Array<{ agentSlug: string; scopes: ReadonlySet<string> }> = [
+            ...HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS.map(agentSlug => ({
+              agentSlug,
+              scopes: new Set(['hq', 'campaign']),
+            })),
+            ...CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS.map(agentSlug => ({
+              agentSlug,
+              scopes: new Set(['campaign']),
+            })),
+          ]
+          for (const { agentSlug, scopes } of artistDefaultAgentTargets) {
             const installedAgent = loadGlobalAgent(agentSlug)
             const starterAgent = STARTER_AGENTS.find(candidate => candidate.slug === agentSlug)
             const skillSlugs = starterAgent?.metadata.skills ?? installedAgent?.metadata.skills ?? []
             const missingSkills = skillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
             if (!installedAgent || missingSkills.length > 0) {
               if (missingSkills.length > 0) {
-                sessionLog.warn(`[agent-definitions] ${agentSlug} campaign default skill bundle incomplete: ${missingSkills.join(', ')}`)
+                sessionLog.warn(`[agent-definitions] ${agentSlug} Artist OS default skill bundle incomplete: ${missingSkills.join(', ')}`)
               }
               continue
             }
 
             const { getWorkspaces } = await import('@craft-agent/shared/config')
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
-            let updatedCampaigns = 0
+            let updatedArtistWorkspaces = 0
             for (const ws of getWorkspaces()) {
-              if (ws.remoteServer || ws.artistWorkspaceScope !== 'campaign') continue
+              if (ws.remoteServer || !ws.artistWorkspaceScope || !scopes.has(ws.artistWorkspaceScope)) continue
               let updated = false
               if (!readActivatedAgents(ws.rootPath).active.includes(agentSlug)) {
                 setAgentActive(ws.rootPath, agentSlug, true)
@@ -4069,10 +4094,10 @@ export class SessionManager implements ISessionManager {
                 setGlobalSkillEnabled(ws.rootPath, skillSlug, true)
                 updated = true
               }
-              if (updated) updatedCampaigns += 1
+              if (updated) updatedArtistWorkspaces += 1
             }
-            if (updatedCampaigns > 0) {
-              sessionLog.info(`[agent-definitions] Activated ${agentSlug} in ${updatedCampaigns} campaign workspace(s)`)
+            if (updatedArtistWorkspaces > 0) {
+              sessionLog.info(`[agent-definitions] Activated ${agentSlug} in ${updatedArtistWorkspaces} Artist OS workspace(s)`)
             }
           }
           const workflowCreatorSkillMd = STARTER_SKILLS
@@ -9409,6 +9434,11 @@ user a clickable link to where the thing now lives.`
               const workspace = getWorkspaceByNameOrId(workspaceId)
               if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
               return workspace.rootPath
+            },
+            isAgentActive: (workspaceId, agentSlug) => {
+              const workspace = getWorkspaceByNameOrId(workspaceId)
+              if (!workspace) return false
+              return loadActivatedAgents(workspace.rootPath).some((agent) => agent.slug === agentSlug)
             },
             deliverPassiveMessage: async (sessionId, message, agentMessage) => {
               const target = this.sessions.get(sessionId)

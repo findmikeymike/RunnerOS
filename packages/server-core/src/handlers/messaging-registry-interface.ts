@@ -46,7 +46,7 @@ export interface IMessagingGatewayRegistry {
   updateConfig(workspaceId: string, config: Partial<MessagingConfigInfo>): Promise<void>
 
   /** Generate a pairing code for binding a session to a chat. */
-  generatePairingCode(workspaceId: string, sessionId: string, platform: string): { code: string; expiresAt: number; botUsername?: string }
+  generatePairingCode(workspaceId: string, sessionId: string, platform: string): Promise<{ code: string; expiresAt: number; botUsername?: string }>
 
   /** Unbind all bindings for a session, optionally limited to one platform. */
   unbindSession(workspaceId: string, sessionId: string, platform?: string): void

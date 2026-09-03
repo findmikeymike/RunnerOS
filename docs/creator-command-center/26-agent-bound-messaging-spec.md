@@ -1,9 +1,9 @@
 ---
-status: proposed
+status: partially-implemented
 owner: agent
 last_verified: 2026-08-31
 source_of_truth: true
-related: ../22-chat-native-goal-mode-spec.md, ../24-session-task-list-spec.md, ../25-release-kit-asset-use-social-scheduling-spec.md
+related: ./22-chat-native-goal-mode-spec.md, ./24-session-task-list-spec.md, ./25-release-kit-asset-use-social-scheduling-spec.md
 ---
 
 # Agent-Bound Messaging
@@ -63,15 +63,26 @@ Slices 1 and 2 deliver the entire core value and touch two files plus a store.
 
 1. **Falling back to a slug-less session** when `resolveAgentSessionOptions` throws. That silently recreates the exact bug this spec exists to fix. Fail loudly instead.
 2. **Building a legacy migration path.** There are no existing users. A binding without a valid `target` is corrupt, not legacy — drop it with a log line rather than inventing a dual-path resolver to preserve it.
-3. **Letting a messaging session run in `allow-all`.** An unattended phone plus an unattended permission mode removes every human checkpoint at once. Downgrade to `ask` and record it.
+3. **Adding approval friction to buy back safety.** Setup is the approval. Do not introduce prompts, confirmations, or silent permission downgrades on the messaging path; see Permission And Approval Boundary for the `allow-all` decision.
 
 ### Prerequisite
 
 The "specialist finishes hours later and messages you" behavior depends on spec 24's wake protocol (Slices 0 and 6), which has shipped. Do not ship agent-bound messaging as a headline capability if that work is ever reverted.
 
-### Start here
+### Shipped
 
-Slice 1 (binding model, pure store change with tests) → Slice 2 (resolution). Everything after is incremental. Slice 5 (authorization) should not lag far behind, because binding chats to HNIC raises the cost of today's channel-only trust model.
+Slices 1, 2, 4, and 4a are implemented:
+
+- `ChannelBinding` carries `target: { kind: 'agent', … }` plus an `activeSessionId` cache; `authorizedSenderIds` is required and fails closed when empty.
+- `SessionResolver` resolves the target to a live session, reusing the cache only when the session exists, is unarchived, is in the right workspace, and is still spawned from the same agent. Serialized per binding; the cache is persisted before dispatch.
+- Commands: `/bind <agent>`, `/agents`, `/who`, `/reset`. `/new` and session-id binding removed; the old forms are refused with an explanation.
+- Pairing codes carry an agent slug. The desktop entry point is still a session menu, so the host resolves that session to its agent, defaulting to HNIC.
+- Automation-created bindings are outbound-only (`OUTBOUND_ONLY_SENDER`): the automation posts, inbound fails closed.
+- `message_agent` rejects self-delegation and inactive targets host-side.
+
+### Remaining
+
+Slice 3 (desktop agent picker), slice 4b (activation catalog refresh, routing hints), slice 5 (team-mode membership, fresh-code rebinding), slice 7 (transport failure visibility). Slice 5 should not lag far behind, because binding chats to HNIC raises the cost of today's channel-only trust model. Slice 6 is dropped by decision.
 
 ---
 
@@ -231,7 +242,7 @@ Unchanged from today, and stated explicitly because binding to a *more capable* 
 
 - A messaging turn inherits the session's permission mode. The gateway neither sets nor widens it — it contains no `permissionMode` reference and must not gain one.
 - Tool approvals remain `approvalChannel: 'app'` for both platforms. `requiresAppApproval()` must continue to cover WhatsApp and Telegram.
-- **A chat bound to an agent must not resolve to a session in `allow-all`.** Resolution creates sessions in the workspace default; if that default is `allow-all`, downgrade to `ask` for messaging sessions and record the downgrade. An unattended phone plus an unattended permission mode is the one combination that removes every human checkpoint.
+- **The workspace permission mode is honored as configured, including `allow-all`.** An earlier draft downgraded messaging sessions to `ask`. That is deliberately **not** built. `allow-all` is a mode the artist chose on purpose, and overriding it from the messaging path would be the app second-guessing a decision already made — using an agentic app is itself the acceptance of agentic risk. The tradeoff is stated rather than hidden: an unattended phone plus `allow-all` means no human checkpoint on that path. If that ever needs a brake, it belongs in the permission system where the artist can see and set it, not as a surprise downgrade inside the gateway.
 - Plans may still be accepted from Telegram. Accepting a plan is not accepting the actions in it — each consequential tool still stops at the desktop gate. This holds **only** while the previous bullet holds.
 
 ## Authorization
@@ -393,7 +404,7 @@ action, and the dual-path resolution branch an earlier draft required.
 | Two messages arrive together | Serialized per binding; one session created, second message queues |
 | Campaign workspace deleted | Binding disabled, not silently redirected to HQ |
 | Sender not in `authorizedSenderIds` | Ignored with one explanatory reply, then silent; logged |
-| Workspace default is `allow-all` | Messaging session created as `ask`; downgrade recorded |
+| Workspace default is `allow-all` | Messaging session runs in `allow-all`, as configured. No messaging-specific downgrade. |
 
 The `resolveAgentSessionOptions` failure row matters most: falling back to a plain session would silently reproduce exactly the bug this specification exists to fix.
 
@@ -419,7 +430,7 @@ Never log message bodies, pairing codes, plan tokens, or credentials.
 
 **Slice 5 — Authorization.** Default `authorizedSenderIds` to the paired sender; enforce on inbound; add membership and campaign-access checks; require a fresh pairing code to rebind.
 
-**Slice 6 — Permission-mode guard.** Downgrade `allow-all` to `ask` for messaging sessions and record it.
+**Slice 6 — Permission-mode guard. DROPPED, deliberately.** See Permission And Approval Boundary. The workspace permission mode is honored as configured; do not reintroduce a messaging-specific downgrade.
 
 **Slice 7 — Failure visibility.** Desktop surfacing, reconnect gap notice, undelivered marking.
 
@@ -445,7 +456,7 @@ Slices 1 and 2 deliver the core value. Slices 4a and 4b are independent of the b
 ### Approval
 
 - both platforms remain `approvalChannel: 'app'` after this change
-- a workspace defaulting to `allow-all` yields an `ask` messaging session, with the downgrade recorded
+- a workspace defaulting to `allow-all` yields an `allow-all` messaging session — the gateway never rewrites permission mode
 - plan-token binding verification still rejects a token replayed from another chat
 
 ### Authorization
