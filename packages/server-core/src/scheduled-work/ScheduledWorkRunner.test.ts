@@ -210,6 +210,35 @@ async function waitFor(predicate: () => boolean, attempts = 100): Promise<void> 
 }
 
 describe('ScheduledWorkRunner', () => {
+  test('defers scheduled work while a legacy automatic prompt occupies the shared lane', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder()])
+    let externalLaneOccupied = true
+    let executeCalls = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      hasExternalBackgroundWork: () => externalLaneOccupied,
+      withLock: createLock(),
+      executeAgentTask: async () => {
+        executeCalls += 1
+        return { sessionId: 'session-after-legacy' }
+      },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+    })
+
+    const deferred = await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    expect(deferred.started).toBe(0)
+    expect(executeCalls).toBe(0)
+    expect(readWork(root).items[0]?.status).toBe('scheduled')
+
+    externalLaneOccupied = false
+    const admitted = await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:02:00.000Z'))
+    expect(admitted.started).toBe(1)
+    await waitFor(() => executeCalls === 1)
+  })
+
   test('ignores needs-setup work without blocking a due background order', async () => {
     const root = makeRoot()
     const started: string[] = []
@@ -896,6 +925,7 @@ describe('ScheduledWorkRunner', () => {
     })
 
     await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await new Promise((resolve) => setTimeout(resolve, 25))
     await waitFor(() => readWork(root).items[0]?.status === 'needs-attention')
 
     const saved = readWork(root).items[0]!
@@ -1983,6 +2013,65 @@ describe('ScheduledWorkRunner', () => {
     expect(saved.status).toBe('canceled')
     expect(saved.attention).toBeUndefined()
     expect(saved.runs.at(-1)?.status).toBe('running')
+  })
+
+  test('aborts a scheduled agent that exceeds its execution deadline', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder()])
+    const aborted: string[] = []
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: createLock(),
+      executeAgentTask: async ({ onStarted }) => {
+        await onStarted('session-stuck')
+        await new Promise<void>(() => {})
+      },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      abortAgentSession: async (sessionId) => { aborted.push(sessionId) },
+      agentTaskTimeoutMs: 15,
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    await waitFor(() => readWork(root).items[0]?.status === 'needs-attention')
+
+    const saved = readWork(root).items[0]!
+    expect(aborted).toEqual(['session-stuck'])
+    expect(saved.attention?.reason).toBe('execution-failed')
+    expect(saved.attention?.message).toContain('timed out')
+  })
+
+  test('aborts a session that reports its id after the scheduled task deadline', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder()])
+    const allowLateStart = deferred<void>()
+    const aborted: string[] = []
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: createLock(),
+      executeAgentTask: async ({ onStarted }) => {
+        await allowLateStart.promise
+        await onStarted('session-started-late')
+        return { sessionId: 'session-started-late' }
+      },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      abortAgentSession: async (sessionId) => { aborted.push(sessionId) },
+      agentTaskTimeoutMs: 15,
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    await waitFor(() => readWork(root).items[0]?.status === 'needs-attention')
+
+    allowLateStart.resolve()
+    await waitFor(() => aborted.includes('session-started-late'))
+
+    expect(aborted).toEqual(['session-started-late'])
+    expect(readWork(root).items[0]?.status).toBe('needs-attention')
   })
 
   test('moves work beyond the 24-hour catch-up window to visible attention', async () => {

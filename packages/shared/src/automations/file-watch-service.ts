@@ -108,6 +108,14 @@ export interface FileWatchServiceOptions {
   onEvent: (payload: FileWatchPayload) => void | Promise<void>;
   /** Retry delays after a failed delivery. Injectable to keep tests fast. */
   deliveryRetryDelaysMs?: readonly number[];
+  /** Called once when every delivery attempt fails. */
+  onDeliveryFailure?: (payload: FileWatchPayload, error: unknown, attempts: number) => void | Promise<void>;
+}
+
+function retryAfterMs(error: unknown): number {
+  if (!error || typeof error !== 'object' || !('retryAfterMs' in error)) return 0;
+  const value = (error as { retryAfterMs?: unknown }).retryAfterMs;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 export class FileWatchService {
@@ -328,9 +336,14 @@ export class FileWatchService {
       } catch (error) {
         if (attempt >= retryDelays.length) {
           log.error(`[file-watch] delivery failed for ${payload.matcherId} after ${attempt + 1} attempts:`, error);
+          try {
+            await this.options.onDeliveryFailure?.(payload, error, attempt + 1);
+          } catch (historyError) {
+            log.error(`[file-watch] failed to record lost event ${payload.matcherId}:`, historyError);
+          }
           return;
         }
-        const delay = retryDelays[attempt]!;
+        const delay = Math.max(retryDelays[attempt]!, retryAfterMs(error));
         log.warn(`[file-watch] delivery failed for ${payload.matcherId}; retrying in ${delay}ms:`, error);
         await new Promise<void>((resolve) => setTimeout(resolve, delay));
       }

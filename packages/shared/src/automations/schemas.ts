@@ -148,7 +148,7 @@ export const QueueWorkActionSchema = z.object({
   type: z.literal('queue-work'),
   ownerScope: z.enum(['hq', 'campaign']),
   calendarVisibility: z.enum(['visible', 'hidden']).optional(),
-  title: z.string().min(1),
+  title: z.string().trim().min(1),
   intentId: z.string().min(1).optional(),
   execution: ScheduledExecutionSchema,
   inputBindings: z.record(z.string(), WorkflowInputBindingSchema).optional(),
@@ -337,13 +337,22 @@ export const DEPRECATED_EVENT_ALIASES: Record<string, string> = {
 /** All valid event names: canonical events + deprecated aliases. Derived from types.ts. */
 export const VALID_EVENTS: readonly string[] = [
   ...APP_EVENTS,
-  ...AGENT_EVENTS,
   ...Object.keys(DEPRECATED_EVENT_ALIASES),
 ];
 
 export const AutomationsConfigSchema = z.object({
   version: z.number().optional(),
   automations: z.record(z.string(), z.array(AutomationMatcherSchema)).optional(),
+}).superRefine((data, context) => {
+  for (const event of Object.keys(data.automations ?? {})) {
+    if ((AGENT_EVENTS as readonly string[]).includes(event)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['automations', event],
+        message: `Agent lifecycle trigger "${event}" is not supported. Use an app, schedule, file, URL, webhook, or message trigger.`,
+      });
+    }
+  }
 }).transform((data) => {
   const automations = data.automations ?? {};
 

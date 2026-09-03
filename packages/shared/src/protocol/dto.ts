@@ -16,7 +16,7 @@ import type {
 } from '@craft-agent/core/types'
 import type { PermissionMode } from '../agent/mode-types'
 import type { ThinkingLevel } from '../agent/thinking-levels'
-import type { QueueWorkAction } from '../automations/types'
+import type { AppEvent, QueueWorkAction } from '../automations/types'
 import type { CustomEndpointConfig } from '../config/llm-connections'
 import type { SessionLaunchReceipt } from '../sessions/types'
 import type { ChatGoalState, CreateChatGoalInput, EditChatGoalInput } from '../sessions/chat-goal'
@@ -678,6 +678,7 @@ export interface TestAutomationPayload {
   workspaceId: string
   automationId?: string
   automationName?: string
+  event?: AppEvent
   actions: TestAutomationAction[]
   permissionMode?: PermissionMode
   labels?: string[]

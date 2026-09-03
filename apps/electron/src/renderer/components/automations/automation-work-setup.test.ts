@@ -69,9 +69,43 @@ describe('automation work setup', () => {
     ])).toEqual({})
   })
 
-  test('auto-binds the first required string input to a file path', () => {
+  test('auto-binds a required string input with a file token in its name', () => {
     const result = reconcileBindingsForWhen(inputs, initialWorkflowInputBindings(inputs), 'file')
     expect(result.design_file).toEqual({ mode: 'trigger', from: 'file.path' })
+  })
+
+  test('ignores file-like descriptions and non-token substrings when auto-binding', () => {
+    const deceptiveInputs: WorkflowTriggerInput[] = [
+      { name: 'prompt', type: 'string', required: true, description: 'Path to the source file asset.' },
+      { name: 'profile', type: 'string', required: true },
+      { name: 'campaignAsset', type: 'string', required: true },
+    ]
+
+    expect(reconcileBindingsForWhen(
+      deceptiveInputs,
+      initialWorkflowInputBindings(deceptiveInputs),
+      'file',
+    )).toEqual({
+      prompt: { mode: 'ask' },
+      profile: { mode: 'ask' },
+      campaignAsset: { mode: 'trigger', from: 'file.path' },
+    })
+  })
+
+  test('leaves required strings asking when no name has a file, path, or asset token', () => {
+    const ambiguousInputs: WorkflowTriggerInput[] = [
+      { name: 'prompt', type: 'string', required: true, description: 'Select an audio file.' },
+      { name: 'document', type: 'string', required: true },
+    ]
+
+    expect(reconcileBindingsForWhen(
+      ambiguousInputs,
+      initialWorkflowInputBindings(ambiguousInputs),
+      'file',
+    )).toEqual({
+      prompt: { mode: 'ask' },
+      document: { mode: 'ask' },
+    })
   })
 
   test('replaces a stale fixed file-like value when a file trigger is selected', () => {

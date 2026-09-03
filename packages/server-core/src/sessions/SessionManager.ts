@@ -1990,6 +1990,7 @@ export function relocateImportedSessionTaskList(
 
 // Performance: Batch IPC delta events to reduce renderer load
 const DELTA_BATCH_INTERVAL_MS = 50  // Flush batched deltas every 50ms
+const AUTOMATIC_PROMPT_TIMEOUT_MS = 20 * 60 * 1000
 
 interface PendingDelta {
   delta: string
@@ -2101,6 +2102,8 @@ export class SessionManager implements ISessionManager {
   /** Workflow runner — bootstrapped during `initialize()`. */
   private workflowRunner!: WorkflowRunner
   private scheduledWorkRunner?: ScheduledWorkRunner
+  private automaticPromptAdmissionTail: Promise<void> = Promise.resolve()
+  private automaticPromptLaneOccupied = false
   private scheduledSocialPreparer?: ScheduledSocialPreparer
   private scheduledSocialExecutor?: ScheduledSocialExecutor
   private paidExecutionAuthorizer: () => boolean = () => RUNTIME_IDENTITY.variant !== 'artist-os'
@@ -2532,7 +2535,7 @@ export class SessionManager implements ISessionManager {
           // Execute prompt automations by creating new sessions
           const settled = await Promise.allSettled(
             prompts.map((pending) =>
-              this.executePromptAutomation({
+              this.executeAutomaticPromptInBackgroundLane({
                 workspaceId,
                 workspaceRootPath,
                 prompt: pending.prompt,
@@ -2618,6 +2621,16 @@ export class SessionManager implements ISessionManager {
           if (failures.length > 0) {
             throw new AggregateError(failures, `Failed to queue ${failures.length} tracked automation(s)`)
           }
+        },
+        onWorkRejected: async ({ matcherId, workTitle, error }) => {
+          await appendAutomationHistoryEntry(workspaceRootPath, {
+            id: matcherId,
+            ts: Date.now(),
+            ok: false,
+            workTitle,
+            error: error.message,
+          }).catch((historyError) => sessionLog.warn('[Automations] Failed to write tracked-work refusal history:', historyError))
+          scheduleHqStateContextRefresh(workspaceRootPath)
         },
         onError: (event, error) => {
           sessionLog.error(`Automation failed for ${event}:`, error.message)
@@ -3204,17 +3217,22 @@ export class SessionManager implements ISessionManager {
     workspaceId: string
     workspaceRootPath: string
     matcherId: string
+    actionIndex?: number
     automationName: string
     action: import('@craft-agent/shared/automations').QueueWorkAction
+    configuredAction?: import('@craft-agent/shared/automations').QueueWorkAction
+    event?: import('@craft-agent/shared/automations').AppEvent
     eventTimestamp?: number
   }): Promise<{ orderIds: string[] }> {
     const eventTimestamp = input.eventTimestamp ?? Date.now()
     const queued = await queueAutomationWork(input.workspaceId, input.workspaceRootPath, {
       matcherId: input.matcherId,
+      actionIndex: input.actionIndex,
       automationName: input.automationName,
-      event: 'SchedulerTick',
+      event: input.event ?? 'SchedulerTick',
       eventTimestamp,
       eventKey: `test:${eventTimestamp}`,
+      configuredAction: input.configuredAction ?? input.action,
       action: input.action,
     }, {
       log: sessionLog,
@@ -3243,6 +3261,7 @@ export class SessionManager implements ISessionManager {
     if (!this.scheduledWorkRunner) {
       this.scheduledWorkRunner = new ScheduledWorkRunner({
         canRunBackgroundWork: canRunWorkspaceBackgroundWork,
+        hasExternalBackgroundWork: () => this.automaticPromptLaneOccupied,
         listWorkspaceRoots: () => getWorkspaces().map(({ id, rootPath }) => ({ id, rootPath })),
         getBackgroundFenceToken: getWorkspaceBackgroundFenceToken,
         canExecuteSocialAutomatically: canExecuteAutomaticBrowserSocial,
@@ -3288,14 +3307,7 @@ export class SessionManager implements ISessionManager {
           if (session.isProcessing || (managed?.messageQueue.length ?? 0) > 0) return 'running'
           return session.lastFinalMessageId ? 'completed' : 'interrupted'
         },
-        isAgentSessionWaitingForUser: (sessionId) => {
-          const managed = this.sessions.get(sessionId)
-          return Boolean(
-            managed?.pendingAuthRequest
-            || Array.from(this.pendingPermissionRequests.values()).some((request) => request.sessionId === sessionId)
-            || (managed && getStoredPendingPlanExecution(managed.workspace.rootPath, sessionId)),
-          )
-        },
+        isAgentSessionWaitingForUser: (sessionId) => this.isAutomationSessionWaitingForUser(sessionId),
         awaitAgentCompletionBarrier: async (sessionId) => {
           const managed = this.sessions.get(sessionId)
           if (!managed || managed.isProcessing || managed.messageQueue.length > 0 || !managed.lastFinalMessageId) return false
@@ -3322,6 +3334,103 @@ export class SessionManager implements ISessionManager {
       })
     }
     return this.scheduledWorkRunner
+  }
+
+  private isAutomationSessionWaitingForUser(sessionId: string): boolean {
+    const managed = this.sessions.get(sessionId)
+    return Boolean(
+      managed?.pendingAuthRequest
+      || Array.from(this.pendingPermissionRequests.values()).some((request) => request.sessionId === sessionId)
+      || (managed && getStoredPendingPlanExecution(managed.workspace.rootPath, sessionId)),
+    )
+  }
+
+  private async acquireAutomaticPromptLane(
+    workspaceId: string,
+    workspaceRootPath: string,
+  ): Promise<() => void> {
+    const previous = this.automaticPromptAdmissionTail
+    let releaseQueue!: () => void
+    const gate = new Promise<void>((resolve) => { releaseQueue = resolve })
+    const current = previous.catch(() => undefined).then(() => gate)
+    this.automaticPromptAdmissionTail = current
+    await previous.catch(() => undefined)
+
+    while (true) {
+      // Claim first so a concurrent Scheduled Work scan sees us both before
+      // and after its own asynchronous occupancy check.
+      this.automaticPromptLaneOccupied = true
+      if (!await this.getScheduledWorkRunner().isBackgroundLaneOccupied(workspaceRootPath, workspaceId)) break
+      this.automaticPromptLaneOccupied = false
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      this.automaticPromptLaneOccupied = false
+      releaseQueue()
+    }
+  }
+
+  private async executeAutomaticPromptInBackgroundLane(
+    input: ExecutePromptAutomationInput,
+  ): Promise<{ sessionId: string }> {
+    const releaseLane = await this.acquireAutomaticPromptLane(input.workspaceId, input.workspaceRootPath)
+    let sessionId: string | undefined
+    let settled = false
+    let timedOut = false
+    let canceledSessionId: string | undefined
+    const cancelTimedOutSession = async (targetSessionId: string): Promise<void> => {
+      if (canceledSessionId === targetSessionId) return
+      canceledSessionId = targetSessionId
+      try {
+        await this.cancelProcessing(targetSessionId, true)
+      } catch (error) {
+        sessionLog.warn(`[Automations] Failed to abort timed-out session ${targetSessionId}:`, error)
+      }
+    }
+    const originalOnSessionCreated = input.onSessionCreated
+    const rawExecution = this.executePromptAutomation({
+      ...input,
+      onSessionCreated: async (createdSessionId) => {
+        sessionId = createdSessionId
+        if (timedOut) {
+          await cancelTimedOutSession(createdSessionId)
+          throw new Error('Automatic prompt session started after its execution deadline.')
+        }
+        await originalOnSessionCreated?.(createdSessionId)
+      },
+    })
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    const execution = Promise.race([
+      rawExecution,
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          timedOut = true
+          if (sessionId) {
+            void cancelTimedOutSession(sessionId)
+          }
+          reject(new Error('Automatic prompt timed out after 20 minutes.'))
+        }, AUTOMATIC_PROMPT_TIMEOUT_MS)
+      }),
+    ]).finally(() => {
+      if (timeout) clearTimeout(timeout)
+    })
+    void execution.then(
+      () => { settled = true },
+      () => { settled = true },
+    )
+
+    try {
+      while (!settled && !(sessionId && this.isAutomationSessionWaitingForUser(sessionId))) {
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+    } finally {
+      releaseLane()
+    }
+    return execution
   }
 
   private async postProcessScheduledAgentTask(input: {

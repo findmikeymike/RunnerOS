@@ -21,6 +21,14 @@ import { appendAutomationHistoryEntry } from './history-store.ts';
 import type { WebhookAction, WebhookActionResult } from './types.ts';
 
 const log = createLogger('retry-scheduler');
+const queueLocks = new Map<string, Promise<void>>();
+
+function withQueueLock<T>(queuePath: string, fn: () => Promise<T>): Promise<T> {
+  const previous = queueLocks.get(queuePath) ?? Promise.resolve();
+  const next = previous.then(fn, fn);
+  queueLocks.set(queuePath, next.then(() => {}, () => {}));
+  return next;
+}
 
 // Deferred retry delays: 5m, 30m, 1h
 const DEFERRED_DELAYS_MS = [
@@ -121,7 +129,7 @@ export class RetryScheduler {
     };
 
     const queuePath = join(this.workspaceRootPath, AUTOMATIONS_RETRY_QUEUE_FILE);
-    await appendFile(queuePath, JSON.stringify(entry) + '\n', 'utf-8');
+    await withQueueLock(queuePath, () => appendFile(queuePath, JSON.stringify(entry) + '\n', 'utf-8'));
     log.debug(`[RetryScheduler] Enqueued ${entry.id} — next retry in ${DEFERRED_DELAYS_MS[0]! / 60_000}m`);
   }
 
@@ -135,117 +143,7 @@ export class RetryScheduler {
 
     try {
       const queuePath = join(this.workspaceRootPath, AUTOMATIONS_RETRY_QUEUE_FILE);
-
-      // Read queue
-      let raw: string;
-      try {
-        raw = await readFile(queuePath, 'utf-8');
-      } catch {
-        // No queue file — nothing to do
-        return;
-      }
-
-      const lines = raw.trim().split('\n').filter(Boolean);
-      if (lines.length === 0) return;
-
-      const entries: RetryQueueEntry[] = [];
-      for (const line of lines) {
-        try {
-          entries.push(JSON.parse(line) as RetryQueueEntry);
-        } catch {
-          // Skip malformed lines
-        }
-      }
-
-      if (entries.length === 0) return;
-
-      const now = Date.now();
-      const remaining: RetryQueueEntry[] = [];
-
-      for (const entry of entries) {
-        if (entry.nextRetryAt > now) {
-          // Not due yet — keep in queue
-          remaining.push(entry);
-          continue;
-        }
-
-        if (!this.canRunBackgroundWork()) {
-          remaining.push(entry, ...entries.slice(entries.indexOf(entry) + 1));
-          break;
-        }
-
-        // Attempt retry
-        log.debug(`[RetryScheduler] Retrying ${entry.id} (deferred attempt ${entry.deferredAttempt + 1}/${MAX_DEFERRED_ATTEMPTS})`);
-        let result: WebhookActionResult;
-        try {
-          result = await executeWebhookRequest(entry.action, { timeoutMs: 30_000 });
-        } catch (err) {
-          result = {
-            type: 'webhook',
-            url: entry.expandedUrl,
-            statusCode: 0,
-            success: false,
-            error: err instanceof Error ? err.message : 'Unknown error',
-          };
-        }
-
-        if (result.success) {
-          // Success — write history entry and drop from queue
-          log.debug(`[RetryScheduler] ${entry.id} succeeded on deferred attempt ${entry.deferredAttempt + 1}`);
-          const historyEntry = createWebhookHistoryEntry({
-            matcherId: entry.matcherId,
-            ok: true,
-            method: entry.action.method,
-            url: entry.expandedUrl,
-            statusCode: result.statusCode,
-            durationMs: result.durationMs ?? 0,
-            attempts: entry.deferredAttempt + 1,
-          });
-          try {
-            await appendAutomationHistoryEntry(this.workspaceRootPath, historyEntry);
-          } catch (e) {
-            log.debug(`[RetryScheduler] Failed to write history: ${e}`);
-          }
-          // Don't add to remaining — drop from queue
-        } else if (entry.deferredAttempt + 1 >= MAX_DEFERRED_ATTEMPTS) {
-          // Final attempt failed — write permanent failure to history
-          log.debug(`[RetryScheduler] ${entry.id} permanently failed after ${MAX_DEFERRED_ATTEMPTS} deferred attempts`);
-          const historyEntry = createWebhookHistoryEntry({
-            matcherId: entry.matcherId,
-            ok: false,
-            method: entry.action.method,
-            url: entry.expandedUrl,
-            statusCode: result.statusCode,
-            durationMs: result.durationMs ?? 0,
-            attempts: entry.deferredAttempt + 1,
-            error: result.error ?? 'Unknown error',
-          });
-          try {
-            await appendAutomationHistoryEntry(this.workspaceRootPath, historyEntry);
-          } catch (e) {
-            log.debug(`[RetryScheduler] Failed to write history: ${e}`);
-          }
-          // Don't add to remaining — drop from queue
-        } else {
-          // Still retryable — schedule next deferred attempt
-          const nextDelay = DEFERRED_DELAYS_MS[entry.deferredAttempt + 1]!;
-          remaining.push({
-            ...entry,
-            deferredAttempt: entry.deferredAttempt + 1,
-            nextRetryAt: Date.now() + nextDelay,
-            lastError: result.error,
-          });
-          log.debug(`[RetryScheduler] ${entry.id} failed — next retry in ${nextDelay / 60_000}m`);
-        }
-      }
-
-      // Rewrite queue file with remaining entries
-      if (remaining.length === 0) {
-        await writeFile(queuePath, '', 'utf-8');
-      } else {
-        const content = remaining.map(e => JSON.stringify(e)).join('\n') + '\n';
-        await writeFile(queuePath, content, 'utf-8');
-      }
+      await withQueueLock(queuePath, () => this.processQueue(queuePath));
     } catch (err) {
       log.debug(`[RetryScheduler] Tick error: ${err}`);
     } finally {
@@ -253,4 +151,116 @@ export class RetryScheduler {
     }
   }
 
+  private async processQueue(queuePath: string): Promise<void> {
+    // Read queue
+    let raw: string;
+    try {
+      raw = await readFile(queuePath, 'utf-8');
+    } catch {
+      // No queue file — nothing to do
+      return;
+    }
+
+    const lines = raw.trim().split('\n').filter(Boolean);
+    if (lines.length === 0) return;
+
+    const entries: RetryQueueEntry[] = [];
+    for (const line of lines) {
+      try {
+        entries.push(JSON.parse(line) as RetryQueueEntry);
+      } catch {
+        // Skip malformed lines
+      }
+    }
+
+    if (entries.length === 0) return;
+
+    const now = Date.now();
+    const remaining: RetryQueueEntry[] = [];
+
+    for (const entry of entries) {
+      if (entry.nextRetryAt > now) {
+        // Not due yet — keep in queue
+        remaining.push(entry);
+        continue;
+      }
+
+      if (!this.canRunBackgroundWork()) {
+        remaining.push(entry, ...entries.slice(entries.indexOf(entry) + 1));
+        break;
+      }
+
+      // Attempt retry
+      log.debug(`[RetryScheduler] Retrying ${entry.id} (deferred attempt ${entry.deferredAttempt + 1}/${MAX_DEFERRED_ATTEMPTS})`);
+      let result: WebhookActionResult;
+      try {
+        result = await executeWebhookRequest(entry.action, { timeoutMs: 30_000 });
+      } catch (err) {
+        result = {
+          type: 'webhook',
+          url: entry.expandedUrl,
+          statusCode: 0,
+          success: false,
+          error: err instanceof Error ? err.message : 'Unknown error',
+        };
+      }
+
+      if (result.success) {
+        // Success — write history entry and drop from queue
+        log.debug(`[RetryScheduler] ${entry.id} succeeded on deferred attempt ${entry.deferredAttempt + 1}`);
+        const historyEntry = createWebhookHistoryEntry({
+          matcherId: entry.matcherId,
+          ok: true,
+          method: entry.action.method,
+          url: entry.expandedUrl,
+          statusCode: result.statusCode,
+          durationMs: result.durationMs ?? 0,
+          attempts: entry.deferredAttempt + 1,
+        });
+        try {
+          await appendAutomationHistoryEntry(this.workspaceRootPath, historyEntry);
+        } catch (e) {
+          log.debug(`[RetryScheduler] Failed to write history: ${e}`);
+        }
+        // Don't add to remaining — drop from queue
+      } else if (entry.deferredAttempt + 1 >= MAX_DEFERRED_ATTEMPTS) {
+        // Final attempt failed — write permanent failure to history
+        log.debug(`[RetryScheduler] ${entry.id} permanently failed after ${MAX_DEFERRED_ATTEMPTS} deferred attempts`);
+        const historyEntry = createWebhookHistoryEntry({
+          matcherId: entry.matcherId,
+          ok: false,
+          method: entry.action.method,
+          url: entry.expandedUrl,
+          statusCode: result.statusCode,
+          durationMs: result.durationMs ?? 0,
+          attempts: entry.deferredAttempt + 1,
+          error: result.error ?? 'Unknown error',
+        });
+        try {
+          await appendAutomationHistoryEntry(this.workspaceRootPath, historyEntry);
+        } catch (e) {
+          log.debug(`[RetryScheduler] Failed to write history: ${e}`);
+        }
+        // Don't add to remaining — drop from queue
+      } else {
+        // Still retryable — schedule next deferred attempt
+        const nextDelay = DEFERRED_DELAYS_MS[entry.deferredAttempt + 1]!;
+        remaining.push({
+          ...entry,
+          deferredAttempt: entry.deferredAttempt + 1,
+          nextRetryAt: Date.now() + nextDelay,
+          lastError: result.error,
+        });
+        log.debug(`[RetryScheduler] ${entry.id} failed — next retry in ${nextDelay / 60_000}m`);
+      }
+    }
+
+    // Rewrite queue file with remaining entries
+    if (remaining.length === 0) {
+      await writeFile(queuePath, '', 'utf-8');
+    } else {
+      const content = remaining.map(e => JSON.stringify(e)).join('\n') + '\n';
+      await writeFile(queuePath, content, 'utf-8');
+    }
+  }
 }

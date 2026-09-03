@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  assertArtistManagerCanSupplyRequestedInputs,
   assertArtistAnswerSupportsValues,
   findArtistAnswerEvidence,
   findArtistAnswerValueEvidence,
@@ -45,19 +46,35 @@ describe('findArtistAnswerEvidence', () => {
     ], requestedAt, 'artist-answer')).toThrow(/not a valid artist answer/)
   })
 
-  test('accepts exact answer values, number words, and current attachments', () => {
+  test('accepts exact string values and current attachments', () => {
     expect(() => assertArtistAnswerSupportsValues(
-      'Use Night Drive and three results. Yes.',
+      'Use Night Drive and the attached mix.',
       [{ name: 'mix.wav', storedPath: '/vault/private/mix.wav' }],
-      { song: 'Night Drive', count: 3, approved: true, file: '/vault/private/mix.wav' },
+      { song: 'Night Drive', file: '/vault/private/mix.wav' },
     )).not.toThrow()
+  })
+
+  test('allows string requests but sends numeric and boolean requests to the Needs you form', () => {
+    expect(() => assertArtistManagerCanSupplyRequestedInputs([
+      { name: 'file', type: 'string', required: true },
+    ], ['file'])).not.toThrow()
+
+    expect(() => assertArtistManagerCanSupplyRequestedInputs([
+      { name: 'file', type: 'string', required: true },
+      { name: 'count', type: 'number', required: true },
+      { name: 'publish', type: 'boolean', required: true },
+    ], ['file', 'count', 'publish'])).toThrow(/count, publish.*Needs you form/)
+
+    expect(() => assertArtistAnswerSupportsValues('Use 3 and yes.', [], {
+      count: 3,
+      publish: true,
+    })).toThrow(/count, publish.*Needs you form/)
   })
 
   test('rejects values invented outside the artist evidence', () => {
     expect(() => assertArtistAnswerSupportsValues('yes', [], {
       file: '/tmp/unmentioned.wav',
-      count: 999,
-    })).toThrow(/file, count/)
+    })).toThrow(/file/)
     expect(() => assertArtistAnswerSupportsValues('This is for the artist.', [], {
       category: 'art',
     })).toThrow(/category/)
@@ -78,7 +95,6 @@ describe('findArtistAnswerEvidence', () => {
     expect(evidence.evidenceText).toContain('/vault/night-drive.wav')
     expect(() => assertArtistAnswerSupportsValues(evidence.evidenceText, evidence.attachments, {
       file: '/vault/night-drive.wav',
-      count: 3,
     })).not.toThrow()
   })
 
@@ -96,8 +112,7 @@ describe('findArtistAnswerEvidence', () => {
     expect(evidence.evidenceText).toBe('Use /vault/right.wav and 2.')
     expect(() => assertArtistAnswerSupportsValues(evidence.evidenceText, [], {
       file: '/vault/wrong.wav',
-      count: 999,
-    })).toThrow(/file, count/)
+    })).toThrow(/file/)
   })
 
   test('does not let a bare yes reach past an intervening visible message', () => {
@@ -119,7 +134,6 @@ describe('findArtistAnswerEvidence', () => {
     expect(evidence.evidenceText).toBe('Yes.')
     expect(() => assertArtistAnswerSupportsValues(evidence.evidenceText, [], {
       file: '/vault/wrong.wav',
-      count: 999,
-    })).toThrow(/file, count/)
+    })).toThrow(/file/)
   })
 })

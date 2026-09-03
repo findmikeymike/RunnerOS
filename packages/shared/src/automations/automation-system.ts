@@ -22,11 +22,10 @@ import { appendAutomationHistoryEntry, compactAutomationHistorySync } from './hi
 import { compactWebhookDeliveryHistorySync } from './delivery-history.ts';
 import { createLogger } from '../utils/debug.ts';
 import { WorkspaceEventBus, type EventPayloadMap, type EventDeliveryResult } from './event-bus.ts';
-import { PromptHandler, QueueWorkHandler, EventLogHandler, WebhookHandler, ShellHookHandler, AcpSpawnHandler, type AutomationsConfigProvider, type ShellHookOutcome } from './handlers/index.ts';
+import { PromptHandler, QueueWorkHandler, EventLogHandler, WebhookHandler, ShellHookHandler, AcpSpawnHandler, type AutomationsConfigProvider, type QueueWorkHandlerOptions, type ShellHookOutcome } from './handlers/index.ts';
 import type { DelegateToAcpResult } from '../protocol/acp/spawn-bridge.ts';
 import { type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type PendingQueuedWork, type WebhookActionResult, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
 import { validateAutomationsConfig } from './validation.ts';
-import { matcherMatchesSdk } from './utils.ts';
 import { SchedulerService, type SchedulerTickPayload } from '../scheduler/scheduler-service.ts';
 import { FileWatchService } from './file-watch-service.ts';
 import { PollService } from './poll-service.ts';
@@ -53,6 +52,17 @@ const BACKGROUND_AUTOMATION_EVENTS = new Set<AutomationEvent>([
   'MessageReceive',
 ]);
 const MISSED_TICK_GRACE_MS = 60 * 1000;
+const EVENT_RATE_WINDOW_MS = 60_000;
+
+class RateLimitedAutomationDeliveryError extends Error {
+  readonly retryAfterMs: number;
+
+  constructor(event: AutomationEvent, result: Extract<EventDeliveryResult, { status: 'rate_limited' }>) {
+    super(`${event} delivery was rate limited`);
+    this.name = 'RateLimitedAutomationDeliveryError';
+    this.retryAfterMs = Math.max(0, result.windowStart + EVENT_RATE_WINDOW_MS - Date.now()) + 25;
+  }
+}
 
 // Re-export SessionMetadataSnapshot from types (single source of truth)
 export type { SessionMetadataSnapshot } from './types.ts';
@@ -79,6 +89,8 @@ export interface AutomationSystemOptions {
   onPromptsReady?: (prompts: PendingPrompt[]) => Promise<void> | void;
   /** Called when a matched trigger queues durable Scheduled Work. */
   onWorkReady?: (work: PendingQueuedWork[]) => Promise<void> | void;
+  /** Called when matched tracked work is refused before it reaches the queue. */
+  onWorkRejected?: QueueWorkHandlerOptions['onWorkRejected'];
   /** Called when webhook results are available */
   onWebhookResults?: (results: WebhookActionResult[]) => void;
   /** Called when an error occurs during automation execution */
@@ -469,6 +481,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
         workspaceId: this.options.workspaceId,
         workspaceRootPath: this.options.workspaceRootPath,
         onWorkReady: this.options.onWorkReady,
+        onWorkRejected: this.options.onWorkRejected,
         onError: this.options.onError,
       },
       this,
@@ -724,9 +737,25 @@ export class AutomationSystem implements AutomationsConfigProvider {
       onEvent: async (payload) => {
         if (!this.shouldRunBackgroundAutomation('FileWatch')) return;
         const result = await this.eventBus.emitWithResult('FileWatch', payload);
+        if (result.status === 'rate_limited') {
+          throw new RateLimitedAutomationDeliveryError('FileWatch', result);
+        }
         if (result.status !== 'accepted') {
           throw new Error(`FileWatch delivery was not accepted: ${result.status}`);
         }
+      },
+      onDeliveryFailure: async (payload, error, attempts) => {
+        const message = error instanceof Error ? error.message : String(error);
+        await appendAutomationHistoryEntry(this.options.workspaceRootPath, {
+          id: payload.matcherId,
+          ts: Date.now(),
+          ok: false,
+          event: 'FileWatch',
+          eventId: payload.eventId,
+          attempts,
+          error: `FileWatch event could not be delivered after ${attempts} attempts: ${message}`,
+        });
+        this.options.onEventLost?.([payload.eventId ?? payload.matcherId], error instanceof Error ? error : new Error(message));
       },
     });
     this.fileWatchService.applyMatchers(this.getMatchersForEvent('FileWatch'));
@@ -939,25 +968,10 @@ export class AutomationSystem implements AutomationsConfigProvider {
    * @returns Number of matched matchers (for diagnostics/testing)
    */
   async executeAgentEvent(event: AgentEvent, input: SdkAutomationInput, signal?: AbortSignal): Promise<number> {
-    if (!this.config) return 0;
-
-    const matchers = this.config.automations[event];
-    if (!matchers?.length) return 0;
-
-    let matchedCount = 0;
-
-    for (const matcher of matchers) {
-      if (!matcherMatchesSdk(matcher, event, input)) continue;
-
-      matchedCount++;
-
-      // Note: Command execution has been removed. Prompt-based execution for
-      // non-Claude backends is not yet implemented. This method currently only
-      // validates matching (including condition gating) — actual execution is a no-op.
-      log.debug(`[AutomationSystem] Matched ${event} automation (prompt-based execution pending)`);
-    }
-
-    return matchedCount;
+    void event;
+    void input;
+    void signal;
+    return 0;
   }
 
   // ============================================================================

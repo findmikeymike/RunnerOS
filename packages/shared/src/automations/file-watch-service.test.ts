@@ -92,6 +92,46 @@ describe('FileWatchService', () => {
     }
   });
 
+  test('honors a delivery retry-after delay and records only the final loss', async () => {
+    const dir = makeTempDir();
+    try {
+      const attemptTimes: number[] = [];
+      const failures: Array<{ attempts: number; payload: FileWatchPayload }> = [];
+      const svc = new FileWatchService({
+        workspaceRootPath: dir,
+        workspaceId: 'ws-test',
+        deliveryRetryDelaysMs: [0],
+        onEvent: () => {
+          attemptTimes.push(Date.now());
+          throw Object.assign(new Error('rate limited'), { retryAfterMs: 15 });
+        },
+        onDeliveryFailure: (payload, _error, attempts) => {
+          failures.push({ attempts, payload });
+        },
+      });
+      const payload: FileWatchPayload = {
+        workspaceId: 'ws-test',
+        timestamp: 1234,
+        eventId: 'event-1',
+        matcherId: 'retry-me',
+        path: join(dir, 'brief.md'),
+        relativePath: 'brief.md',
+        changeType: 'change',
+        size: 10,
+        isDirectory: false,
+      };
+
+      await (svc as unknown as { deliverEvent(payload: FileWatchPayload): Promise<void> }).deliverEvent(payload);
+
+      expect(attemptTimes).toHaveLength(2);
+      expect(attemptTimes[1]! - attemptTimes[0]!).toBeGreaterThanOrEqual(12);
+      expect(failures).toEqual([{ attempts: 2, payload }]);
+      svc.dispose();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('invalid glob skips only that matcher', async () => {
     const dir = makeTempDir();
     try {

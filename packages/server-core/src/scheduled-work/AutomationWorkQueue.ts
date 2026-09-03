@@ -136,11 +136,14 @@ export function assertAutomationWorkRequestIsCurrent(
   if (!matcher || matcher.enabled === false) {
     throw new Error('This automation is disabled or no longer exists. Refresh Active work before supplying inputs.')
   }
-  const stillCurrent = matcher.actions.some((action) => action.type === 'queue-work'
+  const actionIndex = automationRef.actionIndex ?? 0
+  const configuredAction = matcher.actions.filter((action): action is QueueWorkAction => action.type === 'queue-work')[actionIndex]
+  const stillCurrent = Boolean(configuredAction
     && scheduledWorkDefinitionDigest({
       matcherId: automationRef.matcherId,
+      actionIndex,
       event: automationRef.event,
-      action,
+      action: configuredAction,
     }) === automationRef.configurationDigest)
   if (!stillCurrent) {
     throw new Error('This automation changed after requesting inputs. Wait for its next run before supplying values.')
@@ -181,7 +184,7 @@ export async function queueAutomationWork(
       workspaceId,
     )
     if (!parsedWork.ok) throw new Error(parsedWork.error)
-    const currentWork = parsedWork.work ?? emptyScheduledWorkDocument(workspaceId)
+    let currentWork = parsedWork.work ?? emptyScheduledWorkDocument(workspaceId)
     const repairedCanceledProjections = reconcileCanceledCalendarProjections(
       workspaceRootPath,
       workspaceId,
@@ -226,11 +229,14 @@ export async function queueAutomationWork(
       return representedWorkResult(currentWork, previouslyRepresented)
     }
 
+    const incomingActionIndex = incomingAutomationRef?.actionIndex ?? 0
     const supersededRoots = incomingAutomationRef
       ? currentWork.items.filter((candidate) => (
           !candidate.deletedAt
           && candidate.status === 'needs-setup'
           && candidate.automationRef?.matcherId === incomingAutomationRef.matcherId
+          && candidate.automationRef.event === incomingAutomationRef.event
+          && (candidate.automationRef.actionIndex ?? 0) === incomingActionIndex
           && candidate.automationRef.configurationDigest !== incomingAutomationRef.configurationDigest
         ))
       : []
@@ -246,21 +252,37 @@ export async function queueAutomationWork(
         : [root.id]
     }))
     const supersededOrders = currentWork.items.filter((candidate) => supersededOrderIds.has(candidate.id))
-    preflightCalendarProjections(workspaceRootPath, workspaceId, supersededOrders)
-    const workAfterSupersede = supersededOrders.length > 0
-      ? {
-          ...currentWork,
-          items: currentWork.items.map((candidate) => supersededOrderIds.has(candidate.id)
-            ? { ...candidate, status: 'canceled' as const, attention: undefined, inputRequest: undefined, updatedAt: built.now }
-            : candidate),
-          updatedAt: built.now,
-        }
-      : currentWork
+    if (supersededOrders.length > 0) {
+      preflightCalendarProjections(workspaceRootPath, workspaceId, supersededOrders)
+      currentWork = {
+        ...currentWork,
+        items: currentWork.items.map((candidate) => supersededOrderIds.has(candidate.id)
+          ? { ...candidate, status: 'canceled' as const, attention: undefined, inputRequest: undefined, updatedAt: built.now }
+          : candidate),
+        updatedAt: built.now,
+      }
+      assertScheduledWorkDocument(currentWork)
+      upsertContextDoc(workspaceRootPath, {
+        slug: SCHEDULED_WORK_CONTEXT_SLUG,
+        metadata: scheduledWorkMetadata(),
+        body: serializeScheduledWorkBody(currentWork),
+      })
+      reconcileCanceledCalendarProjections(workspaceRootPath, workspaceId, supersededOrders, built.now)
+      deps.log?.info('[ScheduledWork] superseded stale automation input request', {
+        automation: incomingAutomationRef?.matcherId,
+        actionIndex: incomingActionIndex,
+        canceledOrderIds: [...supersededOrderIds],
+      })
+      deps.emitContextChanged?.(workspaceId, loadAllContextDocs(workspaceRootPath))
+    }
+
     if (incomingRoot?.status === 'needs-setup') {
-      const outstanding = workAfterSupersede.items.find((candidate) => (
+      const outstanding = currentWork.items.find((candidate) => (
         !candidate.deletedAt
         && candidate.status === 'needs-setup'
         && candidate.automationRef?.matcherId === incomingRoot.automationRef?.matcherId
+        && candidate.automationRef?.event === incomingRoot.automationRef?.event
+        && (candidate.automationRef?.actionIndex ?? 0) === (incomingRoot.automationRef?.actionIndex ?? 0)
         && candidate.automationRef?.configurationDigest === incomingRoot.automationRef?.configurationDigest
       ))
       if (outstanding?.inputRequest && incomingRoot.automationRef) {
@@ -279,11 +301,11 @@ export async function queueAutomationWork(
           },
           updatedAt: built.now,
         }
-        let representedWork = workAfterSupersede
+        let representedWork = currentWork
         if (!alreadyRepresented) {
           const nextWork = {
-            ...workAfterSupersede,
-            items: workAfterSupersede.items.map((candidate) => candidate.id === nextOutstanding.id ? nextOutstanding : candidate),
+            ...currentWork,
+            items: currentWork.items.map((candidate) => candidate.id === nextOutstanding.id ? nextOutstanding : candidate),
             updatedAt: built.now,
           }
           representedWork = nextWork
@@ -311,12 +333,12 @@ export async function queueAutomationWork(
       }
     }
     for (const order of built.orders) {
-      const existing = workAfterSupersede.items.find((candidate) => candidate.id === order.id)
+      const existing = currentWork.items.find((candidate) => candidate.id === order.id)
       if (existing && !sameAutomationIdentity(existing, order)) {
         throw new Error(`Automation work id collision: ${order.id}`)
       }
     }
-    const missingOrders = built.orders.filter((order) => !workAfterSupersede.items.some((candidate) => candidate.id === order.id))
+    const missingOrders = built.orders.filter((order) => !currentWork.items.some((candidate) => candidate.id === order.id))
 
     // Calendar is the user-visible projection. Persist it before making new
     // work runnable so a projection failure can never create invisible work.
@@ -348,10 +370,10 @@ export async function queueAutomationWork(
       })
     }
 
-    if (missingOrders.length > 0 || supersededOrders.length > 0) {
+    if (missingOrders.length > 0) {
       const nextWork = {
-        ...workAfterSupersede,
-        items: [...workAfterSupersede.items, ...missingOrders],
+        ...currentWork,
+        items: [...currentWork.items, ...missingOrders],
         updatedAt: built.now,
       }
       assertScheduledWorkDocument(nextWork)
@@ -362,7 +384,6 @@ export async function queueAutomationWork(
       })
     }
 
-    reconcileCanceledCalendarProjections(workspaceRootPath, workspaceId, supersededOrders, built.now)
     deps.emitContextChanged?.(workspaceId, loadAllContextDocs(workspaceRootPath))
     return {
       orderIds: built.orders.map((order) => order.id),
@@ -546,14 +567,17 @@ function buildTriggeredWork(
 ) {
   const now = new Date(pending.eventTimestamp).toISOString()
   const timezone = pending.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  const actionIndex = pending.actionIndex ?? 0
   const definitionDigest = scheduledWorkDefinitionDigest({
     matcherId: pending.matcherId,
+    actionIndex,
     event: pending.event,
     eventKey: pending.eventKey,
     action: configuredAction,
   })
   const configurationDigest = scheduledWorkDefinitionDigest({
     matcherId: pending.matcherId,
+    actionIndex,
     event: pending.event,
     action: configuredAction,
   })
@@ -564,6 +588,7 @@ function buildTriggeredWork(
   const chainId = `automation-work-${pending.matcherId}-${key}`
   const automationRef = {
     matcherId: pending.matcherId,
+    actionIndex,
     name: pending.automationName.trim() || pending.action.title.trim(),
     event: pending.event,
     definitionDigest,
@@ -727,7 +752,7 @@ function resolveWorkflowInputBindings(
       throw new Error(`Trigger data is unavailable for workflow input "${definition.name}": ${binding.from}`)
     }
     raw[definition.name] = normalizeTriggerBoundValue(binding.from, pending.triggerData?.[binding.from])
-    if (binding.from !== 'file.path' && binding.from !== 'file.name') untrustedTriggerInputs.push(definition.name)
+    if (binding.from !== 'file.path') untrustedTriggerInputs.push(definition.name)
   }
 
   const triggerInputs = normalizeWorkflowTriggerInputs(workflow, raw, {
@@ -755,7 +780,7 @@ function workflowBindingTrigger(event: PendingQueuedWork['event']): 'SchedulerTi
 const MAX_TRIGGER_TEXT_CHARS = 4_096
 
 function normalizeTriggerBoundValue(source: WorkflowInputTriggerSource, value: unknown): unknown {
-  if (source === 'file.path' || source === 'file.name') return value
+  if (source === 'file.path') return value
   const serialized = typeof value === 'string' ? value : JSON.stringify(value)
   if (!serialized || serialized === 'null') throw new Error(`Trigger data is empty: ${source}`)
   const encoded = new TextEncoder().encode(serialized)

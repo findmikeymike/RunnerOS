@@ -81,6 +81,8 @@ export interface ScheduledWorkInputSupplyReceipt {
 
 export interface ScheduledWorkAutomationRef {
   matcherId: string
+  /** Zero-based position among queue-work actions in the matcher. */
+  actionIndex?: number
   name: string
   event: string
   /** Digest of immutable matcher, event identity, and configured action. */
@@ -1195,6 +1197,7 @@ function isScheduledWorkAutomationRef(value: unknown): value is ScheduledWorkAut
   if (!value || typeof value !== 'object') return false
   const ref = value as Partial<ScheduledWorkAutomationRef>
   return Boolean(clean(ref.matcherId))
+    && (ref.actionIndex === undefined || (Number.isInteger(ref.actionIndex) && ref.actionIndex >= 0))
     && Boolean(clean(ref.name))
     && Boolean(clean(ref.event))
     && Boolean(clean(ref.definitionDigest))

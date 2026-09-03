@@ -577,13 +577,14 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
   const eventMap = config.automations
   if (!eventMap || typeof eventMap !== 'object') return []
 
-  const allEvents = [...APP_EVENTS, ...AGENT_EVENTS] as string[]
+  const allEvents = APP_EVENTS as string[]
   const items: AutomationListItem[] = []
   let index = 0
 
   for (const [eventName, matchers] of Object.entries(eventMap)) {
     if (!Array.isArray(matchers)) continue
-    const event = (allEvents.includes(eventName) ? eventName : eventName) as AutomationTrigger
+    if (!allEvents.includes(eventName)) continue
+    const event = eventName as AutomationTrigger
 
     for (let matcherIdx = 0; matcherIdx < matchers.length; matcherIdx++) {
       const matcher = matchers[matcherIdx]

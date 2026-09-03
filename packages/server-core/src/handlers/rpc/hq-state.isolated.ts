@@ -11,6 +11,8 @@ const workspace = { id: 'ws-1', name: 'Artist HQ', rootPath }
 
 mock.module('@craft-agent/shared/config', () => ({
   getWorkspaceByNameOrId: (id: string) => id === workspace.id ? workspace : undefined,
+  getWorkspaces: () => [workspace],
+  loadPreferences: () => ({}),
 }))
 
 type Handler = (...args: unknown[]) => Promise<unknown>

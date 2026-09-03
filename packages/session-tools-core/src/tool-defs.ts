@@ -1542,6 +1542,7 @@ Rules:
 - Calendar work requires startAt and timezone.
 - Automation work requires trigger. Set showOnCalendar false for background maintenance that should not clutter Calendar.
 - Agent tasks require a concrete brief. Use expectedOutput when a durable artifact is required.
+- Agent tasks default to safe unattended execution. Sending, publishing, and other separately gated external actions still require their own authorization.
 - For one-shot campaign work that must use an approved asset, attach the exact Release Kit item ID and SHA-256 in inputRefs. The backend re-verifies it and copies the reference into the Calendar shell.
 - Bounded continuation requires an active Goal context slug, explicit objective, 2-8 rounds, a required Output contract, and permissionMode safe. Confirm all of those with the user first.
 - This HNIC tool schedules agent tasks and workflow runs only. Native social publishing remains separately approval-gated through the Campaign Calendar composer.

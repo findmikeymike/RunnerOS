@@ -439,6 +439,8 @@ export interface PendingPrompt {
 
 export interface PendingQueuedWork {
   matcherId: string;
+  /** Zero-based position among queue-work actions in this matcher. */
+  actionIndex?: number;
   automationName: string;
   event: AppEvent;
   eventTimestamp: number;

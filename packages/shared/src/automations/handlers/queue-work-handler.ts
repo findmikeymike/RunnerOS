@@ -37,16 +37,26 @@ export class QueueWorkHandler implements AutomationHandler {
     const pending: PendingQueuedWork[] = [];
     for (const matcher of matchers) {
       if (!matcher.id || !matcherMatches(matcher, event, payload as unknown as Record<string, unknown>)) continue;
+      let queueWorkActionIndex = 0;
       for (const action of matcher.actions) {
         if (action.type !== 'queue-work') continue;
+        const actionIndex = queueWorkActionIndex++;
         if (event === 'WebhookReceive'
           && matcher.allowUnauthenticated === true
           && Object.values(action.inputBindings ?? {}).some((binding) => binding.mode === 'trigger' && binding.from === 'webhook.body')) {
-          this.options.onError?.(event, new Error('Unauthenticated webhooks cannot supply workflow input values.'));
+          const error = new Error('Unauthenticated webhooks cannot supply workflow input values.');
+          await this.options.onWorkRejected?.({
+            event,
+            matcherId: matcher.id,
+            workTitle: action.title,
+            error,
+          });
+          this.options.onError?.(event, error);
           continue;
         }
         pending.push({
           matcherId: matcher.id,
+          actionIndex,
           automationName: deriveAutomationName(event, matcher),
           event: event as AppEvent,
           eventTimestamp: payload.timestamp,

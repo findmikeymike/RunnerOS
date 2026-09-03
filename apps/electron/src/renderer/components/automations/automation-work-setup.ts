@@ -49,9 +49,11 @@ export function reconcileBindingsForWhen(
       const binding = next[input.name]
       return !binding || binding.mode === 'ask' || binding.mode === 'fixed'
     }
-    const fileLike = (input: WorkflowTriggerInput) => /(?:file|path|asset|document|audio|image|video)/i.test(`${input.name} ${input.description ?? ''}`)
+    const fileLike = (input: WorkflowTriggerInput) => input.name
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .split(/[^a-zA-Z0-9]+/)
+      .some((token) => ['file', 'path', 'asset'].includes(token.toLowerCase()))
     const candidate = inputs.find((input) => input.required && input.type === 'string' && available(input) && fileLike(input))
-      ?? inputs.find((input) => input.required && input.type === 'string' && next[input.name]?.mode === 'ask')
     if (candidate) next[candidate.name] = { mode: 'trigger', from: 'file.path' }
   }
   return next

@@ -99,7 +99,7 @@ function resolveExecution(rootPath: string, request: ScheduleWorkToolInput): Sch
       type: 'agent-task',
       agentSlug: input.agentSlug,
       brief: input.brief.trim(),
-      permissionMode: input.permissionMode ?? 'ask',
+      permissionMode: input.permissionMode ?? 'safe',
       expectedOutput: {
         requirement: input.expectedOutput?.requirement ?? 'none',
         kind: input.expectedOutput?.kind,

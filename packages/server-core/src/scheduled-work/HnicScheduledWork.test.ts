@@ -138,6 +138,18 @@ afterEach(async () => {
 })
 
 describe('persistHnicScheduleWork', () => {
+  test('defaults unattended agent work to safe mode', async () => {
+    const root = createRoot()
+    await persistHnicScheduleWork(options(root, input()))
+    const parsed = parseScheduledWorkDocResult(
+      loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined,
+      'campaign-1',
+    )
+    if (!parsed.ok) throw new Error(parsed.error)
+
+    expect(parsed.work.items[0]?.execution).toMatchObject({ type: 'agent-task', permissionMode: 'safe' })
+  })
+
   test('creates one visible coordinator and one hidden first round for confirmed continuation', async () => {
     const root = createRoot()
     upsertContextDoc(root, {

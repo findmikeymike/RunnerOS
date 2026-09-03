@@ -1,3 +1,5 @@
+import type { WorkflowTriggerInput } from '@craft-agent/shared/workflows'
+
 export interface ArtistAnswerEvidenceMessage {
   id: string
   role: string
@@ -33,6 +35,22 @@ export interface ArtistAnswerValueEvidence {
   attachments: Array<{ name: string; storedPath: string }>
 }
 
+export function assertArtistManagerCanSupplyRequestedInputs(
+  inputs: readonly WorkflowTriggerInput[],
+  requestedInputNames: readonly string[],
+): void {
+  const requested = new Set(requestedInputNames)
+  const unsupported = inputs
+    .filter((input) => requested.has(input.name) && (input.type === 'number' || input.type === 'boolean'))
+    .map((input) => input.name)
+  if (unsupported.length > 0) {
+    throw new Error(
+      `Artist Manager cannot supply numeric or boolean workflow inputs: ${unsupported.join(', ')}. `
+      + 'Use the Needs you form instead.',
+    )
+  }
+}
+
 export function findArtistAnswerValueEvidence(
   messages: ArtistAnswerEvidenceMessage[],
   requestedAt: string,
@@ -66,6 +84,15 @@ export function assertArtistAnswerSupportsValues(
   attachments: Array<{ name: string; storedPath: string }>,
   values: Record<string, unknown>,
 ): void {
+  const unsupportedTypes = Object.entries(values)
+    .filter(([, value]) => typeof value === 'number' || typeof value === 'boolean')
+    .map(([key]) => key)
+  if (unsupportedTypes.length > 0) {
+    throw new Error(
+      `Artist Manager cannot supply numeric or boolean workflow inputs: ${unsupportedTypes.join(', ')}. `
+      + 'Use the Needs you form instead.',
+    )
+  }
   const unsupported = Object.entries(values)
     .filter(([, value]) => !hasValueEvidence(evidenceText, attachments, value))
     .map(([key]) => key)
@@ -96,19 +123,6 @@ function hasValueEvidence(
       || normalizeComparable(attachment.storedPath) === target
     ))
   }
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    const compact = normalizeText(evidenceText).replaceAll(',', '')
-    const numeric = String(value).replaceAll(',', '')
-    return new RegExp(`(^|[^0-9.])${escapeRegExp(numeric)}(?=$|[^0-9.])`).test(compact)
-      || numberWord(value).some((word) => new RegExp(`\\b${word}\\b`).test(compact))
-  }
-  if (typeof value === 'boolean') {
-    const normalized = normalizeText(evidenceText)
-    const words = value
-      ? ['yes', 'true', 'approved', 'confirmed', 'do it', 'go ahead']
-      : ['no', 'false', 'declined', 'do not', "don't"]
-    return words.some((word) => new RegExp(`(^|\\b)${escapeRegExp(word)}(?=$|\\b)`).test(normalized))
-  }
   return false
 }
 
@@ -118,17 +132,4 @@ function normalizeText(value: string): string {
 
 function normalizeComparable(value: string): string {
   return normalizeText(value).replace(/[^\p{L}\p{N}@._/+:-]+/gu, ' ').trim()
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function numberWord(value: number): string[] {
-  if (!Number.isInteger(value) || value < 0 || value > 20) return []
-  return [
-    'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
-    'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen',
-    'nineteen', 'twenty',
-  ].slice(value, value + 1)
 }

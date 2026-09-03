@@ -26,7 +26,10 @@ import {
 import { loadGlobalWorkflow, normalizeWorkflowTriggerInputs, readActivatedWorkflows } from '@craft-agent/shared/workflows'
 import { loadAllContextDocs, loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context'
 import { withWorkspaceContextLock } from './workspace-context-lock'
-import { assertArtistAnswerSupportsValues } from './ScheduledWorkInputAnswerEvidence'
+import {
+  assertArtistAnswerSupportsValues,
+  assertArtistManagerCanSupplyRequestedInputs,
+} from './ScheduledWorkInputAnswerEvidence'
 import { assertAutomationWorkRequestIsCurrent } from './AutomationWorkQueue'
 
 export interface ScheduledWorkInputSupplyDeps {
@@ -98,6 +101,10 @@ export async function supplyScheduledWorkInputs(
       throw new Error(`Automation workflow changed: ${order.execution.workflowSlug}`)
     }
     if (input.source === 'tool') {
+      assertArtistManagerCanSupplyRequestedInputs(
+        workflow.metadata.trigger.inputs ?? [],
+        order.inputRequest.inputs,
+      )
       assertArtistAnswerSupportsValues(
         input.sourceEvidenceText!,
         input.sourceAttachments ?? [],

@@ -195,13 +195,21 @@ function bindingTriggerForEvent(eventName: string): WorkflowBindingTrigger {
   throw new Error(`Event cannot supply workflow inputs: ${eventName}`)
 }
 
+export function assertTestAutomationHasQueueWorkEvent(
+  payload: import('@craft-agent/shared/protocol').TestAutomationPayload,
+): void {
+  if (payload.automationId && !payload.event && payload.actions.some((action) => action.type === 'queue-work')) {
+    throw new Error('The saved automation trigger is unavailable. Refresh and run the test again.')
+  }
+}
+
 // Shared helper: resolve workspace, read automations.json, validate matcher, mutate, write back
 interface AutomationsConfigJson { automations?: Record<string, Record<string, unknown>[]>; [key: string]: unknown }
 async function withAutomationEvent<T>(
   workspaceId: string,
   eventName: string,
   mutate: (matchers: Record<string, unknown>[], config: AutomationsConfigJson, genId: () => string) => T,
-  beforeWrite?: (result: T, workspaceRootPath: string) => Promise<void>,
+  afterWrite?: (result: T, workspaceRootPath: string) => Promise<void>,
 ): Promise<T> {
   const workspace = getWorkspaceByNameOrId(workspaceId)
   if (!workspace) throw new Error('Workspace not found')
@@ -231,10 +239,10 @@ async function withAutomationEvent<T>(
     const validation = validateAutomationsConfig(config)
     if (!validation.valid) throw new Error(`Invalid automation: ${validation.errors.join('; ')}`)
 
-    if (beforeWrite) {
+    if (afterWrite) {
       await withWorkspaceContextLock(workspace.rootPath, async () => {
-        await beforeWrite(result, workspace.rootPath)
         await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+        await afterWrite(result, workspace.rootPath)
       })
     } else {
       await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
@@ -248,14 +256,14 @@ async function withAutomationMatcher<T = void>(
   eventName: string,
   matcherIndex: number,
   mutate: (matchers: Record<string, unknown>[], index: number, config: AutomationsConfigJson, genId: () => string) => T,
-  beforeWrite?: (result: T, workspaceRootPath: string) => Promise<void>,
+  afterWrite?: (result: T, workspaceRootPath: string) => Promise<void>,
 ): Promise<T> {
   return withAutomationEvent(workspaceId, eventName, (matchers, config, generateId) => {
     if (matcherIndex < 0 || matcherIndex >= matchers.length) {
       throw new Error(`Invalid automation reference: ${eventName}[${matcherIndex}]`)
     }
     return mutate(matchers, matcherIndex, config, generateId)
-  }, beforeWrite)
+  }, afterWrite)
 }
 
 export const HANDLED_CHANNELS = [
@@ -310,10 +318,12 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
     if (payload.actions.some((action) => action.type === 'webhook')) {
       assertTeamPermission(workspace.rootPath, 'automation.external.execute')
     }
+    assertTestAutomationHasQueueWorkEvent(payload)
 
     const results: import('@craft-agent/shared/protocol').TestAutomationActionResult[] = []
     const { parsePromptReferences } = await import('@craft-agent/shared/automations')
     const { executeWebhookRequest, createWebhookHistoryEntry, createPromptHistoryEntry } = await import('@craft-agent/shared/automations/webhook-utils')
+    let queueWorkActionIndex = 0
 
     for (const action of payload.actions) {
       const start = Date.now()
@@ -350,13 +360,17 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
       }
 
       if (action.type === 'queue-work') {
+        const actionIndex = queueWorkActionIndex++
         try {
           const queued = await deps.sessionManager.queueTrackedWorkAutomation({
             workspaceId: payload.workspaceId,
             workspaceRootPath: workspace.rootPath,
             matcherId: payload.automationId ?? `test-${Date.now()}`,
+            actionIndex,
             automationName: payload.automationName ?? action.title,
             action,
+            configuredAction: action,
+            event: payload.event,
           })
           results.push({
             type: 'queue-work',

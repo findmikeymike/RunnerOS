@@ -104,6 +104,7 @@ export function useAutomations(
       workspaceId: activeWorkspaceId,
       automationId: automation.id,
       automationName: automation.name,
+      event: automation.event as import('@craft-agent/shared/automations').AppEvent,
       actions: testableActions,
       permissionMode: automation.permissionMode,
       labels: automation.labels,

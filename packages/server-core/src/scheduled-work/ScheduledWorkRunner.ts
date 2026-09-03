@@ -43,9 +43,12 @@ import { reconcileXEditorialSlateOrder } from '../x-editorial/slate-status'
 const ACTIVE_WORKFLOW_STATES = new Set<WorkflowRunState>(['created', 'queued', 'running', 'paused'])
 const START_GRACE_MS = 24 * 60 * 60 * 1000
 const SOCIAL_PREP_WINDOW_MS = 30 * 60 * 1000
+const DEFAULT_AGENT_TASK_TIMEOUT_MS = 20 * 60 * 1000
 
 export interface ScheduledWorkRunnerDeps {
   canRunBackgroundWork(workspaceRootPath: string): boolean
+  /** True while an automatic prompt outside Scheduled Work occupies the shared lane. */
+  hasExternalBackgroundWork?(): boolean
   listWorkspaceRoots?(): Array<{ id: string; rootPath: string }>
   getBackgroundFenceToken?(workspaceRootPath: string): string | null
   canExecuteSocialAutomatically?(workspaceRootPath: string): boolean
@@ -83,6 +86,8 @@ export interface ScheduledWorkRunnerDeps {
   isAgentSessionWaitingForUser?(sessionId: string): boolean
   awaitAgentCompletionBarrier?(sessionId: string): Promise<boolean>
   abortAgentSession?(sessionId: string): Promise<void>
+  /** Maximum time a direct scheduled agent may run before it needs attention. */
+  agentTaskTimeoutMs?: number
   prepareSocial?(input: { workspaceId: string; workspaceRootPath: string; order: ScheduledWorkOrder }): Promise<ScheduledSocialActionPreview>
   executeSocial?(input: { workspaceId: string; workspaceRootPath: string; order: ScheduledWorkOrder; preview: ScheduledSocialActionPreview; approval: ScheduledSocialApproval }): Promise<{ receiptId: string; externalUrl?: string; summary: string }>
   emitContextChanged?(workspaceId: string, docs: LoadedContextDoc[]): void
@@ -533,6 +538,8 @@ export class ScheduledWorkRunner {
     capturedFence: string | null,
   ): Promise<'done' | 'failed'> {
     let sessionId = currentSessionId(order)
+    let timedOut = false
+    let abortedSessionId: string | undefined
     try {
       const execution = order.execution
       if (execution.type !== 'agent-task') return 'failed'
@@ -542,7 +549,7 @@ export class ScheduledWorkRunner {
         await this.stopContinuation(workspaceId, workspaceRootPath, order.id, continuationIssue)
         return 'failed'
       }
-      const started = await this.deps.executeAgentTask({
+      const executePromise = this.deps.executeAgentTask({
         workOrderId: order.id,
         workspace: { id: workspaceId, rootPath: workspaceRootPath },
         agentSlug: execution.agentSlug,
@@ -555,8 +562,41 @@ export class ScheduledWorkRunner {
           const cleaned = clean(startedSessionId)
           if (!cleaned) return
           sessionId = cleaned
+          if (timedOut) {
+            if (this.deps.abortAgentSession && abortedSessionId !== cleaned) {
+              abortedSessionId = cleaned
+              try {
+                await this.deps.abortAgentSession(cleaned)
+              } catch (abortError) {
+                this.log.warn(`[ScheduledWork] Failed to abort late-starting timed-out session ${cleaned}: ${errorMessage(abortError)}`)
+              }
+            }
+            throw new Error(`Scheduled agent task ${order.id} started after its execution deadline.`)
+          }
           await this.persistRunningSessionId(workspaceId, workspaceRootPath, order.id, cleaned)
         },
+      })
+      const timeoutMs = this.deps.agentTaskTimeoutMs && this.deps.agentTaskTimeoutMs > 0
+        ? this.deps.agentTaskTimeoutMs
+        : DEFAULT_AGENT_TASK_TIMEOUT_MS
+      let timeout: ReturnType<typeof setTimeout> | undefined
+      const started = await Promise.race([
+        executePromise,
+        new Promise<never>((_resolve, reject) => {
+          timeout = setTimeout(() => {
+            timedOut = true
+            const activeSessionId = sessionId
+            if (activeSessionId && this.deps.abortAgentSession && abortedSessionId !== activeSessionId) {
+              abortedSessionId = activeSessionId
+              void this.deps.abortAgentSession(activeSessionId).catch((abortError) => {
+                this.log.warn(`[ScheduledWork] Failed to abort timed-out session ${activeSessionId}: ${errorMessage(abortError)}`)
+              })
+            }
+            reject(new Error(`Scheduled agent task timed out after ${Math.round(timeoutMs / 60_000)} minute(s).`))
+          }, timeoutMs)
+        }),
+      ]).finally(() => {
+        if (timeout) clearTimeout(timeout)
       })
       if (!sessionId) {
         const returnedSessionId = clean(started && typeof started === 'object' && 'sessionId' in started ? started.sessionId : undefined)
@@ -1311,17 +1351,29 @@ export class ScheduledWorkRunner {
     order: ScheduledWorkOrder,
     now: Date,
   ): Promise<boolean> {
+    if (this.deps.hasExternalBackgroundWork?.()) return false
     if (this.backgroundAdmissionOwner) return false
     if (await this.hasOccupiedBackgroundLane(workspaceRootPath, workspaceId)) return false
     // Another concurrent scan may have reserved while session state was read.
+    if (this.deps.hasExternalBackgroundWork?.()) return false
     if (this.backgroundAdmissionOwner) return false
     if (!this.isOldestDueBackgroundOrder(workspaceRootPath, workspaceId, order, now)) return false
+    // Keep this guard even while isOldestDueBackgroundOrder is synchronous.
+    // It preserves the admission invariant if that scan ever gains async work.
+    if (this.deps.hasExternalBackgroundWork?.()) return false
+    if (this.backgroundAdmissionOwner) return false
     this.backgroundAdmissionOwner = admissionKey
     return true
   }
 
   private releaseBackgroundAdmission(admissionKey: string): void {
     if (this.backgroundAdmissionOwner === admissionKey) this.backgroundAdmissionOwner = null
+  }
+
+  /** Used by legacy prompt automations before claiming the same global lane. */
+  async isBackgroundLaneOccupied(currentRootPath: string, currentWorkspaceId: string): Promise<boolean> {
+    if (this.backgroundAdmissionOwner) return true
+    return this.hasOccupiedBackgroundLane(currentRootPath, currentWorkspaceId)
   }
 
   private async hasOccupiedBackgroundLane(currentRootPath: string, currentWorkspaceId: string): Promise<boolean> {

@@ -354,62 +354,65 @@ export class WorkflowRunner {
     const { workflow, workspaceId } = input;
     const triggerInputs = normalizeWorkflowTriggerInputs(workflow, input.triggerInputs);
     const key = concurrencyKey(workspaceId, workflow.slug);
-    if (this.activeByKey.has(key)) {
-      throw new Error(
-        `Workflow "${workflow.slug}" already has an active run in workspace "${workspaceId}".`,
-      );
-    }
     this.assertStepBudget(workflow.metadata.steps);
-    await this.preflightStepAgents(workspaceId, workflow.metadata.steps);
-
-    const now = new Date().toISOString();
     const runId = randomUUID();
-
-    const steps: WorkflowRunStep[] = workflow.metadata.steps.map((s) => ({
-      id: s.id,
-      state: 'queued',
-      attempts: 0,
-    }));
-
-    const workflowSnapshot = this.cloneJson({ metadata: workflow.metadata, body: workflow.body });
-
-    const snapshot: WorkflowRunSnapshot = {
-      id: runId,
-      workflowSlug: workflow.slug,
-      workspaceId,
-      state: 'running',
-      trigger: {
-        type: 'manual',
-        inputs: triggerInputs,
-        ...(input.untrustedTriggerInputs?.length ? { untrustedInputNames: [...new Set(input.untrustedTriggerInputs)] } : {}),
-        firedAt: now,
-      },
-      workflowSnapshot,
-      steps,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const active: ActiveRun = { snapshot, abort: new AbortController(), startIndex: 0 };
-    this.active.set(runId, active);
-    this.activeByKey.set(key, runId);
+    this.reserveConcurrencyKey(key, runId, workflow.slug, workspaceId);
 
     try {
-      this.persist(active);
-    } catch (err) {
-      this.releaseActiveRun(active);
-      throw err;
+      await this.preflightStepAgents(workspaceId, workflow.metadata.steps);
+
+      const now = new Date().toISOString();
+
+      const steps: WorkflowRunStep[] = workflow.metadata.steps.map((s) => ({
+        id: s.id,
+        state: 'queued',
+        attempts: 0,
+      }));
+
+      const workflowSnapshot = this.cloneJson({ metadata: workflow.metadata, body: workflow.body });
+
+      const snapshot: WorkflowRunSnapshot = {
+        id: runId,
+        workflowSlug: workflow.slug,
+        workspaceId,
+        state: 'running',
+        trigger: {
+          type: 'manual',
+          inputs: triggerInputs,
+          ...(input.untrustedTriggerInputs?.length ? { untrustedInputNames: [...new Set(input.untrustedTriggerInputs)] } : {}),
+          firedAt: now,
+        },
+        workflowSnapshot,
+        steps,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const active: ActiveRun = { snapshot, abort: new AbortController(), startIndex: 0 };
+      this.active.set(runId, active);
+
+      try {
+        this.persist(active);
+      } catch (err) {
+        this.releaseActiveRun(active);
+        throw err;
+      }
+
+      this.emitEvent({ type: 'run.created', run: this.cloneSnapshot(active.snapshot) });
+      this.emitEvent({ type: 'run.updated', run: this.cloneSnapshot(active.snapshot) });
+
+      // Fire-and-forget — caller awaits via emitted events, not this method's
+      // resolution. runStepLoop handles its own crash finalization so active
+      // concurrency slots cannot leak on an unexpected runner bug.
+      void this.runStepLoop(active);
+
+      return this.cloneSnapshot(active.snapshot);
+    } catch (error) {
+      const active = this.active.get(runId);
+      if (active) this.releaseActiveRun(active);
+      else this.releaseConcurrencyKey(key, runId);
+      throw error;
     }
-
-    this.emitEvent({ type: 'run.created', run: this.cloneSnapshot(active.snapshot) });
-    this.emitEvent({ type: 'run.updated', run: this.cloneSnapshot(active.snapshot) });
-
-    // Fire-and-forget — caller awaits via emitted events, not this method's
-    // resolution. runStepLoop handles its own crash finalization so active
-    // concurrency slots cannot leak on an unexpected runner bug.
-    void this.runStepLoop(active);
-
-    return this.cloneSnapshot(active.snapshot);
   }
 
   /**
@@ -454,71 +457,92 @@ export class WorkflowRunner {
     const startIndex = this.resolveRerunStartIndex(original, input.stepId);
     const startStep = workflowSnapshot.metadata.steps[startIndex]!;
     const key = concurrencyKey(input.workspaceId, original.workflowSlug);
-    if (this.activeByKey.has(key)) {
-      throw new Error(
-        `Workflow "${original.workflowSlug}" already has an active run in workspace "${input.workspaceId}".`,
-      );
-    }
     this.assertStepBudget(workflowSnapshot.metadata.steps);
-    await this.preflightStepAgents(input.workspaceId, workflowSnapshot.metadata.steps.slice(startIndex));
-
-    const now = new Date().toISOString();
-    const steps: WorkflowRunStep[] = workflowSnapshot.metadata.steps.map((step, index) => {
-      const previous = original.steps[index];
-      if (index < startIndex && previous?.state === 'succeeded') {
-        return this.cloneJson(previous);
-      }
-      if (index < startIndex) {
-        return {
-          id: step.id,
-          state: 'skipped',
-          attempts: previous?.attempts ?? 0,
-          error: {
-            code: 'rerun-skipped-prior-step',
-            message: `Step was before rerun start step "${startStep.id}" and had no successful output to copy.`,
-          },
-        };
-      }
-      return { id: step.id, state: 'queued', attempts: 0 };
-    });
-
     const runId = randomUUID();
-    const snapshot: WorkflowRunSnapshot = {
-      id: runId,
-      workflowSlug: original.workflowSlug,
-      workspaceId: input.workspaceId,
-      state: 'running',
-      trigger: this.cloneJson(original.trigger),
-      workflowSnapshot,
-      steps,
-      createdAt: now,
-      updatedAt: now,
-      resumeFromStepId: startStep.id,
-      resumedFromRunId: original.id,
-    };
-
-    const active: ActiveRun = { snapshot, abort: new AbortController(), startIndex };
-    this.active.set(snapshot.id, active);
-    this.activeByKey.set(key, snapshot.id);
+    this.reserveConcurrencyKey(key, runId, original.workflowSlug, input.workspaceId);
 
     try {
-      this.persist(active);
-    } catch (err) {
-      this.releaseActiveRun(active);
-      throw err;
+      await this.preflightStepAgents(input.workspaceId, workflowSnapshot.metadata.steps.slice(startIndex));
+
+      const now = new Date().toISOString();
+      const steps: WorkflowRunStep[] = workflowSnapshot.metadata.steps.map((step, index) => {
+        const previous = original.steps[index];
+        if (index < startIndex && previous?.state === 'succeeded') {
+          return this.cloneJson(previous);
+        }
+        if (index < startIndex) {
+          return {
+            id: step.id,
+            state: 'skipped',
+            attempts: previous?.attempts ?? 0,
+            error: {
+              code: 'rerun-skipped-prior-step',
+              message: `Step was before rerun start step "${startStep.id}" and had no successful output to copy.`,
+            },
+          };
+        }
+        return { id: step.id, state: 'queued', attempts: 0 };
+      });
+
+      const snapshot: WorkflowRunSnapshot = {
+        id: runId,
+        workflowSlug: original.workflowSlug,
+        workspaceId: input.workspaceId,
+        state: 'running',
+        trigger: this.cloneJson(original.trigger),
+        workflowSnapshot,
+        steps,
+        createdAt: now,
+        updatedAt: now,
+        resumeFromStepId: startStep.id,
+        resumedFromRunId: original.id,
+      };
+
+      const active: ActiveRun = { snapshot, abort: new AbortController(), startIndex };
+      this.active.set(snapshot.id, active);
+
+      try {
+        this.persist(active);
+      } catch (err) {
+        this.releaseActiveRun(active);
+        throw err;
+      }
+
+      writeRun(root, {
+        ...original,
+        resumedByRunId: runId,
+        updatedAt: now,
+      });
+
+      this.emitEvent({ type: 'run.created', run: this.cloneSnapshot(active.snapshot) });
+      this.emitEvent({ type: 'run.updated', run: this.cloneSnapshot(active.snapshot) });
+      void this.runStepLoop(active);
+
+      return this.cloneSnapshot(active.snapshot);
+    } catch (error) {
+      const active = this.active.get(runId);
+      if (active) this.releaseActiveRun(active);
+      else this.releaseConcurrencyKey(key, runId);
+      throw error;
     }
+  }
 
-    writeRun(root, {
-      ...original,
-      resumedByRunId: runId,
-      updatedAt: now,
-    });
+  private reserveConcurrencyKey(
+    key: string,
+    runId: string,
+    workflowSlug: string,
+    workspaceId: string,
+  ): void {
+    if (this.activeByKey.has(key)) {
+      throw new Error(
+        `Workflow "${workflowSlug}" already has an active run in workspace "${workspaceId}".`,
+      );
+    }
+    this.activeByKey.set(key, runId);
+  }
 
-    this.emitEvent({ type: 'run.created', run: this.cloneSnapshot(active.snapshot) });
-    this.emitEvent({ type: 'run.updated', run: this.cloneSnapshot(active.snapshot) });
-    void this.runStepLoop(active);
-
-    return this.cloneSnapshot(active.snapshot);
+  private releaseConcurrencyKey(key: string, runId: string): void {
+    if (this.activeByKey.get(key) === runId) this.activeByKey.delete(key);
   }
 
   private async preflightStepAgents(workspaceId: string, steps: WorkflowStep[]): Promise<void> {

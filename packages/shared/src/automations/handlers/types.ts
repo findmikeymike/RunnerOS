@@ -49,6 +49,12 @@ export interface QueueWorkHandlerOptions {
   workspaceId: string;
   workspaceRootPath: string;
   onWorkReady?: (work: PendingQueuedWork[]) => Promise<void> | void;
+  onWorkRejected?: (rejection: {
+    event: AutomationEvent;
+    matcherId: string;
+    workTitle: string;
+    error: Error;
+  }) => Promise<void> | void;
   onError?: (event: AutomationEvent, error: Error) => void;
 }
 

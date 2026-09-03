@@ -60,6 +60,7 @@ describe('QueueWorkHandler', () => {
     expect(queued).toHaveLength(1);
     expect(queued[0]).toMatchObject({
       matcherId: 'file-agent',
+      actionIndex: 0,
       automationName: 'Process new brief',
       event: 'FileWatch',
       eventTimestamp: 1234,
@@ -77,6 +78,33 @@ describe('QueueWorkHandler', () => {
         execution: { brief: 'Read $CRAFT_PATH and create a campaign brief.' },
       },
     });
+    handler.dispose();
+  });
+
+  it('assigns distinct stable indexes to sibling tracked-work actions', async () => {
+    const onWorkReady = jest.fn();
+    const actions = [
+      {
+        type: 'queue-work' as const, ownerScope: 'campaign' as const, title: 'First',
+        execution: { type: 'agent-task' as const, agentSlug: 'content-agent', brief: 'First.', permissionMode: 'safe' as const, expectedOutput: { requirement: 'none' as const } },
+      },
+      { type: 'prompt' as const, prompt: 'Untracked action.' },
+      {
+        type: 'queue-work' as const, ownerScope: 'campaign' as const, title: 'Second',
+        execution: { type: 'agent-task' as const, agentSlug: 'content-agent', brief: 'Second.', permissionMode: 'safe' as const, expectedOutput: { requirement: 'none' as const } },
+      },
+    ];
+    const handler = new QueueWorkHandler({ workspaceId: 'workspace-1', workspaceRootPath: '/workspace', onWorkReady }, provider({
+      SchedulerTick: [{ id: 'siblings', cron: '* * * * *', actions }],
+    }));
+    handler.subscribe(bus);
+
+    await bus.emit('SchedulerTick', {
+      workspaceId: 'workspace-1', timestamp: 1234, localTime: '09:00', utcTime: new Date(1234).toISOString(),
+    });
+
+    const queued = onWorkReady.mock.calls[0]![0] as PendingQueuedWork[];
+    expect(queued.map((item) => [item.actionIndex, item.action.title])).toEqual([[0, 'First'], [1, 'Second']]);
     handler.dispose();
   });
 
@@ -295,6 +323,39 @@ describe('QueueWorkHandler', () => {
       .toEqual({ 'webhook.body': '{"topic":"launch"}' });
     expect((onWorkReady.mock.calls[1]![0] as PendingQueuedWork[])[0]?.triggerData)
       .toEqual({ 'url.content': 'Latest page' });
+    handler.dispose();
+  });
+
+  it('reports refused unauthenticated webhook work with matcher details', async () => {
+    const onWorkReady = jest.fn();
+    const onWorkRejected = jest.fn();
+    const onError = jest.fn();
+    const handler = new QueueWorkHandler({
+      workspaceId: 'workspace-1', workspaceRootPath: '/workspace', onWorkReady, onWorkRejected, onError,
+    }, provider({
+      WebhookReceive: [{
+        id: 'unsigned-hook', slug: 'unsigned', allowUnauthenticated: true,
+        actions: [{
+          type: 'queue-work', ownerScope: 'campaign', title: 'Use webhook body',
+          execution: { type: 'workflow-run', workflowSlug: 'demo', workflowDigest: 'digest', triggerInputs: {} },
+          inputBindings: { payload: { mode: 'trigger', from: 'webhook.body' } },
+        }],
+      }],
+    }));
+    handler.subscribe(bus);
+
+    await bus.emit('WebhookReceive', {
+      workspaceId: 'workspace-1', timestamp: 100, slug: 'unsigned', method: 'POST', headers: {}, query: {},
+      body: { topic: 'launch' }, bodyRaw: '{"topic":"launch"}', remoteIp: '127.0.0.1',
+    });
+
+    expect(onWorkReady).not.toHaveBeenCalled();
+    expect(onWorkRejected).toHaveBeenCalledTimes(1);
+    expect(onWorkRejected.mock.calls[0]![0]).toMatchObject({
+      event: 'WebhookReceive', matcherId: 'unsigned-hook', workTitle: 'Use webhook body',
+      error: { message: 'Unauthenticated webhooks cannot supply workflow input values.' },
+    });
+    expect(onError).toHaveBeenCalledTimes(1);
     handler.dispose();
   });
 });

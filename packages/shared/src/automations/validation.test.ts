@@ -54,6 +54,20 @@ describe('validateAutomationsConfig', () => {
       expect(result.valid).toBe(true);
     });
 
+    it('should reject unsupported agent lifecycle triggers instead of accepting a no-op', () => {
+      const result = validateAutomationsConfig({
+        automations: {
+          PreToolUse: [{
+            matcher: '^Bash$',
+            actions: [{ type: 'prompt', prompt: 'check this' }],
+          }],
+        },
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).toContain('Agent lifecycle trigger "PreToolUse" is not supported');
+    });
+
     it('should accept config with disabled matchers', () => {
       const config = {
         automations: {
@@ -154,6 +168,36 @@ describe('validateAutomationsConfig', () => {
         },
       });
       expect(result.valid).toBe(true);
+      const action = result.config?.automations.SchedulerTick?.[0]?.actions[0];
+      expect(action).toMatchObject({ title: 'Draft the campaign post' });
+    });
+
+    it('trims queue-work titles and rejects whitespace-only titles', () => {
+      const action = {
+        type: 'queue-work' as const,
+        ownerScope: 'campaign' as const,
+        title: '  Process campaign file  ',
+        execution: {
+          type: 'workflow-run' as const,
+          workflowSlug: 'process-file',
+          workflowDigest: 'digest',
+          triggerInputs: {},
+        },
+      };
+      const trimmed = validateAutomationsConfig({
+        automations: { SchedulerTick: [{ cron: '0 9 * * *', actions: [action] }] },
+      });
+      expect(trimmed.valid).toBe(true);
+      expect(trimmed.config?.automations.SchedulerTick?.[0]?.actions[0]).toMatchObject({
+        title: 'Process campaign file',
+      });
+
+      const blank = validateAutomationsConfig({
+        automations: {
+          SchedulerTick: [{ cron: '0 9 * * *', actions: [{ ...action, title: ' \t\n ' }] }],
+        },
+      });
+      expect(blank.valid).toBe(false);
     });
 
     it('accepts workflow input bindings and rejects them on agent work', () => {

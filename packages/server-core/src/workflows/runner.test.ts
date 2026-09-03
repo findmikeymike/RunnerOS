@@ -1513,6 +1513,91 @@ describe('WorkflowRunner', () => {
     await waitFor(() => lastCompleted(h.events) !== undefined);
   });
 
+  test('concurrency: reserves the workflow before asynchronous agent preflight', async () => {
+    const h = makeHarness();
+    let releasePreflight: (() => void) | undefined;
+    let enteredPreflight = false;
+    const preflightGate = new Promise<void>((resolve) => {
+      releasePreflight = resolve;
+    });
+    h.deps.preflightStepAgent = async () => {
+      enteredPreflight = true;
+      await preflightGate;
+    };
+    const runner = new WorkflowRunner(h.deps);
+
+    const first = runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'first' },
+    });
+    await waitFor(() => enteredPreflight);
+
+    await expect(runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'second' },
+    })).rejects.toThrow(/already has an active run/);
+
+    releasePreflight!();
+    await first;
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    expect(h.sessions.size).toBe(2);
+  });
+
+  test('failed asynchronous preflight releases its reserved workflow slot', async () => {
+    const h = makeHarness();
+    let shouldFail = true;
+    h.deps.preflightStepAgent = async () => {
+      await Promise.resolve();
+      if (shouldFail) throw new Error('agent unavailable');
+    };
+    const runner = new WorkflowRunner(h.deps);
+
+    await expect(runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'first' },
+    })).rejects.toThrow(/agent unavailable/);
+
+    shouldFail = false;
+    await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'second' },
+    });
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+  });
+
+  test('rerun reserves the workflow before asynchronous agent preflight', async () => {
+    const h = makeHarness();
+    const runner = new WorkflowRunner(h.deps);
+    const original = await runner.start({
+      workflow: makeWorkflow(),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'original' },
+    });
+    await waitFor(() => readRun(workspaceRoot, original.id)?.state === 'succeeded');
+
+    let releasePreflight: (() => void) | undefined;
+    let enteredPreflight = false;
+    const preflightGate = new Promise<void>((resolve) => { releasePreflight = resolve });
+    h.deps.preflightStepAgent = async () => {
+      enteredPreflight = true;
+      await preflightGate;
+    };
+
+    const firstRerun = runner.rerunFromStep({ workspaceId: WORKSPACE_ID, runId: original.id, stepId: 'first' });
+    await waitFor(() => enteredPreflight);
+    await expect(
+      runner.rerunFromStep({ workspaceId: WORKSPACE_ID, runId: original.id, stepId: 'first' }),
+    ).rejects.toThrow(/already has an active run/);
+
+    releasePreflight!();
+    const rerun = await firstRerun;
+    await waitFor(() => readRun(workspaceRoot, rerun.id)?.state === 'succeeded');
+  });
+
   test('initial persist failure rejects start and releases the concurrency slot', async () => {
     const h = makeHarness();
     const blockedPath = join(workspaceRoot, 'not-a-directory');

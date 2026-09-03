@@ -14,6 +14,8 @@ export interface GlobalRunningWorkSnapshot {
   error: string | null
 }
 
+const FALLBACK_POLL_INTERVAL_MS = 30_000
+
 const emptySnapshot = (workspaceIds: string[]): GlobalRunningWorkSnapshot => ({
   workspaceIds,
   sessions: [],
@@ -199,7 +201,7 @@ export function useGlobalRunningWork(localWorkspaceIds: string[]): GlobalRunning
     void refresh()
     const poll = setInterval(() => {
       if (!refreshInFlight && !refreshTimer) void refresh()
-    }, 5_000)
+    }, FALLBACK_POLL_INTERVAL_MS)
 
     return () => {
       cancelled = true

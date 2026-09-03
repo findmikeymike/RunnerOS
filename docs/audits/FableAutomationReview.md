@@ -1,12 +1,133 @@
 ---
 status: resolved
 owner: fable
-reviewed: 2026-09-02
-target: working tree at baseline 4ce41b857 (uncommitted), spec 33 implementation
+reviewed: 2026-09-02 (round 1 on uncommitted tree; round 2 on commit 24b6af713)
+target: spec 33 implementation
 spec: ../creator-command-center/33-automations-input-aware-setup-spec.md
 ---
 
 # Fable Automation Review — Input-Aware Setup (Spec 33)
+
+# Round 2 — after commit `24b6af713` ("harden automations and creator operations")
+
+**Verdict: close, not yet bulletproof. Three real defects remain, all new
+code, all small.** Every round-1 blocking item was addressed and the fixes
+are the right shape — the untrusted envelope is threaded end-to-end into the
+workflow run, unauthenticated webhooks are refused as an input source at all
+three doors, answer evidence is bound to the artist's *current* turn and is
+single-use across orders, the RPC door runs the same shared validator as the
+manager door, and every write now asserts the document before persisting.
+The three remaining items are edge interactions the new supersede logic and
+the new auto-bind heuristic did not anticipate.
+
+| Check | Result |
+| --- | --- |
+| Typecheck (shared, server-core, session-tools-core, electron) | 0 errors in all four |
+| Tests, broad set (scheduled-work, rpc, session-tools, automations, workflows, renderer) | 1045 pass / 7 fail |
+| Of those 7 | 6 are **pre-existing cross-file mock pollution** in `handlers/rpc` (polluters: `hq-state`, `shared-intel`, `team-permission-helpers` tests — none touched by this commit; the suite passes 33/0 alone). 1 is an unrelated 5 s `artwork_compose` timeout. |
+| New guards with tests | supersede, single-use message, current-turn evidence (7 cases), unauthenticated-webhook refusal at the doors, untrusted envelope at both ends |
+
+Two reviewer claims were **rejected after verification** and are not below:
+"custom schedule saves a malformed cron" — false, `validateAutomationsConfig`
+runs croner on every SchedulerTick matcher (`validation.ts:258-266`) and I
+confirmed by execution that `abc 9 * * 1-5` and a one-field cron are rejected
+at the RPC door with an error the artist sees.
+
+## Must fix
+
+### R1. "Run test" destroys the real Needs-you order and creates one that can never be supplied
+`packages/server-core/src/sessions/SessionManager.ts:3212-3219` (queueTrackedWorkAutomation)
+`packages/server-core/src/handlers/rpc/automations.ts:352-358`
+`packages/server-core/src/scheduled-work/AutomationWorkQueue.ts:229-235, :133-135`
+
+The test-run path hardcodes `event: 'SchedulerTick'` and passes no
+`configuredAction`, but the RPC hands it the **real** `automationId` as
+`matcherId`. So the test fire's `configurationDigest` never matches a real
+fire's, which is exactly the new supersede predicate — the outstanding
+`needs-setup` order for that automation is **canceled**. The order the test
+creates carries `automationRef.event = 'SchedulerTick'`, so
+`assertAutomationWorkRequestIsCurrent` looks in the wrong event bucket for any
+FileWatch/Webhook/Message automation and both list and tool supply fail with
+"This automation is disabled or no longer exists." Reproduced by execution.
+
+Fix: pass `event` and `configuredAction` through from the real matcher, or
+give test fires a synthetic `matcherId` (`test:<id>`) so they can never
+supersede real work.
+
+### R2. Supersede is keyed on `matcherId` alone; a second `queue-work` action in the same matcher cancels the first
+`packages/server-core/src/scheduled-work/AutomationWorkQueue.ts:229-235`
+`packages/shared/src/automations/schemas.ts:285` (`actions: min(1)`, no max)
+
+`QueueWorkHandler` emits one pending item per `queue-work` action, all with
+the same `matcher.id`; their `configuredAction` digests differ. One fire of a
+matcher with actions A and B leaves A **canceled** and only B outstanding.
+Reproduced by execution. Fix: include event and action identity (or the
+action's own digest) in the supersede predicate.
+
+### R3. File trigger auto-binds the first required string input even when it is not a file
+`apps/electron/src/renderer/components/automations/automation-work-setup.ts:53-55`
+
+The `??` fallback ignores the file-like check and takes the first required
+`ask` string in declaration order. Against the shipped library that means
+Blog Post Writer's `topic`, Outreach's `from`, and every `campaign_brief` /
+`release_brief` silently become `{ mode: 'trigger', from: 'file.path' }` under
+*On file*. Section 3 renders below section 2, so the artist never scrolls
+back, and the review sentence names only `ask`/`fixed` bindings. Every drop
+runs with `topic = "/Users/…/cover.png"`. The existing test uses
+`design_file`, which satisfies the first arm, so it cannot catch this.
+Related: the file-like regex is an unanchored substring over
+name + description, so a text field `audio_description` outranks a real
+`source_path` declared after it.
+
+Fix: delete the fallback arm and match on name tokens only (`file|path|asset`).
+If nothing matches, leave inputs as `ask` — an honest Needs you row beats a
+silent wrong path.
+
+## Should fix
+
+- **Boolean asks are still word-matched.** `ScheduledWorkInputAnswerEvidence.ts:105-111` — "no worries, go ahead" in the current turn satisfies *both* polarities of any boolean input. Everything else about the evidence gate is now sound; this is the one residual a prompt-injected manager could use. Route boolean (and ideally number) asks to the Needs you form only.
+- **`file.name` is exempt from the envelope and the 4 KB cap** (`AutomationWorkQueue.ts:730`). A watched folder can be shared or synced (spec 06 Team Mode), and a filename is ~255 bytes of attacker-chosen prose landing verbatim in the prompt. Envelope `file.name`; keep only `file.path` exempt.
+- **Runtime unauthenticated-webhook refusal only logs.** `queue-work-handler.ts:42-46` → `SessionManager.ts:2622` never writes an automation-history entry, unlike the failure path forty lines above. A legacy config that predates the door-side check stops running with no artist-visible signal. Also: this runtime refusal has no test.
+- **Coalescing early-return skips calendar reconciliation.** `AutomationWorkQueue.ts:259-312` returns before `reconcileCanceledCalendarProjections` (:365), orphaning superseded calendar rows; when `alreadyRepresented` is true nothing is written at all, silently discarding the supersede.
+- **REPLACE / TOGGLE cancel all live work for the matcher before the config write** (`automations.ts:234-240`), so a failed write leaves the work canceled anyway. Cancel after a successful write.
+- **`QueueWorkAction.title` has no `.trim()`** (`schemas.ts:151`) — residual of B5. A whitespace title passes config validation, fails `isScheduledWorkOrder`, and every fire throws "Scheduled Work item 1 is invalid" with no field or order id.
+- **Observability still absent.** No logger in `AutomationWorkQueue` or `ScheduledWorkInputSupply`; the supply transition is the security-relevant event and leaves only the persisted receipt.
+- **Pre-existing test pollution in `handlers/rpc`** — not this commit, but worth a separate fix: three test files' `mock.module` calls leak into `scheduled-work.test.ts`, so "0 fail" only reproduces with a narrower file set.
+- **Polling cost:** `useGlobalRunningWork` issues 3N+1 IPC calls every 5 s for N workspaces. Fine at 3 workspaces; worth a single batched RPC before a manager with many artists hits it.
+
+## Decision to confirm, not a defect
+
+`supply_work_input` remains `safeMode: 'allow'` while its siblings are
+`'block'`. I concur with keeping it — four host-enforced facts bound it
+(HNIC-only; order must already be `needs-setup` for an artist-approved
+workflow; evidence must be the current host-stamped human turn; values must
+appear as whole tokens), and it matches the product rule that the artist's
+answer *is* the approval. The boolean item above is the only residual.
+
+## Confirmed fixed since round 1
+
+B1 order (what → starts → needs) with reconcile re-offering over `fixed` and
+applied on workflow change · B2 envelope + 4 KB cap + `"null"` refusal, `| escape`
+correctly ignored inside the envelope, `untrustedInputNames` persisted in the
+run snapshot and cloned on rerun · B4 current-turn evidence, single-use,
+whole-token, simple-"yes" allowed only against the immediately preceding
+visible assistant proposal · B5 write-side asserts at every `upsertContextDoc`
+plus trimmed matcher name · B6 shared `assertWorkflowInputBindings` at
+CREATE_FROM_TEMPLATE and REPLACE with workflow load, activation, and digest ·
+calendar and Release Kit show "Needs setup"/"Needs you" in amber · supply
+retry is a true no-op · `'reply'` source removed · webhook-body empty →
+undefined · orphan supersede exists (see R1/R2 for its two holes) · cross-door
+placement unchanged and both doors still fail closed · dialog reset leak ·
+optional inputs cannot be `ask` · review sentence no longer "X will run with X" ·
+raw cron gone from copy; `CronBuilder` used · cadence derived from cron fields
+not English copy, `*/15 * * * *` tested · "waiting over a week" counter ·
+**campaign-origin chip** renders the campaign name or "HQ" on every row ·
+**Needs you spans all local workspaces**, with per-workspace `allSettled` so
+one bad workspace hides nothing, and supply addressed to `item.workspaceId`
+without switching workspace.
+
+---
+
 
 ## Verdict
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { scheduledWorkDefinitionDigest } from '@craft-agent/shared/scheduled-work'
-import { assertAutomationQueueWorkBindings, automaticScheduleOccupancyFromConfig, beginPromptAutomation, findAutomationMatcherIndexByIdentity, replacementAutomationMatcher, uniqueWebhookSlug } from './automations'
+import { assertAutomationQueueWorkBindings, assertTestAutomationHasQueueWorkEvent, automaticScheduleOccupancyFromConfig, beginPromptAutomation, findAutomationMatcherIndexByIdentity, replacementAutomationMatcher, uniqueWebhookSlug } from './automations'
 
 describe('automation RPC helpers', () => {
   test('extracts enabled scheduled work for atomic automatic placement', () => {
@@ -122,6 +122,36 @@ describe('automation RPC helpers', () => {
       loadWorkflow: () => workflow,
       activeWorkflowSlugs: () => [workflow.slug],
     })).toThrow('Unauthenticated webhooks cannot supply workflow input values')
+  })
+
+  test('refuses a saved tracked-work test without its real trigger identity', () => {
+    const action = {
+      type: 'queue-work' as const,
+      ownerScope: 'hq' as const,
+      title: 'Run brief',
+      execution: {
+        type: 'agent-task' as const,
+        agentSlug: 'concierge',
+        brief: 'Run.',
+        permissionMode: 'safe' as const,
+        expectedOutput: { requirement: 'none' as const },
+      },
+    }
+    expect(() => assertTestAutomationHasQueueWorkEvent({
+      workspaceId: 'ws-1',
+      automationId: 'saved-automation',
+      actions: [action],
+    })).toThrow('trigger is unavailable')
+    expect(() => assertTestAutomationHasQueueWorkEvent({
+      workspaceId: 'ws-1',
+      automationId: 'saved-automation',
+      event: 'FileWatch',
+      actions: [action],
+    })).not.toThrow()
+    expect(() => assertTestAutomationHasQueueWorkEvent({
+      workspaceId: 'ws-1',
+      actions: [action],
+    })).not.toThrow()
   })
 
   test('targets automation replacement by stable identity and rejects a stale revision', () => {

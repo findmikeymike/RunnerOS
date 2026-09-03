@@ -25,9 +25,10 @@ import {
 } from '@craft-agent/shared/scheduled-work'
 import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context'
 import * as actualWorkflows from '@craft-agent/shared/workflows'
+import type { LoadedWorkflow } from '@craft-agent/shared/workflows'
 import { supplyScheduledWorkInputs } from './ScheduledWorkInputSupply'
 
-const workflow = {
+const workflow: LoadedWorkflow = {
   slug: 'process-file',
   path: '/tmp/process-file/WORKFLOW.md',
   source: 'global' as const,
@@ -46,18 +47,50 @@ const workflow = {
   },
 }
 
+const stringWorkflow: LoadedWorkflow = {
+  ...workflow,
+  slug: 'process-string-file',
+  path: '/tmp/process-string-file/WORKFLOW.md',
+  metadata: {
+    ...workflow.metadata,
+    name: 'Process String File',
+    trigger: {
+      type: 'manual',
+      inputs: [{ name: 'file', type: 'string', required: true }],
+    },
+  },
+}
+
+const typedWorkflow: LoadedWorkflow = {
+  ...workflow,
+  slug: 'process-typed-file',
+  path: '/tmp/process-typed-file/WORKFLOW.md',
+  metadata: {
+    ...workflow.metadata,
+    name: 'Process Typed File',
+    trigger: {
+      type: 'manual',
+      inputs: [
+        { name: 'file', type: 'string', required: true },
+        { name: 'count', type: 'number', required: true, min: 1 },
+        { name: 'publish', type: 'boolean', required: true },
+      ],
+    },
+  },
+}
+
+const workflows = new Map([workflow, stringWorkflow, typedWorkflow].map((candidate) => [candidate.slug, candidate]))
+
 mock.module('@craft-agent/shared/workflows', () => ({
   ...actualWorkflows,
-  loadGlobalWorkflow: (slug: string) => slug === workflow.slug ? workflow : actualWorkflows.loadGlobalWorkflow(slug),
+  loadGlobalWorkflow: (slug: string) => workflows.get(slug) ?? actualWorkflows.loadGlobalWorkflow(slug),
   readActivatedWorkflows: (rootPath: string) => rootPath.includes('scheduled-input-supply-')
-    ? { version: 1, active: [workflow.slug] }
+    ? { version: 1, active: [...workflows.keys()] }
     : actualWorkflows.readActivatedWorkflows(rootPath),
 }))
 
 const roots: string[] = []
 const workspaceId = 'campaign-1'
-const workflowDigest = scheduledWorkDefinitionDigest({ metadata: workflow.metadata, body: workflow.body })
-
 afterEach(() => {
   while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true })
 })
@@ -69,14 +102,21 @@ function makeRoot(): string {
   return value
 }
 
-function automationAction() {
+function automationAction(selectedWorkflow: LoadedWorkflow = workflow) {
   return {
     type: 'queue-work' as const,
     ownerScope: 'campaign' as const,
     calendarVisibility: 'hidden' as const,
     title: 'Process file',
-    execution: { type: 'workflow-run' as const, workflowSlug: workflow.slug, workflowDigest, triggerInputs: {} },
-    inputBindings: { file: { mode: 'ask' as const }, count: { mode: 'ask' as const } },
+    execution: {
+      type: 'workflow-run' as const,
+      workflowSlug: selectedWorkflow.slug,
+      workflowDigest: scheduledWorkDefinitionDigest({ metadata: selectedWorkflow.metadata, body: selectedWorkflow.body }),
+      triggerInputs: {},
+    },
+    inputBindings: Object.fromEntries(
+      (selectedWorkflow.metadata.trigger.inputs ?? []).map((input) => [input.name, { mode: 'ask' as const }]),
+    ),
   }
 }
 
@@ -96,8 +136,14 @@ function writeAutomationConfig(root: string, action = automationAction()): void 
   }, null, 2)}\n`)
 }
 
-function waitingOrder(scope: 'campaign' | 'hq' = 'campaign', hidden = true): ScheduledWorkOrder {
+function waitingOrder(
+  scope: 'campaign' | 'hq' = 'campaign',
+  hidden = true,
+  selectedWorkflow: LoadedWorkflow = workflow,
+): ScheduledWorkOrder {
   const requestedAt = '2026-09-02T14:00:00.000Z'
+  const requestedInputs = (selectedWorkflow.metadata.trigger.inputs ?? []).map((input) => input.name)
+  const action = automationAction(selectedWorkflow)
   return {
     version: 1,
     id: 'waiting-work',
@@ -111,12 +157,12 @@ function waitingOrder(scope: 'campaign' | 'hq' = 'campaign', hidden = true): Sch
     status: 'needs-setup',
     startAt: requestedAt,
     timezone: 'America/Chicago',
-    execution: { type: 'workflow-run', workflowSlug: workflow.slug, workflowDigest, triggerInputs: {} },
+    execution: action.execution,
     inputRefs: [], approvals: [], runs: [],
-    attention: { reason: 'input-required', message: 'Waiting for: file, count' },
+    attention: { reason: 'input-required', message: `Waiting for: ${requestedInputs.join(', ')}` },
     inputRequest: {
       id: 'waiting-work:input',
-      inputs: ['file', 'count'],
+      inputs: requestedInputs,
       requestedAt,
       lastTriggeredAt: requestedAt,
       coalescedFireCount: 1,
@@ -127,8 +173,9 @@ function waitingOrder(scope: 'campaign' | 'hq' = 'campaign', hidden = true): Sch
       definitionDigest: 'fire-1',
       configurationDigest: scheduledWorkDefinitionDigest({
         matcherId: 'process-file-trigger',
+        actionIndex: 0,
         event: 'SchedulerTick',
-        action: automationAction(),
+        action,
       }),
     },
     executionKey: { payloadDigest: 'before', idempotencyKey: 'waiting-work:0' },
@@ -271,7 +318,8 @@ describe('supplyScheduledWorkInputs', () => {
 
   test('requires and records a post-request Artist Manager message for tool supplies', async () => {
     const root = makeRoot()
-    writeOrder(root, waitingOrder())
+    writeAutomationConfig(root, automationAction(stringWorkflow))
+    writeOrder(root, waitingOrder('campaign', true, stringWorkflow))
     const logs: unknown[][] = []
 
     await expect(supply(root, { source: 'tool' })).rejects.toThrow('Invalid scheduled-work input supply request')
@@ -283,7 +331,7 @@ describe('supplyScheduledWorkInputs', () => {
     })).rejects.toThrow(/new artist answer/)
 
     const result = await supplyScheduledWorkInputs(workspaceId, root, {
-      orderId: 'waiting-work', requestId: 'waiting-work:input', values: { file: '/vault/art.png', count: 2 },
+      orderId: 'waiting-work', requestId: 'waiting-work:input', values: { file: '/vault/art.png' },
       source: 'tool', sourceSessionId: 'manager-session', sourceMessageId: 'artist-answer',
       sourceMessageAt: '2026-09-02T14:01:00.000Z',
       sourceEvidenceText: 'Use /vault/art.png and 2 results.',
@@ -297,13 +345,44 @@ describe('supplyScheduledWorkInputs', () => {
     })
     expect(logs).toMatchObject([[
       '[ScheduledWork] workflow inputs supplied',
-      { orderId: 'waiting-work', source: 'tool', suppliedKeys: ['count', 'file'], sourceSessionId: 'manager-session', sourceMessageId: 'artist-answer' },
+      { orderId: 'waiting-work', source: 'tool', suppliedKeys: ['file'], sourceSessionId: 'manager-session', sourceMessageId: 'artist-answer' },
     ]])
+  })
+
+  test('refuses numeric and boolean tool inputs while list form supply remains allowed', async () => {
+    const root = makeRoot()
+    writeAutomationConfig(root, automationAction(typedWorkflow))
+    writeOrder(root, waitingOrder('campaign', true, typedWorkflow))
+    const values = { file: '/vault/art.png', count: 2, publish: true }
+
+    await expect(supply(root, {
+      source: 'tool',
+      sourceSessionId: 'manager-session',
+      sourceMessageId: 'artist-answer',
+      sourceMessageAt: '2026-09-02T14:01:00.000Z',
+      sourceEvidenceText: 'Use /vault/art.png, count 2, and publish it.',
+      values,
+    })).rejects.toThrow(/count, publish.*Needs you form/)
+
+    const waiting = parseScheduledWorkDocResult(
+      loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined,
+      workspaceId,
+    )
+    if (!waiting.ok) throw new Error(waiting.error)
+    expect(waiting.work.items[0]?.status).toBe('needs-setup')
+
+    const result = await supply(root, { source: 'list', values })
+    expect(result.order).toMatchObject({
+      status: 'scheduled',
+      execution: { triggerInputs: values },
+      inputSupplyReceipt: { source: 'list', suppliedKeys: ['count', 'file', 'publish'] },
+    })
   })
 
   test('rejects schema-valid tool values that the artist did not provide or approve', async () => {
     const root = makeRoot()
-    writeOrder(root, waitingOrder())
+    writeAutomationConfig(root, automationAction(stringWorkflow))
+    writeOrder(root, waitingOrder('campaign', true, stringWorkflow))
 
     await expect(supply(root, {
       source: 'tool',
@@ -311,8 +390,8 @@ describe('supplyScheduledWorkInputs', () => {
       sourceMessageId: 'artist-answer',
       sourceMessageAt: '2026-09-02T14:01:00.000Z',
       sourceEvidenceText: 'yes',
-      values: { file: '/tmp/unmentioned.wav', count: 999 },
-    })).rejects.toThrow(/did not explicitly provide or approve values for: file, count/)
+      values: { file: '/tmp/unmentioned.wav' },
+    })).rejects.toThrow(/did not explicitly provide or approve values for: file/)
 
     const parsed = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, workspaceId)
     if (!parsed.ok) throw new Error(parsed.error)

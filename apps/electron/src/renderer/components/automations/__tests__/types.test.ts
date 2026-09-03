@@ -96,7 +96,7 @@ describe('parseAutomationsConfig', () => {
     const config = {
       version: 2,
       automations: {
-        UserPromptSubmit: [{
+        LabelAdd: [{
           actions: [{ type: 'prompt', prompt: 'Run @daily-standup task' }],
         }],
       },
@@ -109,7 +109,7 @@ describe('parseAutomationsConfig', () => {
     const config = {
       version: 2,
       automations: {
-        SessionStart: [{
+        SessionStatusChange: [{
           actions: [{ type: 'prompt', prompt: 'echo "hello world"' }],
         }],
       },
@@ -123,7 +123,7 @@ describe('parseAutomationsConfig', () => {
     const config = {
       version: 2,
       automations: {
-        SessionStart: [{
+        SessionStatusChange: [{
           actions: [{ type: 'prompt', prompt: longPrompt }],
         }],
       },
@@ -136,7 +136,7 @@ describe('parseAutomationsConfig', () => {
     const config = {
       version: 2,
       automations: {
-        SessionStart: [{
+        SessionStatusChange: [{
           actions: [{ type: 'prompt', prompt: 'Run test' }],
         }],
       },
@@ -149,7 +149,7 @@ describe('parseAutomationsConfig', () => {
     const config = {
       version: 2,
       automations: {
-        SessionStart: [{
+        SessionStatusChange: [{
           enabled: false,
           actions: [{ type: 'prompt', prompt: 'Run test' }],
         }],
@@ -163,7 +163,7 @@ describe('parseAutomationsConfig', () => {
     const config = {
       version: 2,
       automations: {
-        SessionStart: [
+        SessionStatusChange: [
           { actions: [] },
           { actions: [{ type: 'prompt', prompt: 'valid' }] },
         ],
@@ -172,6 +172,16 @@ describe('parseAutomationsConfig', () => {
     const items = parseAutomationsConfig(config)
     expect(items).toHaveLength(1)
     expect(items[0].name).toBe('valid')
+  })
+
+  it('hides unsupported agent lifecycle events', () => {
+    const items = parseAutomationsConfig({
+      automations: {
+        PreToolUse: [{ actions: [{ type: 'prompt', prompt: 'looks active but cannot run' }] }],
+      },
+    })
+
+    expect(items).toEqual([])
   })
 
   it('generates correct matcherIndex per event', () => {
