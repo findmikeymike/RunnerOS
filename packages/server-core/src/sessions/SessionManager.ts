@@ -5313,6 +5313,11 @@ Default report shape:`,
                 ).updated,
                 replaceBuiltInAgentPromptText(
                   'lyric-video-agent',
+                  '3. If approved Vault lyrics exist, use their `lyrics.text` and `lyrics.lyricLines` without retranscribing. If lyrics or timed lyric lines are missing and a master/audio file exists, offer to transcribe first or run the fallback when the user asked you to proceed. Use `node bin/lyrics-transcriber.mjs doctor --json`, then `transcribe --audio-file ... --out-dir ... --json`. Use its `lyrics_text` and `lyric_lines`, but keep `review_required: true` until the user confirms/corrects the lyrics.',
+                  '3. If approved Vault lyrics exist, use their `lyrics.text` and `lyrics.lyricLines` without retranscribing. Preserve each line\'s optional `section` label. Treat artist-marked `hook` and `chorus` lines as priority visual moments for emphasis, selection, and caption treatment, while using tempo and energy to choose pacing instead of mechanically cutting faster. If lyrics or timed lyric lines are missing and a master/audio file exists, offer to transcribe first or run the fallback when the user asked you to proceed. Use `node bin/lyrics-transcriber.mjs doctor --json`, then `transcribe --audio-file ... --out-dir ... --json`. Use its `lyrics_text` and `lyric_lines`, but keep `review_required: true` until the user confirms/corrects the lyrics.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'lyric-video-agent',
                   lyricVideoOldVisualWorkflow,
                   lyricVideoNewVisualWorkflow,
                 ).updated,

@@ -368,8 +368,15 @@ function normalizeReviewedLyricLines(
       endMs,
       words: corrected ? undefined : line.words,
       corrected,
+      section: normalizeTrackLyricSection(line.section),
     };
   });
+}
+
+function normalizeTrackLyricSection(value: TrackLyricLine['section']): TrackLyricLine['section'] {
+  return value && ['verse', 'pre-chorus', 'chorus', 'hook', 'bridge', 'outro'].includes(value)
+    ? value
+    : undefined;
 }
 
 export function planArtistVaultImports(
@@ -1098,6 +1105,7 @@ function isTrackIntelligenceRevision(value: unknown): boolean {
       !line || typeof line.id !== 'string' || typeof line.text !== 'string'
       || (line.startMs !== undefined && (typeof line.startMs !== 'number' || !Number.isFinite(line.startMs) || line.startMs < 0))
       || (line.endMs !== undefined && (typeof line.endMs !== 'number' || !Number.isFinite(line.endMs) || (line.startMs !== undefined && line.endMs < line.startMs)))
+      || (line.section !== undefined && !['verse', 'pre-chorus', 'chorus', 'hook', 'bridge', 'outro'].includes(line.section))
     ))) return false;
   }
   return true;

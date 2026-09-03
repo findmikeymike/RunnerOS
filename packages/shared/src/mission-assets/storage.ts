@@ -41,6 +41,7 @@ import {
   type MissionAssetScanResult,
 } from './types.ts';
 import { normalizeTrackCharacter } from '../artist-vault/track-intelligence.ts';
+import type { TrackLyricSection } from '../artist-vault/types.ts';
 import { hashFileSha256 } from '../utils/hash-file.ts';
 import {
   missionLyricsProjectionFromTrackIntelligence,
@@ -205,14 +206,25 @@ export async function saveMissionLyricsAsync(
       && existing.lyrics.text.trim() !== lyricsText;
     const sourceLines = input.lyricLines
       ?? (lyricsChangedWithoutLines ? undefined : existing?.lyrics?.lyricLines);
+    const sectionByLineIndex = new Map<number, TrackLyricSection>();
+    for (const item of input.lyricSections ?? []) {
+      if (Number.isInteger(item.lineIndex) && item.lineIndex >= 0 && isTrackLyricSection(item.section)) {
+        sectionByLineIndex.set(item.lineIndex, item.section);
+      }
+    }
     const lyricLines = sourceLines?.length
       ? sourceLines.map((line, index) => ({
         id: `line-${index + 1}`,
         text: line.text,
         startMs: Math.max(0, Math.round(line.start_time * 1000)),
         endMs: Math.max(0, Math.round(line.end_time * 1000)),
+        section: isTrackLyricSection(line.section) ? line.section : sectionByLineIndex.get(index),
       }))
-      : lyricsText.split(/\r?\n/).map((text, index) => ({ id: `line-${index + 1}`, text: text.trim() })).filter((line) => line.text);
+      : lyricsText.split(/\r?\n/).map((text, index) => ({
+        id: `line-${index + 1}`,
+        text: text.trim(),
+        section: sectionByLineIndex.get(index),
+      })).filter((line) => line.text);
     const baseRevision = prior?.draft ?? prior?.approved;
     const character = normalizeTrackCharacter(input.character ?? baseRevision?.character);
     const revision = {
@@ -915,4 +927,9 @@ function isMissionAssetManifest(value: unknown): value is MissionAssetManifest {
     && typeof candidate.assetsRoot === 'string'
     && Array.isArray(candidate.files)
     && typeof candidate.updatedAt === 'string';
+}
+
+function isTrackLyricSection(value: unknown): value is TrackLyricSection {
+  return typeof value === 'string'
+    && ['verse', 'pre-chorus', 'chorus', 'hook', 'bridge', 'outro'].includes(value);
 }

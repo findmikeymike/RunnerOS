@@ -78,6 +78,8 @@ export interface TrackLyricWord {
   endMs: number;
 }
 
+export type TrackLyricSection = 'verse' | 'pre-chorus' | 'chorus' | 'hook' | 'bridge' | 'outro';
+
 export interface TrackLyricLine {
   id: string;
   text: string;
@@ -85,6 +87,7 @@ export interface TrackLyricLine {
   endMs?: number;
   words?: TrackLyricWord[];
   corrected?: boolean;
+  section?: TrackLyricSection;
 }
 
 export interface TrackCharacterMetadata {

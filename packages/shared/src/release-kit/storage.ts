@@ -574,7 +574,12 @@ function isReviewedTrackIntelligenceRevision(value: unknown): boolean {
   if (!isRecord(value.reviewedBy) || value.reviewedBy.type !== 'user' || typeof value.reviewedBy.clientId !== 'string') return false;
   if (value.lyrics !== undefined) {
     if (!isRecord(value.lyrics) || !Array.isArray(value.lyrics.lines)) return false;
-    if (value.lyrics.lines.some((line) => !isRecord(line) || typeof line.id !== 'string' || typeof line.text !== 'string')) return false;
+    if (value.lyrics.lines.some((line) => (
+      !isRecord(line)
+      || typeof line.id !== 'string'
+      || typeof line.text !== 'string'
+      || (line.section !== undefined && !['verse', 'pre-chorus', 'chorus', 'hook', 'bridge', 'outro'].includes(String(line.section)))
+    ))) return false;
   }
   return true;
 }

@@ -92,7 +92,7 @@ describe('mission assets', () => {
       sourceAudioAssetId: imported?.id,
       lyricsText: 'first line\nsecond line',
       lyricLines: [
-        { text: 'first line', start_time: 0, end_time: 2.5 },
+        { text: 'first line', start_time: 0, end_time: 2.5, section: 'chorus' },
         { text: 'second line', start_time: 2.5, end_time: 5 },
       ],
     }, 'client-1');
@@ -107,6 +107,7 @@ describe('mission assets', () => {
     expect(body).toContain('first line');
     expect(body).toContain('<untrusted-campaign-lyrics-data>');
     expect(body).toContain('Timed Lyric Lines');
+    expect(body).toContain('"section": "chorus"');
   });
 
   test('rebuilds legacy lyrics metadata from canonical Track Intelligence', async () => {
@@ -117,7 +118,7 @@ describe('mission assets', () => {
     const saved = await saveMissionLyricsAsync(workspace, 'workspace-1', {
       sourceAudioAssetId: audio.id,
       lyricsText: 'canonical line',
-      lyricLines: [{ text: 'canonical line', start_time: 1, end_time: 2 }],
+      lyricLines: [{ text: 'canonical line', start_time: 1, end_time: 2, section: 'hook' }],
     }, 'client-1');
     const drifted = {
       ...saved.manifest,
@@ -131,8 +132,35 @@ describe('mission assets', () => {
     const lyrics = loaded.files.find((file) => file.kind === 'lyrics')?.lyrics;
 
     expect(lyrics?.text).toBe('canonical line');
-    expect(lyrics?.lyricLines).toEqual([{ text: 'canonical line', start_time: 1, end_time: 2 }]);
+    expect(lyrics?.lyricLines).toEqual([{ text: 'canonical line', start_time: 1, end_time: 2, section: 'hook' }]);
     expect(serializeMissionAssetContext(loaded)).not.toContain('drifted legacy line');
+  });
+
+  test('preserves hook and chorus labels when approved lyrics do not have timing yet', async () => {
+    const workspace = tempWorkspace();
+    const source = join(workspace, 'manual-lyrics-master.wav');
+    writeFileSync(source, 'fake audio');
+    const audio = importMissionAssets(workspace, 'workspace-1', [source], { kindHint: 'master' }).imported[0]!;
+
+    const saved = await saveMissionLyricsAsync(workspace, 'workspace-1', {
+      sourceAudioAssetId: audio.id,
+      lyricsText: 'verse line\nhook line\nchorus line',
+      lyricSections: [
+        { lineIndex: 1, section: 'hook' },
+        { lineIndex: 2, section: 'chorus' },
+      ],
+      timingSource: 'manual',
+    }, 'client-1');
+    const approvedLines = saved.manifest.files
+      .find((file) => file.id === audio.id)
+      ?.trackIntelligence?.approved?.lyrics?.lines;
+    const context = serializeMissionAssetContext(saved.manifest);
+
+    expect(approvedLines?.[0]?.section).toBeUndefined();
+    expect(approvedLines?.[1]?.section).toBe('hook');
+    expect(approvedLines?.[2]?.section).toBe('chorus');
+    expect(context).toContain('"section": "hook"');
+    expect(context).toContain('"section": "chorus"');
   });
 
   test('requires a host-supplied human identity before approving lyrics', async () => {

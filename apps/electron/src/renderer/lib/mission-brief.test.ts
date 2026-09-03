@@ -37,6 +37,12 @@ describe('mission brief utilities', () => {
       goal: 'Build release-week momentum.',
       timeline: 'June 30',
       promoBudget: '$2k',
+      genre: 'alt-pop / drum and bass',
+      bpm: 130,
+      sonicReferences: ['Track One — Artist A', 'Track Two — Artist B'],
+      theme: 'Running toward freedom while still grieving what was lost.',
+      energy: 'Tense verses, explosive chorus, breathless final run.',
+      keyMoments: 'Double-time lift at 0:42; final chorus lands at 2:11.',
       mood: 'dark pop tension',
     })
     const body = serializeMissionBriefBody(brief)
@@ -55,8 +61,25 @@ describe('mission brief utilities', () => {
     expect(parsed?.title).toBe('Night Drive')
     expect(parsed?.workspaceId).toBe('workspace-1')
     expect(parsed?.promoBudget).toBe('$2k')
+    expect(parsed?.genre).toBe('alt-pop / drum and bass')
+    expect(parsed?.bpm).toBe(130)
+    expect(parsed?.sonicReferences).toEqual(['Track One — Artist A', 'Track Two — Artist B'])
+    expect(parsed?.theme).toContain('freedom')
+    expect(parsed?.energy).toContain('explosive chorus')
+    expect(parsed?.keyMoments).toContain('0:42')
     expect(parsed?.status).toBe('full')
     expect(body).toContain('Promo budget: $2k')
+    expect(body).toContain('BPM: 130')
+    expect(body).toContain('Similar sonics: Track One — Artist A, Track Two — Artist B')
+  })
+
+  test('keeps song intelligence optional and rejects unusable BPM values', () => {
+    const minimal = buildMissionBrief('workspace-1', { title: 'Night Drive' })
+    const invalidTempo = buildMissionBrief('workspace-1', { title: 'Night Drive', bpm: 900 })
+
+    expect(minimal.bpm).toBeUndefined()
+    expect(invalidTempo.bpm).toBeUndefined()
+    expect(minimal.completeness).toBe(invalidTempo.completeness)
   })
 
   test('content key ignores volatile timestamps', () => {

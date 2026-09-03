@@ -29,6 +29,7 @@ export interface MissionLyricsLine {
   text: string;
   start_time: number;
   end_time: number;
+  section?: TrackLyricSection;
 }
 
 export interface MissionAssetLyricsMetadata {
@@ -111,6 +112,7 @@ export interface MissionAssetScanResult {
 export interface MissionAssetSaveLyricsInput {
   lyricsText: string;
   lyricLines?: MissionLyricsLine[];
+  lyricSections?: Array<{ lineIndex: number; section: TrackLyricSection }>;
   draftId?: string;
   assetId?: string;
   sourceAudioAssetId?: string;
@@ -146,4 +148,4 @@ export interface MissionAssetTranscribeLyricsResult {
   error?: string;
   blockers?: Array<{ code: string; message: string }>;
 }
-import type { TrackCharacterMetadata, TrackIntelligence } from '../artist-vault/types.ts';
+import type { TrackCharacterMetadata, TrackIntelligence, TrackLyricSection } from '../artist-vault/types.ts';

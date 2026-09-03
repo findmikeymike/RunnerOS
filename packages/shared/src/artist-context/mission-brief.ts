@@ -38,6 +38,12 @@ export interface MissionBrief {
   campaignFinishDate?: string
   campaignDateStatuses?: CampaignDateStatuses
   promoBudget?: string
+  genre?: string
+  bpm?: number
+  sonicReferences?: string[]
+  theme?: string
+  energy?: string
+  keyMoments?: string
   mood?: string
   visualWorld?: string
   references?: MissionReference[]
@@ -238,6 +244,12 @@ function normalizeMissionBrief(
     campaignFinishDate,
     campaignDateStatuses,
     promoBudget: clean(input.promoBudget),
+    genre: clean(input.genre),
+    bpm: normalizeBpm(input.bpm),
+    sonicReferences: input.sonicReferences ? unique(input.sonicReferences) : undefined,
+    theme: clean(input.theme),
+    energy: clean(input.energy),
+    keyMoments: clean(input.keyMoments),
     mood: clean(input.mood),
     visualWorld: clean(input.visualWorld),
     references: input.references?.filter((ref) => clean(ref.value)),
@@ -287,6 +299,12 @@ export function missionBriefContentKey(brief: MissionBrief): string {
     campaignFinishDate: brief.campaignFinishDate ?? null,
     campaignDateStatuses: brief.campaignDateStatuses ?? null,
     promoBudget: brief.promoBudget ?? null,
+    genre: brief.genre ?? null,
+    bpm: brief.bpm ?? null,
+    sonicReferences: brief.sonicReferences ?? [],
+    theme: brief.theme ?? null,
+    energy: brief.energy ?? null,
+    keyMoments: brief.keyMoments ?? null,
     mood: brief.mood ?? null,
     visualWorld: brief.visualWorld ?? null,
     references: brief.references ?? [],
@@ -416,6 +434,12 @@ function normalizeCampaignDateStatus(value: unknown): CampaignDateStatus {
   return value === 'locked' ? 'locked' : 'target'
 }
 
+function normalizeBpm(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  const rounded = Math.round(value)
+  return rounded >= 20 && rounded <= 300 ? rounded : undefined
+}
+
 function isIsoTimestamp(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Date.parse(value))
 }
@@ -430,6 +454,12 @@ function buildEnhancedSummary(brief: Partial<MissionBrief>, missing: string[]): 
     brief.campaignFinishDate ? `Campaign finish: ${brief.campaignFinishDate} (${brief.campaignDateStatuses?.finish ?? 'target'})` : null,
     brief.timeline ? `Release target: ${brief.timeline}` : null,
     brief.promoBudget ? `Promo budget: ${brief.promoBudget}` : null,
+    brief.genre ? `Genre: ${brief.genre}` : null,
+    brief.bpm ? `BPM: ${brief.bpm}` : null,
+    brief.sonicReferences?.length ? `Similar sonics: ${brief.sonicReferences.join(', ')}` : null,
+    brief.theme ? `Theme: ${brief.theme}` : null,
+    brief.energy ? `Energy and movement: ${brief.energy}` : null,
+    brief.keyMoments ? `Key song moments: ${brief.keyMoments}` : null,
     brief.mood ? `Mood: ${brief.mood}` : null,
     brief.visualWorld ? `Visual world: ${brief.visualWorld}` : null,
     brief.targetListener ? `Target listener: ${brief.targetListener}` : null,

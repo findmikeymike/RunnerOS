@@ -29115,7 +29115,7 @@ node bin/genesis-lyric.mjs render --brief-file <brief.json> --approved --json
 ## Workflow
 
 1. Confirm the clip target: platform, aspect ratio, duration, lyrics, audio file, and visual source.
-2. Write a brief JSON with \`lyrics\` or \`lyric_lines\`, \`audio_file\`, optional \`video_file\`/\`image_file\`, \`duration_seconds\`, \`aspect_ratio\`, and \`output_dir\`.
+2. Write a brief JSON with \`lyrics\` or \`lyric_lines\`, \`audio_file\`, optional \`video_file\`/\`image_file\`, \`duration_seconds\`, \`aspect_ratio\`, and \`output_dir\`. Preserve optional per-line \`section\` labels. Artist-marked \`hook\` and \`chorus\` lines are priority visual moments for selection, emphasis, and caption treatment; use tempo and energy to shape pacing instead of mechanically overcutting.
 3. If no visual exists, or if the visual needs creative direction, run \`storyboard\` before any image/video generation.
 4. Use the storyboard \`image_prompt\` and \`motion_prompt\` with the approved media-generation tool. Do not let generated visuals invent a separate concept.
 5. Add the selected visual asset back to the brief as \`video_file\` or \`image_file\`.

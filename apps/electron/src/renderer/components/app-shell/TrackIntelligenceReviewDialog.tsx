@@ -1,9 +1,11 @@
 import * as React from 'react'
+import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { Check, ChevronLeft, Clock3, Loader2, Music2, Plus, Trash2, X } from 'lucide-react'
 import type {
   TrackCharacterMetadata,
   TrackIntelligence,
   TrackLyricLine,
+  TrackLyricSection,
 } from '@craft-agent/shared/artist-vault'
 import { cn } from '@/lib/utils'
 
@@ -29,6 +31,14 @@ interface TrackIntelligenceReviewDialogProps {
 }
 
 const FIELD_CLASS = 'h-9 w-full rounded-[9px] border border-white/[0.07] bg-black/30 px-3 text-sm text-white/78 outline-none placeholder:text-white/25 focus:border-[#f97316]/40'
+const LYRIC_SECTION_OPTIONS: Array<{ value: TrackLyricSection; label: string }> = [
+  { value: 'verse', label: 'Verse' },
+  { value: 'pre-chorus', label: 'Pre-Chorus' },
+  { value: 'chorus', label: 'Chorus' },
+  { value: 'hook', label: 'Hook' },
+  { value: 'bridge', label: 'Bridge' },
+  { value: 'outro', label: 'Outro' },
+]
 
 export function TrackIntelligenceReviewDialog({
   open,
@@ -104,13 +114,21 @@ export function TrackIntelligenceReviewDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[86vh] w-full max-w-3xl flex-col overflow-hidden rounded-[16px] border border-white/[0.08] bg-[#0a0a0a] shadow-modal-small">
+    <DialogPrimitive.Root open={open} onOpenChange={(nextOpen) => {
+      if (!nextOpen && !busy) onClose()
+    }}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-overlay bg-black/75 backdrop-blur-sm" />
+        <DialogPrimitive.Content
+          className="fixed left-1/2 top-1/2 z-overlay flex max-h-[86vh] w-[min(48rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[16px] border border-white/[0.08] bg-[#0a0a0a] shadow-modal-small outline-none"
+          onWheelCapture={(event) => event.stopPropagation()}
+          onTouchMoveCapture={(event) => event.stopPropagation()}
+        >
         <header className="flex items-start justify-between gap-4 border-b border-white/[0.06] px-5 py-4">
           <div className="min-w-0">
             <div className="mb-1 flex items-center gap-2 text-[11px] text-[#fb923c]/80"><Music2 className="h-3.5 w-3.5" /> Track Intelligence</div>
-            <h2 className="truncate text-lg font-medium text-white/90">{title}</h2>
-            <p className="mt-1 text-xs text-white/40">Review the machine draft. Saving makes these lyrics and tags available to agents.</p>
+            <DialogPrimitive.Title className="truncate text-lg font-medium text-white/90">{title}</DialogPrimitive.Title>
+            <DialogPrimitive.Description className="mt-1 text-xs text-white/40">Review the machine draft. Saving makes these lyrics and tags available to agents.</DialogPrimitive.Description>
           </div>
           <button type="button" onClick={onClose} disabled={busy} className="rounded-full p-2 text-white/40 hover:bg-white/[0.06] hover:text-white"><X className="h-4 w-4" /></button>
         </header>
@@ -123,11 +141,11 @@ export function TrackIntelligenceReviewDialog({
           </span>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        <div className="min-h-0 flex-1 overscroll-contain overflow-y-auto p-5">
           {step === 'lyrics' ? (
             <div>
               <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-xs text-white/38">Edit a line without losing its line timing. Replacing all lyrics clears timing until they are aligned again.</p>
+                <p className="text-xs text-white/38">Edit lyrics and mark Chorus or Hook lines so visual agents know what to emphasize.</p>
                 <button type="button" onClick={() => setPasteOpen((value) => !value)} className="shrink-0 text-xs text-white/55 hover:text-white">Paste lyrics</button>
               </div>
               {pasteOpen ? (
@@ -141,7 +159,15 @@ export function TrackIntelligenceReviewDialog({
               ) : null}
               <div className="space-y-1.5">
                 {lines.map((line, index) => (
-                  <div key={line.id} className="grid grid-cols-[64px_minmax(0,1fr)_28px] items-center gap-2 rounded-[9px] bg-white/[0.025] p-2">
+                  <div
+                    key={line.id}
+                    className={cn(
+                      'grid grid-cols-[64px_minmax(0,1fr)_96px_28px] items-center gap-2 rounded-[9px] p-2',
+                      line.section === 'hook' || line.section === 'chorus'
+                        ? 'bg-orange-400/[0.07]'
+                        : 'bg-white/[0.025]',
+                    )}
+                  >
                     <button type="button" className="inline-flex items-center gap-1 font-mono text-[10px] text-white/38" title="Line start time">
                       <Clock3 className="h-3 w-3" />{formatTime(line.startMs)}
                     </button>
@@ -155,6 +181,23 @@ export function TrackIntelligenceReviewDialog({
                       } : candidate))}
                       className="min-w-0 bg-transparent text-sm text-white/78 outline-none"
                     />
+                    <select
+                      value={line.section ?? ''}
+                      onChange={(event) => setLines((current) => current.map((candidate, candidateIndex) => candidateIndex === index ? {
+                        ...candidate,
+                        section: (event.target.value || undefined) as TrackLyricSection | undefined,
+                      } : candidate))}
+                      aria-label={`Section for lyric line ${index + 1}`}
+                      className={cn(
+                        'h-7 min-w-0 rounded-[7px] border bg-black/35 px-2 text-[10px] outline-none',
+                        line.section ? 'border-orange-400/25 text-orange-200/85' : 'border-white/[0.06] text-white/32',
+                      )}
+                    >
+                      <option value="">Section</option>
+                      {LYRIC_SECTION_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
                     <button type="button" onClick={() => setLines((current) => current.filter((_, candidateIndex) => candidateIndex !== index))} className="rounded p-1 text-white/25 hover:bg-white/[0.05] hover:text-white/60" title="Remove line"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                 ))}
@@ -184,8 +227,9 @@ export function TrackIntelligenceReviewDialog({
             </button>
           )}
         </footer>
-      </div>
-    </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   )
 }
 

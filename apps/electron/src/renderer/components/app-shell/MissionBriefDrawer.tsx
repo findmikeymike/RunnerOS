@@ -1,7 +1,6 @@
 import * as React from 'react'
 import {
   CalendarDays,
-  Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -12,7 +11,6 @@ import {
   ImageIcon,
   Loader2,
   Music2,
-  Sparkles,
   Upload,
   Video,
   X,
@@ -31,7 +29,6 @@ import { cn } from '@/lib/utils'
 import {
   buildMissionBrief,
   hasSaveableMissionBrief,
-  missionBriefContentKey,
   missionCampaignWindow,
   missionCampaignWindowError,
   missionBriefMetadata,
@@ -51,8 +48,18 @@ import type {
 import { isReleaseBoardItemIncluded, type ReleaseBoard } from '@/lib/release-board'
 
 const missionTypes: MissionType[] = ['single', 'ep', 'album', 'other']
+const campaignChannelOptions = [
+  'TikTok',
+  'Instagram',
+  'Facebook',
+  'YouTube',
+  'X',
+  'Email',
+  'Website',
+  'Phone / SMS',
+] as const
 const missionFieldClass = 'w-full rounded-lg border border-white/[0.07] bg-black/25 px-3 py-2 text-sm text-white/78 outline-none placeholder:text-white/22 focus:border-orange-300/45'
-type DrawerTab = 'brief' | 'assets'
+type BriefPage = 'essentials' | 'song'
 type CampaignDateKey = 'start' | 'release' | 'finish'
 
 const campaignDateOrder: CampaignDateKey[] = ['start', 'release', 'finish']
@@ -70,6 +77,7 @@ type SaveMissionBrief = (input: {
 
 interface MissionBriefDrawerProps {
   open: boolean
+  backgroundInteractionLocked?: boolean
   workspaceId: string
   mission: MissionBrief
   onOpenChange: (open: boolean) => void
@@ -87,6 +95,7 @@ interface MissionBriefDrawerProps {
 
 export function MissionBriefDrawer({
   open,
+  backgroundInteractionLocked = false,
   workspaceId,
   mission,
   onOpenChange,
@@ -103,7 +112,8 @@ export function MissionBriefDrawer({
 }: MissionBriefDrawerProps) {
   const closeButtonRef = React.useRef<HTMLButtonElement>(null)
   const [drawerPortalContainer, setDrawerPortalContainer] = React.useState<HTMLDivElement | null>(null)
-  const [activeTab, setActiveTab] = React.useState<DrawerTab>('brief')
+  const [showAssets, setShowAssets] = React.useState(false)
+  const [briefPage, setBriefPage] = React.useState<BriefPage>('essentials')
   const [draft, setDraft] = React.useState<Partial<MissionBrief>>(mission)
   const [saving, setSaving] = React.useState(false)
 
@@ -111,15 +121,17 @@ export function MissionBriefDrawer({
     setDraft(mission)
   }, [mission])
 
+  React.useEffect(() => {
+    if (open) {
+      setBriefPage('essentials')
+      setShowAssets(false)
+    }
+  }, [open])
+
   const editableBrief = React.useMemo(() => buildMissionBrief(workspaceId, draft), [draft, workspaceId])
-  const savedBrief = React.useMemo(() => buildMissionBrief(workspaceId, mission), [mission, workspaceId])
   const campaignWindow = React.useMemo(() => missionCampaignWindow(editableBrief), [editableBrief])
   const campaignWindowError = React.useMemo(() => missionCampaignWindowError(editableBrief), [editableBrief])
   const canSave = hasSaveableMissionBrief(editableBrief) && !campaignWindowError
-  const briefDirty = React.useMemo(
-    () => missionBriefContentKey(editableBrief) !== missionBriefContentKey(savedBrief),
-    [editableBrief, savedBrief],
-  )
 
   const save = React.useCallback(async () => {
     const brief = buildMissionBrief(workspaceId, {
@@ -147,11 +159,7 @@ export function MissionBriefDrawer({
       })
       onSaved(brief)
       toast.success('Campaign brief saved')
-      if (mission.status === 'empty') {
-        setActiveTab('assets')
-      } else {
-        onOpenChange(false)
-      }
+      setShowAssets(true)
     } catch (err) {
       toast.error('Failed to save campaign brief', {
         description: err instanceof Error ? err.message : String(err),
@@ -159,7 +167,7 @@ export function MissionBriefDrawer({
     } finally {
       setSaving(false)
     }
-  }, [draft, mission.status, onOpenChange, onSaved, saveMissionBrief, workspaceId])
+  }, [draft, onSaved, saveMissionBrief, workspaceId])
 
   const handleDrop = React.useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
@@ -214,172 +222,274 @@ export function MissionBriefDrawer({
           </div>
         </DrawerHeader>
 
-        <div className="flex gap-1 border-b border-white/[0.06] px-5 py-3">
-          <TabButton active={activeTab === 'brief'} onClick={() => setActiveTab('brief')}>Brief</TabButton>
-          <TabButton active={activeTab === 'assets'} onClick={() => setActiveTab('assets')}>Assets</TabButton>
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4">
-          {activeTab === 'brief' ? (
+        <div
+          aria-hidden={backgroundInteractionLocked || undefined}
+          className={cn(
+            'flex min-h-0 flex-1 flex-col px-5 py-4',
+            backgroundInteractionLocked ? 'overflow-hidden' : 'overflow-y-auto',
+          )}
+        >
+          {!showAssets ? (
           <section className="rounded-2xl border border-white/[0.06] bg-[#0b0b0b] p-4">
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/50">
-                  Campaign Brief
+                  {briefPage === 'essentials' ? 'Campaign Essentials' : 'Song Intelligence'}
                 </h3>
+                {briefPage === 'song' ? (
+                  <p className="mt-1.5 max-w-[390px] text-[11px] leading-4 text-white/38">
+                    Optional—but these details help every agent understand the song at a deeper level.
+                  </p>
+                ) : null}
               </div>
-              <span className="rounded-full border border-white/[0.06] px-2.5 py-1 text-[10px] text-white/42">
-                {editableBrief.completeness}% complete
+              <span className="shrink-0 text-[10px] uppercase tracking-[0.14em] text-white/30">
+                {briefPage === 'essentials' ? '1 of 3' : '2 of 3'}
               </span>
             </div>
 
-            <div className="grid gap-3">
-              <Field label="Title">
-                <input
-                  value={draft.title ?? ''}
-                  onChange={(event) => setDraft((value) => ({ ...value, title: event.target.value }))}
-                  className={missionFieldClass}
-                  placeholder="Song, EP, or album name"
-                />
-              </Field>
-              <Field label="Type">
-                <select
-                  value={draft.missionType ?? ''}
-                  onChange={(event) => setDraft((value) => ({ ...value, missionType: event.target.value as MissionType || undefined }))}
-                  className={missionFieldClass}
-                >
-                  <option value="">Unknown</option>
-                  {missionTypes.map((type) => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Goal">
-                <textarea
-                  value={draft.goal ?? ''}
-                  onChange={(event) => setDraft((value) => ({ ...value, goal: event.target.value }))}
-                  className={cn(missionFieldClass, 'min-h-[84px] resize-none')}
-                  placeholder="What are we trying to make happen?"
-                />
-              </Field>
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.015] p-3">
-                <div className="mb-3">
-                  <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/52">Campaign window</div>
-                  <div className="mt-1 text-[11px] leading-4 text-white/30">Start the rollout, anchor the release, and define when post-release work ends.</div>
+            {briefPage === 'essentials' ? (
+              <div className="grid gap-3">
+                <Field label="Title">
+                  <input
+                    value={draft.title ?? ''}
+                    onChange={(event) => setDraft((value) => ({ ...value, title: event.target.value }))}
+                    className={missionFieldClass}
+                    placeholder="Song, EP, or album name"
+                  />
+                </Field>
+                <Field label="Type">
+                  <select
+                    value={draft.missionType ?? ''}
+                    onChange={(event) => setDraft((value) => ({ ...value, missionType: event.target.value as MissionType || undefined }))}
+                    className={missionFieldClass}
+                  >
+                    <option value="">Unknown</option>
+                    {missionTypes.map((type) => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Goal">
+                  <textarea
+                    value={draft.goal ?? ''}
+                    onChange={(event) => setDraft((value) => ({ ...value, goal: event.target.value }))}
+                    className={cn(missionFieldClass, 'min-h-[84px] resize-none')}
+                    placeholder="What are we trying to make happen?"
+                  />
+                </Field>
+                <div className="rounded-xl border border-white/[0.06] bg-white/[0.015] p-3">
+                  <div className="mb-3">
+                    <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/52">Campaign window</div>
+                    <div className="mt-1 text-[11px] leading-4 text-white/30">Start the rollout, anchor the release, and define when post-release work ends.</div>
+                  </div>
+                  <CampaignWindowPicker
+                    dates={{
+                      start: campaignWindow.startDate,
+                      release: campaignWindow.releaseDate,
+                      finish: campaignWindow.finishDate,
+                    }}
+                    statuses={campaignWindow.statuses}
+                    portalContainer={drawerPortalContainer}
+                    onDateChange={(key, date) => setDraft((value) => ({
+                      ...value,
+                      ...(key === 'start' ? { campaignStartDate: date } : {}),
+                      ...(key === 'release' ? { releaseDate: date } : {}),
+                      ...(key === 'finish' ? { campaignFinishDate: date } : {}),
+                    }))}
+                    onStatusChange={(key, status) => setDraft((value) => ({
+                      ...value,
+                      campaignDateStatuses: { ...value.campaignDateStatuses, [key]: status },
+                    }))}
+                  />
+                  {campaignWindowError ? <p className="mt-2 text-[11px] text-red-300/80">{campaignWindowError}</p> : null}
                 </div>
-                <CampaignWindowPicker
-                  dates={{
-                    start: campaignWindow.startDate,
-                    release: campaignWindow.releaseDate,
-                    finish: campaignWindow.finishDate,
-                  }}
-                  statuses={campaignWindow.statuses}
-                  portalContainer={drawerPortalContainer}
-                  onDateChange={(key, date) => setDraft((value) => ({
-                    ...value,
-                    ...(key === 'start' ? { campaignStartDate: date } : {}),
-                    ...(key === 'release' ? { releaseDate: date } : {}),
-                    ...(key === 'finish' ? { campaignFinishDate: date } : {}),
-                  }))}
-                  onStatusChange={(key, status) => setDraft((value) => ({
-                    ...value,
-                    campaignDateStatuses: { ...value.campaignDateStatuses, [key]: status },
-                  }))}
-                />
-                {campaignWindowError ? <p className="mt-2 text-[11px] text-red-300/80">{campaignWindowError}</p> : null}
+                <Field label="Promo Budget">
+                  <input
+                    value={draft.promoBudget ?? ''}
+                    onChange={(event) => setDraft((value) => ({ ...value, promoBudget: event.target.value }))}
+                    className={missionFieldClass}
+                    placeholder="$0, $500, $2k, not sure yet"
+                  />
+                </Field>
+                <Field label="Who Will Love This Song?">
+                  <input
+                    value={draft.targetListener ?? ''}
+                    onChange={(event) => setDraft((value) => ({ ...value, targetListener: event.target.value }))}
+                    className={missionFieldClass}
+                    placeholder="Young adults realizing life gets more complicated as they get older"
+                  />
+                </Field>
+                <div className="mt-2 grid gap-1.5">
+                  <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-white/32">
+                    How Will This Reach People?
+                  </span>
+                  <span className="text-[11px] leading-4 text-white/30">
+                    Click all paths.
+                  </span>
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="Campaign channels">
+                    {campaignChannelOptions.map((channel) => {
+                      const selected = draft.channels?.includes(channel) ?? false
+                      return (
+                        <button
+                          key={channel}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => setDraft((value) => ({
+                            ...value,
+                            channels: toggleListValue(value.channels, channel),
+                          }))}
+                          className={cn(
+                            'rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors',
+                            selected
+                              ? 'border-orange-400/55 bg-orange-400/14 text-orange-200'
+                              : 'border-white/[0.08] bg-white/[0.025] text-white/44 hover:border-white/[0.16] hover:text-white/72',
+                          )}
+                        >
+                          {channel}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
               </div>
-              <Field label="Promo Budget">
-                <input
-                  value={draft.promoBudget ?? ''}
-                  onChange={(event) => setDraft((value) => ({ ...value, promoBudget: event.target.value }))}
-                  className={missionFieldClass}
-                  placeholder="$0, $500, $2k, not sure yet"
-                />
-              </Field>
-              <Field label="Timeline">
-                <input
-                  value={draft.timeline ?? ''}
-                  onChange={(event) => setDraft((value) => ({ ...value, timeline: event.target.value }))}
-                  className={missionFieldClass}
-                  placeholder="Release week, next month, this summer..."
-                />
-              </Field>
-              <Field label="Mood">
-                <textarea
-                  value={draft.mood ?? ''}
-                  onChange={(event) => setDraft((value) => ({ ...value, mood: event.target.value }))}
-                  className={cn(missionFieldClass, 'min-h-[72px] resize-none')}
-                  placeholder="What should it feel like?"
-                />
-              </Field>
-              <Field label="Visual World">
-                <textarea
-                  value={draft.visualWorld ?? ''}
-                  onChange={(event) => setDraft((value) => ({ ...value, visualWorld: event.target.value }))}
-                  className={cn(missionFieldClass, 'min-h-[72px] resize-none')}
-                  placeholder="Colors, imagery, world, references"
-                />
-              </Field>
-              <Field label="Target Listener">
-                <input
-                  value={draft.targetListener ?? ''}
-                  onChange={(event) => setDraft((value) => ({ ...value, targetListener: event.target.value }))}
-                  className={missionFieldClass}
-                  placeholder="Who is this for?"
-                />
-              </Field>
-              <Field label="References">
-                <input
-                  value={(draft.references ?? []).map((ref) => ref.value).join(', ')}
-                  onChange={(event) => setDraft((value) => ({ ...value, references: parseReferences(event.target.value) }))}
-                  className={missionFieldClass}
-                  placeholder="artists, songs, visuals"
-                />
-              </Field>
-              <Field label="Channels">
-                <input
-                  value={(draft.channels ?? []).join(', ')}
-                  onChange={(event) => setDraft((value) => ({ ...value, channels: parseList(event.target.value) }))}
-                  className={missionFieldClass}
-                  placeholder="TikTok, Instagram, Spotify"
-                />
-              </Field>
-            </div>
+            ) : (
+              <div className="grid gap-3">
+                <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
+                  <Field label="Genre / Subgenre">
+                    <input
+                      value={draft.genre ?? ''}
+                      onChange={(event) => setDraft((value) => ({ ...value, genre: event.target.value }))}
+                      className={missionFieldClass}
+                      placeholder="Alt-pop, drum and bass"
+                    />
+                  </Field>
+                  <Field label="BPM">
+                    <input
+                      type="number"
+                      min={20}
+                      max={300}
+                      value={draft.bpm ?? ''}
+                      onChange={(event) => setDraft((value) => ({
+                        ...value,
+                        bpm: event.target.value ? Number(event.target.value) : undefined,
+                      }))}
+                      className={missionFieldClass}
+                      placeholder="130"
+                    />
+                  </Field>
+                </div>
+                <Field label="Songs With Similar Sonics">
+                  <input
+                    value={(draft.sonicReferences ?? []).join(', ')}
+                    onChange={(event) => setDraft((value) => ({ ...value, sonicReferences: parseList(event.target.value) }))}
+                    className={missionFieldClass}
+                    placeholder="Song — Artist, Song — Artist"
+                  />
+                </Field>
+                <Field label="Theme / Meaning">
+                  <textarea
+                    value={draft.theme ?? ''}
+                    onChange={(event) => setDraft((value) => ({ ...value, theme: event.target.value }))}
+                    className={cn(missionFieldClass, 'min-h-[72px] resize-none')}
+                    placeholder="What is the song really about?"
+                  />
+                </Field>
+                <Field label="Energy & Movement">
+                  <textarea
+                    value={draft.energy ?? ''}
+                    onChange={(event) => setDraft((value) => ({ ...value, energy: event.target.value }))}
+                    className={cn(missionFieldClass, 'min-h-[72px] resize-none')}
+                    placeholder="Slow burn, tense verses, explosive chorus"
+                  />
+                </Field>
+                <Field label="Key Song Moments">
+                  <textarea
+                    value={draft.keyMoments ?? ''}
+                    onChange={(event) => setDraft((value) => ({ ...value, keyMoments: event.target.value }))}
+                    className={cn(missionFieldClass, 'min-h-[72px] resize-none')}
+                    placeholder="Beat switch at 0:42, final chorus at 2:11"
+                  />
+                </Field>
+                <Field label="Mood">
+                  <textarea
+                    value={draft.mood ?? ''}
+                    onChange={(event) => setDraft((value) => ({ ...value, mood: event.target.value }))}
+                    className={cn(missionFieldClass, 'min-h-[72px] resize-none')}
+                    placeholder="What should it feel like?"
+                  />
+                </Field>
+                <Field label="Visual World">
+                  <textarea
+                    value={draft.visualWorld ?? ''}
+                    onChange={(event) => setDraft((value) => ({ ...value, visualWorld: event.target.value }))}
+                    className={cn(missionFieldClass, 'min-h-[72px] resize-none')}
+                    placeholder="Colors, imagery, world, references"
+                  />
+                </Field>
+                <Field label="Creative References">
+                  <input
+                    value={(draft.references ?? []).map((ref) => ref.value).join(', ')}
+                    onChange={(event) => setDraft((value) => ({ ...value, references: parseReferences(event.target.value) }))}
+                    className={missionFieldClass}
+                    placeholder="Artists, videos, films, visuals"
+                  />
+                </Field>
+              </div>
+            )}
           </section>
           ) : (
-            <AssetsSetup
-              manifest={assetManifest}
-              busy={assetBusy}
-              releaseBoard={releaseBoard}
-              onAdd={onAddAsset}
-              onTranscribeLyrics={onTranscribeLyrics}
-              onReviewLyrics={onReviewLyrics}
-              onDrop={handleDrop}
-              onOpenFolder={onOpenAssetsFolder}
-            />
+            <div className="grid gap-4">
+              <div className="flex items-start justify-between gap-4 px-1">
+                <div>
+                  <h3 className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/50">
+                    Campaign Assets
+                  </h3>
+                  <p className="mt-1.5 max-w-[390px] text-[11px] leading-4 text-white/38">
+                    Add what already exists. Agents will use these files and help create what is missing.
+                  </p>
+                </div>
+                <span className="shrink-0 text-[10px] uppercase tracking-[0.14em] text-white/30">3 of 3</span>
+              </div>
+              <AssetsSetup
+                manifest={assetManifest}
+                busy={assetBusy}
+                releaseBoard={releaseBoard}
+                onAdd={onAddAsset}
+                onTranscribeLyrics={onTranscribeLyrics}
+                onReviewLyrics={onReviewLyrics}
+                onDrop={handleDrop}
+                onOpenFolder={onOpenAssetsFolder}
+              />
+            </div>
           )}
         </div>
 
         <div className="border-t border-white/[0.06] px-5 py-4">
-          {activeTab === 'brief' ? (
+          {!showAssets ? (
             <>
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={save}
-                  disabled={saving || !canSave}
+                  onClick={briefPage === 'essentials' ? () => setBriefPage('song') : save}
+                  disabled={briefPage === 'essentials' ? !canSave : saving || !canSave}
                   className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-full bg-orange-500 px-4 text-sm font-medium text-black hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-60"
                   title={campaignWindowError ?? (!hasSaveableMissionBrief(editableBrief) ? 'Add a title or goal before saving' : undefined)}
                 >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                  Accept Brief
+                  {briefPage === 'essentials' ? (
+                    <ChevronRight className="h-4 w-4" />
+                  ) : saving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                  Continue
                 </button>
                 <button
                   type="button"
-                  onClick={() => onOpenChange(false)}
+                  onClick={briefPage === 'essentials' ? () => onOpenChange(false) : () => setBriefPage('essentials')}
                   className="inline-flex h-10 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03] px-4 text-sm font-medium text-white/62 hover:bg-white/[0.07] hover:text-white"
                 >
-                  Skip
+                  {briefPage === 'essentials' ? 'Skip' : 'Back'}
                 </button>
               </div>
               {!canSave ? (
@@ -390,18 +500,20 @@ export function MissionBriefDrawer({
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={briefDirty ? save : () => onOpenChange(false)}
-                disabled={briefDirty && (saving || !canSave)}
+                onClick={() => onOpenChange(false)}
                 className="inline-flex h-10 flex-1 items-center justify-center rounded-full bg-white/90 px-4 text-sm font-medium text-black hover:bg-white"
               >
-                {briefDirty ? 'Save Brief' : 'Done'}
+                Done
               </button>
               <button
                 type="button"
-                onClick={() => setActiveTab('brief')}
+                onClick={() => {
+                  setShowAssets(false)
+                  setBriefPage('song')
+                }}
                 className="inline-flex h-10 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03] px-4 text-sm font-medium text-white/62 hover:bg-white/[0.07] hover:text-white"
               >
-                Brief
+                Back
               </button>
             </div>
           )}
@@ -411,13 +523,30 @@ export function MissionBriefDrawer({
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  description,
+  children,
+}: {
+  label: string
+  description?: string
+  children: React.ReactNode
+}) {
   return (
     <label className="grid gap-1.5">
       <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-white/32">{label}</span>
+      {description ? <span className="text-[11px] leading-4 text-white/30">{description}</span> : null}
       {children}
     </label>
   )
+}
+
+function toggleListValue(values: string[] | undefined, value: string): string[] | undefined {
+  const current = values ?? []
+  const next = current.includes(value)
+    ? current.filter((item) => item !== value)
+    : [...current, value]
+  return next.length > 0 ? next : undefined
 }
 
 function CampaignWindowPicker({
@@ -661,31 +790,6 @@ function formatCampaignDate(value?: string): string {
     : 'Choose date'
 }
 
-function TabButton({
-  active,
-  children,
-  onClick,
-}: {
-  active: boolean
-  children: React.ReactNode
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'h-8 rounded-full px-3 text-xs font-medium transition-colors',
-        active
-          ? 'bg-white/90 text-black'
-          : 'bg-white/[0.025] text-white/50 hover:bg-white/[0.06] hover:text-white/80',
-      )}
-    >
-      {children}
-    </button>
-  )
-}
-
 function AssetsSetup({
   manifest,
   busy,
@@ -711,10 +815,8 @@ function AssetsSetup({
   const lyricsApproved = files.some((file) => file.status === 'available' && file.kind === 'lyrics' && file.lyrics && !file.lyrics.reviewRequired)
   const lyricsDraftExists = Boolean(master?.trackIntelligence?.draft)
     || files.some((file) => file.status === 'available' && file.kind === 'lyrics' && file.lyrics?.reviewRequired)
-  const cover = firstAsset(files, ['cover-art'])
   const photos = files.filter((file) => file.status === 'available' && file.kind === 'press-photo').length
   const rawVideo = files.filter((file) => file.status === 'available' && file.kind === 'raw-video').length
-  const refs = files.filter((file) => file.status === 'available' && ['moodboard-image', 'audio-reference'].includes(file.kind)).length
   const toCreate = releaseBoard.categories
     .flatMap((category) => category.items.map((item) => ({ category: category.label, item })))
     .filter(({ item }) => isReleaseBoardItemIncluded(item) && ['canvas', 'lyric-clips', 'viral-clips', 'ugc-clips', 'lyric-video', 'ad-creatives'].includes(item.id))
@@ -755,10 +857,8 @@ function AssetsSetup({
             busy={busy}
             onClick={() => onAdd('lyrics')}
           />
-          <AssetBucket icon={ImageIcon} label="Cover Art" value={cover?.label ?? 'Missing'} active={Boolean(cover)} busy={busy} onClick={() => onAdd('cover-art')} />
           <AssetBucket icon={ImageIcon} label="Photos" value={photos ? `${photos} added` : 'Add'} active={photos > 0} busy={busy} onClick={() => onAdd('any')} />
           <AssetBucket icon={Video} label="Raw Video" value={rawVideo ? `${rawVideo} added` : 'Add'} active={rawVideo > 0} busy={busy} onClick={() => onAdd('any')} />
-          <AssetBucket icon={Sparkles} label="References" value={refs ? `${refs} added` : 'Add'} active={refs > 0} busy={busy} onClick={() => onAdd('any')} />
         </div>
 
         <button

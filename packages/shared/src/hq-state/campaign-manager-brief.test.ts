@@ -24,8 +24,15 @@ describe('Campaign Manager Brief', () => {
     expect(brief.campaign.name).toBe('September Single');
     expect(brief.campaign.readiness?.nextMissing).toContain('Cover art');
     expect(brief.operatingState.suggestedFocus).toContain('approval');
+    expect(brief.campaign.mission?.bpm).toBe(130);
+    expect(brief.campaign.mission?.sonicReferences).toEqual(['Rush — Artist A', 'Static — Artist B']);
     expect(brief.revision).toMatch(/^campaign-manager-v1:fnv1a:[0-9a-f]{8}$/);
-    expect(renderCampaignManagerBriefPromptSection(brief).length).toBeLessThanOrEqual(CAMPAIGN_MANAGER_BRIEF_MAX_CHARS);
+    const prompt = renderCampaignManagerBriefPromptSection(brief);
+    expect(prompt).toContain('Genre: alt-pop / drum and bass');
+    expect(prompt).toContain('BPM: 130');
+    expect(prompt).toContain('Similar sonics: Rush — Artist A, Static — Artist B');
+    expect(prompt).toContain('Theme: Escaping a life that no longer fits.');
+    expect(prompt.length).toBeLessThanOrEqual(CAMPAIGN_MANAGER_BRIEF_MAX_CHARS);
     expect(parseCampaignManagerBrief(serializeCampaignManagerBrief(brief))?.revision).toBe(brief.revision);
   });
 
@@ -106,7 +113,23 @@ function campaign(): ManagerCampaignSnapshot {
     workspaceId: 'campaign-1',
     name: 'September Single',
     primary: true,
-    mission: { id: 'mission-brief', workspaceId: 'campaign-1', status: 'full', completeness: 90, missionType: 'single', title: 'September Single', goal: 'Build audience.', releaseDate: '2026-09-12', updatedAt: '2026-08-29T00:00:00.000Z' },
+    mission: {
+      id: 'mission-brief',
+      workspaceId: 'campaign-1',
+      status: 'full',
+      completeness: 90,
+      missionType: 'single',
+      title: 'September Single',
+      goal: 'Build audience.',
+      releaseDate: '2026-09-12',
+      genre: 'alt-pop / drum and bass',
+      bpm: 130,
+      sonicReferences: ['Rush — Artist A', 'Static — Artist B'],
+      theme: 'Escaping a life that no longer fits.',
+      energy: 'Tense verses with a fast, explosive chorus.',
+      keyMoments: 'Double-time lift at 0:42.',
+      updatedAt: '2026-08-29T00:00:00.000Z',
+    },
     readiness: { done: 8, total: 12, nextMissing: ['Cover art'] },
     essentialAssets: [{ label: 'Master', available: true }, { label: 'Cover art', available: false }],
     calendarHighlights: [{ title: 'Final mix', date: '2026-09-01', status: 'scheduled', timing: 'upcoming' }],

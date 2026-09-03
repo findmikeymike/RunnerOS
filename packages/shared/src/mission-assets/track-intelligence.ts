@@ -33,6 +33,7 @@ export function missionLyricsProjectionFromTrackIntelligence(
       text: line.text,
       start_time: (line.startMs ?? 0) / 1000,
       end_time: (line.endMs ?? line.startMs ?? 0) / 1000,
+      section: line.section,
     })),
     reviewRequired,
     status: reviewRequired ? 'machine' : 'approved',

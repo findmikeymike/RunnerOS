@@ -98,6 +98,12 @@ export function renderCampaignManagerBriefPromptSection(brief: CampaignManagerBr
     else if (mission.timeline) lines.push(`Timeline: ${mission.timeline}`);
     if (mission.campaignFinishDate) lines.push(`Campaign finish: ${mission.campaignFinishDate} (${mission.campaignDateStatuses?.finish ?? 'target'})`);
     if (mission.goal) lines.push(`Campaign goal: ${mission.goal}`);
+    if (mission.genre) lines.push(`Genre: ${mission.genre}`);
+    if (mission.bpm) lines.push(`BPM: ${mission.bpm}`);
+    if (mission.sonicReferences?.length) lines.push(`Similar sonics: ${mission.sonicReferences.join(', ')}`);
+    if (mission.theme) lines.push(`Theme: ${mission.theme}`);
+    if (mission.energy) lines.push(`Energy and movement: ${mission.energy}`);
+    if (mission.keyMoments) lines.push(`Key song moments: ${mission.keyMoments}`);
     if (mission.targetListener) lines.push(`Target listener: ${mission.targetListener}`);
     if (mission.mood) lines.push(`Mood: ${mission.mood}`);
     if (mission.visualWorld) lines.push(`Visual world: ${mission.visualWorld}`);
@@ -263,7 +269,9 @@ function isMissionBrief(value: unknown): boolean {
   if (!isRecord(value)) return false;
   if (!isNonEmptyString(value.id) || !isNonEmptyString(value.workspaceId) || !isNonEmptyString(value.status)) return false;
   if (!isNonNegativeFiniteNumber(value.completeness)) return false;
-  if (!areOptionalStrings(value, ['missionType', 'title', 'goal', 'timeline', 'releaseDate', 'promoBudget', 'mood', 'visualWorld', 'targetListener', 'updatedAt'])) return false;
+  if (!areOptionalStrings(value, ['missionType', 'title', 'goal', 'timeline', 'releaseDate', 'promoBudget', 'genre', 'theme', 'energy', 'keyMoments', 'mood', 'visualWorld', 'targetListener', 'updatedAt'])) return false;
+  if (!isOptionalFiniteNumber(value.bpm)) return false;
+  if (value.sonicReferences !== undefined && !isStringArray(value.sonicReferences)) return false;
   if (value.channels !== undefined && !isStringArray(value.channels)) return false;
   if (value.openQuestions !== undefined && !isStringArray(value.openQuestions)) return false;
   return value.references === undefined || isArrayOf(value.references, (item) => (
@@ -421,6 +429,12 @@ function compactMission(mission: MissionBrief): MissionBrief {
     campaignFinishDate: cap(mission.campaignFinishDate, 40),
     campaignDateStatuses: mission.campaignDateStatuses,
     promoBudget: cap(mission.promoBudget, 100),
+    genre: cap(mission.genre, 120),
+    bpm: mission.bpm,
+    sonicReferences: mission.sonicReferences?.map((item) => cap(item, 120)).filter(isString).slice(0, 5),
+    theme: cap(mission.theme, 360),
+    energy: cap(mission.energy, 240),
+    keyMoments: cap(mission.keyMoments, 360),
     mood: cap(mission.mood, 240),
     visualWorld: cap(mission.visualWorld, 360),
     references: mission.references?.slice(0, 5).map((item) => ({ type: item.type, value: cap(item.value, 140) ?? 'Reference' })),

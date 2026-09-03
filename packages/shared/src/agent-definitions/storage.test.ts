@@ -899,6 +899,7 @@ body
 
     expect(lyricVideoAgent).toBeDefined()
     expect(lyricVideoAgent?.metadata.name).toBe('Lyric Video')
+    expect(lyricVideoAgent?.systemPrompt).toContain('artist-marked `hook` and `chorus` lines')
     expect(lyricVideoAgent?.metadata.visualAgent).toBe(true)
     expect(lyricVideoAgent?.metadata.skills).toContain('lyric-video-genesis')
     expect(lyricVideoAgent?.metadata.sources).toContain('genesis-lyric')

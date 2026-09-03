@@ -418,8 +418,13 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
             text: line.text,
             start_time: line.startMs / 1000,
             end_time: line.endMs / 1000,
+            section: line.section,
           }] : [])
           : undefined,
+        lyricSections: value.lyrics.lines.flatMap((line, lineIndex) => line.section ? [{
+          lineIndex,
+          section: line.section,
+        }] : []),
         assetId: campaignLyricsAsset?.id,
         sourceAudioAssetId: campaignReviewAudio.id,
         language: value.lyrics.language,
@@ -845,6 +850,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId,
 
       <MissionBriefDrawer
         open={drawerOpen}
+        backgroundInteractionLocked={Boolean(trackReviewAudioAssetId && campaignReviewIntelligence)}
         workspaceId={workspaceId}
         mission={mission}
         onOpenChange={setDrawerOpen}

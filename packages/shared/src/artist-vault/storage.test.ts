@@ -306,7 +306,7 @@ describe('artist vault', () => {
       lyrics: {
         timingSource: 'transcription',
         timingStatus: 'ready',
-        lines: [{ id: 'line-1', text: 'approved lyric', startMs: 0, endMs: 1200 }],
+        lines: [{ id: 'line-1', text: 'approved lyric', startMs: 0, endMs: 1200, section: 'hook' }],
       },
       character: { genre: ['alt-pop'], moods: ['melancholy'], themes: ['leaving home'], tempoBpm: 92 },
     }, 'client-1').assets[0]!;
@@ -316,7 +316,7 @@ describe('artist vault', () => {
     expect(vaultAssetForAgentDetail(reviewed).trackIntelligence).toMatchObject({
       status: 'reviewed',
       approved: {
-        lyrics: { lines: [{ text: 'approved lyric' }] },
+        lyrics: { lines: [{ text: 'approved lyric', section: 'hook' }] },
         reviewedBy: { type: 'user', clientId: 'client-1' },
       },
     });
