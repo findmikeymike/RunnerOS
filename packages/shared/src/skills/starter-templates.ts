@@ -191,7 +191,8 @@ Use \`schedule_work\` with \`destination: "automation"\` when a saved worker or 
 - Read the selected workflow's declared inputs.
 - Bind every required input explicitly: \`fixed\` when the artist supplied a stable value, \`ask\` when it changes each run, or \`trigger\` only when the selected trigger can provide it.
 - Never make up an empty string, zero, false, path, topic, or other placeholder.
-- Prefer \`trigger: { type: "schedule", cadence: "daily" | "weekly" }\` so Artist OS places background work away from other jobs. Use \`cron\` only when the artist named a specific time.
+- If recurrence is not already clear, ask one compact choice: daily, weekly, monthly, or when something happens. Do not repeat the question when the artist already said when.
+- Prefer \`trigger: { type: "schedule", cadence: "daily" | "weekly" | "monthly" }\` so Artist OS places background work away from other jobs. Use \`cron\` only when the artist named a specific time.
 - Before saving, summarize what runs, what starts it, which values stay fixed, and what Artist OS will ask for each run.
 
 ## Templating: \`$CRAFT_*\` env vars

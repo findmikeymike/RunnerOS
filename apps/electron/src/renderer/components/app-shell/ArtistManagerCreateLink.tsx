@@ -11,7 +11,7 @@ export type ArtistManagerCreationKind = 'worker' | 'workflow' | 'automation' | '
 const CREATION_DRAFTS: Record<ArtistManagerCreationKind, string> = {
   worker: 'Help me create a worker. Ask only the minimum questions needed to define one clear job, then show me the complete worker draft before saving it.',
   workflow: 'Help me create a workflow: a chain of specialists acting in sequence for long, complex work. Ask only what is missing, then show me the complete workflow draft before saving it.',
-  automation: 'Help me set up automatic work. Begin by asking, "What would you like Artist OS to handle automatically?" Resolve the right active worker or workflow, bind every required workflow input, ask at most one compact clarification, prefer automatic weekly or daily placement unless I name a time, then show one plain-language review sentence before saving with schedule_work.',
+  automation: 'Help me set up automatic work. Begin by asking, "What would you like Artist OS to handle automatically?" Resolve the right active worker or workflow and bind every required workflow input. If I have not said when it should repeat, ask one compact choice: daily, weekly, monthly, or when something happens. Do not ask again if my request already makes the recurrence clear. Prefer automatic placement unless I name an exact time, then show one plain-language review sentence before saving with schedule_work.',
   skill: 'Help me find the right skill. Ask what capability I need, search Artist OS skills first, and search the external marketplace only if there is no strong local match. Do not install or activate external content from search results.',
 }
 
@@ -25,12 +25,14 @@ export function ArtistManagerCreateLink({
   className,
   label: labelOverride,
   prominent = false,
+  draft,
 }: {
   kind: ArtistManagerCreationKind
   workspaceId: string | null | undefined
   className?: string
   label?: string
   prominent?: boolean
+  draft?: string
 }) {
   const {
     activeAgents = [],
@@ -61,7 +63,7 @@ export function ArtistManagerCreateLink({
         sources: enabledSources,
         contextDocs,
         agentCatalog: activeAgents.filter((agent) => agent.slug !== manager.slug),
-        draftInput: getArtistManagerCreationDraft(kind),
+        draftInput: draft ?? getArtistManagerCreationDraft(kind),
       })
     } catch (error) {
       toast.error('Failed to open Artist Manager', {
@@ -70,7 +72,7 @@ export function ArtistManagerCreateLink({
     } finally {
       setOpening(false)
     }
-  }, [activeAgents, enabledSources, kind, onCreateSession, onInputChange, opening, skills, workspaceId])
+  }, [activeAgents, draft, enabledSources, kind, onCreateSession, onInputChange, opening, skills, workspaceId])
 
   return (
     <button

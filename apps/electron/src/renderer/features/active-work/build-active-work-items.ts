@@ -1,4 +1,5 @@
 import type { ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
+import { nextDailyWindowRuns } from '@craft-agent/shared/automations/daily-window'
 import type { AutomationListItem, ExecutionEntry } from '@/components/automations/types'
 import { computeNextRuns } from '@/components/automations/utils'
 import type { ActiveWorkItem, ActiveWorkSection } from './types'
@@ -42,6 +43,7 @@ export interface BuildActiveWorkItemsInput {
 
 const ATTENTION_STATUS = new Set(['needs-setup', 'needs-approval', 'awaiting-review', 'needs-attention'])
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+const RECENT_COMPLETION_MS = 30 * 24 * 60 * 60 * 1000
 
 export function countStaleInputRequests(items: ActiveWorkItem[], now = Date.now()): number {
   return items.filter((item) => {
@@ -86,6 +88,17 @@ function scheduledStatusLabel(order: ScheduledWorkOrder): string {
     case 'needs-attention': return 'Needs attention'
     default: return order.status
   }
+}
+
+function scheduledActionLabel(order: ScheduledWorkOrder, missingSource: boolean): ActiveWorkItem['actionLabel'] {
+  if (order.inputRequest) return 'Supply'
+  if (missingSource) return 'Reschedule'
+  if (order.status === 'needs-approval') return 'Approve again'
+  if (order.status === 'awaiting-review') return 'Review'
+  if (/connect|credential|account|token|sign.?in/i.test(order.attention?.message ?? '')) return 'Reconnect'
+  if (/missed|schedule|time|window/i.test(order.attention?.message ?? '')) return 'Reschedule'
+  if (order.status === 'needs-setup') return 'Activate'
+  return ATTENTION_STATUS.has(order.status) ? 'Review' : undefined
 }
 
 function workflowSection(state: ActiveWorkflowRunLike['state']): ActiveWorkSection | null {
@@ -187,10 +200,16 @@ function compareItems(a: ActiveWorkItem, b: ActiveWorkItem): number {
 
 export function buildActiveWorkItems(input: BuildActiveWorkItemsInput): ActiveWorkItem[] {
   const runningWorkspaceIds = input.runningWorkspaceIds ?? new Set([input.workspaceId])
+  const latestCompletedByAutomation = new Map<string, ScheduledWorkOrder>()
+  for (const order of input.scheduledWork) {
+    if (order.deletedAt || order.status !== 'done' || !order.automationRef?.matcherId) continue
+    const current = latestCompletedByAutomation.get(order.automationRef.matcherId)
+    if (!current || current.updatedAt < order.updatedAt) latestCompletedByAutomation.set(order.automationRef.matcherId, order)
+  }
   const orders = input.scheduledWork.filter((order) => (
     !order.deletedAt
     && (order.owner.workspaceId === input.workspaceId
-      || ((order.status === 'running' || order.status === 'needs-setup' || order.status === 'needs-attention') && runningWorkspaceIds.has(order.owner.workspaceId)))
+      || ((order.status === 'running' || ATTENTION_STATUS.has(order.status)) && runningWorkspaceIds.has(order.owner.workspaceId)))
   ))
   const orderByWorkflowRun = new Map<string, ScheduledWorkOrder>()
   const orderBySession = new Map<string, ScheduledWorkOrder>()
@@ -228,6 +247,7 @@ export function buildActiveWorkItems(input: BuildActiveWorkItemsInput): ActiveWo
       sortAt: order?.startAt ?? run.createdAt,
       updatedAt: run.updatedAt,
       attentionReason: section === 'attention' ? workflowStatusLabel(run.state) : undefined,
+      actionLabel: section === 'attention' ? 'Review' : undefined,
       openTarget: { kind: 'workflow-run', id: run.id },
     })
   }
@@ -265,11 +285,13 @@ export function buildActiveWorkItems(input: BuildActiveWorkItemsInput): ActiveWo
     const missingSource = hasLinkedTarget && !hasAvailableTarget && !hasDurableAttention
     const section = missingSource ? 'attention' : scheduledSection(order)
     if (!section) continue
-    const openTarget = links.workflowRunId && availableWorkflowRunIds.has(links.workflowRunId)
-      ? { kind: 'workflow-run' as const, id: links.workflowRunId }
-      : links.sessionId && availableSessionIds.has(links.sessionId)
-        ? { kind: 'session' as const, id: links.sessionId }
-        : { kind: 'scheduled-work' as const, id: order.id }
+    const openTarget = ATTENTION_STATUS.has(order.status)
+      ? { kind: 'scheduled-work' as const, id: order.id }
+      : links.workflowRunId && availableWorkflowRunIds.has(links.workflowRunId)
+        ? { kind: 'workflow-run' as const, id: links.workflowRunId }
+        : links.sessionId && availableSessionIds.has(links.sessionId)
+          ? { kind: 'session' as const, id: links.sessionId }
+          : { kind: 'scheduled-work' as const, id: order.id }
     items.push({
       id: `scheduled-work:${order.id}`,
       source: 'scheduled-work',
@@ -291,6 +313,8 @@ export function buildActiveWorkItems(input: BuildActiveWorkItemsInput): ActiveWo
         ? 'The linked run or worker session is no longer available. Open the scheduled item to review or remove it.'
         : order.attention?.message,
       inputRequest: order.inputRequest,
+      actionLabel: scheduledActionLabel(order, missingSource),
+      nextRunAt: section === 'up-next' ? order.startAt : undefined,
       openTarget,
     })
   }
@@ -302,6 +326,11 @@ export function buildActiveWorkItems(input: BuildActiveWorkItemsInput): ActiveWo
   for (const automation of input.automations) {
     const latest = [...(input.automationExecutions?.get(automation.id) ?? [])]
       .sort((a, b) => b.timestamp - a.timestamp)[0]
+    const latestSuccess = [...(input.automationExecutions?.get(automation.id) ?? [])]
+      .filter((entry) => entry.status === 'success')
+      .sort((a, b) => b.timestamp - a.timestamp)[0]
+    const latestCompletedOrder = latestCompletedByAutomation.get(automation.id)
+    const queuesTrackedWork = automation.actions.some((action) => action.type === 'queue-work')
     const hasUnresolvedFailure = Boolean(
       automation.enabled
       &&
@@ -309,25 +338,44 @@ export function buildActiveWorkItems(input: BuildActiveWorkItemsInput): ActiveWo
       && latest.status !== 'success'
       && !latest.workOrderIds?.some((id) => attentionOrderIds.has(id)),
     )
-    const nextRun = automation.enabled && automation.cron
-      ? computeNextRuns(automation.cron, 1, automation.timezone)[0]
-      : undefined
+    const snoozedUntilMs = automation.snoozedUntil ? Date.parse(automation.snoozedUntil) : Number.NaN
+    const isSnoozed = automation.enabled && Number.isFinite(snoozedUntilMs) && snoozedUntilMs > Date.now()
+    const candidateRuns = automation.enabled && automation.cron
+      ? automation.dailyWindow
+        ? nextDailyWindowRuns(automation.id, automation.dailyWindow, 3, automation.timezone)
+        : computeNextRuns(automation.cron, 10, automation.timezone)
+      : []
+    const nextRun = candidateRuns.find((run) => !isSnoozed || run.getTime() >= snoozedUntilMs)
+    const recentCompletionAt = latestCompletedOrder?.updatedAt ?? (!queuesTrackedWork && latestSuccess ? asIso(latestSuccess.timestamp) : undefined)
+    const recentCompletionMs = recentCompletionAt ? Date.parse(recentCompletionAt) : Number.NaN
     items.push({
       id: `automation:${automation.id}`,
       source: 'automation',
       sourceId: automation.id,
       workspaceId: input.workspaceId,
-      section: hasUnresolvedFailure ? 'attention' : automation.enabled ? 'up-next' : 'paused',
+      section: isSnoozed ? 'paused' : hasUnresolvedFailure ? 'attention' : automation.enabled ? 'up-next' : 'paused',
       title: automation.name,
       subtitle: automation.summary,
-      statusLabel: hasUnresolvedFailure
+      statusLabel: isSnoozed
+        ? 'Snoozed'
+        : hasUnresolvedFailure
         ? latest!.status === 'blocked' ? 'Blocked' : 'Failed'
         : automation.enabled ? automationStateLabel(automation) : 'Paused',
       cadenceLabel: automationCadence(automation, input.describeCron),
       originLabel: originLabel(input.workspaceId, input),
       sortAt: nextRun?.toISOString(),
       updatedAt: hasUnresolvedFailure ? asIso(latest!.timestamp) : asIso(automation.lastExecutedAt),
-      attentionReason: hasUnresolvedFailure ? latest!.error : undefined,
+      attentionReason: !isSnoozed && hasUnresolvedFailure ? latest!.error : undefined,
+      actionLabel: !automation.enabled || isSnoozed
+        ? 'Activate'
+        : hasUnresolvedFailure && /connect|credential|account|token|sign.?in/i.test(latest?.error ?? '')
+          ? 'Reconnect'
+          : hasUnresolvedFailure ? 'Review' : 'Snooze 24h',
+      nextRunAt: nextRun?.toISOString(),
+      recentCompletionAt: Number.isFinite(recentCompletionMs) && Date.now() - recentCompletionMs <= RECENT_COMPLETION_MS
+        ? recentCompletionAt
+        : undefined,
+      snoozedUntil: Number.isFinite(snoozedUntilMs) && snoozedUntilMs > Date.now() ? automation.snoozedUntil : undefined,
       openTarget: { kind: 'automation', id: automation.id },
     })
   }

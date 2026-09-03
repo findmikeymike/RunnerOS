@@ -1,6 +1,7 @@
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { errorResponse, successResponse } from '../response.ts';
+import { automationReviewSentence, type AutomationReviewWhen } from '@craft-agent/shared/automations/review-sentence';
 
 export type ScheduleWorkInputBinding =
   | { mode: 'fixed'; value: unknown }
@@ -27,7 +28,7 @@ export type ScheduleWorkExecutionInput =
     };
 
 export type ScheduleWorkTriggerInput =
-  | { type: 'schedule'; cron?: string; cadence?: 'daily' | 'weekly'; timezone?: string }
+  | { type: 'schedule'; cron?: string; cadence?: 'daily' | 'weekly' | 'monthly'; timezone?: string }
   | { type: 'file-change'; watchPath: string; watchGlob?: string; changeTypes?: ('add' | 'change' | 'remove')[] }
   | { type: 'webhook'; slug: string; secretEnv?: string; allowUnauthenticated?: boolean }
   | { type: 'url-change'; url: string; intervalSeconds?: number }
@@ -123,9 +124,53 @@ export async function handleScheduleWork(ctx: SessionToolContext, args: Schedule
   try {
     const result = await ctx.scheduleWork(args);
     if (!result.ok) return errorResponse(result.error ?? 'Failed to schedule work.');
+    if (result.destination === 'automation' && args.trigger) {
+      const bindings = args.execution.type === 'workflow-run' ? args.execution.inputBindings ?? {} : {};
+      const requestedInputs = Object.entries(bindings).flatMap(([name, binding]) => binding.mode === 'ask' ? [name] : []);
+      const fixedInputs = Object.fromEntries(Object.entries(bindings).flatMap(([name, binding]) => binding.mode === 'fixed' ? [[name, binding.value]] : []));
+      return successResponse(automationReviewSentence({
+        title: result.title ?? args.title,
+        runnerName: humanizeSlug(args.execution.type === 'workflow-run' ? args.execution.workflowSlug : args.execution.agentSlug),
+        when: reviewWhen(args.trigger),
+        scheduleLabel: scheduleLabel(args.trigger, result.nextFireAt),
+        requestedInputs,
+        fixedInputs,
+      }));
+    }
     const timing = result.nextFireAt ? ` Next run: ${result.nextFireAt}.` : '';
-    return successResponse(`${result.destination === 'automation' ? 'Automation created' : 'Work scheduled'}: ${result.title ?? args.title}.${timing}`);
+    return successResponse(`Work scheduled: ${result.title ?? args.title}.${timing}`);
   } catch (error) {
     return errorResponse(`Failed to schedule work: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+function reviewWhen(trigger: ScheduleWorkTriggerInput): AutomationReviewWhen {
+  if (trigger.type === 'schedule') return trigger.cadence ?? 'custom';
+  if (trigger.type === 'file-change') return 'file';
+  if (trigger.type === 'webhook') return 'webhook';
+  if (trigger.type === 'url-change') return 'url';
+  return 'message';
+}
+
+function scheduleLabel(trigger: ScheduleWorkTriggerInput, nextFireAt?: string): string | undefined {
+  if (trigger.type !== 'schedule' || !nextFireAt) return undefined;
+  const date = new Date(nextFireAt);
+  if (Number.isNaN(date.getTime())) return undefined;
+  const timezone = trigger.timezone;
+  const time = date.toLocaleTimeString('en-US', { timeZone: timezone, hour: 'numeric', minute: '2-digit' });
+  if (!trigger.cadence) {
+    const day = date.toLocaleDateString('en-US', { timeZone: timezone, weekday: 'long', month: 'short', day: 'numeric' });
+    return `Next run ${day} at ${time}`;
+  }
+  if (trigger.cadence === 'daily') return time;
+  if (trigger.cadence === 'weekly') {
+    const day = date.toLocaleDateString('en-US', { timeZone: timezone, weekday: 'long' });
+    return `${day} at ${time}`;
+  }
+  const day = date.toLocaleDateString('en-US', { timeZone: timezone, day: 'numeric' });
+  return `Monthly on day ${day} at ${time}`;
+}
+
+function humanizeSlug(value: string): string {
+  return value.replace(/[-_]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }

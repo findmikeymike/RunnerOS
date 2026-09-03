@@ -1,8 +1,18 @@
 import { describe, expect, test } from 'bun:test'
 import { scheduledWorkDefinitionDigest } from '@craft-agent/shared/scheduled-work'
-import { assertAutomationQueueWorkBindings, assertTestAutomationHasQueueWorkEvent, automaticScheduleOccupancyFromConfig, beginPromptAutomation, findAutomationMatcherIndexByIdentity, replacementAutomationMatcher, uniqueWebhookSlug } from './automations'
+import { assertAutomationCanBeDuplicated, assertAutomationQueueWorkBindings, assertTestAutomationHasQueueWorkEvent, assertUniqueAutomationTemplateKey, automaticScheduleOccupancyFromConfig, beginPromptAutomation, findAutomationMatcherIndexByIdentity, replacementAutomationMatcher, uniqueWebhookSlug } from './automations'
 
 describe('automation RPC helpers', () => {
+  test('prevents a shared template from being installed twice', () => {
+    const config = { automations: { SchedulerTick: [{ templateKey: 'artist-social-comment-replies' }] } }
+    expect(() => assertUniqueAutomationTemplateKey(config, 'artist-social-comment-replies')).toThrow('already installed')
+    expect(() => assertUniqueAutomationTemplateKey(config, 'another-template')).not.toThrow()
+  })
+
+  test('prevents a shared artist automation from being duplicated', () => {
+    expect(() => assertAutomationCanBeDuplicated({ templateKey: 'artist-social-comment-replies' })).toThrow('cannot be duplicated')
+    expect(() => assertAutomationCanBeDuplicated({ name: 'ordinary automation' })).not.toThrow()
+  })
   test('extracts enabled scheduled work for atomic automatic placement', () => {
     expect(automaticScheduleOccupancyFromConfig({ automations: { SchedulerTick: [
       { cron: '0 9 * * 1', timezone: 'America/Chicago', actions: [{ type: 'prompt', prompt: 'Run.' }] },

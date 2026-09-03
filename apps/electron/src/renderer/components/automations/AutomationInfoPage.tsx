@@ -8,6 +8,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { PauseCircle, AlertCircle } from 'lucide-react'
+import { nextDailyWindowRuns } from '@craft-agent/shared/automations/daily-window'
 import {
   Info_Page,
   Info_Section,
@@ -60,7 +61,13 @@ export function AutomationInfoPage({
 }: AutomationInfoPageProps) {
   const { t } = useTranslation()
   const workspace = useActiveWorkspace()
-  const nextRuns = automation.cron ? computeNextRuns(automation.cron, 3, automation.timezone) : []
+  const nextRuns = automation.cron
+    ? automation.dailyWindow
+      ? nextDailyWindowRuns(automation.id, automation.dailyWindow, 3, automation.timezone)
+      : computeNextRuns(automation.cron, 3, automation.timezone)
+    : []
+  const snoozedUntilMs = automation.snoozedUntil ? Date.parse(automation.snoozedUntil) : Number.NaN
+  const isSnoozed = automation.enabled && Number.isFinite(snoozedUntilMs) && snoozedUntilMs > Date.now()
   const editActions = workspace?.rootPath ? (
     <EditPopover
       trigger={<EditButton />}
@@ -131,11 +138,6 @@ export function AutomationInfoPage({
             {automation.cron && (
               <>
                 <Info_Table.Row label={t('automations.labelRepeats')} value={describeCron(automation.cron)} />
-                <Info_Table.Row label={t('automations.labelScheduleExpression')}>
-                  <code className="text-xs font-mono bg-foreground/5 px-1.5 py-0.5 rounded">
-                    {automation.cron}
-                  </code>
-                </Info_Table.Row>
                 {nextRuns.length > 0 && (
                   <Info_Table.Row label={t('automations.labelNextRuns')}>
                     <div className="flex flex-col gap-0.5">
@@ -201,10 +203,15 @@ export function AutomationInfoPage({
           <Info_Table>
             <Info_Table.Row label={t('automations.labelAccessLevel')} value={getPermissionDisplayName(automation.permissionMode)} />
             <Info_Table.Row label={t('automations.labelStatus')}>
-              <Info_Badge color={automation.enabled ? 'success' : 'muted'}>
-                {automation.enabled ? t('automations.statusActive') : t('automations.statusDisabled')}
+              <Info_Badge color={isSnoozed ? 'warning' : automation.enabled ? 'success' : 'muted'}>
+                {isSnoozed ? 'Snoozed' : automation.enabled ? t('automations.statusActive') : t('automations.statusDisabled')}
               </Info_Badge>
             </Info_Table.Row>
+            {isSnoozed && (
+              <Info_Table.Row label="Resumes">
+                <span className="text-sm text-foreground/70">{new Date(snoozedUntilMs).toLocaleString()}</span>
+              </Info_Table.Row>
+            )}
             {automation.labels && automation.labels.length > 0 && (
               <Info_Table.Row label={t('automations.labelLabels')}>
                 <div className="flex gap-1.5 flex-wrap">
@@ -236,16 +243,21 @@ export function AutomationInfoPage({
           <AutomationEventTimeline entries={executions} onReplay={onReplay} />
         </Info_Section>
 
-        {/* Section: Raw config (JSON) */}
-        <Info_Section title={t('automations.sectionRawConfig')}>
-          <div className="rounded-[8px] shadow-minimal overflow-hidden [&_pre]:!bg-transparent [&_.relative]:!bg-transparent [&_.relative]:!border-0 [&_.relative>div:first-child]:!bg-transparent [&_.relative>div:first-child]:!border-0">
-            <Info_Markdown maxHeight={300} fullscreen>
-              {`\`\`\`json\n${JSON.stringify({
+        <details className="group rounded-[8px] bg-foreground/[0.025] px-3 py-2">
+          <summary className="cursor-pointer list-none text-xs font-medium text-foreground/45 hover:text-foreground/70">Advanced</summary>
+          <div className="mt-3 space-y-3">
+            {automation.cron ? <div className="text-xs text-foreground/45">Schedule expression <code className="ml-2 rounded bg-foreground/5 px-1.5 py-0.5 font-mono text-foreground/65">{automation.cron}</code></div> : null}
+            <Info_Section title={t('automations.sectionRawConfig')}>
+              <div className="rounded-[8px] shadow-minimal overflow-hidden [&_pre]:!bg-transparent [&_.relative]:!bg-transparent [&_.relative]:!border-0 [&_.relative>div:first-child]:!bg-transparent [&_.relative>div:first-child]:!border-0">
+                <Info_Markdown maxHeight={300} fullscreen>
+                  {`\`\`\`json\n${JSON.stringify({
                 event: automation.event,
                 matcher: automation.matcher,
                 conditions: automation.conditions,
                 cron: automation.cron,
+                dailyWindow: automation.dailyWindow,
                 timezone: automation.timezone,
+                snoozedUntil: automation.snoozedUntil,
                 permissionMode: automation.permissionMode,
                 labels: automation.labels,
                 enabled: automation.enabled,
@@ -264,10 +276,12 @@ export function AutomationInfoPage({
                 ...(automation.pollHeaders && { pollHeaders: automation.pollHeaders }),
                 ...(automation.pollAuth && { pollAuth: automation.pollAuth }),
                 actions: automation.actions,
-              }, null, 2)}\n\`\`\``}
-            </Info_Markdown>
+                  }, null, 2)}\n\`\`\``}
+                </Info_Markdown>
+              </div>
+            </Info_Section>
           </div>
-        </Info_Section>
+        </details>
       </Info_Page.Content>
     </Info_Page>
   )

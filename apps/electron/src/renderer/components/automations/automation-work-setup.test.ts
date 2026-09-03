@@ -163,6 +163,15 @@ describe('automation work setup', () => {
     })).toBe('Every Tuesday at 9:30 AM, Merch Run will wait under Needs you for design file, then run with campaign brief “Q4 drop” and size run 250 using Merch workflow.')
   })
 
+  test('writes the assigned monthly schedule in plain language', () => {
+    expect(automationReviewSentence({
+      title: 'Monthly Report',
+      runnerName: 'Report workflow',
+      when: 'monthly',
+      scheduleLabel: 'Monthly on day 4 at 9:00 AM',
+    })).toBe('Monthly on day 4 at 9:00 AM, Monthly Report will run using Report workflow.')
+  })
+
   test('does not repeat the runner name when it is also the automation title', () => {
     expect(automationReviewSentence({
       title: 'Merch Run',

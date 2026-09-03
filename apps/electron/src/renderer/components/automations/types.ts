@@ -259,10 +259,14 @@ export interface AutomationListItem {
   summary: string
   /** Whether this automation is enabled */
   enabled: boolean
+  /** ISO timestamp until which this automation is temporarily suppressed. */
+  snoozedUntil?: string
   /** Regex matcher (if any) */
   matcher?: string
   /** Cron expression (SchedulerTick only) */
   cron?: string
+  /** Optional local daily time window used to vary the exact run minute. */
+  dailyWindow?: { start: string; end: string }
   /** IANA timezone for cron */
   timezone?: string
   /** Permission mode */
@@ -473,10 +477,12 @@ interface AutomationsConfigMatcher {
   matcher?: string
   cron?: string
   timezone?: string
+  dailyWindow?: { start: string; end: string }
   permissionMode?: PermissionMode
   labels?: string[]
   conditions?: AutomationConditionUI[]
   enabled?: boolean
+  snoozedUntil?: string
   actions?: RawAction[]
   // External input fields
   slug?: string
@@ -545,6 +551,11 @@ function deriveAutomationSummary(event: string, matcher: AutomationsConfigMatche
     return 'On every inbound chat message'
   }
   if (matcher.cron) {
+    if (matcher.dailyWindow) {
+      const tz = matcher.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+      const tzCity = tz.split('/').pop()?.replace(/_/g, ' ') ?? tz
+      return `Daily at a varied time · ${formatClock(matcher.dailyWindow.start)}–${formatClock(matcher.dailyWindow.end)} (${tzCity})`
+    }
     const runs = computeNextRuns(matcher.cron, 1)
     if (runs.length > 0) {
       const next = runs[0]!
@@ -565,6 +576,13 @@ function deriveAutomationSummary(event: string, matcher: AutomationsConfigMatche
     return `Matches: ${matcher.matcher}`
   }
   return `On ${getEventDisplayName(event as AutomationTrigger)}`
+}
+
+function formatClock(value: string): string {
+  const [hourText, minute = '00'] = value.split(':')
+  const hour = Number(hourText)
+  if (!Number.isInteger(hour)) return value
+  return `${hour % 12 || 12}:${minute} ${hour >= 12 ? 'PM' : 'AM'}`
 }
 
 /**
@@ -603,8 +621,10 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
         name: deriveAutomationName(eventName, matcher),
         summary: deriveAutomationSummary(eventName, matcher),
         enabled: matcher.enabled !== false,
+        snoozedUntil: matcher.snoozedUntil,
         matcher: matcher.matcher,
         cron: matcher.cron,
+        dailyWindow: matcher.dailyWindow,
         timezone: matcher.timezone,
         permissionMode: matcher.permissionMode,
         labels: matcher.labels,

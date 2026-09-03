@@ -96,6 +96,8 @@
     "./skills/system": "./src/skills/system.ts",
     "./skills/categories": "./src/skills/categories.ts",
     "./automations": "./src/automations/index.ts",
+    "./automations/review-sentence": "./src/automations/review-sentence.ts",
+    "./automations/daily-window": "./src/automations/daily-window.ts",
     "./automations/staggered-schedule": "./src/automations/staggered-schedule.ts",
     "./campaign-calendar": "./src/campaign-calendar/index.ts",
     "./scheduled-work": "./src/scheduled-work/index.ts",

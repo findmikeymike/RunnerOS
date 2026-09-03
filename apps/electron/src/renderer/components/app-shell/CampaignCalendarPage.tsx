@@ -688,6 +688,22 @@ function CampaignCalendarSurface({
   onOpenComposer: (type?: ScheduledWorkComposerEntry['suggestedType']) => void
 }) {
   const [detailItemId, setDetailItemId] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    const raw = sessionStorage.getItem('artist-os:scheduled-work-focus')
+    if (!raw) return
+    try {
+      const target = JSON.parse(raw) as { workspaceId?: string; orderId?: string }
+      if (target.workspaceId !== workspaceId || !target.orderId) return
+      const item = activeCalendarItems.find((candidate) => candidate.scheduledWorkId === target.orderId)
+      if (!item) return
+      setSelectedCalendarDate(item.date)
+      setVisibleCalendarMonth(parseDateKey(item.date))
+      setDetailItemId(item.id)
+      sessionStorage.removeItem('artist-os:scheduled-work-focus')
+    } catch {
+      sessionStorage.removeItem('artist-os:scheduled-work-focus')
+    }
+  }, [activeCalendarItems, workspaceId])
   const dayMetaByDate = React.useMemo(() => {
     const metaByDate = new Map<string, CalendarMonthDayMeta>()
     for (const item of items) {

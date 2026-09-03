@@ -274,13 +274,19 @@ export const WEBHOOK_SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
 export const AutomationMatcherSchema = z.object({
   id: z.string().optional(),
+  templateKey: z.string().trim().min(1).optional(),
   name: z.string().trim().min(1, 'Automation name cannot be blank').optional(),
   matcher: z.string().optional(),
   cron: z.string().optional(),
   timezone: z.string().optional(),
+  dailyWindow: z.object({
+    start: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
+    end: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
+  }).refine(({ start, end }) => end >= start, 'Daily window must end at or after its start time').optional(),
   permissionMode: z.enum(['safe', 'ask', 'allow-all']).optional(),
   labels: z.array(z.string()).optional(),
   enabled: z.boolean().optional(),
+  snoozedUntil: z.string().datetime({ offset: true }).optional(),
   conditions: z.array(AutomationConditionSchema).optional(),
   actions: z.array(ActionDefinitionSchema).min(1, 'At least one action required'),
   // WebhookReceive-specific fields. Validated structurally here; cross-field

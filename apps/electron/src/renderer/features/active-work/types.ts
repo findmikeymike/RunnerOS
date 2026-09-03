@@ -24,5 +24,9 @@ export interface ActiveWorkItem {
   updatedAt?: string
   attentionReason?: string
   inputRequest?: ScheduledWorkInputRequest
+  actionLabel?: 'Supply' | 'Reconnect' | 'Reschedule' | 'Activate' | 'Approve again' | 'Review' | 'Snooze 24h'
+  nextRunAt?: string
+  recentCompletionAt?: string
+  snoozedUntil?: string
   openTarget: ActiveWorkOpenTarget
 }

@@ -25,7 +25,8 @@ import {
   DialogDescription,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { useActiveWorkspace } from '@/context/AppShellContext'
+import { useActiveWorkspace, useAppShellContext } from '@/context/AppShellContext'
+import { findArtistHQWorkspace } from '@/lib/artist-workspace'
 import {
   AUTOMATION_TEMPLATES,
   TEMPLATE_CATEGORY_LABELS,
@@ -43,6 +44,7 @@ export function TemplatesGalleryDialog({ trigger, open, onOpenChange }: Template
   const [internalOpen, setInternalOpen] = React.useState(false)
   const [pending, setPending] = React.useState<string | null>(null)
   const workspace = useActiveWorkspace()
+  const { workspaces } = useAppShellContext()
   const dialogOpen = open ?? internalOpen
   const setDialogOpen = React.useCallback((nextOpen: boolean) => {
     if (open === undefined) setInternalOpen(nextOpen)
@@ -51,15 +53,20 @@ export function TemplatesGalleryDialog({ trigger, open, onOpenChange }: Template
 
   const handlePick = React.useCallback(async (template: AutomationTemplate) => {
     if (!workspace?.id) return
+    const owner = template.ownerScope === 'artist-hq'
+      ? findArtistHQWorkspace(workspaces) ?? workspace
+      : workspace
     setPending(template.id)
     try {
       await window.electronAPI.createAutomationFromTemplate(
-        workspace.id,
+        owner.id,
         template.event,
         template.matcher,
       )
       toast.success(`Added: ${template.title}`, {
-        description: template.setupHint,
+        description: template.ownerScope === 'artist-hq' && owner.id !== workspace.id
+          ? `Added once in Artist HQ to prevent duplicate replies. ${template.setupHint ?? ''}`
+          : template.setupHint,
       })
       setDialogOpen(false)
     } catch (err) {
@@ -69,7 +76,7 @@ export function TemplatesGalleryDialog({ trigger, open, onOpenChange }: Template
     } finally {
       setPending(null)
     }
-  }, [setDialogOpen, workspace?.id])
+  }, [setDialogOpen, workspace, workspaces])
 
   const groups = React.useMemo(() => {
     const byCategory: Record<AutomationTemplate['category'], AutomationTemplate[]> = {

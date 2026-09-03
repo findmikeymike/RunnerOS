@@ -4352,6 +4352,22 @@ function ArtistCalendarView({
   onQueueHqWork: (type?: ScheduledWorkComposerEntry['suggestedType']) => void
 }) {
   const [detailEventId, setDetailEventId] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    const raw = sessionStorage.getItem('artist-os:scheduled-work-focus')
+    if (!raw) return
+    try {
+      const target = JSON.parse(raw) as { workspaceId?: string; orderId?: string }
+      if (target.workspaceId !== workspaceId || !target.orderId) return
+      const event = events.find((candidate) => candidate.scheduledWorkId === target.orderId)
+      if (!event) return
+      onSelectDate(event.date)
+      onChangeMonth(parseDateKey(event.date))
+      setDetailEventId(event.id)
+      sessionStorage.removeItem('artist-os:scheduled-work-focus')
+    } catch {
+      sessionStorage.removeItem('artist-os:scheduled-work-focus')
+    }
+  }, [events, onChangeMonth, onSelectDate, workspaceId])
   const dayMetaByDate = React.useMemo(() => {
     const metaByDate = new Map<string, CalendarMonthDayMeta>()
     for (const event of events) {

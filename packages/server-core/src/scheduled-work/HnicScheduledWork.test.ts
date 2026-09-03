@@ -458,6 +458,20 @@ describe('persistHnicScheduleWork', () => {
     expect(config.automations.SchedulerTick[0].cron).toBe('0 9 * * 2')
   })
 
+  test('persists automatic monthly work on a safe day present in every month', async () => {
+    const root = createRoot()
+    const workInput = workflowAutomation({
+      idempotencyKey: 'automatic-monthly',
+      trigger: { type: 'schedule', cadence: 'monthly', timezone: 'America/Chicago' },
+    })
+
+    await persistHnicScheduleWork(options(root, workInput))
+    const config = await Bun.file(resolveAutomationsConfigPath(root)).json()
+
+    expect(config.automations.SchedulerTick).toHaveLength(1)
+    expect(config.automations.SchedulerTick[0].cron).toBe('0 9 1 * *')
+  })
+
   test('serializes simultaneous automatic placement across workspaces', async () => {
     const firstRoot = createRoot()
     const secondRoot = createRoot()

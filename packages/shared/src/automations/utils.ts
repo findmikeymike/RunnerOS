@@ -8,6 +8,7 @@
 import type { BaseEventPayload } from './event-bus.ts';
 import type { AutomationEvent, AutomationMatcher, PromptReferences, AgentEvent, SdkAutomationInput } from './types.ts';
 import { cronMatchedInWindow, matchesCron } from './cron-matcher.ts';
+import { dailyWindowMatchedInRange, dailyWindowMatchesAt } from './daily-window.ts';
 import { sanitizeForShell } from './security.ts';
 import { evaluateConditions } from './conditions.ts';
 
@@ -163,12 +164,35 @@ function matchesBasePredicate(
   payload?: Record<string, unknown>,
 ): boolean {
   if (matcher.enabled === false) return false;
+  const evaluationTime = event === 'SchedulerTick' && typeof payload?.timestamp === 'number'
+    ? payload.timestamp
+    : Date.now();
+  let snoozedUntil: number | undefined;
+  if (matcher.snoozedUntil) {
+    const parsed = Date.parse(matcher.snoozedUntil);
+    if (Number.isFinite(parsed)) snoozedUntil = parsed;
+    if (snoozedUntil !== undefined && snoozedUntil > evaluationTime) return false;
+  }
+  const rawCatchUpFromMs = payload?.catchUpFromMs;
+  const catchUpFromMs = typeof rawCatchUpFromMs === 'number' && snoozedUntil !== undefined
+    ? Math.max(rawCatchUpFromMs, snoozedUntil)
+    : rawCatchUpFromMs;
   if (event === 'SchedulerTick') {
     if (!matcher.cron) return false;
+    if (matcher.dailyWindow) {
+      const rawTimestamp = payload?.timestamp;
+      const atMs = typeof rawTimestamp === 'number'
+        ? rawTimestamp
+        : typeof rawTimestamp === 'string' ? Date.parse(rawTimestamp) : Date.now();
+      const identity = matcher.id || matcher.name || matcher.cron;
+      if (Number.isFinite(atMs) && dailyWindowMatchesAt(identity, matcher.dailyWindow, atMs, matcher.timezone)) return true;
+      return typeof catchUpFromMs === 'number' && Number.isFinite(atMs)
+        ? dailyWindowMatchedInRange(identity, matcher.dailyWindow, catchUpFromMs, atMs, matcher.timezone)
+        : false;
+    }
     if (matchesCron(matcher.cron, matcher.timezone)) return true;
     // Catch-up tick: the process was suspended or restarted, so also ask
     // whether this cron was due during the gap we missed.
-    const catchUpFromMs = payload?.catchUpFromMs;
     if (typeof catchUpFromMs !== 'number') return false;
     const toMs = typeof payload?.timestamp === 'number' ? payload.timestamp : Date.now();
     return cronMatchedInWindow(matcher.cron, catchUpFromMs, toMs, matcher.timezone);

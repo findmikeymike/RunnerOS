@@ -64,7 +64,13 @@ function replaceWorkspaceOrders(
 }
 
 export function selectGloballyVisibleOrders(orders: ScheduledWorkOrder[]): ScheduledWorkOrder[] {
-  return orders.filter((order) => order.status === 'running' || order.status === 'needs-setup' || order.status === 'needs-attention')
+  return orders.filter((order) => (
+    order.status === 'running'
+    || order.status === 'needs-setup'
+    || order.status === 'needs-approval'
+    || order.status === 'awaiting-review'
+    || order.status === 'needs-attention'
+  ))
 }
 
 export function useGlobalRunningWork(localWorkspaceIds: string[]): GlobalRunningWorkSnapshot {

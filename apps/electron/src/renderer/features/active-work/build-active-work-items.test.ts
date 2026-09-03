@@ -322,6 +322,35 @@ describe('buildActiveWorkItems', () => {
     expect(items[0]?.statusLabel).toBe('Paused')
   })
 
+  test('shows a snoozed automation as paused and keeps its successful receipt', () => {
+    const completed = order({
+      status: 'done',
+      automationRef: { matcherId: 'auto-1', name: 'Weekly content', event: 'SchedulerTick', definitionDigest: 'definition', configurationDigest: 'configuration' },
+      updatedAt: '2026-09-01T02:00:00.000Z',
+    })
+    const items = buildActiveWorkItems({
+      workspaceId: 'workspace-1', sessions: [], workflowRuns: [], scheduledWork: [completed],
+      automations: [automation({ snoozedUntil: new Date(Date.now() + 86_400_000).toISOString(), actions: [{ type: 'queue-work', ownerScope: 'hq', title: 'Weekly content', execution: { type: 'agent-task', agentSlug: 'writer', brief: 'Write', permissionMode: 'safe', expectedOutput: { requirement: 'required', kind: 'report' } } }] })],
+      automationExecutions: new Map([['auto-1', [{
+        id: 'run-1', automationId: 'auto-1', event: 'SchedulerTick', status: 'success', duration: 10, timestamp: Date.now() - 3_600_000,
+      }]]]),
+    })
+    expect(items[0]).toMatchObject({ section: 'paused', statusLabel: 'Snoozed', actionLabel: 'Activate' })
+    expect(items[0]?.recentCompletionAt).toBe('2026-09-01T02:00:00.000Z')
+  })
+
+  test('does not call an old completion recent', () => {
+    const completed = order({
+      status: 'done',
+      automationRef: { matcherId: 'auto-1', name: 'Weekly content', event: 'SchedulerTick', definitionDigest: 'definition', configurationDigest: 'configuration' },
+      updatedAt: new Date(Date.now() - 31 * 86_400_000).toISOString(),
+    })
+    const items = buildActiveWorkItems({
+      workspaceId: 'workspace-1', sessions: [], workflowRuns: [], scheduledWork: [completed], automations: [automation()],
+    })
+    expect(items[0]?.recentCompletionAt).toBeUndefined()
+  })
+
   test('does not surface an old failure after the automation is paused', () => {
     const items = buildActiveWorkItems({
       workspaceId: 'workspace-1',

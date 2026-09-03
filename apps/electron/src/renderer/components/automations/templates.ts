@@ -27,6 +27,8 @@ export interface AutomationTemplate {
   event: AppEvent
   /** Pre-filled matcher body. The server adds an `id` automatically. */
   matcher: Record<string, unknown>
+  /** Store one shared copy in Artist HQ even when added from a Campaign. */
+  ownerScope?: 'artist-hq'
   /**
    * Optional setup hint shown after creation — e.g. "set CRAFT_WH_X in your shell"
    * or "configure your GitHub webhook to point at this URL".
@@ -69,14 +71,16 @@ Do not publish, reply, DM, follow, or change account settings. Never fabricate m
     id: 'scheduled-social-comment-replies',
     category: 'scheduled',
     title: 'Daily social comment replies',
-    description: 'Have Social Publisher inspect and answer eligible public comments across every ready profile pack each day.',
+    description: 'Run Social Comment Replies once daily at a varied local time between 3 and 5 PM.',
     glyph: '💬',
     event: 'SchedulerTick',
+    ownerScope: 'artist-hq',
     matcher: {
+      templateKey: 'artist-social-comment-replies',
       name: 'Daily social comment replies',
-      cron: '0 16 * * *',
-      timezone: 'America/Chicago',
-      permissionMode: 'ask',
+      cron: '* * * * *',
+      dailyWindow: { start: '15:00', end: '17:00' },
+      permissionMode: 'allow-all',
       enabled: false,
       actions: [
         {
@@ -107,7 +111,7 @@ Eligible exact-target replies inside this mandate may execute without per-item a
         },
       ],
     },
-    setupHint: 'Disabled by default. Review the schedule and scope, verify saved social sessions, then toggle it on.',
+    setupHint: 'The workflow is ready in HQ and Campaigns. This local-time daily schedule stays off until you verify social sessions and enable it.',
   },
 
   // ----- WebhookReceive -----

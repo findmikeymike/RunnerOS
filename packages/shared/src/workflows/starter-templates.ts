@@ -17,6 +17,7 @@ export const INDUSTRY_OUTREACH_PIPELINE_SLUG = 'industry-outreach-pipeline';
 export const COLLEGE_RADIO_CAMPAIGN_SLUG = 'college-radio-campaign';
 export const MERCH_PRODUCT_BUILDER_SLUG = 'merch-product-builder';
 export const WEEKLY_SIGNAL_SCAN_SLUG = 'weekly-signal-scan';
+export const SOCIAL_COMMENT_REPLIES_SLUG = 'social-comment-replies';
 
 const weeklySignalScan = {
   slug: WEEKLY_SIGNAL_SCAN_SLUG,
@@ -179,6 +180,75 @@ Produce the complete final report. Keep only findings that change or sharpen a d
 One weekly intelligence workflow for Artist HQ. It runs three bounded collection sessions, then Signal Analyst produces one artist-specific brief.
 
 The main Signals page shows the final brief. Collector packets remain available in the Library for deeper reading without crowding the page.
+`,
+};
+
+const socialCommentReplies = {
+  slug: SOCIAL_COMMENT_REPLIES_SLUG,
+  metadata: {
+    name: 'Social Comment Replies',
+    description: 'Inspect and answer eligible public comments and mentions across every verified artist social profile.',
+    avatar: 'CR',
+    trigger: {
+      type: 'manual' as const,
+      inputs: [
+        {
+          name: 'lookback_hours',
+          type: 'number' as const,
+          default: 24,
+          min: 1,
+          max: 168,
+          integer: true,
+          description: 'How far back to inspect for unanswered public engagement',
+        },
+        {
+          name: 'max_replies_per_profile',
+          type: 'number' as const,
+          default: 20,
+          min: 1,
+          max: 20,
+          integer: true,
+          description: 'Maximum public replies allowed per exact profile in this run',
+        },
+      ],
+    },
+    steps: [
+      {
+        id: 'reply',
+        agent: 'social-publisher',
+        description: 'Verify every target, answer eligible public engagement in Artist Voice, and return one private receipt.',
+        input: `Run Social Comment Replies across every social account pack currently saved in Settings.
+
+Inspect unanswered public comments and mentions from the last {{trigger.lookback_hours}} hours. Process only verified Instagram, TikTok, X, and YouTube profiles. Deduplicate exact profiles that appear in multiple account sets.
+
+Read the social-publishing skill, Engagement Playbook, Artist Voice, and relevant Artist HQ and campaign context before replying. Bind every reply to an exact comment ID or permalink. Never fall back to a new top-level comment. Send no more than {{trigger.max_replies_per_profile}} replies per exact profile.
+
+Skip spam, already-answered comments, and comments where a useful native response is unnecessary. Skip any expired, logged-out, ambiguous, CAPTCHA/2FA-blocked, or unverified profile. Do not inspect or answer DMs.
+
+Escalate without replying when content involves business commitments, booking, licensing, press, controversy, rights, payments, contracts, credentials, account recovery, threats, safety, medical/legal claims, minors, or uncertain identity. Do not post, upload, cold-DM, delete, edit, follow, block, report, switch accounts, or change settings.
+
+This workflow is a bounded mandate for eligible exact-target public replies. Use stable idempotency keys. Finish with one private receipt grouped by account set and exact platform/profile: inspected, replied, skipped, escalated, failed, and login/blocker counts. Never copy private message bodies or credentials.`,
+        timeout: 900,
+        retries: 1,
+        onFailure: 'stop' as const,
+        completion: {
+          requireNonEmptyOutput: true,
+          requireToolUse: true,
+          minOutputChars: 160,
+          maxAgentMessages: 0,
+        },
+      },
+    ],
+    outputs: {
+      mode: 'final-step' as const,
+      kind: 'report' as const,
+      title: 'Social Comment Reply Receipt',
+      primary: { from: 'step-output' as const, step: 'reply' },
+    },
+  } satisfies WorkflowMetadata,
+  body: `# Social Comment Replies
+
+Use this workflow for a manual or scheduled sweep of eligible public comments and mentions. Social Publisher verifies exact accounts and targets, writes in Artist Voice, and escalates sensitive conversations instead of improvising.
 `,
 };
 
@@ -1226,6 +1296,7 @@ export const STARTER_WORKFLOWS: ReadonlyArray<{
   metadata: WorkflowMetadata;
   body: string;
 }> = [
+  socialCommentReplies,
   weeklySignalScan,
   weeklyContentPipeline,
   emailTriage,
@@ -1244,6 +1315,7 @@ export const STARTER_WORKFLOW_SLUGS: readonly string[] = STARTER_WORKFLOWS.map((
  * preserving user-edited copies.
  */
 export const ENSURED_STARTER_WORKFLOW_SLUGS = [
+  SOCIAL_COMMENT_REPLIES_SLUG,
   WEEKLY_SIGNAL_SCAN_SLUG,
   CONTENT_MASTERMIND_SLUG,
   PAID_CAMPAIGN_BUILDER_SLUG,

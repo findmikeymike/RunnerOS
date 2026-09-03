@@ -1129,6 +1129,7 @@ export interface ElectronAPI {
 
   // Automation state management
   setAutomationEnabled(workspaceId: string, eventName: string, matcherIndex: number, enabled: boolean, permissionMode?: PermissionMode): Promise<void>
+  setAutomationSnoozedUntil(workspaceId: string, eventName: string, matcherIndex: number, snoozedUntil: string | null): Promise<void>
   duplicateAutomation(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
   deleteAutomation(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
   /** Append a fully-formed matcher under the given event. Server assigns id and de-dupes WebhookReceive slugs. */
@@ -1136,7 +1137,7 @@ export interface ElectronAPI {
     workspaceId: string,
     eventName: string,
     matcher: Record<string, unknown>,
-    options?: { automaticCadence?: 'daily' | 'weekly' },
+    options?: { automaticCadence?: 'daily' | 'weekly' | 'monthly' },
   ): Promise<{ cron?: string; label?: string }>
   /** Atomically replace the expected matcher by stable id while preserving its identity. */
   replaceAutomation(workspaceId: string, eventName: string, automationId: string, expectedMatcher: Record<string, unknown>, matcher: Record<string, unknown>): Promise<void>

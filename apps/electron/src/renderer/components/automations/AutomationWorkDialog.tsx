@@ -48,12 +48,12 @@ type SetupTarget = { kind: 'agent'; agent: AgentDefinitionDTO } | { kind: 'workf
 const WHEN_OPTIONS: Array<{ value: AutomationWhen; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { value: 'weekly', label: 'Weekly', icon: CalendarClock },
   { value: 'daily', label: 'Daily', icon: CalendarClock },
+  { value: 'monthly', label: 'Monthly', icon: CalendarClock },
   { value: 'once', label: 'Once', icon: CalendarClock },
   { value: 'file', label: 'On file', icon: FileSearch },
   { value: 'webhook', label: 'Webhook', icon: Webhook },
   { value: 'message', label: 'Message', icon: MessageSquare },
   { value: 'url', label: 'Page change', icon: Link2 },
-  { value: 'custom', label: 'Custom', icon: CalendarClock },
 ]
 
 const INPUT_CLASS = 'h-10 w-full rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-3 text-[13px] text-white outline-none transition-colors placeholder:text-white/25 hover:bg-white/[0.06] focus:border-orange-400/35 focus:bg-white/[0.065] focus:ring-2 focus:ring-orange-400/10'
@@ -175,7 +175,7 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
   }, [automaticScheduleWorkspaceIds, timezone])
 
   React.useEffect(() => {
-    if (!dialogOpen || (when !== 'weekly' && when !== 'daily') || !workspace?.id) return
+    if (!dialogOpen || !isAutomaticCadence(when) || !workspace?.id) return
     let cancelled = false
     setScheduleLoading(true)
     setScheduleError(null)
@@ -260,19 +260,19 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
           workspace.id,
           event,
           matcher,
-          when === 'weekly' || when === 'daily' ? { automaticCadence: when } : undefined,
+          isAutomaticCadence(when) ? { automaticCadence: when } : undefined,
         )
         if (result.cron) setCron(result.cron)
         if (result.label) {
           resolvedLabel = result.label
           setAssignedScheduleLabel(result.label)
         }
-        toast.success('Automation created', { description: automationReviewSentence({ title: name, runnerName: targetName(selected), when, scheduleLabel: when === 'weekly' || when === 'daily' ? resolvedLabel : when === 'custom' ? cron : undefined, requestedInputs, fixedInputs: selected.kind === 'workflow' ? fixedTriggerInputs(bindings) : undefined }) })
+        toast.success('Automation created', { description: automationReviewSentence({ title: name, runnerName: targetName(selected), when, scheduleLabel: isAutomaticCadence(when) ? resolvedLabel : when === 'custom' ? cron : undefined, requestedInputs, fixedInputs: selected.kind === 'workflow' ? fixedTriggerInputs(bindings) : undefined }) })
       }
       setDialogOpen(false)
       onCreated?.()
     } catch (submitError) {
-      if ((when === 'weekly' || when === 'daily') && isAutomaticSchedulePlacementUnavailable(submitError)) {
+      if (isAutomaticCadence(when) && isAutomaticSchedulePlacementUnavailable(submitError)) {
         setScheduleError("Couldn't verify an open time. Try again.")
         setCron('')
         setAssignedScheduleLabel('')
@@ -289,7 +289,7 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
     title: name,
     runnerName: targetName(selected),
     when,
-    scheduleLabel: when === 'weekly' || when === 'daily' ? (scheduleError ? undefined : assignedScheduleLabel) : when === 'once' ? formatLocalDateTime(onceDate, onceTime) : undefined,
+    scheduleLabel: isAutomaticCadence(when) ? (scheduleError ? undefined : assignedScheduleLabel) : when === 'once' ? formatLocalDateTime(onceDate, onceTime) : undefined,
     requestedInputs,
     fixedInputs: selected.kind === 'workflow' ? fixedTriggerInputs(bindings) : undefined,
   }) : ''
@@ -334,7 +334,7 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
           {review ? <p className="mb-3 text-[12px] leading-5 text-white/48">{review}</p> : null}
           <div className="flex justify-end gap-2">
             <Button className="h-9 rounded-[8px] px-4 text-[13px] text-white/52 hover:bg-white/[0.05] hover:text-white/82" variant="ghost" onClick={() => setDialogOpen(false)} disabled={busy}>Cancel</Button>
-            <Button className="h-9 rounded-[8px] bg-[#f4511e] px-4 text-[13px] font-semibold text-white hover:bg-[#ff5c28]" onClick={() => void submit()} disabled={!selected || busy || scheduleLoading || ((when === 'weekly' || when === 'daily') && Boolean(scheduleError))}>{busy ? 'Saving...' : when === 'once' ? 'Schedule once' : 'Save automation'}</Button>
+            <Button className="h-9 rounded-[8px] bg-[#f4511e] px-4 text-[13px] font-semibold text-white hover:bg-[#ff5c28]" onClick={() => void submit()} disabled={!selected || busy || scheduleLoading || (isAutomaticCadence(when) && Boolean(scheduleError))}>{busy ? 'Saving...' : when === 'once' ? 'Schedule once' : 'Save automation'}</Button>
           </div>
         </div>
       </DialogContent>
@@ -382,11 +382,11 @@ function FixedInput({ input, value, onChange }: { input: WorkflowTriggerInput; v
 }
 
 function WhenPicker({ when, isFed, onChoose }: { when: AutomationWhen; isFed: boolean; onChoose: (value: AutomationWhen) => void }) {
-  return <div className="grid grid-cols-2 gap-1 rounded-[10px] bg-white/[0.028] p-1 sm:grid-cols-4" role="radiogroup" aria-label="When this work runs">{WHEN_OPTIONS.filter((option) => !(isFed && option.value === 'once')).map((option) => {
+  return <div className="space-y-2"><div className="grid grid-cols-2 gap-1 rounded-[10px] bg-white/[0.028] p-1 sm:grid-cols-4" role="radiogroup" aria-label="When this work runs">{WHEN_OPTIONS.filter((option) => !(isFed && option.value === 'once')).map((option) => {
     const Icon = option.icon
-    const label = isFed && option.value === 'weekly' ? 'Needs input weekly' : isFed && option.value === 'daily' ? 'Needs input daily' : option.label
+    const label = isFed && option.value === 'weekly' ? 'Needs input weekly' : isFed && option.value === 'daily' ? 'Needs input daily' : isFed && option.value === 'monthly' ? 'Needs input monthly' : option.label
     return <button key={option.value} type="button" role="radio" aria-checked={option.value === when} onClick={() => onChoose(option.value)} className={cn('flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-[7px] px-2 text-[11px] font-medium transition-colors', option.value === when ? 'bg-[#f4511e] text-white' : 'text-white/40 hover:bg-white/[0.045] hover:text-white/70')}><Icon className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{label}</span></button>
-  })}</div>
+  })}</div><details className="group"><summary className="w-fit cursor-pointer list-none text-[10.5px] font-medium text-white/30 hover:text-white/60">Advanced</summary><button type="button" role="radio" aria-checked={when === 'custom'} onClick={() => onChoose('custom')} className={cn('mt-2 inline-flex h-8 items-center gap-1.5 rounded-[7px] px-2.5 text-[10.5px] font-medium', when === 'custom' ? 'bg-[#f4511e] text-white' : 'bg-white/[0.035] text-white/42 hover:text-white/70')}><CalendarClock className="h-3.5 w-3.5" /> Custom schedule</button></details></div>
 }
 
 interface WhenFieldsProps {
@@ -395,9 +395,9 @@ interface WhenFieldsProps {
 }
 
 function WhenFields(props: WhenFieldsProps) {
-  if (props.when === 'weekly' || props.when === 'daily') return <div className="space-y-2">{props.scheduleError ? <div className="flex items-center justify-between gap-3 rounded-[8px] bg-orange-500/[0.08] px-3 py-2.5 text-[12px]"><span className="text-orange-100/70">{props.scheduleError}</span><button type="button" className="font-medium text-orange-300 hover:text-orange-200" onClick={props.onScheduleRetry}>Retry</button></div> : <div className="flex items-center justify-between gap-3 rounded-[8px] bg-white/[0.035] px-3 py-2.5 text-[12px]"><span className="text-white/38">{props.scheduleLoading ? 'Finding an open time...' : props.isFed ? `Waits for ${props.requestedInputs.map(humanizeWorkflowInputName).join(', ')}` : 'Assigned time'}</span><span className="font-medium text-white/72">{props.scheduleLoading ? '' : props.assignedScheduleLabel}</span></div>}<Field label="Time zone"><input className={INPUT_CLASS} value={props.timezone} onChange={(event) => props.onTimezone(event.target.value)} /></Field></div>
+  if (isAutomaticCadence(props.when)) return <div className="space-y-2">{props.scheduleError ? <div className="flex items-center justify-between gap-3 rounded-[8px] bg-orange-500/[0.08] px-3 py-2.5 text-[12px]"><span className="text-orange-100/70">{props.scheduleError}</span><button type="button" className="font-medium text-orange-300 hover:text-orange-200" onClick={props.onScheduleRetry}>Retry</button></div> : <div className="flex items-center justify-between gap-3 rounded-[8px] bg-white/[0.035] px-3 py-2.5 text-[12px]"><span className="text-white/38">{props.scheduleLoading ? 'Finding an open time...' : props.isFed ? `Waits for ${props.requestedInputs.map(humanizeWorkflowInputName).join(', ')}` : 'Assigned time'}</span><span className="font-medium text-white/72">{props.scheduleLoading ? '' : props.assignedScheduleLabel}</span></div>}<Field label="Time zone"><input className={INPUT_CLASS} value={props.timezone} onChange={(event) => props.onTimezone(event.target.value)} /></Field></div>
   if (props.when === 'once') return <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]"><Field label="Date"><input className={INPUT_CLASS} type="date" value={props.onceDate} onChange={(event) => props.onOnceDate(event.target.value)} /></Field><Field label="Time"><input className={INPUT_CLASS} type="time" value={props.onceTime} onChange={(event) => props.onOnceTime(event.target.value)} /></Field><div className="min-w-[130px] space-y-1.5"><span className="block text-[11px] font-medium text-white/48">Time zone</span><div className="flex h-10 items-center rounded-[8px] bg-white/[0.035] px-3 text-[12px] text-white/48">{props.timezone}</div></div></div>
-  if (props.when === 'custom') return <CronBuilder className="rounded-[10px] bg-white/[0.02] p-3" value={props.cron} onChange={props.onCron} timezone={props.timezone} onTimezoneChange={props.onTimezone} showAdvanced={false} />
+  if (props.when === 'custom') return <CronBuilder className="rounded-[10px] bg-white/[0.02] p-3" value={props.cron} onChange={props.onCron} timezone={props.timezone} onTimezoneChange={props.onTimezone} showAdvanced />
   if (props.when === 'file') return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><Field label="Folder"><input className={INPUT_CLASS} value={props.watchPath} onChange={(event) => props.onWatchPath(event.target.value)} placeholder="content" /></Field><Field label="File pattern"><input className={INPUT_CLASS} value={props.watchGlob} onChange={(event) => props.onWatchGlob(event.target.value)} placeholder="**/*.md" /></Field></div>
   if (props.when === 'webhook') return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><Field label="Webhook name"><input className={INPUT_CLASS} value={props.webhookSlug} onChange={(event) => props.onWebhookSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} placeholder="campaign-ready" /></Field><Field label="Secret environment variable"><input className={INPUT_CLASS} value={props.secretEnv} onChange={(event) => props.onSecretEnv(event.target.value.toUpperCase())} placeholder="CRAFT_WH_CAMPAIGN_SECRET" /></Field></div>
   if (props.when === 'url') return <div className="grid grid-cols-[minmax(0,1fr)_120px] gap-3"><Field label="Page or feed URL"><input className={INPUT_CLASS} value={props.pollUrl} onChange={(event) => props.onPollUrl(event.target.value)} placeholder="https://example.com/feed.json" /></Field><Field label="Every (seconds)"><input className={INPUT_CLASS} type="number" min={30} value={props.pollIntervalSec} onChange={(event) => props.onPollIntervalSec(Number(event.target.value))} /></Field></div>
@@ -453,7 +453,7 @@ function validateSetup(input: { selected: SetupTarget; name: string; brief: stri
 
 function buildAutomationMatcher(input: { when: Exclude<AutomationWhen, 'once'>; name: string; cron: string; timezone: string; watchPath: string; watchGlob: string; webhookSlug: string; secretEnv: string; pollUrl: string; pollIntervalSec: number; messageMatcher: string; action: ReturnType<typeof buildAutomationQueueWorkAction> }): { event: WorkTrigger; matcher: Record<string, unknown> } {
   const base = { name: input.name.trim(), actions: [input.action] }
-  if (input.when === 'weekly' || input.when === 'daily' || input.when === 'custom') return { event: 'SchedulerTick', matcher: { ...base, cron: input.cron.trim(), timezone: input.timezone.trim() || 'UTC' } }
+  if (isAutomaticCadence(input.when) || input.when === 'custom') return { event: 'SchedulerTick', matcher: { ...base, cron: input.cron.trim(), timezone: input.timezone.trim() || 'UTC' } }
   if (input.when === 'file') return { event: 'FileWatch', matcher: { ...base, watchPath: input.watchPath.trim(), watchGlob: input.watchGlob.trim(), watchChangeTypes: ['add', 'change'], watchDebounceMs: 500 } }
   if (input.when === 'webhook') return { event: 'WebhookReceive', matcher: { ...base, slug: input.webhookSlug, secretEnv: input.secretEnv, allowedMethods: ['POST'] } }
   if (input.when === 'url') return { event: 'PollUrl', matcher: { ...base, pollUrl: input.pollUrl.trim(), pollIntervalSec: input.pollIntervalSec, pollMethod: 'GET', pollFingerprint: 'body' } }
@@ -463,3 +463,4 @@ function buildAutomationMatcher(input: { when: Exclude<AutomationWhen, 'once'>; 
 function todayKey(): string { const now = new Date(); return [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-') }
 function formatLocalDateTime(date: string, time: string): string { const value = new Date(`${date}T${time}:00`); return Number.isNaN(value.getTime()) ? 'the selected time' : `${value.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${value.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` }
 function localTimezone(): string { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }
+function isAutomaticCadence(when: AutomationWhen): when is AutomaticScheduleCadence { return when === 'daily' || when === 'weekly' || when === 'monthly' }

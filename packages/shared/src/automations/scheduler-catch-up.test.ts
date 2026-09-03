@@ -87,4 +87,36 @@ describe('scheduler suspend catch-up', () => {
     );
     expect(matched).toBe(false);
   });
+
+  it('suppresses a matcher until its durable snooze expires', () => {
+    const snoozed = weeklyMatcher('0 9 * * 5');
+    snoozed.snoozedUntil = new Date(FRIDAY_1015 + 60_000).toISOString();
+    expect(matcherMatches(snoozed, 'SchedulerTick', tick(FRIDAY_1015, FRIDAY_0855))).toBe(false);
+
+    snoozed.snoozedUntil = new Date(FRIDAY_0855 + 60_000).toISOString();
+    expect(matcherMatches(snoozed, 'SchedulerTick', tick(FRIDAY_1015, FRIDAY_0855))).toBe(true);
+  });
+
+  it('does not catch up an occurrence that happened while snoozed', () => {
+    const snoozed = weeklyMatcher('0 9 * * 5');
+    snoozed.snoozedUntil = new Date(FRIDAY_0900 + 30 * 60_000).toISOString();
+    expect(matcherMatches(snoozed, 'SchedulerTick', tick(FRIDAY_1015, FRIDAY_0855))).toBe(false);
+  });
+
+  it('fires a varied daily window at exactly one deterministic minute and catches it up once', () => {
+    const matcher = {
+      id: 'daily-comments',
+      cron: '* 15-17 * * *',
+      timezone: 'UTC',
+      dailyWindow: { start: '15:00', end: '17:00' },
+    } as AutomationMatcher;
+    const matches: number[] = [];
+    for (let minute = 15 * 60; minute <= 17 * 60; minute += 1) {
+      const at = Date.UTC(2026, 8, 3, Math.floor(minute / 60), minute % 60);
+      if (matcherMatches(matcher, 'SchedulerTick', tick(at))) matches.push(at);
+    }
+    expect(matches).toHaveLength(1);
+    expect(matcherMatches(matcher, 'SchedulerTick', tick(matches[0]! + 60_000, matches[0]! - 60_000))).toBe(true);
+    expect(matcherMatches(matcher, 'SchedulerTick', tick(matches[0]! + 60_000, matches[0]!))).toBe(false);
+  });
 });

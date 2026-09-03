@@ -635,7 +635,7 @@ const ScheduleWorkTriggerSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('schedule'),
     cron: z.string().min(1).optional(),
-    cadence: z.enum(['daily', 'weekly']).optional(),
+    cadence: z.enum(['daily', 'weekly', 'monthly']).optional(),
     timezone: z.string().optional(),
   }),
   z.object({ type: z.literal('file-change'), watchPath: z.string().min(1), watchGlob: z.string().optional(), changeTypes: z.array(z.enum(['add', 'change', 'remove'])).optional() }),
@@ -1541,6 +1541,7 @@ Rules:
 - Create one stable idempotencyKey for the request and reuse it on retries.
 - If the time, trigger, agent, workflow, or expected output is ambiguous, ask once and do not call this tool yet.
 - Use active agent/workflow slugs from list_agents or list_workflows. The backend resolves and locks the current workflow definition.
+- For a schedule without a named exact time, use cadence \`daily\`, \`weekly\`, or \`monthly\` so Artist OS can choose an open daytime slot. Ask one compact cadence question only when the user has not already made the frequency clear.
 - Calendar work requires startAt and timezone.
 - Automation work requires trigger. Set showOnCalendar false for background maintenance that should not clutter Calendar.
 - Agent tasks require a concrete brief. Use expectedOutput when a durable artifact is required.

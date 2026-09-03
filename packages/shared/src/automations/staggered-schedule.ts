@@ -1,6 +1,6 @@
 import { Cron } from 'croner'
 
-export type AutomaticScheduleCadence = 'daily' | 'weekly'
+export type AutomaticScheduleCadence = 'daily' | 'weekly' | 'monthly'
 
 export const AUTOMATIC_SCHEDULE_PLACEMENT_UNAVAILABLE = 'AUTOMATIC_SCHEDULE_PLACEMENT_UNAVAILABLE'
 
@@ -29,12 +29,14 @@ export interface AutomaticScheduleSuggestion {
   cron: string
   label: string
   dayOfWeek?: number
+  dayOfMonth?: number
   hour: number
   minute: number
 }
 
 interface ScheduleSlot {
   dayOfWeek?: number
+  dayOfMonth?: number
   hour: number
   minute: number
 }
@@ -63,7 +65,9 @@ export function suggestAutomaticSchedule(
   const occupancy = buildOccupancy(existing, timezone, now)
   const candidates: ScheduleSlot[] = cadence === 'daily'
     ? DAYTIME_SLOTS.map((time) => ({ ...time }))
-    : DAYTIME_SLOTS.flatMap((time) => WEEKDAYS.map((dayOfWeek) => ({ ...time, dayOfWeek })))
+    : cadence === 'weekly'
+      ? DAYTIME_SLOTS.flatMap((time) => WEEKDAYS.map((dayOfWeek) => ({ ...time, dayOfWeek })))
+      : DAYTIME_SLOTS.flatMap((time) => Array.from({ length: 28 }, (_, day) => ({ ...time, dayOfMonth: day + 1 })))
 
   const selected = candidates.reduce((best, candidate) => (
     slotLoad(candidate, cadence, occupancy) < slotLoad(best, cadence, occupancy)
@@ -75,10 +79,14 @@ export function suggestAutomaticSchedule(
     cadence,
     cron: cadence === 'daily'
       ? `${selected.minute} ${selected.hour} * * *`
-      : `${selected.minute} ${selected.hour} * * ${selected.dayOfWeek}`,
+      : cadence === 'weekly'
+        ? `${selected.minute} ${selected.hour} * * ${selected.dayOfWeek}`
+        : `${selected.minute} ${selected.hour} ${selected.dayOfMonth} * *`,
     label: cadence === 'daily'
       ? `Every day at ${formatTime(selected.hour, selected.minute)}`
-      : `${DAY_NAMES[selected.dayOfWeek!]} at ${formatTime(selected.hour, selected.minute)}`,
+      : cadence === 'weekly'
+        ? `${DAY_NAMES[selected.dayOfWeek!]} at ${formatTime(selected.hour, selected.minute)}`
+        : `Monthly on day ${selected.dayOfMonth} at ${formatTime(selected.hour, selected.minute)}`,
     ...selected,
   }
 }
@@ -87,19 +95,31 @@ function buildOccupancy(
   existing: ExistingAutomationSchedule[],
   targetTimezone: string,
   now: Date,
-): Map<string, number> {
-  const occupancy = new Map<string, number>()
+): { weekly: Map<string, number>; monthly: Map<string, number> } {
+  const occupancy = {
+    weekly: new Map<string, number>(),
+    monthly: new Map<string, number>(),
+  }
   const formatter = createSlotFormatter(targetTimezone)
   for (const schedule of existing) {
     if (schedule.enabled === false || !schedule.cron || !isPlaceableRecurringCron(schedule.cron)) continue
-    for (const run of nextRuns(schedule.cron, schedule.timezone || targetTimezone, now, 42)) {
+    for (const run of nextRuns(schedule.cron, schedule.timezone || targetTimezone, now, occurrenceLookahead(schedule.cron))) {
       const slot = formatSlot(run, formatter)
       if (!slot) continue
-      const key = slotKey(slot.dayOfWeek!, slot.hour, slot.minute)
-      occupancy.set(key, (occupancy.get(key) ?? 0) + 1)
+      const weeklyKey = slotKey(slot.dayOfWeek!, slot.hour, slot.minute)
+      occupancy.weekly.set(weeklyKey, (occupancy.weekly.get(weeklyKey) ?? 0) + 1)
+      const monthlyKey = slotKey(slot.dayOfMonth!, slot.hour, slot.minute)
+      occupancy.monthly.set(monthlyKey, (occupancy.monthly.get(monthlyKey) ?? 0) + 1)
     }
   }
   return occupancy
+}
+
+function occurrenceLookahead(cron: string): number {
+  const fields = cron.trim().split(/\s+/)
+  if (fields[2] !== '*') return 14
+  if (fields[4] !== '*') return 54
+  return 42
 }
 
 function isPlaceableRecurringCron(cron: string): boolean {
@@ -107,18 +127,23 @@ function isPlaceableRecurringCron(cron: string): boolean {
   return fields.length === 5
     && /^\d+$/.test(fields[0]!)
     && /^\d+$/.test(fields[1]!)
-    && fields[2] === '*'
     && fields[3] === '*'
+    && (fields[2] === '*' || /^\d+$/.test(fields[2]!))
+    && (fields[4] === '*' || /^\d+$/.test(fields[4]!))
+    && !(fields[2] !== '*' && fields[4] !== '*')
 }
 
 function slotLoad(
   slot: ScheduleSlot,
   cadence: AutomaticScheduleCadence,
-  occupancy: Map<string, number>,
+  occupancy: { weekly: Map<string, number>; monthly: Map<string, number> },
 ): number {
+  if (cadence === 'monthly') {
+    return occupancy.monthly.get(slotKey(slot.dayOfMonth!, slot.hour, slot.minute)) ?? 0
+  }
   const days = cadence === 'daily' ? [0, 1, 2, 3, 4, 5, 6] : [slot.dayOfWeek!]
   return days.reduce(
-    (total, dayOfWeek) => total + (occupancy.get(slotKey(dayOfWeek, slot.hour, slot.minute)) ?? 0),
+    (total, dayOfWeek) => total + (occupancy.weekly.get(slotKey(dayOfWeek, slot.hour, slot.minute)) ?? 0),
     0,
   )
 }
@@ -136,6 +161,7 @@ function createSlotFormatter(timezone: string): Intl.DateTimeFormat {
     return new Intl.DateTimeFormat('en-US', {
       timeZone: timezone,
       weekday: 'short',
+      day: 'numeric',
       hour: 'numeric',
       minute: 'numeric',
       hourCycle: 'h23',
@@ -144,6 +170,7 @@ function createSlotFormatter(timezone: string): Intl.DateTimeFormat {
     return new Intl.DateTimeFormat('en-US', {
       timeZone: 'UTC',
       weekday: 'short',
+      day: 'numeric',
       hour: 'numeric',
       minute: 'numeric',
       hourCycle: 'h23',
@@ -154,10 +181,11 @@ function createSlotFormatter(timezone: string): Intl.DateTimeFormat {
 function formatSlot(run: Date, formatter: Intl.DateTimeFormat): ScheduleSlot | null {
   const parts = Object.fromEntries(formatter.formatToParts(run).map((part) => [part.type, part.value]))
   const dayOfWeek = DAY_INDEX.get(parts.weekday ?? '')
+  const dayOfMonth = Number(parts.day)
   const hour = Number(parts.hour)
   const minute = Number(parts.minute)
-  if (dayOfWeek === undefined || !Number.isInteger(hour) || !Number.isInteger(minute)) return null
-  return { dayOfWeek, hour, minute }
+  if (dayOfWeek === undefined || !Number.isInteger(dayOfMonth) || !Number.isInteger(hour) || !Number.isInteger(minute)) return null
+  return { dayOfWeek, dayOfMonth, hour, minute }
 }
 
 function slotKey(dayOfWeek: number, hour: number, minute: number): string {

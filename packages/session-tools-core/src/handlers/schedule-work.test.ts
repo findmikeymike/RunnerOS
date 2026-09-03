@@ -90,6 +90,33 @@ describe('schedule_work', () => {
     });
     expect(automatic.isError).toBe(false);
     expect(captured?.trigger).toMatchObject({ cadence: 'weekly' });
+    expect((automatic.content[0] as { text: string }).text).toBe('Every Monday at 9:00 AM, Weekly channel report will wait under Needs you for topic, then run using Weekly Report.')
+
+    const monthly = await handleScheduleWork(context(async (value) => {
+      captured = value;
+      return { ok: true, destination: 'automation', nextFireAt: '2026-10-01T14:00:00.000Z' };
+    }), {
+      ...calendarInput,
+      destination: 'automation',
+      startAt: undefined,
+      execution: { type: 'workflow-run', workflowSlug: 'monthly-report', inputBindings: { topic: { mode: 'ask' } } },
+      trigger: { type: 'schedule', cadence: 'monthly', timezone: 'America/Chicago' },
+    });
+    expect(monthly.isError).toBe(false);
+    expect(captured?.trigger).toMatchObject({ cadence: 'monthly' });
+    expect((monthly.content[0] as { text: string }).text).toBe('Monthly on day 1 at 9:00 AM, Weekly channel report will wait under Needs you for topic, then run using Monthly Report.')
+
+    const custom = await handleScheduleWork(context(async () => ({
+      ok: true, destination: 'automation', nextFireAt: '2026-09-08T15:30:00.000Z',
+    })), {
+      ...calendarInput,
+      destination: 'automation',
+      startAt: undefined,
+      execution: { type: 'workflow-run', workflowSlug: 'weekly-report', inputBindings: {} },
+      trigger: { type: 'schedule', cron: '30 10 * * 2', timezone: 'America/Chicago' },
+    });
+    expect(custom.isError).toBe(false);
+    expect((custom.content[0] as { text: string }).text).toBe('Next run Tuesday, Sep 8 at 10:30 AM, Weekly channel report will run using Weekly Report.')
 
     for (const trigger of [
       { type: 'schedule' as const, timezone: 'America/Chicago' },

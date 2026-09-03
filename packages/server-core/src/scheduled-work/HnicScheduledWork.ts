@@ -557,7 +557,7 @@ function legacyAutomationMatcher(
 
 async function resolveAutomaticCron(
   options: ScheduleWorkPersistenceOptions,
-  cadence: 'daily' | 'weekly',
+  cadence: 'daily' | 'weekly' | 'monthly',
   timezone?: string,
 ): Promise<string> {
   const roots = [...new Set(options.automationWorkspaceRootPaths ?? [options.workspaceRootPath])]

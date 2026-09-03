@@ -39,6 +39,30 @@ describe('suggestAutomaticSchedule', () => {
     })
   })
 
+  test('spreads monthly work across safe calendar days before reusing a day and time', () => {
+    const existing = [1, 2, 3].map((dayOfMonth) => ({ cron: `0 9 ${dayOfMonth} * *` }))
+
+    expect(suggestAutomaticSchedule(existing, 'monthly', {
+      now: new Date('2026-07-01T12:00:00.000Z'),
+      timezone: 'America/Chicago',
+    })).toEqual({
+      cadence: 'monthly',
+      cron: '0 9 4 * *',
+      label: 'Monthly on day 4 at 9:00 AM',
+      dayOfMonth: 4,
+      hour: 9,
+      minute: 0,
+    })
+  })
+
+  test('limits automatic monthly placement to days present in every month', () => {
+    const existing = Array.from({ length: 28 }, (_, index) => ({ cron: `0 9 ${index + 1} * *` }))
+    const suggestion = suggestAutomaticSchedule(existing, 'monthly')
+
+    expect(suggestion.dayOfMonth).toBe(1)
+    expect(suggestion.cron).toBe('30 9 1 * *')
+  })
+
   test('accounts for daily schedules when assigning weekly work', () => {
     expect(suggestAutomaticSchedule([{ cron: '0 9 * * *' }], 'weekly')).toMatchObject({
       cron: '30 9 * * 1',

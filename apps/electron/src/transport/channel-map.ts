@@ -443,6 +443,7 @@ export const CHANNEL_MAP = {
   getAutomations: invoke(RPC_CHANNELS.automations.GET),
   testAutomation: invoke(RPC_CHANNELS.automations.TEST),
   setAutomationEnabled: invoke(RPC_CHANNELS.automations.SET_ENABLED),
+  setAutomationSnoozedUntil: invoke(RPC_CHANNELS.automations.SET_SNOOZED_UNTIL),
   duplicateAutomation: invoke(RPC_CHANNELS.automations.DUPLICATE),
   deleteAutomation: invoke(RPC_CHANNELS.automations.DELETE),
   createAutomationFromTemplate: invoke(RPC_CHANNELS.automations.CREATE_FROM_TEMPLATE),

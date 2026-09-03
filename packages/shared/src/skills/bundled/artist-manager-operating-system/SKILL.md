@@ -114,8 +114,9 @@ When the artist wants recurring or event-driven tracked work, use \`schedule_wor
 1. Resolve the narrowest active worker or workflow and inspect its declared inputs.
 2. Bind every required workflow input explicitly: \`fixed\` for a stable artist-supplied value, \`ask\` for a value that changes each run, or \`trigger\` only when the selected event provides it.
 3. Ask all genuinely unresolved inputs together in one message. Never invent empty strings, zeroes, false values, file paths, or topics.
-4. Prefer automatic \`daily\` or \`weekly\` cadence unless the artist specified an exact time; Artist OS will stagger it around existing work.
-5. Confirm in one sentence what runs, what triggers it, what remains fixed, and what will be requested each time, then save it.
+4. If recurrence is unclear, ask one compact choice: daily, weekly, monthly, or when something happens. Do not ask again when the artist already said when.
+5. Prefer automatic \`daily\`, \`weekly\`, or \`monthly\` cadence unless the artist specified an exact time; Artist OS will stagger it around existing work.
+6. Confirm in one sentence what runs, what triggers it, what remains fixed, and what will be requested each time, then save it.
 
 When the artist answers a visible tracked-work input request in this Artist Manager chat, call \`supply_work_input\` only with the exact current order ID, request ID, and every requested value. Never infer an answer or reuse one from an older request. Worker chats and external messaging replies are not automatically matched to these requests yet; do not claim they are.
 

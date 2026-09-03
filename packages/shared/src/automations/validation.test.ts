@@ -54,6 +54,28 @@ describe('validateAutomationsConfig', () => {
       expect(result.valid).toBe(true);
     });
 
+    it('accepts a same-day varied schedule window and rejects an overnight one', () => {
+      const base = {
+        cron: '* * * * *',
+        actions: [{ type: 'prompt', prompt: 'Reply to comments' }],
+      };
+      expect(validateAutomationsConfig({
+        automations: { SchedulerTick: [{ ...base, dailyWindow: { start: '15:00', end: '17:00' } }] },
+      }).valid).toBe(true);
+      expect(validateAutomationsConfig({
+        automations: { SchedulerTick: [{ ...base, dailyWindow: { start: '17:00', end: '15:00' } }] },
+      }).valid).toBe(false);
+      expect(validateAutomationsConfig({
+        automations: { SchedulerTick: [{ actions: base.actions, dailyWindow: { start: '15:00', end: '17:00' } }] },
+      }).valid).toBe(false);
+      expect(validateAutomationsConfig({
+        automations: { LabelAdd: [{ ...base, dailyWindow: { start: '15:00', end: '17:00' } }] },
+      }).valid).toBe(false);
+      expect(validateAutomationsConfig({
+        automations: { SchedulerTick: [{ ...base, cron: '0 9 * * *', dailyWindow: { start: '15:00', end: '17:00' } }] },
+      }).valid).toBe(false);
+    });
+
     it('should reject unsupported agent lifecycle triggers instead of accepting a no-op', () => {
       const result = validateAutomationsConfig({
         automations: {

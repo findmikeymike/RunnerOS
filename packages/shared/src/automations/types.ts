@@ -9,6 +9,7 @@ import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 import type { PulseAction } from '../pulses/types.ts';
 import type { OutputKind } from '../outputs/types.ts';
 import type { ScheduledWorkExecution, ScheduledWorkInputRef } from '../scheduled-work/index.ts';
+import type { DailyScheduleWindow } from './daily-window.ts';
 
 // ============================================================================
 // Event Types
@@ -208,6 +209,8 @@ export type AutomationCondition = TimeCondition | StateCondition | LogicalCondit
 export interface AutomationMatcher {
   /** Short 6-character hex ID for stable identification across config changes. */
   id?: string;
+  /** Stable template identity used to prevent duplicate installation. */
+  templateKey?: string;
   /** Optional display name. If omitted, derived from the first action. */
   name?: string;
   /** Regex pattern for matching event data (not used for SchedulerTick) */
@@ -216,12 +219,16 @@ export interface AutomationMatcher {
   cron?: string;
   /** IANA timezone for cron evaluation (e.g., "Europe/Budapest", "America/New_York") */
   timezone?: string;
+  /** Pick one stable-but-different local minute inside this window each day. */
+  dailyWindow?: DailyScheduleWindow;
   /** Permission mode for sessions created by prompt actions. */
   permissionMode?: PermissionMode;
   /** Labels to apply to sessions created by prompt actions */
   labels?: string[];
   /** Whether this automation matcher is enabled. Defaults to true. Set to false to disable without removing. */
   enabled?: boolean;
+  /** Temporarily suppress matches until this ISO timestamp. The matcher remains enabled. */
+  snoozedUntil?: string;
   /** Optional conditions that must all pass (AND) after matcher matches, before actions fire */
   conditions?: AutomationCondition[];
   actions: AutomationAction[];

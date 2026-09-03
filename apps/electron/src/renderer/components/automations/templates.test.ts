@@ -25,10 +25,12 @@ describe('automation templates', () => {
     expect(template).toBeDefined()
     expect(template?.category).toBe('scheduled')
     expect(template?.event).toBe('SchedulerTick')
+    expect(template?.ownerScope).toBe('artist-hq')
     expect(template?.matcher).toMatchObject({
-      cron: '0 16 * * *',
-      timezone: 'America/Chicago',
-      permissionMode: 'ask',
+      templateKey: 'artist-social-comment-replies',
+      cron: '* * * * *',
+      dailyWindow: { start: '15:00', end: '17:00' },
+      permissionMode: 'allow-all',
       enabled: false,
     })
     const actions = template?.matcher.actions as Array<Record<string, unknown>>

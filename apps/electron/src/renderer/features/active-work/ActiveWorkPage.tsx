@@ -45,11 +45,23 @@ function formatWhen(value: string | undefined): string | null {
     : { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
-function ActiveRow({ item, onOpen, supplyOpen, onToggleSupply, children }: {
+function shortDay(value: string | undefined): string | null {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  const ageDays = Math.floor((Date.now() - date.getTime()) / 86_400_000)
+  if (ageDays === 0) return 'Today'
+  if (ageDays === 1) return 'Yesterday'
+  return date.toLocaleDateString(undefined, ageDays < 7
+    ? { weekday: 'short' }
+    : { month: 'short', day: 'numeric' })
+}
+
+function ActiveRow({ item, onOpen, onAction, supplyOpen, children }: {
   item: ActiveWorkItem
   onOpen: () => void
+  onAction?: () => void
   supplyOpen?: boolean
-  onToggleSupply?: () => void
   children?: React.ReactNode
 }) {
   const Icon = item.source === 'workflow-run'
@@ -59,7 +71,8 @@ function ActiveRow({ item, onOpen, supplyOpen, onToggleSupply, children }: {
       : item.source === 'scheduled-work'
         ? CalendarClock
         : Bot
-  const when = item.section === 'up-next' ? formatWhen(item.sortAt) : null
+  const when = formatWhen(item.nextRunAt ?? (item.section === 'up-next' ? item.sortAt : undefined))
+  const finished = shortDay(item.recentCompletionAt)
 
   return (
     <div className={cn(
@@ -78,9 +91,10 @@ function ActiveRow({ item, onOpen, supplyOpen, onToggleSupply, children }: {
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[12.5px] font-medium text-white/82">{item.title}</span>
-            {item.subtitle || item.attentionReason ? (
+            {item.subtitle || item.attentionReason || when || finished ? (
               <span className="mt-0.5 block truncate text-[10.5px] text-white/36">
                 {item.attentionReason || item.subtitle}
+                {(when || finished) ? <span className="ml-2 text-white/28">{when ? `Runs ${when}` : ''}{when && finished ? ' · ' : ''}{finished ? `Finished ${finished}` : ''}</span> : null}
               </span>
             ) : null}
           </span>
@@ -100,10 +114,10 @@ function ActiveRow({ item, onOpen, supplyOpen, onToggleSupply, children }: {
           ) : null}
           <ArrowRight className="h-3.5 w-3.5 shrink-0 text-white/24 transition-transform group-hover:translate-x-0.5 group-hover:text-white/48 motion-reduce:transform-none motion-reduce:transition-none" />
         </button>
-        {item.inputRequest && onToggleSupply ? (
-          <button type="button" onClick={onToggleSupply} className="shrink-0 rounded-[7px] bg-amber-300/12 px-2.5 py-1.5 text-[10.5px] font-semibold text-amber-100/78 hover:bg-amber-300/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/40">
-            {supplyOpen ? 'Close' : 'Supply'}
-            {item.inputRequest.coalescedFireCount > 1 ? ` ×${item.inputRequest.coalescedFireCount}` : ''}
+        {item.actionLabel && onAction ? (
+          <button type="button" onClick={onAction} className="shrink-0 rounded-[7px] bg-amber-300/12 px-2.5 py-1.5 text-[10.5px] font-semibold text-amber-100/78 hover:bg-amber-300/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/40">
+            {item.actionLabel === 'Supply' && supplyOpen ? 'Close' : item.actionLabel}
+            {(item.inputRequest?.coalescedFireCount ?? 0) > 1 ? ` ×${item.inputRequest!.coalescedFireCount}` : ''}
           </button>
         ) : null}
       </div>
@@ -116,15 +130,15 @@ function ActiveSection({
   section,
   items,
   onOpen,
+  onAction,
   supplyingItemId,
-  onToggleSupply,
   renderSupply,
 }: {
   section: ActiveWorkSection
   items: ActiveWorkItem[]
   onOpen: (item: ActiveWorkItem) => void
+  onAction: (item: ActiveWorkItem) => void
   supplyingItemId?: string | null
-  onToggleSupply: (item: ActiveWorkItem) => void
   renderSupply: (item: ActiveWorkItem) => React.ReactNode
 }) {
   const [showAll, setShowAll] = React.useState(false)
@@ -151,7 +165,7 @@ function ActiveSection({
             item={item}
             onOpen={() => onOpen(item)}
             supplyOpen={supplyingItemId === item.id}
-            onToggleSupply={item.inputRequest ? () => onToggleSupply(item) : undefined}
+            onAction={item.actionLabel ? () => onAction(item) : undefined}
           >
             {renderSupply(item)}
           </ActiveRow>
@@ -180,6 +194,34 @@ function WorkSetupActions({ workspaceId }: { workspaceId: string | null | undefi
       />
       <ActiveWorkAddMenu label="More" hideAutomation />
     </div>
+  )
+}
+
+const STARTER_ROUTINES = [
+  { title: 'Weekly campaign check-in', detail: 'Review timing, readiness, and the clearest next move.' },
+  { title: 'Weekly signal scan', detail: 'Collect useful artist, audience, and industry signals.' },
+  { title: 'Weekly content plan', detail: 'Turn current priorities into a focused week of content.' },
+] as const
+
+function StarterRoutines({ workspaceId }: { workspaceId: string | null | undefined }) {
+  return (
+    <section className="mb-6">
+      <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">Starter routines</div>
+      <div className="grid gap-1.5 md:grid-cols-3">
+        {STARTER_ROUTINES.map((routine) => (
+          <div key={routine.title} className="flex min-h-[68px] items-center justify-between gap-3 rounded-[10px] bg-white/[0.032] px-3 py-2.5">
+            <div className="min-w-0"><div className="text-[11.5px] font-medium text-white/76">{routine.title}</div><div className="mt-0.5 line-clamp-2 text-[10px] leading-4 text-white/32">{routine.detail}</div></div>
+            <ArtistManagerCreateLink
+              kind="automation"
+              workspaceId={workspaceId}
+              label="Set up"
+              draft={`Set up a ${routine.title.toLowerCase()}. ${routine.detail} Choose the best active worker or workflow, use automatic weekly placement, bind every required input, and show me the exact one-sentence review before saving.`}
+              className="shrink-0"
+            />
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -287,6 +329,7 @@ export function ActiveWorkPage({ automationId, onSendAutomationToWorkspace }: { 
   const [historyLoading, setHistoryLoading] = React.useState(false)
   const [historyError, setHistoryError] = React.useState<string | null>(null)
   const [supplyingItemId, setSupplyingItemId] = React.useState<string | null>(null)
+  const [pausingAll, setPausingAll] = React.useState(false)
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId)
 
   React.useEffect(() => {
@@ -394,6 +437,12 @@ export function ActiveWorkPage({ automationId, onSendAutomationToWorkspace }: { 
     }
     let route
     let hash: string | undefined
+    if (item.openTarget.kind === 'scheduled-work') {
+      sessionStorage.setItem('artist-os:scheduled-work-focus', JSON.stringify({
+        workspaceId: item.workspaceId,
+        orderId: item.openTarget.id,
+      }))
+    }
     switch (item.openTarget.kind) {
       case 'session':
         route = routes.view.allSessions(item.openTarget.id)
@@ -428,6 +477,91 @@ export function ActiveWorkPage({ automationId, onSendAutomationToWorkspace }: { 
     }
     if (hash !== undefined) window.location.hash = hash
     navigate(route)
+  }
+
+  const handleAction = async (item: ActiveWorkItem) => {
+    if (item.actionLabel === 'Supply') {
+      setSupplyingItemId((current) => current === item.id ? null : item.id)
+      return
+    }
+    if (item.source === 'automation' && (item.actionLabel === 'Activate' || item.actionLabel === 'Snooze 24h')) {
+      const automation = automationsByWorkspace.get(item.workspaceId)?.find((candidate) => candidate.id === item.sourceId)
+      if (!automation) return
+      try {
+        if (item.actionLabel === 'Snooze 24h') {
+          await window.electronAPI.setAutomationSnoozedUntil(
+            item.workspaceId,
+            automation.event,
+            automation.matcherIndex,
+            new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          )
+          toast.success(`${item.title} snoozed for 24 hours`)
+        } else if (item.snoozedUntil) {
+          await window.electronAPI.setAutomationSnoozedUntil(item.workspaceId, automation.event, automation.matcherIndex, null)
+          if (!automation.enabled) {
+            await window.electronAPI.setAutomationEnabled(item.workspaceId, automation.event, automation.matcherIndex, true)
+          }
+          toast.success(`${item.title} is active again`)
+        } else if (onToggleAutomation) {
+          onToggleAutomation(item.sourceId)
+        }
+      } catch (error) {
+        toast.error('Could not update automatic work', { description: error instanceof Error ? error.message : String(error) })
+      }
+      return
+    }
+    if (item.actionLabel === 'Reconnect') {
+      try {
+        if (item.workspaceId !== activeWorkspaceId) {
+          if (!onSelectWorkspaceAndNavigate) throw new Error('Workspace navigation is unavailable')
+          await onSelectWorkspaceAndNavigate(item.workspaceId, routes.view.settings('secrets'))
+        } else {
+          navigate(routes.view.settings('secrets'))
+        }
+      } catch (error) {
+        toast.error('Could not open Connections', { description: error instanceof Error ? error.message : String(error) })
+      }
+      return
+    }
+    if (item.source === 'scheduled-work' && item.actionLabel === 'Activate') {
+      const order = combinedScheduledWork.find((candidate) => candidate.id === item.sourceId)
+      if (!order) return
+      try {
+        if (order.execution.type === 'agent-task') {
+          await window.electronAPI.setAgentDefinitionActive(item.workspaceId, order.execution.agentSlug, true)
+        } else if (order.execution.type === 'workflow-run') {
+          await window.electronAPI.setWorkflowActive(item.workspaceId, order.execution.workflowSlug, true)
+        } else {
+          await handleOpen(item)
+          return
+        }
+        toast.success(`${item.title} is ready to resume`)
+      } catch (error) {
+        toast.error('Could not activate this work', { description: error instanceof Error ? error.message : String(error) })
+      }
+      return
+    }
+    await handleOpen(item)
+  }
+
+  const handlePauseAll = async () => {
+    if (pausingAll) return
+    if (globalRunning.loading || globalRunning.error) {
+      toast.error('Refresh Work before pausing all automatic work')
+      return
+    }
+    const enabled = [...automationsByWorkspace.entries()].flatMap(([workspaceId, entries]) => (
+      entries.filter((automation) => automation.enabled).map((automation) => ({ workspaceId, automation }))
+    ))
+    if (!enabled.length) return
+    setPausingAll(true)
+    const results = await Promise.allSettled(enabled.map(({ workspaceId, automation }) => (
+      window.electronAPI.setAutomationEnabled(workspaceId, automation.event, automation.matcherIndex, false)
+    )))
+    const failed = results.filter((result) => result.status === 'rejected').length
+    if (failed) toast.error(`Paused ${enabled.length - failed}; ${failed} could not be paused`)
+    else toast.success(`Paused ${enabled.length} automatic ${enabled.length === 1 ? 'routine' : 'routines'}`)
+    setPausingAll(false)
   }
 
   const grouped = new Map<ActiveWorkSection, ActiveWorkItem[]>(SECTION_ORDER.map((section) => [section, []]))
@@ -467,7 +601,12 @@ export function ActiveWorkPage({ automationId, onSendAutomationToWorkspace }: { 
         <CompactPageHeader eyebrow="Team" title="Work" tone="orange" className="mb-4" />
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <WorkPageTabs active="active" />
-          <WorkSetupActions workspaceId={activeWorkspaceId} />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button type="button" title={globalRunning.error ? 'Refresh Work before pausing every workspace' : 'Pause automatic work in every local workspace'} disabled={pausingAll || globalRunning.loading || Boolean(globalRunning.error) || ![...automationsByWorkspace.values()].some((entries) => entries.some((automation) => automation.enabled))} onClick={() => void handlePauseAll()} className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-white/[0.045] px-3 text-[10.5px] font-medium text-white/48 hover:bg-white/[0.075] hover:text-white/78 disabled:opacity-30">
+              <Pause className="h-3 w-3" /> {pausingAll ? 'Pausing…' : 'Pause all'}
+            </button>
+            <WorkSetupActions workspaceId={activeWorkspaceId} />
+          </div>
         </div>
 
         {sourceError ? (
@@ -476,6 +615,8 @@ export function ActiveWorkPage({ automationId, onSendAutomationToWorkspace }: { 
             Some active-work details could not be loaded. Available work is still shown. {sourceError}
           </div>
         ) : null}
+
+        {automations.length === 0 && !loading ? <StarterRoutines workspaceId={activeWorkspaceId} /> : null}
 
         {loading && items.length === 0 ? (
           <div className="space-y-2">
@@ -486,8 +627,7 @@ export function ActiveWorkPage({ automationId, onSendAutomationToWorkspace }: { 
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.045] text-white/36">
               <Clock3 className="h-4 w-4" />
             </div>
-            <p className="max-w-md text-[13px] text-white/52">Nothing active yet. Run a worker or workflow now, schedule something for later, or create an automation.</p>
-            <div className="mt-4"><WorkSetupActions workspaceId={activeWorkspaceId} /></div>
+            <p className="max-w-md text-[13px] text-white/52">Nothing is running or scheduled.</p>
           </div>
         ) : (
           <div className="space-y-7 pb-10">
@@ -497,8 +637,8 @@ export function ActiveWorkPage({ automationId, onSendAutomationToWorkspace }: { 
                 section={section}
                 items={grouped.get(section) ?? []}
                 onOpen={handleOpen}
+                onAction={(item) => void handleAction(item)}
                 supplyingItemId={supplyingItemId}
-                onToggleSupply={(item) => setSupplyingItemId((current) => current === item.id ? null : item.id)}
                 renderSupply={renderSupply}
               />
             ))}

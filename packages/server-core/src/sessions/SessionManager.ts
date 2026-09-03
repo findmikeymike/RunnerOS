@@ -5849,14 +5849,16 @@ user a clickable link to where the thing now lives.`
           COLLEGE_RADIO_CAMPAIGN_SLUG,
           MERCH_PRODUCT_BUILDER_SLUG,
           WEEKLY_SIGNAL_SCAN_SLUG,
+          SOCIAL_COMMENT_REPLIES_SLUG,
         } = await import('@craft-agent/shared/workflows')
         for (const workspace of workspaces) {
           const newDefaults = workspace.artistWorkspaceScope === 'hq'
-            ? [INDUSTRY_OUTREACH_PIPELINE_SLUG, WEEKLY_SIGNAL_SCAN_SLUG]
+            ? [INDUSTRY_OUTREACH_PIPELINE_SLUG, WEEKLY_SIGNAL_SCAN_SLUG, SOCIAL_COMMENT_REPLIES_SLUG]
             : workspace.artistWorkspaceScope === 'campaign' ? [
                 INDUSTRY_OUTREACH_PIPELINE_SLUG,
                 COLLEGE_RADIO_CAMPAIGN_SLUG,
                 MERCH_PRODUCT_BUILDER_SLUG,
+                SOCIAL_COMMENT_REPLIES_SLUG,
               ] : []
           const { activated } = ensureDefaultWorkflowActivations(workspace.rootPath, newDefaults)
           if (activated > 0) {

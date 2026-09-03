@@ -20,6 +20,7 @@ import {
   INDUSTRY_OUTREACH_PIPELINE_SLUG,
   MERCH_PRODUCT_BUILDER_SLUG,
   PAID_CAMPAIGN_BUILDER_SLUG,
+  SOCIAL_COMMENT_REPLIES_SLUG,
   WEEKLY_SIGNAL_SCAN_SLUG,
   STARTER_WORKFLOWS,
   STARTER_WORKFLOW_SLUGS,
@@ -934,6 +935,22 @@ describe('seedGlobalWorkflowLibraryIfEmpty', () => {
     expect(ENSURED_STARTER_WORKFLOW_SLUGS).toContain(WEEKLY_SIGNAL_SCAN_SLUG)
     expect(HQ_DEFAULT_WORKFLOW_SLUGS).toContain(WEEKLY_SIGNAL_SCAN_SLUG)
     expect(CAMPAIGN_DEFAULT_WORKFLOW_SLUGS).not.toContain(WEEKLY_SIGNAL_SCAN_SLUG)
+  })
+
+  test('Social Comment Replies is a bounded default workflow in HQ and Campaign workspaces', () => {
+    const workflow = STARTER_WORKFLOWS.find((item) => item.slug === SOCIAL_COMMENT_REPLIES_SLUG)
+
+    expect(workflow).toBeDefined()
+    const parsed = parseWorkflowFile(serializeWorkflow(workflow!.metadata, workflow!.body))
+    expect(parsed).not.toBeNull()
+    expect(parsed?.metadata.steps.map((step) => step.agent)).toEqual(['social-publisher'])
+    expect(parsed?.metadata.steps[0]?.input).toContain('exact comment ID or permalink')
+    expect(parsed?.metadata.steps[0]?.input).toContain('Do not inspect or answer DMs')
+    expect(parsed?.metadata.steps[0]?.input).toContain('stable idempotency keys')
+    expect(parsed?.metadata.steps[0]?.completion).toMatchObject({ requireToolUse: true, maxAgentMessages: 0 })
+    expect(ENSURED_STARTER_WORKFLOW_SLUGS).toContain(SOCIAL_COMMENT_REPLIES_SLUG)
+    expect(HQ_DEFAULT_WORKFLOW_SLUGS).toContain(SOCIAL_COMMENT_REPLIES_SLUG)
+    expect(CAMPAIGN_DEFAULT_WORKFLOW_SLUGS).toContain(SOCIAL_COMMENT_REPLIES_SLUG)
   })
 
   test('Content Mastermind starter parses with the lean four-agent contract', () => {

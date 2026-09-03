@@ -71,6 +71,14 @@ export { buildEnvFromSdkInput } from './sdk-bridge.ts';
 // ============================================================================
 
 export { parsePromptReferences, matcherMatches } from './utils.ts';
+export { automationReviewSentence, type AutomationReviewWhen } from './review-sentence.ts';
+export {
+  dailyWindowMatchedInRange,
+  dailyWindowMatchesAt,
+  nextDailyWindowRuns,
+  scheduledMinuteForDailyWindow,
+  type DailyScheduleWindow,
+} from './daily-window.ts';
 
 // ============================================================================
 // Re-exports from sub-modules

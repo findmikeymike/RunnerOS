@@ -84,6 +84,34 @@ function runMatcherSemanticValidations(
       const matcher = matchers[i];
       if (!matcher) continue;
 
+      if (matcher.dailyWindow && event !== 'SchedulerTick') {
+        errors.push({
+          file,
+          path: `automations.${event}[${i}].dailyWindow`,
+          message: 'dailyWindow is only supported by SchedulerTick automations',
+          severity: 'error',
+          suggestion: 'Move this automation to SchedulerTick',
+        });
+      }
+      if (matcher.dailyWindow && !matcher.cron) {
+        errors.push({
+          file,
+          path: `automations.${event}[${i}].cron`,
+          message: 'A dailyWindow schedule requires a cron expression',
+          severity: 'error',
+          suggestion: 'Use a per-minute cron covering the full daily window',
+        });
+      }
+      if (matcher.dailyWindow && matcher.cron && matcher.cron !== '* * * * *') {
+        errors.push({
+          file,
+          path: `automations.${event}[${i}].cron`,
+          message: 'A dailyWindow schedule must use the every-minute scheduler expression',
+          severity: 'error',
+          suggestion: 'Use * * * * *; dailyWindow chooses the one actual run minute',
+        });
+      }
+
       // WebhookReceive-specific semantic checks
       if (event === 'WebhookReceive') {
         if (!matcher.slug) {

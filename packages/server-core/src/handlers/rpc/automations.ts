@@ -26,6 +26,19 @@ interface HistoryEntry { id: string; ts: number; ok: boolean; sessionId?: string
 
 type AutomaticScheduleEntry = { cron: string; enabled?: boolean; timezone?: string }
 
+export function assertUniqueAutomationTemplateKey(config: AutomationsConfigJson, templateKey: string): void {
+  const duplicate = Object.values(config.automations ?? {}).some((matchers) => (
+    Array.isArray(matchers) && matchers.some((candidate) => candidate.templateKey === templateKey)
+  ))
+  if (duplicate) throw new Error('This shared automation is already installed in Artist HQ.')
+}
+
+export function assertAutomationCanBeDuplicated(matcher: Record<string, unknown>): void {
+  if (typeof matcher.templateKey === 'string' && matcher.templateKey.trim()) {
+    throw new Error('Shared artist automations cannot be duplicated.')
+  }
+}
+
 export function automaticScheduleOccupancyFromConfig(value: unknown): AutomaticScheduleEntry[] {
   const validation = validateAutomationsConfig(value)
   if (!validation.valid || !validation.config) {
@@ -270,6 +283,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.automations.GET,
   RPC_CHANNELS.automations.TEST,
   RPC_CHANNELS.automations.SET_ENABLED,
+  RPC_CHANNELS.automations.SET_SNOOZED_UNTIL,
   RPC_CHANNELS.automations.DUPLICATE,
   RPC_CHANNELS.automations.DELETE,
   RPC_CHANNELS.automations.GET_HISTORY,
@@ -514,6 +528,29 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
     })
   })
 
+  server.handle(RPC_CHANNELS.automations.SET_SNOOZED_UNTIL, async (
+    _ctx,
+    workspaceId: string,
+    eventName: string,
+    matcherIndex: number,
+    snoozedUntil: string | null,
+  ) => {
+    if (snoozedUntil !== null) {
+      const timestamp = Date.parse(snoozedUntil)
+      if (!Number.isFinite(timestamp) || timestamp <= Date.now()) throw new Error('Snooze must end in the future')
+    }
+    await withAutomationMatcher(workspaceId, eventName, matcherIndex, (matchers, idx) => {
+      const matcherId = typeof matchers[idx]!.id === 'string' ? matchers[idx]!.id as string : ''
+      if (snoozedUntil === null) delete matchers[idx]!.snoozedUntil
+      else matchers[idx]!.snoozedUntil = new Date(snoozedUntil).toISOString()
+      return matcherId
+    }, async (matcherId, workspaceRootPath) => {
+      if (matcherId && snoozedUntil !== null) {
+        cancelPendingAutomationWorkForMatcherLocked(workspaceId, workspaceRootPath, matcherId)
+      }
+    })
+  })
+
   // Report inbound webhook trigger server state to the renderer.
   // Returns { enabled: false, url: null } when the host didn't wire the
   // closure (older bootstraps) or when the server is disabled.
@@ -555,6 +592,8 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
       }
 
       if (!config.automations) config.automations = {}
+      const templateKey = typeof resolvedMatcher.templateKey === 'string' ? resolvedMatcher.templateKey.trim() : ''
+      if (templateKey) assertUniqueAutomationTemplateKey(config, templateKey)
       const eventMap = config.automations
       if (!eventMap[eventName]) eventMap[eventName] = []
       const matchers = eventMap[eventName]!
@@ -630,6 +669,7 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
   // Duplicate an automation matcher
   server.handle(RPC_CHANNELS.automations.DUPLICATE, async (_ctx, workspaceId: string, eventName: string, matcherIndex: number) => {
     await withAutomationMatcher(workspaceId, eventName, matcherIndex, (matchers, idx, _config, genId) => {
+      assertAutomationCanBeDuplicated(matchers[idx]!)
       const clone = JSON.parse(JSON.stringify(matchers[idx]))
       clone.id = genId()
       clone.name = clone.name ? `${clone.name} Copy` : 'Untitled Copy'
