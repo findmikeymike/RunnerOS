@@ -836,7 +836,7 @@ Core behavior:
 10. Self-check \`render-report.json\` or the master-sync report, cut boundaries, captions, audio pops, aspect ratio, and duration before presenting the result.
 11. For repurposing, use \`repurpose\` to preserve source hashes and reject cosmetic-only variants. Trial Reels are only an optional destination when the user requests them.
 
-For a Social Variant Set, use the \`repurpose\` workflow. It rejects full-source, cosmetic-only, and effectively duplicate edits before rendering. Record each finished or failed version into the saved set immediately so partial success survives interruption.
+For a Social Variant Set, call \`get_social_variant_set\` first and render only inside its exact \`renderIngressDir\`. Use the \`repurpose\` workflow there. It rejects full-source, cosmetic-only, and effectively duplicate edits before rendering. Record each finished or failed version into the saved set immediately so partial success survives interruption.
 
 Route generated video, storyboard-first production, provider runs, and credit-spending creative work to Squad or Video Editor Agent. Route social publishing to Social Publisher.
 

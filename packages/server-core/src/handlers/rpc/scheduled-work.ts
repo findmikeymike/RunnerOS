@@ -82,6 +82,7 @@ import {
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
+import { SocialVariantSetService } from '../../outputs/SocialVariantSetService'
 import { supplyScheduledWorkInputs } from '../../scheduled-work/ScheduledWorkInputSupply'
 import { assertTeamPermission } from '@craft-agent/shared/workspaces'
 import { loadReleaseKitManifest, resolveVerifiedReleaseKitItemPath, resolveVerifiedReleaseKitItemPathWhileLocked, withReleaseKitLockAsync } from '@craft-agent/shared/release-kit'
@@ -508,6 +509,11 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         const restriction = releaseKitSocialRestriction(item.usage.restrictions)
         if (restriction) throw new Error(restriction)
         resolveVerifiedReleaseKitItemPathWhileLocked(rootPath, workspaceId, workspaceId, item.id, item.sha256)
+        const variantService = new SocialVariantSetService({
+          getWorkspace: (id) => getWorkspaceByNameOrId(id) ?? undefined,
+          emitOutputsUpdated: (id) => broadcastOutputChanged(deps, id),
+        })
+        const variantBinding = await variantService.assertReleaseKitSocialVariantAllowed(workspaceId, item, normalized)
 
         const startAt = new Date(normalized.startAt)
         if (startAt.getTime() <= Date.now()) throw new Error('Choose a future publish time.')
@@ -574,6 +580,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           if (!existingOrder || !existingCalendarItem || !sameScheduleIdentity(existingOrder, order)) {
             throw new Error(`Schedule request id already exists with different details: ${requestId}`)
           }
+          if (variantBinding) variantService.linkScheduledUse(variantBinding, item.id, existingOrder.id)
           return { updated: false, work: scheduled.work, order: existingOrder, calendar: parsedCalendar.calendar, calendarItem: existingCalendarItem }
         }
         const equivalentOrder = scheduled.work.items.find((candidate) => !candidate.deletedAt
@@ -583,6 +590,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         if (equivalentOrder) {
           const equivalentCalendarItem = parsedCalendar.calendar.items.find((candidate) => candidate.id === equivalentOrder.calendarLink?.itemId)
           if (!equivalentCalendarItem) throw new Error(`Existing social schedule is missing its calendar item: ${equivalentOrder.id}`)
+          if (variantBinding) variantService.linkScheduledUse(variantBinding, item.id, equivalentOrder.id)
           return { updated: false, work: scheduled.work, order: equivalentOrder, calendar: parsedCalendar.calendar, calendarItem: equivalentCalendarItem }
         }
         await validateScheduleRuntime(deps, rootPath, order)
@@ -590,6 +598,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         const calendar = { ...parsedCalendar.calendar, items: [...parsedCalendar.calendar.items, calendarItem], updatedAt: now }
         writeScheduledWork(rootPath, work)
         writeCampaignCalendar(rootPath, calendar)
+        if (variantBinding) variantService.linkScheduledUse(variantBinding, item.id, order.id)
         broadcastChanged(deps, workspaceId, rootPath)
         return { updated: true, work, order, calendar, calendarItem }
       }))
@@ -631,6 +640,9 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         const restriction = releaseKitSocialRestriction(item.usage.restrictions)
         if (restriction) throw new Error(restriction)
         resolveVerifiedReleaseKitItemPathWhileLocked(rootPath, workspaceId, workspaceId, item.id, item.sha256)
+        await new SocialVariantSetService({
+          getWorkspace: (id) => getWorkspaceByNameOrId(id) ?? undefined,
+        }).assertReleaseKitSocialVariantAllowed(workspaceId, item, normalized)
         if (Date.parse(normalized.startAt) <= Date.now()) throw new Error('Choose a future publish time.')
 
         const definition: ReleaseKitSocialAuthorizationDefinition = {

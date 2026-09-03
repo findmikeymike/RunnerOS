@@ -1,3 +1,5 @@
+import type { SocialVariantDestinationIntent } from '../outputs/social-variants.ts';
+
 export const RELEASE_KIT_DIR = 'release-kit';
 export const RELEASE_KIT_MANIFEST_FILE = 'manifest.json';
 export const RELEASE_KIT_CONTEXT_SLUG = 'release-kit';
@@ -63,6 +65,8 @@ export interface ReleaseKitItem {
   note?: string;
   /** Immutable reviewed song package captured with this exact byte snapshot. */
   trackIntelligence?: ReviewedTrackIntelligenceRevision;
+  /** Exact account and mode approved when this snapshot was created from a social variant. */
+  socialVariantIntent?: { variantId: string; destination: SocialVariantDestinationIntent };
   usage: ReleaseKitUsageMetadata;
 }
 
@@ -94,6 +98,9 @@ export interface MaterializeReleaseKitItemInput {
   promotedBy: ReleaseKitItem['promotedBy'];
   note?: string;
   trackIntelligence?: ReviewedTrackIntelligenceRevision;
+  /** Usage restrictions inherited from a verified upstream final. */
+  usage?: ReleaseKitUsageMetadata;
+  socialVariantIntent?: ReleaseKitItem['socialVariantIntent'];
 }
 
 export interface PromoteToReleaseKitInput {

@@ -55,6 +55,15 @@ export interface SocialVariantRecord {
   failureReason?: string;
   releaseKitItemId?: string;
   scheduledWorkOrderIds: string[];
+  /** Host-verified evidence copied from the local repurpose manifest. */
+  renderEvidence?: {
+    manifestSha256: string;
+    sourceSha256: string;
+    sourceDurationSeconds: number;
+    sourceSegments: Array<{ start: number; end: number }>;
+    meaningfulDifference: 'meaningfully-different';
+    assessmentBasis: 'local-editorial-timeline-gate';
+  };
 }
 
 export interface SocialVariantSetManifest {
@@ -129,6 +138,8 @@ export interface RecordSocialVariantResultRequest {
   editorialMode: string;
   editorialIntent: string;
   filePath?: string;
+  manifestPath?: string;
+  manifestVariantId?: string;
   failureReason?: string;
   durationSeconds?: number;
   aspectRatio?: string;
@@ -276,6 +287,7 @@ function isSocialVariantRecord(value: unknown, sourceIds: ReadonlySet<string>, a
   if (!isBoundedString(value.failureReason, 1_000, true)) return false;
   if (!isOptionalIdentifier(value.releaseKitItemId)) return false;
   if (!Array.isArray(value.scheduledWorkOrderIds) || !value.scheduledWorkOrderIds.every(isIdentifier) || !hasUniqueStrings(value.scheduledWorkOrderIds)) return false;
+  if (value.renderEvidence !== undefined && !isSocialVariantRenderEvidence(value.renderEvidence)) return false;
   if (value.state === 'ready') {
     if (!value.assetId || !value.sha256) return false;
     if (assetIds && !assetIds.has(value.assetId)) return false;
@@ -283,6 +295,25 @@ function isSocialVariantRecord(value: unknown, sourceIds: ReadonlySet<string>, a
   if (value.state === 'failed' && !value.failureReason) return false;
   if (value.state !== 'failed' && value.failureReason !== undefined) return false;
   return true;
+}
+
+function isSocialVariantRenderEvidence(value: unknown): value is NonNullable<SocialVariantRecord['renderEvidence']> {
+  if (!isRecord(value)) return false;
+  if (typeof value.manifestSha256 !== 'string' || !SHA256.test(value.manifestSha256)) return false;
+  if (typeof value.sourceSha256 !== 'string' || !SHA256.test(value.sourceSha256)) return false;
+  if (typeof value.sourceDurationSeconds !== 'number' || !Number.isFinite(value.sourceDurationSeconds) || value.sourceDurationSeconds <= 0) return false;
+  const sourceDurationSeconds = value.sourceDurationSeconds;
+  if (value.meaningfulDifference !== 'meaningfully-different' || value.assessmentBasis !== 'local-editorial-timeline-gate') return false;
+  return Array.isArray(value.sourceSegments) && value.sourceSegments.length > 0 && value.sourceSegments.every((segment) => (
+    isRecord(segment)
+    && typeof segment.start === 'number'
+    && Number.isFinite(segment.start)
+    && typeof segment.end === 'number'
+    && Number.isFinite(segment.end)
+    && segment.start >= 0
+    && segment.end > segment.start
+    && segment.end <= sourceDurationSeconds + 0.05
+  ));
 }
 
 export function isSocialVariantSetManifest(value: unknown, assetIds?: ReadonlySet<string>): value is SocialVariantSetManifest {

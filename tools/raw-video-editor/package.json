@@ -7,6 +7,7 @@
     "runner-raw-video-editor": "bin/raw-video-editor.mjs"
   },
   "scripts": {
+    "test": "bun test bin/*.test.mjs",
     "doctor": "node bin/raw-video-editor.mjs doctor --json",
     "inspect": "node bin/raw-video-editor.mjs inspect",
     "transcribe": "node bin/raw-video-editor.mjs transcribe",

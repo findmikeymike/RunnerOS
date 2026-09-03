@@ -18,6 +18,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
+import { isSocialVariantDestinationIntent } from '../outputs/social-variants.ts';
 import {
   RELEASE_KIT_DIR,
   RELEASE_KIT_MANIFEST_FILE,
@@ -138,7 +139,10 @@ export function materializeReleaseKitItem(
         promotedBy: input.promotedBy,
         ...(input.note?.trim() ? { note: input.note.trim().slice(0, 1_000) } : {}),
         ...(input.trackIntelligence ? { trackIntelligence: input.trackIntelligence } : {}),
-        usage: defaultReleaseKitUsage(now, input.promotedBy === 'migration' ? 'migration' : 'system'),
+        ...(input.socialVariantIntent ? { socialVariantIntent: input.socialVariantIntent } : {}),
+        usage: input.usage
+          ? { ...normalizeReleaseKitUsage(input.usage), updatedAt: now, updatedBy: input.promotedBy === 'migration' ? 'migration' : 'system' }
+          : defaultReleaseKitUsage(now, input.promotedBy === 'migration' ? 'migration' : 'system'),
       };
       const nextItems = manifest.items.map((existing) => (
         item.isPrimary && existing.category === item.category && existing.subtype === item.subtype
@@ -476,6 +480,10 @@ function validateMaterializeInput(input: MaterializeReleaseKitItemInput): void {
   if (!input.subtype.trim()) throw new Error('subtype is required.');
   if (!input.sourcePath.trim()) throw new Error('sourcePath is required.');
   normalizeSource(input.source);
+  if (input.usage) normalizeReleaseKitUsage(input.usage);
+  if (input.socialVariantIntent && !isReleaseKitSocialVariantIntent(input.socialVariantIntent)) {
+    throw new Error('Social variant destination intent is invalid.');
+  }
 }
 
 function normalizeSource(source: ReleaseKitSource): ReleaseKitSource {
@@ -546,7 +554,17 @@ function isReleaseKitItem(value: unknown, schemaVersion: 1 | 2 | 3): value is Re
   if (value.promotedBy !== 'user' && value.promotedBy !== 'agent' && value.promotedBy !== 'migration') return false;
   if (value.note !== undefined && typeof value.note !== 'string') return false;
   if (value.trackIntelligence !== undefined && !isReviewedTrackIntelligenceRevision(value.trackIntelligence)) return false;
+  if (value.socialVariantIntent !== undefined && !isReleaseKitSocialVariantIntent(value.socialVariantIntent)) return false;
   return schemaVersion === 1 ? value.usage === undefined : isReleaseKitUsage(value.usage);
+}
+
+function isReleaseKitSocialVariantIntent(value: unknown): value is NonNullable<ReleaseKitItem['socialVariantIntent']> {
+  return isRecord(value)
+    && typeof value.variantId === 'string'
+    && value.variantId.length > 0
+    && value.variantId.length <= 200
+    && isSocialVariantDestinationIntent(value.destination)
+    && Boolean(value.destination.profileId);
 }
 
 function isReviewedTrackIntelligenceRevision(value: unknown): boolean {

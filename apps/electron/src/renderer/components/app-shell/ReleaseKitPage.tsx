@@ -71,6 +71,17 @@ type SourceKind = 'upload' | 'campaign-asset' | 'vault-asset' | 'output'
 type AssetDrawerMode = 'details' | 'where' | 'post' | 'when'
 type ReleaseKitSocialProfile = { platform: string; profileId: string; label: string; accountSetId?: string; ready: boolean }
 type SocialVariantPostIntent = SocialVariantDestinationIntent & { variantId: string }
+type PendingVariantPromotion = {
+  sourceWorkspaceId: string
+  outputId: string
+  variantId: string
+  assetId: string
+  title: string
+  sha256: string
+  mimeType?: string
+  sizeBytes?: number
+  destination: SocialVariantDestinationIntent
+}
 
 const ReleaseKitInspectContext = React.createContext<(item: ReleaseKitItem) => void>(() => {})
 
@@ -113,9 +124,14 @@ export function ReleaseKitPage({
   const [itemPaths, setItemPaths] = React.useState<Record<string, string>>({})
   const [selectedItemId, setSelectedItemId] = React.useState<string | null>(null)
   const [selectedVariantPostIntent, setSelectedVariantPostIntent] = React.useState<SocialVariantPostIntent | null>(null)
+  const [pendingVariantPromotion, setPendingVariantPromotion] = React.useState<PendingVariantPromotion | null>(null)
   const [variantSetupOpen, setVariantSetupOpen] = React.useState(false)
   const [variantSetupSourceId, setVariantSetupSourceId] = React.useState<string | null>(null)
   const selectedItem = manifest?.items.find((item) => item.id === selectedItemId) ?? null
+  const pendingVariantItem = React.useMemo(
+    () => pendingVariantPromotion ? pendingVariantAsReleaseKitItem(workspaceId, pendingVariantPromotion) : null,
+    [pendingVariantPromotion, workspaceId],
+  )
   const { onCreateSession, onInputChange, onSendMessage, skills, enabledSources, activeAgents } = useAppShellContext()
   const variantOutputs = React.useMemo(() => outputs.filter((output) => Boolean(output.socialVariantSetSummary)), [outputs])
 
@@ -195,6 +211,10 @@ export function ReleaseKitPage({
     const pending = consumePendingReleaseKitOutput()
     if (!pending) return
     if (pending.socialVariantId && pending.assetId) {
+      if (pending.targetCampaignId && pending.targetCampaignId !== workspaceId) {
+        toast.error('Could not open this variant', { description: 'The selected campaign changed before the handoff completed.' })
+        return
+      }
       const sourceWorkspaceId = pending.sourceWorkspaceId ?? workspaceId
       void (async () => {
         const output = await window.electronAPI.getOutput(sourceWorkspaceId, pending.outputId)
@@ -202,6 +222,8 @@ export function ReleaseKitPage({
         if (!output || !variant || variant.state !== 'ready' || variant.assetId !== pending.assetId || !variant.sha256) {
           throw new Error('This exact variant is no longer ready to use.')
         }
+        const variantAssetId = variant.assetId!
+        const variantSha256 = variant.sha256!
         const outputAsset = output.assets.find((candidate) => candidate.id === variant.assetId)
         if (!outputAsset?.sha256 || outputAsset.sha256.toLowerCase() !== variant.sha256.toLowerCase()) {
           throw new Error('This version no longer matches its rendered asset record.')
@@ -212,18 +234,25 @@ export function ReleaseKitPage({
           && item.source.assetId === variant.assetId
           && (item.source.sourceWorkspaceId ?? workspaceId) === sourceWorkspaceId
           && item.sha256.toLowerCase() === variant.sha256?.toLowerCase())
-        const result = existing
-          ? { manifest: current, item: existing }
-          : await window.electronAPI.promoteToReleaseKit(workspaceId, {
-            source: { type: 'output', outputId: output.id, assetId: variant.assetId, sourceWorkspaceId },
-            category: 'video',
-            subtype: 'social-variant',
-            title: variant.title,
-            note: `Social variant ${variant.id}`,
-          })
-        setManifest(result.manifest)
         setSelectedVariantPostIntent({ ...variant.destination, variantId: variant.id })
-        setSelectedItemId(result.item.id)
+        if (existing) {
+          setManifest(current)
+          setPendingVariantPromotion(null)
+          setSelectedItemId(existing.id)
+        } else {
+          setSelectedItemId(null)
+          setPendingVariantPromotion({
+            sourceWorkspaceId,
+            outputId: output.id,
+            variantId: variant.id,
+            assetId: variantAssetId,
+            title: variant.title,
+            sha256: variantSha256,
+            mimeType: outputAsset.mimeType,
+            sizeBytes: outputAsset.sizeBytes,
+            destination: variant.destination,
+          })
+        }
       })().catch((cause) => toast.error('Could not prepare this version', { description: cause instanceof Error ? cause.message : String(cause) }))
       return
     }
@@ -358,12 +387,15 @@ export function ReleaseKitPage({
         }}
       />
       <ReleaseKitAssetDrawer
-        open={Boolean(selectedItem)}
-        item={selectedItem}
+        open={Boolean(selectedItem || pendingVariantPromotion)}
+        item={selectedItem ?? pendingVariantItem}
         itemPath={selectedItem ? itemPaths[selectedItem.id] : undefined}
         workspaceId={workspaceId}
-        initialPostIntent={selectedVariantPostIntent}
-        onOpenChange={(open) => { if (!open) { setSelectedItemId(null); setSelectedVariantPostIntent(null) } }}
+        initialPostIntent={selectedVariantPostIntent ?? (selectedItem?.socialVariantIntent
+          ? { ...selectedItem.socialVariantIntent.destination, variantId: selectedItem.socialVariantIntent.variantId }
+          : null)}
+        pendingVariantPromotion={pendingVariantPromotion}
+        onOpenChange={(open) => { if (!open) { setSelectedItemId(null); setSelectedVariantPostIntent(null); setPendingVariantPromotion(null) } }}
         onChanged={setManifest}
         onCreateVariants={(itemId) => {
           setSelectedItemId(null)
@@ -806,12 +838,13 @@ function displayVariantStatus(status: string): string {
   return status.replace(/-/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase())
 }
 
-function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, initialPostIntent, onOpenChange, onChanged, onCreateVariants }: {
+function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, initialPostIntent, pendingVariantPromotion, onOpenChange, onChanged, onCreateVariants }: {
   open: boolean
   item: ReleaseKitItem | null
   itemPath?: string
   workspaceId: string
   initialPostIntent?: SocialVariantPostIntent | null
+  pendingVariantPromotion?: PendingVariantPromotion | null
   onOpenChange: (open: boolean) => void
   onChanged: (manifest: ReleaseKitManifest) => void
   onCreateVariants: (itemId: string) => void
@@ -833,9 +866,9 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, initialPostI
   const itemId = item?.id
 
   const loadUses = React.useCallback(async () => {
-    if (!itemId) return
+    if (!itemId || pendingVariantPromotion) { setUses([]); return }
     setUses(await window.electronAPI.listReleaseKitItemUses(workspaceId, itemId))
-  }, [itemId, workspaceId])
+  }, [itemId, pendingVariantPromotion, workspaceId])
 
   React.useEffect(() => {
     if (!open || !item) return
@@ -904,11 +937,30 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, initialPostI
       return
     }
     setBusy(true)
+    let promotedItemId: string | null = null
     try {
       const startAt = new Date(`${date}T${time}:00`).toISOString()
+      let scheduledItem = item
+      if (pendingVariantPromotion) {
+        const promoted = await window.electronAPI.promoteToReleaseKit(workspaceId, {
+          source: {
+            type: 'output',
+            outputId: pendingVariantPromotion.outputId,
+            assetId: pendingVariantPromotion.assetId,
+            sourceWorkspaceId: pendingVariantPromotion.sourceWorkspaceId,
+          },
+          category: 'video',
+          subtype: 'social-variant',
+          title: pendingVariantPromotion.title,
+          note: `Social variant ${pendingVariantPromotion.variantId}`,
+        })
+        promotedItemId = promoted.item.id
+        scheduledItem = promoted.item
+        onChanged(promoted.manifest)
+      }
       await window.electronAPI.authorizeReleaseKitSocial(workspaceId, {
         requestId: `release-kit-${crypto.randomUUID()}`,
-        releaseKitItemId: item.id,
+        releaseKitItemId: scheduledItem.id,
         platform: selectedProfile.platform,
         profileId: selectedProfile.profileId,
         accountSetId: selectedProfile.accountSetId,
@@ -919,8 +971,12 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, initialPostI
       })
       await loadUses()
       setMode('details')
+      onOpenChange(false)
       toast.success('Post scheduled')
     } catch (error) {
+      if (promotedItemId) {
+        try { onChanged(await window.electronAPI.removeFromReleaseKit(workspaceId, promotedItemId)) } catch { /* Authorization remains failed closed; cleanup can be retried manually. */ }
+      }
       toast.error('Could not schedule post', { description: error instanceof Error ? error.message : String(error) })
     } finally { setBusy(false) }
   }
@@ -930,7 +986,10 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, initialPostI
       <DrawerContent className="w-[min(480px,94vw)] border-white/[0.07] bg-[#090909] text-white sm:max-w-[480px]">
         <DrawerHeader className="border-b border-white/[0.06]">
           <div className="flex items-center gap-2">
-            {mode !== 'details' ? <button type="button" onClick={() => setMode(mode === 'where' ? 'details' : mode === 'post' ? 'where' : 'post')} className="rounded-md p-1 text-white/45 hover:bg-white/[0.06] hover:text-white"><ArrowLeft className="h-4 w-4" /></button> : null}
+            {mode !== 'details' ? <button type="button" onClick={() => {
+              if (mode === 'where' && pendingVariantPromotion) onOpenChange(false)
+              else setMode(mode === 'where' ? 'details' : mode === 'post' ? 'where' : 'post')
+            }} className="rounded-md p-1 text-white/45 hover:bg-white/[0.06] hover:text-white"><ArrowLeft className="h-4 w-4" /></button> : null}
             <div>
               <DrawerTitle className="text-base text-white/86">{mode === 'details' ? item.title : mode === 'where' ? 'Choose an account' : mode === 'post' ? 'Write the post' : 'Choose when'}</DrawerTitle>
               <DrawerDescription>{mode === 'details' ? `${displaySubtype(item.subtype)}${item.sizeBytes ? ` · ${formatFileSize(item.sizeBytes)}` : ''}` : `Schedule ${item.title}`}</DrawerDescription>
@@ -1348,3 +1407,29 @@ function formatFileSize(bytes: number): string {
 const WAVEFORM_HEIGHTS = ['28%', '48%', '72%', '94%', '78%', '58%', '36%', '50%', '82%', '100%', '68%', '42%', '60%', '88%', '54%', '32%', '70%', '46%']
 
 const INPUT_CLASS = 'h-10 w-full rounded-[6px] border border-white/[0.1] bg-[#111114] px-3 text-sm text-white/78 outline-none focus:border-[#f97316]/55'
+
+function pendingVariantAsReleaseKitItem(campaignId: string, pending: PendingVariantPromotion): ReleaseKitItem {
+  return {
+    id: `pending_${pending.variantId}`,
+    campaignId,
+    category: 'video',
+    subtype: 'social-variant',
+    title: pending.title,
+    source: { type: 'output', outputId: pending.outputId, assetId: pending.assetId, sourceWorkspaceId: pending.sourceWorkspaceId },
+    relativePath: '',
+    mimeType: pending.mimeType,
+    sizeBytes: pending.sizeBytes,
+    sha256: pending.sha256,
+    status: 'ready',
+    isPrimary: false,
+    promotedAt: new Date().toISOString(),
+    promotedBy: 'user',
+    usage: {
+      bestFor: ['social'],
+      contentRating: 'unknown',
+      restrictions: { blockedFromUse: false, needsRightsClearance: false, artistLikenessRestricted: false },
+      updatedAt: new Date().toISOString(),
+      updatedBy: 'system',
+    },
+  }
+}

@@ -4316,10 +4316,15 @@ export class SessionManager implements ISessionManager {
             '6. Ask for plain-English strategy confirmation before rendering.',
             '6. Ask for plain-English strategy confirmation before rendering, except when a host-created Social Variant Set explicitly says the user\'s Create action already authorized the bounded render. In that flow, read the saved set and begin without a duplicate approval pause.',
           ).updated
-          const rawVideoEditorVariantWorkflowUpdated = replaceBuiltInAgentPromptText(
+          const rawVideoEditorIngressWorkflowUpdated = replaceBuiltInAgentPromptText(
+            'raw-video-editor',
+            '10. Self-check `render-report.json` or the master-sync report, cut boundaries, captions, audio pops, aspect ratio, and duration before presenting the result.\n\nFor a Social Variant Set, use the `repurpose` workflow. It rejects full-source, cosmetic-only, and effectively duplicate edits before rendering. Record each finished or failed version into the saved set immediately so partial success survives interruption.',
+            '10. Self-check `render-report.json` or the master-sync report, cut boundaries, captions, audio pops, aspect ratio, and duration before presenting the result.\n\nFor a Social Variant Set, call `get_social_variant_set` first and render only inside its exact `renderIngressDir`. Use the `repurpose` workflow there. It rejects full-source, cosmetic-only, and effectively duplicate edits before rendering. Record each finished or failed version into the saved set immediately so partial success survives interruption.',
+          ).updated
+          const rawVideoEditorVariantWorkflowUpdated = rawVideoEditorIngressWorkflowUpdated ? false : replaceBuiltInAgentPromptText(
             'raw-video-editor',
             '10. Self-check `render-report.json` or the master-sync report, cut boundaries, captions, audio pops, aspect ratio, and duration before presenting the result.',
-            '10. Self-check `render-report.json` or the master-sync report, cut boundaries, captions, audio pops, aspect ratio, and duration before presenting the result.\n\nFor a Social Variant Set, use the `repurpose` workflow. It rejects full-source, cosmetic-only, and effectively duplicate edits before rendering. Record each finished or failed version into the saved set immediately so partial success survives interruption.',
+            '10. Self-check `render-report.json` or the master-sync report, cut boundaries, captions, audio pops, aspect ratio, and duration before presenting the result.\n\nFor a Social Variant Set, call `get_social_variant_set` first and render only inside its exact `renderIngressDir`. Use the `repurpose` workflow there. It rejects full-source, cosmetic-only, and effectively duplicate edits before rendering. Record each finished or failed version into the saved set immediately so partial success survives interruption.',
           ).updated
           const rawVideoEditorMetadataUpdated = replaceBuiltInAgentMetadata('raw-video-editor', {
             greeting: {
@@ -4335,7 +4340,7 @@ export class SessionManager implements ISessionManager {
               to: 'An edit folder with inventory, packed transcript, EDL, preview/final MP4 paths, optional master-sync report and synchronized preview, self-check notes, and clear limits when source media or transcription is missing.',
             },
           }).updated
-          if (rawVideoEditorDirectionSkillUpdated || rawVideoEditorDirectionPromptUpdated || rawVideoEditorPromptUpdated || rawVideoEditorForceGuidanceUpdated || rawVideoEditorRepurposePromptUpdated || rawVideoEditorVariantApprovalUpdated || rawVideoEditorVariantWorkflowUpdated || rawVideoEditorMetadataUpdated) {
+          if (rawVideoEditorDirectionSkillUpdated || rawVideoEditorDirectionPromptUpdated || rawVideoEditorPromptUpdated || rawVideoEditorForceGuidanceUpdated || rawVideoEditorRepurposePromptUpdated || rawVideoEditorVariantApprovalUpdated || rawVideoEditorIngressWorkflowUpdated || rawVideoEditorVariantWorkflowUpdated || rawVideoEditorMetadataUpdated) {
             sessionLog.info('[agent-definitions] Updated existing Raw Video Editor direction, social variants, and song-master synchronization')
           }
           const signalScoutOldRules = `Collection rules:
@@ -8468,14 +8473,15 @@ user a clickable link to where the thing now lives.`
             const service = new SocialVariantSetService({
               getWorkspace: (workspaceId) => workspaceId === managed.workspace.id ? managed.workspace : undefined,
             })
+            const output = service.getForEditor(
+              managed.workspace.id,
+              input.outputId,
+              managed.id,
+              managed.spawnedFromAgent?.agentSlug,
+            )
             return {
               ok: true,
-              data: service.getForEditor(
-                managed.workspace.id,
-                input.outputId,
-                managed.id,
-                managed.spawnedFromAgent?.agentSlug,
-              ),
+              data: { ...output, renderIngressDir: service.getRenderIngressDir(managed.workspace.id, input.outputId) },
             }
           } catch (error) {
             return { ok: false, error: error instanceof Error ? error.message : String(error) }
@@ -8508,13 +8514,14 @@ user a clickable link to where the thing now lives.`
             if (activeAgentSlug !== SOCIAL_PUBLISHER_SLUG && activeAgentSlug !== CONCIERGE_SLUG) {
               throw new Error('Only Social Publisher or Artist Manager can query posting-ready social variants.')
             }
+            const target = resolveCampaignReadTarget(input.campaignId)
             const service = new SocialVariantSetService({
-              getWorkspace: (workspaceId) => getWorkspaceByNameOrId(workspaceId) ?? undefined,
+              getWorkspace: (workspaceId) => workspaceId === target.id ? target : undefined,
               validateSocialProfile: sessionRuntimeHooks.validateSocialProfile,
             })
             return {
               ok: true,
-              data: await service.listUsable(input.campaignId, input),
+              data: await service.listUsable(target.id, { ...input, campaignId: target.id }),
             }
           } catch (error) {
             return { ok: false, error: error instanceof Error ? error.message : String(error) }

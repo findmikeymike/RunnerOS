@@ -16,6 +16,8 @@ export interface RecordSocialVariantResultToolInput {
   editorialMode: string
   editorialIntent: string
   filePath?: string
+  manifestPath?: string
+  manifestVariantId?: string
   failureReason?: string
   durationSeconds?: number
   aspectRatio?: string
@@ -59,9 +61,14 @@ export async function handleRecordSocialVariantResult(
     return errorResponse('destinationIndex must be a non-negative integer.')
   }
   const filePath = args.filePath?.trim()
+  const manifestPath = args.manifestPath?.trim()
+  const manifestVariantId = args.manifestVariantId?.trim()
   const failureReason = args.failureReason?.trim()
   if ((filePath ? 1 : 0) + (failureReason ? 1 : 0) !== 1) {
     return errorResponse('Provide exactly one of filePath or failureReason.')
+  }
+  if (filePath && (!manifestPath || !manifestVariantId)) {
+    return errorResponse('Ready variants require manifestPath and manifestVariantId from the repurpose render result.')
   }
 
   return callCapability('record_social_variant_result', ctx.recordSocialVariantResult, {
@@ -73,6 +80,8 @@ export async function handleRecordSocialVariantResult(
     editorialMode: args.editorialMode.trim(),
     editorialIntent: args.editorialIntent.trim(),
     filePath,
+    manifestPath,
+    manifestVariantId,
     failureReason,
     aspectRatio: args.aspectRatio?.trim(),
     replaceVariantId: args.replaceVariantId?.trim(),
