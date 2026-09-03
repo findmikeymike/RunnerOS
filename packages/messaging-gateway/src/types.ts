@@ -58,6 +58,19 @@ export interface MessagingPlatformRuntimeInfo {
   state: MessagingPlatformRuntimeState
   identity?: string
   lastError?: string
+  /**
+   * Last outbound reply that could not be delivered to a chat.
+   *
+   * A remote user cannot see the app, so a silently dropped reply leaves them
+   * believing the agent never answered. Surfacing it on the desktop is the only
+   * place the failure can be noticed at all.
+   */
+  lastDeliveryFailure?: {
+    channelId: string
+    channelName?: string
+    reason: string
+    at: number
+  }
   updatedAt: number
 }
 

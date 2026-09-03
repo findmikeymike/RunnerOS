@@ -1462,6 +1462,8 @@ export interface MessagingPlatformRuntimeInfo {
   state: 'disconnected' | 'connecting' | 'connected' | 'reconnect_required' | 'error'
   identity?: string
   lastError?: string
+  /** Last reply that could not be delivered to a chat (spec 26, slice 7). */
+  lastDeliveryFailure?: { channelId: string; channelName?: string; reason: string; at: number }
   updatedAt: number
 }
 

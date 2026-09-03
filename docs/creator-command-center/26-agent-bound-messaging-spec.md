@@ -82,7 +82,7 @@ Slices 1, 2, 4, and 4a are implemented:
 
 ### Remaining
 
-Slice 4b (activation catalog refresh, routing hints), slice 5 (team-mode membership, fresh-code rebinding), slice 7 (transport failure visibility). Slice 5 should not lag far behind, because binding chats to HNIC raises the cost of today's channel-only trust model. Slices 3 and 6 are dropped by decision.
+Slice 4b (activation catalog refresh, routing hints) and slice 5 (team-mode membership, fresh-code rebinding). Slice 5 should not lag far behind, because binding chats to HNIC raises the cost of today's channel-only trust model. Slices 3 and 6 are dropped by decision; slices 1, 2, 4, 4a, and 7 are done.
 
 ---
 
@@ -371,7 +371,7 @@ Silent failure is the worst outcome for a remote user, who cannot see the app.
 
 - Worker crash, auth expiry, or connection loss surfaces in the desktop messaging pane with a plain-language cause.
 - On reconnect, if any inbound message was dropped, the gateway sends one message to affected chats: connection was lost, messages between these times may not have arrived.
-- Outbound send failure after retries marks the turn as undelivered in the desktop transcript, so the user is not left believing the agent replied.
+- Outbound send failure surfaces on the desktop as `lastDeliveryFailure` on the platform runtime, naming the chat and the reason, so the user is not left believing the agent replied. Marking the individual turn inside the session transcript is deferred — the platform row is enough to notice the failure, and injecting into transcripts is a larger change than the value warrants.
 
 ## UI
 
@@ -434,7 +434,7 @@ The case this does not serve is iterating with a specialist *through* the manage
 
 **Slice 6 — Permission-mode guard. DROPPED, deliberately.** See Permission And Approval Boundary. The workspace permission mode is honored as configured; do not reintroduce a messaging-specific downgrade.
 
-**Slice 7 — Failure visibility.** Desktop surfacing, reconnect gap notice, undelivered marking.
+**Slice 7 — Failure visibility. DONE.** Connection state and cause already surfaced in the desktop pane; added the reconnect gap notice (one message per outage over 60s, per chat, naming the window) and `lastDeliveryFailure` on the platform runtime, shown in the messaging pane.
 
 Slices 1 and 2 deliver the core value. Slices 4a and 4b are independent of the binding work and can land in any order. Slice 5 should not lag far behind, since binding to HNIC raises the cost of the current channel-only trust model.
 

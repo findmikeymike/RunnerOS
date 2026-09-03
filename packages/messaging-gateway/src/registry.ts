@@ -806,6 +806,18 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
           }))
         },
       },
+      onDeliveryFailure: (info) => {
+        const current = this.workspaces.get(workspaceId)
+        if (!current) return
+        this.setPlatformRuntime(workspaceId, current, info.platform, {
+          lastDeliveryFailure: {
+            channelId: info.channelId,
+            channelName: info.channelName,
+            reason: info.reason,
+            at: Date.now(),
+          },
+        })
+      },
       onBindingChanged: () => this.emitBindingChanged(workspaceId),
       onIncomingMessage: onIncomingMessage
         ? (event) => onIncomingMessage(workspaceId, event)
@@ -906,8 +918,69 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       updatedAt: Date.now(),
     }
     state.runtime[platform] = next
+    this.trackConnectionGap(workspaceId, state, platform, previous, next)
     this.emitPlatformStatus(workspaceId, platform, next)
   }
+
+  /**
+   * Tell chats when the connection dropped and came back.
+   *
+   * A remote user cannot see the app. If the transport was down, messages they
+   * sent in that window were never received and no reply is coming — without a
+   * notice they are left waiting on an answer that will never arrive. One
+   * message per outage, per chat, naming the window.
+   */
+  private trackConnectionGap(
+    workspaceId: string,
+    state: WorkspaceState,
+    platform: PlatformType,
+    previous: MessagingPlatformRuntimeInfo,
+    next: MessagingPlatformRuntimeInfo,
+  ): void {
+    const key = `${workspaceId}:${platform}`
+    if (previous.connected && !next.connected) {
+      // Record the start of the outage only once, on the falling edge.
+      if (!this.connectionGaps.has(key)) this.connectionGaps.set(key, Date.now())
+      return
+    }
+    if (!next.connected) return
+
+    const since = this.connectionGaps.get(key)
+    this.connectionGaps.delete(key)
+    if (since === undefined) return
+
+    const downMs = Date.now() - since
+    // A brief blip drops nothing worth reporting; announcing it would be noise
+    // on every transient reconnect.
+    if (downMs < MIN_REPORTABLE_OUTAGE_MS) return
+
+    const bindings = state.gateway.getBindingStore().getAll()
+      .filter((binding) => binding.enabled && binding.platform === platform)
+    if (bindings.length === 0) return
+
+    const text = `⚠️ I lost my connection from ${formatClock(since)} to ${formatClock(Date.now())}. Anything you sent in that window did not reach me — please send it again.`
+    for (const binding of bindings) {
+      void state.gateway.sendTextToChannel(platform, binding.channelId, text).catch((err) => {
+        this.log.warn('failed to deliver connection-gap notice', {
+          event: 'connection_gap_notice_failed',
+          workspaceId,
+          platform,
+          channelId: binding.channelId,
+          error: err,
+        })
+      })
+    }
+    this.log.info('connection gap reported to chats', {
+      event: 'connection_gap_reported',
+      workspaceId,
+      platform,
+      downMs,
+      chatCount: bindings.length,
+    })
+  }
+
+  /** Outage start per `workspaceId:platform`, while disconnected. */
+  private readonly connectionGaps = new Map<string, number>()
 
   private emitBindingChanged(workspaceId: string): void {
     this.opts.publishEvent?.(
@@ -1177,6 +1250,13 @@ function isPlatformConfigured(
   platform: PlatformType,
 ): boolean {
   return Boolean(config.enabled && config.platforms[platform]?.enabled)
+}
+
+/** Outages shorter than this are transient reconnects, not lost messages. */
+const MIN_REPORTABLE_OUTAGE_MS = 60_000
+
+function formatClock(at: number): string {
+  return new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
 function createRuntime(platform: PlatformType, configured: boolean): MessagingPlatformRuntimeInfo {

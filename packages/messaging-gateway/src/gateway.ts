@@ -41,6 +41,11 @@ export interface GatewayOptions {
   sessionManager: ISessionManager
   /** Lets `/agents` list who this chat may bind to. */
   agentDirectory?: AgentDirectory
+  /**
+   * Called when a reply could not be delivered to a chat. The remote user
+   * cannot see the app, so this is the only way the failure becomes visible.
+   */
+  onDeliveryFailure?: (info: { platform: PlatformType; channelId: string; channelName?: string; reason: string }) => void
   workspaceId: string
   /** Absolute path to the messaging storage directory. */
   storageDir: string
@@ -137,6 +142,7 @@ export class MessagingGateway {
   private readonly adapters = new Map<PlatformType, PlatformAdapter>()
   private readonly log: MessagingLogger
   private readonly onIncomingMessage?: (event: IncomingMessageEvent) => void | Promise<void>
+  private readonly onDeliveryFailure?: GatewayOptions['onDeliveryFailure']
   private readonly onBeforeRouteMessage?: (event: BeforeRouteMessageEvent) => boolean | Promise<boolean>
   private started = false
 
@@ -144,6 +150,7 @@ export class MessagingGateway {
     this.sessionManager = opts.sessionManager
     this.workspaceId = opts.workspaceId
     this.onIncomingMessage = opts.onIncomingMessage
+    this.onDeliveryFailure = opts.onDeliveryFailure
     this.onBeforeRouteMessage = opts.onBeforeRouteMessage
     this.log = (opts.logger ?? consoleLogger).child({
       component: 'gateway',
@@ -241,6 +248,17 @@ export class MessagingGateway {
 
   hasConnectedAdapter(platform: PlatformType): boolean {
     return this.adapters.get(platform)?.isConnected() ?? false
+  }
+
+  /**
+   * Send one plain message to a channel outside the normal session render path.
+   * Used for transport notices the artist must see even though no agent turn
+   * produced them.
+   */
+  async sendTextToChannel(platform: PlatformType, channelId: string, text: string): Promise<void> {
+    const adapter = this.adapters.get(platform)
+    if (!adapter?.isConnected()) throw new Error(`${platform} is not connected`)
+    await adapter.sendText(channelId, text)
   }
 
   // -------------------------------------------------------------------------
@@ -393,6 +411,12 @@ export class MessagingGateway {
       const adapter = this.adapters.get(binding.platform)
       if (!adapter || !adapter.isConnected()) continue
       this.renderer.handle(event, binding, adapter).catch((err) => {
+        this.onDeliveryFailure?.({
+          platform: binding.platform,
+          channelId: binding.channelId,
+          channelName: binding.channelName,
+          reason: err instanceof Error ? err.message : String(err),
+        })
         this.log.error('renderer failed to emit event to chat', {
           event: 'renderer_failed',
           sessionId: event.sessionId,

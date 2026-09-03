@@ -466,6 +466,14 @@ function buildDescription(
   runtime: MessagingPlatformRuntimeInfo,
   t: (key: string, opts?: Record<string, unknown>) => string,
 ): string {
+  // Checked before the connected branch, which returns early. A dropped reply
+  // is invisible to the person on the phone — they just see silence — so the
+  // desktop is the only place it can surface, connected or not.
+  if (runtime.lastDeliveryFailure) {
+    const failure = runtime.lastDeliveryFailure
+    const target = failure.channelName ?? failure.channelId
+    return `A reply to ${target} did not send: ${failure.reason}`
+  }
   if (runtime.connected) {
     if (platform === 'whatsapp' && runtime.identity) {
       return t('dialog.whatsapp.connectedAs', { name: runtime.identity })
