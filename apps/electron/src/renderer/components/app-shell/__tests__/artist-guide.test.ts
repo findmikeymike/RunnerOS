@@ -70,6 +70,15 @@ describe('Artist OS guide content', () => {
     expect(copy).not.toContain('all documentation')
   })
 
+  it('explains input-aware automation setup in artist language', () => {
+    const general = ARTIST_GUIDE_TABS.find((tab) => tab.id === 'general')
+    const copy = JSON.stringify(general)
+    expect(copy).toContain('Same every time')
+    expect(copy).toContain('Ask me each time')
+    expect(copy).toContain('Needs you')
+    expect(copy).toContain('ask Artist Manager')
+  })
+
   it('keeps item ids unique and every action visibly labelled', () => {
     const itemIds = ARTIST_GUIDE_TABS.flatMap((tab) => [
       ...tab.start,

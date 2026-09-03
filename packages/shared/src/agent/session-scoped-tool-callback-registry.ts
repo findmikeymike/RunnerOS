@@ -138,6 +138,9 @@ export interface SessionScopedToolCallbacks {
   scheduleWorkFn?: (
     input: import('@craft-agent/session-tools-core').ScheduleWorkToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').ScheduleWorkResult>;
+  supplyWorkInputFn?: (
+    input: import('@craft-agent/session-tools-core').SupplyWorkInputToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').SupplyWorkInputToolResult>;
   manageGoalRunFn?: (
     input: import('@craft-agent/session-tools-core').ManageGoalRunToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').ManageGoalRunToolResult>;

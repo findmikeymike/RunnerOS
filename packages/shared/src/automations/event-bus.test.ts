@@ -75,14 +75,13 @@ describe('WorkspaceEventBus', () => {
       expect(flagHandler).not.toHaveBeenCalled();
     });
 
-    it('should catch and log handler errors without stopping other handlers', async () => {
+    it('reports handler errors without stopping independent handlers', async () => {
       const errorHandler = jest.fn().mockRejectedValue(new Error('Test error'));
       const successHandler = jest.fn();
       bus.on('LabelAdd', errorHandler);
       bus.on('LabelAdd', successHandler);
 
-      // Should not throw
-      await bus.emit('LabelAdd', {
+      const result = await bus.emitWithResult('LabelAdd', {
         sessionId: 'session-1',
         workspaceId: 'test-workspace',
         timestamp: Date.now(),
@@ -91,6 +90,23 @@ describe('WorkspaceEventBus', () => {
 
       expect(errorHandler).toHaveBeenCalledTimes(1);
       expect(successHandler).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({
+        status: 'failed',
+        handlerCount: 2,
+        anyHandlerCount: 0,
+        failedHandlerCount: 1,
+      });
+    });
+
+    it('rejects emit when a handler fails so producers can retry', async () => {
+      bus.on('LabelAdd', () => { throw new Error('queue unavailable'); });
+
+      await expect(bus.emit('LabelAdd', {
+        sessionId: 'session-1',
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'test-label',
+      })).rejects.toThrow('failed in 1 handler');
     });
 
     it('should not emit after disposal', async () => {

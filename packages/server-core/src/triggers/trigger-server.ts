@@ -443,6 +443,20 @@ async function handleRequest(
     })
     return sendJson(res, 503, { error: 'automation_system_unavailable' })
   }
+  if (delivery.status === 'failed') {
+    await recordDelivery(config.deliveryRecorder, workspaceRootPath, log, {
+      timestamp: Date.now(),
+      workspaceId,
+      slug,
+      matcherId: matcher.id,
+      method,
+      outcome: 'automation_system_unavailable',
+      httpStatus: 503,
+      remoteIp,
+      reason: 'event_delivery_failed',
+    })
+    return sendJson(res, 503, { error: 'event_delivery_failed' })
+  }
   if (delivery.status === 'skipped') {
     return sendJson(res, 409, { error: 'automation_skipped', reason: delivery.reason })
   }

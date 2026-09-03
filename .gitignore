@@ -104,6 +104,7 @@ scratch.md
 /sessions/
 /automations.json
 /automations-history.jsonl
+/automations-scheduler-state.json
 /activated-agents.json
 
 # Vendored Swift tools — keep source, exclude build artifacts

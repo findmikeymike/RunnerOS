@@ -10,7 +10,7 @@ import type {
 import type { OutputKind } from '@craft-agent/shared/outputs'
 import { scheduledWorkDefinitionDigest } from '@craft-agent/shared/scheduled-work'
 import { createCampaignCalendarItem } from '@craft-agent/shared/campaign-calendar'
-import type { QueueWorkAction } from '@craft-agent/shared/automations'
+import type { QueueWorkAction, WorkflowInputBinding } from '@craft-agent/shared/automations'
 import { hqSemanticIntentId } from '@craft-agent/shared/hq-state'
 
 export type ScheduledWorkComposerType = 'event' | 'agent-task' | 'workflow-run' | 'social-publish' | 'review'
@@ -259,7 +259,7 @@ export function composerDefinitionDigest(value: unknown): string {
 
 export function buildAutomationQueueWorkAction(
   draft: Exclude<ScheduledWorkComposerDraft, EventComposerDraft>,
-  options: { calendarVisibility?: 'visible' | 'hidden' } = {},
+  options: { calendarVisibility?: 'visible' | 'hidden'; inputBindings?: Record<string, WorkflowInputBinding> } = {},
 ): QueueWorkAction {
   const execution = executionFromDraft(draft)
   const action: QueueWorkAction = {
@@ -269,6 +269,7 @@ export function buildAutomationQueueWorkAction(
     title: draft.title.trim(),
     intentId: hqSemanticIntentId({ title: draft.title.trim(), intent: JSON.stringify(execution) }),
     execution,
+    ...(draft.type === 'workflow-run' && options.inputBindings ? { inputBindings: options.inputBindings } : {}),
     inputRefs: draft.inputRefs.filter((ref): ref is Exclude<ScheduledWorkInputRef, { kind: 'produced-output' }> => ref.kind !== 'produced-output'),
   }
   if (draft.followUp.type !== 'none') {

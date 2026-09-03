@@ -2,6 +2,11 @@ import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { errorResponse, successResponse } from '../response.ts';
 
+export type ScheduleWorkInputBinding =
+  | { mode: 'fixed'; value: unknown }
+  | { mode: 'ask' }
+  | { mode: 'trigger'; from: 'file.path' | 'file.name' | 'webhook.body' | 'message.text' | 'url.content' };
+
 export type ScheduleWorkExecutionInput =
   | {
       type: 'agent-task';
@@ -18,10 +23,11 @@ export type ScheduleWorkExecutionInput =
       type: 'workflow-run';
       workflowSlug: string;
       triggerInputs?: Record<string, unknown>;
+      inputBindings?: Record<string, ScheduleWorkInputBinding>;
     };
 
 export type ScheduleWorkTriggerInput =
-  | { type: 'schedule'; cron: string; timezone?: string }
+  | { type: 'schedule'; cron?: string; cadence?: 'daily' | 'weekly'; timezone?: string }
   | { type: 'file-change'; watchPath: string; watchGlob?: string; changeTypes?: ('add' | 'change' | 'remove')[] }
   | { type: 'webhook'; slug: string; secretEnv?: string; allowUnauthenticated?: boolean }
   | { type: 'url-change'; url: string; intervalSeconds?: number }
@@ -72,6 +78,9 @@ export async function handleScheduleWork(ctx: SessionToolContext, args: Schedule
   } else if (!args.execution.workflowSlug?.trim()) {
     return errorResponse('workflow-run requires workflowSlug.');
   }
+  if (args.execution.type === 'workflow-run' && args.execution.inputBindings && args.destination !== 'automation') {
+    return errorResponse('Workflow input bindings are available only for Automation work.');
+  }
   if (args.continuation) {
     if (args.destination !== 'calendar' || args.execution.type !== 'agent-task') {
       return errorResponse('Continuation is available only for Calendar agent tasks.');
@@ -102,6 +111,11 @@ export async function handleScheduleWork(ctx: SessionToolContext, args: Schedule
     if (!args.timezone?.trim()) return errorResponse('Calendar work requires an IANA timezone.');
   } else if (args.destination === 'automation') {
     if (!args.trigger) return errorResponse('Automation work requires a trigger.');
+    if (args.trigger.type === 'schedule') {
+      const hasCron = Boolean(args.trigger.cron?.trim());
+      const hasCadence = Boolean(args.trigger.cadence);
+      if (hasCron === hasCadence) return errorResponse('Scheduled automation requires exactly one of cron or cadence.');
+    }
   } else {
     return errorResponse('destination must be calendar or automation.');
   }

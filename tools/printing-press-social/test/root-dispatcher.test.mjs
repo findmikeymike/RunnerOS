@@ -295,6 +295,34 @@ test('root dispatcher routes normalized profile lifecycle commands', () => {
   assert.equal(deleted.deleted, true);
 });
 
+test('Spotify profiles persist and clear the expected Ads Manager account', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const env = { SOCIAL_HOME: home };
+  const added = JSON.parse(run([
+    'profile', 'add', 'spotify',
+    '--profile', 'artist01',
+    '--ads-account-id', 'spotify-advertiser-123',
+    '--json',
+  ], env));
+  assert.equal(added.data.adsAccountId, 'spotify-advertiser-123');
+  assert.equal(added.data.profileIdentity.expectedAdsAccountId, 'spotify-advertiser-123');
+
+  const status = JSON.parse(run([
+    'profile', 'status', 'spotify', '--profile', 'artist01', '--json',
+  ], env));
+  assert.equal(status.adsAccountId, 'spotify-advertiser-123');
+  assert.equal(status.data.profileIdentity.expectedAdsAccountId, 'spotify-advertiser-123');
+
+  const cleared = JSON.parse(run([
+    'profile', 'update', 'spotify',
+    '--profile', 'artist01',
+    '--clear-ads-account-id',
+    '--json',
+  ], env));
+  assert.equal(cleared.data.adsAccountId, null);
+  assert.equal(cleared.data.profileIdentity.expectedAdsAccountId, null);
+});
+
 test('root dispatcher routes Instagram dry-run', () => {
   const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
   const media = path.join(home, 'image.jpg');

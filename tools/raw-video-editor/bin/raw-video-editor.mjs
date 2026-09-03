@@ -8,6 +8,7 @@ import {
   analyzeMasterSync,
   renderMasterSync,
 } from './audio-sync.mjs';
+import { executeRepurpose } from './repurpose.mjs';
 
 const args = process.argv.slice(2);
 const command = args[0] || 'help';
@@ -489,6 +490,7 @@ function usage() {
       '  raw-video-editor plan <footage-dir> [--max-duration 45] [--aspect 9:16] [--caption "..."] --json',
       '  raw-video-editor render <footage-dir> [--out edit/preview.mp4] --json',
       '  raw-video-editor sync-master <camera-video> <master-audio> [--out edit/synced.mp4] [--camera-mix 0] [--analyze-only] --json',
+      '  raw-video-editor repurpose <source-video> [--out-dir <dir>] [--brief <brief.json>] [--render] --json',
     ],
   };
 }
@@ -513,6 +515,23 @@ if (command === 'doctor') {
 } else if (command === 'sync-master') {
   try {
     print(syncMaster(positional(0), positional(1)));
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
+} else if (command === 'repurpose') {
+  try {
+    const result = await executeRepurpose({
+      source: positional(0),
+      outDir: opt('--out-dir', ''),
+      briefPath: opt('--brief', ''),
+      render: hasFlag('--render'),
+      sceneThreshold: seconds(opt('--scene-threshold', '0.35'), 0.35),
+    });
+    if (!result.ok) {
+      print(result);
+      process.exit(1);
+    }
+    print(result);
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
   }

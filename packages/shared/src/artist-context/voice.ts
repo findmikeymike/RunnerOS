@@ -10,6 +10,7 @@ export const ARTIST_VOICE_TARGET_AGENT_SLUGS = [
   'content-genius',
   'video-director',
   'video-editor-agent',
+  'ad-creative-agent',
   'ads-agent',
   'gaygent-master',
   'persona-agent',

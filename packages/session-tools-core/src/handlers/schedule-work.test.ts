@@ -76,6 +76,49 @@ describe('schedule_work', () => {
     expect((result.content[0] as { text: string }).text).toContain('requires a trigger');
   });
 
+  test('accepts automatic cadence and rejects ambiguous schedule definitions', async () => {
+    let captured: ScheduleWorkToolInput | undefined;
+    const automatic = await handleScheduleWork(context(async (value) => {
+      captured = value;
+      return { ok: true, destination: 'automation', nextFireAt: '2026-09-07T14:00:00.000Z' };
+    }), {
+      ...calendarInput,
+      destination: 'automation',
+      startAt: undefined,
+      execution: { type: 'workflow-run', workflowSlug: 'weekly-report', inputBindings: { topic: { mode: 'ask' } } },
+      trigger: { type: 'schedule', cadence: 'weekly', timezone: 'America/Chicago' },
+    });
+    expect(automatic.isError).toBe(false);
+    expect(captured?.trigger).toMatchObject({ cadence: 'weekly' });
+
+    for (const trigger of [
+      { type: 'schedule' as const, timezone: 'America/Chicago' },
+      { type: 'schedule' as const, cron: '0 9 * * 1', cadence: 'weekly' as const, timezone: 'America/Chicago' },
+    ]) {
+      const invalid = await handleScheduleWork(context(async () => ({ ok: true })), {
+        ...calendarInput,
+        destination: 'automation',
+        startAt: undefined,
+        trigger,
+      });
+      expect(invalid.isError).toBe(true);
+      expect((invalid.content[0] as { text: string }).text).toContain('exactly one');
+    }
+  });
+
+  test('rejects per-run bindings on one-shot Calendar work', async () => {
+    const result = await handleScheduleWork(context(async () => ({ ok: true })), {
+      ...calendarInput,
+      execution: {
+        type: 'workflow-run',
+        workflowSlug: 'weekly-report',
+        inputBindings: { topic: { mode: 'ask' } },
+      },
+    });
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toContain('only for Automation');
+  });
+
   test('requires a bounded required-Output Calendar agent task for continuation', async () => {
     const result = await handleScheduleWork(context(async () => ({ ok: true })), {
       ...calendarInput,

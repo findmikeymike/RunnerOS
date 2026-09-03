@@ -108,7 +108,7 @@ Avoid oversized cards, nested boxes, screenshot carousels, long prose, and hover
 | Command | Talk to the manager, ask questions, or begin a job in a normal chat. | Open Command |
 | Workers | Browse specialists. Selecting one starts a chat with that worker. | Open Workers |
 | Workflows | Run or inspect a repeatable multi-step process. | Open Workflows |
-| Automations | Schedule or trigger repeatable work. | Open Automations |
+| Active | See running, upcoming, repeating, or waiting work. Set it up manually or ask Artist Manager. | Open Active |
 | Outputs | Find durable work produced by agents and workflows. | Open Outputs |
 | Creative Lab | Develop songs and projects before they become campaign work. | Open Lab when available |
 
@@ -116,6 +116,9 @@ Avoid oversized cards, nested boxes, screenshot carousels, long prose, and hover
 
 - **Worker, Workflow, or Automation?**  
   A Worker is a specialist you talk to. A Workflow is a chain of specialists acting in sequence for long, complex work. An Automation decides when a repeatable action runs.
+
+- **What does an automation need?**
+  Use **Same every time** for information that stays fixed. Use **Ask me each time** when the value changes between runs; the work waits under **Needs you** until the artist supplies it.
 
 - **Where did my work go?**  
   Chats preserve the conversation; Outputs hold durable deliverables. Approved campaign assets belong in that campaign's Release Kit.

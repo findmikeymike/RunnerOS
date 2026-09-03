@@ -3,15 +3,55 @@ import { join } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { appendAutomationHistoryEntry } from '@craft-agent/shared/automations/history-store'
-import { validateAutomationsConfig } from '@craft-agent/shared/automations'
+import { assertWorkflowInputBindings, validateAutomationsConfig, type QueueWorkAction, type WorkflowBindingTrigger } from '@craft-agent/shared/automations'
+import { loadGlobalWorkflow, normalizeWorkflowTriggerInputs, readActivatedWorkflows } from '@craft-agent/shared/workflows'
+import { scheduledWorkDefinitionDigest } from '@craft-agent/shared/scheduled-work'
 import { AUTOMATION_HISTORY_MAX_RUNS_PER_MATCHER } from '@craft-agent/shared/automations/constants'
+import {
+  automaticSchedulePlacementUnavailableError,
+  suggestAutomaticSchedule,
+  type AutomaticScheduleCadence,
+} from '@craft-agent/shared/automations/staggered-schedule'
+import { resolveAutomationsConfigPath } from '@craft-agent/shared/automations/resolve-config-path'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import { withAutomaticSchedulePlacementLock } from '../../scheduled-work/AutomaticSchedulePlacementLock'
+import { cancelPendingAutomationWorkForMatcherLocked } from '../../scheduled-work/AutomationWorkQueue'
+import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
 
 // History file name — matches AUTOMATIONS_HISTORY_FILE from @craft-agent/shared/automations/constants
 const HISTORY_FILE = 'automations-history.jsonl'
 interface HistoryEntry { id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; workOrderIds?: string[]; workTitle?: string; error?: string; webhook?: { method: string; url: string; statusCode: number; durationMs: number; attempts?: number; error?: string; responseBody?: string } }
+
+type AutomaticScheduleEntry = { cron: string; enabled?: boolean; timezone?: string }
+
+export function automaticScheduleOccupancyFromConfig(value: unknown): AutomaticScheduleEntry[] {
+  const validation = validateAutomationsConfig(value)
+  if (!validation.valid || !validation.config) {
+    throw new Error(`Automation config cannot be trusted for schedule placement: ${validation.errors.join('; ')}`)
+  }
+  return (validation.config.automations.SchedulerTick ?? []).flatMap((matcher): AutomaticScheduleEntry[] => {
+    if (!matcher.cron?.trim()) return []
+    return [{
+      cron: matcher.cron,
+      enabled: matcher.enabled === false ? false : true,
+      timezone: matcher.timezone,
+    }]
+  })
+}
+
+async function readAutomaticScheduleOccupancy(workspaceRoots: string[]): Promise<AutomaticScheduleEntry[]> {
+  const configs = await Promise.all(workspaceRoots.map(async (rootPath) => {
+    try {
+      return JSON.parse(await readFile(resolveAutomationsConfigPath(rootPath), 'utf-8')) as unknown
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') return { automations: {} }
+      throw error
+    }
+  }))
+  return configs.flatMap(automaticScheduleOccupancyFromConfig)
+}
 
 // Per-workspace config mutex: serializes read-modify-write cycles on automations.json
 // to prevent concurrent IPC calls from clobbering each other's changes.
@@ -87,6 +127,7 @@ export function replacementAutomationMatcher(
   generateId: () => string,
 ): Record<string, unknown> {
   const cloned = JSON.parse(JSON.stringify(replacement)) as Record<string, unknown>
+  if (typeof cloned.name === 'string') cloned.name = cloned.name.trim()
   cloned.id = typeof current.id === 'string' && current.id ? current.id : generateId()
   return cloned
 }
@@ -111,12 +152,56 @@ export function findAutomationMatcherIndexByIdentity(
   return index
 }
 
+export function assertAutomationQueueWorkBindings(
+  workspaceRootPath: string,
+  eventName: string,
+  matcher: Record<string, unknown>,
+  deps: {
+    loadWorkflow?: typeof loadGlobalWorkflow
+    activeWorkflowSlugs?: (rootPath: string) => string[]
+  } = {},
+): void {
+  if (!Array.isArray(matcher.actions)) return
+  for (const rawAction of matcher.actions) {
+    if (!rawAction || typeof rawAction !== 'object' || (rawAction as { type?: unknown }).type !== 'queue-work') continue
+    const action = rawAction as QueueWorkAction
+    if (action.execution.type !== 'workflow-run') {
+      if (action.inputBindings) throw new Error('Workflow input bindings require workflow work.')
+      continue
+    }
+    const workflow = (deps.loadWorkflow ?? loadGlobalWorkflow)(action.execution.workflowSlug)
+    if (!workflow) throw new Error(`Automation workflow was not found: ${action.execution.workflowSlug}`)
+    const active = deps.activeWorkflowSlugs?.(workspaceRootPath) ?? readActivatedWorkflows(workspaceRootPath).active
+    if (!active.includes(action.execution.workflowSlug)) {
+      throw new Error(`Automation workflow is not active: ${action.execution.workflowSlug}`)
+    }
+    const digest = scheduledWorkDefinitionDigest({ metadata: workflow.metadata, body: workflow.body })
+    if (digest !== action.execution.workflowDigest) throw new Error(`Automation workflow changed: ${action.execution.workflowSlug}`)
+    if (action.inputBindings) {
+      assertWorkflowInputBindings(
+        workflow.metadata.trigger.inputs ?? [],
+        action.inputBindings,
+        bindingTriggerForEvent(eventName),
+        { allowUnauthenticatedWebhook: eventName === 'WebhookReceive' && matcher.allowUnauthenticated === true },
+      )
+    } else {
+      normalizeWorkflowTriggerInputs(workflow, action.execution.triggerInputs)
+    }
+  }
+}
+
+function bindingTriggerForEvent(eventName: string): WorkflowBindingTrigger {
+  if (eventName === 'SchedulerTick' || eventName === 'FileWatch' || eventName === 'WebhookReceive' || eventName === 'PollUrl' || eventName === 'MessageReceive') return eventName
+  throw new Error(`Event cannot supply workflow inputs: ${eventName}`)
+}
+
 // Shared helper: resolve workspace, read automations.json, validate matcher, mutate, write back
 interface AutomationsConfigJson { automations?: Record<string, Record<string, unknown>[]>; [key: string]: unknown }
 async function withAutomationEvent<T>(
   workspaceId: string,
   eventName: string,
   mutate: (matchers: Record<string, unknown>[], config: AutomationsConfigJson, genId: () => string) => T,
+  beforeWrite?: (result: T, workspaceRootPath: string) => Promise<void>,
 ): Promise<T> {
   const workspace = getWorkspaceByNameOrId(workspaceId)
   if (!workspace) throw new Error('Workspace not found')
@@ -146,23 +231,31 @@ async function withAutomationEvent<T>(
     const validation = validateAutomationsConfig(config)
     if (!validation.valid) throw new Error(`Invalid automation: ${validation.errors.join('; ')}`)
 
-    await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+    if (beforeWrite) {
+      await withWorkspaceContextLock(workspace.rootPath, async () => {
+        await beforeWrite(result, workspace.rootPath)
+        await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+      })
+    } else {
+      await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+    }
     return result
   })
 }
 
-async function withAutomationMatcher(
+async function withAutomationMatcher<T = void>(
   workspaceId: string,
   eventName: string,
   matcherIndex: number,
-  mutate: (matchers: Record<string, unknown>[], index: number, config: AutomationsConfigJson, genId: () => string) => void,
-): Promise<void> {
-  await withAutomationEvent(workspaceId, eventName, (matchers, config, generateId) => {
+  mutate: (matchers: Record<string, unknown>[], index: number, config: AutomationsConfigJson, genId: () => string) => T,
+  beforeWrite?: (result: T, workspaceRootPath: string) => Promise<void>,
+): Promise<T> {
+  return withAutomationEvent(workspaceId, eventName, (matchers, config, generateId) => {
     if (matcherIndex < 0 || matcherIndex >= matchers.length) {
       throw new Error(`Invalid automation reference: ${eventName}[${matcherIndex}]`)
     }
-    mutate(matchers, matcherIndex, config, generateId)
-  })
+    return mutate(matchers, matcherIndex, config, generateId)
+  }, beforeWrite)
 }
 
 export const HANDLED_CHANNELS = [
@@ -390,6 +483,7 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
     permissionMode?: PermissionMode,
   ) => {
     await withAutomationMatcher(workspaceId, eventName, matcherIndex, (matchers, idx) => {
+      const matcherId = typeof matchers[idx]!.id === 'string' ? matchers[idx]!.id as string : ''
       if (enabled) {
         delete matchers[idx].enabled
       } else {
@@ -397,6 +491,11 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
       }
       if (permissionMode) {
         matchers[idx].permissionMode = permissionMode
+      }
+      return matcherId
+    }, async (matcherId, workspaceRootPath) => {
+      if (matcherId && (!enabled || permissionMode)) {
+        cancelPendingAutomationWorkForMatcherLocked(workspaceId, workspaceRootPath, matcherId)
       }
     })
   })
@@ -413,14 +512,20 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
   // sends the event name plus a fully-formed matcher object (already
   // validated client-side). The server appends, ensures a unique ID, and
   // creates the file if absent.
-  server.handle(RPC_CHANNELS.automations.CREATE_FROM_TEMPLATE, async (_ctx, workspaceId: string, eventName: string, matcher: Record<string, unknown>) => {
+  server.handle(RPC_CHANNELS.automations.CREATE_FROM_TEMPLATE, async (
+    _ctx,
+    workspaceId: string,
+    eventName: string,
+    matcher: Record<string, unknown>,
+    options?: { automaticCadence?: AutomaticScheduleCadence },
+  ) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
     const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
     assertTeamPermission(workspace.rootPath, 'team.settings.update')
 
-    await withConfigMutex(workspace.rootPath, async () => {
-      const { resolveAutomationsConfigPath, generateShortId } = await import('@craft-agent/shared/automations/resolve-config-path')
+    const persist = async (resolvedMatcher: Record<string, unknown>) => withConfigMutex(workspace.rootPath, async () => {
+      const { generateShortId } = await import('@craft-agent/shared/automations/resolve-config-path')
       const configPath = resolveAutomationsConfigPath(workspace.rootPath)
 
       let config: AutomationsConfigJson
@@ -440,12 +545,14 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
       if (!eventMap[eventName]) eventMap[eventName] = []
       const matchers = eventMap[eventName]!
 
-      const cloned = JSON.parse(JSON.stringify(matcher)) as Record<string, unknown>
+      const cloned = JSON.parse(JSON.stringify(resolvedMatcher)) as Record<string, unknown>
+      if (typeof cloned.name === 'string') cloned.name = cloned.name.trim()
       cloned.id = generateShortId()
       // For WebhookReceive, ensure the slug is unique within the event group
       if (eventName === 'WebhookReceive' && typeof cloned.slug === 'string') {
         cloned.slug = uniqueWebhookSlug(cloned.slug, matchers)
       }
+      assertAutomationQueueWorkBindings(workspace.rootPath, eventName, cloned)
       matchers.push(cloned)
 
       // Backfill missing IDs across the whole config (matches DUPLICATE handler convention)
@@ -463,6 +570,25 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
 
       await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
     })
+
+    if (options?.automaticCadence) {
+      if (eventName !== 'SchedulerTick') throw new Error('Automatic cadence is available only for scheduled automations.')
+      const automaticCadence = options.automaticCadence
+      return withAutomaticSchedulePlacementLock(async () => {
+        const timezone = typeof matcher.timezone === 'string' && matcher.timezone.trim() ? matcher.timezone : 'UTC'
+        let existing: AutomaticScheduleEntry[]
+        try {
+          existing = await readAutomaticScheduleOccupancy(deps.sessionManager.getWorkspaces().map((candidate) => candidate.rootPath))
+        } catch (error) {
+          throw automaticSchedulePlacementUnavailableError(error)
+        }
+        const suggestion = suggestAutomaticSchedule(existing, automaticCadence, { timezone })
+        await persist({ ...matcher, cron: suggestion.cron, timezone })
+        return suggestion
+      })
+    }
+    await persist(matcher)
+    return {}
   })
 
   // Replace in one validated write so a failed update cannot delete the working automation.
@@ -476,7 +602,14 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
   ) => {
     await withAutomationEvent(workspaceId, eventName, (matchers, _config, generateId) => {
       const idx = findAutomationMatcherIndexByIdentity(matchers, automationId, expectedMatcher)
-      matchers[idx] = replacementAutomationMatcher(matchers[idx]!, matcher, generateId)
+      const replacement = replacementAutomationMatcher(matchers[idx]!, matcher, generateId)
+      const workspace = getWorkspaceByNameOrId(workspaceId)
+      if (!workspace) throw new Error('Workspace not found')
+      assertAutomationQueueWorkBindings(workspace.rootPath, eventName, replacement)
+      matchers[idx] = replacement
+      return replacement.id as string
+    }, async (matcherId, workspaceRootPath) => {
+      cancelPendingAutomationWorkForMatcherLocked(workspaceId, workspaceRootPath, matcherId)
     })
   })
 
@@ -496,11 +629,15 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
   // Delete an automation matcher
   server.handle(RPC_CHANNELS.automations.DELETE, async (_ctx, workspaceId: string, eventName: string, matcherIndex: number) => {
     await withAutomationMatcher(workspaceId, eventName, matcherIndex, (matchers, idx, config) => {
+      const matcherId = typeof matchers[idx]!.id === 'string' ? matchers[idx]!.id as string : ''
       matchers.splice(idx, 1)
       if (matchers.length === 0) {
         const eventMap = config.automations
         if (eventMap) delete eventMap[eventName]
       }
+      return matcherId
+    }, async (matcherId, workspaceRootPath) => {
+      if (matcherId) cancelPendingAutomationWorkForMatcherLocked(workspaceId, workspaceRootPath, matcherId)
     })
   })
 

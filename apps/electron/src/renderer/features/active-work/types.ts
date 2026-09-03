@@ -1,4 +1,6 @@
-export type ActiveWorkSection = 'attention' | 'running' | 'up-next' | 'recurring'
+import type { ScheduledWorkInputRequest } from '@craft-agent/shared/scheduled-work'
+
+export type ActiveWorkSection = 'running' | 'attention' | 'up-next' | 'paused'
 export type ActiveWorkSource = 'session' | 'workflow-run' | 'scheduled-work' | 'automation'
 
 export type ActiveWorkOpenTarget =
@@ -17,8 +19,10 @@ export interface ActiveWorkItem {
   subtitle?: string
   statusLabel: string
   cadenceLabel?: string
+  originLabel?: string
   sortAt?: string
   updatedAt?: string
   attentionReason?: string
+  inputRequest?: ScheduledWorkInputRequest
   openTarget: ActiveWorkOpenTarget
 }

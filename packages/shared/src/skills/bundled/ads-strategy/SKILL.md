@@ -12,7 +12,7 @@ This skill plans. It does not touch ad accounts.
 ## Required Inputs
 
 - Campaign goal: awareness, traffic, leads, sales, conversions, or ROAS.
-- Platform scope: Meta, Google, or both.
+- Platform scope: Meta, Google, Spotify, or a deliberate mix.
 - Budget range and time window.
 - Artist Ad DNA packet or Artist HQ context.
 - Release/campaign context and destination URL, if available.
@@ -25,7 +25,7 @@ If budget, territories, or goal are missing, ask for them or mark the output non
 Produce:
 
 1. Goal and success metric: one primary metric and 2-3 guardrail metrics.
-2. Platform rationale: why Meta, Google, or both.
+2. Platform rationale: why Meta, Google, Spotify, or a deliberate mix. Use Spotify for audio-first reach, repeated listening moments, music discovery, contextual listening, or artist/genre affinity; Meta for visual/social discovery and retargeting; Google/YouTube for intent, search, video, and measurable site actions.
 3. Funnel structure: prospecting, retargeting, search intent, landing page, conversion event, and follow-up path.
 4. Campaign architecture: campaign, ad set/ad group, audience, location, creative-test, and measurement structure.
 5. Audience plan: 3-6 testable audiences with rationale from artist context.
@@ -34,6 +34,8 @@ Produce:
 8. Budget plan: daily/total budget, control vs test split, pacing, and minimum learning budget warnings.
 9. Kill/scale rules: what to pause, hold, iterate, or increase based on spend, clicks, CTR, CPA, ROAS, or learning state.
 10. Execution handoff: exact fields Ads Agent needs for `campaign-plan` and `setup-plan`.
+
+For Spotify, include the promoted destination, audio/video format, CTA, companion image requirement, measurement readiness, and Spotify for Artists audience signals used. Do not recommend splitting a small budget across all three platforms without enough spend to learn on each.
 
 ## Budget Logic
 

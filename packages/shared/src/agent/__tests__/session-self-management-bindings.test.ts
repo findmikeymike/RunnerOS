@@ -195,6 +195,22 @@ describe('attachSessionSelfManagementBindings', () => {
     expect(result.id).toBe('work-1');
   });
 
+  it('supplyWorkInput resolves through the Artist Manager callback binding', async () => {
+    const ctx = createBaseContext(sessionId);
+    attachSessionSelfManagementBindings(ctx, sessionId);
+    expect(ctx.supplyWorkInput).toBeUndefined();
+
+    mergeSessionScopedToolCallbacks(sessionId, {
+      supplyWorkInputFn: async () => ({
+        updated: true,
+        work: { version: 1, workspaceId: 'workspace-1', items: [], updatedAt: '2026-09-02T00:00:00.000Z' },
+        order: { id: 'work-1', title: 'Test work', status: 'scheduled' } as never,
+      }),
+    });
+    const result = await ctx.supplyWorkInput!({ orderId: 'work-1', requestId: 'work-1:input', values: { topic: 'test' } });
+    expect(result.order.id).toBe('work-1');
+  });
+
   it('recallMemory resolves through the lazy session callback registry', async () => {
     const ctx = createBaseContext(sessionId);
     attachSessionSelfManagementBindings(ctx, sessionId);

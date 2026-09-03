@@ -19,6 +19,7 @@ function listener(channel: string) {
 export const CHANNEL_MAP = {
   // Session management
   getSessions: invoke(RPC_CHANNELS.sessions.GET),
+  getActiveSessions: invoke(RPC_CHANNELS.server.GET_ACTIVE_SESSIONS),
   getUnreadSummary: invoke(RPC_CHANNELS.sessions.GET_UNREAD_SUMMARY),
   markAllSessionsRead: invoke(RPC_CHANNELS.sessions.MARK_ALL_READ),
   getSessionMessages: invoke(RPC_CHANNELS.sessions.GET_MESSAGES),
@@ -481,6 +482,7 @@ export const CHANNEL_MAP = {
   cancelCampaignWork: invoke(RPC_CHANNELS.scheduledWork.CANCEL_CAMPAIGN),
   decideCampaignWork: invoke(RPC_CHANNELS.scheduledWork.DECIDE_CAMPAIGN),
   resolveCampaignProducedOutput: invoke(RPC_CHANNELS.scheduledWork.RESOLVE_CAMPAIGN_OUTPUT),
+  supplyScheduledWorkInputs: invoke(RPC_CHANNELS.scheduledWork.SUPPLY_INPUTS),
   approveCampaignSocialWork: invoke(RPC_CHANNELS.scheduledWork.APPROVE_CAMPAIGN_SOCIAL),
   manageGoalRun: invoke(RPC_CHANNELS.scheduledWork.MANAGE_GOAL_RUN),
   scheduleHqWork: invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_HQ),

@@ -61,6 +61,7 @@ import { handleCreateAutomation } from './handlers/create-automation.ts';
 import { handleCreateWorkflow } from './handlers/create-workflow.ts';
 import { handleCampaignCalendarWrite } from './handlers/campaign-calendar.ts';
 import { handleScheduleWork } from './handlers/schedule-work.ts';
+import { handleSupplyWorkInput } from './handlers/supply-work-input.ts';
 import { handleManageGoalRun } from './handlers/manage-goal-run.ts';
 import {
   handleGetManagerBrief,
@@ -618,11 +619,24 @@ const ScheduleWorkExecutionSchema = z.discriminatedUnion('type', [
     type: z.literal('workflow-run'),
     workflowSlug: z.string().min(1),
     triggerInputs: z.record(z.string(), z.unknown()).optional(),
+    inputBindings: z.record(z.string(), z.discriminatedUnion('mode', [
+      z.object({ mode: z.literal('fixed'), value: z.unknown() }),
+      z.object({ mode: z.literal('ask') }),
+      z.object({
+        mode: z.literal('trigger'),
+        from: z.enum(['file.path', 'file.name', 'webhook.body', 'message.text', 'url.content']),
+      }),
+    ])).optional(),
   }),
 ]);
 
 const ScheduleWorkTriggerSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('schedule'), cron: z.string().min(1), timezone: z.string().optional() }),
+  z.object({
+    type: z.literal('schedule'),
+    cron: z.string().min(1).optional(),
+    cadence: z.enum(['daily', 'weekly']).optional(),
+    timezone: z.string().optional(),
+  }),
   z.object({ type: z.literal('file-change'), watchPath: z.string().min(1), watchGlob: z.string().optional(), changeTypes: z.array(z.enum(['add', 'change', 'remove'])).optional() }),
   z.object({ type: z.literal('webhook'), slug: z.string().min(1), secretEnv: z.string().optional(), allowUnauthenticated: z.boolean().optional() }),
   z.object({ type: z.literal('url-change'), url: z.string().url(), intervalSeconds: z.number().int().min(30).optional() }),
@@ -651,6 +665,13 @@ export const ScheduleWorkSchema = z.object({
     objective: z.string().min(1).max(4000),
     maxRounds: z.number().int().min(2).max(8),
   }).optional().describe('Bounded continuation for a confirmed Calendar agent task. Requires a required expectedOutput contract.'),
+});
+
+export const SupplyWorkInputSchema = z.object({
+  orderId: z.string().min(1).describe('Exact tracked-work order ID from the pending input request.'),
+  requestId: z.string().min(1).describe('Exact current input-request ID.'),
+  expectedUpdatedAt: z.string().optional().describe('Known order updatedAt revision for stale-write protection.'),
+  values: z.record(z.string(), z.unknown()).describe('Every requested input exactly once, using only values the artist supplied.'),
 });
 
 export const ManageGoalRunSchema = z.object({
@@ -1470,9 +1491,8 @@ Use this when the user explicitly asks to schedule, calendar, queue, or plan cam
 Rules:
 - Ask once if the date/time, asset, account/profile, or target action is ambiguous.
 - For normal reminders/deadlines/reviews, create a local item.
-- For runnable work, include \`item.job\`.
-- Do not create \`post-asset\` jobs here. Campaign social publishing must use the typed scheduled-work flow with exactly one Release Kit item and checksum.
-- For other external actions such as outreach, set/expect \`needs-approval\`; this tool does not approve or execute live actions.
+- For runnable work, ask Artist Manager to use \`schedule_work\`; do not include \`item.job\` here.
+- Campaign social publishing must use the typed scheduled-work flow with exactly one Release Kit item and checksum.
 - Never store passwords, cookies, tokens, 2FA codes, or private local paths in calendar payloads.
 
 Runnable job payloads:
@@ -1498,6 +1518,10 @@ Rules:
 - This HNIC tool schedules agent tasks and workflow runs only. Native social publishing remains separately approval-gated through the Campaign Calendar composer.
 
 After success, state what will run, where it appears, and when or what triggers it.`,
+
+  supply_work_input: `Supply artist-provided values to one exact tracked-work input request.
+
+Use this only when the current conversation contains the artist's answer and the pending work's exact orderId and requestId are known. Supply every requested key exactly once. Never guess, infer, reuse an old answer, or search for unrelated pending requests. The host validates the workflow, request revision, exact keys, and values before scheduling the work.`,
 
   manage_goal_run: `Re-arm, pause, or cancel one bounded Goal continuation run. HNIC-only.
 
@@ -1860,6 +1884,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'create_automation', description: TOOL_DESCRIPTIONS.create_automation, inputSchema: CreateAutomationSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateAutomation },
   { name: 'campaign_calendar_write', description: TOOL_DESCRIPTIONS.campaign_calendar_write, inputSchema: CampaignCalendarWriteSchema, executionMode: 'registry', safeMode: 'block', handler: handleCampaignCalendarWrite },
   { name: 'schedule_work', description: TOOL_DESCRIPTIONS.schedule_work, inputSchema: ScheduleWorkSchema, executionMode: 'registry', safeMode: 'block', handler: handleScheduleWork },
+  { name: 'supply_work_input', description: TOOL_DESCRIPTIONS.supply_work_input, inputSchema: SupplyWorkInputSchema, executionMode: 'registry', safeMode: 'allow', handler: handleSupplyWorkInput },
   { name: 'manage_goal_run', description: TOOL_DESCRIPTIONS.manage_goal_run, inputSchema: ManageGoalRunSchema, executionMode: 'registry', safeMode: 'block', handler: handleManageGoalRun },
   { name: 'get_manager_brief', description: TOOL_DESCRIPTIONS.get_manager_brief, inputSchema: GetManagerBriefSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetManagerBrief },
   { name: 'get_campaign_brief', description: TOOL_DESCRIPTIONS.get_campaign_brief, inputSchema: GetCampaignBriefSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetCampaignBrief },
@@ -1907,6 +1932,8 @@ export interface SessionToolFilterOptions {
   includeDeveloperFeedback?: boolean;
   /** Include the HNIC-only schedule_work tool. */
   includeScheduleWork?: boolean;
+  /** Include input supply for Artist Manager sessions. */
+  includeSupplyWorkInput?: boolean;
   /** Include the HNIC-only semantic Manager tools. */
   includeManagerTools?: boolean;
   /** Include the current-campaign brief tool. */
@@ -1926,6 +1953,7 @@ export interface SessionToolFilterOptions {
 export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionToolDef[] {
   const includeDeveloperFeedback = options?.includeDeveloperFeedback ?? true;
   const includeScheduleWork = options?.includeScheduleWork ?? false;
+  const includeSupplyWorkInput = options?.includeSupplyWorkInput ?? false;
   const includeManagerTools = options?.includeManagerTools ?? false;
   const includeCampaignManagerTools = options?.includeCampaignManagerTools ?? false;
   const includeLabTools = options?.includeLabTools ?? false;
@@ -1936,6 +1964,7 @@ export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionT
       return false;
     }
     if (!includeScheduleWork && (def.name === 'schedule_work' || def.name === 'manage_goal_run')) return false;
+    if (!includeSupplyWorkInput && def.name === 'supply_work_input') return false;
     if (!includeManagerTools && ['get_manager_brief', 'get_artist_context', 'get_campaign_context'].includes(def.name)) return false;
     if (!includeCampaignManagerTools && def.name === 'get_campaign_brief') return false;
     if (!includeLabTools && ['create_lab_song', 'save_lab_lyrics', 'list_lab_songs'].includes(def.name)) return false;
@@ -2052,6 +2081,7 @@ export function getToolDefsAsJsonSchema(opts?: {
   prefix?: string;
   includeDeveloperFeedback?: boolean;
   includeScheduleWork?: boolean;
+  includeSupplyWorkInput?: boolean;
   includeManagerTools?: boolean;
   includeCampaignManagerTools?: boolean;
   includeLabTools?: boolean;
@@ -2061,6 +2091,7 @@ export function getToolDefsAsJsonSchema(opts?: {
   const defs = getSessionToolDefs({
     includeDeveloperFeedback: opts?.includeDeveloperFeedback,
     includeScheduleWork: opts?.includeScheduleWork,
+    includeSupplyWorkInput: opts?.includeSupplyWorkInput,
     includeManagerTools: opts?.includeManagerTools,
     includeCampaignManagerTools: opts?.includeCampaignManagerTools,
     includeLabTools: opts?.includeLabTools,

@@ -2137,6 +2137,7 @@ export function shouldAllowToolInMode(
         // permission layer must classify every exposed read-only variant, or
         // HNIC/Lab-only tools are incorrectly treated as configuration writes.
         includeScheduleWork: true,
+        includeSupplyWorkInput: true,
         includeManagerTools: true,
         includeCampaignManagerTools: true,
         includeLabTools: true,

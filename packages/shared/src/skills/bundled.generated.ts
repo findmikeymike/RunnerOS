@@ -1411,7 +1411,7 @@ This skill creates creative strategy and copy. It does not touch ad accounts.
 
 - Artist Ad DNA packet or Artist HQ context.
 - Ads Strategy Packet, if available.
-- Platform: Meta, Google, or both.
+- Platform: Meta, Google, Spotify, or a deliberate mix.
 - Campaign goal and destination.
 - Existing creative, hooks, captions, lyrics, clips, comments, or prior ads.
 - Known constraints: claims, policy, assets, budget, release timing, territory, language, and brand rules.
@@ -1427,6 +1427,7 @@ Produce:
    - Meta primary text
    - Meta headline
    - Google responsive search ad headlines/descriptions when relevant
+   - Spotify display copy, CTA, destination, audio/video concept, and companion-image direction when relevant
    - CTA recommendations
 5. Format plan: video, static, carousel, UGC-style, lyric-led, performance clip, comment/social-proof, or story-world concept.
 6. Diversity check: concept, format, visual, hook, and headline diversity.
@@ -1439,6 +1440,7 @@ Produce:
 
 - For Meta, prioritize genuine concept and format diversity over many tiny copy variants.
 - For Google Search, keep intent and landing-page promise aligned.
+- For Spotify, make the creative work as audio first: earn attention immediately, keep voice/music intelligible, pair audio with a companion image, and align CTA timing with the destination. Use video only when the approved asset and objective justify it.
 - Do not invent testimonials, stats, press, charting, streaming counts, or fan claims.
 - Make creative feel native to the artist's world, not generic direct-response filler.
 `,
@@ -1464,7 +1466,7 @@ This skill plans. It does not touch ad accounts.
 ## Required Inputs
 
 - Campaign goal: awareness, traffic, leads, sales, conversions, or ROAS.
-- Platform scope: Meta, Google, or both.
+- Platform scope: Meta, Google, Spotify, or a deliberate mix.
 - Budget range and time window.
 - Artist Ad DNA packet or Artist HQ context.
 - Release/campaign context and destination URL, if available.
@@ -1477,7 +1479,7 @@ If budget, territories, or goal are missing, ask for them or mark the output non
 Produce:
 
 1. Goal and success metric: one primary metric and 2-3 guardrail metrics.
-2. Platform rationale: why Meta, Google, or both.
+2. Platform rationale: why Meta, Google, Spotify, or a deliberate mix. Use Spotify for audio-first reach, repeated listening moments, music discovery, contextual listening, or artist/genre affinity; Meta for visual/social discovery and retargeting; Google/YouTube for intent, search, video, and measurable site actions.
 3. Funnel structure: prospecting, retargeting, search intent, landing page, conversion event, and follow-up path.
 4. Campaign architecture: campaign, ad set/ad group, audience, location, creative-test, and measurement structure.
 5. Audience plan: 3-6 testable audiences with rationale from artist context.
@@ -1486,6 +1488,8 @@ Produce:
 8. Budget plan: daily/total budget, control vs test split, pacing, and minimum learning budget warnings.
 9. Kill/scale rules: what to pause, hold, iterate, or increase based on spend, clicks, CTR, CPA, ROAS, or learning state.
 10. Execution handoff: exact fields Ads Agent needs for \`campaign-plan\` and \`setup-plan\`.
+
+For Spotify, include the promoted destination, audio/video format, CTA, companion image requirement, measurement readiness, and Spotify for Artists audience signals used. Do not recommend splitting a small budget across all three platforms without enough spend to learn on each.
 
 ## Budget Logic
 
@@ -5272,6 +5276,18 @@ Use the current active-agent capability catalog and choose the narrowest capable
 - desired output.
 
 Name the intended result, not just the worker. A handoff is not authorization to send, publish, spend, delete, or change an external account.
+
+## Set Up Automations Conversationally
+
+When the artist wants recurring or event-driven tracked work, use \\\`schedule_work\\\` after one compact confirmation.
+
+1. Resolve the narrowest active worker or workflow and inspect its declared inputs.
+2. Bind every required workflow input explicitly: \\\`fixed\\\` for a stable artist-supplied value, \\\`ask\\\` for a value that changes each run, or \\\`trigger\\\` only when the selected event provides it.
+3. Ask all genuinely unresolved inputs together in one message. Never invent empty strings, zeroes, false values, file paths, or topics.
+4. Prefer automatic \\\`daily\\\` or \\\`weekly\\\` cadence unless the artist specified an exact time; Artist OS will stagger it around existing work.
+5. Confirm in one sentence what runs, what triggers it, what remains fixed, and what will be requested each time, then save it.
+
+When the artist answers a visible tracked-work input request in this Artist Manager chat, call \\\`supply_work_input\\\` only with the exact current order ID, request ID, and every requested value. Never infer an answer or reuse one from an older request. Worker chats and external messaging replies are not automatically matched to these requests yet; do not claim they are.
 
 ## Preserve Approval Gates
 
@@ -31484,7 +31500,7 @@ Use this skill to keep paid-ads work useful when APIs are unavailable while stil
    - Meta Ads: use \`ads-operator --platform meta\` as the local browser/export/setup operator. Use \`meta-ads\` only when authenticated and eligible.
    - Spotify Ads: use browser mode for Spotify Ads Manager / Spotify Ad Studio in V1. Spotify Ads API is optional later and must not block work.
 2. If structured access is missing, blocked, expired, or incomplete, switch to browser dashboard/export mode.
-3. Before Meta or Google browser work, run \`browser_tool accounts\`, resolve one exact saved dashboard account, and attach it with \`browser_tool account <meta-ads|google-ads> <profile>\`. These logins live in Settings > Ad Accounts. Never use a generic browser session when a configured account exists.
+3. Before Meta or Google browser work, run \`browser_tool accounts\`, resolve one exact saved dashboard account, and attach it with \`browser_tool account <meta-ads|google-ads> <profile>\`. These logins live in Settings > Ad Accounts. For Spotify, resolve the account with \`cd tools/printing-press-social && node src/social.mjs catalog --json\`, then attach it with \`browser_tool profile spotify <id>\`. Never use a generic browser session when a configured account exists.
 4. For Spotify audience strategy, use Spotify for Artists browser intel when the user is logged in: top cities, listener demographics, source/playlist signal, song performance, and audience trend clues. Do not confuse Spotify for Artists with Spotify Ads Manager.
 5. If browser automation is blocked, ask the user for an export/screenshot and give exact platform, account, date range, table, columns, and file type.
 6. Use screenshots as visual evidence only. Use API/export data for numbers when available.
@@ -31501,14 +31517,14 @@ node tools/ads-operator/bin/ads-operator.mjs doctor --json
 Use only these commands in the current skeleton:
 
 \`\`\`bash
-node tools/ads-operator/bin/ads-operator.mjs accounts --platform meta|google --json
-node tools/ads-operator/bin/ads-operator.mjs campaigns --platform meta|google --account <id> --json
-node tools/ads-operator/bin/ads-operator.mjs export-plan --platform meta|google --level campaign|adset|adgroup|ad|keyword --json
-node tools/ads-operator/bin/ads-operator.mjs import <file.csv> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json
-node tools/ads-operator/bin/ads-operator.mjs audit <file.csv|import.json> --platform meta|google --level campaign|adset|adgroup|ad|keyword|search-term --goal conversions|traffic|awareness|leads|sales|roas --json
-node tools/ads-operator/bin/ads-operator.mjs campaign-plan --platform meta|google --goal <goal> --artist-context <file.md> --territories "city one,city two" --budget "<amount>" --out campaign-plan.json --json
-node tools/ads-operator/bin/ads-operator.mjs setup-plan --platform meta|google --goal <goal> --artist-context <file.md> --territories "city one,city two" --budget "<amount>" --campaign-name "<name>" --out setup-plan.json --json
-node tools/ads-operator/bin/ads-operator.mjs packet create --platform meta|google --type publish|budget|status|targeting|creative --account <id> --action "..." --spend-impact "..." --evidence <path> --out packet.json --json
+node tools/ads-operator/bin/ads-operator.mjs accounts --platform meta|google|spotify --json
+node tools/ads-operator/bin/ads-operator.mjs campaigns --platform meta|google|spotify --account <id> --json
+node tools/ads-operator/bin/ads-operator.mjs export-plan --platform meta|google|spotify --level campaign|adset|adgroup|ad|keyword --json
+node tools/ads-operator/bin/ads-operator.mjs import <file.csv> --platform meta|google|spotify --level campaign|adset|adgroup|ad|keyword --json
+node tools/ads-operator/bin/ads-operator.mjs audit <file.csv|import.json> --platform meta|google|spotify --level campaign|adset|adgroup|ad|keyword|search-term --goal conversions|traffic|awareness|leads|sales|roas --json
+node tools/ads-operator/bin/ads-operator.mjs campaign-plan --platform meta|google|spotify --goal <goal> --artist-context <file.md> --territories "city one,city two" --budget "<amount>" --out campaign-plan.json --json
+node tools/ads-operator/bin/ads-operator.mjs setup-plan --platform meta|google|spotify --goal <goal> --artist-context <file.md> --territories "city one,city two" --budget "<amount>" --campaign-name "<name>" --out setup-plan.json --json
+node tools/ads-operator/bin/ads-operator.mjs packet create --platform meta|google|spotify --type publish|budget|status|targeting|creative --account <id> --action "..." --spend-impact "..." --evidence <path> --out packet.json --json
 node tools/ads-operator/bin/ads-operator.mjs receipt create --packet packet.json --status approved|rejected|skipped --out receipt.json --json
 \`\`\`
 
@@ -31518,7 +31534,7 @@ Use \`audit\` after import to surface spend waste, weak CTR, no-conversion spend
 
 Use \`campaign-plan\` to draft a campaign from artist context, audience signals, territories, goal, and budget. It may recommend audience and territory research, but it must not publish or create the campaign.
 
-Use \`setup-plan\` before browser-guided campaign setup. For Meta, it returns the Ads Manager route, campaign/ad set/ad fields, browser steps, evidence requirements, and approval gate. Follow it to create drafts only; stop before Publish/Launch.
+Use \`setup-plan\` before browser-guided campaign setup. For Meta and Spotify, it returns the dashboard route, campaign hierarchy, browser steps, evidence requirements, and approval gate. Follow it to create drafts only; stop before Publish/Launch.
 
 ## Browser Export Protocol
 
@@ -31552,8 +31568,10 @@ For Spotify Ads:
 - Use Spotify for Artists only for audience and song intel, not campaign creation. It can inform cities, age/gender if visible, listener growth, top songs, playlist/source signal, and campaign geography.
 - In Spotify Ads Manager, inspect or draft campaigns, ad sets, ads, targeting, budget, placements/formats, and reporting only when the user is logged in.
 - Before campaign setup, identify campaign objective, song/landing URL, creative assets, audio/video format, territories, budget, dates, audience/artist targeting, and CTA.
-- Stop before Launch, Submit, Publish, Save changes, budget changes, targeting changes, asset upload, status changes, or anything that could spend or mutate the account.
-- For Spotify approval packets, do not call \`ads-operator --platform spotify\`; it is not supported yet. Write the approval packet manually using the same fields below.
+- Use the dedicated \`spotify-ads-manager\` playbook for channel selection, campaign hierarchy, creative requirements, draft setup, reporting, and monitoring.
+- A direct user request to set up a campaign authorizes draft entry and approved asset upload. Do not interrupt with repeated confirmation prompts while building the draft.
+- Stop before final Submit, Publish, or Launch, and before any later live budget, targeting, creative, schedule, destination, pause/resume, or status change.
+- Create Spotify approval packets with \`ads-operator packet create --platform spotify\` so Meta, Google, and Spotify use one artifact format.
 - If the Spotify Ads API is later configured, treat it like Google/Meta structured access: read-only first, then approval packet before writes.
 
 ## Export Handling
@@ -31566,7 +31584,7 @@ For Spotify Ads:
 
 ## Approval Gate
 
-Before any external ad-account change, stop and produce an approval packet.
+Before any action that can publish, spend, or change a live ad-account object, stop and produce an approval packet. Read-only work and user-requested draft preparation do not need extra prompts.
 
 Approval packet must include:
 
@@ -31581,7 +31599,7 @@ Approval packet must include:
 - risk and rollback plan
 - exact approval phrase needed
 
-Never apply changes without explicit approval in the current conversation. This includes publishing, pausing, enabling, deleting, budget/bid changes, targeting changes, creative or catalog updates, keyword or negative keyword changes, conversion/billing changes, uploads, recommendations, and status changes.
+Never publish, launch, pause/resume, change live budget/bids/targeting/creative/schedule/destination/status, alter billing or conversions, or apply live recommendations without explicit approval in the current conversation. Draft entry and approved asset upload are covered by the user's setup request; final launch is not.
 
 After approval review, create a receipt that records the packet phrase, status, and evidence. Do not use receipts to claim live ad execution; this operator is read-only.
 
@@ -40389,6 +40407,113 @@ defamiliarization; first-principles reasoning; Rick Rubin's *The Creative Act*; 
 mind / Mary Oliver; Pat Pattison's object writing & hidden senses; StoryCorps great questions;
 Motivational Interviewing (OARS, evocative & scaling questions); the Proust Questionnaire & Aron's 36
 Questions; and autobiographical-memory / reminiscence-bump / Proust-phenomenon research.
+`,
+      },
+    ],
+  },
+  {
+    slug: "spotify-ads-manager",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: spotify-ads-manager
+description: Plan, draft, review, and diagnose Spotify Ads Manager campaigns through the saved browser account. Use for Spotify campaign strategy, campaign/ad set/ad setup, creative requirements, audience planning, delivery checks, reporting exports, and final approval handoff when Ads API access is unavailable.
+---
+
+# Spotify Ads Manager
+
+Use Spotify Ads Manager as a first-class paid channel alongside Meta and Google. This V1 playbook operates the browser dashboard; it does not require Spotify Ads API access.
+
+This workflow is adapted from the campaign strategy, draft builder, reporting, and monitoring patterns in Spotify's Apache-2.0 \`spotify/ads-agentic-tools\` project. The browser UI is the authority for fields and options available to the connected account.
+
+## Choose Spotify Intentionally
+
+Recommend Spotify when audio-first reach, repeated listening moments, music discovery, contextual listening, artist/genre affinity, or a song-native creative experience fits the campaign goal.
+
+Compare it with:
+
+- Meta for visual/social discovery, retargeting, broad creative testing, and social proof.
+- Google/YouTube for active intent, search demand, video viewing, and measurable site actions.
+- A mixed plan when each platform has a distinct role. Do not split a small budget across three channels without enough learning budget.
+
+Spotify for Artists can improve the plan with top cities, listener demographics, source/playlist signals, top songs, and trend direction. It informs targeting; it does not create ads.
+
+## Required Inputs
+
+Before setup, resolve:
+
+- goal and primary success metric
+- total or daily budget and date window
+- destination URL or promoted Spotify/song destination
+- territories and audience rationale
+- approved audio/video asset, copy, CTA, and companion image for audio
+- connected Spotify profile and correct Ads Manager account
+- measurement readiness for traffic, lead, conversion, sales, or ROAS goals
+
+If a required field is absent, keep the plan non-actionable and name only the missing inputs.
+
+## Campaign Structure
+
+Model every plan as:
+
+1. Campaign: objective and campaign-level identity.
+2. Ad set: schedule, budget, geography, age, platform, targeting, format, placement, category, and delivery estimate.
+3. Ad: approved creative, companion image when required, CTA, destination, and display copy.
+
+Prefer broad, interpretable ad sets over many narrow fragments. Split ad sets only when territory, audience hypothesis, format, creative, or budget role genuinely differs.
+
+For music campaigns, start with audio unless approved video creative and the objective justify video. Never invent targeting fields, placement names, categories, or format availability; use what the live account shows.
+
+## Draft Workflow
+
+1. Resolve the configured account with \`cd tools/printing-press-social && node src/social.mjs catalog --json\`, then attach it with \`browser_tool profile spotify <id>\`. Never use a generic browser session when one is configured.
+2. Run \`ads-operator campaign-plan --platform spotify\` from approved artist and campaign context.
+3. Run \`ads-operator setup-plan --platform spotify\` to produce the field-by-field browser plan.
+4. Open Spotify Ads Manager and confirm the correct account.
+5. Build the campaign, ad set, and ad as a draft. The user's setup request authorizes draft entry and approved asset upload; do not add repetitive prompts.
+6. Review objective, budget, schedule, targeting, geography, age, platforms, format, placements, category, CTA, destination, creative, and audience/delivery estimate.
+7. Stop at the final screen before Submit, Publish, or Launch.
+8. Create \`ads-operator packet create --platform spotify ...\` and ask for one explicit approval for the exact final payload and spend.
+9. After approval, perform only the approved final action and verify the resulting status in Ads Manager.
+
+Any later live pause/resume, budget, targeting, creative, schedule, destination, or status change needs a fresh approval for that exact change. Read-only inspection and reporting do not.
+
+## Reporting And Monitoring
+
+Use the ad set report as the primary browser reporting view. Set the exact date range and export CSV where possible. Capture:
+
+- spend, impressions, reach, and frequency
+- clicks and CTR
+- completion rate
+- played-to-25/50/75/100 percentages
+- delivery or pacing state
+- audience breakdowns available in the account
+
+Normalize exports with \`ads-operator import --platform spotify --level adset\`, then audit before making claims. Preserve unknown columns. Metrics may lag; record the report date range and when the dashboard says data was updated.
+
+Diagnose in this order:
+
+1. delivery and pacing
+2. audience size and targeting restrictions
+3. format, asset, or review status
+4. completion and click behavior
+5. landing destination and measurement readiness
+6. budget concentration and creative fatigue
+
+Do not present a guessed benchmark as Spotify policy or account truth.
+
+## Output
+
+Return:
+
+1. Why Spotify is or is not the right channel
+2. Campaign tree
+3. Field-ready draft plan
+4. Creative and asset checklist
+5. Measurement and reporting plan
+6. Missing inputs
+7. Final approval packet only when the draft is ready to submit
 `,
       },
     ],

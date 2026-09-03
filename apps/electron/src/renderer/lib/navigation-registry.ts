@@ -167,6 +167,7 @@ export const NavigationRegistry = {
       memory: PlaceholderComponent, // MemorySettingsPage
       shortcuts: PlaceholderComponent, // ShortcutsPage
       preferences: PlaceholderComponent, // PreferencesPage
+      about: PlaceholderComponent, // AboutSettingsPage
     },
     defaultDetails: 'app', // Always has a default
     getFirstItem: () => 'app',

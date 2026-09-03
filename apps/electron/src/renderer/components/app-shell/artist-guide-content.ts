@@ -335,7 +335,7 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
       {
         id: 'general-active-work',
         title: 'Active',
-        body: 'See what is running, coming next, repeating, or waiting for you.',
+        body: 'See what is running, coming next, repeating, or waiting for you. Set work up manually or ask Artist Manager.',
         icon: 'automation',
         actions: [{ id: 'workspace.automations', label: 'Open' }],
       },
@@ -360,6 +360,11 @@ export const ARTIST_GUIDE_TABS: ArtistGuideTabContent[] = [
         id: 'concept-work-types',
         title: 'Worker, Workflow, or Automation?',
         body: 'A Worker is a specialist you talk to. A Workflow is a chain of specialists acting in sequence for long, complex work. An Automation decides when repeatable work runs.',
+      },
+      {
+        id: 'concept-automation-inputs',
+        title: 'What does an automation need?',
+        body: 'Use Same every time for information that stays fixed. Use Ask me each time when the value changes between runs; the work waits under Needs you until you supply it.',
       },
       {
         id: 'concept-work-location',

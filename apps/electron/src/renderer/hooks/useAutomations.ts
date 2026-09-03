@@ -94,11 +94,17 @@ export function useAutomations(
 
     setAutomationTestResults(prev => ({ ...prev, [automationId]: { state: 'running' } }))
 
+    const testableActions = automation.actions.filter((action) => action.type !== 'pulse')
+    if (testableActions.length !== automation.actions.length) {
+      setAutomationTestResults(prev => ({ ...prev, [automationId]: { state: 'error', stderr: 'Pulses run from their saved schedule and cannot be test-fired here.' } }))
+      return
+    }
+
     window.electronAPI.testAutomation({
       workspaceId: activeWorkspaceId,
       automationId: automation.id,
       automationName: automation.name,
-      actions: automation.actions,
+      actions: testableActions,
       permissionMode: automation.permissionMode,
       labels: automation.labels,
     }).then((result) => {

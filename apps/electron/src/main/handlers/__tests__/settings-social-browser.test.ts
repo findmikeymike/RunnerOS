@@ -6,6 +6,7 @@ import type { HandlerDeps } from '../handler-deps'
 type HandlerFn = (ctx: { clientId: string; webContentsId?: number }, ...args: any[]) => Promise<any> | any
 
 let savedAccountUrl: string | null = null
+let savedAdsAccountId: string | null = null
 
 const runSocialJsonMock = mock(async (args: string[]) => {
   if (args[0] === 'profile' && args[1] === 'login') {
@@ -15,10 +16,11 @@ const runSocialJsonMock = mock(async (args: string[]) => {
     return { id: 'spotify/artist-main', ready: true, loggedIn: true }
   }
   if (args[0] === 'profile' && args[1] === 'update') {
-    savedAccountUrl = String(args[args.indexOf('--account-url') + 1] || '')
-    return { id: 'spotify/artist-main', accountUrl: savedAccountUrl }
+    if (args.includes('--account-url')) savedAccountUrl = String(args[args.indexOf('--account-url') + 1] || '')
+    if (args.includes('--ads-account-id')) savedAdsAccountId = String(args[args.indexOf('--ads-account-id') + 1] || '')
+    return { id: 'spotify/artist-main', accountUrl: savedAccountUrl, adsAccountId: savedAdsAccountId }
   }
-  return { id: 'spotify/artist-main', accountHandle: null, accountUrl: savedAccountUrl }
+  return { id: 'spotify/artist-main', accountHandle: null, accountUrl: savedAccountUrl, adsAccountId: savedAdsAccountId }
 })
 
 mock.module('../../social-cli', () => ({ runSocialJson: runSocialJsonMock }))
@@ -45,7 +47,7 @@ describe('social account browser presentation', () => {
           url: 'https://adsmanager.spotify.com/campaigns',
           title: 'Spotify Ads Manager',
           text: 'Campaigns Create campaign Reporting',
-          links: [],
+          links: ['https://adsmanager.spotify.com/advertisers/spotify-ads-main/campaigns'],
         }
     : {
         url: 'https://artists.spotify.com/c/artist/home',
@@ -64,6 +66,7 @@ describe('social account browser presentation', () => {
     evaluate.mockClear()
     currentUrl = 'https://artists.spotify.com/c/artist/home'
     savedAccountUrl = null
+    savedAdsAccountId = null
     navigate.mockImplementation(async (_id: string, url: string) => {
       currentUrl = url
       const instance = instances.get('social-spotify-artist-main')
@@ -158,7 +161,7 @@ describe('social account browser presentation', () => {
           status: 'ready',
           accountUrl: 'https://open.spotify.com/user/31artistmain',
         },
-        adsManager: { ready: true, status: 'ready' },
+        adsManager: { ready: true, status: 'ready', accountId: 'spotify-ads-main' },
       },
     })
     expect(navigate).toHaveBeenCalledWith('social-spotify-artist-main', 'https://artists.spotify.com/')
@@ -167,6 +170,66 @@ describe('social account browser presentation', () => {
     expect(runSocialJsonMock).toHaveBeenCalledWith(expect.arrayContaining([
       'profile', 'update', 'spotify', '--profile', 'artist-main', '--account-url',
       'https://open.spotify.com/user/31artistmain',
+    ]))
+    expect(runSocialJsonMock).toHaveBeenCalledWith(expect.arrayContaining([
+      'profile', 'update', 'spotify', '--profile', 'artist-main', '--ads-account-id',
+      'spotify-ads-main',
+    ]))
+  })
+
+  it('fails the Ads Manager capability when it opens a different saved ad account', async () => {
+    savedAdsAccountId = 'expected-ads-account'
+    const verify = handlers.get(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_STATUS)
+
+    const result = await verify!(
+      { clientId: 'client-1' },
+      { platform: 'spotify', profile: 'artist-main', live: true },
+    )
+
+    expect(result.spotifyCapabilities.adsManager).toMatchObject({
+      ready: false,
+      status: 'wrong_account',
+      accountId: 'spotify-ads-main',
+    })
+    expect(result.message).toContain('different ad account')
+  })
+
+  it('keeps Ads Manager unavailable until the advertiser identity is visible', async () => {
+    evaluate.mockImplementation(async () => currentUrl.includes('open.spotify.com')
+      ? {
+          url: 'https://open.spotify.com/collection/playlists',
+          title: 'Spotify',
+          text: 'Your Library Create playlist',
+          links: ['https://open.spotify.com/user/31artistmain'],
+        }
+      : currentUrl.includes('adsmanager.spotify.com')
+        ? {
+            url: 'https://adsmanager.spotify.com/campaigns',
+            title: 'Spotify Ads Manager',
+            text: 'Campaigns Create campaign Reporting',
+            links: [],
+          }
+        : {
+            url: 'https://artists.spotify.com/c/artist/home',
+            title: 'Spotify for Artists',
+            text: 'Audience Music Songs',
+            links: [],
+          })
+    const verify = handlers.get(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_STATUS)
+
+    const result = await verify!(
+      { clientId: 'client-1' },
+      { platform: 'spotify', profile: 'artist-main', live: true },
+    )
+
+    expect(result.spotifyCapabilities.adsManager).toMatchObject({
+      ready: false,
+      status: 'identity_unverified',
+      accountId: null,
+    })
+    expect(result.message).toContain('Select an Ads Manager account')
+    expect(runSocialJsonMock).not.toHaveBeenCalledWith(expect.arrayContaining([
+      'profile', 'update', 'spotify', '--ads-account-id',
     ]))
   })
 

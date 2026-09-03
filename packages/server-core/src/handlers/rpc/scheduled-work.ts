@@ -70,6 +70,8 @@ import {
   type ScheduledWorkParseResult,
   type ManageGoalRunInput,
   type ManageGoalRunResult,
+  type SupplyScheduledWorkInput,
+  type SupplyScheduledWorkInputResult,
   isReleaseKitSocialAuthorizationDefinition,
 } from '@craft-agent/shared/scheduled-work'
 import {
@@ -80,6 +82,7 @@ import {
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
+import { supplyScheduledWorkInputs } from '../../scheduled-work/ScheduledWorkInputSupply'
 import { assertTeamPermission } from '@craft-agent/shared/workspaces'
 import { loadReleaseKitManifest, resolveVerifiedReleaseKitItemPath, resolveVerifiedReleaseKitItemPathWhileLocked, withReleaseKitLockAsync } from '@craft-agent/shared/release-kit'
 import {
@@ -111,6 +114,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.scheduledWork.CANCEL_CAMPAIGN,
   RPC_CHANNELS.scheduledWork.DECIDE_CAMPAIGN,
   RPC_CHANNELS.scheduledWork.RESOLVE_CAMPAIGN_OUTPUT,
+  RPC_CHANNELS.scheduledWork.SUPPLY_INPUTS,
   RPC_CHANNELS.scheduledWork.APPROVE_CAMPAIGN_SOCIAL,
   RPC_CHANNELS.scheduledWork.MANAGE_GOAL_RUN,
   RPC_CHANNELS.scheduledWork.SCHEDULE_HQ,
@@ -190,6 +194,15 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
       return withWorkspaceContextLock(rootPath, async () => {
         const parsed = readScheduledWork(rootPath, workspaceId)
         if (!parsed.ok) throw new Error(parsed.error)
+        if (mutation.operation === 'upsert') {
+          const existing = parsed.work.items.find((candidate) => candidate.id === mutation.order.id && !candidate.deletedAt)
+          if (mutation.order.inputRequest
+            || mutation.order.inputSupplyReceipt
+            || existing?.inputRequest
+            || existing?.inputSupplyReceipt) {
+            throw new Error('Workflow input requests can only be changed by the host input-supply command.')
+          }
+        }
         const result = applyScheduledWorkMutation(parsed.work, mutation)
         if (!result.ok) return result
         writeScheduledWork(rootPath, result.work)
@@ -207,6 +220,24 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
       const result = await deps.sessionManager.manageGoalRun(workspaceId, rootPath, input)
       broadcastChanged(deps, workspaceId, rootPath)
       return result
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.scheduledWork.SUPPLY_INPUTS,
+    async (_ctx, workspaceId: string, input: SupplyScheduledWorkInput): Promise<SupplyScheduledWorkInputResult> => {
+      const rootPath = resolveRootPath(workspaceId)
+      assertTeamPermission(rootPath, 'files.write')
+      return supplyScheduledWorkInputs(workspaceId, rootPath, {
+        orderId: input.orderId,
+        requestId: input.requestId,
+        expectedUpdatedAt: input.expectedUpdatedAt,
+        values: input.values,
+        source: 'list',
+      }, {
+        log: console,
+        emitContextChanged: (changedWorkspaceId) => broadcastChanged(deps, changedWorkspaceId, rootPath),
+      })
     },
   )
 

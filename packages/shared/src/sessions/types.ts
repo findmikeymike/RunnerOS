@@ -296,7 +296,7 @@ export interface SessionConfig {
   /** Whether the transferred-session summary has already been injected. */
   transferredSessionSummaryApplied?: boolean;
   /** Metadata for sessions created by automations */
-  triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
+  triggeredBy?: { automationId?: string; automationName?: string; event?: string; timestamp?: number };
   /**
    * Provenance for sessions spawned by summoning a saved Agent.
    * Set at session-creation time; never updated thereafter.
@@ -405,7 +405,7 @@ export interface SessionHeader {
   /** Whether the transferred-session summary has already been injected. */
   transferredSessionSummaryApplied?: boolean;
   /** Metadata for sessions created by automations */
-  triggeredBy?: { automationName?: string; event?: string; timestamp?: number };
+  triggeredBy?: { automationId?: string; automationName?: string; event?: string; timestamp?: number };
   /**
    * Provenance for sessions spawned by summoning a saved Agent.
    * Set at session-creation time; never updated thereafter.

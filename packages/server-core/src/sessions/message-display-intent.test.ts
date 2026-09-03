@@ -54,6 +54,20 @@ describe('message display intent', () => {
     expect(storedToMessage(stored).content).toContain('Task:\nReview this.');
   });
 
+  it('persists host-stamped input origin across reload conversion', () => {
+    const message: Message = {
+      id: 'msg-origin',
+      role: 'user',
+      content: 'Direct artist answer.',
+      timestamp: 123,
+      inputOrigin: 'human',
+    };
+
+    const stored = messageToStored(message);
+    expect(stored.inputOrigin).toBe('human');
+    expect(storedToMessage(stored).inputOrigin).toBe('human');
+  });
+
   it('persists the hidden marker for internal Goal continuation prompts', () => {
     const message: Message = {
       id: 'msg-goal-hidden',

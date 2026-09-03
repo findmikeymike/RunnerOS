@@ -14,7 +14,7 @@ Use this skill to keep paid-ads work useful when APIs are unavailable while stil
    - Meta Ads: use `ads-operator --platform meta` as the local browser/export/setup operator. Use `meta-ads` only when authenticated and eligible.
    - Spotify Ads: use browser mode for Spotify Ads Manager / Spotify Ad Studio in V1. Spotify Ads API is optional later and must not block work.
 2. If structured access is missing, blocked, expired, or incomplete, switch to browser dashboard/export mode.
-3. Before Meta or Google browser work, run `browser_tool accounts`, resolve one exact saved dashboard account, and attach it with `browser_tool account <meta-ads|google-ads> <profile>`. These logins live in Settings > Ad Accounts. Never use a generic browser session when a configured account exists.
+3. Before Meta or Google browser work, run `browser_tool accounts`, resolve one exact saved dashboard account, and attach it with `browser_tool account <meta-ads|google-ads> <profile>`. These logins live in Settings > Ad Accounts. For Spotify, resolve the account with `cd tools/printing-press-social && node src/social.mjs catalog --json`, then attach it with `browser_tool profile spotify <id>`. Never use a generic browser session when a configured account exists.
 4. For Spotify audience strategy, use Spotify for Artists browser intel when the user is logged in: top cities, listener demographics, source/playlist signal, song performance, and audience trend clues. Do not confuse Spotify for Artists with Spotify Ads Manager.
 5. If browser automation is blocked, ask the user for an export/screenshot and give exact platform, account, date range, table, columns, and file type.
 6. Use screenshots as visual evidence only. Use API/export data for numbers when available.
@@ -31,14 +31,14 @@ node tools/ads-operator/bin/ads-operator.mjs doctor --json
 Use only these commands in the current skeleton:
 
 ```bash
-node tools/ads-operator/bin/ads-operator.mjs accounts --platform meta|google --json
-node tools/ads-operator/bin/ads-operator.mjs campaigns --platform meta|google --account <id> --json
-node tools/ads-operator/bin/ads-operator.mjs export-plan --platform meta|google --level campaign|adset|adgroup|ad|keyword --json
-node tools/ads-operator/bin/ads-operator.mjs import <file.csv> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json
-node tools/ads-operator/bin/ads-operator.mjs audit <file.csv|import.json> --platform meta|google --level campaign|adset|adgroup|ad|keyword|search-term --goal conversions|traffic|awareness|leads|sales|roas --json
-node tools/ads-operator/bin/ads-operator.mjs campaign-plan --platform meta|google --goal <goal> --artist-context <file.md> --territories "city one,city two" --budget "<amount>" --out campaign-plan.json --json
-node tools/ads-operator/bin/ads-operator.mjs setup-plan --platform meta|google --goal <goal> --artist-context <file.md> --territories "city one,city two" --budget "<amount>" --campaign-name "<name>" --out setup-plan.json --json
-node tools/ads-operator/bin/ads-operator.mjs packet create --platform meta|google --type publish|budget|status|targeting|creative --account <id> --action "..." --spend-impact "..." --evidence <path> --out packet.json --json
+node tools/ads-operator/bin/ads-operator.mjs accounts --platform meta|google|spotify --json
+node tools/ads-operator/bin/ads-operator.mjs campaigns --platform meta|google|spotify --account <id> --json
+node tools/ads-operator/bin/ads-operator.mjs export-plan --platform meta|google|spotify --level campaign|adset|adgroup|ad|keyword --json
+node tools/ads-operator/bin/ads-operator.mjs import <file.csv> --platform meta|google|spotify --level campaign|adset|adgroup|ad|keyword --json
+node tools/ads-operator/bin/ads-operator.mjs audit <file.csv|import.json> --platform meta|google|spotify --level campaign|adset|adgroup|ad|keyword|search-term --goal conversions|traffic|awareness|leads|sales|roas --json
+node tools/ads-operator/bin/ads-operator.mjs campaign-plan --platform meta|google|spotify --goal <goal> --artist-context <file.md> --territories "city one,city two" --budget "<amount>" --out campaign-plan.json --json
+node tools/ads-operator/bin/ads-operator.mjs setup-plan --platform meta|google|spotify --goal <goal> --artist-context <file.md> --territories "city one,city two" --budget "<amount>" --campaign-name "<name>" --out setup-plan.json --json
+node tools/ads-operator/bin/ads-operator.mjs packet create --platform meta|google|spotify --type publish|budget|status|targeting|creative --account <id> --action "..." --spend-impact "..." --evidence <path> --out packet.json --json
 node tools/ads-operator/bin/ads-operator.mjs receipt create --packet packet.json --status approved|rejected|skipped --out receipt.json --json
 ```
 
@@ -48,7 +48,7 @@ Use `audit` after import to surface spend waste, weak CTR, no-conversion spend, 
 
 Use `campaign-plan` to draft a campaign from artist context, audience signals, territories, goal, and budget. It may recommend audience and territory research, but it must not publish or create the campaign.
 
-Use `setup-plan` before browser-guided campaign setup. For Meta, it returns the Ads Manager route, campaign/ad set/ad fields, browser steps, evidence requirements, and approval gate. Follow it to create drafts only; stop before Publish/Launch.
+Use `setup-plan` before browser-guided campaign setup. For Meta and Spotify, it returns the dashboard route, campaign hierarchy, browser steps, evidence requirements, and approval gate. Follow it to create drafts only; stop before Publish/Launch.
 
 ## Browser Export Protocol
 
@@ -82,8 +82,10 @@ For Spotify Ads:
 - Use Spotify for Artists only for audience and song intel, not campaign creation. It can inform cities, age/gender if visible, listener growth, top songs, playlist/source signal, and campaign geography.
 - In Spotify Ads Manager, inspect or draft campaigns, ad sets, ads, targeting, budget, placements/formats, and reporting only when the user is logged in.
 - Before campaign setup, identify campaign objective, song/landing URL, creative assets, audio/video format, territories, budget, dates, audience/artist targeting, and CTA.
-- Stop before Launch, Submit, Publish, Save changes, budget changes, targeting changes, asset upload, status changes, or anything that could spend or mutate the account.
-- For Spotify approval packets, do not call `ads-operator --platform spotify`; it is not supported yet. Write the approval packet manually using the same fields below.
+- Use the dedicated `spotify-ads-manager` playbook for channel selection, campaign hierarchy, creative requirements, draft setup, reporting, and monitoring.
+- A direct user request to set up a campaign authorizes draft entry and approved asset upload. Do not interrupt with repeated confirmation prompts while building the draft.
+- Stop before final Submit, Publish, or Launch, and before any later live budget, targeting, creative, schedule, destination, pause/resume, or status change.
+- Create Spotify approval packets with `ads-operator packet create --platform spotify` so Meta, Google, and Spotify use one artifact format.
 - If the Spotify Ads API is later configured, treat it like Google/Meta structured access: read-only first, then approval packet before writes.
 
 ## Export Handling
@@ -96,7 +98,7 @@ For Spotify Ads:
 
 ## Approval Gate
 
-Before any external ad-account change, stop and produce an approval packet.
+Before any action that can publish, spend, or change a live ad-account object, stop and produce an approval packet. Read-only work and user-requested draft preparation do not need extra prompts.
 
 Approval packet must include:
 
@@ -111,7 +113,7 @@ Approval packet must include:
 - risk and rollback plan
 - exact approval phrase needed
 
-Never apply changes without explicit approval in the current conversation. This includes publishing, pausing, enabling, deleting, budget/bid changes, targeting changes, creative or catalog updates, keyword or negative keyword changes, conversion/billing changes, uploads, recommendations, and status changes.
+Never publish, launch, pause/resume, change live budget/bids/targeting/creative/schedule/destination/status, alter billing or conversions, or apply live recommendations without explicit approval in the current conversation. Draft entry and approved asset upload are covered by the user's setup request; final launch is not.
 
 After approval review, create a receipt that records the packet phrase, status, and evidence. Do not use receipts to claim live ad execution; this operator is read-only.
 

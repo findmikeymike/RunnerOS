@@ -51,6 +51,12 @@ describe('session tool filtering helpers', () => {
     expect(getSessionToolNames({ includeScheduleWork: true }).has('schedule_work')).toBe(true);
   });
 
+  it('exposes input supply only when the Artist Manager session enables it', () => {
+    expect(getSessionToolNames().has('supply_work_input')).toBe(false);
+    expect(getSessionToolNames({ includeSupplyWorkInput: true }).has('supply_work_input')).toBe(true);
+    expect(getSessionToolNames({ includeScheduleWork: true }).has('supply_work_input')).toBe(false);
+  });
+
   it('registers update_tasks only when the non-Anthropic task surface is enabled', () => {
     expect(getSessionToolNames().has('update_tasks')).toBe(false);
     expect(getSessionToolNames({ includeSessionTasks: false }).has('update_tasks')).toBe(false);

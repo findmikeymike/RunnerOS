@@ -135,6 +135,15 @@ const WorkInputRefSchema = z.union([
   z.object({ kind: z.literal('vault'), assetId: z.string().min(1), label: z.string().min(1).optional(), assetKind: z.string().min(1).optional() }),
 ]);
 
+const WorkflowInputBindingSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('fixed'), value: z.unknown() }),
+  z.object({ mode: z.literal('ask') }),
+  z.object({
+    mode: z.literal('trigger'),
+    from: z.enum(['file.path', 'file.name', 'webhook.body', 'message.text', 'url.content']),
+  }),
+]);
+
 export const QueueWorkActionSchema = z.object({
   type: z.literal('queue-work'),
   ownerScope: z.enum(['hq', 'campaign']),
@@ -142,6 +151,7 @@ export const QueueWorkActionSchema = z.object({
   title: z.string().min(1),
   intentId: z.string().min(1).optional(),
   execution: ScheduledExecutionSchema,
+  inputBindings: z.record(z.string(), WorkflowInputBindingSchema).optional(),
   inputRefs: z.array(WorkInputRefSchema).optional(),
   followUp: z.object({
     execution: ScheduledExecutionSchema,
@@ -151,6 +161,9 @@ export const QueueWorkActionSchema = z.object({
 }).superRefine((action, ctx) => {
   const rootType = action.execution.type;
   const childType = action.followUp?.execution.type;
+  if (action.inputBindings && rootType !== 'workflow-run') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Input bindings are supported only for workflow work', path: ['inputBindings'] });
+  }
   if (action.calendarVisibility === 'hidden' && (action.followUp || (rootType !== 'agent-task' && rootType !== 'workflow-run'))) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Hidden tracked work supports standalone agent and workflow work only', path: ['calendarVisibility'] });
   }
@@ -261,7 +274,7 @@ export const WEBHOOK_SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
 export const AutomationMatcherSchema = z.object({
   id: z.string().optional(),
-  name: z.string().optional(),
+  name: z.string().trim().min(1, 'Automation name cannot be blank').optional(),
   matcher: z.string().optional(),
   cron: z.string().optional(),
   timezone: z.string().optional(),

@@ -60,6 +60,25 @@ describe('normalizeWorkflowTriggerInputs', () => {
     ]), {})).toThrow('Missing required workflow input: topic');
   });
 
+  test('can validate a partial fed run without applying a skipped default', () => {
+    expect(normalizeWorkflowTriggerInputs(workflow([
+      { name: 'topic', type: 'string', required: true, default: 'fallback' },
+      { name: 'count', type: 'number', default: 3 },
+    ]), {}, {
+      allowMissingRequired: ['topic'],
+      skipDefaultsFor: ['topic'],
+    })).toEqual({ count: 3 });
+  });
+
+  test('does not let one allowed missing input hide another invalid required value', () => {
+    expect(() => normalizeWorkflowTriggerInputs(workflow([
+      { name: 'topic', type: 'string', required: true },
+      { name: 'owner', type: 'string', required: true },
+    ]), { owner: '' }, {
+      allowMissingRequired: ['topic'],
+    })).toThrow('Missing required workflow input: owner');
+  });
+
   test('rejects invalid input types', () => {
     expect(() => normalizeWorkflowTriggerInputs(workflow([
       { name: 'limit', type: 'number' },

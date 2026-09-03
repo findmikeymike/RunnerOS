@@ -18,6 +18,7 @@ import {
   Plus,
   Star,
   Send,
+  Scissors,
   Trash2,
   Upload,
   Video,
@@ -50,6 +51,8 @@ import {
 import { toast } from 'sonner'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
+import { openAgentSessionComposer } from '@/lib/run-agent'
+import { buildReleaseKitRepurposeKickoff, releaseKitRepurposeRestriction } from '@/lib/release-kit-repurpose'
 
 interface ReleaseKitPageProps {
   workspaceId: string
@@ -622,7 +625,15 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange
   onOpenChange: (open: boolean) => void
   onChanged: (manifest: ReleaseKitManifest) => void
 }) {
-  const { onOpenFile } = useAppShellContext()
+  const {
+    onOpenFile,
+    onCreateSession,
+    onInputChange,
+    onSendMessage,
+    skills,
+    enabledSources,
+    activeAgents,
+  } = useAppShellContext()
   const [mode, setMode] = React.useState<AssetDrawerMode>('details')
   const [uses, setUses] = React.useState<ReleaseKitItemUseSummary[]>([])
   const [profiles, setProfiles] = React.useState<ReleaseKitSocialProfile[]>([])
@@ -680,6 +691,7 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange
   const restrictionMessage = releaseKitScheduleRestriction(item)
   const eligible = (item.category === 'artwork' || item.category === 'images' || item.category === 'video')
     && item.status === 'ready' && !restrictionMessage
+  const repurposeRestriction = releaseKitRepurposeRestriction(item, itemPath)
 
   const saveDetails = async () => {
     setBusy(true)
@@ -716,6 +728,32 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange
     } finally { setBusy(false) }
   }
 
+  const createVariants = async () => {
+    if (!itemPath || repurposeRestriction) return
+    setBusy(true)
+    try {
+      const agent = activeAgents?.find((candidate) => candidate.slug === 'raw-video-editor')
+        ?? (await window.electronAPI.listAllAgentDefinitions()).find((candidate) => candidate.slug === 'raw-video-editor')
+      if (!agent) throw new Error('Raw Video Editor is not installed.')
+      await openAgentSessionComposer({
+        agent,
+        workspaceId,
+        onCreateSession,
+        onInputChange,
+        onSendMessage,
+        skills,
+        sources: enabledSources,
+        draftInput: buildReleaseKitRepurposeKickoff(item, itemPath),
+        autoSendDraft: true,
+      })
+      onOpenChange(false)
+    } catch (error) {
+      toast.error('Could not start video repurposing', { description: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <Drawer direction="right" open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
       <DrawerContent className="w-[min(480px,94vw)] border-white/[0.07] bg-[#090909] text-white sm:max-w-[480px]">
@@ -736,6 +774,9 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange
                 <div className="max-h-56 overflow-hidden rounded-lg bg-white/[0.025]"><img src={thumbnailUrl(itemPath)} alt={item.title} className="h-full max-h-56 w-full object-contain" /></div>
               ) : null}
               <div className="flex flex-wrap gap-2">
+                {item.category === 'video' ? (
+                  <Button variant="outline" className="border-white/10 bg-transparent text-white/65 hover:bg-white/[0.05] hover:text-white" disabled={Boolean(repurposeRestriction) || busy} onClick={() => void createVariants()}><Scissors className="mr-1.5 h-3.5 w-3.5" />Create variants</Button>
+                ) : null}
                 <Button className="bg-[#f97316] text-black hover:bg-[#fb923c]" disabled={!eligible} onClick={() => setMode('where')}><Send className="mr-1.5 h-3.5 w-3.5" />Schedule social post</Button>
                 <Button variant="outline" className="border-white/10 bg-transparent text-white/65" onClick={async () => {
                   const detail = await window.electronAPI.getReleaseKitItem(workspaceId, item.id)
@@ -743,6 +784,7 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange
                 }}><ExternalLink className="mr-1.5 h-3.5 w-3.5" />Open file</Button>
               </div>
               {!eligible ? <p className="text-xs text-amber-200/75">{restrictionMessage ?? (item.status !== 'ready' ? releaseKitStatusExplanation(item) : 'Social scheduling supports final images and videos.')}</p> : null}
+              {item.category === 'video' && repurposeRestriction && eligible ? <p className="text-xs text-amber-200/75">{repurposeRestriction}</p> : null}
 
               <DrawerSection title="Details">
                 <div className="flex flex-wrap gap-1.5">
@@ -797,7 +839,7 @@ function RestrictionToggle({ label, checked, onChange }: { label: string; checke
 }
 
 function AssetUseRow({ use }: { use: ReleaseKitItemUseSummary }) {
-  return <div className="flex items-start justify-between gap-3 border-t border-white/[0.05] py-2 first:border-0"><div className="min-w-0"><div className="truncate text-sm text-white/72">{use.title}</div><div className="mt-0.5 text-[11px] text-white/35">{use.platform ? `${use.platform} · ` : ''}{new Date(use.startAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</div>{use.attentionMessage ? <div className="mt-1 text-xs text-orange-200/75">{use.attentionMessage}</div> : null}</div><span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px]', use.status === 'needs-attention' ? 'bg-red-500/12 text-red-200' : use.status === 'done' ? 'bg-emerald-400/10 text-emerald-200' : 'bg-white/[0.05] text-white/45')}>{displaySubtype(use.status)}</span></div>
+  return <div className="flex items-start justify-between gap-3 border-t border-white/[0.05] py-2 first:border-0"><div className="min-w-0"><div className="truncate text-sm text-white/72">{use.title}</div><div className="mt-0.5 text-[11px] text-white/35">{use.platform ? `${use.platform} · ` : ''}{new Date(use.startAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</div>{use.attentionMessage ? <div className="mt-1 text-xs text-orange-200/75">{use.attentionMessage}</div> : null}</div><span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px]', use.status === 'needs-attention' ? 'bg-red-500/12 text-red-200' : use.status === 'needs-setup' ? 'bg-amber-400/10 text-amber-100/75' : use.status === 'done' ? 'bg-emerald-400/10 text-emerald-200' : 'bg-white/[0.05] text-white/45')}>{use.status === 'needs-setup' ? 'Needs you' : displaySubtype(use.status)}</span></div>
 }
 
 function EmptyDrawerLine({ children }: { children: React.ReactNode }) { return <div className="text-xs text-white/30">{children}</div> }

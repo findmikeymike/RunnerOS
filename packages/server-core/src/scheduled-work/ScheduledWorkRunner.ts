@@ -1,9 +1,19 @@
-import { createCampaignJobRun, type CampaignExternalExecutionReceipt, type CampaignJobRun } from '@craft-agent/shared/campaign-calendar'
+import {
+  CAMPAIGN_CALENDAR_CONTEXT_SLUG,
+  campaignCalendarMetadata,
+  createCampaignJobRun,
+  parseCampaignCalendarDocResult,
+  serializeCampaignCalendarBody,
+  type CampaignExternalExecutionReceipt,
+  type CampaignJobRun,
+} from '@craft-agent/shared/campaign-calendar'
 import { createHash, randomUUID } from 'node:crypto'
 import type { OutputManifest } from '@craft-agent/shared/outputs'
 import { assertReleaseKitSocialUseAllowed, loadReleaseKitManifest } from '@craft-agent/shared/release-kit'
 import {
   SCHEDULED_WORK_CONTEXT_SLUG,
+  assertScheduledWorkDocument,
+  migrateCampaignCalendarJobs,
   parseScheduledWorkDocResult,
   scheduledWorkMetadata,
   serializeScheduledWorkBody,
@@ -36,6 +46,7 @@ const SOCIAL_PREP_WINDOW_MS = 30 * 60 * 1000
 
 export interface ScheduledWorkRunnerDeps {
   canRunBackgroundWork(workspaceRootPath: string): boolean
+  listWorkspaceRoots?(): Array<{ id: string; rootPath: string }>
   getBackgroundFenceToken?(workspaceRootPath: string): string | null
   canExecuteSocialAutomatically?(workspaceRootPath: string): boolean
   withLock<T>(workspaceRootPath: string, fn: () => Promise<T> | T): Promise<T>
@@ -57,6 +68,7 @@ export interface ScheduledWorkRunnerDeps {
     workflowSlug: string
     workflowDigest: string
     triggerInputs: Record<string, unknown>
+    untrustedTriggerInputs?: string[]
   }): Promise<{ runId: string }>
   readWorkflowRun(workspaceRootPath: string, runId: string): WorkflowRunSnapshot | null | undefined
   listOutputManifests(workspaceRootPath: string): OutputManifest[]
@@ -68,6 +80,7 @@ export interface ScheduledWorkRunnerDeps {
     outputs: OutputManifest[]
   }): Promise<{ sharedIntelContextSlugs?: string[] }>
   readAgentSession?(sessionId: string): Promise<'running' | 'completed' | 'interrupted' | 'missing'>
+  isAgentSessionWaitingForUser?(sessionId: string): boolean
   awaitAgentCompletionBarrier?(sessionId: string): Promise<boolean>
   abortAgentSession?(sessionId: string): Promise<void>
   prepareSocial?(input: { workspaceId: string; workspaceRootPath: string; order: ScheduledWorkOrder }): Promise<ScheduledSocialActionPreview>
@@ -101,21 +114,12 @@ interface OutputMatchResult {
   message?: string
 }
 
-/**
- * Ceiling on agent sessions this runner starts at once.
- *
- * Waking from sleep can make a whole night of work due in a single scan.
- * Launching every order together spawns competing agent sessions that exhaust
- * memory and provider rate limits, and the artist just sees a wall of
- * failures. Orders over the cap stay `scheduled` for the next scan.
- */
-const MAX_CONCURRENT_AGENT_TASKS = 3
-
 export class ScheduledWorkRunner {
   readonly runtimeId = randomUUID()
   private readonly inFlight = new Set<string>()
   private readonly activeAgentRuns = new Set<string>()
   private readonly activeSocialProfiles = new Set<string>()
+  private backgroundAdmissionOwner: string | null = null
   private readonly deps: ScheduledWorkRunnerDeps
   private readonly log: Pick<Console, 'info' | 'warn' | 'error'>
 
@@ -271,6 +275,7 @@ export class ScheduledWorkRunner {
     }
     this.inFlight.add(workspaceRootPath)
     try {
+      await this.migrateLegacyCampaignJobs(workspaceId, workspaceRootPath)
       const parsed = this.readWork(workspaceRootPath, workspaceId)
       if (!parsed.ok) {
         this.log.warn(`[ScheduledWork] ${parsed.error}`)
@@ -280,6 +285,7 @@ export class ScheduledWorkRunner {
       const candidates = parsed.work.items
         .filter((order) => this.shouldScanOrder(order, now)
           && !this.activeAgentRuns.has(activeAgentRunKey(workspaceRootPath, order.id)))
+        .sort(compareScanPriority)
         .map((order) => order.id)
       const result: ScheduledWorkRunnerResult = {
         scanned: candidates.length,
@@ -419,17 +425,31 @@ export class ScheduledWorkRunner {
             continue
           }
 
-          // Check the cap BEFORE claiming: a claimed order is already `running`,
-          // so skipping after the claim would strand it with nothing executing.
-          if (current.execution.type === 'agent-task'
-            && this.activeAgentRuns.size >= MAX_CONCURRENT_AGENT_TASKS) {
+          // Automatic work uses one top-level lane across this Artist OS
+          // installation. A workflow may still parallelize intentional steps.
+          // Check before claiming so deferred work remains safely scheduled.
+          const backgroundAdmissionKey = isBackgroundExecution(current)
+            ? activeBackgroundRunKey(workspaceRootPath, current.id)
+            : null
+          if (backgroundAdmissionKey && !await this.tryReserveBackgroundLane(
+            backgroundAdmissionKey,
+            workspaceRootPath,
+            workspaceId,
+            current,
+            now,
+          )) {
             this.log.info(
-              `[ScheduledWork] Deferring "${current.title}" — ${this.activeAgentRuns.size} agent tasks already running.`,
+              `[ScheduledWork] Deferring "${current.title}" - waiting for its turn in the Artist OS background queue.`,
             )
             continue
           }
 
-          const claimed = await this.claimRunning(workspaceId, workspaceRootPath, orderId)
+          let claimed: PersistResult
+          try {
+            claimed = await this.claimRunning(workspaceId, workspaceRootPath, orderId)
+          } finally {
+            if (backgroundAdmissionKey) this.releaseBackgroundAdmission(backgroundAdmissionKey)
+          }
           if (!claimed.order) continue
           if (claimed.order.execution.type === 'workflow-run') {
             const started = await this.startWorkflow(workspaceId, workspaceRootPath, claimed.order, capturedFence)
@@ -721,6 +741,7 @@ export class ScheduledWorkRunner {
         workflowSlug: execution.workflowSlug,
         workflowDigest: execution.workflowDigest,
         triggerInputs: execution.triggerInputs,
+        untrustedTriggerInputs: execution.untrustedTriggerInputs,
       })
       const cleanedRunId = clean(runId)
       if (!cleanedRunId) throw new Error(`Workflow job ${order.id} did not return a run id.`)
@@ -1231,10 +1252,39 @@ export class ScheduledWorkRunner {
   }
 
   private writeWork(workspaceRootPath: string, work: ScheduledWorkDocument): void {
+    assertScheduledWorkDocument(work)
     upsertContextDoc(workspaceRootPath, {
       slug: SCHEDULED_WORK_CONTEXT_SLUG,
       metadata: scheduledWorkMetadata(),
       body: serializeScheduledWorkBody(work),
+    })
+  }
+
+  private async migrateLegacyCampaignJobs(workspaceId: string, workspaceRootPath: string): Promise<void> {
+    await this.deps.withLock(workspaceRootPath, () => {
+      const calendarDoc = loadContextDoc(workspaceRootPath, CAMPAIGN_CALENDAR_CONTEXT_SLUG)
+      if (!calendarDoc) return
+      const calendar = parseCampaignCalendarDocResult(calendarDoc, workspaceId)
+      if (!calendar.ok) {
+        this.log.warn(`[ScheduledWork] Legacy campaign migration skipped: ${calendar.error}`)
+        return
+      }
+      const scheduled = this.readWork(workspaceRootPath, workspaceId)
+      if (!scheduled.ok) return
+      const migration = migrateCampaignCalendarJobs(calendar.calendar, scheduled.work)
+      const workChanged = serializeScheduledWorkBody(migration.work) !== serializeScheduledWorkBody(scheduled.work)
+      const calendarChanged = serializeCampaignCalendarBody(migration.calendar) !== serializeCampaignCalendarBody(calendar.calendar)
+      if (workChanged) this.writeWork(workspaceRootPath, migration.work)
+      if (calendarChanged) {
+        upsertContextDoc(workspaceRootPath, {
+          slug: CAMPAIGN_CALENDAR_CONTEXT_SLUG,
+          metadata: campaignCalendarMetadata(),
+          body: serializeCampaignCalendarBody(migration.calendar),
+        })
+      }
+      if (workChanged || calendarChanged) {
+        this.deps.emitContextChanged?.(workspaceId, loadAllContextDocs(workspaceRootPath))
+      }
     })
   }
 
@@ -1252,6 +1302,122 @@ export class ScheduledWorkRunner {
     if (order.status !== 'scheduled') return false
     const startedAt = Date.parse(order.startAt)
     return !Number.isNaN(startedAt) && startedAt <= now.getTime()
+  }
+
+  private async tryReserveBackgroundLane(
+    admissionKey: string,
+    workspaceRootPath: string,
+    workspaceId: string,
+    order: ScheduledWorkOrder,
+    now: Date,
+  ): Promise<boolean> {
+    if (this.backgroundAdmissionOwner) return false
+    if (await this.hasOccupiedBackgroundLane(workspaceRootPath, workspaceId)) return false
+    // Another concurrent scan may have reserved while session state was read.
+    if (this.backgroundAdmissionOwner) return false
+    if (!this.isOldestDueBackgroundOrder(workspaceRootPath, workspaceId, order, now)) return false
+    this.backgroundAdmissionOwner = admissionKey
+    return true
+  }
+
+  private releaseBackgroundAdmission(admissionKey: string): void {
+    if (this.backgroundAdmissionOwner === admissionKey) this.backgroundAdmissionOwner = null
+  }
+
+  private async hasOccupiedBackgroundLane(currentRootPath: string, currentWorkspaceId: string): Promise<boolean> {
+    const workspaces = [
+      ...(this.deps.listWorkspaceRoots?.() ?? []),
+      { id: currentWorkspaceId, rootPath: currentRootPath },
+    ]
+    const seen = new Set<string>()
+    for (const workspace of workspaces) {
+      const key = `${workspace.id}:${workspace.rootPath}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      if (!this.canWorkspaceJoinBackgroundLane(workspace.rootPath)) continue
+      const parsed = this.readWork(workspace.rootPath, workspace.id)
+      if (!parsed.ok) {
+        // A broken current work document already prevents its own scan. Do not
+        // let one unrelated workspace freeze automatic work everywhere else.
+        if (workspace.id === currentWorkspaceId && workspace.rootPath === currentRootPath) return true
+        continue
+      }
+      for (const order of parsed.work.items) {
+        if (!order.deletedAt
+          && !order.legacyRef
+          && order.status === 'running'
+          && await this.occupiesBackgroundLane(order, workspace.rootPath)) return true
+      }
+    }
+    return false
+  }
+
+  private isOldestDueBackgroundOrder(
+    currentRootPath: string,
+    currentWorkspaceId: string,
+    currentOrder: ScheduledWorkOrder,
+    now: Date,
+  ): boolean {
+    const workspaces = [
+      ...(this.deps.listWorkspaceRoots?.() ?? []),
+      { id: currentWorkspaceId, rootPath: currentRootPath },
+    ]
+    const seen = new Set<string>()
+    const candidates: Array<{ workspaceId: string; rootPath: string; order: ScheduledWorkOrder }> = []
+    for (const workspace of workspaces) {
+      const key = `${workspace.id}:${workspace.rootPath}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      if (!this.canWorkspaceJoinBackgroundLane(workspace.rootPath)) continue
+      const parsed = this.readWork(workspace.rootPath, workspace.id)
+      if (!parsed.ok) continue
+      for (const order of parsed.work.items) {
+        if (order.status !== 'scheduled'
+          || !isBackgroundExecution(order)
+          || !this.shouldScanOrder(order, now)
+          || isPastStartGrace(order, now)
+          || (order.continuation?.role === 'round' && this.continuationFenceIssue(workspace.rootPath, order))) {
+          continue
+        }
+        candidates.push({ workspaceId: workspace.id, rootPath: workspace.rootPath, order })
+      }
+    }
+    candidates.sort((left, right) => compareScanPriority(left.order, right.order)
+      || left.workspaceId.localeCompare(right.workspaceId)
+      || left.rootPath.localeCompare(right.rootPath))
+    const oldest = candidates[0]
+    return Boolean(oldest
+      && oldest.workspaceId === currentWorkspaceId
+      && oldest.rootPath === currentRootPath
+      && oldest.order.id === currentOrder.id)
+  }
+
+  private canWorkspaceJoinBackgroundLane(workspaceRootPath: string): boolean {
+    if (!this.deps.canRunBackgroundWork(workspaceRootPath)) return false
+    return !this.deps.getBackgroundFenceToken || Boolean(this.deps.getBackgroundFenceToken(workspaceRootPath))
+  }
+
+  private async occupiesBackgroundLane(order: ScheduledWorkOrder, workspaceRootPath: string): Promise<boolean> {
+    if (order.execution.type === 'agent-task') {
+      const sessionId = currentSessionId(order)
+      // Active thinking occupies the lane regardless of permission mode. Once
+      // the session is genuinely waiting for the artist, it remains visible
+      // and recoverable without freezing unrelated automatic work.
+      if (!sessionId) return true
+      if (this.deps.isAgentSessionWaitingForUser?.(sessionId)) return false
+      if (!this.deps.readAgentSession) return true
+      try {
+        return await this.deps.readAgentSession(sessionId) === 'running'
+      } catch {
+        // Unknown session state must not permit concurrent background work.
+        return true
+      }
+    }
+    if (order.execution.type !== 'workflow-run') return false
+    const runId = currentWorkflowRunId(order)
+    if (!runId) return true
+    const run = this.deps.readWorkflowRun(workspaceRootPath, runId)
+    return !run || run.state === 'created' || run.state === 'queued' || run.state === 'running'
   }
 
   private releaseSuccessor(
@@ -1439,6 +1605,31 @@ function deriveSocialApproval(order: ScheduledWorkOrder, preview: ScheduledSocia
 
 function activeAgentRunKey(workspaceRootPath: string, orderId: string): string {
   return `${workspaceRootPath}:${orderId}`
+}
+
+function activeBackgroundRunKey(workspaceRootPath: string, orderId: string): string {
+  return `${workspaceRootPath}:${orderId}`
+}
+
+function isBackgroundExecution(order: ScheduledWorkOrder): boolean {
+  return order.execution.type === 'agent-task' || order.execution.type === 'workflow-run'
+}
+
+function compareScanPriority(left: ScheduledWorkOrder, right: ScheduledWorkOrder): number {
+  const runningPriority = Number(right.status === 'running') - Number(left.status === 'running')
+  if (runningPriority !== 0) return runningPriority
+  return compareIso(left.startAt, right.startAt)
+    || compareIso(left.createdAt, right.createdAt)
+    || left.id.localeCompare(right.id)
+}
+
+function compareIso(left: string, right: string): number {
+  const leftMs = Date.parse(left)
+  const rightMs = Date.parse(right)
+  if (Number.isNaN(leftMs) && Number.isNaN(rightMs)) return 0
+  if (Number.isNaN(leftMs)) return 1
+  if (Number.isNaN(rightMs)) return -1
+  return leftMs - rightMs
 }
 
 function isPastStartGrace(order: ScheduledWorkOrder, now: Date): boolean {

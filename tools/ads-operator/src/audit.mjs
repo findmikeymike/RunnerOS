@@ -163,7 +163,9 @@ export function createSetupPlan({ platform, goal = 'conversions', artistContextP
   }
   const browserPlan = normalizedPlatform === 'meta'
     ? metaBrowserSetupPlan(campaignPlan, { campaignName })
-    : googleBrowserSetupPlan(campaignPlan, { campaignName });
+    : normalizedPlatform === 'spotify'
+      ? spotifyBrowserSetupPlan(campaignPlan, { campaignName })
+      : googleBrowserSetupPlan(campaignPlan, { campaignName });
 
   return {
     ok: true,
@@ -263,6 +265,60 @@ function googleBrowserSetupPlan(plan, { campaignName }) {
   };
 }
 
+function spotifyBrowserSetupPlan(plan, { campaignName }) {
+  const name = campaignName || plan.recommendedStructure.campaign;
+  return {
+    route: 'spotify-ads-manager-browser',
+    startUrl: 'https://adsmanager.spotify.com/',
+    setupObjects: ['campaign', 'ad set', 'ad'],
+    campaignFields: {
+      name,
+      objective: plan.recommendedStructure.objective,
+      budget: plan.budget || 'User input required before draft setup.',
+    },
+    adSetFields: plan.recommendedStructure.adSets.map((adSet) => ({
+      name: adSet.name,
+      location: adSet.territory,
+      audienceSignals: adSet.audienceSignals,
+      budgetRole: adSet.budgetRole,
+      format: 'Audio by default for a music campaign; use video only when the approved creative and objective support it.',
+      age: 'Keep broad unless artist data or campaign strategy supports a narrower range.',
+      platforms: ['iOS', 'Android', 'Desktop'],
+      placements: 'Use the placements available for the selected objective and format; do not invent unavailable inventory.',
+      category: 'Select the closest truthful Ads Manager category; do not guess if eligibility is unclear.',
+    })),
+    adFields: plan.recommendedStructure.creativeTests.map((test, index) => ({
+      name: `Creative test ${index + 1}: ${test}`,
+      concept: test,
+      assetsNeeded: [
+        'approved audio or video asset',
+        'companion image for audio',
+        'CTA',
+        'destination URL',
+        'display name and approved copy',
+      ],
+    })),
+    browserSteps: [
+      'Attach the exact saved Spotify profile and open Spotify Ads Manager.',
+      'Confirm the correct ad account before entering campaign details.',
+      'Create the campaign, ad set, and ad as a draft from this plan.',
+      'Review objective, schedule, budget, geography, age, platform, targeting, format, placements, category, CTA, and destination.',
+      'Check the audience and delivery estimate; broaden targeting if the estimated audience is too small.',
+      'Upload only the approved creative assets requested by this draft.',
+      'Stop at the final review screen before Submit, Publish, or Launch and create an approval packet.',
+    ],
+    requiredEvidence: [
+      'final draft review screenshot or exported draft summary',
+      'strategy/setup plan JSON',
+      'budget and spend impact',
+      'targeting and territory rationale',
+      'creative asset and companion image',
+      'CTA and destination URL',
+      'audience or delivery estimate',
+    ],
+  };
+}
+
 function objectiveOptimization(goal) {
   if (goal === 'traffic') return 'Landing page views or link clicks depending on tracking quality.';
   if (goal === 'awareness') return 'Reach or impressions.';
@@ -357,6 +413,12 @@ function extractSignals(context) {
 }
 
 function objectiveFor(goal, platform) {
+  if (platform === 'spotify') {
+    if (goal === 'awareness') return 'Reach';
+    if (goal === 'traffic') return 'Website visits';
+    if (goal === 'leads') return 'Lead generation, if available for this account and market';
+    return 'Conversions, only when the destination and measurement setup are ready';
+  }
   if (goal === 'traffic') return platform === 'meta' ? 'Traffic' : 'Maximize clicks';
   if (goal === 'awareness') return platform === 'meta' ? 'Awareness' : 'Target impression share';
   if (goal === 'leads') return platform === 'meta' ? 'Leads' : 'Lead form / conversions';

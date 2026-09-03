@@ -30,6 +30,7 @@ import { matcherMatchesSdk } from './utils.ts';
 import { SchedulerService, type SchedulerTickPayload } from '../scheduler/scheduler-service.ts';
 import { FileWatchService } from './file-watch-service.ts';
 import { PollService } from './poll-service.ts';
+import { readAutomationSchedulerState, recordAutomationSchedulerTick } from './scheduler-state.ts';
 import {
   appendRunnerPulse,
   clearReadyRunnerHandover,
@@ -75,7 +76,7 @@ export interface AutomationSystemOptions {
   /** Whether scheduler startup should immediately run missed-tick catch-up (default: true) */
   runSchedulerCatchUpOnStart?: boolean;
   /** Called when prompts are ready to be executed */
-  onPromptsReady?: (prompts: PendingPrompt[]) => void;
+  onPromptsReady?: (prompts: PendingPrompt[]) => Promise<void> | void;
   /** Called when a matched trigger queues durable Scheduled Work. */
   onWorkReady?: (work: PendingQueuedWork[]) => Promise<void> | void;
   /** Called when webhook results are available */
@@ -578,7 +579,9 @@ export class AutomationSystem implements AutomationsConfigProvider {
     });
 
     if (this.options.runSchedulerCatchUpOnStart !== false) {
-      void this.fireMissedSchedulerCatchUp();
+      void this.fireMissedSchedulerCatchUp().catch((error) => {
+        this.options.onError?.('SchedulerTick', error instanceof Error ? error : new Error(String(error)));
+      });
     }
     this.scheduler.start();
     log.debug(`[AutomationSystem] Scheduler started`);
@@ -607,7 +610,11 @@ export class AutomationSystem implements AutomationsConfigProvider {
     await this.fireMissedSchedulerCatchUp();
   }
 
-  private createSchedulerPayload(date: Date, catchUp = false): SchedulerTickPayload {
+  private createSchedulerPayload(
+    date: Date,
+    catchUp = false,
+    catchUpFromMs?: number,
+  ): SchedulerTickPayload {
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     return {
       timestamp: date.toISOString(),
@@ -617,28 +624,58 @@ export class AutomationSystem implements AutomationsConfigProvider {
       dayOfWeek: date.getDay(),
       dayName: days[date.getDay()]!,
       catchUp,
+      ...(catchUpFromMs !== undefined ? { catchUpFromMs } : {}),
     };
   }
 
   private async fireMissedSchedulerCatchUp(): Promise<void> {
-    let status: ReturnType<typeof getTeamModeStatus>;
+    if (this.disposed) return;
+    const now = new Date();
+    let fallbackFromMs: number | undefined;
     try {
-      status = getTeamModeStatus(this.options.workspaceRootPath);
-    } catch {
+      const gate = evaluateTeamRunnerGate(this.options.workspaceRootPath);
+      if (!gate.allowed) return;
+      const status = getTeamModeStatus(this.options.workspaceRootPath);
+      if (status.storage.mode === 'shared-folder') {
+        if (status.team.runnerMissedTickPolicy !== 'run-once') return;
+        if (status.team.runnerMachineId !== status.machine.machineId) return;
+        const heartbeatAt = Date.parse(status.heartbeat.lastAutomationHeartbeatAt ?? status.heartbeat.lastSeenAt);
+        if (Number.isFinite(heartbeatAt)) fallbackFromMs = heartbeatAt;
+      }
+    } catch (error) {
+      this.options.onError?.('SchedulerTick', error instanceof Error ? error : new Error(String(error)));
       return;
     }
-    if (status.storage.mode !== 'shared-folder') return;
-    if (status.team.runnerMissedTickPolicy !== 'run-once') return;
-    if (status.team.runnerMachineId !== status.machine.machineId) return;
-    const lastHeartbeat = Date.parse(status.heartbeat.lastAutomationHeartbeatAt ?? status.heartbeat.lastSeenAt);
-    if (Number.isFinite(lastHeartbeat) && Date.now() - lastHeartbeat <= MISSED_TICK_GRACE_MS) return;
-    await this.fireSchedulerTick(this.createSchedulerPayload(new Date(), true));
+
+    let checkpointFromMs: number | undefined;
+    try {
+      const state = readAutomationSchedulerState(this.options.workspaceRootPath);
+      const parsed = state ? Date.parse(state.lastDeliveredTickAt) : NaN;
+      if (Number.isFinite(parsed)) checkpointFromMs = parsed;
+    } catch (error) {
+      this.options.onError?.('SchedulerTick', error instanceof Error ? error : new Error(String(error)));
+      return;
+    }
+
+    const catchUpFromMs = checkpointFromMs ?? fallbackFromMs;
+    if (catchUpFromMs === undefined) {
+      try {
+        recordAutomationSchedulerTick(this.options.workspaceRootPath, now.toISOString(), now.toISOString());
+      } catch (error) {
+        this.options.onError?.('SchedulerTick', error instanceof Error ? error : new Error(String(error)));
+      }
+      return;
+    }
+    if (now.getTime() - catchUpFromMs <= MISSED_TICK_GRACE_MS) return;
+    await this.fireSchedulerTick(this.createSchedulerPayload(now, true, catchUpFromMs));
   }
 
   private async fireSchedulerTick(payload: SchedulerTickPayload): Promise<void> {
     if (this.disposed) return;
     if (!this.shouldRunBackgroundAutomation('SchedulerTick')) return;
     try {
+      const durableState = readAutomationSchedulerState(this.options.workspaceRootPath);
+      if (durableState?.lastDeliveredTickKey === payload.timestamp) return;
       const decision = evaluateTeamRunnerGate(this.options.workspaceRootPath);
       if (decision.allowed && decision.reason === 'runner') {
         if (readTeamRunnerState(this.options.workspaceRootPath).lastSchedulerTickKey === payload.timestamp) {
@@ -650,13 +687,12 @@ export class AutomationSystem implements AutomationsConfigProvider {
           });
           return;
         }
-        recordRunnerSchedulerTick(this.options.workspaceRootPath, decision.machineId, payload.timestamp);
         detectClobberedWrites(this.options.workspaceRootPath, decision.machineId);
       }
     } catch {
       // Legacy/no-config tests and workspaces can still run scheduler ticks.
     }
-    await this.eventBus.emit('SchedulerTick', {
+    const result = await this.eventBus.emitWithResult('SchedulerTick', {
       workspaceId: this.options.workspaceId,
       timestamp: Date.now(),
       localTime: payload.localTime,
@@ -664,6 +700,16 @@ export class AutomationSystem implements AutomationsConfigProvider {
       catchUp: payload.catchUp,
       catchUpFromMs: payload.catchUpFromMs,
     });
+    if (result.status !== 'accepted') return;
+    recordAutomationSchedulerTick(this.options.workspaceRootPath, payload.timestamp, payload.timestamp);
+    try {
+      const decision = evaluateTeamRunnerGate(this.options.workspaceRootPath);
+      if (decision.allowed && decision.reason === 'runner') {
+        recordRunnerSchedulerTick(this.options.workspaceRootPath, decision.machineId, payload.timestamp);
+      }
+    } catch {
+      // Solo and legacy workspaces have no shared runner state to update.
+    }
   }
 
   // ============================================================================
@@ -677,7 +723,10 @@ export class AutomationSystem implements AutomationsConfigProvider {
       workspaceId: this.options.workspaceId,
       onEvent: async (payload) => {
         if (!this.shouldRunBackgroundAutomation('FileWatch')) return;
-        await this.eventBus.emit('FileWatch', payload);
+        const result = await this.eventBus.emitWithResult('FileWatch', payload);
+        if (result.status !== 'accepted') {
+          throw new Error(`FileWatch delivery was not accepted: ${result.status}`);
+        }
       },
     });
     this.fileWatchService.applyMatchers(this.getMatchersForEvent('FileWatch'));
@@ -690,7 +739,10 @@ export class AutomationSystem implements AutomationsConfigProvider {
       workspaceId: this.options.workspaceId,
       onEvent: async (payload) => {
         if (!this.shouldRunBackgroundAutomation('PollUrl')) return;
-        await this.eventBus.emit('PollUrl', payload);
+        const result = await this.eventBus.emitWithResult('PollUrl', payload);
+        if (result.status !== 'accepted') {
+          throw new Error(`PollUrl delivery was not accepted: ${result.status}`);
+        }
       },
       onSustainedFailure: async ({ matcherId, consecutiveFailures, error }) => {
         const failure = new Error(

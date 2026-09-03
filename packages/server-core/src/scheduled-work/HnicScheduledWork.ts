@@ -11,6 +11,7 @@ import {
   type ArtistCalendar,
 } from '@craft-agent/shared/artist-context'
 import { loadGlobalWorkflow, readActivatedWorkflows } from '@craft-agent/shared/workflows'
+import { normalizeWorkflowTriggerInputs } from '@craft-agent/shared/workflows/trigger-inputs'
 import {
   CAMPAIGN_CALENDAR_CONTEXT_SLUG,
   campaignCalendarMetadata,
@@ -28,7 +29,11 @@ import {
   type ScheduledWorkExecution,
   type ScheduledWorkOrder,
 } from '@craft-agent/shared/scheduled-work'
-import { validateAutomationsConfig } from '@craft-agent/shared/automations'
+import {
+  assertWorkflowInputBindings,
+  validateAutomationsConfig,
+} from '@craft-agent/shared/automations'
+import { suggestAutomaticSchedule, type ExistingAutomationSchedule } from '@craft-agent/shared/automations/staggered-schedule'
 import { hqSemanticIntentId } from '@craft-agent/shared/hq-state'
 import { generateShortId, resolveAutomationsConfigPath } from '@craft-agent/shared/automations/resolve-config-path'
 import { loadAllContextDocs, loadContextDoc, upsertContextDoc, type LoadedContextDoc } from '@craft-agent/shared/workspace-context'
@@ -44,7 +49,9 @@ export interface ScheduleWorkPersistenceOptions {
   input: ScheduleWorkToolInput
   onContextChanged: (docs: LoadedContextDoc[]) => void
   withAutomationLock: <T>(path: string, fn: () => Promise<T>) => Promise<T>
+  withAutomaticScheduleLock?: <T>(fn: () => Promise<T>) => Promise<T>
   writeFileAtomic: (path: string, data: string) => Promise<void>
+  automationWorkspaceRootPaths?: string[]
   continuationRuntimeId?: string
   continuationFenceToken?: string
 }
@@ -54,11 +61,18 @@ export async function persistHnicScheduleWork(options: ScheduleWorkPersistenceOp
   title: string
   nextFireAt?: string
 }> {
-  const execution = resolveExecution(options.workspaceRootPath, options.input.execution)
   if (options.input.destination === 'automation') {
+    let execution: ScheduledWorkExecution
+    try {
+      execution = resolveExecution(options.workspaceRootPath, options.input)
+    } catch (error) {
+      const legacy = await findMatchingLegacyAutomation(options)
+      if (legacy) return legacy
+      throw error
+    }
     return persistAutomation(options, execution)
   }
-  return persistCalendarWork(options, execution)
+  return persistCalendarWork(options, resolveExecution(options.workspaceRootPath, options.input))
 }
 
 export function inferScheduledWorkScope(workspace: { artistWorkspaceScope?: WorkspaceScope | 'lab' | 'general' }): WorkspaceScope {
@@ -71,8 +85,12 @@ export function inferScheduledWorkScope(workspace: { artistWorkspaceScope?: Work
   return workspace.artistWorkspaceScope
 }
 
-function resolveExecution(rootPath: string, input: ScheduleWorkToolInput['execution']): ScheduledWorkExecution {
+function resolveExecution(rootPath: string, request: ScheduleWorkToolInput): ScheduledWorkExecution {
+  const input = request.execution
   if (input.type === 'agent-task') {
+    if ('inputBindings' in input && input.inputBindings) {
+      throw new Error('Workflow input bindings are available only for workflow work.')
+    }
     if (!readActivatedAgents(rootPath).active.includes(input.agentSlug)) {
       throw new Error(`Agent is not active in this workspace: ${input.agentSlug}`)
     }
@@ -96,13 +114,34 @@ function resolveExecution(rootPath: string, input: ScheduleWorkToolInput['execut
   const workflow = loadGlobalWorkflow(input.workflowSlug)
   if (!workflow) throw new Error(`Workflow definition was not found: ${input.workflowSlug}`)
   const supplied = input.triggerInputs ?? {}
-  const triggerInputs = Object.fromEntries((workflow.metadata.trigger.inputs ?? []).map((definition) => {
-    const value = supplied[definition.name] ?? definition.default ?? defaultTriggerValue(definition.type)
-    if (definition.required && (value === undefined || value === null || (typeof value === 'string' && !value.trim()))) {
-      throw new Error(`Workflow input is required: ${definition.name}`)
+  let triggerInputs: Record<string, unknown>
+  if (!input.inputBindings) {
+    triggerInputs = normalizeWorkflowTriggerInputs(workflow, supplied)
+  } else {
+    if (request.destination !== 'automation') {
+      throw new Error('Workflow input bindings are available only for Automations.')
     }
-    return [definition.name, value]
-  }))
+    assertWorkflowInputBindings(
+      workflow.metadata.trigger.inputs ?? [],
+      input.inputBindings,
+      request.trigger!.type,
+      { allowUnauthenticatedWebhook: request.trigger?.type === 'webhook' && request.trigger.allowUnauthenticated === true },
+    )
+    const raw: Record<string, unknown> = {}
+    for (const control of ['enabled_source_slugs', 'permission_mode'] as const) {
+      if (Object.prototype.hasOwnProperty.call(supplied, control)) raw[control] = supplied[control]
+    }
+    const unresolved: string[] = []
+    for (const definition of workflow.metadata.trigger.inputs ?? []) {
+      const binding = input.inputBindings[definition.name]
+      if (binding?.mode === 'fixed') raw[definition.name] = binding.value
+      if (binding && binding.mode !== 'fixed') unresolved.push(definition.name)
+    }
+    triggerInputs = normalizeWorkflowTriggerInputs(workflow, raw, {
+      allowMissingRequired: unresolved,
+      skipDefaultsFor: unresolved,
+    })
+  }
   return {
     type: 'workflow-run',
     workflowSlug: workflow.slug,
@@ -303,12 +342,90 @@ async function persistCalendarWork(options: ScheduleWorkPersistenceOptions, exec
 }
 
 async function persistAutomation(options: ScheduleWorkPersistenceOptions, execution: ScheduledWorkExecution): Promise<{ id: string; title: string; nextFireAt?: string }> {
+  if (options.input.trigger?.type === 'schedule'
+    && options.input.trigger.cadence
+    && options.withAutomaticScheduleLock) {
+    return options.withAutomaticScheduleLock(() => persistAutomationUnlocked(options, execution))
+  }
+  return persistAutomationUnlocked(options, execution)
+}
+
+async function persistAutomationUnlocked(options: ScheduleWorkPersistenceOptions, execution: ScheduledWorkExecution): Promise<{ id: string; title: string; nextFireAt?: string }> {
   const trigger = options.input.trigger!
-  const eventName = trigger.type === 'schedule' ? 'SchedulerTick'
+  if (trigger.type === 'schedule') {
+    const hasCron = Boolean(trigger.cron?.trim())
+    const hasCadence = Boolean(trigger.cadence)
+    if (hasCron === hasCadence) throw new Error('Scheduled automation requires exactly one of cron or cadence.')
+  }
+  const eventName = automationEventName(trigger)
+  const matcherBase = automationMatcherBase(options, execution)
+  const timezone = trigger.type === 'schedule' ? trigger.timezone ?? options.input.timezone : undefined
+  const intentDigest = scheduledWorkDefinitionDigest({ eventName, matcherBase, trigger, timezone })
+
+  const configPath = resolveAutomationsConfigPath(options.workspaceRootPath)
+  return options.withAutomationLock(configPath, async () => {
+    const config = await readAutomationConfig(configPath)
+    for (const existingMatchers of Object.values(config.automations)) {
+      if (!Array.isArray(existingMatchers)) throw new Error('Automation config contains a non-list event entry.')
+      const existing = existingMatchers.find((candidate) => candidate.scheduleWorkKey === options.input.idempotencyKey)
+      if (!existing) continue
+      const expectedLegacyMatcher = legacyAutomationMatcher(matcherBase, trigger, timezone, options.input.idempotencyKey)
+      const serializedExpectedLegacyMatcher = expectedLegacyMatcher
+        ? JSON.parse(JSON.stringify(expectedLegacyMatcher)) as Record<string, unknown>
+        : undefined
+      const { id: _id, scheduleWorkDigest: persistedLegacyDigest, scheduleWorkIntentDigest: _intent, ...persistedLegacyMatcher } = existing
+      const isMatchingLegacy = existing.scheduleWorkIntentDigest === undefined
+        && serializedExpectedLegacyMatcher !== undefined
+        && persistedLegacyDigest === scheduledWorkDefinitionDigest({ eventName, matcher: persistedLegacyMatcher })
+        && scheduledWorkDefinitionDigest(legacyComparableMatcher(persistedLegacyMatcher)) === scheduledWorkDefinitionDigest(legacyComparableMatcher(serializedExpectedLegacyMatcher))
+      if (existing.scheduleWorkIntentDigest !== intentDigest && !isMatchingLegacy) {
+        throw new Error(`idempotencyKey is already bound to a different automation: ${options.input.idempotencyKey}`)
+      }
+      if (isMatchingLegacy) {
+        existing.scheduleWorkIntentDigest = intentDigest
+        existing.actions = matcherBase.actions
+        const { id: _existingId, scheduleWorkDigest: _existingDigest, scheduleWorkIntentDigest: _existingIntent, ...healedMatcher } = existing
+        existing.scheduleWorkDigest = scheduledWorkDefinitionDigest({ eventName, matcher: healedMatcher })
+        const validation = validateAutomationsConfig(config)
+        if (!validation.valid) throw new Error(`Automation validation failed: ${validation.errors.join('; ')}`)
+        await options.writeFileAtomic(configPath, `${JSON.stringify(config, null, 2)}\n`)
+      }
+      const nextFireAt = eventName === 'SchedulerTick' && typeof existing.cron === 'string'
+        ? nextCronRun(existing.cron, typeof existing.timezone === 'string' ? existing.timezone : undefined)
+        : undefined
+      return { id: String(existing.id), title: options.input.title.trim(), nextFireAt }
+    }
+    const matcher = { ...matcherBase }
+    if (trigger.type === 'schedule') {
+      const cron = trigger.cron ?? (await resolveAutomaticCron(options, trigger.cadence!, timezone))
+      Object.assign(matcher, { cron, timezone })
+    }
+    matcher.scheduleWorkKey = options.input.idempotencyKey
+    matcher.scheduleWorkIntentDigest = intentDigest
+    matcher.scheduleWorkDigest = scheduledWorkDefinitionDigest({ eventName, matcher })
+    config.automations[eventName] ??= []
+    const id = generateShortId()
+    config.automations[eventName]!.push({ ...matcher, id })
+    const validation = validateAutomationsConfig(config)
+    if (!validation.valid) throw new Error(`Automation validation failed: ${validation.errors.join('; ')}`)
+    await options.writeFileAtomic(configPath, `${JSON.stringify(config, null, 2)}\n`)
+    const nextFireAt = trigger.type === 'schedule' ? nextCronRun(String(matcher.cron), timezone) : undefined
+    return { id, title: options.input.title.trim(), nextFireAt }
+  })
+}
+
+function automationEventName(trigger: NonNullable<ScheduleWorkToolInput['trigger']>): string {
+  return trigger.type === 'schedule' ? 'SchedulerTick'
     : trigger.type === 'file-change' ? 'FileWatch'
       : trigger.type === 'webhook' ? 'WebhookReceive'
         : trigger.type === 'url-change' ? 'PollUrl'
           : 'MessageReceive'
+}
+
+function automationMatcherBase(
+  options: ScheduleWorkPersistenceOptions,
+  execution: ScheduledWorkExecution,
+): Record<string, unknown> {
   const matcher: Record<string, unknown> = {
     name: options.input.title.trim(),
     enabled: true,
@@ -317,49 +434,156 @@ async function persistAutomation(options: ScheduleWorkPersistenceOptions, execut
       ownerScope: options.scope,
       calendarVisibility: options.input.showOnCalendar === false ? 'hidden' : 'visible',
       title: options.input.title.trim(),
+      intentId: hqSemanticIntentId({ title: options.input.title.trim(), intent: JSON.stringify(execution) }),
       execution,
+      ...(options.input.execution.type === 'workflow-run' && options.input.execution.inputBindings
+        ? { inputBindings: options.input.execution.inputBindings }
+        : {}),
       inputRefs: [],
     }],
   }
-  if (trigger.type === 'schedule') Object.assign(matcher, { cron: trigger.cron, timezone: trigger.timezone ?? options.input.timezone })
+  const trigger = options.input.trigger!
   if (trigger.type === 'file-change') Object.assign(matcher, { watchPath: trigger.watchPath, watchGlob: trigger.watchGlob, watchChangeTypes: trigger.changeTypes })
   if (trigger.type === 'webhook') Object.assign(matcher, { slug: trigger.slug, secretEnv: trigger.secretEnv, allowUnauthenticated: trigger.allowUnauthenticated })
   if (trigger.type === 'url-change') Object.assign(matcher, { pollUrl: trigger.url, pollIntervalSec: trigger.intervalSeconds ?? 300 })
   if (trigger.type === 'message') Object.assign(matcher, { matcher: trigger.matcher })
-  matcher.scheduleWorkKey = options.input.idempotencyKey
-  const definitionDigest = scheduledWorkDefinitionDigest({ eventName, matcher })
-  matcher.scheduleWorkDigest = definitionDigest
-  const nextFireAt = trigger.type === 'schedule'
-    ? new Cron(trigger.cron, trigger.timezone || options.input.timezone ? { timezone: trigger.timezone ?? options.input.timezone } : {}).nextRun()?.toISOString()
-    : undefined
+  return matcher
+}
 
-  const configPath = resolveAutomationsConfigPath(options.workspaceRootPath)
-  return options.withAutomationLock(configPath, async () => {
-    let config: { version?: number; automations?: Record<string, Record<string, unknown>[]>; [key: string]: unknown }
-    try {
-      config = JSON.parse(await readFile(configPath, 'utf-8'))
-    } catch (error) {
-      if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') config = { version: 2, automations: {} }
-      else throw error
+async function readAutomationConfig(configPath: string): Promise<{
+  version?: number
+  automations: Record<string, Record<string, unknown>[]>
+  [key: string]: unknown
+}> {
+  try {
+    const config = JSON.parse(await readFile(configPath, 'utf-8')) as {
+      version?: number
+      automations?: Record<string, Record<string, unknown>[]>
+      [key: string]: unknown
     }
     config.automations ??= {}
-    for (const existingMatchers of Object.values(config.automations)) {
-      if (!Array.isArray(existingMatchers)) throw new Error('Automation config contains a non-list event entry.')
-      const existing = existingMatchers.find((candidate) => candidate.scheduleWorkKey === options.input.idempotencyKey)
-      if (!existing) continue
-      if (existing.scheduleWorkDigest !== definitionDigest) {
-        throw new Error(`idempotencyKey is already bound to a different automation: ${options.input.idempotencyKey}`)
-      }
-      return { id: String(existing.id), title: options.input.title.trim(), nextFireAt }
+    return config as { version?: number; automations: Record<string, Record<string, unknown>[]>; [key: string]: unknown }
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { version: 2, automations: {} }
     }
-    config.automations[eventName] ??= []
-    const id = generateShortId()
-    config.automations[eventName]!.push({ ...matcher, id })
-    const validation = validateAutomationsConfig(config)
-    if (!validation.valid) throw new Error(`Automation validation failed: ${validation.errors.join('; ')}`)
-    await options.writeFileAtomic(configPath, `${JSON.stringify(config, null, 2)}\n`)
-    return { id, title: options.input.title.trim(), nextFireAt }
+    throw error
+  }
+}
+
+async function findMatchingLegacyAutomation(
+  options: ScheduleWorkPersistenceOptions,
+): Promise<{ id: string; title: string; nextFireAt?: string } | undefined> {
+  const trigger = options.input.trigger!
+  if (trigger.type === 'schedule' && !trigger.cron) return undefined
+  const execution = resolveLegacyExecution(options.workspaceRootPath, options.input)
+  if (!execution) return undefined
+  const eventName = automationEventName(trigger)
+  const timezone = trigger.type === 'schedule' ? trigger.timezone ?? options.input.timezone : undefined
+  const expected = legacyAutomationMatcher(
+    automationMatcherBase(options, execution),
+    trigger,
+    timezone,
+    options.input.idempotencyKey,
+  )
+  if (!expected) return undefined
+  const serializedExpected = legacyComparableMatcher(expected)
+  const configPath = resolveAutomationsConfigPath(options.workspaceRootPath)
+  return options.withAutomationLock(configPath, async () => {
+    const config = await readAutomationConfig(configPath)
+    const existing = config.automations[eventName]?.find((candidate) => candidate.scheduleWorkKey === options.input.idempotencyKey)
+    if (!existing || existing.scheduleWorkIntentDigest !== undefined) return undefined
+    const { id: _id, scheduleWorkDigest, scheduleWorkIntentDigest: _intent, ...persistedMatcher } = existing
+    if (scheduleWorkDigest !== scheduledWorkDefinitionDigest({ eventName, matcher: persistedMatcher })
+      || scheduledWorkDefinitionDigest(legacyComparableMatcher(persistedMatcher)) !== scheduledWorkDefinitionDigest(serializedExpected)) {
+      return undefined
+    }
+    const nextFireAt = eventName === 'SchedulerTick' && typeof existing.cron === 'string'
+      ? nextCronRun(existing.cron, typeof existing.timezone === 'string' ? existing.timezone : undefined)
+      : undefined
+    return { id: String(existing.id), title: options.input.title.trim(), nextFireAt }
   })
+}
+
+function legacyComparableMatcher(value: Record<string, unknown>): Record<string, unknown> {
+  const comparable = JSON.parse(JSON.stringify(value)) as Record<string, unknown>
+  for (const action of Array.isArray(comparable.actions) ? comparable.actions : []) {
+    if (action && typeof action === 'object') delete (action as Record<string, unknown>).intentId
+  }
+  return comparable
+}
+
+function resolveLegacyExecution(rootPath: string, request: ScheduleWorkToolInput): ScheduledWorkExecution | undefined {
+  const input = request.execution
+  if (input.type !== 'workflow-run' || input.inputBindings) return undefined
+  if (!readActivatedWorkflows(rootPath).active.includes(input.workflowSlug)) return undefined
+  const workflow = loadGlobalWorkflow(input.workflowSlug)
+  if (!workflow) return undefined
+  const supplied = input.triggerInputs ?? {}
+  const triggerInputs: Record<string, unknown> = {}
+  for (const definition of workflow.metadata.trigger.inputs ?? []) {
+    const value = supplied[definition.name] ?? definition.default ?? legacyDefaultTriggerValue(definition.type)
+    if (definition.required && (value === undefined || value === null || (typeof value === 'string' && !value.trim()))) return undefined
+    triggerInputs[definition.name] = value
+  }
+  return {
+    type: 'workflow-run',
+    workflowSlug: workflow.slug,
+    workflowDigest: scheduledWorkDefinitionDigest({ metadata: workflow.metadata, body: workflow.body }),
+    triggerInputs,
+  }
+}
+
+function legacyDefaultTriggerValue(type: 'string' | 'number' | 'boolean'): string | number | boolean {
+  if (type === 'number') return 0
+  if (type === 'boolean') return false
+  return ''
+}
+
+function legacyAutomationMatcher(
+  matcherBase: Record<string, unknown>,
+  trigger: NonNullable<ScheduleWorkToolInput['trigger']>,
+  timezone: string | undefined,
+  idempotencyKey: string,
+): Record<string, unknown> | undefined {
+  const matcher = { ...matcherBase }
+  if (trigger.type === 'schedule') {
+    if (!trigger.cron) return undefined
+    Object.assign(matcher, { cron: trigger.cron, timezone })
+  }
+  matcher.scheduleWorkKey = idempotencyKey
+  return matcher
+}
+
+async function resolveAutomaticCron(
+  options: ScheduleWorkPersistenceOptions,
+  cadence: 'daily' | 'weekly',
+  timezone?: string,
+): Promise<string> {
+  const roots = [...new Set(options.automationWorkspaceRootPaths ?? [options.workspaceRootPath])]
+  const existing: ExistingAutomationSchedule[] = []
+  for (const rootPath of roots) {
+    const path = resolveAutomationsConfigPath(rootPath)
+    let raw: unknown
+    try {
+      raw = JSON.parse(await readFile(path, 'utf-8'))
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') continue
+      throw new Error(`Could not inspect automation schedules for ${rootPath}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+    const parsed = validateAutomationsConfig(raw)
+    if (!parsed.valid || !parsed.config) {
+      throw new Error(`Could not inspect automation schedules for ${rootPath}: ${parsed.errors.join('; ')}`)
+    }
+    for (const matcher of parsed.config.automations.SchedulerTick ?? []) {
+      existing.push({ cron: matcher.cron, timezone: matcher.timezone, enabled: matcher.enabled })
+    }
+  }
+  return suggestAutomaticSchedule(existing, cadence, { timezone }).cron
+}
+
+function nextCronRun(cron: string, timezone?: string): string | undefined {
+  return new Cron(cron, timezone ? { timezone } : {}).nextRun()?.toISOString()
 }
 
 function writeScheduledWork(rootPath: string, work: ReturnType<typeof parseScheduledWorkDocResult>['work']): void {
@@ -385,10 +609,4 @@ function formatInTimezone(value: string, timezone: string): { date: string; time
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(value))
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((candidate) => candidate.type === type)?.value ?? ''
   return { date: `${part('year')}-${part('month')}-${part('day')}`, time: `${part('hour')}:${part('minute')}` }
-}
-
-function defaultTriggerValue(type: 'string' | 'number' | 'boolean'): string | number | boolean {
-  if (type === 'number') return 0
-  if (type === 'boolean') return false
-  return ''
 }

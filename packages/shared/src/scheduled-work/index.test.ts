@@ -54,6 +54,53 @@ function calendarWithJob(actionType: 'ask-agent' | 'run-workflow' | 'post-asset'
 }
 
 describe('scheduled work documents', () => {
+  test('requires coherent workflow input-request state', () => {
+    const base: ScheduledWorkOrder = {
+      version: 1,
+      id: 'workflow-needs-input',
+      owner: { scope: 'campaign', workspaceId: 'campaign-1', campaignId: 'campaign-1' },
+      calendarLink: { calendar: 'campaign', itemId: 'workflow-needs-input-calendar' },
+      title: 'Merch run',
+      type: 'workflow-run',
+      status: 'needs-setup',
+      startAt: '2026-07-13T10:00:00.000Z',
+      timezone: 'UTC',
+      execution: { type: 'workflow-run', workflowSlug: 'merch-run', workflowDigest: 'digest', triggerInputs: {} },
+      inputRefs: [], approvals: [], runs: [],
+      attention: { reason: 'input-required', message: 'Waiting for: design_file' },
+      inputRequest: {
+        id: 'workflow-needs-input:input',
+        inputs: ['design_file'],
+        requestedAt: '2026-07-10T00:00:00.000Z',
+        lastTriggeredAt: '2026-07-10T00:00:00.000Z',
+        coalescedFireCount: 1,
+        fireDefinitionDigests: ['fire-1'],
+      },
+      executionKey: { payloadDigest: 'digest', idempotencyKey: 'key' },
+      createdAt: '2026-07-10T00:00:00.000Z', updatedAt: '2026-07-10T00:00:00.000Z',
+    }
+    const parse = (order: ScheduledWorkOrder) => parseScheduledWorkDocResult({
+      body: serializeScheduledWorkBody({ version: 1, workspaceId: 'campaign-1', items: [order], updatedAt: order.updatedAt }),
+    }, 'campaign-1')
+
+    expect(parse(base).ok).toBe(true)
+    expect(parse({ ...base, status: 'scheduled' }).ok).toBe(false)
+    expect(parse({ ...base, type: 'agent-task', execution: {
+      type: 'agent-task', agentSlug: 'writer', brief: 'Write.', permissionMode: 'safe', expectedOutput: { requirement: 'none' },
+    } }).ok).toBe(false)
+    expect(parse({ ...base, inputRequest: undefined }).ok).toBe(false)
+
+    const canceled = applyScheduledWorkMutation(
+      { version: 1, workspaceId: 'campaign-1', items: [base], updatedAt: base.updatedAt },
+      { operation: 'cancel', id: base.id, expectedUpdatedAt: base.updatedAt },
+    )
+    expect(canceled.ok).toBe(true)
+    if (canceled.ok) {
+      expect(canceled.item).toMatchObject({ status: 'canceled', attention: undefined, inputRequest: undefined })
+      expect(parseScheduledWorkDocResult({ body: serializeScheduledWorkBody(canceled.work) }, 'campaign-1').ok).toBe(true)
+    }
+  })
+
   test('accepts the YouTube Intelligence report postprocessor contract', () => {
     const work = emptyScheduledWorkDocument('workspace-1')
     work.items.push({
@@ -86,7 +133,7 @@ describe('scheduled work documents', () => {
     expect(parsed.work.items[0]?.intentId).toBe('weekly-youtube-intel')
   })
 
-  test('round-trips a migrated agent task without removing the embedded job', () => {
+  test('converts a legacy agent task into one canonical work order', () => {
     const calendar = calendarWithJob()
     const originalJobId = calendar.items[0]!.job!.id
 
@@ -94,7 +141,7 @@ describe('scheduled work documents', () => {
 
     expect(migrated.migrated).toBe(1)
     expect(migrated.calendar.items[0]?.scheduledWorkId).toBe(`scheduled-work-${originalJobId}`)
-    expect(migrated.calendar.items[0]?.job?.id).toBe(originalJobId)
+    expect(migrated.calendar.items[0]?.job).toBeUndefined()
     expect(migrated.work.items[0]).toMatchObject({
       id: `scheduled-work-${originalJobId}`,
       owner: { scope: 'campaign', workspaceId: 'campaign-1', campaignId: 'campaign-1' },
@@ -104,8 +151,8 @@ describe('scheduled work documents', () => {
         agentSlug: 'content-genius',
         brief: 'Create the launch copy.',
       },
-      legacyRef: { campaignItemId: calendar.items[0]!.id, campaignJobId: originalJobId },
     })
+    expect(migrated.work.items[0]?.legacyRef).toBeUndefined()
 
     const calendarRoundTrip = parseCampaignCalendarDocResult({
       body: serializeCampaignCalendarBody(migrated.calendar),
@@ -130,7 +177,38 @@ describe('scheduled work documents', () => {
     expect(first.migrated).toBe(1)
     expect(second.migrated).toBe(0)
     expect(second.work.items).toHaveLength(1)
-    expect(second.calendar.items[0]?.job).toBeDefined()
+    expect(second.calendar.items[0]?.job).toBeUndefined()
+  })
+
+  test('quarantines a legacy job that may already have started', () => {
+    const calendar = calendarWithJob()
+    calendar.items[0] = { ...calendar.items[0]!, status: 'running' }
+
+    const migrated = migrateCampaignCalendarJobs(calendar, emptyScheduledWorkDocument('campaign-1'))
+
+    expect(migrated.calendar.items[0]?.job).toBeUndefined()
+    expect(migrated.work.items[0]).toMatchObject({
+      status: 'needs-attention',
+      attention: { reason: 'execution-uncertain' },
+    })
+  })
+
+  test('does not bind a legacy job to a conflicting scheduled-work id', () => {
+    const calendar = calendarWithJob()
+    const job = calendar.items[0]!.job!
+    calendar.items[0] = { ...calendar.items[0]!, scheduledWorkId: 'existing-order' }
+    const work = emptyScheduledWorkDocument('campaign-1')
+    work.items.push({
+      ...migrateCampaignCalendarJobs(calendarWithJob(), emptyScheduledWorkDocument('campaign-1')).work.items[0]!,
+      id: 'existing-order',
+      calendarLink: { calendar: 'campaign', itemId: 'different-calendar-item' },
+    })
+
+    const migrated = migrateCampaignCalendarJobs(calendar, work)
+
+    expect(migrated.migrated).toBe(0)
+    expect(migrated.calendar.items[0]?.job?.id).toBe(job.id)
+    expect(migrated.work.items).toHaveLength(1)
   })
 
   test('migrates exact social bindings into a social publish work order', () => {
@@ -149,7 +227,7 @@ describe('scheduled work documents', () => {
     })
   })
 
-  test('leaves unsupported legacy actions embedded for the old runner', () => {
+  test('leaves unsupported legacy actions embedded without making them runnable', () => {
     const calendar = calendarWithJob('outreach-batch')
     const migrated = migrateCampaignCalendarJobs(calendar, emptyScheduledWorkDocument('campaign-1'))
 
@@ -433,16 +511,20 @@ describe('scheduled work documents', () => {
         makeOrder('other-asset', 'scheduled', '2026-09-01T12:00:00.000Z', 'kit-2'),
         { ...makeOrder('deleted', 'scheduled', '2026-09-01T12:00:00.000Z'), deletedAt: '2026-08-10T00:00:00.000Z' },
         makeOrder('attention', 'needs-attention', '2026-07-01T12:00:00.000Z'),
+        { ...makeOrder('needs-input', 'needs-setup', '2026-07-02T12:00:00.000Z'), attention: { reason: 'input-required' as const, message: 'Waiting for: caption' }, inputRequest: { id: 'needs-input:input', inputs: ['caption'], requestedAt: '2026-07-02T12:00:00.000Z', lastTriggeredAt: '2026-07-02T12:00:00.000Z', coalescedFireCount: 1, fireDefinitionDigests: ['fire-input'] } },
         makeOrder('future-soon', 'scheduled', '2026-09-01T12:00:00.000Z'),
         makeOrder('canceled-new', 'canceled', '2026-08-15T12:00:00.000Z'),
       ],
     }
 
     expect(listReleaseKitItemUses(work, 'kit-1', new Date('2026-08-20T00:00:00.000Z')).map((order) => order.id)).toEqual([
-      'attention', 'done-unverified', 'future-soon', 'future-late', 'canceled-new', 'done-old',
+      'attention', 'needs-input', 'done-unverified', 'future-soon', 'future-late', 'canceled-new', 'done-old',
     ])
+    expect(summarizeReleaseKitItemUses(work, 'kit-1', { now: new Date('2026-08-20T00:00:00.000Z') })
+      .find((use) => use.orderId === 'needs-input')?.status).toBe('needs-setup')
     expect(summarizeReleaseKitItemUses(work, 'kit-1', { now: new Date('2026-08-20T00:00:00.000Z') })).toMatchObject([
       { orderId: 'attention', status: 'needs-attention', attentionMessage: 'Reconnect Instagram.' },
+      { orderId: 'needs-input', status: 'needs-setup', attentionMessage: 'Waiting for: caption' },
       { orderId: 'done-unverified', status: 'needs-attention', attentionMessage: expect.stringContaining('receipt is missing') },
       { orderId: 'future-soon', status: 'scheduled' },
       { orderId: 'future-late', status: 'scheduled' },

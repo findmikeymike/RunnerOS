@@ -59,9 +59,9 @@ export interface ActiveSessionInfo {
   title?: string
   status: SessionProcessingStatus
   triggeredBy?: {
+    automationId?: string
     automationName: string
     timestamp: number
   }
   createdAt: number
 }
-

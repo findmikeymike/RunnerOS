@@ -16,6 +16,7 @@ export function createProfile({ platform, profileId, flags, browserEngine, confi
     accountGroup: flags['account-group'] || flags.persona || null,
     accountHandle: flags.handle || flags['account-handle'] || null,
     accountUrl: flags['account-url'] || null,
+    adsAccountId: flags['ads-account-id'] || null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -27,6 +28,7 @@ export function updateProfile(profile, flags, { browserEngine, confirmPolicy } =
     next.accountHandle = flags.handle || flags['account-handle'] || null;
   }
   if (flags['account-url'] !== undefined) next.accountUrl = flags['account-url'] || null;
+  if (flags['ads-account-id'] !== undefined) next.adsAccountId = flags['ads-account-id'] || null;
   if (flags.engine !== undefined && browserEngine) {
     next.adapter = browserEngine;
     next.browserEngine = browserEngine;
@@ -40,6 +42,7 @@ export function updateProfile(profile, flags, { browserEngine, confirmPolicy } =
   if (flags['clear-account-group'] || flags['clear-persona']) next.accountGroup = null;
   if (flags['clear-handle']) next.accountHandle = null;
   if (flags['clear-account-url']) next.accountUrl = null;
+  if (flags['clear-ads-account-id']) next.adsAccountId = null;
   next.updatedAt = new Date().toISOString();
   return next;
 }
@@ -58,9 +61,11 @@ export function profileJson(profile, { sessionPath = null, sessionExists = null 
     localSessionExists: sessionExists,
     accountHandle: profile.accountHandle || null,
     accountUrl: profile.accountUrl || null,
+    adsAccountId: profile.adsAccountId || null,
     profileIdentity: {
       expectedHandle: profile.accountHandle || null,
       expectedAccountUrl: profile.accountUrl || null,
+      expectedAdsAccountId: profile.adsAccountId || null,
     },
     proxyId: profile.proxyId || null,
     ratePolicy: profile.ratePolicy || 'normal',
@@ -107,6 +112,7 @@ export function profileStatusJson({ command, platform, profileId, profile, sessi
     profileId,
     accountHandle: profile.accountHandle || null,
     accountUrl: profile.accountUrl || null,
+    adsAccountId: profile.adsAccountId || null,
     accountGroup: profile.accountGroup || null,
     sessionRef: profile.sessionRef || path.join('sessions', platform, profileId),
     sessionPath,
@@ -242,6 +248,7 @@ export function profileLoginJson({ platform, profileId, profile, sessionPath, re
     profileId,
     accountHandle: profile.accountHandle || null,
     accountUrl: profile.accountUrl || null,
+    adsAccountId: profile.adsAccountId || null,
     accountGroup: profile.accountGroup || null,
     sessionRef: profile.sessionRef || path.join('sessions', platform, profileId),
     sessionPath,

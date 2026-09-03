@@ -13,6 +13,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Scissors,
   ShieldCheck,
   Tags,
   Upload,
@@ -33,6 +34,9 @@ import type {
   VaultManifest,
   TrackIntelligence,
 } from '@craft-agent/shared/artist-vault'
+import { useAppShellContext } from '@/context/AppShellContext'
+import { openAgentSessionComposer } from '@/lib/run-agent'
+import { buildVaultRepurposeKickoff, vaultRepurposeRestriction } from '@/lib/release-kit-repurpose'
 
 interface VaultPageProps {
   workspaceId: string
@@ -121,6 +125,7 @@ const QUICK_TAGS: Record<VaultCategory, string[]> = {
 }
 
 export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
+  const { onCreateSession, onInputChange, onSendMessage, skills, enabledSources, activeAgents } = useAppShellContext()
   const [manifest, setManifest] = React.useState<VaultManifest | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [busy, setBusy] = React.useState<string | null>(null)
@@ -367,6 +372,35 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
     }
   }, [trackReviewAsset, workspaceId])
 
+  const createVideoVariants = React.useCallback(async (asset: VaultAssetRecord) => {
+    const restriction = vaultRepurposeRestriction(asset)
+    if (restriction) {
+      toast.error(restriction)
+      return
+    }
+    setBusy(`repurpose:${asset.id}`)
+    try {
+      const agent = activeAgents?.find((candidate) => candidate.slug === 'raw-video-editor')
+        ?? (await window.electronAPI.listAllAgentDefinitions()).find((candidate) => candidate.slug === 'raw-video-editor')
+      if (!agent) throw new Error('Raw Video Editor is not installed.')
+      await openAgentSessionComposer({
+        agent,
+        workspaceId,
+        onCreateSession,
+        onInputChange,
+        onSendMessage,
+        skills,
+        sources: enabledSources,
+        draftInput: buildVaultRepurposeKickoff(asset),
+        autoSendDraft: true,
+      })
+    } catch (error) {
+      toast.error('Could not start video repurposing', { description: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setBusy(null)
+    }
+  }, [activeAgents, enabledSources, onCreateSession, onInputChange, onSendMessage, skills, workspaceId])
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center bg-[#050505] text-sm text-white/45">
@@ -499,10 +533,11 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
 
           <AssetDetailPanel
             asset={selectedAsset}
-            busy={busy === `asset:${selectedAsset?.id}`}
+            busy={busy === `asset:${selectedAsset?.id}` || busy === `repurpose:${selectedAsset?.id}`}
             onUpdate={updateAsset}
             onAnalyze={analyzeTrack}
             onReviewTrack={(assetId) => setTrackReviewAssetId(assetId)}
+            onCreateVariants={createVideoVariants}
           />
         </div>
       </div>
@@ -531,12 +566,14 @@ function AssetDetailPanel({
   onUpdate,
   onAnalyze,
   onReviewTrack,
+  onCreateVariants,
 }: {
   asset: VaultAssetRecord | null
   busy: boolean
   onUpdate: (assetId: string, patch: VaultAssetUpdatePatch) => Promise<void>
   onAnalyze: (asset: VaultAssetRecord, force?: boolean) => Promise<boolean>
   onReviewTrack: (assetId: string) => void
+  onCreateVariants: (asset: VaultAssetRecord) => Promise<void>
 }) {
   const [label, setLabel] = React.useState('')
   const [kind, setKind] = React.useState<VaultAssetKind>('other')
@@ -631,6 +668,19 @@ function AssetDetailPanel({
           <div className="max-w-[240px] truncate text-xs text-white/52">{asset.relativePath ?? asset.absolutePath ?? 'No path'}</div>
         </div>
       </div>
+
+      {asset.category === 'video' ? (
+        <button
+          type="button"
+          disabled={busy || Boolean(vaultRepurposeRestriction(asset))}
+          title={vaultRepurposeRestriction(asset)}
+          onClick={() => void onCreateVariants(asset)}
+          className="mb-4 inline-flex h-9 w-full items-center justify-center gap-2 rounded-[10px] border border-white/[0.08] bg-white/[0.025] text-xs font-medium text-white/66 hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Scissors className="h-3.5 w-3.5" />}
+          Create variants
+        </button>
+      ) : null}
 
       <div className="space-y-3">
         <Field label="Label">

@@ -256,4 +256,5 @@ export const SETTINGS_ICONS: Record<SettingsSubpage, React.ComponentType<IconPro
   memory: PreferencesIcon,
   shortcuts: ShortcutsIcon,
   preferences: PreferencesIcon,
+  about: AppSettingsIcon,
 }

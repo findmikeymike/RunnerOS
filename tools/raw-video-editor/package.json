@@ -11,7 +11,8 @@
     "inspect": "node bin/raw-video-editor.mjs inspect",
     "transcribe": "node bin/raw-video-editor.mjs transcribe",
     "plan": "node bin/raw-video-editor.mjs plan",
-    "render": "node bin/raw-video-editor.mjs render"
+    "render": "node bin/raw-video-editor.mjs render",
+    "repurpose": "node bin/raw-video-editor.mjs repurpose"
   },
   "license": "UNLICENSED"
 }

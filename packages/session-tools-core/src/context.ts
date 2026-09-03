@@ -413,6 +413,8 @@ export interface SessionToolContext {
 
   /** Create typed one-shot or trigger-owned scheduled work. HNIC-only backend capability. */
   scheduleWork?(input: import('./handlers/schedule-work.ts').ScheduleWorkToolInput): Promise<import('./handlers/schedule-work.ts').ScheduleWorkResult>;
+  /** Supply artist-provided values to one exact pending tracked-work request. */
+  supplyWorkInput?(input: import('./handlers/supply-work-input.ts').SupplyWorkInputToolInput): Promise<import('./handlers/supply-work-input.ts').SupplyWorkInputToolResult>;
   manageGoalRun?(input: import('./handlers/manage-goal-run.ts').ManageGoalRunToolInput): Promise<import('./handlers/manage-goal-run.ts').ManageGoalRunToolResult>;
 
   /** Compose the current bounded Artist Manager Brief without persisting it. HNIC-only. */

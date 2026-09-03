@@ -151,6 +151,7 @@ export type {
 
 // HNIC scheduled work
 export { handleScheduleWork } from './schedule-work.ts';
+export { handleSupplyWorkInput } from './supply-work-input.ts';
 export { handleManageGoalRun } from './manage-goal-run.ts';
 export type {
   ScheduleWorkToolInput,
@@ -158,6 +159,7 @@ export type {
   ScheduleWorkExecutionInput,
   ScheduleWorkTriggerInput,
 } from './schedule-work.ts';
+export type { SupplyWorkInputToolInput, SupplyWorkInputToolResult } from './supply-work-input.ts';
 export type { ManageGoalRunToolInput, ManageGoalRunToolResult } from './manage-goal-run.ts';
 
 // Artist Manager and authorized workspace context reads

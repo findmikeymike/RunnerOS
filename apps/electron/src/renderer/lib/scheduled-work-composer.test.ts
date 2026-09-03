@@ -269,4 +269,27 @@ describe('scheduled work composer drafts', () => {
     expect(action).not.toHaveProperty('date')
     expect(action).not.toHaveProperty('time')
   })
+
+  test('carries workflow input bindings into an automation action', () => {
+    const initial = createScheduledWorkComposerDraft({ ...defaults, suggestedType: 'workflow-run' })
+    if (initial.type !== 'workflow-run') throw new Error('Expected workflow draft')
+    const action = buildAutomationQueueWorkAction({
+      ...initial,
+      title: 'Merch Run',
+      workflowSlug: 'merch-run',
+      workflowName: 'Merch Run',
+      workflowDigest: 'digest',
+      triggerInputs: { campaign_brief: 'Q4 drop' },
+    }, {
+      inputBindings: {
+        campaign_brief: { mode: 'fixed', value: 'Q4 drop' },
+        design_file: { mode: 'ask' },
+      },
+    })
+
+    expect(action.inputBindings).toEqual({
+      campaign_brief: { mode: 'fixed', value: 'Q4 drop' },
+      design_file: { mode: 'ask' },
+    })
+  })
 })

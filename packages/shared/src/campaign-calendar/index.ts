@@ -7,6 +7,7 @@ export type CampaignCalendarItemStatus =
   | 'draft'
   | 'scheduled'
   | 'needs-approval'
+  | 'needs-setup'
   | 'running'
   | 'done'
   | 'failed'
@@ -585,7 +586,7 @@ export function selectDueCampaignScheduledJobs(
     if (Number.isNaN(dueMs)) return [{ item, job, dueAt: job.runAt, blockedReason: 'invalid-run-at' }];
     if (dueMs > nowMs) return [];
     if (hasCompletedScheduledJob(item, job)) return [];
-    if (item.status === 'draft' || item.status === 'done' || item.status === 'failed' || item.status === 'missed' || item.status === 'canceled') return [];
+    if (item.status === 'draft' || item.status === 'needs-setup' || item.status === 'done' || item.status === 'failed' || item.status === 'missed' || item.status === 'canceled') return [];
     if (job.attempts >= job.maxAttempts) return [{ item, job, dueAt: job.runAt, blockedReason: 'max-attempts' }];
     if (item.status === 'running') {
       const lastRunMs = Date.parse(job.lastRunAt ?? '');
@@ -865,6 +866,7 @@ function normalizeStatus(value: unknown): CampaignCalendarItemStatus {
   return value === 'draft'
     || value === 'scheduled'
     || value === 'needs-approval'
+    || value === 'needs-setup'
     || value === 'running'
     || value === 'done'
     || value === 'failed'

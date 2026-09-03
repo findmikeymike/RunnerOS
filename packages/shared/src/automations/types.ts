@@ -132,6 +132,8 @@ export interface QueueWorkAction {
   /** Stable semantic identity used to suppress equivalent active work across trigger events. */
   intentId?: string;
   execution: ScheduledWorkExecution;
+  /** Per-run workflow input policy. Present only for workflow-run actions. */
+  inputBindings?: Record<string, WorkflowInputBinding>;
   inputRefs?: Exclude<ScheduledWorkInputRef, { kind: 'produced-output' }>[];
   followUp?: {
     execution: ScheduledWorkExecution;
@@ -139,6 +141,18 @@ export interface QueueWorkAction {
     outputInput?: string;
   };
 }
+
+export type WorkflowInputTriggerSource =
+  | 'file.path'
+  | 'file.name'
+  | 'webhook.body'
+  | 'message.text'
+  | 'url.content';
+
+export type WorkflowInputBinding =
+  | { mode: 'fixed'; value: unknown }
+  | { mode: 'ask' }
+  | { mode: 'trigger'; from: WorkflowInputTriggerSource };
 
 export type AutomationAction = PromptAction | WebhookAction | PulseAction | QueueWorkAction;
 
@@ -432,6 +446,10 @@ export interface PendingQueuedWork {
   eventKey: string;
   /** Calendar timezone selected by the trigger, when it has one. */
   timezone?: string;
+  /** Typed values exposed by the event for workflow trigger bindings. */
+  triggerData?: Partial<Record<WorkflowInputTriggerSource, unknown>>;
+  /** Original unexpanded action used for deterministic event idempotency. */
+  configuredAction?: QueueWorkAction;
   action: QueueWorkAction;
 }
 

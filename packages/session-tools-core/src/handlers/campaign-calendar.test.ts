@@ -60,7 +60,7 @@ describe('handleCampaignCalendarWrite', () => {
     expect(called).toBe(false);
   });
 
-  it('passes exact Release Kit references on non-social scheduled work', async () => {
+  it('passes exact Release Kit references on non-running calendar work', async () => {
     let captured: CampaignCalendarWriteToolInput | undefined;
     const result = await handleCampaignCalendarWrite(makeCtx({
       campaignCalendarWrite: async (input) => {
@@ -70,7 +70,7 @@ describe('handleCampaignCalendarWrite', () => {
           operation: input.operation,
           itemId: 'campaign-item-1',
           title: input.item.title,
-          status: 'needs-approval',
+          status: 'scheduled',
         };
       },
     }), {
@@ -80,17 +80,12 @@ describe('handleCampaignCalendarWrite', () => {
         date: '2026-07-10',
         title: 'Review teaser',
         releaseKitRefs: [{ itemId: 'kit-1', sha256: 'a'.repeat(64), label: 'Teaser' }],
-        job: {
-          runAt: '2026-07-10T14:00:00.000Z',
-          actionType: 'review',
-          payload: { prompt: 'Review the teaser.' },
-        },
       },
     });
 
     expect(result.isError).not.toBe(true);
     expect(captured?.item.releaseKitRefs?.[0]?.itemId).toBe('kit-1');
-    expect((result.content[0] as any).text).toContain('needs-approval');
+    expect((result.content[0] as any).text).toContain('scheduled');
   });
 
   it('rejects legacy social publishing and directs HNIC to schedule_work', async () => {
@@ -114,7 +109,7 @@ describe('handleCampaignCalendarWrite', () => {
     expect((result.content[0] as any).text).toContain('schedule_work');
   });
 
-  it('rejects sensitive scheduled-job payload material before calling backend', async () => {
+  it('rejects every legacy runnable job before calling backend', async () => {
     let called = false;
     const result = await handleCampaignCalendarWrite(makeCtx({
       campaignCalendarWrite: async () => {
@@ -137,6 +132,6 @@ describe('handleCampaignCalendarWrite', () => {
 
     expect(result.isError).toBe(true);
     expect(called).toBe(false);
-    expect((result.content[0] as any).text).toContain('sensitive material');
+    expect((result.content[0] as any).text).toContain('Artist Manager schedule_work');
   });
 });

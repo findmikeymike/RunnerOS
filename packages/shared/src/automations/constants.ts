@@ -7,6 +7,9 @@ export const AUTOMATIONS_HISTORY_FILE = 'automations-history.jsonl';
 /** Persistent retry queue filename */
 export const AUTOMATIONS_RETRY_QUEUE_FILE = 'automations-retry-queue.jsonl';
 
+/** Durable last-successful scheduler delivery checkpoint. */
+export const AUTOMATIONS_SCHEDULER_STATE_FILE = 'automations-scheduler-state.json';
+
 /** Default HTTP method for webhook actions */
 export const DEFAULT_WEBHOOK_METHOD = 'POST';
 

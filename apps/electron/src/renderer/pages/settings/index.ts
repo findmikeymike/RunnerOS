@@ -16,6 +16,7 @@ export { default as LabelsSettingsPage, meta as LabelsMeta } from './LabelsSetti
 export { default as MemorySettingsPage, meta as MemorySettingsMeta } from './MemorySettingsPage'
 export { default as ShortcutsPage, meta as ShortcutsMeta } from './ShortcutsPage'
 export { default as PreferencesPage, meta as PreferencesMeta } from './PreferencesPage'
+export { default as AboutSettingsPage, meta as AboutSettingsMeta } from './AboutSettingsPage'
 
 // Re-export types
 export type { DetailsPageMeta } from '@/lib/navigation-registry'

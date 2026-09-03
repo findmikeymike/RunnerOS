@@ -7,7 +7,7 @@ import { validateAutomationsConfig, validateAutomationsContent } from './validat
 import { AutomationsConfigSchema, PromptActionSchema } from './schemas.ts';
 
 describe('validation', () => {
-  describe('validateAutomationsConfig', () => {
+describe('validateAutomationsConfig', () => {
     it('should accept a valid config', () => {
       const config = {
         automations: {
@@ -82,6 +82,20 @@ describe('validation', () => {
       expect(result.valid).toBe(true);
     });
 
+    it('should reject a blank matcher name', () => {
+      const result = validateAutomationsConfig({
+        automations: {
+          SchedulerTick: [{
+            name: '   ',
+            cron: '0 8 * * *',
+            actions: [{ type: 'prompt', prompt: 'Check the weather' }],
+          }],
+        },
+      });
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).toContain('Automation name cannot be blank');
+    });
+
     it('should accept thinkingLevel on prompt actions', () => {
       const config = {
         automations: {
@@ -140,6 +154,43 @@ describe('validation', () => {
         },
       });
       expect(result.valid).toBe(true);
+    });
+
+    it('accepts workflow input bindings and rejects them on agent work', () => {
+      const workflow = validateAutomationsConfig({
+        automations: {
+          FileWatch: [{
+            id: 'workflow-file', watchPath: 'inbox',
+            actions: [{
+              type: 'queue-work', ownerScope: 'campaign', title: 'Process file',
+              execution: { type: 'workflow-run', workflowSlug: 'process-file', workflowDigest: 'digest', triggerInputs: {} },
+              inputBindings: {
+                file: { mode: 'trigger', from: 'file.path' },
+                brief: { mode: 'fixed', value: 'Launch' },
+                notes: { mode: 'ask' },
+              },
+            }],
+          }],
+        },
+      });
+      expect(workflow.valid).toBe(true);
+
+      const agent = validateAutomationsConfig({
+        automations: {
+          SchedulerTick: [{
+            id: 'agent-schedule', cron: '0 9 * * 1',
+            actions: [{
+              type: 'queue-work', ownerScope: 'campaign', title: 'Agent work',
+              execution: {
+                type: 'agent-task', agentSlug: 'writer', brief: 'Write.', permissionMode: 'safe',
+                expectedOutput: { requirement: 'none' },
+              },
+              inputBindings: { topic: { mode: 'ask' } },
+            }],
+          }],
+        },
+      });
+      expect(agent.valid).toBe(false);
     });
 
     it('rejects hidden tracked work that needs a visible approval surface', () => {
