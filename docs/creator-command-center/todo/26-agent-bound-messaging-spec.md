@@ -62,7 +62,7 @@ Slices 1 and 2 deliver the entire core value and touch two files plus a store.
 ### Three ways to get this wrong
 
 1. **Falling back to a slug-less session** when `resolveAgentSessionOptions` throws. That silently recreates the exact bug this spec exists to fix. Fail loudly instead.
-2. **Silently re-pointing legacy bindings at HNIC** during migration. The user chose that session. Keep legacy bindings working untouched until a human upgrades them.
+2. **Building a legacy migration path.** There are no existing users. A binding without a valid `target` is corrupt, not legacy — drop it with a log line rather than inventing a dual-path resolver to preserve it.
 3. **Letting a messaging session run in `allow-all`.** An unattended phone plus an unattended permission mode removes every human checkpoint at once. Downgrade to `ask` and record it.
 
 ### Prerequisite
@@ -166,7 +166,6 @@ Approval for consequential action happens in the app.
 ```ts
 export type ChannelBindingTarget =
   | { kind: 'agent'; agentSlug: string; workspaceId: string }
-  | { kind: 'session'; sessionId: string }   // legacy, migration only
 
 export interface ChannelBinding {
   id: string
@@ -194,13 +193,17 @@ export interface ChannelBinding {
 
 `authorizedSenderIds` becomes required and non-empty.
 
+There is no legacy `{ kind: 'session' }` variant. The product has no existing
+users, so bindings are agent-targeted from the first release. A stored binding
+carrying a bare `sessionId` and no `target` is treated as corrupt and dropped
+with a log line, not migrated.
+
 ## Session Resolution
 
 On every inbound message the gateway resolves the binding's target to a live session:
 
-1. If `target.kind === 'session'` (legacy), use `sessionId` unchanged. No agent resolution.
-2. If `activeSessionId` is set, load it. **Reuse it only if** it still exists, is not archived or deleted, belongs to `workspaceId`, and its `spawnedFromAgent.agentSlug` equals `target.agentSlug`. A mismatch means the session was rebound or repurposed; discard the cache.
-3. Otherwise create one:
+1. If `activeSessionId` is set, load it. **Reuse it only if** it still exists, is not archived or deleted, belongs to `workspaceId`, and its `spawnedFromAgent.agentSlug` equals `target.agentSlug`. A mismatch means the session was rebound or repurposed; discard the cache.
+2. Otherwise create one:
 
 ```ts
 const base = await sessionManager.resolveAgentSessionOptions(workspaceId, agentSlug)
@@ -212,7 +215,7 @@ const session = await sessionManager.createSession(workspaceId, {
 })
 ```
 
-4. Persist the new `activeSessionId` on the binding **before** dispatching the message, so a crash mid-turn does not orphan the session.
+3. Persist the new `activeSessionId` on the binding **before** dispatching the message, so a crash mid-turn does not orphan the session.
 
 Resolution is serialized per binding. Two messages arriving together must not create two sessions; the second waits and reuses the first.
 
@@ -256,6 +259,87 @@ The gateway currently authenticates the *channel*, not the *person*. With bindin
 
 Removed: `/new`, and `/bind <session-id>`.
 
+## Agent Discovery And Routing
+
+Once a chat reaches a capable agent, that agent routes onward. Most of this
+already exists and must not be rebuilt.
+
+### What exists and works
+
+| Mechanism | Where | What it gives |
+| --- | --- | --- |
+| `list_agents` tool | `session-tools-core/src/handlers/list-agents.ts`, host at `SessionManager.ts:9077` | Live read of the library **at call time**. Returns slug, name, description, tags, skills, sources, `sourceReadiness` (`ready`/`degraded`/`blocked`), inputs/outputs, trusted tools, and `active` per workspace. Filterable by `activeOnly`, `tags`, `search`. |
+| Injected agent catalog | `run-agent.ts:151-169` | Compact snapshot in the system prompt at session start: slug, name, description, inputs, outputs, tags. Lets the manager route without a tool call. |
+| Delegation doctrine | `prompts/system.ts:487-506` | Capability-fit rule, readiness refresh before account-dependent work, one bounded handoff per specialist, parent owns the final answer. |
+| `message_agent` | `AgentMessageService.ts` | Bounded handoff returning a result or a durable receipt; refuses when a required source is unavailable (`:213`). |
+
+A newly created worker is discoverable **immediately** through `list_agents`,
+because that tool reads from disk on every call.
+
+### Gap 1: a live session does not learn about a new worker
+
+The injected catalog is a start-of-session snapshot. A manager session open for
+hours will not mention a worker created after it started unless it happens to
+call `list_agents`.
+
+When an agent is activated in a workspace, the host appends one line of hidden
+context to that workspace's live sessions:
+
+```text
+New worker available: Radio Outreach (radio-outreach) — pitches college radio
+stations and hands verified email work to Outreach Agent.
+```
+
+Rules: hidden context only, never a visible message; one line per activation;
+appended to sessions whose injected catalog is now stale; no turn is started by
+this. It is a cache refresh, not a notification.
+
+### Gap 2: routing quality is only as good as the description
+
+Routing is driven by `description` plus `tags`, both free text. A vague
+description produces vague routing, and this is the single highest-leverage
+reliability lever in the system.
+
+Add optional structured routing fields to agent metadata:
+
+```ts
+interface AgentRoutingHints {
+  /** Concrete jobs this agent is the right owner for. */
+  bestFor?: string[]
+  /** Jobs it is plausibly but wrongly routed for, with the better owner named. */
+  notFor?: string[]
+  /** Slugs it habitually hands off to at a real boundary. */
+  handsOffTo?: string[]
+}
+```
+
+- Optional and additive. An agent without them behaves exactly as today.
+- Included in both `list_agents` output and the injected catalog when present.
+- The agent-creator skill requires **Best for** and **Not for** when creating a
+  worker, instead of accepting one prose paragraph.
+- `handsOffTo` is a routing hint only. It grants no authority and does not
+  pre-authorize a delegation.
+
+### Gap 3: two safety rules are asked for but never enforced
+
+`prompts/system.ts:504` instructs "never delegate to your own slug or create a
+delegation loop," and `list_agents` marks inactive workers `active: false`.
+Neither is enforced host-side — verified against `AgentMessageService`.
+
+The spawn-depth gate (`spawn-session-isolation.ts:140`, default 1) stops
+infinite recursion but does not reject A→A, and nothing rejects a target that is
+not active in the workspace.
+
+Add two host guards in `AgentMessageService.messageAgent`:
+
+- **Self-delegation.** Reject when the target slug equals the calling session's
+  `spawnedFromAgent.agentSlug`. The message names the loop.
+- **Inactive target.** Reject when the target is not active in the workspace,
+  and say how to activate it. Do not silently activate it.
+
+Both are prompt rules today. Binding an external chat to HNIC raises the cost of
+a bad route enough that they should be enforced by code.
+
 ## Delegation And Return
 
 No new machinery. The existing pieces compose once the chat reaches a capable agent:
@@ -289,12 +373,15 @@ In the existing Messaging settings pane, each platform's **Connect** flow gains 
 
 ## Migration
 
-Existing bindings carry `sessionId` and no `target`.
+None. The product has no existing users, so there is no legacy binding shape to
+preserve and no upgrade path to build.
 
-- On load, a legacy binding is rewritten to `{ kind: 'session', sessionId }` and keeps working exactly as today. **No behavior change, no silent re-pointing at HNIC** — the user chose that session and may still be using it.
-- The desktop pane shows legacy bindings with an "Upgrade to agent" action that mints a pairing code and rebinds.
-- Legacy `/bind <session-id>` is refused with a message explaining the change, rather than silently doing something else.
-- Remove the legacy target only when no bindings use it.
+A stored binding without a valid `target` is dropped on load with a log line.
+Legacy `/bind <session-id>` is refused with a message explaining that chats bind
+to agents now, rather than silently doing something else.
+
+This removes the `{ kind: 'session' }` variant, the "Upgrade to agent" desktop
+action, and the dual-path resolution branch an earlier draft required.
 
 ## Failure And Edge Cases
 
@@ -318,7 +405,7 @@ Never log message bodies, pairing codes, plan tokens, or credentials.
 
 ## Implementation Slices
 
-**Slice 1 — Binding model.** Add `target` and `activeSessionId`, make `authorizedSenderIds` required, parse legacy records into `{ kind: 'session' }`. Pure store change with tests; no behavior change yet.
+**Slice 1 — Binding model.** Add `target` and `activeSessionId`, make `authorizedSenderIds` required, drop malformed records on load. Pure store change with tests; no behavior change yet.
 
 **Slice 2 — Session resolution.** `resolveBindingSession()` calling `resolveAgentSessionOptions` + `createSession`, with reuse validation, per-binding serialization, and persistence before dispatch.
 
@@ -326,13 +413,17 @@ Never log message bodies, pairing codes, plan tokens, or credentials.
 
 **Slice 4 — Commands.** `/who`, `/agents`, `/bind <agent-slug>`, `/reset`. Remove `/new` and session-id binding. Refuse legacy forms with an explanation.
 
+**Slice 4a — Delegation guards.** Host-side rejection of self-delegation and inactive targets in `AgentMessageService.messageAgent`. Independent of the gateway; ships before an external chat is bound to HNIC.
+
+**Slice 4b — Discovery freshness.** Hidden-context catalog refresh on agent activation, plus optional `AgentRoutingHints` surfaced through `list_agents` and the injected catalog.
+
 **Slice 5 — Authorization.** Default `authorizedSenderIds` to the paired sender; enforce on inbound; add membership and campaign-access checks; require a fresh pairing code to rebind.
 
 **Slice 6 — Permission-mode guard.** Downgrade `allow-all` to `ask` for messaging sessions and record it.
 
 **Slice 7 — Failure visibility.** Desktop surfacing, reconnect gap notice, undelivered marking.
 
-Slices 1 and 2 deliver the core value. Slice 5 should not lag far behind, since binding to HNIC raises the cost of the current channel-only trust model.
+Slices 1 and 2 deliver the core value. Slices 4a and 4b are independent of the binding work and can land in any order. Slice 5 should not lag far behind, since binding to HNIC raises the cost of the current channel-only trust model.
 
 ## Acceptance Tests
 
@@ -364,10 +455,18 @@ Slices 1 and 2 deliver the core value. Slice 5 should not lag far behind, since 
 - `/bind <agent-slug>` without a valid recent pairing is refused
 - a non-member cannot bind to a workspace agent
 
+### Discovery and delegation guards
+
+- a worker created after a session started is returned by that session's `list_agents`
+- activating a worker appends one hidden catalog line to live sessions in that workspace and starts no turn
+- `message_agent` targeting the caller's own slug is rejected host-side
+- `message_agent` targeting a worker not active in the workspace is rejected with an activation hint
+- an agent without routing hints behaves exactly as before
+
 ### Migration
 
-- a legacy binding keeps working unchanged and is never silently re-pointed at HNIC
-- upgrading a legacy binding requires a fresh pairing code
+- a stored binding with no valid `target` is dropped on load with a log line
+- `/bind <session-id>` is refused with an explanation, never silently reinterpreted
 
 ### Delegation
 
