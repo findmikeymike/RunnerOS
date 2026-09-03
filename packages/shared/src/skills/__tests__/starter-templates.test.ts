@@ -502,6 +502,21 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(parsed.content).toContain("may not yet be eligible for Meta's Ads MCP");
   });
 
+  it('bundles Zero with exact-slug selection and an enforceable weekly allowance', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'zero');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.content).toContain('exact slug returned by search');
+    expect(parsed.content).toContain('at most three searches');
+    expect(parsed.content).toContain('zero-budget.mjs fetch');
+    expect(parsed.content).toContain('weekly allowance');
+    expect(parsed.content).toContain('Never bypass the guard');
+    expect(parsed.content).toContain('Never automatically retry a paid failure');
+    expect(parsed.content).not.toContain('ZERO_AGENT=codex');
+    expect(parsed.content).not.toContain('--max-pay 0.50');
+    expect(skill!.files.some(file => file.path === 'scripts/zero-budget.mjs')).toBe(true);
+  });
+
   it('bundles music-specific Meta conversion and visual hook doctrine', () => {
     const conversion = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'music-ad-conversion-protocol');
     const visual = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'music-ad-visual-hooks');

@@ -79,6 +79,10 @@ describe('permissions craft-agent allowlist sync', () => {
     expect(validateBashCommand('ZERO_AGENT=codex zero search "Tomba LinkedIn email finder"', patterns).allowed).toBe(false)
     expect(validateBashCommand('zero get 1 --formatted', patterns).allowed).toBe(true)
     expect(validateBashCommand('zero fetch "https://example.com" --max-pay 0.50 --json', patterns).allowed).toBe(false)
+    expect(validateBashCommand('node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs status --json', patterns).allowed).toBe(true)
+    expect(validateBashCommand('node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs fetch --capability example --max-pay 0.10 --read-only --json', patterns).allowed).toBe(true)
+    expect(validateBashCommand('node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs configure --weekly-limit 5 --json', patterns).allowed).toBe(false)
+    expect(validateBashCommand('node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs fetch --capability example --max-pay 0.10 --read-only --json && touch /tmp/BAD', patterns).allowed).toBe(false)
 
     expect(validateBashCommand('python3 ~/.agents/skills/college-radio-matcher/match.py --limit 12 --format json', patterns).allowed).toBe(true)
 

@@ -13,7 +13,7 @@ import type { CreateAgentInput } from './storage.ts'
 import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, SONG_DIRECTOR_SLUG, OPEN_SLIDE_AGENT_SLUG } from './types.ts'
 import { CONCIERGE_SYSTEM_SKILL_SLUGS, CREATOR_SYSTEM_SKILL_SLUGS } from '../skills/system.ts'
 import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts'
-import { RELEASE_MANAGER_AGENT_SLUG, RELEASE_MANAGER_SKILL_SLUGS } from './defaults.ts'
+import { ANYTHING_AGENT_SLUG, RELEASE_MANAGER_AGENT_SLUG, RELEASE_MANAGER_SKILL_SLUGS } from './defaults.ts'
 
 const PORTABLE_AGENT_LIBRARY_ROOT = RUNTIME_IDENTITY.variant === 'artist-os'
   ? '~/.artist-os/libraries/agents'
@@ -27,6 +27,38 @@ const PORTABLE_AGENT_LIBRARY_ROOT = RUNTIME_IDENTITY.variant === 'artist-os'
  * which is useful even before Rooms ship.
  */
 export const STARTER_AGENTS: CreateAgentInput[] = [
+  {
+    slug: ANYTHING_AGENT_SLUG,
+    metadata: {
+      name: 'Anything Agent',
+      description: 'Fallback capability broker. Safely finds and runs outside APIs through Zero when no native connector or specialist fits.',
+      avatar: '∞',
+      permissionMode: 'ask',
+      thinkingLevel: 'high',
+      greeting: 'Tell me what the current workers cannot do. I will find the safest, strongest, best-value route.',
+      inputs: 'A specific capability gap, desired result, constraints, sensitive-data limits, and any required external side effect.',
+      outputs: 'A native-path check, ranked provider choice, guarded result, spend receipt, and clear handoff or blocker.',
+      tags: ['command', 'zero', 'api', 'fallback', 'external-tools', 'paid'],
+      skills: ['zero'],
+      sources: ['zero'],
+    },
+    systemPrompt: `You are Anything Agent, Artist OS's fallback capability broker.
+
+Use Zero only when no healthy native connector, built-in tool, or dedicated active worker can do the job. Accept direct requests and compact handoffs from other agents. State the missing capability, check the active catalog first, and return work to the specialist when one fits.
+
+When Zero is necessary:
+1. Use the bundled \`zero\` skill and its guarded budget wrapper.
+2. Search narrowly at run time. Use no more than three searches and inspect no more than three finalists by exact capability slug, never a positional result number.
+3. Rank exact fit, schema quality, availability, recent success, provider identity, reviews, success rate, and price. Prefer a credible economical option; reject unclear, unhealthy, or suspicious providers. For sensitive or high-stakes work, verify the provider publicly or stop.
+4. Never expose secrets or unnecessary personal data.
+5. The saved weekly Zero allowance authorizes routine read-like paid calls inside its remaining balance. Do not ask before each small call. The guard enforces the cap and records a receipt. If no allowance exists, ask once for the weekly amount and configure it only after the user answers.
+6. Never bypass the guard, automatically retry a paid failure, fund a wallet, install software, accept terms, or exceed the remaining allowance.
+7. A spending allowance does not authorize posting, sending, purchasing, deleting, account changes, or other external mutations. Those require exact current approval.
+
+Return the result, provider, price charged or reserved, weekly remaining balance, confidence, and any limitation. Keep the explanation short.
+
+Memory scope: save durable user preferences such as acceptable providers or budget posture with \`scope: user\`; save only Anything Agent-specific collaboration behavior with \`scope: agent\`.`,
+  },
   {
     slug: CONCIERGE_SLUG,
     metadata: {
@@ -92,7 +124,7 @@ Routing behavior:
   - If the user asks how RunnerOS/Artist OS works, where something lives, how to
     connect a service, how to save keys, or what to set up next, route to
     \`@setup-concierge\`.
-  - If no worker fits, say so and propose the missing worker/skill.
+  - If no native worker fits, hand the capability gap to \`@anything-agent\`. Propose a new worker or skill only when the need is durable and Zero is not an appropriate fallback.
   - For external actions, draft and ask for approval before execution.
 
 Canvas awareness:

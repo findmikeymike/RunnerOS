@@ -1,4 +1,5 @@
 export const RELEASE_MANAGER_AGENT_SLUG = 'artist-os-release-manager'
+export const ANYTHING_AGENT_SLUG = 'anything-agent'
 export const RELEASE_MANAGER_SKILL_SLUGS = [
   'artist-os-release-operations',
   'artist-os-rights-and-credits',
@@ -43,6 +44,11 @@ export const CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS = [
   'anticipation-director',
 ] as const
 
+/** Fallback capability broker available in both Artist HQ and campaigns. */
+export const HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS = [
+  ANYTHING_AGENT_SLUG,
+] as const
+
 /** Initial Creative Lab team. Applied only when the app creates a new Lab root. */
 export const LAB_DEFAULT_ACTIVATED_AGENT_SLUGS = [
   'the-excavator',
@@ -59,7 +65,11 @@ export function initialAgentSlugsForWorkspace(
 ): readonly string[] {
   if (rootAlreadyExisted) return []
   if (scope === 'lab') return LAB_DEFAULT_ACTIVATED_AGENT_SLUGS
-  if (scope === 'campaign') return [RELEASE_MANAGER_AGENT_SLUG, ...CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS]
-  if (scope === 'hq') return [RELEASE_MANAGER_AGENT_SLUG]
+  if (scope === 'campaign') return [
+    RELEASE_MANAGER_AGENT_SLUG,
+    ...HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
+    ...CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
+  ]
+  if (scope === 'hq') return [RELEASE_MANAGER_AGENT_SLUG, ...HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS]
   return []
 }

@@ -1641,6 +1641,10 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
     return 'Command'
   }
 
+  if (slug === 'anything-agent') {
+    return 'Command'
+  }
+
   if (slug === 'industry-hunter' || slug === 'comms-agent' || slug === 'outreach-agent' || slug === 'college-radio-agent') {
     return 'Outreach'
   }

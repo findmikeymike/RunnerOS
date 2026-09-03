@@ -1,6 +1,6 @@
 ---
 name: Zero
-description: Discover and call external paid API capabilities through Zero when RunnerOS cannot do the job natively.
+description: Discover and call external API capabilities through Zero when RunnerOS has no healthy native connector or dedicated specialist.
 requiredSources:
   - zero
 tags: [tools, api, marketplace, paid]
@@ -8,79 +8,60 @@ tags: [tools, api, marketplace, paid]
 
 # Zero
 
-Use this skill when the user asks for a capability RunnerOS does not already provide: paid APIs, image generation, translation, weather/location data, audio/video processing, web scraping, enrichment, geolocation, restaurant/business lookup, currency conversion, stock prices, or other real-world retrieval.
+Use Zero as a gap closer, not the first choice. Prefer a healthy native connector, built-in tool, or dedicated worker when one fits. Do not use Zero for code edits, local files, shell work, math, or ordinary model answers.
 
-Do not use Zero for code edits, local files, shell commands, math, or normal model answers.
+## Discover
 
-## Setup
-
-Check first:
+Check setup without spending:
 
 ```bash
 command -v zero && zero --version
 ```
 
-If the CLI is missing, ask before installing:
+Search narrowly at run time. Use at most three searches and inspect at most three finalists:
 
 ```bash
-npm i -g @zeroxyz/cli
+zero search "<specific capability>" --agent anything-agent --limit 5 --status healthy --json
+zero get <exact-capability-slug> --agent anything-agent --formatted
 ```
 
-Wallet precedence is `ZERO_PRIVATE_KEY` first, then `~/.zero/config.json`. For funding inside an agent, always use `zero wallet fund --no-open` and give the URL to the user.
+Always use the exact slug returned by search. Positional numbers can refer to stale search state. Never use `--all` by default, reuse a remembered schema or price, or invent fields when a schema is missing.
 
-## Workflow
+Compare exact fit, request/response schema, read/write behavior, authentication, provider identity, availability, last success, reviews, stars, success rate, and price. Prefer a credible economical provider. Reject unclear, unhealthy, or suspicious providers when a credible option exists. For sensitive or high-stakes work, verify the provider through public sources or stop.
 
-1. Search every time:
+## Weekly allowance
+
+Paid calls use the bundled guard. It stores one user-approved weekly limit, reserves each call before execution, tracks the week from Monday in local time, and refuses any call that could exceed the remaining balance.
+
+Check it freely:
 
 ```bash
-ZERO_AGENT=codex zero search "<capability>"
+node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs status --json
 ```
 
-2. Inspect the chosen result:
+If no limit exists, ask once for a weekly amount. After the user answers, configure it once; changing the amount also requires approval:
 
 ```bash
-zero get <number> --formatted
+node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs configure --weekly-limit <usd> --json
 ```
 
-Use plain `zero get <number>` when you need the full JSON schema.
-
-3. Skip results with `bodySchema: null`. Do not invent fields.
-
-4. Call with a hard spend cap:
+Routine read-like calls inside the remaining allowance do not need a new spending prompt:
 
 ```bash
-zero fetch "<url>" --max-pay 0.50 --json
+node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs fetch --capability <exact-slug> --max-pay <per-call-usd> --read-only --json
 ```
 
-For POST calls, send only the actual `body` from the inspected schema:
+Add `--method POST --data-json '<json>'` only when the inspected schema requires it. The guard accepts only the exact inspected capability slug, GET/POST, and inline JSON; it does not accept arbitrary URLs, headers, or local-file uploads. `--read-only` means the provider returns data or a generated artifact without changing an outside account, publishing, sending, purchasing, deleting, or accepting terms. Never label an external mutation read-only.
 
-```bash
-zero fetch "<url>" -d '{"text":"hello","to":"es"}' -H "Content-Type:application/json" --max-pay 0.50 --json
-```
+## Hard rules
 
-For binary output, redirect stdout to a file:
+- The weekly allowance is the sole standing approval for routine paid retrieval/generation. It is not approval for external mutations.
+- Always set `--max-pay` to the inspected call price or a tight ceiling no greater than the remaining weekly balance.
+- Never bypass the guard with direct `zero fetch` during automatic work.
+- Never automatically retry a paid failure. Reinspect the receipt and decide whether a new call is justified.
+- Never install the CLI, fund/import a wallet, store credentials, or accept provider terms without explicit approval.
+- Send only data the provider actually needs; do not expose secrets or unnecessary personal information.
+- Read success from `ok` in JSON. Report provider, capability, actual or conservatively reserved cost, remaining weekly balance, and limitations.
+- Review completed paid calls when useful with `zero review <runId> ...`; do not fabricate a review.
 
-```bash
-zero fetch "<url>" --max-pay 0.50 > output.png
-```
-
-5. Review paid calls:
-
-```bash
-zero review <runId> --accuracy 5 --value 4 --reliability 5 --content "<specific observation>"
-```
-
-Before ending a multi-call task, check:
-
-```bash
-zero runs --unreviewed
-```
-
-## Rules
-
-- Always re-search. Capability URLs, schemas, prices, and rankings can change.
-- Always inspect with `zero get` before `zero fetch`.
-- Use `--max-pay` for unfamiliar or paid calls.
-- Read success from `ok` in `--json` output, not only HTTP status.
-- Ask before installing the CLI, funding a wallet, spending meaningful money, or making external write/mutation calls.
-- Publish generated files as RunnerOS outputs when the result should appear on Canvas.
+Runner installations outside Artist OS use the corresponding installed Zero skill path under their agent library.

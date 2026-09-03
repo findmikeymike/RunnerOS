@@ -86,6 +86,10 @@
       "comment": "Search and inspect Zero capabilities without paid fetches"
     },
     {
+      "pattern": "^node\\s+(?:~|/Users/[^/]+)/(?:\\.artist-os/libraries/agents/skills|\\.agents/skills|\\.codex/skills)/zero/scripts/zero-budget\\.mjs\\s+(?:status|fetch)\\b",
+      "comment": "Check or use the locally enforced weekly Zero spend allowance for read-like calls"
+    },
+    {
       "pattern": "^python3\\s+\"?(?:~|/Users/[^/]+)/(?:\\.agents|\\.codex)/skills/college-radio-matcher/match\\.py\"?(?:\\s|$)",
       "comment": "Run the bundled read-only college radio station matcher"
     },

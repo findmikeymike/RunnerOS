@@ -1111,6 +1111,9 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.config.type).toBe('local');
     expect(sources[0]!.config.local?.format).toBe('cli-tool');
     expect(sources[0]!.guide?.raw).toContain('zero search');
+    expect(sources[0]!.guide?.raw).toContain('zero-budget.mjs fetch');
+    expect(sources[0]!.guide?.raw).toContain('weekly allowance');
+    expect(sources[0]!.guide?.raw).not.toContain('ZERO_AGENT=codex');
   });
 
   test('resolves media-generation by slug without workspace activation', () => {

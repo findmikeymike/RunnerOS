@@ -26,7 +26,7 @@ import {
   removeBuiltInAgentSkills,
 } from './storage.ts'
 import { STARTER_AGENTS } from './starter-templates.ts'
-import { RELEASE_MANAGER_AGENT_SLUG, DEFAULT_ACTIVATED_AGENT_SLUGS, CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS, LAB_DEFAULT_ACTIVATED_AGENT_SLUGS, initialAgentSlugsForWorkspace, isReleaseManagerDefinition } from './defaults.ts'
+import { ANYTHING_AGENT_SLUG, RELEASE_MANAGER_AGENT_SLUG, DEFAULT_ACTIVATED_AGENT_SLUGS, CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS, HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS, LAB_DEFAULT_ACTIVATED_AGENT_SLUGS, initialAgentSlugsForWorkspace, isReleaseManagerDefinition } from './defaults.ts'
 import { SOCIAL_PUBLISHER_SLUG } from './types.ts'
 import { BUNDLED_STARTER_SKILLS, STARTER_SKILLS } from '../skills/index.ts'
 import * as publicAgentDefinitions from './index.ts'
@@ -833,7 +833,23 @@ body
     expect(DEFAULT_ACTIVATED_AGENT_SLUGS).toContain('spotify-playlist-creator')
   })
 
-  test('Creative Lab defaults are bounded to the songwriting team', () => {
+  test('starter library includes a guarded Anything Agent for capability gaps', () => {
+    const agent = STARTER_AGENTS.find((item) => item.slug === ANYTHING_AGENT_SLUG)
+
+    expect(agent).toBeDefined()
+    expect(agent?.metadata.name).toBe('Anything Agent')
+    expect(agent?.metadata.permissionMode).toBe('ask')
+    expect(agent?.metadata.skills).toEqual(['zero'])
+    expect(agent?.metadata.sources).toEqual(['zero'])
+    expect(agent?.metadata.tags).toContain('fallback')
+    expect(agent?.systemPrompt).toContain('no healthy native connector')
+    expect(agent?.systemPrompt).toContain('weekly Zero allowance')
+    expect(agent?.systemPrompt).toContain('Do not ask before each small call')
+    expect(agent?.systemPrompt).toContain('Never bypass the guard')
+    expect(agent?.systemPrompt).toContain('external mutations')
+  })
+
+  test('Creative Lab defaults are bounded and Anything Agent stays in HQ and campaigns', () => {
     expect(LAB_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual([
       'the-excavator',
       'reverse-magic',
@@ -845,11 +861,13 @@ body
     expect(initialAgentSlugsForWorkspace('lab', false)).toEqual(LAB_DEFAULT_ACTIVATED_AGENT_SLUGS)
     expect(initialAgentSlugsForWorkspace('lab', true)).toEqual([])
     expect(CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['anticipation-director'])
+    expect(HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual([ANYTHING_AGENT_SLUG])
     expect(initialAgentSlugsForWorkspace('campaign', false)).toEqual([
       RELEASE_MANAGER_AGENT_SLUG,
+      ANYTHING_AGENT_SLUG,
       'anticipation-director',
     ])
-    expect(initialAgentSlugsForWorkspace('hq', false)).toEqual([RELEASE_MANAGER_AGENT_SLUG])
+    expect(initialAgentSlugsForWorkspace('hq', false)).toEqual([RELEASE_MANAGER_AGENT_SLUG, ANYTHING_AGENT_SLUG])
     expect(initialAgentSlugsForWorkspace('general', false)).toEqual([])
   })
 
