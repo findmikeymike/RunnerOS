@@ -3,7 +3,7 @@ status: proposed
 owner: agent
 last_verified: 2026-09-01
 source_of_truth: true
-related: ./07-artist-vault-architecture-spec.md, ./23-release-kit-architecture-spec.md, ./30-release-manager-essentials-execution-spec.md
+related: ../07-artist-vault-architecture-spec.md, ../23-release-kit-architecture-spec.md, ../30-release-manager-essentials-execution-spec.md
 ---
 
 # Catalog & Royalty Reconciliation

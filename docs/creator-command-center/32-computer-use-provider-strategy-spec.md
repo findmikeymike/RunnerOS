@@ -3,7 +3,7 @@ status: implemented
 owner: agent
 last_verified: 2026-09-01
 source_of_truth: true
-related: ./26-agent-bound-messaging-spec.md
+related: ./todo/26-agent-bound-messaging-spec.md
 ---
 
 # Computer Use Provider Strategy

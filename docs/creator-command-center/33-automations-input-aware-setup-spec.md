@@ -4,7 +4,7 @@ owner: agent
 last_verified: 2026-09-02
 source_of_truth: true
 extends: ./13-scheduled-work-composer-execution-spec.md
-related: ./26-agent-bound-messaging-spec.md, ./24-session-task-list-spec.md
+related: ./todo/26-agent-bound-messaging-spec.md, ./24-session-task-list-spec.md
 ---
 
 # Automations: Input-Aware Setup And The One List

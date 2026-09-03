@@ -3,7 +3,7 @@ status: proposed
 owner: agent
 last_verified: 2026-08-31
 source_of_truth: true
-related: ./22-chat-native-goal-mode-spec.md, ./24-session-task-list-spec.md, ./25-release-kit-asset-use-social-scheduling-spec.md
+related: ../22-chat-native-goal-mode-spec.md, ../24-session-task-list-spec.md, ../25-release-kit-asset-use-social-scheduling-spec.md
 ---
 
 # Agent-Bound Messaging

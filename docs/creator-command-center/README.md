@@ -34,17 +34,25 @@ Core Artist HQ and campaign workspace specs live here.
 - [23 Release Kit, Outputs, And Artist Vault](./23-release-kit-architecture-spec.md)
 - [24 Session Task List And Delegation Return Path](./24-session-task-list-spec.md)
 - [25 Release Kit Asset Use And Social Scheduling Surface](./25-release-kit-asset-use-social-scheduling-spec.md)
-- [26 Agent-Bound Messaging](./26-agent-bound-messaging-spec.md)
 - [27 In-App Artist OS User Guide](./27-in-app-user-guide-spec.md)
 - [28 Track Intelligence: Lyrics, Timing, And Musical Metadata](./28-track-intelligence-spec.md)
 - [29 X Editorial System](./29-x-editorial-system-spec.md)
 - [30 Release Manager And Essentials Execution](./30-release-manager-essentials-execution-spec.md)
-- [31 Catalog And Royalty Reconciliation](./31-catalog-royalty-reconciliation-spec.md)
 - [32 Computer Use Provider Strategy](./32-computer-use-provider-strategy-spec.md)
 - [33 Automations: Input-Aware Setup And The One List](./33-automations-input-aware-setup-spec.md)
 - [35 Guided Social Variant Sets](./35-social-video-repurposing-spec.md)
-- [36 Capability Evolution Engine](./36-capability-evolution-engine-spec.md)
-- [37 Model Fallback Chain](./37-model-fallback-chain-spec.md)
+
+## Not Yet Built
+
+Specs written but with no implementation in the tree. They live in
+[`todo/`](./todo/) so this index only lists work that exists.
+
+- [26 Agent-Bound Messaging](./todo/26-agent-bound-messaging-spec.md)
+- [31 Catalog And Royalty Reconciliation](./todo/31-catalog-royalty-reconciliation-spec.md) — BMI/ASCAP vs Spotify
+- [36 Capability Evolution Engine](./todo/36-capability-evolution-engine-spec.md)
+- [37 Model Fallback Chain](./todo/37-model-fallback-chain-spec.md)
+
+When one ships, move it back up into the numbered list above.
 
 Current V1 implementation notes:
 
