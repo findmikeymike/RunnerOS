@@ -15,6 +15,7 @@ import fs from 'node:fs'
 import { runSocialJson } from '../social-cli'
 import {
   findSpotifyUserAccountUrl,
+  findSpotifyAdsManagerAccountId,
   hasLoggedInSignal,
   isSocialPlatformUrl,
   socialLoginUrl,
@@ -154,6 +155,17 @@ export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps
             ])
             accountUrl = checked.discoveredAccountUrl
           }
+          let adsAccountId = typeof current.adsAccountId === 'string' ? current.adsAccountId : null
+          const discoveredAdsAccountId = checked.capabilities.adsManager.accountId || null
+          if (!adsAccountId && discoveredAdsAccountId) {
+            await runSocialJson([
+              'profile', 'update', 'spotify',
+              '--profile', ref.profile,
+              '--ads-account-id', discoveredAdsAccountId,
+              '--json',
+            ])
+            adsAccountId = discoveredAdsAccountId
+          }
 
           const verification = {
             ...checked.verification,
@@ -175,6 +187,7 @@ export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps
           return {
             ...result,
             accountUrl,
+            adsAccountId,
             ready: bothReady,
             loggedIn: bothReady,
             profileStatus: bothReady ? 'verified' : wrongAccount ? 'wrong_account' : anyReady ? 'partial' : 'login_needed',
@@ -341,6 +354,7 @@ type SocialAccountCommandResult = {
 type SocialAccountStatusResult = SocialAccountCommandResult & {
   accountHandle?: unknown
   accountUrl?: unknown
+  adsAccountId?: unknown
 }
 
 type SocialAccountProfileStatusResult = SocialAccountStatusResult & {
@@ -377,6 +391,7 @@ type SpotifyCapability = {
   label: string
   message: string
   accountUrl?: string | null
+  accountId?: string | null
 }
 
 type SpotifyCapabilities = {
@@ -524,6 +539,19 @@ async function verifySpotifyBrowserCapabilities(
     String(adsManagerPage?.text || ''),
     String(adsManagerPage?.url || ''),
   )
+  const discoveredAdsAccountId = findSpotifyAdsManagerAccountId({
+    currentUrl: String(adsManagerPage?.url || ''),
+    links: Array.isArray(adsManagerPage?.links) ? adsManagerPage.links : [],
+    text: String(adsManagerPage?.text || ''),
+  })
+  const expectedAdsAccountId = String(status.adsAccountId || '').trim() || null
+  const wrongAdsAccount = Boolean(
+    adsManagerLoggedIn
+    && expectedAdsAccountId
+    && discoveredAdsAccountId
+    && expectedAdsAccountId !== discoveredAdsAccountId,
+  )
+  const adsManagerReady = Boolean(adsManagerLoggedIn && discoveredAdsAccountId && !wrongAdsAccount)
 
   const capabilities: SpotifyCapabilities = {
     artists: {
@@ -554,12 +582,23 @@ async function verifySpotifyBrowserCapabilities(
       accountUrl: discoveredAccountUrl,
     },
     adsManager: {
-      ready: adsManagerLoggedIn,
-      status: adsManagerLoggedIn ? 'ready' : 'login_needed',
+      ready: adsManagerReady,
+      status: wrongAdsAccount
+        ? 'wrong_account'
+        : !adsManagerLoggedIn
+          ? 'login_needed'
+          : discoveredAdsAccountId
+            ? 'ready'
+            : 'identity_unverified',
       label: 'Spotify Ads Manager',
-      message: adsManagerLoggedIn
-        ? 'Paid campaign dashboard access is ready.'
-        : 'Log in to Spotify Ads Manager to enable Ad Runner browser work.',
+      message: wrongAdsAccount
+        ? 'Spotify Ads Manager is open to a different ad account.'
+        : !adsManagerLoggedIn
+          ? 'Log in to Spotify Ads Manager to enable Ad Runner browser work.'
+          : discoveredAdsAccountId
+            ? 'Paid campaign dashboard access is ready.'
+            : 'Select an Ads Manager account so Artist OS can verify it.',
+      accountId: discoveredAdsAccountId,
     },
   }
 

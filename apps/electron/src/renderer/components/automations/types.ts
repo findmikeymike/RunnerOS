@@ -14,6 +14,7 @@ import { computeNextRuns } from './utils'
 import type { PermissionMode } from '../../../shared/types'
 import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import type { OutputKind } from '@craft-agent/shared/outputs'
+import type { PulseAction } from '@craft-agent/shared/pulses'
 import type { ScheduledWorkExecution, ScheduledWorkInputRef } from '@craft-agent/shared/scheduled-work'
 import { DEFAULT_WEBHOOK_METHOD } from './constants'
 
@@ -105,6 +106,7 @@ export interface QueueWorkAction {
   calendarVisibility?: 'visible' | 'hidden'
   title: string
   execution: ScheduledWorkExecution
+  inputBindings?: Record<string, WorkflowInputBinding>
   inputRefs?: Exclude<ScheduledWorkInputRef, { kind: 'produced-output' }>[]
   followUp?: {
     execution: ScheduledWorkExecution
@@ -113,7 +115,19 @@ export interface QueueWorkAction {
   }
 }
 
-export type AutomationAction = PromptAction | WebhookAction | QueueWorkAction
+export type WorkflowInputTriggerSource =
+  | 'file.path'
+  | 'file.name'
+  | 'webhook.body'
+  | 'message.text'
+  | 'url.content'
+
+export type WorkflowInputBinding =
+  | { mode: 'fixed'; value: unknown }
+  | { mode: 'ask' }
+  | { mode: 'trigger'; from: WorkflowInputTriggerSource }
+
+export type AutomationAction = PromptAction | WebhookAction | PulseAction | QueueWorkAction
 
 // ============================================================================
 // Conditions (mirrored from packages/shared/src/automations/types.ts)
@@ -450,6 +464,7 @@ interface AutomationsConfigFile {
 type RawAction =
   | { type: 'prompt'; prompt: string; agentSlug?: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel }
   | WebhookAction
+  | PulseAction
   | QueueWorkAction
 
 interface AutomationsConfigMatcher {
@@ -494,6 +509,7 @@ function deriveAutomationName(event: string, matcher: AutomationsConfigMatcher):
   }
 
   if (firstAction.type === 'queue-work') return `Tracked work: ${firstAction.title}`
+  if (firstAction.type === 'pulse') return 'Artist pulse'
 
   // Extract @skill mentions or use first ~40 chars
   const mentionMatch = firstAction.prompt.match(/@(\S+)/)
@@ -575,7 +591,7 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
       if (!rawActions || !Array.isArray(rawActions) || rawActions.length === 0) continue
 
       const actions: AutomationAction[] = rawActions
-        .filter((a): a is AutomationAction => a.type === 'prompt' || a.type === 'webhook' || a.type === 'queue-work')
+        .filter((a): a is AutomationAction => a.type === 'prompt' || a.type === 'webhook' || a.type === 'pulse' || a.type === 'queue-work')
       if (actions.length === 0) continue
 
       items.push({

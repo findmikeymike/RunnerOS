@@ -56,6 +56,42 @@ describe('file-watch provider noise filtering', () => {
 });
 
 describe('FileWatchService', () => {
+  test('retries a failed event delivery with the exact same payload', async () => {
+    const dir = makeTempDir();
+    try {
+      const received: FileWatchPayload[] = [];
+      let attempts = 0;
+      const svc = new FileWatchService({
+        workspaceRootPath: dir,
+        workspaceId: 'ws-test',
+        deliveryRetryDelaysMs: [0, 0],
+        onEvent: (payload) => {
+          attempts += 1;
+          received.push(payload);
+          if (attempts < 3) throw new Error('queue unavailable');
+        },
+      });
+      const payload: FileWatchPayload = {
+        workspaceId: 'ws-test',
+        timestamp: 1234,
+        matcherId: 'retry-me',
+        path: join(dir, 'brief.md'),
+        relativePath: 'brief.md',
+        changeType: 'add',
+        size: 10,
+        isDirectory: false,
+      };
+
+      await (svc as unknown as { deliverEvent(payload: FileWatchPayload): Promise<void> }).deliverEvent(payload);
+
+      expect(attempts).toBe(3);
+      expect(received).toEqual([payload, payload, payload]);
+      svc.dispose();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('invalid glob skips only that matcher', async () => {
     const dir = makeTempDir();
     try {
@@ -89,6 +125,7 @@ describe('FileWatchService', () => {
       const ids = new Set(events.map((e) => e.matcherId));
       expect(ids.has('bad-glob')).toBe(false);
       expect(ids.has('good-glob')).toBe(true);
+      expect(events.every((event) => typeof event.eventId === 'string' && event.eventId.length > 0)).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

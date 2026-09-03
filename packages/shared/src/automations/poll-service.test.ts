@@ -182,6 +182,40 @@ describe('PollService', () => {
     svc.dispose();
   });
 
+  test('retries an unchanged fingerprint after event delivery fails', async () => {
+    const delivered: PollUrlPayload[] = [];
+    let attempts = 0;
+    const fetcher = makeQueuedFetch([
+      { status: 200, body: 'first' },
+      { status: 200, body: 'second' },
+      { status: 200, body: 'second' },
+    ]);
+    const svc = new PollService({
+      workspaceId: 'ws-1',
+      onEvent: (payload) => {
+        attempts += 1;
+        if (attempts === 1) throw new Error('queue unavailable');
+        delivered.push(payload);
+      },
+      fetchImpl: fetcher.impl,
+    });
+    svc.applyMatchers([{
+      id: 'p-retry',
+      pollUrl: 'https://example.com/api',
+      pollIntervalSec: 9999,
+      actions: [{ type: 'prompt', prompt: 'noop' }],
+    }]);
+
+    await svc.runOnce('p-retry');
+    await svc.runOnce('p-retry');
+    await svc.runOnce('p-retry');
+
+    expect(attempts).toBe(2);
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0]?.previousFingerprint).not.toBe(delivered[0]?.fingerprint);
+    svc.dispose();
+  });
+
   test('emits per-matcher event with matcherId', async () => {
     const events: PollUrlPayload[] = [];
     const fetcher = makeQueuedFetch([

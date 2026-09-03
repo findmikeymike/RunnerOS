@@ -284,6 +284,8 @@ export interface SendMessageOptions {
   displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task' | 'goal-event' | 'task-event'
   /** Drive a model turn without rendering this system-generated prompt. */
   hidden?: boolean
+  /** Host-only provenance. The renderer RPC always overwrites this as human. */
+  inputOrigin?: 'human' | 'agent' | 'system'
 }
 
 // ---------------------------------------------------------------------------

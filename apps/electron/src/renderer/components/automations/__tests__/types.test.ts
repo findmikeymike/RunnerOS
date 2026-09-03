@@ -43,6 +43,18 @@ describe('parseAutomationsConfig', () => {
     expect(items[0].actions[0].type).toBe('prompt')
   })
 
+  it('keeps pulse-only automations visible', () => {
+    const items = parseAutomationsConfig({
+      version: 2,
+      automations: {
+        SchedulerTick: [{ cron: '20 9 * * 1', actions: [{ type: 'pulse', driverAgentSlug: 'orchestrator' }] }],
+      },
+    })
+    expect(items).toHaveLength(1)
+    expect(items[0]?.name).toBe('Artist pulse')
+    expect(items[0]?.actions[0]?.type).toBe('pulse')
+  })
+
   it('parses multiple events with multiple matchers', () => {
     const config = {
       version: 2,

@@ -19,6 +19,7 @@
 
 export interface TemplateContext {
   trigger?: Record<string, unknown>;
+  untrustedTriggerFields?: readonly string[];
   steps?: Record<string, { output: unknown }>;
   run?: { id: string; startedAt: string };
 }
@@ -63,6 +64,11 @@ function formatResolvedValue(value: unknown, filter: 'escape' | undefined): stri
   return filter === 'escape' ? escapePromptBoundary(text) : text;
 }
 
+function formatUntrustedTriggerValue(name: string, value: unknown): string {
+  const safeName = name.replace(/[^a-zA-Z0-9_.-]/g, '_');
+  return `<untrusted-trigger-data name="${safeName}">\n${escapePromptBoundary(stringify(value))}\n</untrusted-trigger-data>`;
+}
+
 function dotWalk(root: unknown, parts: string[]): { ok: true; value: unknown } | { ok: false } {
   let cur: unknown = root;
   for (const p of parts) {
@@ -87,6 +93,9 @@ function resolveToken(expr: string, ctx: TemplateContext): { ok: true; value: st
     if (parts.length !== 2) return { ok: false, reason: `"{{${expr}}}" must be trigger.<field>` };
     if (!ctx.trigger || !(field in ctx.trigger)) {
       return { ok: false, reason: `unknown trigger field "${field}"` };
+    }
+    if (ctx.untrustedTriggerFields?.includes(field)) {
+      return { ok: true, value: formatUntrustedTriggerValue(field, ctx.trigger[field]) };
     }
     return { ok: true, value: formatResolvedValue(ctx.trigger[field], parsed.filter) };
   }

@@ -1118,8 +1118,19 @@ export function connectionSettingsSubpageForWork(work: ScheduledWorkOrder): Conn
   if (work.execution.type === 'social-publish' && work.execution.platform === 'spotify') return 'spotify'
   if (work.socialAction?.platform === 'spotify') return 'spotify'
   if (work.execution.type === 'agent-task' && /^spotify-/.test(work.execution.agentSlug)) return 'spotify'
+  if (work.attention?.message && /\bspotify(?:\s+ads?)?\b/i.test(work.attention.message)) return 'spotify'
+  if (work.execution.type === 'agent-task' && work.execution.agentSlug === 'ads-agent' && isSpotifyOnly(work.execution.brief)) return 'spotify'
+  if (work.execution.type === 'workflow-run' && work.execution.workflowSlug === 'paid-campaign-builder') {
+    const platforms = String(work.execution.triggerInputs.platforms || '')
+    if (isSpotifyOnly(platforms)) return 'spotify'
+    return 'ad-accounts'
+  }
   if (work.execution.type === 'agent-task' && work.execution.agentSlug === 'ads-agent') return 'ad-accounts'
   return 'social-accounts'
+}
+
+function isSpotifyOnly(value: string): boolean {
+  return /\bspotify\b/i.test(value) && !/\b(meta|facebook|instagram|google|youtube)\b/i.test(value)
 }
 
 function WorkAction({ label, onClick }: { label: string; onClick: () => void }) {
@@ -1275,6 +1286,7 @@ function Input({ value, onChange, placeholder }: { value: string; onChange: (val
 }
 
 function statusDotClass(status: CampaignCalendarItemStatus): string {
+  if (status === 'needs-setup') return 'bg-amber-300/85'
   if (status === 'needs-approval') return 'bg-yellow-300/85'
   if (status === 'done') return 'bg-emerald-300/85'
   if (status === 'failed' || status === 'missed') return 'bg-red-300/85'
@@ -1284,6 +1296,7 @@ function statusDotClass(status: CampaignCalendarItemStatus): string {
 }
 
 function statusBadgeClass(status: CampaignCalendarItemStatus): string {
+  if (status === 'needs-setup') return 'bg-amber-300/10 text-amber-100/75'
   if (status === 'needs-approval') return 'bg-yellow-300/10 text-yellow-100/75'
   if (status === 'done') return 'bg-emerald-400/10 text-emerald-200/75'
   if (status === 'failed' || status === 'missed') return 'bg-red-400/10 text-red-100/75'
@@ -1295,7 +1308,8 @@ function statusBadgeClass(status: CampaignCalendarItemStatus): string {
 function campaignStatusForWork(status: ScheduledWorkStatus | undefined): CampaignCalendarItemStatus | undefined {
   if (!status) return undefined
   if (status === 'waiting') return 'draft'
-  if (status === 'needs-setup' || status === 'needs-attention') return 'failed'
+  if (status === 'needs-setup') return 'needs-setup'
+  if (status === 'needs-attention') return 'failed'
   if (status === 'awaiting-review') return 'needs-approval'
   return status
 }

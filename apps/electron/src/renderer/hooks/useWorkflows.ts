@@ -32,9 +32,9 @@ export interface UseWorkflowsResult {
 
 const NULL_WORKSPACE_KEY = '__no_workspace__'
 const inFlightRefreshes = new Map<string, Promise<void>>()
-const mountedWorkspaceKeys = new Map<string, number>()
+const queuedRefreshes = new Set<string>()
 let globalWorkflowsCleanup: (() => void) | null = null
-const refreshersByWorkspaceKey = new Map<string, () => Promise<void>>()
+const refreshersByWorkspaceKey = new Map<string, Set<() => Promise<void>>>()
 
 function getWorkspaceKey(activeWorkspaceId: string | null | undefined): string {
   return activeWorkspaceId ?? NULL_WORKSPACE_KEY
@@ -50,30 +50,38 @@ export function useWorkflows(activeWorkspaceId: string | null | undefined): UseW
 
   const refresh = useCallback(async () => {
     const existing = inFlightRefreshes.get(workspaceKey)
-    if (existing) return existing
+    if (existing) {
+      queuedRefreshes.add(workspaceKey)
+      return existing
+    }
 
     const run = (async () => {
-      setState((prev) => ({ ...prev, loading: true }))
       try {
-        const [libraryRaw, activeRaw] = await Promise.all([
-          window.electronAPI.listAllWorkflows(),
-          activeWorkspaceId
-            ? window.electronAPI.listActiveWorkflowsInWorkspace(activeWorkspaceId)
-            : Promise.resolve([] as string[]),
-        ])
-        const next: WorkflowsState = {
-          allWorkflows: sortWorkflows(libraryRaw),
-          activeSlugs: activeRaw,
-          loading: false,
-          error: null,
-        }
-        setState(next)
-      } catch (err) {
-        setState((prev) => ({
-          ...prev,
-          loading: false,
-          error: err instanceof Error ? err.message : String(err),
-        }))
+        do {
+          queuedRefreshes.delete(workspaceKey)
+          setState((prev) => ({ ...prev, loading: true }))
+          try {
+            const [libraryRaw, activeRaw] = await Promise.all([
+              window.electronAPI.listAllWorkflows(),
+              activeWorkspaceId
+                ? window.electronAPI.listActiveWorkflowsInWorkspace(activeWorkspaceId)
+                : Promise.resolve([] as string[]),
+            ])
+            const next: WorkflowsState = {
+              allWorkflows: sortWorkflows(libraryRaw),
+              activeSlugs: activeRaw,
+              loading: false,
+              error: null,
+            }
+            setState(next)
+          } catch (err) {
+            setState((prev) => ({
+              ...prev,
+              loading: false,
+              error: err instanceof Error ? err.message : String(err),
+            }))
+          }
+        } while (queuedRefreshes.has(workspaceKey))
       } finally {
         inFlightRefreshes.delete(workspaceKey)
       }
@@ -84,10 +92,23 @@ export function useWorkflows(activeWorkspaceId: string | null | undefined): UseW
   }, [activeWorkspaceId, setState, workspaceKey])
 
   useEffect(() => {
-    refreshersByWorkspaceKey.set(workspaceKey, refresh)
+    const refreshers = refreshersByWorkspaceKey.get(workspaceKey) ?? new Set<() => Promise<void>>()
+    refreshers.add(refresh)
+    refreshersByWorkspaceKey.set(workspaceKey, refreshers)
+    if (!globalWorkflowsCleanup) {
+      globalWorkflowsCleanup = window.electronAPI.onWorkflowsChanged(() => {
+        for (const workspaceRefreshers of refreshersByWorkspaceKey.values()) {
+          for (const refreshWorkspace of workspaceRefreshers) void refreshWorkspace()
+        }
+      })
+    }
     return () => {
-      if (refreshersByWorkspaceKey.get(workspaceKey) === refresh) {
-        refreshersByWorkspaceKey.delete(workspaceKey)
+      const current = refreshersByWorkspaceKey.get(workspaceKey)
+      current?.delete(refresh)
+      if (current?.size === 0) refreshersByWorkspaceKey.delete(workspaceKey)
+      if (refreshersByWorkspaceKey.size === 0 && globalWorkflowsCleanup) {
+        globalWorkflowsCleanup()
+        globalWorkflowsCleanup = null
       }
     }
   }, [refresh, workspaceKey])
@@ -95,27 +116,6 @@ export function useWorkflows(activeWorkspaceId: string | null | undefined): UseW
   useEffect(() => {
     void refresh()
   }, [refresh, workspaceKey])
-
-  useEffect(() => {
-    mountedWorkspaceKeys.set(workspaceKey, (mountedWorkspaceKeys.get(workspaceKey) ?? 0) + 1)
-    if (!globalWorkflowsCleanup) {
-      globalWorkflowsCleanup = window.electronAPI.onWorkflowsChanged(() => {
-        for (const refreshWorkspace of refreshersByWorkspaceKey.values()) {
-          refreshWorkspace()
-        }
-      })
-    }
-    return () => {
-      const nextCount = (mountedWorkspaceKeys.get(workspaceKey) ?? 1) - 1
-      if (nextCount <= 0) mountedWorkspaceKeys.delete(workspaceKey)
-      else mountedWorkspaceKeys.set(workspaceKey, nextCount)
-
-      if (mountedWorkspaceKeys.size === 0 && globalWorkflowsCleanup) {
-        globalWorkflowsCleanup()
-        globalWorkflowsCleanup = null
-      }
-    }
-  }, [workspaceKey])
 
   const setActive = useCallback(async (slug: string, active: boolean) => {
     if (!activeWorkspaceId) return

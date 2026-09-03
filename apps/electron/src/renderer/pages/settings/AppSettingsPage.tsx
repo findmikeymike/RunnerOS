@@ -20,15 +20,13 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@craft-agent/ui'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { NetworkProxySettings } from '../../../shared/types'
-import electronPackage from '../../../../package.json'
 import { LicensePanel } from '@/components/licensing/LicensePanel'
-import { PRODUCT_NAME, RENDERER_PRODUCT_VARIANT } from '@/lib/product-identity'
+import { RENDERER_PRODUCT_VARIANT } from '@/lib/product-identity'
 
 import {
   SettingsSection,
   SettingsCard,
   SettingsCardFooter,
-  SettingsRow,
   SettingsToggle,
   SettingsInput,
 } from '@/components/settings'
@@ -37,11 +35,6 @@ export const meta: DetailsPageMeta = {
   navigator: 'settings',
   slug: 'app',
 }
-
-const UPDATES_URL = RENDERER_PRODUCT_VARIANT === 'artist-os'
-  ? 'https://artistos.app/updates'
-  : 'https://github.com/findmikeymike/RunnerOS/releases'
-const quietButtonClass = 'inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-white/[0.065] bg-white/[0.035] px-2.5 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.055] hover:text-white/76'
 
 // ============================================
 // Proxy form helpers
@@ -303,32 +296,6 @@ export default function AppSettingsPage() {
                       </Button>
                     </SettingsCardFooter>
                   )}
-                </SettingsCard>
-              </SettingsSection>
-
-              {/* About */}
-              <SettingsSection title={t("settings.about.title")}>
-                <SettingsCard>
-                  <SettingsRow label={t("settings.about.version")}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-white/38">
-                        {electronPackage.version}
-                      </span>
-                    </div>
-                  </SettingsRow>
-                  <SettingsRow
-                    label={t("settings.about.futureUpdates")}
-                    description={t("settings.about.futureUpdatesDesc")}
-                    action={
-                      <button
-                        type="button"
-                        onClick={() => window.electronAPI.openUrl(UPDATES_URL)}
-                        className={quietButtonClass}
-                      >
-                        Open {PRODUCT_NAME} updates
-                      </button>
-                    }
-                  />
                 </SettingsCard>
               </SettingsSection>
             </div>

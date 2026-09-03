@@ -111,7 +111,7 @@ import type { LabelConfig, LabelTreeNode } from "@craft-agent/shared/labels"
 import { resolveEntityColor } from "@craft-agent/shared/colors"
 import * as storage from "@/lib/local-storage"
 import { toast } from "sonner"
-import { navigate, routes } from "@/lib/navigate"
+import { navigate, routes, type Route } from "@/lib/navigate"
 import {
   useNavigation,
   useNavigationState,
@@ -613,6 +613,8 @@ function AppShellContent({
     action: ArtistGuideActionId
     workspaceId: string
   } | null>(null)
+  const pendingWorkspaceNavigationRef = React.useRef<{ workspaceId: string; route: Route; hash?: string } | null>(null)
+  const pendingWorkspaceNavigationTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Check for unseen release notes on mount
   useEffect(() => {
@@ -1650,10 +1652,59 @@ function AppShellContent({
     return onDeleteSession(sessionId, skipConfirmation)
   }, [session.selected, setSession, onDeleteSession])
 
+  const handleSelectWorkspaceAndNavigate = React.useCallback(async (workspaceId: string, route: Route, hash?: string) => {
+    if (workspaceId === activeWorkspaceId) {
+      if (hash !== undefined) window.location.hash = hash
+      navigate(route)
+      return
+    }
+    const pending = { workspaceId, route, hash }
+    pendingWorkspaceNavigationRef.current = pending
+    if (pendingWorkspaceNavigationTimeoutRef.current) clearTimeout(pendingWorkspaceNavigationTimeoutRef.current)
+    pendingWorkspaceNavigationTimeoutRef.current = setTimeout(() => {
+      if (pendingWorkspaceNavigationRef.current !== pending) return
+      pendingWorkspaceNavigationRef.current = null
+      pendingWorkspaceNavigationTimeoutRef.current = null
+      toast.error('Could not finish opening that workspace')
+    }, 15_000)
+    try {
+      await onSelectWorkspace(workspaceId)
+    } catch (error) {
+      pendingWorkspaceNavigationRef.current = null
+      if (pendingWorkspaceNavigationTimeoutRef.current) clearTimeout(pendingWorkspaceNavigationTimeoutRef.current)
+      pendingWorkspaceNavigationTimeoutRef.current = null
+      throw error
+    }
+  }, [activeWorkspaceId, onSelectWorkspace])
+
+  React.useEffect(() => {
+    const pending = pendingWorkspaceNavigationRef.current
+    if (!pending || pending.workspaceId !== activeWorkspaceId) return
+    const targetSessionId = /^allSessions\/session\/([^/]+)$/.exec(pending.route)?.[1]
+    if (targetSessionId) {
+      const targetSession = sessionMetaMap.get(targetSessionId)
+      if (!targetSession || targetSession.workspaceId !== activeWorkspaceId) return
+    }
+    // Let workspace route restoration settle before applying the requested destination.
+    setTimeout(() => {
+      if (pendingWorkspaceNavigationRef.current !== pending) return
+      pendingWorkspaceNavigationRef.current = null
+      if (pendingWorkspaceNavigationTimeoutRef.current) clearTimeout(pendingWorkspaceNavigationTimeoutRef.current)
+      pendingWorkspaceNavigationTimeoutRef.current = null
+      if (pending.hash !== undefined) window.location.hash = pending.hash
+      navigate(pending.route)
+    }, 0)
+  }, [activeWorkspaceId, sessionMetaMap])
+
+  React.useEffect(() => () => {
+    if (pendingWorkspaceNavigationTimeoutRef.current) clearTimeout(pendingWorkspaceNavigationTimeoutRef.current)
+  }, [])
+
   // Extend context value with local overrides (wrapped onDeleteSession, sources, skills, labels, enabledModes, rightSidebarOpenButton, effectiveSessionStatuses)
   const appShellContextValue = React.useMemo<AppShellContextType>(() => ({
     ...contextValue,
     onDeleteSession: handleDeleteSession,
+    onSelectWorkspaceAndNavigate: handleSelectWorkspaceAndNavigate,
     enabledSources: sources,
     skills,
     activeAgents,
@@ -1677,7 +1728,7 @@ function AppShellContent({
     automationTestResults,
     getAutomationHistory,
     onReplayAutomation: handleReplayAutomation,
-  }), [contextValue, handleDeleteSession, sources, skills, activeAgents, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation])
+  }), [contextValue, handleDeleteSession, handleSelectWorkspaceAndNavigate, sources, skills, activeAgents, activeSessionWorkingDirectory, displayLabelConfigs, handleSessionLabelsChange, enabledModes, effectiveSessionStatuses, handleSessionSourcesChange, isAutoCompact, searchActive, searchQuery, handleChatMatchInfoChange, handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, automationTestResults, getAutomationHistory, handleReplayAutomation])
 
   // Persist expanded folders to localStorage (workspace-scoped)
   React.useEffect(() => {

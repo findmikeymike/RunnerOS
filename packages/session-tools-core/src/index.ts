@@ -290,6 +290,8 @@ export type {
 } from './handlers/index.ts';
 
 export { handleScheduleWork } from './handlers/index.ts';
+export { handleSupplyWorkInput } from './handlers/index.ts';
+export type { SupplyWorkInputToolInput, SupplyWorkInputToolResult } from './handlers/index.ts';
 export { handleManageGoalRun } from './handlers/index.ts';
 export type { ManageGoalRunToolInput, ManageGoalRunToolResult } from './handlers/index.ts';
 

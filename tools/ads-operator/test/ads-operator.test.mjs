@@ -52,6 +52,7 @@ describe('ads-operator cli', () => {
     expect(result.stdout.writesEnabled).toBe(false);
     expect(result.stdout.platforms.google.route).toBe('google-ads-cli');
     expect(result.stdout.platforms.meta.route).toBe('browser-export');
+    expect(result.stdout.platforms.spotify.route).toBe('spotify-ads-manager-browser');
   });
 
   test('routes google account discovery to the existing google-ads wrapper without executing it', () => {
@@ -73,6 +74,18 @@ describe('ads-operator cli', () => {
     expect(result.stdout.writeExecuted).toBe(false);
   });
 
+  test('routes Spotify campaign discovery to Ads Manager ad set reporting', () => {
+    const result = run(['campaigns', '--platform', 'spotify', '--json']);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.route).toBe('browser-export');
+    expect(result.stdout.exportPlan.platform).toBe('spotify');
+    expect(result.stdout.exportPlan.level).toBe('adset');
+    expect(result.stdout.exportPlan.source).toBe('Spotify Ads Manager ad set report');
+    expect(result.stdout.exportPlan.usefulColumns).toContain('Completion rate');
+    expect(result.stdout.writeExecuted).toBe(false);
+  });
+
   test('creates a public Meta Ad Library browser research plan', () => {
     const result = run([
       'ad-library-plan',
@@ -89,7 +102,7 @@ describe('ads-operator cli', () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout.ok).toBe(true);
-    expect(result.stdout.route).toBe('public-meta-ad-library-browser');
+    expect(result.stdout.route).toBe('browser-tiktok-discovery-meta-validation');
     expect(result.stdout.loginRequired).toBe(false);
     expect(result.stdout.writeExecuted).toBe(false);
     expect(result.stdout.searchTerms).toContain('Watching Tornado Videos');
@@ -157,6 +170,18 @@ describe('ads-operator cli', () => {
     expect(result.stdout.normalizedRows[0].spend).toBe(125.5);
     expect(result.stdout.normalizedRows[0].conversions).toBe(7);
     expect(result.stdout.normalizedRows[0].raw['Amount spent']).toBe('$125.50');
+  });
+
+  test('normalizes Spotify Ads Manager completion metrics', () => {
+    const file = tempCsv('Ad set name,Impressions,Reach,Frequency,Clicks,CTR,Spend,Completion rate,Ad played to 25%,Ad played to 50%,Ad played to 75%,Ad played to 100%\nNight Drive,10000,8000,1.25,120,1.2,$75,82%,94%,90%,86%,82%\n');
+    const result = run(['import', file, '--platform', 'spotify', '--level', 'adset', '--json']);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.normalizedRows[0].platform).toBe('spotify');
+    expect(result.stdout.normalizedRows[0].adSetName).toBe('Night Drive');
+    expect(result.stdout.normalizedRows[0].completionRate).toBe(82);
+    expect(result.stdout.normalizedRows[0].played25).toBe(94);
+    expect(result.stdout.normalizedRows[0].played100).toBe(82);
   });
 
   test('accepts global json flag before import file path', () => {
@@ -474,6 +499,66 @@ describe('ads-operator cli', () => {
     const savedSetup = JSON.parse(readFileSync(setupPath, 'utf8'));
     expect(savedSetup.schema).toBe('runneros.ads.setup_plan.v1');
     expect(savedSetup.writeExecuted).toBe(false);
+  });
+
+  test('creates Spotify browser setup plans with campaign hierarchy and final launch gate', () => {
+    const context = tempFile('artist-context.md', 'Artist: Luna Vale\nAudience: synth pop fans\nTop city: London\n');
+    const result = run([
+      'setup-plan',
+      '--platform',
+      'spotify',
+      '--goal',
+      'awareness',
+      '--account',
+      'spotify-main',
+      '--budget',
+      '$500 total',
+      '--territories',
+      'London,Manchester',
+      '--campaign-name',
+      'Night Drive audio awareness',
+      '--artist-context',
+      context,
+      '--json',
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.platform).toBe('spotify');
+    expect(result.stdout.browserPlan.route).toBe('spotify-ads-manager-browser');
+    expect(result.stdout.browserPlan.startUrl).toBe('https://adsmanager.spotify.com/');
+    expect(result.stdout.browserPlan.setupObjects).toEqual(['campaign', 'ad set', 'ad']);
+    expect(result.stdout.browserPlan.campaignFields.objective).toBe('Reach');
+    expect(result.stdout.browserPlan.adSetFields[0].format).toContain('Audio by default');
+    expect(result.stdout.browserPlan.adFields[0].assetsNeeded).toContain('companion image for audio');
+    expect(result.stdout.browserPlan.browserSteps.join(' ')).toContain('final review screen');
+    expect(result.stdout.approvalGate.packetCommand).toContain('--platform spotify');
+    expect(result.stdout.writeExecuted).toBe(false);
+  });
+
+  test('creates Spotify approval packets in the shared artifact format', () => {
+    const result = run([
+      'packet',
+      'create',
+      '--platform',
+      'spotify',
+      '--type',
+      'publish',
+      '--account',
+      'spotify-main',
+      '--action',
+      'Launch Night Drive audio campaign',
+      '--spend-impact',
+      '$500 total',
+      '--evidence',
+      'evidence/spotify-draft.json',
+      '--json',
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.packet.platform).toBe('spotify');
+    expect(result.stdout.packet.approvalPhrase).toBe('APPROVE SPOTIFY PUBLISH');
+    expect(result.stdout.packet.requiresApproval).toBe(true);
+    expect(result.stdout.packet.writeExecuted).toBe(false);
   });
 
   test('normalizes setup plan goal consistently at top level and strategy level', () => {

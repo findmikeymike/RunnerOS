@@ -137,6 +137,7 @@ name: Automation Creator
 description: Builds a new automation through a short conversational interview, then writes the matcher.
 tools:
   - create_automation
+  - schedule_work
 inputs: A description of what should fire automatically and what should happen.
 outputs: A saved automation activated in the current workspace, plus a chat confirmation with a link.
 tags: [creator, meta, automations]
@@ -164,6 +165,7 @@ A pairing of a **trigger** (when does this fire?) and one or more
 
 - \`{ type: 'prompt', prompt }\` — spawns a session with the rendered prompt. Optional \`llmConnection\`, \`model\`, \`thinkingLevel\`.
 - \`{ type: 'webhook', url, method?, headers?, body? }\` — sends an outbound HTTP request.
+- Tracked agent/workflow work uses \`schedule_work\`, not a raw prompt action. It creates the same queued work shown on the Automations page.
 
 If the user describes something that can't be expressed as one of the
 trigger types above, say so plainly — don't fudge a fit. Suggest the
@@ -179,6 +181,18 @@ closest available, or recommend opening a feature request.
    text, including how it should reference the trigger payload.
 3. **The slug** — for WebhookReceive only. Otherwise infer a \`name\` from
    the description.
+
+Ask all unresolved details in one compact question. Do not walk the artist through one field at a time.
+
+## Tracked workflow automations
+
+Use \`schedule_work\` with \`destination: "automation"\` when a saved worker or workflow should produce tracked work.
+
+- Read the selected workflow's declared inputs.
+- Bind every required input explicitly: \`fixed\` when the artist supplied a stable value, \`ask\` when it changes each run, or \`trigger\` only when the selected trigger can provide it.
+- Never make up an empty string, zero, false, path, topic, or other placeholder.
+- Prefer \`trigger: { type: "schedule", cadence: "daily" | "weekly" }\` so Artist OS places background work away from other jobs. Use \`cron\` only when the artist named a specific time.
+- Before saving, summarize what runs, what starts it, which values stay fixed, and what Artist OS will ask for each run.
 
 ## Templating: \`$CRAFT_*\` env vars
 
@@ -947,6 +961,84 @@ Use this mode for BTS, events, montages, tutorials, demos, and mixed visual mate
 Before rendering, state the selected mode and give the user a short plan covering structure, pacing, best moments, audio treatment, and target runtime. Ask only for decisions that the footage and existing context cannot answer.
 `;
 
+const SOCIAL_VIDEO_REPURPOSING_SKILL = `---
+name: social-video-repurposing
+description: Create genuinely different, rights-cleared social video variants from an artist's existing Vault, Campaign Asset, Output, or Release Kit video. Use for fan-page edits, alternate hooks, account-native recuts, campaign reposting, or an explicitly requested Instagram Trial Reel. Do not use for cosmetic-only duplicate disguises.
+---
+
+# Social Video Repurposing
+
+Turn one approved artist-owned or licensed video into a small family of meaningfully different editorial versions. This is creative repurposing, not fingerprint evasion.
+
+## Start as a conversation
+
+For an open-ended chat request, do not immediately render a batch. Begin in this vein:
+
+> I want to turn this campaign video into a few genuinely different versions for these accounts. Let's choose the strongest angles and hooks first. I can read the campaign and asset context; what audience or account behavior should each version feel native to?
+
+Read existing Artist HQ, campaign, asset, and prior-output context before asking the artist to repeat it. Ask the missing strategic questions together: exact source, intended accounts, desired number of variants, and any must-keep or forbidden moments. Trial Reels are only one optional destination when the artist explicitly requests them.
+
+When Artist OS supplies a host-created Social Variant Set, the setup UI has already captured those choices and the user's Create action authorizes that bounded render. Read the saved set and proceed without asking for the same strategy approval again. Ask only if a required input is genuinely missing or contradictory.
+
+## Source and rights gate
+
+1. Resolve one exact video and preserve its SHA-256 lineage. Prefer a verified Release Kit item for campaign finals; Vault or Output video is valid when the artist explicitly chooses it.
+2. Confirm the artist owns the source, has a license permitting derivatives, or controls the account and content authorization.
+3. Never remove watermarks, disguise somebody else's work, or claim a render is guaranteed to evade a platform classifier.
+4. Preserve the source. Variants remain draft Outputs until individually approved.
+
+## What counts as a real variant
+
+Build a new editorial object through the hook, selected moments, structure, order, pacing, focal subject, narrative frame, commentary, voice-over, or lyric/theme thesis.
+
+A filter, font, border, watermark, metadata change, mirror, speed nudge, tiny crop, or re-encode is seasoning only. It cannot be the reason a variant is considered meaningfully different.
+
+Useful modes:
+
+- **Alternate hook:** lead with a different three-second question, lyric, image, or payoff.
+- **Fan-page perspective:** add genuine discovery framing, context, reaction, quote, or point of view native to the authorized page.
+- **Lyric/theme cut:** select and structure footage around a different emotional or lyrical thesis.
+- **Performance energy:** use different takes, song sections, pacing, and visual emphasis.
+- **Archive/BTS:** make process, origin, or backstory the story.
+- **Trial Reel:** only when requested; it changes the destination/testing plan, not the originality standard.
+
+## Workflow
+
+1. Run analysis without rendering:
+
+\`\`\`bash
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs repurpose <source-video> --out-dir <working-output-dir> --json
+\`\`\`
+
+2. Inspect the generated scene-preview images, then read \`analysis.json\`, the transcript/takes pack when present, scene boundaries, campaign world, song meaning, and target-account context. Do not propose visual hooks from timestamps alone.
+3. For an open-ended chat request, present 2-5 concise variant plans. For each, state the hook, selected structure, destination account, and why it is meaningfully different. For a host-created Social Variant Set, use its saved plans directly.
+4. For an open-ended chat request, wait for strategic approval. For a host-created Social Variant Set, the Create action is that authorization. Fill \`variant-brief.template.json\` with the authorized source hash, rights basis, destinations, and time ranges.
+5. Validate before heavy work:
+
+\`\`\`bash
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs repurpose <source-video> --out-dir <working-output-dir> --brief <brief.json> --json
+\`\`\`
+
+6. Resolve every \`needs-revision\` error. Never weaken or bypass the cosmetic-only gate.
+7. Render approved plans:
+
+\`\`\`bash
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs repurpose <source-video> --out-dir <working-output-dir> --brief <brief.json> --render --json
+\`\`\`
+
+8. Review variants side by side for first-three-second differentiation, cut logic, mobile framing, overlay readability, audio, duration, and account fit.
+9. Publish each finished variant as a durable reviewable Output with \`showInCanvas: true\`. Preserve \`variant-manifest.json\` with source hash, transformations, destination, approval status, and later platform media ID.
+10. Route approved scheduling or posting to Social Publisher. Never publish or schedule from this editing skill.
+
+## Trial destination
+
+Trial is secondary and opt-in. If requested, mark \`destination.mode\` as \`trial\` and \`destination.trialRequested\` as \`true\`; otherwise validation must refuse it. Use the artist's connected official Instagram account path only when the capability is verified. Otherwise prepare the finished asset and hand the user into Instagram to enable Trial. Do not use private/mobile Instagram APIs.
+
+## Output
+
+Return the source asset and hash, the approved variant plans, rendered paths, meaningful-difference findings, intended accounts, remaining review needs, and the path to \`variant-manifest.json\`.
+`;
+
 export const STARTER_SKILLS: StarterSkill[] = [
   { slug: 'agent-creator', files: [{ path: 'SKILL.md', content: AGENT_CREATOR_SKILL }] },
   { slug: 'automation-creator', files: [{ path: 'SKILL.md', content: AUTOMATION_CREATOR_SKILL }] },
@@ -957,6 +1049,7 @@ export const STARTER_SKILLS: StarterSkill[] = [
   { slug: 'runneros-self-edit', files: [{ path: 'SKILL.md', content: RUNNEROS_SELF_EDIT_SKILL }] },
   { slug: 'raw-video-editor', files: [{ path: 'SKILL.md', content: RAW_VIDEO_EDITOR_SKILL }] },
   { slug: 'raw-video-edit-direction', files: [{ path: 'SKILL.md', content: RAW_VIDEO_EDIT_DIRECTION_SKILL }] },
+  { slug: 'social-video-repurposing', files: [{ path: 'SKILL.md', content: SOCIAL_VIDEO_REPURPOSING_SKILL }] },
 ];
 
 export { SYSTEM_GLOBAL_SKILL_SLUGS } from './system.ts';

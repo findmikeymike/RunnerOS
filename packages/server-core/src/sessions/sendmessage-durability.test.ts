@@ -53,6 +53,13 @@ describe('sendMessage durability', () => {
     return lines.slice(1).map(l => JSON.parse(l)).map(m => m.id as string)
   }
 
+  function readPersistedMessages(sessionId: string): Array<{ id: string; inputOrigin?: string }> {
+    const path = getSessionFilePath(tmpRoot, sessionId)
+    if (!existsSync(path)) return []
+    const lines = readFileSync(path, 'utf-8').trim().split('\n')
+    return lines.slice(1).map((line) => JSON.parse(line) as { id: string; inputOrigin?: string })
+  }
+
   it('user message is on disk before onAck fires (normal branch)', async () => {
     const sessionId = 'durability-normal'
     buildSession(sessionId)
@@ -144,5 +151,24 @@ describe('sendMessage durability', () => {
     expect(managed.messages.filter((message) => message.role === 'user')).toHaveLength(2)
     expect(managed.messageQueue).toHaveLength(1)
     expect(managed.messageQueue[0]!.message).toBe('second')
+  })
+
+  it('persists the host-provided origin and defaults internal sends to system', async () => {
+    const agentSessionId = 'origin-agent'
+    buildSession(agentSessionId)
+    await sm.sendMessage(
+      agentSessionId,
+      'Internal agent delivery',
+      undefined,
+      undefined,
+      { inputOrigin: 'agent' },
+    ).catch(() => { /* expected post-ack agent-init failure */ })
+
+    const systemSessionId = 'origin-system'
+    buildSession(systemSessionId)
+    await sm.sendMessage(systemSessionId, 'Internal host prompt').catch(() => { /* expected post-ack agent-init failure */ })
+
+    expect(readPersistedMessages(agentSessionId).find((message) => message.inputOrigin)?.inputOrigin).toBe('agent')
+    expect(readPersistedMessages(systemSessionId).find((message) => message.inputOrigin)?.inputOrigin).toBe('system')
   })
 })

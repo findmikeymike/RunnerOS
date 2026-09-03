@@ -32,6 +32,37 @@ export function findSpotifyUserAccountUrl(links: readonly string[]): string | nu
   return null
 }
 
+export function findSpotifyAdsManagerAccountId(values: {
+  currentUrl?: string
+  links?: readonly string[]
+  text?: string
+}): string | null {
+  const urls = [values.currentUrl, ...(values.links ?? [])].filter((value): value is string => Boolean(value))
+  for (const value of urls) {
+    try {
+      const url = new URL(value)
+      if (!['adsmanager.spotify.com', 'adstudio.spotify.com'].includes(url.hostname)) continue
+      for (const key of ['adAccountId', 'ad_account_id', 'accountId', 'account_id', 'advertiserId', 'advertiser_id']) {
+        const candidate = normalizeSpotifyAdsAccountId(url.searchParams.get(key))
+        if (candidate) return candidate
+      }
+      const pathMatch = url.pathname.match(/\/(?:ad-?accounts?|accounts?|advertisers?)\/([^/?#]+)/i)
+      const candidate = normalizeSpotifyAdsAccountId(pathMatch?.[1])
+      if (candidate) return candidate
+    } catch {
+      // Ignore malformed and non-URL values.
+    }
+  }
+
+  const textMatch = String(values.text || '').match(/\b(?:ad account|advertiser)\s*(?:id)?\s*[:#]\s*([a-z0-9][a-z0-9_-]{3,127})\b/i)
+  return normalizeSpotifyAdsAccountId(textMatch?.[1])
+}
+
+function normalizeSpotifyAdsAccountId(value: string | null | undefined): string | null {
+  const candidate = String(value || '').trim()
+  return /^[a-z0-9][a-z0-9_-]{3,127}$/i.test(candidate) ? candidate : null
+}
+
 export function hasLoggedInSignal(platform: string, text: string, currentUrl: string): boolean {
   const lower = text.toLowerCase()
   const url = parseHttpUrl(currentUrl)

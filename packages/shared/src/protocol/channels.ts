@@ -504,6 +504,8 @@ export const RPC_CHANNELS = {
     DECIDE_CAMPAIGN: 'scheduledWork:decideCampaign',
     /** Resolve one ambiguous produced Output for a waiting campaign follow-up. */
     RESOLVE_CAMPAIGN_OUTPUT: 'scheduledWork:resolveCampaignOutput',
+    /** Supply requested workflow inputs and release the order into the run lane. */
+    SUPPLY_INPUTS: 'scheduledWork:supplyInputs',
     /** Approve one exact prepared native social action. */
     APPROVE_CAMPAIGN_SOCIAL: 'scheduledWork:approveCampaignSocial',
     /** Re-arm, pause, or cancel one bounded Goal continuation run. */

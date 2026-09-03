@@ -515,6 +515,7 @@ export class PiAgent extends BaseAgent {
     const delegatedSession = this.config.session?.launchReceipt?.delegation !== undefined;
     const sessionToolDefs = getSessionToolProxyDefs({
       includeScheduleWork: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge',
+      includeSupplyWorkInput: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge',
       includeManagerTools: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge'
         && (this.config.workspace.artistWorkspaceScope === 'hq' || this.config.workspace.artistWorkspaceScope === 'campaign'),
       includeCampaignManagerTools: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge'

@@ -315,6 +315,7 @@ const EXPECTED_CHANNELS: string[] = [
   "scheduledWork:scheduleCampaign",
   "scheduledWork:scheduleCampaignChain",
   "scheduledWork:scheduleHq",
+  "scheduledWork:supplyInputs",
   "secrets:changed",
   "secrets:claimZeroWelcome",
   "secrets:delete",

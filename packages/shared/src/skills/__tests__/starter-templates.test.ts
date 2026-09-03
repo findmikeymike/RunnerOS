@@ -132,6 +132,18 @@ describe('STARTER_SKILLS', () => {
     expect(parsed.content).toContain('Do not assume every video belongs to a song');
   });
 
+  it('includes rights-safe social video repurposing for the existing editor', () => {
+    const skill = STARTER_SKILLS.find(s => s.slug === 'social-video-repurposing');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('social-video-repurposing');
+    expect(parsed.content).toContain('Start as a conversation');
+    expect(parsed.content).toContain('cosmetic-only');
+    expect(parsed.content).toContain('variant-manifest.json');
+    expect(parsed.content).toContain('Trial is secondary and opt-in');
+    expect(parsed.content).toContain('Do not use private/mobile Instagram APIs');
+  });
+
   it('ships the focused Release Manager skill bundle', () => {
     const slugs = BUNDLED_STARTER_SKILLS.map(skill => skill.slug);
     expect(slugs).toContain('artist-os-release-operations');
@@ -450,9 +462,24 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(parsed.content).toContain('browser dashboard/export mode');
     expect(parsed.content).toContain('Spotify Ads Manager');
     expect(parsed.content).toContain('Spotify for Artists');
-    expect(parsed.content).toContain('do not call `ads-operator --platform spotify`');
+    expect(parsed.content).toContain('packet create --platform spotify');
+    expect(parsed.content).toContain('draft entry and approved asset upload');
     expect(parsed.content).toContain('Stop before clicking any ambiguous Save, Publish, Apply, Launch');
     expect(parsed.content).toContain('Do not use receipts to claim live ad execution');
+  });
+
+  it('bundles the Spotify Ads Manager browser playbook', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'spotify-ads-manager');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('spotify-ads-manager');
+    expect(parsed.content).toContain('Spotify Ads Manager');
+    expect(parsed.content).toContain('Campaign: objective');
+    expect(parsed.content).toContain('campaign-plan --platform spotify');
+    expect(parsed.content).toContain('setup-plan --platform spotify');
+    expect(parsed.content).toContain('packet create --platform spotify');
+    expect(parsed.content).toContain('ad set report');
+    expect(parsed.content).toContain('completion rate');
   });
 
   it('bundles separated paid ads planning and creative skills', () => {

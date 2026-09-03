@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: implemented
 owner: agent
 last_verified: 2026-09-02
 source_of_truth: true
@@ -20,7 +20,7 @@ work the only missing input is *time*.
 
 The Active tab opens a dialog that asks **when** first and **what** second
 (`AutomationWorkDialog.tsx`: five trigger buttons, then a second composer).
-That order is backwards. The system cannot know which "when" options are
+That order was backwards. The system cannot know which "when" options are
 honest until it knows what is running, because a workflow that needs a design
 file from the artist cannot honestly be put on a Monday 9:00 cron. It will fire,
 have nothing to work with, and stall.
@@ -67,17 +67,18 @@ Three things, all small relative to what exists:
 - Building a second automation system for the chat path. The manager and the
   dialog must write the **same record** through the **same validation**. If
   the manager can do something the dialog cannot, or vice versa, that is a bug.
-- Treating "ask me each time" as a form that pops up on a timer. It is a
-  **message from the agent that will do the work**, delivered where the artist
-  already talks to that agent (spec 26), and the reply *is* the input.
+- Treating "ask me each time" as a modal that interrupts the artist on a timer.
+  In V1 it appears under **Needs you**; the Artist Manager may also apply a
+  value from the exact current direct human turn after that request. Worker-originated asks and
+  external reply correlation remain deferred.
 - Adding approval prompts. Setting up the automation is the approval. The only
   time the artist hears from it afterward is when it genuinely cannot proceed
   without something only they have.
 
 ### Start here
 
-Slice 1 (input binding model) and Slice 2 (`needs-setup` in the runner) are
-backend-only and testable without UI. Do them first.
+The implementation is sliced across the shared binding model, queue and supply
+state machine, manager tool path, dialog, and global Active list.
 
 ## Decision
 
@@ -88,12 +89,16 @@ by whether it can run unattended:
   URL change, inbound message) is the only trigger needed.
 - **Fed:** at least one required input is unbound and marked *ask each time*.
   The automation still fires on its trigger, but firing produces a `needs-setup`
-  work order and an agent-bound message asking for the input. The reply
+  work order surfaced in-app. Supplying it from the list or Artist Manager
   completes the order and it enters the normal automatic lane.
 
-The setup surface (dialog or manager chat) picks **what** first, reads its
-input schema, and only then offers the **when** options that are honest for
-that shape.
+The setup surface (dialog or manager chat) picks **what** first, then **what
+starts it**, then configures **what it needs** with trigger-aware choices.
+
+The Automations page exposes both doors together: a compact **Set up with
+Artist Manager** button is the preferred conversational path for most artists,
+with **+ New automation** beside it for direct manual setup. Both doors create
+the same validated automation record.
 
 There is one list. "Active" is its top section, not a different page.
 
@@ -109,10 +114,12 @@ There is one list. "Active" is its top section, not a different page.
 
 ## User Promise
 
-- "Pick a worker, tell it what it needs, tell it when. Done."
+- "Pick a worker, choose what starts it, tell it what it needs. Done."
 - "If it needs something from me each time, it asks me — it doesn't fake it."
 - "I can tell my manager 'set this up weekly' and get exactly what the button
   would have made."
+- "I can start that conversation directly from the Automations page without
+  knowing which worker, workflow, or schedule fields to choose."
 - "One list shows me everything that will happen without me clicking again."
 
 ## Non-Goals
@@ -125,9 +132,9 @@ There is one list. "Active" is its top section, not a different page.
 - Conditional logic, branching, or "if the report says X then Y."
 - Cross-machine or Team Mode fan-out beyond what spec 13 already defines.
 
-## Current State
+## Baseline Before Implementation
 
-### What exists and works
+### What existed and worked
 
 - `AutomationWorkDialog.tsx` — trigger-first two-step dialog, staggered
   automatic placement for weekly/daily, custom cron.
@@ -146,7 +153,7 @@ There is one list. "Active" is its top section, not a different page.
 - Agent-bound messaging (spec 26) — a message *to an agent* resolves to a
   session for that agent; specialists can message the artist back.
 
-### What is missing
+### What this implementation added
 
 - No representation of an unbound-by-design input on a `queue-work` action.
 - No path from a trigger payload (file path, webhook body, message text) into
@@ -163,9 +170,11 @@ There is one list. "Active" is its top section, not a different page.
    `AutomationWorkQueue` validation identically.
 2. **Never schedule a lie.** A required input with no binding and no *ask*
    marker is a validation error at both doors.
-3. **The ask comes from the worker.** When a fed automation fires, the message
-   asking for input is sent by the agent that will run it (for workflows, by
-   the manager), through spec 26, so the reply lands with the right agent.
+3. **The ask has one honest V1 surface.** A fed automation appears under *Needs
+   you*. The Artist Manager may apply values only during the exact current,
+   direct, visible human turn posted after the request. The host stamps that
+   message identity, and one human message cannot satisfy multiple requests.
+   Automatic worker asks and external reply correlation remain deferred.
 4. **Setup is the approval.** No confirmation dialogs fire on schedule. The
    permission boundary for external actions (spec 13 §6, social exact
    approval) is unchanged and orthogonal.
@@ -218,23 +227,29 @@ A fired fed automation produces an order with:
 - `attention: { reason: 'input-required', message: 'Waiting for: design_file' }`
 - `execution.triggerInputs` holding every `fixed` and `trigger` value already
   resolved, and the `ask` keys absent
-- `askRequest: { sessionId, messageId, inputs: string[] }` — the agent-bound
-  message that was sent, so a reply can be matched to the order
+- `inputRequest: { id, inputs, requestedAt, lastTriggeredAt,
+  coalescedFireCount, fireDefinitionDigests }` — the durable unresolved request.
+  Optional session/message linkage is reserved for a future explicitly bound
+  reply channel; V1 does not fabricate it.
 
 The order transitions `needs-setup → scheduled` when all `ask` inputs are
-supplied (by reply or by the list row's inline field), with `startAt` set to
-the supply time. It then enters the normal lane.
+supplied through the list or from the exact current post-request Artist Manager
+turn, with `startAt` set to the supply time. It then enters the normal lane.
+The manager tool remains allowed in Safe mode because the current artist
+message is the authorization; adding a second confirmation would duplicate the
+artist's instruction. Host-bound current-turn evidence, schema validation,
+one-use evidence, and HNIC-only routing are the enforcement boundary.
 
 ### Cadence tag (derived, not stored)
 
 ```ts
-type CadenceTag = 'daily' | 'weekly' | 'once' | 'on-file' | 'webhook' | 'on-message' | 'on-url'
+type CadenceTag = 'daily' | 'weekly' | 'monthly' | 'custom' | 'once' | 'on-file' | 'webhook' | 'on-message' | 'on-url'
 ```
 
 Derived from the automation's event and cron:
-- `SchedulerTick` with `* * *` day fields → `daily`; with a single weekday →
-  `weekly`; any other cron → `custom` (rendered as the cron's plain-English
-  label).
+- `SchedulerTick` with wildcard day fields → `daily`; with one weekday →
+  `weekly`; with one day of month → `monthly`; any other cron → `custom`.
+  Custom cadence is shown as *Custom schedule*, never as raw cron.
 - `FileWatch` → `on-file`, `WebhookReceive` → `webhook`, `MessageReceive` →
   `on-message`, `PollUrl` → `on-url`.
 - One-shot Calendar work → `once`.
@@ -250,30 +265,10 @@ A single picker over active workers and active workflows, searchable, with
 the same avatars the Workers/Workflows tabs use. Picking one loads its input
 schema. Name defaults to the worker/workflow name and can be edited.
 
-### 2. What it needs
+### 2. What starts it
 
-Rendered only if the selection has declared inputs.
-
-For each input, one row:
-
-```
-design_file      [ Same every time ▾ ]   [ /vault/merch/current.png ]
-campaign_brief   [ Ask me each time ▾ ]  "I'll message you for this when it runs."
-size_run         [ Same every time ▾ ]   [ 250 ]        (default from workflow)
-```
-
-- Inputs with a `default` start as *Same every time* with the default filled.
-- Required inputs with no default start as *Ask me each time*.
-- When the trigger chosen in §3 is a file, webhook, or message, a third option
-  appears on string inputs: *From the trigger* (file path / file name /
-  message text / webhook body). Choosing a file trigger auto-selects *From the
-  trigger → file path* on the first unbound required string input, since that
-  is almost always what the artist means.
-
-### 3. When
-
-Options are computed from §2. If every required input is bound (`fixed` or
-`trigger`):
+The artist chooses the event before configuring inputs so trigger-derived
+bindings are visible immediately:
 
 - **Weekly** (default; auto-staggered slot shown, e.g. "Tuesday 9:30 AM")
 - **Daily** (auto-staggered)
@@ -285,28 +280,61 @@ Options are computed from §2. If every required input is bound (`fixed` or
 
 If any input is *Ask me each time*, the time options are relabelled honestly:
 
-- **Ask me weekly** / **Ask me daily** — "Every Tuesday at 9:30 AM, {agent}
-  will message you for {inputs}. It runs when you reply."
-- File/webhook/message triggers stay available; the fire still asks for
-  whatever the trigger did not supply.
+- **Needs input weekly** / **Needs input daily** — "Every Tuesday at 9:30 AM,
+  this will appear under Needs you for {inputs}. It runs after you supply them."
+- File/webhook/message triggers stay available; each fire appears under *Needs
+  you* only when the trigger did not supply everything.
 - **Once** is hidden — a one-time fed run is just a manual start; use the
   Workflows tab.
 
-The staggered slot is recomputed on save (already implemented). If the
-occupancy read fails for any workspace, the dialog shows *Couldn't check other
-schedules — pick a time* and falls back to the custom picker instead of
-asserting a slot it cannot justify.
+The staggered slot is recomputed on save. If the occupancy read fails for any
+workspace, the dialog keeps the selected Weekly/Daily cadence, shows a visible
+Retry action, clears the unverified slot, and disables Save. It never asserts a
+slot it cannot justify or drops a non-technical artist into raw cron.
+
+### 3. What it needs
+
+Rendered only if the selection has declared inputs.
+
+For each input, one row:
+
+```
+design_file      [ From file path ▾ ]
+campaign_brief   [ Ask me each time ▾ ]  "This appears under Needs you when it runs."
+size_run         [ Same every time ▾ ]   [ 250 ]
+```
+
+- Inputs with a `default` start as *Same every time* with the default filled.
+- Required inputs with no default start as *Ask me each time*.
+- A file, webhook, URL, or message trigger adds matching *From the trigger*
+  options on string inputs. Choosing a file trigger auto-selects file path on
+  the first required string input that has no deliberate fixed value. Existing
+  fixed values are preserved rather than silently overwritten.
+- Optional inputs without defaults remain omitted; they never create a
+  `needs-setup` order.
 
 ### 4. Save
 
 One button. Copy is the review sentence:
 
-> Every Tuesday at 9:30 AM, **Merch Run** will ask you for a design file, then
-> run with brief "Q4 drop" and size run 250.
+> Every Tuesday at 9:30 AM, **Merch Run** will wait under *Needs you* for a
+> design file, then run with brief "Q4 drop" and size run 250.
 
 Toast on save. No further confirmation.
 
 ## Setup Flow: The Manager
+
+The page-level **Set up with Artist Manager** button opens the Artist Manager
+chat with an automation-setup intent attached. It does not preselect a worker,
+workflow, or cadence and it does not create a draft record. The manager starts
+with one plain-language prompt such as:
+
+> What would you like Artist OS to handle automatically?
+
+The artist can answer naturally (for example, "run an audience report every
+Friday"), and the manager resolves the right worker or workflow, asks at most
+one compact clarification, then shows the same review sentence used by the
+manual dialog before saving.
 
 The manager uses `schedule_work` with `destination: 'automation'`. Two
 additions to the tool input:
@@ -353,27 +381,32 @@ is indistinguishable.
    `trigger` bindings into `triggerInputs`. Remaining `ask` inputs are listed.
 2. If none remain → normal `scheduled` order, existing path.
 3. If some remain → order is persisted as `needs-setup` with
-   `attention.reason: 'input-required'`, then a message is sent **as the
-   worker** (the workflow's runner agent, or the manager for workflows without
-   one) through spec 26's channel binding for that agent, falling back to the
-   in-app agent chat:
+   `attention.reason: 'input-required'` and appears in the in-app *Needs you*
+   group. The Artist Manager chat may
+   also collect the answer:
 
    > Merch Run is ready to go. I need the design file for this run — drop it
    > here or reply with a path.
 
-   The message carries `askRequest` linkage so the reply can be matched.
-4. The artist replies with text, a file, or a Release Kit item. The receiving
-   session has a `supply_work_input` tool (new, HNIC and worker sessions) that
+4. The artist supplies values through the list or gives them directly in the
+   current Artist Manager turn. The Artist Manager session has a `supply_work_input` tool that
    writes the values, transitions the order to `scheduled`, and acknowledges.
-   The same transition is available from the list row inline.
+   The host accepts that tool only against the exact current visible human
+   message after the request, and one message can satisfy only one request.
+   The same transition is available from the list row inline. Automatic
+   outbound asks and Telegram/WhatsApp reply correlation are deferred until a
+   durable message-to-request linkage exists; worker chats cannot supply these
+   values in V1 and the product never pretends that bridge is live.
 5. The order enters the global lane like any other. Because `startAt` is the
    supply time, it is placed by age like everything else.
 
-If the artist does not reply, the order stays `needs-setup` indefinitely and is
-visible in the list under *Needs you*. It is not an error. The next fire of the
-same automation creates a **new** order and a new ask; the old one remains
-until supplied or dismissed. The list groups repeated asks from the same
-automation so five unanswered Mondays read as one row with a count, not five.
+If the artist does not supply the values, the order stays `needs-setup` indefinitely and is
+visible in the list under *Needs you*. It is not an error. Later fires of the
+same unchanged automation coalesce into that one outstanding request; the most
+recent trigger-bound values win and a count records how many fires are
+represented. Exact event redelivery does not increase the count. Once supplied,
+every represented fire digest remains receipted so a late redelivery cannot
+create or execute duplicate work.
 
 ## The List
 
@@ -403,18 +436,23 @@ action. State text is the only column that changes across groups.
 
 - *Running now* comes from `running` orders and live Pulse runs across all
   local workspaces — this is the "Active" that the tab name already promises.
-- *Needs you* comes from `needs-setup` (input) and `needs-attention` orders.
-  `[Supply]` opens an inline field for the missing inputs; the same transition
-  the chat reply uses.
+  Rows carry an **HQ** or campaign-name origin chip.
+- *Needs you* comes from `needs-setup` (input) and `needs-attention` orders
+  across every local workspace, with the same origin chip.
+  `[Supply]` opens an inline field for the missing inputs; Artist Manager uses
+  that same host transition after a verified direct artist reply.
 - *Up next* is every enabled automation sorted by next fire time, plus dated
   Calendar work in the next 14 days. Next-fire is computed from the cron in
   its timezone; file/webhook/message rows show what they watch instead.
 - *Paused* is `enabled: false`.
 
-Clicking a row opens `AutomationInfoPage` unchanged. The `+` button opens the
-new dialog. Prompt, webhook, and Pulse automations still appear in the list
-with their existing kinds and are still created through the existing template
-gallery; this spec does not remove those doors.
+The page header has two compact actions: **Set up with Artist Manager** opens
+the conversational setup above, and **+ New automation** opens the manual
+dialog. The manager action is visually primary without becoming a large hero
+or explanatory panel. Clicking a row opens `AutomationInfoPage` unchanged.
+Prompt, webhook, Pulse, review, and publishing automations retain their existing
+creation doors under **More**. The compact manual dialog intentionally handles
+recurring worker and workflow work only; it does not remove those capabilities.
 
 The "Workers / Workflows / Active" tabs remain. Nothing is renamed.
 
@@ -423,9 +461,8 @@ The "Workers / Workflows / Active" tabs remain. Nothing is renamed.
 - Existing `queue-work` actions have no `inputBindings`. Reader treats them as
   all-`fixed` from `triggerInputs`. Nothing is rewritten on disk until edited.
 - Existing `AutomationWorkDialog` is replaced, not kept beside the new one.
-- `needs-setup` is already in the status union and already maps to the `draft`
-  display bucket (`scheduled-work/index.ts:804`). The list must stop bucketing
-  it as draft and show it under *Needs you*.
+- `needs-setup` remains a distinct state in the Active list, Campaign Calendar,
+  and Release Kit views. It is shown as *Needs you*, never as failed or draft.
 
 ## Failure And Edge Cases
 
@@ -437,21 +474,28 @@ The "Workers / Workflows / Active" tabs remain. Nothing is renamed.
   ask is sent; it is self-running in effect. The tag stays *On file*.
 - **Reply arrives for an order already supplied from the list.** Second
   supply is a no-op with a friendly acknowledgement.
-- **Reply arrives with the wrong type** (text for a number input). The
-  worker's session asks again with the constraint; never coerces silently.
-- **Agent has no channel binding.** Ask goes to the in-app chat for that agent
-  and raises the bell. The order is still `needs-setup`.
-- **Occupancy read fails during placement.** Dialog: fall back to custom
-  picker with a visible notice. Manager: the handler returns an error naming
+- **The list or Artist Manager receives the wrong type** (text for a number
+  input). Validation names the constraint; the order stays under *Needs you*
+  and nothing is coerced silently.
+- **No Artist Manager chat is active.** *Needs you* remains the canonical
+  surface and raises the app attention indicator. No worker chat is invented.
+- **Occupancy read fails during placement.** Dialog: keep the simple cadence,
+  show Retry, clear the unverified slot, and block Save. Manager: the handler returns an error naming
   the failure; the manager tells the artist and offers a specific time.
+- **Automation configuration changes while an ask is outstanding.** The old
+  request and every nonterminal member of its chain are canceled together;
+  their campaign projections are canceled and HQ projections soft-deleted.
+  Exact stale redelivery cannot cancel the replacement configuration.
 - **Artist disables the automation while an ask is outstanding.** The order
   remains under *Needs you*; disabling stops future fires only.
 
 ## Observability
 
-- Log line on every fed fire: automation slug, order id, asked inputs, message
-  id, channel.
-- Log line on every supply: order id, source (`reply` | `list`), supplied keys.
+- Log line on every fed fire: automation slug, order id, unresolved input keys,
+  and immutable fire definition digest.
+- Log line on every supply: order id, source (`tool` | `list`), supplied keys,
+  and the host-stamped session/message receipt for tool supply. There is no
+  unverified `reply` source in V1.
 - Counter of `needs-setup` orders older than 7 days, surfaced in the list
   group header as "3 waiting over a week".
 
@@ -469,13 +513,13 @@ The "Workers / Workflows / Active" tabs remain. Nothing is renamed.
    `trigger.schedule.cadence`. `HnicScheduledWork` validation updated. New
    `supply_work_input` tool. Manager skill text updated with the one-question
    rule. Tests.
-4. **The ask.** On `needs-setup` creation, send the agent-bound message
-   through spec 26 with `askRequest` linkage; reply handling calls
-   `supply_work_input`. Fallback to in-app agent chat. Tests.
-5. **Dialog.** Replace `AutomationWorkDialog` with the what → needs → when
-   flow. Honest relabelling for fed shapes. Occupancy-failure fallback.
+4. **The ask.** Surface `needs-setup` in-app and permit exact current-turn
+   supply from Artist Manager. Worker-chat supply, durable outbound asks, and
+   external reply correlation remain deferred.
+5. **Dialog.** Replace `AutomationWorkDialog` with the what → starts → needs
+   flow. Honest relabelling for fed shapes. Retry-safe occupancy failure.
 6. **List.** Grouped row list with cadence tags, next-fire, *Needs you* inline
-   supply, repeated-ask grouping.
+   supply, repeated-ask grouping, and the two page-level setup actions.
 7. **Docs.** Update the in-app user guide (spec 27) section on automations to
    use the *Same every time / Ask me each time* language.
 
@@ -488,12 +532,12 @@ The "Workers / Workflows / Active" tabs remain. Nothing is renamed.
   name in the message.
 
 ### Fed fires
-- A weekly fed automation fires → exactly one `needs-setup` order, one
-  agent-bound message from the correct agent, no `running` order, lane free.
-- Supplying via reply and via list both transition to `scheduled` with
+- A weekly fed automation fires → exactly one `needs-setup` order, no
+  `running` order, lane free.
+- Supplying via Artist Manager and via list both transition to `scheduled` with
   `startAt` = supply time and the resolved `triggerInputs` complete.
-- Two unanswered fires produce two orders and the list renders one grouped
-  row with count 2.
+- Two unanswered fires produce one outstanding order with count 2; exact
+  redelivery does not increase it.
 
 ### Trigger binding
 - A `FileWatch` fire with `design_file → trigger:file.path` yields a
@@ -503,7 +547,8 @@ The "Workers / Workflows / Active" tabs remain. Nothing is renamed.
 ### Placement
 - `cadence: 'weekly'` from the manager and *Weekly* from the dialog choose the
   same slot given the same occupancy.
-- Occupancy read failure does not produce a confident slot at either door.
+- Occupancy read failure does not produce a confident slot at either door and
+  keeps a visible retry path.
 
 ### Lane
 - Ten `needs-setup` orders across three workspaces do not prevent a
@@ -512,5 +557,5 @@ The "Workers / Workflows / Active" tabs remain. Nothing is renamed.
 ### List
 - Cadence tags derive correctly for `0 9 * * *`, `30 9 * * 2`, `*/15 * * * *`
   (custom), and each non-schedule event.
-- *Running now* shows orders from every local workspace, not only the active
-  one.
+- *Running now* and *Needs you* show orders from every local workspace, not
+  only the active one, with an HQ or campaign origin chip.

@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-10
+last_verified: 2026-09-02
 source_of_truth: true
 extends: ./12-campaign-calendar-scheduled-jobs-spec.md
 ---
@@ -142,6 +142,57 @@ Completion is based on the selected queue type:
 - Social Publish: external executor returned a valid receipt.
 - Review: explicit approval or changes-requested decision recorded.
 - Event / Reminder: manually completed or informational only.
+
+### 5A. Automatic Work Is Staggered And Serialized
+
+Recurring tracked work defaults to automatic placement instead of a shared
+hard-coded start time.
+
+- Weekly work takes the least-busy weekday/time slot across local Artist OS
+  workspaces.
+- Daily work takes the least-busy daytime slot across local Artist OS
+  workspaces.
+- The assigned schedule is stored as an ordinary cron expression with the
+  workspace's selected timezone, so existing scheduler and editing paths remain
+  compatible.
+- Occupancy is compared as real instants across workspace timezones, preventing
+  differently labeled local times from landing on the same actual half-hour.
+- The automatic slot is recalculated immediately before save, so a stale open
+  composer does not casually reuse a slot that was just taken.
+- Custom cron remains available through `Choose schedule`.
+- Disabled schedules do not reserve a slot. Complex custom cron that cannot be
+  mapped to one exact slot remains valid but is not treated as a reserved slot.
+
+The durable Scheduled Work runner starts at most one top-level automatic Agent
+Task or Workflow Run across the local Artist OS installation. Additional due
+work remains `scheduled` and is reconsidered on the next minute scan.
+
+- Each workspace reconciles its own running work before admitting its next job.
+  A stale running order in another workspace may hold the lane until that
+  workspace's next scan. It must not be assumed free from another root because
+  that could duplicate work after restart or temporary session unavailability.
+- Due work is ordered across all runnable workspace roots by `startAt`, then
+  `createdAt`, stable ID, workspace ID, and root path.
+- `done`, `failed`, `needs-attention`, review, and approval-wait states release
+  the lane; they do not stall unrelated work.
+- Agent sessions release the automatic lane only while a credential, permission,
+  or plan decision is actually waiting on the artist. Ask-mode sessions still
+  occupy the lane while actively thinking, preventing a launch burst. Paused
+  workflows likewise release the lane while they wait.
+- Explicitly approving or resuming paused work is a manual launch and may run
+  beside the automatic lane. The artist's current action takes priority over
+  background serialization.
+- A workflow may still use intentional parallel groups inside its own run.
+- Manual user launches remain immediate and do not enter this automatic lane.
+- Disabled workspaces and roots without a valid Team Mode runner fence neither
+  occupy the lane nor compete for its next start.
+- Social publishing retains its separate exact-approval and per-profile
+  serialization contract.
+
+The lane is derived from persisted work-order state across workspace roots. A
+short process-local admission reservation closes the race between simultaneous
+workspace scans; it is not the source of truth. Restart and sleep catch-up
+therefore cannot recreate a launch burst.
 
 ### 6. Social Publishing Is Deterministic
 

@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { AutomationSystem, type SessionMetadataSnapshot } from './automation-system.ts';
 import { AUTOMATIONS_CONFIG_FILE, AUTOMATIONS_HISTORY_FILE } from './constants.ts';
 import { getTeamHeartbeatFile, markWorkspaceAsSharedFolder, readTeamRunnerState, setRunnerMachine, TEAM_RUNNER_PULSE_LOG_FILE } from '../workspaces/team-mode.ts';
+import { readAutomationSchedulerState, recordAutomationSchedulerTick } from './scheduler-state.ts';
 import { loadWorkspaceConfig, saveWorkspaceConfig } from '../workspaces/storage.ts';
 import { getRecordFile, listConflictRecords, writeSharedRecord } from '../records/storage.ts';
 import type { WorkspaceConfig } from '../workspaces/types.ts';
@@ -246,6 +247,37 @@ describe('AutomationSystem', () => {
       await system.fireSchedulerTickForTest(schedulerPayload());
 
       expect(ticks).toBe(1);
+      expect(readAutomationSchedulerState(tempDir)?.lastDeliveredTickKey).toBe('2026-07-02T12:00:00.000Z');
+      await system.dispose();
+    });
+
+    it('dedupes repeated solo SchedulerTick keys', async () => {
+      writeWorkspaceConfig();
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+      let ticks = 0;
+      system.eventBus.on('SchedulerTick', () => { ticks++; });
+
+      await system.fireSchedulerTickForTest(schedulerPayload());
+      await system.fireSchedulerTickForTest(schedulerPayload());
+
+      expect(ticks).toBe(1);
+      await system.dispose();
+    });
+
+    it('does not advance the scheduler checkpoint when delivery fails', async () => {
+      writeWorkspaceConfig();
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+      system.eventBus.on('SchedulerTick', () => { throw new Error('queue unavailable'); });
+
+      await system.fireSchedulerTickForTest(schedulerPayload());
+
+      expect(readAutomationSchedulerState(tempDir)).toBeNull();
       await system.dispose();
     });
 
@@ -402,14 +434,53 @@ describe('AutomationSystem', () => {
         workspaceRootPath: tempDir,
         workspaceId: 'test-workspace',
       });
-      const catchUpFlags: Array<boolean | undefined> = [];
-      system.eventBus.on('SchedulerTick', (payload) => { catchUpFlags.push(payload.catchUp); });
+      const catchUps: Array<{ catchUp?: boolean; catchUpFromMs?: number }> = [];
+      system.eventBus.on('SchedulerTick', (payload) => {
+        catchUps.push({ catchUp: payload.catchUp, catchUpFromMs: payload.catchUpFromMs });
+      });
 
       await system.fireMissedSchedulerCatchUpForTest();
 
-      expect(catchUpFlags).toEqual([true]);
+      expect(catchUps).toEqual([{ catchUp: true, catchUpFromMs: Date.parse(staleAt) }]);
       await system.dispose();
       rmSync(privateRoot, { recursive: true, force: true });
+    });
+
+    it('replays a missed solo schedule from the durable checkpoint after restart', async () => {
+      writeWorkspaceConfig();
+      const now = Date.now();
+      const checkpointAt = new Date(now - 5 * 60 * 1000).toISOString();
+      recordAutomationSchedulerTick(tempDir, checkpointAt, checkpointAt);
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+      const catchUpFrom: number[] = [];
+      system.eventBus.on('SchedulerTick', (payload) => {
+        if (payload.catchUpFromMs !== undefined) catchUpFrom.push(payload.catchUpFromMs);
+      });
+
+      await system.fireMissedSchedulerCatchUpForTest();
+
+      expect(catchUpFrom).toEqual([Date.parse(checkpointAt)]);
+      expect(Date.parse(readAutomationSchedulerState(tempDir)!.lastDeliveredTickAt)).toBeGreaterThan(now - 1_000);
+      await system.dispose();
+    });
+
+    it('establishes a solo baseline without fabricating a first-launch catch-up', async () => {
+      writeWorkspaceConfig();
+      const system = new AutomationSystem({
+        workspaceRootPath: tempDir,
+        workspaceId: 'test-workspace',
+      });
+      let ticks = 0;
+      system.eventBus.on('SchedulerTick', () => { ticks++; });
+
+      await system.fireMissedSchedulerCatchUpForTest();
+
+      expect(ticks).toBe(0);
+      expect(readAutomationSchedulerState(tempDir)).not.toBeNull();
+      await system.dispose();
     });
 
     it('can defer startup catch-up until subscribers are attached', async () => {

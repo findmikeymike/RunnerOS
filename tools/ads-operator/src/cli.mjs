@@ -90,6 +90,11 @@ function doctorPayload() {
         apiRoute: 'meta-ads source when connected',
         browserExportRequiredWhenApiMissing: true,
       },
+      spotify: {
+        route: 'spotify-ads-manager-browser',
+        audienceIntel: 'Spotify for Artists when connected',
+        browserExportRequired: true,
+      },
     },
     commands: ['doctor', 'accounts', 'campaigns', 'export-plan', 'import', 'audit', 'ad-library-plan', 'ad-library-analyze', 'campaign-plan', 'setup-plan', 'packet create', 'receipt create'],
   };
@@ -107,12 +112,13 @@ function accountsPayload(args) {
       writeExecuted: false,
     };
   }
+  const label = platform === 'spotify' ? 'Spotify Ads Manager' : 'Meta Ads Manager';
   return {
     ok: true,
     platform,
     readOnly: true,
     route: 'browser-export',
-    next: 'Open Meta Ads Manager, choose the ad account, export account/campaign tables, then run ads-operator import.',
+    next: `Open ${label}, choose the ad account, export the relevant table, then run ads-operator import.`,
     writeExecuted: false,
   };
 }
@@ -147,7 +153,7 @@ function campaignsPayload(args) {
     account: account || null,
     readOnly: true,
     route: 'browser-export',
-    exportPlan: exportPlan('meta', 'campaign'),
+    exportPlan: exportPlan(platform, platform === 'spotify' ? 'adset' : 'campaign'),
     writeExecuted: false,
   };
 }
@@ -271,23 +277,31 @@ function exportPlan(platform, level) {
   const commonColumns = ['Campaign name', 'Impressions', 'Clicks', 'Spend', 'Conversions', 'Date'];
   const platformColumns = platform === 'google'
     ? ['Campaign status', 'CTR', 'Avg. CPC', 'Cost', 'Conv. value']
-    : ['Ad set name', 'Ad name', 'Amount spent', 'Results', 'CPM', 'Frequency'];
+    : platform === 'spotify'
+      ? ['Ad set name', 'Status', 'Reach', 'Frequency', 'Completion rate', 'Ad played to 25%', 'Ad played to 50%', 'Ad played to 75%', 'Ad played to 100%', 'CTR']
+      : ['Ad set name', 'Ad name', 'Amount spent', 'Results', 'CPM', 'Frequency'];
   return {
     platform,
     level,
-    source: platform === 'google' ? 'Google Ads UI or google-ads CLI report' : 'Meta Ads Manager export',
+    source: platform === 'google'
+      ? 'Google Ads UI or google-ads CLI report'
+      : platform === 'spotify'
+        ? 'Spotify Ads Manager ad set report'
+        : 'Meta Ads Manager export',
     fileType: 'csv',
     requiredColumns: commonColumns,
     usefulColumns: platformColumns,
     steps: platform === 'google'
       ? ['Open Google Ads campaign table or use google-ads GAQL.', 'Set date range.', 'Export CSV with campaign metrics.', 'Run ads-operator import.']
-      : ['Open Meta Ads Manager.', 'Select campaign/ad set/ad level table.', 'Set date range and attribution view.', 'Export CSV.', 'Run ads-operator import.'],
+      : platform === 'spotify'
+        ? ['Open Spotify Ads Manager.', 'Open the ad set overview/report.', 'Set the date range.', 'Export CSV with delivery, performance, and audience metrics.', 'Run ads-operator import.']
+        : ['Open Meta Ads Manager.', 'Select campaign/ad set/ad level table.', 'Set date range and attribution view.', 'Export CSV.', 'Run ads-operator import.'],
   };
 }
 
 function requirePlatform(args) {
   const platform = normalizePlatform(opt(args, '--platform'));
-  if (!validatePlatform(platform)) throw new Error('--platform must be google or meta.');
+  if (!validatePlatform(platform)) throw new Error('--platform must be google, meta, or spotify.');
   return platform;
 }
 

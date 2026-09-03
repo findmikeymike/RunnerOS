@@ -227,18 +227,13 @@ export function AutomationsListPanel({
       && !(EXTERNAL_INPUT_EVENTS as string[]).includes(a.event)
     )
     if (kind === 'agent') return automations.filter(a => (AGENT_EVENTS as string[]).includes(a.event))
-    if (kind === 'pulses') return automations.filter(a =>
-      // Pulse action type added in Wave 1; cast through unknown for the local UI types until mirrored.
-      a.actions.some((act) => (act as unknown as { type: string }).type === 'pulse'),
-    )
+    if (kind === 'pulses') return automations.filter(a => a.actions.some((act) => act.type === 'pulse'))
     return automations
   }, [automations, automationFilter?.kind])
 
   const pulseFiltered = React.useMemo(() => {
     if (!pulsesOnly) return categoryFiltered
-    return categoryFiltered.filter((a) =>
-      a.actions.some((act) => (act as unknown as { type: string }).type === 'pulse'),
-    )
+    return categoryFiltered.filter((a) => a.actions.some((act) => act.type === 'pulse'))
   }, [categoryFiltered, pulsesOnly])
 
   // Further filter by search query (name, summary, event display name)

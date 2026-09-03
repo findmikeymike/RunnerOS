@@ -58,6 +58,42 @@ describe('campaign connection routing', () => {
     }))).toBe('ad-accounts')
   })
 
+  it('routes Spotify-only Ad Runner work to Spotify settings', () => {
+    expect(connectionSettingsSubpageForWork(work({
+      execution: {
+        type: 'agent-task',
+        agentSlug: 'ads-agent',
+        brief: 'Build the Spotify Ads campaign draft.',
+        permissionMode: 'safe',
+        expectedOutput: { requirement: 'none' },
+      },
+    }))).toBe('spotify')
+  })
+
+  it('routes a Spotify-only paid campaign workflow to Spotify settings', () => {
+    expect(connectionSettingsSubpageForWork(work({
+      type: 'workflow-run',
+      execution: {
+        type: 'workflow-run',
+        workflowSlug: 'paid-campaign-builder',
+        workflowDigest: 'sha256:workflow',
+        triggerInputs: { platforms: 'Spotify' },
+      },
+    }))).toBe('spotify')
+  })
+
+  it('routes mixed paid campaign workflows to Ad Accounts by default', () => {
+    expect(connectionSettingsSubpageForWork(work({
+      type: 'workflow-run',
+      execution: {
+        type: 'workflow-run',
+        workflowSlug: 'paid-campaign-builder',
+        workflowDigest: 'sha256:workflow',
+        triggerInputs: { platforms: 'Meta and Spotify' },
+      },
+    }))).toBe('ad-accounts')
+  })
+
   it('routes spotify publish setup issues to Spotify settings', () => {
     expect(connectionSettingsSubpageForWork(work({
       type: 'social-publish',

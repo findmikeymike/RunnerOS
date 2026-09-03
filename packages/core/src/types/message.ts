@@ -286,6 +286,8 @@ export interface Message {
   role: MessageRole;
   content: string;
   timestamp: number;
+  /** Host-stamped origin for user-shaped messages. Never trust renderer input for this field. */
+  inputOrigin?: 'human' | 'agent' | 'system';
   // Tool-specific fields
   toolName?: string;
   toolUseId?: string;
@@ -383,6 +385,8 @@ export interface StoredMessage {
   type: MessageRole;
   content: string;
   timestamp?: number;
+  /** Persisted host-stamped origin for user-shaped messages. */
+  inputOrigin?: 'human' | 'agent' | 'system';
   // Tool-specific fields
   toolName?: string;
   toolUseId?: string;

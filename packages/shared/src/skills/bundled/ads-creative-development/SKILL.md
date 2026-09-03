@@ -13,7 +13,7 @@ This skill creates creative strategy and copy. It does not touch ad accounts.
 
 - Artist Ad DNA packet or Artist HQ context.
 - Ads Strategy Packet, if available.
-- Platform: Meta, Google, or both.
+- Platform: Meta, Google, Spotify, or a deliberate mix.
 - Campaign goal and destination.
 - Existing creative, hooks, captions, lyrics, clips, comments, or prior ads.
 - Known constraints: claims, policy, assets, budget, release timing, territory, language, and brand rules.
@@ -29,6 +29,7 @@ Produce:
    - Meta primary text
    - Meta headline
    - Google responsive search ad headlines/descriptions when relevant
+   - Spotify display copy, CTA, destination, audio/video concept, and companion-image direction when relevant
    - CTA recommendations
 5. Format plan: video, static, carousel, UGC-style, lyric-led, performance clip, comment/social-proof, or story-world concept.
 6. Diversity check: concept, format, visual, hook, and headline diversity.
@@ -41,5 +42,6 @@ Produce:
 
 - For Meta, prioritize genuine concept and format diversity over many tiny copy variants.
 - For Google Search, keep intent and landing-page promise aligned.
+- For Spotify, make the creative work as audio first: earn attention immediately, keep voice/music intelligible, pair audio with a companion image, and align CTA timing with the destination. Use video only when the approved asset and objective justify it.
 - Do not invent testimonials, stats, press, charting, streaming counts, or fan claims.
 - Make creative feel native to the artist's world, not generic direct-response filler.

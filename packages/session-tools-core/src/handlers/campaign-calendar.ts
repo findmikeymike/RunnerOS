@@ -44,7 +44,6 @@ export interface CampaignCalendarWriteResult {
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const SECRET_PAYLOAD_RE = /token|secret|password|cookie|bearer|2fa|two[-_\s]?factor/i;
 
 export async function handleCampaignCalendarWrite(
   ctx: SessionToolContext,
@@ -68,17 +67,7 @@ export async function handleCampaignCalendarWrite(
   }
 
   if (args.item.job) {
-    if (args.item.job.actionType === 'post-asset') {
-      return errorResponse('Social publishing must use HNIC schedule_work with one exact Release Kit item, not campaign_calendar_write.');
-    }
-    if (!args.item.job.runAt || Number.isNaN(Date.parse(args.item.job.runAt))) {
-      return errorResponse('item.job.runAt must be a valid ISO timestamp.');
-    }
-    if (!args.item.job.actionType) return errorResponse('item.job.actionType is required.');
-    const unsafePayloadPath = findUnsafePayloadPath(args.item.job.payload ?? {});
-    if (unsafePayloadPath) {
-      return errorResponse(`item.job.payload contains sensitive material at ${unsafePayloadPath}. Store credentials in Settings/Secrets, not Campaign Calendar.`);
-    }
+    return errorResponse('Runnable work must use Artist Manager schedule_work so it joins the tracked background queue. Use campaign_calendar_write only for reminders, deadlines, and other non-running calendar items.');
   }
 
   try {
@@ -90,25 +79,4 @@ export async function handleCampaignCalendarWrite(
   } catch (err) {
     return errorResponse(`Failed to write campaign calendar item: ${err instanceof Error ? err.message : String(err)}`);
   }
-}
-
-function findUnsafePayloadPath(value: unknown, path = 'payload'): string | undefined {
-  if (typeof value === 'string') {
-    return SECRET_PAYLOAD_RE.test(value) ? path : undefined;
-  }
-  if (!value || typeof value !== 'object') return undefined;
-  if (Array.isArray(value)) {
-    for (let index = 0; index < value.length; index += 1) {
-      const match = findUnsafePayloadPath(value[index], `${path}[${index}]`);
-      if (match) return match;
-    }
-    return undefined;
-  }
-  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    const childPath = `${path}.${key}`;
-    if (SECRET_PAYLOAD_RE.test(key)) return childPath;
-    const match = findUnsafePayloadPath(child, childPath);
-    if (match) return match;
-  }
-  return undefined;
 }

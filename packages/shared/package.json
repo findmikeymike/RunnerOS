@@ -94,6 +94,7 @@
     "./skills/system": "./src/skills/system.ts",
     "./skills/categories": "./src/skills/categories.ts",
     "./automations": "./src/automations/index.ts",
+    "./automations/staggered-schedule": "./src/automations/staggered-schedule.ts",
     "./campaign-calendar": "./src/campaign-calendar/index.ts",
     "./scheduled-work": "./src/scheduled-work/index.ts",
     "./x-editorial": "./src/x-editorial/index.ts",

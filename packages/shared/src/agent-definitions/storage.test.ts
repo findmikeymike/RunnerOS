@@ -630,6 +630,7 @@ body
     expect(adsAgent?.metadata.skills).not.toContain('ad-creative')
     expect(adsAgent?.metadata.skills).toContain('meta-ads')
     expect(adsAgent?.metadata.skills).toContain('google-ads')
+    expect(adsAgent?.metadata.skills).toContain('spotify-ads-manager')
     expect(adsAgent?.metadata.skills).toContain('paid-ads-browser-operator')
     expect(adsAgent?.metadata.skills).toContain('music-ad-conversion-protocol')
     expect(adsAgent?.metadata.sources).toContain('meta-ads')
@@ -643,8 +644,8 @@ body
     expect(adsAgent?.systemPrompt).toContain('setup-plan --platform meta')
     expect(adsAgent?.systemPrompt).toContain('Spotify Ads Manager')
     expect(adsAgent?.systemPrompt).toContain('Spotify for Artists')
-    expect(adsAgent?.systemPrompt).toContain('manual Spotify approval packet')
-    expect(adsAgent?.systemPrompt).toContain('ads-operator --platform spotify')
+    expect(adsAgent?.systemPrompt).toContain('packet create --platform meta|google|spotify')
+    expect(adsAgent?.systemPrompt).toContain('setup-plan --platform meta|google|spotify')
     expect(adsAgent?.systemPrompt).toContain('Ads Strategy Packet')
     expect(adsAgent?.systemPrompt).toContain('Ad Creative Packet')
     expect(adsAgent?.systemPrompt).toContain('Routing decision tree')
@@ -949,6 +950,7 @@ body
     expect(rawVideoAgent?.metadata.permissionMode).toBe('ask')
     expect(rawVideoAgent?.metadata.skills).toContain('raw-video-editor')
     expect(rawVideoAgent?.metadata.skills).toContain('raw-video-edit-direction')
+    expect(rawVideoAgent?.metadata.skills).toContain('social-video-repurposing')
     expect(rawVideoAgent?.metadata.sources).toContain('raw-video-editor')
     expect(rawVideoAgent?.metadata.sources).toContain('video-studio')
     expect(rawVideoAgent?.metadata.tags).toContain('raw-footage')
@@ -964,6 +966,7 @@ body
     expect(rawVideoAgent?.systemPrompt).toContain('Create action already authorized the bounded render')
     expect(rawVideoAgent?.systemPrompt).toContain('use the `repurpose` workflow')
     expect(rawVideoAgent?.systemPrompt).toContain('partial success survives interruption')
+    expect(rawVideoAgent?.systemPrompt).toContain('Trial Reels are only an optional destination')
   })
 
   test('starter library includes Content Genius with captions and overlays', () => {
@@ -1583,7 +1586,7 @@ body
     expect(loadGlobalAgent('orchestrator', { globalAgentsDir })!.metadata.skills).toEqual(['agent-creator'])
   })
 
-  test('can add editorial direction to an existing Raw Video Editor without replacing its other skills', () => {
+  test('can add direction and repurposing to an existing Raw Video Editor without replacing its other skills', () => {
     writeGlobalAgent(
       {
         slug: 'raw-video-editor',
@@ -1593,9 +1596,9 @@ body
       { globalAgentsDir },
     )
 
-    expect(ensureBuiltInAgentSkillsForSlug('raw-video-editor', ['raw-video-edit-direction'], { globalAgentsDir }).updated).toBe(true)
+    expect(ensureBuiltInAgentSkillsForSlug('raw-video-editor', ['raw-video-edit-direction', 'social-video-repurposing'], { globalAgentsDir }).updated).toBe(true)
     const migrated = loadGlobalAgent('raw-video-editor', { globalAgentsDir })!
-    expect(migrated.metadata.skills).toEqual(['raw-video-editor', 'custom-editing-skill', 'raw-video-edit-direction'])
+    expect(migrated.metadata.skills).toEqual(['raw-video-editor', 'custom-editing-skill', 'raw-video-edit-direction', 'social-video-repurposing'])
     expect(migrated.systemPrompt).toBe('Customized editing body.')
   })
 
@@ -1700,12 +1703,12 @@ body
     )
 
     expect(ensureBuiltInAgentMetadataSlugs('ads-agent', {
-      skills: ['meta-ads', 'google-ads', 'paid-ads-browser-operator'],
+      skills: ['meta-ads', 'google-ads', 'spotify-ads-manager', 'paid-ads-browser-operator'],
       sources: ['meta-ads', 'google-ads', 'ads-operator'],
     }, { globalAgentsDir }).updated).toBe(true)
 
     const adsAgent = loadGlobalAgent('ads-agent', { globalAgentsDir })!
-    expect(adsAgent.metadata.skills).toEqual(['meta-ads', 'google-ads', 'paid-ads-browser-operator', 'ad-creative'])
+    expect(adsAgent.metadata.skills).toEqual(['meta-ads', 'google-ads', 'spotify-ads-manager', 'paid-ads-browser-operator', 'ad-creative'])
     expect(adsAgent.metadata.sources).toEqual(['meta-ads', 'google-ads', 'ads-operator'])
     expect(adsAgent.metadata.optionalSources).toBeUndefined()
     expect(adsAgent.systemPrompt).toBe('Ads Agent body stays intact.')

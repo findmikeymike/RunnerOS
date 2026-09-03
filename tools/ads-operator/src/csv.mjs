@@ -30,6 +30,11 @@ const FIELD_ALIASES = {
   costPerResult: [{ name: 'cost per result' }],
   costPerConversion: [{ name: 'cost / conv.' }, { name: 'cost per conversion' }],
   impressionShare: [{ name: 'search impr. share' }, { name: 'search impression share' }, { name: 'impr. share' }],
+  completionRate: [{ name: 'completion rate' }, { name: 'audio completion rate' }, { name: 'video completion rate' }],
+  played25: [{ name: 'ad played to 25%' }, { name: 'played to 25%' }],
+  played50: [{ name: 'ad played to 50%' }, { name: 'played to 50%' }],
+  played75: [{ name: 'ad played to 75%' }, { name: 'played to 75%' }],
+  played100: [{ name: 'ad played to 100%' }, { name: 'played to 100%' }],
 };
 
 export function importCsvFile(filePath, { platform, level }) {
@@ -100,6 +105,11 @@ const numericFields = new Set([
   'costPerResult',
   'costPerConversion',
   'impressionShare',
+  'completionRate',
+  'played25',
+  'played50',
+  'played75',
+  'played100',
 ]);
 
 function pick(row, aliases) {

@@ -22,6 +22,8 @@ export type {
   PromptAction,
   WebhookAction,
   QueueWorkAction,
+  WorkflowInputBinding,
+  WorkflowInputTriggerSource,
   WebhookHttpMethod,
   WebhookBodyFormat,
   WebhookAuth,
@@ -93,7 +95,14 @@ export { executeWebhookRequest, executeWithRetry, createWebhookHistoryEntry, cre
 export { RetryScheduler, type RetryQueueEntry, type RetrySchedulerOptions } from './retry-scheduler.ts';
 
 // Config constants
-export { AUTOMATIONS_CONFIG_FILE, AUTOMATIONS_HISTORY_FILE, AUTOMATIONS_RETRY_QUEUE_FILE, HISTORY_FIELD_MAX_LENGTH, AUTOMATION_HISTORY_MAX_RUNS_PER_MATCHER, AUTOMATION_HISTORY_MAX_ENTRIES } from './constants.ts';
+export { AUTOMATIONS_CONFIG_FILE, AUTOMATIONS_HISTORY_FILE, AUTOMATIONS_RETRY_QUEUE_FILE, AUTOMATIONS_SCHEDULER_STATE_FILE, HISTORY_FIELD_MAX_LENGTH, AUTOMATION_HISTORY_MAX_RUNS_PER_MATCHER, AUTOMATION_HISTORY_MAX_ENTRIES } from './constants.ts';
+
+export {
+  readAutomationSchedulerState,
+  recordAutomationSchedulerTick,
+  resolveAutomationSchedulerStatePath,
+  type AutomationSchedulerState,
+} from './scheduler-state.ts';
 
 // History store
 export { appendAutomationHistoryEntry, compactAutomationHistory, compactAutomationHistorySync } from './history-store.ts';
@@ -114,6 +123,12 @@ export { resolveAutomationsConfigPath, generateShortId } from './resolve-config-
 
 // Cron matching
 export { matchesCron, normalizeStandardFiveFieldCron } from './cron-matcher.ts';
+
+export {
+  assertWorkflowInputBindings,
+  workflowInputBindingValidationError,
+  type WorkflowBindingTrigger,
+} from './workflow-input-bindings.ts';
 
 // Event Bus
 export {

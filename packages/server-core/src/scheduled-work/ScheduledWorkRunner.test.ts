@@ -4,6 +4,14 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { OutputManifest } from '@craft-agent/shared/outputs'
+import {
+  CAMPAIGN_CALENDAR_CONTEXT_SLUG,
+  campaignCalendarMetadata,
+  createCampaignCalendarItem,
+  createCampaignScheduledJob,
+  parseCampaignCalendarDocResult,
+  serializeCampaignCalendarBody,
+} from '@craft-agent/shared/campaign-calendar'
 import { materializeReleaseKitItem, updateReleaseKitItemUsage } from '@craft-agent/shared/release-kit'
 import {
   SCHEDULED_WORK_CONTEXT_SLUG,
@@ -33,10 +41,10 @@ function makeRoot(): string {
   return root
 }
 
-function writeWork(root: string, items: ScheduledWorkOrder[]): void {
+function writeWork(root: string, items: ScheduledWorkOrder[], targetWorkspaceId = workspaceId): void {
   const work: ScheduledWorkDocument = {
     version: 1,
-    workspaceId,
+    workspaceId: targetWorkspaceId,
     items,
     updatedAt: '2026-07-09T00:00:00.000Z',
   }
@@ -95,8 +103,8 @@ function continuationOrders(runtimeId: string, goalRevision: string, round = 1, 
   return [coordinator, child]
 }
 
-function readWork(root: string): ScheduledWorkDocument {
-  const parsed = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, workspaceId)
+function readWork(root: string, targetWorkspaceId = workspaceId): ScheduledWorkDocument {
+  const parsed = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, targetWorkspaceId)
   if (!parsed.ok) throw new Error(parsed.error)
   return parsed.work
 }
@@ -132,6 +140,9 @@ function buildOrder(overrides: Partial<ScheduledWorkOrder> = {}): ScheduledWorkO
     authorization: overrides.authorization,
     authorizationPolicy: overrides.authorizationPolicy,
     attention: overrides.attention,
+    inputRequest: overrides.inputRequest,
+    inputSupplyReceipt: overrides.inputSupplyReceipt,
+    automationRef: overrides.automationRef,
     executionKey: overrides.executionKey ?? { payloadDigest: 'digest-1', idempotencyKey: 'idem-1' },
     chain: overrides.chain,
     continuation: overrides.continuation,
@@ -199,6 +210,43 @@ async function waitFor(predicate: () => boolean, attempts = 100): Promise<void> 
 }
 
 describe('ScheduledWorkRunner', () => {
+  test('ignores needs-setup work without blocking a due background order', async () => {
+    const root = makeRoot()
+    const started: string[] = []
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: createLock(),
+      executeAgentTask: async ({ workOrderId, onStarted }) => {
+        started.push(workOrderId)
+        await onStarted(`session-${workOrderId}`)
+        return { sessionId: `session-${workOrderId}` }
+      },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      awaitAgentCompletionBarrier: async () => true,
+    })
+    const waiting = buildOrder({
+      id: 'waiting-input',
+      type: 'workflow-run',
+      status: 'needs-setup',
+      execution: { type: 'workflow-run', workflowSlug: 'merch-run', workflowDigest: 'workflow-v1', triggerInputs: {} },
+      attention: { reason: 'input-required', message: 'Waiting for: design_file' },
+      inputRequest: {
+        id: 'waiting-input:input', inputs: ['design_file'],
+        requestedAt: '2026-07-09T00:00:00.000Z', lastTriggeredAt: '2026-07-09T00:00:00.000Z',
+        coalescedFireCount: 1, fireDefinitionDigests: ['fire-1'],
+      },
+    })
+    const due = buildOrder({ id: 'due-agent', createdAt: '2026-07-09T00:01:00.000Z' })
+    writeWork(root, [waiting, due])
+
+    const result = await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => started.length === 1)
+    expect(result.scanned).toBe(1)
+    expect(started).toEqual(['due-agent'])
+  })
+
   test('advances a completed continuation round without Output by creating one hidden successor', async () => {
     const root = makeRoot()
     const runner = new ScheduledWorkRunner({
@@ -504,6 +552,325 @@ describe('ScheduledWorkRunner', () => {
     expect(saved.runs.at(-1)?.status).toBe('done')
   })
 
+  test('starts only the oldest due background job and leaves the rest scheduled', async () => {
+    const root = makeRoot()
+    writeWork(root, [
+      buildOrder({ id: 'older', title: 'Older work', createdAt: '2026-07-09T08:00:00.000Z' }),
+      buildOrder({ id: 'newer', title: 'Newer work', createdAt: '2026-07-09T09:00:00.000Z' }),
+    ])
+    const firstExecution = deferred<void>()
+    const executeCalls: string[] = []
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: createLock(),
+      executeAgentTask: async ({ workOrderId, onStarted }) => {
+        executeCalls.push(workOrderId)
+        await onStarted(`session-${workOrderId}`)
+        if (workOrderId === 'older') await firstExecution.promise
+        return { sessionId: `session-${workOrderId}` }
+      },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+    })
+
+    const first = await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => readWork(root).items.find((order) => order.id === 'older')?.status === 'running')
+
+    expect(first.started).toBe(1)
+    expect(executeCalls).toEqual(['older'])
+    expect(readWork(root).items.find((order) => order.id === 'newer')?.status).toBe('scheduled')
+
+    firstExecution.resolve()
+    await waitFor(() => readWork(root).items.find((order) => order.id === 'older')?.status === 'done')
+    const second = await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:02:00.000Z'))
+    await waitFor(() => executeCalls.length === 2)
+
+    expect(second.started).toBe(1)
+    expect(executeCalls).toEqual(['older', 'newer'])
+  })
+
+  test('admits only one due background job when separate workspaces scan concurrently', async () => {
+    const secondWorkspaceId = 'campaign-2'
+    const firstRoot = makeRoot()
+    const secondRoot = makeRoot()
+    writeWork(firstRoot, [buildOrder({
+      id: 'first-workspace-job',
+      startAt: '2026-07-10T14:00:00.000Z',
+    })])
+    writeWork(secondRoot, [buildOrder({
+      id: 'second-workspace-job',
+      startAt: '2026-07-10T13:59:00.000Z',
+      owner: { scope: 'campaign', workspaceId: secondWorkspaceId, campaignId: secondWorkspaceId },
+      calendarLink: { calendar: 'campaign', itemId: 'calendar-second-workspace' },
+    })], secondWorkspaceId)
+    const execution = deferred<void>()
+    const starts: string[] = []
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      listWorkspaceRoots: () => [
+        { id: workspaceId, rootPath: firstRoot },
+        { id: secondWorkspaceId, rootPath: secondRoot },
+      ],
+      withLock: createLock(),
+      executeAgentTask: async ({ workOrderId, onStarted }) => {
+        starts.push(workOrderId)
+        await onStarted(`session-${workOrderId}`)
+        await execution.promise
+        return { sessionId: `session-${workOrderId}` }
+      },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+    })
+
+    const scans = await Promise.all([
+      runner.scanWorkspace(workspaceId, firstRoot, new Date('2026-07-10T14:01:00.000Z')),
+      runner.scanWorkspace(secondWorkspaceId, secondRoot, new Date('2026-07-10T14:01:00.000Z')),
+    ])
+    await waitFor(() => starts.length === 1)
+
+    expect(scans.reduce((total, result) => total + result.started, 0)).toBe(1)
+    expect(starts).toEqual(['second-workspace-job'])
+    expect(readWork(firstRoot).items[0]?.status).toBe('scheduled')
+
+    execution.resolve()
+    await waitFor(() => (
+      readWork(firstRoot).items[0]?.status === 'done'
+      || readWork(secondRoot, secondWorkspaceId).items[0]?.status === 'done'
+    ))
+  })
+
+  test('reserves one admission when the same workspace is scanned concurrently', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder({ id: 'single-concurrent-job' })])
+    const execution = deferred<void>()
+    let starts = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: createLock(),
+      executeAgentTask: async ({ onStarted }) => {
+        starts += 1
+        await onStarted('single-concurrent-session')
+        await execution.promise
+        return { sessionId: 'single-concurrent-session' }
+      },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+    })
+
+    const scans = await Promise.all([
+      runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z')),
+      runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z')),
+    ])
+    await waitFor(() => starts === 1)
+
+    expect(scans.reduce((total, result) => total + result.started, 0)).toBe(1)
+    expect(starts).toBe(1)
+    execution.resolve()
+    await waitFor(() => readWork(root).items[0]?.status === 'done')
+  })
+
+  test('does not let disabled workspace state occupy the global background lane', async () => {
+    const disabledWorkspaceId = 'campaign-disabled'
+    const disabledRoot = makeRoot()
+    const activeRoot = makeRoot()
+    writeWork(disabledRoot, [buildOrder({
+      id: 'disabled-running-job',
+      status: 'running',
+      owner: { scope: 'campaign', workspaceId: disabledWorkspaceId, campaignId: disabledWorkspaceId },
+      calendarLink: { calendar: 'campaign', itemId: 'calendar-disabled-running' },
+      runs: [{
+        id: 'disabled-run',
+        jobId: 'disabled-running-job',
+        status: 'running',
+        startedAt: '2026-07-10T13:00:00.000Z',
+        sessionId: 'disabled-session',
+      }],
+    })], disabledWorkspaceId)
+    writeWork(activeRoot, [buildOrder({ id: 'active-scheduled-job' })])
+    const starts: string[] = []
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: (rootPath) => rootPath !== disabledRoot,
+      listWorkspaceRoots: () => [
+        { id: disabledWorkspaceId, rootPath: disabledRoot },
+        { id: workspaceId, rootPath: activeRoot },
+      ],
+      withLock: createLock(),
+      executeAgentTask: async ({ workOrderId, onStarted }) => {
+        starts.push(workOrderId)
+        await onStarted('active-session')
+        return { sessionId: 'active-session' }
+      },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+    })
+
+    const result = await runner.scanWorkspace(workspaceId, activeRoot, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => starts.length === 1)
+
+    expect(result.started).toBe(1)
+    expect(starts).toEqual(['active-scheduled-job'])
+  })
+
+  test('does not let a confirmed missing session in another workspace hold the global lane', async () => {
+    const staleWorkspaceId = 'campaign-stale'
+    const staleRoot = makeRoot()
+    const activeRoot = makeRoot()
+    writeWork(staleRoot, [buildOrder({
+      id: 'stale-running-job',
+      status: 'running',
+      owner: { scope: 'campaign', workspaceId: staleWorkspaceId, campaignId: staleWorkspaceId },
+      calendarLink: { calendar: 'campaign', itemId: 'calendar-stale-running' },
+      runs: [{
+        id: 'stale-run',
+        jobId: 'stale-running-job',
+        status: 'running',
+        startedAt: '2026-07-10T13:00:00.000Z',
+        sessionId: 'missing-session',
+      }],
+    })], staleWorkspaceId)
+    writeWork(activeRoot, [buildOrder({ id: 'active-after-stale-session' })])
+    const starts: string[] = []
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      listWorkspaceRoots: () => [
+        { id: staleWorkspaceId, rootPath: staleRoot },
+        { id: workspaceId, rootPath: activeRoot },
+      ],
+      withLock: createLock(),
+      readAgentSession: async (sessionId) => sessionId === 'missing-session' ? 'missing' : 'running',
+      executeAgentTask: async ({ workOrderId, onStarted }) => {
+        starts.push(workOrderId)
+        await onStarted('active-session')
+        return { sessionId: 'active-session' }
+      },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+    })
+
+    const result = await runner.scanWorkspace(workspaceId, activeRoot, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => starts.length === 1)
+
+    expect(result.started).toBe(1)
+    expect(starts).toEqual(['active-after-stale-session'])
+  })
+
+  test('keeps the global lane occupied when another session state cannot be verified', async () => {
+    const unknownWorkspaceId = 'campaign-unknown'
+    const unknownRoot = makeRoot()
+    const activeRoot = makeRoot()
+    writeWork(unknownRoot, [buildOrder({
+      id: 'unknown-running-job',
+      status: 'running',
+      owner: { scope: 'campaign', workspaceId: unknownWorkspaceId, campaignId: unknownWorkspaceId },
+      calendarLink: { calendar: 'campaign', itemId: 'calendar-unknown-running' },
+      runs: [{
+        id: 'unknown-run',
+        jobId: 'unknown-running-job',
+        status: 'running',
+        startedAt: '2026-07-10T13:00:00.000Z',
+        sessionId: 'unknown-session',
+      }],
+    })], unknownWorkspaceId)
+    writeWork(activeRoot, [buildOrder({ id: 'blocked-by-unknown-session' })])
+    let starts = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      listWorkspaceRoots: () => [
+        { id: unknownWorkspaceId, rootPath: unknownRoot },
+        { id: workspaceId, rootPath: activeRoot },
+      ],
+      withLock: createLock(),
+      readAgentSession: async () => { throw new Error('session store unavailable') },
+      executeAgentTask: async ({ onStarted }) => {
+        starts += 1
+        await onStarted('should-not-start')
+        return { sessionId: 'should-not-start' }
+      },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+    })
+
+    const result = await runner.scanWorkspace(workspaceId, activeRoot, new Date('2026-07-10T14:01:00.000Z'))
+
+    expect(result.started).toBe(0)
+    expect(starts).toBe(0)
+    expect(readWork(activeRoot).items[0]?.status).toBe('scheduled')
+  })
+
+  test('uses running work across workspace roots as the lane source of truth and releases paused workflows', async () => {
+    const secondWorkspaceId = 'campaign-2'
+    const workflowRoot = makeRoot()
+    const agentRoot = makeRoot()
+    writeWork(workflowRoot, [buildOrder({
+      id: 'running-workflow',
+      type: 'workflow-run',
+      status: 'running',
+      execution: {
+        type: 'workflow-run',
+        workflowSlug: 'weekly-content',
+        workflowDigest: 'digest-weekly',
+        triggerInputs: {},
+      },
+      runs: [{
+        id: 'run-entry-global',
+        jobId: 'running-workflow',
+        status: 'running',
+        startedAt: '2026-07-10T14:00:00.000Z',
+        workflowRunId: 'run-global',
+      }],
+    })])
+    writeWork(agentRoot, [buildOrder({
+      id: 'waiting-agent',
+      owner: { scope: 'campaign', workspaceId: secondWorkspaceId, campaignId: secondWorkspaceId },
+      calendarLink: { calendar: 'campaign', itemId: 'calendar-waiting-agent' },
+    })], secondWorkspaceId)
+    let workflowState: WorkflowRunSnapshot['state'] = 'running'
+    let agentStarts = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      listWorkspaceRoots: () => [
+        { id: workspaceId, rootPath: workflowRoot },
+        { id: secondWorkspaceId, rootPath: agentRoot },
+      ],
+      withLock: createLock(),
+      executeAgentTask: async ({ onStarted }) => {
+        agentStarts += 1
+        await onStarted('session-after-global-workflow')
+        return { sessionId: 'session-after-global-workflow' }
+      },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => ({
+        id: 'run-global',
+        workflowSlug: 'weekly-content',
+        workspaceId,
+        state: workflowState,
+        trigger: { type: 'automation', inputs: {}, firedAt: '2026-07-10T14:00:00.000Z' },
+        workflowSnapshot: { metadata: { name: 'Weekly content', steps: [] }, body: '# body' } as unknown as WorkflowRunSnapshot['workflowSnapshot'],
+        steps: [],
+        createdAt: '2026-07-10T14:00:00.000Z',
+        updatedAt: '2026-07-10T14:00:10.000Z',
+        outputIds: [],
+      }),
+      listOutputManifests: () => [],
+    })
+
+    const blocked = await runner.scanWorkspace(secondWorkspaceId, agentRoot, new Date('2026-07-10T14:01:00.000Z'))
+    expect(blocked.started).toBe(0)
+    expect(agentStarts).toBe(0)
+    expect(readWork(agentRoot, secondWorkspaceId).items[0]?.status).toBe('scheduled')
+
+    workflowState = 'paused'
+    const released = await runner.scanWorkspace(secondWorkspaceId, agentRoot, new Date('2026-07-10T14:02:00.000Z'))
+    await waitFor(() => agentStarts === 1)
+    expect(released.started).toBe(1)
+  })
+
   test('moves agent tasks to needs-attention when required outputs are missing', async () => {
     const root = makeRoot()
     writeWork(root, [buildOrder({
@@ -594,7 +961,7 @@ describe('ScheduledWorkRunner', () => {
     expect(readWork(root).items[0]?.attention).toMatchObject({ reason: 'execution-failed', message: 'Structured nuggets are missing.' })
   })
 
-  test('does not let an ask-mode agent block later due work in the workspace', async () => {
+  test('holds the lane while an ask-mode agent thinks, then releases it while waiting for the user', async () => {
     const root = makeRoot()
     const ask = buildOrder({ id: 'ask-1', calendarLink: { calendar: 'campaign', itemId: 'calendar-ask' }, execution: {
       type: 'agent-task', agentSlug: 'content-genius', brief: 'Wait for permission.', permissionMode: 'ask', expectedOutput: { requirement: 'none' },
@@ -602,6 +969,7 @@ describe('ScheduledWorkRunner', () => {
     const automatic = buildOrder({ id: 'auto-2', calendarLink: { calendar: 'campaign', itemId: 'calendar-auto' } })
     writeWork(root, [ask, automatic])
     const permission = deferred<void>()
+    let waitingForUser = false
     const runner = new ScheduledWorkRunner({
       canRunBackgroundWork: () => true,
       withLock: createLock(),
@@ -610,13 +978,22 @@ describe('ScheduledWorkRunner', () => {
         if (workOrderId === 'ask-1') await permission.promise
         return { sessionId: `session-${workOrderId}` }
       },
+      isAgentSessionWaitingForUser: () => waitingForUser,
+      readAgentSession: async () => 'running',
       startWorkflow: async () => ({ runId: 'unused' }),
       readWorkflowRun: () => null,
       listOutputManifests: () => [],
     })
 
-    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    const activeScan = await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => readWork(root).items.find((order) => order.id === 'ask-1')?.status === 'running')
+    expect(activeScan.started).toBe(1)
+    expect(readWork(root).items.find((order) => order.id === 'auto-2')?.status).toBe('scheduled')
+
+    waitingForUser = true
+    const waitingScan = await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:02:00.000Z'))
     await waitFor(() => readWork(root).items.find((order) => order.id === 'auto-2')?.status === 'done')
+    expect(waitingScan.started).toBe(1)
     expect(readWork(root).items.find((order) => order.id === 'ask-1')?.status).toBe('running')
     permission.resolve()
     await waitFor(() => readWork(root).items.find((order) => order.id === 'ask-1')?.status === 'done')
@@ -744,6 +1121,70 @@ describe('ScheduledWorkRunner', () => {
     expect(saved.status).toBe('done')
     expect(saved.result).toEqual({ type: 'workflow-run', workflowRunId: 'run-1', outputIds: ['out-1', 'out-final'] })
     expect(saved.runs.at(-1)?.status).toBe('done')
+  })
+
+  test('holds due agent work behind a running workflow and releases it when the workflow finishes', async () => {
+    const root = makeRoot()
+    writeWork(root, [
+      buildOrder({
+        id: 'workflow-first',
+        type: 'workflow-run',
+        title: 'Weekly workflow',
+        createdAt: '2026-07-09T08:00:00.000Z',
+        execution: {
+          type: 'workflow-run',
+          workflowSlug: 'weekly-content',
+          workflowDigest: 'digest-weekly',
+          triggerInputs: {},
+        },
+      }),
+      buildOrder({ id: 'agent-second', createdAt: '2026-07-09T09:00:00.000Z' }),
+    ])
+
+    let workflowState: WorkflowRunSnapshot['state'] = 'running'
+    let agentStarts = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: createLock(),
+      executeAgentTask: async ({ onStarted }) => {
+        agentStarts += 1
+        await onStarted('session-after-workflow')
+        return { sessionId: 'session-after-workflow' }
+      },
+      startWorkflow: async () => ({ runId: 'run-lane' }),
+      readWorkflowRun: () => ({
+        id: 'run-lane',
+        workflowSlug: 'weekly-content',
+        workspaceId,
+        state: workflowState,
+        trigger: { type: 'manual', inputs: {}, firedAt: '2026-07-10T14:01:00.000Z' },
+        workflowSnapshot: { metadata: { name: 'Weekly content', steps: [] }, body: '# body' } as unknown as WorkflowRunSnapshot['workflowSnapshot'],
+        steps: [],
+        createdAt: '2026-07-10T14:01:00.000Z',
+        updatedAt: '2026-07-10T14:01:10.000Z',
+        outputIds: [],
+        completedAt: workflowState === 'succeeded' ? '2026-07-10T14:02:00.000Z' : undefined,
+      }),
+      listOutputManifests: () => [],
+    })
+
+    const first = await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    expect(first.started).toBe(1)
+    expect(agentStarts).toBe(0)
+    expect(readWork(root).items.find((order) => order.id === 'workflow-first')?.status).toBe('running')
+    expect(readWork(root).items.find((order) => order.id === 'agent-second')?.status).toBe('scheduled')
+
+    const whileRunning = await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:02:00.000Z'))
+    expect(whileRunning.started).toBe(0)
+    expect(agentStarts).toBe(0)
+
+    workflowState = 'succeeded'
+    const released = await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:03:00.000Z'))
+    await waitFor(() => agentStarts === 1)
+
+    expect(released.completed).toBe(1)
+    expect(released.started).toBe(1)
+    expect(readWork(root).items.find((order) => order.id === 'workflow-first')?.status).toBe('done')
   })
 
   test('does not mark a workflow done when workflow finalization records an error', async () => {
@@ -1568,24 +2009,60 @@ describe('ScheduledWorkRunner', () => {
     expect(saved.attention?.reason).toBe('missed-start-window')
   })
 
-  test('never touches embedded legacy campaign jobs', async () => {
+  test('migrates a due legacy calendar job and runs it through Scheduled Work', async () => {
     const root = makeRoot()
-    writeWork(root, [buildOrder({
-      id: 'legacy-1',
-      legacyRef: { campaignItemId: 'campaign-item-1', campaignJobId: 'campaign-job-1' },
-    })])
+    const calendarItem = createCampaignCalendarItem({
+      campaignId: workspaceId,
+      date: '2026-07-10',
+      time: '09:00',
+      timezone: 'America/Chicago',
+      title: 'Legacy launch copy',
+      kind: 'scheduled-job',
+      status: 'scheduled',
+      job: createCampaignScheduledJob({
+        runAt: '2026-07-10T14:00:00.000Z',
+        timezone: 'America/Chicago',
+        actionType: 'ask-agent',
+        payload: { prompt: 'Write launch copy.', agentSlug: 'content-genius' },
+      }),
+    })
+    upsertContextDoc(root, {
+      slug: CAMPAIGN_CALENDAR_CONTEXT_SLUG,
+      metadata: campaignCalendarMetadata(),
+      body: serializeCampaignCalendarBody({
+        version: 1,
+        campaignId: workspaceId,
+        items: [calendarItem],
+        updatedAt: '2026-07-10T13:00:00.000Z',
+      }),
+    })
+    let executeCalls = 0
 
     const runner = new ScheduledWorkRunner({
       canRunBackgroundWork: () => true,
       withLock: createLock(),
-      executeAgentTask: async () => ({ sessionId: 'unused' }),
+      executeAgentTask: async () => {
+        executeCalls += 1
+        return { sessionId: 'legacy-session' }
+      },
       startWorkflow: async () => ({ runId: 'unused' }),
       readWorkflowRun: () => null,
       listOutputManifests: () => [],
     })
 
     const result = await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
-    expect(result.scanned).toBe(0)
-    expect(readWork(root).items[0]?.status).toBe('scheduled')
+    expect(result.scanned).toBe(1)
+    expect(result.started).toBe(1)
+    expect(executeCalls).toBe(1)
+    await waitFor(() => readWork(root).items[0]?.status === 'done')
+    expect(readWork(root).items[0]).toMatchObject({ status: 'done', result: { sessionId: 'legacy-session' } })
+    expect(readWork(root).items[0]?.legacyRef).toBeUndefined()
+    const parsedCalendar = parseCampaignCalendarDocResult(
+      loadContextDoc(root, CAMPAIGN_CALENDAR_CONTEXT_SLUG)!,
+      workspaceId,
+    )
+    expect(parsedCalendar.ok).toBe(true)
+    expect(parsedCalendar.calendar.items[0]?.job).toBeUndefined()
+    expect(parsedCalendar.calendar.items[0]?.scheduledWorkId).toBe(readWork(root).items[0]?.id)
   })
 })

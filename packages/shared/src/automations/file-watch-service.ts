@@ -22,6 +22,7 @@
 import { watch, statSync, realpathSync, type FSWatcher } from 'node:fs';
 import { resolve, sep, posix } from 'node:path';
 import { homedir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import type { AutomationMatcher, FileWatchChangeType } from './types.ts';
 import type { FileWatchPayload } from './event-bus.ts';
 import { createLogger } from '../utils/debug.ts';
@@ -29,6 +30,7 @@ import { createLogger } from '../utils/debug.ts';
 const log = createLogger('file-watch');
 
 const DEFAULT_DEBOUNCE_MS = 500;
+const DEFAULT_DELIVERY_RETRY_DELAYS_MS = [250, 1_000] as const;
 const ALL_CHANGE_TYPES: FileWatchChangeType[] = ['add', 'change', 'remove'];
 
 export function isIgnoredFileWatchPath(relativePath: string): boolean {
@@ -104,6 +106,8 @@ export interface FileWatchServiceOptions {
   workspaceId: string;
   /** Called once per fired event — typically forwards into the event bus. */
   onEvent: (payload: FileWatchPayload) => void | Promise<void>;
+  /** Retry delays after a failed delivery. Injectable to keep tests fast. */
+  deliveryRetryDelaysMs?: readonly number[];
 }
 
 export class FileWatchService {
@@ -295,6 +299,7 @@ export class FileWatchService {
         const payload: FileWatchPayload = {
           workspaceId: this.options.workspaceId,
           timestamp: Date.now(),
+          eventId: randomUUID(),
           matcherId: m.matcherId,
           path: absPath,
           relativePath: relPath,
@@ -302,15 +307,32 @@ export class FileWatchService {
           size,
           isDirectory,
         };
-        Promise.resolve(this.options.onEvent(payload)).catch((err) => {
-          log.warn(`[file-watch] onEvent failed for ${m.matcherId}:`, err);
-        });
+        void this.deliverEvent(payload);
       };
 
       if (m.debounceMs > 0) {
         this.debounceTimers.set(debounceKey, setTimeout(fire, m.debounceMs));
       } else {
         fire();
+      }
+    }
+  }
+
+  private async deliverEvent(payload: FileWatchPayload): Promise<void> {
+    const retryDelays = this.options.deliveryRetryDelaysMs ?? DEFAULT_DELIVERY_RETRY_DELAYS_MS;
+    for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+      if (this.disposed) return;
+      try {
+        await this.options.onEvent(payload);
+        return;
+      } catch (error) {
+        if (attempt >= retryDelays.length) {
+          log.error(`[file-watch] delivery failed for ${payload.matcherId} after ${attempt + 1} attempts:`, error);
+          return;
+        }
+        const delay = retryDelays[attempt]!;
+        log.warn(`[file-watch] delivery failed for ${payload.matcherId}; retrying in ${delay}ms:`, error);
+        await new Promise<void>((resolve) => setTimeout(resolve, delay));
       }
     }
   }

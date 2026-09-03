@@ -41,6 +41,7 @@ describe('SPAWN_SESSION_BLOCKED_TOOLS', () => {
     'update_memory',
     'forget_memory',
     'send_agent_message',
+    'supply_work_input',
     'script_sandbox',
   ];
 
@@ -95,6 +96,7 @@ describe('delegated session tool visibility', () => {
   it('blocks both Claude and Pi spellings only for delegated children', () => {
     expect(isToolBlockedForDelegatedSession('save_memory', true)).toBe(true);
     expect(isToolBlockedForDelegatedSession('mcp__session__save_memory', true)).toBe(true);
+    expect(isToolBlockedForDelegatedSession('supply_work_input', true)).toBe(true);
     expect(isToolBlockedForDelegatedSession('save_memory', false)).toBe(false);
     expect(isToolBlockedForDelegatedSession('read_file', true)).toBe(false);
   });

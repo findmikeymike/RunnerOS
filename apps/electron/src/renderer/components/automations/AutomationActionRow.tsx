@@ -65,6 +65,15 @@ function QueueWorkText({ action }: { action: Extract<AutomationAction, { type: '
   )
 }
 
+function PulseText({ action }: { action: Extract<AutomationAction, { type: 'pulse' }> }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-sm break-words">Artist pulse</p>
+      <p className="mt-0.5 text-xs text-foreground/50">{action.driverAgentSlug || 'orchestrator'}</p>
+    </div>
+  )
+}
+
 /**
  * Render the per-action override chips (connection / model / thinking level).
  * Each chip is conditional on its field being set on the action.
@@ -130,6 +139,8 @@ export function AutomationActionRow({ action, index, className }: AutomationActi
       <div className="flex-1 min-w-0">
         {action.type === 'webhook' ? (
           <WebhookText action={action} />
+        ) : action.type === 'pulse' ? (
+          <PulseText action={action} />
         ) : action.type === 'queue-work' ? (
           <QueueWorkText action={action} />
         ) : (

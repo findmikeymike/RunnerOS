@@ -126,6 +126,8 @@ export interface WorkflowRunSnapshot {
     /** 'manual' for Phase 1; left open for schedule/automation/webhook. */
     type: string;
     inputs: Record<string, unknown>;
+    /** Inputs originating in external event payloads; prompt rendering encloses these as data. */
+    untrustedInputNames?: string[];
     firedAt: string;
   };
   /**

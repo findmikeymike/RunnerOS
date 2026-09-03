@@ -248,6 +248,7 @@ const SETTINGS_ICONS: Record<SettingsSubpage, string> = {
   memory: 'Brain',
   shortcuts: 'Keyboard',
   preferences: 'UserCircle',
+  about: 'Info',
 }
 
 /**

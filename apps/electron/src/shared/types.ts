@@ -21,6 +21,7 @@ import type {
   WorkspaceInfo as CoreWorkspaceInfo,
   Workspace as CoreWorkspace,
   SessionMetadata as CoreSessionMetadata,
+  ActiveSessionInfo,
   StoredAttachment as CoreStoredAttachment,
   ContentBadge,
   ToolDisplayMeta,
@@ -81,6 +82,7 @@ export type {
   CoreWorkspaceInfo as WorkspaceInfo,
   CoreWorkspace as Workspace,
   CoreSessionMetadata as SessionMetadata,
+  ActiveSessionInfo,
   CoreStoredAttachment as StoredAttachment,
   ContentBadge,
   ToolDisplayMeta,
@@ -171,6 +173,8 @@ import type {
   DecideCampaignWorkResult,
   ResolveCampaignProducedOutputInput,
   ResolveCampaignProducedOutputResult,
+  SupplyScheduledWorkInput,
+  SupplyScheduledWorkInputResult,
   ApproveCampaignSocialWorkInput,
   ApproveCampaignSocialWorkResult,
   AuthorizeReleaseKitSocialInput,
@@ -196,6 +200,8 @@ export type {
   DecideCampaignWorkResult,
   ResolveCampaignProducedOutputInput,
   ResolveCampaignProducedOutputResult,
+  SupplyScheduledWorkInput,
+  SupplyScheduledWorkInputResult,
   ApproveCampaignSocialWorkInput,
   ApproveCampaignSocialWorkResult,
   AuthorizeReleaseKitSocialInput,
@@ -594,6 +600,7 @@ export interface ElectronAPI {
   readonly webContentsId: number
   // Session management
   getSessions(): Promise<Session[]>
+  getActiveSessions(): Promise<ActiveSessionInfo[]>
   getUnreadSummary(): Promise<UnreadSummary>
   markAllSessionsRead(workspaceId: string): Promise<void>
   getSessionMessages(sessionId: string): Promise<Session | null>
@@ -1125,7 +1132,12 @@ export interface ElectronAPI {
   duplicateAutomation(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
   deleteAutomation(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
   /** Append a fully-formed matcher under the given event. Server assigns id and de-dupes WebhookReceive slugs. */
-  createAutomationFromTemplate(workspaceId: string, eventName: string, matcher: Record<string, unknown>): Promise<void>
+  createAutomationFromTemplate(
+    workspaceId: string,
+    eventName: string,
+    matcher: Record<string, unknown>,
+    options?: { automaticCadence?: 'daily' | 'weekly' },
+  ): Promise<{ cron?: string; label?: string }>
   /** Atomically replace the expected matcher by stable id while preserving its identity. */
   replaceAutomation(workspaceId: string, eventName: string, automationId: string, expectedMatcher: Record<string, unknown>, matcher: Record<string, unknown>): Promise<void>
   /** Live status of the inbound webhook trigger HTTP server (port and URL). */
@@ -1174,6 +1186,7 @@ export interface ElectronAPI {
   cancelCampaignWork(workspaceId: string, input: CancelCampaignWorkInput): Promise<CancelCampaignWorkResult>
   decideCampaignWork(workspaceId: string, input: DecideCampaignWorkInput): Promise<DecideCampaignWorkResult>
   resolveCampaignProducedOutput(workspaceId: string, input: ResolveCampaignProducedOutputInput): Promise<ResolveCampaignProducedOutputResult>
+  supplyScheduledWorkInputs(workspaceId: string, input: SupplyScheduledWorkInput): Promise<SupplyScheduledWorkInputResult>
   approveCampaignSocialWork(workspaceId: string, input: ApproveCampaignSocialWorkInput): Promise<ApproveCampaignSocialWorkResult>
   manageGoalRun(workspaceId: string, input: ManageGoalRunInput): Promise<ManageGoalRunResult>
   scheduleHqWork(workspaceId: string, input: ScheduleHqWorkInput): Promise<ScheduleHqWorkResult>
@@ -1481,6 +1494,7 @@ export interface SocialAccountProfileStatus extends SocialAccountProfileRef {
   browserInstanceId?: string
   accountHandle: string | null
   accountUrl: string | null
+  adsAccountId?: string | null
   accountGroup: string | null
   sessionPath: string | null
   confirmPolicy: string | null
@@ -1511,6 +1525,7 @@ export interface SpotifyCapabilityStatus {
   label: string
   message: string
   accountUrl?: string | null
+  accountId?: string | null
 }
 
 export interface SocialAccountsDoctorResult {

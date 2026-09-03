@@ -122,9 +122,6 @@ import {
 import type { EventSink } from '@craft-agent/server-core/transport'
 import { validateGitBashPath, checkVCRedistInstalled } from '@craft-agent/server-core/services'
 import {
-  prepareCampaignSocialJob,
-  fingerprintCampaignSocialMediaPath,
-  resolveCampaignSocialMediaPath,
   resolveScheduledSocialMediaPath,
   prepareScheduledSocialWork,
 } from './campaign-social-job-preparer'
@@ -738,11 +735,6 @@ app.whenReady().then(async () => {
               }
             })
           }
-          sm.setCampaignExternalJobPreparer((input) => prepareCampaignSocialJob(input, {
-            runSocialJson,
-            resolveMediaPath: resolveCampaignSocialMediaPath,
-            fingerprintMediaPath: fingerprintCampaignSocialMediaPath,
-          }))
           sm.setScheduledSocialExecution(
             (input) => prepareScheduledSocialWork(input, { runSocialJson, resolveWorkspace: getWorkspaceByNameOrId }),
             (input) => executeScheduledSocialAuto(input, {

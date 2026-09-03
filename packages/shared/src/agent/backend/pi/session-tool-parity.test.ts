@@ -20,6 +20,11 @@ describe('Pi backend session tool parity', () => {
     expect(getSessionToolProxyDefs({ includeScheduleWork: true }).some((tool) => tool.name === 'mcp__session__schedule_work')).toBe(true);
   });
 
+  it('exposes input supply only for Artist Manager proxy registration', () => {
+    expect(getSessionToolProxyDefs().some((tool) => tool.name === 'mcp__session__supply_work_input')).toBe(false);
+    expect(getSessionToolProxyDefs({ includeSupplyWorkInput: true }).some((tool) => tool.name === 'mcp__session__supply_work_input')).toBe(true);
+  });
+
   it('exposes semantic Manager tools only for HNIC proxy registration', () => {
     const ordinary = getSessionToolProxyDefs().map((tool) => tool.name);
     const manager = getSessionToolProxyDefs({ includeManagerTools: true }).map((tool) => tool.name);

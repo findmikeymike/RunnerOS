@@ -72,6 +72,7 @@ const ENFORCED_SPAWN_SESSION_BLOCKED_TOOLS = new Set<string>([
 
     // Cross-platform messaging — side effects users didn't authorize via subagent.
     'send_agent_message',               // tool-defs.ts (messaging family)
+    'supply_work_input',                 // requires a direct artist answer in a visible named-agent chat
 
     // Arbitrary code execution — force tool-by-tool reasoning.
     'script_sandbox',                   // tool-defs.ts:965

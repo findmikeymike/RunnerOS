@@ -7,6 +7,7 @@ It sits above provider-specific paths:
 - Google Ads: route to `tools/google-ads/bin/google-ads.mjs`.
 - Meta Ads: use browser dashboard/export mode until Meta API/MCP is connected and usable.
 - Meta campaign setup: create read-only `campaign-plan` and `setup-plan` artifacts, then use Ads Manager browser mode to create a draft only. Stop before Publish/Launch.
+- Spotify Ads: use the saved Spotify Ads Manager browser account for draft setup and ad-set reporting. Spotify for Artists supplies audience signals, not campaign controls.
 - CSV exports: normalize local campaign/ad exports into a common metric shape.
 - Audits: flag spend waste, weak CTR, no-conversion spend, search-term cleanup, fatigue signals, and budget concentration.
 - Campaign plans: draft read-only campaign structures from artist context, territories, goals, and budget.
@@ -24,9 +25,9 @@ node tools/ads-operator/bin/ads-operator.mjs import <file.csv> --platform meta -
 node tools/ads-operator/bin/ads-operator.mjs audit <file.csv|import.json> --platform google --level search-term --goal conversions --json
 node tools/ads-operator/bin/ads-operator.mjs ad-library-plan --artist "Artist Name" --competitors "Similar Artist,Label" --keywords "genre phrase,fan phrase" --countries "US,GB" --out ad-library-plan.json --json
 node tools/ads-operator/bin/ads-operator.mjs ad-library-analyze captured-ads.json --artist "Artist Name" --out ad-library-intel.json --json
-node tools/ads-operator/bin/ads-operator.mjs campaign-plan --platform meta --goal leads --artist-context artist.md --territories "Los Angeles,London" --budget "$50/day" --out campaign-plan.json --json
-node tools/ads-operator/bin/ads-operator.mjs setup-plan --platform meta --goal leads --artist-context artist.md --territories "Los Angeles,London" --budget "$50/day" --campaign-name "Artist lead test" --out setup-plan.json --json
-node tools/ads-operator/bin/ads-operator.mjs packet create --platform google --type budget --account <id> --action "..." --spend-impact "..." --evidence <path> --out packet.json --json
+node tools/ads-operator/bin/ads-operator.mjs campaign-plan --platform meta|google|spotify --goal leads --artist-context artist.md --territories "Los Angeles,London" --budget "$50/day" --out campaign-plan.json --json
+node tools/ads-operator/bin/ads-operator.mjs setup-plan --platform meta|google|spotify --goal leads --artist-context artist.md --territories "Los Angeles,London" --budget "$50/day" --campaign-name "Artist lead test" --out setup-plan.json --json
+node tools/ads-operator/bin/ads-operator.mjs packet create --platform meta|google|spotify --type budget --account <id> --action "..." --spend-impact "..." --evidence <path> --out packet.json --json
 node tools/ads-operator/bin/ads-operator.mjs receipt create --packet packet.json --status approved --out receipt.json --json
 ```
 

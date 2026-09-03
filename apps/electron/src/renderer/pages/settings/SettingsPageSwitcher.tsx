@@ -80,6 +80,7 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
       { id: 'app', label: 'Behavior' },
       { id: 'input', label: 'Input' },
       { id: 'shortcuts', label: 'Shortcuts' },
+      { id: 'about', label: 'About' },
     ],
   },
   {

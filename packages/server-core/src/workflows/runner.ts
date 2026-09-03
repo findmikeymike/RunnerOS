@@ -349,6 +349,7 @@ export class WorkflowRunner {
     workflow: LoadedWorkflow;
     workspaceId: string;
     triggerInputs: Record<string, unknown>;
+    untrustedTriggerInputs?: string[];
   }): Promise<WorkflowRunSnapshot> {
     const { workflow, workspaceId } = input;
     const triggerInputs = normalizeWorkflowTriggerInputs(workflow, input.triggerInputs);
@@ -377,7 +378,12 @@ export class WorkflowRunner {
       workflowSlug: workflow.slug,
       workspaceId,
       state: 'running',
-      trigger: { type: 'manual', inputs: triggerInputs, firedAt: now },
+      trigger: {
+        type: 'manual',
+        inputs: triggerInputs,
+        ...(input.untrustedTriggerInputs?.length ? { untrustedInputNames: [...new Set(input.untrustedTriggerInputs)] } : {}),
+        firedAt: now,
+      },
       workflowSnapshot,
       steps,
       createdAt: now,
@@ -661,6 +667,7 @@ export class WorkflowRunner {
       // 3. Resolve the step's input template.
       const resolved = resolveTemplate(stepDef.input, {
         trigger: active.snapshot.trigger.inputs,
+        untrustedTriggerFields: active.snapshot.trigger.untrustedInputNames,
         steps: stepsCtx,
         run: { id: active.snapshot.id, startedAt: runStartedAt },
       });

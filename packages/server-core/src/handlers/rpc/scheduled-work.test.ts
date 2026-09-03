@@ -787,6 +787,38 @@ describe('scheduled-work RPC handler', () => {
     expect(contextDocs.has(SCHEDULED_WORK_CONTEXT_SLUG)).toBe(false)
   })
 
+  test('mutate cannot bypass a host-owned workflow input request', async () => {
+    const { invoke } = await registerServer()
+    const requestedAt = '2026-09-02T14:00:00.000Z'
+    const waiting = {
+      ...buildOrder(),
+      type: 'workflow-run' as const,
+      status: 'needs-setup' as const,
+      execution: { type: 'workflow-run' as const, workflowSlug: 'merch-run', workflowDigest: 'digest', triggerInputs: {} },
+      attention: { reason: 'input-required' as const, message: 'Waiting for: design_file' },
+      inputRequest: {
+        id: 'scheduled-work-1:input', inputs: ['design_file'], requestedAt, lastTriggeredAt: requestedAt,
+        coalescedFireCount: 1, fireDefinitionDigests: ['fire-1'],
+      },
+    }
+    seedContextDoc(SCHEDULED_WORK_CONTEXT_SLUG, serializeScheduledWorkBody({
+      version: 1, workspaceId: workspace.id, items: [waiting], updatedAt: waiting.updatedAt,
+    }), 'Scheduled Work')
+
+    await expect(invoke(RPC_CHANNELS.scheduledWork.MUTATE, workspace.id, {
+      operation: 'upsert',
+      order: {
+        ...waiting,
+        status: 'scheduled',
+        attention: undefined,
+        inputRequest: undefined,
+        execution: { ...waiting.execution, triggerInputs: { design_file: '/tmp/forged.png' } },
+      },
+      expectedUpdatedAt: waiting.updatedAt,
+    })).rejects.toThrow(/host input-supply command/i)
+    expect(readScheduledWork().items[0]?.status).toBe('needs-setup')
+  })
+
   test('mutate rejects stale whole-order updates without writing', async () => {
     const { invoke } = await registerServer()
     const created = await invoke(RPC_CHANNELS.scheduledWork.MUTATE, workspace.id, {
@@ -1100,12 +1132,12 @@ describe('scheduled-work RPC handler', () => {
 
     const scheduled = readScheduledWork()
     expect(scheduled.items).toHaveLength(1)
-    expect(scheduled.items[0]?.legacyRef?.campaignJobId).toBeTruthy()
+    expect(scheduled.items[0]?.legacyRef).toBeUndefined()
 
     const calendar = readCampaignCalendar()
     expect(calendar.items).toHaveLength(1)
     expect(calendar.items[0]?.scheduledWorkId).toBe(scheduled.items[0]?.id)
-    expect(calendar.items[0]?.job?.id).toBeTruthy()
+    expect(calendar.items[0]?.job).toBeUndefined()
 
     upsertCalls = []
     pushCalls.length = 0
@@ -1141,6 +1173,6 @@ describe('scheduled-work RPC handler', () => {
     expect(pushCalls).toHaveLength(1)
     expect(readScheduledWork().items).toHaveLength(1)
     expect(readCampaignCalendar().items[0]?.scheduledWorkId).toBe(readScheduledWork().items[0]?.id)
-    expect(readCampaignCalendar().items[0]?.job?.id).toBeTruthy()
+    expect(readCampaignCalendar().items[0]?.job).toBeUndefined()
   })
 })

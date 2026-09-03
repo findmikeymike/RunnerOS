@@ -122,6 +122,7 @@ export interface CronBuilderProps {
   onChange?: (cron: string) => void
   timezone?: string
   onTimezoneChange?: (tz: string) => void
+  showAdvanced?: boolean
   className?: string
 }
 
@@ -130,6 +131,7 @@ export function CronBuilder({
   onChange,
   timezone,
   onTimezoneChange,
+  showAdvanced = true,
   className,
 }: CronBuilderProps) {
   const { t } = useTranslation()
@@ -184,6 +186,7 @@ export function CronBuilder({
           {PRESETS.map((preset) => (
             <button
               key={preset.cron}
+              type="button"
               onClick={() => handlePreset(preset.cron)}
               className={cn(
                 'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
@@ -216,7 +219,7 @@ export function CronBuilder({
       </div>
 
       {/* Layer 3: Advanced */}
-      <div className="space-y-2">
+      {showAdvanced ? <div className="space-y-2">
         <h4 className="pl-1 text-xs font-medium uppercase tracking-wider text-white/45">
           Advanced
         </h4>
@@ -239,7 +242,7 @@ export function CronBuilder({
             {validationError}
           </div>
         )}
-      </div>
+      </div> : null}
 
       {/* Summary */}
       <div className="runneros-card space-y-3 p-4">
@@ -278,7 +281,7 @@ export function CronBuilder({
         {/* Timezone */}
         <div className="flex items-center gap-2 text-xs text-white/42">
           <span>{t('automations.labelTimezone')}:</span>
-          <span className="font-medium text-white/62">{timezone || t('automations.systemDefault')}</span>
+          {onTimezoneChange ? <input className="h-8 min-w-0 flex-1 rounded-[7px] border border-white/[0.08] bg-white/[0.04] px-2.5 text-xs text-white/68 outline-none focus:border-[#f97316]/35" value={timezone ?? ''} onChange={(event) => onTimezoneChange(event.target.value)} /> : <span className="font-medium text-white/62">{timezone || t('automations.systemDefault')}</span>}
         </div>
       </div>
     </div>

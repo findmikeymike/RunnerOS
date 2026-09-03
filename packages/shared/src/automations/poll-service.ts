@@ -234,11 +234,7 @@ export class PollService {
     const fingerprint = computeFingerprint(fingerprintKind, response, bodyText);
     const previousFingerprint = bucket.lastFingerprint;
 
-    // Always update the stored fingerprint for the next comparison
-    bucket.lastFingerprint = fingerprint;
-
     const isFirstPoll = !bucket.firstPollDone;
-    bucket.firstPollDone = true;
 
     // First poll establishes baseline — don't fire (unless test override).
     // Subsequent polls fire only on change.
@@ -247,6 +243,8 @@ export class PollService {
       (!isFirstPoll && fingerprint !== previousFingerprint);
 
     if (!shouldFire) {
+      bucket.lastFingerprint = fingerprint;
+      bucket.firstPollDone = true;
       log.debug(`[poll] ${m.id} no change (${fingerprintKind}=${fingerprint.slice(0, 16)}…)`);
       return;
     }
@@ -269,9 +267,9 @@ export class PollService {
       headers: responseHeaders,
     };
 
-    await Promise.resolve(this.options.onEvent(payload)).catch((err) => {
-      log.warn(`[poll] ${m.id} onEvent failed:`, err);
-    });
+    await this.options.onEvent(payload);
+    bucket.lastFingerprint = fingerprint;
+    bucket.firstPollDone = true;
   }
 }
 

@@ -30,6 +30,7 @@ import type { SessionStatus as SessionStatusConfig } from '@/config/session-stat
 import type { SessionOptions, SessionOptionUpdates } from '../hooks/useSessionOptions'
 import { defaultSessionOptions } from '../hooks/useSessionOptions'
 import { sessionAtomFamily } from '../atoms/sessions'
+import type { Route } from '../../shared/routes'
 
 export interface AppShellContextType {
   // Data
@@ -118,6 +119,7 @@ export interface AppShellContextType {
 
   // Workspace
   onSelectWorkspace: (id: string, openInNewWindow?: boolean) => void | Promise<void>
+  onSelectWorkspaceAndNavigate?: (id: string, route: Route, hash?: string) => Promise<void>
   onRefreshWorkspaces?: () => void
 
   // App actions

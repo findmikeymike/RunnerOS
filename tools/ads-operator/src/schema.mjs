@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 
-export const SUPPORTED_PLATFORMS = ['google', 'meta'];
+export const SUPPORTED_PLATFORMS = ['google', 'meta', 'spotify'];
 export const SUPPORTED_LEVELS = ['campaign', 'adset', 'adgroup', 'ad', 'keyword', 'search_term'];
 export const PACKET_TYPES = ['publish', 'budget', 'status', 'targeting', 'creative', 'keyword', 'recommendation'];
 export const RECEIPT_STATUSES = ['approved', 'rejected', 'skipped'];
@@ -8,6 +8,7 @@ export const RECEIPT_STATUSES = ['approved', 'rejected', 'skipped'];
 export function normalizePlatform(value) {
   if (value === 'google-ads') return 'google';
   if (value === 'facebook' || value === 'meta-ads') return 'meta';
+  if (value === 'spotify-ads' || value === 'spotify-ads-manager' || value === 'ad-studio') return 'spotify';
   return value;
 }
 
@@ -28,7 +29,7 @@ export function validateLevel(level) {
 
 export function validateApprovalPacketInput(input) {
   const errors = [];
-  if (!validatePlatform(input.platform)) errors.push('platform must be google or meta');
+  if (!validatePlatform(input.platform)) errors.push('platform must be google, meta, or spotify');
   if (!PACKET_TYPES.includes(input.type)) errors.push(`type must be one of: ${PACKET_TYPES.join(', ')}`);
   if (!input.account) errors.push('account is required');
   if (!input.action) errors.push('action is required');
@@ -154,6 +155,11 @@ export function normalizedMetricRow({ platform, level, raw, fields }) {
     costPerResult: fields.costPerResult ?? null,
     costPerConversion: fields.costPerConversion ?? null,
     impressionShare: fields.impressionShare ?? null,
+    completionRate: fields.completionRate ?? null,
+    played25: fields.played25 ?? null,
+    played50: fields.played50 ?? null,
+    played75: fields.played75 ?? null,
+    played100: fields.played100 ?? null,
     raw: redactRawRecord(raw),
   };
 }

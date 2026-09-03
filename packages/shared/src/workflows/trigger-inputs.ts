@@ -65,15 +65,18 @@ export function fillMissingWorkflowTriggerInputConstraints(
 export function normalizeWorkflowTriggerInputs(
   workflow: LoadedWorkflow,
   raw: Record<string, unknown>,
+  options: { allowMissingRequired?: readonly string[]; skipDefaultsFor?: readonly string[] } = {},
 ): Record<string, unknown> {
   const inputDefs = workflow.metadata.trigger.inputs ?? [];
 
   const out: Record<string, unknown> = {};
   for (const def of inputDefs) {
     let value = raw?.[def.name];
-    if (value === undefined) value = def.default;
+    if (value === undefined && !options.skipDefaultsFor?.includes(def.name)) value = def.default;
 
-    if (def.required && (value === undefined || value === null || value === '')) {
+    if (def.required
+      && !options.allowMissingRequired?.includes(def.name)
+      && (value === undefined || value === null || value === '')) {
       throw new Error(`Missing required workflow input: ${def.name}`);
     }
     if (value === undefined || value === null || value === '') continue;

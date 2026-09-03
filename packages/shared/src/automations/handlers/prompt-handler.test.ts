@@ -461,6 +461,28 @@ describe('PromptHandler', () => {
   });
 
   describe('onPromptsReady callback', () => {
+    it('awaits callback completion and propagates delivery failure', async () => {
+      let completed = false;
+      const onPromptsReady = async () => {
+        await Promise.resolve();
+        completed = true;
+        throw new Error('session creation failed');
+      };
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), createMockConfigProvider({
+        LabelAdd: [{ actions: [{ type: 'prompt', prompt: 'Run the task' }] }],
+      }));
+      handler.subscribe(bus);
+
+      await expect(bus.emit('LabelAdd', {
+        workspaceId: 'test-workspace',
+        timestamp: Date.now(),
+        label: 'ready',
+      })).rejects.toThrow('failed in 1 handler');
+
+      expect(completed).toBe(true);
+      handler.dispose();
+    });
+
     it('should deliver multiple prompts from a single event', async () => {
       const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({

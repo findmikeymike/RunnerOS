@@ -268,6 +268,7 @@ export function getSessionScopedTools(
     tools = getSessionToolDefs({
       includeDeveloperFeedback: FEATURE_FLAGS.developerFeedback,
       includeScheduleWork: agentSlug === 'concierge',
+      includeSupplyWorkInput: agentSlug === 'concierge',
       includeManagerTools: agentSlug === 'concierge' && (artistWorkspaceScope === 'hq' || artistWorkspaceScope === 'campaign'),
       includeCampaignManagerTools: agentSlug === 'concierge' && artistWorkspaceScope === 'campaign',
       includeLabTools,

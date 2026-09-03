@@ -51,7 +51,7 @@ export function matchesRunNowQuery(name: string, description: string | undefined
   return !normalized || `${name} ${description ?? ''}`.toLowerCase().includes(normalized)
 }
 
-export function ActiveWorkAddMenu({ label = 'Add', prominent = false }: { label?: string; prominent?: boolean }) {
+export function ActiveWorkAddMenu({ label = 'Add', prominent = false, hideAutomation = false }: { label?: string; prominent?: boolean; hideAutomation?: boolean }) {
   const workspace = useActiveWorkspace()
   const {
     workspaces,
@@ -168,9 +168,11 @@ export function ActiveWorkAddMenu({ label = 'Add', prominent = false }: { label?
           <DropdownMenuItem onSelect={() => setScheduleOpen(true)} disabled={!entry}>
             <CalendarClock className="h-3.5 w-3.5" /> Schedule once
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setAutomationOpen(true)} disabled={!entry}>
-            <Repeat2 className="h-3.5 w-3.5" /> New automation
-          </DropdownMenuItem>
+          {!hideAutomation ? (
+            <DropdownMenuItem onSelect={() => setAutomationOpen(true)} disabled={!entry}>
+              <Repeat2 className="h-3.5 w-3.5" /> New automation
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem onSelect={() => setTemplatesOpen(true)} disabled={!entry}>
             <Sparkles className="h-3.5 w-3.5" /> Browse templates
           </DropdownMenuItem>

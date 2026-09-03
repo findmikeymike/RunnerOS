@@ -1,4 +1,5 @@
 import { createLogger } from '../../utils/debug.ts';
+import { createHash } from 'node:crypto';
 import type { EventBus, BaseEventPayload } from '../event-bus.ts';
 import {
   APP_EVENTS,
@@ -38,6 +39,12 @@ export class QueueWorkHandler implements AutomationHandler {
       if (!matcher.id || !matcherMatches(matcher, event, payload as unknown as Record<string, unknown>)) continue;
       for (const action of matcher.actions) {
         if (action.type !== 'queue-work') continue;
+        if (event === 'WebhookReceive'
+          && matcher.allowUnauthenticated === true
+          && Object.values(action.inputBindings ?? {}).some((binding) => binding.mode === 'trigger' && binding.from === 'webhook.body')) {
+          this.options.onError?.(event, new Error('Unauthenticated webhooks cannot supply workflow input values.'));
+          continue;
+        }
         pending.push({
           matcherId: matcher.id,
           automationName: deriveAutomationName(event, matcher),
@@ -45,6 +52,8 @@ export class QueueWorkHandler implements AutomationHandler {
           eventTimestamp: payload.timestamp,
           eventKey: eventKey(event as AppEvent, payload),
           timezone: event === 'SchedulerTick' ? matcher.timezone : undefined,
+          triggerData: triggerData(event as AppEvent, payload),
+          configuredAction: action,
           action: expandAction(action, env),
         });
       }
@@ -66,8 +75,42 @@ export class QueueWorkHandler implements AutomationHandler {
   }
 }
 
+function triggerData(
+  event: AppEvent,
+  payload: BaseEventPayload,
+): PendingQueuedWork['triggerData'] {
+  const data = payload as unknown as Record<string, unknown>;
+  if (event === 'FileWatch') {
+    const path = typeof data.path === 'string' ? data.path : undefined;
+    if (!path) return undefined;
+    const normalized = path.replace(/\\/g, '/');
+    return {
+      'file.path': path,
+      'file.name': normalized.split('/').filter(Boolean).at(-1) ?? path,
+    };
+  }
+  if (event === 'WebhookReceive') {
+    const body = typeof data.bodyRaw === 'string'
+      ? data.bodyRaw
+      : data.body === undefined || data.body === null
+        ? undefined
+        : JSON.stringify(data.body);
+    return body ? { 'webhook.body': body } : undefined;
+  }
+  if (event === 'MessageReceive' && typeof data.text === 'string') {
+    return { 'message.text': data.text };
+  }
+  if (event === 'PollUrl' && typeof data.body === 'string') {
+    return { 'url.content': data.body };
+  }
+  return undefined;
+}
+
 function eventKey(event: AppEvent, payload: BaseEventPayload): string {
   const data = payload as unknown as Record<string, unknown>;
+  if (event === 'SchedulerTick' && typeof data.catchUpFromMs === 'number') {
+    return `SchedulerTick:catch-up:${data.catchUpFromMs}`;
+  }
   if (event === 'MessageReceive') {
     return ['message', data.platform, data.channelId, data.messageId].map(String).join(':');
   }
@@ -82,11 +125,25 @@ function eventKey(event: AppEvent, payload: BaseEventPayload): string {
   if (event === 'PollUrl') {
     return ['poll', data.url, data.previousFingerprint, data.fingerprint].map(String).join(':');
   }
+  if (event === 'FileWatch') {
+    if (typeof data.eventId === 'string' && data.eventId) return `FileWatch:${data.eventId}`;
+    const identity = [
+      typeof data.path === 'string' ? data.path.replace(/\\/g, '/') : '',
+      typeof data.relativePath === 'string' ? data.relativePath.replace(/\\/g, '/') : '',
+      typeof data.changeType === 'string' ? data.changeType : '',
+      typeof data.size === 'number' ? data.size : null,
+      data.isDirectory === true,
+    ];
+    const digest = createHash('sha256').update(JSON.stringify(identity)).digest('hex').slice(0, 20);
+    return `FileWatch:${payload.timestamp}:${digest}`;
+  }
   return `${event}:${payload.timestamp}`;
 }
 
 function expandAction(action: QueueWorkAction, env: Record<string, string>): QueueWorkAction {
-  return expandValue(action, env) as QueueWorkAction;
+  const { inputBindings, ...expandableAction } = action;
+  const expanded = expandValue(expandableAction, env) as QueueWorkAction;
+  return inputBindings === undefined ? expanded : { ...expanded, inputBindings };
 }
 
 function expandValue(value: unknown, env: Record<string, string>): unknown {

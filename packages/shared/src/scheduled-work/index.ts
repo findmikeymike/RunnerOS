@@ -28,6 +28,7 @@ export type ScheduledWorkStatus =
   | 'canceled'
 
 export type WorkAttentionReason =
+  | 'input-required'
   | 'agent-not-active'
   | 'workflow-not-active'
   | 'workflow-changed'
@@ -52,6 +53,40 @@ export type WorkAttentionReason =
 export interface ScheduledWorkAttention {
   reason: WorkAttentionReason
   message: string
+}
+
+export interface ScheduledWorkInputRequest {
+  id: string
+  inputs: string[]
+  requestedAt: string
+  lastTriggeredAt: string
+  /** Number of matching fires folded into this one outstanding request. */
+  coalescedFireCount: number
+  /** Immutable fire definitions already represented by this request. */
+  fireDefinitionDigests: string[]
+  sessionId?: string
+  messageId?: string
+}
+
+export interface ScheduledWorkInputSupplyReceipt {
+  requestId: string
+  source: 'list' | 'tool'
+  suppliedKeys: string[]
+  fireDefinitionDigests: string[]
+  suppliedAt: string
+  sourceSessionId?: string
+  sourceMessageId?: string
+  sourceMessageAt?: string
+}
+
+export interface ScheduledWorkAutomationRef {
+  matcherId: string
+  name: string
+  event: string
+  /** Digest of immutable matcher, event identity, and configured action. */
+  definitionDigest: string
+  /** Digest of the automation configuration, excluding this individual fire. */
+  configurationDigest: string
 }
 
 export interface ScheduledWorkOwner {
@@ -133,6 +168,8 @@ export type ScheduledWorkExecution =
       workflowSlug: string
       workflowDigest: string
       triggerInputs: Record<string, unknown>
+      /** Trigger-fed strings that must be escaped and data-wrapped when rendered into agent prompts. */
+      untrustedTriggerInputs?: string[]
     }
   | {
       type: 'social-publish'
@@ -290,6 +327,12 @@ export interface ScheduledWorkOrder {
   authorization?: ScheduledWorkAuthorization
   authorizationPolicy?: 'durable-v1'
   attention?: ScheduledWorkAttention
+  /** Missing workflow inputs that must be supplied before this order can run. */
+  inputRequest?: ScheduledWorkInputRequest
+  /** Retained after supply so retries of the same request are harmless. */
+  inputSupplyReceipt?: ScheduledWorkInputSupplyReceipt
+  /** Automation definition that created this run. */
+  automationRef?: ScheduledWorkAutomationRef
   executionKey: {
     payloadDigest: string
     idempotencyKey: string
@@ -320,7 +363,7 @@ export interface ReleaseKitItemUseSummary {
   profileId?: string
   startAt: string
   timezone: string
-  status: 'draft' | 'scheduled' | 'done' | 'needs-attention' | 'canceled'
+  status: 'draft' | 'needs-setup' | 'scheduled' | 'done' | 'needs-attention' | 'canceled'
   attentionMessage?: string
   receipt?: {
     externalUrl?: string
@@ -397,6 +440,27 @@ export interface ResolveCampaignProducedOutputResult {
   order: ScheduledWorkOrder
   calendar: CampaignCalendar
   calendarItem: CampaignCalendarItem
+}
+
+export interface SupplyScheduledWorkInput {
+  orderId: string
+  requestId: string
+  expectedUpdatedAt?: string
+  source: 'list' | 'tool'
+  values: Record<string, unknown>
+  sourceSessionId?: string
+  sourceMessageId?: string
+  sourceMessageAt?: string
+  /** Host-derived artist answer/proposal text. Never accepted from the model tool payload. */
+  sourceEvidenceText?: string
+  /** Host-derived attachments on the artist's answer. */
+  sourceAttachments?: Array<{ name: string; storedPath: string }>
+}
+
+export interface SupplyScheduledWorkInputResult {
+  updated: boolean
+  work: ScheduledWorkDocument
+  order: ScheduledWorkOrder
 }
 
 export interface ApproveCampaignSocialWorkInput {
@@ -619,6 +683,12 @@ export function serializeScheduledWorkBody(work: ScheduledWorkDocument): string 
   ].join('\n')
 }
 
+export function assertScheduledWorkDocument(work: ScheduledWorkDocument): void {
+  if (!clean(work.workspaceId)) throw new Error('Scheduled Work workspace id is invalid.')
+  const invalidIndex = work.items.findIndex((item) => !isScheduledWorkOrder(item))
+  if (invalidIndex >= 0) throw new Error(`Scheduled Work item ${invalidIndex + 1} is invalid.`)
+}
+
 export function applyScheduledWorkMutation(
   work: ScheduledWorkDocument,
   mutation: ScheduledWorkMutation,
@@ -653,6 +723,8 @@ export function applyScheduledWorkMutation(
   const item = normalizeScheduledWorkOrder({
     ...existing,
     status: mutation.operation === 'cancel' ? 'canceled' : existing.status,
+    attention: mutation.operation === 'cancel' ? undefined : existing.attention,
+    inputRequest: mutation.operation === 'cancel' ? undefined : existing.inputRequest,
     deletedAt: mutation.operation === 'delete' ? now : existing.deletedAt,
     updatedAt: now,
   })
@@ -671,21 +743,32 @@ export function migrateCampaignCalendarJobs(
   calendar: CampaignCalendar,
   work: ScheduledWorkDocument,
 ): { calendar: CampaignCalendar; work: ScheduledWorkDocument; migrated: number } {
-  const existingJobIds = new Set(work.items.map((item) => item.legacyRef?.campaignJobId).filter(Boolean))
   const nextWorkItems = [...work.items]
   let migrated = 0
   const nextCalendarItems = calendar.items.map((item) => {
     if (!item.job) return item
-    const existing = nextWorkItems.find((candidate) => candidate.legacyRef?.campaignJobId === item.job?.id)
-    if (item.scheduledWorkId && existing) return item
-    if (existing) return { ...item, scheduledWorkId: existing.id }
-    if (existingJobIds.has(item.job.id)) return item
+    const expectedOrderId = item.scheduledWorkId ?? `scheduled-work-${item.job.id}`
+    const existingIndex = nextWorkItems.findIndex((candidate) => (
+      candidate.legacyRef?.campaignJobId === item.job?.id
+      || (candidate.id === expectedOrderId
+        && candidate.owner.workspaceId === calendar.campaignId
+        && candidate.calendarLink.calendar === 'campaign'
+        && candidate.calendarLink.itemId === item.id)
+    ))
+    if (existingIndex >= 0) {
+      const existing = nextWorkItems[existingIndex]!
+      if (existing.legacyRef) {
+        nextWorkItems[existingIndex] = { ...existing, legacyRef: undefined }
+        migrated += 1
+      }
+      return { ...item, scheduledWorkId: existing.id, job: undefined }
+    }
+    if (nextWorkItems.some((candidate) => candidate.id === expectedOrderId)) return item
     const order = workOrderFromCampaignItem(calendar.campaignId, item, item.job)
     if (!order) return item
     nextWorkItems.push(order)
-    existingJobIds.add(item.job.id)
     migrated += 1
-    return { ...item, scheduledWorkId: order.id }
+    return { ...item, scheduledWorkId: order.id, job: undefined }
   })
   if (migrated === 0 && nextCalendarItems.every((item, index) => item === calendar.items[index])) {
     return { calendar, work, migrated: 0 }
@@ -706,6 +789,7 @@ function workOrderFromCampaignItem(
   const execution = executionFromCampaignItem(item, job)
   if (!execution) return undefined
   const type = execution.type
+  const uncertainRunning = item.status === 'running'
   return normalizeScheduledWorkOrder({
     version: 1,
     id: item.scheduledWorkId ?? `scheduled-work-${job.id}`,
@@ -713,7 +797,7 @@ function workOrderFromCampaignItem(
     calendarLink: { calendar: 'campaign', itemId: item.id },
     title: item.title,
     type,
-    status: statusFromCampaignStatus(item.status),
+    status: uncertainRunning ? 'needs-attention' : statusFromCampaignStatus(item.status),
     startAt: job.runAt,
     timezone: job.timezone || item.timezone,
     execution,
@@ -726,7 +810,9 @@ function workOrderFromCampaignItem(
     runs: item.runHistory,
     result: resultFromRuns(type, item.runHistory),
     executionKey: { payloadDigest: job.payloadDigest, idempotencyKey: job.idempotencyKey },
-    legacyRef: { campaignItemId: item.id, campaignJobId: job.id },
+    attention: uncertainRunning
+      ? { reason: 'execution-uncertain', message: 'This legacy job was already marked running when it was migrated. Review it before scheduling again.' }
+      : undefined,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     deletedAt: item.deletedAt,
@@ -793,7 +879,8 @@ function statusFromCampaignStatus(status: CampaignCalendarItemStatus): Scheduled
 }
 
 function releaseKitUseSortGroup(order: ScheduledWorkOrder, nowMs: number): 0 | 1 | 2 {
-  if (releaseKitUseSummaryStatus(order) === 'needs-attention') return 0
+  const status = releaseKitUseSummaryStatus(order)
+  if (status === 'needs-attention' || status === 'needs-setup') return 0
   if (order.status !== 'done' && order.status !== 'canceled' && Date.parse(order.startAt) >= nowMs) return 1
   return 2
 }
@@ -801,7 +888,8 @@ function releaseKitUseSortGroup(order: ScheduledWorkOrder, nowMs: number): 0 | 1
 function releaseKitUseSummaryStatus(order: ScheduledWorkOrder): ReleaseKitItemUseSummary['status'] {
   const { status } = order
   if (status === 'needs-approval' && order.authorizationPolicy === 'durable-v1' && order.authorization) return 'scheduled'
-  if (status === 'draft' || status === 'waiting' || status === 'needs-setup' || status === 'needs-approval') return 'draft'
+  if (status === 'needs-setup') return 'needs-setup'
+  if (status === 'draft' || status === 'waiting' || status === 'needs-approval') return 'draft'
   if (status === 'done') return order.result?.type === 'social-publish' ? 'done' : 'needs-attention'
   if (status === 'needs-attention' || status === 'canceled') return status
   return 'scheduled'
@@ -826,7 +914,7 @@ function normalizeScheduledWorkOrder(value: ScheduledWorkOrder): ScheduledWorkOr
   }
 }
 
-function isScheduledWorkOrder(value: unknown): value is ScheduledWorkOrder {
+export function isScheduledWorkOrder(value: unknown): value is ScheduledWorkOrder {
   if (!value || typeof value !== 'object') return false
   const order = value as Partial<ScheduledWorkOrder>
   return order.version === 1
@@ -863,6 +951,10 @@ function isScheduledWorkOrder(value: unknown): value is ScheduledWorkOrder {
     && (order.authorization === undefined || (order.authorizationPolicy === 'durable-v1' && order.execution?.type === 'social-publish'))
     && (order.authorizationPolicy === undefined || order.authorization !== undefined)
     && (order.attention === undefined || isScheduledWorkAttention(order.attention))
+    && (order.inputRequest === undefined || isScheduledWorkInputRequest(order.inputRequest))
+    && (order.inputSupplyReceipt === undefined || isScheduledWorkInputSupplyReceipt(order.inputSupplyReceipt))
+    && coherentInputRequestState(order)
+    && (order.automationRef === undefined || isScheduledWorkAutomationRef(order.automationRef))
     && (order.chain === undefined || isScheduledWorkChainLink(order.chain))
     && (order.continuation === undefined || isScheduledWorkContinuation(order.continuation, order))
     && Boolean(order.executionKey
@@ -908,6 +1000,11 @@ function isScheduledWorkExecution(value: unknown, type: ScheduledWorkType): valu
     return Boolean(clean(execution.workflowSlug))
       && Boolean(clean(execution.workflowDigest))
       && Boolean(execution.triggerInputs && typeof execution.triggerInputs === 'object' && !Array.isArray(execution.triggerInputs))
+      && (execution.untrustedTriggerInputs === undefined || (
+        Array.isArray(execution.untrustedTriggerInputs)
+        && execution.untrustedTriggerInputs.every((name) => Boolean(clean(name)) && Object.prototype.hasOwnProperty.call(execution.triggerInputs!, name))
+        && new Set(execution.untrustedTriggerInputs).size === execution.untrustedTriggerInputs.length
+      ))
   }
   if (execution.type === 'social-publish') {
     return Boolean(clean(execution.platform))
@@ -1015,7 +1112,8 @@ function isExternalExecutionReceipt(value: unknown): value is CampaignExternalEx
 function isScheduledWorkAttention(value: unknown): value is ScheduledWorkAttention {
   if (!value || typeof value !== 'object') return false
   const attention = value as Partial<ScheduledWorkAttention>
-  return (attention.reason === 'agent-not-active'
+  return (attention.reason === 'input-required'
+    || attention.reason === 'agent-not-active'
     || attention.reason === 'workflow-not-active'
     || attention.reason === 'workflow-changed'
     || attention.reason === 'profile-login-required'
@@ -1036,6 +1134,71 @@ function isScheduledWorkAttention(value: unknown): value is ScheduledWorkAttenti
     || attention.reason === 'continuation-round-limit'
     || attention.reason === 'continuation-state-invalid')
     && Boolean(clean(attention.message))
+}
+
+function isScheduledWorkInputRequest(value: unknown): value is ScheduledWorkInputRequest {
+  if (!value || typeof value !== 'object') return false
+  const request = value as Partial<ScheduledWorkInputRequest>
+  return Boolean(clean(request.id))
+    && Array.isArray(request.inputs)
+    && request.inputs.length > 0
+    && request.inputs.every((input) => Boolean(clean(input)))
+    && Boolean(cleanIso(request.requestedAt))
+    && Boolean(cleanIso(request.lastTriggeredAt))
+    && Number.isInteger(request.coalescedFireCount)
+    && request.coalescedFireCount! >= 1
+    && Array.isArray(request.fireDefinitionDigests)
+    && request.fireDefinitionDigests.length === request.coalescedFireCount
+    && request.fireDefinitionDigests.every((digest) => Boolean(clean(digest)))
+    && new Set(request.fireDefinitionDigests).size === request.fireDefinitionDigests.length
+    && (request.sessionId === undefined || Boolean(clean(request.sessionId)))
+    && (request.messageId === undefined || Boolean(clean(request.messageId)))
+}
+
+function isScheduledWorkInputSupplyReceipt(value: unknown): value is ScheduledWorkInputSupplyReceipt {
+  if (!value || typeof value !== 'object') return false
+  const receipt = value as Partial<ScheduledWorkInputSupplyReceipt>
+  return Boolean(clean(receipt.requestId))
+    && (receipt.source === 'list' || receipt.source === 'tool')
+    && Array.isArray(receipt.suppliedKeys)
+    && receipt.suppliedKeys.length > 0
+    && receipt.suppliedKeys.every((input) => Boolean(clean(input)))
+    && new Set(receipt.suppliedKeys).size === receipt.suppliedKeys.length
+    && Array.isArray(receipt.fireDefinitionDigests)
+    && receipt.fireDefinitionDigests.length > 0
+    && receipt.fireDefinitionDigests.every((digest) => Boolean(clean(digest)))
+    && new Set(receipt.fireDefinitionDigests).size === receipt.fireDefinitionDigests.length
+    && Boolean(cleanIso(receipt.suppliedAt))
+    && (receipt.sourceSessionId === undefined || Boolean(clean(receipt.sourceSessionId)))
+    && (receipt.sourceMessageId === undefined || Boolean(clean(receipt.sourceMessageId)))
+    && (receipt.sourceMessageAt === undefined || Boolean(cleanIso(receipt.sourceMessageAt)))
+    && (receipt.source !== 'tool' || Boolean(
+      clean(receipt.sourceSessionId)
+      && clean(receipt.sourceMessageId)
+      && cleanIso(receipt.sourceMessageAt),
+    ))
+}
+
+function coherentInputRequestState(order: Partial<ScheduledWorkOrder>): boolean {
+  if (order.status === 'needs-setup') {
+    return order.execution?.type === 'workflow-run'
+      && order.attention?.reason === 'input-required'
+      && order.inputRequest !== undefined
+      && order.inputSupplyReceipt === undefined
+  }
+  return order.inputRequest === undefined
+    && order.attention?.reason !== 'input-required'
+    && (order.inputSupplyReceipt === undefined || order.execution?.type === 'workflow-run')
+}
+
+function isScheduledWorkAutomationRef(value: unknown): value is ScheduledWorkAutomationRef {
+  if (!value || typeof value !== 'object') return false
+  const ref = value as Partial<ScheduledWorkAutomationRef>
+  return Boolean(clean(ref.matcherId))
+    && Boolean(clean(ref.name))
+    && Boolean(clean(ref.event))
+    && Boolean(clean(ref.definitionDigest))
+    && Boolean(clean(ref.configurationDigest))
 }
 
 function isScheduledWorkReviewDecision(value: unknown): value is ScheduledWorkReviewDecision {

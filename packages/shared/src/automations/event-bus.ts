@@ -78,6 +78,8 @@ export interface GenericEventPayload extends BaseEventPayload {
  * bus's matcher-iteration uses it to dispatch only to the matcher that fired.
  */
 export interface FileWatchPayload extends BaseEventPayload {
+  /** Host-generated identity for this observed change; stable across delivery retries. */
+  eventId?: string;
   /** ID of the FileWatch matcher that fired this event */
   matcherId: string;
   /** Absolute path to the changed file */
@@ -229,6 +231,7 @@ export type AnyEventHandler = (
 
 export type EventDeliveryResult =
   | { status: 'accepted'; handlerCount: number; anyHandlerCount: number }
+  | { status: 'failed'; handlerCount: number; anyHandlerCount: number; failedHandlerCount: number }
   | { status: 'rate_limited'; limit: number; count: number; windowStart: number }
   | { status: 'skipped'; reason: string }
   | { status: 'disposed' };
@@ -280,7 +283,7 @@ function getRateBuckets(event: AutomationEvent, payload: BaseEventPayload): Rate
 // ============================================================================
 
 export interface EventBus {
-  /** Emit an event to all registered handlers */
+  /** Emit an event to all registered handlers; rejects when any handler fails. */
   emit<T extends AutomationEvent>(event: T, payload: EventPayloadMap[T]): Promise<void>;
 
   /** Emit an event and return whether the bus accepted or dropped it */
@@ -326,12 +329,16 @@ export class WorkspaceEventBus implements EventBus {
    * Handlers are called in parallel, errors are caught and logged.
    */
   async emit<T extends AutomationEvent>(event: T, payload: EventPayloadMap[T]): Promise<void> {
-    await this.emitWithResult(event, payload);
+    const result = await this.emitWithResult(event, payload);
+    if (result.status === 'failed') {
+      throw new Error(`Automation event ${event} failed in ${result.failedHandlerCount} handler(s)`);
+    }
   }
 
   /**
    * Emit an event to all registered handlers and return a minimal delivery result.
-   * Handlers are still called in parallel, errors are caught and logged.
+   * Handlers are called in parallel. Failures are reported without preventing
+   * independent handlers from completing.
    */
   async emitWithResult<T extends AutomationEvent>(
     event: T,
@@ -379,25 +386,26 @@ export class WorkspaceEventBus implements EventBus {
     const anyHandlersCopy = new Set(this.anyHandlers);
 
     // Execute event-specific handlers
-    const eventPromises = Array.from(eventHandlers).map(async (handler) => {
-      try {
-        await handler(payload);
-      } catch (error) {
-        log.error(`[EventBus] Handler error for ${event}:`, error);
-      }
-    });
+    const eventPromises = Array.from(eventHandlers).map((handler) => Promise.resolve().then(() => handler(payload)));
 
     // Execute any-event handlers
-    const anyPromises = Array.from(anyHandlersCopy).map(async (handler) => {
-      try {
-        await handler(event, payload as BaseEventPayload);
-      } catch (error) {
-        log.error(`[EventBus] Any-handler error for ${event}:`, error);
-      }
-    });
+    const anyPromises = Array.from(anyHandlersCopy).map((handler) => Promise.resolve().then(() => handler(event, payload as BaseEventPayload)));
 
     // Wait for all handlers to complete
-    await Promise.all([...eventPromises, ...anyPromises]);
+    const settled = await Promise.allSettled([...eventPromises, ...anyPromises]);
+    const failures = settled.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+    for (const failure of failures) {
+      log.error(`[EventBus] Handler error for ${event}:`, failure.reason);
+    }
+
+    if (failures.length > 0) {
+      return {
+        status: 'failed',
+        handlerCount: eventHandlers.size,
+        anyHandlerCount: anyHandlersCopy.size,
+        failedHandlerCount: failures.length,
+      };
+    }
 
     log.debug(`[EventBus] Emitted: ${event} (${eventHandlers.size} handlers, ${anyHandlersCopy.size} any-handlers)`);
 

@@ -3,6 +3,7 @@ import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import { withAgentDefinitionsLibraryMutex } from '../handlers/rpc/agent-definitions'
 import { migrateInitialReleaseManagerActivation, preserveReleaseManagerActivationChoices, releaseManagerActivationNeedsWork } from './release-manager-activation'
+import { withAutomaticSchedulePlacementLock } from '../scheduled-work/AutomaticSchedulePlacementLock'
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
 import { basename, dirname, join } from 'path'
 import { existsSync } from 'fs'
@@ -160,16 +161,12 @@ import {
   verifiedMissionAssetManifestForAgents,
 } from '../track-intelligence/agent-visibility'
 import { ReleaseKitService, releaseKitPlacementFromLegacySlot } from '../release-kit/ReleaseKitService'
-import { scheduledWorkDefinitionDigest, type ExpectedOutputContract, type ScheduledWorkContinuation, type ScheduledWorkInputRef } from '@craft-agent/shared/scheduled-work'
+import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult, scheduledWorkDefinitionDigest, type ExpectedOutputContract, type ScheduledWorkContinuation, type ScheduledWorkInputRef } from '@craft-agent/shared/scheduled-work'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
 import { findExactWorkflowStepOutput } from '../workflows/step-output'
-import {
-  CampaignScheduledJobRunner,
-  type CampaignExternalJobPreparer,
-} from '../campaign-calendar/CampaignScheduledJobRunner'
 import { ScheduledWorkRunner, type ScheduledSocialExecutor, type ScheduledSocialPreparer } from '../scheduled-work/ScheduledWorkRunner'
 import { queueAutomationWork } from '../scheduled-work/AutomationWorkQueue'
 import {
@@ -265,6 +262,8 @@ import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISH
 import { composeAgentSystemPrompt, managerBriefReceiptFromDocs } from '@craft-agent/shared/agent-prompt'
 import { filterAttachmentsForModelInput } from './runtime-config'
 import { inferScheduledWorkScope, persistHnicScheduleWork } from '../scheduled-work/HnicScheduledWork'
+import { supplyScheduledWorkInputs } from '../scheduled-work/ScheduledWorkInputSupply'
+import { findArtistAnswerValueEvidence, type ArtistAnswerValueEvidence } from '../scheduled-work/ScheduledWorkInputAnswerEvidence'
 import { assertAutomatedTeamBrowserCommandAllowed } from './team-automation-browser-guard'
 
 function isConversationContextMessage(message: Message): boolean {
@@ -555,6 +554,29 @@ export function canSaveRunnerSecrets(spawnedFromAgent?: SpawnedAgentRef): boolea
 
 export function canScheduleWork(spawnedFromAgent?: SpawnedAgentRef): boolean {
   return Boolean(spawnedFromAgent?.agentSlug && SCHEDULE_WORK_AGENT_SLUGS.has(spawnedFromAgent.agentSlug))
+}
+
+function requireCurrentArtistAnswerForWorkInput(
+  managed: ManagedSession,
+  input: import('@craft-agent/session-tools-core').SupplyWorkInputToolInput,
+): ArtistAnswerValueEvidence {
+  const parsed = parseScheduledWorkDocResult(
+    loadContextDoc(managed.workspace.rootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined,
+    managed.workspace.id,
+  )
+  if (!parsed.ok) throw new Error(parsed.error)
+  const order = parsed.work.items.find((candidate) => (
+    candidate.id === input.orderId
+    && candidate.inputRequest?.id === input.requestId
+    && candidate.status === 'needs-setup'
+    && !candidate.deletedAt
+  ))
+  if (!order?.inputRequest) throw new Error('This work is not waiting for the supplied input request.')
+  return findArtistAnswerValueEvidence(
+    managed.messages,
+    order.inputRequest.requestedAt,
+    managed.activeHumanMessageId,
+  )
 }
 
 export function backendAgentSessionFields(
@@ -1428,6 +1450,8 @@ interface ManagedSession {
   // Incremented each time a new message starts processing.
   // Used to detect if a follow-up message has superseded the current one (stale-request guard).
   processingGeneration: number
+  /** Exact human message whose turn is currently executing; never model supplied. */
+  activeHumanMessageId?: string
   // NOTE: Parent-child tracking state (pendingTools, parentToolStack, toolToParentMap,
   // pendingTextParent) has been removed. CraftAgent now provides parentToolUseId
   // directly on all events using the SDK's authoritative parent_tool_use_id field.
@@ -1576,7 +1600,7 @@ interface ManagedSession {
   // Token refresh manager for OAuth token refresh with rate limiting
   tokenRefreshManager: TokenRefreshManager
   // Metadata for sessions created by automations
-  triggeredBy?: { automationName?: string; event?: string; timestamp?: number }
+  triggeredBy?: { automationId?: string; automationName?: string; event?: string; timestamp?: number }
   // Provenance for sessions spawned by summoning a saved Agent.
   spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
   launchReceipt?: SessionLaunchReceipt
@@ -2076,13 +2100,10 @@ export class SessionManager implements ISessionManager {
   private lastTimestamp = 0
   /** Workflow runner — bootstrapped during `initialize()`. */
   private workflowRunner!: WorkflowRunner
-  /** Campaign one-shot job runner — bootstrapped lazily after scheduler setup. */
-  private campaignScheduledJobRunner?: CampaignScheduledJobRunner
   private scheduledWorkRunner?: ScheduledWorkRunner
   private scheduledSocialPreparer?: ScheduledSocialPreparer
   private scheduledSocialExecutor?: ScheduledSocialExecutor
   private paidExecutionAuthorizer: () => boolean = () => RUNTIME_IDENTITY.variant !== 'artist-os'
-  private campaignExternalJobPreparer?: CampaignExternalJobPreparer
   /** Deep Research runner — bootstrapped during `initialize()`. */
   private deepResearchRunner!: DeepResearchRunner
 
@@ -2550,12 +2571,18 @@ export class SessionManager implements ISessionManager {
             }
           }
           scheduleHqStateContextRefresh(workspaceRootPath)
+          const failures = settled.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+          if (failures.length > 0) {
+            throw new AggregateError(failures.map((failure) => failure.reason), `Failed to execute ${failures.length} prompt automation(s)`)
+          }
         },
         onWorkReady: async (pendingWork) => {
           if (!this.isPaidExecutionAuthorized()) return
+          const failures: unknown[] = []
           for (const pending of pendingWork) {
             try {
               const queued = await queueAutomationWork(workspaceId, workspaceRootPath, pending, {
+                log: sessionLog,
                 emitContextChanged: (changedWorkspaceId, docs) => {
                   scheduleHqStateContextRefresh(workspaceRootPath)
                   this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, changedWorkspaceId, docs)
@@ -2585,7 +2612,11 @@ export class SessionManager implements ISessionManager {
               }).catch((historyError) => sessionLog.warn('[Automations] Failed to write tracked-work failure history:', historyError))
               scheduleHqStateContextRefresh(workspaceRootPath)
               sessionLog.error(`[Automations] Failed to queue tracked work for ${pending.matcherId}:`, error)
+              failures.push(error)
             }
+          }
+          if (failures.length > 0) {
+            throw new AggregateError(failures, `Failed to queue ${failures.length} tracked automation(s)`)
           }
         },
         onError: (event, error) => {
@@ -2665,6 +2696,16 @@ export class SessionManager implements ISessionManager {
                 automation: { name: `Pulse: ${pulseId}` },
               },
             } as import('@craft-agent/shared/protocol').CreateSessionOptions)
+            const managed = this.sessions.get(session.id)
+            if (managed) {
+              managed.triggeredBy = {
+                automationId: matcher.id ?? matcher.slug ?? pulseId,
+                automationName: matcher.name || `Pulse: ${pulseId}`,
+                event: 'SchedulerTick',
+                timestamp: startedAt,
+              }
+              this.persistSession(managed)
+            }
             await this.sendMessage(session.id, params.userMessage)
             return {
               sessionId: session.id,
@@ -2732,7 +2773,8 @@ export class SessionManager implements ISessionManager {
             automationFiredAt: new Date().toISOString(),
           })
         } catch (err) {
-      sessionLog.error(`[Pulse] Tick execution failed for pulse "${pulseId}":`, err)
+          sessionLog.error(`[Pulse] Tick execution failed for pulse "${pulseId}":`, err)
+          throw err
         }
       }
     })
@@ -2749,14 +2791,9 @@ export class SessionManager implements ISessionManager {
             `[ScheduledWork] workspace=${workspaceId} scanned=${scheduledWorkResult.scanned} started=${scheduledWorkResult.started} blocked=${scheduledWorkResult.blocked} completed=${scheduledWorkResult.completed} failed=${scheduledWorkResult.failed}`,
           )
         }
-        const result = await this.getCampaignScheduledJobRunner().scanWorkspace(workspaceId, workspaceRootPath)
-        if (result.scanned > 0) {
-          sessionLog.info(
-            `[CampaignScheduledJobs] workspace=${workspaceId} scanned=${result.scanned} started=${result.started} blocked=${result.blocked} missed=${result.missed} failed=${result.failed}`,
-          )
-        }
       } catch (err) {
-        sessionLog.error(`[CampaignScheduledJobs] Tick scan failed for workspace "${workspaceId}":`, err)
+        sessionLog.error(`[ScheduledWork] Tick scan failed for workspace "${workspaceId}":`, err)
+        throw err
       }
     })
   }
@@ -3180,6 +3217,7 @@ export class SessionManager implements ISessionManager {
       eventKey: `test:${eventTimestamp}`,
       action: input.action,
     }, {
+      log: sessionLog,
       emitContextChanged: (workspaceId, docs) => {
         scheduleHqStateContextRefresh(input.workspaceRootPath)
         this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, docs)
@@ -3205,6 +3243,7 @@ export class SessionManager implements ISessionManager {
     if (!this.scheduledWorkRunner) {
       this.scheduledWorkRunner = new ScheduledWorkRunner({
         canRunBackgroundWork: canRunWorkspaceBackgroundWork,
+        listWorkspaceRoots: () => getWorkspaces().map(({ id, rootPath }) => ({ id, rootPath })),
         getBackgroundFenceToken: getWorkspaceBackgroundFenceToken,
         canExecuteSocialAutomatically: canExecuteAutomaticBrowserSocial,
         withLock: withWorkspaceContextLock,
@@ -3222,7 +3261,7 @@ export class SessionManager implements ISessionManager {
             onSessionCreated: input.onStarted,
           })
         },
-        startWorkflow: async ({ workOrderId, workspace, workflowSlug, workflowDigest, triggerInputs }) => {
+        startWorkflow: async ({ workOrderId, workspace, workflowSlug, workflowDigest, triggerInputs, untrustedTriggerInputs }) => {
           if (!readActivatedWorkflows(workspace.rootPath).active.includes(workflowSlug)) {
             throw new Error(`Workflow "${workflowSlug}" is not active in this workspace.`)
           }
@@ -3234,6 +3273,7 @@ export class SessionManager implements ISessionManager {
             workflow,
             workspaceId: workspace.id,
             triggerInputs: normalizeWorkflowTriggerInputs(workflow, triggerInputs),
+            untrustedTriggerInputs,
           })
           sessionLog.info(`[ScheduledWork] started workflow run=${run.id} workOrder=${workOrderId}`)
           return { runId: run.id }
@@ -3247,6 +3287,14 @@ export class SessionManager implements ISessionManager {
           const managed = this.sessions.get(sessionId)
           if (session.isProcessing || (managed?.messageQueue.length ?? 0) > 0) return 'running'
           return session.lastFinalMessageId ? 'completed' : 'interrupted'
+        },
+        isAgentSessionWaitingForUser: (sessionId) => {
+          const managed = this.sessions.get(sessionId)
+          return Boolean(
+            managed?.pendingAuthRequest
+            || Array.from(this.pendingPermissionRequests.values()).some((request) => request.sessionId === sessionId)
+            || (managed && getStoredPendingPlanExecution(managed.workspace.rootPath, sessionId)),
+          )
         },
         awaitAgentCompletionBarrier: async (sessionId) => {
           const managed = this.sessions.get(sessionId)
@@ -3549,52 +3597,6 @@ export class SessionManager implements ISessionManager {
       this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, input.workspaceId, loadAllContextDocs(input.workspaceRootPath))
       return { sharedIntelContextSlugs: docs.map((doc) => doc.slug) }
     })
-  }
-
-  private getCampaignScheduledJobRunner(): CampaignScheduledJobRunner {
-    if (!this.campaignScheduledJobRunner) {
-      this.campaignScheduledJobRunner = new CampaignScheduledJobRunner({
-        canRunBackgroundWork: canRunWorkspaceBackgroundWork,
-        getBackgroundFenceToken: getWorkspaceBackgroundFenceToken,
-        executePromptJob: (input) => this.executePromptAutomation({
-          workspaceId: input.workspaceId,
-          workspaceRootPath: input.workspaceRootPath,
-          prompt: input.prompt,
-          labels: ['campaign-calendar'],
-          permissionMode: input.permissionMode ?? 'safe',
-          agentSlug: input.agentSlug,
-          automationName: input.automationName,
-        }),
-        startWorkflow: async ({ workspaceId, workflowSlug, triggerInputs }) => {
-          const workspace = getWorkspaceByNameOrId(workspaceId)
-          if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-          if (!readActivatedWorkflows(workspace.rootPath).active.includes(workflowSlug)) {
-            throw new Error(`Workflow "${workflowSlug}" is not active in this workspace.`)
-          }
-          const workflow = loadGlobalWorkflow(workflowSlug)
-          if (!workflow) throw new Error(`Workflow not found: ${workflowSlug}`)
-          const run = await this.workflowRunner.start({
-            workflow,
-            workspaceId,
-            triggerInputs: normalizeWorkflowTriggerInputs(workflow, triggerInputs),
-          })
-          return { runId: run.id }
-        },
-        prepareExternalJob: this.campaignExternalJobPreparer,
-        emitContextChanged: (workspaceId, docs) => {
-          const workspace = getWorkspaceByNameOrId(workspaceId)
-          if (workspace) scheduleHqStateContextRefresh(workspace.rootPath)
-          this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, docs)
-        },
-        log: sessionLog,
-      })
-    }
-    return this.campaignScheduledJobRunner
-  }
-
-  setCampaignExternalJobPreparer(preparer: CampaignExternalJobPreparer): void {
-    this.campaignExternalJobPreparer = preparer
-    this.campaignScheduledJobRunner = undefined
   }
 
   setScheduledSocialExecution(preparer: ScheduledSocialPreparer, executor: ScheduledSocialExecutor): void {
@@ -4287,7 +4289,7 @@ export class SessionManager implements ISessionManager {
           }
           const rawVideoEditorDirectionSkillUpdated = ensureBuiltInAgentSkillsForSlug(
             'raw-video-editor',
-            ['raw-video-editor', 'raw-video-edit-direction'],
+            ['raw-video-editor', 'raw-video-edit-direction', 'social-video-repurposing'],
           ).updated
           const rawVideoEditorDirectionPromptUpdated = replaceBuiltInAgentPromptText(
             'raw-video-editor',
@@ -4303,6 +4305,11 @@ export class SessionManager implements ISessionManager {
             'raw-video-editor',
             '9. When performance footage includes faint playback and a clean master exists, run `sync-master <camera-video> <master-audio> --analyze-only --json`, then render only after its confidence gate passes.',
             '9. When performance footage includes faint playback and a clean master exists, run `sync-master <camera-video> <master-audio> --analyze-only --json`, then render only after its confidence gate passes. Never pass `--force` unless the user explicitly requests a manual preview after reviewing the proposed timing.',
+          ).updated
+          const rawVideoEditorRepurposePromptUpdated = replaceBuiltInAgentPromptText(
+            'raw-video-editor',
+            'Use the `raw-video-edit-direction` skill to choose the editorial mode, then use `raw-video-editor` for technical execution. Your job is post-production, not AI video generation.',
+            'Use the `raw-video-edit-direction` skill to choose the editorial mode, `social-video-repurposing` when creating alternate social versions from an existing final, and `raw-video-editor` for technical execution. Your job is post-production, not AI video generation.',
           ).updated
           const rawVideoEditorVariantApprovalUpdated = replaceBuiltInAgentPromptText(
             'raw-video-editor',
@@ -4328,7 +4335,7 @@ export class SessionManager implements ISessionManager {
               to: 'An edit folder with inventory, packed transcript, EDL, preview/final MP4 paths, optional master-sync report and synchronized preview, self-check notes, and clear limits when source media or transcription is missing.',
             },
           }).updated
-          if (rawVideoEditorDirectionSkillUpdated || rawVideoEditorDirectionPromptUpdated || rawVideoEditorPromptUpdated || rawVideoEditorForceGuidanceUpdated || rawVideoEditorVariantApprovalUpdated || rawVideoEditorVariantWorkflowUpdated || rawVideoEditorMetadataUpdated) {
+          if (rawVideoEditorDirectionSkillUpdated || rawVideoEditorDirectionPromptUpdated || rawVideoEditorPromptUpdated || rawVideoEditorForceGuidanceUpdated || rawVideoEditorRepurposePromptUpdated || rawVideoEditorVariantApprovalUpdated || rawVideoEditorVariantWorkflowUpdated || rawVideoEditorMetadataUpdated) {
             sessionLog.info('[agent-definitions] Updated existing Raw Video Editor direction, social variants, and song-master synchronization')
           }
           const signalScoutOldRules = `Collection rules:
@@ -5308,6 +5315,31 @@ Default report shape:`,
                   '- If Google Ads API is not configured or lacks a developer token, offer browser dashboard/export mode for reads and draft setup.\n- Spotify Ads V1 uses browser-guided Spotify Ads Manager / Spotify Ad Studio. Resolve the configured Spotify account with `cd tools/printing-press-social && node src/social.mjs catalog --json`, then attach its exact saved session with `browser_tool profile spotify <id>` before opening any Spotify dashboard. Spotify for Artists can inform targeting but does not create ad campaigns. Never use a generic browser session for a configured Spotify account.',
                   '- If Google Ads API is not configured or lacks a developer token, offer browser dashboard/export mode for reads and draft setup.\n- Meta and Google dashboard sessions are configured in Settings > Ad Accounts. Run `browser_tool accounts` and attach the exact account with `browser_tool account <provider> <profile>`; never use a generic browser session for a configured ad account.\n- Spotify Ads V1 uses browser-guided Spotify Ads Manager / Spotify Ad Studio. Resolve the configured Spotify account with `cd tools/printing-press-social && node src/social.mjs catalog --json`, then attach its exact saved session with `browser_tool profile spotify <id>` before opening any Spotify dashboard. Spotify for Artists can inform targeting but does not create ad campaigns. Never use a generic browser session for a configured Spotify account.',
                 ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '4. Use user-provided exports when browser automation is blocked or the user already has files. For CSV exports, run `node tools/ads-operator/bin/ads-operator.mjs import <file.csv> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json` from the repo/workspace root to normalize before making strong claims. For Spotify exports/screenshots, summarize carefully and state confidence until a Spotify normalizer exists.',
+                  '4. Use user-provided exports when browser automation is blocked or the user already has files. For CSV exports, run `node tools/ads-operator/bin/ads-operator.mjs import <file.csv> --platform meta|google|spotify --level campaign|adset|adgroup|ad|keyword --json` from the repo/workspace root to normalize before making strong claims. For Spotify, prefer the ad set report and preserve completion/quartile metrics.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '8. Treat all ad-account writes as external business actions. Preview first, create a clear approval packet, then ask for explicit approval. Use `tools/ads-operator` packet JSON for Meta/Google. For Spotify Ads, write the same approval packet fields manually because local `ads-operator` does not support `--platform spotify` yet.',
+                  '8. A direct user request to set up a campaign authorizes draft entry and approved asset upload. Do not add repeated prompts while preparing the draft. Before final publish/launch/spend or any change to a live campaign, preview the exact payload, create a `tools/ads-operator` approval packet for Meta, Google, or Spotify, and ask once for explicit approval.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '- Use `campaign-plan --platform meta|google --goal ... --artist-context <file> --territories "..." --budget "..." --json` to draft campaign structures from artist context, target audiences, territories, goals, and budget before creating any live campaign.\n- Use `setup-plan --platform meta --goal ... --artist-context <file> --territories "..." --budget "..." --campaign-name "..." --json` before browser-guided Meta Ads Manager campaign setup. Follow its Ads Manager field plan and stop before Publish/Launch.\n- For Spotify Ads, use browser setup guidance from `paid-ads-browser-operator`; do not invent an API call path unless a Spotify Ads API source/skill is explicitly configured.\n- For Spotify Ads approval packets, do not call `ads-operator --platform spotify`. Write a manual packet with platform/account, current page, exact draft action, budget/spend impact, targeting, creative/assets, evidence, risks, rollback/stop plan, and exact approval phrase.\n- Use `packet create` to produce approval JSON, not to apply the change.',
+                  '- Use `campaign-plan --platform meta|google|spotify --goal ... --artist-context <file> --territories "..." --budget "..." --json` to draft campaign structures from artist context, target audiences, territories, goals, and budget before creating any live campaign.\n- Use `setup-plan --platform meta|google|spotify --goal ... --artist-context <file> --territories "..." --budget "..." --campaign-name "..." --json` before browser-guided campaign setup. For Spotify, follow `spotify-ads-manager`, build the campaign/ad set/ad draft, and stop at final review before Submit/Publish/Launch.\n- Use `packet create --platform meta|google|spotify` for one consistent approval artifact before final spend or any live change.\n- Use `packet create` to produce approval JSON, not to apply the change.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '8. If the request would publish, spend, pause, enable, delete, change budget/bids/targeting/creative/keywords/conversions/billing, upload assets, or apply recommendations, stop before mutation and show an approval packet from `tools/ads-operator` for Meta/Google or a manual Spotify approval packet with the same fields.',
+                  '8. If the request would publish, spend, pause/resume, delete, change a live budget/bid/targeting/creative/schedule/destination/status, alter conversions/billing, or apply live recommendations, stop before mutation and show an approval packet from `tools/ads-operator`. User-requested draft entry and approved asset upload do not require a second prompt.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  'Never apply a campaign, budget, catalog, creative, keyword, audience, placement, conversion, billing, recommendation, upload, publish, delete, enable, pause, or status change without explicit user approval in the current conversation.',
+                  "Never publish, launch, pause/resume, delete, or change a live campaign's budget, bid, targeting, creative, schedule, destination, placement, conversion, billing, recommendation, or status without explicit user approval in the current conversation. Draft entry and approved asset upload are covered by the user's setup request.",
+                ).updated,
               ].some(Boolean)
             : false
           if (adsAgentPromptUpdated) {
@@ -5339,6 +5371,11 @@ Default report shape:`,
                   'ads-strategist',
                   '4. Platform recommendation',
                   '4. Platform recommendation, including Spotify Ads when useful',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-strategist',
+                  '6. For Spotify campaigns, use Spotify for Artists browser intel when available: top cities, listener demographics, source/playlist signal, song performance, and audience trend clues. Make clear when this intel is missing and do not fabricate private Spotify metrics.\n7. If goal, budget, or territories are missing, mark the plan non-actionable and list the exact missing inputs.\n8. Do not create approval packets, browser setup plans, or account changes. Hand execution to Ad Runner.',
+                  '6. Compare platforms by job: Spotify for audio-first reach, music discovery, contextual listening, and artist/genre affinity; Meta for visual/social discovery and retargeting; Google/YouTube for intent, search, video, and measurable site actions. Recommend a mix only when each platform has a distinct role and enough budget to learn.\n7. For Spotify campaigns, use Spotify for Artists browser intel when available: top cities, listener demographics, source/playlist signal, song performance, and audience trend clues. Make clear when this intel is missing and do not fabricate private Spotify metrics.\n8. If goal, budget, or territories are missing, mark the plan non-actionable and list the exact missing inputs.\n9. Do not create approval packets, browser setup plans, or account changes. Hand execution to Ad Runner.',
                 ).updated,
               ].some(Boolean)
             : false
@@ -5771,9 +5808,6 @@ user a clickable link to where the thing now lives.`
         this.getScheduledWorkRunner()
           .scanWorkspace(workspace.id, workspace.rootPath)
           .catch((err) => sessionLog.error(`[ScheduledWork] Startup scan failed for workspace "${workspace.id}":`, err))
-        this.getCampaignScheduledJobRunner()
-          .scanWorkspace(workspace.id, workspace.rootPath)
-          .catch((err) => sessionLog.error(`[CampaignScheduledJobs] Startup scan failed for workspace "${workspace.id}":`, err))
       }
 
       this.deepResearchRunner = new DeepResearchRunner({
@@ -6488,7 +6522,11 @@ user a clickable link to where the thing now lives.`
         title: managed.name || undefined,
         status,
         triggeredBy: managed.triggeredBy
-          ? { automationName: managed.triggeredBy.automationName ?? 'Unknown', timestamp: managed.triggeredBy.timestamp ?? 0 }
+          ? {
+              automationId: managed.triggeredBy.automationId,
+              automationName: managed.triggeredBy.automationName ?? 'Unknown',
+              timestamp: managed.triggeredBy.timestamp ?? 0,
+            }
           : undefined,
         createdAt: managed.lastMessageAt,
       })
@@ -6683,7 +6721,12 @@ user a clickable link to where the thing now lives.`
             messageId: msg.id,
             attachments: undefined,  // Attachments already stored on disk
             storedAttachments: msg.attachments,
-            options: undefined,
+            options: {
+              inputOrigin: msg.inputOrigin ?? 'system',
+              badges: msg.badges,
+              displayIntent: msg.displayIntent,
+              hidden: msg.hidden,
+            },
           })
         }
         // Process queue when session becomes active (will be triggered by first message or interaction)
@@ -9178,7 +9221,7 @@ user a clickable link to where the thing now lives.`
             return
           }
 
-          await this.sendMessage(sessionId, message, fileAttachments)
+          await this.sendMessage(sessionId, message, fileAttachments, undefined, { inputOrigin: 'agent' })
         },
         messageAgentFn: async (input) => {
           const service = new AgentMessageService({
@@ -9192,6 +9235,7 @@ user a clickable link to where the thing now lives.`
               {
                 ...(options?.skillSlugs?.length ? { skillSlugs: options.skillSlugs } : {}),
                 displayIntent: options?.displayIntent,
+                inputOrigin: 'agent',
               },
             ),
             abortSession: async (sessionId) => {
@@ -9481,7 +9525,9 @@ user a clickable link to where the thing now lives.`
                     )
                   },
                   withAutomationLock: withAutomationConfigMutex,
+                  withAutomaticScheduleLock: withAutomaticSchedulePlacementLock,
                   writeFileAtomic,
+                  automationWorkspaceRootPaths: getWorkspaces().map((workspace) => workspace.rootPath),
                   continuationRuntimeId: this.getScheduledWorkRunner().runtimeId,
                   continuationFenceToken: getWorkspaceBackgroundFenceToken(managed.workspace.rootPath) ?? undefined,
                 })
@@ -9501,6 +9547,37 @@ user a clickable link to where the thing now lives.`
                   error: error instanceof Error ? error.message : String(error),
                 }
               }
+            }
+          : undefined,
+        supplyWorkInputFn: canScheduleWork(managed.spawnedFromAgent)
+          ? async (input) => {
+              const evidence = requireCurrentArtistAnswerForWorkInput(managed, input)
+              const supplied = await supplyScheduledWorkInputs(
+                managed.workspace.id,
+                managed.workspace.rootPath,
+                {
+                  ...input,
+                  source: 'tool',
+                  sourceSessionId: managed.id,
+                  sourceMessageId: evidence.message.id,
+                  sourceMessageAt: new Date(evidence.message.timestamp).toISOString(),
+                  sourceEvidenceText: evidence.evidenceText,
+                  sourceAttachments: evidence.attachments,
+                },
+                {
+                  log: sessionLog,
+                  emitContextChanged: (workspaceId, docs) => {
+                    this.eventSink?.(
+                      RPC_CHANNELS.workspaceContext.CHANGED,
+                      { to: 'all' },
+                      workspaceId,
+                      docs,
+                    )
+                  },
+                },
+              )
+              await this.getScheduledWorkRunner().scanWorkspace(managed.workspace.id, managed.workspace.rootPath)
+              return supplied
             }
           : undefined,
         manageGoalRunFn: canScheduleWork(managed.spawnedFromAgent)
@@ -11640,12 +11717,18 @@ user a clickable link to where the thing now lives.`
           role: 'user',
           content: message,
           timestamp: this.monotonic(),
+          inputOrigin: options?.inputOrigin ?? 'system',
           attachments: storedAttachments,
           badges: options?.badges,
           displayIntent: options?.displayIntent,
           ...(options?.hidden ? { hidden: true } : {}),
         }
         managed.messages.push(userMessage)
+        if (steered) {
+          managed.activeHumanMessageId = userMessage.inputOrigin === 'human' && !userMessage.hidden
+            ? userMessage.id
+            : undefined
+        }
 
         // Emit to UI — 'accepted' if steered (processing now), 'queued' if aborted (will re-send)
         this.sendEvent({
@@ -11695,6 +11778,7 @@ user a clickable link to where the thing now lives.`
           role: 'user',
           content: message,
           timestamp: this.monotonic(),
+          inputOrigin: options?.inputOrigin ?? 'system',
           attachments: storedAttachments, // Include for persistence (has thumbnailBase64)
           badges: options?.badges,  // Include content badges (sources, skills with embedded icons)
           displayIntent: options?.displayIntent,
@@ -11794,6 +11878,9 @@ user a clickable link to where the thing now lives.`
       }
 
       managed.lastMessageAt = Date.now()
+      managed.activeHumanMessageId = userMessage.inputOrigin === 'human' && !userMessage.hidden
+        ? userMessage.id
+        : undefined
       this.setProcessing(managed, true)
       managed.activeChatGoalTurn = admittedTurn ?? {
         origin: 'human',
@@ -12432,6 +12519,7 @@ user a clickable link to where the thing now lives.`
     // 1. Cleanup state
     this.setProcessing(managed, false)
     managed.stopRequested = false  // Reset for next turn
+    managed.activeHumanMessageId = undefined
 
     const turnStartFinalMessageId = managed.turnStartFinalMessageId
     managed.turnStartFinalMessageId = undefined

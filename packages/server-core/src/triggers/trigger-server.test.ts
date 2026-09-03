@@ -539,6 +539,30 @@ describe('trigger HTTP server', () => {
     expect((await res.json() as { error: string }).error).toBe('event_bus_rate_limited')
   })
 
+  test('event handler failure returns 503 instead of acknowledging the webhook', async () => {
+    const matcher: AutomationMatcher = {
+      id: 'delivery-fails',
+      slug: 'delivery-fails',
+      allowUnauthenticated: true,
+      actions: [{ type: 'prompt', prompt: 'noop' }],
+    }
+    const stub = {
+      findWebhookReceiveMatcher: (slug: string) => (slug === matcher.slug ? matcher : undefined),
+      fireWebhookReceive: async () => ({
+        status: 'failed' as const,
+        handlerCount: 1,
+        anyHandlerCount: 0,
+        failedHandlerCount: 1,
+      }),
+    } as unknown as AutomationSystem
+    handle = await startWithResolver(makeResolver({ ws1: stub }))
+
+    const res = await fetch(`${handle.url}/v1/triggers/ws1/delivery-fails`, { method: 'POST' })
+
+    expect(res.status).toBe(503)
+    expect((await res.json() as { error: string }).error).toBe('event_delivery_failed')
+  })
+
   test('ignores X-Forwarded-For unless the socket IP is trusted', async () => {
     const matcher: AutomationMatcher = {
       slug: 'xff',
