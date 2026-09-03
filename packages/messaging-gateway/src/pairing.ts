@@ -15,7 +15,8 @@ import type { PlatformType } from './types'
 
 export interface PairingEntry {
   workspaceId: string
-  sessionId: string
+  /** Spec 26: a pairing code names the agent the chat will talk to. */
+  agentSlug: string
   platform: PlatformType
   code: string
   expiresAt: number
@@ -59,7 +60,7 @@ export class PairingCodeManager {
    * Issue a new pairing code.
    * @throws Error with code 'RATE_LIMIT' when the workspace exceeds the per-minute cap.
    */
-  generate(workspaceId: string, sessionId: string, platform: PlatformType): GeneratedPairing {
+  generate(workspaceId: string, agentSlug: string, platform: PlatformType): GeneratedPairing {
     this.checkRate(workspaceId)
     this.gc()
 
@@ -72,7 +73,7 @@ export class PairingCodeManager {
     const expiresAt = Date.now() + this.ttlMs
     this.entries.set(this.key(platform, code), {
       workspaceId,
-      sessionId,
+      agentSlug,
       platform,
       code,
       expiresAt,

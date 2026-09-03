@@ -27,6 +27,11 @@ function makeSessionManager(sessions: Session[]): ISessionManager {
     getSessions: () => sessions,
     getSession: async (sessionId: string) => sessions.find((session) => session.id === sessionId) ?? null,
     createSession: async () => { throw new Error('not implemented') },
+    resolveAgentSessionOptions: async (_ws: string, agentSlug: string) => {
+      if (agentSlug === 'concierge') return { spawnedFromAgent: { agentSlug, agentName: 'HNIC', timestamp: 1 } }
+      throw new Error(`No agent: ${agentSlug}`)
+    },
+    archiveSession: async () => {},
     sendMessage: async () => {},
     cancelProcessing: async () => {},
     respondToPermission: () => true,
@@ -93,37 +98,54 @@ function makeStore(): BindingStore {
 }
 
 describe('Commands', () => {
-  it('binds by numbered recent-session index on non-inline platforms', async () => {
-    const sessions = [
-      makeSession('sess-1', 'Old', 100),
-      makeSession('sess-2', 'Newest', 200),
-    ]
+  it('binds to an agent by slug and restricts the channel to that sender', async () => {
     const store = makeStore()
-    const commands = new Commands(makeSessionManager(sessions), store, 'ws1')
+    const commands = new Commands(makeSessionManager([]), store, 'ws1')
+    const adapter = makeAdapter('whatsapp', false)
+
+    await commands.handleCommand(adapter, makeMessage('/bind concierge'))
+
+    const binding = store.findByChannel('whatsapp', 'chan-1', 'u1')
+    expect(binding?.target).toEqual({ kind: 'agent', agentSlug: 'concierge', workspaceId: 'ws1' })
+    // No session is created at bind time — one is resolved on the first message.
+    expect(binding?.activeSessionId).toBeUndefined()
+    expect(binding?.authorizedSenderIds).toEqual(['u1'])
+    expect(store.findByChannel('whatsapp', 'chan-1')).toBeUndefined()
+    expect(store.findByChannel('whatsapp', 'chan-1', 'other')).toBeUndefined()
+    expect(adapter.sent.at(-1)).toContain('concierge')
+  })
+
+  it('refuses an unknown agent slug rather than binding to nothing', async () => {
+    const store = makeStore()
+    const commands = new Commands(makeSessionManager([]), store, 'ws1')
+    const adapter = makeAdapter('whatsapp', false)
+
+    await commands.handleCommand(adapter, makeMessage('/bind not-an-agent'))
+
+    expect(store.findByChannel('whatsapp', 'chan-1', 'u1')).toBeUndefined()
+    expect(adapter.sent.at(-1)).toContain('not-an-agent')
+  })
+
+  it('refuses the removed session-id bind form with an explanation', async () => {
+    const store = makeStore()
+    const commands = new Commands(makeSessionManager([]), store, 'ws1')
     const adapter = makeAdapter('whatsapp', false)
 
     await commands.handleCommand(adapter, makeMessage('/bind 1'))
 
-    expect(store.findByChannel('whatsapp', 'chan-1', 'u1')?.sessionId).toBe('sess-2')
-    expect(store.findByChannel('whatsapp', 'chan-1', 'u1')?.authorizedSenderIds).toEqual(['u1'])
-    expect(store.findByChannel('whatsapp', 'chan-1')).toBeUndefined()
-    expect(store.findByChannel('whatsapp', 'chan-1', 'other')).toBeUndefined()
-    expect(adapter.sent.at(-1)).toContain('Newest')
+    expect(store.getAll()).toHaveLength(0)
+    expect(adapter.sent.at(-1)).toContain('agent')
   })
 
-  it('lists numbered recent sessions with usable /bind instructions on WhatsApp', async () => {
-    const sessions = [
-      makeSession('sess-1', 'Alpha', 100),
-      makeSession('sess-2', 'Beta', 200),
-    ]
+  it('directs an unbound chat to the agent list when /bind has no argument', async () => {
     const store = makeStore()
-    const commands = new Commands(makeSessionManager(sessions), store, 'ws1')
+    const commands = new Commands(makeSessionManager([]), store, 'ws1')
     const adapter = makeAdapter('whatsapp', false)
 
     await commands.handleCommand(adapter, makeMessage('/bind'))
 
-    expect(adapter.sent[0]).toContain('1. Beta (sess-2)')
-    expect(adapter.sent[0]).toContain('/bind <number>')
+    expect(store.getAll()).toHaveLength(0)
+    expect(adapter.sent[0]).toContain('/bind')
   })
 
   it('lists WhatsApp Home Gateway commands in help', async () => {

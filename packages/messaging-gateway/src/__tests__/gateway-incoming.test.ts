@@ -78,6 +78,9 @@ function makeSessionManager() {
   return {
     getSessions: mock(() => sessions),
     getSession: mock(async (id: string) => sessions.find((s) => s.id === id)),
+    resolveAgentSessionOptions: mock(async (_ws: string, agentSlug: string) => ({
+      spawnedFromAgent: { agentSlug, agentName: agentSlug, timestamp: 1 },
+    })),
     sendMessage: mock(async () => {}),
   }
 }
@@ -98,7 +101,7 @@ describe('MessagingGateway incoming hook', () => {
 
     gateway.registerAdapter(adapter)
     await gateway.start()
-    await emitMessage(baseMsg({ text: '/bind sess-1' }))
+    await emitMessage(baseMsg({ text: '/bind concierge' }))
 
     expect(events).toHaveLength(1)
     expect(events[0]!.bound).toBe(false)

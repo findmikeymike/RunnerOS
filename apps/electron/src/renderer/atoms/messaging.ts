@@ -10,7 +10,10 @@ import { atom } from 'jotai'
 export interface MessagingBinding {
   id: string
   workspaceId: string
-  sessionId: string
+  /** Durable identity: the agent this chat talks to. */
+  agentSlug: string
+  /** Session currently serving the agent, when one is live. A cache. */
+  activeSessionId?: string
   platform: string
   channelId: string
   channelName?: string
@@ -20,15 +23,20 @@ export interface MessagingBinding {
 
 export const messagingBindingsAtom = atom<MessagingBinding[]>([])
 
+/**
+ * Bindings keyed by the session currently serving them. A binding with no live
+ * session is absent: it is still connected to its agent and will resolve a new
+ * session on the next message.
+ */
 export const messagingBindingsBySessionAtom = atom((get) => {
   const map = new Map<string, MessagingBinding[]>()
   for (const binding of get(messagingBindingsAtom)) {
-    if (!binding.enabled) continue
-    const list = map.get(binding.sessionId)
+    if (!binding.enabled || !binding.activeSessionId) continue
+    const list = map.get(binding.activeSessionId)
     if (list) {
       list.push(binding)
     } else {
-      map.set(binding.sessionId, [binding])
+      map.set(binding.activeSessionId, [binding])
     }
   }
   return map

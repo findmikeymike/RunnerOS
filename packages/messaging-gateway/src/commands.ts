@@ -1,13 +1,17 @@
 /**
  * Commands — handles chat commands from unbound or bound channels.
  *
- * /new [name]    — create session + bind
- * /bind          — list recent sessions (or by id / index)
- * /pair <code>   — finish a session-initiated pairing flow
+ * /pair <code>   — redeem a desktop-issued pairing code (binds to an agent)
+ * /bind <slug>   — bind this chat to an agent
+ * /agents        — list agents this chat may bind to
+ * /who           — show the bound agent
+ * /reset         — start a fresh thread with the same agent
  * /unbind        — disconnect channel
  * /help          — show available commands
- * /status        — show current binding
  * /stop          — abort the current agent run
+ *
+ * Spec 26: chats bind to agents, never sessions. `/new` and session-id binding
+ * are removed — the latter was an enumerate-then-hijack pair.
  */
 
 import type { ISessionManager } from '@craft-agent/server-core/handlers'
@@ -39,7 +43,16 @@ export interface PairingCodeConsumer {
    */
   canConsume(platform: PlatformType, senderId: string): boolean
   /** Returns the pending pairing (workspace + session) if the code is valid, or null. */
-  consume(platform: PlatformType, code: string): { workspaceId: string; sessionId: string } | null
+  consume(platform: PlatformType, code: string): { workspaceId: string; agentSlug: string } | null
+}
+
+/**
+ * Minimal agent listing for `/agents` and bind buttons. Optional: without it,
+ * `/bind <slug>` still works (the slug is validated against the library) but
+ * the chat cannot browse.
+ */
+export interface AgentDirectory {
+  list(workspaceId: string): Promise<Array<{ slug: string; name: string; description?: string }>>
 }
 
 export class Commands {
@@ -51,16 +64,25 @@ export class Commands {
     private readonly workspaceId: string,
     private readonly pairingConsumer?: PairingCodeConsumer,
     logger: MessagingLogger = NOOP_LOGGER,
+    private readonly agentDirectory?: AgentDirectory,
   ) {
     this.log = logger
+  }
+
+  /** True when the slug names an agent this workspace can actually run. */
+  private async agentExists(agentSlug: string): Promise<boolean> {
+    try {
+      await this.sessionManager.resolveAgentSessionOptions(this.workspaceId, agentSlug)
+      return true
+    } catch {
+      return false
+    }
   }
 
   async handle(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
     const text = msg.text.trim()
 
-    if (text.startsWith('/new')) {
-      await this.handleNew(adapter, msg)
-    } else if (text.startsWith('/bind')) {
+    if (text.startsWith('/bind')) {
       await this.handleBind(adapter, msg)
     } else if (text.startsWith('/pair')) {
       await this.handlePair(adapter, msg)
@@ -71,10 +93,10 @@ export class Commands {
     } else {
       await adapter.sendText(
         msg.channelId,
-        'No session bound to this chat.\n\n' +
-        '/new [name] — start a new session\n' +
-        '/bind — connect to an existing session\n' +
+        'This chat is not connected to an agent yet.\n\n' +
         '/pair <code> — redeem a pairing code from the app\n' +
+        '/agents — see who you can connect to\n' +
+        '/bind <agent> — connect to an agent\n' +
         '/help — show all commands',
       )
     }
@@ -96,9 +118,6 @@ export class Commands {
     })
 
     switch (cmd) {
-      case '/new':
-        await this.handleNew(adapter, msg)
-        return true
       case '/bind':
         await this.handleBind(adapter, msg)
         return true
@@ -111,8 +130,15 @@ export class Commands {
       case '/help':
         await this.handleHelp(adapter, msg)
         return true
+      case '/who':
       case '/status':
-        await this.handleStatus(adapter, msg)
+        await this.handleWho(adapter, msg)
+        return true
+      case '/agents':
+        await this.handleAgents(adapter, msg)
+        return true
+      case '/reset':
+        await this.handleReset(adapter, msg)
         return true
       case '/stop':
         await this.handleStop(adapter, msg)
@@ -126,112 +152,126 @@ export class Commands {
   // Command handlers
   // -------------------------------------------------------------------------
 
-  private async handleNew(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
-    const name = msg.text.replace(/^\/new\s*/, '').trim() || undefined
+  private async handleBind(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
+    const arg = msg.text.replace(/^\/bind\s*/, '').trim()
 
-    try {
-      const session = await this.sessionManager.createSession(this.workspaceId, { name })
-
-      this.bindingStore.bind(
-        this.workspaceId,
-        session.id,
-        adapter.platform,
-        msg.channelId,
-        msg.senderName,
-        undefined,
-        msg.senderId,
-      )
-
-      const displayName = session.name || session.id
+    // Session-id binding is gone (spec 26). Refuse the old form explicitly
+    // rather than reinterpreting it as an agent slug.
+    if (/^\d+$/.test(arg) || /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(arg)) {
       await adapter.sendText(
         msg.channelId,
-        `Created "${displayName}" — you're connected. Just type to start.`,
+        'Chats connect to an agent now, not a session. Try /agents to see who is available, then /bind <agent>.',
       )
-      this.log.info('session created and bound from chat', {
-        event: 'session_created_from_chat',
-        workspaceId: this.workspaceId,
-        sessionId: session.id,
-        platform: adapter.platform,
-        channelId: msg.channelId,
-      })
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Unknown error'
-      this.log.error('failed to create session from chat', {
-        event: 'session_create_failed',
-        workspaceId: this.workspaceId,
-        platform: adapter.platform,
-        channelId: msg.channelId,
-        error: err,
-      })
-      await adapter.sendText(msg.channelId, `Failed to create session: ${errorMsg}`)
-    }
-  }
-
-  private async handleBind(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
-    const bindArg = msg.text.replace(/^\/bind\s*/, '').trim()
-    const recent = this.getRecentSessions()
-
-    if (bindArg) {
-      const session = await this.resolveBindTarget(bindArg, recent)
-      if (!session) {
-        await adapter.sendText(msg.channelId, `Session not found: ${bindArg}`)
-        return
-      }
-
-      this.bindingStore.bind(
-        this.workspaceId,
-        session.id,
-        adapter.platform,
-        msg.channelId,
-        msg.senderName,
-        undefined,
-        msg.senderId,
-      )
-
-      this.log.info('chat bound to existing session', {
-        event: 'chat_bound',
-        workspaceId: this.workspaceId,
-        sessionId: session.id,
-        platform: adapter.platform,
-        channelId: msg.channelId,
-        bindArg,
-      })
-
-      await adapter.sendText(msg.channelId, `Bound to "${session.name || session.id}"`)
       return
     }
 
-    if (recent.length === 0) {
+    if (!arg) {
+      await this.handleAgents(adapter, msg)
+      return
+    }
+
+    if (!msg.senderId) {
+      await adapter.sendText(msg.channelId, 'Could not identify you well enough to bind this chat.')
+      return
+    }
+
+    const agentSlug = arg.toLowerCase()
+    if (!(await this.agentExists(agentSlug))) {
+      await adapter.sendText(msg.channelId, `No agent named "${agentSlug}". Try /agents.`)
+      return
+    }
+
+    this.bindingStore.bind(
+      this.workspaceId,
+      agentSlug,
+      adapter.platform,
+      msg.channelId,
+      msg.senderId,
+      msg.senderName,
+    )
+
+    this.log.info('chat bound to agent', {
+      event: 'chat_bound',
+      workspaceId: this.workspaceId,
+      agentSlug,
+      platform: adapter.platform,
+      channelId: msg.channelId,
+    })
+
+    await adapter.sendText(msg.channelId, `Connected to ${agentSlug}. Just type to start.`)
+  }
+
+  private async handleAgents(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
+    if (!this.agentDirectory) {
       await adapter.sendText(
         msg.channelId,
-        'No sessions found. Use /new to create one.',
+        'Use /bind <agent> with the agent name shown in the app.',
       )
+      return
+    }
+
+    let agents: Array<{ slug: string; name: string; description?: string }> = []
+    try {
+      agents = await this.agentDirectory.list(this.workspaceId)
+    } catch (err) {
+      this.log.error('failed to list agents for chat', {
+        event: 'agents_list_failed',
+        workspaceId: this.workspaceId,
+        error: err,
+      })
+      await adapter.sendText(msg.channelId, 'Could not load the agent list right now.')
+      return
+    }
+
+    if (agents.length === 0) {
+      await adapter.sendText(msg.channelId, 'No agents are active in this workspace yet.')
       return
     }
 
     if (adapter.capabilities.inlineButtons) {
-      const buttons = recent.slice(0, adapter.capabilities.maxButtons).map((s) => ({
-        id: `bind:${s.id}`,
-        label: (s.name || s.id.slice(0, 8)).slice(0, 30),
-        data: s.id,
+      const buttons = agents.slice(0, adapter.capabilities.maxButtons).map((a) => ({
+        id: `bind:${a.slug}`,
+        label: a.name.slice(0, 30),
+        data: a.slug,
       }))
-
-      await adapter.sendButtons(
-        msg.channelId,
-        'Recent sessions:',
-        buttons,
-      )
+      await adapter.sendButtons(msg.channelId, 'Who should this chat talk to?', buttons)
       return
     }
 
-    const lines = recent.map((s, i) => {
-      const name = s.name || s.id.slice(0, 8)
-      return `${i + 1}. ${name} (${s.id.slice(0, 8)})`
-    })
+    const lines = agents.map((a) => `• ${a.name} (${a.slug})`)
+    await adapter.sendText(
+      msg.channelId,
+      'Who should this chat talk to?\n' + lines.join('\n') + '\n\nUse /bind <agent>.',
+    )
+  }
+
+  /**
+   * Start a fresh thread with the same agent. Clears the cached session only —
+   * `target` is untouched, so the counterpart is unchanged.
+   */
+  private async handleReset(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
+    const binding = this.bindingStore.findByChannel(adapter.platform, msg.channelId, msg.senderId)
+    if (!binding) {
+      await adapter.sendText(msg.channelId, 'This chat is not connected to an agent.')
+      return
+    }
+
+    const previous = binding.activeSessionId
+    this.bindingStore.clearActiveSession(binding.id)
+    if (previous) {
+      await this.sessionManager.archiveSession(previous).catch((err) => {
+        this.log.warn('failed to archive session on reset', {
+          event: 'reset_archive_failed',
+          bindingId: binding.id,
+          sessionId: previous,
+          error: err,
+        })
+      })
+    }
 
     await adapter.sendText(
       msg.channelId,
-      'Recent sessions:\n' + lines.join('\n') + '\n\nUse /bind <number> to connect, or /bind <session-id> if you already know it.',
+      `Started a fresh thread with ${binding.target.agentSlug}.`,
     )
   }
 
@@ -276,33 +316,31 @@ export class Commands {
       return
     }
 
-    const session = await this.sessionManager.getSession(entry.sessionId)
-    if (!session) {
-      await adapter.sendText(msg.channelId, 'Session no longer exists.')
+    if (!msg.senderId) {
+      await adapter.sendText(msg.channelId, 'Could not identify you well enough to bind this chat.')
       return
     }
 
     this.bindingStore.bind(
       entry.workspaceId,
-      entry.sessionId,
+      entry.agentSlug,
       adapter.platform,
       msg.channelId,
-      msg.senderName,
-      undefined,
       msg.senderId,
+      msg.senderName,
     )
 
     this.log.info('pairing code redeemed', {
       event: 'pairing_redeemed',
       workspaceId: entry.workspaceId,
-      sessionId: entry.sessionId,
+      agentSlug: entry.agentSlug,
       platform: adapter.platform,
       channelId: msg.channelId,
     })
 
     await adapter.sendText(
       msg.channelId,
-      `✅ Paired with "${session.name || session.id}". You can start chatting now.`,
+      `✅ Connected to ${entry.agentSlug}. You can start chatting now.`,
     )
   }
 
@@ -319,21 +357,19 @@ export class Commands {
     }
   }
 
-  private async handleStatus(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
+  private async handleWho(adapter: PlatformAdapter, msg: IncomingMessage): Promise<void> {
     const binding = this.bindingStore.findByChannel(adapter.platform, msg.channelId, msg.senderId)
     if (!binding) {
-      await adapter.sendText(msg.channelId, 'No session bound. Use /bind, /new, or /pair.')
+      await adapter.sendText(msg.channelId, 'This chat is not connected to an agent. Use /pair or /bind.')
       return
     }
 
-    const session = await this.sessionManager.getSession(binding.sessionId)
-    const name = session?.name || binding.sessionId.slice(0, 8)
     const mode = binding.config.approvalChannel
     const responseMode = binding.config.responseMode
 
     await adapter.sendText(
       msg.channelId,
-      `Bound to "${name}"\nApproval: ${mode}\nResponse mode: ${responseMode}`,
+      `Connected to ${binding.target.agentSlug}\nWorkspace: ${binding.target.workspaceId}\nApproval: ${mode}\nResponse mode: ${responseMode}`,
     )
   }
 
@@ -344,8 +380,13 @@ export class Commands {
       return
     }
 
+    if (!binding.activeSessionId) {
+      await adapter.sendText(msg.channelId, 'Nothing to stop.')
+      return
+    }
+
     try {
-      await this.sessionManager.cancelProcessing(binding.sessionId)
+      await this.sessionManager.cancelProcessing(binding.activeSessionId)
       await adapter.sendText(msg.channelId, 'Stopped.')
     } catch {
       await adapter.sendText(msg.channelId, 'Nothing to stop.')

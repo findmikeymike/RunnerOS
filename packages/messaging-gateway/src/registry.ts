@@ -33,6 +33,7 @@ import { TelegramAdapter } from './adapters/telegram/index'
 import { WhatsAppAdapter, type WhatsAppEvent } from './adapters/whatsapp/index'
 import type { SessionEvent } from './renderer'
 import type { EventSinkFn } from './event-fanout'
+import { OUTBOUND_ONLY_SENDER } from './types'
 import type {
   ChannelBinding,
   IncomingMessage,
@@ -343,8 +344,35 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     }
   }
 
-  bindSession(
+  /**
+   * Bind a channel to an agent. `authorizedSenderId` is required — a binding
+   * with no authorized sender fails closed and would be unusable.
+   */
+  bindAgent(
     workspaceId: string,
+    agentSlug: string,
+    platform: string,
+    channelId: string,
+    authorizedSenderId: string,
+    channelName?: string | null,
+  ): void {
+    const state = this.workspaces.get(workspaceId)
+    if (!state) return
+    if (!isKnownPlatform(platform)) return
+    state.gateway
+      .getBindingStore()
+      .bind(workspaceId, agentSlug, platform, channelId, authorizedSenderId, channelName ?? undefined)
+    this.emitBindingChanged(workspaceId)
+  }
+
+  /**
+   * Bind a channel for an automation-spawned session. No human paired this
+   * channel, so the binding is outbound-only (see OUTBOUND_ONLY_SENDER) and the
+   * spawned session is seeded as the active one.
+   */
+  bindAutomationSession(
+    workspaceId: string,
+    agentSlug: string,
     sessionId: string,
     platform: string,
     channelId: string,
@@ -353,9 +381,16 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     const state = this.workspaces.get(workspaceId)
     if (!state) return
     if (!isKnownPlatform(platform)) return
-    state.gateway
-      .getBindingStore()
-      .bind(workspaceId, sessionId, platform, channelId, channelName ?? undefined)
+    const store = state.gateway.getBindingStore()
+    const binding = store.bind(
+      workspaceId,
+      agentSlug,
+      platform,
+      channelId,
+      OUTBOUND_ONLY_SENDER,
+      channelName ?? undefined,
+    )
+    store.setActiveSession(binding.id, sessionId)
     this.emitBindingChanged(workspaceId)
   }
 
@@ -701,7 +736,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     const state = this.workspaces.get(workspaceId)
     if (state) states.add(state)
     for (const candidate of this.workspaces.values()) {
-      if (candidate.gateway.getBindingStore().findBySession(event.sessionId).length > 0) {
+      if (candidate.gateway.getBindingStore().findByActiveSession(event.sessionId).length > 0) {
         states.add(candidate)
       }
     }
@@ -740,7 +775,7 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
         consume: (platform, code) => {
           const entry = this.pairing.consume(workspaceId, platform, code)
           if (!entry) return null
-          return { workspaceId: entry.workspaceId, sessionId: entry.sessionId }
+          return { workspaceId: entry.workspaceId, agentSlug: entry.agentSlug }
         },
       },
       onBindingChanged: () => this.emitBindingChanged(workspaceId),
@@ -983,15 +1018,18 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       })
 
       const homeState = this.workspaces.get(homeWorkspaceId) ?? this.bootstrapWorkspace(homeWorkspaceId)
-      homeState.gateway.getBindingStore().bind(
+      const store = homeState.gateway.getBindingStore()
+      const binding = store.bind(
         workspace.id,
-        session.id,
+        CONCIERGE_SLUG,
         'whatsapp',
         msg.channelId,
-        msg.senderName,
-        undefined,
         msg.senderId,
+        msg.senderName,
       )
+      // The session was created above; seed the cache so this first message
+      // reuses it rather than resolving a second one.
+      store.setActiveSession(binding.id, session.id)
       this.emitBindingChanged(homeWorkspaceId)
 
       await this.opts.sessionManager.sendMessage(
@@ -1088,7 +1126,8 @@ function toBindingInfo(b: ChannelBinding): MessagingBindingInfo {
   return {
     id: b.id,
     workspaceId: b.workspaceId,
-    sessionId: b.sessionId,
+    agentSlug: b.target.agentSlug,
+    activeSessionId: b.activeSessionId,
     platform: b.platform,
     channelId: b.channelId,
     channelName: b.channelName,

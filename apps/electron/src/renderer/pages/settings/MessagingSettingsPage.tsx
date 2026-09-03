@@ -363,10 +363,12 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
             <div className="mx-4 h-px bg-border/50" />
             <div className="divide-y divide-border/50">
               {platformBindings.map((binding) => {
-                const sessionMeta = sessionMetaMap.get(binding.sessionId)
-                const displayName = sessionMeta
-                  ? getSessionTitle(sessionMeta)
-                  : binding.channelName || binding.channelId
+                // The chat is connected to an agent; the session is a cache
+                // that may not exist yet, so it cannot be the label.
+                const activeSessionId = binding.activeSessionId
+                const sessionMeta = activeSessionId ? sessionMetaMap.get(activeSessionId) : undefined
+                const displayName = binding.agentSlug
+                const subtitle = sessionMeta ? getSessionTitle(sessionMeta) : binding.channelName || binding.channelId
                 return (
                   <div
                     key={binding.id}
@@ -374,16 +376,19 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
                   >
                     <div className="min-w-0">
                       <div className="truncate text-sm">{displayName}</div>
+                      <div className="truncate text-xs text-muted-foreground">{subtitle}</div>
                     </div>
                     <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => navigateToSession(binding.sessionId)}
-                      >
-                        <ArrowUpRight className="h-3.5 w-3.5" />
-                        {t('settings.messaging.bindings.openSession')}
-                      </Button>
+                      {activeSessionId ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigateToSession(activeSessionId)}
+                        >
+                          <ArrowUpRight className="h-3.5 w-3.5" />
+                          {t('settings.messaging.bindings.openSession')}
+                        </Button>
+                      ) : null}
                       <Button
                         variant="ghost"
                         size="sm"

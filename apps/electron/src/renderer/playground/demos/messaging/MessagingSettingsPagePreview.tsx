@@ -32,7 +32,8 @@ function buildBindings(preset: BindingsPreset): MessagingBinding[] {
         {
           ...base,
           id: 'binding-1',
-          sessionId: 'session-aaa',
+          agentSlug: 'concierge',
+          activeSessionId: 'session-aaa',
           platform: 'telegram',
           channelId: '123456',
           channelName: 'Gyula (DM)',
@@ -43,7 +44,8 @@ function buildBindings(preset: BindingsPreset): MessagingBinding[] {
         {
           ...base,
           id: 'binding-1',
-          sessionId: 'session-aaa',
+          agentSlug: 'concierge',
+          activeSessionId: 'session-aaa',
           platform: 'telegram',
           channelId: '123456',
           channelName: 'Gyula (DM)',
@@ -51,7 +53,8 @@ function buildBindings(preset: BindingsPreset): MessagingBinding[] {
         {
           ...base,
           id: 'binding-2',
-          sessionId: 'session-bbb',
+          agentSlug: 'concierge',
+          activeSessionId: 'session-bbb',
           platform: 'whatsapp',
           channelId: '36201234567@s.whatsapp.net',
           channelName: 'Standup Bot',
@@ -60,7 +63,8 @@ function buildBindings(preset: BindingsPreset): MessagingBinding[] {
         {
           ...base,
           id: 'binding-3',
-          sessionId: 'session-ccc',
+          agentSlug: 'concierge',
+          activeSessionId: 'session-ccc',
           platform: 'telegram',
           channelId: '-10098765',
           channelName: 'Team Inbox',

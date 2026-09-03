@@ -135,7 +135,7 @@ describe('MessagingGatewayRegistry WhatsApp Home Gateway', () => {
     )
 
     const homeState = (registry as any).workspaces.get('home')
-    const binding = homeState.gateway.getBindingStore().findByChannel('whatsapp', 'chat-1')
+    const binding = homeState.gateway.getBindingStore().findByChannel('whatsapp', 'chat-1', 'sender-1')
 
     expect(handled).toBe(true)
     expect(sessionManager.resolveAgentSessionOptions).toHaveBeenCalledWith('target', CONCIERGE_SLUG)
@@ -148,7 +148,7 @@ describe('MessagingGatewayRegistry WhatsApp Home Gateway', () => {
       undefined,
     )
     expect(binding?.workspaceId).toBe('target')
-    expect(binding?.sessionId).toBe('sess-new')
+    expect(binding?.activeSessionId).toBe('sess-new')
   })
 
   it('lists cross-workspace WhatsApp bindings from the target workspace view', () => {
@@ -157,13 +157,13 @@ describe('MessagingGatewayRegistry WhatsApp Home Gateway', () => {
     registry.getConfig('home')
 
     const homeState = (registry as any).workspaces.get('home')
-    const binding = homeState.gateway.getBindingStore().bind('target', 'sess-1', 'whatsapp', 'chat-1', 'Mikey')
+    const binding = homeState.gateway.getBindingStore().bind('target', 'concierge', 'whatsapp', 'chat-1', 'sender-1', 'Mikey')
 
     expect(registry.getBindings('target')).toEqual([
       expect.objectContaining({
         id: binding.id,
         workspaceId: 'target',
-        sessionId: 'sess-1',
+        agentSlug: 'concierge',
         platform: 'whatsapp',
         channelId: 'chat-1',
       }),
@@ -176,11 +176,11 @@ describe('MessagingGatewayRegistry WhatsApp Home Gateway', () => {
     registry.getConfig('home')
 
     const homeState = (registry as any).workspaces.get('home')
-    const binding = homeState.gateway.getBindingStore().bind('target', 'sess-1', 'whatsapp', 'chat-1', 'Mikey')
+    const binding = homeState.gateway.getBindingStore().bind('target', 'concierge', 'whatsapp', 'chat-1', 'sender-1', 'Mikey')
 
     expect(registry.unbindBinding('target', binding.id)).toBe(true)
 
-    expect(homeState.gateway.getBindingStore().findByChannel('whatsapp', 'chat-1')).toBeUndefined()
+    expect(homeState.gateway.getBindingStore().findByChannel('whatsapp', 'chat-1', 'sender-1')).toBeUndefined()
     expect(registry.getBindings('target')).toEqual([])
   })
 
@@ -190,10 +190,11 @@ describe('MessagingGatewayRegistry WhatsApp Home Gateway', () => {
     registry.getConfig('home')
 
     const homeState = (registry as any).workspaces.get('home')
-    homeState.gateway.getBindingStore().bind('target', 'sess-1', 'whatsapp', 'chat-1', 'Mikey')
+    const bound = homeState.gateway.getBindingStore().bind('target', 'concierge', 'whatsapp', 'chat-1', 'sender-1', 'Mikey')
+    homeState.gateway.getBindingStore().setActiveSession(bound.id, 'sess-1')
 
     registry.unbindSession('target', 'sess-1', 'whatsapp')
 
-    expect(homeState.gateway.getBindingStore().findByChannel('whatsapp', 'chat-1')).toBeUndefined()
+    expect(homeState.gateway.getBindingStore().findByChannel('whatsapp', 'chat-1', 'sender-1')).toBeUndefined()
   })
 })

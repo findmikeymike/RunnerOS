@@ -383,7 +383,7 @@ export const mockElectronAPI = {
     console.log('[Playground] unbindMessagingSession called:', { sessionId, platform })
     playgroundMessagingHandle.setBindings(
       messagingMockState.bindings.filter((b) => {
-        if (b.sessionId !== sessionId) return true
+        if (b.activeSessionId !== sessionId) return true
         if (platform && b.platform !== platform) return true
         return false
       }),

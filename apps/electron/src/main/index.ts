@@ -799,8 +799,8 @@ app.whenReady().then(async () => {
               pairingMode: 'qr',
             },
           })
-          sm.setAutomationMessagingBinder(({ workspaceId, sessionId, platform, channelId, channelName }) => {
-            messagingHandle?.registry.bindSession(workspaceId, sessionId, platform, channelId, channelName)
+          sm.setAutomationMessagingBinder(({ workspaceId, agentSlug, sessionId, platform, channelId, channelName }) => {
+            messagingHandle?.registry.bindAutomationSession(workspaceId, agentSlug, sessionId, platform, channelId, channelName)
           })
           return {
             sessionManager: sm,

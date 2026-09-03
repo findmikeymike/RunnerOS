@@ -13,6 +13,7 @@ import { readFileAttachment } from '@craft-agent/shared/utils'
 import type { FileAttachment } from '@craft-agent/shared/protocol'
 import type { BindingStore } from './binding-store'
 import type { Commands } from './commands'
+import type { SessionResolver } from './session-resolver'
 import type { IncomingMessage, MessagingLogger, PlatformAdapter } from './types'
 
 const NOOP_LOGGER: MessagingLogger = {
@@ -27,6 +28,7 @@ export class Router {
     private readonly sessionManager: ISessionManager,
     private readonly bindingStore: BindingStore,
     private readonly commands: Commands,
+    private readonly sessionResolver: SessionResolver,
     private readonly log: MessagingLogger = NOOP_LOGGER,
   ) {}
 
@@ -34,18 +36,26 @@ export class Router {
     const binding = this.bindingStore.findByChannel(msg.platform, msg.channelId, msg.senderId)
 
     if (binding) {
+      let sessionId: string | undefined
       try {
         const fileAttachments = this.resolveAttachments(msg)
+        // The binding names an agent; the session serving it is resolved (and
+        // created when needed) here. A thread therefore survives its session
+        // ending — spec 26.
+        const resolved = await this.sessionResolver.resolve(binding)
+        sessionId = resolved.sessionId
         this.log.info('routing inbound chat message to session', {
           event: 'message_routed',
           platform: msg.platform,
           channelId: msg.channelId,
-          sessionId: binding.sessionId,
+          agentSlug: binding.target.agentSlug,
+          sessionId,
+          sessionCreated: resolved.created,
           bindingId: binding.id,
           attachmentCount: fileAttachments?.length ?? 0,
         })
         await this.sessionManager.sendMessage(
-          binding.sessionId,
+          sessionId,
           msg.text,
           fileAttachments,
           undefined, // storedAttachments (handled by session layer)
@@ -57,13 +67,16 @@ export class Router {
           event: 'message_route_failed',
           platform: msg.platform,
           channelId: msg.channelId,
-          sessionId: binding.sessionId,
+          agentSlug: binding.target.agentSlug,
+          sessionId,
           bindingId: binding.id,
           error: err,
         })
         await adapter.sendText(
           msg.channelId,
-          `Failed to send message to session: ${errorMsg}`,
+          sessionId
+            ? `Failed to send message to ${binding.target.agentSlug}: ${errorMsg}`
+            : `Could not reach ${binding.target.agentSlug}: ${errorMsg}`,
         )
       }
       return

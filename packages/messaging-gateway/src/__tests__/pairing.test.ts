@@ -14,17 +14,17 @@ import { PairingCodeManager } from '../pairing'
 describe('PairingCodeManager', () => {
   it('generates a 6-digit numeric code with future expiry', () => {
     const mgr = new PairingCodeManager()
-    const { code, expiresAt } = mgr.generate('ws1', 'sess', 'telegram')
+    const { code, expiresAt } = mgr.generate('ws1', 'concierge', 'telegram')
     expect(code).toMatch(/^\d{6}$/)
     expect(expiresAt).toBeGreaterThan(Date.now())
   })
 
   it('consumes a code exactly once', () => {
     const mgr = new PairingCodeManager()
-    const { code } = mgr.generate('ws1', 'sess', 'telegram')
+    const { code } = mgr.generate('ws1', 'concierge', 'telegram')
 
     const first = mgr.consume('ws1', 'telegram', code)
-    expect(first?.sessionId).toBe('sess')
+    expect(first?.agentSlug).toBe('concierge')
 
     const second = mgr.consume('ws1', 'telegram', code)
     expect(second).toBeNull()
@@ -32,15 +32,15 @@ describe('PairingCodeManager', () => {
 
   it('rejects consumption by a different workspace', () => {
     const mgr = new PairingCodeManager()
-    const { code } = mgr.generate('ws1', 'sess', 'telegram')
+    const { code } = mgr.generate('ws1', 'concierge', 'telegram')
     expect(mgr.consume('ws2', 'telegram', code)).toBeNull()
     // Still redeemable by correct ws
-    expect(mgr.consume('ws1', 'telegram', code)?.sessionId).toBe('sess')
+    expect(mgr.consume('ws1', 'telegram', code)?.agentSlug).toBe('concierge')
   })
 
   it('returns null for expired codes', () => {
     const mgr = new PairingCodeManager(1) // 1ms TTL
-    const { code } = mgr.generate('ws1', 'sess', 'telegram')
+    const { code } = mgr.generate('ws1', 'concierge', 'telegram')
     // Busy-wait a hair past TTL
     const until = Date.now() + 5
     while (Date.now() < until) {
@@ -51,19 +51,19 @@ describe('PairingCodeManager', () => {
 
   it('scopes codes per platform', () => {
     const mgr = new PairingCodeManager()
-    const { code } = mgr.generate('ws1', 'sess', 'telegram')
+    const { code } = mgr.generate('ws1', 'concierge', 'telegram')
     expect(mgr.consume('ws1', 'whatsapp', code)).toBeNull()
   })
 
   it('throws RATE_LIMIT after the per-minute cap', () => {
     const mgr = new PairingCodeManager(60_000, 3)
-    mgr.generate('ws1', 'sess', 'telegram')
-    mgr.generate('ws1', 'sess', 'telegram')
-    mgr.generate('ws1', 'sess', 'telegram')
+    mgr.generate('ws1', 'concierge', 'telegram')
+    mgr.generate('ws1', 'concierge', 'telegram')
+    mgr.generate('ws1', 'concierge', 'telegram')
 
     let caught: unknown
     try {
-      mgr.generate('ws1', 'sess', 'telegram')
+      mgr.generate('ws1', 'concierge', 'telegram')
     } catch (err) {
       caught = err
     }
@@ -73,10 +73,10 @@ describe('PairingCodeManager', () => {
 
   it('rate-limits per workspace, not globally', () => {
     const mgr = new PairingCodeManager(60_000, 2)
-    mgr.generate('ws1', 'sess', 'telegram')
-    mgr.generate('ws1', 'sess', 'telegram')
+    mgr.generate('ws1', 'concierge', 'telegram')
+    mgr.generate('ws1', 'concierge', 'telegram')
     // ws2 still has full budget
-    expect(() => mgr.generate('ws2', 'sess', 'telegram')).not.toThrow()
+    expect(() => mgr.generate('ws2', 'concierge', 'telegram')).not.toThrow()
   })
 
   it('clearWorkspace removes only codes for that workspace', () => {
@@ -86,6 +86,6 @@ describe('PairingCodeManager', () => {
 
     mgr.clearWorkspace('ws1')
     expect(mgr.consume('ws1', 'telegram', a.code)).toBeNull()
-    expect(mgr.consume('ws2', 'telegram', b.code)?.sessionId).toBe('sB')
+    expect(mgr.consume('ws2', 'telegram', b.code)?.agentSlug).toBe('sB')
   })
 })

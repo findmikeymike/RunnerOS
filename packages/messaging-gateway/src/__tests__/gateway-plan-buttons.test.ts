@@ -124,8 +124,11 @@ describe('MessagingGateway plan button binding checks', () => {
     gateway.registerAdapter(adapter)
     await gateway.start()
 
-    gateway.getBindingStore().bind('ws-1', 'sess-1', 'telegram', 'chat-original')
-    gateway.getBindingStore().bind('ws-1', 'sess-1', 'telegram', 'chat-other')
+    const original = gateway.getBindingStore().bind('ws-1', 'concierge', 'telegram', 'chat-original', 'sender-1')
+    const other = gateway.getBindingStore().bind('ws-1', 'concierge', 'telegram', 'chat-other', 'sender-1')
+    // Event fan-out targets bindings currently serving the session.
+    gateway.getBindingStore().setActiveSession(original.id, 'sess-1')
+    gateway.getBindingStore().setActiveSession(other.id, 'sess-1')
 
     gateway.onSessionEvent('session:event', { to: 'workspace', workspaceId: 'ws-1' } as any, planEvent())
     await flush()
@@ -158,7 +161,8 @@ describe('MessagingGateway plan button binding checks', () => {
     const { adapter, press } = makeAdapter()
     gateway.registerAdapter(adapter)
     await gateway.start()
-    gateway.getBindingStore().bind('ws-1', 'sess-1', 'telegram', 'chat-1')
+    const bound = gateway.getBindingStore().bind('ws-1', 'concierge', 'telegram', 'chat-1', 'sender-1')
+    gateway.getBindingStore().setActiveSession(bound.id, 'sess-1')
 
     gateway.onSessionEvent('session:event', { to: 'workspace', workspaceId: 'ws-1' } as any, planEvent())
     await flush()
@@ -184,7 +188,8 @@ describe('MessagingGateway plan button binding checks', () => {
     const { adapter, press } = makeAdapter()
     gateway.registerAdapter(adapter)
     await gateway.start()
-    gateway.getBindingStore().bind('ws-1', 'sess-1', 'telegram', 'chat-1')
+    const bound = gateway.getBindingStore().bind('ws-1', 'concierge', 'telegram', 'chat-1', 'sender-1')
+    gateway.getBindingStore().setActiveSession(bound.id, 'sess-1')
 
     gateway.onSessionEvent('session:event', { to: 'workspace', workspaceId: 'ws-1' } as any, planEvent())
     await flush()

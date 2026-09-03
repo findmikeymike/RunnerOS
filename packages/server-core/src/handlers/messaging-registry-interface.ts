@@ -8,7 +8,10 @@
 export interface MessagingBindingInfo {
   id: string
   workspaceId: string
-  sessionId: string
+  /** Durable identity: the agent this chat talks to. */
+  agentSlug: string
+  /** Session currently serving the agent, when one is live. A cache. */
+  activeSessionId?: string
   platform: string
   channelId: string
   channelName?: string
@@ -49,7 +52,8 @@ export interface IMessagingGatewayRegistry {
   unbindSession(workspaceId: string, sessionId: string, platform?: string): void
 
   /** Bind one messaging channel to a session. */
-  bindSession(workspaceId: string, sessionId: string, platform: string, channelId: string, channelName?: string | null): void
+  bindAgent(workspaceId: string, agentSlug: string, platform: string, channelId: string, authorizedSenderId: string, channelName?: string | null): void
+  bindAutomationSession(workspaceId: string, agentSlug: string, sessionId: string, platform: string, channelId: string, channelName?: string | null): void
 
   /** Unbind one specific binding row by ID. */
   unbindBinding(workspaceId: string, bindingId: string): boolean

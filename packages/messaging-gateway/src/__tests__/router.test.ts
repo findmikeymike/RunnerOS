@@ -17,6 +17,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Router } from '../router'
 import { BindingStore } from '../binding-store'
+import { SessionResolver } from '../session-resolver'
 import type { Commands } from '../commands'
 import type { IncomingMessage, PlatformAdapter } from '../types'
 
@@ -89,7 +90,17 @@ function makeFakeAdapter(): PlatformAdapter {
 }
 
 function makeFakeSessionManager(): { sendMessage: ReturnType<typeof mock> } {
-  return { sendMessage: mock(async () => {}) }
+  return {
+    sendMessage: mock(async () => {}),
+    // The resolver validates the cached session before reusing it.
+    getSession: async (id: string) => ({
+      id,
+      workspaceId: 'ws1',
+      spawnedFromAgent: { agentSlug: 'concierge', agentName: 'HNIC', timestamp: 1 },
+    }),
+    resolveAgentSessionOptions: async () => ({}),
+    createSession: async () => ({ id: 'sess-new', workspaceId: 'ws1' }),
+  } as unknown as { sendMessage: ReturnType<typeof mock> }
 }
 
 function makeFakeCommands(): { handle: ReturnType<typeof mock> } {
@@ -98,11 +109,15 @@ function makeFakeCommands(): { handle: ReturnType<typeof mock> } {
 
 function makeRouter() {
   const store = new BindingStore(storeDir)
-  store.bind('ws1', 'sess-A', 'telegram', 'chat-1')
+  const binding = store.bind('ws1', 'concierge', 'telegram', 'chat-1', 'user-1')
+  // Seed the cache so the router reuses this session instead of creating one.
+  store.setActiveSession(binding.id, 'sess-A')
   const sessionManager = makeFakeSessionManager()
   const commands = makeFakeCommands()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const router = new Router(sessionManager as any, store, commands as unknown as Commands)
+  const resolver = new SessionResolver(sessionManager as any, store)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const router = new Router(sessionManager as any, store, commands as unknown as Commands, resolver)
   return { router, store, sessionManager, commands }
 }
 
@@ -123,11 +138,13 @@ describe('Router', () => {
 
   it('does not route a bound channel for an unauthorized sender', async () => {
     const store = new BindingStore(storeDir)
-    store.bind('ws1', 'sess-A', 'telegram', 'chat-1', undefined, undefined, 'user-1')
+    store.bind('ws1', 'concierge', 'telegram', 'chat-1', 'user-1')
     const sessionManager = makeFakeSessionManager()
     const commands = makeFakeCommands()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const router = new Router(sessionManager as any, store, commands as unknown as Commands)
+    const resolver = new SessionResolver(sessionManager as any, store)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const router = new Router(sessionManager as any, store, commands as unknown as Commands, resolver)
 
     await router.route(makeFakeAdapter(), baseMsg({ senderId: 'user-2', text: 'hi there' }))
 

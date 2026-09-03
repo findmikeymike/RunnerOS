@@ -242,17 +242,59 @@ export function normalizeBindingConfig(
   }
 }
 
+/**
+ * Who a chat talks to.
+ *
+ * Spec 26: a chat binds to an *agent*, never a session. `target` is durable
+ * identity; the session serving it is a replaceable cache (`activeSessionId`).
+ * There is no legacy session-targeted variant — a stored binding without a
+ * valid target is corrupt and dropped on load.
+ */
+export type ChannelBindingTarget =
+  | { kind: 'agent'; agentSlug: string; workspaceId: string }
+
 export interface ChannelBinding {
   id: string
   workspaceId: string
-  sessionId: string
   platform: PlatformType
   channelId: string
   channelName?: string
-  authorizedSenderIds?: string[]
+
+  /** Durable identity: who this chat talks to. */
+  target: ChannelBindingTarget
+
+  /**
+   * Session currently serving `target`. A cache, never identity — it may be
+   * replaced at any time (session archived, repurposed, or /reset) without the
+   * user noticing.
+   */
+  activeSessionId?: string
+
+  /** Senders permitted on this channel. Required and non-empty. */
+  authorizedSenderIds: string[]
+
   enabled: boolean
   createdAt: number
   config: BindingConfig
+}
+
+/**
+ * Sentinel authorized-sender for bindings an automation created, where no human
+ * paired the channel. It matches no real sender id, so such a binding is
+ * outbound-only: the automation can post to the chat, but inbound messages fail
+ * closed instead of being accepted from whoever happens to write in.
+ */
+export const OUTBOUND_ONLY_SENDER = '__outbound_only__'
+
+/** Narrow an unknown value to a valid binding target. */
+export function isChannelBindingTarget(value: unknown): value is ChannelBindingTarget {
+  if (!value || typeof value !== 'object') return false
+  const target = value as Partial<Extract<ChannelBindingTarget, { kind: 'agent' }>>
+  return target.kind === 'agent'
+    && typeof target.agentSlug === 'string'
+    && target.agentSlug.length > 0
+    && typeof target.workspaceId === 'string'
+    && target.workspaceId.length > 0
 }
 
 // ---------------------------------------------------------------------------

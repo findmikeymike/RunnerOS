@@ -522,7 +522,7 @@ Approve in the desktop app to continue.`,
     const planPath = planMessage?.planPath ?? ''
     const planContent = planMessage?.content ?? ''
 
-    const token = this.planTokens.issue(binding.id, binding.sessionId, planPath)
+    const token = this.planTokens.issue(binding.id, event.sessionId, planPath)
     const buttons: InlineButton[] = [
       { id: `plan:accept:${token}`, label: '✅ Accept plan' },
       { id: `plan:compact:${token}`, label: '♻️ Accept & compact' },

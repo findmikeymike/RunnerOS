@@ -10,6 +10,7 @@ import type { PushTarget } from '@craft-agent/shared/protocol'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { BindingStore } from './binding-store'
 import { Router } from './router'
+import { SessionResolver } from './session-resolver'
 import { Commands, type PairingCodeConsumer } from './commands'
 import { Renderer, type SessionEvent } from './renderer'
 import { PlanTokenRegistry } from './plan-tokens'
@@ -126,6 +127,7 @@ export class MessagingGateway {
   private readonly router: Router
   private readonly commands: Commands
   private readonly renderer: Renderer
+  private readonly sessionResolver: SessionResolver
   private readonly planTokens: PlanTokenRegistry
   private readonly planMessages = new Map<string, PlanMessageRecord>()
   private readonly pendingCompactAccepts = new Map<string, PendingCompactAccept>()
@@ -159,10 +161,16 @@ export class MessagingGateway {
       opts.pairingConsumer,
       this.log.child({ component: 'commands' }),
     )
+    this.sessionResolver = new SessionResolver(
+      opts.sessionManager,
+      this.bindingStore,
+      this.log.child({ component: 'session-resolver' }),
+    )
     this.router = new Router(
       opts.sessionManager,
       this.bindingStore,
       this.commands,
+      this.sessionResolver,
       this.log.child({ component: 'router' }),
     )
     this.planTokens = new PlanTokenRegistry()
@@ -374,7 +382,7 @@ export class MessagingGateway {
       void this.finishPendingCompactAccept(event.sessionId)
     }
 
-    const bindings = this.bindingStore.findBySession(event.sessionId)
+    const bindings = this.bindingStore.findByActiveSession(event.sessionId)
     if (bindings.length === 0) return
 
     for (const binding of bindings) {
@@ -402,27 +410,29 @@ export class MessagingGateway {
     if (!adapter) return
 
     if (press.buttonId.startsWith('bind:')) {
-      const sessionId = press.buttonId.slice('bind:'.length)
-      const session = await this.sessionManager.getSession(sessionId)
-      if (!session) {
-        await adapter.sendText(press.channelId, 'Session not found.')
+      // Binds to an agent slug, never a session id. Session-id binding was the
+      // enumerate-then-hijack pair removed by spec 26.
+      const agentSlug = press.buttonId.slice('bind:'.length)
+      if (!press.senderId) {
+        await adapter.sendText(press.channelId, 'Could not identify the sender for this binding.')
+        return
+      }
+      try {
+        await this.sessionManager.resolveAgentSessionOptions(this.workspaceId, agentSlug)
+      } catch {
+        await adapter.sendText(press.channelId, `No agent named "${agentSlug}" in this workspace.`)
         return
       }
 
       this.bindingStore.bind(
         this.workspaceId,
-        session.id,
+        agentSlug,
         platform,
         press.channelId,
-        undefined,
-        undefined,
         press.senderId,
       )
 
-      await adapter.sendText(
-        press.channelId,
-        `Bound to "${session.name || session.id}"`,
-      )
+      await adapter.sendText(press.channelId, `Bound to ${agentSlug}.`)
       return
     }
 
@@ -445,12 +455,13 @@ export class MessagingGateway {
       const requestId = parts[2]
       if (!requestId) return
 
-      const binding = this.bindingStore.findByChannel(platform, press.channelId)
+      const binding = this.bindingStore.findByChannel(platform, press.channelId, press.senderId)
       if (!binding) return
 
       const allowed = action === 'allow'
+      if (!binding.activeSessionId) return
       this.sessionManager.respondToPermission(
-        binding.sessionId,
+        binding.activeSessionId,
         requestId,
         allowed,
         false,
@@ -485,12 +496,12 @@ export class MessagingGateway {
       return
     }
 
-    const binding = this.bindingStore.findByChannel(platform, press.channelId)
+    const binding = this.bindingStore.findByChannel(platform, press.channelId, press.senderId)
     const record = this.planMessages.get(token)
     if (
       !binding ||
       binding.id !== entry.bindingId ||
-      binding.sessionId !== entry.sessionId ||
+      binding.activeSessionId !== entry.sessionId ||
       record?.bindingId !== entry.bindingId ||
       record?.platform !== platform ||
       record?.channelId !== press.channelId
@@ -608,11 +619,13 @@ export class MessagingGateway {
 
     const adapter = this.adapters.get(entry.platform)
     try {
-      const binding = this.bindingStore.findByChannel(entry.platform, entry.channelId)
+      const binding = this.bindingStore.findById(entry.bindingId)
       if (
         !binding ||
-        binding.id !== entry.bindingId ||
-        binding.sessionId !== entry.sessionId
+        !binding.enabled ||
+        binding.platform !== entry.platform ||
+        binding.channelId !== entry.channelId ||
+        binding.activeSessionId !== entry.sessionId
       ) {
         this.log.warn('dropping compact-accept for non-original binding', {
           event: 'plan_compact_binding_mismatch',

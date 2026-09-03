@@ -83,7 +83,9 @@ function makeBinding(platform: PlatformType, id = 'bind-1'): ChannelBinding {
   return {
     id,
     workspaceId: 'ws-1',
-    sessionId: 'sess-1',
+    target: { kind: 'agent', agentSlug: 'concierge', workspaceId: 'ws1' },
+  authorizedSenderIds: ['sender-1'],
+    activeSessionId: 'sess-1',
     platform,
     channelId: 'chan-1',
     enabled: true,
@@ -177,7 +179,7 @@ describe('Renderer — plan_submitted', () => {
     const renderer = new Renderer({
       planTokens: tokens,
       recordPlanMessage: (b, t, m) => {
-        recorded.push({ bindingId: b.id, sessionId: b.sessionId, token: t, messageId: m })
+        recorded.push({ bindingId: b.id, sessionId: b.activeSessionId ?? '', token: t, messageId: m })
       },
     })
     const adapter = makeAdapter('telegram')

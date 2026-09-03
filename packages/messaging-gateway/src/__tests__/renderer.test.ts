@@ -94,7 +94,9 @@ function makeBinding(overrides: Partial<BindingConfig> = {}): ChannelBinding {
   return {
     id: 'bind-1',
     workspaceId: 'ws-1',
-    sessionId: 'sess-1',
+    target: { kind: 'agent', agentSlug: 'concierge', workspaceId: 'ws1' },
+  authorizedSenderIds: ['sender-1'],
+    activeSessionId: 'sess-1',
     platform: 'telegram',
     channelId: 'chan-1',
     enabled: true,

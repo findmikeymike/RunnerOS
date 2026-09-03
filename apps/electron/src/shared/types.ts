@@ -1443,7 +1443,7 @@ export interface ElectronAPI {
   saveTelegramToken(token: string): Promise<void>
   disconnectMessagingPlatform(platform: string): Promise<void>
   forgetMessagingPlatform(platform: string): Promise<void>
-  getMessagingBindings(): Promise<Array<{ id: string; workspaceId: string; sessionId: string; platform: string; channelId: string; channelName?: string; enabled: boolean; createdAt: number }>>
+  getMessagingBindings(): Promise<Array<{ id: string; workspaceId: string; agentSlug: string; activeSessionId?: string; platform: string; channelId: string; channelName?: string; enabled: boolean; createdAt: number }>>
   generateMessagingPairingCode(sessionId: string, platform: string): Promise<{ code: string; expiresAt: number; botUsername?: string }>
   unbindMessagingSession(sessionId: string, platform?: string): Promise<void>
   unbindMessagingBinding(bindingId: string): Promise<{ success: boolean }>

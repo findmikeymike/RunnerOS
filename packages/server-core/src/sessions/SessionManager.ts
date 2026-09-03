@@ -2009,6 +2009,7 @@ export class SessionManager implements ISessionManager {
   private canvasVisualReviewAttempts: Map<string, number> = new Map()
   private automationMessagingBinder?: (input: {
     workspaceId: string
+    agentSlug: string
     sessionId: string
     platform: string
     channelId: string
@@ -2089,6 +2090,7 @@ export class SessionManager implements ISessionManager {
   setAutomationMessagingBinder(
     binder: (input: {
       workspaceId: string
+      agentSlug: string
       sessionId: string
       platform: string
       channelId: string
@@ -14426,6 +14428,7 @@ user a clickable link to where the thing now lives.`
     if (messagingChannel && this.automationMessagingBinder) {
       this.automationMessagingBinder({
         workspaceId,
+        agentSlug: session.spawnedFromAgent?.agentSlug ?? CONCIERGE_SLUG,
         sessionId: session.id,
         platform: messagingChannel.platform,
         channelId: messagingChannel.channelId,

@@ -1,13 +1,15 @@
 /**
  * BindingStore tests
  *
+ * Spec 26: a chat binds to an *agent*. `activeSessionId` is a replaceable cache.
+ *
  * Covers:
- *   - bind / findByChannel / findBySession / getAll roundtrip
- *   - one-channel-one-session invariant (second bind evicts first)
- *   - unbind and unbindSession counts
- *   - change listener fires on mutation
- *   - legacy directory migration (one-shot copy forward)
- *   - persistence across instances via file on disk
+ *   - bind / findByChannel / findByActiveSession / getAll roundtrip
+ *   - one-channel-one-agent invariant (second bind evicts first)
+ *   - authorized senders are required and fail closed
+ *   - active-session cache set/clear without touching the target
+ *   - malformed records are dropped on load (no legacy shape exists)
+ *   - unbind counts, change listener, legacy directory migration, persistence
  */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync, mkdirSync } from 'node:fs'
@@ -28,91 +30,145 @@ afterEach(() => {
   rmSync(legacyDir, { recursive: true, force: true })
 })
 
-describe('BindingStore', () => {
-  it('binds and finds a channel', () => {
-    const store = new BindingStore(dir)
-    const b = store.bind('ws1', 'session-A', 'telegram', 'chat-1', 'Alice')
+/** A well-formed persisted binding in the current (agent-targeted) shape. */
+function storedBinding(over: Record<string, unknown> = {}) {
+  return {
+    id: 'b-1',
+    workspaceId: 'ws1',
+    platform: 'telegram',
+    channelId: 'c1',
+    target: { kind: 'agent', agentSlug: 'concierge', workspaceId: 'ws1' },
+    authorizedSenderIds: ['sender-1'],
+    enabled: true,
+    createdAt: 1,
+    config: {},
+    ...over,
+  }
+}
 
-    expect(b.sessionId).toBe('session-A')
+describe('BindingStore', () => {
+  it('binds a channel to an agent and finds it', () => {
+    const store = new BindingStore(dir)
+    const b = store.bind('ws1', 'concierge', 'telegram', 'chat-1', 'sender-1', 'Alice')
+
+    expect(b.target).toEqual({ kind: 'agent', agentSlug: 'concierge', workspaceId: 'ws1' })
+    expect(b.activeSessionId).toBeUndefined()
     expect(b.platform).toBe('telegram')
     expect(b.channelId).toBe('chat-1')
     expect(b.channelName).toBe('Alice')
     expect(b.enabled).toBe(true)
 
-    const hit = store.findByChannel('telegram', 'chat-1')
-    expect(hit?.sessionId).toBe('session-A')
-    expect(store.findByChannel('telegram', 'unknown')).toBeUndefined()
+    expect(store.findByChannel('telegram', 'chat-1', 'sender-1')?.target.agentSlug).toBe('concierge')
+    expect(store.findByChannel('telegram', 'unknown', 'sender-1')).toBeUndefined()
   })
 
-  it('restricts a binding to authorized senders when present', () => {
+  it('fails closed for unknown and missing senders', () => {
     const store = new BindingStore(dir)
-    const binding = store.bind('ws1', 'session-A', 'telegram', 'chat-1', 'Alice', undefined, 'sender-1')
+    store.bind('ws1', 'concierge', 'telegram', 'chat-1', 'sender-1')
 
-    expect(binding.authorizedSenderIds).toEqual(['sender-1'])
-    expect(store.findByChannel('telegram', 'chat-1', 'sender-1')?.sessionId).toBe('session-A')
+    expect(store.findByChannel('telegram', 'chat-1', 'sender-1')?.target.agentSlug).toBe('concierge')
     expect(store.findByChannel('telegram', 'chat-1', 'sender-2')).toBeUndefined()
+    // No sender id at all must not fall through to "anyone may write".
     expect(store.findByChannel('telegram', 'chat-1')).toBeUndefined()
   })
 
-  it('evicts prior binding when same channel binds again', () => {
+  it('requires an authorized sender at bind time', () => {
     const store = new BindingStore(dir)
-    store.bind('ws1', 'sess-1', 'telegram', 'chat-1')
-    store.bind('ws1', 'sess-2', 'telegram', 'chat-1')
+    expect(() => store.bind('ws1', 'concierge', 'telegram', 'chat-1', '')).toThrow()
+  })
 
-    const hit = store.findByChannel('telegram', 'chat-1')
-    expect(hit?.sessionId).toBe('sess-2')
+  it('evicts the prior binding when the same channel binds again', () => {
+    const store = new BindingStore(dir)
+    store.bind('ws1', 'agent-a', 'telegram', 'chat-1', 'sender-1')
+    store.bind('ws1', 'agent-b', 'telegram', 'chat-1', 'sender-1')
+
+    expect(store.findByChannel('telegram', 'chat-1', 'sender-1')?.target.agentSlug).toBe('agent-b')
     expect(store.getAll()).toHaveLength(1)
   })
 
-  it('lists bindings by session, only enabled', () => {
+  it('caches and clears the active session without touching the target', () => {
     const store = new BindingStore(dir)
-    store.bind('ws1', 'sess', 'telegram', 'c1')
-    store.bind('ws1', 'sess', 'whatsapp', 'c2')
-    store.bind('ws1', 'other', 'telegram', 'c3')
+    const b = store.bind('ws1', 'concierge', 'telegram', 'c1', 'sender-1')
 
-    const mine = store.findBySession('sess')
+    store.setActiveSession(b.id, 'sess-1')
+    expect(store.findById(b.id)?.activeSessionId).toBe('sess-1')
+    expect(store.findByActiveSession('sess-1')).toHaveLength(1)
+
+    store.clearActiveSession(b.id)
+    const after = store.findById(b.id)
+    expect(after?.activeSessionId).toBeUndefined()
+    // The counterpart is unchanged — only the cache was dropped.
+    expect(after?.target.agentSlug).toBe('concierge')
+    expect(store.findByActiveSession('sess-1')).toHaveLength(0)
+  })
+
+  it('persists the active session across instances', () => {
+    const a = new BindingStore(dir)
+    const b = a.bind('ws1', 'concierge', 'telegram', 'c1', 'sender-1')
+    a.setActiveSession(b.id, 'sess-1')
+
+    const reopened = new BindingStore(dir)
+    expect(reopened.findById(b.id)?.activeSessionId).toBe('sess-1')
+  })
+
+  it('lists bindings by agent and by active session, only enabled', () => {
+    const store = new BindingStore(dir)
+    const one = store.bind('ws1', 'concierge', 'telegram', 'c1', 'sender-1')
+    const two = store.bind('ws1', 'concierge', 'whatsapp', 'c2', 'sender-1')
+    store.bind('ws1', 'other-agent', 'telegram', 'c3', 'sender-1')
+
+    expect(store.findByAgent('concierge')).toHaveLength(2)
+
+    store.setActiveSession(one.id, 'sess')
+    store.setActiveSession(two.id, 'sess')
+    const mine = store.findByActiveSession('sess')
     expect(mine).toHaveLength(2)
     expect(new Set(mine.map((b) => b.platform))).toEqual(new Set(['telegram', 'whatsapp']))
   })
 
   it('unbind returns true only when a row was removed', () => {
     const store = new BindingStore(dir)
-    store.bind('ws1', 'sess', 'telegram', 'c1')
+    store.bind('ws1', 'concierge', 'telegram', 'c1', 'sender-1')
 
     expect(store.unbind('telegram', 'c1')).toBe(true)
     expect(store.unbind('telegram', 'c1')).toBe(false)
     expect(store.getAll()).toHaveLength(0)
   })
 
-  it('unbindSession removes correct count with optional platform filter', () => {
+  it('unbindSession matches on the cached session, with optional platform filter', () => {
     const store = new BindingStore(dir)
-    store.bind('ws1', 'sess', 'telegram', 'c1')
-    store.bind('ws1', 'sess', 'whatsapp', 'c2')
-    store.bind('ws1', 'other', 'telegram', 'c3')
+    const a = store.bind('ws1', 'concierge', 'telegram', 'c1', 'sender-1')
+    const b = store.bind('ws1', 'concierge', 'whatsapp', 'c2', 'sender-1')
+    const c = store.bind('ws1', 'other-agent', 'telegram', 'c3', 'sender-1')
+    store.setActiveSession(a.id, 'sess')
+    store.setActiveSession(b.id, 'sess')
+    store.setActiveSession(c.id, 'other')
 
     expect(store.unbindSession('sess', 'telegram')).toBe(1)
     expect(store.getAll()).toHaveLength(2)
 
     expect(store.unbindSession('sess')).toBe(1)
     expect(store.getAll()).toHaveLength(1)
-    expect(store.getAll()[0]?.sessionId).toBe('other')
+    expect(store.getAll()[0]?.target.agentSlug).toBe('other-agent')
   })
 
   it('unbindById removes only the selected binding row', () => {
     const store = new BindingStore(dir)
-    const a = store.bind('ws1', 'sess', 'telegram', 'c1')
-    const b = store.bind('ws1', 'sess', 'whatsapp', 'c2')
+    const a = store.bind('ws1', 'concierge', 'telegram', 'c1', 'sender-1')
+    const b = store.bind('ws1', 'concierge', 'whatsapp', 'c2', 'sender-1')
 
     expect(store.unbindById(a.id)).toBe(true)
-    expect(store.findByChannel('telegram', 'c1')).toBeUndefined()
-    expect(store.findByChannel('whatsapp', 'c2')?.id).toBe(b.id)
+    expect(store.findByChannel('telegram', 'c1', 'sender-1')).toBeUndefined()
+    expect(store.findByChannel('whatsapp', 'c2', 'sender-1')?.id).toBe(b.id)
     expect(store.unbindById(a.id)).toBe(false)
   })
 
   it('forces remote chat bindings to use desktop-only approvals', () => {
     const store = new BindingStore(dir)
-    const whatsapp = store.bind('ws1', 'sess', 'whatsapp', 'c2')
-    const telegram = store.bind('ws1', 'sess', 'telegram', 'c3', undefined, { approvalChannel: 'chat' })
+    const whatsapp = store.bind('ws1', 'concierge', 'whatsapp', 'c2', 'sender-1')
+    const telegram = store.bind('ws1', 'concierge', 'telegram', 'c3', 'sender-1', undefined, {
+      approvalChannel: 'chat',
+    })
     expect(whatsapp.config.approvalChannel).toBe('app')
     expect(telegram.config.approvalChannel).toBe('app')
   })
@@ -122,7 +178,7 @@ describe('BindingStore', () => {
     let calls = 0
     store.onChange(() => calls++)
 
-    store.bind('ws1', 'sess', 'telegram', 'c1')
+    store.bind('ws1', 'concierge', 'telegram', 'c1', 'sender-1')
     store.unbind('telegram', 'c1')
 
     expect(calls).toBe(2)
@@ -130,80 +186,79 @@ describe('BindingStore', () => {
 
   it('persists across instances via bindings.json', () => {
     const a = new BindingStore(dir)
-    a.bind('ws1', 'sess', 'telegram', 'c1', 'name')
+    a.bind('ws1', 'concierge', 'telegram', 'c1', 'sender-1', 'name')
 
     const b = new BindingStore(dir)
-    const hit = b.findByChannel('telegram', 'c1')
-    expect(hit?.channelName).toBe('name')
+    expect(b.findByChannel('telegram', 'c1', 'sender-1')?.channelName).toBe('name')
   })
 
-  it('migrates legacy bindings.json one-shot on construction', () => {
-    const legacyFile = join(legacyDir, 'bindings.json')
-    const sample = [
-      {
-        id: 'legacy-1',
-        workspaceId: 'ws1',
-        sessionId: 'sess',
-        platform: 'telegram',
-        channelId: 'c1',
-        enabled: true,
-        createdAt: 1,
-        config: {},
-      },
-    ]
-    writeFileSync(legacyFile, JSON.stringify(sample))
+  // --- Malformed records -----------------------------------------------------
+  // There is no legacy binding shape (spec 26): the product shipped with agent
+  // targets. A record without a valid target or sender is corrupt, and keeping
+  // it would mean resolving a chat to the wrong counterpart.
 
-    const store = new BindingStore(dir, legacyDir)
-    expect(store.findByChannel('telegram', 'c1')?.id).toBe('legacy-1')
-    expect(existsSync(join(dir, 'bindings.json'))).toBe(true)
+  it('drops a record with no target', () => {
+    const legacyShape = { ...storedBinding(), target: undefined, sessionId: 'sess-1' }
+    writeFileSync(join(dir, 'bindings.json'), JSON.stringify([legacyShape]))
+
+    const store = new BindingStore(dir)
+    expect(store.getAll()).toEqual([])
   })
 
-  it('does not overwrite existing file when legacy is also present', () => {
-    // Pre-populate new location
-    mkdirSync(dir, { recursive: true })
+  it('drops a record whose target is not an agent target', () => {
+    writeFileSync(
+      join(dir, 'bindings.json'),
+      JSON.stringify([storedBinding({ target: { kind: 'session', sessionId: 'sess-1' } })]),
+    )
+
+    const store = new BindingStore(dir)
+    expect(store.getAll()).toEqual([])
+  })
+
+  it('drops a record with no authorized senders rather than admitting everyone', () => {
+    writeFileSync(join(dir, 'bindings.json'), JSON.stringify([storedBinding({ authorizedSenderIds: [] })]))
+
+    const store = new BindingStore(dir)
+    expect(store.getAll()).toEqual([])
+  })
+
+  it('keeps well-formed records alongside dropped ones', () => {
     writeFileSync(
       join(dir, 'bindings.json'),
       JSON.stringify([
-        {
-          id: 'new-1',
-          workspaceId: 'ws1',
-          sessionId: 'sess-new',
-          platform: 'telegram',
-          channelId: 'c1',
-          enabled: true,
-          createdAt: 2,
-          config: {},
-        },
-      ]),
-    )
-    // Legacy has different content
-    writeFileSync(
-      join(legacyDir, 'bindings.json'),
-      JSON.stringify([
-        {
-          id: 'legacy-1',
-          workspaceId: 'ws1',
-          sessionId: 'sess-legacy',
-          platform: 'telegram',
-          channelId: 'c1',
-          enabled: true,
-          createdAt: 1,
-          config: {},
-        },
+        storedBinding({ id: 'good', channelId: 'c1' }),
+        storedBinding({ id: 'bad', channelId: 'c2', target: undefined }),
       ]),
     )
 
+    const store = new BindingStore(dir)
+    expect(store.getAll().map((b) => b.id)).toEqual(['good'])
+  })
+
+  it('migrates the legacy storage directory one-shot on construction', () => {
+    // Directory-location migration, unrelated to binding shape.
+    writeFileSync(join(legacyDir, 'bindings.json'), JSON.stringify([storedBinding({ id: 'moved-1' })]))
+
     const store = new BindingStore(dir, legacyDir)
-    expect(store.findByChannel('telegram', 'c1')?.sessionId).toBe('sess-new')
+    expect(store.findByChannel('telegram', 'c1', 'sender-1')?.id).toBe('moved-1')
+    expect(existsSync(join(dir, 'bindings.json'))).toBe(true)
+  })
+
+  it('does not overwrite an existing file when legacy is also present', () => {
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'bindings.json'), JSON.stringify([storedBinding({ id: 'new-1' })]))
+    writeFileSync(join(legacyDir, 'bindings.json'), JSON.stringify([storedBinding({ id: 'old-1' })]))
+
+    const store = new BindingStore(dir, legacyDir)
+    expect(store.findByChannel('telegram', 'c1', 'sender-1')?.id).toBe('new-1')
   })
 
   it('recovers from corrupt bindings.json as an empty store', () => {
     writeFileSync(join(dir, 'bindings.json'), 'not-json')
     const store = new BindingStore(dir)
     expect(store.getAll()).toEqual([])
-    // Subsequent write should succeed
-    store.bind('ws1', 'sess', 'telegram', 'c1')
-    const raw = readFileSync(join(dir, 'bindings.json'), 'utf-8')
-    expect(JSON.parse(raw)).toHaveLength(1)
+
+    store.bind('ws1', 'concierge', 'telegram', 'c1', 'sender-1')
+    expect(JSON.parse(readFileSync(join(dir, 'bindings.json'), 'utf-8'))).toHaveLength(1)
   })
 })
