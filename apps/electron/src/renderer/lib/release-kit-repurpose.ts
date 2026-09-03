@@ -96,3 +96,12 @@ export function buildSocialVariantSetKickoff(input: {
     'Do not publish, schedule, spend money, or use Instagram Trial unless the exact intent above explicitly requests it. Posting approval comes later.',
   ].join('\n')
 }
+
+export function buildSocialVariantSetContinuePrompt(input: { outputId: string; revision?: number }): string {
+  return [
+    `Continue Variant Set ${input.outputId}${input.revision ? ` at revision ${input.revision}` : ''}.`,
+    'Read the saved set with get_social_variant_set, preserve every ready version, and finish only missing or failed versions.',
+    'Use the repurpose timeline gate so cosmetic-only or effectively duplicate edits do not pass.',
+    'Creation is already authorized. Do not ask for another plan approval, and do not post or schedule anything.',
+  ].join(' ')
+}

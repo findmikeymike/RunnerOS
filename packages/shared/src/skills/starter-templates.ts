@@ -792,7 +792,7 @@ This workflow is inspired by Browser Use \`video-use\`, which is MIT licensed. I
 3. Inspect before editing: list files, run \`ffprobe\`, and identify aspect ratio, duration, audio streams, and likely content type.
 4. Transcribe before making speech cuts. Prefer word-level timestamps. Use ElevenLabs Scribe, WhisperX, Whisper, or an available local transcript source.
 5. Build a compact edit surface, usually \`edit/takes_packed.md\`, with phrase-level timestamps grouped by source file.
-6. Ask for strategy confirmation before rendering: target length, platform/aspect, pacing, must-keep moments, must-cut moments, caption style, and grade direction.
+6. Ask for strategy confirmation before rendering: target length, platform/aspect, pacing, must-keep moments, must-cut moments, caption style, and grade direction. Exception: when Artist OS supplies a host-created Social Variant Set and says the Create action already authorized that bounded render, do not ask for the same approval again.
 7. Never cut inside a word. Snap cuts to transcript word boundaries when word timestamps exist.
 8. Pad cut edges by roughly 30-200ms to avoid chopped syllables.
 9. Add short audio fades at cut boundaries to avoid pops.
@@ -894,6 +894,17 @@ Before calling the edit done:
 - Confirm captions are readable and not hidden.
 - Confirm no audio pops or clipped words.
 - If quality is uncertain, say exactly what needs manual review.
+
+### Social Variant Sets
+
+For Artist OS Social Variant Sets, use the dedicated repurpose command instead of treating a filter or re-encode as a new version:
+
+\`\`\`bash
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs repurpose <source-video> --out-dir <workspace-output-dir> --json
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs repurpose <source-video> --out-dir <workspace-output-dir> --brief <variant-brief.json> --render --json
+\`\`\`
+
+Bind the brief to the exact source SHA-256 and the rights basis already recorded by Artist OS. The local timeline gate must pass: every version needs a meaningfully different opening, selected moments, duration, or sequence. A font, filter, crop nudge, or re-encode alone is not a variant. Record each success or failure immediately with \`record_social_variant_result\`; preserve successful siblings and retry only failed or explicitly revised versions. The Create action authorizes this bounded render, but never authorizes scheduling or posting.
 
 ## Output
 

@@ -828,11 +828,13 @@ Core behavior:
 3. Start with \`cd tools/raw-video-editor && node bin/raw-video-editor.mjs doctor --json\`.
 4. Run \`inspect <footage-dir> --json\` to create \`inventory.json\`, \`project.md\`, and \`takes_packed.md\`.
 5. Run \`transcribe <footage-dir> --model base --json\` when speech-accurate cuts matter and local Whisper is available.
-6. Ask for plain-English strategy confirmation before rendering.
+6. Ask for plain-English strategy confirmation before rendering, except when a host-created Social Variant Set explicitly says the user's Create action already authorized the bounded render. In that flow, read the saved set and begin without a duplicate approval pause.
 7. Run \`plan <footage-dir> --max-duration <seconds> --aspect <ratio> --json\` to create \`edl.json\`.
 8. Run \`render <footage-dir> --out <footage-dir>/edit/preview.mp4 --json\`.
 9. When performance footage includes faint playback and a clean master exists, run \`sync-master <camera-video> <master-audio> --analyze-only --json\`, then render only after its confidence gate passes. Never pass \`--force\` unless the user explicitly requests a manual preview after reviewing the proposed timing.
 10. Self-check \`render-report.json\` or the master-sync report, cut boundaries, captions, audio pops, aspect ratio, and duration before presenting the result.
+
+For a Social Variant Set, use the \`repurpose\` workflow. It rejects full-source, cosmetic-only, and effectively duplicate edits before rendering. Record each finished or failed version into the saved set immediately so partial success survives interruption.
 
 Route generated video, storyboard-first production, provider runs, and credit-spending creative work to Squad or Video Editor Agent. Route social publishing to Social Publisher.
 

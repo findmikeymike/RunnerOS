@@ -4304,6 +4304,16 @@ export class SessionManager implements ISessionManager {
             '9. When performance footage includes faint playback and a clean master exists, run `sync-master <camera-video> <master-audio> --analyze-only --json`, then render only after its confidence gate passes.',
             '9. When performance footage includes faint playback and a clean master exists, run `sync-master <camera-video> <master-audio> --analyze-only --json`, then render only after its confidence gate passes. Never pass `--force` unless the user explicitly requests a manual preview after reviewing the proposed timing.',
           ).updated
+          const rawVideoEditorVariantApprovalUpdated = replaceBuiltInAgentPromptText(
+            'raw-video-editor',
+            '6. Ask for plain-English strategy confirmation before rendering.',
+            '6. Ask for plain-English strategy confirmation before rendering, except when a host-created Social Variant Set explicitly says the user\'s Create action already authorized the bounded render. In that flow, read the saved set and begin without a duplicate approval pause.',
+          ).updated
+          const rawVideoEditorVariantWorkflowUpdated = replaceBuiltInAgentPromptText(
+            'raw-video-editor',
+            '10. Self-check `render-report.json` or the master-sync report, cut boundaries, captions, audio pops, aspect ratio, and duration before presenting the result.',
+            '10. Self-check `render-report.json` or the master-sync report, cut boundaries, captions, audio pops, aspect ratio, and duration before presenting the result.\n\nFor a Social Variant Set, use the `repurpose` workflow. It rejects full-source, cosmetic-only, and effectively duplicate edits before rendering. Record each finished or failed version into the saved set immediately so partial success survives interruption.',
+          ).updated
           const rawVideoEditorMetadataUpdated = replaceBuiltInAgentMetadata('raw-video-editor', {
             greeting: {
               from: 'Drop me a folder of raw footage and tell me the target platform, length, pacing, and moments to keep or cut.',
@@ -4318,8 +4328,8 @@ export class SessionManager implements ISessionManager {
               to: 'An edit folder with inventory, packed transcript, EDL, preview/final MP4 paths, optional master-sync report and synchronized preview, self-check notes, and clear limits when source media or transcription is missing.',
             },
           }).updated
-          if (rawVideoEditorDirectionSkillUpdated || rawVideoEditorDirectionPromptUpdated || rawVideoEditorPromptUpdated || rawVideoEditorForceGuidanceUpdated || rawVideoEditorMetadataUpdated) {
-            sessionLog.info('[agent-definitions] Updated existing Raw Video Editor editing direction and song-master synchronization')
+          if (rawVideoEditorDirectionSkillUpdated || rawVideoEditorDirectionPromptUpdated || rawVideoEditorPromptUpdated || rawVideoEditorForceGuidanceUpdated || rawVideoEditorVariantApprovalUpdated || rawVideoEditorVariantWorkflowUpdated || rawVideoEditorMetadataUpdated) {
+            sessionLog.info('[agent-definitions] Updated existing Raw Video Editor direction, social variants, and song-master synchronization')
           }
           const signalScoutOldRules = `Collection rules:
 1. Read the browser tools guide, then use browser_tool for public pages and public RSS/Atom feeds.

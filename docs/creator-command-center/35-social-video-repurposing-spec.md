@@ -1,5 +1,5 @@
 ---
-status: partially-implemented-v1-proposed-v2
+status: implemented-v1
 owner: raw-video-editor
 last_verified: 2026-09-02
 source_of_truth: true
@@ -37,7 +37,7 @@ This is creative repurposing, not duplicate-detection evasion. Artist OS can pro
 
 ## What Exists Today
 
-Implemented baseline:
+Implemented V1:
 
 - Raw Video Editor can analyze a selected source without rendering.
 - `repurpose` records the exact source SHA-256, scene evidence, edit decisions, and render paths.
@@ -46,17 +46,13 @@ Implemented baseline:
 - Finished variants can become durable Outputs visible in Canvas.
 - Verified Release Kit videos and usable HQ Vault videos expose **Create variants**.
 - Raw Video Editor already owns the `social-video-repurposing` skill.
+- A host-owned typed Variant Set records multi-source requests, exact hashes, account intent, the 12-render ceiling, incremental results, and editor-session identity.
+- Campaign Release Kit and HQ Outputs expose compact Variants surfaces with Continue, Keep, Revise, Archive, and **Use this version** actions.
+- Continue reopens the exact editor conversation, repairs an empty pre-kickoff session, or explicitly rebinds an unavailable session without duplicating the set.
+- **Use this version** snapshots the exact asset into the campaign Release Kit and enters the existing account, caption, time, and posting-approval flow.
+- Social Publisher has a strict usable-variant query; Trial, disconnected accounts, source drift, duplicate schedules, and uncertain publication fail closed.
 
-Still required:
-
-- a host-owned typed Variant Set contract;
-- multi-source setup and total-output limits;
-- durable progress and resume;
-- a campaign Variants view;
-- per-variant keep, revise, archive, and post actions;
-- exact destination-account metadata;
-- a typed Social Publisher query and scheduling handoff;
-- live end-to-end Electron verification.
+The implementation has automated source-drift, duplicate-render, partial-failure, restart, session-resume, Trial-refusal, scheduling, receipt, IPC, and UI-contract coverage. A real provider post remains a separate explicit live gate because verification must not create a public side effect.
 
 ## Core Laws
 

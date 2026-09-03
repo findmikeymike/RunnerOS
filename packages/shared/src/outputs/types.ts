@@ -173,6 +173,7 @@ export interface OutputSummary {
   updatedAt: string;
   completedAt?: string;
   origin: OutputOrigin;
+  primary?: OutputAsset;
   preview?: OutputPreview;
   primaryAssetId?: string;
   previewMode?: OutputPreviewMode;

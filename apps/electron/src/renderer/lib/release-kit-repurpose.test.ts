@@ -5,6 +5,7 @@ import {
   buildReleaseKitRepurposeKickoff,
   buildVaultRepurposeKickoff,
   buildSocialVariantSetKickoff,
+  buildSocialVariantSetContinuePrompt,
   releaseKitRepurposeRestriction,
   vaultRepurposeRestriction,
 } from './release-kit-repurpose'
@@ -99,5 +100,15 @@ describe('Release Kit repurposing kickoff', () => {
     expect(prompt).toContain('do not pause for a separate plan approval')
     expect(prompt).toContain('Posting approval comes later')
     expect(prompt).not.toContain('Trial requested')
+  })
+
+  test('resumes the exact durable set without repeating approval or completed work', () => {
+    const prompt = buildSocialVariantSetContinuePrompt({ outputId: 'variant-set-1', revision: 7 })
+    expect(prompt).toContain('Continue Variant Set variant-set-1 at revision 7')
+    expect(prompt).toContain('preserve every ready version')
+    expect(prompt).toContain('finish only missing or failed versions')
+    expect(prompt).toContain('cosmetic-only or effectively duplicate edits do not pass')
+    expect(prompt).toContain('Do not ask for another plan approval')
+    expect(prompt).toContain('do not post or schedule anything')
   })
 })

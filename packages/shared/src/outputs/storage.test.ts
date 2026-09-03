@@ -202,6 +202,8 @@ describe('output storage', () => {
     const newManifest = manifest(OUTPUT_NEW_ID, {
       createdAt: '2026-05-01T10:05:00.000Z',
       updatedAt: '2026-05-01T10:05:00.000Z',
+      primary: { id: 'video-1', label: 'Vertical cut', role: 'primary', path: 'vertical.mp4', mimeType: 'video/mp4', sha256: 'a'.repeat(64) },
+      assets: [{ id: 'video-1', label: 'Vertical cut', role: 'primary', path: 'vertical.mp4', mimeType: 'video/mp4', sha256: 'a'.repeat(64) }],
     });
 
     writeOutputManifest(workspace, oldManifest);
@@ -211,6 +213,7 @@ describe('output storage', () => {
     expect(readOutputManifest(workspace, OUTPUT_NEW_ID)).toEqual(newManifest);
     expect(listOutputManifests(workspace).map((output) => output.id)).toEqual([OUTPUT_NEW_ID, OUTPUT_OLD_ID]);
     expect(listOutputs(workspace).map((output) => output.id)).toEqual([OUTPUT_NEW_ID, OUTPUT_OLD_ID]);
+    expect(listOutputs(workspace)[0]?.primary).toEqual(newManifest.primary);
   });
 
   test('creates manifests once and uses atomic output.json writes', () => {

@@ -71,6 +71,7 @@ export function toOutputSummary(manifest: OutputManifest): OutputSummary {
     updatedAt: manifest.updatedAt,
     completedAt: manifest.completedAt,
     origin: manifest.origin,
+    primary: manifest.primary,
     preview: manifest.preview,
     primaryAssetId: manifest.primary?.id,
     previewMode: manifest.preview?.mode,

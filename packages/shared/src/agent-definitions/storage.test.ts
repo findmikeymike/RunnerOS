@@ -961,6 +961,9 @@ body
     expect(rawVideoAgent?.systemPrompt).toContain('sync-master')
     expect(rawVideoAgent?.systemPrompt).toContain('confidence gate')
     expect(rawVideoAgent?.systemPrompt).toContain('Never pass `--force`')
+    expect(rawVideoAgent?.systemPrompt).toContain('Create action already authorized the bounded render')
+    expect(rawVideoAgent?.systemPrompt).toContain('use the `repurpose` workflow')
+    expect(rawVideoAgent?.systemPrompt).toContain('partial success survives interruption')
   })
 
   test('starter library includes Content Genius with captions and overlays', () => {

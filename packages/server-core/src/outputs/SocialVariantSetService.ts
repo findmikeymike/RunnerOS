@@ -290,6 +290,18 @@ export class SocialVariantSetService {
           renameSync(tempPath, finalPath);
           copiedPath = finalPath;
           const fileStat = statSync(finalPath);
+          const sha256 = await hashFileSha256(finalPath);
+          if (sha256 === source.sha256.toLowerCase()) {
+            throw new Error('This render is identical to its source. Create a meaningfully different edit before saving it as a variant.');
+          }
+          const duplicateVariant = currentSet.variants.find((candidate) => (
+            candidate.id !== replacedVariant?.id
+            && candidate.state === 'ready'
+            && candidate.sha256?.toLowerCase() === sha256
+          ));
+          if (duplicateVariant) {
+            throw new Error(`This render duplicates the saved variant "${duplicateVariant.title}".`);
+          }
           asset = {
             id: `social-variant-${variantId}`,
             label: input.title.trim(),
@@ -297,7 +309,7 @@ export class SocialVariantSetService {
             path: relativePath,
             mimeType: mimeTypeForVideoPath(finalPath),
             sizeBytes: fileStat.size,
-            sha256: await hashFileSha256(finalPath),
+            sha256,
           };
         }
 

@@ -116,6 +116,10 @@ describe('STARTER_SKILLS', () => {
     expect(parsed.content).toContain('sync-master');
     expect(parsed.content).toContain('confidence gate');
     expect(parsed.content).toContain('MIT licensed');
+    expect(parsed.content).toContain('Social Variant Sets');
+    expect(parsed.content).toContain('repurpose <source-video>');
+    expect(parsed.content).toContain('do not ask for the same approval again');
+    expect(parsed.content).toContain('A font, filter, crop nudge, or re-encode alone is not a variant');
   });
 
   it('includes compact mode direction for raw footage edits', () => {

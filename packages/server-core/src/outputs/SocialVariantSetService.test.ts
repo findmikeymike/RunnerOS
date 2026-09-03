@@ -247,6 +247,100 @@ describe('SocialVariantSetService', () => {
     rmSync(outsideRoot, { recursive: true, force: true });
   });
 
+  test('rejects exact source copies and duplicate rendered variants without consuming a slot', async () => {
+    const instance = service();
+    const created = await instance.create(WORKSPACE_ID, {
+      ...request({ variantsPerSource: 2 }),
+      requestedByClientId: 'client-1',
+    });
+    const started = await instance.start(WORKSPACE_ID, created.id, 1);
+    const sourceId = started.socialVariantSet!.sources[0]!.id;
+    const renderDir = join(root, 'renders');
+    mkdirSync(renderDir, { recursive: true });
+    const sourceCopy = join(renderDir, 'source-copy.mp4');
+    writeFileSync(sourceCopy, 'source-video');
+    const result = {
+      outputId: created.id,
+      expectedRevision: 2,
+      sourceId,
+      destinationIndex: 0,
+      title: 'First cut',
+      hook: 'Open immediately.',
+      editorialMode: 'chorus-first',
+      editorialIntent: 'Move the payoff to the opening.',
+      filePath: sourceCopy,
+    };
+
+    await expect(instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', result)).rejects.toThrow(/identical to its source/);
+    expect(readOutput(root, created.id)?.socialVariantSet).toMatchObject({ revision: 2, variants: [] });
+
+    const firstRender = join(renderDir, 'first-render.mp4');
+    writeFileSync(firstRender, 'meaningfully-different-render');
+    const saved = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', { ...result, filePath: firstRender });
+    expect(saved.socialVariantSet).toMatchObject({ revision: 3, status: 'partially-ready' });
+
+    const duplicateRender = join(renderDir, 'duplicate-render.mp4');
+    writeFileSync(duplicateRender, 'meaningfully-different-render');
+    await expect(instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+      ...result,
+      expectedRevision: 3,
+      destinationIndex: 0,
+      title: 'Duplicate cut',
+      filePath: duplicateRender,
+    })).rejects.toThrow(/duplicates the saved variant/);
+    expect(readOutput(root, created.id)?.socialVariantSet).toMatchObject({ revision: 3 });
+    expect(readOutput(root, created.id)?.socialVariantSet?.variants).toHaveLength(1);
+  });
+
+  test('restores partial success from disk and resumes through the exact bound editor session', async () => {
+    const created = await service().create(WORKSPACE_ID, {
+      ...request({ variantsPerSource: 2 }),
+      requestedByClientId: 'client-1',
+    });
+    const started = await service().start(WORKSPACE_ID, created.id, 1);
+    const renderDir = join(root, 'renders');
+    mkdirSync(renderDir, { recursive: true });
+    const firstPath = join(renderDir, 'before-restart.mp4');
+    writeFileSync(firstPath, 'render-before-restart');
+    const partial = await service().recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+      outputId: created.id,
+      expectedRevision: 2,
+      sourceId: started.socialVariantSet!.sources[0]!.id,
+      destinationIndex: 0,
+      title: 'Saved before restart',
+      hook: 'Open on the payoff.',
+      editorialMode: 'payoff-first',
+      editorialIntent: 'Preserve this completed version across restart.',
+      filePath: firstPath,
+    });
+    expect(partial.socialVariantSet).toMatchObject({ revision: 3, status: 'partially-ready' });
+
+    const restarted = service();
+    const restored = restarted.getForEditor(WORKSPACE_ID, created.id, 'editor-session-1', 'raw-video-editor');
+    expect(restored.socialVariantSet).toMatchObject({
+      revision: 3,
+      editorSessionId: 'editor-session-1',
+      status: 'partially-ready',
+    });
+    expect(restored.socialVariantSet?.variants.filter((variant) => variant.state === 'ready')).toHaveLength(1);
+
+    const secondPath = join(renderDir, 'after-restart.mp4');
+    writeFileSync(secondPath, 'render-after-restart');
+    const completed = await restarted.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+      outputId: created.id,
+      expectedRevision: 3,
+      sourceId: started.socialVariantSet!.sources[0]!.id,
+      destinationIndex: 0,
+      title: 'Finished after restart',
+      hook: 'Open somewhere else.',
+      editorialMode: 'alternate-open',
+      editorialIntent: 'Finish only the remaining authorized slot.',
+      filePath: secondPath,
+    });
+    expect(completed.socialVariantSet).toMatchObject({ revision: 4, status: 'ready' });
+    expect(completed.socialVariantSet?.variants).toHaveLength(2);
+  });
+
   test('archives an unscheduled variant with a revision fence and preserves its asset', async () => {
     const instance = service();
     const created = await instance.create(WORKSPACE_ID, {

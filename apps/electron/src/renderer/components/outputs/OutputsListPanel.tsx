@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Box, CheckCircle2, FileText, Image, Link2, PackageCheck, ReceiptText, Scissors, Search, Star } from 'lucide-react'
+import { Box, CheckCircle2, FileText, Image, Link2, PackageCheck, Plus, ReceiptText, Scissors, Search, Star } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { EntityRow } from '@/components/ui/entity-row'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,8 @@ import { routes } from '../../../shared/routes'
 import { setPendingReleaseKitOutput } from '@/lib/release-kit-navigation'
 import { OutputFinalActionDialog } from '@/components/outputs/OutputFinalActionDialog'
 import { useOutputs, type OutputFinalPointerDTO, type OutputKind, type OutputSummaryDTO } from '@/hooks/useOutputs'
+import { SocialVariantSetupDrawer, type SocialVariantSetupSource } from '@/components/social-variants/SocialVariantSetupDrawer'
+import { Button } from '@/components/ui/button'
 
 type TFn = (key: string, options?: Record<string, unknown>) => string
 
@@ -37,6 +39,7 @@ export function OutputsListPanel({
   const { promoteToFinal, removeFromFinal } = useOutputs(workspaceId)
   const [query, setQuery] = React.useState('')
   const [filter, setFilter] = React.useState<'all' | 'variants'>('all')
+  const [variantSetupOpen, setVariantSetupOpen] = React.useState(false)
   const [finalAction, setFinalAction] = React.useState<{
     output: OutputSummaryDTO
     action: 'promote' | 'primary' | 'remove'
@@ -58,16 +61,45 @@ export function OutputsListPanel({
       return haystack.includes(q)
     })
   }, [filter, outputs, query])
+  const variantSources = React.useMemo<SocialVariantSetupSource[]>(() => outputs
+    .filter(isOutputVideoSource)
+    .map((output) => ({
+      id: output.id,
+      title: output.title,
+      detail: 'HQ Output',
+      selection: {
+        origin: 'output' as const,
+        sourceId: output.id,
+        ...(output.primary?.id ? { assetId: output.primary.id } : {}),
+      },
+      absolutePath: output.primary ? displayOutputAssetPath(output.id, output.primary.path) : undefined,
+      sha256: output.primary?.sha256,
+      ...(!output.primary?.sha256 ? { restriction: 'This video Output needs a verified checksum before agents can use it.' } : {}),
+    })), [outputs])
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="px-3 py-2 border-b border-border/30">
         {!currentCampaignId ? (
-          <div className="mb-2 flex gap-1">
-            <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>All</FilterButton>
-            <FilterButton active={filter === 'variants'} onClick={() => setFilter('variants')}>
-              <Scissors className="h-3 w-3" /> Variants
-            </FilterButton>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex gap-1">
+              <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>All</FilterButton>
+              <FilterButton active={filter === 'variants'} onClick={() => setFilter('variants')}>
+                <Scissors className="h-3 w-3" /> Variants
+              </FilterButton>
+            </div>
+            {filter === 'variants' ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={!workspaceId}
+                onClick={() => setVariantSetupOpen(true)}
+                className="h-6 gap-1 px-2 text-[11px] text-muted-foreground hover:bg-white/[0.05] hover:text-foreground"
+              >
+                <Plus className="h-3 w-3" />Create variants
+              </Button>
+            ) : null}
           </div>
         ) : null}
         <div className="relative">
@@ -135,8 +167,30 @@ export function OutputsListPanel({
         removeFromFinal={removeFromFinal}
         currentCampaignId={currentCampaignId}
       /> : null}
+      {workspaceId && !currentCampaignId ? (
+        <SocialVariantSetupDrawer
+          open={variantSetupOpen}
+          workspaceId={workspaceId}
+          sources={variantSources}
+          onOpenChange={setVariantSetupOpen}
+        />
+      ) : null}
     </div>
   )
+}
+
+function isOutputVideoSource(output: OutputSummaryDTO): boolean {
+  const asset = output.primary
+  if (!asset) return false
+  return output.kind === 'video'
+    || asset.mimeType?.toLowerCase().startsWith('video/') === true
+    || /\.(?:mp4|mov|m4v|webm)$/i.test(asset.path)
+}
+
+function displayOutputAssetPath(outputId: string, assetPath: string): string {
+  return /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(assetPath)
+    ? assetPath
+    : `outputs/${outputId}/${assetPath}`
 }
 
 function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {

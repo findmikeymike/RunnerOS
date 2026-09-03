@@ -51,7 +51,7 @@ import {
 import { toast } from 'sonner'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
-import { releaseKitRepurposeRestriction } from '@/lib/release-kit-repurpose'
+import { buildSocialVariantSetContinuePrompt, releaseKitRepurposeRestriction } from '@/lib/release-kit-repurpose'
 import { SocialVariantSetupDrawer, type SocialVariantSetupSource } from '@/components/social-variants/SocialVariantSetupDrawer'
 import { openVideoRepurposeSession } from '@/lib/video-repurpose-launch'
 import { sendAgentDraft } from '@/lib/run-agent'
@@ -113,6 +113,7 @@ export function ReleaseKitPage({
   const [itemPaths, setItemPaths] = React.useState<Record<string, string>>({})
   const [selectedItemId, setSelectedItemId] = React.useState<string | null>(null)
   const [selectedVariantPostIntent, setSelectedVariantPostIntent] = React.useState<SocialVariantPostIntent | null>(null)
+  const [variantSetupOpen, setVariantSetupOpen] = React.useState(false)
   const [variantSetupSourceId, setVariantSetupSourceId] = React.useState<string | null>(null)
   const selectedItem = manifest?.items.find((item) => item.id === selectedItemId) ?? null
   const { onCreateSession, onInputChange, onSendMessage, skills, enabledSources, activeAgents } = useAppShellContext()
@@ -124,6 +125,14 @@ export function ReleaseKitPage({
     if (!detail || !set) throw new Error('Variant Set is unavailable.')
     const existing = await window.electronAPI.getSessionMessages(set.editorSessionId)
     if (existing) {
+      if (!existing.isProcessing && existing.messages.length === 0) {
+        await sendAgentDraft(
+          onSendMessage,
+          set.editorSessionId,
+          buildSocialVariantSetContinuePrompt({ outputId: detail.id, revision: set.revision }),
+          'Raw Video Editor',
+        )
+      }
       navigate(routes.view.allSessions(set.editorSessionId))
       return
     }
@@ -144,11 +153,12 @@ export function ReleaseKitPage({
       editorSessionId: replacement.id,
     })
     const revision = rebound.socialVariantSet?.revision
-    await sendAgentDraft(onSendMessage, replacement.id, [
-      `Continue Variant Set ${detail.id}${revision ? ` at revision ${revision}` : ''}.`,
-      'Read the saved set with get_social_variant_set, preserve every ready version, and finish only missing or failed versions.',
-      'Creation is already authorized. Do not ask for another plan approval, and do not post or schedule anything.',
-    ].join(' '), 'Raw Video Editor')
+    await sendAgentDraft(
+      onSendMessage,
+      replacement.id,
+      buildSocialVariantSetContinuePrompt({ outputId: detail.id, revision }),
+      'Raw Video Editor',
+    )
     navigate(routes.view.allSessions(replacement.id))
   }, [activeAgents, enabledSources, onCreateSession, onInputChange, onSendMessage, skills, workspaceId])
 
@@ -315,6 +325,10 @@ export function ReleaseKitPage({
               error={outputsError}
               onOpen={onOutputClick}
               onContinue={(output) => void continueVariantSet(output).catch((cause) => toast.error('Could not continue variants', { description: cause instanceof Error ? cause.message : String(cause) }))}
+              onCreate={() => {
+                setVariantSetupSourceId(null)
+                setVariantSetupOpen(true)
+              }}
             />
           ) : (
             <OutputsTab
@@ -354,14 +368,18 @@ export function ReleaseKitPage({
         onCreateVariants={(itemId) => {
           setSelectedItemId(null)
           setVariantSetupSourceId(itemId)
+          setVariantSetupOpen(true)
         }}
       />
       <SocialVariantSetupDrawer
-        open={Boolean(variantSetupSourceId)}
+        open={variantSetupOpen}
         workspaceId={workspaceId}
         sources={variantSources}
         initialSourceId={variantSetupSourceId ?? undefined}
-        onOpenChange={(open) => { if (!open) setVariantSetupSourceId(null) }}
+        onOpenChange={(open) => {
+          setVariantSetupOpen(open)
+          if (!open) setVariantSetupSourceId(null)
+        }}
       />
     </div>
   )
@@ -724,19 +742,35 @@ function OutputsTab({ outputs, loading, error, onOpen, onPromote }: {
   )
 }
 
-function VariantsTab({ outputs, loading, error, onOpen, onContinue }: {
+function VariantsTab({ outputs, loading, error, onOpen, onContinue, onCreate }: {
   outputs: OutputSummaryDTO[]
   loading: boolean
   error: string | null
   onOpen: (id: string) => void
   onContinue: (output: OutputSummaryDTO) => void
+  onCreate: () => void
 }) {
   if (loading) return <Centered><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading variants</Centered>
   if (error) return <Centered>{error}</Centered>
-  if (!outputs.length) return <Centered>No video variants yet. Create them from an approved video in Finals.</Centered>
+  if (!outputs.length) return (
+    <Centered>
+      <div className="flex flex-col items-center gap-3">
+        <span>No video variants yet.</span>
+        <Button size="sm" className="h-8 bg-[#f97316] px-3 text-xs text-black hover:bg-[#fb923c]" onClick={onCreate}>
+          <Scissors className="mr-1.5 h-3.5 w-3.5" />Create variants
+        </Button>
+      </div>
+    </Centered>
+  )
   return (
-    <div className="mx-auto grid max-w-[1120px] gap-3 md:grid-cols-2">
-      {outputs.map((output) => {
+    <div className="mx-auto max-w-[1120px]">
+      <div className="mb-3 flex justify-end">
+        <Button size="sm" variant="outline" className="h-8 border-white/10 bg-transparent px-3 text-xs text-white/58 hover:bg-white/[0.05] hover:text-white" onClick={onCreate}>
+          <Plus className="mr-1.5 h-3.5 w-3.5" />Create variants
+        </Button>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        {outputs.map((output) => {
         const set = output.socialVariantSetSummary!
         const needsAccount = set.attention?.code === 'account-unavailable'
         const complete = set.readyCount >= set.requestedCount && set.failedCount === 0 && set.requestedCount > 0
@@ -762,7 +796,8 @@ function VariantsTab({ outputs, loading, error, onOpen, onContinue }: {
             </div>
           </article>
         )
-      })}
+        })}
+      </div>
     </div>
   )
 }
@@ -814,7 +849,7 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, initialPostI
     const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
     setDate(`${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`)
     void loadUses().catch((error) => toast.error('Could not load planned uses', { description: error instanceof Error ? error.message : String(error) }))
-  }, [initialPostIntent, itemId, loadUses, open])
+  }, [initialPostIntent, item, itemId, loadUses, open])
 
   React.useEffect(() => {
     if (!open || mode === 'details') return
