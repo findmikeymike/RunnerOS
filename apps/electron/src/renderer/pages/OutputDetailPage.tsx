@@ -3,6 +3,8 @@ import { AlertTriangle, Archive, CalendarClock, CheckCircle2, ExternalLink, Eye,
 import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useAppShellContext } from '@/context/AppShellContext'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../shared/routes'
 import { StatusPill } from '@/components/outputs/OutputsListPanel'
@@ -14,6 +16,7 @@ import { OutputFinalActionDialog } from '@/components/outputs/OutputFinalActionD
 import { campaignCalendarPrefillForOutput, isAdOutput } from '@/lib/output-finals-actions'
 import { setPendingCampaignCalendarPrefill } from '@/lib/campaign-calendar'
 import { setPendingReleaseKitOutput } from '@/lib/release-kit-navigation'
+import { isArtistCampaignWorkspace } from '@/lib/artist-workspace'
 import type { VaultKindHint } from '@craft-agent/shared/artist-vault'
 import { isXEditorialSlateOutput } from '@craft-agent/shared/x-editorial'
 
@@ -44,6 +47,7 @@ const IMAGE_OUTPUT_VAULT_KIND_OPTIONS: Array<{ value: ImageOutputVaultKindHint; 
 
 export default function OutputDetailPage({ workspaceId, outputId, currentCampaignId }: Props) {
   const { navigate } = useNavigation()
+  const { workspaces, onSelectWorkspace } = useAppShellContext()
   const { getOutput, outputs, loading, error, promoteToFinal, removeFromFinal } = useOutputs(workspaceId)
   const openOutputVisualSurface = useSetAtom(openOutputVisualSurfaceAtom)
   const openDemoVisualSurface = useSetAtom(openDemoVisualSurfaceAtom)
@@ -52,6 +56,7 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
   const [savingToVault, setSavingToVault] = React.useState(false)
   const [imageVaultKindHint, setImageVaultKindHint] = React.useState<ImageOutputVaultKindHint>('cover-art')
   const [finalAction, setFinalAction] = React.useState<'promote' | 'primary' | 'remove' | null>(null)
+  const [pendingVariantUse, setPendingVariantUse] = React.useState<{ variantId: string; assetId: string } | null>(null)
 
   React.useEffect(() => {
     if (!outputId) {
@@ -118,12 +123,37 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
   const isFinal = Boolean(manifest.finals?.length)
   const canChooseVaultKind = canChooseImageVaultKind(manifest)
   const isXEditorialSlate = isXEditorialSlateOutput(manifest)
+  const campaignWorkspaces = workspaces.filter(isArtistCampaignWorkspace)
+  const openVariantInCampaign = async (campaignId: string, variantId: string, assetId: string) => {
+    setPendingReleaseKitOutput(manifest.id, assetId, {
+      sourceWorkspaceId: manifest.workspaceId,
+      socialVariantId: variantId,
+    })
+    try {
+      if (campaignId !== currentCampaignId) await onSelectWorkspace(campaignId)
+      navigate(routes.view.campaign('release-kit'))
+      setPendingVariantUse(null)
+    } catch (switchError) {
+      toast.error(switchError instanceof Error ? switchError.message : 'Could not open that campaign.')
+    }
+  }
   const socialVariantActions = manifest.socialVariantSet ? {
     onUse: (variantId: string) => {
       const variant = manifest.socialVariantSet?.variants.find((candidate) => candidate.id === variantId)
       if (!variant?.assetId) return
-      setPendingReleaseKitOutput(manifest.id, variant.assetId)
-      navigate(routes.view.campaign('release-kit'))
+      if (currentCampaignId) {
+        void openVariantInCampaign(currentCampaignId, variant.id, variant.assetId)
+        return
+      }
+      if (campaignWorkspaces.length === 0) {
+        toast.error('Create or open a campaign before using this version.')
+        return
+      }
+      if (campaignWorkspaces.length === 1) {
+        void openVariantInCampaign(campaignWorkspaces[0]!.id, variant.id, variant.assetId)
+        return
+      }
+      setPendingVariantUse({ variantId: variant.id, assetId: variant.assetId })
     },
     onArchive: (variantId: string) => void archiveSocialVariant(workspaceId, manifest, variantId, setManifest),
     onRevise: (variantId: string) => void reviseSocialVariant(workspaceId, manifest, variantId, setManifest, navigate),
@@ -329,6 +359,33 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
         removeFromFinal={removeFromFinal}
         currentCampaignId={currentCampaignId}
       /> : null}
+      <Dialog open={Boolean(pendingVariantUse)} onOpenChange={(open) => {
+        if (!open) setPendingVariantUse(null)
+      }}>
+        <DialogContent className="max-w-md border-white/[0.09] bg-[#0d0d0e] p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base text-white">Choose the campaign</DialogTitle>
+            <DialogDescription className="text-white/52">
+              This version will be added to that campaign's Release Kit, then opened for posting approval.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            {campaignWorkspaces.map((campaign) => (
+              <button
+                key={campaign.id}
+                type="button"
+                className="rounded-xl bg-white/[0.045] px-3 py-2.5 text-left text-sm text-white/82 transition-colors hover:bg-white/[0.08] hover:text-white"
+                onClick={() => {
+                  if (!pendingVariantUse) return
+                  void openVariantInCampaign(campaign.id, pendingVariantUse.variantId, pendingVariantUse.assetId)
+                }}
+              >
+                {campaign.name}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
       </div>
     </div>
   )

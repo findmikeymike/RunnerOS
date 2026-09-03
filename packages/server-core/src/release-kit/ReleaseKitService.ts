@@ -10,6 +10,7 @@ import {
   type MissionAssetRecord,
 } from '@craft-agent/shared/mission-assets'
 import {
+  hashFileSha256,
   getReleaseKitRoot,
   loadReleaseKitManifest,
   materializeReleaseKitItem,
@@ -308,12 +309,21 @@ export class ReleaseKitService {
     if (!source.assetId?.trim()) {
       throw new Error('Output promotion requires an exact assetId. Choose the specific Output asset to promote.')
     }
-    const output = this.outputs.get(workspaceId, source.outputId)
+    const sourceWorkspaceId = source.sourceWorkspaceId?.trim() || workspaceId
+    const sourceWorkspace = this.getWorkspace(sourceWorkspaceId)
+    if (sourceWorkspace.artistWorkspaceScope !== 'hq' && sourceWorkspace.artistWorkspaceScope !== 'campaign') {
+      throw new Error('Output source must belong to Artist HQ or a Campaign workspace.')
+    }
+    const output = this.outputs.get(sourceWorkspaceId, source.outputId)
     if (!output) throw new Error(`Output not found: ${source.outputId}`)
     const asset = output.assets.find((candidate) => candidate.id === source.assetId)
     if (!asset) throw new Error(`Output has no file asset: ${source.outputId}`)
+    const path = this.outputs.resolveAssetPath(sourceWorkspaceId, output.id, asset.path)
+    if (asset.sha256 && hashFileSha256(path).toLowerCase() !== asset.sha256.toLowerCase()) {
+      throw new Error('Output asset changed after it was created. Review the current file before adding it to the Release Kit.')
+    }
     return {
-      path: this.outputs.resolveAssetPath(workspaceId, output.id, asset.path),
+      path,
       mimeType: asset.mimeType,
     }
   }

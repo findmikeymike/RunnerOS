@@ -140,6 +140,17 @@ describe('session tool filtering helpers', () => {
     expect(SESSION_TOOL_DEFS.find((def) => def.name === 'record_social_variant_result')?.safeMode).toBe('block');
   });
 
+  it('exposes the posting candidate query separately from editor mutation tools', () => {
+    expect(getSessionToolNames().has('list_usable_social_variants')).toBe(false);
+    const names = getSessionToolNames({ includeSocialVariantQueryTools: true });
+    expect(names.has('list_usable_social_variants')).toBe(true);
+    expect(names.has('get_social_variant_set')).toBe(false);
+    expect(names.has('record_social_variant_result')).toBe(false);
+    const query = SESSION_TOOL_DEFS.find((def) => def.name === 'list_usable_social_variants');
+    expect(query?.readOnly).toBe(true);
+    expect(query?.safeMode).toBe('allow');
+  });
+
   it('all canonical session tools declare safeMode metadata', () => {
     for (const def of SESSION_TOOL_DEFS) {
       expect(def.safeMode === 'allow' || def.safeMode === 'block').toBe(true);

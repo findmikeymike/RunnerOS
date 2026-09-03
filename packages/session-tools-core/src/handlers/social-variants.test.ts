@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import type { SessionToolContext } from '../context.ts'
-import { handleGetSocialVariantSet, handleRecordSocialVariantResult } from './social-variants.ts'
+import { handleGetSocialVariantSet, handleListUsableSocialVariants, handleRecordSocialVariantResult } from './social-variants.ts'
 
 function context(overrides: Partial<SessionToolContext> = {}): SessionToolContext {
   return {
@@ -59,5 +59,29 @@ describe('social variant session tools', () => {
 
     expect(result.isError).toBe(false)
     expect(captured).toMatchObject({ outputId: 'variants-1', sourceId: 'source-1', filePath: '/workspace/a.mp4' })
+  })
+
+  it('queries one exact campaign destination and defaults to unscheduled results', async () => {
+    let captured: unknown
+    const result = await handleListUsableSocialVariants(context({
+      listUsableSocialVariants: async (input) => {
+        captured = input
+        return { ok: true, data: [{ variantId: 'variant-1' }] }
+      },
+    }), {
+      campaignId: ' campaign-1 ',
+      platform: 'instagram',
+      profileId: ' artist-main ',
+      accountRole: 'primary',
+    })
+
+    expect(result.isError).toBe(false)
+    expect(captured).toEqual({
+      campaignId: 'campaign-1',
+      platform: 'instagram',
+      profileId: 'artist-main',
+      accountRole: 'primary',
+      unscheduledOnly: true,
+    })
   })
 })

@@ -496,6 +496,7 @@ function normalizeSource(source: ReleaseKitSource): ReleaseKitSource {
     type: source.type,
     outputId: source.outputId.trim(),
     ...(source.assetId?.trim() ? { assetId: source.assetId.trim() } : {}),
+    ...(source.type === 'output' && source.sourceWorkspaceId?.trim() ? { sourceWorkspaceId: source.sourceWorkspaceId.trim() } : {}),
     ...(source.type === 'legacy-final' && source.legacyFinalId?.trim() ? { legacyFinalId: source.legacyFinalId.trim() } : {}),
   };
 }
@@ -612,6 +613,7 @@ function isReleaseKitSource(value: unknown): value is ReleaseKitSource {
   if (value.type === 'output' || value.type === 'legacy-final') {
     return typeof value.outputId === 'string' && Boolean(value.outputId)
       && (value.assetId === undefined || typeof value.assetId === 'string')
+      && (value.type !== 'output' || value.sourceWorkspaceId === undefined || typeof value.sourceWorkspaceId === 'string')
       && (value.type !== 'legacy-final' || value.legacyFinalId === undefined || typeof value.legacyFinalId === 'string');
   }
   return false;

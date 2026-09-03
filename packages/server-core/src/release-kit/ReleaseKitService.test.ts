@@ -29,6 +29,39 @@ function service(): ReleaseKitService {
 }
 
 describe('ReleaseKitService source trust', () => {
+  test('snapshots one exact HQ Output asset into a Campaign Release Kit', async () => {
+    const campaignRoot = mkdtempSync(join(tmpdir(), 'release-kit-service-campaign-'))
+    const hqRoot = mkdtempSync(join(tmpdir(), 'release-kit-service-hq-'))
+    workspaces.set('campaign-1', { id: 'campaign-1', name: 'Campaign', rootPath: campaignRoot, artistWorkspaceScope: 'campaign' })
+    workspaces.set('hq-1', { id: 'hq-1', name: 'Artist HQ', rootPath: hqRoot, artistWorkspaceScope: 'hq' })
+    const sourcePath = join(hqRoot, 'hq-variant.mp4')
+    writeFileSync(sourcePath, 'hq-video-variant')
+    const outputs = new OutputService({ getWorkspaceRootPath: (id) => workspaces.get(id)!.rootPath })
+    const created = await outputs.createFromSessionTool({
+      workspaceId: 'hq-1',
+      sessionId: 'editor-1',
+      output: { title: 'HQ Variant', kind: 'video', summary: 'Ready cut.', files: [{ path: sourcePath, role: 'primary' }] },
+    })
+    expect(created.ok).toBe(true)
+    const output = outputs.get('hq-1', created.outputId!)!
+    const asset = output.primary ?? output.assets[0]!
+
+    const promoted = service().promote('campaign-1', {
+      source: { type: 'output', outputId: output.id, assetId: asset.id, sourceWorkspaceId: 'hq-1' },
+      category: 'video',
+      subtype: 'social-variant',
+    }, 'user')
+
+    expect(promoted.item.source).toEqual({ type: 'output', outputId: output.id, assetId: asset.id, sourceWorkspaceId: 'hq-1' })
+    expect(readFileSync(resolveReleaseKitItemPath(campaignRoot, promoted.item.relativePath), 'utf8')).toBe('hq-video-variant')
+
+    writeFileSync(outputs.resolveAssetPath('hq-1', output.id, asset.path), 'drifted-output')
+    expect(() => service().promote('campaign-1', {
+      source: { type: 'output', outputId: output.id, assetId: asset.id, sourceWorkspaceId: 'hq-1' },
+      category: 'video', subtype: 'social-variant',
+    }, 'user')).toThrow(/changed after it was created/i)
+  })
+
   test('promotes a registered Campaign Asset with reviewed Track Intelligence into an independent snapshot', async () => {
     const campaignRoot = mkdtempSync(join(tmpdir(), 'release-kit-service-campaign-'))
     workspaces.set('campaign-1', {

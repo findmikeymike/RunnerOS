@@ -60,10 +60,10 @@ function request(overrides: Partial<CreateSocialVariantSetRequest> = {}): Create
   };
 }
 
-function service(options: { profileReady?: boolean } = {}): SocialVariantSetService {
+function service(options: { profileReady?: boolean; scope?: 'hq' | 'campaign' } = {}): SocialVariantSetService {
   return new SocialVariantSetService({
     getWorkspace: (workspaceId) => workspaceId === WORKSPACE_ID
-      ? { id: WORKSPACE_ID, name: 'Artist HQ', rootPath: root, artistWorkspaceScope: 'hq' }
+      ? { id: WORKSPACE_ID, name: 'Artist workspace', rootPath: root, artistWorkspaceScope: options.scope ?? 'hq' }
       : undefined,
     validateSocialProfile: async () => options.profileReady === false
       ? { ready: false, reason: 'Reconnect this account.' }
@@ -380,5 +380,71 @@ describe('SocialVariantSetService', () => {
       expectedRevision: ready.socialVariantSet!.revision,
       editorSessionId: 'replacement-editor',
     })).rejects.toThrow('ready Variant Set cannot be continued');
+  });
+
+  test('lists only intact ready variants for an exact ready campaign profile', async () => {
+    const instance = service({ scope: 'campaign' });
+    const created = await instance.create(WORKSPACE_ID, {
+      ...request({ variantsPerSource: 1 }),
+      requestedByClientId: 'client-1',
+    });
+    const started = await instance.start(WORKSPACE_ID, created.id, 1);
+    const renderDir = join(root, 'renders');
+    mkdirSync(renderDir, { recursive: true });
+    const filePath = join(renderDir, 'usable.mp4');
+    writeFileSync(filePath, 'usable-render');
+    await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+      outputId: created.id,
+      expectedRevision: 2,
+      sourceId: started.socialVariantSet!.sources[0]!.id,
+      destinationIndex: 0,
+      title: 'Usable cut',
+      hook: 'Open on the chorus.',
+      editorialMode: 'fast-cut',
+      editorialIntent: 'Lead with the strongest beat.',
+      filePath,
+    });
+    const query = {
+      campaignId: WORKSPACE_ID,
+      platform: 'instagram' as const,
+      profileId: 'artist secondary profile',
+      accountRole: 'secondary' as const,
+      unscheduledOnly: true,
+    };
+    const usable = await instance.listUsable(WORKSPACE_ID, query);
+    expect(usable).toHaveLength(1);
+    expect(usable[0]).toMatchObject({ outputId: created.id, status: 'ready-to-use', scheduledWorkOrderIds: [] });
+    expect(await instance.listUsable(WORKSPACE_ID, { ...query, accountRole: 'primary' })).toEqual([]);
+    await expect(service({ scope: 'campaign', profileReady: false }).listUsable(WORKSPACE_ID, query)).rejects.toThrow('Reconnect this account');
+  });
+
+  test('never assigns an unbound ready variant to a profile during discovery', async () => {
+    const instance = service({ scope: 'campaign' });
+    const created = await instance.create(WORKSPACE_ID, {
+      ...request({
+        variantsPerSource: 1,
+        destinationIntents: [{ platform: 'instagram', accountRole: 'secondary', mode: 'standard' }],
+      }),
+      requestedByClientId: 'client-1',
+    });
+    const started = await instance.start(WORKSPACE_ID, created.id, 1);
+    const renderDir = join(root, 'renders');
+    mkdirSync(renderDir, { recursive: true });
+    const filePath = join(renderDir, 'unbound.mp4');
+    writeFileSync(filePath, 'unbound-render');
+    await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+      outputId: created.id,
+      expectedRevision: 2,
+      sourceId: started.socialVariantSet!.sources[0]!.id,
+      destinationIndex: 0,
+      title: 'Unbound cut', hook: 'Open strong.', editorialMode: 'direct', editorialIntent: 'A clean cut.', filePath,
+    });
+
+    expect(await instance.listUsable(WORKSPACE_ID, {
+      campaignId: WORKSPACE_ID,
+      platform: 'instagram',
+      profileId: 'artist secondary profile',
+      accountRole: 'secondary',
+    })).toEqual([]);
   });
 });

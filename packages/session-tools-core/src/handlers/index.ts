@@ -238,10 +238,11 @@ export type {
   CreateOutputLinkInput,
   CreateOutputReceiptInput,
 } from './outputs.ts';
-export { handleGetSocialVariantSet, handleRecordSocialVariantResult } from './social-variants.ts';
+export { handleGetSocialVariantSet, handleRecordSocialVariantResult, handleListUsableSocialVariants } from './social-variants.ts';
 export type {
   GetSocialVariantSetToolInput,
   RecordSocialVariantResultToolInput,
+  ListUsableSocialVariantsToolInput,
   SocialVariantToolResult,
 } from './social-variants.ts';
 export type {

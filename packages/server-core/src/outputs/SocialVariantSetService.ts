@@ -12,6 +12,7 @@ import {
   createOutputBundle,
   getOutputDir,
   isSocialVariantDestinationIntent,
+  listOutputManifests,
   readOutput,
   resolveOutputAssetPath,
   withOutputBundleLockAsync,
@@ -21,9 +22,11 @@ import {
   type OutputManifest,
   type RecordSocialVariantResultRequest,
   type RebindSocialVariantSetRequest,
+  type ListUsableSocialVariantsRequest,
   type SocialVariantDestinationIntent,
   type SocialVariantSource,
   type SocialVariantSourceSelection,
+  type UsableSocialVariant,
 } from '@craft-agent/shared/outputs';
 import {
   loadReleaseKitManifest,
@@ -34,6 +37,12 @@ import {
   loadArtistVaultManifest,
   resolveArtistVaultAssetPath,
 } from '@craft-agent/shared/artist-vault';
+import {
+  SCHEDULED_WORK_CONTEXT_SLUG,
+  parseScheduledWorkDocResult,
+  summarizeReleaseKitItemUses,
+} from '@craft-agent/shared/scheduled-work';
+import { loadContextDoc } from '@craft-agent/shared/workspace-context';
 
 export interface SocialVariantWorkspace {
   id: string;
@@ -442,6 +451,84 @@ export class SocialVariantSetService {
     return updated;
   }
 
+  async listUsable(workspaceId: string, input: ListUsableSocialVariantsRequest): Promise<UsableSocialVariant[]> {
+    const workspace = this.requireWorkspace(workspaceId);
+    if (workspace.artistWorkspaceScope !== 'campaign' || input.campaignId !== workspaceId) {
+      throw new Error('Usable social variants must be queried from their exact Campaign workspace.');
+    }
+    if (!input.profileId?.trim()) throw new Error('An exact connected social profile is required.');
+    if (!this.deps.validateSocialProfile) throw new Error('Social profile validation is unavailable on this host.');
+    const profile = await this.deps.validateSocialProfile({ platform: input.platform, profileId: input.profileId.trim() });
+    if (!profile.ready) throw new Error(profile.reason ?? 'Social profile is not ready.');
+
+    const releaseKit = loadReleaseKitManifest(workspace.rootPath, workspace.id, workspace.id);
+    const scheduled = parseScheduledWorkDocResult(
+      loadContextDoc(workspace.rootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined,
+      workspace.id,
+    );
+    if (!scheduled.ok) throw new Error(`Scheduled Work is invalid: ${scheduled.error}`);
+    const requireUnscheduled = input.unscheduledOnly !== false;
+    const usable: UsableSocialVariant[] = [];
+
+    for (const output of listOutputManifests(workspace.rootPath)) {
+      const set = output.socialVariantSet;
+      if (!set || set.scope !== 'campaign' || set.campaignId !== input.campaignId) continue;
+
+      for (const variant of set.variants) {
+        if (variant.state !== 'ready' || !variant.assetId || !variant.sha256) continue;
+        const source = set.sources.find((candidate) => candidate.id === variant.sourceId);
+        if (!source) continue;
+        try {
+          await this.assertPinnedSourceCurrent(workspace, source);
+        } catch {
+          continue;
+        }
+        const variantSha256 = variant.sha256.toLowerCase();
+        if (variant.destination.platform !== input.platform || variant.destination.accountRole !== input.accountRole) continue;
+        if (variant.destination.profileId !== input.profileId.trim()) continue;
+        if (variant.destination.mode === 'trial' && (input.platform !== 'instagram' || variant.destination.trialRequested !== true)) continue;
+        const asset = output.assets.find((candidate) => candidate.id === variant.assetId);
+        if (!asset || asset.sha256?.toLowerCase() !== variantSha256) continue;
+        const assetPath = resolveOutputAssetPath(workspace.rootPath, output.id, asset.path);
+        if (!assetPath || !existsSync(assetPath) || !statSync(assetPath).isFile() || await hashFileSha256(assetPath) !== variantSha256) continue;
+
+        const snapshot = releaseKit.items.find((item) => (
+          item.id === variant.releaseKitItemId
+          || (item.source.type === 'output' && item.source.outputId === output.id && item.source.assetId === variant.assetId && item.sha256.toLowerCase() === variantSha256)
+        ));
+        if (snapshot && (snapshot.status !== 'ready' || hasSocialRestriction(snapshot.usage.restrictions))) continue;
+        const uses = snapshot
+          ? summarizeReleaseKitItemUses(scheduled.work, snapshot.id).filter((use) => use.platform === input.platform && use.profileId === input.profileId.trim())
+          : [];
+        const activeUses = uses.filter((use) => use.status !== 'done' && use.status !== 'canceled');
+        if (requireUnscheduled && (activeUses.length > 0 || uses.some((use) => use.status === 'done'))) continue;
+        const status: UsableSocialVariant['status'] = uses.some((use) => use.status === 'needs-attention')
+          ? 'needs-attention'
+          : uses.some((use) => use.status === 'done' && use.receipt)
+            ? 'posted'
+            : activeUses.length > 0
+              ? 'scheduled'
+              : 'ready-to-use';
+        usable.push({
+          outputId: output.id,
+          setId: set.id,
+          variantId: variant.id,
+          assetId: variant.assetId,
+          title: variant.title,
+          hook: variant.hook,
+          editorialMode: variant.editorialMode,
+          editorialIntent: variant.editorialIntent,
+          sha256: variant.sha256,
+          destination: variant.destination,
+          releaseKitItemId: snapshot?.id,
+          scheduledWorkOrderIds: uses.map((use) => use.orderId),
+          status,
+        });
+      }
+    }
+    return usable;
+  }
+
   private requireWorkspace(workspaceId: string): SocialVariantWorkspace {
     const workspace = this.deps.getWorkspace(workspaceId);
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
@@ -683,6 +770,10 @@ function sameDestination(left: SocialVariantDestinationIntent, right: SocialVari
     && left.accountSetId === right.accountSetId
     && left.mode === right.mode
     && left.trialRequested === right.trialRequested;
+}
+
+function hasSocialRestriction(restrictions: { blockedFromUse: boolean; needsRightsClearance: boolean; artistLikenessRestricted: boolean }): boolean {
+  return restrictions.blockedFromUse || restrictions.needsRightsClearance || restrictions.artistLikenessRestricted;
 }
 
 function hashFileSha256(path: string): Promise<string> {

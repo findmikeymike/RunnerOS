@@ -624,6 +624,36 @@ describe('scheduled-work RPC handler', () => {
     expect(assertTeamPermission).toHaveBeenCalledWith(workspaceRoot, 'social.publish.approve')
   })
 
+  test('authorizeReleaseKitSocial reuses an exact existing schedule across different request ids', async () => {
+    seedEmptyCampaignCalendar()
+    const sourcePath = `${workspaceRoot}/duplicate-source.png`
+    writeFileSync(sourcePath, 'approved-image')
+    const released = materializeReleaseKitItem(workspaceRoot, {
+      workspaceId: workspace.id, campaignId: workspace.id,
+      source: { type: 'upload', originalFileName: 'duplicate-source.png' }, sourcePath,
+      category: 'artwork', subtype: 'cover-art', promotedBy: 'user',
+    })
+    const { invoke } = await registerServer()
+    const startAt = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    const exact = {
+      releaseKitItemId: released.item.id,
+      platform: 'instagram', profileId: 'artist-main', caption: 'Out now.', startAt, timezone: 'America/Chicago',
+    }
+
+    const first = await invoke(RPC_CHANNELS.scheduledWork.AUTHORIZE_RELEASE_KIT_SOCIAL, workspace.id, {
+      ...exact, requestId: 'duplicate-post-1',
+    }) as { updated: boolean; order: ScheduledWorkOrder }
+    const second = await invoke(RPC_CHANNELS.scheduledWork.AUTHORIZE_RELEASE_KIT_SOCIAL, workspace.id, {
+      ...exact, requestId: 'duplicate-post-2',
+    }) as { updated: boolean; order: ScheduledWorkOrder }
+
+    expect(first.updated).toBe(true)
+    expect(second.updated).toBe(false)
+    expect(second.order.id).toBe(first.order.id)
+    expect(readScheduledWork().items).toHaveLength(1)
+    expect(readCampaignCalendar().items).toHaveLength(1)
+  })
+
   test('authorizeReleaseKitSocial refuses a hard-restricted final', async () => {
     seedEmptyCampaignCalendar()
     const sourcePath = `${workspaceRoot}/source.png`

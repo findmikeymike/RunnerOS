@@ -22,6 +22,14 @@ export interface RecordSocialVariantResultToolInput {
   replaceVariantId?: string
 }
 
+export interface ListUsableSocialVariantsToolInput {
+  campaignId: string
+  platform: 'instagram' | 'tiktok' | 'x' | 'youtube'
+  profileId: string
+  accountRole: 'primary' | 'secondary' | 'fan-page'
+  unscheduledOnly?: boolean
+}
+
 export interface SocialVariantToolResult {
   ok: boolean
   data?: unknown
@@ -68,6 +76,22 @@ export async function handleRecordSocialVariantResult(
     failureReason,
     aspectRatio: args.aspectRatio?.trim(),
     replaceVariantId: args.replaceVariantId?.trim(),
+  })
+}
+
+export async function handleListUsableSocialVariants(
+  ctx: SessionToolContext,
+  args: ListUsableSocialVariantsToolInput,
+): Promise<ToolResult> {
+  const campaignId = args.campaignId?.trim()
+  const profileId = args.profileId?.trim()
+  if (!campaignId) return errorResponse('campaignId is required.')
+  if (!profileId) return errorResponse('profileId is required.')
+  return callCapability('list_usable_social_variants', ctx.listUsableSocialVariants, {
+    ...args,
+    campaignId,
+    profileId,
+    unscheduledOnly: args.unscheduledOnly !== false,
   })
 }
 

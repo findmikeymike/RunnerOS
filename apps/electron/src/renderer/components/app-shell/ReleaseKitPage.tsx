@@ -34,7 +34,7 @@ import type {
 } from '@craft-agent/shared/release-kit'
 import type { ReleaseKitItemUseSummary } from '@craft-agent/shared/scheduled-work'
 import type { OutputSummaryDTO } from '@/hooks/useOutputs'
-import type { OutputAsset, OutputManifest } from '@craft-agent/shared/outputs'
+import type { OutputAsset, OutputManifest, SocialVariantDestinationIntent } from '@craft-agent/shared/outputs'
 import { Button } from '@/components/ui/button'
 import { CompactPageHeader } from './CompactPageHeader'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -70,6 +70,7 @@ type AddStage = 'source' | 'item' | 'details'
 type SourceKind = 'upload' | 'campaign-asset' | 'vault-asset' | 'output'
 type AssetDrawerMode = 'details' | 'where' | 'post' | 'when'
 type ReleaseKitSocialProfile = { platform: string; profileId: string; label: string; accountSetId?: string; ready: boolean }
+type SocialVariantPostIntent = SocialVariantDestinationIntent & { variantId: string }
 
 const ReleaseKitInspectContext = React.createContext<(item: ReleaseKitItem) => void>(() => {})
 
@@ -111,6 +112,7 @@ export function ReleaseKitPage({
   const [prefillOutput, setPrefillOutput] = React.useState<OutputSummaryDTO | null>(null)
   const [itemPaths, setItemPaths] = React.useState<Record<string, string>>({})
   const [selectedItemId, setSelectedItemId] = React.useState<string | null>(null)
+  const [selectedVariantPostIntent, setSelectedVariantPostIntent] = React.useState<SocialVariantPostIntent | null>(null)
   const [variantSetupSourceId, setVariantSetupSourceId] = React.useState<string | null>(null)
   const selectedItem = manifest?.items.find((item) => item.id === selectedItemId) ?? null
   const { onCreateSession, onInputChange, onSendMessage, skills, enabledSources, activeAgents } = useAppShellContext()
@@ -182,6 +184,39 @@ export function ReleaseKitPage({
     if (outputsLoading) return
     const pending = consumePendingReleaseKitOutput()
     if (!pending) return
+    if (pending.socialVariantId && pending.assetId) {
+      const sourceWorkspaceId = pending.sourceWorkspaceId ?? workspaceId
+      void (async () => {
+        const output = await window.electronAPI.getOutput(sourceWorkspaceId, pending.outputId)
+        const variant = output?.socialVariantSet?.variants.find((candidate) => candidate.id === pending.socialVariantId)
+        if (!output || !variant || variant.state !== 'ready' || variant.assetId !== pending.assetId || !variant.sha256) {
+          throw new Error('This exact variant is no longer ready to use.')
+        }
+        const outputAsset = output.assets.find((candidate) => candidate.id === variant.assetId)
+        if (!outputAsset?.sha256 || outputAsset.sha256.toLowerCase() !== variant.sha256.toLowerCase()) {
+          throw new Error('This version no longer matches its rendered asset record.')
+        }
+        const current = await window.electronAPI.getReleaseKit(workspaceId)
+        const existing = current.items.find((item) => item.source.type === 'output'
+          && item.source.outputId === output.id
+          && item.source.assetId === variant.assetId
+          && (item.source.sourceWorkspaceId ?? workspaceId) === sourceWorkspaceId
+          && item.sha256.toLowerCase() === variant.sha256?.toLowerCase())
+        const result = existing
+          ? { manifest: current, item: existing }
+          : await window.electronAPI.promoteToReleaseKit(workspaceId, {
+            source: { type: 'output', outputId: output.id, assetId: variant.assetId, sourceWorkspaceId },
+            category: 'video',
+            subtype: 'social-variant',
+            title: variant.title,
+            note: `Social variant ${variant.id}`,
+          })
+        setManifest(result.manifest)
+        setSelectedVariantPostIntent({ ...variant.destination, variantId: variant.id })
+        setSelectedItemId(result.item.id)
+      })().catch((cause) => toast.error('Could not prepare this version', { description: cause instanceof Error ? cause.message : String(cause) }))
+      return
+    }
     const output = outputs.find((candidate) => candidate.id === pending.outputId)
     if (!output) return
     setTab('outputs')
@@ -313,7 +348,8 @@ export function ReleaseKitPage({
         item={selectedItem}
         itemPath={selectedItem ? itemPaths[selectedItem.id] : undefined}
         workspaceId={workspaceId}
-        onOpenChange={(open) => { if (!open) setSelectedItemId(null) }}
+        initialPostIntent={selectedVariantPostIntent}
+        onOpenChange={(open) => { if (!open) { setSelectedItemId(null); setSelectedVariantPostIntent(null) } }}
         onChanged={setManifest}
         onCreateVariants={(itemId) => {
           setSelectedItemId(null)
@@ -735,11 +771,12 @@ function displayVariantStatus(status: string): string {
   return status.replace(/-/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase())
 }
 
-function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange, onChanged, onCreateVariants }: {
+function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, initialPostIntent, onOpenChange, onChanged, onCreateVariants }: {
   open: boolean
   item: ReleaseKitItem | null
   itemPath?: string
   workspaceId: string
+  initialPostIntent?: SocialVariantPostIntent | null
   onOpenChange: (open: boolean) => void
   onChanged: (manifest: ReleaseKitManifest) => void
   onCreateVariants: (itemId: string) => void
@@ -767,7 +804,7 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange
 
   React.useEffect(() => {
     if (!open || !item) return
-    setMode('details')
+    setMode(initialPostIntent ? 'where' : 'details')
     setNotes(item.usage.notes ?? '')
     setContentRating(item.usage.contentRating)
     setBestFor(item.usage.bestFor)
@@ -777,10 +814,10 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange
     const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
     setDate(`${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`)
     void loadUses().catch((error) => toast.error('Could not load planned uses', { description: error instanceof Error ? error.message : String(error) }))
-  }, [itemId, loadUses, open])
+  }, [initialPostIntent, itemId, loadUses, open])
 
   React.useEffect(() => {
-    if (!open || mode !== 'where') return
+    if (!open || mode === 'details') return
     let active = true
     void window.electronAPI.listSocialAccounts().then((doctor) => {
       if (!active) return
@@ -795,8 +832,18 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange
     return () => { active = false }
   }, [mode, open])
 
+  React.useEffect(() => {
+    if (!open || !initialPostIntent?.profileId) return
+    const exactProfile = profiles.find((profile) => matchesSocialVariantIntent(profile, initialPostIntent))
+    setProfileKey(exactProfile ? socialProfileKey(exactProfile) : '')
+  }, [initialPostIntent, open, profiles])
+
   if (!item) return null
-  const selectedProfile = profiles.find((profile) => `${profile.platform}/${profile.profileId}` === profileKey)
+  const selectedProfile = profiles.find((profile) => socialProfileKey(profile) === profileKey)
+  const visibleProfiles = initialPostIntent
+    ? profiles.filter((profile) => profile.platform === initialPostIntent.platform
+      && (!initialPostIntent.profileId || matchesSocialVariantIntent(profile, initialPostIntent)))
+    : profiles
   const planned = uses.filter((use) => use.status !== 'done' && use.status !== 'canceled')
   const history = uses.filter((use) => use.status === 'done' || use.status === 'canceled')
   const restrictionMessage = releaseKitScheduleRestriction(item)
@@ -817,6 +864,10 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange
 
   const schedule = async () => {
     if (!selectedProfile || !caption.trim() || !date || !time) return
+    if (initialPostIntent?.mode === 'trial') {
+      toast.error('Instagram Trial scheduling is not available yet', { description: 'Artist OS will not silently turn a Trial variant into a normal Reel.' })
+      return
+    }
     setBusy(true)
     try {
       const startAt = new Date(`${date}T${time}:00`).toISOString()
@@ -890,8 +941,10 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange
             </div>
           ) : mode === 'where' ? (
             <div className="divide-y divide-white/[0.06] border-y border-white/[0.06]">
-              {profiles.filter((profile) => profile.ready).map((profile) => <button key={`${profile.platform}/${profile.profileId}`} type="button" onClick={() => setProfileKey(`${profile.platform}/${profile.profileId}`)} className={cn('flex w-full items-center justify-between px-2 py-3 text-left', profileKey === `${profile.platform}/${profile.profileId}` && 'bg-white/[0.05]')}><span><span className="block text-sm text-white/78">{profile.label}</span><span className="text-xs text-emerald-200/55">Ready</span></span>{profileKey === `${profile.platform}/${profile.profileId}` ? <Check className="h-4 w-4 text-orange-300" /> : null}</button>)}
-              {!profiles.some((profile) => profile.ready) ? <EmptyDrawerLine>No ready social accounts.</EmptyDrawerLine> : null}
+              {initialPostIntent ? <div className="px-2 py-2 text-[11px] text-white/38">Intended for {displaySubtype(initialPostIntent.accountRole)} · {displaySubtype(initialPostIntent.platform)}{initialPostIntent.mode === 'trial' ? ' · Trial' : ''}</div> : null}
+              {visibleProfiles.filter((profile) => profile.ready).map((profile) => <button key={socialProfileKey(profile)} type="button" onClick={() => setProfileKey(socialProfileKey(profile))} className={cn('flex w-full items-center justify-between px-2 py-3 text-left', profileKey === socialProfileKey(profile) && 'bg-white/[0.05]')}><span><span className="block text-sm text-white/78">{profile.label}</span><span className="text-xs text-emerald-200/55">Ready</span></span>{profileKey === socialProfileKey(profile) ? <Check className="h-4 w-4 text-orange-300" /> : null}</button>)}
+              {!visibleProfiles.some((profile) => profile.ready) ? <EmptyDrawerLine>No ready {initialPostIntent ? displaySubtype(initialPostIntent.platform) : 'social'} accounts.</EmptyDrawerLine> : null}
+              {planned.length ? <div className="py-3"><div className="mb-1 text-[10px] uppercase tracking-[0.14em] text-white/30">Already planned</div>{planned.map((use) => <AssetUseRow key={use.orderId} use={use} />)}</div> : null}
               <div className="flex justify-end pt-4"><Button disabled={!selectedProfile} onClick={() => setMode('post')}>Next</Button></div>
             </div>
           ) : mode === 'post' ? (
@@ -905,8 +958,9 @@ function ReleaseKitAssetDrawer({ open, item, itemPath, workspaceId, onOpenChange
             <div className="space-y-5">
               <div className="grid grid-cols-2 gap-3"><label className="space-y-1.5 text-xs text-white/42"><span>Date</span><input type="date" value={date} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setDate(event.target.value)} className={INPUT_CLASS} /></label><label className="space-y-1.5 text-xs text-white/42"><span>Time</span><input type="time" value={time} onChange={(event) => setTime(event.target.value)} className={INPUT_CLASS} /></label></div>
               <div className="flex items-center gap-2 text-xs text-white/42"><Clock3 className="h-3.5 w-3.5" />{timezone}</div>
-              <div className="space-y-2 border-y border-white/[0.06] py-4 text-sm"><SummaryLine label="Asset" value={item.title} /><SummaryLine label="Account" value={selectedProfile?.label ?? ''} /><SummaryLine label="Caption" value={caption} /><SummaryLine label="When" value={`${date} at ${time} · ${timezone}`} /></div>
-              <div className="flex justify-end"><Button disabled={busy || !date || !time} className="bg-[#f97316] text-black hover:bg-[#fb923c]" onClick={() => void schedule()}>{busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}Schedule post</Button></div>
+              <div className="space-y-2 border-y border-white/[0.06] py-4 text-sm"><SummaryLine label="Asset" value={item.title} /><SummaryLine label="Account" value={selectedProfile?.label ?? ''} /><SummaryLine label="Caption" value={caption} /><SummaryLine label="When" value={`${date} at ${time} · ${timezone}`} />{initialPostIntent ? <SummaryLine label="Use" value={`${displaySubtype(initialPostIntent.accountRole)}${initialPostIntent.mode === 'trial' ? ' · Instagram Trial' : ''}`} /> : null}</div>
+              {initialPostIntent?.mode === 'trial' ? <p className="text-xs text-amber-200/75">Trial was explicitly requested for this variant, but the current publisher cannot guarantee Instagram Trial delivery. Scheduling is blocked instead of silently posting it as a normal Reel.</p> : null}
+              <div className="flex justify-end"><Button disabled={busy || !date || !time || initialPostIntent?.mode === 'trial'} className="bg-[#f97316] text-black hover:bg-[#fb923c]" onClick={() => void schedule()}>{busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}Schedule post</Button></div>
             </div>
           )}
         </div>
@@ -1202,12 +1256,26 @@ function placementForKind(kind: string): { category: ReleaseKitCategory; subtype
 
 function sourceKey(source: ReleaseKitSource): string {
   if (source.type === 'upload') return `upload:${source.originalFileName}`
-  if (source.type === 'output' || source.type === 'legacy-final') return `${source.type}:${source.outputId}:${source.assetId ?? ''}`
+  if (source.type === 'output') return `${source.type}:${source.sourceWorkspaceId ?? ''}:${source.outputId}:${source.assetId ?? ''}`
+  if (source.type === 'legacy-final') return `${source.type}:${source.outputId}:${source.assetId ?? ''}`
   return `${source.type}:${source.assetId}`
 }
 
 function displaySubtype(value: string): string {
   return value.replace(/[-_]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function socialProfileKey(profile: { platform: string; profileId?: string; accountSetId?: string }): string {
+  return `${profile.platform}/${profile.profileId ?? ''}/${profile.accountSetId ?? ''}`
+}
+
+function matchesSocialVariantIntent(
+  profile: { platform: string; profileId?: string; accountSetId?: string },
+  intent: SocialVariantPostIntent,
+): boolean {
+  return profile.platform === intent.platform
+    && profile.profileId === intent.profileId
+    && (!intent.accountSetId || profile.accountSetId === intent.accountSetId)
 }
 
 function displayCategory(category: ReleaseKitCategory): string {

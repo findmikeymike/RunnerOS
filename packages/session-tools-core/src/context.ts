@@ -479,6 +479,9 @@ export interface SessionToolContext {
   /** Record one rendered or failed variant result into the bound durable job. */
   recordSocialVariantResult?(input: import('./handlers/social-variants.ts').RecordSocialVariantResultToolInput): Promise<import('./handlers/social-variants.ts').SocialVariantToolResult>;
 
+  /** List verified, destination-compatible campaign variants that remain usable for posting. */
+  listUsableSocialVariants?(input: import('./handlers/social-variants.ts').ListUsableSocialVariantsToolInput): Promise<import('./handlers/social-variants.ts').SocialVariantToolResult>;
+
   /** Create a Lab song in the current workspace. */
   createLabSong?(input: import('./handlers/lab-songs.ts').CreateLabSongToolInput): Promise<unknown>;
 

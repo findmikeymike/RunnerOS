@@ -382,6 +382,14 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'listUsableSocialVariants', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.listUsableSocialVariantsFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'promoteOutputToFinal', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.promoteOutputToFinalFn;

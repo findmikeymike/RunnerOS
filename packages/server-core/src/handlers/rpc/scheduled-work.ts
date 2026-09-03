@@ -532,7 +532,6 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           socialProfileRefs: [{ platform: definition.platform, profileId: definition.profileId }], scheduledWorkId: orderId,
         })
         assertCampaignScheduleInput(workspaceId, { order, calendarItem }, false, true)
-        await validateScheduleRuntime(deps, rootPath, order)
 
         const scheduled = readScheduledWork(rootPath, workspaceId)
         if (!scheduled.ok) throw new Error(scheduled.error)
@@ -546,6 +545,16 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           }
           return { updated: false, work: scheduled.work, order: existingOrder, calendar: parsedCalendar.calendar, calendarItem: existingCalendarItem }
         }
+        const equivalentOrder = scheduled.work.items.find((candidate) => !candidate.deletedAt
+          && candidate.status !== 'canceled'
+          && candidate.type === 'social-publish'
+          && candidate.executionKey.payloadDigest === payloadDigest)
+        if (equivalentOrder) {
+          const equivalentCalendarItem = parsedCalendar.calendar.items.find((candidate) => candidate.id === equivalentOrder.calendarLink?.itemId)
+          if (!equivalentCalendarItem) throw new Error(`Existing social schedule is missing its calendar item: ${equivalentOrder.id}`)
+          return { updated: false, work: scheduled.work, order: equivalentOrder, calendar: parsedCalendar.calendar, calendarItem: equivalentCalendarItem }
+        }
+        await validateScheduleRuntime(deps, rootPath, order)
         const work = { ...scheduled.work, items: [...scheduled.work.items, order], updatedAt: now }
         const calendar = { ...parsedCalendar.calendar, items: [...parsedCalendar.calendar.items, calendarItem], updatedAt: now }
         writeScheduledWork(rootPath, work)

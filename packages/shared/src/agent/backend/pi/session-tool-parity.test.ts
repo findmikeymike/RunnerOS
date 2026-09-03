@@ -45,4 +45,11 @@ describe('Pi backend session tool parity', () => {
     expect(editor).toContain('mcp__session__get_social_variant_set');
     expect(editor).toContain('mcp__session__record_social_variant_result');
   });
+
+  it('exposes the social variant candidate query without editor mutation tools', () => {
+    const publisher = getSessionToolProxyDefs({ includeSocialVariantQueryTools: true }).map((tool) => tool.name);
+    expect(publisher).toContain('mcp__session__list_usable_social_variants');
+    expect(publisher).not.toContain('mcp__session__get_social_variant_set');
+    expect(publisher).not.toContain('mcp__session__record_social_variant_result');
+  });
 });

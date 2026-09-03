@@ -192,6 +192,9 @@ export interface SessionScopedToolCallbacks {
   recordSocialVariantResultFn?: (
     input: import('@craft-agent/session-tools-core').RecordSocialVariantResultToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').SocialVariantToolResult>;
+  listUsableSocialVariantsFn?: (
+    input: import('@craft-agent/session-tools-core').ListUsableSocialVariantsToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').SocialVariantToolResult>;
   /** Promote an existing output into Finals. */
   promoteOutputToFinalFn?: (
     input: import('@craft-agent/session-tools-core').PromoteOutputToFinalToolInput,

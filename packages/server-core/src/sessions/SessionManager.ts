@@ -261,7 +261,7 @@ import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntr
 import type { PulseAction } from '@craft-agent/shared/pulses'
 import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
-import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
+import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
 import { composeAgentSystemPrompt, managerBriefReceiptFromDocs } from '@craft-agent/shared/agent-prompt'
 import { filterAttachmentsForModelInput } from './runtime-config'
 import { inferScheduledWorkScope, persistHnicScheduleWork } from '../scheduled-work/HnicScheduledWork'
@@ -482,6 +482,7 @@ interface SessionRuntimeHooks {
   onSessionStarted: () => void
   onSessionStopped: () => void
   onTeamRunnerActiveChange: (active: boolean) => void
+  validateSocialProfile: (input: { platform: string; profileId: string }) => Promise<{ ready: boolean; reason?: string }>
 }
 
 const defaultSessionRuntimeHooks: SessionRuntimeHooks = {
@@ -489,6 +490,7 @@ const defaultSessionRuntimeHooks: SessionRuntimeHooks = {
   onSessionStarted: () => {},
   onSessionStopped: () => {},
   onTeamRunnerActiveChange: () => {},
+  validateSocialProfile: async () => ({ ready: false, reason: 'Social profile validation is unavailable on this host.' }),
   captureException: (error, context) => {
     const err = error instanceof Error ? error : new Error(String(error))
     if (_platform?.captureError) {
@@ -8442,6 +8444,24 @@ user a clickable link to where the thing now lives.`
                 managed.spawnedFromAgent?.agentSlug,
                 input,
               ),
+            }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
+        },
+        listUsableSocialVariantsFn: async (input) => {
+          try {
+            const activeAgentSlug = managed.spawnedFromAgent?.agentSlug
+            if (activeAgentSlug !== SOCIAL_PUBLISHER_SLUG && activeAgentSlug !== CONCIERGE_SLUG) {
+              throw new Error('Only Social Publisher or Artist Manager can query posting-ready social variants.')
+            }
+            const service = new SocialVariantSetService({
+              getWorkspace: (workspaceId) => getWorkspaceByNameOrId(workspaceId) ?? undefined,
+              validateSocialProfile: sessionRuntimeHooks.validateSocialProfile,
+            })
+            return {
+              ok: true,
+              data: await service.listUsable(input.campaignId, input),
             }
           } catch (error) {
             return { ok: false, error: error instanceof Error ? error.message : String(error) }

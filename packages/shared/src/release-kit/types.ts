@@ -41,7 +41,7 @@ export type ReleaseKitSource =
   | { type: 'upload'; originalFileName: string }
   | { type: 'campaign-asset'; assetId: string }
   | { type: 'vault-asset'; assetId: string; vaultWorkspaceId: string }
-  | { type: 'output'; outputId: string; assetId?: string }
+  | { type: 'output'; outputId: string; assetId?: string; sourceWorkspaceId?: string }
   | { type: 'legacy-final'; outputId: string; assetId?: string; legacyFinalId?: string };
 
 export interface ReleaseKitItem {

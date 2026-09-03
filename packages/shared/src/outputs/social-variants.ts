@@ -147,6 +147,30 @@ export interface RebindSocialVariantSetRequest {
   editorSessionId: string;
 }
 
+export interface ListUsableSocialVariantsRequest {
+  campaignId: string;
+  platform: SocialVariantPlatform;
+  profileId: string;
+  accountRole: SocialAccountRole;
+  unscheduledOnly?: boolean;
+}
+
+export interface UsableSocialVariant {
+  outputId: string;
+  setId: string;
+  variantId: string;
+  assetId: string;
+  title: string;
+  hook: string;
+  editorialMode: string;
+  editorialIntent: string;
+  sha256: string;
+  destination: SocialVariantDestinationIntent;
+  releaseKitItemId?: string;
+  scheduledWorkOrderIds: string[];
+  status: 'ready-to-use' | 'scheduled' | 'posted' | 'needs-attention';
+}
+
 const SHA256 = /^[a-f0-9]{64}$/i;
 const IDENTIFIER = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/;
 const SET_STATUSES = new Set<SocialVariantSetStatus>([

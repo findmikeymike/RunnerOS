@@ -78,7 +78,7 @@ import {
   handleRecallMemory,
 } from './handlers/memory.ts';
 import { handleCreateOutput, handlePromoteOutputToFinal } from './handlers/outputs.ts';
-import { handleGetSocialVariantSet, handleRecordSocialVariantResult } from './handlers/social-variants.ts';
+import { handleGetSocialVariantSet, handleRecordSocialVariantResult, handleListUsableSocialVariants } from './handlers/social-variants.ts';
 import {
   handleListReleaseKit,
   handleGetReleaseKitItem,
@@ -814,6 +814,14 @@ export const RecordSocialVariantResultSchema = z.object({
   durationSeconds: z.number().positive().optional(),
   aspectRatio: z.string().min(1).max(32).optional(),
   replaceVariantId: z.string().min(1).optional().describe('Failed variant id to retry, or archived variant id after the user explicitly requested a revision. Never replace a ready variant directly.'),
+});
+
+export const ListUsableSocialVariantsSchema = z.object({
+  campaignId: z.string().min(1).describe('Exact Campaign workspace id.'),
+  platform: z.enum(['instagram', 'tiktok', 'x', 'youtube']),
+  profileId: z.string().min(1).describe('Exact connected social profile id.'),
+  accountRole: z.enum(['primary', 'secondary', 'fan-page']),
+  unscheduledOnly: z.boolean().optional().describe('Defaults true so already scheduled or posted variants are omitted.'),
 });
 
 export const PromoteOutputToFinalSchema = z.object({
@@ -1652,6 +1660,10 @@ Use this before rendering and again after every recorded result. It returns the 
 
 Call get_social_variant_set first and use its current revision. Report each result immediately so successful files survive if a later render fails. A ready result requires a workspace-local file and exact pinned source/destination ids. Use replaceVariantId to retry one failed variant, or to replace the exact archived version named by a user's Revise action without changing its source or destination. This creates reviewable files; it never authorizes posting.`,
 
+  list_usable_social_variants: `List verified social-video variants for one exact campaign destination.
+
+Use this read-only query before proposing or scheduling a variant. It filters by campaign, platform, connected profile, and account role; defaults to unscheduled variants; and excludes stale, restricted, missing, drifted, or incompatible files. A returned candidate is eligible for review, not authorized to post. Posting still requires the user's final approval of the exact asset, account, caption, and time through the existing social approval flow.`,
+
   promote_output_to_final: `Legacy-compatible Output finalization.
 
 For campaign work, this now creates a copied Release Kit snapshot. Prefer \`promote_to_release_kit\` for new work because its category, subtype, source, and Primary behavior are explicit. HQ compatibility pointers remain available for old workflows.
@@ -1905,6 +1917,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'create_output', description: TOOL_DESCRIPTIONS.create_output, inputSchema: CreateOutputSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateOutput },
   { name: 'get_social_variant_set', description: TOOL_DESCRIPTIONS.get_social_variant_set, inputSchema: GetSocialVariantSetSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetSocialVariantSet },
   { name: 'record_social_variant_result', description: TOOL_DESCRIPTIONS.record_social_variant_result, inputSchema: RecordSocialVariantResultSchema, executionMode: 'registry', safeMode: 'block', handler: handleRecordSocialVariantResult },
+  { name: 'list_usable_social_variants', description: TOOL_DESCRIPTIONS.list_usable_social_variants, inputSchema: ListUsableSocialVariantsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListUsableSocialVariants },
   { name: 'promote_output_to_final', description: TOOL_DESCRIPTIONS.promote_output_to_final, inputSchema: PromoteOutputToFinalSchema, executionMode: 'registry', safeMode: 'block', handler: handlePromoteOutputToFinal },
   { name: 'list_release_kit', description: TOOL_DESCRIPTIONS.list_release_kit, inputSchema: ListReleaseKitSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListReleaseKit },
   { name: 'get_release_kit_item', description: TOOL_DESCRIPTIONS.get_release_kit_item, inputSchema: GetReleaseKitItemSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetReleaseKitItem },
@@ -1948,6 +1961,8 @@ export interface SessionToolFilterOptions {
   includeSessionTasks?: boolean;
   /** Include durable social variant tools only for the bound Raw Video Editor. */
   includeSocialVariantTools?: boolean;
+  /** Include the verified variant candidate query for HNIC and Social Publisher. */
+  includeSocialVariantQueryTools?: boolean;
 }
 
 /**
@@ -1964,6 +1979,7 @@ export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionT
   const includeLabTools = options?.includeLabTools ?? false;
   const includeSessionTasks = options?.includeSessionTasks ?? false;
   const includeSocialVariantTools = options?.includeSocialVariantTools ?? false;
+  const includeSocialVariantQueryTools = options?.includeSocialVariantQueryTools ?? false;
 
   return SESSION_TOOL_DEFS.filter(def => {
     if (!includeDeveloperFeedback && def.name === 'send_developer_feedback') {
@@ -1975,6 +1991,7 @@ export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionT
     if (!includeLabTools && ['create_lab_song', 'save_lab_lyrics', 'list_lab_songs'].includes(def.name)) return false;
     if (!includeSessionTasks && def.name === 'update_tasks') return false;
     if (!includeSocialVariantTools && ['get_social_variant_set', 'record_social_variant_result'].includes(def.name)) return false;
+    if (!includeSocialVariantQueryTools && def.name === 'list_usable_social_variants') return false;
     return true;
   });
 }
@@ -2092,6 +2109,7 @@ export function getToolDefsAsJsonSchema(opts?: {
   includeLabTools?: boolean;
   includeSessionTasks?: boolean;
   includeSocialVariantTools?: boolean;
+  includeSocialVariantQueryTools?: boolean;
 }): JsonSchemaToolDef[] {
   const prefix = opts?.prefix || '';
   const defs = getSessionToolDefs({
@@ -2102,6 +2120,7 @@ export function getToolDefsAsJsonSchema(opts?: {
     includeLabTools: opts?.includeLabTools,
     includeSessionTasks: opts?.includeSessionTasks,
     includeSocialVariantTools: opts?.includeSocialVariantTools,
+    includeSocialVariantQueryTools: opts?.includeSocialVariantQueryTools,
   });
 
   return defs.map(def => {

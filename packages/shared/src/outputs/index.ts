@@ -52,6 +52,8 @@ export type {
   RecordSocialVariantResultRequest,
   ArchiveSocialVariantRequest,
   RebindSocialVariantSetRequest,
+  ListUsableSocialVariantsRequest,
+  UsableSocialVariant,
 } from './social-variants.ts';
 
 export {

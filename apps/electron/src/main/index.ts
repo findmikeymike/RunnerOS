@@ -705,6 +705,17 @@ app.whenReady().then(async () => {
             onSessionStarted,
             onSessionStopped,
             onTeamRunnerActiveChange: setTeamRunnerActive,
+            validateSocialProfile: async ({ platform, profileId }) => {
+              const { runSocialJson } = await import('./social-cli')
+              const doctor = await runSocialJson(['doctor', '--json']) as {
+                platforms?: Array<{ profiles?: Array<{ platform?: string; profile?: string; ready?: boolean; localSessionExists?: boolean; accountHandle?: string | null; accountUrl?: string | null }> }>
+              }
+              const profile = doctor.platforms?.flatMap((group) => group.profiles ?? [])
+                .find((candidate) => candidate.platform === platform && candidate.profile === profileId)
+              return profile?.ready || (profile?.localSessionExists && Boolean(profile.accountHandle || profile.accountUrl))
+                ? { ready: true }
+                : { ready: false, reason: 'Social profile login or setup is required.' }
+            },
             captureException: (error, context) => {
               Sentry.captureException(error instanceof Error ? error : new Error(String(error)), {
                 tags: {
