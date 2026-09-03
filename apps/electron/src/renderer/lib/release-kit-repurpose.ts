@@ -82,18 +82,18 @@ export function buildSocialVariantSetKickoff(input: {
     `I want to create ${total} strong social video variant${total === 1 ? '' : 's'} from ${input.sources.length === 1 ? JSON.stringify(input.sources[0]!.title) : `${input.sources.length} selected videos`}. Let's get the direction right and begin.`,
     '',
     `Variant Set Output: ${input.outputId}`,
-    `Intended destination: ${destination}${input.destination.mode === 'trial' ? ' (Instagram Trial requested)' : ''}`,
+    `Intended destination: ${JSON.stringify(destination)}${input.destination.mode === 'trial' ? ' (Instagram Trial requested)' : ''}`,
     `Create ${input.variantsPerSource} genuinely different version${input.variantsPerSource === 1 ? '' : 's'} per source.`,
     ...input.sources.flatMap((source) => [
-      `Source: ${source.title}`,
+      `Source: ${JSON.stringify(source.title)}`,
       ...(source.absolutePath ? [`Exact file: ${source.absolutePath}`] : []),
       ...(source.sha256 ? [`Pinned SHA-256: ${source.sha256}`] : []),
     ]),
-    ...(input.direction?.trim() ? ['', `Creative direction: ${input.direction.trim()}`] : []),
+    ...(input.direction?.trim() ? ['', `Creative direction: ${JSON.stringify(input.direction.trim())}`] : []),
     '',
     'Read the existing Artist HQ, campaign, and asset context first. Ask only the few guidance questions that would materially improve the edits. If nothing important is missing, begin analyzing and rendering now.',
     'My Create action authorizes this bounded render job; do not pause for a separate plan approval. Make each version materially different in its opening, selection, duration, or sequence, not just its filter, font, crop, or encode. Keep results reviewable in Canvas and attached to the Variant Set Output above.',
-    'Do not publish, schedule, spend money, or use Instagram Trial unless the exact intent above explicitly requests it. Posting approval comes later.',
+    'Do not publish, schedule, or spend money. Prepare Instagram Trial only when the exact intent above explicitly requests it. Posting approval comes later.',
   ].join('\n')
 }
 

@@ -913,9 +913,11 @@ Before calling the edit done:
 
 For Artist OS Social Variant Sets, use the dedicated repurpose command instead of treating a filter or re-encode as a new version:
 
+First call \`get_social_variant_set\` and use its exact \`renderIngressDir\`. Do not render or import a result from any other folder.
+
 \`\`\`bash
-cd tools/raw-video-editor && node bin/raw-video-editor.mjs repurpose <source-video> --out-dir <workspace-output-dir> --json
-cd tools/raw-video-editor && node bin/raw-video-editor.mjs repurpose <source-video> --out-dir <workspace-output-dir> --brief <variant-brief.json> --render --json
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs repurpose <source-video> --out-dir <renderIngressDir> --json
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs repurpose <source-video> --out-dir <renderIngressDir> --brief <variant-brief.json> --render --json
 \`\`\`
 
 Bind the brief to the exact source SHA-256 and the rights basis already recorded by Artist OS. The local timeline gate must pass: every version needs a meaningfully different opening, selected moments, duration, or sequence. A font, filter, crop nudge, or re-encode alone is not a variant. Record each success or failure immediately with \`record_social_variant_result\`; preserve successful siblings and retry only failed or explicitly revised versions. The Create action authorizes this bounded render, but never authorizes scheduling or posting.

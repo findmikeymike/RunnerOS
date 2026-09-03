@@ -139,6 +139,8 @@ export class ReleaseKitService {
       promotedBy: actor,
       note: input.note,
       trackIntelligence: resolved.trackIntelligence,
+      usage: resolved.usage,
+      socialVariantIntent: resolved.socialVariantIntent,
     })
     this.commitContext(workspace.id, workspace.rootPath, result.manifest)
     return result
@@ -268,7 +270,7 @@ export class ReleaseKitService {
     workspaceRootPath: string,
     input: PromoteToReleaseKitInput,
     actor: 'user' | 'agent',
-  ): { path: string; mimeType?: string; trackIntelligence?: import('@craft-agent/shared/artist-vault').ReviewedTrackIntelligenceRevision } {
+  ): { path: string; mimeType?: string; trackIntelligence?: import('@craft-agent/shared/artist-vault').ReviewedTrackIntelligenceRevision; usage?: ReleaseKitItem['usage']; socialVariantIntent?: ReleaseKitItem['socialVariantIntent'] } {
     const source = input.source
     if (source.type === 'upload') {
       if (actor !== 'user') throw new Error('Agents cannot promote arbitrary upload paths. Import the file first.')
@@ -322,9 +324,26 @@ export class ReleaseKitService {
     if (asset.sha256 && hashFileSha256(path).toLowerCase() !== asset.sha256.toLowerCase()) {
       throw new Error('Output asset changed after it was created. Review the current file before adding it to the Release Kit.')
     }
+    let usage: ReleaseKitItem['usage'] | undefined
+    const variant = output.socialVariantSet?.variants.find((candidate) => candidate.assetId === asset.id)
+    if (variant) {
+      const pinnedSource = output.socialVariantSet?.sources.find((candidate) => candidate.id === variant.sourceId)
+      if (pinnedSource?.origin === 'release-kit') {
+        if (sourceWorkspace.artistWorkspaceScope !== 'campaign') throw new Error('A Release Kit-backed variant must belong to a Campaign workspace.')
+        const sourceManifest = loadReleaseKitManifest(sourceWorkspace.rootPath, sourceWorkspace.id, sourceWorkspace.id)
+        const sourceItem = sourceManifest.items.find((candidate) => candidate.id === pinnedSource.sourceId)
+        if (!sourceItem) throw new Error('The final used to create this variant no longer exists.')
+        if (sourceItem.status !== 'ready' || sourceItem.sha256.toLowerCase() !== pinnedSource.sha256.toLowerCase()) {
+          throw new Error('The final used to create this variant is no longer verified.')
+        }
+        usage = sourceItem.usage
+      }
+    }
     return {
       path,
       mimeType: asset.mimeType,
+      usage,
+      ...(variant ? { socialVariantIntent: { variantId: variant.id, destination: variant.destination } } : {}),
     }
   }
 

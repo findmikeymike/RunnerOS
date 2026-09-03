@@ -831,6 +831,8 @@ export const RecordSocialVariantResultSchema = z.object({
   editorialMode: z.string().min(1).max(120).describe('Concrete edit mode used, such as fast-cut performance, intimate close-up, or lyric-led.'),
   editorialIntent: z.string().min(1).max(1200).describe('Concise explanation of what materially changed and why.'),
   filePath: z.string().min(1).optional().describe('Rendered video file inside the active workspace.'),
+  manifestPath: z.string().min(1).optional().describe('variant-manifest.json emitted by the local repurpose tool for this render.'),
+  manifestVariantId: z.string().min(1).optional().describe('Exact variant id inside variant-manifest.json.'),
   failureReason: z.string().min(1).max(1000).optional().describe('Actionable failure for this one variant. Use instead of filePath.'),
   durationSeconds: z.number().positive().optional(),
   aspectRatio: z.string().min(1).max(32).optional(),
@@ -1683,7 +1685,7 @@ Use this before rendering and again after every recorded result. It returns the 
 
   record_social_variant_result: `Record exactly one rendered or failed social video variant into the durable Variant Set bound to this Raw Video Editor session.
 
-Call get_social_variant_set first and use its current revision. Report each result immediately so successful files survive if a later render fails. A ready result requires a workspace-local file and exact pinned source/destination ids. Use replaceVariantId to retry one failed variant, or to replace the exact archived version named by a user's Revise action without changing its source or destination. This creates reviewable files; it never authorizes posting.`,
+Call get_social_variant_set first and use its current revision and renderIngressDir. Render only inside that directory. Report each result immediately so successful files survive if a later render fails. A ready result requires the rendered file plus variant-manifest.json and its exact manifest variant id. Use replaceVariantId to retry one failed variant, or to replace the exact archived version named by a user's Revise action without changing its source or destination. This creates reviewable files; it never authorizes posting.`,
 
   list_usable_social_variants: `List verified social-video variants for one exact campaign destination.
 

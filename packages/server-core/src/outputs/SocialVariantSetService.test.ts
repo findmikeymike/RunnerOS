@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -9,16 +9,21 @@ import {
   readOutput,
   type CreateSocialVariantSetRequest,
 } from '@craft-agent/shared/outputs';
+import { materializeReleaseKitItem, updateReleaseKitItemUsage } from '@craft-agent/shared/release-kit';
+import type { ReleaseKitItem } from '@craft-agent/shared/release-kit';
 import { SocialVariantSetService } from './SocialVariantSetService';
+import { ReleaseKitService } from '../release-kit/ReleaseKitService';
 
 const WORKSPACE_ID = 'hq-workspace';
 const SOURCE_OUTPUT_ID = '11111111-1111-4111-8111-111111111111';
 let root: string;
 let updates: string[];
+let renderSequence: number;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'social-variant-service-'));
   updates = [];
+  renderSequence = 0;
   const sourcePath = join(getOutputDir(root, SOURCE_OUTPUT_ID), 'source.mp4');
   mkdirSync(getOutputDir(root, SOURCE_OUTPUT_ID), { recursive: true });
   writeFileSync(sourcePath, 'source-video');
@@ -71,6 +76,45 @@ function service(options: { profileReady?: boolean; scope?: 'hq' | 'campaign' } 
     emitOutputsUpdated: (workspaceId) => updates.push(workspaceId),
     now: () => new Date('2026-09-02T12:00:00.000Z'),
   });
+}
+
+function writeRenderEvidence(
+  instance: SocialVariantSetService,
+  outputId: string,
+  fileName: string,
+  content: string,
+  options: { start?: number; sourceSha256?: string } = {},
+): { filePath: string; manifestPath: string; manifestVariantId: string } {
+  const ingress = instance.getRenderIngressDir(WORKSPACE_ID, outputId);
+  const variantId = `manifest-variant-${++renderSequence}`;
+  const filePath = join(ingress, fileName);
+  writeFileSync(filePath, content);
+  const manifestPath = join(ingress, 'variant-manifest.json');
+  const start = options.start ?? renderSequence * 4;
+  writeFileSync(manifestPath, `${JSON.stringify({
+    version: 1,
+    status: 'rendered-for-review',
+    source: {
+      sha256: options.sourceSha256 ?? createHash('sha256').update('source-video').digest('hex'),
+      durationSeconds: 60,
+    },
+    validation: { status: 'ready', errors: [], warnings: [] },
+    variants: [{
+      id: variantId,
+      sourceSegments: [{ start, end: start + 10 }],
+      meaningfulDifference: 'meaningfully-different',
+      assessmentBasis: 'local-editorial-timeline-gate',
+      renderStatus: 'ready',
+      output: {
+        path: filePath,
+        sha256: createHash('sha256').update(content).digest('hex'),
+        duration: 10,
+        width: 1080,
+        height: 1920,
+      },
+    }],
+  }, null, 2)}\n`);
+  return { filePath, manifestPath, manifestVariantId: variantId };
 }
 
 describe('SocialVariantSetService', () => {
@@ -140,10 +184,39 @@ describe('SocialVariantSetService', () => {
     expect(updates).toEqual([WORKSPACE_ID]);
   });
 
+  test('records durable attention when a pinned source drifts before result import', async () => {
+    const instance = service();
+    const created = await instance.create(WORKSPACE_ID, {
+      ...request({ variantsPerSource: 1 }),
+      requestedByClientId: 'client-1',
+    });
+    const started = await instance.start(WORKSPACE_ID, created.id, 1);
+    const render = writeRenderEvidence(instance, created.id, 'drifted-source.mp4', 'safe-render');
+    writeFileSync(join(getOutputDir(root, SOURCE_OUTPUT_ID), 'source.mp4'), 'changed-before-import');
+
+    await expect(instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+      outputId: created.id,
+      expectedRevision: 2,
+      sourceId: started.socialVariantSet!.sources[0]!.id,
+      destinationIndex: 0,
+      title: 'Drifted source cut',
+      hook: 'Strong opening.',
+      editorialMode: 'direct',
+      editorialIntent: 'A real recut.',
+      ...render,
+    })).rejects.toThrow(/changed after it was recorded/);
+
+    expect(readOutput(root, created.id)?.socialVariantSet).toMatchObject({
+      revision: 3,
+      status: 'needs-attention',
+      attention: { code: 'source-unavailable', sourceId: started.socialVariantSet!.sources[0]!.id },
+    });
+  });
+
   test('serializes separate service instances and rejects the stale starter', async () => {
     const created = await service().create(WORKSPACE_ID, {
       ...request(),
-      destinationIntents: [{ platform: 'x', accountRole: 'primary', mode: 'standard' }],
+      destinationIntents: [{ platform: 'x', accountRole: 'primary', profileId: 'artist-x', mode: 'standard' }],
       requestedByClientId: 'client-1',
     });
     updates = [];
@@ -167,10 +240,7 @@ describe('SocialVariantSetService', () => {
     });
     const started = await instance.start(WORKSPACE_ID, created.id, 1);
     const sourceId = started.socialVariantSet!.sources[0]!.id;
-    const renderDir = join(root, 'renders');
-    mkdirSync(renderDir, { recursive: true });
-    const firstPath = join(renderDir, 'first.mp4');
-    writeFileSync(firstPath, 'render-one');
+    const firstRender = writeRenderEvidence(instance, created.id, 'first.mp4', 'render-one');
 
     const first = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
       outputId: created.id,
@@ -181,7 +251,7 @@ describe('SocialVariantSetService', () => {
       hook: 'Open on the chorus.',
       editorialMode: 'chorus-first',
       editorialIntent: 'Reach the emotional payoff immediately.',
-      filePath: firstPath,
+      ...firstRender,
       durationSeconds: 12,
       aspectRatio: '9:16',
     });
@@ -202,8 +272,7 @@ describe('SocialVariantSetService', () => {
     expect(failed.socialVariantSet).toMatchObject({ revision: 4, status: 'partially-ready' });
     const failedVariant = failed.socialVariantSet!.variants.find((variant) => variant.state === 'failed')!;
 
-    const retryPath = join(renderDir, 'retry.mp4');
-    writeFileSync(retryPath, 'render-two');
+    const retryRender = writeRenderEvidence(instance, created.id, 'retry.mp4', 'render-two');
     const retried = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
       outputId: created.id,
       expectedRevision: 4,
@@ -214,7 +283,7 @@ describe('SocialVariantSetService', () => {
       hook: 'Start on the quiet look.',
       editorialMode: 'quiet-open',
       editorialIntent: 'Create contrast before the payoff.',
-      filePath: retryPath,
+      ...retryRender,
       durationSeconds: 10,
       aspectRatio: '9:16',
     });
@@ -241,9 +310,11 @@ describe('SocialVariantSetService', () => {
       editorialMode: 'outside',
       editorialIntent: 'This must not be ingested.',
       filePath: outsidePath,
+      manifestPath: outsidePath,
+      manifestVariantId: 'outside',
     };
     await expect(instance.recordResult(WORKSPACE_ID, 'wrong-session', 'raw-video-editor', result)).rejects.toThrow(/different Raw Video Editor session/);
-    await expect(instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', result)).rejects.toThrow(/inside the current workspace/);
+    await expect(instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', result)).rejects.toThrow(/render-staging/);
     rmSync(outsideRoot, { recursive: true, force: true });
   });
 
@@ -255,10 +326,7 @@ describe('SocialVariantSetService', () => {
     });
     const started = await instance.start(WORKSPACE_ID, created.id, 1);
     const sourceId = started.socialVariantSet!.sources[0]!.id;
-    const renderDir = join(root, 'renders');
-    mkdirSync(renderDir, { recursive: true });
-    const sourceCopy = join(renderDir, 'source-copy.mp4');
-    writeFileSync(sourceCopy, 'source-video');
+    const sourceCopy = writeRenderEvidence(instance, created.id, 'source-copy.mp4', 'source-video');
     const result = {
       outputId: created.id,
       expectedRevision: 2,
@@ -268,25 +336,23 @@ describe('SocialVariantSetService', () => {
       hook: 'Open immediately.',
       editorialMode: 'chorus-first',
       editorialIntent: 'Move the payoff to the opening.',
-      filePath: sourceCopy,
+      ...sourceCopy,
     };
 
     await expect(instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', result)).rejects.toThrow(/identical to its source/);
     expect(readOutput(root, created.id)?.socialVariantSet).toMatchObject({ revision: 2, variants: [] });
 
-    const firstRender = join(renderDir, 'first-render.mp4');
-    writeFileSync(firstRender, 'meaningfully-different-render');
-    const saved = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', { ...result, filePath: firstRender });
+    const firstRender = writeRenderEvidence(instance, created.id, 'first-render.mp4', 'meaningfully-different-render');
+    const saved = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', { ...result, ...firstRender });
     expect(saved.socialVariantSet).toMatchObject({ revision: 3, status: 'partially-ready' });
 
-    const duplicateRender = join(renderDir, 'duplicate-render.mp4');
-    writeFileSync(duplicateRender, 'meaningfully-different-render');
+    const duplicateRender = writeRenderEvidence(instance, created.id, 'duplicate-render.mp4', 'meaningfully-different-render', { start: 30 });
     await expect(instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
       ...result,
       expectedRevision: 3,
       destinationIndex: 0,
       title: 'Duplicate cut',
-      filePath: duplicateRender,
+      ...duplicateRender,
     })).rejects.toThrow(/duplicates the saved variant/);
     expect(readOutput(root, created.id)?.socialVariantSet).toMatchObject({ revision: 3 });
     expect(readOutput(root, created.id)?.socialVariantSet?.variants).toHaveLength(1);
@@ -298,10 +364,7 @@ describe('SocialVariantSetService', () => {
       requestedByClientId: 'client-1',
     });
     const started = await service().start(WORKSPACE_ID, created.id, 1);
-    const renderDir = join(root, 'renders');
-    mkdirSync(renderDir, { recursive: true });
-    const firstPath = join(renderDir, 'before-restart.mp4');
-    writeFileSync(firstPath, 'render-before-restart');
+    const firstRender = writeRenderEvidence(service(), created.id, 'before-restart.mp4', 'render-before-restart');
     const partial = await service().recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
       outputId: created.id,
       expectedRevision: 2,
@@ -311,7 +374,7 @@ describe('SocialVariantSetService', () => {
       hook: 'Open on the payoff.',
       editorialMode: 'payoff-first',
       editorialIntent: 'Preserve this completed version across restart.',
-      filePath: firstPath,
+      ...firstRender,
     });
     expect(partial.socialVariantSet).toMatchObject({ revision: 3, status: 'partially-ready' });
 
@@ -324,8 +387,7 @@ describe('SocialVariantSetService', () => {
     });
     expect(restored.socialVariantSet?.variants.filter((variant) => variant.state === 'ready')).toHaveLength(1);
 
-    const secondPath = join(renderDir, 'after-restart.mp4');
-    writeFileSync(secondPath, 'render-after-restart');
+    const secondRender = writeRenderEvidence(restarted, created.id, 'after-restart.mp4', 'render-after-restart');
     const completed = await restarted.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
       outputId: created.id,
       expectedRevision: 3,
@@ -335,7 +397,7 @@ describe('SocialVariantSetService', () => {
       hook: 'Open somewhere else.',
       editorialMode: 'alternate-open',
       editorialIntent: 'Finish only the remaining authorized slot.',
-      filePath: secondPath,
+      ...secondRender,
     });
     expect(completed.socialVariantSet).toMatchObject({ revision: 4, status: 'ready' });
     expect(completed.socialVariantSet?.variants).toHaveLength(2);
@@ -347,17 +409,14 @@ describe('SocialVariantSetService', () => {
       ...request(),
       variantsPerSource: 1,
       destinationIntents: [
-        { platform: 'instagram', accountRole: 'primary', mode: 'standard' },
-        { platform: 'tiktok', accountRole: 'secondary', mode: 'standard' },
+        { platform: 'instagram', accountRole: 'primary', profileId: 'artist-instagram', mode: 'standard' },
+        { platform: 'tiktok', accountRole: 'secondary', profileId: 'artist-tiktok', mode: 'standard' },
       ],
       requestedByClientId: 'client-1',
     });
     const started = await instance.start(WORKSPACE_ID, created.id, 1);
     const sourceId = started.socialVariantSet!.sources[0]!.id;
-    const renderDir = join(root, 'renders');
-    mkdirSync(renderDir, { recursive: true });
-    const filePath = join(renderDir, 'only.mp4');
-    writeFileSync(filePath, 'render');
+    const onlyRender = writeRenderEvidence(instance, created.id, 'only.mp4', 'render');
     const rendered = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
       outputId: created.id,
       expectedRevision: 2,
@@ -367,7 +426,7 @@ describe('SocialVariantSetService', () => {
       hook: 'Start immediately.',
       editorialMode: 'direct',
       editorialIntent: 'Remove the setup.',
-      filePath,
+      ...onlyRender,
     });
     const variant = rendered.socialVariantSet!.variants[0]!;
 
@@ -408,8 +467,7 @@ describe('SocialVariantSetService', () => {
     expect(failedRevision.socialVariantSet).toMatchObject({ revision: 5, status: 'needs-attention' });
     expect(failedRevision.socialVariantSet!.variants[0]!.state).toBe('archived');
     expect(failedRevision.assets.some((asset) => asset.id === variant.assetId)).toBe(true);
-    const revisedPath = join(renderDir, 'revised.mp4');
-    writeFileSync(revisedPath, 'revised-render');
+    const revisedRender = writeRenderEvidence(instance, created.id, 'revised.mp4', 'revised-render');
     const revised = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
       outputId: created.id,
       expectedRevision: 5,
@@ -420,11 +478,11 @@ describe('SocialVariantSetService', () => {
       hook: 'Start even faster.',
       editorialMode: 'direct',
       editorialIntent: 'Tighten the opening.',
-      filePath: revisedPath,
+      ...revisedRender,
     });
     expect(revised.socialVariantSet).toMatchObject({ revision: 6, status: 'ready' });
     expect(revised.socialVariantSet!.variants[0]!.id).not.toBe(variant.id);
-    expect(revised.assets.some((asset) => asset.id === variant.assetId)).toBe(true);
+    expect(revised.assets.some((asset) => asset.id === variant.assetId)).toBe(false);
     expect(revised.assets.some((asset) => asset.id === revised.socialVariantSet!.variants[0]!.assetId)).toBe(true);
     await expect(instance.archiveVariant(WORKSPACE_ID, {
       outputId: created.id,
@@ -454,9 +512,7 @@ describe('SocialVariantSetService', () => {
       requestedByClientId: 'client-1',
     });
     const started = await instance.start(WORKSPACE_ID, readyCandidate.id, 1);
-    const readyPath = join(root, 'renders', 'ready.mp4');
-    mkdirSync(join(root, 'renders'), { recursive: true });
-    writeFileSync(readyPath, 'ready-render');
+    const readyRender = writeRenderEvidence(instance, readyCandidate.id, 'ready.mp4', 'ready-render');
     const ready = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
       outputId: readyCandidate.id,
       expectedRevision: 2,
@@ -466,7 +522,7 @@ describe('SocialVariantSetService', () => {
       hook: 'Open immediately.',
       editorialMode: 'direct',
       editorialIntent: 'Use the strongest moment.',
-      filePath: readyPath,
+      ...readyRender,
     });
     expect(ready.socialVariantSet?.status).toBe('ready');
     await expect(instance.rebindEditor(WORKSPACE_ID, {
@@ -483,10 +539,7 @@ describe('SocialVariantSetService', () => {
       requestedByClientId: 'client-1',
     });
     const started = await instance.start(WORKSPACE_ID, created.id, 1);
-    const renderDir = join(root, 'renders');
-    mkdirSync(renderDir, { recursive: true });
-    const filePath = join(renderDir, 'usable.mp4');
-    writeFileSync(filePath, 'usable-render');
+    const usableRender = writeRenderEvidence(instance, created.id, 'usable.mp4', 'usable-render');
     await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
       outputId: created.id,
       expectedRevision: 2,
@@ -496,7 +549,7 @@ describe('SocialVariantSetService', () => {
       hook: 'Open on the chorus.',
       editorialMode: 'fast-cut',
       editorialIntent: 'Lead with the strongest beat.',
-      filePath,
+      ...usableRender,
     });
     const query = {
       campaignId: WORKSPACE_ID,
@@ -509,36 +562,111 @@ describe('SocialVariantSetService', () => {
     expect(usable).toHaveLength(1);
     expect(usable[0]).toMatchObject({ outputId: created.id, status: 'ready-to-use', scheduledWorkOrderIds: [] });
     expect(await instance.listUsable(WORKSPACE_ID, { ...query, accountRole: 'primary' })).toEqual([]);
+    instance.linkScheduledUse({ sourceWorkspaceId: WORKSPACE_ID, outputId: created.id, variantId: usable[0]!.variantId }, 'missing-snapshot', 'scheduled-order-1');
+    expect(await instance.listUsable(WORKSPACE_ID, query)).toEqual([]);
     await expect(service({ scope: 'campaign', profileReady: false }).listUsable(WORKSPACE_ID, query)).rejects.toThrow('Reconnect this account');
   });
 
-  test('never assigns an unbound ready variant to a profile during discovery', async () => {
+  test('refuses to create a variant set without an exact connected account', async () => {
     const instance = service({ scope: 'campaign' });
-    const created = await instance.create(WORKSPACE_ID, {
+    await expect(instance.create(WORKSPACE_ID, {
       ...request({
         variantsPerSource: 1,
         destinationIntents: [{ platform: 'instagram', accountRole: 'secondary', mode: 'standard' }],
       }),
       requestedByClientId: 'client-1',
-    });
+    })).rejects.toThrow('exact connected account');
+  });
+
+  test('host rejects a manifest that claims a shifted near-full-source edit is meaningful', async () => {
+    const instance = service();
+    const created = await instance.create(WORKSPACE_ID, { ...request({ variantsPerSource: 1 }), requestedByClientId: 'client-1' });
     const started = await instance.start(WORKSPACE_ID, created.id, 1);
-    const renderDir = join(root, 'renders');
-    mkdirSync(renderDir, { recursive: true });
-    const filePath = join(renderDir, 'unbound.mp4');
-    writeFileSync(filePath, 'unbound-render');
-    await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+    const render = writeRenderEvidence(instance, created.id, 'near-full.mp4', 'near-full-render');
+    const manifest = JSON.parse(readFileSync(render.manifestPath, 'utf8'));
+    manifest.source.durationSeconds = 60;
+    manifest.variants[0].sourceSegments = [{ start: 1.5, end: 60 }];
+    writeFileSync(render.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    await expect(instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
       outputId: created.id,
       expectedRevision: 2,
       sourceId: started.socialVariantSet!.sources[0]!.id,
       destinationIndex: 0,
-      title: 'Unbound cut', hook: 'Open strong.', editorialMode: 'direct', editorialIntent: 'A clean cut.', filePath,
-    });
+      title: 'Near full', hook: 'Tiny shift', editorialMode: 'shift', editorialIntent: 'Not enough change.',
+      ...render,
+    })).rejects.toThrow('near-full-source');
+  });
 
-    expect(await instance.listUsable(WORKSPACE_ID, {
+  test('posting gate enforces the exact account stored on the reviewed variant', async () => {
+    const instance = service();
+    const created = await instance.create(WORKSPACE_ID, { ...request({ variantsPerSource: 1 }), requestedByClientId: 'client-1' });
+    const started = await instance.start(WORKSPACE_ID, created.id, 1);
+    const render = writeRenderEvidence(instance, created.id, 'bound.mp4', 'bound-render');
+    const saved = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+      outputId: created.id,
+      expectedRevision: 2,
+      sourceId: started.socialVariantSet!.sources[0]!.id,
+      destinationIndex: 0,
+      title: 'Bound cut', hook: 'Strong opening', editorialMode: 'direct', editorialIntent: 'A real recut.',
+      ...render,
+    });
+    const variant = saved.socialVariantSet!.variants[0]!;
+    const item: ReleaseKitItem = {
+      id: 'kit_variant', campaignId: WORKSPACE_ID, category: 'video', subtype: 'social-variant', title: variant.title,
+      source: { type: 'output', outputId: saved.id, assetId: variant.assetId!, sourceWorkspaceId: WORKSPACE_ID },
+      relativePath: 'release-kit/video/social-variant/bound.mp4', sha256: variant.sha256!, status: 'ready', isPrimary: false,
+      promotedAt: new Date().toISOString(), promotedBy: 'user',
+      usage: { bestFor: ['social'], contentRating: 'unknown', restrictions: { blockedFromUse: false, needsRightsClearance: false, artistLikenessRestricted: false }, updatedAt: new Date().toISOString(), updatedBy: 'system' },
+    };
+    await expect(instance.assertReleaseKitSocialVariantAllowed(WORKSPACE_ID, item, {
+      platform: 'instagram', profileId: 'wrong-profile',
+    })).rejects.toThrow('approved only for');
+  });
+
+  test('posting gate rechecks revoked rights on the original Release Kit source', async () => {
+    const instance = service({ scope: 'campaign' });
+    const sourceFinal = materializeReleaseKitItem(root, {
+      workspaceId: WORKSPACE_ID,
       campaignId: WORKSPACE_ID,
-      platform: 'instagram',
-      profileId: 'artist secondary profile',
-      accountRole: 'secondary',
-    })).toEqual([]);
+      source: { type: 'output', outputId: SOURCE_OUTPUT_ID, assetId: 'source-video' },
+      sourcePath: join(getOutputDir(root, SOURCE_OUTPUT_ID), 'source.mp4'),
+      category: 'video',
+      subtype: 'performance-video',
+      promotedBy: 'user',
+    }).item;
+    const created = await instance.create(WORKSPACE_ID, {
+      ...request({ variantsPerSource: 1, sourceSelections: [{ origin: 'release-kit', sourceId: sourceFinal.id }] }),
+      requestedByClientId: 'client-1',
+    });
+    const started = await instance.start(WORKSPACE_ID, created.id, 1);
+    const render = writeRenderEvidence(instance, created.id, 'rights-bound.mp4', 'rights-bound-render');
+    const saved = await instance.recordResult(WORKSPACE_ID, 'editor-session-1', 'raw-video-editor', {
+      outputId: created.id,
+      expectedRevision: 2,
+      sourceId: started.socialVariantSet!.sources[0]!.id,
+      destinationIndex: 0,
+      title: 'Rights-bound cut', hook: 'Strong opening', editorialMode: 'direct', editorialIntent: 'A real recut.',
+      ...render,
+    });
+    const variant = saved.socialVariantSet!.variants[0]!;
+    const promoted = new ReleaseKitService({
+      getWorkspaceByNameOrId: (id) => id === WORKSPACE_ID
+        ? { id: WORKSPACE_ID, name: 'Campaign', rootPath: root, artistWorkspaceScope: 'campaign' } as never
+        : null,
+      assertWritePermission: () => {},
+    }).promote(WORKSPACE_ID, {
+      source: { type: 'output', outputId: saved.id, assetId: variant.assetId! },
+      category: 'video',
+      subtype: 'social-variant',
+    }, 'user');
+    expect(promoted.item.socialVariantIntent).toEqual({ variantId: variant.id, destination: variant.destination });
+    expect(promoted.item.usage.restrictions).toEqual(sourceFinal.usage.restrictions);
+    updateReleaseKitItemUsage(root, WORKSPACE_ID, WORKSPACE_ID, sourceFinal.id, {
+      restrictions: { needsRightsClearance: true },
+    });
+    await expect(instance.assertReleaseKitSocialVariantAllowed(WORKSPACE_ID, promoted.item, {
+      platform: 'instagram', profileId: 'artist secondary profile',
+    })).rejects.toThrow('restricted from variant creation');
   });
 });

@@ -128,6 +128,7 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
     setPendingReleaseKitOutput(manifest.id, assetId, {
       sourceWorkspaceId: manifest.workspaceId,
       socialVariantId: variantId,
+      targetCampaignId: campaignId,
     })
     try {
       if (campaignId !== currentCampaignId) await onSelectWorkspace(campaignId)

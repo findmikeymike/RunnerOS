@@ -6,6 +6,11 @@ import type {
   SocialVariantPlatform,
   SocialVariantSourceSelection,
 } from '@craft-agent/shared/outputs'
+import {
+  SOCIAL_VARIANT_MAX_PER_SOURCE,
+  SOCIAL_VARIANT_MAX_SOURCES,
+  SOCIAL_VARIANT_MAX_TOTAL,
+} from '@craft-agent/shared/outputs/social-variants'
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { Button } from '@/components/ui/button'
 import { useAppShellContext } from '@/context/AppShellContext'
@@ -74,9 +79,15 @@ export function SocialVariantSetupDrawer({
   const [trial, setTrial] = React.useState(false)
   const [direction, setDirection] = React.useState('')
   const [busy, setBusy] = React.useState(false)
+  const wasOpen = React.useRef(false)
 
   React.useEffect(() => {
-    if (!open) return
+    if (!open) {
+      wasOpen.current = false
+      return
+    }
+    if (wasOpen.current) return
+    wasOpen.current = true
     const initial = sources.find((source) => source.id === initialSourceId && !source.restriction)
       ?? sources.find((source) => !source.restriction)
     setSelectedIds(initial ? [initial.id] : [])
@@ -86,6 +97,10 @@ export function SocialVariantSetupDrawer({
     setProfileKey('')
     setTrial(false)
     setDirection('')
+  }, [initialSourceId, open, sources])
+
+  React.useEffect(() => {
+    if (!open) return
     let active = true
     void window.electronAPI.listSocialAccounts().then((doctor) => {
       if (!active) return
@@ -104,18 +119,18 @@ export function SocialVariantSetupDrawer({
       })))
     }).catch(() => { if (active) setProfiles([]) })
     return () => { active = false }
-  }, [initialSourceId, open, sources])
+  }, [open])
 
   const selectedSources = sources.filter((source) => selectedIds.includes(source.id))
   const total = selectedSources.length * variantsPerSource
-  const overLimit = total > 12
+  const overLimit = total > SOCIAL_VARIANT_MAX_TOTAL
   const selectedProfile = profiles.find((profile) => profile.key === profileKey)
 
   const toggleSource = (source: SocialVariantSetupSource) => {
     if (source.restriction) return
     setSelectedIds((current) => current.includes(source.id)
       ? current.filter((id) => id !== source.id)
-      : current.length >= 5 ? current : [...current, source.id])
+      : current.length >= SOCIAL_VARIANT_MAX_SOURCES ? current : [...current, source.id])
   }
 
   const chooseProfile = (nextKey: string) => {
@@ -128,8 +143,10 @@ export function SocialVariantSetupDrawer({
   }
 
   const create = async () => {
-    if (!selectedSources.length || !role || overLimit || total < 1) return
+    if (!selectedSources.length || !role || !selectedProfile || overLimit || total < 1) return
     setBusy(true)
+    let createdSessionId: string | null = null
+    let durableSetCreated = false
     try {
       const destination: SocialVariantDestinationIntent = {
         platform,
@@ -153,6 +170,7 @@ export function SocialVariantSetupDrawer({
         autoSendDraft: false,
         navigateOnCreate: false,
       })
+      createdSessionId = session.id
       const created = await window.electronAPI.createSocialVariantSet(workspaceId, {
         editorSessionId: session.id,
         sourceSelections: selectedSources.map((source) => source.selection),
@@ -160,6 +178,7 @@ export function SocialVariantSetupDrawer({
         variantsPerSource,
         ...(direction.trim() ? { direction: direction.trim() } : {}),
       })
+      durableSetCreated = true
       if (!created.socialVariantSet) throw new Error('The Variant Set was not saved correctly.')
       const started = await window.electronAPI.startSocialVariantSet(workspaceId, {
         outputId: created.id,
@@ -185,6 +204,9 @@ export function SocialVariantSetupDrawer({
       onOpenChange(false)
       toast.success(`Creating ${total} video variant${total === 1 ? '' : 's'}`)
     } catch (error) {
+      if (createdSessionId && !durableSetCreated) {
+        await window.electronAPI.deleteSession(createdSessionId).catch(() => {})
+      }
       toast.error('Could not start video variants', {
         description: error instanceof Error ? error.message : String(error),
       })
@@ -244,7 +266,7 @@ export function SocialVariantSetupDrawer({
                 <div className="text-[11px] text-white/32">Each edit must be materially different.</div>
               </div>
               <div className="flex items-center gap-1">
-                {[1, 2, 3, 4, 5].map((count) => (
+                {Array.from({ length: SOCIAL_VARIANT_MAX_PER_SOURCE }, (_, index) => index + 1).map((count) => (
                   <button key={count} type="button" onClick={() => setVariantsPerSource(count)} className={cn('h-7 w-7 rounded-md text-xs', variantsPerSource === count ? 'bg-white/90 text-black' : 'text-white/45 hover:bg-white/[0.05]')}>{count}</button>
                 ))}
               </div>
@@ -262,7 +284,7 @@ export function SocialVariantSetupDrawer({
               </select>
             </div>
             <select value={profileKey} onChange={(event) => chooseProfile(event.target.value)} className={cn(SELECT_CLASS, 'mt-2 w-full')}>
-              <option value="">Choose the exact account later</option>
+              <option value="">Choose the exact account</option>
               {profiles.map((profile) => <option key={profile.key} value={profile.key}>{profile.label}</option>)}
             </select>
             <p className="mt-1.5 text-[10px] leading-4 text-white/26">Account role is your explicit label for how this profile will be used.</p>
@@ -289,9 +311,9 @@ export function SocialVariantSetupDrawer({
         <div className="border-t border-white/[0.06] px-5 py-4">
           <div className="mb-3 flex items-center justify-between text-xs">
             <span className="text-white/36">{selectedSources.length} video{selectedSources.length === 1 ? '' : 's'} × {variantsPerSource}</span>
-            <span className={overLimit ? 'text-red-300' : 'font-medium text-white/76'}>{total} total{overLimit ? ' · max 12' : ''}</span>
+            <span className={overLimit ? 'text-red-300' : 'font-medium text-white/76'}>{total} total{overLimit ? ` · max ${SOCIAL_VARIANT_MAX_TOTAL}` : ''}</span>
           </div>
-          <Button className="h-10 w-full bg-[#f97316] text-black hover:bg-[#fb923c]" disabled={busy || !selectedSources.length || !role || overLimit} onClick={() => void create()}>
+          <Button className="h-10 w-full bg-[#f97316] text-black hover:bg-[#fb923c]" disabled={busy || !selectedSources.length || !role || !selectedProfile || overLimit} onClick={() => void create()}>
             {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Scissors className="mr-2 h-4 w-4" />}
             {busy ? 'Starting…' : `Create ${total || ''} variant${total === 1 ? '' : 's'}`}
           </Button>

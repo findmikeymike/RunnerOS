@@ -132,6 +132,32 @@ describe('social video repurposing', () => {
     expect(result.errors.join(' ')).toContain('cosmetic only');
   });
 
+  test('refuses a shifted near-full-source edit', () => {
+    const brief = validBrief({
+      variants: [{ ...validBrief().variants[0], segments: [{ start: 1.5, end: 60 }] }],
+    });
+    const result = validateRepurposeBrief(brief, analysisFixture(60));
+    expect(result.ok).toBe(false);
+    expect(result.errors.join(' ')).toContain('cosmetic only');
+  });
+
+  test('refuses near-duplicate timelines shifted by a hundredth of a second', () => {
+    const first = { ...validBrief().variants[0], segments: [{ start: 4, end: 14 }] };
+    const brief = validBrief({
+      variants: [first, { ...first, id: 'tiny-shift', title: 'Tiny shift', segments: [{ start: 4.01, end: 14.01 }] }],
+    });
+    const result = validateRepurposeBrief(brief, analysisFixture());
+    expect(result.ok).toBe(false);
+    expect(result.errors.join(' ')).toContain('effectively the same edit');
+  });
+
+  test('handles an empty segment list without crashing', () => {
+    const brief = validBrief({ variants: [{ ...validBrief().variants[0], segments: [] }] });
+    const result = validateRepurposeBrief(brief, analysisFixture());
+    expect(result.ok).toBe(false);
+    expect(result.errors.join(' ')).toContain('at least one selected source segment');
+  });
+
   test('requires the brief to bind to the exact analyzed source hash', () => {
     const brief = validBrief({ source: { campaignId: 'campaign-1', releaseKitItemId: 'video-1' } });
     const result = validateRepurposeBrief(brief, analysisFixture());

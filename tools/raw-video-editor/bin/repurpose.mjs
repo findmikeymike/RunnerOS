@@ -57,17 +57,12 @@ function timelineOverlapRatio(left, right) {
   return Math.min(1, overlap / Math.min(leftDuration, rightDuration));
 }
 
-function sequenceSignature(segments) {
-  return segments.map((segment) => `${segment.start.toFixed(2)}-${segment.end.toFixed(2)}`).join('|');
-}
-
 function hasMeaningfulTimelineChange(segments, sourceDuration) {
   if (!segments.length) return false;
   const selectedDuration = selectedSeconds(segments);
-  const openingShift = segments[0].start >= Math.min(1.5, sourceDuration * 0.1);
   const meaningfulReduction = selectedDuration <= sourceDuration * 0.85;
   const reordered = segments.some((segment, index) => index > 0 && segment.start < segments[index - 1].start);
-  return openingShift || meaningfulReduction || reordered;
+  return meaningfulReduction || reordered;
 }
 
 function dimensions(aspect) {
@@ -313,9 +308,9 @@ export function validateRepurposeBrief(brief, analysis) {
       const a = variants[left];
       const b = variants[right];
       const overlap = timelineOverlapRatio(a.segments, b.segments);
-      const sameOpening = Math.abs(a.segments[0].start - b.segments[0].start) < 1.5;
-      const sameSequence = sequenceSignature(a.segments) === sequenceSignature(b.segments);
-      if (overlap > 0.9 && sameOpening && sameSequence) {
+      const sameOpening = a.segments.length > 0 && b.segments.length > 0
+        && Math.abs(a.segments[0].start - b.segments[0].start) < 1.5;
+      if (overlap > 0.9 && sameOpening) {
         errors.push(`${a.title} and ${b.title} are effectively the same edit. Give them different openings, selections, duration, or order.`);
       } else if (overlap > 0.8 && sameOpening) {
         warnings.push(`${a.title} and ${b.title} are borderline similar; review them side by side before approval.`);
@@ -451,6 +446,7 @@ export async function executeRepurpose({ source, outDir, briefPath, render = fal
       path: analysis.source.path,
       file: analysis.source.file,
       sha256: analysis.source.sha256,
+      durationSeconds: analysis.source.duration,
       releaseKitItemId: brief?.source?.releaseKitItemId || null,
       campaignId: brief?.source?.campaignId || null,
     },

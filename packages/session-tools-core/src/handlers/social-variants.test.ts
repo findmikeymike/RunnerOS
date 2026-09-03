@@ -55,10 +55,12 @@ describe('social variant session tools', () => {
       outputId: ' variants-1 ', expectedRevision: 1, sourceId: ' source-1 ', destinationIndex: 0,
       title: ' Cut ', hook: ' Hook ', editorialMode: ' Mode ', editorialIntent: ' Intent ',
       filePath: ' /workspace/a.mp4 ',
+      manifestPath: ' /workspace/variant-manifest.json ',
+      manifestVariantId: ' variant-a ',
     })
 
     expect(result.isError).toBe(false)
-    expect(captured).toMatchObject({ outputId: 'variants-1', sourceId: 'source-1', filePath: '/workspace/a.mp4' })
+    expect(captured).toMatchObject({ outputId: 'variants-1', sourceId: 'source-1', filePath: '/workspace/a.mp4', manifestPath: '/workspace/variant-manifest.json', manifestVariantId: 'variant-a' })
   })
 
   it('queries one exact campaign destination and defaults to unscheduled results', async () => {

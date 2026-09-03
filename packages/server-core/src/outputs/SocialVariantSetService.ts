@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { closeSync, constants, createReadStream, existsSync, fstatSync, mkdirSync, openSync, readSync, realpathSync, renameSync, rmSync, statSync, writeSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync } from 'node:fs';
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   SOCIAL_VARIANT_MAX_SOURCES,
@@ -15,6 +15,7 @@ import {
   listOutputManifests,
   readOutput,
   resolveOutputAssetPath,
+  withOutputBundleLock,
   withOutputBundleLockAsync,
   writeOutputManifest,
   type CreateSocialVariantSetRequest,
@@ -24,6 +25,7 @@ import {
   type RebindSocialVariantSetRequest,
   type ListUsableSocialVariantsRequest,
   type SocialVariantDestinationIntent,
+  type SocialVariantRecord,
   type SocialVariantSource,
   type SocialVariantSourceSelection,
   type UsableSocialVariant,
@@ -33,6 +35,7 @@ import {
   resolveVerifiedReleaseKitItemPathWhileLocked,
   withReleaseKitLockAsync,
 } from '@craft-agent/shared/release-kit';
+import type { ReleaseKitItem } from '@craft-agent/shared/release-kit';
 import {
   loadArtistVaultManifest,
   resolveArtistVaultAssetPath,
@@ -43,6 +46,7 @@ import {
   summarizeReleaseKitItemUses,
 } from '@craft-agent/shared/scheduled-work';
 import { loadContextDoc } from '@craft-agent/shared/workspace-context';
+import { assertPathWithinRealRoot, verifiedCopyFileSync } from '@craft-agent/shared/workspaces/verified-copy';
 
 export interface SocialVariantWorkspace {
   id: string;
@@ -75,7 +79,7 @@ export class SocialVariantSetService {
     const destinationIntents = input.destinationIntents.map((intent) => this.normalizeDestination(intent));
     if (!destinationIntents.every(isSocialVariantDestinationIntent)) throw new Error('One or more destination choices are invalid.');
     for (const intent of destinationIntents) {
-      if (!intent.profileId) continue;
+      if (!intent.profileId) throw new Error('Every social variant destination requires an exact connected account.');
       if (!this.deps.validateSocialProfile) throw new Error('Social profile validation is unavailable on this host.');
       const result = await this.deps.validateSocialProfile({ platform: intent.platform, profileId: intent.profileId });
       if (!result.ready) throw new Error(result.reason ?? `Social profile is not ready: ${intent.platform}/${intent.profileId}`);
@@ -204,6 +208,87 @@ export class SocialVariantSetService {
     return output;
   }
 
+  getRenderIngressDir(workspaceId: string, outputId: string): string {
+    const workspace = this.requireWorkspace(workspaceId);
+    const output = readOutput(workspace.rootPath, outputId);
+    if (!output?.socialVariantSet || output.workspaceId !== workspaceId) throw new Error(`Social Variant Set not found: ${outputId}`);
+    const ingress = join(getOutputDir(workspace.rootPath, outputId), 'render-staging');
+    mkdirSync(ingress, { recursive: true });
+    return assertPathWithinRealRoot(getOutputDir(workspace.rootPath, outputId), ingress);
+  }
+
+  async assertReleaseKitSocialVariantAllowed(
+    campaignWorkspaceId: string,
+    item: ReleaseKitItem,
+    destination: { platform: string; profileId: string; accountSetId?: string },
+  ): Promise<{ sourceWorkspaceId: string; outputId: string; variantId: string } | null> {
+    if (item.source.type !== 'output' || !item.source.assetId) return null;
+    const sourceAssetId = item.source.assetId;
+    const sourceWorkspaceId = item.source.sourceWorkspaceId?.trim() || campaignWorkspaceId;
+    const sourceWorkspace = this.requireWorkspace(sourceWorkspaceId);
+    const output = readOutput(sourceWorkspace.rootPath, item.source.outputId);
+    if (!output?.socialVariantSet) return null;
+    const variant = output.socialVariantSet.variants.find((candidate) => candidate.assetId === sourceAssetId);
+    if (!variant || variant.state !== 'ready' || !variant.sha256 || !variant.renderEvidence) {
+      throw new Error('This social variant is missing current host-verified render evidence. Revise it before posting.');
+    }
+    const asset = output.assets.find((candidate) => candidate.id === variant.assetId);
+    if (!asset?.sha256 || asset.sha256.toLowerCase() !== variant.sha256.toLowerCase() || item.sha256.toLowerCase() !== variant.sha256.toLowerCase()) {
+      throw new Error('This social variant no longer matches its reviewed render.');
+    }
+    const source = output.socialVariantSet.sources.find((candidate) => candidate.id === variant.sourceId);
+    if (!source) throw new Error('This social variant has lost its pinned source.');
+    await this.assertPinnedSourceCurrent(sourceWorkspace, source);
+    if (item.socialVariantIntent && (
+      item.socialVariantIntent.variantId !== variant.id
+      || !sameDestination(item.socialVariantIntent.destination, variant.destination)
+    )) {
+      throw new Error('This Release Kit snapshot no longer matches its saved social destination intent.');
+    }
+    if (!variant.destination.profileId) throw new Error('This variant is not bound to an exact connected account. Revise it before posting.');
+    if (variant.destination.platform !== destination.platform || variant.destination.profileId !== destination.profileId) {
+      throw new Error(`This variant is approved only for ${variant.destination.labelSnapshot ?? `${variant.destination.platform}/${variant.destination.profileId}`}.`);
+    }
+    if ((variant.destination.accountSetId ?? '') !== (destination.accountSetId ?? '')) {
+      throw new Error('This variant is approved for a different connected account set.');
+    }
+    if (variant.destination.mode === 'trial') {
+      throw new Error('Instagram Trial publishing is not supported yet. Artist OS will not post this as a normal Reel.');
+    }
+    return { sourceWorkspaceId, outputId: output.id, variantId: variant.id };
+  }
+
+  linkScheduledUse(
+    binding: { sourceWorkspaceId: string; outputId: string; variantId: string },
+    releaseKitItemId: string,
+    orderId: string,
+  ): void {
+    const workspace = this.requireWorkspace(binding.sourceWorkspaceId);
+    withOutputBundleLock(workspace.rootPath, binding.outputId, () => {
+      const output = readOutput(workspace.rootPath, binding.outputId);
+      const set = output?.socialVariantSet;
+      if (!output || !set) throw new Error('Social Variant Set disappeared while linking its scheduled use.');
+      const index = set.variants.findIndex((candidate) => candidate.id === binding.variantId);
+      if (index < 0) throw new Error('Social variant disappeared while linking its scheduled use.');
+      const selected = set.variants[index]!;
+      if (selected.releaseKitItemId === releaseKitItemId && selected.scheduledWorkOrderIds.includes(orderId)) return;
+      const variants = [...set.variants];
+      variants[index] = {
+        ...selected,
+        releaseKitItemId,
+        scheduledWorkOrderIds: [...new Set([...selected.scheduledWorkOrderIds, orderId])],
+      };
+      const now = this.nextTimestamp(set.updatedAt);
+      const nextSet = advanceSocialVariantSetRevision(set, {
+        status: set.status,
+        variants,
+        ...(set.attention ? { attention: set.attention } : {}),
+      }, now);
+      writeOutputManifest(workspace.rootPath, { ...output, socialVariantSet: nextSet, updatedAt: now });
+    });
+    this.deps.emitOutputsUpdated?.(workspace.id);
+  }
+
   async recordResult(
     workspaceId: string,
     editorSessionId: string,
@@ -272,21 +357,53 @@ export class SocialVariantSetService {
       }
 
       const ready = Boolean(input.filePath);
-      if (ready) await this.assertPinnedSourceCurrent(workspace, source);
+      if (ready) {
+        try {
+          await this.assertPinnedSourceCurrent(workspace, source);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const now = this.nextTimestamp(currentSet.updatedAt);
+          const set = advanceSocialVariantSetRevision(currentSet, {
+            status: 'needs-attention',
+            variants: currentSet.variants,
+            attention: { code: 'source-unavailable', message, sourceId: source.id, updatedAt: now },
+          }, now);
+          writeOutputManifest(workspace.rootPath, {
+            ...current,
+            summary: `Needs attention: ${message}`,
+            updatedAt: now,
+            socialVariantSet: set,
+          });
+          throw error;
+        }
+      }
       const replacedVariant = replacementIndex >= 0 ? currentSet.variants[replacementIndex]! : undefined;
       const variantId = replacedVariant?.state === 'failed' ? replacedVariant.id : randomUUID();
       let asset = undefined as OutputManifest['assets'][number] | undefined;
+      let renderEvidence: SocialVariantRecord['renderEvidence'];
+      let measuredDurationSeconds: number | undefined;
+      let measuredAspectRatio: string | undefined;
       let copiedPath: string | undefined;
+      let committed = false;
       try {
         if (input.filePath) {
-          const sourcePath = this.assertWorkspaceFile(workspace.rootPath, input.filePath);
+          const ingressRoot = this.getRenderIngressDir(workspaceId, current.id);
+          const sourcePath = this.assertIngressFile(ingressRoot, input.filePath);
           if (!isVideoAsset(sourcePath)) throw new Error('Variant result must be a supported video file.');
+          const evidence = await this.readAndValidateRenderEvidence({
+            ingressRoot,
+            manifestPath: input.manifestPath!,
+            manifestVariantId: input.manifestVariantId!,
+            filePath: sourcePath,
+            pinnedSourceSha256: source.sha256,
+            existingVariants: currentSet.variants.filter((candidate) => candidate.id !== replacedVariant?.id),
+          });
           const extension = extname(sourcePath).toLowerCase();
           const relativePath = `variants/${variantId}${extension}`;
           const finalPath = join(getOutputDir(workspace.rootPath, current.id), relativePath);
           const tempPath = `${finalPath}.${process.pid}.${randomUUID()}.tmp`;
           mkdirSync(dirname(finalPath), { recursive: true });
-          this.copyVerifiedWorkspaceFile(workspace.rootPath, sourcePath, tempPath);
+          verifiedCopyFileSync(sourcePath, tempPath, { sourceRootPath: realpathSync(ingressRoot), destinationRootPath: getOutputDir(workspace.rootPath, current.id) });
           renameSync(tempPath, finalPath);
           copiedPath = finalPath;
           const fileStat = statSync(finalPath);
@@ -311,8 +428,13 @@ export class SocialVariantSetService {
             sizeBytes: fileStat.size,
             sha256,
           };
+          renderEvidence = evidence.record;
+          measuredDurationSeconds = evidence.durationSeconds;
+          measuredAspectRatio = evidence.aspectRatio;
         }
 
+        const durationSeconds = input.durationSeconds ?? measuredDurationSeconds;
+        const aspectRatio = input.aspectRatio?.trim() || measuredAspectRatio;
         const variant = {
           id: variantId,
           sourceId: source.id,
@@ -322,13 +444,14 @@ export class SocialVariantSetService {
           editorialIntent: input.editorialIntent.trim(),
           destination,
           ...(asset ? { assetId: asset.id, sha256: asset.sha256 } : {}),
-          ...(input.durationSeconds !== undefined ? { durationSeconds: input.durationSeconds } : {}),
-          ...(input.aspectRatio?.trim() ? { aspectRatio: input.aspectRatio.trim() } : {}),
+          ...(durationSeconds !== undefined ? { durationSeconds } : {}),
+          ...(aspectRatio ? { aspectRatio } : {}),
           state: asset ? 'ready' as const : 'failed' as const,
           ...(!asset ? { failureReason: input.failureReason!.trim() } : {}),
           scheduledWorkOrderIds: replacementIndex >= 0
             ? currentSet.variants[replacementIndex]!.scheduledWorkOrderIds
             : [],
+          ...(renderEvidence ? { renderEvidence } : {}),
         };
         const variants = [...currentSet.variants];
         if (replacementIndex >= 0) variants[replacementIndex] = variant;
@@ -336,18 +459,24 @@ export class SocialVariantSetService {
         const readyCount = variants.filter((candidate) => candidate.state === 'ready').length;
         const failedCount = variants.filter((candidate) => candidate.state === 'failed').length;
         const complete = variants.length === currentSet.request.totalRequested;
-        const status = complete && readyCount === currentSet.request.totalRequested
-          ? 'ready' as const
-          : readyCount > 0
-            ? 'partially-ready' as const
-            : failedCount > 0
-              ? 'needs-attention' as const
-              : 'rendering' as const;
+        const preservedSourceAttention = currentSet.attention?.code === 'source-unavailable'
+          && currentSet.attention.sourceId !== source.id
+          ? currentSet.attention
+          : undefined;
+        const status = preservedSourceAttention
+          ? 'needs-attention' as const
+          : complete && readyCount === currentSet.request.totalRequested
+            ? 'ready' as const
+            : readyCount > 0
+              ? 'partially-ready' as const
+              : failedCount > 0
+                ? 'needs-attention' as const
+                : 'rendering' as const;
         const now = this.nextTimestamp(currentSet.updatedAt);
         const set = advanceSocialVariantSetRevision(currentSet, {
           status,
           variants,
-          ...(status === 'needs-attention' ? {
+          ...(preservedSourceAttention ? { attention: preservedSourceAttention } : status === 'needs-attention' ? {
             attention: {
               code: 'render-failed' as const,
               message: input.failureReason!.trim(),
@@ -356,8 +485,11 @@ export class SocialVariantSetService {
             },
           } : {}),
         }, now);
+        const obsoleteAsset = replacementIndex >= 0 && asset
+          ? current.assets.find((candidate) => candidate.id === replacedVariant?.assetId)
+          : undefined;
         const assets = replacementIndex >= 0
-          ? current.assets.filter((candidate) => candidate.id !== `social-variant-${variantId}`)
+          ? current.assets.filter((candidate) => candidate.id !== replacedVariant?.assetId && candidate.id !== `social-variant-${variantId}`)
           : [...current.assets];
         if (asset) assets.push(asset);
         const next: OutputManifest = {
@@ -368,9 +500,16 @@ export class SocialVariantSetService {
           socialVariantSet: set,
         };
         writeOutputManifest(workspace.rootPath, next);
+        committed = true;
+        if (obsoleteAsset) {
+          const obsoletePath = resolveOutputAssetPath(workspace.rootPath, current.id, obsoleteAsset.path);
+          if (obsoletePath) {
+            try { rmSync(obsoletePath, { force: true }); } catch { /* The committed replacement remains authoritative. */ }
+          }
+        }
         return next;
       } catch (error) {
-        if (copiedPath) rmSync(copiedPath, { force: true });
+        if (copiedPath && !committed) rmSync(copiedPath, { force: true });
         throw error;
       }
     });
@@ -389,7 +528,8 @@ export class SocialVariantSetService {
       if (index < 0) throw new Error(`Social variant not found: ${input.variantId}`);
       const selected = currentSet.variants[index]!;
       if (selected.state === 'archived') return current;
-      if (selected.scheduledWorkOrderIds.length > 0) {
+      const scheduledUses = this.findScheduledUsesForVariant(workspace, current, selected);
+      if (scheduledUses.length > 0) {
         throw new Error('This variant has scheduled work. Open that order before archiving it.');
       }
       const variants = [...currentSet.variants];
@@ -487,7 +627,7 @@ export class SocialVariantSetService {
       if (!set || set.scope !== 'campaign' || set.campaignId !== input.campaignId) continue;
 
       for (const variant of set.variants) {
-        if (variant.state !== 'ready' || !variant.assetId || !variant.sha256) continue;
+        if (variant.state !== 'ready' || !variant.assetId || !variant.sha256 || !variant.renderEvidence) continue;
         const source = set.sources.find((candidate) => candidate.id === variant.sourceId);
         if (!source) continue;
         try {
@@ -498,7 +638,7 @@ export class SocialVariantSetService {
         const variantSha256 = variant.sha256.toLowerCase();
         if (variant.destination.platform !== input.platform || variant.destination.accountRole !== input.accountRole) continue;
         if (variant.destination.profileId !== input.profileId.trim()) continue;
-        if (variant.destination.mode === 'trial' && (input.platform !== 'instagram' || variant.destination.trialRequested !== true)) continue;
+        if (variant.destination.mode !== 'standard') continue;
         const asset = output.assets.find((candidate) => candidate.id === variant.assetId);
         if (!asset || asset.sha256?.toLowerCase() !== variantSha256) continue;
         const assetPath = resolveOutputAssetPath(workspace.rootPath, output.id, asset.path);
@@ -513,7 +653,7 @@ export class SocialVariantSetService {
           ? summarizeReleaseKitItemUses(scheduled.work, snapshot.id).filter((use) => use.platform === input.platform && use.profileId === input.profileId.trim())
           : [];
         const activeUses = uses.filter((use) => use.status !== 'done' && use.status !== 'canceled');
-        if (requireUnscheduled && (activeUses.length > 0 || uses.some((use) => use.status === 'done'))) continue;
+        if (requireUnscheduled && (variant.scheduledWorkOrderIds.length > 0 || activeUses.length > 0 || uses.some((use) => use.status === 'done'))) continue;
         const status: UsableSocialVariant['status'] = uses.some((use) => use.status === 'needs-attention')
           ? 'needs-attention'
           : uses.some((use) => use.status === 'done' && use.receipt)
@@ -568,54 +708,100 @@ export class SocialVariantSetService {
     const hasFailure = typeof input.failureReason === 'string' && input.failureReason.trim().length > 0;
     if (hasFile === hasFailure) throw new Error('Record exactly one result: a rendered file or a failure reason.');
     if (input.failureReason && input.failureReason.length > 1_000) throw new Error('failureReason is too long.');
+    if (hasFile && (!input.manifestPath?.trim() || !input.manifestVariantId?.trim())) {
+      throw new Error('Ready variants require the repurpose manifest path and exact manifest variant id.');
+    }
     if (input.durationSeconds !== undefined && (!Number.isFinite(input.durationSeconds) || input.durationSeconds <= 0)) throw new Error('durationSeconds must be positive.');
     if (input.aspectRatio !== undefined && (!input.aspectRatio.trim() || input.aspectRatio.length > 32)) throw new Error('aspectRatio is invalid.');
   }
 
-  private assertWorkspaceFile(workspaceRootPath: string, requestedPath: string): string {
-    const root = realpathSync(resolve(workspaceRootPath));
+  private findScheduledUsesForVariant(
+    workspace: SocialVariantWorkspace,
+    output: OutputManifest,
+    variant: SocialVariantRecord,
+  ): string[] {
+    if (workspace.artistWorkspaceScope !== 'campaign' || !variant.assetId || !variant.sha256) return [];
+    const releaseKit = loadReleaseKitManifest(workspace.rootPath, workspace.id, workspace.id);
+    const snapshot = releaseKit.items.find((item) => item.source.type === 'output'
+      && item.source.outputId === output.id
+      && item.source.assetId === variant.assetId
+      && (item.source.sourceWorkspaceId ?? workspace.id) === workspace.id
+      && item.sha256.toLowerCase() === variant.sha256!.toLowerCase());
+    if (!snapshot) return [];
+    const scheduled = parseScheduledWorkDocResult(
+      loadContextDoc(workspace.rootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined,
+      workspace.id,
+    );
+    if (!scheduled.ok) throw new Error(`Cannot archive while Scheduled Work is invalid: ${scheduled.error}`);
+    return summarizeReleaseKitItemUses(scheduled.work, snapshot.id)
+      .filter((use) => use.status !== 'done' && use.status !== 'canceled')
+      .map((use) => use.orderId);
+  }
+
+  private assertIngressFile(ingressRootPath: string, requestedPath: string): string {
+    const root = realpathSync(resolve(ingressRootPath));
     const path = realpathSync(resolve(requestedPath));
     const relation = relative(root, path);
     if (relation === '..' || relation.startsWith(`..${sep}`) || isAbsolute(relation)) {
-      throw new Error('Variant result must be inside the current workspace.');
+      throw new Error('Variant result must come from this Variant Set render-staging directory.');
     }
     if (!statSync(path).isFile()) throw new Error('Variant result is not a file.');
     return path;
   }
 
-  private copyVerifiedWorkspaceFile(workspaceRootPath: string, requestedPath: string, destinationPath: string): void {
-    const verifiedPath = this.assertWorkspaceFile(workspaceRootPath, requestedPath);
-    const before = statSync(verifiedPath);
-    const noFollow = typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0;
-    let sourceFd: number | undefined;
-    let destinationFd: number | undefined;
-    let failure: unknown;
-    try {
-      sourceFd = openSync(verifiedPath, constants.O_RDONLY | noFollow);
-      const opened = fstatSync(sourceFd);
-      if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino) {
-        throw new Error('Variant result changed while it was being secured for import.');
-      }
-      destinationFd = openSync(destinationPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600);
-      const buffer = Buffer.allocUnsafe(1024 * 1024);
-      while (true) {
-        const bytesRead = readSync(sourceFd, buffer, 0, buffer.length, null);
-        if (bytesRead === 0) break;
-        let offset = 0;
-        while (offset < bytesRead) {
-          offset += writeSync(destinationFd, buffer, offset, bytesRead - offset);
-        }
-      }
-    } catch (error) {
-      failure = error;
-    } finally {
-      if (destinationFd !== undefined) closeSync(destinationFd);
-      if (sourceFd !== undefined) closeSync(sourceFd);
+  private async readAndValidateRenderEvidence(input: {
+    ingressRoot: string;
+    manifestPath: string;
+    manifestVariantId: string;
+    filePath: string;
+    pinnedSourceSha256: string;
+    existingVariants: SocialVariantRecord[];
+  }): Promise<{ record: NonNullable<SocialVariantRecord['renderEvidence']>; durationSeconds?: number; aspectRatio?: string }> {
+    const manifestPath = this.assertIngressFile(input.ingressRoot, input.manifestPath);
+    if (manifestPath !== realpathSync(resolve(input.ingressRoot, 'variant-manifest.json'))) {
+      throw new Error('Render evidence must be this Variant Set\'s variant-manifest.json.');
     }
-    if (failure) {
-      rmSync(destinationPath, { force: true });
-      throw failure;
+    const body = readFileSync(manifestPath, 'utf8');
+    let parsed: unknown;
+    try { parsed = JSON.parse(body); } catch { throw new Error('Repurpose render manifest is invalid JSON.'); }
+    if (!isRecord(parsed) || !isRecord(parsed.source) || !isRecord(parsed.validation) || !Array.isArray(parsed.variants)) {
+      throw new Error('Repurpose render manifest is malformed.');
     }
+    if (parsed.source.sha256 !== input.pinnedSourceSha256.toLowerCase()) throw new Error('Repurpose manifest does not match the pinned source.');
+    const sourceDuration = Number(parsed.source.durationSeconds);
+    if (!Number.isFinite(sourceDuration) || sourceDuration <= 0) throw new Error('Repurpose manifest is missing source duration evidence.');
+    if (!['ready', 'ready-with-warnings'].includes(String(parsed.validation.status))) throw new Error('Repurpose timeline gate did not approve this render.');
+    const entry = parsed.variants.find((candidate) => isRecord(candidate) && candidate.id === input.manifestVariantId);
+    if (!isRecord(entry) || entry.renderStatus !== 'ready' || entry.meaningfulDifference !== 'meaningfully-different' || entry.assessmentBasis !== 'local-editorial-timeline-gate') {
+      throw new Error('Repurpose manifest does not contain an approved ready entry for this variant.');
+    }
+    if (!isRecord(entry.output) || typeof entry.output.path !== 'string' || realpathSync(resolve(entry.output.path)) !== input.filePath) {
+      throw new Error('Repurpose manifest output does not match the submitted file.');
+    }
+    const outputSha256 = await hashFileSha256(input.filePath);
+    if (entry.output.sha256 !== outputSha256) throw new Error('Repurpose manifest output hash does not match the submitted file.');
+    const segments = normalizeEvidenceSegments(entry.sourceSegments, sourceDuration);
+    if (!isMeaningfullyDifferentTimeline(segments, sourceDuration)) {
+      throw new Error('Repurpose evidence describes a cosmetic or near-full-source edit.');
+    }
+    for (const existing of input.existingVariants) {
+      if (existing.state !== 'ready' || !existing.renderEvidence) continue;
+      if (timelinesEffectivelyDuplicate(segments, existing.renderEvidence.sourceSegments)) {
+        throw new Error(`This render is editorially too close to the saved variant "${existing.title}".`);
+      }
+    }
+    return {
+      record: {
+        manifestSha256: createHash('sha256').update(body).digest('hex'),
+        sourceSha256: input.pinnedSourceSha256.toLowerCase(),
+        sourceDurationSeconds: sourceDuration,
+        sourceSegments: segments,
+        meaningfulDifference: 'meaningfully-different',
+        assessmentBasis: 'local-editorial-timeline-gate',
+      },
+      ...(typeof entry.output.duration === 'number' ? { durationSeconds: entry.output.duration } : {}),
+      ...(typeof entry.output.width === 'number' && typeof entry.output.height === 'number' ? { aspectRatio: `${entry.output.width}:${entry.output.height}` } : {}),
+    };
   }
 
   private requireSupportedScope(workspace: SocialVariantWorkspace): 'hq' | 'campaign' {
@@ -796,4 +982,43 @@ function hashFileSha256(path: string): Promise<string> {
     stream.on('error', rejectHash);
     stream.on('end', () => resolveHash(hash.digest('hex')));
   });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeEvidenceSegments(value: unknown, sourceDurationSeconds: number): Array<{ start: number; end: number }> {
+  if (!Array.isArray(value) || value.length === 0) throw new Error('Repurpose manifest has no source-segment evidence.');
+  return value.map((candidate) => {
+    if (!isRecord(candidate)) throw new Error('Repurpose manifest contains malformed source-segment evidence.');
+    const start = Number(candidate.start);
+    const end = Number(candidate.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start || end > sourceDurationSeconds + 0.05) {
+      throw new Error('Repurpose manifest contains invalid source-segment evidence.');
+    }
+    return { start, end };
+  });
+}
+
+function isMeaningfullyDifferentTimeline(segments: Array<{ start: number; end: number }>, sourceDurationSeconds: number): boolean {
+  const selectedSeconds = segments.reduce((sum, segment) => sum + segment.end - segment.start, 0);
+  const materiallyShorter = selectedSeconds <= sourceDurationSeconds * 0.85;
+  const reordered = segments.some((segment, index) => index > 0 && segment.start < segments[index - 1]!.start);
+  return materiallyShorter || reordered;
+}
+
+function timelineOverlapRatio(left: Array<{ start: number; end: number }>, right: Array<{ start: number; end: number }>): number {
+  const overlap = left.reduce((total, a) => total + right.reduce((sum, b) => sum + Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start)), 0), 0);
+  const shorter = Math.min(
+    left.reduce((sum, segment) => sum + segment.end - segment.start, 0),
+    right.reduce((sum, segment) => sum + segment.end - segment.start, 0),
+  );
+  return shorter > 0 ? Math.min(1, overlap / shorter) : 0;
+}
+
+function timelinesEffectivelyDuplicate(left: Array<{ start: number; end: number }>, right: Array<{ start: number; end: number }>): boolean {
+  if (left.length === 0 || right.length === 0) return false;
+  const sameOpening = Math.abs(left[0]!.start - right[0]!.start) < 1.5;
+  return sameOpening && timelineOverlapRatio(left, right) > 0.9;
 }

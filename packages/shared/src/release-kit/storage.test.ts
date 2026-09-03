@@ -52,6 +52,36 @@ describe('release kit storage', () => {
     expect(readFileSync(snapshot, 'utf8')).toBe('master-v1');
   });
 
+  test('persists the exact destination intent on a social variant snapshot', () => {
+    const workspace = tempWorkspace();
+    const source = join(workspace, 'variant.mp4');
+    writeFileSync(source, 'variant-video');
+    const socialVariantIntent = {
+      variantId: 'variant-1',
+      destination: {
+        platform: 'instagram' as const,
+        accountRole: 'fan-page' as const,
+        profileId: 'fan-profile-1',
+        accountSetId: 'fan-set-1',
+        mode: 'standard' as const,
+      },
+    };
+
+    const result = materializeReleaseKitItem(workspace, {
+      workspaceId: 'workspace-1',
+      campaignId: 'campaign-1',
+      source: { type: 'output', outputId: 'variant-set-1', assetId: 'variant-asset-1' },
+      sourcePath: source,
+      category: 'video',
+      subtype: 'social-variant',
+      promotedBy: 'user',
+      socialVariantIntent,
+    });
+
+    expect(result.item.socialVariantIntent).toEqual(socialVariantIntent);
+    expect(loadReleaseKitManifest(workspace, 'workspace-1', 'campaign-1').items[0]?.socialVariantIntent).toEqual(socialVariantIntent);
+  });
+
   test('preserves multiple finals and scopes Primary to category and subtype', () => {
     const workspace = tempWorkspace();
     const first = join(workspace, 'cover-a.png');

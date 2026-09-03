@@ -98,6 +98,7 @@ describe('Release Kit repurposing kickoff', () => {
     expect(prompt).toContain('Let\'s get the direction right and begin')
     expect(prompt).toContain('Variant Set Output: variant-set-1')
     expect(prompt).toContain('do not pause for a separate plan approval')
+    expect(prompt).toContain('Do not publish, schedule, or spend money')
     expect(prompt).toContain('Posting approval comes later')
     expect(prompt).not.toContain('Trial requested')
   })
