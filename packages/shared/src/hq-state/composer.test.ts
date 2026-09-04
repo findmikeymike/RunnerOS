@@ -258,6 +258,40 @@ describe('HQ State of Play composer', () => {
     expect(state.attention[0]?.kind).toBe('approval');
   });
 
+  test('several things waiting say so instead of hiding behind the newest', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [profileDoc()],
+      operational: operational({
+        approvals: [
+          operationalItem('output-1', 'Approve teaser cut', 'output', 'pending'),
+          operationalItem('output-2', 'Two Colorado nights', 'output', 'pending'),
+          operationalItem('output-3', 'Site change', 'output', 'pending'),
+        ],
+      }),
+    });
+
+    const approval = state.attention.find((item) => item.kind === 'approval');
+    // A queue of three must not read as a queue of one.
+    expect(approval?.text).toContain('2 others are waiting for you');
+  });
+
+  test('exactly two reads as one other, not "1 others"', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [profileDoc()],
+      operational: operational({
+        approvals: [
+          operationalItem('output-1', 'Approve teaser cut', 'output', 'pending'),
+          operationalItem('output-2', 'Two Colorado nights', 'output', 'pending'),
+        ],
+      }),
+    });
+
+    expect(state.attention.find((item) => item.kind === 'approval')?.text)
+      .toContain('1 other is waiting for you');
+  });
+
   test('keeps an abstract active goal out of the headline recommendation', () => {
     const state = buildHqStateOfPlay({
       now,

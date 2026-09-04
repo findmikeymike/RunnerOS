@@ -121,7 +121,7 @@ export function buildHqStateOfPlay(args: BuildHqStateInput): HqStateOfPlayV2 {
   };
 
   const missing = buildMissing(input);
-  const attention = buildAttention(input).slice(0, 3);
+  const attention = buildAttention(input).slice(0, MAX_ATTENTION_ITEMS);
   const rankedMoves = buildRankedMoves(input, missing);
   const nextMove = withRoute(input, rankedMoves[0]!);
   const alternatives = rankedMoves.slice(1, 4).map((move) => withRoute(input, move));
@@ -454,6 +454,9 @@ function buildRoutePrompt(nextMove: HqStateNextMove, contextDocSlugs: string[]):
   ].join('\n');
 }
 
+/** Carried in the doc. The home card shows five and scrolls past that. */
+const MAX_ATTENTION_ITEMS = 8;
+
 function buildAttention(input: HqInputState): HqStateAttentionItem[] {
   const items: HqStateAttentionItem[] = [];
   const urgentEvent = nextUpcomingEvent(input, 21);
@@ -468,20 +471,28 @@ function buildAttention(input: HqInputState): HqStateAttentionItem[] {
     });
   }
 
-  const approval = newestOperationalItem(input, input.operational?.approvals);
+  // Showing only the newest and hiding the rest makes a queue of four look
+  // like a queue of one, so the count travels with the row.
+  const approvals = sortedOperationalItems(input, input.operational?.approvals);
+  const approval = approvals[0];
   if (approval) {
     items.push({
       kind: 'approval',
-      text: `${approval.title} is waiting for approval.`,
+      text: approvals.length > 1
+        ? `${approval.title} and ${approvals.length - 1} ${approvals.length === 2 ? 'other is' : 'others are'} waiting for you.`
+        : `${approval.title} is waiting for approval.`,
       source: approval.source,
     });
   }
 
-  const failure = newestOperationalItem(input, input.operational?.failures);
+  const failures = sortedOperationalItems(input, input.operational?.failures);
+  const failure = failures[0];
   if (failure) {
     items.push({
       kind: 'failure',
-      text: `${failure.title} needs attention after ${failure.status}.`,
+      text: failures.length > 1
+        ? `${failure.title} needs attention after ${failure.status}, and ${failures.length - 1} more.`
+        : `${failure.title} needs attention after ${failure.status}.`,
       source: failure.source,
     });
   }

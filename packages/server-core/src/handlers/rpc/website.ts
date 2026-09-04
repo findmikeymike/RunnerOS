@@ -2,7 +2,7 @@ import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
-import { WebsiteService } from '../../website/WebsiteService'
+import { WebsiteService, settleSitePreviewApproval } from '../../website/WebsiteService'
 import { collectRoutineSignals } from '../../website/signals'
 import type { WebsiteRoutineConfig } from '@craft-agent/shared/website'
 import {
@@ -122,6 +122,16 @@ export function registerWebsiteHandlers(server: RpcServer, _deps: HandlerDeps): 
 
     // A refused publish must not leave a live approval sitting behind it.
     if (!result.ok) clearWebsiteApproval(workspace.rootPath)
+    else {
+      // The brief's preview stops asking once the change is live.
+      const { loadWebsiteManifest } = await import('@craft-agent/shared/website')
+      settleSitePreviewApproval(
+        workspace.rootPath,
+        loadWebsiteManifest(workspace.rootPath)?.pendingBrief?.site?.previewOutputId,
+        'approved',
+        'Published to the live site.',
+      )
+    }
     return result
   })
 

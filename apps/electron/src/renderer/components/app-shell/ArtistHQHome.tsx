@@ -3792,7 +3792,7 @@ function StateOfPlayDetailPanel({
     )
   }
 
-  const attention = userFacingHqAttention(state.attention).slice(0, 3)
+  const attention = userFacingHqAttention(state.attention)
   const missing = state.missing.slice(0, 3)
   const route = state.nextMove.route
   const recommendationStatus = state.nextMove.recommendationStatus ?? 'proposed'
@@ -3816,7 +3816,12 @@ function StateOfPlayDetailPanel({
       {attention.length > 0 ? (
         <section className="mt-6 border-t border-white/[0.06] pt-5">
           <h3 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">Needs attention</h3>
-          <div className="mt-2 divide-y divide-white/[0.055]">
+          <div className={cn(
+            'mt-2 divide-y divide-white/[0.055]',
+            // Five fit comfortably; past that it scrolls rather than hiding
+            // the rest or pushing the page down.
+            attention.length > 5 && 'max-h-[280px] overflow-y-auto pr-1',
+          )}>
             {attention.map((item) => (
               <div key={`${item.kind}-${item.source}-${item.text}`} className="flex items-start gap-2.5 py-3">
                 <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-300" />

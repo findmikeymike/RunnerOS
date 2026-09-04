@@ -1277,6 +1277,17 @@ export class WebsiteService {
       }
     }
 
+    // A change the artist has to approve should ask from the approvals list,
+    // not only from the Website page. The preview Output is already the thing
+    // they would look at, so it carries the request.
+    if (tier === 'one-click' && previewOutputId) {
+      markPreviewAwaitingApproval(
+        options.previewTarget?.workspaceRootPath ?? workspaceRootPath,
+        previewOutputId,
+        summary,
+      )
+    }
+
     const brief: WebsiteBrief = {
       runId,
       weekOf: today,
@@ -1336,6 +1347,55 @@ export class WebsiteService {
   dispose(): void {
     for (const preview of this.previews.values()) closeServer(preview.server)
     this.previews.clear()
+  }
+}
+
+/**
+ * Mark a preview Output as waiting on the artist.
+ *
+ * Best effort: a site change that cannot be mirrored into the approvals list
+ * is still previewable and publishable from the Website page, so a failure
+ * here must not fail the run.
+ */
+function markPreviewAwaitingApproval(
+  workspaceRootPath: string,
+  outputId: string,
+  summary: string,
+): void {
+  try {
+    const manifest = readOutputManifest(workspaceRootPath, outputId)
+    if (!manifest) return
+    writeOutputManifest(workspaceRootPath, {
+      ...manifest,
+      approval: { state: 'pending', note: `Publish from the Website page: ${summary}` },
+      updatedAt: new Date().toISOString(),
+    })
+  } catch {
+    // See above.
+  }
+}
+
+/**
+ * Settle a site preview's approval once the artist has published or rolled
+ * back, so it stops asking.
+ */
+export function settleSitePreviewApproval(
+  workspaceRootPath: string,
+  outputId: string | undefined,
+  state: 'approved' | 'changes_requested',
+  note: string,
+): void {
+  if (!outputId) return
+  try {
+    const manifest = readOutputManifest(workspaceRootPath, outputId)
+    if (!manifest || manifest.approval?.state !== 'pending') return
+    writeOutputManifest(workspaceRootPath, {
+      ...manifest,
+      approval: { state, note, updatedAt: new Date().toISOString() },
+      updatedAt: new Date().toISOString(),
+    })
+  } catch {
+    // The publish already happened; a stale Output is the smaller problem.
   }
 }
 
