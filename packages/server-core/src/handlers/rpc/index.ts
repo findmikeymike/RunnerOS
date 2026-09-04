@@ -6,6 +6,7 @@ import { registerAutomationsHandlers } from './automations'
 import { registerAgentDefinitionsHandlers } from './agent-definitions'
 import { registerAgendaHandlers } from './agenda'
 import { registerCommunityHandlers } from './community'
+import { registerWebsiteHandlers } from './website'
 import { registerWorkspaceContextHandlers } from './workspace-context'
 import { registerHqStateHandlers } from './hq-state'
 import { registerScheduledWorkHandlers } from './scheduled-work'
@@ -54,6 +55,7 @@ export function registerCoreRpcHandlers(
   registerAgentDefinitionsHandlers(server, deps)
   registerAgendaHandlers(server, deps)
   registerCommunityHandlers(server, deps)
+  registerWebsiteHandlers(server, deps)
   registerWorkspaceContextHandlers(server, deps)
   registerHqStateHandlers(server, deps)
   registerScheduledWorkHandlers(server, deps)

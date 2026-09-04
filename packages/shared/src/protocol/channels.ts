@@ -323,6 +323,22 @@ export const RPC_CHANNELS = {
     ADD_TASK_COMMENT: 'agenda:taskThread:addComment',
     DELETE_TASK_THREAD: 'agenda:taskThread:delete',
   },
+  website: {
+    STATUS: 'website:status',
+    HISTORY: 'website:history',
+    APPROVE_BUILD: 'website:approveBuild',
+    CLEAR_APPROVAL: 'website:clearApproval',
+    APPROVE_TARGET: 'website:approveTarget',
+    PUBLISH: 'website:publish',
+    ROLLBACK: 'website:rollback',
+    SET_TRUSTED_MODE: 'website:setTrustedMode',
+    BUILD: 'website:build',
+    PREVIEW: 'website:preview',
+    CAPTURE_SYNC: 'website:captureSync',
+    DOMAIN_SET: 'website:domainSet',
+    DOMAIN_CHECK: 'website:domainCheck',
+  },
+
   community: {
     GET: 'community:get',
     ADD_CONTACT: 'community:addContact',

@@ -1190,7 +1190,7 @@ function ReleaseBoardSection({
                   ? item.linkedAssetId ? 'Approved' : 'Done'
                   : skipped
                     ? 'N/A'
-                    : 'Missing'
+                    : null
             return (
               <div key={item.id} className="flex min-h-7 items-center gap-1.5 rounded-md bg-black/[0.35] px-2 py-1 ring-1 ring-white/[0.035] transition-colors hover:bg-white/[0.03]">
                 <button
@@ -1226,7 +1226,7 @@ function ReleaseBoardSection({
                     {item.linkedAssetId ? <span className="h-1 w-1 shrink-0 rounded-full bg-orange-300/80" title="Matched from campaign vault" /> : null}
                   </div>
                 </div>
-                {canOpenLinkedWork ? (
+                {statusLabel && canOpenLinkedWork ? (
                   <button
                     type="button"
                     onClick={() => onLaunchItem(category, item)}
@@ -1238,12 +1238,12 @@ function ReleaseBoardSection({
                   >
                     {statusLabel}
                   </button>
-                ) : (
+                ) : statusLabel ? (
                   <span className={cn(
                     'shrink-0 text-[7px] font-semibold uppercase tracking-[0.08em]',
                     done ? 'text-orange-200/62' : item.status === 'review' ? 'text-amber-200/70' : item.status === 'in-progress' ? 'text-sky-200/60' : 'text-white/24',
                   )}>{statusLabel}</span>
-                )}
+                ) : null}
                 {action || uploadHint ? (
                   <button
                     type="button"

@@ -32,6 +32,8 @@ describe('Essentials workspace', () => {
     expect(source).toContain("? 'In progress'")
     expect(source).toContain("? 'Review'")
     expect(source).toContain("? 'Approved' : 'Done'")
+    expect(source).toContain(": null")
+    expect(source).not.toContain(": 'Missing'")
     expect(source).toContain('Mark ready for review')
     expect(source).toContain('Confirm done')
     expect(source).toContain('Not applicable to this release')

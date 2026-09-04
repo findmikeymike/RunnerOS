@@ -888,6 +888,27 @@ export interface ElectronAPI {
   addAgendaTaskComment(workspaceId: string, taskId: string, input: AddAgendaTaskCommentInput): Promise<AgendaTaskThread>
   deleteAgendaTaskThread(workspaceId: string, taskId: string): Promise<void>
   getSelfEditTarget(workspaceId: string): Promise<SelfEditTargetInfo>
+  // Artist website. Publishing and trusted mode live here rather than on a
+  // session, because approving a publish is the artist's own action.
+  getWebsiteStatus(workspaceId: string): Promise<Record<string, unknown>>
+  getWebsiteHistory(workspaceId: string, limit?: number): Promise<Record<string, unknown>>
+  approveWebsiteBuild(workspaceId: string, buildHash: string): Promise<Record<string, unknown>>
+  clearWebsiteApproval(workspaceId: string): Promise<Record<string, unknown>>
+  approveWebsiteTarget(workspaceId: string, target: string): Promise<Record<string, unknown>>
+  publishWebsite(workspaceId: string, input: {
+    buildHash: string
+    changeClass?: 'content-only' | 'design'
+    summary?: string
+    why?: string[]
+    changes?: string[]
+  }): Promise<Record<string, unknown>>
+  rollbackWebsite(workspaceId: string, input: { deployId?: string; reason?: string }): Promise<Record<string, unknown>>
+  setWebsiteTrustedMode(workspaceId: string, enabled: boolean): Promise<Record<string, unknown>>
+  buildWebsite(workspaceId: string): Promise<Record<string, unknown>>
+  previewWebsite(workspaceId: string, input?: { build?: boolean }): Promise<Record<string, unknown>>
+  syncWebsiteCapture(workspaceId: string, input?: { limit?: number }): Promise<Record<string, unknown>>
+  setWebsiteDomain(workspaceId: string, domain: string): Promise<Record<string, unknown>>
+  checkWebsiteDomain(workspaceId: string): Promise<Record<string, unknown>>
   getCommunity(workspaceId: string): Promise<CommunityState>
   addCommunityContact(workspaceId: string, input: UpsertCommunityContactInput): Promise<CommunityState>
   importCommunityCsv(workspaceId: string, input: Omit<ImportCommunityCsvInput, 'assertedBy'> & { assertedBy?: string }): Promise<CommunityState>
@@ -1765,6 +1786,11 @@ export interface CommunityNavigationState {
   rightSidebar?: RightSidebarPanel
 }
 
+export interface WebsiteNavigationState {
+  navigator: 'website'
+  rightSidebar?: RightSidebarPanel
+}
+
 export interface VaultNavigationState {
   navigator: 'vault'
   rightSidebar?: RightSidebarPanel
@@ -1826,6 +1852,7 @@ export type NavigationState =
   | WorkspaceContextNavigationState
   | AgendaNavigationState
   | CommunityNavigationState
+  | WebsiteNavigationState
   | VaultNavigationState
   | WorkflowsNavigationState
   | WorkflowRunNavigationState
@@ -1880,6 +1907,10 @@ export const isCommunityNavigation = (
 export const isVaultNavigation = (
   state: NavigationState
 ): state is VaultNavigationState => state.navigator === 'vault'
+
+export const isWebsiteNavigation = (
+  state: NavigationState
+): state is WebsiteNavigationState => state.navigator === 'website'
 
 export const isWorkflowsNavigation = (
   state: NavigationState
@@ -1951,6 +1982,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'community') {
     return 'community'
+  }
+  if (state.navigator === 'website') {
+    return 'website'
   }
   if (state.navigator === 'vault') {
     return 'vault'
@@ -2049,6 +2083,7 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   if (key === 'workspace-context') return { navigator: 'workspaceContext' }
   if (key === 'agenda') return { navigator: 'agenda' }
   if (key === 'community') return { navigator: 'community' }
+  if (key === 'website') return { navigator: 'website' }
   if (key === 'vault') return { navigator: 'vault' }
 
   // Handle workflows

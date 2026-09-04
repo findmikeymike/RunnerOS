@@ -38,6 +38,7 @@ import {
   isWorkspaceContextNavigation,
   isAgendaNavigation,
   isCommunityNavigation,
+  isWebsiteNavigation,
   isVaultNavigation,
   isOutputsNavigation,
 } from '@/contexts/NavigationContext'
@@ -72,6 +73,7 @@ import { LabSequencePage } from './LabSequencePage'
 import { AgendaPage, type AgendaTaskDraft } from './AgendaPage'
 import { AGENDA_LABEL } from './agenda-utils'
 import { CommunityPage } from './CommunityPage'
+import { WebsitePage } from './WebsitePage'
 import { VaultPage } from './VaultPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { SettingsGroupTabs, SettingsPageSwitcher } from '@/pages/settings/SettingsPageSwitcher'
@@ -573,6 +575,14 @@ export function MainContentPanel({
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <CommunityPage workspaceId={activeWorkspaceId || ''} />
+      </Panel>
+    )
+  }
+
+  if (isWebsiteNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <WebsitePage workspaceId={activeWorkspaceId || ''} />
       </Panel>
     )
   }

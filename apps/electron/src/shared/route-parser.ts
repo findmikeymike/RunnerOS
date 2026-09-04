@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'campaign' | 'lab' | 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'agenda' | 'community' | 'vault' | 'workflows' | 'workflowRun' | 'deepResearchRun' | 'outputs' | 'videoStudio' | 'settings'
+export type NavigatorType = 'campaign' | 'lab' | 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'agenda' | 'community' | 'website' | 'vault' | 'workflows' | 'workflowRun' | 'deepResearchRun' | 'outputs' | 'videoStudio' | 'settings'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -444,6 +444,10 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
     return 'community'
   }
 
+  if (parsed.navigator === 'website') {
+    return 'website'
+  }
+
   if (parsed.navigator === 'vault') {
     return 'vault'
   }
@@ -629,6 +633,9 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
   }
   if (compound.navigator === 'community') {
     return { type: 'view', name: 'community', params: {} }
+  }
+  if (compound.navigator === 'website') {
+    return { type: 'view', name: 'website', params: {} }
   }
   if (compound.navigator === 'vault') {
     return { type: 'view', name: 'vault', params: {} }
@@ -840,6 +847,10 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
 
   if (compound.navigator === 'community') {
     return { navigator: 'community' }
+  }
+
+  if (compound.navigator === 'website') {
+    return { navigator: 'website' }
   }
 
   if (compound.navigator === 'vault') {
@@ -1191,6 +1202,12 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
   if (state.navigator === 'community') {
     return {
       navigator: 'community',
+      details: null,
+    }
+  }
+  if (state.navigator === 'website') {
+    return {
+      navigator: 'website',
       details: null,
     }
   }
