@@ -9,6 +9,7 @@ import type {
 } from '@craft-agent/shared/community'
 import type { HandlerDeps } from '../handler-deps'
 import { CommunityMailService, type MailProviderConfig } from '../../community/CommunityMailService'
+import { settleEmailJobOutput } from '../../community/CommunityToolService'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.community.GET,
@@ -206,7 +207,12 @@ export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps)
     const approved = mail.approve(workspace.rootPath, machineId, jobId)
     if (!approved.ok) return approved
 
-    return mail.send(workspace.rootPath, machineId, jobId, provider, { kind: 'user' })
+    const result = await mail.send(workspace.rootPath, machineId, jobId, provider, { kind: 'user' })
+    // Stop the mirrored Output asking for attention once the decision is made.
+    if (result.ok) {
+      settleEmailJobOutput(workspace.rootPath, jobId, 'approved', 'Sent to the fan list.')
+    }
+    return result
   })
 
   server.handle(RPC_CHANNELS.community.CANCEL_EMAIL_JOB, async (_ctx, workspaceId: string, jobId: string) => {
@@ -216,7 +222,11 @@ export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps)
     ])
     assertTeamPermission(workspace.rootPath, 'community.email.draft')
     const machineId = normalizeMachineId(getTeamModeStatus(workspace.rootPath).machine.machineId)
-    return new CommunityMailService().cancel(workspace.rootPath, machineId, jobId)
+    const result = new CommunityMailService().cancel(workspace.rootPath, machineId, jobId)
+    if (result.ok) {
+      settleEmailJobOutput(workspace.rootPath, jobId, 'changes_requested', 'The artist discarded this draft.')
+    }
+    return result
   })
 
   server.handle(RPC_CHANNELS.community.GET_ROUTINE, async (_ctx, workspaceId: string) => {

@@ -8,7 +8,8 @@ import {
   suppressCommunityContact,
   upsertCommunityContact,
 } from '@craft-agent/shared/community'
-import { CommunityToolService } from './CommunityToolService'
+import { CommunityToolService, settleEmailJobOutput } from './CommunityToolService'
+import { listOutputManifests } from '@craft-agent/shared/outputs'
 
 const MACHINE = 'machine-1'
 const NOW = new Date('2026-09-15T12:00:00.000Z')
@@ -297,6 +298,86 @@ describe('tagging', () => {
     try {
       const result = tools.tagContacts(root, MACHINE, { contactIds: ['x'] })
       expect(result.ok).toBe(false)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('a draft is a real thing the artist can find', () => {
+  test('drafting publishes an Output waiting for approval', () => {
+    const root = workspace([{ email: 'a@example.com', segment: 'general' }])
+    try {
+      const result = tools.draftEmail(root, MACHINE, {
+        title: 'Two nights',
+        subject: 'Two Colorado nights',
+        bodyMarkdown: 'We added two shows.',
+        segmentIds: ['general'],
+      }, { workspaceId: 'hq', agentSlug: 'community-agent' })
+
+      expect(result.outputId).toBeTruthy()
+
+      const output = listOutputManifests(root).find(item => item.id === result.outputId)!
+      // Pending approval is what puts it in the approvals list and State of Play.
+      expect(output.approval?.state).toBe('pending')
+      expect(output.title).toBe('Two Colorado nights')
+      expect(output.tags).toContain('fan-email')
+      expect(output.summary).toContain('1 fan')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('settling the job stops the Output asking for attention', () => {
+    const root = workspace([{ email: 'a@example.com', segment: 'general' }])
+    try {
+      const draft = tools.draftEmail(root, MACHINE, {
+        title: 'Note',
+        subject: 'A note',
+        bodyMarkdown: 'Hello.',
+        segmentIds: ['general'],
+      }, { workspaceId: 'hq' })
+
+      settleEmailJobOutput(root, String(draft.jobId), 'approved', 'Sent to the fan list.')
+
+      const output = listOutputManifests(root).find(item => item.id === draft.outputId)!
+      expect(output.approval?.state).toBe('approved')
+      expect(output.status).toBe('published')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a discarded draft is marked as such rather than left pending', () => {
+    const root = workspace([{ email: 'a@example.com', segment: 'general' }])
+    try {
+      const draft = tools.draftEmail(root, MACHINE, {
+        title: 'Note',
+        subject: 'A note',
+        bodyMarkdown: 'Hello.',
+        segmentIds: ['general'],
+      }, { workspaceId: 'hq' })
+
+      settleEmailJobOutput(root, String(draft.jobId), 'changes_requested', 'The artist discarded this draft.')
+      expect(listOutputManifests(root).find(item => item.id === draft.outputId)!.approval?.state)
+        .toBe('changes_requested')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('without a workspace the draft still succeeds, just unmirrored', () => {
+    const root = workspace([{ email: 'a@example.com', segment: 'general' }])
+    try {
+      // The email itself is the real artifact; the Output is a convenience.
+      const result = tools.draftEmail(root, MACHINE, {
+        title: 'Note',
+        subject: 'A note',
+        bodyMarkdown: 'Hello.',
+        segmentIds: ['general'],
+      })
+      expect(result.ok).toBe(true)
+      expect(result.outputId).toBeUndefined()
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

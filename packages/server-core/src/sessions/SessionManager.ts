@@ -8910,7 +8910,11 @@ user a clickable link to where the thing now lives.`
           root => this.communityTools.jobStatus(root, input.jobId),
         ),
         communityDraftEmailFn: async (input) => this.withArtistHqCommunity(
-          root => this.communityTools.draftEmail(root, this.resolveMachineId(root), input as never),
+          root => this.communityTools.draftEmail(root, this.resolveMachineId(root), input as never, {
+            workspaceId: findArtistHqWorkspace()?.id,
+            agentSlug: managed.spawnedFromAgent?.agentSlug,
+            sessionId: managed.id,
+          }),
         ),
         communityRequestSendFn: async (input) => this.withArtistHqCommunity(
           root => this.communityTools.requestSend(root, input.jobId),

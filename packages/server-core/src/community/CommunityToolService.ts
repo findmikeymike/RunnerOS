@@ -11,7 +11,11 @@ import {
   type CommunityEmailJobRecord,
   type ConsentStatus,
 } from '@craft-agent/shared/community'
+import { createOutputBundle, listOutputManifests, writeOutputManifest } from '@craft-agent/shared/outputs'
 import type { CommunityMailResult } from './CommunityMailService'
+
+/** Ties an Output back to the email job it represents. */
+export const EMAIL_JOB_TAG_PREFIX = 'community-email:'
 
 /** Hard ceiling on a list read, so a tool result cannot swallow a context window. */
 const MAX_CONTACTS = 200
@@ -170,6 +174,7 @@ export class CommunityToolService {
       segmentIds: string[]
       purpose?: CommunityEmailJobRecord['purpose']
     },
+    context: { workspaceId?: string; agentSlug?: string; sessionId?: string } = {},
   ): CommunityMailResult {
     if (!input.subject.trim() || !input.bodyMarkdown.trim()) {
       return { ok: false, error: 'A draft needs both a subject and a body.' }
@@ -187,9 +192,17 @@ export class CommunityToolService {
       transportProvider: 'esp',
     }, { status: 'draft' })
 
+    // A draft nobody can find is a draft that does not exist. Publishing it
+    // as an Output awaiting approval is what makes it show up in the
+    // approvals list and State of Play without any surface of its own.
+    const outputId = context.workspaceId
+      ? publishDraftAsOutput(workspaceRootPath, context.workspaceId, job, context)
+      : undefined
+
     return {
       ok: true,
       jobId: job.id,
+      outputId,
       subject: job.content.subject,
       audience: {
         segments: job.audience.segmentIds,
@@ -282,3 +295,67 @@ export class CommunityToolService {
 }
 
 export type { CommunityContactRecord }
+
+/**
+ * Represent a drafted email as an Output awaiting approval.
+ *
+ * Outputs already feed the approvals list, State of Play, and the Outputs
+ * page, so this is how a draft becomes visible everywhere at once rather
+ * than only at the bottom of the Community page.
+ */
+function publishDraftAsOutput(
+  workspaceRootPath: string,
+  workspaceId: string,
+  job: CommunityEmailJobRecord,
+  origin: { agentSlug?: string; sessionId?: string } = {},
+): string | undefined {
+  try {
+    const recipients = job.audience.estimatedRecipients
+    const output = createOutputBundle(workspaceRootPath, {
+      workspaceId,
+      title: job.content.subject || job.title,
+      kind: 'document',
+      status: 'draft',
+      summary: `Fan email waiting for you: ${recipients} ${recipients === 1 ? 'fan' : 'fans'} in ${job.audience.segmentIds.join(', ') || 'no segment'}.`,
+      content: job.content.bodyMarkdown,
+      contentMimeType: 'text/markdown',
+      origin: { source: 'session', agentSlug: origin.agentSlug ?? 'community-agent', sessionId: origin.sessionId },
+      // Pending is what puts it in front of the artist.
+      approval: { state: 'pending', note: 'Review and send from the Community page.' },
+      tags: ['community', 'fan-email', `${EMAIL_JOB_TAG_PREFIX}${job.id}`],
+    })
+    return output.id
+  } catch {
+    // The draft itself is the real artifact; failing to mirror it as an
+    // Output must not lose the artist's email.
+    return undefined
+  }
+}
+
+/**
+ * Resolve the Output mirroring a job, so its approval can be settled when the
+ * email is sent or discarded and it stops asking for attention.
+ */
+export function settleEmailJobOutput(
+  workspaceRootPath: string,
+  jobId: string,
+  state: 'approved' | 'changes_requested',
+  note: string,
+): void {
+  const tag = `${EMAIL_JOB_TAG_PREFIX}${jobId}`
+  for (const manifest of listOutputManifests(workspaceRootPath)) {
+    if (!manifest.tags?.includes(tag)) continue
+    if (manifest.approval?.state !== 'pending') continue
+    try {
+      writeOutputManifest(workspaceRootPath, {
+        ...manifest,
+        status: state === 'approved' ? 'published' : manifest.status,
+        approval: { state, note, updatedAt: new Date().toISOString() },
+        updatedAt: new Date().toISOString(),
+      })
+    } catch {
+      // Best effort: the send already happened, and a stale Output is a
+      // smaller problem than throwing after real email went out.
+    }
+  }
+}
