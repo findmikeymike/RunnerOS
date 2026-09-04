@@ -6,7 +6,7 @@ describe('Pulse run controls', () => {
   test('separates manual Play from the smaller weekly auto-run control', () => {
     const source = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
     const start = source.indexOf('function PulseRunControls')
-    const end = source.indexOf('function LiveWorkChip')
+    const end = source.indexOf('function RecentActivity')
     const controls = source.slice(start, end)
 
     expect(controls).toContain('<Play className="h-3 w-3 fill-current" />')
@@ -45,6 +45,22 @@ describe('Pulse run controls', () => {
     expect(source).toContain('grid grid-cols-2 gap-2 lg:grid-cols-4')
     expect(source.match(/<SignalTile\n/g)).toHaveLength(4)
     expect(source).not.toContain('flex h-[132px] flex-col overflow-hidden rounded-[16px]')
+  })
+
+  test('anchors each provider control group over its own signal card', () => {
+    const source = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
+    const start = source.indexOf('function SignalsStrip')
+    const end = source.indexOf('function SignalTile', start)
+    const strip = source.slice(start, end)
+    const grid = strip.indexOf('<div className="grid grid-cols-2 gap-2 lg:grid-cols-4">')
+    const firstControls = strip.indexOf('<PulseRunControls', grid)
+
+    expect(grid).toBeGreaterThan(-1)
+    expect(strip.slice(0, grid)).not.toContain('<PulseRunControls')
+    expect(firstControls).toBeGreaterThan(grid)
+    expect(strip.match(/absolute right-3 top-2\.5 z-10/g)).toHaveLength(2)
+    expect(strip).toContain('manualLabel="Run Spotify Pulse now — manual"')
+    expect(strip).toContain('manualLabel="Run Instagram Insights now — manual"')
   })
 
   test('shows honest pre-baseline copy instead of a blank card', () => {

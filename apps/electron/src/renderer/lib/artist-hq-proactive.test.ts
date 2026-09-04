@@ -91,9 +91,12 @@ describe('artist HQ proactive helpers', () => {
     ]).map((source) => source.source)).toEqual(['scheduled-work', 'workflow-runs'])
   })
 
-  test('keeps internal source-health diagnostics out of the artist-facing action list', () => {
+  test('keeps diagnostics and passive observations out of the artist-facing action list', () => {
     expect(userFacingHqAttention([
       { kind: 'source-health', text: 'Outputs are stale.', source: 'operational:outputs' },
+      { kind: 'network', text: 'Alex looks outreach-ready.', source: 'artist-network' },
+      { kind: 'community', text: '42 contacts have no broadcast.', source: 'artist-community' },
+      { kind: 'shared-intel', text: 'New intel was saved.', source: 'intel-1' },
       { kind: 'vault', text: 'Add the final master.', source: 'artist-vault' },
       { kind: 'approval', text: 'Approve the press release.', source: 'approvals' },
     ])).toEqual([

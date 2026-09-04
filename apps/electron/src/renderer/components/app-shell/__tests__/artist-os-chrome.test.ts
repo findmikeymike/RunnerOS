@@ -550,19 +550,29 @@ describe('Artist OS persistent shell chrome', () => {
     expect(hq).toContain('bg-white/[0.035] p-3.5')
   })
 
-  test('places the quieter next move below the Release Horizon and lifts active work into the hero', () => {
+  test('places the lifecycle activity card below the Release Horizon', () => {
     const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
     const releaseHorizon = hq.indexOf('<ReleaseHorizon')
     const nextMove = hq.indexOf('<StateOfPlayPanel')
-    const liveChip = hq.indexOf('<LiveWorkChip items={workerItems} />')
+    const activity = hq.indexOf('workerItems={workerItems}', nextMove)
 
     expect(releaseHorizon).toBeGreaterThan(-1)
     expect(nextMove).toBeGreaterThan(releaseHorizon)
-    expect(liveChip).toBeGreaterThan(-1)
-    expect(liveChip).toBeLessThan(releaseHorizon)
+    expect(activity).toBeGreaterThan(nextMove)
+    expect(hq).not.toContain('<LiveWorkChip')
+    expect(hq).not.toContain('<RecentActivity')
+    expect(hq).toContain('aria-label="Work activity"')
+    expect(hq).toContain("['needs', 'Needs you']")
+    expect(hq).toContain("['progress', 'In progress']")
+    expect(hq).toContain("['recent', 'Recent']")
+    expect(hq).toContain('.filter((move) => move.attentionRequired)')
+    expect(hq).toContain('completedOutputs.map((output)')
     expect(hq).not.toContain('>Active work</span>')
-    expect(hq).toContain('text-sm font-medium tracking-tight text-white/88')
-    expect(hq).toContain('text-[#f97316]')
+    expect(hq).toContain('h-1 w-1 shrink-0 rounded-full bg-white/28')
+    expect(hq).toContain('min-w-0 flex-1 truncate text-xs font-semibold text-white/88')
+    expect(hq).not.toContain('>Priority</p>')
+    expect(hq).not.toContain('after:bg-[#f97316]')
+    expect(hq).toContain('inset_0_0_0_1px_rgba(249,115,22,0.62)')
   })
 
   test('places the Pulse stack directly below the HQ header', () => {
@@ -574,7 +584,7 @@ describe('Artist OS persistent shell chrome', () => {
     expect(hq).toContain('id="hq-home-operations" className="space-y-3"')
     expect(hq).toContain('<div id="hq-home-details">')
     expect(hq).toContain('<SignalsStrip')
-    expect(hq).toContain('group relative flex h-[104px] min-w-0 flex-col overflow-hidden rounded-[14px]')
+    expect(hq).toContain('group relative flex h-[104px] w-full min-w-0 flex-col overflow-hidden rounded-[14px]')
     expect(hq).toContain('bg-white/[0.035] p-3.5')
     expect(hq).toContain('backdrop-blur-2xl')
     expect(hq).not.toContain('border border-[#f97316]/35')
@@ -583,9 +593,10 @@ describe('Artist OS persistent shell chrome', () => {
     expect(hq).toContain('<PulseDetailsDialog')
     expect(hq).not.toContain('mt-3 grid grid-cols-3 gap-2 rounded-[12px] bg-black/20 py-3')
     expect(hq).toContain('placeholder="Tell your manager what you need…"')
-    expect(hq).toContain('h-1.5 w-1.5 shrink-0 rounded-full bg-[#f97316]')
-    expect(hq).toContain('>This week</span>')
-    expect(hq).toContain('userFacingHqAttention(state.attention).slice(0, 2)')
+    expect(hq).not.toContain('h-1.5 w-1.5 shrink-0 rounded-full bg-[#f97316]')
+    expect(hq).not.toContain('>This week</span>')
+    expect(hq).toContain('aria-label="Work activity"')
+    expect(hq).toContain('userFacingHqAttention(state.attention)')
   })
 
   test('does not leave a former North Star spacer before HQ analytics', () => {

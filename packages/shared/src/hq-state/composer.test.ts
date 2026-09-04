@@ -38,6 +38,7 @@ describe('HQ State of Play composer', () => {
 
     expect(state.nextMove.title).toBe('Complete Artist Profile');
     expect(state.nextMove.worker).toBe('branding-agent');
+    expect(state.nextMove.attentionRequired).toBe(true);
     expect(state.nextMove.route?.target).toBe('agent');
     expect(state.nextMove.route?.agentSlug).toBe('branding-agent');
     expect(state.nextMove.route?.blockedReason).toContain('Artist profile');
@@ -68,6 +69,7 @@ describe('HQ State of Play composer', () => {
 
     expect(state.nextMove.title).toBe('Close asset gaps before Single release');
     expect(state.nextMove.worker).toBe('art-director');
+    expect(state.nextMove.attentionRequired).toBe(true);
     expect(state.nextMove.route?.target).toBe('agent');
     expect(state.nextMove.route?.agentSlug).toBe('art-director');
     expect(state.nextMove.route?.contextDocSlugs).toEqual(['artist-calendar', 'artist-profile', 'artist-vault']);
@@ -75,7 +77,34 @@ describe('HQ State of Play composer', () => {
     expect(state.attention.some((item) => item.kind === 'vault')).toBe(true);
   });
 
-  test('creates a launch-ready route hint for one-click outreach', () => {
+  test('puts urgent release blockers ahead of incomplete profile setup', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [
+        doc('artist-profile', 'Artist Profile', {
+          version: 1,
+          artistName: 'Mikey Mike',
+          updatedAt: '2026-07-04T00:00:00.000Z',
+        }),
+        doc('artist-calendar', 'Artist Calendar', {
+          version: 1,
+          events: [{ title: 'Single release', date: '2026-07-10' }],
+        }),
+        doc('artist-vault', 'Artist Vault', {
+          version: 1,
+          workspaceId: 'artist-hq',
+          vaultRoot: 'vault',
+          storageMode: 'copied',
+          assets: [],
+        }),
+      ],
+    });
+
+    expect(state.nextMove.title).toBe('Close asset gaps before Single release');
+    expect(state.nextMove.title).not.toBe('Complete Artist Profile');
+  });
+
+  test('does not turn a saved network contact into unsolicited outreach work', () => {
     const state = buildHqStateOfPlay({
       now,
       docs: [
@@ -111,15 +140,9 @@ describe('HQ State of Play composer', () => {
       ],
     });
 
-    expect(state.nextMove.title).toBe('Re-open Alex Manager');
-    expect(state.nextMove.route).toEqual(expect.objectContaining({
-      target: 'agent',
-      agentSlug: 'outreach-agent',
-      action: 'outreach',
-      confidence: 'high',
-      contextDocSlugs: ['artist-network', 'artist-profile'],
-    }));
-    expect(state.nextMove.route?.prompt).toContain('Re-open Alex Manager');
+    expect(state.nextMove.title).toBe('Run the weekly HQ review');
+    expect(state.nextMove.attentionRequired).toBe(false);
+    expect(state.attention.filter((item) => item.kind === 'network')).toEqual([]);
   });
 
   test('lets Spotify Analyst create the missing snapshot instead of blocking on its absence', () => {
@@ -129,6 +152,7 @@ describe('HQ State of Play composer', () => {
     });
 
     expect(state.nextMove.title).toBe('Add a Spotify snapshot');
+    expect(state.nextMove.attentionRequired).toBe(false);
     expect(state.nextMove.route).toEqual(expect.objectContaining({
       target: 'agent',
       agentSlug: 'spotify-analyst',
@@ -165,7 +189,7 @@ describe('HQ State of Play composer', () => {
 
     expect(state.goalProgress).toHaveLength(1);
     expect(state.goalProgress[0]?.goal).toBe('Launch single');
-    expect(state.attention.some((item) => item.kind === 'shared-intel')).toBe(true);
+    expect(state.attention.some((item) => item.kind === 'shared-intel')).toBe(false);
   });
 
   test('round-trips generated context body', () => {
@@ -182,6 +206,7 @@ describe('HQ State of Play composer', () => {
     expect(built.metadata.delivery).toBe('always');
     expect(parsed?.version).toBe(2);
     expect(parsed?.nextMove.title).toBeTruthy();
+    expect(parsed?.nextMove.attentionRequired).toBe(false);
     expect(parsed?.nextMove.route?.prompt).toContain(parsed?.nextMove.title ?? '');
   });
 
@@ -231,6 +256,27 @@ describe('HQ State of Play composer', () => {
     expect(state.nextMove.worker).toBeUndefined();
     expect(state.nextMove.route?.target).toBe('manual');
     expect(state.attention[0]?.kind).toBe('approval');
+  });
+
+  test('keeps an abstract active goal out of the headline recommendation', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [
+        profileDoc(),
+        textDoc('growth-goal', 'Grow the audience', 'Active growth goal.', { status: 'active', priority: 'high' }),
+      ],
+    });
+
+    expect(state.nextMove.title).toBe('Add a Spotify snapshot');
+    expect(state.nextMove.title).not.toContain('Grow the audience');
+    expect(state.goalProgress[0]?.goal).toBe('Grow the audience');
+  });
+
+  test('does not treat creating an abstract HQ goal as a weekly priority', () => {
+    const state = buildHqStateOfPlay({ now, docs: [profileDoc()] });
+
+    expect(state.missing).not.toContain('active HQ goal');
+    expect(state.nextMove.title).not.toContain('goal');
   });
 
   test('keeps lower-ranked obligations as explicit alternatives', () => {
@@ -390,7 +436,7 @@ describe('HQ State of Play composer', () => {
    * silently went to zero. Both shapes must be understood: v2 is what is written
    * today, v1 survives in workspaces that have not run the community migration.
    */
-  test('reads community counts from the generated v2 summary', () => {
+  test('does not treat an untouched community list as work needing attention', () => {
     const state = buildHqStateOfPlay({
       now,
       docs: [
@@ -408,12 +454,7 @@ describe('HQ State of Play composer', () => {
       ],
     });
 
-    expect(state.attention).toContainEqual(
-      expect.objectContaining({
-        kind: 'community',
-        text: '42 fan contacts exist, but no sent broadcast is recorded.',
-      }),
-    );
+    expect(state.attention.filter((item) => item.kind === 'community')).toEqual([]);
   });
 
   test('counts a sent broadcast from the v2 summary', () => {
@@ -468,7 +509,7 @@ describe('HQ State of Play composer', () => {
     expect(state.attention.filter((item) => item.kind === 'community')).toEqual([]);
   });
 
-  test('still reads the pre-migration v1 community shape', () => {
+  test('does not treat a pre-migration contact list as work needing attention', () => {
     const state = buildHqStateOfPlay({
       now,
       docs: [
@@ -481,12 +522,7 @@ describe('HQ State of Play composer', () => {
       ],
     });
 
-    expect(state.attention).toContainEqual(
-      expect.objectContaining({
-        kind: 'community',
-        text: '42 fan contacts exist, but no sent broadcast is recorded.',
-      }),
-    );
+    expect(state.attention.filter((item) => item.kind === 'community')).toEqual([]);
   });
 });
 

@@ -261,6 +261,7 @@ function buildRankedMoves(input: HqInputState, missing: string[]): HqStateNextMo
       why: `${operationalKindLabel(approval)} is waiting for approval before work can continue.`,
       action: 'review',
       oneClick: false,
+      attentionRequired: true,
       entityRef: operationalEntityRef(approval),
     });
   }
@@ -272,6 +273,7 @@ function buildRankedMoves(input: HqInputState, missing: string[]): HqStateNextMo
       worker: 'concierge',
       action: 'review',
       oneClick: false,
+      attentionRequired: true,
       entityRef: operationalEntityRef(failure),
     });
   }
@@ -288,6 +290,7 @@ function buildRankedMoves(input: HqInputState, missing: string[]): HqStateNextMo
       why: `${operationalKindLabel(duplicate)} is already ${duplicate.status} and appears to cover this next move.`,
       action: 'review',
       oneClick: false,
+      attentionRequired: false,
       entityRef: operationalEntityRef(duplicate),
     });
   } else {
@@ -304,19 +307,7 @@ function buildContextNextMove(input: HqInputState, missing: string[]): HqStateNe
 
   const urgentEvent = nextUpcomingEvent(input, 14);
   const vault = summarizeVault(input.vault);
-  const stalePerson = mostActionableStalePerson(input);
-  const topGoal = rankGoals(input)[0];
   const community = summarizeCommunity(input.community);
-
-  if (!clean(input.profile?.artistName) || !clean(input.profile?.sound) || !clean(input.profile?.audience)) {
-    return {
-      title: 'Complete Artist Profile',
-      why: 'The HQ brain cannot make sharp worker recommendations until artist identity, sound, and audience are defined.',
-      worker: 'branding-agent',
-      action: 'review',
-      oneClick: false,
-    };
-  }
 
   if (urgentEvent && (!vault.finalMaster || !vault.coverArt || !vault.pressPhoto)) {
     const missingAssets = missingVaultLabels(vault);
@@ -326,19 +317,21 @@ function buildContextNextMove(input: HqInputState, missing: string[]): HqStateNe
       worker: 'art-director',
       action: 'organize',
       oneClick: false,
+      attentionRequired: true,
       semanticIntentId: missingAssets.length === 1
         ? hqSemanticIntentId({ title: missingAssets[0] ?? '' })
         : 'release-assets-general',
     };
   }
 
-  if (topGoal && topGoal.metadata.status === 'active') {
+  if (!clean(input.profile?.artistName) || !clean(input.profile?.sound) || !clean(input.profile?.audience)) {
     return {
-      title: `Push goal: ${topGoal.metadata.name}`,
-      why: goalUrgencyNote(topGoal, input.now),
-      worker: 'concierge',
-      action: 'schedule',
+      title: 'Complete Artist Profile',
+      why: 'The HQ brain cannot make sharp worker recommendations until artist identity, sound, and audience are defined.',
+      worker: 'branding-agent',
+      action: 'review',
       oneClick: false,
+      attentionRequired: true,
     };
   }
 
@@ -349,16 +342,7 @@ function buildContextNextMove(input: HqInputState, missing: string[]): HqStateNe
       worker: 'comms-agent',
       action: 'draft',
       oneClick: true,
-    };
-  }
-
-  if (stalePerson) {
-    return {
-      title: `Re-open ${stalePerson.name}`,
-      why: `${stalePerson.name} is a ${stalePerson.relationship ?? 'network'} contact${stalePerson.canHelpWith ? ` who can help with ${stalePerson.canHelpWith}` : ''}.`,
-      worker: 'outreach-agent',
-      action: 'outreach',
-      oneClick: true,
+      attentionRequired: true,
     };
   }
 
@@ -369,6 +353,7 @@ function buildContextNextMove(input: HqInputState, missing: string[]): HqStateNe
       worker: 'spotify-analyst',
       action: 'refresh',
       oneClick: true,
+      attentionRequired: false,
     };
   }
 
@@ -379,15 +364,17 @@ function buildContextNextMove(input: HqInputState, missing: string[]): HqStateNe
       worker: 'concierge',
       action: 'review',
       oneClick: false,
+      attentionRequired: false,
     };
   }
 
   return {
     title: 'Run the weekly HQ review',
-    why: 'Core context is present. The next production-grade move is to review goals, momentum, and worker queue together.',
+    why: 'Core context is present. Review current work, deadlines, and recent signals together.',
     worker: 'concierge',
     action: 'review',
     oneClick: true,
+    attentionRequired: false,
   };
 }
 
@@ -471,9 +458,6 @@ function buildAttention(input: HqInputState): HqStateAttentionItem[] {
   const items: HqStateAttentionItem[] = [];
   const urgentEvent = nextUpcomingEvent(input, 21);
   const vault = summarizeVault(input.vault);
-  const stalePerson = mostActionableStalePerson(input);
-  const latestIntel = [...input.sharedIntel].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0];
-  const community = summarizeCommunity(input.community);
 
   const degradedSource = input.operational?.sourceHealth.find((source) => source.status !== 'fresh');
   if (degradedSource) {
@@ -511,27 +495,11 @@ function buildAttention(input: HqInputState): HqStateAttentionItem[] {
   }
 
   const missingVault = missingVaultLabels(vault);
-  if (missingVault.length > 0) {
+  if (urgentEvent && missingVault.length > 0) {
     items.push({
       kind: 'vault',
       text: `Vault is missing ${missingVault.join(', ')} for agent-ready campaign execution.`,
       source: HQ_SOURCE_CONTEXT_SLUGS.vault,
-    });
-  }
-
-  if (stalePerson) {
-    items.push({
-      kind: 'network',
-      text: `${stalePerson.name} looks outreach-ready${stalePerson.canHelpWith ? ` for ${stalePerson.canHelpWith}` : ''}.`,
-      source: HQ_SOURCE_CONTEXT_SLUGS.network,
-    });
-  }
-
-  if (community.contacts > 0 && community.sentJobs === 0) {
-    items.push({
-      kind: 'community',
-      text: `${community.contacts} fan contact${community.contacts === 1 ? '' : 's'} exist, but no sent broadcast is recorded.`,
-      source: HQ_SOURCE_CONTEXT_SLUGS.community,
     });
   }
 
@@ -540,14 +508,6 @@ function buildAttention(input: HqInputState): HqStateAttentionItem[] {
       kind: 'spotify',
       text: 'Spotify snapshot is partial or has errors; refresh before making performance calls.',
       source: HQ_SOURCE_CONTEXT_SLUGS.spotify,
-    });
-  }
-
-  if (latestIntel) {
-    items.push({
-      kind: 'shared-intel',
-      text: `Recent shared intel: ${latestIntel.title}.`,
-      source: latestIntel.id,
     });
   }
 
@@ -601,7 +561,6 @@ function buildMissing(input: HqInputState): string[] {
   if (!vault.finalMaster) missing.push('final master in Vault');
   if (!vault.coverArt) missing.push('cover art in Vault');
   if (!vault.pressPhoto) missing.push('press photo in Vault');
-  if (input.goals.length === 0) missing.push('active HQ goal');
 
   return [...new Set(missing)].slice(0, 10);
 }
@@ -785,24 +744,6 @@ function nextUpcomingEvent(input: HqInputState, withinDays: number): NonNullable
     .sort((a, b) => a.days - b.days)[0]?.event ?? null;
 }
 
-function mostActionableStalePerson(input: HqInputState): NonNullable<NetworkDoc['people']>[number] | null {
-  const people = asArray(input.network?.people);
-  return people
-    .filter((person) => clean(person.name))
-    .map((person) => ({ person, score: personScore(person, input.now) }))
-    .filter((entry) => entry.score > 0)
-    .sort((a, b) => b.score - a.score)[0]?.person ?? null;
-}
-
-function personScore(person: NonNullable<NetworkDoc['people']>[number], now: Date): number {
-  const relationshipScore = person.relationship === 'vip' ? 5 : person.relationship === 'strong' ? 4 : person.relationship === 'warm' ? 3 : 0;
-  const helpScore = clean(person.canHelpWith) ? 2 : 0;
-  if (relationshipScore === 0 && helpScore === 0) return 0;
-  const lastTouchDays = person.lastTouch ? Math.floor((startOfDay(now).getTime() - startOfDay(new Date(person.lastTouch)).getTime()) / DAY_MS) : 120;
-  const staleScore = lastTouchDays >= 90 ? 4 : lastTouchDays >= 45 ? 2 : 0;
-  return relationshipScore + staleScore + helpScore;
-}
-
 function summarizeCommunity(community: CommunityDoc | null): { contacts: number; unsentDrafts: number; sentJobs: number } {
   if (!community) return { contacts: 0, unsentDrafts: 0, sentJobs: 0 };
 
@@ -894,6 +835,7 @@ function normalizeNextMove(value: unknown): HqStateNextMove {
     route: normalizeRouteHint(candidate.route),
     entityRef: normalizeEntityRef(candidate.entityRef),
     semanticIntentId: clean(candidate.semanticIntentId),
+    attentionRequired: typeof candidate.attentionRequired === 'boolean' ? candidate.attentionRequired : undefined,
   };
 }
 

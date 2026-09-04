@@ -49,7 +49,8 @@ export function unhealthyHqSources(sources: HqOperationalSourceHealth[]): HqOper
 }
 
 export function userFacingHqAttention(items: HqStateAttentionItem[]): HqStateAttentionItem[] {
-  return items.filter((item) => item.kind !== 'source-health')
+  const passiveKinds = new Set(['source-health', 'network', 'community', 'shared-intel'])
+  return items.filter((item) => !passiveKinds.has(item.kind))
 }
 
 export function proactiveHqModeStorageKey(workspaceId: string): string {

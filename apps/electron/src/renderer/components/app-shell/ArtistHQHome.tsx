@@ -777,7 +777,7 @@ export function ArtistHQHome({
     [sessionMetaMap, workspaceId],
   )
   const workerItems = React.useMemo(
-    () => buildHqWorkerItems(automations, scheduledWorkResult.work.items, workspaceWorkerSessions),
+    () => buildHqWorkerItems(automations, scheduledWorkResult.work.items, workspaceWorkerSessions, Number.MAX_SAFE_INTEGER),
     [automations, scheduledWorkResult.work.items, workspaceWorkerSessions],
   )
   const selectedDateEvents = React.useMemo(
@@ -2099,9 +2099,6 @@ export function ArtistHQHome({
           className={tab === 'home' ? "after:pointer-events-none after:absolute after:inset-0 after:z-[9] after:rounded-[inherit] after:ring-2 after:ring-inset after:ring-[#050505] after:content-['']" : undefined}
           actions={
             <>
-              {tab === 'home' ? (
-                <LiveWorkChip items={workerItems} />
-              ) : null}
               {tab !== 'signals' ? (
                 <div className="hidden min-w-0 text-right sm:block">
                   <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/38">Next</p>
@@ -2191,6 +2188,9 @@ export function ArtistHQHome({
 
             <StateOfPlayPanel
               state={hqState}
+              workerItems={workerItems}
+              recentOutputs={outputs}
+              recentLoading={outputsLoading}
               workspaceId={workspaceId}
               proactiveMode={proactiveMode}
               proactiveBusy={managerCheckInBusy}
@@ -2996,28 +2996,6 @@ function PulseRunControls({
   )
 }
 
-function LiveWorkChip({ items }: { items: HqHomeWorkerItem[] }) {
-  const running = items.length
-  const lead = items[0]?.title
-  const label = running === 0
-    ? 'Quiet'
-    : running === 1 && lead
-      ? `1 running · ${lead}`
-      : `${running} running`
-  return (
-    <button
-      type="button"
-      onClick={() => navigate(routes.view.automations())}
-      title={running > 0 ? items.map((item) => item.title).join(' · ') : 'No automatic work running'}
-      aria-label="Open active work"
-      className="inline-flex h-8 max-w-[240px] items-center gap-2 rounded-full border border-white/[0.1] bg-black/35 px-3 text-[11px] font-medium text-white/72 backdrop-blur-md transition-colors hover:bg-black/55 hover:text-white/92"
-    >
-      <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', running > 0 ? 'bg-emerald-300' : 'bg-white/30')} />
-      <span className="truncate">{label}</span>
-    </button>
-  )
-}
-
 function ManagerAskBar({
   busy,
   onAsk,
@@ -3133,15 +3111,30 @@ function SignalsStrip({
 
   return (
     <section className="min-w-0">
-      <div className="mb-2 flex h-6 items-center justify-between gap-3 px-1">
+      <div className="mb-2 flex h-6 items-center px-1">
         <p className="text-[9px] font-medium uppercase tracking-[0.16em] text-white/42">
           Signals
           {spotifyDate ? <span className="text-white/24"> · {spotifyDate}</span> : null}
           {spotifySnapshot?.windowDays && !spotifyPublicApi ? <span className="text-white/24"> · {spotifySnapshot.windowDays} days</span> : null}
         </p>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[9px] uppercase tracking-[0.12em] text-white/28">Spotify</span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <div className="relative min-w-0">
+          <SignalTile
+            label={spotifyPublicApi ? 'Popularity' : 'Streams'}
+            value={formatMetric(spotifyPublicApi ? spotifySnapshot?.metrics.popularity : spotifySnapshot?.metrics.streams)}
+            trend={spotifyPublicApi ? [] : streamTrend}
+            foot={spotifySnapshot
+              ? spotifyPublicApi
+                ? 'Public API · 0–100'
+                : growthFoot(growth?.streamsPercent, growth?.comparisonDate) ?? 'Baseline set'
+              : spotifyPending}
+            footTone={growthTone(growth?.streamsPercent)}
+            ariaLabel="Open Spotify Pulse analysis"
+            onOpen={() => setSpotifyOpen(true)}
+          />
+          <div className="absolute right-3 top-2.5 z-10">
             <PulseRunControls
               active={spotifyActive}
               busy={spotifyBusy}
@@ -3153,46 +3146,7 @@ function SignalsStrip({
               onToggle={onToggleSpotify}
             />
           </div>
-          <span className="h-4 w-px bg-white/[0.08]" />
-          <div className="flex items-center gap-1.5">
-            <span className="text-[9px] uppercase tracking-[0.12em] text-white/28">Instagram</span>
-            <button
-              type="button"
-              onClick={onManageSocial}
-              title="Manage social accounts"
-              aria-label="Manage social accounts"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.07] bg-white/[0.02] text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/65"
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-            </button>
-            <PulseRunControls
-              active={instagramActive}
-              busy={instagramBusy}
-              runDisabled={instagramRunDisabled}
-              manualLabel="Run Instagram Insights now — manual"
-              weeklyLabel="Weekly Instagram Insights auto-run"
-              activeClassName="border-[#f97316]/40 bg-[#f97316]/14 text-[#f97316]"
-              onRun={onRunInstagram}
-              onToggle={onToggleInstagram}
-            />
-          </div>
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <SignalTile
-          label={spotifyPublicApi ? 'Popularity' : 'Streams'}
-          value={formatMetric(spotifyPublicApi ? spotifySnapshot?.metrics.popularity : spotifySnapshot?.metrics.streams)}
-          trend={spotifyPublicApi ? [] : streamTrend}
-          foot={spotifySnapshot
-            ? spotifyPublicApi
-              ? 'Public API · 0–100'
-              : growthFoot(growth?.streamsPercent, growth?.comparisonDate) ?? 'Baseline set'
-            : spotifyPending}
-          footTone={growthTone(growth?.streamsPercent)}
-          ariaLabel="Open Spotify Pulse analysis"
-          onOpen={() => setSpotifyOpen(true)}
-        />
         <SignalTile
           label="Listeners"
           value={formatMetric(spotifySnapshot?.metrics.listeners)}
@@ -3214,15 +3168,38 @@ function SignalsStrip({
           ariaLabel="Open Spotify follower analysis"
           onOpen={() => setSpotifyOpen(true)}
         />
-        <SignalTile
-          label="Instagram"
-          value={formatSignedMetric(instagramSnapshot?.metrics.followerDelta)}
-          trend={instagramHistory.map((point) => point.followerDelta)}
-          trendMode="bars"
-          foot={instagramFoot}
-          ariaLabel="Open Social Pulse analysis"
-          onOpen={() => setSocialOpen(true)}
-        />
+        <div className="relative min-w-0">
+          <SignalTile
+            label="Instagram"
+            value={formatSignedMetric(instagramSnapshot?.metrics.followerDelta)}
+            trend={instagramHistory.map((point) => point.followerDelta)}
+            trendMode="bars"
+            foot={instagramFoot}
+            ariaLabel="Open Social Pulse analysis"
+            onOpen={() => setSocialOpen(true)}
+          />
+          <div className="absolute right-3 top-2.5 z-10 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onManageSocial}
+              title="Manage social accounts"
+              aria-label="Manage social accounts"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.07] bg-white/[0.02] text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/65"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+            </button>
+            <PulseRunControls
+              active={instagramActive}
+              busy={instagramBusy}
+              runDisabled={instagramRunDisabled}
+              manualLabel="Run Instagram Insights now — manual"
+              weeklyLabel="Weekly Instagram Insights auto-run"
+              activeClassName="border-[#f97316]/40 bg-[#f97316]/14 text-[#f97316]"
+              onRun={onRunInstagram}
+              onToggle={onToggleInstagram}
+            />
+          </div>
+        </div>
       </div>
 
       <SpotifyPulseDetails
@@ -3270,7 +3247,7 @@ function SignalTile({
       type="button"
       aria-label={ariaLabel}
       onClick={onOpen}
-      className="group relative flex h-[104px] min-w-0 flex-col overflow-hidden rounded-[14px] border border-white/[0.075] bg-white/[0.035] p-3.5 text-left backdrop-blur-2xl transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#f97316]/70"
+      className="group relative flex h-[104px] w-full min-w-0 flex-col overflow-hidden rounded-[14px] border border-white/[0.075] bg-white/[0.035] p-3.5 text-left backdrop-blur-2xl transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#f97316]/70"
     >
       <span className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/42">{label}</span>
       <span className={cn(
@@ -3546,6 +3523,9 @@ function SignalProgress({
 
 type StateOfPlayPanelProps = {
   state: HqStateOfPlay | null
+  workerItems: HqHomeWorkerItem[]
+  recentOutputs: OutputSummaryDTO[]
+  recentLoading: boolean
   workspaceId: string
   proactiveMode: boolean
   proactiveBusy: boolean
@@ -3563,85 +3543,178 @@ type StateOfPlayPanelProps = {
 function StateOfPlayPanel(props: StateOfPlayPanelProps) {
   const {
     state,
+    workerItems,
+    recentOutputs,
+    recentLoading,
     proactiveMode,
     proactiveBusy,
     routeBusy,
     refreshBusy,
     availableAgentSlugs,
+    onOpenEntity,
     onToggleProactiveMode,
     onLaunchRoute,
     onRefresh,
   } = props
   const [detailsOpen, setDetailsOpen] = React.useState(false)
-
-  if (!state) {
-    return (
-      <HQCard className="border-white/[0.07] bg-white/[0.03] p-3.5 backdrop-blur-xl">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-3.5 w-3.5 text-[#f97316]/80" />
-              <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/42">This week</span>
-            </div>
-            <p className="mt-1.5 text-sm font-medium text-white/72">No priorities yet</p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <StateOfPlayRefreshButton busy={refreshBusy} onRefresh={onRefresh} size="md" />
-            <Switch
-              checked={proactiveMode}
-              onCheckedChange={onToggleProactiveMode}
-              disabled={proactiveBusy}
-              aria-label={proactiveMode ? 'Pause weekly manager check-in' : 'Enable weekly manager check-in'}
-              className="data-[state=checked]:bg-[#f97316]"
-            />
-          </div>
-        </div>
-      </HQCard>
-    )
+  const [view, setView] = React.useState<'needs' | 'progress' | 'recent'>('needs')
+  const actionableMoves = state
+    ? [state.nextMove, ...state.alternatives].filter((move) => move.attentionRequired)
+    : []
+  const primaryNeed = actionableMoves[0]
+  const secondaryMoves = actionableMoves.slice(1, 4)
+  const representedSources = new Set([
+    primaryNeed?.entityRef?.source,
+    ...secondaryMoves.map((move) => move.entityRef?.source),
+  ].filter((source): source is string => Boolean(source)))
+  const needsYouItems = state
+    ? userFacingHqAttention(state.attention)
+      .filter((item) => !representedSources.has(item.source))
+      .slice(0, Math.max(0, 4 - secondaryMoves.length))
+    : []
+  const inProgressItems = workerItems
+    .filter((item) => item.kind !== 'automation' && ['running', 'waiting', 'scheduled'].includes(item.status))
+    .slice(0, 5)
+  const completedOutputs = [...recentOutputs]
+    .filter((output) => output.status !== 'failed' && output.status !== 'cancelled')
+    .sort((left, right) => outputActivityTime(right) - outputActivityTime(left))
+    .slice(0, 5)
+  const counts = {
+    needs: (primaryNeed ? 1 : 0) + secondaryMoves.length + needsYouItems.length,
+    progress: inProgressItems.length,
+    recent: completedOutputs.length,
   }
-
-  const thisWeekItems = userFacingHqAttention(state.attention).slice(0, 2)
 
   return (
     <>
       <HQCard className="overflow-hidden border-white/[0.075] bg-white/[0.032] p-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl">
-        <div className="flex h-10 items-center justify-between gap-4 border-b border-white/[0.055] px-4">
-          <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/42">This week</span>
-          <button
-            type="button"
-            onClick={() => setDetailsOpen(true)}
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[7px] px-2 text-[10px] font-medium text-white/42 transition-colors hover:bg-white/[0.05] hover:text-white/75"
-          >
-            Manager
-            <ChevronRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <div className="divide-y divide-white/[0.05]">
-          <div className="flex min-h-12 items-center gap-3 px-4 py-2.5">
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#f97316]" />
-            <div className="min-w-0 flex-1">
-              <p className="text-[9px] font-medium uppercase tracking-[0.12em] text-white/28">Next move</p>
-              <h2 className="mt-0.5 truncate text-sm font-medium tracking-tight text-white/88">{state.nextMove.title}</h2>
-            </div>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Why this is recommended"
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white/30 transition-colors hover:bg-white/[0.05] hover:text-white/70"
-                >
-                  <Info className="h-3.5 w-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-[320px] text-xs leading-5">{state.nextMove.why}</TooltipContent>
-            </Tooltip>
+        <div className="flex min-h-12 items-center justify-between gap-3 border-b border-white/[0.055] px-3 sm:px-4">
+          <div className="flex min-w-0 items-center gap-1" role="tablist" aria-label="Work activity">
+            {([
+              ['needs', 'Needs you'],
+              ['progress', 'In progress'],
+              ['recent', 'Recent'],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={view === id}
+                onClick={() => setView(id)}
+                className={cn(
+                  'relative inline-flex h-8 items-center gap-2 rounded-[7px] px-2.5 text-[11px] font-medium transition-[background-color,color,box-shadow] sm:px-3',
+                  view === id
+                    ? 'bg-white/[0.055] text-white/90 shadow-[inset_0_0_0_1px_rgba(249,115,22,0.62),0_1px_2px_rgba(0,0,0,0.22)]'
+                    : 'text-white/38 hover:bg-white/[0.035] hover:text-white/68',
+                )}
+              >
+                {label}
+                {counts[id] > 0 ? (
+                  <span className={cn(
+                    'inline-flex min-w-4 items-center justify-center rounded-full px-1 text-[9px] tabular-nums',
+                    view === id ? 'bg-black/25 text-white/60' : 'bg-white/[0.045] text-white/30',
+                  )}>
+                    {counts[id]}
+                  </span>
+                ) : null}
+              </button>
+            ))}
           </div>
-          {thisWeekItems.map((item) => (
-            <div key={`${item.kind}-${item.source}-${item.text}`} className="flex min-h-10 items-center gap-3 px-4 py-2">
-              <span className="h-1 w-1 shrink-0 rounded-full bg-white/28" />
-              <p className="line-clamp-1 text-xs text-white/54">{item.text}</p>
-            </div>
-          ))}
+          {state ? (
+            <button
+              type="button"
+              onClick={() => setDetailsOpen(true)}
+              aria-label="Open manager details"
+              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[7px] px-1.5 text-[10px] font-medium text-white/42 transition-colors hover:bg-white/[0.05] hover:text-white/75 sm:px-2"
+            >
+              <span className="hidden sm:inline">Manager</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <StateOfPlayRefreshButton busy={refreshBusy} onRefresh={onRefresh} size="md" />
+          )}
+        </div>
+        <div className="max-h-[228px] divide-y divide-white/[0.05] overflow-y-auto">
+          {view === 'needs' ? (
+            state && counts.needs > 0 ? (
+              <>
+                {primaryNeed ? <div className="flex min-h-10 items-center gap-3 px-4 py-2">
+                  <span className="h-1 w-1 shrink-0 rounded-full bg-white/28" />
+                  <h2 className="min-w-0 flex-1 truncate text-xs font-semibold text-white/88">{primaryNeed.title}</h2>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Why this is recommended"
+                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white/30 transition-colors hover:bg-white/[0.05] hover:text-white/70"
+                      >
+                        <Info className="h-3.5 w-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-[320px] text-xs leading-5">{primaryNeed.why}</TooltipContent>
+                  </Tooltip>
+                </div> : null}
+                {secondaryMoves.map((move) => (
+                  <button
+                    key={move.entityRef?.source ?? `${move.worker ?? 'manual'}-${move.title}`}
+                    type="button"
+                    onClick={() => move.entityRef ? onOpenEntity(move.entityRef) : setDetailsOpen(true)}
+                    className="flex min-h-10 w-full items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-white/[0.035]"
+                  >
+                    <span className={cn(
+                      'h-1 w-1 shrink-0 rounded-full',
+                      /failed|failure|interrupted/i.test(move.why) ? 'bg-red-300/80' : 'bg-white/28',
+                    )} />
+                    <span className="min-w-0 flex-1 truncate text-xs text-white/58">{move.title}</span>
+                    <ChevronRight className="h-3 w-3 shrink-0 text-white/24" />
+                  </button>
+                ))}
+                {needsYouItems.map((item) => (
+                  <div key={`${item.kind}-${item.source}-${item.text}`} className="flex min-h-10 items-center gap-3 px-4 py-2">
+                    <span className={cn('h-1 w-1 shrink-0 rounded-full', item.kind === 'failure' ? 'bg-red-300/80' : 'bg-white/28')} />
+                    <p className="line-clamp-1 text-xs text-white/54">{item.text}</p>
+                  </div>
+                ))}
+              </>
+            ) : <ActivityEmpty label="Nothing needs attention yet" />
+          ) : null}
+
+          {view === 'progress' ? (
+            inProgressItems.length > 0 ? inProgressItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => navigate(routes.view.automations())}
+                className="grid min-h-11 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-white/[0.035]"
+              >
+                <span className={cn('h-1.5 w-1.5 rounded-full', item.status === 'running' ? 'bg-emerald-300' : 'bg-amber-300/75')} />
+                <span className="min-w-0">
+                  <span className="block truncate text-xs font-medium text-white/78">{item.title}</span>
+                  <span className="block truncate text-[10px] text-white/34">{item.detail}</span>
+                </span>
+                <span className="text-[9px] font-medium uppercase tracking-[0.1em] text-white/34">{activityStatusLabel(item.status)}</span>
+              </button>
+            )) : <ActivityEmpty label="No work is running or queued" />
+          ) : null}
+
+          {view === 'recent' ? (
+            recentLoading ? <ActivityEmpty label="Loading recent work..." />
+              : completedOutputs.length > 0 ? completedOutputs.map((output) => (
+                <button
+                  key={output.id}
+                  type="button"
+                  onClick={() => navigate(routes.view.output(output.id))}
+                  className="grid min-h-11 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-white/[0.035]"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300/65" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-medium text-white/78">{output.title}</span>
+                    <span className="block truncate text-[10px] text-white/34">{output.origin?.agentName || output.origin?.workflowName || 'Saved output'}</span>
+                  </span>
+                  <span className="text-[10px] text-white/30">{formatShortDate(output.completedAt || output.updatedAt || output.createdAt)}</span>
+                </button>
+              )) : <ActivityEmpty label="No completed work yet" />
+          ) : null}
         </div>
       </HQCard>
 
@@ -3668,6 +3741,22 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
       </Drawer>
     </>
   )
+}
+
+function ActivityEmpty({ label }: { label: string }) {
+  return <p className="px-4 py-4 text-xs text-white/34">{label}</p>
+}
+
+function activityStatusLabel(status: string): string {
+  if (status === 'running') return 'Running'
+  if (status === 'waiting') return 'Queued'
+  if (status === 'scheduled') return 'Scheduled'
+  return status.replaceAll('-', ' ')
+}
+
+function outputActivityTime(output: OutputSummaryDTO): number {
+  const parsed = Date.parse(output.completedAt || output.updatedAt || output.createdAt)
+  return Number.isNaN(parsed) ? 0 : parsed
 }
 
 function StateOfPlayDetailPanel({

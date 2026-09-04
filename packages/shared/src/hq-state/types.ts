@@ -47,6 +47,8 @@ export interface HqStateNextMove {
   route?: HqStateRouteHint;
   entityRef?: HqStateEntityRef;
   semanticIntentId?: string;
+  /** True only when this move needs a user decision or intervention now. */
+  attentionRequired?: boolean;
 }
 
 export type HqRecommendationStatus =
