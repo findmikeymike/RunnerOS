@@ -2901,6 +2901,9 @@ export const TurnCard = React.memo(function TurnCard({
     () => allSortedActivities.filter(a => a.type !== 'plan'),
     [allSortedActivities]
   )
+  const oldestRunningTool = sortedActivities.find(a => (
+    a.type === 'tool' && a.status === 'running' && Number.isFinite(a.timestamp)
+  ))
 
   // Check if we have any Task subagents - if so, use grouped view
   const hasTaskSubagents = useMemo(
@@ -3009,6 +3012,10 @@ export const TurnCard = React.memo(function TurnCard({
                 </motion.span>
               </AnimatePresence>
             </span>
+
+            {!isExpanded && oldestRunningTool && !isComplete && (
+              <SlowToolNotice startedAt={oldestRunningTool.timestamp} running />
+            )}
 
             {/* Turn actions menu - use platform override or default */}
             {renderActionsMenu ? renderActionsMenu() : (

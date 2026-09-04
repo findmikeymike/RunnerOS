@@ -29,8 +29,8 @@
  * environment, so under Bun this file is inert no matter how early it loads —
  * verified against a preload, a `.env.test`, and a dynamic import, all still
  * 20s+. Bun processes need the variable in the actual environment instead:
- * the root `test` script exports it, and the standalone Bun server wants it
- * set by whatever launches it.
+ * the root `test` script sets it, and the standalone server entry relaunches
+ * once with it set before importing the server runtime.
  *
  * macOS only. Linux already defaults to fontconfig, and Windows Pango uses its
  * own backend that this would break.

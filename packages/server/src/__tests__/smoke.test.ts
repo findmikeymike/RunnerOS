@@ -34,6 +34,7 @@ async function spawnTestServer(extraEnv?: Record<string, string>): Promise<Spawn
       ...parentEnv,
       ...extraEnv,
       CRAFT_SERVER_TOKEN: token,
+      CRAFT_PRODUCT_VARIANT: 'runner',
       CRAFT_RPC_PORT: '0',
       CRAFT_RPC_HOST: '127.0.0.1',
       CRAFT_HEALTH_PORT: '0', // random port
@@ -105,6 +106,7 @@ function connectWs(url: string, token: string): Promise<WebSocket> {
         id: crypto.randomUUID(),
         type: 'handshake',
         protocolVersion: '1.0',
+        productVariant: 'runner',
         token,
       }))
     })
