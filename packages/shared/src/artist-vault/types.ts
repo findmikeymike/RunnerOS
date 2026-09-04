@@ -36,6 +36,7 @@ export type VaultAssetKind =
   | 'social-pack'
   | 'contract'
   | 'split-sheet'
+  | 'rights-record'
   | 'invoice'
   | 'one-sheet'
   | 'epk'

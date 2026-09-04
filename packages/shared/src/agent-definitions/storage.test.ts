@@ -26,7 +26,7 @@ import {
   removeBuiltInAgentSkills,
 } from './storage.ts'
 import { STARTER_AGENTS } from './starter-templates.ts'
-import { ANYTHING_AGENT_SLUG, RELEASE_MANAGER_AGENT_SLUG, DEFAULT_ACTIVATED_AGENT_SLUGS, CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS, HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS, LAB_DEFAULT_ACTIVATED_AGENT_SLUGS, initialAgentSlugsForWorkspace, isReleaseManagerDefinition } from './defaults.ts'
+import { ANYTHING_AGENT_SLUG, RELEASE_MANAGER_AGENT_SLUG, DEFAULT_ACTIVATED_AGENT_SLUGS, CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS, HQ_DEFAULT_ACTIVATED_AGENT_SLUGS, HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS, LAB_DEFAULT_ACTIVATED_AGENT_SLUGS, initialAgentSlugsForWorkspace, isReleaseManagerDefinition } from './defaults.ts'
 import { SOCIAL_PUBLISHER_SLUG } from './types.ts'
 import { BUNDLED_STARTER_SKILLS, STARTER_SKILLS } from '../skills/index.ts'
 import * as publicAgentDefinitions from './index.ts'
@@ -560,6 +560,25 @@ body
     expect(setupConcierge?.systemPrompt).toContain('Never ask for account passwords')
   })
 
+  test('starter library includes an HQ royalty reconciliation worker with SoundExchange coverage', () => {
+    const agent = STARTER_AGENTS.find((candidate) => candidate.slug === 'catalog-royalty-agent')
+
+    expect(agent).toBeDefined()
+    expect(agent?.metadata.name).toBe('Catalog & Royalties')
+    expect(agent?.metadata.permissionMode).toBe('ask')
+    expect(agent?.metadata.skills).toEqual(['catalog-royalty-reconciliation'])
+    expect(agent?.metadata.trustedWorkerTools).toEqual(['create_output'])
+    expect(agent?.systemPrompt).toContain('SoundExchange')
+    expect(agent?.systemPrompt).toContain('featured-artist')
+    expect(agent?.systemPrompt).toContain('sound-recording-copyright-owner')
+    expect(agent?.systemPrompt).toContain('Release control only while the artist handles login')
+    expect(agent?.systemPrompt).toContain('resume control and navigate the normal UI')
+    expect(agent?.systemPrompt).toContain('stop immediately if the artist takes control')
+    expect(agent?.systemPrompt).toContain('Never turn not checked into not registered')
+    expect(agent?.systemPrompt).toContain('Prepare; never submit')
+    expect(agent?.systemPrompt).toContain('Never use headless browsing')
+  })
+
   test('every starter agent skill reference resolves to a shipped starter skill', () => {
     const skillSlugs = new Set([
       ...STARTER_SKILLS.map((skill) => skill.slug),
@@ -874,13 +893,18 @@ body
     expect(initialAgentSlugsForWorkspace('lab', false)).toEqual(LAB_DEFAULT_ACTIVATED_AGENT_SLUGS)
     expect(initialAgentSlugsForWorkspace('lab', true)).toEqual([])
     expect(CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['anticipation-director'])
+    expect(HQ_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['catalog-royalty-agent'])
     expect(HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual([ANYTHING_AGENT_SLUG])
     expect(initialAgentSlugsForWorkspace('campaign', false)).toEqual([
       RELEASE_MANAGER_AGENT_SLUG,
       ANYTHING_AGENT_SLUG,
       'anticipation-director',
     ])
-    expect(initialAgentSlugsForWorkspace('hq', false)).toEqual([RELEASE_MANAGER_AGENT_SLUG, ANYTHING_AGENT_SLUG])
+    expect(initialAgentSlugsForWorkspace('hq', false)).toEqual([
+      RELEASE_MANAGER_AGENT_SLUG,
+      ANYTHING_AGENT_SLUG,
+      'catalog-royalty-agent',
+    ])
     expect(initialAgentSlugsForWorkspace('general', false)).toEqual([])
   })
 

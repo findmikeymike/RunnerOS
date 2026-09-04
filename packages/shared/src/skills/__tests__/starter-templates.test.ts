@@ -294,6 +294,21 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(getSkillMd(outreach!)).toContain('Outreach Agent handoff');
   });
 
+  it('includes catalog royalty reconciliation with supervised visible-browser capture', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'catalog-royalty-reconciliation');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('catalog-royalty-reconciliation');
+    expect(parsed.content).toContain('SoundExchange');
+    expect(parsed.content).toContain('featured-artist');
+    expect(parsed.content).toContain('sound-recording-copyright-owner');
+    expect(parsed.content).toContain('Release control only for login');
+    expect(parsed.content).toContain('resume control and navigate the normal site');
+    expect(parsed.content).toContain('stop immediately if the artist takes control');
+    expect(parsed.content).toContain('Never turn `not-checked` into `not registered`');
+    expect(parsed.content).toContain('Do not file or submit');
+  });
+
   it('includes spotify-canvas-video for silent Spotify Canvas loops', () => {
     const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'spotify-canvas-video');
     expect(skill).toBeDefined();

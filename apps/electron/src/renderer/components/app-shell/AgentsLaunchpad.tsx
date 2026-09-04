@@ -1657,6 +1657,10 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
     return 'Release Operations'
   }
 
+  if (slug === 'catalog-royalty-agent') {
+    return 'Rights & Royalties'
+  }
+
   if (
     slug === 'persona-agent'
     || slug === 'content-genius'
@@ -1717,6 +1721,7 @@ function agentDomainRank(domain: string) {
     'Socials',
     'Promotion',
     'Release Operations',
+    'Rights & Royalties',
     'Outreach',
     'Merch',
     'Research',

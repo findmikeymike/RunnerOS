@@ -29,6 +29,11 @@ describe('worker page defaults', () => {
     expect(defaultWorkerSlugs(true)).not.toContain('update-system-agent')
   })
 
+  test('Catalog & Royalties is an HQ-only default worker', () => {
+    expect(defaultWorkerSlugs(false)).toContain('catalog-royalty-agent')
+    expect(defaultWorkerSlugs(true)).not.toContain('catalog-royalty-agent')
+  })
+
   test('Lab defaults stay bounded to the songwriting roster', () => {
     expect(LAB_DEFAULT_WORKER_SLUGS).toEqual([
       'the-excavator',

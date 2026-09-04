@@ -161,6 +161,7 @@ export function destinationForVaultKind(kind: VaultAssetKind): string {
     case 'social-pack': return 'campaigns/social-packs';
     case 'contract': return 'business/contracts';
     case 'split-sheet': return 'business/splits';
+    case 'rights-record': return 'business/rights-and-royalties/catalog';
     case 'invoice': return 'business/invoices';
     case 'one-sheet': return 'business/one-sheets';
     case 'epk': return 'business/epk';
@@ -177,7 +178,7 @@ export function categoryForKind(kind: VaultAssetKind): VaultCategory {
   if (kind === 'final-video' || kind === 'raw-footage' || kind === 'content-clip' || kind === 'b-roll' || kind === 'live-performance' || kind === 'video-project') return 'video';
   if (kind === 'cover-art' || kind === 'artist-photo' || kind === 'face-reference' || kind === 'logo-mark' || kind === 'brand-asset' || kind === 'poster-flyer' || kind === 'merch-design') return 'visuals';
   if (kind === 'release-asset' || kind === 'ad-asset' || kind === 'press-asset' || kind === 'social-pack') return 'campaigns';
-  if (kind === 'contract' || kind === 'split-sheet' || kind === 'invoice' || kind === 'one-sheet' || kind === 'epk') return 'business';
+  if (kind === 'contract' || kind === 'split-sheet' || kind === 'rights-record' || kind === 'invoice' || kind === 'one-sheet' || kind === 'epk') return 'business';
   return 'references';
 }
 
@@ -186,7 +187,7 @@ export function defaultVaultPolicy(kind: VaultAssetKind): {
   rightsStatus: VaultRightsStatus;
   usableByAgents: boolean;
 } {
-  if (kind === 'contract' || kind === 'split-sheet' || kind === 'invoice') {
+  if (kind === 'contract' || kind === 'split-sheet' || kind === 'rights-record' || kind === 'invoice') {
     return { status: 'review', rightsStatus: 'private', usableByAgents: false };
   }
   if (kind === 'master-final' || kind === 'final-video' || kind === 'cover-art' || kind === 'artist-photo' || kind === 'face-reference' || kind === 'logo-mark' || kind === 'ad-asset' || kind === 'one-sheet' || kind === 'epk') {

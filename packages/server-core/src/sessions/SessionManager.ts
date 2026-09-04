@@ -3915,6 +3915,7 @@ export class SessionManager implements ISessionManager {
           RELEASE_MANAGER_AGENT_SLUG,
           DEFAULT_ACTIVATED_AGENT_SLUGS,
           CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
+          HQ_DEFAULT_ACTIVATED_AGENT_SLUGS,
           ensureBuiltInAgentSkillsForSlug,
           getGlobalAgentDir,
           hasReleaseManagerIdentity,
@@ -3938,7 +3939,8 @@ export class SessionManager implements ISessionManager {
         // Chat nav entry), Setup Concierge, Social Publisher, TryPost, Postiz, Hypermotion, Video Director, Lottie Animation,
         // Video Editor, Lyric Video, Content Genius, Scroll Stopper, Anticipation Director, Content Director, promotion helpers, Shopify, Print Agent,
         // Release Manager, Outreach, Industry Hunter, Art Director, World Builder, Record Doctor,
-        // Song Director, Reverse Magic, Legendary Writer, Reference Master, and Update System Agent.
+        // Song Director, Reverse Magic, Legendary Writer, Reference Master, Update System Agent,
+        // and Catalog & Royalties.
         const required = STARTER_AGENTS.filter(
           (a) => a.slug === ORCHESTRATOR_SLUG
             || a.slug === CONCIERGE_SLUG
@@ -3985,7 +3987,8 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'legendary-writer'
             || a.slug === 'reference-master'
             || a.slug === 'the-excavator'
-            || a.slug === 'update-system-agent',
+            || a.slug === 'update-system-agent'
+            || a.slug === 'catalog-royalty-agent',
         )
         const { ensured } = ensureRequiredAgents(required)
         if (ensured > 0) {
@@ -4146,6 +4149,10 @@ export class SessionManager implements ISessionManager {
             sessionLog.info('[skills] Enabled Anticipation Engine for existing local workspaces')
           }
           const artistDefaultAgentTargets: Array<{ agentSlug: string; scopes: ReadonlySet<string> }> = [
+            ...HQ_DEFAULT_ACTIVATED_AGENT_SLUGS.map(agentSlug => ({
+              agentSlug,
+              scopes: new Set(['hq']),
+            })),
             ...CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS.map(agentSlug => ({
               agentSlug,
               scopes: new Set(['campaign']),

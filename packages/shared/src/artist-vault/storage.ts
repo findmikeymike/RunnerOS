@@ -79,6 +79,9 @@ const DEFAULT_DIRECTORIES = [
   'campaigns/social-packs',
   'business/contracts',
   'business/splits',
+  'business/rights-and-royalties/catalog',
+  'business/rights-and-royalties/registration-evidence',
+  'business/rights-and-royalties/filing-packets',
   'business/invoices',
   'business/one-sheets',
   'business/epk',
@@ -115,6 +118,7 @@ const VAULT_KINDS = new Set<VaultAssetKind>([
   'social-pack',
   'contract',
   'split-sheet',
+  'rights-record',
   'invoice',
   'one-sheet',
   'epk',
@@ -933,6 +937,7 @@ function kindFromRelativePath(relativePath: string): VaultAssetRecord['kind'] | 
   if (normalized.startsWith('vault/campaigns/social-packs/')) return 'social-pack';
   if (normalized.startsWith('vault/business/contracts/')) return 'contract';
   if (normalized.startsWith('vault/business/splits/')) return 'split-sheet';
+  if (normalized.startsWith('vault/business/rights-and-royalties/')) return 'rights-record';
   if (normalized.startsWith('vault/business/invoices/')) return 'invoice';
   if (normalized.startsWith('vault/business/one-sheets/')) return 'one-sheet';
   if (normalized.startsWith('vault/business/epk/')) return 'epk';

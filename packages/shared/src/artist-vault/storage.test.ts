@@ -6,6 +6,7 @@ import {
   artistVaultContextMetadata,
   classifyVaultAsset,
   getArtistVaultManifestPath,
+  ensureArtistVaultFolders,
   importArtistVaultAssets,
   importArtistVaultAssetsAsync,
   linkArtistVaultFolder,
@@ -26,6 +27,26 @@ function tempWorkspace(): string {
 }
 
 describe('artist vault', () => {
+  test('creates the private Rights & Royalties workspace structure', () => {
+    const workspace = tempWorkspace();
+
+    ensureArtistVaultFolders(workspace);
+
+    const catalogDir = join(workspace, 'vault/business/rights-and-royalties/catalog');
+    expect(existsSync(catalogDir)).toBe(true);
+    expect(existsSync(join(workspace, 'vault/business/rights-and-royalties/registration-evidence'))).toBe(true);
+    expect(existsSync(join(workspace, 'vault/business/rights-and-royalties/filing-packets'))).toBe(true);
+
+    writeFileSync(join(catalogDir, 'bmi-works.csv'), 'title,writer\nNight Drive,Mikey Mike\n');
+    const scan = scanArtistVault(workspace, 'workspace-1');
+    const record = scan.added.find((asset) => asset.relativePath?.endsWith('bmi-works.csv'));
+    expect(record?.kind).toBe('rights-record');
+    expect(record?.category).toBe('business');
+    expect(record?.rightsStatus).toBe('private');
+    expect(record?.usableByAgents).toBe(false);
+    expect(serializeArtistVaultContext(scan.manifest)).not.toContain('bmi-works.csv');
+  });
+
   test('classifies artist library filenames into Vault categories', () => {
     expect(classifyVaultAsset('/tmp/final-master.wav').kind).toBe('master-final');
     expect(classifyVaultAsset('/tmp/vocal-stem.wav').kind).toBe('stem');

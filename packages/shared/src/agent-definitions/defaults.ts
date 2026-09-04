@@ -44,6 +44,11 @@ export const CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS = [
   'anticipation-director',
 ] as const
 
+/** Career-wide specialists that belong only in Artist HQ. */
+export const HQ_DEFAULT_ACTIVATED_AGENT_SLUGS = [
+  'catalog-royalty-agent',
+] as const
+
 /** Fallback capability broker available in both Artist HQ and campaigns. */
 export const HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS = [
   ANYTHING_AGENT_SLUG,
@@ -70,6 +75,10 @@ export function initialAgentSlugsForWorkspace(
     ...HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
     ...CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
   ]
-  if (scope === 'hq') return [RELEASE_MANAGER_AGENT_SLUG, ...HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS]
+  if (scope === 'hq') return [
+    RELEASE_MANAGER_AGENT_SLUG,
+    ...HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
+    ...HQ_DEFAULT_ACTIVATED_AGENT_SLUGS,
+  ]
   return []
 }
