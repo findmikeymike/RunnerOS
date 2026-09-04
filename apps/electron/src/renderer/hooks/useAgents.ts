@@ -72,6 +72,10 @@ const BUILTIN_VISIBLE_AGENT_SLUGS = [
   'persona-agent',
   'branding-agent',
   'comms-agent',
+  // The site and the fan list are career-wide objects a campaign also acts on,
+  // so both belong in HQ and in a campaign — same as comms-agent beside them.
+  'website-agent',
+  'community-agent',
   'outreach-agent',
   'industry-hunter',
   'college-radio-agent',
