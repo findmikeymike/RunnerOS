@@ -183,6 +183,25 @@ export type {
   ManagerContextToolResult,
 } from './manager-context.ts';
 
+// Artist website: read, edit content, build, preview, audit. Never publishes.
+export {
+  handleGetWebsiteManifest,
+  handleCreateWebsite,
+  handleSetWebsiteContent,
+  handleBuildWebsite,
+  handlePreviewWebsite,
+  handleAuditWebsite,
+} from './website.ts';
+export type {
+  GetWebsiteManifestInput,
+  CreateWebsiteInput,
+  SetWebsiteContentInput,
+  BuildWebsiteInput,
+  PreviewWebsiteInput,
+  AuditWebsiteInput,
+  WebsiteToolResult,
+} from './website.ts';
+
 // Create Workflow (workflow-creator skill)
 export { handleCreateWorkflow } from './create-workflow.ts';
 export type {

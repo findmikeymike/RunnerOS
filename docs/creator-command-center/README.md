@@ -42,6 +42,7 @@ Core Artist HQ and campaign workspace specs live here.
 - [32 Computer Use Provider Strategy](./32-computer-use-provider-strategy-spec.md)
 - [33 Automations: Input-Aware Setup And The One List](./33-automations-input-aware-setup-spec.md)
 - [35 Guided Social Variant Sets](./35-social-video-repurposing-spec.md)
+- [39 Artist Website: Managed Site, Website Agent, And Site Builder](./39-artist-website-agent-spec.md) — Slice 1 shipped: `website/` object, bundled builder, six session tools, Site Builder agent
 
 ## Not Yet Built
 
@@ -51,6 +52,7 @@ Specs written but with no implementation in the tree. They live in
 - [31 Catalog And Royalty Reconciliation](./todo/31-catalog-royalty-reconciliation-spec.md) — BMI/ASCAP vs Spotify
 - [36 Capability Evolution Engine](./todo/36-capability-evolution-engine-spec.md)
 - [37 Model Fallback Chain](./todo/37-model-fallback-chain-spec.md)
+- [38 Community Email Engine And The Community Agent](./todo/38-community-email-engine-spec.md) — Resend fan lane, Gmail personal lane, inbox, doors, Community Agent
 
 When one ships, move it back up into the numbered list above.
 

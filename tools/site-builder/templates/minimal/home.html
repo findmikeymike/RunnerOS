@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+{{> head}}
+</head>
+<body>
+{{> header}}
+
+<main>
+  <section class="hero">
+    <h1>{{site.artist.name}}</h1>
+    {{#if site.artist.tagline}}<p class="tagline">{{site.artist.tagline}}</p>{{/if}}
+    {{#if featuredRelease}}
+    <div class="hero-release">
+      <p class="eyebrow">Out now</p>
+      <p class="release-title">{{featuredRelease.title}}</p>
+      <div class="listen">
+        {{#if featuredRelease.links.spotify}}<a class="btn" href="{{featuredRelease.links.spotify}}" rel="noopener">Spotify</a>{{/if}}
+        {{#if featuredRelease.links.apple}}<a class="btn" href="{{featuredRelease.links.apple}}" rel="noopener">Apple Music</a>{{/if}}
+        {{#if featuredRelease.links.bandcamp}}<a class="btn" href="{{featuredRelease.links.bandcamp}}" rel="noopener">Bandcamp</a>{{/if}}
+        {{#if featuredRelease.links.presave}}<a class="btn primary" href="{{featuredRelease.links.presave}}" rel="noopener">Pre-save</a>{{/if}}
+        {{#if featuredRelease.links.smart}}<a class="btn primary" href="{{featuredRelease.links.smart}}" rel="noopener">Listen</a>{{/if}}
+      </div>
+    </div>
+    {{/if}}
+  </section>
+
+  {{> signup}}
+
+  {{#if releases}}
+  <section id="music">
+    <h2>Music</h2>
+    <ul class="releases">
+      {{#each releases}}
+      <li class="release">
+        <div class="release-meta">
+          <p class="release-name">{{this.title}}</p>
+          <p class="fine">{{this.type}} · {{this.date}}</p>
+        </div>
+        <div class="listen">
+          {{#if this.links.smart}}<a href="{{this.links.smart}}" rel="noopener">Listen</a>{{/if}}
+          {{#if this.links.spotify}}<a href="{{this.links.spotify}}" rel="noopener">Spotify</a>{{/if}}
+          {{#if this.links.apple}}<a href="{{this.links.apple}}" rel="noopener">Apple</a>{{/if}}
+          {{#if this.links.bandcamp}}<a href="{{this.links.bandcamp}}" rel="noopener">Bandcamp</a>{{/if}}
+        </div>
+      </li>
+      {{/each}}
+    </ul>
+  </section>
+  {{/if}}
+
+  <section id="shows">
+    <h2>Shows</h2>
+    {{#if upcomingShows}}
+    <ul class="shows">
+      {{#each upcomingShows}}
+      <li class="show">
+        <span class="show-date">{{this.date}}</span>
+        <span class="show-where">{{this.city}} · {{this.venue}}</span>
+        {{#if this.soldOut}}<span class="sold-out">Sold out</span>{{else}}{{#if this.ticketUrl}}<a class="btn" href="{{this.ticketUrl}}" rel="noopener">Tickets</a>{{/if}}{{/if}}
+      </li>
+      {{/each}}
+    </ul>
+    {{else}}
+    <p class="empty">No shows on the books right now. Join the list above and you will hear first.</p>
+    {{/if}}
+    {{#if pastShows}}
+    <details class="past-shows">
+      <summary>Past shows</summary>
+      <ul>{{#each pastShows}}<li>{{this.date}} · {{this.city}} · {{this.venue}}</li>{{/each}}</ul>
+    </details>
+    {{/if}}
+  </section>
+
+  {{#if featuredVideo}}
+  <section id="video">
+    <h2>Video</h2>
+    {{#if featuredVideo.youtubeId}}
+    <div class="video-frame">
+      <iframe src="https://www.youtube-nocookie.com/embed/{{featuredVideo.youtubeId}}" title="{{featuredVideo.title}}" loading="lazy" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+    </div>
+    {{/if}}
+    <p class="fine">{{featuredVideo.title}}</p>
+  </section>
+  {{/if}}
+
+  {{#if site.artist.bio.long}}
+  <section id="about">
+    <h2>About</h2>
+    <p class="bio">{{site.artist.bio.long}}</p>
+  </section>
+  {{/if}}
+
+  {{#if journal}}
+  <section id="journal">
+    <h2>Latest</h2>
+    {{#each journal}}
+    <article class="journal-entry">
+      <h3>{{this.title}}</h3>
+      <p class="fine">{{this.date}}</p>
+      <p>{{this.body}}</p>
+    </article>
+    {{/each}}
+  </section>
+  {{/if}}
+
+  {{#if site.storeLinks}}
+  <section id="merch">
+    <h2>Merch</h2>
+    <ul class="links">{{#each site.storeLinks}}<li><a href="{{this.url}}" rel="noopener">{{this.label}}</a></li>{{/each}}</ul>
+  </section>
+  {{/if}}
+</main>
+
+{{> footer}}
+</body>
+</html>

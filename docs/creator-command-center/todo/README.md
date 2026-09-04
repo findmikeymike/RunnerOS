@@ -19,6 +19,7 @@ an implementing agent as-is.
 | [31 Catalog And Royalty Reconciliation](./31-catalog-royalty-reconciliation-spec.md) | Compiles every released song from Spotify and squares it against BMI/ASCAP registrations to find unregistered works | no `ISWC` handling anywhere in `packages/` |
 | [36 Capability Evolution Engine](./36-capability-evolution-engine-spec.md) | Turns weekly intel and usage friction into a few proposed system upgrades the artist can try, keep, then routinize | no `EvolutionProposal` or evolution service |
 | [37 Model Fallback Chain](./37-model-fallback-chain-spec.md) | User-picked Fallback 1 and 2 so a rate-limited model does not kill a session, workflow step, or scheduled run | no fallback logic in `agent/` or `config/`; workflow retries the same model (`runner.ts:712-752`) |
+| [38 Community Email Engine And The Community Agent](./38-community-email-engine-spec.md) | Finishes the fan-list loop: Resend sending with one-click approve, inbound fan mail, engagement, capture doors, agent tools, and a Community Agent starter; Gmail stays the personal lane | no Resend API call anywhere; `community-email.ts:25-30` is a stub; no job status transition after create; no `community_*` session tools |
 
 ## Rules For This Folder
 
@@ -30,6 +31,8 @@ an implementing agent as-is.
 - Cross-references from here use `../` for specs in the parent folder.
 - Spec 26 (Agent-Bound Messaging) left this folder once slices 1, 2, 4, and 4a
   shipped; it now lives in the parent folder as `partially-implemented`.
+- Spec 39 (Artist Website) left this folder once Slice 1 shipped; it now lives
+  in the parent folder as `partially-implemented`.
 
 ## Suggested Order
 
@@ -39,6 +42,10 @@ Independent of each other; ordered by leverage per unit of work.
    dying on a busy free-tier model. Everything else benefits.
 2. **36 Capability Evolution Engine** — ship Slice 3 and stop to measure before
    building the draft and activation machinery.
-3. **31 Catalog And Royalty Reconciliation** — highest real-world payoff for an
+3. **38 Community Email Engine** — the fan list already exists and is well
+   modeled; Slices 1 through 3 turn it into a working sender with no agent
+   work, and Slice 4 gives the Community Agent hands. Highest compounding
+   payoff for any artist with fans.
+4. **31 Catalog And Royalty Reconciliation** — highest real-world payoff for an
    artist with a back catalog, but depends on a Spotify path and browser
    sessions for BMI/ASCAP.

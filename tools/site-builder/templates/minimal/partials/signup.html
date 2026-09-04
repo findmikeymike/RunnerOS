@@ -1,0 +1,13 @@
+{{#if site.primarySignup}}
+<section class="signup" id="signup">
+  <h2>{{site.primarySignup.headline}}</h2>
+  {{#if site.primarySignup.blurb}}<p class="blurb">{{site.primarySignup.blurb}}</p>{{/if}}
+  <form class="signup-form" method="POST" action="/api/signup" data-form-id="{{site.primarySignup.id}}">
+    <input type="hidden" name="formId" value="{{site.primarySignup.id}}">
+    <label class="visually-hidden" for="signup-email">Email address</label>
+    <input id="signup-email" type="email" name="email" required autocomplete="email" placeholder="you@email.com">
+    <button type="submit">Join</button>
+  </form>
+  <p class="fine">Unsubscribe any time. Your address is never sold or shared.</p>
+</section>
+{{/if}}

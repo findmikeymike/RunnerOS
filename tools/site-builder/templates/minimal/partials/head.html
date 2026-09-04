@@ -1,0 +1,16 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{meta.title}}</title>
+<meta name="description" content="{{meta.description}}">
+{{#if meta.noindex}}<meta name="robots" content="noindex, nofollow">{{/if}}
+{{#if meta.canonical}}<link rel="canonical" href="{{meta.canonical}}">{{/if}}
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{{site.seo.siteName}}">
+<meta property="og:title" content="{{meta.ogTitle}}">
+<meta property="og:description" content="{{meta.ogDescription}}">
+{{#if meta.ogUrl}}<meta property="og:url" content="{{meta.ogUrl}}">{{/if}}
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{meta.ogTitle}}">
+<meta name="twitter:description" content="{{meta.ogDescription}}">
+<link rel="stylesheet" href="/styles.css">
+<script type="application/ld+json">{{{site.jsonLd}}}</script>

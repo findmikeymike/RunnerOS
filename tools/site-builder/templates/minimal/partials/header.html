@@ -1,0 +1,9 @@
+<header class="site-header">
+  <a class="wordmark" href="/">{{site.artist.name}}</a>
+  <nav aria-label="Primary">
+    <a href="/#music">Music</a>
+    <a href="/#shows">Shows</a>
+    {{#if site.hasPressPage}}<a href="/press/">Press</a>{{/if}}
+    {{#each site.pages}}<a href="/{{this.slug}}/">{{this.title}}</a>{{/each}}
+  </nav>
+</header>

@@ -1,0 +1,11 @@
+<footer class="site-footer">
+  {{#if site.socialLinks}}
+  <ul class="social">
+    {{#each site.socialLinks}}<li><a href="{{this.url}}" rel="noopener">{{this.label}}</a></li>{{/each}}
+  </ul>
+  {{/if}}
+  {{#if site.artist.booking.email}}
+  <p class="contact">Booking · <a href="mailto:{{site.artist.booking.email}}">{{site.artist.booking.email}}</a></p>
+  {{/if}}
+  <p class="fine">&copy; {{site.year}} {{site.artist.name}}</p>
+</footer>

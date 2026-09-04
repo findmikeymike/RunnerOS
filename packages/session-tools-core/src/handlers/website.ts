@@ -1,0 +1,59 @@
+import type { SessionToolContext } from '../context.ts';
+import type { ToolResult } from '../types.ts';
+import { errorResponse, successResponse } from '../response.ts';
+
+export interface GetWebsiteManifestInput { includeHistory?: boolean }
+
+export interface CreateWebsiteInput { artistName: string; template?: string }
+
+export interface SetWebsiteContentInput {
+  /** Structured edits against the content contract. See SiteContentOperation. */
+  operations: unknown[];
+}
+
+export interface BuildWebsiteInput { audit?: boolean }
+export interface PreviewWebsiteInput { build?: boolean }
+export interface AuditWebsiteInput { url?: string }
+
+export type WebsiteToolResult = { ok: boolean; error?: string; [key: string]: unknown };
+
+async function invoke(
+  callback: ((input: never) => Promise<WebsiteToolResult>) | undefined,
+  input: unknown,
+  unavailable: string,
+): Promise<ToolResult> {
+  if (!callback) return errorResponse(unavailable);
+  try {
+    const result = await callback(input as never);
+    const body = JSON.stringify(result, null, 2);
+    return result.ok ? successResponse(body) : errorResponse(body);
+  } catch (error) {
+    return errorResponse(error instanceof Error ? error.message : String(error));
+  }
+}
+
+const NO_WEBSITE = 'Website tools are only available in an Artist HQ workspace.';
+
+export function handleGetWebsiteManifest(ctx: SessionToolContext, input: GetWebsiteManifestInput): Promise<ToolResult> {
+  return invoke(ctx.getWebsiteManifest, input, NO_WEBSITE);
+}
+
+export function handleCreateWebsite(ctx: SessionToolContext, input: CreateWebsiteInput): Promise<ToolResult> {
+  return invoke(ctx.createWebsite, input, NO_WEBSITE);
+}
+
+export function handleSetWebsiteContent(ctx: SessionToolContext, input: SetWebsiteContentInput): Promise<ToolResult> {
+  return invoke(ctx.setWebsiteContent, input, NO_WEBSITE);
+}
+
+export function handleBuildWebsite(ctx: SessionToolContext, input: BuildWebsiteInput): Promise<ToolResult> {
+  return invoke(ctx.buildWebsite, input, NO_WEBSITE);
+}
+
+export function handlePreviewWebsite(ctx: SessionToolContext, input: PreviewWebsiteInput): Promise<ToolResult> {
+  return invoke(ctx.previewWebsite, input, NO_WEBSITE);
+}
+
+export function handleAuditWebsite(ctx: SessionToolContext, input: AuditWebsiteInput): Promise<ToolResult> {
+  return invoke(ctx.auditWebsite, input, NO_WEBSITE);
+}

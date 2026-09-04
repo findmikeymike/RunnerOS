@@ -165,6 +165,25 @@ export interface SessionScopedToolCallbacks {
   searchArtistNetworkFn?: (
     input: import('@craft-agent/session-tools-core').SearchArtistNetworkInput,
   ) => Promise<import('@craft-agent/session-tools-core').ManagerContextToolResult>;
+  /** Artist website: read the manifest, edit content, render, preview, audit. */
+  getWebsiteManifestFn?: (
+    input: import('@craft-agent/session-tools-core').GetWebsiteManifestInput,
+  ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;
+  createWebsiteFn?: (
+    input: import('@craft-agent/session-tools-core').CreateWebsiteInput,
+  ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;
+  setWebsiteContentFn?: (
+    input: import('@craft-agent/session-tools-core').SetWebsiteContentInput,
+  ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;
+  buildWebsiteFn?: (
+    input: import('@craft-agent/session-tools-core').BuildWebsiteInput,
+  ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;
+  previewWebsiteFn?: (
+    input: import('@craft-agent/session-tools-core').PreviewWebsiteInput,
+  ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;
+  auditWebsiteFn?: (
+    input: import('@craft-agent/session-tools-core').AuditWebsiteInput,
+  ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;
   /** Create a workflow in the global library (used by the workflow-creator skill's create_workflow tool). */
   createWorkflowFn?: (
     input: import('@craft-agent/session-tools-core').CreateWorkflowToolInput,

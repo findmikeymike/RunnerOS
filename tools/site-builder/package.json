@@ -1,0 +1,15 @@
+{
+  "name": "@runneros/site-builder",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "runner-site": "bin/site.mjs"
+  },
+  "scripts": {
+    "doctor": "node bin/site.mjs doctor",
+    "build": "node bin/site.mjs build",
+    "audit": "node bin/site.mjs audit",
+    "serve": "node bin/site.mjs serve"
+  }
+}

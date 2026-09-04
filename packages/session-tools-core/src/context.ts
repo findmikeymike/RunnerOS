@@ -432,6 +432,19 @@ export interface SessionToolContext {
   /** Search the global Artist Network without injecting or returning the full contact list. */
   searchArtistNetwork?(input: import('./handlers/manager-context.ts').SearchArtistNetworkInput): Promise<import('./handlers/manager-context.ts').ManagerContextToolResult>;
 
+  /** Read the artist website manifest: mode, urls, domain, policy, last build. */
+  getWebsiteManifest?(input: import('./handlers/website.ts').GetWebsiteManifestInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
+  /** Scaffold a new website in this workspace from a starter template. */
+  createWebsite?(input: import('./handlers/website.ts').CreateWebsiteInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
+  /** Apply structured edits to the website content contract. Never publishes. */
+  setWebsiteContent?(input: import('./handlers/website.ts').SetWebsiteContentInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
+  /** Render the website to dist/ and audit it. Never publishes. */
+  buildWebsite?(input: import('./handlers/website.ts').BuildWebsiteInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
+  /** Serve the last build locally and publish it as a canvas Output. */
+  previewWebsite?(input: import('./handlers/website.ts').PreviewWebsiteInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
+  /** Audit the built site, or an external URL, against the SEO baseline. */
+  auditWebsite?(input: import('./handlers/website.ts').AuditWebsiteInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
+
   /**
    * Create a workflow in the global workflow library and optionally activate it
    * in the current workspace. Backend owns parse/write validation, slug

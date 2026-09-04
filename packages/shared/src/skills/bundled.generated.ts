@@ -6077,6 +6077,269 @@ Read \`references/visual-world.md\` for the art-direction framework.
     ],
   },
   {
+    slug: "artist-website-builder",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: artist-website-builder
+description: "Use when building, editing, or rendering the artist website in \`website/\`. Triggers on 'build my site', 'make me a website', 'add the new single to the site', 'put the tour dates up', 'update my bio on the site', 'add a lyrics page', 'the site looks wrong', or any change to \`website/content\`, \`website/site\`, or \`website/theme\`. Covers the content contract, template syntax, the build and preview loop, and the rules that keep a site publishable. Pairs with the artist-website-playbook skill, which decides what a site should contain."
+tags: [website, html, css, build, seo, preview, artist-os]
+metadata:
+  version: 1.0.0
+  last_verified: 2026-09-03
+---
+
+# Artist Website Builder
+
+The artist website is an HQ object at \`website/\`. You edit it with tools and a
+bundled renderer, never by hand-writing HTML into \`dist/\`.
+
+## The folder
+
+\`\`\`
+website/
+  site.json          manifest: mode, urls, domain, publish policy, last build
+  content/site.json  the content contract — the source of truth
+  theme/tokens.json  colors, type, radius, max width
+  site/              templates you may edit (home, page, press, notfound, partials, styles.css)
+  assets/            images and files copied into the build
+  dist/              rendered output — disposable, never edit by hand
+\`\`\`
+
+## Three laws
+
+1. **Content is data.** Bio, releases, shows, videos, links, press, journal,
+   pages, signup forms, and SEO defaults live in \`content/site.json\` and are
+   edited with \`website_set_content\`. Never hand-edit that file, and never put
+   copy directly into a template.
+2. **\`dist/\` is disposable.** It is rendered from content, theme, and
+   templates. If something is wrong in \`dist/\`, fix the input and rebuild.
+3. **Never claim a build.** A build is done when \`website_build\` returns a
+   hash and an audit score. Report those numbers, not an impression.
+
+## The loop
+
+\`\`\`
+website_get_manifest        does a site exist? what mode? what was the last build?
+website_set_content         structured edits, one operation per thing changed
+website_build               render + audit; returns hash, pages, score, warnings
+website_preview             build + serve locally + show it in the canvas
+website_seo_audit           score and a fix for each finding
+\`\`\`
+
+Always call \`website_get_manifest\` first. If \`mode\` is \`none\`, there is no
+site: use \`website_create\` with the artist's name. If \`mode\` is
+\`closed-builder\` or \`wordpress\`, the artist has a site elsewhere and you do
+not rebuild it.
+
+After any change, build and preview. Show the artist the preview URL and the
+audit score in the same message.
+
+## Content operations
+
+Each operation upserts by \`id\`, so re-sending the same \`id\` updates in place
+instead of creating a duplicate. Pick stable ids (\`r-cold-room\`,
+\`show-2026-11-14-mpls\`), not random ones.
+
+\`\`\`json
+{ "operations": [
+  { "op": "upsert-release", "value": { "id": "r-cold-room", "title": "Cold Room",
+      "type": "album", "date": "2026-08-01", "featured": true,
+      "links": { "spotify": "https://…", "smart": "https://…" } } },
+  { "op": "upsert-show", "value": { "id": "show-2026-11-14-mpls", "date": "2026-11-14",
+      "city": "Minneapolis, MN", "venue": "7th St Entry", "ticketUrl": "https://…" } },
+  { "op": "set-artist", "value": { "tagline": "Songs from a cold room." } },
+  { "op": "remove", "collection": "shows", "id": "show-2026-01-09-duluth" }
+] }
+\`\`\`
+
+Dates are \`YYYY-MM-DD\`. Shows sort ascending and split automatically into
+upcoming and a past archive. Releases sort newest first. Exactly one release
+should be \`featured: true\` — that is the hero.
+
+Set \`seo.canonicalBase\` as soon as a domain is known. Without it there is no
+sitemap and no canonical tags, and the audit will say so.
+
+## Template syntax
+
+Templates are plain HTML with a tiny mustache-style engine. No framework, no
+bundler, no build step beyond the renderer.
+
+\`\`\`
+{{ path }}                    escaped
+{{{ path }}}                  raw — only for values the renderer produced
+{{#if path}} … {{else}} … {{/if}}
+{{#each list}} {{this.field}} {{@index}} {{/each}}
+{{> partialName}}
+\`\`\`
+
+\`{{#if}}\` treats an empty array as false, so \`{{#if upcomingShows}}\` is the
+right way to branch on "are there shows".
+
+Available to every page: \`site\` (artist, seo, links, socialLinks, storeLinks,
+signup, primarySignup, year, themeCss, jsonLd, pages, hasPressPage) and \`meta\`
+(title, description, canonical, noindex, og fields). The home page also gets
+\`featuredRelease\`, \`releases\`, \`upcomingShows\`, \`pastShows\`, \`videos\`,
+\`featuredVideo\`, and \`journal\`.
+
+Partials live in \`site/partials/\`. \`head\` emits the whole \`<head>\` including
+Open Graph tags and the schema.org graph — always include it, or the audit
+will flag missing structured data.
+
+## Theme
+
+\`theme/tokens.json\` becomes CSS custom properties. Change colors and type
+there, not in \`styles.css\`, so every page stays consistent. Derive the palette
+from the artist's branding context and the current release artwork rather than
+inventing one.
+
+## Hard rules
+
+- **Never write a credential into content, a template, or an asset.** The
+  build refuses to emit any file containing a key-shaped value and names the
+  file and line. Keys belong in host environment variables.
+- **Never link to a file outside the workspace.** Put images in
+  \`website/assets/\` and reference them from there.
+- **Never scrape a social platform for media.** Use the Vault, the Release
+  Kit, or an official embed.
+- **Every image needs alt text.** The audit fails you otherwise, and so does a
+  screen reader.
+- **One \`<h1>\` per page.**
+- **You cannot publish.** There is no deploy tool in this skill. Build and
+  preview, then hand the decision to the Website Agent and the artist.
+
+## When the audit complains
+
+The audit returns a \`fix\` for every finding. Work through them in severity
+order: errors first, then warnings, then notices. A score under 80 is worth
+fixing before showing the artist. Re-run \`website_build\` after each pass, and
+report the new score.
+`,
+      },
+    ],
+  },
+  {
+    slug: "artist-website-playbook",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: artist-website-playbook
+description: "Use when deciding what an artist's website should contain, how it should be structured, or how to make it earn something. Triggers on 'what should my site have', 'is my website any good', 'review my site', 'how do I get people on my email list from my site', 'what pages do I need', 'my site gets no traffic', or planning a site before building one. Covers the required sections, the email door, SEO that actually matters for musicians, and engagement ideas. Pairs with artist-website-builder, which does the rendering."
+tags: [website, seo, fans, email, growth, artist-os]
+metadata:
+  version: 1.0.0
+  last_verified: 2026-09-03
+---
+
+# Artist Website Playbook
+
+The site is the one surface the artist owns. Platforms rent attention; the
+site keeps it. Every decision below serves one of two jobs: **convert a
+visitor into someone you can reach**, or **answer the question that brought
+them**.
+
+## What every artist site needs
+
+Ordered by how often it matters.
+
+1. **Hero.** Artist name, one line of who they are, and the single thing
+   happening right now — new release, tour, or the record that defines them.
+   One primary action, not five.
+2. **The email door.** Above the fold and again at the end of every page. A
+   reason to join, not "subscribe to my newsletter". "Get the next single a
+   week early" converts; "stay updated" does not.
+3. **Music.** Every release with links out. Include a smart link when there is
+   one, and always include the platforms the artist's audience actually uses.
+4. **Shows.** Upcoming with ticket links, past as an archive. An empty
+   upcoming list is fine — say so and point at the email door.
+5. **Video.** One featured piece. Embeds, never uploads.
+6. **About.** A short bio for skimmers and a long one for writers.
+7. **Press kit.** Bio, quotes with outlets, downloadable photos, and a contact
+   address. Bookers and writers leave if they cannot find this in one click.
+8. **Merch and socials.** Links out, low in the page.
+9. **Booking contact.** A real address, not a form nobody checks.
+10. **A 404 that still has the door.** People land there; give them somewhere
+    to go.
+
+## The email door is the whole point
+
+Traffic that leaves without joining is traffic you paid for twice. Rules:
+
+- One clear promise. Early access, an unreleased demo, a discount, or a
+  show alert for their city.
+- Ask for the email and nothing else. Every extra field costs signups.
+- Say what they get and how often. "A few times a year, when it matters."
+- Confirm what happened. A signup with no acknowledgement reads as broken.
+- The reward has to be real. A "sneak peek" that never arrives is worse than
+  no door at all.
+
+Signups flow into the Community fan list with consent evidence attached, so
+the artist can email them legally later. That link is the reason the door
+exists — a form that only collects addresses into a spreadsheet is a dead end.
+
+## SEO that matters for a musician
+
+Ignore most SEO advice. These five things do the work:
+
+1. **Lyrics pages, one per song.** This is the highest-intent search traffic
+   an artist gets. Someone searching a lyric is looking for that exact song.
+   Give each one a page, link it to the release, and let it rank.
+2. **Structured data.** The renderer emits \`MusicGroup\`, \`MusicAlbum\`,
+   \`MusicRecording\`, and \`Event\` automatically. This is how shows and releases
+   surface in search results.
+3. **A real title and description per page.** Not "Home". The artist's name
+   plus what the page is.
+4. **Canonical base set.** Without it there is no sitemap and search engines
+   guess.
+5. **Fast and light.** A hero image under 200 KB, a page under 1 MB. Artists
+   share links on phones with bad signal.
+
+Skip keyword stuffing, meta keywords, and blog-for-SEO advice. A lyrics page
+and a fast site beat all of it.
+
+## Ideas that earn their place
+
+Reach for these when the artist asks "what else should we do".
+
+- **Sneak-peek gate.** The next single, a week early, behind the email door.
+  Best converting thing an artist can run.
+- **Show alerts by city.** "Tell me when you play Chicago." Segments the list
+  by geography for free.
+- **Lyrics pages.** SEO engine and a genuine fan destination.
+- **Secret page.** A QR code on merch or a show flyer pointing at an unlisted
+  page. Rewards the people who were actually there.
+- **Release countdown.** A date and a pre-save link on the hero in the weeks
+  before a drop.
+- **Journal.** Short posts, a few a year. Gives search engines something new
+  and gives fans a reason to return.
+- **Early access for core fans.** Announce to the most engaged segment a day
+  before everyone else. Costs nothing and builds the habit of opening.
+
+## Reviewing a site the artist already has
+
+Do not open with a rebuild pitch. Inspect, then report in this order:
+
+1. What is good. Say it plainly and specifically.
+2. What is missing that costs them something. Usually: no email door, no
+   press contact, no structured data, shows out of date.
+3. The smallest change with the biggest return. Almost always the email door.
+
+An artist on Squarespace or Bandzoogle keeps their site. Add the doors and
+the pages their platform does badly; do not migrate someone who did not ask.
+
+## The tone of a good artist site
+
+Short. Specific. Sounds like the artist, not like a press release. If the copy
+could describe any musician, it is wrong. Pull voice from the artist's own
+words in their profile and branding context, and when there is nothing to pull
+from, ask them one question rather than inventing a persona.
+`,
+      },
+    ],
+  },
+  {
     slug: "artist-x-editorial",
     files: [
       {

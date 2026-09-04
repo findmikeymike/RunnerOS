@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+{{> head}}
+</head>
+<body>
+{{> header}}
+<main class="prose">
+  <h1>Press</h1>
+
+  {{#if site.artist.bio.short}}
+  <section>
+    <h2>Short bio</h2>
+    <p>{{site.artist.bio.short}}</p>
+  </section>
+  {{/if}}
+
+  {{#if site.artist.bio.long}}
+  <section>
+    <h2>Full bio</h2>
+    <p>{{site.artist.bio.long}}</p>
+  </section>
+  {{/if}}
+
+  {{#if press}}
+  <section>
+    <h2>Coverage</h2>
+    <ul class="press">
+      {{#each press}}
+      <li>
+        {{#if this.quote}}<blockquote>{{this.quote}}</blockquote>{{/if}}
+        <p class="fine">{{#if this.url}}<a href="{{this.url}}" rel="noopener">{{this.outlet}}</a>{{else}}{{this.outlet}}{{/if}}{{#if this.date}} · {{this.date}}{{/if}}</p>
+      </li>
+      {{/each}}
+    </ul>
+  </section>
+  {{/if}}
+
+  {{#if releases}}
+  <section>
+    <h2>Releases</h2>
+    <ul>{{#each releases}}<li>{{this.title}} · {{this.type}} · {{this.date}}</li>{{/each}}</ul>
+  </section>
+  {{/if}}
+
+  <section>
+    <h2>Contact</h2>
+    {{#if site.artist.press.email}}<p>Press · <a href="mailto:{{site.artist.press.email}}">{{site.artist.press.email}}</a></p>{{/if}}
+    {{#if site.artist.booking.email}}<p>Booking · <a href="mailto:{{site.artist.booking.email}}">{{site.artist.booking.email}}</a></p>{{/if}}
+  </section>
+</main>
+{{> footer}}
+</body>
+</html>

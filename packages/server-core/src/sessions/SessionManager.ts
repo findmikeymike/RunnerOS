@@ -205,6 +205,7 @@ import {
   listAuthorizedWorkspaceContext,
 } from '../hq-state/manager-tools'
 import { findArtistHqWorkspace } from '../hq-state/snapshot'
+import { WebsiteService, type WebsiteToolResult } from '../website/WebsiteService'
 import { publishLatestSpotifySnapshotContext } from '../pulses/spotify-snapshot-publisher'
 import { recoverInterruptedWorkspaceMigrations } from '../workspaces/workspace-migration-recovery'
 import {
@@ -2064,6 +2065,21 @@ export class SessionManager implements ISessionManager {
   private readonly keepBackgroundTasksAlive = resolveKeepBackgroundTasksAlive()
   private readonly chatGoalDriver = new ChatGoalDriver()
   private readonly scheduledAgentMessageTaskWakes = new Set<string>()
+  private readonly websiteService = new WebsiteService()
+
+  /**
+   * Run a website operation against the Artist HQ workspace.
+   *
+   * The site is an HQ object, so a campaign session and an HQ session both
+   * resolve to the same `website/` folder instead of creating a second one.
+   */
+  private async withArtistHqWebsite(
+    run: (website: { service: WebsiteService; rootPath: string; workspaceId: string }) => Promise<WebsiteToolResult>,
+  ): Promise<WebsiteToolResult> {
+    const hq = findArtistHqWorkspace()
+    if (!hq) return { ok: false, error: 'Artist HQ workspace is not configured.' }
+    return run({ service: this.websiteService, rootPath: hq.rootPath, workspaceId: hq.id })
+  }
 
   private async acquireSendMessageAdmissionLock(sessionId: string): Promise<() => void> {
     const previous = this.sendMessageAdmissionLocks.get(sessionId) ?? Promise.resolve()
@@ -8799,6 +8815,30 @@ user a clickable link to where the thing now lives.`
             )
             : { ok: false, error: 'Artist HQ workspace is not configured.' }
         },
+        // Artist website. Every call resolves the HQ workspace, so a campaign
+        // session edits the same site rather than a second copy.
+        getWebsiteManifestFn: async (input) => this.withArtistHqWebsite(
+          website => website.service.getManifest(website.rootPath, input),
+        ),
+        createWebsiteFn: async (input) => this.withArtistHqWebsite(
+          website => website.service.create(website.rootPath, input),
+        ),
+        setWebsiteContentFn: async (input) => this.withArtistHqWebsite(
+          website => website.service.setContent(website.rootPath, input),
+        ),
+        buildWebsiteFn: async (input) => this.withArtistHqWebsite(
+          website => website.service.build(website.rootPath, input),
+        ),
+        auditWebsiteFn: async (input) => this.withArtistHqWebsite(
+          website => website.service.audit(website.rootPath, input),
+        ),
+        previewWebsiteFn: async (input) => this.withArtistHqWebsite(
+          website => website.service.preview(website.rootPath, website.workspaceId, input, {
+            sessionId: managed.id,
+            agentSlug: managed.spawnedFromAgent?.agentSlug,
+            agentName: managed.spawnedFromAgent?.agentName,
+          }),
+        ),
         setSessionLabelsFn: (sessionId: string | undefined, labels: string[]) => {
           this.setSessionLabels(sessionId ?? managed.id, labels)
         },
