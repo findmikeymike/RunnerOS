@@ -1471,6 +1471,61 @@ describe('ScheduledWorkRunner', () => {
     expect(executeCalls).toBe(1)
   })
 
+  test('blocks execution when an equivalent post exists in another artist workspace', async () => {
+    const hqRoot = makeRoot()
+    const campaignRoot = makeRoot()
+    const hqOrder = buildOrder({
+      id: 'hq-social-existing',
+      owner: { scope: 'hq', workspaceId: 'hq' },
+      calendarLink: { calendar: 'hq', itemId: 'hq-social-calendar' },
+      type: 'social-publish',
+      status: 'needs-approval',
+      execution: { type: 'social-publish', platform: 'x', profileId: 'artist-main', caption: 'Out Friday.' },
+      createdAt: '2026-07-09T10:00:00.000Z',
+    })
+    const campaignOrder = buildOrder({
+      id: 'campaign-social-duplicate',
+      type: 'social-publish',
+      status: 'needs-approval',
+      execution: { type: 'social-publish', platform: 'x', profileId: 'artist-main', caption: 'Out Friday.' },
+      executionKey: { payloadDigest: 'payload-campaign', idempotencyKey: 'idem-campaign' },
+      socialAction: {
+        actionId: 'action-campaign', actionDigest: 'sha256:action', platform: 'x', profileId: 'artist-main',
+        preparedAt: '2026-07-10T14:00:00.000Z', payloadDigest: 'payload-campaign', dryRun: { ok: true },
+      },
+      socialApproval: {
+        id: 'approval-campaign', approvedAt: '2026-07-10T14:00:00.000Z', expiresAt: '2026-07-10T14:30:00.000Z',
+        actionId: 'action-campaign', actionDigest: 'sha256:action', payloadDigest: 'payload-campaign',
+        platform: 'x', profileId: 'artist-main', approvedBy: { type: 'user', clientId: 'test-client' },
+      },
+      createdAt: '2026-07-09T11:00:00.000Z',
+    })
+    writeWork(hqRoot, [hqOrder], 'hq')
+    writeWork(campaignRoot, [campaignOrder], workspaceId)
+    let executeCalls = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      listWorkspaceRoots: () => [{ id: 'hq', rootPath: hqRoot }, { id: workspaceId, rootPath: campaignRoot }],
+      resolveWorkspace: (id) => id === 'hq'
+        ? { id, name: 'Artist HQ', rootPath: hqRoot, artistWorkspaceScope: 'hq' }
+        : { id, name: 'Release Campaign', rootPath: campaignRoot, artistWorkspaceScope: 'campaign' },
+      withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'unused' }),
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      executeSocial: async () => {
+        executeCalls += 1
+        return { receiptId: 'must-not-publish', summary: 'Must not publish.' }
+      },
+    })
+
+    await runner.scanWorkspace(workspaceId, campaignRoot, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => readWork(campaignRoot).items[0]?.status === 'needs-attention')
+    expect(executeCalls).toBe(0)
+    expect(readWork(campaignRoot).items[0]?.attention?.message).toMatch(/Publish blocked.*Artist HQ/i)
+  })
+
   test('derives execution attestation from durable schedule authorization without a second click', async () => {
     const root = makeRoot()
     const source = join(root, 'release-cover.png')

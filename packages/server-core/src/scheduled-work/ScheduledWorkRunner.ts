@@ -40,6 +40,10 @@ import {
 import type { WorkflowRunSnapshot, WorkflowRunState } from '@craft-agent/shared/workflows'
 import type { ModelAttempt } from '@craft-agent/shared/config'
 import { reconcileXEditorialSlateOrder } from '../x-editorial/slate-status'
+import {
+  assertArtistSocialPublishMayExecute,
+  type ArtistSocialWorkEntry,
+} from './SocialPublishConflictGuard'
 
 const ACTIVE_WORKFLOW_STATES = new Set<WorkflowRunState>(['created', 'queued', 'running', 'paused'])
 const START_GRACE_MS = 24 * 60 * 60 * 1000
@@ -54,7 +58,7 @@ export interface ScheduledWorkRunnerDeps {
   getBackgroundFenceToken?(workspaceRootPath: string): string | null
   canExecuteSocialAutomatically?(workspaceRootPath: string): boolean
   withLock<T>(workspaceRootPath: string, fn: () => Promise<T> | T): Promise<T>
-  resolveWorkspace?(workspaceId: string): { id: string; rootPath: string; artistWorkspaceScope?: string } | null | undefined
+  resolveWorkspace?(workspaceId: string): { id: string; name?: string; rootPath: string; artistWorkspaceScope?: string } | null | undefined
   executeAgentTask(input: {
     workOrderId: string
     workspace: { id: string; rootPath: string }
@@ -365,7 +369,7 @@ export class ScheduledWorkRunner {
             if (persisted.updated) result.failed += 1
             continue
           }
-          const profileKey = `${current.execution.platform}/${current.execution.profileId}`
+          const profileKey = `${current.execution.platform.trim().toLocaleLowerCase('en-US')}/${current.execution.profileId.trim().toLocaleLowerCase('en-US')}`
           if (this.activeSocialProfiles.has(profileKey) || !this.deps.executeSocial) continue
           if (this.deps.canExecuteSocialAutomatically && !this.deps.canExecuteSocialAutomatically(workspaceRootPath)) {
             const persisted = await this.updateOrder(workspaceId, workspaceRootPath, current.id, (order, nowIso) => ({
@@ -377,9 +381,18 @@ export class ScheduledWorkRunner {
             if (persisted.updated) result.blocked += 1
             continue
           }
-          const claimed = await this.claimSocialRunning(workspaceId, workspaceRootPath, current.id)
-          if (!claimed.order || claimed.order.execution.type !== 'social-publish' || !claimed.order.socialAction || !claimed.order.socialApproval) continue
           this.activeSocialProfiles.add(profileKey)
+          let claimed: PersistResult
+          try {
+            claimed = await this.claimSocialRunning(workspaceId, workspaceRootPath, current.id)
+          } catch (error) {
+            this.activeSocialProfiles.delete(profileKey)
+            throw error
+          }
+          if (!claimed.order || claimed.order.execution.type !== 'social-publish' || !claimed.order.socialAction || !claimed.order.socialApproval) {
+            this.activeSocialProfiles.delete(profileKey)
+            continue
+          }
           void this.runSocial(workspaceId, workspaceRootPath, claimed.order, capturedFence)
             .catch((error) => this.log.error(`[ScheduledWork] ${errorMessage(error)}`))
             .finally(() => this.activeSocialProfiles.delete(profileKey))
@@ -760,6 +773,10 @@ export class ScheduledWorkRunner {
       if (!this.deps.executeSocial || order.execution.type !== 'social-publish' || !order.socialAction || !order.socialApproval) return
       if (!this.canContinue(workspaceRootPath, capturedFence)) throw new Error('Team runner fence changed before social execution.')
       assertCurrentReleaseKitSocialUseAllowed(workspaceRootPath, order, this.deps.resolveWorkspace)
+      assertArtistSocialPublishMayExecute(
+        { workspaceId, workspaceName: this.deps.resolveWorkspace?.(workspaceId)?.name, order },
+        this.readArtistSocialWorkEntries(workspaceId, workspaceRootPath),
+      )
       const result = await this.deps.executeSocial({ workspaceId, workspaceRootPath, order, preview: order.socialAction, approval: order.socialApproval })
       const nowIso = (this.deps.now?.() ?? new Date()).toISOString()
       const receipt: CampaignExternalExecutionReceipt = {
@@ -1322,6 +1339,32 @@ export class ScheduledWorkRunner {
 
   private readWork(workspaceRootPath: string, workspaceId: string) {
     return parseScheduledWorkDocResult(loadContextDoc(workspaceRootPath, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, workspaceId)
+  }
+
+  private readArtistSocialWorkEntries(currentWorkspaceId: string, currentRootPath: string): ArtistSocialWorkEntry[] {
+    const workspaces = [
+      ...(this.deps.listWorkspaceRoots?.() ?? []),
+      { id: currentWorkspaceId, rootPath: currentRootPath },
+    ]
+    const entries: ArtistSocialWorkEntry[] = []
+    const seen = new Set<string>()
+    for (const workspace of workspaces) {
+      const key = `${workspace.id}:${workspace.rootPath}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const resolved = this.deps.resolveWorkspace?.(workspace.id)
+      if (resolved?.artistWorkspaceScope
+        && resolved.artistWorkspaceScope !== 'hq'
+        && resolved.artistWorkspaceScope !== 'campaign') continue
+      const parsed = this.readWork(workspace.rootPath, workspace.id)
+      if (!parsed.ok) {
+        throw new Error(`Cannot verify artist-wide social conflicts because scheduled work is invalid in workspace ${workspace.id}: ${parsed.error}`)
+      }
+      for (const candidate of parsed.work.items) {
+        entries.push({ workspaceId: workspace.id, workspaceName: resolved?.name, order: candidate })
+      }
+    }
+    return entries
   }
 
   private writeWork(workspaceRootPath: string, work: ScheduledWorkDocument): void {

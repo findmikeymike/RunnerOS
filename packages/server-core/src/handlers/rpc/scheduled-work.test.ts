@@ -27,6 +27,7 @@ import { parseXEditorialSlate, type XEditorialSlate } from '@craft-agent/shared/
 import {
   SCHEDULED_WORK_CONTEXT_SLUG,
   parseScheduledWorkDocResult,
+  scheduledWorkMetadata,
   serializeScheduledWorkBody,
   type ScheduledWorkOrder,
 } from '@craft-agent/shared/scheduled-work'
@@ -38,6 +39,9 @@ const workspaceRoot = '/tmp/runneros-scheduled-work-test'
 const campaignRoot = '/tmp/runneros-scheduled-work-x-campaign-test'
 const workspace = { id: 'ws-1', name: 'Scheduled Work Test', rootPath: workspaceRoot, artistWorkspaceScope: 'hq' as const }
 const campaignWorkspace = { id: 'campaign-x', name: 'X Campaign', rootPath: campaignRoot, artistWorkspaceScope: 'campaign' as const }
+const loadActualContextDoc = actualWorkspaceContext.loadContextDoc
+const upsertActualContextDoc = actualWorkspaceContext.upsertContextDoc
+const loadAllActualContextDocs = actualWorkspaceContext.loadAllContextDocs
 
 let contextDocs = new Map<string, LoadedContextDoc>()
 let upsertCalls: string[] = []
@@ -47,6 +51,7 @@ const assertTeamPermission = mock((_rootPath: string, _action: string) => ({ all
 
 mock.module('@craft-agent/shared/config', () => ({
   ...actualConfig,
+  getWorkspaces: () => [workspace, campaignWorkspace],
   getWorkspaceByNameOrId: (workspaceId: string) => (
     workspaceId === workspace.id
       ? workspace
@@ -61,13 +66,13 @@ mock.module('@craft-agent/shared/workspace-context', () => ({
   loadContextDoc: (rootPath: string, slug: string) => (
     rootPath === workspaceRoot
       ? contextDocs.get(slug) ?? null
-      : actualWorkspaceContext.loadContextDoc(rootPath, slug)
+      : loadActualContextDoc(rootPath, slug)
   ),
   upsertContextDoc: (
     rootPath: string,
     doc: { slug: string; metadata: ContextDocMetadata; body: string },
   ) => {
-    if (rootPath !== workspaceRoot) return actualWorkspaceContext.upsertContextDoc(rootPath, doc as never)
+    if (rootPath !== workspaceRoot) return upsertActualContextDoc(rootPath, doc as never)
     upsertCalls.push(doc.slug)
     if (failOnSlug === doc.slug) throw new Error(`Forced upsert failure for ${doc.slug}`)
     const loaded: LoadedContextDoc = {
@@ -83,7 +88,7 @@ mock.module('@craft-agent/shared/workspace-context', () => ({
   loadAllContextDocs: (rootPath: string) => (
     rootPath === workspaceRoot
       ? [...contextDocs.values()]
-      : actualWorkspaceContext.loadAllContextDocs(rootPath)
+      : loadAllActualContextDocs(rootPath)
   ),
 }))
 
@@ -573,6 +578,39 @@ describe('scheduled-work RPC handler', () => {
     })).rejects.toThrow(/time slot/i)
     expect(readScheduledWork().items).toHaveLength(1)
     expect(readArtistCalendar().events).toHaveLength(1)
+  })
+
+  test('Daily X Slate refuses a Campaign post already scheduled for the same account and minute', async () => {
+    const scheduledFor = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    const campaignOrder: ScheduledWorkOrder = {
+      ...buildOrder(),
+      id: 'campaign-social-existing',
+      owner: { scope: 'campaign', workspaceId: campaignWorkspace.id, campaignId: campaignWorkspace.id },
+      calendarLink: { calendar: 'campaign', itemId: 'campaign-social-calendar' },
+      type: 'social-publish',
+      status: 'needs-approval',
+      startAt: scheduledFor,
+      execution: { type: 'social-publish', platform: 'x', profileId: 'artist-main', caption: 'Campaign post.' },
+    }
+    actualWorkspaceContext.upsertContextDoc(campaignRoot, {
+      slug: SCHEDULED_WORK_CONTEXT_SLUG,
+      metadata: scheduledWorkMetadata(),
+      body: serializeScheduledWorkBody({
+        version: 1,
+        workspaceId: campaignWorkspace.id,
+        items: [campaignOrder],
+        updatedAt: campaignOrder.updatedAt,
+      }),
+    })
+    const { manifest } = seedXEditorialSlate({ scheduledFor })
+    const { invoke } = await registerServer()
+
+    await expect(invoke(RPC_CHANNELS.scheduledWork.MUTATE_X_EDITORIAL_CANDIDATE, workspace.id, {
+      action: 'approve', outputId: manifest.id, candidateId: 'post_1', expectedRevision: 1,
+      expectedOutputUpdatedAt: manifest.updatedAt,
+    })).rejects.toThrow(/same minute.*X Campaign/i)
+    expect(readScheduledWork().items).toHaveLength(0)
+    expect(readPersistedXSlate(manifest.id).candidates[0]?.status).toBe('proposed')
   })
 
   test('Daily X Slate refuses duplicate normalized copy inside seven days', async () => {

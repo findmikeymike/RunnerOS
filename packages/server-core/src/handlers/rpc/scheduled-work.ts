@@ -1,7 +1,7 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { createHash } from 'node:crypto'
 import { readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+import { getWorkspaceByNameOrId, getWorkspaces } from '@craft-agent/shared/config'
 import { loadGlobalAgent, readActivatedAgents } from '@craft-agent/shared/agent-definitions'
 import { loadGlobalWorkflow, readActivatedWorkflows } from '@craft-agent/shared/workflows'
 import {
@@ -82,6 +82,11 @@ import {
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
+import {
+  assertNoArtistSocialScheduleConflict,
+  withArtistSocialScheduleLock,
+  type ArtistSocialWorkEntry,
+} from '../../scheduled-work/SocialPublishConflictGuard'
 import { SocialVariantSetService } from '../../outputs/SocialVariantSetService'
 import { supplyScheduledWorkInputs } from '../../scheduled-work/ScheduledWorkInputSupply'
 import { assertTeamPermission } from '@craft-agent/shared/workspaces'
@@ -163,6 +168,39 @@ function writeCampaignCalendar(rootPath: string, calendar: CampaignCalendar): vo
   })
 }
 
+function readArtistSocialWorkEntries(currentWorkspaceId: string): ArtistSocialWorkEntry[] {
+  const currentWorkspace = getWorkspaceByNameOrId(currentWorkspaceId)
+  if (!currentWorkspace) throw new Error(`Workspace not found: ${currentWorkspaceId}`)
+  const artistWorkspaces = getWorkspaces()
+    .filter((workspace) => workspace.artistWorkspaceScope === 'hq' || workspace.artistWorkspaceScope === 'campaign')
+  if (!artistWorkspaces.some((workspace) => workspace.id === currentWorkspace.id)) artistWorkspaces.push(currentWorkspace)
+
+  const entries: ArtistSocialWorkEntry[] = []
+  const seen = new Set<string>()
+  for (const workspace of artistWorkspaces) {
+    const key = `${workspace.id}:${workspace.rootPath}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const parsed = readScheduledWork(workspace.rootPath, workspace.id)
+    if (!parsed.ok) {
+      throw new Error(`Cannot verify social schedule conflicts because ${workspace.name} scheduled work is invalid: ${parsed.error}`)
+    }
+    for (const order of parsed.work.items) {
+      entries.push({ workspaceId: workspace.id, workspaceName: workspace.name, order })
+    }
+  }
+  return entries
+}
+
+function assertArtistSocialScheduleAvailable(workspaceId: string, order: ScheduledWorkDocument['items'][number]): void {
+  if (order.execution.type !== 'social-publish') return
+  const workspace = getWorkspaceByNameOrId(workspaceId)
+  assertNoArtistSocialScheduleConflict(
+    { workspaceId, workspaceName: workspace?.name, order },
+    readArtistSocialWorkEntries(workspaceId),
+  )
+}
+
 function sameScheduledWorkContent(left: ScheduledWorkDocument, right: ScheduledWorkDocument): boolean {
   return JSON.stringify({
     version: left.version,
@@ -192,7 +230,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
       if (mutation.operation === 'upsert' && (mutation.order.authorization || mutation.order.authorizationPolicy)) {
         throw new Error('Durable social authorization can only be minted by the host authorization command.')
       }
-      return withWorkspaceContextLock(rootPath, async () => {
+      const persist = () => withWorkspaceContextLock(rootPath, async () => {
         const parsed = readScheduledWork(rootPath, workspaceId)
         if (!parsed.ok) throw new Error(parsed.error)
         if (mutation.operation === 'upsert') {
@@ -206,10 +244,14 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         }
         const result = applyScheduledWorkMutation(parsed.work, mutation)
         if (!result.ok) return result
+        assertArtistSocialScheduleAvailable(workspaceId, result.item)
         writeScheduledWork(rootPath, result.work)
         broadcastChanged(deps, workspaceId, rootPath)
         return result
       })
+      return mutation.operation === 'upsert' && mutation.order.execution.type === 'social-publish'
+        ? withArtistSocialScheduleLock(persist)
+        : persist()
     },
   )
 
@@ -445,7 +487,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
     async (ctx, workspaceId: string, input: ApproveCampaignSocialWorkInput): Promise<ApproveCampaignSocialWorkResult> => {
       const rootPath = resolveRootPath(workspaceId)
       assertTeamPermission(rootPath, 'social.publish.approve')
-      return withWorkspaceContextLock(rootPath, async () => {
+      return withArtistSocialScheduleLock(() => withWorkspaceContextLock(rootPath, async () => {
         const scheduled = readScheduledWork(rootPath, workspaceId)
         if (!scheduled.ok) throw new Error(scheduled.error)
         const parsedCalendar = readCampaignCalendar(rootPath, workspaceId)
@@ -486,11 +528,12 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           approvedBy: { type: 'user' as const, clientId: ctx.clientId },
         }
         const nextOrder = { ...order, socialApproval: approval, updatedAt: now.toISOString() }
+        assertArtistSocialScheduleAvailable(workspaceId, nextOrder)
         const work = { ...scheduled.work, items: scheduled.work.items.map((candidate) => candidate.id === nextOrder.id ? nextOrder : candidate), updatedAt: now.toISOString() }
         writeScheduledWork(rootPath, work)
         broadcastChanged(deps, workspaceId, rootPath)
         return { work, order: nextOrder, calendar: parsedCalendar.calendar, calendarItem }
-      })
+      }))
     },
   )
 
@@ -500,7 +543,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
       const rootPath = resolveRootPath(workspaceId)
       assertTeamPermission(rootPath, 'files.write')
       assertTeamPermission(rootPath, 'social.publish.approve')
-      return withReleaseKitLockAsync(rootPath, () => withWorkspaceContextLock(rootPath, async () => {
+      return withArtistSocialScheduleLock(() => withReleaseKitLockAsync(rootPath, () => withWorkspaceContextLock(rootPath, async () => {
         const normalized = normalizeReleaseKitSocialInput(input)
         const manifest = loadReleaseKitManifest(rootPath, workspaceId, workspaceId)
         const item = manifest.items.find((candidate) => candidate.id === normalized.releaseKitItemId)
@@ -593,6 +636,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           if (variantBinding) variantService.linkScheduledUse(variantBinding, item.id, equivalentOrder.id)
           return { updated: false, work: scheduled.work, order: equivalentOrder, calendar: parsedCalendar.calendar, calendarItem: equivalentCalendarItem }
         }
+        assertArtistSocialScheduleAvailable(workspaceId, order)
         await validateScheduleRuntime(deps, rootPath, order)
         const work = { ...scheduled.work, items: [...scheduled.work.items, order], updatedAt: now }
         const calendar = { ...parsedCalendar.calendar, items: [...parsedCalendar.calendar.items, calendarItem], updatedAt: now }
@@ -601,7 +645,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         if (variantBinding) variantService.linkScheduledUse(variantBinding, item.id, order.id)
         broadcastChanged(deps, workspaceId, rootPath)
         return { updated: true, work, order, calendar, calendarItem }
-      }))
+      })))
     },
   )
 
@@ -611,7 +655,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
       const rootPath = resolveRootPath(workspaceId)
       assertTeamPermission(rootPath, 'files.write')
       assertTeamPermission(rootPath, 'social.publish.approve')
-      return withReleaseKitLockAsync(rootPath, () => withWorkspaceContextLock(rootPath, async () => {
+      return withArtistSocialScheduleLock(() => withReleaseKitLockAsync(rootPath, () => withWorkspaceContextLock(rootPath, async () => {
         const scheduled = readScheduledWork(rootPath, workspaceId)
         if (!scheduled.ok) throw new Error(scheduled.error)
         const parsedCalendar = readCampaignCalendar(rootPath, workspaceId)
@@ -686,6 +730,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           executionKey: { payloadDigest, idempotencyKey: `${order.id}:${payloadDigest}` },
           updatedAt: now,
         }
+        assertArtistSocialScheduleAvailable(workspaceId, nextOrder)
         await validateScheduleRuntime(deps, rootPath, nextOrder)
         const localStart = formatInTimezone(nextOrder.startAt, nextOrder.timezone)
         const nextCalendarItem: CampaignCalendarItem = {
@@ -708,7 +753,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         writeCampaignCalendar(rootPath, calendar)
         broadcastChanged(deps, workspaceId, rootPath)
         return { updated: true, changes, work, order: nextOrder, calendar, calendarItem: nextCalendarItem }
-      }))
+      })))
     },
   )
 
@@ -749,6 +794,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
             }, candidateOrder.updatedAt)
         if (!workResult.ok) throw new Error(workResult.error)
         const order = workResult.item
+        assertArtistSocialScheduleAvailable(workspaceId, order)
 
         const existingCalendarItem = parsedCalendar.calendar.items.find((candidate) => candidate.id === validatedInput.calendarItem.id)
         if (existingCalendarItem && existingCalendarItem.scheduledWorkId !== order.id) {
@@ -778,9 +824,12 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           calendarItem,
         }
       })
-      return input.order.inputRefs.some((ref) => ref.kind === 'release-kit')
+      const persistWithAssetLock = () => input.order.inputRefs.some((ref) => ref.kind === 'release-kit')
         ? withReleaseKitLockAsync(rootPath, persist)
         : persist()
+      return input.order.execution.type === 'social-publish'
+        ? withArtistSocialScheduleLock(persistWithAssetLock)
+        : persistWithAssetLock()
     },
   )
 
@@ -819,6 +868,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           items: [...scheduled.work.items, ...missingOrders],
           updatedAt: new Date().toISOString(),
         }
+        for (const order of resolvedOrders) assertArtistSocialScheduleAvailable(workspaceId, order)
 
         const resolvedShells = input.calendarItems.map((candidate, index) => {
           const existing = parsedCalendar.calendar.items.find((item) => item.id === candidate.id)
@@ -847,9 +897,12 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           calendarItems: resolvedShells,
         }
       })
-      return input.orders.some((order) => order.inputRefs.some((ref) => ref.kind === 'release-kit'))
+      const persistWithAssetLock = () => input.orders.some((order) => order.inputRefs.some((ref) => ref.kind === 'release-kit'))
         ? withReleaseKitLockAsync(rootPath, persist)
         : persist()
+      return input.orders.some((order) => order.execution.type === 'social-publish')
+        ? withArtistSocialScheduleLock(persistWithAssetLock)
+        : persistWithAssetLock()
     },
   )
 
@@ -860,7 +913,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
       assertTeamPermission(rootPath, 'files.write')
       if (input.action === 'approve') assertTeamPermission(rootPath, 'social.publish.approve')
 
-      return withWorkspaceContextLock(rootPath, async () => {
+      const mutate = () => withWorkspaceContextLock(rootPath, async () => {
         const loaded = loadXEditorialSlateOutput(rootPath, workspaceId, input.outputId)
         const candidate = loaded.slate.candidates.find((entry) => entry.id === input.candidateId)
         if (!candidate) throw new Error(`Daily X Slate candidate was not found: ${input.candidateId}`)
@@ -980,6 +1033,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           createdAt: now,
           updatedAt: now,
         }
+        assertArtistSocialScheduleAvailable(workspaceId, order)
         await validateScheduleRuntime(deps, rootPath, order)
 
         const scheduled = readScheduledWork(rootPath, workspaceId)
@@ -989,7 +1043,6 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         if (existingOrder && !sameXEditorialSchedule(existingOrder, order)) {
           throw new Error('This Daily X Slate approval conflicts with an existing scheduled post.')
         }
-        assertNoXEditorialScheduleConflict(scheduled.work, order)
         const existingEvent = artistCalendar.events.find((event) => event.id === calendarItemId && !event.deletedAt)
         if (existingEvent && existingEvent.scheduledWorkId !== orderId) {
           throw new Error('This Daily X Slate approval conflicts with an existing Calendar event.')
@@ -1041,6 +1094,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           calendarItemId: resolvedEvent.id,
         }
       })
+      return input.action === 'approve' ? withArtistSocialScheduleLock(mutate) : mutate()
     },
   )
 
@@ -1463,35 +1517,6 @@ function sameXEditorialSchedule(
     authorizationPolicy: right.authorizationPolicy,
     executionKey: right.executionKey,
   })
-}
-
-function assertNoXEditorialScheduleConflict(
-  work: ScheduledWorkDocument,
-  proposed: ScheduledWorkDocument['items'][number],
-): void {
-  if (proposed.execution.type !== 'social-publish') return
-  const proposedText = normalizeXEditorialCopy(proposed.execution.caption)
-  const proposedAt = Date.parse(proposed.startAt)
-  for (const existing of work.items) {
-    if (existing.id === proposed.id || existing.deletedAt || existing.status === 'canceled') continue
-    if (existing.execution.type !== 'social-publish') continue
-    if (existing.execution.platform !== 'x' || proposed.execution.platform !== 'x') continue
-    if (existing.execution.profileId !== proposed.execution.profileId) continue
-
-    const existingAt = Date.parse(existing.startAt)
-    if (Number.isFinite(existingAt) && Math.abs(existingAt - proposedAt) < 60_000) {
-      throw new Error('Another X post is already scheduled in this time slot. Choose a different time.')
-    }
-    if (normalizeXEditorialCopy(existing.execution.caption) === proposedText
-      && Number.isFinite(existingAt)
-      && Math.abs(existingAt - proposedAt) <= 7 * 24 * 60 * 60 * 1000) {
-      throw new Error('This exact X post is already scheduled or was posted within the same seven-day window.')
-    }
-  }
-}
-
-function normalizeXEditorialCopy(value: string): string {
-  return value.normalize('NFKC').toLocaleLowerCase('en-US').replace(/\s+/g, ' ').trim()
 }
 
 function cancelXEditorialCandidateSchedule(
