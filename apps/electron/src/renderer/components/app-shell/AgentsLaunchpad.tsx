@@ -34,7 +34,7 @@ import { sourcesAtom } from '@/atoms/sources'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { openAgentSessionComposer } from '@/lib/run-agent'
 import { cn } from '@/lib/utils'
-import { defaultWorkerSlugs, LAB_DEFAULT_WORKER_SLUGS } from '@/lib/worker-defaults'
+import { defaultWorkerSlugs, excludedWorkerSlugs, LAB_DEFAULT_WORKER_SLUGS } from '@/lib/worker-defaults'
 import { CompactPageHeader } from './CompactPageHeader'
 import { ArtistManagerCreateLink } from './ArtistManagerCreateLink'
 import { WorkPageTabs } from './WorkPageTabs'
@@ -59,7 +59,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
     ? LAB_DEFAULT_WORKER_SLUGS
     : defaultWorkerSlugs(includeCampaignDefaultWorkers)
   const allowedAgentSlugs = labOnly ? LAB_DEFAULT_WORKER_SLUGS : undefined
-  const excludedAgentSlugs = includeCampaignDefaultWorkers ? ['legal-agent'] : []
+  const excludedAgentSlugs = excludedWorkerSlugs(includeCampaignDefaultWorkers)
   const allowedAgentSet = React.useMemo(
     () => allowedAgentSlugs ? new Set<string>(allowedAgentSlugs) : null,
     [allowedAgentSlugs],

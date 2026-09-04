@@ -917,7 +917,6 @@ body
       'anticipation-director',
     ])
     expect(initialAgentSlugsForWorkspace('hq', false)).toEqual([
-      RELEASE_MANAGER_AGENT_SLUG,
       ANYTHING_AGENT_SLUG,
       'site-builder',
       'catalog-royalty-agent',
@@ -927,6 +926,9 @@ body
     expect(isAgentAllowedInArtistWorkspace('legal-agent', 'hq')).toBe(true)
     expect(isAgentAllowedInArtistWorkspace('legal-agent', 'campaign')).toBe(false)
     expect(isAgentAllowedInArtistWorkspace('legal-agent', 'lab')).toBe(false)
+    expect(isAgentAllowedInArtistWorkspace(RELEASE_MANAGER_AGENT_SLUG, 'campaign')).toBe(true)
+    expect(isAgentAllowedInArtistWorkspace(RELEASE_MANAGER_AGENT_SLUG, 'hq')).toBe(false)
+    expect(isAgentAllowedInArtistWorkspace(RELEASE_MANAGER_AGENT_SLUG, 'lab')).toBe(false)
     expect(isAgentAllowedInArtistWorkspace('catalog-royalty-agent', 'campaign')).toBe(true)
   })
 

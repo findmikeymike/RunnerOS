@@ -112,10 +112,11 @@ The worker must never collapse these states into "done."
 
 ## Activation
 
-Release Manager is activated only in Artist HQ and Campaign workspaces. First installation adds it
-once to existing HQ/Campaign workspaces; new HQ/Campaign roots receive it when created. Creative
-Lab and general workspaces do not. A later user deactivation or deletion is respected and is not
-reversed on every startup.
+Release Manager is activated only in Campaign workspaces. First installation adds it once to
+existing Campaign workspaces, and new Campaign roots receive it when created. It reads shared
+Artist HQ truth from the Campaign but does not appear as an HQ worker. Artist HQ, Creative Lab,
+and general workspaces cannot activate it. A later user deactivation or deletion in a Campaign is
+respected and is not reversed on every startup.
 
 ## Connector Strategy
 
@@ -154,7 +155,7 @@ the provider UI. It must label that result manual and never claim submission.
 3. Distributor Upload, Pre-Save Link, Credits & Metadata, Rights & Splits, Final Release QA,
    and DSP Pitch all open the same Release Manager with item-specific kickoff context.
 4. Release Manager and all four skills are installed and initially activated only for existing
-   Artist HQ and Campaign workspaces, without overriding later user deactivation.
+   Campaign workspaces, without overriding later user deactivation.
 5. Every Release Board action resolves to a shipped worker or workflow.
 6. Worker chats, workflow runs, and tool review targets reopen from the originating Essentials row.
 7. Focused Release Board, starter-agent, starter-skill, and typecheck suites pass.

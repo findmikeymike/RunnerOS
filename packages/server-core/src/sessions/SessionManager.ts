@@ -4183,10 +4183,20 @@ export class SessionManager implements ISessionManager {
           if (releaseManagerAgent && releaseManagerIdentityValid && missingReleaseManagerSkills.length === 0) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
+            const artistWorkspaces = getWorkspaces()
+            for (const ws of artistWorkspaces) {
+              if (ws.remoteServer || ws.artistWorkspaceScope !== 'hq') continue
+              if (readActivatedAgents(ws.rootPath).active.includes(RELEASE_MANAGER_AGENT_SLUG)) {
+                setAgentActive(ws.rootPath, RELEASE_MANAGER_AGENT_SLUG, false)
+              }
+            }
+            const campaignWorkspaces = artistWorkspaces.filter(ws => (
+              !ws.remoteServer && ws.artistWorkspaceScope === 'campaign'
+            ))
             const activation = migrateInitialReleaseManagerActivation({
               stateFile: releaseManagerActivationState,
               legacyMarkerFile: legacyReleaseManagerActivationMarker,
-              workspaces: getWorkspaces(),
+              workspaces: campaignWorkspaces,
               agentSlug: RELEASE_MANAGER_AGENT_SLUG,
               skillSlugs: releaseManagerSkillSlugs,
               isAgentActive: ws => readActivatedAgents(ws.rootPath).active.includes(RELEASE_MANAGER_AGENT_SLUG),
@@ -4196,7 +4206,7 @@ export class SessionManager implements ISessionManager {
               warn: (message, error) => sessionLog.warn(`[agent-definitions] ${message}:`, error as Error),
             })
             if (activation.updatedWorkspaceIds.length > 0) {
-              sessionLog.info(`[agent-definitions] Activated Release Manager in ${activation.updatedWorkspaceIds.length} HQ/Campaign workspace(s)`)
+              sessionLog.info(`[agent-definitions] Activated Release Manager in ${activation.updatedWorkspaceIds.length} Campaign workspace(s)`)
             }
             if (activation.migratedLegacyMarker) {
               sessionLog.info('[agent-definitions] Migrated Release Manager activation state outside the agent directory')
@@ -4207,7 +4217,10 @@ export class SessionManager implements ISessionManager {
             sessionLog.warn(`[agent-definitions] Release Manager skill bundle incomplete: ${missingReleaseManagerSkills.join(', ')}`)
           } else if (releaseManagerActivationPending && !installedReleaseManager) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')
-            preserveReleaseManagerActivationChoices(releaseManagerActivationState, getWorkspaces())
+            preserveReleaseManagerActivationChoices(
+              releaseManagerActivationState,
+              getWorkspaces().filter(ws => !ws.remoteServer && ws.artistWorkspaceScope === 'campaign'),
+            )
             sessionLog.debug('[agent-definitions] Release Manager is not installed; preserved current workspace activation choices')
           }
           if (anticipationEngineWasMissing && loadGlobalSkillBySlug('anticipation-engine')) {

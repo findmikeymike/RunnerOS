@@ -51,12 +51,15 @@ export const HQ_DEFAULT_ACTIVATED_AGENT_SLUGS = [
 ] as const
 
 const HQ_ONLY_ARTIST_AGENT_SLUGS = new Set<string>(['legal-agent'])
+const CAMPAIGN_ONLY_ARTIST_AGENT_SLUGS = new Set<string>([RELEASE_MANAGER_AGENT_SLUG])
 
 export function isAgentAllowedInArtistWorkspace(
   agentSlug: string,
   scope: 'hq' | 'campaign' | 'lab' | 'general' | undefined,
 ): boolean {
-  return !HQ_ONLY_ARTIST_AGENT_SLUGS.has(agentSlug) || scope === 'hq'
+  if (HQ_ONLY_ARTIST_AGENT_SLUGS.has(agentSlug)) return scope === 'hq'
+  if (CAMPAIGN_ONLY_ARTIST_AGENT_SLUGS.has(agentSlug)) return scope === 'campaign'
+  return true
 }
 
 /** Fallback capability broker available in both Artist HQ and campaigns. */
@@ -87,7 +90,6 @@ export function initialAgentSlugsForWorkspace(
     ...CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
   ]
   if (scope === 'hq') return [
-    RELEASE_MANAGER_AGENT_SLUG,
     ...HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
     ...HQ_DEFAULT_ACTIVATED_AGENT_SLUGS,
   ]

@@ -14,6 +14,7 @@ export const HQ_DEFAULT_WORKER_SLUGS = [
 ] as const
 
 export const CAMPAIGN_DEFAULT_WORKER_SLUGS = [
+  'artist-os-release-manager',
   'content-genius',
   'scroll-stopper',
   'anticipation-director',
@@ -35,4 +36,10 @@ export function defaultWorkerSlugs(includeCampaignWorkers: boolean): readonly st
   return includeCampaignWorkers
     ? [...BASE_DEFAULT_WORKER_SLUGS, ...CAMPAIGN_DEFAULT_WORKER_SLUGS]
     : [...BASE_DEFAULT_WORKER_SLUGS, ...HQ_DEFAULT_WORKER_SLUGS]
+}
+
+export function excludedWorkerSlugs(includeCampaignWorkers: boolean): readonly string[] {
+  return includeCampaignWorkers
+    ? ['legal-agent']
+    : ['artist-os-release-manager']
 }

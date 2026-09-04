@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test'
-import { defaultWorkerSlugs, LAB_DEFAULT_WORKER_SLUGS } from './worker-defaults'
+import { defaultWorkerSlugs, excludedWorkerSlugs, LAB_DEFAULT_WORKER_SLUGS } from './worker-defaults'
+
+test('Release Manager is visible by default only in Campaign Workers', () => {
+  expect(defaultWorkerSlugs(true)).toContain('artist-os-release-manager')
+  expect(defaultWorkerSlugs(false)).not.toContain('artist-os-release-manager')
+  expect(excludedWorkerSlugs(true)).not.toContain('artist-os-release-manager')
+  expect(excludedWorkerSlugs(false)).toContain('artist-os-release-manager')
+})
 
 describe('worker page defaults', () => {
   test('Site Builder appears by default in Artist HQ and Campaign workers', () => {
