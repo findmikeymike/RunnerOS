@@ -918,6 +918,7 @@ export interface ElectronAPI {
   }): Promise<Record<string, unknown>>
   clearWebsiteBrief(workspaceId: string): Promise<Record<string, unknown>>
   getCommunity(workspaceId: string): Promise<CommunityState>
+  getCommunitySetup(workspaceId: string): Promise<Record<string, unknown>>
   updateCommunityEmailJob(workspaceId: string, jobId: string, patch: {
     subject?: string
     bodyMarkdown?: string

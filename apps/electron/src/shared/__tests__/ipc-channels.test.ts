@@ -107,6 +107,7 @@ const EXPECTED_CHANNELS: string[] = [
   "community:createEmailJob",
   "community:get",
   "community:getRoutine",
+  "community:getSetup",
   "community:importCsv",
   "community:sendEmailJob",
   "community:sendResendEmail",

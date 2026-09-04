@@ -348,6 +348,7 @@ export const RPC_CHANNELS = {
     IMPORT_CSV: 'community:importCsv',
     CREATE_EMAIL_JOB: 'community:createEmailJob',
     SUPPRESS: 'community:suppress',
+    GET_SETUP: 'community:getSetup',
     UPDATE_EMAIL_JOB: 'community:updateEmailJob',
     SEND_EMAIL_JOB: 'community:sendEmailJob',
     CANCEL_EMAIL_JOB: 'community:cancelEmailJob',

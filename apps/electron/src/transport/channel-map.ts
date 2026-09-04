@@ -237,6 +237,7 @@ export const CHANNEL_MAP = {
   setWebsiteRoutine: invoke(RPC_CHANNELS.website.SET_ROUTINE),
   clearWebsiteBrief: invoke(RPC_CHANNELS.website.CLEAR_BRIEF),
   getCommunity: invoke(RPC_CHANNELS.community.GET),
+  getCommunitySetup: invoke(RPC_CHANNELS.community.GET_SETUP),
   updateCommunityEmailJob: invoke(RPC_CHANNELS.community.UPDATE_EMAIL_JOB),
   sendCommunityEmailJob: invoke(RPC_CHANNELS.community.SEND_EMAIL_JOB),
   cancelCommunityEmailJob: invoke(RPC_CHANNELS.community.CANCEL_EMAIL_JOB),

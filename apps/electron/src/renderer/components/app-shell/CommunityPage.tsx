@@ -88,6 +88,7 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
   const [addFanOpen, setAddFanOpen] = React.useState(false)
   const [emailQueueOpen, setEmailQueueOpen] = React.useState(true)
   const [mailBusy, setMailBusy] = React.useState<string | null>(null)
+  const [emailReady, setEmailReady] = React.useState(true)
 
   const refreshCommunity = React.useCallback(async (foreground = true) => {
     if (foreground) setLoading(true)
@@ -366,6 +367,8 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
             )}
           </div>
 
+          <CommunityEmailSetup workspaceId={workspaceId} onReadyChange={setEmailReady} />
+
           <CommunityRoutineRow
             workspaceId={workspaceId}
             busy={mailBusy}
@@ -398,6 +401,7 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
                     workspaceId={workspaceId}
                     busy={mailBusy}
                     onBusy={setMailBusy}
+                    emailReady={emailReady}
                     onChanged={() => void refreshCommunity(false)}
                   />
                 )) : (
@@ -668,12 +672,15 @@ function EmailProposal({
   workspaceId,
   busy,
   onBusy,
+  emailReady,
   onChanged,
 }: {
   job: CommunityEmailJobRecord
   workspaceId: string
   busy: string | null
   onBusy: (key: string | null) => void
+  /** False until a verified sender and an unsubscribe link exist. */
+  emailReady: boolean
   onChanged: () => void
 }) {
   const [open, setOpen] = React.useState(false)
@@ -683,7 +690,14 @@ function EmailProposal({
 
   const edited = subject !== job.content.subject || body !== job.content.bodyMarkdown
   const recipients = job.audience.estimatedRecipients
-  const canSend = recipients > 0 && subject.trim().length > 0 && body.trim().length > 0
+  const blocker = !emailReady
+    ? 'Finish the email setup above first.'
+    : recipients === 0
+      ? 'Nobody is in this audience.'
+      : !subject.trim() || !body.trim()
+        ? 'Needs a subject and a body.'
+        : undefined
+  const canSend = blocker === undefined
 
   const act = React.useCallback(async (key: string, run: () => Promise<unknown>, success: string) => {
     onBusy(key)
@@ -805,7 +819,7 @@ function EmailProposal({
               <button
                 type="button"
                 disabled={busy !== null || !canSend}
-                title={canSend ? undefined : 'Needs a subject, a body, and at least one recipient.'}
+                title={blocker}
                 onClick={() => setConfirming(true)}
                 className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-emerald-200/90 px-3 text-[12px] font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-40"
               >
@@ -813,6 +827,10 @@ function EmailProposal({
                 Send
               </button>
             )}
+
+            {blocker && !confirming ? (
+              <span className="text-[11px] text-white/35">{blocker}</span>
+            ) : null}
 
             <button
               type="button"
@@ -833,6 +851,232 @@ function EmailProposal({
             drafted are dropped automatically at send.
           </p>
         </div>
+      ) : null}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// What is still missing before fan email can go out
+// ---------------------------------------------------------------------------
+
+interface SetupStep {
+  id: string
+  label: string
+  done: boolean
+  secret?: boolean
+  value?: string
+}
+
+interface CommunitySetup {
+  ready: boolean
+  steps: SetupStep[]
+  domain?: { name: string; verified: boolean; note?: string }
+  suggestedUnsubscribeUrl?: string
+  remaining: number
+}
+
+const STEP_HELP: Record<string, { hint: string; placeholder: string; link?: { label: string; url: string } }> = {
+  RESEND_API_KEY: {
+    hint: 'Resend is the service that actually delivers the email. The free tier covers most artists.',
+    placeholder: 're_...',
+    link: { label: 'Create a key', url: 'https://resend.com/api-keys' },
+  },
+  COMMUNITY_FROM_EMAIL: {
+    hint: 'The address fans see. It has to use a domain you verified in Resend, not gmail.com.',
+    placeholder: 'hello@yourband.com',
+    link: { label: 'Verify a domain', url: 'https://resend.com/domains' },
+  },
+  COMMUNITY_UNSUBSCRIBE_URL: {
+    hint: 'Where the unsubscribe link goes. Every email carries one.',
+    placeholder: 'https://yourband.com/unsubscribe',
+  },
+  COMMUNITY_POSTAL_ADDRESS: {
+    hint: 'Required by law on bulk email. A PO box is fine; it does not have to be your home.',
+    placeholder: 'PO Box 1, Denver CO 80201',
+  },
+}
+
+/**
+ * Shown until fan email can actually be sent, then collapses to a quiet line.
+ *
+ * Steps rather than one switch: "not set up" is useless to an artist who has
+ * already done three of the four things.
+ */
+function CommunityEmailSetup({
+  workspaceId,
+  onReadyChange,
+}: {
+  workspaceId: string
+  onReadyChange?: (ready: boolean) => void
+}) {
+  const [setup, setSetup] = React.useState<CommunitySetup | null>(null)
+  const [drafts, setDrafts] = React.useState<Record<string, string>>({})
+  const [saving, setSaving] = React.useState<string | null>(null)
+  const [expanded, setExpanded] = React.useState(false)
+
+  const load = React.useCallback(async () => {
+    if (!workspaceId) return
+    try {
+      const result = await window.electronAPI.getCommunitySetup(workspaceId) as unknown as CommunitySetup
+      setSetup(result)
+      onReadyChange?.(Boolean(result?.ready))
+    } catch {
+      // Setup state is advisory; a failure here must not break the page.
+    }
+  }, [onReadyChange, workspaceId])
+
+  React.useEffect(() => { void load() }, [load])
+
+  const save = React.useCallback(async (id: string) => {
+    const value = (drafts[id] ?? '').trim()
+    if (!value) return
+    setSaving(id)
+    try {
+      const result = await window.electronAPI.saveSecret(id, value, workspaceId)
+      if (!result.success) {
+        toast.error(result.error ?? 'Could not save that.')
+        return
+      }
+      setDrafts(current => ({ ...current, [id]: '' }))
+      toast.success('Saved.')
+      await load()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not save that.')
+    } finally {
+      setSaving(null)
+    }
+  }, [drafts, load, workspaceId])
+
+  if (!setup) return null
+
+  const domainProblem = setup.domain && !setup.domain.verified
+
+  if (setup.ready && !expanded) {
+    return (
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/[0.045] px-2 pt-3">
+        <p className="text-[11px] text-white/30">
+          Sending from {setup.steps.find(step => step.id === 'COMMUNITY_FROM_EMAIL')?.value}
+        </p>
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="text-[11px] text-white/30 underline-offset-2 hover:text-white/60 hover:underline"
+        >
+          Change
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-4 rounded-[13px] border border-amber-300/15 bg-amber-300/[0.04] p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[12px] font-medium text-white/80">
+            {setup.ready ? 'Email settings' : 'Before you can email fans'}
+          </h2>
+          {!setup.ready ? (
+            <p className="mt-1 max-w-md text-[11px] leading-5 text-white/45">
+              {setup.remaining} {setup.remaining === 1 ? 'thing' : 'things'} left. This is a one-time
+              setup and the free tier covers most artists.
+            </p>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate(routes.action.newSession({
+            name: 'Set up fan email',
+            input: 'Walk me through setting up fan email with Resend, step by step. I need an API key, a verified sending domain, an unsubscribe link, and a postal address for the footer. Tell me what each one is for in plain terms, open the pages I need, and wait for me at each step.',
+          }))}
+          className="h-7 shrink-0 rounded-[7px] bg-white/90 px-2.5 text-[11px] font-medium text-black transition-opacity hover:opacity-90"
+        >
+          Set up with Resend
+        </button>
+      </div>
+
+      {domainProblem ? (
+        <p className="mt-2.5 rounded-[8px] border border-amber-300/20 bg-amber-300/[0.05] px-2.5 py-2 text-[11px] leading-5 text-amber-100/75">
+          {setup.domain?.note}
+        </p>
+      ) : null}
+
+      <div className="mt-3 space-y-2.5">
+        {setup.steps.map(step => {
+          const help = STEP_HELP[step.id]
+          const suggestion = step.id === 'COMMUNITY_UNSUBSCRIBE_URL' ? setup.suggestedUnsubscribeUrl : undefined
+          return (
+            <div key={step.id}>
+              <div className="flex items-center gap-2">
+                <span className={cn(
+                  'inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border text-[8px]',
+                  step.done ? 'border-emerald-300/40 bg-emerald-300/20 text-emerald-100' : 'border-white/15 text-white/25',
+                )}>
+                  {step.done ? '✓' : ''}
+                </span>
+                <span className="text-[11px] font-medium text-white/65">{step.label}</span>
+                {step.done && step.value ? (
+                  <span className="truncate text-[11px] text-white/30">{step.value}</span>
+                ) : null}
+                {step.done && step.secret ? (
+                  <span className="text-[11px] text-white/30">saved</span>
+                ) : null}
+                {help?.link ? (
+                  <a
+                    href={help.link.url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="ml-auto text-[11px] text-white/35 underline-offset-2 hover:text-white/70 hover:underline"
+                  >
+                    {help.link.label}
+                  </a>
+                ) : null}
+              </div>
+
+              {!step.done ? (
+                <div className="mt-1.5 pl-[22px]">
+                  <p className="text-[11px] leading-5 text-white/35">{help?.hint}</p>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <input
+                      type={step.secret ? 'password' : 'text'}
+                      value={drafts[step.id] ?? ''}
+                      onChange={(event) => setDrafts(current => ({ ...current, [step.id]: event.target.value }))}
+                      placeholder={help?.placeholder}
+                      className="h-7 flex-1 rounded-[7px] border border-white/[0.08] bg-transparent px-2 text-[11px] text-white/80 outline-none placeholder:text-white/20 focus:border-white/20"
+                    />
+                    <button
+                      type="button"
+                      disabled={saving !== null || !(drafts[step.id] ?? '').trim()}
+                      onClick={() => void save(step.id)}
+                      className="h-7 rounded-[7px] border border-white/[0.08] px-2.5 text-[11px] text-white/70 transition-colors hover:bg-white/[0.04] disabled:opacity-40"
+                    >
+                      {saving === step.id ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                  {suggestion ? (
+                    <button
+                      type="button"
+                      onClick={() => setDrafts(current => ({ ...current, [step.id]: suggestion }))}
+                      className="mt-1 text-[10px] text-white/30 underline-offset-2 hover:text-white/60 hover:underline"
+                    >
+                      Use {suggestion}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+
+      {setup.ready ? (
+        <button
+          type="button"
+          onClick={() => setExpanded(false)}
+          className="mt-3 text-[11px] text-white/30 underline-offset-2 hover:text-white/60 hover:underline"
+        >
+          Done
+        </button>
       ) : null}
     </div>
   )

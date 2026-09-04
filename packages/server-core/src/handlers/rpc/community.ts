@@ -16,6 +16,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.community.IMPORT_CSV,
   RPC_CHANNELS.community.CREATE_EMAIL_JOB,
   RPC_CHANNELS.community.SUPPRESS,
+  RPC_CHANNELS.community.GET_SETUP,
   RPC_CHANNELS.community.UPDATE_EMAIL_JOB,
   RPC_CHANNELS.community.SEND_EMAIL_JOB,
   RPC_CHANNELS.community.CANCEL_EMAIL_JOB,
@@ -101,6 +102,63 @@ export function registerCommunityHandlers(server: RpcServer, _deps: HandlerDeps)
   // ---------------------------------------------------------------------
   // Drafts the artist reviews before anything is sent
   // ---------------------------------------------------------------------
+
+  /**
+   * What is still missing before fan email can go out.
+   *
+   * Reported as steps rather than one boolean, because "not set up" is
+   * useless when the artist has done three of four things.
+   */
+  server.handle(RPC_CHANNELS.community.GET_SETUP, async (_ctx, workspaceId: string) => {
+    const workspace = resolveWorkspace(workspaceId)
+    const { getCredentialManager } = await import('@craft-agent/shared/credentials')
+    const credentials = getCredentialManager()
+
+    const [apiKey, from, unsubscribeUrl, postalAddress] = await Promise.all([
+      credentials.getUserSecret('RESEND_API_KEY'),
+      credentials.getUserSecret('COMMUNITY_FROM_EMAIL'),
+      credentials.getUserSecret('COMMUNITY_UNSUBSCRIBE_URL'),
+      credentials.getUserSecret('COMMUNITY_POSTAL_ADDRESS'),
+    ])
+
+    // Only worth asking Resend once there is a key and an address to check.
+    let domain: { name: string; verified: boolean; note?: string } | undefined
+    if (apiKey && from) {
+      const { ResendMailer } = await import('../../community/ResendMailer')
+      const check = await new ResendMailer({ apiKey }).verifySender(from)
+      domain = {
+        name: from.split('@')[1] ?? from,
+        verified: check.ok,
+        ...(check.ok ? {} : { note: check.error }),
+      }
+    }
+
+    // A site that is already live is the obvious place to host the opt-out.
+    let suggestedUnsubscribeUrl: string | undefined
+    try {
+      const { loadWebsiteManifest } = await import('@craft-agent/shared/website')
+      const production = loadWebsiteManifest(workspace.rootPath)?.urls.production
+      if (production) suggestedUnsubscribeUrl = `${production.replace(/\/+$/, '')}/unsubscribe`
+    } catch {
+      // No site yet; the artist supplies a URL themselves.
+    }
+
+    const steps = [
+      { id: 'RESEND_API_KEY', label: 'Resend API key', done: Boolean(apiKey), secret: true },
+      { id: 'COMMUNITY_FROM_EMAIL', label: 'Send from', done: Boolean(from), value: from ?? undefined },
+      { id: 'COMMUNITY_UNSUBSCRIBE_URL', label: 'Unsubscribe link', done: Boolean(unsubscribeUrl), value: unsubscribeUrl ?? undefined },
+      { id: 'COMMUNITY_POSTAL_ADDRESS', label: 'Postal address', done: Boolean(postalAddress), value: postalAddress ?? undefined },
+    ]
+
+    return {
+      ok: true,
+      ready: steps.every(step => step.done) && domain?.verified === true,
+      steps,
+      domain,
+      suggestedUnsubscribeUrl,
+      remaining: steps.filter(step => !step.done).length + (domain && !domain.verified ? 1 : 0),
+    }
+  })
 
   server.handle(RPC_CHANNELS.community.UPDATE_EMAIL_JOB, async (
     _ctx,
