@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -13,6 +13,22 @@ import {
   handleVideoProjectCreate,
   handleVideoProjectUpdate,
 } from './video-tools.ts';
+
+/**
+ * These tests shell out to real ffmpeg to build fixtures and render real mp4s,
+ * which does not fit bun's 5s default on a loaded machine.
+ *
+ * A timeout here is not just a slow test. `afterEach` deletes the temp root, so
+ * when bun tears a test down mid-render it pulls the working directory out from
+ * under the ffmpeg process still using it. The export then fails and its
+ * assertion resolves after the test has already ended, surfacing as an error
+ * outside any test and aborting the rest of the file — one slow render turns
+ * into several unrelated-looking failures.
+ *
+ * File-scoped rather than per-test: the renders that currently finish just
+ * inside 5s are the same flake waiting for a busier machine.
+ */
+setDefaultTimeout(30_000);
 
 let root: string;
 
