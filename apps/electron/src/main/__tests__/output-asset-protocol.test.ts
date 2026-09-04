@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, symlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 
@@ -47,10 +47,10 @@ mock.module('@craft-agent/shared/config', () => ({
 
 const { registerOutputAssetHandler } = await import('../output-asset-protocol')
 const { BROWSER_PANE_SESSION_PARTITION } = await import('../browser-pane-constants')
-const { RUNNER_OUTPUT_SCHEME } = await import('@craft-agent/shared/outputs')
+const { RUNNER_OUTPUT_SCHEME, buildRunnerOutputAssetUrl } = await import('@craft-agent/shared/outputs')
 
 function assetUrl(workspaceId: string, outputId: string, assetPath: string): string {
-  return `${RUNNER_OUTPUT_SCHEME}://asset/${workspaceId}/${outputId}/${assetPath}`
+  return buildRunnerOutputAssetUrl(workspaceId, outputId, assetPath)
 }
 
 async function handle(url: string): Promise<Response> {
@@ -86,22 +86,24 @@ describe('registerOutputAssetHandler', () => {
 })
 
 describe('generated-output CSP', () => {
-  test('forbids fetch/XHR outright so a shared-origin document cannot read another output', async () => {
+  test('permits own-bundle fetch on a distinct output origin', async () => {
     const response = await handle(assetUrl('attacker', ATTACKER_OUTPUT, 'index.html'))
     expect(response.status).toBe(200)
-    expect(response.headers.get('Content-Security-Policy')).toContain("connect-src 'none'")
+    expect(response.headers.get('Content-Security-Policy')).toContain("connect-src 'self'")
+    expect(new URL(assetUrl('attacker', ATTACKER_OUTPUT, 'index.html')).host)
+      .not.toBe(new URL(assetUrl('victim', VICTIM_OUTPUT, 'secret.html')).host)
+    expect(response.headers.get('Origin-Agent-Cluster')).toBeNull()
+    expect(response.headers.get('Content-Security-Policy')).toContain('sandbox allow-scripts allow-same-origin')
   })
 
-  test("never grants 'self', which under an opaque origin matches nothing and would blank every page", async () => {
+  test('allows subresources only from the output origin, never the whole scheme', async () => {
     const csp = (await handle(assetUrl('attacker', ATTACKER_OUTPUT, 'index.html')))
       .headers.get('Content-Security-Policy') ?? ''
 
-    expect(csp).not.toContain("'self'")
-    // Subresources must stay loadable by scheme, or a page with a separate
-    // stylesheet renders blank once the iframe origin goes opaque.
-    expect(csp).toContain(`style-src ${RUNNER_OUTPUT_SCHEME}:`)
-    expect(csp).toContain(`script-src ${RUNNER_OUTPUT_SCHEME}:`)
-    expect(csp).toContain(`img-src ${RUNNER_OUTPUT_SCHEME}:`)
+    expect(csp).not.toContain(`${RUNNER_OUTPUT_SCHEME}:`)
+    expect(csp).toContain("style-src 'self'")
+    expect(csp).toContain("script-src 'self'")
+    expect(csp).toContain("img-src 'self'")
   })
 
   test('denies by default and blocks framing, objects, base-uri, and form posts', async () => {
@@ -121,7 +123,7 @@ describe('generated-output CSP', () => {
 
     expect(response.status).toBe(200)
     expect(response.headers.get('Content-Type')).toBe('text/javascript')
-    expect(response.headers.get('Content-Security-Policy')).toContain("connect-src 'none'")
+    expect(response.headers.get('Content-Security-Policy')).toContain("connect-src 'self'")
     expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff')
   })
 })
@@ -145,24 +147,69 @@ describe('path scoping', () => {
 
   for (const [label, buildUrl] of escapeAttempts) {
     test(`never serves another workspace's asset via ${label}`, async () => {
-      const response = await handle(buildUrl())
-      const body = response.status === 200 ? await response.text() : ''
+      let response = await handle(buildUrl())
+      if (response.status === 302) response = await handle(response.headers.get('location')!)
+      expect([400, 404]).toContain(response.status)
+      const body = await response.text()
       expect(body).not.toContain('SECRET')
     })
   }
 
-  /**
-   * The handler serves any workspace addressed by id — it cannot see who is
-   * asking, so it is NOT the thing that isolates one output from another.
-   * Isolation is the browser's job: an opaque iframe origin plus
-   * `connect-src 'none'`. This test states that boundary explicitly so nobody
-   * later "hardens" the handler and assumes the job is done here.
-   */
-  test('serves any workspace addressed directly — isolation is the CSP/origin, not this handler', async () => {
+  test('serves another output only at its own scoped origin', async () => {
     const response = await handle(assetUrl('victim', VICTIM_OUTPUT, 'secret.html'))
     expect(response.status).toBe(200)
     expect(await response.text()).toContain('SECRET')
-    expect(response.headers.get('Content-Security-Policy')).toContain("connect-src 'none'")
+    expect(response.headers.get('Content-Security-Policy')).toContain("connect-src 'self'")
+  })
+
+  test('rejects another workspace/output path on the attacker origin', async () => {
+    const forged = new URL(assetUrl('attacker', ATTACKER_OUTPUT, 'index.html'))
+    forged.pathname = new URL(assetUrl('victim', VICTIM_OUTPUT, 'secret.html')).pathname
+    expect((await handle(forged.href)).status).toBe(400)
+  })
+
+  test('redirects old shared-origin links before serving any bytes', async () => {
+    const response = await handle(`${RUNNER_OUTPUT_SCHEME}://asset/attacker/${ATTACKER_OUTPUT}/index.html?v=2`)
+    expect(response.status).toBe(302)
+    expect(await response.text()).toBe('')
+    expect(response.headers.get('location')).toBe(`${assetUrl('attacker', ATTACKER_OUTPUT, 'index.html')}?v=2`)
+  })
+
+  test('rejects an undeclared absolute asset from the same workspace', async () => {
+    const privateFile = join(root, 'attacker', 'private.json')
+    writeFileSync(privateFile, 'PRIVATE')
+    expect((await handle(assetUrl('attacker', ATTACKER_OUTPUT, privateFile))).status).toBe(404)
+  })
+
+  test('serves manifest-attached absolute PDF and image assets', async () => {
+    const paths = ['attached.pdf', 'attached.png'].map((name) => join(root, 'attacker', name))
+    const assets = paths.map((path, i) => ({ id: `attached-${i}`, label: 'Attached', role: 'primary', path }))
+    writeFileSync(join(root, 'attacker', 'outputs', ATTACKER_OUTPUT, 'output.json'), JSON.stringify({
+      schemaVersion: 1, id: ATTACKER_OUTPUT, workspaceId: 'attacker', title: 'Attached', slug: 'attached', summary: '',
+      kind: 'report', status: 'published', createdAt: '2026-09-04T00:00:00.000Z', updatedAt: '2026-09-04T00:00:00.000Z',
+      origin: { source: 'workflow' }, primary: assets[0], assets, receipts: [], links: [],
+    }))
+    for (const path of paths) {
+      writeFileSync(path, 'ATTACHED')
+      const response = await handle(assetUrl('attacker', ATTACKER_OUTPUT, path))
+      expect(response.status).toBe(200)
+      expect(await response.text()).toBe('ATTACHED')
+      expect(response.headers.get('Content-Security-Policy')).not.toContain('sandbox')
+    }
+  })
+
+  test('rejects a symlink from the bundle into another workspace', async () => {
+    symlinkSync(join(root, 'victim', 'outputs', VICTIM_OUTPUT, 'secret.html'),
+      join(root, 'attacker', 'outputs', ATTACKER_OUTPUT, 'linked.html'))
+    expect((await handle(assetUrl('attacker', ATTACKER_OUTPUT, 'linked.html'))).status).toBe(404)
+  })
+
+  test('rejects a symlink into a different output in the same workspace', async () => {
+    const other = join(root, 'attacker', 'outputs', VICTIM_OUTPUT)
+    mkdirSync(other)
+    writeFileSync(join(other, 'secret.html'), 'PRIVATE')
+    symlinkSync(join(other, 'secret.html'), join(root, 'attacker', 'outputs', ATTACKER_OUTPUT, 'other.html'))
+    expect((await handle(assetUrl('attacker', ATTACKER_OUTPUT, 'other.html'))).status).toBe(404)
   })
 
   test('404s an unknown workspace instead of resolving it against another root', async () => {

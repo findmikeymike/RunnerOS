@@ -26,17 +26,12 @@ export function isGeneratedOutputPreviewUrl(url: string): boolean {
 }
 
 /**
- * Agent-authored HTML served from `runner-output://`. No `allow-same-origin`:
- * every `runner-output://` URL shares one origin (`runner-output://asset` —
- * the workspace and output ids live in the path, not the host), so a document
- * with a real origin here could read any other output of any other local
- * workspace. An opaque origin removes that read primitive entirely.
- *
- * Kept in step with `HTML_PREVIEW_CSP` in `main/output-asset-protocol.ts`,
- * which allows subresources by scheme precisely because `'self'` cannot match
- * an opaque origin.
+ * Each generated output now has a separate protocol origin. Retain that origin
+ * for same-bundle fetch, modules and fonts. The protocol handler verifies the
+ * host/path binding and sends a self-only CSP in iframe AND Browser Pane.
+ * Legacy shared-origin URLs redirect to a scoped origin before serving bytes.
  */
-export const GENERATED_OUTPUT_SANDBOX = 'allow-scripts allow-forms'
+export const GENERATED_OUTPUT_SANDBOX = 'allow-scripts allow-forms allow-same-origin'
 
 /**
  * A localhost dev server is already its own origin and cannot reach

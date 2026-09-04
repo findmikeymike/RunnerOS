@@ -5,10 +5,30 @@ import {
   isVisualBoardSnapshot,
   parseVisualBoardSnapshot,
   summarizeVisualBoard,
+  rebaseVisualBoardDraft,
   type VisualBoardSnapshot,
 } from './index.ts';
 
 describe('visual board snapshots', () => {
+  test('keeps edits made during save and adopts the returned observed state', () => {
+    const board = createEmptyVisualBoardSnapshot({ workspaceId: 'ws', sessionId: 'session-1' });
+    const note = { id: 'note', type: 'note' as const, title: 'Note', body: 'submitted', createdAt: board.createdAt, updatedAt: board.updatedAt };
+    const submitted = { ...board, cards: [note] };
+    const current = { ...submitted, cards: [{ ...note, body: 'typed while saving' }] };
+    const saved = { ...submitted, observedState: { title: board.title, cards: [{ id: 'note', hash: 'a'.repeat(64) }] }, cards: [{ ...note, id: 'remote' }, note] };
+    const rebased = rebaseVisualBoardDraft(submitted, current, saved);
+    expect(rebased.observedState).toEqual(saved.observedState);
+    expect(rebased.cards).toHaveLength(2);
+    expect(rebased.cards.find((card) => card.id === 'note')).toMatchObject({ body: 'typed while saving' });
+    expect(rebaseVisualBoardDraft(submitted, { ...current, cards: [] }, saved).cards.map((card) => card.id)).toEqual(['remote']);
+  });
+
+  test('rejects duplicate card IDs and malformed observed state', () => {
+    const board = createEmptyVisualBoardSnapshot({ workspaceId: 'ws', sessionId: 'session-1' });
+    const note = { id: 'note', type: 'note', title: 'Note', body: '', createdAt: board.createdAt, updatedAt: board.updatedAt };
+    expect(isVisualBoardSnapshot({ ...board, cards: [note, note] })).toBe(false);
+    expect(isVisualBoardSnapshot({ ...board, observedState: { title: '', cards: [{ id: 'note', hash: 'bad' }] } })).toBe(false);
+  });
   test('creates and validates an empty session board', () => {
     const board = createEmptyVisualBoardSnapshot({
       workspaceId: 'ws',

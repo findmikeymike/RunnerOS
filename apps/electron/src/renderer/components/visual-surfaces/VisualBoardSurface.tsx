@@ -4,6 +4,7 @@ import {
   VISUAL_BOARD_MAX_BODY_LENGTH,
   VISUAL_BOARD_MAX_TITLE_LENGTH,
   VISUAL_BOARD_TAG,
+  rebaseVisualBoardDraft,
   type VisualBoardCard,
   type VisualBoardOutputCard,
   type VisualBoardSnapshot,
@@ -34,15 +35,33 @@ export function VisualBoardSurface({
   const [draft, setDraft] = React.useState<VisualBoardSnapshot | null>(null)
   const [dirty, setDirty] = React.useState(false)
   const [saveState, setSaveState] = React.useState<SaveState>('idle')
+  const [saveError, setSaveError] = React.useState<string | null>(null)
   const versionRef = React.useRef(0)
+  const dirtyRef = React.useRef(false)
+  const savingRef = React.useRef(false)
+  const scopeRef = React.useRef('')
+  const scopeAbortRef = React.useRef(new AbortController())
+  scopeRef.current = JSON.stringify([workspaceId, sessionId])
 
   React.useEffect(() => {
-    if (!board) return
+    const controller = new AbortController()
+    scopeAbortRef.current = controller
+    dirtyRef.current = false
+    savingRef.current = false
+    versionRef.current += 1
+    setDraft(null)
+    setDirty(false)
+    setSaveError(null)
+    return () => controller.abort()
+  }, [workspaceId, sessionId])
+
+  React.useEffect(() => {
+    if (!board || board.workspaceId !== workspaceId || board.sessionId !== sessionId || dirtyRef.current) return
     setDraft(removePlaceholderNotes(board))
     setDirty(false)
     setSaveState('saved')
     versionRef.current += 1
-  }, [board])
+  }, [board, workspaceId, sessionId])
 
   React.useEffect(() => {
     if (!refreshKey || dirty) return
@@ -52,27 +71,42 @@ export function VisualBoardSurface({
   }, [dirty, refresh, refreshKey])
 
   React.useEffect(() => {
-    if (!draft || !dirty) return
+    if (!draft || draft.workspaceId !== workspaceId || draft.sessionId !== sessionId || !dirty || savingRef.current) return
     setSaveState('dirty')
     const version = versionRef.current
+    const scope = scopeRef.current
+    const signal = scopeAbortRef.current.signal
     const timeout = window.setTimeout(() => {
+      if (signal.aborted || scopeRef.current !== scope) return
+      savingRef.current = true
       setSaveState('saving')
+      setSaveError(null)
       saveBoard(removePlaceholderNotes(draft)).then((result) => {
-        if (versionRef.current !== version) return
+        if (signal.aborted || scopeRef.current !== scope) return
+        savingRef.current = false
+        if (versionRef.current !== version) {
+          setDraft((current) => current ? rebaseVisualBoardDraft(draft, current, result.board) : current)
+          return
+        }
         setDraft(removePlaceholderNotes(result.board))
+        dirtyRef.current = false
         setDirty(false)
         setSaveState('saved')
-      }).catch(() => {
-        if (versionRef.current === version) setSaveState('error')
+      }).catch((err) => {
+        if (signal.aborted || scopeRef.current !== scope) return
+        savingRef.current = false
+        setSaveState('error')
+        setSaveError(err instanceof Error ? err.message : String(err))
       })
     }, 700)
     return () => window.clearTimeout(timeout)
-  }, [dirty, draft, saveBoard])
+  }, [dirty, draft, saveBoard, workspaceId, sessionId])
 
   const updateDraft = React.useCallback((updater: (board: VisualBoardSnapshot) => VisualBoardSnapshot) => {
     setDraft((current) => {
       if (!current) return current
       versionRef.current += 1
+      dirtyRef.current = true
       setDirty(true)
       return updater(current)
     })
@@ -168,6 +202,13 @@ export function VisualBoardSurface({
           {saveLabel(saveState)}
         </div>
       </div>
+
+      {saveError && <div role="alert" className="shrink-0 px-3 py-2 text-xs text-destructive">
+        <p>{saveError}</p>
+        <Button type="button" size="sm" variant="ghost" onClick={() => setDraft((current) => current ? { ...current } : current)}>
+          Retry save
+        </Button>
+      </div>}
 
       <div className="min-h-0 flex-1 overflow-auto bg-[#050505] p-3">
         {draft.cards.length === 0 ? (

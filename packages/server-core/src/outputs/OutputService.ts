@@ -332,7 +332,7 @@ export class OutputService {
       try {
         const content = readOutputAssetText(this.resolveAssetPath(workspaceId, existing.id, VISUAL_BOARD_ASSET_PATH));
         const board = parseVisualBoardSnapshot(content, { workspaceId, sessionId });
-        if (board) return { output: existing, board };
+        if (board) return { output: existing, board: this.withObservedBoardState(board) };
       } catch {
         // Fall through and repair the existing board output below.
       }
@@ -373,58 +373,72 @@ export class OutputService {
     // concurrent `applyVisualSurfaceEvent` from landing between the read and the
     // write and being overwritten.
     const saved = withOutputBundleLock(root, existing.id, () => this.writeVisualBoardToOutput(workspaceId, existing, {
-      ...this.mergeCardsAddedSinceClientLoaded(workspaceId, sessionId, snapshot),
+      ...this.mergeObservedBoard(workspaceId, sessionId, snapshot),
       updatedAt: new Date().toISOString(),
     }));
     this.emitUpdated(workspaceId);
     return saved;
   }
 
-  /**
-   * The renderer saves the whole board it last loaded, so anything an agent
-   * pinned since then is missing from that snapshot — not because the artist
-   * deleted it, but because they never saw it. Without this, editing one note
-   * silently destroys every card the agent added while the panel was open.
-   *
-   * Rescue exactly those cards: on disk, absent from the incoming snapshot, and
-   * created after the snapshot the client was working from. A card the client
-   * did see and removed is older than that timestamp, so real deletes still go
-   * through. Ties go to the client, so a delete is never undone by rounding.
-   */
-  private mergeCardsAddedSinceClientLoaded(
+  private boardCardHash(card: VisualBoardSnapshot['cards'][number]): string {
+    // Stable across JSON property order; timestamps are data, never versions.
+    return createHash('sha256').update(JSON.stringify([
+      card.id, card.type, card.title, card.createdAt, card.updatedAt,
+      ...(card.type === 'note' ? [card.body] : [card.outputId, card.kind, card.summary ?? null]),
+    ])).digest('hex');
+  }
+
+  private withObservedBoardState(board: VisualBoardSnapshot): VisualBoardSnapshot {
+    return { ...board, observedState: {
+      title: board.title,
+      cards: board.cards.map((card) => ({ id: card.id, hash: this.boardCardHash(card) })),
+    } };
+  }
+
+  /** Three-way merge against what the editor actually saw, under the bundle lock. */
+  private mergeObservedBoard(
     workspaceId: string,
     sessionId: string,
     incoming: VisualBoardSnapshot,
   ): VisualBoardSnapshot {
     const manifest = this.findVisualBoardManifest(workspaceId, sessionId);
-    if (!manifest) return incoming;
+    if (!manifest || !incoming.observedState) throw new Error('Board changed. Reopen the board before saving; your draft has not been saved.');
 
     let disk: VisualBoardSnapshot | null = null;
     try {
       const content = readOutputAssetText(this.resolveAssetPath(workspaceId, manifest.id, VISUAL_BOARD_ASSET_PATH));
       disk = parseVisualBoardSnapshot(content, { workspaceId, sessionId });
     } catch {
-      // An unreadable board is repaired elsewhere; never block the artist's save.
-      return incoming;
+      throw new Error('Board could not be read. Your draft has not been saved.');
     }
-    if (!disk) return incoming;
+    if (!disk) throw new Error('Board could not be read. Your draft has not been saved.');
 
-    const clientLoadedAt = Date.parse(incoming.updatedAt);
-    if (Number.isNaN(clientLoadedAt)) return incoming;
-
-    const incomingIds = new Set(incoming.cards.map((card) => card.id));
-    const addedSince = disk.cards.filter((card) => {
-      if (incomingIds.has(card.id)) return false;
-      const createdAt = Date.parse(card.createdAt);
-      return !Number.isNaN(createdAt) && createdAt > clientLoadedAt;
-    });
-    if (addedSince.length === 0) return incoming;
-
-    // The artist's own cards keep their places; rescued ones go in front, which
-    // is where a newly pinned card appears anyway.
-    const room = Math.max(0, VISUAL_BOARD_MAX_CARDS - incoming.cards.length);
-    const rescued = addedSince.slice(0, room);
-    return rescued.length === 0 ? incoming : { ...incoming, cards: [...rescued, ...incoming.cards] };
+    const base = incoming.observedState;
+    const baseline = new Map(base.cards.map((card) => [card.id, card.hash]));
+    const local = new Map(incoming.cards.map((card) => [card.id, card]));
+    const remote = new Map(disk.cards.map((card) => [card.id, card]));
+    const cards: VisualBoardSnapshot['cards'] = [];
+    // Unseen remote additions stay at the front; otherwise preserve local order.
+    const ids = new Set([...disk.cards.filter((card) => !local.has(card.id)).map((card) => card.id), ...local.keys()]);
+    for (const id of ids) {
+      const ours = local.get(id);
+      const theirs = remote.get(id);
+      const before = baseline.get(id);
+      const oursHash = ours && this.boardCardHash(ours);
+      const theirsHash = theirs && this.boardCardHash(theirs);
+      if (oursHash !== before && theirsHash !== before && oursHash !== theirsHash) {
+        throw new Error('This card changed elsewhere while you were editing. Your draft is kept here; copy your changes before reopening the board.');
+      }
+      const chosen = oursHash === before ? theirs : ours;
+      if (chosen) cards.push(chosen);
+    }
+    if (cards.length > VISUAL_BOARD_MAX_CARDS) throw new Error(`Board is full after concurrent changes (${VISUAL_BOARD_MAX_CARDS} cards maximum). Your draft has not been saved.`);
+    const outputIds = cards.flatMap((card) => card.type === 'output' ? [card.outputId] : []);
+    if (new Set(outputIds).size !== outputIds.length) throw new Error('This output was already pinned elsewhere. Your draft has not been saved; reopen the board to see the existing pin.');
+    if (incoming.title !== base.title && disk.title !== base.title && incoming.title !== disk.title) {
+      throw new Error('Board title changed elsewhere. Your draft has not been saved.');
+    }
+    return { ...disk, cards, title: incoming.title === base.title ? disk.title : incoming.title };
   }
 
   applyVisualSurfaceEvent(
@@ -744,7 +758,8 @@ export class OutputService {
     const file = join(outputDir, VISUAL_BOARD_ASSET_PATH);
     const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
     try {
-      writeFileSync(tmp, JSON.stringify(board, null, 2) + '\n', 'utf-8');
+      const { observedState: _observedState, ...persistedBoard } = board;
+      writeFileSync(tmp, JSON.stringify(persistedBoard, null, 2) + '\n', 'utf-8');
       renameSync(tmp, file);
     } catch (err) {
       try { rmSync(tmp, { force: true }); } catch { /* ignore */ }
@@ -779,7 +794,7 @@ export class OutputService {
       tags: [...new Set([...(output.tags ?? []), VISUAL_BOARD_TAG, VISUAL_BOARD_SESSION_TAG])],
     };
     writeOutputManifest(root, nextOutput);
-    return { output: nextOutput, board };
+    return { output: nextOutput, board: this.withObservedBoardState(board) };
   }
 
   async createFromSessionTool(input: {
