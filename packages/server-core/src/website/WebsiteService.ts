@@ -1042,11 +1042,124 @@ export class WebsiteService {
     }
   }
 
+  /**
+   * Point a domain the artist owns at their Artist OS site.
+   *
+   * The existing DNS is read and recorded *before* any instruction is shown,
+   * because this is the one destructive act in the loop: whatever the domain
+   * pointed at before stops being reachable there. The receipt is the way
+   * back.
+   */
+  async setDomain(
+    workspaceRootPath: string,
+    input: { domain: string },
+    context: { machineId: string; origin: ChangeReceiptOrigin },
+    options: { resolveDns?: (domain: string) => Promise<string[]> } = {},
+  ): Promise<WebsiteToolResult> {
+    const missing = this.requireSite(workspaceRootPath)
+    if (missing) return missing
+
+    const domain = input.domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+    if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(domain)) {
+      return { ok: false, error: `That does not look like a domain: ${input.domain}` }
+    }
+
+    const manifest = loadWebsiteManifest(workspaceRootPath)
+    if (!manifest) return { ok: false, error: 'No website in this workspace yet.' }
+
+    // Capture what the domain resolves to today, before anything changes.
+    const previousDns = await (options.resolveDns ?? resolveDomainRecords)(domain).catch(() => [])
+
+    try {
+      const adapter = await this.resolveAdapter(manifest)
+      const state = await adapter.setDomain(domain)
+
+      saveWebsiteManifest(workspaceRootPath, { ...manifest, domain: state })
+
+      const receipt = writeChangeReceipt(workspaceRootPath, context.machineId, {
+        kind: 'domain-cutover',
+        origin: context.origin,
+        approval: {
+          tier: 'one-click',
+          approvedAt: new Date().toISOString(),
+          approvedBy: 'user',
+          boundTo: domain,
+        },
+        summary: state.state === 'active'
+          ? `Pointed ${domain} at the Artist OS site.`
+          : `Started pointing ${domain} at the Artist OS site.`,
+        why: ['The artist connected their own domain.'],
+        changes: [`Domain ${domain} is now ${state.state}`],
+        before: { dns: previousDns },
+        after: { url: `https://${domain}` },
+        rollback: previousDns.length > 0
+          ? {
+            kind: 'dns-steps',
+            steps: [
+              `At the registrar for ${domain}, restore these records:`,
+              ...previousDns,
+            ],
+          }
+          : { kind: 'none' },
+      })
+
+      return { ok: true, domain: state, receiptId: receipt.id, previousDns, steps: state.steps }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  /** Re-check a domain. Never claims active on hope; the host decides. */
+  async checkDomain(workspaceRootPath: string): Promise<WebsiteToolResult> {
+    const missing = this.requireSite(workspaceRootPath)
+    if (missing) return missing
+
+    const manifest = loadWebsiteManifest(workspaceRootPath)
+    if (!manifest) return { ok: false, error: 'No website in this workspace yet.' }
+    if (!manifest.domain) return { ok: true, domain: undefined, note: 'No domain is connected yet.' }
+
+    try {
+      const adapter = await this.resolveAdapter(manifest)
+      const state = await adapter.checkDomain(manifest.domain.name)
+      saveWebsiteManifest(workspaceRootPath, { ...manifest, domain: state })
+      return { ok: true, domain: state }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
   /** Stop every preview server. Called on shutdown. */
   dispose(): void {
     for (const preview of this.previews.values()) closeServer(preview.server)
     this.previews.clear()
   }
+}
+
+/**
+ * What a domain resolves to right now.
+ *
+ * Recorded before a cutover so the receipt can tell the artist exactly what
+ * to restore if they change their mind. Failures are not fatal: an
+ * unregistered or unreachable domain simply has nothing to preserve.
+ */
+async function resolveDomainRecords(domain: string): Promise<string[]> {
+  const dns = await import('node:dns/promises')
+  const records: string[] = []
+  await Promise.all([
+    dns.resolveNs(domain).then(
+      values => { for (const value of values) records.push(`NS ${value}`) },
+      () => undefined,
+    ),
+    dns.resolve4(domain).then(
+      values => { for (const value of values) records.push(`A ${value}`) },
+      () => undefined,
+    ),
+    dns.resolveCname(domain).then(
+      values => { for (const value of values) records.push(`CNAME ${value}`) },
+      () => undefined,
+    ),
+  ])
+  return records.sort()
 }
 
 /**

@@ -454,6 +454,10 @@ export interface SessionToolContext {
   websiteStatus?(input: import('./handlers/website.ts').WebsiteStatusInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
   /** Pull new site signups into the Community fan list. */
   websiteCaptureSync?(input: import('./handlers/website.ts').WebsiteCaptureSyncInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
+  /** Point an owned domain at the site. Records the previous DNS first. */
+  websiteDomainSet?(input: import('./handlers/website.ts').WebsiteDomainSetInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
+  /** Re-check whether a connected domain is live. */
+  websiteDomainCheck?(input: import('./handlers/website.ts').WebsiteDomainCheckInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
 
   /**
    * Create a workflow in the global workflow library and optionally activate it

@@ -199,6 +199,12 @@ export interface SessionScopedToolCallbacks {
   websiteCaptureSyncFn?: (
     input: import('@craft-agent/session-tools-core').WebsiteCaptureSyncInput,
   ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;
+  websiteDomainSetFn?: (
+    input: import('@craft-agent/session-tools-core').WebsiteDomainSetInput,
+  ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;
+  websiteDomainCheckFn?: (
+    input: import('@craft-agent/session-tools-core').WebsiteDomainCheckInput,
+  ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;
   /** Create a workflow in the global library (used by the workflow-creator skill's create_workflow tool). */
   createWorkflowFn?: (
     input: import('@craft-agent/session-tools-core').CreateWorkflowToolInput,

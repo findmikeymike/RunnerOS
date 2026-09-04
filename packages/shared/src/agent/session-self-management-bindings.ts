@@ -392,6 +392,18 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'websiteDomainSet', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.websiteDomainSetFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'websiteDomainCheck', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.websiteDomainCheckFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'createWorkflow', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.createWorkflowFn;

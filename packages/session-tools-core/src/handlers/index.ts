@@ -197,6 +197,8 @@ export {
   handleWebsiteHistory,
   handleWebsiteStatus,
   handleWebsiteCaptureSync,
+  handleWebsiteDomainSet,
+  handleWebsiteDomainCheck,
 } from './website.ts';
 export type {
   GetWebsiteManifestInput,
@@ -210,6 +212,8 @@ export type {
   WebsiteHistoryInput,
   WebsiteStatusInput,
   WebsiteCaptureSyncInput,
+  WebsiteDomainSetInput,
+  WebsiteDomainCheckInput,
   WebsiteToolResult,
 } from './website.ts';
 

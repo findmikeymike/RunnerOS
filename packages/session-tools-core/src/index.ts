@@ -328,6 +328,8 @@ export type {
   WebsiteHistoryInput,
   WebsiteStatusInput,
   WebsiteCaptureSyncInput,
+  WebsiteDomainSetInput,
+  WebsiteDomainCheckInput,
   WebsiteToolResult,
 } from './handlers/index.ts';
 

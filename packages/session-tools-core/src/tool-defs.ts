@@ -84,6 +84,8 @@ import {
   handleWebsiteHistory,
   handleWebsiteStatus,
   handleWebsiteCaptureSync,
+  handleWebsiteDomainSet,
+  handleWebsiteDomainCheck,
 } from './handlers/website.ts';
 import {
   handleSaveMemory,
@@ -900,6 +902,12 @@ export const WebsiteHistorySchema = z.object({
 });
 
 export const WebsiteStatusSchema = z.object({}).strict();
+
+export const WebsiteDomainSetSchema = z.object({
+  domain: z.string().min(3).max(253).describe('The domain the artist owns, e.g. "lowtide.com".'),
+});
+
+export const WebsiteDomainCheckSchema = z.object({}).strict();
 
 export const WebsiteCaptureSyncSchema = z.object({
   limit: z.number().int().min(1).max(100).optional()
@@ -1803,6 +1811,10 @@ Use only after the user explicitly confirms the operation. Read the current coor
 
   website_status: `Report what is actually live: mode, host, URLs, domain state, the build behind the live deploy, publish policy, and whether trusted mode is available. Checks the host, so it reflects reality rather than the local manifest alone. Read-only.`,
 
+  website_domain_set: `Point a domain the artist already owns at their Artist OS site. Returns the exact DNS steps to follow; it never claims the domain is live until the host confirms it. This is the one destructive step in the loop — whatever the domain pointed at before stops being reachable there — so the previous DNS records are recorded first and the receipt carries the way back.`,
+
+  website_domain_check: `Re-check whether a connected domain is live yet. Use after the artist updates DNS. Read-only.`,
+
   website_capture_sync: `Pull new signups from the site's capture door into the Community fan list. Each one arrives with its consent evidence (form, timestamp, hashed IP), which is what lets it receive a broadcast later. Already-known and unsubscribed addresses are skipped and counted rather than re-added. Safe to run any time; it sends nothing.`,
 
   website_seo_audit: `Audit the local built site against the baseline: titles, descriptions, one h1 per page, canonical links, Open Graph tags, image alt text and size, internal links, structured data, secret-pattern leaks, and page weight. Live-URL audit arrives with existing-site support in a later slice. Returns a score out of 100 and a fix for each finding. Read-only.`,
@@ -2185,6 +2197,8 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'website_deploy', description: TOOL_DESCRIPTIONS.website_deploy, inputSchema: DeployWebsiteSchema, executionMode: 'registry', safeMode: 'block', handler: handleDeployWebsite },
   { name: 'website_rollback', description: TOOL_DESCRIPTIONS.website_rollback, inputSchema: RollbackWebsiteSchema, executionMode: 'registry', safeMode: 'block', handler: handleRollbackWebsite },
   { name: 'website_capture_sync', description: TOOL_DESCRIPTIONS.website_capture_sync, inputSchema: WebsiteCaptureSyncSchema, executionMode: 'registry', safeMode: 'block', handler: handleWebsiteCaptureSync },
+  { name: 'website_domain_check', description: TOOL_DESCRIPTIONS.website_domain_check, inputSchema: WebsiteDomainCheckSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleWebsiteDomainCheck },
+  { name: 'website_domain_set', description: TOOL_DESCRIPTIONS.website_domain_set, inputSchema: WebsiteDomainSetSchema, executionMode: 'registry', safeMode: 'block', handler: handleWebsiteDomainSet },
   { name: 'create_workflow', description: TOOL_DESCRIPTIONS.create_workflow, inputSchema: CreateWorkflowSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateWorkflow },
   { name: 'save_memory', description: TOOL_DESCRIPTIONS.save_memory, inputSchema: SaveMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleSaveMemory },
   { name: 'update_memory', description: TOOL_DESCRIPTIONS.update_memory, inputSchema: UpdateMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdateMemory },

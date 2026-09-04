@@ -8867,6 +8867,19 @@ user a clickable link to where the thing now lives.`
         websiteStatusFn: async () => this.withArtistHqWebsite(
           website => website.service.status(website.rootPath),
         ),
+        websiteDomainCheckFn: async () => this.withArtistHqWebsite(
+          website => website.service.checkDomain(website.rootPath),
+        ),
+        websiteDomainSetFn: async (input) => this.withArtistHqWebsite(
+          website => website.service.setDomain(website.rootPath, input, {
+            machineId: this.resolveMachineId(website.rootPath),
+            origin: {
+              kind: hasAutomatedSessionAncestry(managed.launchReceipt) ? 'automation' : 'agent',
+              sessionId: managed.id,
+              agentSlug: managed.spawnedFromAgent?.agentSlug,
+            },
+          }),
+        ),
         websiteCaptureSyncFn: async (input) => this.withArtistHqWebsite(
           website => website.service.syncCapture(website.rootPath, {
             machineId: this.resolveMachineId(website.rootPath),
