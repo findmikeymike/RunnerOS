@@ -9,6 +9,7 @@ export const BASE_DEFAULT_WORKER_SLUGS = [
 export const HQ_DEFAULT_WORKER_SLUGS = [
   'update-system-agent',
   'catalog-royalty-agent',
+  'legal-agent',
 ] as const
 
 export const CAMPAIGN_DEFAULT_WORKER_SLUGS = [

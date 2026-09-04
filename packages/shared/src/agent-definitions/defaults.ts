@@ -47,7 +47,17 @@ export const CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS = [
 /** Career-wide specialists that belong only in Artist HQ. */
 export const HQ_DEFAULT_ACTIVATED_AGENT_SLUGS = [
   'catalog-royalty-agent',
+  'legal-agent',
 ] as const
+
+const HQ_ONLY_ARTIST_AGENT_SLUGS = new Set<string>(['legal-agent'])
+
+export function isAgentAllowedInArtistWorkspace(
+  agentSlug: string,
+  scope: 'hq' | 'campaign' | 'lab' | 'general' | undefined,
+): boolean {
+  return !HQ_ONLY_ARTIST_AGENT_SLUGS.has(agentSlug) || scope === 'hq'
+}
 
 /** Fallback capability broker available in both Artist HQ and campaigns. */
 export const HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS = [

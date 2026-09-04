@@ -107,7 +107,7 @@ export function classifyVaultAsset(filePath: string, kindHint: VaultKindHint = '
   }
 
   if (DOC_EXTENSIONS.has(ext)) {
-    if (/\b(contract|agreement)\b/.test(lower)) {
+    if (/\b(contract|agreement|deal|licen[cs]e|assignment|administration|publishing|distribution|producer|sync)\b|\bterm[-_\s]?sheet\b|\bartist[-_\s]?360\b/.test(lower)) {
       return route('business', 'contract', 'business/contracts', 'high', 'Document filename suggests contract');
     }
     if (/\b(split|splitsheet|split-sheet)\b/.test(lower)) {

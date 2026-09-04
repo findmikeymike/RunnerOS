@@ -47,6 +47,59 @@ describe('artist vault', () => {
     expect(serializeArtistVaultContext(scan.manifest)).not.toContain('bmi-works.csv');
   });
 
+  test('creates private Legal & Deals folders and withholds reviews from broad agent context', () => {
+    const workspace = tempWorkspace();
+
+    ensureArtistVaultFolders(workspace);
+
+    const reviewsDir = join(workspace, 'vault/business/legal/reviews');
+    expect(existsSync(join(workspace, 'vault/business/contracts'))).toBe(true);
+    expect(existsSync(reviewsDir)).toBe(true);
+    expect(existsSync(join(workspace, 'vault/business/legal/negotiation-packets'))).toBe(true);
+
+    writeFileSync(join(reviewsDir, 'distribution-deal-review.md'), '# Private review\n');
+    const scan = scanArtistVault(workspace, 'workspace-1');
+    const record = scan.added.find((asset) => asset.relativePath?.endsWith('distribution-deal-review.md'));
+    expect(record?.kind).toBe('contract');
+    expect(record?.category).toBe('business');
+    expect(record?.rightsStatus).toBe('private');
+    expect(record?.usableByAgents).toBe(false);
+    expect(serializeArtistVaultContext(scan.manifest)).not.toContain('distribution-deal-review.md');
+  });
+
+  test('routes common legal filenames to private contract storage', () => {
+    const workspace = tempWorkspace();
+    const sourceDir = join(workspace, 'incoming-legal');
+    mkdirSync(sourceDir, { recursive: true });
+    const fileNames = [
+      'producer.pdf',
+      'single-song-assignment.pdf',
+      'publishing-administration.pdf',
+      'distribution.pdf',
+      'artist-360.pdf',
+      'sync-license.pdf',
+      'co-publishing.pdf',
+      'term-sheet.pdf',
+    ];
+    for (const fileName of fileNames) {
+      writeFileSync(join(sourceDir, fileName), 'legal document');
+    }
+
+    const imported = importArtistVaultAssets(
+      workspace,
+      'workspace-1',
+      fileNames.map(fileName => join(sourceDir, fileName)),
+    );
+
+    expect(imported.imported).toHaveLength(fileNames.length);
+    for (const asset of imported.imported) {
+      expect(asset.kind).toBe('contract');
+      expect(asset.relativePath).toContain('vault/business/contracts/');
+      expect(asset.rightsStatus).toBe('private');
+      expect(asset.usableByAgents).toBe(false);
+    }
+  });
+
   test('classifies artist library filenames into Vault categories', () => {
     expect(classifyVaultAsset('/tmp/final-master.wav').kind).toBe('master-final');
     expect(classifyVaultAsset('/tmp/vocal-stem.wav').kind).toBe('stem');

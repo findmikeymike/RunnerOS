@@ -82,6 +82,8 @@ const DEFAULT_DIRECTORIES = [
   'business/rights-and-royalties/catalog',
   'business/rights-and-royalties/registration-evidence',
   'business/rights-and-royalties/filing-packets',
+  'business/legal/reviews',
+  'business/legal/negotiation-packets',
   'business/invoices',
   'business/one-sheets',
   'business/epk',
@@ -938,6 +940,7 @@ function kindFromRelativePath(relativePath: string): VaultAssetRecord['kind'] | 
   if (normalized.startsWith('vault/business/contracts/')) return 'contract';
   if (normalized.startsWith('vault/business/splits/')) return 'split-sheet';
   if (normalized.startsWith('vault/business/rights-and-royalties/')) return 'rights-record';
+  if (normalized.startsWith('vault/business/legal/')) return 'contract';
   if (normalized.startsWith('vault/business/invoices/')) return 'invoice';
   if (normalized.startsWith('vault/business/one-sheets/')) return 'one-sheet';
   if (normalized.startsWith('vault/business/epk/')) return 'epk';

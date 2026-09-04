@@ -263,7 +263,7 @@ import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntr
 import type { PulseAction } from '@craft-agent/shared/pulses'
 import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
-import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
+import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, isAgentAllowedInArtistWorkspace, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
 import { composeAgentSystemPrompt, managerBriefReceiptFromDocs } from '@craft-agent/shared/agent-prompt'
 import { filterAttachmentsForModelInput } from './runtime-config'
 import { inferScheduledWorkScope, persistHnicScheduleWork } from '../scheduled-work/HnicScheduledWork'
@@ -2869,6 +2869,9 @@ export class SessionManager implements ISessionManager {
     const strict = options.referenceMode !== 'lenient'
     const ws = getWorkspaceByNameOrId(workspaceId)
     if (!ws) throw new Error(`Workspace not found: ${workspaceId}`)
+    if (!isAgentAllowedInArtistWorkspace(agentSlug, ws.artistWorkspaceScope)) {
+      throw new Error(`Agent "${agentSlug}" is not available in this workspace.`)
+    }
     const { loadPromptContextDocsForAgent } = await import('@craft-agent/shared/workspace-context')
     const agent = loadGlobalAgent(agentSlug)
     if (!agent) throw new Error(`Agent not found: ${agentSlug}`)
@@ -2943,7 +2946,9 @@ export class SessionManager implements ISessionManager {
     // from it. Server-spawned sessions (workflow steps, pulses, delegated
     // children) need it too, or an agent can be delegated to but cannot delegate
     // onward. Recursion stays bounded by the agent-message depth limit.
-    const agentCatalog = loadActivatedAgents(ws.rootPath).map((entry) => ({
+    const agentCatalog = loadActivatedAgents(ws.rootPath)
+      .filter(entry => isAgentAllowedInArtistWorkspace(entry.slug, ws.artistWorkspaceScope))
+      .map((entry) => ({
       slug: entry.slug,
       name: entry.metadata.name,
       description: entry.metadata.description,
@@ -3930,6 +3935,13 @@ export class SessionManager implements ISessionManager {
         const anythingAgentDir = getGlobalAgentDir(ANYTHING_AGENT_SLUG)
         const anythingAgentActivationState = join(dirname(anythingAgentDir), '.migrations', 'anything-agent-activation-v1.json')
         const anythingAgentPreviouslyInstalled = Boolean(loadGlobalAgent(ANYTHING_AGENT_SLUG))
+        const artistDefaultAgentSlugs = [
+          ...HQ_DEFAULT_ACTIVATED_AGENT_SLUGS,
+          ...CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
+        ]
+        const artistDefaultAgentsPreviouslyInstalled = new Set<string>(
+          artistDefaultAgentSlugs.filter(agentSlug => Boolean(loadGlobalAgent(agentSlug))),
+        )
         const { seeded } = seedGlobalLibraryIfEmpty(STARTER_AGENTS)
         if (seeded > 0) {
           sessionLog.info(`[agent-definitions] Seeded ${seeded} starter agent(s) into global library`)
@@ -3988,7 +4000,8 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'reference-master'
             || a.slug === 'the-excavator'
             || a.slug === 'update-system-agent'
-            || a.slug === 'catalog-royalty-agent',
+            || a.slug === 'catalog-royalty-agent'
+            || a.slug === 'legal-agent',
         )
         const { ensured } = ensureRequiredAgents(required)
         if (ensured > 0) {
@@ -4172,24 +4185,26 @@ export class SessionManager implements ISessionManager {
 
             const { getWorkspaces } = await import('@craft-agent/shared/config')
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
-            let updatedArtistWorkspaces = 0
-            for (const ws of getWorkspaces()) {
-              if (ws.remoteServer || !ws.artistWorkspaceScope || !scopes.has(ws.artistWorkspaceScope)) continue
-              let updated = false
-              if (!readActivatedAgents(ws.rootPath).active.includes(agentSlug)) {
-                setAgentActive(ws.rootPath, agentSlug, true)
-                updated = true
-              }
-              const enabledSkills = new Set(listEnabledGlobalSkillSlugs(ws.rootPath))
-              for (const skillSlug of skillSlugs) {
-                if (enabledSkills.has(skillSlug)) continue
-                setGlobalSkillEnabled(ws.rootPath, skillSlug, true)
-                updated = true
-              }
-              if (updated) updatedArtistWorkspaces += 1
+            const targetWorkspaces = getWorkspaces().filter(
+              ws => !ws.remoteServer && Boolean(ws.artistWorkspaceScope) && scopes.has(ws.artistWorkspaceScope!),
+            )
+            const activation = migrateOrPreserveInitialArtistAgentActivation({
+              stateFile: join(dirname(getGlobalAgentDir(agentSlug)), '.migrations', `${agentSlug}-activation-v1.json`),
+              workspaces: targetWorkspaces,
+              agentSlug,
+              skillSlugs,
+              previouslyInstalled: artistDefaultAgentsPreviouslyInstalled.has(agentSlug),
+              isAgentActive: ws => readActivatedAgents(ws.rootPath).active.includes(agentSlug),
+              activateAgent: ws => setAgentActive(ws.rootPath, agentSlug, true),
+              enabledSkillSlugs: ws => listEnabledGlobalSkillSlugs(ws.rootPath),
+              enableSkill: (ws, slug) => setGlobalSkillEnabled(ws.rootPath, slug, true),
+              warn: (message, error) => sessionLog.warn(`[agent-definitions] ${message}:`, error as Error),
+            })
+            if (activation.preservedExistingChoices) {
+              sessionLog.debug(`[agent-definitions] Preserved existing ${agentSlug} activation choices`)
             }
-            if (updatedArtistWorkspaces > 0) {
-              sessionLog.info(`[agent-definitions] Activated ${agentSlug} in ${updatedArtistWorkspaces} Artist OS workspace(s)`)
+            if (activation.updatedWorkspaceIds.length > 0) {
+              sessionLog.info(`[agent-definitions] Activated ${agentSlug} in ${activation.updatedWorkspaceIds.length} Artist OS workspace(s)`)
             }
           }
           const workflowCreatorSkillMd = STARTER_SKILLS
@@ -9334,7 +9349,9 @@ user a clickable link to where the thing now lives.`
             enabled: source.config.enabled,
             usable: isSourceUsable(source),
           }))
-          let agents = loadAllGlobalAgents().map(agent => {
+          let agents = loadAllGlobalAgents()
+            .filter(agent => isAgentAllowedInArtistWorkspace(agent.slug, managed.workspace.artistWorkspaceScope))
+            .map(agent => {
             const sources = agent.metadata.sources ?? []
             const optionalSources = agent.metadata.optionalSources ?? []
             return {
@@ -9665,6 +9682,7 @@ user a clickable link to where the thing now lives.`
             isAgentActive: (workspaceId, agentSlug) => {
               const workspace = getWorkspaceByNameOrId(workspaceId)
               if (!workspace) return false
+              if (!isAgentAllowedInArtistWorkspace(agentSlug, workspace.artistWorkspaceScope)) return false
               return loadActivatedAgents(workspace.rootPath).some((agent) => agent.slug === agentSlug)
             },
             deliverPassiveMessage: async (sessionId, message, agentMessage) => {

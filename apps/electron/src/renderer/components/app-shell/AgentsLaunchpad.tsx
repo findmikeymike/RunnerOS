@@ -59,6 +59,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
     ? LAB_DEFAULT_WORKER_SLUGS
     : defaultWorkerSlugs(includeCampaignDefaultWorkers)
   const allowedAgentSlugs = labOnly ? LAB_DEFAULT_WORKER_SLUGS : undefined
+  const excludedAgentSlugs = includeCampaignDefaultWorkers ? ['legal-agent'] : []
   const allowedAgentSet = React.useMemo(
     () => allowedAgentSlugs ? new Set<string>(allowedAgentSlugs) : null,
     [allowedAgentSlugs],
@@ -182,6 +183,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
     const visibleAgents = dedupeLaunchpadAgents(activeAgents.filter((a) => (
       !isSystemAgent(a.slug)
       && !isHiddenFromWorkerHome(a.slug)
+      && !excludedAgentSlugs.includes(a.slug)
       && (!allowedAgentSet || allowedAgentSet.has(a.slug))
     )))
     const orch = visibleAgents.find((a) => a.slug === ORCHESTRATOR_SLUG)
@@ -207,7 +209,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
 
     return Array.from(groups.entries())
       .sort(([a], [b]) => agentDomainRank(a) - agentDomainRank(b) || a.localeCompare(b))
-  }, [activeAgents, allowedAgentSet, defaultVisibleSlugs, getDisplayName, labOnly])
+  }, [activeAgents, allowedAgentSet, defaultVisibleSlugs, excludedAgentSlugs, getDisplayName, labOnly])
 
   const domains = React.useMemo(() => grouped.map(([domain]) => domain), [grouped])
 
@@ -349,7 +351,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
           <div className="text-sm text-white/50">Loading workers...</div>
         ) : grouped.length === 0 ? (
           <EmptyState
-            allAgentsCount={allAgents.length}
+            allAgentsCount={allAgents.filter(agent => !excludedAgentSlugs.includes(agent.slug)).length}
             onOpenLibrary={() => setLibraryOpen(true)}
           />
         ) : visibleGroups.length === 0 ? (
@@ -421,6 +423,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
         defaultVisibleSlugs={defaultVisibleSlugs}
         includeSystemVisibleAgents={!labOnly}
         allowedAgentSlugs={allowedAgentSlugs}
+        excludedAgentSlugs={excludedAgentSlugs}
       />
 
       <AgentEditDialog
@@ -1661,6 +1664,10 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
     return 'Rights & Royalties'
   }
 
+  if (slug === 'legal-agent') {
+    return 'Legal & Deals'
+  }
+
   if (
     slug === 'persona-agent'
     || slug === 'content-genius'
@@ -1722,6 +1729,7 @@ function agentDomainRank(domain: string) {
     'Promotion',
     'Release Operations',
     'Rights & Royalties',
+    'Legal & Deals',
     'Outreach',
     'Merch',
     'Research',

@@ -23,6 +23,7 @@ import {
   writeActivatedAgents,
   writeGlobalAgent,
   deleteGlobalAgent,
+  isAgentAllowedInArtistWorkspace,
   type CreateAgentInput,
   type LoadedAgent,
 } from '@craft-agent/shared/agent-definitions'
@@ -83,7 +84,9 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
   server.handle(RPC_CHANNELS.agentDefinitions.LIST_ACTIVE_IN_WORKSPACE, async (_ctx, workspaceId: string): Promise<string[]> => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) return []
-    return readActivatedAgents(workspace.rootPath).active
+    return readActivatedAgents(workspace.rootPath).active.filter(
+      slug => isAgentAllowedInArtistWorkspace(slug, workspace.artistWorkspaceScope),
+    )
   })
 
   server.handle(RPC_CHANNELS.agentDefinitions.GET, async (_ctx, slug: string): Promise<LoadedAgent | null> => {
@@ -103,6 +106,9 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
         throw new Error(`Workspace not found: ${payload.activateInWorkspaceId}`)
       }
       if (activationWorkspace) {
+        if (!isAgentAllowedInArtistWorkspace(payload.slug, activationWorkspace.artistWorkspaceScope)) {
+          throw new Error(`Agent "${payload.slug}" is not available in this workspace.`)
+        }
         const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
         assertTeamPermission(activationWorkspace.rootPath, 'team.settings.update')
       }
@@ -147,6 +153,9 @@ export function registerAgentDefinitionsHandlers(server: RpcServer, deps: Handle
     return withAgentDefinitionsLibraryMutex(async () => {
       const workspace = getWorkspaceByNameOrId(workspaceId)
       if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+      if (active && !isAgentAllowedInArtistWorkspace(slug, workspace.artistWorkspaceScope)) {
+        throw new Error(`Agent "${slug}" is not available in this workspace.`)
+      }
       const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
       assertTeamPermission(workspace.rootPath, 'team.settings.update')
       const manifest = setAgentActive(workspace.rootPath, slug, active)

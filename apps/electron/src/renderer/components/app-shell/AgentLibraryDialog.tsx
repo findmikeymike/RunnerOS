@@ -37,6 +37,7 @@ interface AgentLibraryDialogProps {
   defaultVisibleSlugs?: readonly string[]
   includeSystemVisibleAgents?: boolean
   allowedAgentSlugs?: readonly string[]
+  excludedAgentSlugs?: readonly string[]
 }
 
 export function AgentLibraryDialog({
@@ -46,6 +47,7 @@ export function AgentLibraryDialog({
   defaultVisibleSlugs,
   includeSystemVisibleAgents = true,
   allowedAgentSlugs,
+  excludedAgentSlugs,
 }: AgentLibraryDialogProps) {
   const { allAgents, activeSlugs, setActive } = useAgents(workspaceId, {
     defaultVisibleSlugs,
@@ -58,12 +60,16 @@ export function AgentLibraryDialog({
     () => allowedAgentSlugs ? new Set<string>(allowedAgentSlugs) : null,
     [allowedAgentSlugs],
   )
+  const excludedAgentSet = React.useMemo(
+    () => new Set<string>(excludedAgentSlugs ?? []),
+    [excludedAgentSlugs],
+  )
 
   const sortedAgents = React.useMemo(() => {
     return allAgents
-      .filter((a) => !isSystemAgent(a.slug) && (!allowedAgentSet || allowedAgentSet.has(a.slug)))
+      .filter((a) => !isSystemAgent(a.slug) && !excludedAgentSet.has(a.slug) && (!allowedAgentSet || allowedAgentSet.has(a.slug)))
       .sort((a, b) => getDisplayName(a).localeCompare(getDisplayName(b)))
-  }, [allAgents, allowedAgentSet, getDisplayName])
+  }, [allAgents, allowedAgentSet, excludedAgentSet, getDisplayName])
 
   const filteredAgents = React.useMemo(() => {
     if (!query.trim()) return sortedAgents

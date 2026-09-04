@@ -2626,6 +2626,7 @@ function buildAppFileBuckets(workspaceRootPath: string | null, workingDirectory?
     { id: 'outputs', label: 'Outputs', description: 'Generated work', paths: [joinPath(workspaceRootPath, 'outputs')] },
     { id: 'release-kit', label: 'Release Kit', description: 'Approved campaign canon', paths: [joinPath(workspaceRootPath, 'release-kit')] },
     { id: 'rights-royalties', label: 'Rights & Royalties', description: 'Catalog, registration evidence, and filing packets', paths: [joinPath(workspaceRootPath, 'vault', 'business', 'rights-and-royalties')] },
+    { id: 'legal-deals', label: 'Legal & Deals', description: 'Contracts, reviews, and negotiation packets', paths: [joinPath(workspaceRootPath, 'vault', 'business', 'contracts'), joinPath(workspaceRootPath, 'vault', 'business', 'legal')] },
     { id: 'photos', label: 'Photos', description: 'Image assets', paths: [joinPath(workspaceRootPath, 'photos'), joinPath(workspaceRootPath, 'Photos'), joinPath(workspaceRootPath, 'assets', 'photos')] },
     { id: 'content', label: 'Content', description: 'Copy and content files', paths: [joinPath(workspaceRootPath, 'content'), joinPath(workspaceRootPath, 'Content')] },
     { id: 'campaigns', label: 'Campaigns', description: 'Campaign folders', paths: [joinPath(workspaceRootPath, 'campaigns'), joinPath(workspaceRootPath, 'Campaigns')] },

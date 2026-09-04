@@ -163,6 +163,40 @@ describe('Release Manager initial activation migration', () => {
     expect(harness.calls).toEqual([])
   })
 
+  test('activates a newly installed default worker once and preserves later deactivation', () => {
+    const harness = setup()
+    const runDefaultWorkerMigration = () => migrateOrPreserveInitialArtistAgentActivation({
+      stateFile: harness.stateFile,
+      workspaces: workspaces.filter(workspace => workspace.artistWorkspaceScope === 'hq'),
+      agentSlug: 'legal-agent',
+      skillSlugs: ['music-contract-review'],
+      previouslyInstalled: false,
+      isAgentActive: workspace => harness.active.has(workspace.id),
+      activateAgent: workspace => {
+        harness.calls.push(`agent:${workspace.id}`)
+        harness.active.add(workspace.id)
+      },
+      enabledSkillSlugs: workspace => [...(harness.skills.get(workspace.id) ?? [])],
+      enableSkill: (workspace, skillSlug) => {
+        harness.calls.push(`skill:${workspace.id}:${skillSlug}`)
+        const enabled = harness.skills.get(workspace.id) ?? new Set<string>()
+        enabled.add(skillSlug)
+        harness.skills.set(workspace.id, enabled)
+      },
+    })
+
+    const first = runDefaultWorkerMigration()
+    expect(first.updatedWorkspaceIds).toEqual(['hq'])
+    expect(harness.active.has('hq')).toBe(true)
+
+    harness.active.delete('hq')
+    harness.calls.length = 0
+    const second = runDefaultWorkerMigration()
+    expect(second.updatedWorkspaceIds).toEqual([])
+    expect(harness.active.has('hq')).toBe(false)
+    expect(harness.calls).toEqual([])
+  })
+
   test('fails closed on malformed state instead of reactivating workspaces', () => {
     const harness = setup()
     mkdirSync(join(harness.root, '.migrations'), { recursive: true })

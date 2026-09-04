@@ -34,6 +34,11 @@ describe('worker page defaults', () => {
     expect(defaultWorkerSlugs(true)).not.toContain('catalog-royalty-agent')
   })
 
+  test('Legal & Deals is an HQ-only default worker', () => {
+    expect(defaultWorkerSlugs(false)).toContain('legal-agent')
+    expect(defaultWorkerSlugs(true)).not.toContain('legal-agent')
+  })
+
   test('Lab defaults stay bounded to the songwriting roster', () => {
     expect(LAB_DEFAULT_WORKER_SLUGS).toEqual([
       'the-excavator',
