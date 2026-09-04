@@ -1043,3 +1043,88 @@ describe('OutputService visual boards', () => {
     expect(duplicateWrongKind.error).toContain('requires a video output');
   });
 });
+
+describe('OutputService visual board concurrent edits', () => {
+  // Concrete note type, not the card union: the union does not narrow when a
+  // spread overrides `body`, and an output card has no `body`.
+  function noteCard(id: string, at: string) {
+    return { id, type: 'note' as const, title: id, body: id, createdAt: at, updatedAt: at };
+  }
+
+  function setup() {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-board-merge-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const service = new OutputService({ getWorkspaceRootPath: () => root });
+    return { root, service };
+  }
+
+  it('keeps a card the agent pinned while the panel was open', () => {
+    const { service } = setup();
+    const initial = service.getOrCreateVisualBoard('ws', 'session-1');
+
+    // What the renderer loaded, and is about to save back.
+    const clientLoadedAt = new Date(Date.now() - 60_000).toISOString();
+    const clientSnapshot: VisualBoardSnapshot = {
+      ...initial.board,
+      cards: [noteCard('artist-note', clientLoadedAt)],
+      updatedAt: clientLoadedAt,
+    };
+    service.saveVisualBoard('ws', 'session-1', clientSnapshot);
+
+    // The agent pins something after the client's copy was taken.
+    const pinned = service.applyVisualSurfaceEvent(
+      'ws',
+      'session-1',
+      { action: 'add_note', title: 'Agent finding', body: 'Landed mid-edit.' },
+      'agent',
+    );
+    expect(pinned.ok).toBe(true);
+
+    // The artist edits their own note and saves the stale snapshot.
+    const edited: VisualBoardSnapshot = {
+      ...clientSnapshot,
+      cards: [{ ...noteCard('artist-note', clientLoadedAt), body: 'edited' }],
+    };
+    const saved = service.saveVisualBoard('ws', 'session-1', edited);
+
+    const titles = saved.board.cards.map((card) => card.title);
+    expect(titles).toContain('Agent finding');
+    expect(saved.board.cards.find((card) => card.id === 'artist-note')).toMatchObject({ body: 'edited' });
+    expect(saved.board.cards).toHaveLength(2);
+  });
+
+  it('still honours a real delete of a card the artist could see', () => {
+    const { service } = setup();
+    const initial = service.getOrCreateVisualBoard('ws', 'session-1');
+
+    const old = new Date(Date.now() - 120_000).toISOString();
+    const withTwo: VisualBoardSnapshot = {
+      ...initial.board,
+      cards: [noteCard('keep', old), noteCard('remove-me', old)],
+      updatedAt: new Date(Date.now() - 60_000).toISOString(),
+    };
+    service.saveVisualBoard('ws', 'session-1', withTwo);
+
+    // Both cards predate the client's snapshot, so dropping one is a real delete.
+    const afterDelete = service.saveVisualBoard('ws', 'session-1', {
+      ...withTwo,
+      cards: [noteCard('keep', old)],
+    });
+
+    expect(afterDelete.board.cards.map((card) => card.id)).toEqual(['keep']);
+  });
+
+  it('does not resurrect cards on a save from a client that is already current', () => {
+    const { service } = setup();
+    const initial = service.getOrCreateVisualBoard('ws', 'session-1');
+    const now = new Date().toISOString();
+
+    const saved = service.saveVisualBoard('ws', 'session-1', {
+      ...initial.board,
+      cards: [noteCard('only', now)],
+      updatedAt: now,
+    });
+
+    expect(saved.board.cards.map((card) => card.id)).toEqual(['only']);
+  });
+})

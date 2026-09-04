@@ -366,14 +366,65 @@ export class OutputService {
   saveVisualBoard(workspaceId: string, sessionId: string, snapshot: VisualBoardSnapshot): { output: OutputManifest; board: VisualBoardSnapshot } {
     assertVisualBoardSnapshot(snapshot, { workspaceId, sessionId });
     this.assertVisualBoardOutputCards(workspaceId, sessionId, snapshot);
+    const root = this.deps.getWorkspaceRootPath(workspaceId);
     const existing = this.findVisualBoardManifest(workspaceId, sessionId)
       ?? this.getOrCreateVisualBoard(workspaceId, sessionId).output;
-    const saved = this.writeVisualBoardToOutput(workspaceId, existing, {
-      ...snapshot,
+    // Read-modify-write: the merge below re-reads the board, so the lock keeps a
+    // concurrent `applyVisualSurfaceEvent` from landing between the read and the
+    // write and being overwritten.
+    const saved = withOutputBundleLock(root, existing.id, () => this.writeVisualBoardToOutput(workspaceId, existing, {
+      ...this.mergeCardsAddedSinceClientLoaded(workspaceId, sessionId, snapshot),
       updatedAt: new Date().toISOString(),
-    });
+    }));
     this.emitUpdated(workspaceId);
     return saved;
+  }
+
+  /**
+   * The renderer saves the whole board it last loaded, so anything an agent
+   * pinned since then is missing from that snapshot — not because the artist
+   * deleted it, but because they never saw it. Without this, editing one note
+   * silently destroys every card the agent added while the panel was open.
+   *
+   * Rescue exactly those cards: on disk, absent from the incoming snapshot, and
+   * created after the snapshot the client was working from. A card the client
+   * did see and removed is older than that timestamp, so real deletes still go
+   * through. Ties go to the client, so a delete is never undone by rounding.
+   */
+  private mergeCardsAddedSinceClientLoaded(
+    workspaceId: string,
+    sessionId: string,
+    incoming: VisualBoardSnapshot,
+  ): VisualBoardSnapshot {
+    const manifest = this.findVisualBoardManifest(workspaceId, sessionId);
+    if (!manifest) return incoming;
+
+    let disk: VisualBoardSnapshot | null = null;
+    try {
+      const content = readOutputAssetText(this.resolveAssetPath(workspaceId, manifest.id, VISUAL_BOARD_ASSET_PATH));
+      disk = parseVisualBoardSnapshot(content, { workspaceId, sessionId });
+    } catch {
+      // An unreadable board is repaired elsewhere; never block the artist's save.
+      return incoming;
+    }
+    if (!disk) return incoming;
+
+    const clientLoadedAt = Date.parse(incoming.updatedAt);
+    if (Number.isNaN(clientLoadedAt)) return incoming;
+
+    const incomingIds = new Set(incoming.cards.map((card) => card.id));
+    const addedSince = disk.cards.filter((card) => {
+      if (incomingIds.has(card.id)) return false;
+      const createdAt = Date.parse(card.createdAt);
+      return !Number.isNaN(createdAt) && createdAt > clientLoadedAt;
+    });
+    if (addedSince.length === 0) return incoming;
+
+    // The artist's own cards keep their places; rescued ones go in front, which
+    // is where a newly pinned card appears anyway.
+    const room = Math.max(0, VISUAL_BOARD_MAX_CARDS - incoming.cards.length);
+    const rescued = addedSince.slice(0, room);
+    return rescued.length === 0 ? incoming : { ...incoming, cards: [...rescued, ...incoming.cards] };
   }
 
   applyVisualSurfaceEvent(
@@ -384,38 +435,52 @@ export class OutputService {
   ): ApplyVisualSurfaceEventResult {
     try {
       const payload = normalizeVisualSurfaceEventInput(input);
-      const current = this.getOrCreateVisualBoard(workspaceId, sessionId);
-      const now = new Date().toISOString();
-      const event: VisualSurfaceEventRecord = {
-        schemaVersion: 1,
-        id: randomUUID(),
-        workspaceId,
-        sessionId,
-        action: payload.action,
-        payload,
-        source,
-        createdAt: now,
-      };
+      const root = this.deps.getWorkspaceRootPath(workspaceId);
+      // Resolve (creating if needed) outside the lock, because the board's
+      // output id is what we lock on.
+      const boardOutputId = this.getOrCreateVisualBoard(workspaceId, sessionId).output.id;
 
-      const applied = this.applyVisualEventToBoard(workspaceId, sessionId, current.board, event, now);
-      const board = applied.board;
-      assertVisualBoardSnapshot(board, { workspaceId, sessionId });
-      this.assertVisualBoardOutputCards(workspaceId, sessionId, board);
-      const saved = this.writeVisualBoardToOutput(workspaceId, current.output, board);
-      try {
-        this.appendVisualSurfaceEvent(workspaceId, saved.output, event);
-      } catch (err) {
-        this.writeVisualBoardToOutput(workspaceId, saved.output, current.board);
-        throw err;
-      }
-      this.emitUpdated(workspaceId);
-      return {
-        ok: true,
-        eventId: event.id,
-        outputId: saved.output.id,
-        board: saved.board,
-        receipt: this.visualEventReceipt(event, saved.board, applied.applied),
-      };
+      // Everything below is a read-modify-write of board.json. Without the lock
+      // an agent tool call and a user edit (`saveVisualBoard`) interleave and
+      // the later write silently drops the earlier one. `withOutputBundleLock`
+      // is re-entrant, so the nested resolve below is safe; a lock timeout
+      // surfaces through the catch as `{ ok: false }` rather than a torn board.
+      return withOutputBundleLock(root, boardOutputId, () => {
+        // Re-read inside the lock: another writer may have landed between the
+        // resolve above and the lock being granted.
+        const current = this.getOrCreateVisualBoard(workspaceId, sessionId);
+        const now = new Date().toISOString();
+        const event: VisualSurfaceEventRecord = {
+          schemaVersion: 1,
+          id: randomUUID(),
+          workspaceId,
+          sessionId,
+          action: payload.action,
+          payload,
+          source,
+          createdAt: now,
+        };
+
+        const applied = this.applyVisualEventToBoard(workspaceId, sessionId, current.board, event, now);
+        const board = applied.board;
+        assertVisualBoardSnapshot(board, { workspaceId, sessionId });
+        this.assertVisualBoardOutputCards(workspaceId, sessionId, board);
+        const saved = this.writeVisualBoardToOutput(workspaceId, current.output, board);
+        try {
+          this.appendVisualSurfaceEvent(workspaceId, saved.output, event);
+        } catch (err) {
+          this.writeVisualBoardToOutput(workspaceId, saved.output, current.board);
+          throw err;
+        }
+        this.emitUpdated(workspaceId);
+        return {
+          ok: true,
+          eventId: event.id,
+          outputId: saved.output.id,
+          board: saved.board,
+          receipt: this.visualEventReceipt(event, saved.board, applied.applied),
+        };
+      });
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
