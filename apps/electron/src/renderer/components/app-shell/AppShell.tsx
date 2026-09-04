@@ -2855,7 +2855,7 @@ function AppShellContent({
         },
         {
           id: "nav:create",
-          title: "Work",
+          title: "Workers",
           icon: Sparkles,
           variant: "ghost",
           onClick: () => toggleMainNavGroup('work'),
@@ -2921,7 +2921,7 @@ function AppShellContent({
         },
         {
           id: "nav:work",
-          title: "Work",
+          title: "Workers",
           icon: Briefcase,
           variant: workActive ? "default" : "ghost",
           onClick: handleAgentsClick,
@@ -2971,7 +2971,7 @@ function AppShellContent({
       },
       {
         id: "nav:work",
-        title: "Work",
+        title: "Workers",
         icon: Briefcase,
         variant: workActive ? "default" : "ghost",
         onClick: handleAgentsClick,

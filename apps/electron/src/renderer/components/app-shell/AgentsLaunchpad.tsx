@@ -1660,12 +1660,8 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
     return 'Release Operations'
   }
 
-  if (slug === 'catalog-royalty-agent') {
-    return 'Rights & Royalties'
-  }
-
-  if (slug === 'legal-agent') {
-    return 'Legal & Deals'
+  if (slug === 'catalog-royalty-agent' || slug === 'legal-agent') {
+    return 'Business Operations'
   }
 
   if (
@@ -1728,8 +1724,7 @@ function agentDomainRank(domain: string) {
     'Socials',
     'Promotion',
     'Release Operations',
-    'Rights & Royalties',
-    'Legal & Deals',
+    'Business Operations',
     'Outreach',
     'Merch',
     'Research',
