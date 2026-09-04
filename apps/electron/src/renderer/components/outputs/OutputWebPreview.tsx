@@ -1,10 +1,9 @@
 import * as React from 'react'
 import { useSetAtom } from 'jotai'
 import { Copy, ExternalLink, Globe2, PanelRightOpen, RefreshCw } from 'lucide-react'
-import { RUNNER_OUTPUT_SCHEME } from '@craft-agent/shared/outputs/web-preview'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { WebPreviewTarget } from './web-preview'
+import { isGeneratedOutputPreviewUrl, sandboxForPreviewUrl, type WebPreviewTarget } from './web-preview'
 import { openBrowserSidecarAtom } from '@/atoms/browser-pane'
 
 const WEB_PREVIEW_LOAD_TIMEOUT_MS = 8000
@@ -156,7 +155,7 @@ export function OutputWebPreview({ target, refreshKey, className, onPreviewSettl
           key={frameKey}
           src={target.url}
           title={target.label}
-          sandbox="allow-scripts allow-forms allow-same-origin"
+          sandbox={sandboxForPreviewUrl(target.url)}
           referrerPolicy="no-referrer"
           className="h-full w-full border-0 bg-white"
           onLoad={() => {
@@ -176,6 +175,4 @@ export function OutputWebPreview({ target, refreshKey, className, onPreviewSettl
   )
 }
 
-export function isGeneratedOutputPreviewUrl(url: string): boolean {
-  return url.startsWith(`${RUNNER_OUTPUT_SCHEME}:`)
-}
+export { isGeneratedOutputPreviewUrl } from './web-preview'

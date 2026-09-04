@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { OutputManifestDTO } from '@/hooks/useOutputs'
 import { isLocalWebPreviewUrl, resolveWebPreviewTarget } from '../web-preview'
 import { isGeneratedOutputPreviewUrl } from '../OutputWebPreview'
+import { GENERATED_OUTPUT_SANDBOX, LOCAL_PREVIEW_SANDBOX, sandboxForPreviewUrl } from '../web-preview'
 import { buildRunnerOutputAssetUrl, parseRunnerOutputAssetUrl } from '@craft-agent/shared/outputs'
 
 function manifest(url: string, mode: 'external-link' | 'web' = 'external-link'): OutputManifestDTO {
@@ -243,5 +244,34 @@ describe('runner-output URL helpers', () => {
 
   test('rejects traversal output asset URLs', () => {
     expect(parseRunnerOutputAssetUrl('runner-output://asset/workspace-1/output-1/%2E%2E/secret.html')).toBeNull()
+  })
+})
+
+describe('preview iframe sandbox', () => {
+  test('agent-generated HTML gets an opaque origin so it cannot read another output', () => {
+    const sandbox = sandboxForPreviewUrl('runner-output://asset/workspace-1/output-1/index.html')
+
+    // The load-bearing assertion: every runner-output URL shares the origin
+    // `runner-output://asset`, so allow-same-origin would let generated HTML in
+    // one workspace read any other workspace's outputs.
+    expect(sandbox).not.toContain('allow-same-origin')
+    expect(sandbox).toBe(GENERATED_OUTPUT_SANDBOX)
+    expect(sandbox).toContain('allow-scripts')
+  })
+
+  test('a localhost dev server keeps same-origin, which real sites need to render', () => {
+    const sandbox = sandboxForPreviewUrl('http://localhost:4187/index.html')
+
+    expect(sandbox).toBe(LOCAL_PREVIEW_SANDBOX)
+    expect(sandbox).toContain('allow-same-origin')
+  })
+
+  test('never grants allow-popups or allow-top-navigation to either source', () => {
+    for (const url of ['runner-output://asset/w/o/index.html', 'http://localhost:4187/']) {
+      const sandbox = sandboxForPreviewUrl(url)
+      expect(sandbox).not.toContain('allow-popups')
+      expect(sandbox).not.toContain('allow-top-navigation')
+      expect(sandbox).not.toContain('allow-modals')
+    }
   })
 })

@@ -5,14 +5,36 @@ import { assertOutputAssetPath, parseRunnerOutputAssetUrl, RUNNER_OUTPUT_SCHEME 
 import { mainLog } from './logger'
 import { BROWSER_PANE_SESSION_PARTITION } from './browser-pane-constants'
 
+/**
+ * CSP for generated-output documents.
+ *
+ * Every `runner-output://` URL shares the single origin `runner-output://asset`
+ * — the workspace and output ids live in the path, not the host. So a document
+ * with a real origin here can same-origin read any other output of any other
+ * local workspace. Two things stop that:
+ *
+ * 1. The renderer loads these in an iframe without `allow-same-origin`
+ *    (`OutputWebPreview`), giving the document an opaque origin.
+ * 2. `connect-src 'none'` below, which also covers the Browser Pane path
+ *    (`openInBrowserPane`), where the document is NOT sandboxed and would
+ *    otherwise keep its real, shared origin. The header travels with the
+ *    response, so it applies wherever the document is loaded.
+ *
+ * Subresources are allowed by scheme rather than by `'self'` because `'self'`
+ * matches nothing under an opaque origin — with `'self'` every generated page
+ * that has a separate stylesheet or script would render blank.
+ *
+ * A generated page that needs data must inline it; it cannot fetch, and could
+ * not have read the response under an opaque origin anyway (no CORS headers).
+ */
 const HTML_PREVIEW_CSP = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  "media-src 'self' data: blob:",
-  `connect-src 'self' ${RUNNER_OUTPUT_SCHEME}:`,
+  "default-src 'none'",
+  `script-src ${RUNNER_OUTPUT_SCHEME}: 'unsafe-inline'`,
+  `style-src ${RUNNER_OUTPUT_SCHEME}: 'unsafe-inline'`,
+  `img-src ${RUNNER_OUTPUT_SCHEME}: data: blob:`,
+  `font-src ${RUNNER_OUTPUT_SCHEME}: data:`,
+  `media-src ${RUNNER_OUTPUT_SCHEME}: data: blob:`,
+  "connect-src 'none'",
   "frame-src 'none'",
   "object-src 'none'",
   "base-uri 'none'",
