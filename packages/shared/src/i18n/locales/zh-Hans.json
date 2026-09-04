@@ -1369,7 +1369,7 @@
   "turnCard.starting": "启动中...",
   "turnCard.stepsCompleted": "步骤已完成",
   "turnCard.stillWorking": "仍在处理…",
-  "turnCard.stillWorkingLong": "仍在处理 — 这次比平时慢（{{seconds}} 秒）",
+  "turnCard.stillWorkingLong": "仍在处理 — {{duration}}",
   "viewer.clearSession": "清除会话",
   "webui.connectingToServer": "正在连接服务器...",
   "webui.connectionFailed": "连接失败",

@@ -1369,7 +1369,7 @@
   "turnCard.starting": "Starting...",
   "turnCard.stepsCompleted": "Steps Completed",
   "turnCard.stillWorking": "still working…",
-  "turnCard.stillWorkingLong": "still working — this one is slow ({{seconds}}s)",
+  "turnCard.stillWorkingLong": "still working — {{duration}}",
   "viewer.clearSession": "Clear session",
   "webui.connectingToServer": "Connecting to server...",
   "webui.connectionFailed": "Connection Failed",

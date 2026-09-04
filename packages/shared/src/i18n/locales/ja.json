@@ -1369,7 +1369,7 @@
   "turnCard.starting": "開始中...",
   "turnCard.stepsCompleted": "ステップ完了",
   "turnCard.stillWorking": "実行中…",
-  "turnCard.stillWorkingLong": "実行中 — 通常より時間がかかっています（{{seconds}}秒）",
+  "turnCard.stillWorkingLong": "実行中 — {{duration}}",
   "viewer.clearSession": "セッションをクリア",
   "webui.connectingToServer": "サーバーに接続中...",
   "webui.connectionFailed": "接続に失敗しました",

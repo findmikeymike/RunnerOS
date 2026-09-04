@@ -1369,7 +1369,7 @@
   "turnCard.starting": "Starten...",
   "turnCard.stepsCompleted": "Schritte abgeschlossen",
   "turnCard.stillWorking": "arbeitet noch…",
-  "turnCard.stillWorkingLong": "arbeitet noch – das dauert ungewöhnlich lange ({{seconds}} s)",
+  "turnCard.stillWorkingLong": "arbeitet noch – {{duration}}",
   "viewer.clearSession": "Sitzung zurücksetzen",
   "webui.connectingToServer": "Verbindung zum Server wird hergestellt...",
   "webui.connectionFailed": "Verbindung fehlgeschlagen",

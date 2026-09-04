@@ -1369,7 +1369,7 @@
   "turnCard.starting": "Indítás...",
   "turnCard.stepsCompleted": "Lépések befejezve",
   "turnCard.stillWorking": "még dolgozik…",
-  "turnCard.stillWorkingLong": "még dolgozik – ez lassan halad ({{seconds}} mp)",
+  "turnCard.stillWorkingLong": "még dolgozik – {{duration}}",
   "viewer.clearSession": "Munkamenet törlése",
   "webui.connectingToServer": "Csatlakozás a szerverhez...",
   "webui.connectionFailed": "Kapcsolódás sikertelen",

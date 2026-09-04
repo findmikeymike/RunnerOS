@@ -5,7 +5,7 @@ import * as React from 'react'
 mock.module('i18next', () => ({
   default: {
     t: (key: string, vars?: Record<string, unknown>) =>
-      key === 'turnCard.stillWorkingLong' ? `slow:${vars?.seconds}` : 'working',
+      key === 'turnCard.stillWorkingLong' ? `count:${vars?.duration}` : 'working',
   },
 }))
 
@@ -33,9 +33,18 @@ describe('telling the artist a tool is still going', () => {
     expect(at(10_000)).toContain('working')
   })
 
-  test('a long wait admits it is slow, with the count', () => {
-    expect(at(45_000)).toContain('slow:45')
-    expect(at(120_000)).toContain('slow:120')
+  test('a long wait shows the count', () => {
+    expect(at(45_000)).toContain('count:45s')
+    expect(at(134_000)).toContain('count:2:14')
+  })
+
+  test('a long wait is never called slow', () => {
+    // A video render legitimately runs for minutes. Calling that "slow" tells
+    // the artist their working render is broken, so the notice reports the
+    // number and lets them judge.
+    const minutes = at(600_000)
+    expect(minutes).toContain('count:10:00')
+    expect(minutes.toLowerCase()).not.toContain('slow')
   })
 
   test('a finished tool says nothing, however long it took', () => {
@@ -45,6 +54,6 @@ describe('telling the artist a tool is still going', () => {
   test('a row that mounts late still reports the true wait', () => {
     // Elapsed comes from the start time, not from a counter that begins on
     // mount, so scrolling a running tool back into view is honest.
-    expect(at(60_000)).toContain('slow:60')
+    expect(at(60_000)).toContain('count:1:00')
   })
 })
