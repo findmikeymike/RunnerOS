@@ -3,7 +3,7 @@ status: implemented
 owner: agent
 last_verified: 2026-09-03
 source_of_truth: true
-related: ../07-artist-vault-architecture-spec.md, 31-catalog-royalty-reconciliation-spec.md
+related: ./07-artist-vault-architecture-spec.md, ./31-catalog-royalty-reconciliation-spec.md
 ---
 
 # Artist HQ Legal & Deals Agent

@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-08-31
+last_verified: 2026-09-04
 source_of_truth: true
 ---
 
@@ -39,18 +39,20 @@ Core Artist HQ and campaign workspace specs live here.
 - [28 Track Intelligence: Lyrics, Timing, And Musical Metadata](./28-track-intelligence-spec.md)
 - [29 X Editorial System](./29-x-editorial-system-spec.md)
 - [30 Release Manager And Essentials Execution](./30-release-manager-essentials-execution-spec.md)
+- [31 Catalog And Royalty Reconciliation](./31-catalog-royalty-reconciliation-spec.md) — agent and skill shipped; import, reconciliation, and filing slices remain
 - [32 Computer Use Provider Strategy](./32-computer-use-provider-strategy-spec.md)
 - [33 Automations: Input-Aware Setup And The One List](./33-automations-input-aware-setup-spec.md)
 - [35 Guided Social Variant Sets](./35-social-video-repurposing-spec.md)
+- [37 Model Fallback Chain](./37-model-fallback-chain-spec.md)
+- [40 Artist HQ Legal & Deals Agent](./40-music-legal-agent-spec.md)
 
 ## Not Yet Built
 
 Specs written but with no implementation in the tree. They live in
 [`todo/`](./todo/) so this index only lists work that exists.
 
-- [31 Catalog And Royalty Reconciliation](./todo/31-catalog-royalty-reconciliation-spec.md) — BMI/ASCAP vs Spotify
 - [36 Capability Evolution Engine](./todo/36-capability-evolution-engine-spec.md)
-- [37 Model Fallback Chain](./todo/37-model-fallback-chain-spec.md)
+- [45 HQ / Campaign Scope Clarity](./todo/45-hq-campaign-scope-clarity-spec.md) — one rule for shared work, timeline inside campaigns, channel-collision warnings
 
 When one ships, move it back up into the numbered list above.
 

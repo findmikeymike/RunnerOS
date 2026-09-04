@@ -1,12 +1,21 @@
 ---
-status: proposed
+status: partially-implemented
 owner: agent
-last_verified: 2026-09-01
+last_verified: 2026-09-04
 source_of_truth: true
-related: ../07-artist-vault-architecture-spec.md, ../23-release-kit-architecture-spec.md, ../30-release-manager-essentials-execution-spec.md
+related: ./07-artist-vault-architecture-spec.md, ./23-release-kit-architecture-spec.md, ./30-release-manager-essentials-execution-spec.md, ./40-music-legal-agent-spec.md
 ---
 
 # Catalog & Royalty Reconciliation
+
+> Implementation status, 2026-09-04: the **Agent Definition** section shipped in
+> `951b28840` — `catalog-royalty-agent` persona, the bundled
+> `catalog-royalty-reconciliation` skill, a default HQ worker slot, and the
+> vault classification for registration documents. Slices 1–7 below (distributor
+> CSV import, reconciliation engine, filing packets, MLC API, Spotify
+> completeness check, PRO capture, deadline tracking) are **not built**; the
+> agent currently works from the skill's method and the artist's supplied
+> lists. Remaining scope is tracked in [`../backlog/TO-DO.md`](../backlog/TO-DO.md).
 
 ## Briefing For The Implementing Agent
 
