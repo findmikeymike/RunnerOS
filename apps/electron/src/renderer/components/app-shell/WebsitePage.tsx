@@ -94,6 +94,9 @@ function relative(at: string): string {
   return `${minutes}m ago`
 }
 
+/** Stable name so the routine's schedule can be found and replaced. */
+const WEBSITE_ROUTINE_AUTOMATION = 'Website Refresh'
+
 const TIER_LABEL: Record<string, string> = {
   free: 'automatic',
   'one-click': 'you approved',
@@ -151,6 +154,44 @@ export function WebsitePage({ workspaceId }: WebsitePageProps) {
       setBusy(null)
     }
   }, [refresh])
+
+  /**
+   * Make the schedule match the artist's choice.
+   *
+   * The cadence is stored on the manifest, but only an automation actually
+   * fires, so the two are kept in step here: create one when a cadence is
+   * picked, update its cron when it changes, remove it on manual.
+   */
+  const syncSchedule = React.useCallback(async (cron: string | null) => {
+    const listed = await window.electronAPI.getAutomations(workspaceId) as
+      | Array<{ id: string; event: string; name?: string; matcherIndex: number }>
+      | null
+    const existing = (Array.isArray(listed) ? listed : [])
+      .find(item => item.event === 'SchedulerTick' && item.name === WEBSITE_ROUTINE_AUTOMATION)
+
+    if (!cron) {
+      if (existing) await window.electronAPI.deleteAutomation(workspaceId, existing.event, existing.matcherIndex)
+      return
+    }
+
+    const matcher: Record<string, unknown> = {
+      name: WEBSITE_ROUTINE_AUTOMATION,
+      cron,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      permissionMode: 'safe',
+      labels: ['website', 'artist-hq', 'scheduled'],
+      actions: [{
+        type: 'prompt',
+        agentSlug: 'website-agent',
+        prompt: 'Bring the artist website up to date. Check for new releases and shows, retire any pre-save link on a song that is already out, make sure the newest release is featured, and pull in anyone who signed up. Build and preview. Do not publish unless the artist has already turned on automatic publishing for content changes; otherwise leave it ready and say what is waiting.',
+      }],
+    }
+
+    if (existing) {
+      await window.electronAPI.deleteAutomation(workspaceId, existing.event, existing.matcherIndex)
+    }
+    await window.electronAPI.createAutomationFromTemplate(workspaceId, 'SchedulerTick', matcher)
+  }, [workspaceId])
 
   const buildHash = status?.lastBuild?.hash
   const liveHash = status?.liveDeploy?.buildHash
@@ -293,11 +334,13 @@ export function WebsitePage({ workspaceId }: WebsitePageProps) {
           routine={status.routine}
           busy={busy}
           onRun={() => void run('routine', () => window.electronAPI.runWebsiteRoutine(workspaceId), 'Checked the site.')}
-          onChange={(config) => void run(
-            'cadence',
-            () => window.electronAPI.setWebsiteRoutine(workspaceId, config),
-            'Saved.',
-          )}
+          onChange={(config) => void run('cadence', async () => {
+            const saved = await window.electronAPI.setWebsiteRoutine(workspaceId, config)
+            if (saved?.ok === false) return saved
+            // Only touch the schedule once the cadence is safely stored.
+            await syncSchedule((saved as { cron?: string | null }).cron ?? null)
+            return { ...saved, ok: true }
+          }, 'Saved.')}
         />
 
         <TrustedMode
