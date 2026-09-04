@@ -470,6 +470,8 @@ export interface SessionToolContext {
   websiteDomainSet?(input: import('./handlers/website.ts').WebsiteDomainSetInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
   /** Re-check whether a connected domain is live. */
   websiteDomainCheck?(input: import('./handlers/website.ts').WebsiteDomainCheckInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
+  /** Read the artist's existing site elsewhere, and remember what is there. */
+  websiteInspectExternal?(input: import('./handlers/website.ts').WebsiteInspectExternalInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
 
   /**
    * Create a workflow in the global workflow library and optionally activate it

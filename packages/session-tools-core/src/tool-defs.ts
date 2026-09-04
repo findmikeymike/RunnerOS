@@ -86,6 +86,7 @@ import {
   handleWebsiteCaptureSync,
   handleWebsiteDomainSet,
   handleWebsiteDomainCheck,
+  handleWebsiteInspectExternal,
 } from './handlers/website.ts';
 import {
   handleCommunityListContacts,
@@ -916,6 +917,15 @@ export const WebsiteDomainSetSchema = z.object({
 });
 
 export const WebsiteDomainCheckSchema = z.object({}).strict();
+
+export const WebsiteInspectExternalSchema = z.object({
+  url: z.string().min(4).max(300).optional()
+    .describe('The site to read, e.g. "lowtide.com". Omit to answer from the site already on file.'),
+  refresh: z.boolean().optional()
+    .describe('Crawl the site again instead of answering from the stored reading. Use when checking whether something has changed.'),
+  remember: z.boolean().optional()
+    .describe('Set false when reading a site that is not the artist\'s own, so it is not stored as theirs. Defaults to true.'),
+}).strict();
 
 export const CommunityListContactsSchema = z.object({
   segment: z.string().max(60).optional().describe('Only contacts in this segment.'),
@@ -1858,6 +1868,8 @@ Use only after the user explicitly confirms the operation. Read the current coor
 
   website_domain_check: `Re-check whether a connected domain is live yet. Use after the artist updates DNS. Read-only.`,
 
+  website_inspect_external: `Read the artist's existing site — the Squarespace, Wix, WordPress or Bandcamp page they already have — and remember what is on it. Returns the platform, every page found with its title, whether a visitor can leave an email address anywhere and where those addresses currently go, and what is worth telling the artist. Read-only: it fetches and parses, and changes nothing on the site. Call this before answering any question about their existing site or offering to change it; the answer tells you whether edits can be made through an API or whether you have to drive the site's own editor. The reading is stored, so later calls answer from memory — pass \`refresh: true\` when you need to see whether something has actually changed.`,
+
   community_stats: `Read the health of the fan list: size, how many are reachable, how many joined recently, how many have gone dormant, the segments, and when the last email went out. Read this before deciding whether anything is worth sending — the cadence note tells you plainly whether another email this soon needs a real reason. Read-only.`,
 
   community_list_contacts: `Read the fan list, filtered by segment, tag, city, consent, or a text match. Email addresses are withheld: choosing an audience and drafting a broadcast never need them, and the send engine resolves them itself from the approved audience. Pass \`forPersonalEmail: true\` only when writing one message to one person; that path returns addresses and is capped at 10. Read-only.`,
@@ -2260,6 +2272,9 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'website_capture_sync', description: TOOL_DESCRIPTIONS.website_capture_sync, inputSchema: WebsiteCaptureSyncSchema, executionMode: 'registry', safeMode: 'block', handler: handleWebsiteCaptureSync },
   { name: 'website_domain_check', description: TOOL_DESCRIPTIONS.website_domain_check, inputSchema: WebsiteDomainCheckSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleWebsiteDomainCheck },
   { name: 'website_domain_set', description: TOOL_DESCRIPTIONS.website_domain_set, inputSchema: WebsiteDomainSetSchema, executionMode: 'registry', safeMode: 'block', handler: handleWebsiteDomainSet },
+  // Not `readOnly`: it changes nothing on the artist's site, but it does store
+  // the reading, so it must not be run in parallel with itself.
+  { name: 'website_inspect_external', description: TOOL_DESCRIPTIONS.website_inspect_external, inputSchema: WebsiteInspectExternalSchema, executionMode: 'registry', safeMode: 'allow', handler: handleWebsiteInspectExternal },
   { name: 'create_workflow', description: TOOL_DESCRIPTIONS.create_workflow, inputSchema: CreateWorkflowSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateWorkflow },
   { name: 'save_memory', description: TOOL_DESCRIPTIONS.save_memory, inputSchema: SaveMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleSaveMemory },
   { name: 'update_memory', description: TOOL_DESCRIPTIONS.update_memory, inputSchema: UpdateMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdateMemory },

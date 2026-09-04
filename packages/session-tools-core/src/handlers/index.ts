@@ -199,6 +199,7 @@ export {
   handleWebsiteCaptureSync,
   handleWebsiteDomainSet,
   handleWebsiteDomainCheck,
+  handleWebsiteInspectExternal,
 } from './website.ts';
 export type {
   GetWebsiteManifestInput,
@@ -214,6 +215,7 @@ export type {
   WebsiteCaptureSyncInput,
   WebsiteDomainSetInput,
   WebsiteDomainCheckInput,
+  WebsiteInspectExternalInput,
   WebsiteToolResult,
 } from './website.ts';
 

@@ -26,6 +26,14 @@ export type WebsiteStatusInput = Record<string, never>;
 export interface WebsiteCaptureSyncInput { limit?: number }
 export interface WebsiteDomainSetInput { domain: string }
 export type WebsiteDomainCheckInput = Record<string, never>;
+export interface WebsiteInspectExternalInput {
+  /** Omit to re-read whatever site is already on file. */
+  url?: string;
+  /** Crawl again instead of answering from the stored reading. */
+  refresh?: boolean;
+  /** False when reading somebody else's site rather than the artist's. */
+  remember?: boolean;
+}
 export interface PreviewWebsiteInput { build?: boolean }
 export interface AuditWebsiteInput { url?: string }
 
@@ -98,4 +106,8 @@ export function handleWebsiteDomainSet(ctx: SessionToolContext, input: WebsiteDo
 
 export function handleWebsiteDomainCheck(ctx: SessionToolContext, input: WebsiteDomainCheckInput): Promise<ToolResult> {
   return invoke(ctx.websiteDomainCheck, input, NO_WEBSITE);
+}
+
+export function handleWebsiteInspectExternal(ctx: SessionToolContext, input: WebsiteInspectExternalInput): Promise<ToolResult> {
+  return invoke(ctx.websiteInspectExternal, input, NO_WEBSITE);
 }

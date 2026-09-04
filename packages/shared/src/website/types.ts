@@ -76,6 +76,27 @@ export interface WebsiteAssetRecord {
   };
 }
 
+/**
+ * A remembered reading of a site Artist OS does not own.
+ *
+ * Deliberately small: page titles and findings, not page bodies. The point is
+ * to know the shape of the site and where its signups go, not to keep a copy
+ * of it.
+ */
+export interface ExternalSiteRecord {
+  url: string;
+  platform: string;
+  /** True only where real edits are possible without driving a browser. */
+  editableThroughApi: boolean;
+  inspectedAt: string;
+  /** One entry per page read, in the order they were found. */
+  inventory: Array<{ url: string; title?: string }>;
+  /** Whether a visitor can leave an address anywhere, and where it goes. */
+  capture: { present: boolean; provider?: string };
+  /** What is worth telling the artist, stated as consequences. */
+  findings: Array<{ severity: 'warning' | 'notice'; message: string }>;
+}
+
 export interface WebsiteManifest {
   version: 1;
   mode: WebsiteMode;
@@ -89,7 +110,15 @@ export interface WebsiteManifest {
   };
   urls: { preview?: string; production?: string; sidecar?: string };
   domain?: WebsiteDomainState;
-  external?: { url: string; platform: string; inspectedAt: string; inventory: string[] };
+  /**
+   * What was found the last time the artist's existing site was read.
+   *
+   * Stored so the agent can answer "does the site still say I'm on tour?"
+   * without crawling the whole thing again in every conversation, and so a
+   * later run can notice what changed. Written by inspection; never by a
+   * publish.
+   */
+  external?: ExternalSiteRecord;
   publishPolicy: {
     /**
      * `needs-you` is the one-click tier: the artist approves a bound build

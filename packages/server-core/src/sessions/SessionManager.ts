@@ -8888,6 +8888,9 @@ user a clickable link to where the thing now lives.`
         websiteDomainCheckFn: async () => this.withArtistHqWebsite(
           website => website.service.checkDomain(website.rootPath),
         ),
+        websiteInspectExternalFn: async (input) => this.withArtistHqWebsite(
+          website => website.service.inspectExternal(website.rootPath, input),
+        ),
         websiteDomainSetFn: async (input) => this.withArtistHqWebsite(
           website => website.service.setDomain(website.rootPath, input, {
             machineId: this.resolveMachineId(website.rootPath),

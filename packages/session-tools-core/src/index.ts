@@ -337,6 +337,7 @@ export type {
   CommunityToolResult,
   WebsiteDomainSetInput,
   WebsiteDomainCheckInput,
+  WebsiteInspectExternalInput,
   WebsiteToolResult,
 } from './handlers/index.ts';
 

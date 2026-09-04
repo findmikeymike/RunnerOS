@@ -6,13 +6,15 @@ import { createHash, randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CloudflareWorkersAdapter } from './adapters/cloudflare'
-import type { SiteDeployAdapter } from './adapters/types'
+import type { FetchLike, SiteDeployAdapter } from './adapters/types'
 import { publishSite, recentReceipts, rollbackSite, siteHistory, type PublishDeps } from './publish'
 import { ResendCaptureSource, type CaptureSource } from './capture-sources'
+import { inspectExternalSite } from './inspect'
 import {
   applySiteContentOperations,
   computeDesignHash,
   defaultSiteContent,
+  defaultWebsiteManifest,
   cronForRoutine,
   describeBrief,
   describeCadence,
@@ -37,6 +39,7 @@ import {
   type ChangeClass,
   type ChangeReceiptOrigin,
   type DeployTarget,
+  type ExternalSiteRecord,
   type RoutineSignals,
   type Observation,
   type SiteContentOperation,
@@ -967,6 +970,9 @@ export class WebsiteService {
       routineDescription: describeCadence(manifest.routine ?? DEFAULT_ROUTINE),
       pendingBrief: manifest.pendingBrief,
       liveDeploy: live ? { id: live.id, at: live.at, url: live.url, buildHash: live.buildHash } : undefined,
+      // So an agent that only asks for status still knows the artist has a
+      // site elsewhere, rather than offering to build them their first one.
+      external: manifest.external ? describeStoredSite(manifest.external) : undefined,
     }
 
     if (!manifest.adapter || !live) return { ...base, live: false }
@@ -1343,11 +1349,126 @@ export class WebsiteService {
     }
   }
 
+  /**
+   * Read a site Artist OS does not own, and remember what was found.
+   *
+   * Most artists arrive with a Squarespace or Wix page they are not going to
+   * abandon. The agent can already drive a browser around one of those when
+   * asked; what it cannot do is hold the site in its head. So this crawls once,
+   * stores the shape of it, and answers from the stored reading afterwards.
+   * Re-crawling is opt-in through `refresh`, because a site the artist controls
+   * does not change behind their back.
+   *
+   * Read-only against the site, and it writes nothing to it.
+   */
+  async inspectExternal(
+    workspaceRootPath: string,
+    input: { url?: string; refresh?: boolean; remember?: boolean } = {},
+    deps: { fetchImpl?: FetchLike } = {},
+  ): Promise<WebsiteToolResult> {
+    const manifest = loadWebsiteManifest(workspaceRootPath)
+    const stored = manifest?.external
+    const url = input.url?.trim() || stored?.url
+
+    if (!url) {
+      return {
+        ok: false,
+        error: 'No site has been connected yet. Pass the address of the artist\'s existing site to read it.',
+      }
+    }
+
+    const sameSite = Boolean(stored) && matchesStoredSite(stored!.url, url)
+    if (stored && sameSite && !input.refresh) {
+      return { ok: true, ...describeStoredSite(stored), fromMemory: true }
+    }
+
+    const result = await inspectExternalSite(url, { fetchImpl: deps.fetchImpl })
+    if (!result.ok) return { ok: false, error: result.error }
+
+    const record: ExternalSiteRecord = {
+      url: result.url!,
+      platform: result.platform!,
+      editableThroughApi: result.editableThroughApi ?? false,
+      inspectedAt: result.inspectedAt!,
+      inventory: (result.pages ?? []).map(page => ({ url: page.url, title: page.title })),
+      capture: result.capture ?? { present: false },
+      findings: result.findings ?? [],
+    }
+
+    // `remember: false` is for reading somebody else's site — a reference, a
+    // label's page — without claiming it as the artist's own.
+    //
+    // Re-read the manifest inside the lock: the crawl took seconds, and a
+    // publish may have written to it in the meantime.
+    if (input.remember !== false) {
+      await this.withWebsiteLock(workspaceRootPath, async () => {
+        const current = loadWebsiteManifest(workspaceRootPath)
+          ?? { ...defaultWebsiteManifest(), mode: modeForPlatform(record.platform) }
+        saveWebsiteManifest(workspaceRootPath, { ...current, external: record })
+      })
+    }
+
+    return { ok: true, ...describeStoredSite(record), fromMemory: false }
+  }
+
   /** Stop every preview server. Called on shutdown. */
   dispose(): void {
     for (const preview of this.previews.values()) closeServer(preview.server)
     this.previews.clear()
   }
+}
+
+/** A week is long enough that a re-read is worth mentioning, not demanding. */
+const EXTERNAL_STALE_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * Does this address name the site already on file?
+ *
+ * Compared by host, because `lowtide.com`, `https://lowtide.com/` and
+ * `https://lowtide.com/shows` are all the artist saying the same thing.
+ */
+function matchesStoredSite(stored: string, candidate: string): boolean {
+  const host = (value: string): string | null => {
+    try {
+      return new URL(value.startsWith('http') ? value : `https://${value}`).hostname.replace(/^www\./, '')
+    } catch {
+      return null
+    }
+  }
+  const a = host(stored)
+  return a !== null && a === host(candidate)
+}
+
+/**
+ * Turn a stored reading into something an agent can act on.
+ *
+ * `canEdit` is the part that matters: on a closed builder the agent has to
+ * drive the browser or hand the artist copy to paste, and saying so up front
+ * is better than letting it discover that halfway through a task.
+ */
+function describeStoredSite(record: ExternalSiteRecord): Record<string, unknown> {
+  const age = Date.now() - Date.parse(record.inspectedAt)
+  return {
+    url: record.url,
+    platform: record.platform,
+    inspectedAt: record.inspectedAt,
+    pages: record.inventory,
+    capture: record.capture,
+    findings: record.findings,
+    canEdit: record.editableThroughApi
+      ? `${record.platform} exposes an API, so edits can be made directly.`
+      : `${record.platform} has no editing API here. Changes mean driving the site's own editor in a browser, or writing the copy for the artist to paste.`,
+    ...(Number.isFinite(age) && age > EXTERNAL_STALE_MS
+      ? { note: 'This reading is over a week old. Call again with refresh to see the site as it is now.' }
+      : {}),
+  }
+}
+
+/** What kind of site is this, in the manifest's terms? */
+function modeForPlatform(platform: string): WebsiteManifest['mode'] {
+  if (platform === 'wordpress') return 'wordpress'
+  if (platform === 'static') return 'static-repo'
+  return 'closed-builder'
 }
 
 /**

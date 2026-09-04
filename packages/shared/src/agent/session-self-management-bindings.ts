@@ -440,6 +440,12 @@ Object.defineProperty(context, 'communityListContacts', {
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'websiteInspectExternal', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.websiteInspectExternalFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'createWorkflow', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.createWorkflowFn;
