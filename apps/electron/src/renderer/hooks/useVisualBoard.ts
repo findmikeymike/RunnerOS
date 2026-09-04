@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VisualBoardSnapshot } from '@craft-agent/shared/visual-board'
 import type { OutputManifestDTO } from './useOutputs'
+import { getBoardDraft } from '@/components/visual-surfaces/board-draft'
 
 interface VisualBoardResult {
   output: OutputManifestDTO
@@ -71,6 +72,9 @@ export function useVisualBoard(
     setLoading(true)
     setError(null)
     try {
+      // A panel may return while its previous instance is still saving.
+      await getBoardDraft(workspaceId, sessionId).waitForSave()
+      if (!isCurrent()) return
       const result = await electronAPI.getVisualBoard(workspaceId, sessionId)
       if (!isCurrent()) return
       setOutput(result.output)
@@ -91,8 +95,10 @@ export function useVisualBoard(
       throw new Error('Visual board API is unavailable.')
     }
     // A read started before this save must never replace the saved board later.
-    readAbortRef.current?.abort()
-    setLoading(false)
+    if (scopeRef.current === scope && !scopeAbortRef.current.signal.aborted) {
+      readAbortRef.current?.abort()
+      setLoading(false)
+    }
     const signal = scopeAbortRef.current.signal
     const result = await electronAPI.saveVisualBoard(workspaceId, sessionId, snapshot)
     if (!signal.aborted && scopeRef.current === scope) setOutput(result.output)
