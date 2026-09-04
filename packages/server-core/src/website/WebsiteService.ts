@@ -13,10 +13,16 @@ import {
   applySiteContentOperations,
   computeDesignHash,
   defaultSiteContent,
+  cronForRoutine,
+  describeBrief,
+  describeCadence,
   describeCapture,
   importCapturedSubscribers,
   isTrustedModeEligible,
+  planSiteUpdate,
+  resolveApprovalTier,
   writeChangeReceipt,
+  DEFAULT_ROUTINE,
   loadSiteContent,
   loadWebsiteManifest,
   saveSiteContent,
@@ -29,7 +35,10 @@ import {
   type ChangeClass,
   type ChangeReceiptOrigin,
   type DeployTarget,
+  type RoutineSignals,
   type SiteContentOperation,
+  type WebsiteBrief,
+  type WebsiteRoutineConfig,
   type WebsiteAssetKind,
   type WebsiteAssetRecord,
   type WebsiteManifest,
@@ -1132,6 +1141,178 @@ export class WebsiteService {
       return { ok: true, domain: state }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  /**
+   * Run the site routine once.
+   *
+   * Everything up to publishing runs free: reading, editing content,
+   * building, auditing, previewing, and pulling signups. Publishing is the
+   * one decision that stops for the artist, unless trusted mode already
+   * covers a content-only change.
+   *
+   * A failure at any step still produces a brief. The artist should hear
+   * that the routine could not do its job, not silently get nothing.
+   */
+  async runRoutine(
+    workspaceRootPath: string,
+    context: { machineId: string; origin: ChangeReceiptOrigin },
+    options: {
+      signals?: RoutineSignals
+      today?: string
+      previewTarget?: WebsitePreviewTarget
+      runId?: string
+    } = {},
+  ): Promise<WebsiteToolResult> {
+    const missing = this.requireSite(workspaceRootPath)
+    if (missing) return missing
+
+    const manifest = loadWebsiteManifest(workspaceRootPath)
+    const content = loadSiteContent(workspaceRootPath)
+    if (!manifest || !content) return { ok: false, error: 'No website in this workspace yet.' }
+
+    const today = options.today ?? new Date().toISOString().slice(0, 10)
+    const runId = options.runId ?? `run-${randomUUID().replace(/-/g, '').slice(0, 12)}`
+    const signals = options.signals ?? { releases: [], shows: [], auditScore: manifest.lastBuild?.auditScore }
+
+    const plan = planSiteUpdate(content, signals, today)
+    const notes = plan.findings.filter(finding => !finding.actionable).map(finding => finding.detail)
+
+    // Pull signups regardless of whether the site itself changed: a fan who
+    // signed up is worth reporting even in an otherwise quiet week.
+    const capture = await this.syncCapture(workspaceRootPath, context)
+    const subscribers = capture.ok && typeof capture.imported === 'number'
+      ? {
+        imported: capture.imported as number,
+        duplicates: (capture.duplicates as number) ?? 0,
+        skippedSuppressed: (capture.skippedSuppressed as number) ?? 0,
+        receiptId: capture.receiptId as string | undefined,
+      }
+      : undefined
+
+    if (plan.operations.length === 0) {
+      const brief: WebsiteBrief = {
+        runId,
+        weekOf: today,
+        cadence: manifest.routine?.cadence ?? 'manual',
+        notes,
+        ...(subscribers && subscribers.imported > 0 ? { subscribers } : {}),
+        ...(notes.length === 0 && !subscribers?.imported ? { nothingToDo: true as const } : {}),
+      }
+      this.storeBrief(workspaceRootPath, brief)
+      return { ok: true, brief, summary: describeBrief(brief) }
+    }
+
+    const applied = applySiteContentOperations(content, plan.operations)
+    saveSiteContent(workspaceRootPath, applied.content)
+
+    const build = await this.build(workspaceRootPath, {}, { workspaceRootPath })
+    if (!build.ok) {
+      const brief: WebsiteBrief = {
+        runId,
+        weekOf: today,
+        cadence: manifest.routine?.cadence ?? 'manual',
+        notes: [...notes, `The site could not be rebuilt: ${String(build.error)}`],
+        ...(subscribers && subscribers.imported > 0 ? { subscribers } : {}),
+      }
+      this.storeBrief(workspaceRootPath, brief)
+      return { ok: false, error: String(build.error), brief }
+    }
+
+    const buildHash = String(build.hash)
+    const summary = plan.changes.join('; ')
+
+    let previewOutputId: string | undefined
+    if (options.previewTarget) {
+      const preview = await this.preview(
+        workspaceRootPath,
+        options.previewTarget,
+        { build: false },
+        { sessionId: context.origin.sessionId, agentSlug: context.origin.agentSlug },
+        { workspaceRootPath },
+      )
+      if (preview.ok) previewOutputId = preview.outputId as string | undefined
+    }
+
+    // Trusted mode is the only path that publishes without a click, and the
+    // publish itself re-derives the change class, so a design edit that crept
+    // in still stops here.
+    const after = loadWebsiteManifest(workspaceRootPath)!
+    const decision = resolveApprovalTier(after, plan.changeClass)
+    let deployReceiptId: string | undefined
+    let tier: 'one-click' | 'trusted' = 'one-click'
+
+    if (!decision.requiresApproval && after.targetApproval) {
+      const published = await this.deploy(workspaceRootPath, {
+        target: 'production',
+        buildHash,
+        changeClass: plan.changeClass,
+        summary,
+        why: plan.why,
+        changes: plan.changes,
+        previewOutputId,
+      }, context)
+      if (published.ok) {
+        tier = 'trusted'
+        deployReceiptId = published.receiptId as string | undefined
+      } else {
+        notes.push(`Could not publish automatically: ${String(published.error)}`)
+      }
+    }
+
+    const brief: WebsiteBrief = {
+      runId,
+      weekOf: today,
+      cadence: after.routine?.cadence ?? 'manual',
+      site: {
+        buildHash,
+        changeClass: plan.changeClass,
+        summary,
+        previewOutputId,
+        auditScore: Number(build.auditScore ?? 0),
+        tier,
+        deployReceiptId,
+      },
+      notes,
+      ...(subscribers && subscribers.imported > 0 ? { subscribers } : {}),
+    }
+    this.storeBrief(workspaceRootPath, brief)
+
+    return { ok: true, brief, summary: describeBrief(brief), changes: plan.changes }
+  }
+
+  private storeBrief(workspaceRootPath: string, brief: WebsiteBrief): void {
+    const manifest = loadWebsiteManifest(workspaceRootPath)
+    if (!manifest) return
+    saveWebsiteManifest(workspaceRootPath, {
+      ...manifest,
+      pendingBrief: brief,
+      routine: manifest.routine
+        ? { ...manifest.routine, lastRunAt: new Date().toISOString() }
+        : { ...DEFAULT_ROUTINE, lastRunAt: new Date().toISOString() },
+    })
+  }
+
+  /** Clear a brief once the artist has acted on it. */
+  clearBrief(workspaceRootPath: string): WebsiteToolResult {
+    const manifest = loadWebsiteManifest(workspaceRootPath)
+    if (!manifest) return { ok: false, error: 'No website in this workspace yet.' }
+    saveWebsiteManifest(workspaceRootPath, { ...manifest, pendingBrief: undefined })
+    return { ok: true }
+  }
+
+  /** Set how often the routine runs. Manual means it only runs on request. */
+  setRoutine(workspaceRootPath: string, config: WebsiteRoutineConfig): WebsiteToolResult {
+    const manifest = loadWebsiteManifest(workspaceRootPath)
+    if (!manifest) return { ok: false, error: 'No website in this workspace yet.' }
+    const routine: WebsiteRoutineConfig = { ...manifest.routine, ...config }
+    saveWebsiteManifest(workspaceRootPath, { ...manifest, routine })
+    return {
+      ok: true,
+      routine,
+      cron: cronForRoutine(routine),
+      description: describeCadence(routine),
     }
   }
 

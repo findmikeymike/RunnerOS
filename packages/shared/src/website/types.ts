@@ -126,6 +126,14 @@ export interface WebsiteManifest {
     drainCursor?: string;
   };
   assets: WebsiteAssetRecord[];
+  /**
+   * How often the site routine runs. Manual until the artist chooses,
+   * because an unasked-for weekly card is noise for an artist who releases
+   * once a year.
+   */
+  routine?: import('./routine.ts').WebsiteRoutineConfig;
+  /** The brief waiting on the artist, if a run produced one. */
+  pendingBrief?: import('./routine.ts').WebsiteBrief;
   createdAt: string;
   updatedAt: string;
 }
