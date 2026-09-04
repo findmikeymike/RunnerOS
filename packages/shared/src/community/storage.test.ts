@@ -188,6 +188,70 @@ describe('community record storage', () => {
     expect(jsonFiles(root, 'records/community/contacts')).toHaveLength(1);
   });
 
+  test('people the old provider lost are suppressed, never imported as fans', () => {
+    const root = tempRoot();
+    const record = importCommunityCsv(root, 'machine_a', {
+      csv: [
+        'Email Address,First Name,OPTIN_TIME,status',
+        'still@here.com,Ada,2024-03-14 09:12:31,subscribed',
+        'left@example.com,Grace,2024-01-02 00:00:00,unsubscribed',
+        'bounced@example.com,Bo,2024-01-02 00:00:00,cleaned',
+      ].join('\n'),
+      filename: 'members.csv',
+      assertedBy: 'machine_a',
+      basis: 'existing-list-opt-in',
+    });
+
+    const state = loadCommunityState(root, 'machine_a');
+    expect(record.stats.created).toBe(1);
+    expect(record.stats.suppressed).toBe(2);
+    expect(state.contacts).toHaveLength(1);
+    expect(state.contacts[0]!.email).toBe('still@here.com');
+  });
+
+  test('a signup date from the export becomes the consent evidence', () => {
+    const root = tempRoot();
+    importCommunityCsv(root, 'machine_a', {
+      csv: 'Email Address,First Name,MEMBER_RATING,CONFIRM_TIME\nada@lovelace.com,Ada,4,2024-03-14 09:14:00\n',
+      filename: 'members.csv',
+      assertedBy: 'machine_a',
+      basis: 'existing-list-opt-in',
+    });
+
+    const contact = loadCommunityState(root, 'machine_a').contacts[0]!;
+    expect(contact.name).toBe('Ada');
+    expect(contact.consentEvidence?.source).toBe('mailchimp');
+    expect(contact.consentEvidence?.capturedAt).toBe('2024-03-14T09:14:00.000Z');
+  });
+
+  test('a real signup date outranks an artist who could only say "unknown"', () => {
+    const root = tempRoot();
+    importCommunityCsv(root, 'machine_a', {
+      csv: 'Email Address,OPTIN_TIME\ndated@example.com,2024-03-14 09:12:31\nbare@example.com,\n',
+      filename: 'members.csv',
+      assertedBy: 'machine_a',
+      basis: 'unknown',
+    });
+
+    const contacts = loadCommunityState(root, 'machine_a').contacts;
+    const dated = contacts.find(contact => contact.email === 'dated@example.com')!;
+    const bare = contacts.find(contact => contact.email === 'bare@example.com')!;
+    expect(dated.consentStatus).toBe('opted-in');
+    expect(bare.consentStatus).toBe('unknown');
+  });
+
+  test('a quoted newline in an export does not swallow the rest of the list', () => {
+    const root = tempRoot();
+    const record = importCommunityCsv(root, 'machine_a', {
+      csv: 'Email Address,Notes\na@example.com,"first line\nsecond line"\nb@example.com,fine\n',
+      filename: 'members.csv',
+      assertedBy: 'machine_a',
+      basis: 'existing-list-opt-in',
+    });
+
+    expect(record.stats.created).toBe(2);
+  });
+
   test('unknown-basis import does not downgrade an existing opted-in contact', () => {
     const root = tempRoot();
     upsertCommunityContact(root, 'machine_a', {

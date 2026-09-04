@@ -36,6 +36,7 @@ import type {
   UpsertCommunityContactInput,
 } from './types.ts';
 import { ARTIST_COMMUNITY_CONTEXT_SLUG } from './types.ts';
+import { parseListExport } from './list-export.ts';
 
 const CONTACTS_COLLECTION = 'community/contacts';
 const EMAIL_JOBS_COLLECTION = 'community/email-jobs';
@@ -407,79 +408,74 @@ export function upsertCommunityContact(
   return contact;
 }
 
-function parseCsvRows(csv: string): Array<Record<string, string>> {
-  const lines = csv.split(/\r?\n/).filter((line) => line.trim());
-  if (lines.length < 2) return [];
-  const headers = splitCsvLine(lines[0]!).map((header) => header.trim().toLowerCase());
-  return lines.slice(1).map((line) => {
-    const cells = splitCsvLine(line);
-    const row: Record<string, string> = {};
-    headers.forEach((header, index) => {
-      row[header] = cells[index]?.trim() ?? '';
-    });
-    return row;
-  });
-}
-
-function splitCsvLine(line: string): string[] {
-  const cells: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    const next = line[index + 1];
-    if (char === '"' && next === '"') {
-      current += '"';
-      index += 1;
-    } else if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
-      cells.push(current);
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  cells.push(current);
-  return cells;
-}
-
+/**
+ * Import a list export into Community.
+ *
+ * The artist's attestation is the floor: `basis` is their claim about how
+ * these people came to be on the list, and it is what the import record
+ * carries if anyone ever asks. A per-row signup date from the old provider
+ * sits on top of it as real evidence, and can lift a row the artist could only
+ * describe as `unknown` — a date from Mailchimp is a fact, not an assertion.
+ *
+ * Rows the export marks as unsubscribed, bounced, or cleaned are never added
+ * as contacts. They go straight to the suppression list, because the one
+ * unrecoverable mistake here is emailing somebody who already left.
+ */
 export function importCommunityCsv(
   workspaceRootPath: string,
   machineId: string,
   input: ImportCommunityCsvInput,
 ): CommunityImportRecord {
-  const rows = parseCsvRows(input.csv);
+  const parsed = parseListExport(input.csv, { filename: input.filename });
   let created = 0;
   let updated = 0;
   let skippedSuppressed = 0;
-  let invalidRows = 0;
+  let suppressed = 0;
+  let invalidRows = parsed.unreadable;
   const suppressions = new Set(listCommunitySuppressions(workspaceRootPath).map((suppression) => suppression.emailHash));
-  for (const row of rows) {
-    const email = row.email || row['email address'];
-    if (!email || !email.includes('@')) {
-      invalidRows += 1;
+
+  for (const row of parsed.rows) {
+    const emailHash = communityEmailHash(row.email);
+
+    // Somebody the old provider lost is not a fan to import. Record that they
+    // are off-limits and move on.
+    if (row.status !== 'subscribed') {
+      if (!suppressions.has(emailHash)) {
+        suppressCommunityContact(
+          workspaceRootPath,
+          machineId,
+          row.email,
+          row.status === 'gone' ? 'bounced' : 'unsubscribed',
+          'import',
+        );
+        suppressions.add(emailHash);
+        suppressed += 1;
+      }
       continue;
     }
-    const emailHash = communityEmailHash(email);
+
     if (suppressions.has(emailHash)) {
       skippedSuppressed += 1;
       continue;
     }
     const existed = Boolean(findContactByEmailHash(listCommunityContacts(workspaceRootPath), emailHash));
     upsertContactRecord(workspaceRootPath, machineId, {
-      name: row.name || row.fullname || row['full name'],
-      email,
+      name: row.name,
+      email: row.email,
       segment: normalizeSegment(row.segment),
       source: 'csv-import',
       city: row.city,
       notes: row.notes,
-      tags: (row.tags ?? '').split(/[;,]/).map((tag) => tag.trim()).filter(Boolean),
-      consentStatus: consentForBasis(input.basis),
+      tags: row.tags,
+      consentStatus: row.optedInAt ? 'opted-in' : consentForBasis(input.basis),
+      ...(row.optedInAt
+        ? { consentEvidence: { source: parsed.provider, capturedAt: row.optedInAt } }
+        : {}),
     }, { consentEvidenceSource: input.basis });
     if (existed) updated += 1;
     else created += 1;
   }
+
   const importId = safeId('import', randomUUID().replace(/-/g, '').slice(0, 16));
   const result = writeSharedRecord(workspaceRootPath, IMPORTS_COLLECTION, importId, {
     filename: input.filename,
@@ -488,7 +484,7 @@ export function importCommunityCsv(
       assertedAt: nowIso(),
       basis: input.basis,
     },
-    stats: { created, updated, skippedSuppressed, invalidRows },
+    stats: { created, updated, skippedSuppressed, invalidRows, suppressed },
   }, { machineId });
   if (result.status === 'conflict') throw new Error(`Community import conflict: ${result.conflict.conflictId}`);
   loadCommunityState(workspaceRootPath, machineId);
@@ -500,12 +496,13 @@ export function suppressCommunityContact(
   machineId: string,
   email: string,
   reason: CommunitySuppressionRecord['reason'] = 'manual-block',
+  source: CommunitySuppressionRecord['source'] = 'manual',
 ): CommunitySuppressionRecord {
   const emailHash = communityEmailHash(email);
   const result = writeSharedRecord(workspaceRootPath, SUPPRESSION_COLLECTION, emailHash, {
     emailHash,
     reason,
-    source: 'manual',
+    source,
     effectiveAt: nowIso(),
   }, { machineId });
   if (result.status === 'conflict') throw new Error(`Suppression conflict: ${result.conflict.conflictId}`);

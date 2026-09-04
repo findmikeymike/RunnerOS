@@ -12,6 +12,7 @@ import {
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { describeListExport, parseListExport } from '@craft-agent/shared/community/list-export'
 import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
 import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
@@ -34,6 +35,11 @@ import type {
 
 type SegmentFilter = CommunitySegment | 'all'
 type ImportBasis = ImportCommunityCsvInput['basis']
+type PendingImport = {
+  csv: string
+  filename?: string
+  preview: ReturnType<typeof describeListExport>
+}
 type FanDraft = {
   name: string
   email: string
@@ -85,6 +91,8 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
   const [saving, setSaving] = React.useState(false)
   const [draftingEmail, setDraftingEmail] = React.useState(false)
   const [importBasis, setImportBasis] = React.useState<ImportBasis>('unknown')
+  const [pendingImport, setPendingImport] = React.useState<PendingImport | null>(null)
+  const [importing, setImporting] = React.useState(false)
   const [addFanOpen, setAddFanOpen] = React.useState(false)
   const [emailQueueOpen, setEmailQueueOpen] = React.useState(true)
   const [mailBusy, setMailBusy] = React.useState<string | null>(null)
@@ -150,19 +158,39 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
       const path = paths[0]
       if (!path) return
       const csv = await window.electronAPI.readFile(path)
-      setCommunity(await window.electronAPI.importCommunityCsv(workspaceId, {
-        csv,
-        filename: path.split('/').pop(),
-        basis: importBasis,
-      })
-      )
-      toast.success(importBasis === 'unknown'
-        ? 'CSV imported. Unknown-consent contacts are held out of broadcasts.'
-        : 'CSV imported with opt-in attestation.')
+      const filename = path.split('/').pop()
+
+      // Read the file before writing anything, so the artist sees what this
+      // will do to their list rather than finding out from the result.
+      const preview = describeListExport(parseListExport(csv, { filename }))
+      setPendingImport({ csv, filename, preview })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     }
-  }, [importBasis, workspaceId])
+  }, [])
+
+  const confirmImport = React.useCallback(async () => {
+    if (!pendingImport) return
+    setImporting(true)
+    try {
+      setCommunity(await window.electronAPI.importCommunityCsv(workspaceId, {
+        csv: pendingImport.csv,
+        filename: pendingImport.filename,
+        basis: importBasis,
+      }))
+      const { canEmail, needConfirming, willSuppress } = pendingImport.preview
+      const parts: string[] = []
+      if (canEmail > 0) parts.push(`${canEmail} ready to email`)
+      if (needConfirming > 0) parts.push(`${needConfirming} held back until they confirm`)
+      if (willSuppress > 0) parts.push(`${willSuppress} added to do-not-email`)
+      toast.success(parts.length > 0 ? parts.join(', ') : 'Nothing to import from that file.')
+      setPendingImport(null)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setImporting(false)
+    }
+  }, [importBasis, pendingImport, workspaceId])
 
   const queueEmailJob = React.useCallback(async (audienceLabel: string, segmentIds: string[]): Promise<boolean> => {
     try {
@@ -339,6 +367,16 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
             </div>
           ) : null}
 
+          {pendingImport ? (
+            <ImportPreview
+              preview={pendingImport.preview}
+              filename={pendingImport.filename}
+              busy={importing}
+              onCancel={() => setPendingImport(null)}
+              onConfirm={() => void confirmImport()}
+            />
+          ) : null}
+
           <div className="mt-4 border-t border-white/[0.045] pt-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
@@ -426,6 +464,75 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
 
 function segmentLabel(segment: string): string {
   return segmentFilters.find((item) => item.id === segment)?.label ?? segment
+}
+
+/**
+ * What this file will do to the fan list, before it does it.
+ *
+ * An import is not undoable in any way the artist would recognise, and the
+ * numbers that matter are not the ones a success toast usually carries: how
+ * many can actually be emailed, and how many are about to be marked
+ * do-not-email. Both are shown here, with the file's own warnings, and
+ * nothing is written until they press the button.
+ */
+function ImportPreview({
+  preview,
+  filename,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  preview: ReturnType<typeof describeListExport>
+  filename?: string
+  busy: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const departures = preview.willSuppress > 0 && preview.willImport === 0
+  return (
+    <div className={cn(
+      'mt-3 rounded-[14px] border p-3',
+      departures ? 'border-[#f97316]/30 bg-[#f97316]/[0.06]' : 'border-white/[0.05] bg-black/20',
+    )}>
+      <p className="text-[13px] font-medium text-white/78">{preview.summary}</p>
+      {filename ? <p className="mt-0.5 text-[11px] text-white/28">{filename}</p> : null}
+
+      <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 text-[11px]">
+        <span className="text-white/50">Ready to email <span className="text-white/78">{preview.canEmail}</span></span>
+        <span className="text-white/50">Held back <span className="text-white/78">{preview.needConfirming}</span></span>
+        {preview.willSuppress > 0 ? (
+          <span className="text-white/50">Do-not-email <span className="text-white/78">{preview.willSuppress}</span></span>
+        ) : null}
+      </div>
+
+      {preview.warnings.length > 0 ? (
+        <ul className="mt-2.5 space-y-1">
+          {preview.warnings.map((warning) => (
+            <li key={warning} className="text-[11px] leading-relaxed text-white/45">{warning}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      <div className="mt-3 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="inline-flex h-9 items-center rounded-[9px] border border-white/[0.06] px-3 text-xs text-white/55 transition-colors hover:text-white/80"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onConfirm}
+          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[9px] bg-[#f97316] px-4 text-xs font-medium text-white transition-colors hover:bg-[#fb8122] disabled:cursor-wait disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+          {departures ? 'Add to do-not-email' : 'Import'}
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function FanRow({ fan, onDraft }: { fan: CommunityContactRecord; onDraft: () => void }) {

@@ -2614,6 +2614,11 @@ Most artists already have a Squarespace, Wix, Bandcamp or WordPress page, and th
 
 That reading also tells you what you can do. WordPress can be edited directly. On a closed builder you have two honest options: drive the site's own editor in the browser, or write the copy and hand it to the artist to paste. Say which one you are doing. Never imply you changed a site you only looked at.
 
+**When the signups are going somewhere else.**
+This is the finding worth raising above all the SEO ones. If the form on their site posts to Mailchimp, Substack or ConvertKit, the artist has fans they cannot email from here — and they usually do not know it. Say it as that, not as a technical fact. The fix has two halves, and both need the artist:
+- The people already on the old list: they export a CSV from that provider and import it on the Community page. Tell them that page is where it happens; you cannot pick the file for them. An unsubscribe or "cleaned" export is fine to import too — those people land on the do-not-email list instead of the fan list, which is what you want.
+- New signups from here on: pointing the form at Artist OS. Offer it, do not do it silently.
+
 **The two things that need the artist, and nothing else.**
 Publishing a change to the live site, and connecting a domain. Everything else — reading, editing content, building, previewing, auditing, pulling signups — runs without asking. Do not ask permission for those; just do them and report.
 

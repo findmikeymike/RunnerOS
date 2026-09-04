@@ -130,6 +130,8 @@ export interface CommunityImportRecord extends SharedEntityMeta {
     updated: number;
     skippedSuppressed: number;
     invalidRows: number;
+    /** Rows the export marked as having left, added to the do-not-email list. */
+    suppressed?: number;
   };
 }
 
