@@ -114,6 +114,7 @@ export interface CommunityEmailJobRecord extends SharedEntityMeta {
     completedAt?: string;
     sentCount?: number;
     failedCount?: number;
+    uncertainCount?: number;
   };
   status: EmailJobStatus;
 }

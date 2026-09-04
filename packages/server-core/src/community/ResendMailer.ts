@@ -5,8 +5,8 @@ const API = 'https://api.resend.com'
 /** Resend accepts up to 100 messages per batch call. */
 export const BATCH_SIZE = 100
 
-/** Ten requests per second per team; stay under it. */
-const MIN_CALL_GAP_MS = 130
+/** Leave headroom between provider calls. */
+const MIN_CALL_GAP_MS = 600
 
 export interface MailRecipient {
   email: string
@@ -27,6 +27,7 @@ export interface SendBroadcastInput {
   idempotencyKey: string
   /** Where an unsubscribe click lands. Required for bulk mail. */
   unsubscribeUrl: string
+  onBatch?: (result: SendResult) => void
 }
 
 export interface SentMessage {
@@ -34,6 +35,7 @@ export interface SentMessage {
   emailHash: string
   providerMessageId?: string
   error?: string
+  uncertain?: boolean
 }
 
 export interface SendResult {
@@ -51,9 +53,8 @@ export class MailerError extends Error {
 /**
  * Sends fan email through the artist's own Resend account.
  *
- * Every message carries one-click unsubscribe headers. Gmail and Yahoo
- * require them of bulk senders, and more to the point a fan who wants out
- * should get out in one click rather than hunting for a link.
+ * Every message links to the verified unsubscribe form. This is not an
+ * RFC 8058 one-click endpoint, so do not advertise List-Unsubscribe-Post.
  */
 export class ResendMailer {
   private readonly fetchImpl: FetchLike
@@ -67,6 +68,34 @@ export class ResendMailer {
     const wait = MIN_CALL_GAP_MS - (Date.now() - this.lastCallAt)
     if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait))
     this.lastCallAt = Date.now()
+  }
+
+  async preflightUnsubscribe(base: string): Promise<string[]> {
+    const url = new URL(base)
+    if (url.protocol !== 'https:') throw new Error('Use the HTTPS unsubscribe page from your published Artist OS website.')
+    url.searchParams.set('health', '1')
+    const health = await this.fetchImpl(url.toString(), { signal: AbortSignal.timeout(15000) })
+    const status = await health.json() as { protocol?: string; ready?: boolean }
+    if (!health.ok || status.protocol !== 'artist-os-unsubscribe-v1' || !status.ready) {
+      throw new Error('Publish the updated Artist OS website and connect Resend before sending. Its unsubscribe page is not ready.')
+    }
+    const emails: string[] = []
+    const cursors = new Set<string>()
+    let cursor: string | undefined
+    do {
+      await this.throttle()
+      const params = new URLSearchParams({ limit: '100' })
+      if (cursor) params.set('after', cursor)
+      const response = await this.fetchImpl(`${API}/contacts?${params}`, { headers: { Authorization: `Bearer ${this.options.apiKey}` }, signal: AbortSignal.timeout(15000) })
+      if (!response.ok) throw new Error('Could not check unsubscribes. Nothing was sent; try again shortly.')
+      const page = await response.json() as { data?: Array<{ id?: string; email?: string; unsubscribed?: boolean }>; has_more?: boolean }
+      if (!Array.isArray(page.data)) throw new Error('Could not read the unsubscribe list. Nothing was sent.')
+      for (const contact of page.data) if (contact.unsubscribed && contact.email) emails.push(contact.email)
+      cursor = page.has_more ? page.data.at(-1)?.id : undefined
+      if (page.has_more && (!cursor || cursors.has(cursor))) throw new Error('Could not finish checking unsubscribes. Nothing was sent.')
+      if (cursor) cursors.add(cursor)
+    } while (cursor)
+    return emails
   }
 
   /**
@@ -83,11 +112,14 @@ export class ResendMailer {
     for (let index = 0; index < input.recipients.length; index += BATCH_SIZE) {
       const batch = input.recipients.slice(index, index + BATCH_SIZE)
       const batchNumber = Math.floor(index / BATCH_SIZE)
+      const sentStart = sent.length
+      const failedStart = failed.length
 
       try {
         await this.throttle()
         const response = await this.fetchImpl(`${API}/emails/batch`, {
           method: 'POST',
+          signal: AbortSignal.timeout(30000),
           headers: {
             Authorization: `Bearer ${this.options.apiKey}`,
             'Content-Type': 'application/json',
@@ -101,34 +133,32 @@ export class ResendMailer {
             text: personalize(input.text, recipient),
             ...(input.replyTo ? { reply_to: input.replyTo } : {}),
             headers: {
-              'List-Unsubscribe': `<${unsubscribeFor(input.unsubscribeUrl, recipient)}>`,
-              'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+              'List-Unsubscribe': `<${input.unsubscribeUrl}>`,
             },
           }))),
         })
 
         if (!response.ok) {
           const detail = await readError(response)
-          const retryable = response.status === 429 || response.status >= 500
           for (const recipient of batch) {
-            failed.push({ ...identity(recipient), error: detail })
+            failed.push({ ...identity(recipient), error: detail, uncertain: response.status >= 500 })
           }
-          if (!retryable && response.status === 401) {
-            throw new MailerError(`${detail} Check the Resend API key in Settings.`)
+        } else {
+          const payload = await response.json().catch(() => undefined) as { data?: Array<{ id?: string }> } | undefined
+          const ids = payload?.data ?? []
+          if (ids.length !== batch.length || ids.some(item => !item.id)) {
+            throw new Error('Incomplete message receipts')
           }
-          continue
+          batch.forEach((recipient, position) => {
+            sent.push({ ...identity(recipient), providerMessageId: ids[position]?.id })
+          })
         }
-
-        const payload = await response.json().catch(() => undefined) as { data?: Array<{ id?: string }> } | undefined
-        const ids = payload?.data ?? []
-        batch.forEach((recipient, position) => {
-          sent.push({ ...identity(recipient), providerMessageId: ids[position]?.id })
-        })
       } catch (error) {
         if (error instanceof MailerError) throw error
-        const message = error instanceof Error ? error.message : String(error)
-        for (const recipient of batch) failed.push({ ...identity(recipient), error: message })
+        const message = 'Delivery uncertain. Check Resend before resending.'
+        for (const recipient of batch) failed.push({ ...identity(recipient), error: message, uncertain: true })
       }
+      input.onBatch?.({ sent: sent.slice(sentStart), failed: failed.slice(failedStart) })
     }
 
     return { sent, failed }
@@ -142,6 +172,7 @@ export class ResendMailer {
     try {
       await this.throttle()
       const response = await this.fetchImpl(`${API}/domains`, {
+        signal: AbortSignal.timeout(15000),
         headers: { Authorization: `Bearer ${this.options.apiKey}` },
       })
       if (!response.ok) {
@@ -176,13 +207,6 @@ function identity(recipient: MailRecipient): { contactId: string; emailHash: str
  */
 function personalize(body: string, recipient: MailRecipient): string {
   return body.replaceAll('{{first_name}}', recipient.firstName || 'there')
-}
-
-/** One-click unsubscribe has to identify who is leaving. */
-function unsubscribeFor(base: string, recipient: MailRecipient): string {
-  const url = new URL(base)
-  url.searchParams.set('c', recipient.emailHash)
-  return url.toString()
 }
 
 async function readError(response: { json: () => Promise<unknown>; status: number }): Promise<string> {

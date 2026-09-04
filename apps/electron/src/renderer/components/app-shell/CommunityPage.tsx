@@ -796,8 +796,13 @@ function EmailProposal({
   const [confirming, setConfirming] = React.useState(false)
 
   const edited = subject !== job.content.subject || body !== job.content.bodyMarkdown
-  const recipients = job.audience.estimatedRecipients
-  const blocker = !emailReady
+  const recipients = job.send?.failedCount ?? job.audience.estimatedRecipients
+  const immutable = ['approved', 'sending', 'failed'].includes(job.status)
+  const blocker = job.status === 'sending'
+    ? 'Delivery is in progress or was interrupted. Check Resend before sending again.'
+    : job.status === 'failed' && (job.send?.uncertainCount !== 0 || !job.send?.failedCount)
+      ? 'Delivery is uncertain. Check Resend before sending again.'
+    : !emailReady
     ? 'Finish the email setup above first.'
     : recipients === 0
       ? 'Nobody is in this audience.'
@@ -812,6 +817,7 @@ function EmailProposal({
       const result = await run() as { ok?: boolean; error?: string }
       if (result?.ok === false) {
         toast.error(String(result.error ?? 'That did not work.'))
+        onChanged()
         return false
       }
       toast.success(success)
@@ -843,6 +849,7 @@ function EmailProposal({
           <span>{recipients} {recipients === 1 ? 'fan' : 'fans'}</span>
           <span>·</span>
           <span>{job.audience.segmentIds.join(', ') || 'no segment'}</span>
+          {job.status === 'failed' ? <><span>·</span><span className="text-amber-200">{job.send?.sentCount ?? 0} sent · delivery needs attention</span></> : null}
           {job.audience.excludedSuppressed > 0 ? (
             <><span>·</span><span>{job.audience.excludedSuppressed} excluded</span></>
           ) : null}
@@ -854,6 +861,7 @@ function EmailProposal({
           <label className="block text-[10px] uppercase tracking-[0.12em] text-white/30">Subject</label>
           <input
             value={subject}
+            disabled={immutable}
             onChange={(event) => setSubject(event.target.value)}
             className="mt-1 h-8 w-full rounded-[8px] border border-white/[0.08] bg-transparent px-2.5 text-[12px] text-white/85 outline-none focus:border-white/20"
           />
@@ -861,6 +869,7 @@ function EmailProposal({
           <label className="mt-3 block text-[10px] uppercase tracking-[0.12em] text-white/30">Email</label>
           <textarea
             value={body}
+            disabled={immutable}
             onChange={(event) => setBody(event.target.value)}
             rows={8}
             className="mt-1 w-full resize-y rounded-[8px] border border-white/[0.08] bg-transparent px-2.5 py-2 text-[12px] leading-6 text-white/80 outline-none focus:border-white/20"
@@ -911,7 +920,7 @@ function EmailProposal({
                   className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-emerald-200/90 px-3 text-[12px] font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-40"
                 >
                   <Send className="h-3.5 w-3.5" />
-                  {busy === `send-${job.id}` ? 'Sending…' : 'Yes, send it'}
+                  {busy === `send-${job.id}` ? 'Sending…' : job.status === 'failed' ? 'Retry failed recipients' : 'Yes, send it'}
                 </button>
                 <button
                   type="button"
@@ -931,7 +940,7 @@ function EmailProposal({
                 className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-emerald-200/90 px-3 text-[12px] font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-40"
               >
                 <Send className="h-3.5 w-3.5" />
-                Send
+                {job.status === 'failed' ? 'Retry failed recipients' : 'Send'}
               </button>
             )}
 

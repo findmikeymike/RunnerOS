@@ -67,6 +67,7 @@ export type FetchLike = (input: string, init?: {
   method?: string
   headers?: Record<string, string>
   body?: unknown
+  signal?: AbortSignal
 }) => Promise<{
   ok: boolean
   status: number

@@ -9,6 +9,9 @@ import {
   readEmailJob,
   resolveSendAudience,
   writeDeliveries,
+  listCommunitySuppressions,
+  suppressCommunityContact,
+  communityEmailHash,
   type CommunityEmailJobRecord,
 } from '@craft-agent/shared/community'
 import { writeChangeReceipt, type ChangeReceiptOrigin } from '@craft-agent/shared/website'
@@ -102,9 +105,31 @@ export class CommunityMailService {
     const sender = await mailer.verifySender(provider.from)
     if (!sender.ok) return { ok: false, error: sender.error, failure: 'no-provider' }
 
+    try {
+      const suppressed = new Set(listCommunitySuppressions(workspaceRootPath).map(row => row.emailHash))
+      for (const email of await mailer.preflightUnsubscribe(provider.unsubscribeUrl)) {
+        if (!suppressed.has(communityEmailHash(email))) {
+          suppressCommunityContact(workspaceRootPath, machineId, email, 'unsubscribed')
+          suppressed.add(communityEmailHash(email))
+        }
+      }
+    } catch {
+      return { ok: false, error: 'Could not verify the unsubscribe page and fan opt-outs. Publish the updated website with Resend connected, then try again.', failure: 'no-provider' }
+    }
+
+    // Preflight awaits must not resurrect a job cancelled in another window.
+    const current = readEmailJob(workspaceRootPath, jobId)
+    if (!current || current.deletedAt || current.revision !== job.revision || current.status !== job.status) {
+      return { ok: false, error: 'This email changed or was cancelled. Refresh before sending.' }
+    }
+
     // Consent at send time is what counts, not consent when the draft was
     // written, so anyone who left in between is dropped here.
     const audience = resolveSendAudience(workspaceRootPath, job)
+    const previous = listDeliveries(workspaceRootPath, jobId)
+    if (previous.some(row => row.lastEvent === 'unknown')) return { ok: false, error: 'Delivery is uncertain. Check Resend before sending again.' }
+    const accepted = new Set(previous.filter(row => row.lastEvent !== 'failed').map(row => row.emailHash))
+    audience.members = audience.members.filter(member => !accepted.has(member.emailHash))
     if (audience.members.length === 0) {
       return {
         ok: false,
@@ -135,26 +160,20 @@ export class CommunityMailService {
         html: renderHtml(job, provider),
         text: renderText(job, provider),
         recipients,
-        idempotencyKey: job.idempotencyKey,
+        idempotencyKey: `${job.idempotencyKey}-${communityEmailHash(`${(started as CommunityEmailJobRecord).revision}:${recipients.map(row => row.emailHash).join(',')}`)}`,
         unsubscribeUrl: provider.unsubscribeUrl,
+        onBatch: (result) => {
+          writeDeliveries(workspaceRootPath, machineId, job.id, [
+            ...result.sent,
+            ...result.failed,
+          ])
+        },
       })
 
-      writeDeliveries(workspaceRootPath, machineId, job.id, [
-        ...result.sent.map(message => ({
-          contactId: message.contactId,
-          emailHash: message.emailHash,
-          providerMessageId: message.providerMessageId,
-        })),
-        ...result.failed.map(message => ({
-          contactId: message.contactId,
-          emailHash: message.emailHash,
-          error: message.error,
-        })),
-      ])
-
       const sentJob = markJobSent(workspaceRootPath, machineId, started as CommunityEmailJobRecord, {
-        sentCount: result.sent.length,
+        sentCount: accepted.size + result.sent.length,
         failedCount: result.failed.length,
+        uncertainCount: result.failed.filter(row => row.uncertain).length,
       })
 
       const receipt = writeChangeReceipt(workspaceRootPath, machineId, {
@@ -176,18 +195,19 @@ export class CommunityMailService {
       })
 
       return {
-        ok: result.sent.length > 0,
+        ok: result.failed.length === 0 && result.sent.length > 0,
         jobId: job.id,
         sent: result.sent.length,
         failed: result.failed.length,
         droppedSinceFreeze: audience.droppedSinceFreeze,
         receiptId: receipt.id,
         status: sentJob.status,
-        ...(result.sent.length === 0 ? { error: 'Every message was rejected by the provider.' } : {}),
+        ...(result.failed.length > 0 ? { error: `${result.sent.length} accepted; ${result.failed.length} failed or unconfirmed. Check delivery details before creating another email.` } : {}),
       }
     } catch (error) {
-      markJobFailed(workspaceRootPath, machineId, started as CommunityEmailJobRecord)
-      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+      const latest = readEmailJob(workspaceRootPath, jobId)
+      if (latest?.status === 'sending') markJobFailed(workspaceRootPath, machineId, latest)
+      return { ok: false, error: 'Delivery could not be fully recorded. Check Resend before sending again.' }
     }
   }
 

@@ -1021,6 +1021,14 @@ export class WebsiteService {
 
     try {
       const fetched = await source.fetchSince(manifest.capture.drainCursor, options.limit ?? 100)
+      const { listCommunitySuppressions, communityEmailHash, suppressCommunityContact } = await import('@craft-agent/shared/community')
+      const suppressed = new Set(listCommunitySuppressions(workspaceRootPath).map(row => row.emailHash))
+      for (const email of fetched.unsubscribedEmails ?? []) {
+        if (!suppressed.has(communityEmailHash(email))) {
+          suppressCommunityContact(workspaceRootPath, context.machineId, email, 'unsubscribed')
+          suppressed.add(communityEmailHash(email))
+        }
+      }
       const result = importCapturedSubscribers(
         workspaceRootPath,
         context.machineId,
@@ -1033,8 +1041,8 @@ export class WebsiteService {
         capture: {
           ...manifest.capture,
           lastDrainAt: at,
-          // Hold the old cursor when a page ends, so the next run resumes here.
-          drainCursor: fetched.cursor ?? manifest.capture.drainCursor,
+          // Re-scan after the final page to pick up changes to older contacts.
+          drainCursor: fetched.cursor,
         },
       })
 

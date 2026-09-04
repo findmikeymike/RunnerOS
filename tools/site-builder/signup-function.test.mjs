@@ -31,6 +31,7 @@ function env(overrides = {}) {
     },
     install(response = { ok: true, status: 200 }) {
       globalThis.fetch = async (url, init) => {
+        if (!init.body) return { ok: false, status: 404, json: async () => ({}) };
         calls.push({ url: String(url), init, body: JSON.parse(init.body) });
         return { ok: response.ok, status: response.status, json: async () => ({}) };
       };
@@ -41,6 +42,52 @@ function env(overrides = {}) {
 const JSON_ACCEPT = 'application/json';
 
 describe('capture function', () => {
+  test('unsubscribe form updates an existing provider contact', async () => {
+    const harness = env();
+    harness.install();
+    const page = await worker.fetch(new Request('https://lowtide.com/unsubscribe'), harness.env);
+    expect(await page.text()).toContain('method="post"');
+    expect(harness.calls).toHaveLength(0);
+    const response = await worker.fetch(new Request('https://lowtide.com/unsubscribe', {
+      method: 'POST', body: new URLSearchParams({ email: 'Fan@Example.com' }),
+    }), harness.env);
+    expect(response.status).toBe(200);
+    expect(harness.calls[0].init.method).toBe('PATCH');
+    expect(harness.calls[0].body.unsubscribed).toBe(true);
+    expect(harness.calls[0].url).toContain('fan%40example.com');
+  });
+
+  test('unsubscribe creates suppression for a locally imported fan absent upstream', async () => {
+    const calls = [];
+    globalThis.fetch = async (url, init) => {
+      calls.push({ url, init });
+      return { ok: init.method === 'POST', status: init.method === 'POST' ? 200 : 404 };
+    };
+    const response = await worker.fetch(new Request('https://lowtide.com/unsubscribe', {
+      method: 'POST', body: new URLSearchParams({ email: 'fan@example.com' }),
+    }), env().env);
+    expect(response.status).toBe(200);
+    expect(JSON.parse(calls[1].init.body)).toEqual({ email: 'fan@example.com', unsubscribed: true });
+  });
+
+  test('unsubscribe failure never claims success', async () => {
+    const harness = env(); harness.install({ ok: false, status: 429 });
+    const response = await worker.fetch(new Request('https://lowtide.com/unsubscribe', {
+      method: 'POST', body: new URLSearchParams({ email: 'fan@example.com' }),
+    }), harness.env);
+    expect(response.status).toBe(502);
+  });
+
+  test('a repeated signup never resets an existing provider opt-out', async () => {
+    let writes = 0;
+    globalThis.fetch = async (_url, init) => {
+      if (init.method) writes++;
+      return { ok: true, status: 200, json: async () => ({ unsubscribed: true }) };
+    };
+    const response = await worker.fetch(post({ email: 'fan@example.com' }, { accept: JSON_ACCEPT }), env().env);
+    expect(response.status).toBe(200);
+    expect(writes).toBe(0);
+  });
   test('a valid signup reaches Resend with form id and a hashed ip', async () => {
     const harness = env();
     harness.install();

@@ -10,6 +10,7 @@ import {
   resolveSendAudience,
   suppressCommunityContact,
   upsertCommunityContact,
+  updateEmailJobDraft,
 } from '@craft-agent/shared/community'
 import { latestChangeReceipt } from '@craft-agent/shared/website'
 import { CommunityMailService } from './CommunityMailService'
@@ -34,9 +35,11 @@ function fakeFetch(handlers: {
   let batchIndex = 0
   const fetchImpl: FetchLike = async (url, init) => {
     calls.push({ url, headers: init?.headers, body: init?.body })
+    if (url.includes('/unsubscribe')) return { ok: true, status: 200, text: async () => '', json: async () => ({ protocol: 'artist-os-unsubscribe-v1', ready: true }) }
+    if (url.includes('/contacts?')) return { ok: true, status: 200, text: async () => '', json: async () => ({ data: [], has_more: false }) }
     const next = url.includes('/domains')
       ? handlers.domains ?? { body: { data: [{ name: 'lowtide.com', status: 'verified' }] } }
-      : (handlers.batch ?? [])[batchIndex++] ?? { body: { data: [{ id: 'msg-1' }] } }
+      : (handlers.batch ?? [])[batchIndex++] ?? { body: { data: JSON.parse(String(init?.body)).map((_: unknown, i: number) => ({ id: `msg-${i}` })) } }
     return {
       ok: next.ok ?? true,
       status: next.status ?? 200,
@@ -177,7 +180,7 @@ describe('sending', () => {
     }
   })
 
-  test('every message carries one-click unsubscribe headers', async () => {
+  test('every message carries a working form link without falsely advertising one-click', async () => {
     const { root, jobId } = workspace()
     try {
       const { fetchImpl, calls } = fakeFetch({})
@@ -188,7 +191,7 @@ describe('sending', () => {
       const batch = calls.find(call => call.url.includes('/emails/batch'))!
       const messages = JSON.parse(String(batch.body)) as Array<{ headers: Record<string, string>; html: string }>
 
-      expect(messages[0]!.headers['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click')
+      expect(messages[0]!.headers['List-Unsubscribe-Post']).toBeUndefined()
       expect(messages[0]!.headers['List-Unsubscribe']).toContain('lowtide.com/unsubscribe')
       // The footer carries the postal address the law requires.
       expect(messages[0]!.html).toContain('PO Box 1, Denver CO')
@@ -329,6 +332,129 @@ describe('refusing to send when the setup is wrong', () => {
 })
 
 describe('batching', () => {
+  test('stale draft writes cannot overwrite a newer decision', () => {
+    const { root, jobId } = workspace()
+    try {
+      const stale = readEmailJob(root, jobId)!
+      const mail = service(fakeFetch({}).fetchImpl)
+      mail.approve(root, MACHINE, jobId)
+      expect(() => updateEmailJobDraft(root, MACHINE, stale, { subject: 'Changed after approval' })).toThrow('changed')
+      expect(readEmailJob(root, jobId)!.content.subject).toBe(stale.content.subject)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
+  test('a confirmed failed batch can retry without resending accepted recipients', async () => {
+    const { root, jobId } = workspace(Array.from({ length: 101 }, (_, i) => ({ email: `fan${i}@example.com` })))
+    try {
+      const fake = fakeFetch({ batch: [
+        { body: { data: Array.from({ length: 100 }, (_, i) => ({ id: `a${i}` })) } },
+        { ok: false, status: 429, body: { message: 'Rate limited' } },
+        { body: { data: [{ id: 'retry' }] } },
+      ] })
+      const mail = service(fake.fetchImpl)
+      mail.approve(root, MACHINE, jobId)
+      expect((await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)).ok).toBe(false)
+      expect(listDeliveries(root, jobId)).toHaveLength(101)
+      expect(mail.approve(root, MACHINE, jobId).ok).toBe(true)
+      expect((await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)).ok).toBe(true)
+      const batches = fake.calls.filter(call => call.url.includes('/emails/batch'))
+      expect(JSON.parse(String(batches[2]!.body))).toHaveLength(1)
+      expect(listDeliveries(root, jobId)).toHaveLength(101)
+      expect(readEmailJob(root, jobId)!.send?.sentCount).toBe(101)
+      expect(readEmailJob(root, jobId)!.status).toBe('sent')
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  }, 20000)
+
+  test('two simultaneous send calls admit only one broadcast', async () => {
+    const { root, jobId } = workspace()
+    try {
+      const fake = fakeFetch({})
+      const mail = service(fake.fetchImpl)
+      mail.approve(root, MACHINE, jobId)
+      const results = await Promise.all([
+        mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN),
+        mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN),
+      ])
+      expect(results.filter(row => row.ok)).toHaveLength(1)
+      expect(fake.calls.filter(call => call.url.includes('/emails/batch'))).toHaveLength(1)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+  test('cancel during preflight cannot be overwritten by send', async () => {
+    const { root, jobId } = workspace()
+    try {
+      const fake = fakeFetch({})
+      let release!: () => void
+      let entered!: () => void
+      const barrier = new Promise<void>(resolve => { release = resolve })
+      const ready = new Promise<void>(resolve => { entered = resolve })
+      const mail = service(async (url, init) => {
+        if (url.includes('/domains')) { entered(); await barrier }
+        return fake.fetchImpl(url, init)
+      })
+      mail.approve(root, MACHINE, jobId)
+      const pending = mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)
+      await ready
+      expect(mail.cancel(root, MACHINE, jobId).ok).toBe(true)
+      release()
+      expect((await pending).ok).toBe(false)
+      expect(readEmailJob(root, jobId)!.status).toBe('cancelled')
+      expect(fake.calls.filter(call => call.url.includes('/emails/batch'))).toHaveLength(0)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
+  test('preflight failure can be approved and retried without making a new job', async () => {
+    const { root, jobId } = workspace()
+    try {
+      const offline = service(async () => { throw new Error('offline') })
+      expect(offline.approve(root, MACHINE, jobId).ok).toBe(true)
+      expect((await offline.send(root, MACHINE, jobId, PROVIDER, ORIGIN)).ok).toBe(false)
+      const fake = fakeFetch({})
+      const online = service(fake.fetchImpl)
+      expect(online.approve(root, MACHINE, jobId).ok).toBe(true)
+      expect((await online.send(root, MACHINE, jobId, PROVIDER, ORIGIN)).ok).toBe(true)
+      expect(fake.calls.filter(call => call.url.includes('/emails/batch'))).toHaveLength(1)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
+  test('provider opt-outs are applied to existing local fans before sending', async () => {
+    const { root, jobId } = workspace()
+    try {
+      const fake = fakeFetch({})
+      const mail = service(async (url, init) => url.includes('/contacts?')
+        ? { ok: true, status: 200, text: async () => '', json: async () => ({ data: [{ id: 'c1', email: 'fan@example.com', unsubscribed: true }] }) }
+        : fake.fetchImpl(url, init))
+      mail.approve(root, MACHINE, jobId)
+      expect((await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)).ok).toBe(false)
+      expect(resolveSendAudience(root, readEmailJob(root, jobId)!).members).toHaveLength(0)
+      expect(fake.calls.filter(call => call.url.includes('/emails/batch'))).toHaveLength(0)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
+  test('malformed acceptance is uncertain, never fabricated as sent', async () => {
+    const { root, jobId } = workspace()
+    try {
+      const fake = fakeFetch({ batch: [{ body: {} }] })
+      const mail = service(fake.fetchImpl)
+      mail.approve(root, MACHINE, jobId)
+      expect((await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)).ok).toBe(false)
+      expect(listDeliveries(root, jobId)[0]!.error).toContain('uncertain')
+      expect(readEmailJob(root, jobId)!.status).toBe('failed')
+      expect(mail.approve(root, MACHINE, jobId).ok).toBe(false)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
+  test('unavailable unsubscribe page prevents sending', async () => {
+    const { root, jobId } = workspace()
+    try {
+      const fake = fakeFetch({})
+      const mail = service(async (url, init) => url.includes('/unsubscribe')
+        ? { ok: false, status: 404, text: async () => '', json: async () => ({}) }
+        : fake.fetchImpl(url, init))
+      mail.approve(root, MACHINE, jobId)
+      expect((await mail.send(root, MACHINE, jobId, PROVIDER, ORIGIN)).ok).toBe(false)
+      expect(fake.calls.filter(call => call.url.includes('/emails/batch'))).toHaveLength(0)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
   test('a large list is split, and each batch carries its own idempotency key', async () => {
     const fans = Array.from({ length: 150 }, (_, index) => ({ email: `fan${index}@example.com` }))
     const { root, jobId } = workspace(fans)
@@ -372,7 +498,7 @@ describe('batching', () => {
       expect(result.sent).toBe(100)
       expect(result.failed).toBe(50)
       // Partial success is still a send worth recording.
-      expect(readEmailJob(root, jobId)!.status).toBe('sent')
+      expect(readEmailJob(root, jobId)!.status).toBe('failed')
       expect(listDeliveries(root, jobId)).toHaveLength(150)
     } finally {
       rmSync(root, { recursive: true, force: true })

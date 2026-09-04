@@ -3,6 +3,7 @@ import type { FetchLike } from './adapters/types'
 
 export interface CaptureFetchResult {
   subscribers: CapturedSubscriber[]
+  unsubscribedEmails?: string[]
   /** Resume point for the next drain. Undefined means the end was reached. */
   cursor?: string
 }
@@ -90,6 +91,7 @@ export class ResendCaptureSource implements CaptureSource {
     const last = contacts.at(-1)
     return {
       subscribers,
+      unsubscribedEmails: contacts.filter(contact => contact.unsubscribed && contact.email).map(contact => contact.email!),
       cursor: payload?.has_more && last?.id ? last.id : undefined,
     }
   }

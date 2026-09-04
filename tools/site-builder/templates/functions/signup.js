@@ -88,6 +88,17 @@ async function handleSignup(request, env) {
     return reply(request, 503, { ok: false, error: 'Signup is not connected yet.' });
   }
 
+  // A repeated signup must never undo an existing opt-out.
+  try {
+    const existing = await fetch(`https://api.resend.com/contacts/${encodeURIComponent(email)}`, {
+      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}` }, signal: AbortSignal.timeout(15000),
+    });
+    if (existing.ok) return reply(request, 200, { ok: true }, env.SIGNUP_THANKS_PATH);
+    if (existing.status !== 404) throw new Error('provider');
+  } catch {
+    return reply(request, 502, { ok: false, error: 'Could not save that right now. Try again shortly.' });
+  }
+
   const formId = String(submission.formId ?? 'newsletter').slice(0, 60);
   const ipHash = await hashIp(request.headers.get('cf-connecting-ip'), env.SIGNUP_SALT ?? 'artist-os');
 
@@ -121,7 +132,33 @@ async function handleSignup(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === '/unsubscribe') return handleUnsubscribe(request, env);
     if (url.pathname === '/api/signup') return handleSignup(request, env);
     return env.ASSETS.fetch(request);
   },
 };
+
+async function handleUnsubscribe(request, env) {
+  const headers = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' };
+  if (request.method === 'GET') {
+    if (new URL(request.url).searchParams.has('health')) {
+      return Response.json({ protocol: 'artist-os-unsubscribe-v1', ready: Boolean(env.RESEND_API_KEY) });
+    }
+    return new Response('<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Unsubscribe</title><body><main><h1>Unsubscribe</h1><form method="post"><label>Email <input type="email" name="email" required autocomplete="email"></label><button type="submit">Unsubscribe</button></form></main></body></html>', { headers });
+  }
+  if (request.method !== 'POST') return new Response('Use POST.', { status: 405, headers });
+  if (!env.RESEND_API_KEY) return new Response('Not connected yet. Please try again later.', { status: 503, headers });
+  let email;
+  try { email = String((await readSubmission(request)).email ?? '').trim().toLowerCase(); } catch { /* Invalid form below. */ }
+  if (!email || !EMAIL.test(email)) return new Response('Enter a valid email address.', { status: 400, headers });
+  try {
+    const init = { method: 'PATCH', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify({ unsubscribed: true }), signal: AbortSignal.timeout(15000) };
+    let response = await fetch(`https://api.resend.com/contacts/${encodeURIComponent(email)}`, init);
+    // Imported local fans may not have a provider contact yet.
+    if (response.status === 404) response = await fetch('https://api.resend.com/contacts', { ...init, method: 'POST', body: JSON.stringify({ email, unsubscribed: true }) });
+    if (!response.ok) throw new Error('provider');
+    return new Response('<!doctype html><html lang="en"><title>Unsubscribed</title><h1>You are unsubscribed.</h1><p>You will not receive future fan emails.</p></html>', { headers });
+  } catch {
+    return new Response('Could not save this yet. Please try again shortly.', { status: 502, headers });
+  }
+}

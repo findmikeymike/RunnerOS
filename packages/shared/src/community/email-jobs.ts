@@ -9,7 +9,6 @@
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { getRecordCollectionDir, readSharedRecordBaseline, writeSharedRecord } from '../records/index.ts';
 import type { SharedEntityMeta } from '../records/types.ts';
 import type { CommunityEmailJobRecord, EmailJobStatus } from './types.ts';
@@ -24,7 +23,7 @@ export interface CommunityDeliveryRecord extends SharedEntityMeta {
   contactId: string;
   emailHash: string;
   providerMessageId?: string;
-  lastEvent?: 'sent' | 'delivered' | 'bounced' | 'complained' | 'opened' | 'clicked' | 'failed';
+  lastEvent?: 'sent' | 'delivered' | 'bounced' | 'complained' | 'opened' | 'clicked' | 'failed' | 'unknown';
   lastEventAt?: string;
   error?: string;
 }
@@ -144,6 +143,10 @@ function writeJob(
   // Updating an existing record requires its current baseline; without one
   // every write is reported as a conflict against itself.
   const baseline = readSharedRecordBaseline(workspaceRootPath, EMAIL_JOBS_COLLECTION, job.id);
+  const current = readEmailJob(workspaceRootPath, job.id);
+  if (!current || current.revision !== job.revision || current.lastWriteSha256 !== job.lastWriteSha256) {
+    throw new Error('This email changed. Refresh it before trying again.');
+  }
   const result = writeSharedRecord(workspaceRootPath, EMAIL_JOBS_COLLECTION, job.id, {
     ...stripMeta(job),
     ...patch,
@@ -177,6 +180,19 @@ export function approveEmailJob(
   job: CommunityEmailJobRecord,
   options: { now?: string } = {},
 ): CommunityEmailJobRecord | JobTransitionError {
+  if (job.status === 'failed') {
+    const deliveries = listDeliveries(workspaceRootPath, job.id);
+    if (job.deletedAt || job.send?.uncertainCount || !deliveries.length || deliveries.some(row => row.lastEvent === 'unknown')) {
+      return fail('wrong-status', 'Delivery is uncertain. Check Resend before sending again.');
+    }
+    if (!deliveries.some(row => row.lastEvent === 'failed')) return fail('already-sent', 'No confirmed failed recipients to retry.');
+    return writeJob(workspaceRootPath, machineId, job, {
+      status: 'approved',
+      approval: { approvedByMachineId: machineId, approvedAt: options.now ?? new Date().toISOString() },
+    }, options.now);
+  }
+  // A previous preflight failure has not transmitted anything.
+  if (job.status === 'approved' && !job.deletedAt) return job;
   const check = canApprove(job);
   if (!check.ok) return check;
   const at = options.now ?? new Date().toISOString();
@@ -233,16 +249,16 @@ export function markJobSent(
   workspaceRootPath: string,
   machineId: string,
   job: CommunityEmailJobRecord,
-  counts: { sentCount: number; failedCount: number; providerCampaignId?: string },
+  counts: { sentCount: number; failedCount: number; uncertainCount?: number; providerCampaignId?: string },
   options: { now?: string } = {},
 ): CommunityEmailJobRecord {
   const at = options.now ?? new Date().toISOString();
   return writeJob(workspaceRootPath, machineId, job, {
-    status: counts.sentCount > 0 ? 'sent' : 'failed',
+    status: counts.failedCount > 0 ? 'failed' : 'sent',
     transport: counts.providerCampaignId
       ? { ...job.transport, providerCampaignId: counts.providerCampaignId }
       : job.transport,
-    send: { ...job.send, completedAt: at, sentCount: counts.sentCount, failedCount: counts.failedCount },
+    send: { ...job.send, completedAt: at, sentCount: counts.sentCount, failedCount: counts.failedCount, uncertainCount: counts.uncertainCount ?? 0 },
   }, at);
 }
 
@@ -255,7 +271,7 @@ export function markJobFailed(
   const at = options.now ?? new Date().toISOString();
   return writeJob(workspaceRootPath, machineId, job, {
     status: 'failed',
-    send: { ...job.send, completedAt: at },
+    send: { ...job.send, completedAt: at, uncertainCount: 1 },
   }, at);
 }
 
@@ -293,23 +309,25 @@ export function writeDeliveries(
   workspaceRootPath: string,
   machineId: string,
   jobId: string,
-  rows: Array<{ contactId: string; emailHash: string; providerMessageId?: string; error?: string }>,
+  rows: Array<{ contactId: string; emailHash: string; providerMessageId?: string; error?: string; uncertain?: boolean }>,
   options: { now?: string } = {},
 ): number {
   const at = options.now ?? new Date().toISOString();
   let written = 0;
   for (const row of rows) {
-    const id = `delivery-${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+    const id = `delivery-${communityEmailHash(`${jobId}:${row.emailHash}`)}`;
+    const baseline = readSharedRecordBaseline(workspaceRootPath, DELIVERIES_COLLECTION, id);
     const result = writeSharedRecord(workspaceRootPath, DELIVERIES_COLLECTION, id, {
       jobId,
       contactId: row.contactId,
       emailHash: row.emailHash,
       providerMessageId: row.providerMessageId,
-      lastEvent: row.error ? 'failed' : 'sent',
+      lastEvent: row.uncertain ? 'unknown' : row.error ? 'failed' : 'sent',
       lastEventAt: at,
       error: row.error,
-    }, { machineId, now: at });
-    if (result.status !== 'conflict') written += 1;
+    }, { machineId, now: at, baseline: baseline ?? undefined });
+    if (result.status === 'conflict') throw new Error('Could not save email delivery evidence. Check Resend before retrying.');
+    written += 1;
   }
   return written;
 }

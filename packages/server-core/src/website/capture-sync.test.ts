@@ -12,7 +12,7 @@ import {
   type CapturedSubscriber,
   type WebsiteManifest,
 } from '@craft-agent/shared/website'
-import { listCommunityContacts, suppressCommunityContact, upsertCommunityContact } from '@craft-agent/shared/community'
+import { listCommunityContacts, listCommunitySuppressions, suppressCommunityContact, upsertCommunityContact } from '@craft-agent/shared/community'
 import { WebsiteService } from './WebsiteService'
 import { ResendCaptureSource, type CaptureFetchResult, type CaptureSource } from './capture-sources'
 import type { FetchLike } from './adapters/types'
@@ -49,6 +49,19 @@ function signup(overrides: Partial<CapturedSubscriber> = {}): CapturedSubscriber
 const CONTEXT = { machineId: 'machine-1', origin: { kind: 'automation' as const, automationId: 'drain' } }
 
 describe('capture drain', () => {
+  test('upstream opt-outs suppress existing fans and the final page resets the cursor', async () => {
+    const root = workspace({ drainCursor: 'old-page' })
+    const service = new WebsiteService()
+    try {
+      upsertCommunityContact(root, 'machine-1', { email: 'gone@example.com', consentStatus: 'opted-in' })
+      const source = fakeSource([{ subscribers: [], unsubscribedEmails: ['gone@example.com'] }])
+      expect((await service.syncCapture(root, CONTEXT, { source })).ok).toBe(true)
+      expect(listCommunitySuppressions(root)).toHaveLength(1)
+      expect(loadWebsiteManifest(root)!.capture.drainCursor).toBeUndefined()
+      expect((await service.syncCapture(root, CONTEXT, { source })).ok).toBe(true)
+      expect(listCommunitySuppressions(root)).toHaveLength(1)
+    } finally { service.dispose(); rmSync(root, { recursive: true, force: true }) }
+  })
   test('signups land in Community and produce one receipt with counts', async () => {
     const root = workspace()
     try {
