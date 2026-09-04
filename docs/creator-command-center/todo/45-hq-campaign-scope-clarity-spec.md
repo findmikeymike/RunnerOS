@@ -7,7 +7,11 @@ source_of_truth: true
 
 # HQ / Campaign Scope Clarity — One Rule, Two Altitudes, Shared Workers
 
-Revision 1. Written from a design review of the HQ ↔ Campaign overlap, grounded
+Revision 2. Clarifies job intent, context precedence, early ownership visibility,
+reliable draft transfers, and timestamp-based collisions. Scope selection stays
+focused on current work; future-campaign planning is not added.
+
+Original design review of the HQ ↔ Campaign overlap was grounded
 in the tree at `f60348976`. Every "already holds" claim below was verified by
 reading the cited symbol, not the spec that describes it.
 
@@ -81,8 +85,12 @@ in this spec follows from it, and the in-app guide (spec 27) should state it
 verbatim.
 
 > **HQ is the artist. A Campaign is a release.
-> If the work is about a specific release, it lives in that campaign.
+> If the work serves one specific release's goals, it lives in that campaign.
 > Otherwise it lives in HQ.**
+
+HQ manages and grows the artist's ongoing career. A campaign delivers its
+release and its goals. A worker brings the same capabilities to either place;
+the assigned job supplies the objective and context.
 
 Corollaries, stated so implementers do not re-derive them differently:
 
@@ -98,6 +106,15 @@ Corollaries, stated so implementers do not re-derive them differently:
 - **Receipts flow back to the asset.** Whichever scope ran the work, the
   durable receipt lands in the asset's history (existing behavior for
   outputs/finals and social approvals; extend the framing, not the code).
+- **A release mention does not determine ownership.** A newsletter covering
+  two releases, a storewide promotion, or ongoing fan replies remains HQ-owned
+  when its purpose is career-wide. Reference relevant campaigns in the job's
+  brief using existing links; do not duplicate the order or add joint ownership.
+  Separate campaign jobs are appropriate only for genuinely separate deliverables.
+- **Current work is the default.** Scope suggestions and the compact picker
+  cover HQ and campaigns active now. This spec adds no future-campaign selector,
+  advance-planning mode, or new scheduling controls. Existing scheduling within
+  a current campaign remains available.
 
 ## 4. Principles
 
@@ -106,7 +123,8 @@ Corollaries, stated so implementers do not re-derive them differently:
 2. **Separate writes, one read.** HQ events, campaign calendars, and the
    scheduled-work ledger remain separate stores. The timeline remains the only
    merge. This spec adds *consumers* and *derivations* of the timeline; it adds
-   no store and no second merge.
+   no new calendar store and no second timeline merge. Transfer recovery metadata
+   (§8) belongs to the existing work persistence mechanism.
 3. **Show before you warn, warn before you block.** Slice A makes the overlap
    visible. Slice B names it. Nothing in this spec prevents the artist from
    scheduling two posts to one channel on one day — that is sometimes exactly
@@ -121,8 +139,9 @@ Corollaries, stated so implementers do not re-derive them differently:
 
 ## 5. Ownership of shared surfaces
 
-This table is the product decision the fuzziness was really about. It should
-be reflected in the guide and in each shared agent's prompt (Slice C).
+This table is the product decision the fuzziness was really about. Reflect it
+in the guide and shared-worker context in Slice 0; proactive suggestions remain
+optional in Slice C.
 
 | Surface | Canonical home | A campaign may… | Never |
 |---|---|---|---|
@@ -134,6 +153,45 @@ be reflected in the guide and in each shared agent's prompt (Slice C).
 
 "Canonical home" means where the artist goes to *manage* the thing. It does
 not restrict where *work against* the thing can be queued.
+
+### 5.1 Shared-worker context contract
+
+Apply this contract to shared workers in both prompt assembly paths, including
+`agent-prompt/compose.ts` and `SessionManager.ts`. These are implementation
+requirements, not additional claims about what already holds.
+
+- Every job carries one owner and a clear objective. Shared workers receive
+  that scope explicitly, including campaign identity when applicable.
+- HQ owns durable artist identity, baseline voice, account configuration, fan
+  suppressions, and career-wide strategy. Resolve authorized shared context from
+  HQ; do not maintain independent campaign copies as competing truth.
+- Campaign work adds its brief, audience, goals, dates, and approved assets.
+  Campaign-specific tone or messaging refines this job's execution locally;
+  it cannot silently overwrite HQ identity or strategy. Material contradictions
+  must be surfaced before the affected action, not resolved by prompt order.
+- The explicit job brief selects the deliverable within those boundaries.
+  Neither a campaign brief nor a worker prompt overrides permissions,
+  suppressions, or approval requirements. Missing required context is surfaced;
+  another campaign's context must never be substituted.
+- Keep the injected block compact: scope, objective, relevant shared facts,
+  and campaign summary. Retrieve detailed documents on demand through existing
+  authorized tools. Campaign results remain campaign evidence until explicitly
+  approved for career-wide reuse.
+
+### 5.2 Slice 0 — Make ownership legible first
+
+Ship this before or with Slice A, without waiting for collision feedback:
+
+- The guide's "Where do I do this?" entry states §3 and summarizes §5,
+  including mixed-release and ongoing HQ work examples.
+- Show a compact `For: Artist HQ` or `For: <campaign name>` label in the work
+  composer and job details, including immediate work. Default to the current
+  workspace; do not add a mandatory scope question to every task.
+- Apply §5.1 to shared-worker context. This is baseline execution context,
+  not an instruction to recite the ownership rule in every conversation.
+
+The label is read-only initially. An optional transfer action is Slice C1;
+proactive agent suggestions are Slice C2. Neither delays these baseline fixes.
 
 ## 6. Slice A — Campaign calendar gets the cross-scope layer
 
@@ -186,7 +244,7 @@ full timeline. The campaign's *own* calendar rendering does not change.
 owners, are named as a collision — on the timeline, in HQ's attention list,
 and inline in the composer. Never blocked.
 
-**Data.** `TimelineEntry` gains one optional field, populated only for
+**Data.** `TimelineEntry` gains two optional fields, populated for
 `scheduled-work` origins whose execution is `social-publish`:
 
 ```ts
@@ -194,6 +252,8 @@ export interface TimelineEntry {
   // ...existing fields
   /** Present for social-publish orders. Stable channel identity. */
   channel?: { platform: string; profileId: string };
+  /** Absolute execution instant copied from order.startAt; never display time. */
+  scheduledAt?: string;
 }
 ```
 
@@ -213,7 +273,7 @@ export interface TimelineCollision {
   /** Exactly two entry ids, in chronological order. */
   entryIds: [string, string];
   owners: [TimelineOrigin, TimelineOrigin];
-  /** Minutes between the two sortKeys. */
+  /** Elapsed minutes between the two absolute scheduledAt timestamps. */
   gapMinutes: number;
 }
 ```
@@ -225,15 +285,23 @@ Rule — a pair `(a, b)` is a collision iff **all** of:
    Two posts from the same owner close together are treated as a deliberate
    thread or sequence and are not flagged;
 3. neither entry's `status` is `'done'` or `'canceled'`;
-4. `|sortKey(a) − sortKey(b)| ≤ CHANNEL_COLLISION_WINDOW_MINUTES`.
+4. both have valid absolute `scheduledAt` timestamps, and
+   `Math.abs(Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt)) / 60000
+   <= CHANNEL_COLLISION_WINDOW_MINUTES`.
 
 `CHANNEL_COLLISION_WINDOW_MINUTES` is a named constant in `timeline.ts`,
 initial value **240** (4 h). It is a product knob, not a user setting, until
 real use says otherwise (§11).
 
-Pairwise is fine: entries are already sorted, so a single forward scan per
-channel bounded by the window is O(n) in practice. Do not pre-bucket by day —
+Use `order.startAt` for elapsed-time comparisons and chronological pair ordering.
+The existing `sortKey` is local display time: never parse it to calculate a gap.
+The draft candidate uses its own `startAt` through the same conversion.
+Sort collision inputs per channel by absolute instant and scan within the window;
+cost is O(n log n + k), where k is the number of matching pairs. Do not pre-bucket by day —
 a 23:30 / 00:30 pair across midnight is exactly the case a day bucket misses.
+For composer checks, collect through at least ±240 minutes around the candidate,
+even across the visible calendar window boundary. Render only the requested
+calendar window; collision lookup must not lose its neighboring entries.
 
 **Surfaces.**
 
@@ -263,8 +331,9 @@ either order's status.
 **Goal.** When the artist is clearly filing work in the wrong scope, the
 system says so once and offers the move. It never moves work on its own.
 
-Ship this last, after A and B have been observed (§11). Visibility may remove
-most of the confusion on its own, and an over-eager redirect is worse than none.
+Evaluate these optional handoff conveniences after Slice 0, A, and B have been
+observed (§11). The ownership label, guide, and context contract already ship
+in Slice 0. An over-eager redirect should not become routine conversation noise.
 
 **C1 — Composer "File in…".** The composer gains an owner affordance that
 defaults to the current space. For a **draft** (`status: 'draft'`, no
@@ -275,9 +344,28 @@ by never mutating `owner` in place. Orders past draft do not move — an
 approval is bound to the exact order it approved, and a moved order is a
 different order.
 
-The choice list is: `HQ`, plus each campaign with an active
-`TimelineCampaignWindow` (start ≤ today ≤ finish, or no finish yet). Campaigns
-outside their window are not offered; if the artist needs one, they go there.
+The choice list is `HQ`, plus non-archived campaigns active today in the artist's
+configured timezone: start ≤ today and (no finish or today ≤ finish). A future
+start with no finish is still future and is not eligible. Missing dates do not
+automatically make another campaign active; preserve the current owner label
+without guessing. Campaigns outside their window are not offered. Existing
+direct navigation remains unchanged; do not add future-campaign planning here.
+
+**Reliable transfer contract.** Re-filing is one server-side operation, not two
+independent renderer writes. Before changing anything, validate the destination
+and the whole draft: worker/workflow availability, authorized asset references,
+campaign Release Kit requirements, and matching calendar links. An HQ asset
+must not be silently promoted to satisfy campaign requirements.
+
+Use a stable transfer id and source revision with the existing persistence and
+locking mechanism. Recheck draft status, absence of approvals/runs, and revision
+under the lock. Persist source/destination linkage so retries return the same
+destination draft. Until transfer completes, neither side may be approved or
+scheduled; then cancel the source and make the destination editable. On crash,
+resume or roll back deterministically from durable transfer metadata. A failed
+validation leaves the source untouched. Never report success with two actionable
+copies, lost work, or a mismatched calendar link. Transfer metadata is not a new
+work scope or calendar store.
 
 **C2 — Shared-agent prompt rule.** The four shared-surface personas —
 `social-publisher`, `comms-agent`, `shopify-agent`, `print-agent` — get a
@@ -285,11 +373,16 @@ short, identical rule appended to their system prompt, written in the artist's
 language per house style, roughly:
 
 > You can be asked to do this from HQ or from a release campaign. If you're in
-> HQ and the request is clearly about one specific release that has its own
-> campaign, say so in one line and offer to file it there instead — then do
+> HQ and the job serves one specific release with a currently active campaign,
+> say so in one line and offer to file it there instead — then do
 > what the artist says. If you're in a campaign and the request is evergreen
 > (not about this release), you can mention it belongs in HQ, but don't hold
 > the work up over it. Never move anything yourself.
+
+Apply the mixed-work rule in §3: merely mentioning a release does not trigger
+a suggestion. Suggest once when relevant, never repeatedly after the artist
+chooses. Reuse Slice 0's scope/context block; only the compact list of other
+currently active campaigns is additional context for these suggestions.
 
 The agent needs two facts to apply it: which scope it is running in, and the
 labels + release dates of active campaigns. The first is already in the
@@ -304,8 +397,8 @@ side's owner personas where one exists (e.g. `social-publisher` ↔
 `release-manager`), as the declarative counterpart to the prompt rule. Hint
 only.
 
-**C3 — Guide.** Spec 27's in-app guide gets a short "Where do I do this?"
-entry that states §3's rule and reproduces the §5 table.
+**Guide already ships in Slice 0.** If C1 ships, add its transfer affordance to
+the existing entry. Do not defer the ownership explanation until then.
 
 ## 9. Non-goals
 
@@ -313,6 +406,8 @@ entry that states §3's rule and reproduces the §5 table.
 - A separate calendar system for either side. The stores are already
   separate; the read is already unified.
 - Making any shared agent HQ-only or campaign-only.
+- Future-campaign planning, new advance-scheduling controls, or a picker of
+  future campaigns. The default workflow is doing current work.
 - Auto-resolving collisions (re-timing one post). The artist decides.
 - Detecting collisions across *different* profiles on the same platform. Two
   accounts posting at once is not a collision.
@@ -322,6 +417,19 @@ entry that states §3's rule and reproduces the §5 table.
 
 Tests live beside the existing ones; do not create a new test tree.
 
+- Existing prompt composition and shared-worker tests
+  - Both prompt paths carry the same scope/context contract; campaign direction
+    stays local, required missing context is surfaced, and another campaign's
+    private context is not injected.
+  - Mixed-release newsletters and ongoing fan replies stay HQ-owned; a single
+    release deliverable is campaign-owned. A release mention alone does not
+    trigger C2, and declining a suggestion does not trigger repeated prompts.
+- Existing composer tests
+  - Owner label reflects the actual job for immediate and scheduled work.
+  - If C1 ships: current campaigns are offered; future starts (including with
+    no finish), finished, and archived campaigns are excluded. Missing dates
+    do not silently qualify a different campaign; timezone boundaries are covered.
+
 - `packages/shared/src/hq-state/__tests__/timeline.test.ts`
   - `channel` populated for social-publish orders, absent otherwise, absent
     when `profileId` missing.
@@ -329,6 +437,10 @@ Tests live beside the existing ones; do not create a new test tree.
     window → not; cross-owner outside window → not; done/canceled → not;
     midnight-straddling pair → flagged; collision still reported when `limit`
     would have cut one entry.
+  - Elapsed gaps remain correct across daylight-saving changes, repeated local
+    clock times, and different timestamp offsets; invalid timestamps do not
+    yield a fabricated collision. Candidate neighbors outside the visible
+    calendar window are included in the check.
   - `findChannelCollisions` returns the same result for a candidate as the
     full build does once the candidate is an entry.
 - `packages/shared/src/hq-state/__tests__/composer.test.ts`
@@ -341,7 +453,14 @@ Tests live beside the existing ones; do not create a new test tree.
   - C1 re-file produces a valid order under the new scope (passes
     `isScheduledWorkOrder`), cancels the original, and refuses for any
     non-draft status.
+  - Destination validation failure preserves the source; campaign asset rules
+    cannot be bypassed. Retry/double-submit creates one destination; concurrent
+    approval or edits prevent a stale transfer. Inject failure between writes
+    and recover without two actionable copies or lost work/calendar links.
 - Manual, in the app with `CRAFT_PRODUCT_VARIANT=artist-os`:
+  - From HQ and a current campaign, run the same shared worker and confirm the
+    visible job owner and supplied objective match. Explain where a two-release
+    newsletter and ongoing fan replies belong using the guide alone.
   - Queue an HQ post to a profile at 10:00; open a campaign, draft a post to
     the same profile at 12:00 → layer shows the HQ post, composer shows the
     collision notice, HQ Needs attention lists it. Schedule anyway → both
@@ -360,9 +479,10 @@ must not leak across variants.
 2. **Should same-owner collisions ever flag?** Current answer: no. Revisit if
    HQ automations (Weekly Spotify Snapshot, YouTube Intel Pulse) start queuing
    social work that collides with the artist's own HQ posts.
-3. **Ship C at all?** Decide after A and B have been in the artist's hands for
-   a couple of campaigns. If the confusion is gone, C2 in particular should
-   stay unshipped — a rule an agent recites every session costs attention.
+3. **Ship optional C1/C2?** Decide after Slice 0, A, and B have been in the
+   artist's hands for a couple of campaigns. The ownership label, guide, and
+   context contract are required regardless. If confusion is gone, leave
+   proactive C2 suggestions unshipped; avoid adding conversational noise.
 4. **Slice A transport.** RPC is recommended; if the renderer already has
    every campaign's stores loaded for another reason by the time this is
    built, the renderer-side builder is acceptable.
@@ -370,12 +490,12 @@ must not leak across variants.
 ## 12. Relationship to other specs
 
 - **20 Artist Timeline** — this spec is a consumer and a small extension
-  (`channel`, `collisions`). Its four principles are inherited unchanged.
+  (`channel`, `scheduledAt`, `collisions`). Its four principles are inherited unchanged.
 - **13 Scheduled Work Composer** — C1 lives here; the order validity guard is
   the reason moves are create-and-cancel.
 - **25 Release Kit Asset Use And Social Scheduling** — `releaseKitOnly` for
   campaign social work is the existing enforcement of §5's "use release-kit
   assets only."
-- **27 In-App User Guide** — C3.
+- **27 In-App User Guide** — Slice 0; optional C1 help added only if shipped.
 - **09 / 14 State Of Play** — Slice B's attention item flows through the
   existing `buildAttention` path.
