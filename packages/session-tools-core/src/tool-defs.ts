@@ -79,6 +79,10 @@ import {
   handleBuildWebsite,
   handlePreviewWebsite,
   handleAuditWebsite,
+  handleDeployWebsite,
+  handleRollbackWebsite,
+  handleWebsiteHistory,
+  handleWebsiteStatus,
 } from './handlers/website.ts';
 import {
   handleSaveMemory,
@@ -872,6 +876,29 @@ export const PreviewWebsiteSchema = z.object({
 });
 
 export const AuditWebsiteSchema = z.object({}).strict();
+
+export const DeployWebsiteSchema = z.object({
+  target: z.enum(['preview', 'production']).optional()
+    .describe('Where to publish. Defaults to "preview", which is free and reaches nobody.'),
+  summary: z.string().min(1).max(200).optional()
+    .describe('One plain line for the receipt, e.g. "Added the Denver show".'),
+  why: z.array(z.string().max(200)).max(10).optional()
+    .describe('The signals that prompted this change.'),
+  changes: z.array(z.string().max(200)).max(30).optional()
+    .describe('What actually changed, one line each.'),
+});
+
+export const RollbackWebsiteSchema = z.object({
+  deployId: z.string().min(1).max(200).optional()
+    .describe('Deploy to restore. Defaults to the one that was live before the current deploy.'),
+  reason: z.string().max(300).optional().describe('Why this is being rolled back.'),
+});
+
+export const WebsiteHistorySchema = z.object({
+  limit: z.number().int().min(1).max(50).optional().describe('How many entries to return. Defaults to 20.'),
+});
+
+export const WebsiteStatusSchema = z.object({}).strict();
 
 export const GetArtistContextSchema = z.object({
   topic: z.enum(['profile', 'branding', 'voice', 'month-plan', 'growth', 'intel', 'calendar', 'timeline', 'network', 'community', 'vault']),
@@ -1762,6 +1789,14 @@ Use only after the user explicitly confirms the operation. Read the current coor
 
   website_preview: `Build (unless \`build: false\`) and serve the site locally, then publish it as a web Output so it renders in the Visual sidecar. Use this to show the artist a change before anything goes live. Returns the preview URL and the Output id.`,
 
+  website_deploy: `Publish the current build. \`target: "preview"\` (the default) is free, reaches nobody, and is how you show the artist a change — use it freely. \`target: "production"\` puts the change in front of the public and requires the artist's approval on this exact build; if they have not approved it, this returns \`needsApproval\` and publishes nothing, which is the expected outcome, not an error to work around. Never claim a site is live until this returns a URL.`,
+
+  website_rollback: `Restore a previous production deploy by re-publishing its retained build. Use this when a published change was wrong. Rolling back always turns off trusted mode, so later content changes go back to asking the artist first.`,
+
+  website_history: `List recent deploys and change receipts: what shipped, when, who triggered it, which approval it had, and whether it can still be rolled back to. Read-only.`,
+
+  website_status: `Report what is actually live: mode, host, URLs, domain state, the build behind the live deploy, publish policy, and whether trusted mode is available. Checks the host, so it reflects reality rather than the local manifest alone. Read-only.`,
+
   website_seo_audit: `Audit the local built site against the baseline: titles, descriptions, one h1 per page, canonical links, Open Graph tags, image alt text and size, internal links, structured data, secret-pattern leaks, and page weight. Live-URL audit arrives with existing-site support in a later slice. Returns a score out of 100 and a fix for each finding. Read-only.`,
 
   search_artist_network: `Search the global Artist Network by name, email, role, category, relationship notes, tags, or what someone can help with. Read-only and available to every agent. Use a specific query tied to the current song, release, campaign, opportunity, or person; results are capped and the full contact list is never injected. A match or saved email is not permission to contact anyone.`,
@@ -2137,6 +2172,10 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'website_create', description: TOOL_DESCRIPTIONS.website_create, inputSchema: CreateWebsiteSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateWebsite },
   { name: 'website_set_content', description: TOOL_DESCRIPTIONS.website_set_content, inputSchema: SetWebsiteContentSchema, executionMode: 'registry', safeMode: 'block', handler: handleSetWebsiteContent },
   { name: 'website_build', description: TOOL_DESCRIPTIONS.website_build, inputSchema: BuildWebsiteSchema, executionMode: 'registry', safeMode: 'block', handler: handleBuildWebsite },
+  { name: 'website_history', description: TOOL_DESCRIPTIONS.website_history, inputSchema: WebsiteHistorySchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleWebsiteHistory },
+  { name: 'website_status', description: TOOL_DESCRIPTIONS.website_status, inputSchema: WebsiteStatusSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleWebsiteStatus },
+  { name: 'website_deploy', description: TOOL_DESCRIPTIONS.website_deploy, inputSchema: DeployWebsiteSchema, executionMode: 'registry', safeMode: 'block', handler: handleDeployWebsite },
+  { name: 'website_rollback', description: TOOL_DESCRIPTIONS.website_rollback, inputSchema: RollbackWebsiteSchema, executionMode: 'registry', safeMode: 'block', handler: handleRollbackWebsite },
   { name: 'create_workflow', description: TOOL_DESCRIPTIONS.create_workflow, inputSchema: CreateWorkflowSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateWorkflow },
   { name: 'save_memory', description: TOOL_DESCRIPTIONS.save_memory, inputSchema: SaveMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleSaveMemory },
   { name: 'update_memory', description: TOOL_DESCRIPTIONS.update_memory, inputSchema: UpdateMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdateMemory },

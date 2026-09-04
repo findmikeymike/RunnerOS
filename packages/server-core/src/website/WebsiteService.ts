@@ -4,10 +4,15 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSyn
 import { extname, join, resolve, sep } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import sharp from 'sharp'
+import { getCredentialManager } from '@craft-agent/shared/credentials'
+import { CloudflareWorkersAdapter } from './adapters/cloudflare'
+import type { SiteDeployAdapter } from './adapters/types'
+import { publishSite, recentReceipts, rollbackSite, siteHistory, type PublishDeps } from './publish'
 import {
   applySiteContentOperations,
   computeDesignHash,
   defaultSiteContent,
+  isTrustedModeEligible,
   loadSiteContent,
   loadWebsiteManifest,
   saveSiteContent,
@@ -16,6 +21,10 @@ import {
   websiteDistDir,
   websiteExists,
   websiteRoot,
+  type ApprovalBinding,
+  type ChangeClass,
+  type ChangeReceiptOrigin,
+  type DeployTarget,
   type SiteContentOperation,
   type WebsiteAssetKind,
   type WebsiteAssetRecord,
@@ -757,6 +766,193 @@ export class WebsiteService {
         resolvePromise(entry)
       })
     })
+  }
+
+  // -------------------------------------------------------------------------
+  // Publishing (spec 41 Slice A)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Build the configured deploy adapter from stored credentials.
+   *
+   * Credentials live in the encrypted user-secret store, never in the
+   * website folder, and are read at call time so a rotated token takes
+   * effect without a restart.
+   */
+  private async resolveAdapter(manifest: WebsiteManifest): Promise<SiteDeployAdapter> {
+    const adapterId = manifest.adapter
+    if (!adapterId) {
+      throw new Error('No host is connected yet. Connect one in Settings before publishing.')
+    }
+    if (adapterId !== 'cloudflare-workers') {
+      throw new Error(`The ${adapterId} adapter is not available yet.`)
+    }
+
+    const credentials = getCredentialManager()
+    const [token, accountId] = await Promise.all([
+      credentials.getUserSecret('CLOUDFLARE_API_TOKEN'),
+      credentials.getUserSecret('CLOUDFLARE_ACCOUNT_ID'),
+    ])
+    if (!token) throw new Error('Save CLOUDFLARE_API_TOKEN in Settings before publishing.')
+
+    const resolvedAccount = manifest.provider?.accountId ?? accountId
+    if (!resolvedAccount) throw new Error('Save CLOUDFLARE_ACCOUNT_ID in Settings before publishing.')
+
+    const scriptName = manifest.provider?.siteId
+    if (!scriptName) throw new Error('This site has no host project yet. Connect a host first.')
+
+    return new CloudflareWorkersAdapter({
+      token,
+      accountId: resolvedAccount,
+      scriptName,
+      zoneId: manifest.domain?.state === 'active' ? manifest.provider?.kvNamespaceId : undefined,
+    })
+  }
+
+  private publishDeps(machineId: string): PublishDeps {
+    return { resolveAdapter: manifest => this.resolveAdapter(manifest), machineId }
+  }
+
+  /**
+   * Publish the current build.
+   *
+   * Preview is free and is how a change gets seen. Production is the one
+   * place a human decision is required, and this refuses rather than asks:
+   * the approval is recorded by the UI, not by the agent calling this.
+   */
+  async deploy(
+    workspaceRootPath: string,
+    input: {
+      target?: DeployTarget
+      buildHash?: string
+      changeClass?: ChangeClass
+      summary?: string
+      why?: string[]
+      changes?: string[]
+      previewOutputId?: string
+    },
+    context: { machineId: string; origin: ChangeReceiptOrigin; approval?: ApprovalBinding },
+  ): Promise<WebsiteToolResult> {
+    const missing = this.requireSite(workspaceRootPath)
+    if (missing) return missing
+
+    const manifest = loadWebsiteManifest(workspaceRootPath)
+    if (!manifest) return { ok: false, error: 'No website in this workspace yet.' }
+
+    const buildHash = input.buildHash ?? manifest.lastBuild?.hash
+    if (!buildHash) return { ok: false, error: 'Build the site before publishing.' }
+
+    try {
+      const result = await publishSite(workspaceRootPath, {
+        target: input.target ?? 'preview',
+        buildHash,
+        changeClass: input.changeClass ?? 'content-only',
+        approval: context.approval,
+        origin: context.origin,
+        summary: input.summary ?? 'Published the site.',
+        why: input.why,
+        changes: input.changes,
+        previewOutputId: input.previewOutputId,
+      }, this.publishDeps(context.machineId))
+
+      if (!result.ok) {
+        return {
+          ok: false,
+          error: result.error,
+          ...(result.needsApproval ? { needsApproval: true, failure: result.failure } : { failure: result.failure }),
+        }
+      }
+      return {
+        ok: true,
+        deployId: result.deployId,
+        url: result.url,
+        target: result.target,
+        approvalTier: result.tier,
+        receiptId: result.receiptId,
+        ...(result.trustedModeOffered ? { trustedModeOffered: true } : {}),
+      }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  async rollback(
+    workspaceRootPath: string,
+    input: { deployId?: string; reason?: string },
+    context: { machineId: string; origin: ChangeReceiptOrigin },
+  ): Promise<WebsiteToolResult> {
+    const missing = this.requireSite(workspaceRootPath)
+    if (missing) return missing
+    try {
+      const result = await rollbackSite(
+        workspaceRootPath,
+        { deployId: input.deployId, reason: input.reason, origin: context.origin },
+        this.publishDeps(context.machineId),
+      )
+      return result.ok
+        ? {
+          ok: true,
+          deployId: result.deployId,
+          url: result.url,
+          receiptId: result.receiptId,
+          trustedModeRevoked: result.trustedModeRevoked,
+        }
+        : { ok: false, error: result.error }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  async history(workspaceRootPath: string, input: { limit?: number } = {}): Promise<WebsiteToolResult> {
+    const missing = this.requireSite(workspaceRootPath)
+    if (missing) return missing
+    const limit = Math.min(Math.max(input.limit ?? 20, 1), 50)
+    return {
+      ok: true,
+      deploys: siteHistory(workspaceRootPath, limit),
+      receipts: recentReceipts(workspaceRootPath, limit).map(receipt => ({
+        id: receipt.id,
+        kind: receipt.kind,
+        at: receipt.at,
+        summary: receipt.summary,
+        approvalTier: receipt.approval.tier,
+        rollback: receipt.rollback,
+      })),
+    }
+  }
+
+  /** Manifest state plus a live check of what is actually being served. */
+  async status(workspaceRootPath: string): Promise<WebsiteToolResult> {
+    const missing = this.requireSite(workspaceRootPath)
+    if (missing) return missing
+
+    const manifest = loadWebsiteManifest(workspaceRootPath)
+    if (!manifest) return { ok: false, error: 'No website in this workspace yet.' }
+
+    const live = manifest.history.find(entry => entry.target === 'production' && entry.status === 'live')
+    const base = {
+      ok: true as const,
+      mode: manifest.mode,
+      adapter: manifest.adapter,
+      urls: manifest.urls,
+      domain: manifest.domain,
+      lastBuild: manifest.lastBuild,
+      publishPolicy: manifest.publishPolicy,
+      trustedModeEligible: isTrustedModeEligible(manifest),
+      targetApproved: Boolean(manifest.targetApproval),
+      liveDeploy: live ? { id: live.id, at: live.at, url: live.url, buildHash: live.buildHash } : undefined,
+    }
+
+    if (!manifest.adapter || !live) return { ...base, live: false }
+
+    try {
+      const adapter = await this.resolveAdapter(manifest)
+      const hostStatus = await adapter.status()
+      return { ...base, live: hostStatus.live, hostUrl: hostStatus.url, lastDeployAt: hostStatus.lastDeployAt }
+    } catch (error) {
+      // A missing credential must not make the page look broken.
+      return { ...base, live: false, hostError: error instanceof Error ? error.message : String(error) }
+    }
   }
 
   /** Stop every preview server. Called on shutdown. */

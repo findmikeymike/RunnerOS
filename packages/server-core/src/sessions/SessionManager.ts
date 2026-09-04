@@ -206,6 +206,7 @@ import {
 } from '../hq-state/manager-tools'
 import { findArtistHqWorkspace } from '../hq-state/snapshot'
 import { WebsiteService, type WebsiteToolResult } from '../website/WebsiteService'
+import { loadWebsiteManifest, type ApprovalBinding } from '@craft-agent/shared/website'
 import { publishLatestSpotifySnapshotContext } from '../pulses/spotify-snapshot-publisher'
 import { recoverInterruptedWorkspaceMigrations } from '../workspaces/workspace-migration-recovery'
 import {
@@ -2079,6 +2080,25 @@ export class SessionManager implements ISessionManager {
     const hq = findArtistHqWorkspace()
     if (!hq) return { ok: false, error: 'Artist HQ workspace is not configured.' }
     return run({ service: this.websiteService, rootPath: hq.rootPath, workspaceId: hq.id })
+  }
+
+  private resolveMachineId(workspaceRootPath: string): string {
+    try {
+      return getTeamModeStatus(workspaceRootPath).machine.machineId.trim() || 'local-machine'
+    } catch {
+      return 'local-machine'
+    }
+  }
+
+  /**
+   * The artist's standing approval of one build, if they granted one.
+   *
+   * Read-only here: this is written by the renderer when the artist presses
+   * Publish. Handing it to the service is how an approved build reaches
+   * production without letting an agent manufacture the approval itself.
+   */
+  private pendingWebsiteApproval(workspaceRootPath: string): ApprovalBinding | undefined {
+    return loadWebsiteManifest(workspaceRootPath)?.pendingApproval
   }
 
   private async acquireSendMessageAdmissionLock(sessionId: string): Promise<() => void> {
@@ -8840,6 +8860,37 @@ user a clickable link to where the thing now lives.`
         ),
         auditWebsiteFn: async (input) => this.withArtistHqWebsite(
           website => website.service.audit(website.rootPath, input),
+        ),
+        websiteHistoryFn: async (input) => this.withArtistHqWebsite(
+          website => website.service.history(website.rootPath, input),
+        ),
+        websiteStatusFn: async () => this.withArtistHqWebsite(
+          website => website.service.status(website.rootPath),
+        ),
+        // No approval is passed here on purpose. An agent calling
+        // `website_deploy` for production gets `needsApproval` back unless the
+        // artist has already approved this exact build in the UI, or trusted
+        // mode covers it. An agent can never approve its own publish.
+        deployWebsiteFn: async (input) => this.withArtistHqWebsite(
+          website => website.service.deploy(website.rootPath, input, {
+            machineId: this.resolveMachineId(website.rootPath),
+            origin: {
+              kind: hasAutomatedSessionAncestry(managed.launchReceipt) ? 'automation' : 'agent',
+              sessionId: managed.id,
+              agentSlug: managed.spawnedFromAgent?.agentSlug,
+            },
+            approval: this.pendingWebsiteApproval(website.rootPath),
+          }),
+        ),
+        rollbackWebsiteFn: async (input) => this.withArtistHqWebsite(
+          website => website.service.rollback(website.rootPath, input, {
+            machineId: this.resolveMachineId(website.rootPath),
+            origin: {
+              kind: hasAutomatedSessionAncestry(managed.launchReceipt) ? 'automation' : 'agent',
+              sessionId: managed.id,
+              agentSlug: managed.spawnedFromAgent?.agentSlug,
+            },
+          }),
         ),
         previewWebsiteFn: async (input) => this.withArtistHqWebsite(async (website) => {
           const result = await website.service.preview(

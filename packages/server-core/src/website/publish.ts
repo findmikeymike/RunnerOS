@@ -147,6 +147,9 @@ export async function publishSite(
     ...manifest,
     history: [record, ...supersede(manifest.history, input.target)],
     urls: { ...manifest.urls, [input.target]: deployed.url },
+    // One approval covers one publish. Spend it so the same click cannot
+    // ship a second, different build later.
+    ...(input.target === 'production' ? { pendingApproval: undefined } : {}),
   }
 
   let trustedModeOffered = false
@@ -320,6 +323,37 @@ export function siteHistory(workspaceRootPath: string, limit = 20): SiteHistoryE
 
 export function recentReceipts(workspaceRootPath: string, limit = 10) {
   return listChangeReceipts(workspaceRootPath, { limit })
+}
+
+/**
+ * Record the artist's approval of one exact build.
+ *
+ * Only the renderer reaches this, through an RPC. It expires so a card left
+ * open for days cannot publish a build the artist has since forgotten.
+ */
+export function approveWebsiteBuild(
+  workspaceRootPath: string,
+  buildHash: string,
+  options: { now?: string; ttlHours?: number } = {},
+): WebsiteManifest | null {
+  const manifest = loadWebsiteManifest(workspaceRootPath)
+  if (!manifest) return null
+  const at = options.now ?? new Date().toISOString()
+  const ttl = (options.ttlHours ?? 72) * 60 * 60 * 1000
+  return saveWebsiteManifest(workspaceRootPath, {
+    ...manifest,
+    pendingApproval: {
+      boundTo: buildHash,
+      approvedAt: at,
+      expiresAt: new Date(Date.parse(at) + ttl).toISOString(),
+    },
+  })
+}
+
+export function clearWebsiteApproval(workspaceRootPath: string): void {
+  const manifest = loadWebsiteManifest(workspaceRootPath)
+  if (!manifest?.pendingApproval) return
+  saveWebsiteManifest(workspaceRootPath, { ...manifest, pendingApproval: undefined })
 }
 
 /** Record that the artist approved this exact publish target, once. */

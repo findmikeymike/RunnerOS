@@ -109,6 +109,14 @@ export interface WebsiteManifest {
     cleanPublishStreak?: number;
   };
   targetApproval?: { approvedAt: string; approvedBy: 'user'; target: string };
+  /**
+   * The artist's approval of one specific build, written by the UI when they
+   * press Publish and consumed by the next production publish.
+   *
+   * Agents cannot write this. It is what keeps "one click" a human decision
+   * rather than something a session can grant itself.
+   */
+  pendingApproval?: { boundTo: string; approvedAt: string; expiresAt?: string };
   history: DeployRecord[];
   lastBuild?: WebsiteBuildSummary;
   capture: {

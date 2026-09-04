@@ -323,6 +323,10 @@ export type {
   BuildWebsiteInput,
   PreviewWebsiteInput,
   AuditWebsiteInput,
+  DeployWebsiteInput,
+  RollbackWebsiteInput,
+  WebsiteHistoryInput,
+  WebsiteStatusInput,
   WebsiteToolResult,
 } from './handlers/index.ts';
 

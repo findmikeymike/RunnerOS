@@ -184,6 +184,18 @@ export interface SessionScopedToolCallbacks {
   auditWebsiteFn?: (
     input: import('@craft-agent/session-tools-core').AuditWebsiteInput,
   ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;
+  deployWebsiteFn?: (
+    input: import('@craft-agent/session-tools-core').DeployWebsiteInput,
+  ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;
+  rollbackWebsiteFn?: (
+    input: import('@craft-agent/session-tools-core').RollbackWebsiteInput,
+  ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;
+  websiteHistoryFn?: (
+    input: import('@craft-agent/session-tools-core').WebsiteHistoryInput,
+  ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;
+  websiteStatusFn?: (
+    input: import('@craft-agent/session-tools-core').WebsiteStatusInput,
+  ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;
   /** Create a workflow in the global library (used by the workflow-creator skill's create_workflow tool). */
   createWorkflowFn?: (
     input: import('@craft-agent/session-tools-core').CreateWorkflowToolInput,

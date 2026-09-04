@@ -183,7 +183,8 @@ export type {
   ManagerContextToolResult,
 } from './manager-context.ts';
 
-// Artist website: read, edit content, build, preview, audit. Never publishes.
+// Artist website: read, edit content, build, preview, audit, publish.
+// Production publishing requires the artist's approval on the exact build.
 export {
   handleGetWebsiteManifest,
   handleCreateWebsite,
@@ -191,6 +192,10 @@ export {
   handleBuildWebsite,
   handlePreviewWebsite,
   handleAuditWebsite,
+  handleDeployWebsite,
+  handleRollbackWebsite,
+  handleWebsiteHistory,
+  handleWebsiteStatus,
 } from './website.ts';
 export type {
   GetWebsiteManifestInput,
@@ -199,6 +204,10 @@ export type {
   BuildWebsiteInput,
   PreviewWebsiteInput,
   AuditWebsiteInput,
+  DeployWebsiteInput,
+  RollbackWebsiteInput,
+  WebsiteHistoryInput,
+  WebsiteStatusInput,
   WebsiteToolResult,
 } from './website.ts';
 

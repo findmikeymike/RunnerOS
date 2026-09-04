@@ -362,6 +362,30 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'deployWebsite', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.deployWebsiteFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'rollbackWebsite', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.rollbackWebsiteFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'websiteHistory', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.websiteHistoryFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'websiteStatus', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.websiteStatusFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'createWorkflow', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.createWorkflowFn;

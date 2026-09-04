@@ -12,6 +12,17 @@ export interface SetWebsiteContentInput {
 }
 
 export interface BuildWebsiteInput { audit?: boolean }
+
+export interface DeployWebsiteInput {
+  target?: 'preview' | 'production';
+  summary?: string;
+  why?: string[];
+  changes?: string[];
+}
+
+export interface RollbackWebsiteInput { deployId?: string; reason?: string }
+export interface WebsiteHistoryInput { limit?: number }
+export type WebsiteStatusInput = Record<string, never>;
 export interface PreviewWebsiteInput { build?: boolean }
 export interface AuditWebsiteInput { url?: string }
 
@@ -56,4 +67,20 @@ export function handlePreviewWebsite(ctx: SessionToolContext, input: PreviewWebs
 
 export function handleAuditWebsite(ctx: SessionToolContext, input: AuditWebsiteInput): Promise<ToolResult> {
   return invoke(ctx.auditWebsite, input, NO_WEBSITE);
+}
+
+export function handleDeployWebsite(ctx: SessionToolContext, input: DeployWebsiteInput): Promise<ToolResult> {
+  return invoke(ctx.deployWebsite, input, NO_WEBSITE);
+}
+
+export function handleRollbackWebsite(ctx: SessionToolContext, input: RollbackWebsiteInput): Promise<ToolResult> {
+  return invoke(ctx.rollbackWebsite, input, NO_WEBSITE);
+}
+
+export function handleWebsiteHistory(ctx: SessionToolContext, input: WebsiteHistoryInput): Promise<ToolResult> {
+  return invoke(ctx.websiteHistory, input, NO_WEBSITE);
+}
+
+export function handleWebsiteStatus(ctx: SessionToolContext, input: WebsiteStatusInput): Promise<ToolResult> {
+  return invoke(ctx.websiteStatus, input, NO_WEBSITE);
 }

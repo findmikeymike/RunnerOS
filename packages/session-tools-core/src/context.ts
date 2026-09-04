@@ -444,6 +444,14 @@ export interface SessionToolContext {
   previewWebsite?(input: import('./handlers/website.ts').PreviewWebsiteInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
   /** Audit the built site, or an external URL, against the SEO baseline. */
   auditWebsite?(input: import('./handlers/website.ts').AuditWebsiteInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
+  /** Publish the current build. Production requires the artist's approval. */
+  deployWebsite?(input: import('./handlers/website.ts').DeployWebsiteInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
+  /** Restore a previous production deploy. Always revokes trusted mode. */
+  rollbackWebsite?(input: import('./handlers/website.ts').RollbackWebsiteInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
+  /** Recent deploys and change receipts. */
+  websiteHistory?(input: import('./handlers/website.ts').WebsiteHistoryInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
+  /** What is actually live, checked against the host. */
+  websiteStatus?(input: import('./handlers/website.ts').WebsiteStatusInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
 
   /**
    * Create a workflow in the global workflow library and optionally activate it

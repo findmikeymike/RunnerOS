@@ -13,7 +13,14 @@ import {
   websiteDistDir,
   type WebsiteManifest,
 } from '@craft-agent/shared/website'
-import { approvePublishTarget, publishSite, rollbackSite, siteHistory } from './publish'
+import {
+  approvePublishTarget,
+  approveWebsiteBuild,
+  clearWebsiteApproval,
+  publishSite,
+  rollbackSite,
+  siteHistory,
+} from './publish'
 import { hasDeploySnapshot, pruneDeploySnapshots } from './deploy-snapshots'
 import type { AdapterDeployInput, SiteDeployAdapter } from './adapters/types'
 
@@ -196,6 +203,67 @@ describe('production publishing', () => {
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.failure).toBe('no-approval')
       expect(deploys).toHaveLength(0)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('the artist approval the UI writes', () => {
+  test('one approval publishes exactly one build, then is spent', async () => {
+    const root = workspace()
+    try {
+      approveWebsiteBuild(root, 'hash-a', { now: '2026-09-05T00:00:00.000Z' })
+      expect(loadWebsiteManifest(root)!.pendingApproval?.boundTo).toBe('hash-a')
+
+      const { adapter } = fakeAdapter()
+      const first = await publishSite(
+        root,
+        publishInput({ approval: loadWebsiteManifest(root)!.pendingApproval }),
+        deps(adapter),
+      )
+      expect(first.ok).toBe(true)
+      expect(loadWebsiteManifest(root)!.pendingApproval).toBeUndefined()
+
+      // The same click must not ship a second build.
+      const second = await publishSite(
+        root,
+        publishInput({ approval: loadWebsiteManifest(root)!.pendingApproval }),
+        deps(adapter),
+      )
+      expect(second.ok).toBe(false)
+      if (!second.ok) expect(second.failure).toBe('no-approval')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('an approval left sitting past its window stops being usable', async () => {
+    const root = workspace()
+    try {
+      approveWebsiteBuild(root, 'hash-a', { now: '2026-09-01T00:00:00.000Z', ttlHours: 72 })
+      const { adapter, deploys } = fakeAdapter()
+
+      const result = await publishSite(
+        root,
+        publishInput({ approval: loadWebsiteManifest(root)!.pendingApproval }),
+        // Five days later.
+        deps(adapter, '2026-09-06T00:00:00.000Z'),
+      )
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.failure).toBe('expired')
+      expect(deploys).toHaveLength(0)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('clearing an approval leaves nothing behind to publish with', async () => {
+    const root = workspace()
+    try {
+      approveWebsiteBuild(root, 'hash-a')
+      clearWebsiteApproval(root)
+      expect(loadWebsiteManifest(root)!.pendingApproval).toBeUndefined()
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
