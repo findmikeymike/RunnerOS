@@ -327,6 +327,7 @@ export type {
   RollbackWebsiteInput,
   WebsiteHistoryInput,
   WebsiteStatusInput,
+  WebsiteCaptureSyncInput,
   WebsiteToolResult,
 } from './handlers/index.ts';
 

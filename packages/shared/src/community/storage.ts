@@ -304,9 +304,11 @@ function upsertContactRecord(
     city: clean(input.city) ?? existing?.city,
     source: input.source ?? existing?.source ?? 'manual',
     consentStatus: mergeConsentStatus(existing?.consentStatus, input.consentStatus),
-    consentEvidence: options.consentEvidenceSource
-      ? { source: options.consentEvidenceSource, capturedAt: options.now ?? nowIso() }
-      : existing?.consentEvidence,
+    consentEvidence: input.consentEvidence
+      ? { capturedAt: options.now ?? nowIso(), ...input.consentEvidence }
+      : options.consentEvidenceSource
+        ? { source: options.consentEvidenceSource, capturedAt: options.now ?? nowIso() }
+        : existing?.consentEvidence,
     tags: Array.from(new Set([...(existing?.tags ?? []), ...tags])),
     segments: Array.from(new Set([...(existing?.segments ?? []), segment])),
     notes: clean(input.notes) ?? existing?.notes,

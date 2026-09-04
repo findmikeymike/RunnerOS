@@ -196,6 +196,7 @@ export {
   handleRollbackWebsite,
   handleWebsiteHistory,
   handleWebsiteStatus,
+  handleWebsiteCaptureSync,
 } from './website.ts';
 export type {
   GetWebsiteManifestInput,
@@ -208,6 +209,7 @@ export type {
   RollbackWebsiteInput,
   WebsiteHistoryInput,
   WebsiteStatusInput,
+  WebsiteCaptureSyncInput,
   WebsiteToolResult,
 } from './website.ts';
 

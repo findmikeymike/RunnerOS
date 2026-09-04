@@ -23,6 +23,7 @@ export interface DeployWebsiteInput {
 export interface RollbackWebsiteInput { deployId?: string; reason?: string }
 export interface WebsiteHistoryInput { limit?: number }
 export type WebsiteStatusInput = Record<string, never>;
+export interface WebsiteCaptureSyncInput { limit?: number }
 export interface PreviewWebsiteInput { build?: boolean }
 export interface AuditWebsiteInput { url?: string }
 
@@ -83,4 +84,8 @@ export function handleWebsiteHistory(ctx: SessionToolContext, input: WebsiteHist
 
 export function handleWebsiteStatus(ctx: SessionToolContext, input: WebsiteStatusInput): Promise<ToolResult> {
   return invoke(ctx.websiteStatus, input, NO_WEBSITE);
+}
+
+export function handleWebsiteCaptureSync(ctx: SessionToolContext, input: WebsiteCaptureSyncInput): Promise<ToolResult> {
+  return invoke(ctx.websiteCaptureSync, input, NO_WEBSITE);
 }

@@ -386,6 +386,12 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'websiteCaptureSync', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.websiteCaptureSyncFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'createWorkflow', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.createWorkflowFn;

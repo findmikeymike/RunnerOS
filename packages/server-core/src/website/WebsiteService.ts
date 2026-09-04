@@ -8,11 +8,15 @@ import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CloudflareWorkersAdapter } from './adapters/cloudflare'
 import type { SiteDeployAdapter } from './adapters/types'
 import { publishSite, recentReceipts, rollbackSite, siteHistory, type PublishDeps } from './publish'
+import { ResendCaptureSource, type CaptureSource } from './capture-sources'
 import {
   applySiteContentOperations,
   computeDesignHash,
   defaultSiteContent,
+  describeCapture,
+  importCapturedSubscribers,
   isTrustedModeEligible,
+  writeChangeReceipt,
   loadSiteContent,
   loadWebsiteManifest,
   saveSiteContent,
@@ -952,6 +956,89 @@ export class WebsiteService {
     } catch (error) {
       // A missing credential must not make the page look broken.
       return { ...base, live: false, hostError: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  /**
+   * Drain the capture door into Community.
+   *
+   * Runs unattended: importing a fan who asked to hear from the artist needs
+   * no approval. It is bounded per pass and resumes from a cursor so a large
+   * backlog arrives over several runs instead of one long stall.
+   */
+  async syncCapture(
+    workspaceRootPath: string,
+    context: { machineId: string; origin: ChangeReceiptOrigin },
+    options: { limit?: number; source?: CaptureSource } = {},
+  ): Promise<WebsiteToolResult> {
+    const missing = this.requireSite(workspaceRootPath)
+    if (missing) return missing
+
+    const manifest = loadWebsiteManifest(workspaceRootPath)
+    if (!manifest) return { ok: false, error: 'No website in this workspace yet.' }
+
+    if (manifest.capture.backend === 'none') {
+      return { ok: true, imported: 0, note: 'No capture backend is connected, so there is nothing to drain.' }
+    }
+
+    let source = options.source
+    if (!source) {
+      if (manifest.capture.backend !== 'resend') {
+        return { ok: false, error: `The ${manifest.capture.backend} capture backend is not available yet.` }
+      }
+      const apiKey = await getCredentialManager().getUserSecret('RESEND_API_KEY')
+      if (!apiKey) return { ok: false, error: 'Save RESEND_API_KEY in Settings before draining signups.' }
+      source = new ResendCaptureSource({ apiKey })
+    }
+
+    try {
+      const fetched = await source.fetchSince(manifest.capture.drainCursor, options.limit ?? 100)
+      const result = importCapturedSubscribers(
+        workspaceRootPath,
+        context.machineId,
+        fetched.subscribers,
+      )
+
+      const at = new Date().toISOString()
+      saveWebsiteManifest(workspaceRootPath, {
+        ...manifest,
+        capture: {
+          ...manifest.capture,
+          lastDrainAt: at,
+          // Hold the old cursor when a page ends, so the next run resumes here.
+          drainCursor: fetched.cursor ?? manifest.capture.drainCursor,
+        },
+      })
+
+      let receiptId: string | undefined
+      if (result.imported > 0 || result.skippedSuppressed > 0) {
+        receiptId = writeChangeReceipt(workspaceRootPath, context.machineId, {
+          kind: 'subscriber-import',
+          origin: context.origin,
+          approval: { tier: 'free', boundTo: '' },
+          summary: describeCapture(result),
+          why: ['Fans signed up through the site.'],
+          changes: result.changes,
+          counts: {
+            imported: result.imported,
+            duplicates: result.duplicates,
+            skippedSuppressed: result.skippedSuppressed,
+          },
+        }, { now: at }).id
+      }
+
+      return {
+        ok: true,
+        imported: result.imported,
+        duplicates: result.duplicates,
+        skippedSuppressed: result.skippedSuppressed,
+        invalid: result.invalid,
+        summary: describeCapture(result),
+        hasMore: Boolean(fetched.cursor),
+        receiptId,
+      }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
   }
 

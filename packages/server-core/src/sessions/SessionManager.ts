@@ -8867,6 +8867,16 @@ user a clickable link to where the thing now lives.`
         websiteStatusFn: async () => this.withArtistHqWebsite(
           website => website.service.status(website.rootPath),
         ),
+        websiteCaptureSyncFn: async (input) => this.withArtistHqWebsite(
+          website => website.service.syncCapture(website.rootPath, {
+            machineId: this.resolveMachineId(website.rootPath),
+            origin: {
+              kind: hasAutomatedSessionAncestry(managed.launchReceipt) ? 'automation' : 'agent',
+              sessionId: managed.id,
+              agentSlug: managed.spawnedFromAgent?.agentSlug,
+            },
+          }, input),
+        ),
         // No approval is passed here on purpose. An agent calling
         // `website_deploy` for production gets `needsApproval` back unless the
         // artist has already approved this exact build in the UI, or trusted

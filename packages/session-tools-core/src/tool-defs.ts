@@ -83,6 +83,7 @@ import {
   handleRollbackWebsite,
   handleWebsiteHistory,
   handleWebsiteStatus,
+  handleWebsiteCaptureSync,
 } from './handlers/website.ts';
 import {
   handleSaveMemory,
@@ -899,6 +900,11 @@ export const WebsiteHistorySchema = z.object({
 });
 
 export const WebsiteStatusSchema = z.object({}).strict();
+
+export const WebsiteCaptureSyncSchema = z.object({
+  limit: z.number().int().min(1).max(100).optional()
+    .describe('How many signups to pull this pass. Defaults to 100.'),
+});
 
 export const GetArtistContextSchema = z.object({
   topic: z.enum(['profile', 'branding', 'voice', 'month-plan', 'growth', 'intel', 'calendar', 'timeline', 'network', 'community', 'vault']),
@@ -1797,6 +1803,8 @@ Use only after the user explicitly confirms the operation. Read the current coor
 
   website_status: `Report what is actually live: mode, host, URLs, domain state, the build behind the live deploy, publish policy, and whether trusted mode is available. Checks the host, so it reflects reality rather than the local manifest alone. Read-only.`,
 
+  website_capture_sync: `Pull new signups from the site's capture door into the Community fan list. Each one arrives with its consent evidence (form, timestamp, hashed IP), which is what lets it receive a broadcast later. Already-known and unsubscribed addresses are skipped and counted rather than re-added. Safe to run any time; it sends nothing.`,
+
   website_seo_audit: `Audit the local built site against the baseline: titles, descriptions, one h1 per page, canonical links, Open Graph tags, image alt text and size, internal links, structured data, secret-pattern leaks, and page weight. Live-URL audit arrives with existing-site support in a later slice. Returns a score out of 100 and a fix for each finding. Read-only.`,
 
   search_artist_network: `Search the global Artist Network by name, email, role, category, relationship notes, tags, or what someone can help with. Read-only and available to every agent. Use a specific query tied to the current song, release, campaign, opportunity, or person; results are capped and the full contact list is never injected. A match or saved email is not permission to contact anyone.`,
@@ -2176,6 +2184,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'website_status', description: TOOL_DESCRIPTIONS.website_status, inputSchema: WebsiteStatusSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleWebsiteStatus },
   { name: 'website_deploy', description: TOOL_DESCRIPTIONS.website_deploy, inputSchema: DeployWebsiteSchema, executionMode: 'registry', safeMode: 'block', handler: handleDeployWebsite },
   { name: 'website_rollback', description: TOOL_DESCRIPTIONS.website_rollback, inputSchema: RollbackWebsiteSchema, executionMode: 'registry', safeMode: 'block', handler: handleRollbackWebsite },
+  { name: 'website_capture_sync', description: TOOL_DESCRIPTIONS.website_capture_sync, inputSchema: WebsiteCaptureSyncSchema, executionMode: 'registry', safeMode: 'block', handler: handleWebsiteCaptureSync },
   { name: 'create_workflow', description: TOOL_DESCRIPTIONS.create_workflow, inputSchema: CreateWorkflowSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateWorkflow },
   { name: 'save_memory', description: TOOL_DESCRIPTIONS.save_memory, inputSchema: SaveMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleSaveMemory },
   { name: 'update_memory', description: TOOL_DESCRIPTIONS.update_memory, inputSchema: UpdateMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdateMemory },

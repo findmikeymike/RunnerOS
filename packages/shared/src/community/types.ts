@@ -179,6 +179,18 @@ export interface UpsertCommunityContactInput {
   notes?: string;
   tags?: string[];
   consentStatus?: ConsentStatus;
+  /**
+   * Where this consent came from, carried with the contact.
+   *
+   * A contact without evidence never receives a broadcast, so capture doors
+   * must supply it rather than leaving it to be inferred later.
+   */
+  consentEvidence?: {
+    source: string;
+    capturedAt?: string;
+    ipHash?: string;
+    formId?: string;
+  };
 }
 
 export interface ImportCommunityCsvInput {

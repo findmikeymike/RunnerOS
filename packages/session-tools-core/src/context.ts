@@ -452,6 +452,8 @@ export interface SessionToolContext {
   websiteHistory?(input: import('./handlers/website.ts').WebsiteHistoryInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
   /** What is actually live, checked against the host. */
   websiteStatus?(input: import('./handlers/website.ts').WebsiteStatusInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
+  /** Pull new site signups into the Community fan list. */
+  websiteCaptureSync?(input: import('./handlers/website.ts').WebsiteCaptureSyncInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
 
   /**
    * Create a workflow in the global workflow library and optionally activate it
