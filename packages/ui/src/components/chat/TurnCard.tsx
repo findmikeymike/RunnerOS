@@ -27,6 +27,7 @@ import {
 import { cn } from '../../lib/utils'
 import { Markdown } from '../markdown'
 import { Spinner } from '../ui/LoadingIndicator'
+import { SlowToolNotice } from './SlowToolNotice'
 import { type IslandTransitionConfig } from '../ui'
 import { AnnotationIslandMenu } from '../annotations/AnnotationIslandMenu'
 import {
@@ -1062,6 +1063,8 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, 
         onClick={onOpenDetails && isComplete ? onOpenDetails : undefined}
       >
         <ActivityStatusIcon status={activity.status} toolName={activity.toolName} customIcon={toolDisplay.icon} />
+        {/* Silent until the wait stops being ordinary, so a freeze reads as a wait. */}
+        <SlowToolNotice startedAt={activity.timestamp} running={activity.status === 'running'} />
         {/* MCP/API tools: Source name (shrink-0) then error badge (if any) then compound label (flex-1) */}
         {isMcpOrApiTool && !isBackgrounded && (
           <>
