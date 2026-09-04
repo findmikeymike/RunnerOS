@@ -53,6 +53,7 @@ Specs written but with no implementation in the tree. They live in
 - [36 Capability Evolution Engine](./todo/36-capability-evolution-engine-spec.md)
 - [37 Model Fallback Chain](./todo/37-model-fallback-chain-spec.md)
 - [38 Community Email Engine And The Community Agent](./todo/38-community-email-engine-spec.md) — Resend fan lane, Gmail personal lane, inbox, doors, Community Agent
+- [41 The Autonomous Website And Community Loop](./todo/41-autonomous-website-and-community-loop-spec.md) — master spec over 38 and 39: weekly loop, Monday Brief, approval tiers, Change Receipts, four slices
 
 When one ships, move it back up into the numbered list above.
 

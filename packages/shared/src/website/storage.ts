@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   MAX_DEPLOY_HISTORY,
+  MAX_PREVIEW_HISTORY,
   WEBSITE_DIR,
   WEBSITE_MANIFEST_FILE,
   type ApplyContentResult,
@@ -75,10 +76,31 @@ export function loadWebsiteManifest(workspaceRootPath: string): WebsiteManifest 
   return readJson<WebsiteManifest>(websiteManifestPath(workspaceRootPath));
 }
 
+/**
+ * Trim deploy history without letting previews push out production.
+ *
+ * The weekly routine previews on every run, so a single shared cap would
+ * evict production records within a few weeks. Rollback resolves its target
+ * from this history, so an evicted production record means a retained build
+ * on disk that can no longer be restored. Budget the two targets separately.
+ */
+export function trimDeployHistory(history: DeployRecord[]): DeployRecord[] {
+  let production = 0;
+  let preview = 0;
+  return history.filter(entry => {
+    if (entry.target === 'preview') {
+      preview += 1;
+      return preview <= MAX_PREVIEW_HISTORY;
+    }
+    production += 1;
+    return production <= MAX_DEPLOY_HISTORY;
+  });
+}
+
 export function saveWebsiteManifest(workspaceRootPath: string, manifest: WebsiteManifest): WebsiteManifest {
   const next: WebsiteManifest = {
     ...manifest,
-    history: manifest.history.slice(0, MAX_DEPLOY_HISTORY),
+    history: trimDeployHistory(manifest.history),
     updatedAt: nowIso(),
   };
   writeJson(websiteManifestPath(workspaceRootPath), next);

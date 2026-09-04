@@ -81,9 +81,22 @@ export interface WebsiteManifest {
   domain?: WebsiteDomainState;
   external?: { url: string; platform: string; inspectedAt: string; inventory: string[] };
   publishPolicy: {
+    /**
+     * `needs-you` is the one-click tier: the artist approves a bound build
+     * hash. `auto` is trusted mode, which only ever applies to content-only
+     * changes and is earned, scoped, and revocable (spec 41 Core Law 3).
+     */
     contentOnly: PublishPolicy;
     design: 'needs-you';
     routines: Record<string, PublishPolicy>;
+    /** Set once the clean-publish streak reaches the threshold. */
+    trustedEligibleAt?: string;
+    /** Set when the artist turns trusted mode on from the Website page. */
+    trustedGrantedAt?: string;
+    /** Set by any rollback. Clears `contentOnly` back to `needs-you`. */
+    trustedRevokedAt?: string;
+    /** Consecutive approved publishes with no rollback since the last reset. */
+    cleanPublishStreak?: number;
   };
   targetApproval?: { approvedAt: string; approvedBy: 'user'; target: string };
   history: DeployRecord[];
@@ -99,8 +112,12 @@ export interface WebsiteManifest {
   updatedAt: string;
 }
 
-/** Deploy history is capped so the manifest stays small and diffable. */
+/**
+ * Deploy history is capped so the manifest stays small and diffable.
+ * Production and preview have separate budgets — see `trimDeployHistory`.
+ */
 export const MAX_DEPLOY_HISTORY = 50;
+export const MAX_PREVIEW_HISTORY = 5;
 
 // ---------------------------------------------------------------------------
 // Content contract
