@@ -417,6 +417,11 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.community.IMPORT_CSV,
   RPC_CHANNELS.community.CREATE_EMAIL_JOB,
   RPC_CHANNELS.community.SUPPRESS,
+  RPC_CHANNELS.community.UPDATE_EMAIL_JOB,
+  RPC_CHANNELS.community.SEND_EMAIL_JOB,
+  RPC_CHANNELS.community.CANCEL_EMAIL_JOB,
+  RPC_CHANNELS.community.GET_ROUTINE,
+  RPC_CHANNELS.community.SET_ROUTINE,
 
   // pi — provider config on workspace server
   RPC_CHANNELS.pi.GET_API_KEY_PROVIDERS,

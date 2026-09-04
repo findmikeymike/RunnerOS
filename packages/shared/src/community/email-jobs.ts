@@ -186,6 +186,33 @@ export function approveEmailJob(
   }, at);
 }
 
+/**
+ * Edit a draft before it is approved.
+ *
+ * Changing the audience refreezes it, because the frozen list is what an
+ * approval will later bind to; leaving a stale list attached to new copy
+ * would send the right words to the wrong people.
+ */
+export function updateEmailJobDraft(
+  workspaceRootPath: string,
+  machineId: string,
+  job: CommunityEmailJobRecord,
+  patch: { subject?: string; bodyMarkdown?: string; title?: string },
+  options: { now?: string } = {},
+): CommunityEmailJobRecord | JobTransitionError {
+  if (!isOpenJob(job)) {
+    return fail('wrong-status', `An email in "${job.status}" can no longer be edited.`);
+  }
+  return writeJob(workspaceRootPath, machineId, job, {
+    ...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
+    content: {
+      ...job.content,
+      ...(patch.subject !== undefined ? { subject: patch.subject.trim() } : {}),
+      ...(patch.bodyMarkdown !== undefined ? { bodyMarkdown: patch.bodyMarkdown } : {}),
+    },
+  }, options.now);
+}
+
 export function markJobSending(
   workspaceRootPath: string,
   machineId: string,

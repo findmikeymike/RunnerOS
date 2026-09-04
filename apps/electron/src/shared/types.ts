@@ -918,6 +918,20 @@ export interface ElectronAPI {
   }): Promise<Record<string, unknown>>
   clearWebsiteBrief(workspaceId: string): Promise<Record<string, unknown>>
   getCommunity(workspaceId: string): Promise<CommunityState>
+  updateCommunityEmailJob(workspaceId: string, jobId: string, patch: {
+    subject?: string
+    bodyMarkdown?: string
+    title?: string
+  }): Promise<Record<string, unknown>>
+  sendCommunityEmailJob(workspaceId: string, jobId: string): Promise<Record<string, unknown>>
+  cancelCommunityEmailJob(workspaceId: string, jobId: string): Promise<Record<string, unknown>>
+  getCommunityRoutine(workspaceId: string): Promise<Record<string, unknown>>
+  setCommunityRoutine(workspaceId: string, config: {
+    cadence: 'weekly' | 'monthly' | 'manual'
+    dayOfWeek?: number
+    dayOfMonth?: number
+    hour?: number
+  }): Promise<Record<string, unknown>>
   addCommunityContact(workspaceId: string, input: UpsertCommunityContactInput): Promise<CommunityState>
   importCommunityCsv(workspaceId: string, input: Omit<ImportCommunityCsvInput, 'assertedBy'> & { assertedBy?: string }): Promise<CommunityState>
   createCommunityEmailJob(workspaceId: string, input: CreateCommunityEmailJobInput): Promise<CommunityState>

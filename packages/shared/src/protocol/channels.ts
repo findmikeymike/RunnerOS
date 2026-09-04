@@ -348,6 +348,11 @@ export const RPC_CHANNELS = {
     IMPORT_CSV: 'community:importCsv',
     CREATE_EMAIL_JOB: 'community:createEmailJob',
     SUPPRESS: 'community:suppress',
+    UPDATE_EMAIL_JOB: 'community:updateEmailJob',
+    SEND_EMAIL_JOB: 'community:sendEmailJob',
+    CANCEL_EMAIL_JOB: 'community:cancelEmailJob',
+    GET_ROUTINE: 'community:getRoutine',
+    SET_ROUTINE: 'community:setRoutine',
     /** Legacy raw send channel. Server blocks it until approved-job execution is implemented. */
     SEND_RESEND_EMAIL: 'community:sendResendEmail',
   },

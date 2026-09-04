@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/styled-dropdown'
 import type {
   CommunityContactRecord,
+  CommunityEmailJobRecord,
   CommunitySegment,
   CommunityState,
   ConsentStatus,
@@ -85,7 +86,8 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
   const [draftingEmail, setDraftingEmail] = React.useState(false)
   const [importBasis, setImportBasis] = React.useState<ImportBasis>('unknown')
   const [addFanOpen, setAddFanOpen] = React.useState(false)
-  const [emailQueueOpen, setEmailQueueOpen] = React.useState(false)
+  const [emailQueueOpen, setEmailQueueOpen] = React.useState(true)
+  const [mailBusy, setMailBusy] = React.useState<string | null>(null)
 
   const refreshCommunity = React.useCallback(async (foreground = true) => {
     if (foreground) setLoading(true)
@@ -105,6 +107,8 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
 
   const contacts = community?.contacts.filter((fan) => !fan.deletedAt) ?? []
   const emailJobs = community?.emailJobs.filter((job) => !job.deletedAt) ?? []
+  const openJobs = emailJobs.filter((job) => job.status !== 'sent' && job.status !== 'cancelled')
+  const sentJobs = emailJobs.filter((job) => job.status === 'sent')
   const visibleFans = React.useMemo(
     () => activeSegment === 'all'
       ? contacts
@@ -362,6 +366,13 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
             )}
           </div>
 
+          <CommunityRoutineRow
+            workspaceId={workspaceId}
+            busy={mailBusy}
+            onBusy={setMailBusy}
+            onChanged={() => void refreshCommunity(false)}
+          />
+
           <div className="mt-4 border-t border-white/[0.045] pt-2">
             <button
               type="button"
@@ -371,36 +382,35 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
             >
               <div className="flex items-center gap-2">
                 <Send className="h-3.5 w-3.5 text-white/40" />
-                <h2 className="text-[11px] font-medium uppercase tracking-[0.15em] text-white/50">Email Queue</h2>
+                <h2 className="text-[11px] font-medium uppercase tracking-[0.15em] text-white/50">Ready to send</h2>
               </div>
               <div className="flex items-center gap-2 text-white/28">
-                <span className="text-[10px] tabular-nums">{emailJobs.length}</span>
+                <span className="text-[10px] tabular-nums">{openJobs.length}</span>
                 <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', emailQueueOpen && 'rotate-180')} />
               </div>
             </button>
             {emailQueueOpen ? (
               <div className="mt-2 space-y-2 px-2 pb-2">
-                {emailJobs.length ? emailJobs.map((email) => (
-                  <button
+                {openJobs.length ? openJobs.map((email) => (
+                  <EmailProposal
                     key={email.id}
-                    type="button"
-                    onClick={() => void draftEmail(email.title, email.audience.segmentIds, false)}
-                    className="group w-full rounded-[13px] border border-white/[0.055] bg-white/[0.025] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.05]"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="line-clamp-1 text-[13px] font-medium leading-5 text-white/70 group-hover:text-white/90">{email.title}</p>
-                      <ArrowRight className="h-3.5 w-3.5 text-white/20 transition-colors group-hover:text-white/50" />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.12em] text-white/28">
-                      <span>{email.audience.estimatedRecipients} ready</span>
-                      <span>{email.status}</span>
-                    </div>
-                  </button>
+                    job={email}
+                    workspaceId={workspaceId}
+                    busy={mailBusy}
+                    onBusy={setMailBusy}
+                    onChanged={() => void refreshCommunity(false)}
+                  />
                 )) : (
-                  <div className="rounded-[12px] border border-dashed border-white/[0.04] bg-white/[0.01] px-3 py-5 text-center text-[11px] text-white/30">
-                    No email jobs yet.
+                  <div className="rounded-[12px] border border-dashed border-white/[0.04] bg-white/[0.01] px-3 py-5 text-center text-[11px] leading-5 text-white/30">
+                    Nothing waiting. Your Community Agent puts drafts here when it finds
+                    something worth sending.
                   </div>
                 )}
+                {sentJobs.length > 0 ? (
+                  <p className="pt-1 text-[10px] uppercase tracking-[0.12em] text-white/22">
+                    {sentJobs.length} already sent
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -456,5 +466,374 @@ function Badge({ children }: { children: React.ReactNode }) {
     <span className="inline-flex h-6 w-fit items-center rounded-full bg-white/[0.03] px-2 text-[9px] font-medium uppercase tracking-[0.12em] text-white/40">
       {children}
     </span>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// How often the agent looks for something worth sending
+// ---------------------------------------------------------------------------
+
+type CommunityCadence = 'weekly' | 'monthly' | 'manual'
+
+interface CommunityRoutine {
+  cadence: CommunityCadence
+  dayOfWeek?: number
+  dayOfMonth?: number
+  hour?: number
+  lastRunAt?: string
+}
+
+/** Stable name so the schedule can be found and replaced. */
+const COMMUNITY_ROUTINE_AUTOMATION = 'Community Check'
+
+const CADENCE_CHOICES: Array<{ value: CommunityCadence; label: string }> = [
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'manual', label: 'Only when I ask' },
+]
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+function CommunityRoutineRow({
+  workspaceId,
+  busy,
+  onBusy,
+  onChanged,
+}: {
+  workspaceId: string
+  busy: string | null
+  onBusy: (key: string | null) => void
+  onChanged: () => void
+}) {
+  const [routine, setRoutine] = React.useState<CommunityRoutine | null>(null)
+  const [description, setDescription] = React.useState('')
+
+  const load = React.useCallback(async () => {
+    if (!workspaceId) return
+    try {
+      const result = await window.electronAPI.getCommunityRoutine(workspaceId) as {
+        routine?: CommunityRoutine
+        description?: string
+      }
+      setRoutine(result?.routine ?? null)
+      setDescription(result?.description ?? '')
+    } catch {
+      // A missing routine is simply "manual"; nothing to report.
+    }
+  }, [workspaceId])
+
+  React.useEffect(() => { void load() }, [load])
+
+  /**
+   * Keep the stored cadence and the automation that actually fires in step.
+   * A preference nothing acts on is worse than no preference.
+   */
+  const apply = React.useCallback(async (config: Partial<CommunityRoutine> & { cadence: CommunityCadence }) => {
+    onBusy('cadence')
+    try {
+      const saved = await window.electronAPI.setCommunityRoutine(workspaceId, {
+        cadence: config.cadence,
+        dayOfWeek: config.dayOfWeek ?? routine?.dayOfWeek,
+        dayOfMonth: config.dayOfMonth ?? routine?.dayOfMonth,
+        hour: config.hour ?? routine?.hour,
+      }) as { cron?: string | null }
+
+      const listed = await window.electronAPI.getAutomations(workspaceId) as
+        | Array<{ event: string; name?: string; matcherIndex: number }>
+        | null
+      const existing = (Array.isArray(listed) ? listed : [])
+        .find(item => item.event === 'SchedulerTick' && item.name === COMMUNITY_ROUTINE_AUTOMATION)
+      if (existing) {
+        await window.electronAPI.deleteAutomation(workspaceId, existing.event, existing.matcherIndex)
+      }
+
+      if (saved?.cron) {
+        await window.electronAPI.createAutomationFromTemplate(workspaceId, 'SchedulerTick', {
+          name: COMMUNITY_ROUTINE_AUTOMATION,
+          cron: saved.cron,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          permissionMode: 'safe',
+          labels: ['community', 'artist-hq', 'scheduled'],
+          actions: [{
+            type: 'prompt',
+            agentSlug: 'community-agent',
+            prompt: 'Scheduled community check. Read the list health and what has happened lately, then decide whether anything is genuinely worth emailing the fans about. If nothing is, say so and stop — do not manufacture a reason to write. If something is, draft one email against the right segment and leave it for the artist to review. Never send.',
+          }],
+        })
+      }
+      toast.success('Saved.')
+      await load()
+      onChanged()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not save that.')
+    } finally {
+      onBusy(null)
+    }
+  }, [load, onBusy, onChanged, routine, workspaceId])
+
+  const cadence = routine?.cadence ?? 'manual'
+  const hour = routine?.hour ?? 10
+
+  return (
+    <div className="mt-4 border-t border-white/[0.045] pt-3">
+      <div className="flex items-start justify-between gap-3 px-2">
+        <div>
+          <h2 className="text-[11px] font-medium uppercase tracking-[0.15em] text-white/50">Look for something to send</h2>
+          <p className="mt-1 max-w-md text-[11px] leading-5 text-white/35">
+            Your Community Agent checks what is happening and drafts an email only when
+            there is something a fan would actually want. {description}
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={() => navigate(routes.action.newSession({
+            name: 'Community check',
+            input: 'Check the fan list and what has happened lately, then tell me whether anything is genuinely worth emailing about. If nothing is, say so. If something is, draft it against the right segment and leave it for me to review.',
+          }))}
+          className="h-7 shrink-0 rounded-[7px] border border-white/[0.08] px-2.5 text-[11px] text-white/60 transition-colors hover:bg-white/[0.04] disabled:opacity-40"
+        >
+          Check now
+        </button>
+      </div>
+
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 px-2">
+        {CADENCE_CHOICES.map(choice => (
+          <button
+            key={choice.value}
+            type="button"
+            disabled={busy !== null}
+            onClick={() => void apply({ cadence: choice.value })}
+            className={cn(
+              'h-7 rounded-[7px] px-2.5 text-[11px] transition-colors disabled:opacity-40',
+              cadence === choice.value
+                ? 'bg-white/90 text-black'
+                : 'border border-white/[0.08] text-white/55 hover:bg-white/[0.04]',
+            )}
+          >
+            {choice.label}
+          </button>
+        ))}
+
+        {cadence !== 'manual' ? (
+          <>
+            {cadence === 'weekly' ? (
+              <select
+                value={routine?.dayOfWeek ?? 1}
+                disabled={busy !== null}
+                onChange={(event) => void apply({ cadence, dayOfWeek: Number(event.target.value) })}
+                className="h-7 rounded-[7px] border border-white/[0.08] bg-transparent px-2 text-[11px] text-white/70 outline-none focus:border-white/20"
+              >
+                {WEEKDAYS.map((name, index) => (
+                  <option key={name} value={index} className="bg-neutral-900">{name}</option>
+                ))}
+              </select>
+            ) : (
+              <select
+                value={routine?.dayOfMonth ?? 1}
+                disabled={busy !== null}
+                onChange={(event) => void apply({ cadence, dayOfMonth: Number(event.target.value) })}
+                className="h-7 rounded-[7px] border border-white/[0.08] bg-transparent px-2 text-[11px] text-white/70 outline-none focus:border-white/20"
+              >
+                {Array.from({ length: 28 }, (_, index) => index + 1).map(day => (
+                  <option key={day} value={day} className="bg-neutral-900">{day}</option>
+                ))}
+              </select>
+            )}
+            <select
+              value={hour}
+              disabled={busy !== null}
+              onChange={(event) => void apply({ cadence, hour: Number(event.target.value) })}
+              className="h-7 rounded-[7px] border border-white/[0.08] bg-transparent px-2 text-[11px] text-white/70 outline-none focus:border-white/20"
+            >
+              {Array.from({ length: 24 }, (_, index) => index).map(value => (
+                <option key={value} value={value} className="bg-neutral-900">
+                  {value % 12 === 0 ? 12 : value % 12}:00 {value < 12 ? 'AM' : 'PM'}
+                </option>
+              ))}
+            </select>
+          </>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// One proposed email: read it, change it, send it
+// ---------------------------------------------------------------------------
+
+function EmailProposal({
+  job,
+  workspaceId,
+  busy,
+  onBusy,
+  onChanged,
+}: {
+  job: CommunityEmailJobRecord
+  workspaceId: string
+  busy: string | null
+  onBusy: (key: string | null) => void
+  onChanged: () => void
+}) {
+  const [open, setOpen] = React.useState(false)
+  const [subject, setSubject] = React.useState(job.content.subject)
+  const [body, setBody] = React.useState(job.content.bodyMarkdown)
+  const [confirming, setConfirming] = React.useState(false)
+
+  const edited = subject !== job.content.subject || body !== job.content.bodyMarkdown
+  const recipients = job.audience.estimatedRecipients
+  const canSend = recipients > 0 && subject.trim().length > 0 && body.trim().length > 0
+
+  const act = React.useCallback(async (key: string, run: () => Promise<unknown>, success: string) => {
+    onBusy(key)
+    try {
+      const result = await run() as { ok?: boolean; error?: string }
+      if (result?.ok === false) {
+        toast.error(String(result.error ?? 'That did not work.'))
+        return false
+      }
+      toast.success(success)
+      onChanged()
+      return true
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'That did not work.')
+      return false
+    } finally {
+      onBusy(null)
+    }
+  }, [onBusy, onChanged])
+
+  return (
+    <div className="rounded-[13px] border border-white/[0.055] bg-white/[0.025]">
+      <button
+        type="button"
+        onClick={() => setOpen(value => !value)}
+        aria-expanded={open}
+        className="w-full px-3 py-2.5 text-left"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <p className="line-clamp-1 text-[13px] font-medium leading-5 text-white/80">
+            {subject || job.title}
+          </p>
+          <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-white/25 transition-transform', open && 'rotate-180')} />
+        </div>
+        <div className="mt-1.5 flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-white/28">
+          <span>{recipients} {recipients === 1 ? 'fan' : 'fans'}</span>
+          <span>·</span>
+          <span>{job.audience.segmentIds.join(', ') || 'no segment'}</span>
+          {job.audience.excludedSuppressed > 0 ? (
+            <><span>·</span><span>{job.audience.excludedSuppressed} excluded</span></>
+          ) : null}
+        </div>
+      </button>
+
+      {open ? (
+        <div className="border-t border-white/[0.05] px-3 py-3">
+          <label className="block text-[10px] uppercase tracking-[0.12em] text-white/30">Subject</label>
+          <input
+            value={subject}
+            onChange={(event) => setSubject(event.target.value)}
+            className="mt-1 h-8 w-full rounded-[8px] border border-white/[0.08] bg-transparent px-2.5 text-[12px] text-white/85 outline-none focus:border-white/20"
+          />
+
+          <label className="mt-3 block text-[10px] uppercase tracking-[0.12em] text-white/30">Email</label>
+          <textarea
+            value={body}
+            onChange={(event) => setBody(event.target.value)}
+            rows={8}
+            className="mt-1 w-full resize-y rounded-[8px] border border-white/[0.08] bg-transparent px-2.5 py-2 text-[12px] leading-6 text-white/80 outline-none focus:border-white/20"
+          />
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {edited ? (
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void act(
+                  `save-${job.id}`,
+                  () => window.electronAPI.updateCommunityEmailJob(workspaceId, job.id, { subject, bodyMarkdown: body }),
+                  'Saved.',
+                )}
+                className="h-8 rounded-[8px] border border-white/[0.08] px-3 text-[12px] text-white/70 transition-colors hover:bg-white/[0.04] disabled:opacity-40"
+              >
+                Save changes
+              </button>
+            ) : null}
+
+            {confirming ? (
+              <>
+                <span className="text-[11px] text-white/55">
+                  Send to {recipients} {recipients === 1 ? 'fan' : 'fans'}?
+                </span>
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void (async () => {
+                    // Save first: sending anything other than what is on screen
+                    // would be a lie about what was approved.
+                    if (edited) {
+                      const saved = await act(
+                        `save-${job.id}`,
+                        () => window.electronAPI.updateCommunityEmailJob(workspaceId, job.id, { subject, bodyMarkdown: body }),
+                        'Saved.',
+                      )
+                      if (!saved) return
+                    }
+                    await act(
+                      `send-${job.id}`,
+                      () => window.electronAPI.sendCommunityEmailJob(workspaceId, job.id),
+                      'Sent.',
+                    )
+                    setConfirming(false)
+                  })()}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-emerald-200/90 px-3 text-[12px] font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-40"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  {busy === `send-${job.id}` ? 'Sending…' : 'Yes, send it'}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => setConfirming(false)}
+                  className="text-[11px] text-white/35 hover:text-white/60"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                disabled={busy !== null || !canSend}
+                title={canSend ? undefined : 'Needs a subject, a body, and at least one recipient.'}
+                onClick={() => setConfirming(true)}
+                className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-emerald-200/90 px-3 text-[12px] font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-40"
+              >
+                <Send className="h-3.5 w-3.5" />
+                Send
+              </button>
+            )}
+
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void act(
+                `cancel-${job.id}`,
+                () => window.electronAPI.cancelCommunityEmailJob(workspaceId, job.id),
+                'Discarded.',
+              )}
+              className="ml-auto text-[11px] text-white/30 underline-offset-2 hover:text-white/60 hover:underline disabled:opacity-40"
+            >
+              Discard
+            </button>
+          </div>
+
+          <p className="mt-2.5 text-[10px] leading-4 text-white/25">
+            Every email carries an unsubscribe link. Fans who unsubscribed after this was
+            drafted are dropped automatically at send.
+          </p>
+        </div>
+      ) : null}
+    </div>
   )
 }
