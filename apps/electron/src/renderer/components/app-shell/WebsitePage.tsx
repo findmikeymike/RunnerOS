@@ -78,7 +78,7 @@ interface Brief {
     tier: 'one-click' | 'trusted'
   }
   subscribers?: { imported: number; duplicates: number; skippedSuppressed: number }
-  notes: string[]
+  observations: Array<{ kind: string; headline: string; suggestion: string }>
   nothingToDo?: true
 }
 
@@ -183,7 +183,7 @@ export function WebsitePage({ workspaceId }: WebsitePageProps) {
       actions: [{
         type: 'prompt',
         agentSlug: 'website-agent',
-        prompt: 'Bring the artist website up to date. Check for new releases and shows, retire any pre-save link on a song that is already out, make sure the newest release is featured, and pull in anyone who signed up. Build and preview. Do not publish unless the artist has already turned on automatic publishing for content changes; otherwise leave it ready and say what is waiting.',
+        prompt: 'Scheduled site check. Do only the obvious work: pull in anyone who signed up, and add content the artist already posted publicly as a site update. Do not add shows, reshuffle the home page, or change a release you were not asked about. Build and preview. Anything else you notice, report it as something worth a look and leave it alone. Do not publish unless the artist has already turned on automatic publishing for content changes.',
       }],
     }
 
@@ -570,8 +570,8 @@ function RoutineCadence({
         <div>
           <h2 className="text-[12px] font-medium text-white/70">Keep the site current</h2>
           <p className="mt-1 max-w-md text-[11px] leading-5 text-white/40">
-            Adds new releases and shows, retires pre-save links once a song is out, and pulls in
-            anyone who signed up. {active?.hint}
+            Pulls in anyone who signed up and offers to put posts you already published on the
+            site. Anything bigger it just mentions, and waits for you. {active?.hint}
           </p>
         </div>
         <button
@@ -690,12 +690,21 @@ function BriefCard({
             </p>
           ) : null}
 
-          {brief.notes.length > 0 ? (
-            <ul className="mt-2 space-y-1">
-              {brief.notes.map(note => (
-                <li key={note} className="text-[11px] leading-5 text-white/40">{note}</li>
-              ))}
-            </ul>
+          {brief.observations.length > 0 ? (
+            <div className="mt-3 border-t border-white/[0.05] pt-2.5">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-white/25">Worth a look</p>
+              <ul className="mt-1.5 space-y-1.5">
+                {brief.observations.map(item => (
+                  <li key={item.kind + item.headline} className="text-[11px] leading-5 text-white/45">
+                    {item.headline}{' '}
+                    <span className="text-white/30">{item.suggestion}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-[10px] leading-4 text-white/25">
+                Nothing here was changed. Ask the Website Agent if you want any of it done.
+              </p>
+            </div>
           ) : null}
 
           {brief.site?.tier === 'trusted' ? (

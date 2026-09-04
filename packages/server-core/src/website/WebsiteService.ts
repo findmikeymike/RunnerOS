@@ -19,7 +19,9 @@ import {
   describeCapture,
   importCapturedSubscribers,
   isTrustedModeEligible,
-  planSiteUpdate,
+  emptySignals,
+  planScheduledUpdate,
+  readSituation,
   resolveApprovalTier,
   writeChangeReceipt,
   DEFAULT_ROUTINE,
@@ -36,6 +38,7 @@ import {
   type ChangeReceiptOrigin,
   type DeployTarget,
   type RoutineSignals,
+  type Observation,
   type SiteContentOperation,
   type WebsiteBrief,
   type WebsiteRoutineConfig,
@@ -1166,7 +1169,6 @@ export class WebsiteService {
       today?: string
       previewTarget?: WebsitePreviewTarget
       runId?: string
-      unmappedEvents?: Array<{ id: string; date: string; title: string }>
     } = {},
   ): Promise<WebsiteToolResult> {
     const missing = this.requireSite(workspaceRootPath)
@@ -1178,20 +1180,12 @@ export class WebsiteService {
 
     const today = options.today ?? new Date().toISOString().slice(0, 10)
     const runId = options.runId ?? `run-${randomUUID().replace(/-/g, '').slice(0, 12)}`
-    const signals = options.signals ?? { releases: [], shows: [], auditScore: manifest.lastBuild?.auditScore }
+    const signals = options.signals ?? { ...emptySignals(), auditScore: manifest.lastBuild?.auditScore }
 
-    const plan = planSiteUpdate(content, signals, today)
-    const notes = plan.findings.filter(finding => !finding.actionable).map(finding => finding.detail)
-
-    // Calendar entries that read like shows but have no city and venue. Say
-    // so rather than guessing: a wrong venue on a public site is worse than
-    // a missing one.
-    const unmapped = options.unmappedEvents ?? []
-    if (unmapped.length > 0) {
-      notes.push(unmapped.length === 1
-        ? `One calendar entry looks like a show but has no city and venue: "${unmapped[0]!.title}". Add it from the Website page.`
-        : `${unmapped.length} calendar entries look like shows but have no city and venue. Add them from the Website page.`)
-    }
+    const plan = planScheduledUpdate(content, signals, today)
+    // Observations are carried as text. Nothing acts on them; they exist so
+    // the artist can raise them with the agent when they choose to.
+    const observations = readSituation(content, signals, today)
 
     // Pull signups regardless of whether the site itself changed: a fan who
     // signed up is worth reporting even in an otherwise quiet week.
@@ -1210,9 +1204,9 @@ export class WebsiteService {
         runId,
         weekOf: today,
         cadence: manifest.routine?.cadence ?? 'manual',
-        notes,
+        observations,
         ...(subscribers && subscribers.imported > 0 ? { subscribers } : {}),
-        ...(notes.length === 0 && !subscribers?.imported ? { nothingToDo: true as const } : {}),
+        ...(observations.length === 0 && !subscribers?.imported ? { nothingToDo: true as const } : {}),
       }
       this.storeBrief(workspaceRootPath, brief)
       return { ok: true, brief, summary: describeBrief(brief) }
@@ -1227,7 +1221,11 @@ export class WebsiteService {
         runId,
         weekOf: today,
         cadence: manifest.routine?.cadence ?? 'manual',
-        notes: [...notes, `The site could not be rebuilt: ${String(build.error)}`],
+        observations: [...observations, {
+          kind: 'low-seo' as const,
+          headline: `The site could not be rebuilt: ${String(build.error)}`,
+          suggestion: 'Open the Website page and rebuild to see the error.',
+        }],
         ...(subscribers && subscribers.imported > 0 ? { subscribers } : {}),
       }
       this.storeBrief(workspaceRootPath, brief)
@@ -1271,7 +1269,11 @@ export class WebsiteService {
         tier = 'trusted'
         deployReceiptId = published.receiptId as string | undefined
       } else {
-        notes.push(`Could not publish automatically: ${String(published.error)}`)
+        observations.push({
+          kind: 'low-seo',
+          headline: `Could not publish automatically: ${String(published.error)}`,
+          suggestion: 'Publish it yourself from the Website page.',
+        })
       }
     }
 
@@ -1288,7 +1290,7 @@ export class WebsiteService {
         tier,
         deployReceiptId,
       },
-      notes,
+      observations,
       ...(subscribers && subscribers.imported > 0 ? { subscribers } : {}),
     }
     this.storeBrief(workspaceRootPath, brief)

@@ -1,13 +1,19 @@
 /**
- * The weekly site routine (spec 41 Slice B).
+ * The site routine (spec 41 Slice B).
  *
- * This module is the routine's brain and holds no I/O: signals go in,
- * a plan and a brief come out. The service around it does the reading,
- * building, and publishing.
+ * Two very different jobs live here, and keeping them apart is the point.
  *
- * The cadence is the artist's choice, not a fixed Monday. Some artists ship
- * constantly and want a weekly pass; others put out a record a year and would
- * find a weekly card noise.
+ * On a schedule the routine does only the direct, obvious work: pull in
+ * anyone who signed up, and offer to put content already posted to socials
+ * on the site. It does not infer shows, invent releases, or reshuffle the
+ * home page on its own.
+ *
+ * Everything else is an *observation* — something worth saying to the artist
+ * in conversation ("the pre-save is still up and the song is out", "you are a
+ * week from release, want the final audio behind an email catcher"). The
+ * artist decides. Observations never become edits without being asked.
+ *
+ * Cadence is the artist's choice, not a fixed Monday.
  */
 
 import type {
@@ -15,7 +21,6 @@ import type {
   SiteContent,
   SiteContentOperation,
   SiteRelease,
-  SiteShow,
 } from './types.ts';
 
 // ---------------------------------------------------------------------------
@@ -101,63 +106,133 @@ export function describeCadence(config: WebsiteRoutineConfig): string {
 // Signals
 // ---------------------------------------------------------------------------
 
-/** A release promoted in the Release Kit that the site may not know about. */
+/** A release the HQ knows about. Read for context, never auto-published. */
 export interface ReleaseSignal {
   id: string;
   title: string;
   type: SiteRelease['type'];
   date: string;
-  artworkAssetId?: string;
-  links?: SiteRelease['links'];
 }
 
-/** A show on the HQ calendar. */
-export interface ShowSignal {
+/** Something the artist already posted publicly, with a link back to it. */
+export interface PostedContentSignal {
+  id: string;
+  postedAt: string;
+  text: string;
+  url?: string;
+  platform: string;
+}
+
+/** A dated calendar entry that may or may not be a show. Never parsed. */
+export interface CalendarSignal {
   id: string;
   date: string;
-  city: string;
-  venue: string;
-  ticketUrl?: string;
-  calendarEventId?: string;
+  title: string;
 }
 
 export interface RoutineSignals {
+  /** Releases known to HQ, for observations about timing. */
   releases: ReleaseSignal[];
-  shows: ShowSignal[];
-  /** Audit score of the last build, if there was one. */
+  /** Posted social content the site could carry as an update. */
+  posted: PostedContentSignal[];
+  /** Upcoming calendar entries, used only to notice the site has no shows. */
+  upcomingEvents: CalendarSignal[];
   auditScore?: number;
-  /** Latest signup, used to notice a door nobody is walking through. */
   lastSignupAt?: string;
-  /** Latest social post, used to notice a silent journal. */
-  lastPostAt?: string;
 }
 
-export type StalenessKind =
-  | 'missing-release'
-  | 'missing-show'
-  | 'past-show'
+export function emptySignals(): RoutineSignals {
+  return { releases: [], posted: [], upcomingEvents: [] };
+}
+
+// ---------------------------------------------------------------------------
+// The scheduled plan: direct and obvious only
+// ---------------------------------------------------------------------------
+
+export interface ScheduledPlan {
+  operations: SiteContentOperation[];
+  changes: string[];
+  why: string[];
+  changeClass: ChangeClass;
+}
+
+/** Journal ids are derived from the post, so a rerun updates instead of duplicating. */
+function journalIdFor(post: PostedContentSignal): string {
+  return `post-${post.platform}-${post.id}`;
+}
+
+/** First sentence or first 70 characters, whichever comes first. */
+function headlineFor(text: string): string {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  const sentence = /^(.{10,70}?)[.!?](\s|$)/.exec(clean);
+  if (sentence) return sentence[1]!.trim();
+  return clean.length > 70 ? `${clean.slice(0, 67).trimEnd()}…` : clean;
+}
+
+/**
+ * What the scheduled run may do without asking.
+ *
+ * Only one thing: carry content the artist already published on socials over
+ * to their own site as an update. Nothing here invents a fact about the
+ * artist, and the result still needs a publish approval before it is public.
+ */
+export function planScheduledUpdate(
+  content: SiteContent,
+  signals: RoutineSignals,
+  today: string,
+): ScheduledPlan {
+  const operations: SiteContentOperation[] = [];
+  const changes: string[] = [];
+  const known = new Set(content.journal.map(entry => entry.id));
+
+  // Newest first, and only a few, so a backlog does not flood the page.
+  const candidates = [...signals.posted]
+    .sort((a, b) => b.postedAt.localeCompare(a.postedAt))
+    .filter(post => !known.has(journalIdFor(post)))
+    .slice(0, 3);
+
+  for (const post of candidates) {
+    operations.push({
+      op: 'upsert-journal',
+      value: {
+        id: journalIdFor(post),
+        date: post.postedAt.slice(0, 10),
+        title: headlineFor(post.text),
+        body: post.text,
+        embedUrl: post.url,
+      },
+    });
+    changes.push(`Added your ${post.platform} post from ${post.postedAt.slice(0, 10)} as a site update`);
+  }
+
+  return {
+    operations,
+    changes,
+    why: operations.length > 0 ? ['You posted this publicly and the site did not have it.'] : [],
+    changeClass: 'content-only',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Observations: things to say, not things to do
+// ---------------------------------------------------------------------------
+
+export type ObservationKind =
   | 'stale-presave'
+  | 'release-soon'
+  | 'gate-final-audio'
   | 'stale-hero'
+  | 'no-shows-listed'
   | 'low-seo'
   | 'quiet-door'
-  | 'quiet-journal';
+  | 'no-door';
 
-export interface StalenessFinding {
-  kind: StalenessKind;
-  /** One line the artist reads on the card. */
-  detail: string;
-  /** True when the routine can fix it on its own. */
-  actionable: boolean;
-}
-
-export interface RoutinePlan {
-  operations: SiteContentOperation[];
-  /** Human lines describing each edit, for the receipt. */
-  changes: string[];
-  /** Why the routine acted, for the receipt. */
-  why: string[];
-  findings: StalenessFinding[];
-  changeClass: ChangeClass;
+export interface Observation {
+  kind: ObservationKind;
+  /** What the agent would actually say, in the artist's language. */
+  headline: string;
+  /** The concrete thing being offered, if the artist says yes. */
+  suggestion: string;
 }
 
 const DAY_MS = 86_400_000;
@@ -166,143 +241,102 @@ function daysBetween(from: string, to: string): number {
   return Math.floor((Date.parse(to) - Date.parse(from)) / DAY_MS);
 }
 
+/** A release inside this window is close enough to plan around. */
+const RELEASE_SOON_DAYS = 14;
+
 /**
- * Decide what the site is missing and how to fix it.
+ * Read the situation and return what is worth raising with the artist.
  *
- * Pure: content and signals in, operations out. Only content-class edits are
- * ever produced here, because a routine must never change the design without
- * the artist asking.
+ * These are conversation openers, not a task list. The agent uses them when
+ * the artist starts a chat, and the scheduled card carries them as notes so
+ * nothing acts on them quietly.
  */
-export function planSiteUpdate(
+export function readSituation(
   content: SiteContent,
   signals: RoutineSignals,
   today: string,
-): RoutinePlan {
-  const operations: SiteContentOperation[] = [];
-  const changes: string[] = [];
-  const why: string[] = [];
-  const findings: StalenessFinding[] = [];
+): Observation[] {
+  const observations: Observation[] = [];
 
-  const knownReleases = new Map(content.releases.map(release => [release.id, release]));
-  const knownShows = new Map(content.shows.map(show => [show.id, show]));
-
-  // New releases promoted since the site last saw them.
-  for (const release of signals.releases) {
-    if (knownReleases.has(release.id)) continue;
-    operations.push({
-      op: 'upsert-release',
-      value: {
-        id: release.id,
-        title: release.title,
-        type: release.type,
-        date: release.date,
-        artworkAssetId: release.artworkAssetId,
-        links: release.links ?? {},
-      },
-    });
-    changes.push(`Added "${release.title}" to Music`);
-    findings.push({ kind: 'missing-release', detail: `"${release.title}" was not on the site`, actionable: true });
-  }
-
-  // New shows on the calendar.
-  for (const show of signals.shows) {
-    if (knownShows.has(show.id)) continue;
-    if (show.date < today) continue;
-    operations.push({
-      op: 'upsert-show',
-      value: {
-        id: show.id,
-        date: show.date,
-        city: show.city,
-        venue: show.venue,
-        ticketUrl: show.ticketUrl,
-        calendarEventId: show.calendarEventId,
-      },
-    });
-    changes.push(`Added ${show.city} on ${show.date} to Shows`);
-    findings.push({ kind: 'missing-show', detail: `${show.city} on ${show.date} was not listed`, actionable: true });
-  }
-
-  // A release that is out but still advertising a pre-save is the single most
-  // embarrassing thing an artist site does, so fix it without being asked.
+  // A song that is out but still advertising a pre-save is the most
+  // embarrassing thing an artist site does. Worth saying immediately.
   for (const release of content.releases) {
-    if (release.date > today) continue;
-    if (!release.links.presave) continue;
-    const links = { ...release.links };
-    delete links.presave;
-    operations.push({ op: 'upsert-release', value: { ...release, links } });
-    changes.push(`Removed the pre-save link from "${release.title}" now that it is out`);
-    findings.push({
-      kind: 'stale-presave',
-      detail: `"${release.title}" is out but still linked to a pre-save`,
-      actionable: true,
-    });
+    if (release.date <= today && release.links.presave) {
+      observations.push({
+        kind: 'stale-presave',
+        headline: `"${release.title}" is out but the site still links to a pre-save.`,
+        suggestion: 'Swap the pre-save for the listen link.',
+      });
+    }
   }
 
-  // The hero should be the newest thing, not whatever was newest last year.
-  const newest = [...content.releases, ...operations.flatMap(op =>
-    op.op === 'upsert-release' ? [op.value] : [])]
+  const upcoming = signals.releases
+    .filter(release => release.date > today && daysBetween(today, release.date) <= RELEASE_SOON_DAYS)
+    .sort((a, b) => a.date.localeCompare(b.date))[0];
+
+  if (upcoming) {
+    const days = daysBetween(today, upcoming.date);
+    observations.push({
+      kind: 'release-soon',
+      headline: `"${upcoming.title}" is out in ${days} ${days === 1 ? 'day' : 'days'}.`,
+      suggestion: 'Feature it on the home page and get the pre-save link up.',
+    });
+    if (content.signup.enabled) {
+      observations.push({
+        kind: 'gate-final-audio',
+        headline: 'You could put an early listen behind an email catcher before it drops.',
+        suggestion: `Add a sneak-peek form for "${upcoming.title}" so fans trade an address for the first play.`,
+      });
+    }
+  }
+
+  // Featuring is a judgement call about what the artist wants front and
+  // centre, so it is raised rather than done.
+  const newestOut = content.releases
     .filter(release => release.date <= today)
     .sort((a, b) => b.date.localeCompare(a.date))[0];
   const featured = content.releases.find(release => release.featured);
-
-  if (newest && featured && featured.id !== newest.id && newest.date > featured.date) {
-    operations.push({ op: 'upsert-release', value: { ...featured, featured: false } });
-    operations.push({ op: 'upsert-release', value: { ...newest, featured: true } });
-    changes.push(`Moved "${newest.title}" to the top of the page`);
-    findings.push({
+  if (newestOut && featured && featured.id !== newestOut.id && newestOut.date > featured.date) {
+    observations.push({
       kind: 'stale-hero',
-      detail: `"${featured.title}" was still featured over the newer "${newest.title}"`,
-      actionable: true,
-    });
-  } else if (newest && !featured) {
-    operations.push({ op: 'upsert-release', value: { ...newest, featured: true } });
-    changes.push(`Featured "${newest.title}" at the top of the page`);
-    findings.push({ kind: 'stale-hero', detail: 'Nothing was featured on the home page', actionable: true });
-  }
-
-  // Past shows are left in place: the archive is worth having, and the
-  // template already separates upcoming from past.
-  const past = content.shows.filter(show => show.date < today).length;
-  if (past > 0 && content.shows.every(show => show.date < today)) {
-    findings.push({
-      kind: 'past-show',
-      detail: 'Every listed show has happened. Nothing is coming up.',
-      actionable: false,
+      headline: `The home page still leads with "${featured.title}" while "${newestOut.title}" is newer.`,
+      suggestion: `Move "${newestOut.title}" to the top.`,
     });
   }
 
-  // Things worth telling the artist but not worth acting on alone.
-  if (typeof signals.auditScore === 'number' && signals.auditScore < 70) {
-    findings.push({
-      kind: 'low-seo',
-      detail: `Search readiness is ${signals.auditScore} out of 100`,
-      actionable: false,
+  // Shows are never inferred from calendar titles. If the calendar is busy
+  // and the site is empty, ask the artist for the list.
+  if (content.shows.filter(show => show.date >= today).length === 0 && signals.upcomingEvents.length > 0) {
+    observations.push({
+      kind: 'no-shows-listed',
+      headline: 'Your site has no upcoming shows, but your calendar is not empty.',
+      suggestion: 'Send me the dates, cities, venues, and ticket links and I will put them up.',
     });
   }
 
-  if (content.signup.enabled && signals.lastSignupAt && daysBetween(signals.lastSignupAt, today) > 30) {
-    findings.push({
+  if (!content.signup.enabled) {
+    observations.push({
+      kind: 'no-door',
+      headline: 'There is no way for a visitor to give you their email.',
+      suggestion: 'Turn on the signup form so people who find you can hear from you again.',
+    });
+  } else if (signals.lastSignupAt && daysBetween(signals.lastSignupAt, today) > 30) {
+    observations.push({
       kind: 'quiet-door',
-      detail: 'No new signups in over a month. The door may be hard to find.',
-      actionable: false,
+      headline: 'Nobody has signed up in over a month.',
+      suggestion: 'Move the form higher on the page or offer something in return.',
     });
   }
 
-  const lastJournal = content.journal[0]?.date;
-  if (signals.lastPostAt && (!lastJournal || daysBetween(lastJournal, today) > 21)) {
-    findings.push({
-      kind: 'quiet-journal',
-      detail: 'You have posted recently but the site has no news.',
-      actionable: false,
+  if (typeof signals.auditScore === 'number' && signals.auditScore < 70) {
+    observations.push({
+      kind: 'low-seo',
+      headline: `Search engines are only reading the site at ${signals.auditScore} out of 100.`,
+      suggestion: 'Let me fix the titles and descriptions the audit flagged.',
     });
   }
 
-  if (operations.length > 0) {
-    why.push(...findings.filter(finding => finding.actionable).map(finding => finding.detail));
-  }
-
-  return { operations, changes, why, findings, changeClass: 'content-only' };
+  return observations;
 }
 
 // ---------------------------------------------------------------------------
@@ -333,9 +367,9 @@ export interface WebsiteBrief {
   cadence: RoutineCadence;
   site?: BriefSiteItem;
   subscribers?: BriefSubscriberItem;
-  /** Everything the routine noticed but did not act on. */
-  notes: string[];
-  /** True when there was nothing to do at all. */
+  /** Things worth raising, carried as text so nothing acts on them. */
+  observations: Observation[];
+  /** True when there was nothing to do and nothing to say. */
   nothingToDo?: true;
 }
 
@@ -351,6 +385,6 @@ export function describeBrief(brief: WebsiteBrief): string {
   if (brief.subscribers && brief.subscribers.imported > 0) {
     parts.push(`${brief.subscribers.imported} new ${brief.subscribers.imported === 1 ? 'fan' : 'fans'} from the site`);
   }
-  if (parts.length === 0 && brief.notes.length > 0) return brief.notes[0]!;
+  if (parts.length === 0 && brief.observations.length > 0) return brief.observations[0]!.headline;
   return parts.join(' · ');
 }

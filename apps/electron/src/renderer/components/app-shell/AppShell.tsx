@@ -2528,9 +2528,9 @@ function AppShellContent({
 
     if (!isArtistHQWorkspace) {
       result.push({ id: 'nav:campaign', type: 'nav', action: handleCampaignHomeClick })
-      result.push({ id: 'nav:calendar', type: 'nav', action: handleCampaignCalendarClick })
       result.push({ id: 'nav:release-board', type: 'nav', action: handleCampaignReleaseBoardClick })
       result.push({ id: 'nav:release-kit', type: 'nav', action: handleCampaignReleaseKitClick })
+      result.push({ id: 'nav:calendar', type: 'nav', action: handleCampaignCalendarClick })
       result.push({ id: 'nav:chat', type: 'nav', action: handleWorkChatClick })
       result.push({ id: 'nav:work', type: 'nav', action: handleAgentsClick })
       return result
@@ -2899,13 +2899,6 @@ function AppShellContent({
           onClick: handleCampaignHomeClick,
         },
         {
-          id: "nav:calendar",
-          title: "Plan",
-          icon: Calendar,
-          variant: campaignCalendarActive ? "default" : "ghost",
-          onClick: handleCampaignCalendarClick,
-        },
-        {
           id: "nav:release-board",
           title: "Essentials",
           icon: ListTodo,
@@ -2918,6 +2911,13 @@ function AppShellContent({
           icon: Archive,
           variant: campaignReleaseKitActive ? "default" : "ghost",
           onClick: handleCampaignReleaseKitClick,
+        },
+        {
+          id: "nav:calendar",
+          title: "Plan",
+          icon: Calendar,
+          variant: campaignCalendarActive ? "default" : "ghost",
+          onClick: handleCampaignCalendarClick,
         },
         {
           id: "nav:work",

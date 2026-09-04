@@ -6,6 +6,7 @@ import {
   cronForRoutine,
   grantTrustedMode,
   loadSiteContent,
+  saveSiteContent,
   loadWebsiteManifest,
   recordCleanPublish,
   saveWebsiteManifest,
@@ -27,7 +28,11 @@ async function site(): Promise<{ root: string; service: WebsiteService }> {
 }
 
 function signals(overrides: Partial<RoutineSignals> = {}): RoutineSignals {
-  return { releases: [], shows: [], ...overrides }
+  return { releases: [], posted: [], upcomingEvents: [], ...overrides }
+}
+
+function post(id: string, text: string, postedAt = '2026-09-14T10:00:00.000Z') {
+  return { id, postedAt, text, platform: 'x' }
 }
 
 function brief(result: WebsiteToolResult): WebsiteBrief {
@@ -35,25 +40,23 @@ function brief(result: WebsiteToolResult): WebsiteBrief {
 }
 
 describe('running the routine', () => {
-  test('a new show reaches the site, is built, and waits for one click', async () => {
+  test('a post already public reaches the site, is built, and waits for one click', async () => {
     const { root, service } = await site()
     try {
       const result = await service.runRoutine(root, CONTEXT, {
         today: TODAY,
-        signals: signals({
-          shows: [{ id: 'denver', date: '2026-10-02', city: 'Denver', venue: 'Bluebird' }],
-        }),
+        signals: signals({ posted: [post('x1', 'Mixing the last song today.')] }),
       })
 
       expect(result.ok).toBe(true)
       const card = brief(result)
       expect(card.site).toBeDefined()
-      expect(card.site!.summary).toContain('Denver')
+      expect(card.site!.summary).toContain('site update')
       expect(card.site!.tier).toBe('one-click')
       // Nothing may reach production without the artist.
       expect(card.site!.deployReceiptId).toBeUndefined()
 
-      expect(loadSiteContent(root)!.shows).toHaveLength(1)
+      expect(loadSiteContent(root)!.journal).toHaveLength(1)
       expect(loadWebsiteManifest(root)!.history).toHaveLength(0)
       service.dispose()
     } finally {
@@ -61,10 +64,17 @@ describe('running the routine', () => {
     }
   }, 30_000)
 
-  test('a quiet run says so and writes no changes', async () => {
+  test('a healthy site with nothing posted says so and writes no changes', async () => {
     const { root, service } = await site()
     try {
-      const result = await service.runRoutine(root, CONTEXT, { today: TODAY, signals: signals() })
+      // A site with a live door and a good score has nothing to raise.
+      const content = loadSiteContent(root)!
+      saveSiteContent(root, { ...content, signup: { ...content.signup, enabled: true } })
+
+      const result = await service.runRoutine(root, CONTEXT, {
+        today: TODAY,
+        signals: signals({ auditScore: 95, lastSignupAt: '2026-09-14' }),
+      })
 
       expect(result.ok).toBe(true)
       const card = brief(result)
@@ -77,16 +87,32 @@ describe('running the routine', () => {
     }
   }, 30_000)
 
+  test('a brand-new site is told it has no way to collect an email', async () => {
+    const { root, service } = await site()
+    try {
+      const result = await service.runRoutine(root, CONTEXT, { today: TODAY, signals: signals() })
+
+      const card = brief(result)
+      expect(card.observations.map(item => item.kind)).toContain('no-door')
+      // Worth saying is not the same as nothing to do.
+      expect(card.nothingToDo).toBeUndefined()
+      expect(card.site).toBeUndefined()
+      service.dispose()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  }, 30_000)
+
   test('the brief is kept on the manifest so the card survives a restart', async () => {
     const { root, service } = await site()
     try {
       await service.runRoutine(root, CONTEXT, {
         today: TODAY,
-        signals: signals({ releases: [{ id: 'low-tide', title: 'Low Tide', type: 'single', date: '2026-09-01' }] }),
+        signals: signals({ posted: [post('x1', 'A note from the studio.')] }),
       })
 
       const stored = loadWebsiteManifest(root)!.pendingBrief
-      expect(stored?.site?.summary).toContain('Low Tide')
+      expect(stored?.site?.summary).toContain('site update')
       expect(loadWebsiteManifest(root)!.routine?.lastRunAt).toBeTruthy()
 
       service.clearBrief(root)
@@ -102,14 +128,14 @@ describe('running the routine', () => {
     try {
       const result = await service.runRoutine(root, CONTEXT, {
         today: TODAY,
-        signals: signals({ auditScore: 40, lastPostAt: '2026-09-12' }),
+        signals: signals({ auditScore: 40 }),
       })
 
       const card = brief(result)
+      // Observations never become edits.
       expect(card.site).toBeUndefined()
-      expect(card.notes.join(' ')).toContain('40 out of 100')
-      expect(card.notes.some(note => note.includes('no news'))).toBe(true)
-      // Notes alone are not "nothing to do".
+      expect(card.observations.map(item => item.kind)).toContain('low-seo')
+      expect(card.observations.some(item => item.headline.includes('40'))).toBe(true)
       expect(card.nothingToDo).toBeUndefined()
       service.dispose()
     } finally {
@@ -146,7 +172,7 @@ describe('running the routine', () => {
 
       const result = await service.runRoutine(root, CONTEXT, {
         today: TODAY,
-        signals: signals({ shows: [{ id: 'denver', date: '2026-10-02', city: 'Denver', venue: 'Bluebird' }] }),
+        signals: signals({ posted: [post('x1', 'Out now everywhere.')] }),
       })
 
       const card = brief(result)
@@ -169,7 +195,7 @@ describe('running the routine', () => {
 
       const result = await service.runRoutine(root, CONTEXT, {
         today: TODAY,
-        signals: signals({ shows: [{ id: 'denver', date: '2026-10-02', city: 'Denver', venue: 'Bluebird' }] }),
+        signals: signals({ posted: [post('x1', 'Out now everywhere.')] }),
       })
 
       expect(brief(result).site!.tier).toBe('one-click')

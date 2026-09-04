@@ -194,13 +194,12 @@ export function registerWebsiteHandlers(server: RpcServer, _deps: HandlerDeps): 
   /** Run the routine now. Also the "manual" cadence's only trigger. */
   server.handle(RPC_CHANNELS.website.RUN_ROUTINE, async (_ctx, workspaceId: string) => {
     const workspace = resolveWorkspace(workspaceId)
-    const signals = collectRoutineSignals(workspace.rootPath)
+    const signals = collectRoutineSignals(workspace.rootPath, workspace.id)
     return service.runRoutine(workspace.rootPath, {
       machineId: await machineIdFor(workspace.rootPath),
       origin: { kind: 'user' },
     }, {
       signals,
-      unmappedEvents: signals.unmappedEvents,
       previewTarget: { workspaceRootPath: workspace.rootPath, workspaceId: workspace.id },
     })
   })
