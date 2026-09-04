@@ -75,6 +75,8 @@ export class ModelCooldownRegistry {
     reason: ModelFallbackFailureCode;
     retryAfterMs?: number;
   }): ModelCooldown | undefined {
+    // Input compatibility is not provider health; text work may still succeed.
+    if (input.reason === 'unsupported_input') return undefined;
     const decision = classifyModelFallback(input.reason);
     if (decision !== 'fall-back') return undefined;
 

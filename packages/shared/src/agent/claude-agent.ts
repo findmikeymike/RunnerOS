@@ -2735,7 +2735,7 @@ This is a branched conversation. All prior messages in this conversation are par
 
     // Clean up session-specific state
     const configSessionId = this.config.session?.id;
-    if (configSessionId) {
+    if (configSessionId && !this.config.temporaryFallbackAttempt) {
       clearPlanFileState(configSessionId);
       unregisterSessionScopedToolCallbacks(configSessionId);
       cleanupSessionScopedTools(configSessionId);

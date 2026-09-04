@@ -22,6 +22,6 @@
     "outDir": "./dist",
     "rootDir": "./src"
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "../shared/src/agent/bash-parser.d.ts"],
   "exclude": ["node_modules", "dist"]
 }

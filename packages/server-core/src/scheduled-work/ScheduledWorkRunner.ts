@@ -38,6 +38,7 @@ import {
   type LoadedContextDoc,
 } from '@craft-agent/shared/workspace-context'
 import type { WorkflowRunSnapshot, WorkflowRunState } from '@craft-agent/shared/workflows'
+import type { ModelAttempt } from '@craft-agent/shared/config'
 import { reconcileXEditorialSlateOrder } from '../x-editorial/slate-status'
 
 const ACTIVE_WORKFLOW_STATES = new Set<WorkflowRunState>(['created', 'queued', 'running', 'paused'])
@@ -83,6 +84,7 @@ export interface ScheduledWorkRunnerDeps {
     outputs: OutputManifest[]
   }): Promise<{ sharedIntelContextSlugs?: string[] }>
   readAgentSession?(sessionId: string): Promise<'running' | 'completed' | 'interrupted' | 'missing'>
+  getSessionModelAttempts?(sessionId: string): import('@craft-agent/shared/config').ModelAttempt[]
   isAgentSessionWaitingForUser?(sessionId: string): boolean
   awaitAgentCompletionBarrier?(sessionId: string): Promise<boolean>
   abortAgentSession?(sessionId: string): Promise<void>
@@ -617,6 +619,17 @@ export class ScheduledWorkRunner {
         )
         return 'failed'
       }
+      const exhaustedAttempts = this.exhaustedModelAttempts(sessionId)
+      if (exhaustedAttempts) {
+        await this.finishWithAttention(
+          workspaceId,
+          workspaceRootPath,
+          order.id,
+          this.buildAttention('provider-unavailable', formatModelExhaustion(exhaustedAttempts)),
+          exhaustedAttempts,
+        )
+        return 'failed'
+      }
       const outputs = this.matchExpectedOutputs(
         execution.expectedOutput,
         sessionId,
@@ -690,6 +703,17 @@ export class ScheduledWorkRunner {
       return persisted.updated ? 'failed' : 'running'
     }
     if (order.execution.type !== 'agent-task') return 'failed'
+    const exhaustedAttempts = this.exhaustedModelAttempts(sessionId)
+    if (exhaustedAttempts) {
+      const persisted = await this.finishWithAttention(
+        workspaceId,
+        workspaceRootPath,
+        order.id,
+        this.buildAttention('provider-unavailable', formatModelExhaustion(exhaustedAttempts)),
+        exhaustedAttempts,
+      )
+      return persisted.updated ? 'failed' : 'running'
+    }
     const outputs = this.matchExpectedOutputs(
       order.execution.expectedOutput,
       sessionId,
@@ -946,6 +970,7 @@ export class ScheduledWorkRunner {
     outputIds: string[],
     sharedIntelContextSlugs?: string[],
   ): Promise<PersistResult> {
+    const modelAttempts = this.deps.getSessionModelAttempts?.(sessionId) ?? []
     return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) => {
       if (order.status !== 'running' || order.execution.type !== 'agent-task') return null
       return {
@@ -961,6 +986,7 @@ export class ScheduledWorkRunner {
           resultSummary: outputIds.length > 0
             ? `Completed with ${outputIds.length} output${outputIds.length === 1 ? '' : 's'}.`
             : 'Completed without output bundles.',
+          ...(modelAttempts.length > 1 ? { modelAttempts } : {}),
         }),
       }
     })
@@ -1012,6 +1038,7 @@ export class ScheduledWorkRunner {
     workspaceRootPath: string,
     orderId: string,
     attention: ScheduledWorkAttention,
+    modelAttempts?: ModelAttempt[],
   ): Promise<PersistResult> {
     return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) => {
       if (order.deletedAt || order.status !== 'running') return null
@@ -1026,9 +1053,15 @@ export class ScheduledWorkRunner {
           endedAt: nowIso,
           error: attention.message,
           resultSummary: summary,
+          ...(modelAttempts?.length ? { modelAttempts } : {}),
         }),
       }
     })
+  }
+
+  private exhaustedModelAttempts(sessionId: string): ModelAttempt[] | undefined {
+    const attempts = this.deps.getSessionModelAttempts?.(sessionId) ?? []
+    return attempts.length > 1 && attempts.at(-1)?.outcome === 'failed' ? attempts : undefined
   }
 
   private continuationFenceIssue(
@@ -1722,6 +1755,7 @@ function updateLatestRun(
       endedAt: patch.endedAt,
       resultSummary: patch.resultSummary,
       error: patch.error,
+      modelAttempts: patch.modelAttempts,
       externalReceipt: patch.externalReceipt,
     }),
   ]
@@ -1789,4 +1823,13 @@ function clean(value: unknown): string | undefined {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function formatModelExhaustion(attempts: ModelAttempt[]): string {
+  return [
+    'Could not reach a working model.',
+    ...attempts.map(attempt =>
+      `${attempt.connectionSlug} · ${attempt.model} — ${attempt.errorCode?.replaceAll('_', ' ') ?? attempt.outcome}`,
+    ),
+  ].join('\n')
 }

@@ -34,16 +34,23 @@ import {
 } from '../../config/storage.ts';
 import { resolveModelFallbackChain } from '../../config/model-fallback.ts';
 import { createModelFallbackBackend } from './model-fallback-backend.ts';
+import {
+  getSessionScopedToolCallbacks,
+  mergeSessionScopedToolCallbacks,
+  registerSessionScopedToolCallbacks,
+  unregisterSessionScopedToolCallbacks,
+} from '../session-scoped-tool-callback-registry.ts';
 // Import deprecated type for legacy migration function only
 import type { LlmConnectionType, CustomEndpointConfig } from '../../config/llm-connections.ts';
 // Import validation helpers for provider-auth combinations
 import {
   isValidProviderAuthCombination,
+  isDeniedMiniModelId,
 } from '../../config/llm-connections.ts';
 import { parseValidationError, type LlmValidationResult } from '../../config/llm-validation.ts';
 import type { ModelFetchResult } from '../../config/model-fetcher.ts';
 // Model resolution utilities
-import { getModelProvider, DEFAULT_MODEL } from '../../config/models.ts';
+import { getModelById, getModelProvider, DEFAULT_MODEL } from '../../config/models.ts';
 import { homedir } from 'node:os';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -170,6 +177,8 @@ export function createBackendFromResolvedContext(args: {
   if (!coreConfig.modelFallback?.enabled || !context.connection) return primary;
 
   const primaryConnection = context.connection;
+  const configuredChain = primaryConnection.fallbackChain ?? getModelFallbackChain();
+  if (!configuredChain?.enabled || configuredChain.entries.length === 0) return primary;
   return createModelFallbackBackend({
     primary,
     primaryConnectionSlug: primaryConnection.slug,
@@ -191,9 +200,19 @@ export function createBackendFromResolvedContext(args: {
         globalChain: getModelFallbackChain(),
       });
 
-      return resolution.candidates.map(candidate => ({
-        ...candidate,
-        create: () => {
+      return resolution.candidates.map(candidate => {
+        const connection = connections.find(item => item.slug === candidate.connectionSlug);
+        const configuredModel = connection?.models?.find(model =>
+          (typeof model === 'string' ? model : model.id) === candidate.model,
+        );
+        const knownImageSupport = typeof configuredModel === 'object'
+          ? configuredModel.supportsImages
+          : (connection?.customEndpoint?.supportsImages ?? getModelById(candidate.model)?.supportsImages);
+        return {
+          ...candidate,
+          supportsImages: knownImageSupport,
+          miniAllowed: !isDeniedMiniModelId(candidate.model, connection?.piAuthProvider),
+          create: () => {
           const candidateContext = resolveBackendContext({
             sessionConnectionSlug: candidate.connectionSlug,
             managedModel: candidate.model,
@@ -210,7 +229,11 @@ export function createBackendFromResolvedContext(args: {
               llmConnection: candidate.connectionSlug,
             }
             : undefined;
-          return createRawBackendFromResolvedContext({
+          const ownerSessionId = coreConfig.session?.id;
+          const ownerCallbacks = ownerSessionId
+            ? getSessionScopedToolCallbacks(ownerSessionId)
+            : undefined;
+          const backend = createRawBackendFromResolvedContext({
             context: candidateContext,
             hostRuntime,
             providerOptions: { piAuthProvider: candidateContext.connection?.piAuthProvider },
@@ -218,10 +241,9 @@ export function createBackendFromResolvedContext(args: {
               ...coreConfig,
               session: candidateSession,
               model: candidate.model,
-              miniModel: candidateContext.connection
-                ? (candidateContext.connection.defaultModel ?? candidate.model)
-                : candidate.model,
+              miniModel: candidate.model,
               modelFallback: undefined,
+              temporaryFallbackAttempt: true,
               onSdkSessionIdUpdate: undefined,
               onSdkSessionIdCleared: undefined,
               getBranchSeedMessages: undefined,
@@ -230,8 +252,39 @@ export function createBackendFromResolvedContext(args: {
               markTransferredSessionSummaryApplied: undefined,
             },
           });
-        },
-      }));
+          if (ownerSessionId) {
+            const candidateCallbacks = getSessionScopedToolCallbacks(ownerSessionId);
+            if (ownerCallbacks) {
+              const {
+                queryFn,
+                onPlanSubmitted,
+                onAuthRequest,
+                spawnSessionFn,
+                ...ownerHostCallbacks
+              } = ownerCallbacks;
+              mergeSessionScopedToolCallbacks(ownerSessionId, {
+                ...ownerHostCallbacks,
+                queryFn: candidateCallbacks?.queryFn ?? queryFn,
+                onPlanSubmitted: candidateCallbacks?.onPlanSubmitted ?? onPlanSubmitted,
+                onAuthRequest: candidateCallbacks?.onAuthRequest ?? onAuthRequest,
+                spawnSessionFn: candidateCallbacks?.spawnSessionFn ?? spawnSessionFn,
+              });
+            }
+            const destroy = backend.destroy.bind(backend);
+            let restored = false;
+            backend.destroy = () => {
+              if (restored) return;
+              restored = true;
+              destroy();
+              if (ownerCallbacks) registerSessionScopedToolCallbacks(ownerSessionId, ownerCallbacks);
+              else unregisterSessionScopedToolCallbacks(ownerSessionId);
+            };
+            backend.dispose = backend.destroy;
+          }
+          return backend;
+          },
+        };
+      });
     },
   });
 }

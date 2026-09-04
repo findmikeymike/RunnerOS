@@ -9,6 +9,8 @@ export interface WorkflowGraphNode {
   agent?: string
   state: WorkflowNodeState
   subagents?: number
+  /** Effective model shown only when this step actually fell back. */
+  model?: string
 }
 
 export interface WorkflowGraphSpec {
@@ -101,6 +103,11 @@ function WorkflowNodes({ nodes }: { nodes: WorkflowGraphNode[] }) {
             {node.subagents ? (
               <text x={x + NODE_WIDTH + 176} y={y + 39} fill="#a1a1aa" fontSize="11">
                 {node.subagents} subagent{node.subagents === 1 ? '' : 's'}
+              </text>
+            ) : null}
+            {node.model ? (
+              <text x={x + NODE_WIDTH + 176} y={y + 57} fill="#fb923c" fontSize="11">
+                Continued on {truncate(node.model, 32)}
               </text>
             ) : null}
           </g>
@@ -212,8 +219,18 @@ function parseRunStepArray(value: unknown, metadata?: Record<string, unknown> | 
       agent: asString(def?.agent) ?? readRunStepAgent(step),
       state: normalizeState(step.state),
       subagents: readSubagentCount(step),
+      model: readFallbackModel(step),
     }]
   })
+}
+
+function readFallbackModel(step: Record<string, unknown>): string | undefined {
+  const receipt = isRecord(step.executionReceipt) ? step.executionReceipt : null
+  const attempts = Array.isArray(receipt?.modelAttempts) ? receipt.modelAttempts : []
+  const effective = [...attempts].reverse().find(attempt =>
+    isRecord(attempt) && attempt.outcome === 'succeeded' && typeof attempt.model === 'string',
+  )
+  return isRecord(effective) ? asString(effective.model) : undefined
 }
 
 function readRunStepAgent(step: Record<string, unknown>): string | undefined {

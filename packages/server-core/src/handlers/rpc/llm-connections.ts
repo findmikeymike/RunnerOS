@@ -1,5 +1,5 @@
 import { RPC_CHANNELS, type DiscoverOmniRouteModelsParams, type DiscoverOmniRouteModelsResult, type LlmConnectionSetup } from '@craft-agent/shared/protocol'
-import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, fetchOpenRouterModels, type LlmConnection, type LlmConnectionWithStatus, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
+import { getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, getModelFallbackChain, setModelFallbackChain, touchLlmConnection, isCompatProvider, isAnthropicProvider, getDefaultModelsForConnection, getDefaultModelForConnection, fetchOpenRouterModels, type LlmConnection, type LlmConnectionWithStatus, type ModelFallbackChain, toBedrockNativeId, deriveBedrockRegionPrefix } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { setSetupDeferred } from '@craft-agent/shared/config/storage'
 import {
@@ -28,6 +28,9 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.llmConnections.TEST,
   RPC_CHANNELS.llmConnections.SET_DEFAULT,
   RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT,
+  RPC_CHANNELS.llmConnections.GET_FALLBACK_CHAIN,
+  RPC_CHANNELS.llmConnections.SET_FALLBACK_CHAIN,
+  RPC_CHANNELS.llmConnections.SET_CONNECTION_FALLBACK_CHAIN,
   RPC_CHANNELS.llmConnections.REFRESH_MODELS,
   RPC_CHANNELS.llmConnections.DISCOVER_OMNIROUTE_MODELS,
   RPC_CHANNELS.chatgpt.START_OAUTH,
@@ -448,6 +451,31 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
   // Get a specific LLM connection by slug
   server.handle(RPC_CHANNELS.llmConnections.GET, async (_ctx, slug: string): Promise<LlmConnection | null> => {
     return getLlmConnection(slug)
+  })
+
+  server.handle(RPC_CHANNELS.llmConnections.GET_FALLBACK_CHAIN, async (): Promise<ModelFallbackChain | undefined> => {
+    return getModelFallbackChain()
+  })
+
+  server.handle(RPC_CHANNELS.llmConnections.SET_FALLBACK_CHAIN, async (_ctx, chain: ModelFallbackChain): Promise<{ success: boolean; error?: string }> => {
+    try {
+      if (!setModelFallbackChain(chain)) return { success: false, error: 'Fallback chain is invalid' }
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to save fallback chain' }
+    }
+  })
+
+  server.handle(RPC_CHANNELS.llmConnections.SET_CONNECTION_FALLBACK_CHAIN, async (_ctx, slug: string, chain: ModelFallbackChain | null): Promise<{ success: boolean; error?: string }> => {
+    try {
+      if (!getLlmConnection(slug)) return { success: false, error: 'Connection not found' }
+      if (!updateLlmConnection(slug, { fallbackChain: chain ?? undefined })) {
+        return { success: false, error: 'Fallback chain is invalid' }
+      }
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to save connection fallback chain' }
+    }
   })
 
   // Get stored API key for an LLM connection (masked — for edit form display only)

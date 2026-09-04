@@ -80,6 +80,26 @@ async function collect(backend: AgentBackend, message = 'hello'): Promise<AgentE
 describe('model fallback backend', () => {
   beforeEach(() => modelCooldownRegistry.clearAll());
 
+  test('passes through primary streaming unchanged when no usable fallback exists', async () => {
+    const primary = fakeBackend([
+      { type: 'text_delta', text: 'live' },
+      { type: 'text_complete', text: 'live' },
+      { type: 'complete' },
+    ]);
+    const backend = createModelFallbackBackend({
+      primary,
+      primaryConnectionSlug: 'primary',
+      primaryModel: 'model-a',
+      resolveCandidates: async () => [],
+    });
+
+    expect(await collect(backend)).toEqual([
+      { type: 'text_delta', text: 'live' },
+      { type: 'text_complete', text: 'live' },
+      { type: 'complete' },
+    ]);
+  });
+
   test('discards a failed partial response and yields only the successful fallback', async () => {
     const primary = fakeBackend([
       { type: 'text_delta', text: 'partial' },
@@ -192,6 +212,31 @@ describe('model fallback backend', () => {
     expect((await collect(backend))[0]).toEqual({ type: 'text_complete', text: 'third works' });
   });
 
+  test('skips a known image-incompatible fallback and records the reason', async () => {
+    const primary = fakeBackend([
+      { type: 'typed_error', error: { code: 'service_error', title: 'Down', message: 'down', actions: [], canRetry: true } },
+    ]);
+    let incompatibleCreated = 0;
+    const compatible = fakeBackend([{ type: 'text_complete', text: 'vision answer' }]);
+    const attempts: Array<{ connectionSlug: string; errorCode?: string }> = [];
+    const backend = createModelFallbackBackend({
+      primary,
+      primaryConnectionSlug: 'primary',
+      primaryModel: 'model-a',
+      resolveCandidates: async () => [
+        { connectionSlug: 'text-only', model: 'model-b', chainIndex: 1, supportsImages: false, create: () => { incompatibleCreated += 1; return fakeBackend([]); } },
+        { connectionSlug: 'vision', model: 'model-c', chainIndex: 2, supportsImages: true, create: () => compatible },
+      ],
+      onAttempt: attempt => attempts.push(attempt),
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of backend.chat('inspect', [{ type: 'image', path: '/tmp/a.png', name: 'a.png', mimeType: 'image/png', size: 1 }])) events.push(event);
+    expect(events[0]).toEqual({ type: 'text_complete', text: 'vision answer' });
+    expect(incompatibleCreated).toBe(0);
+    expect(attempts).toContainEqual(expect.objectContaining({ connectionSlug: 'text-only', errorCode: 'unsupported_input' }));
+  });
+
   test('stops immediately for a non-fallback error', async () => {
     const primary = fakeBackend([
       { type: 'typed_error', error: { code: 'invalid_request', title: 'Bad', message: 'bad', actions: [], canRetry: false } },
@@ -224,8 +269,64 @@ describe('model fallback backend', () => {
     });
 
     const events = await collect(backend);
-    expect(events.some(event => event.type === 'error')).toBe(true);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'typed_error',
+      error: expect.objectContaining({ message: expect.stringContaining('Could not reach a working model') }),
+    }));
     expect(fallbackTwoCreated).toBe(0);
+  });
+
+  test('exhaustion names every attempted model and reason', async () => {
+    const primary = fakeBackend([
+      { type: 'typed_error', error: { code: 'rate_limited', title: 'Rate', message: 'wait', actions: [], canRetry: true } },
+    ]);
+    const fallback = fakeBackend([
+      { type: 'typed_error', error: { code: 'service_unavailable', title: 'Down', message: 'down', actions: [], canRetry: true } },
+    ]);
+    const backend = createModelFallbackBackend({
+      primary,
+      primaryConnectionSlug: 'primary',
+      primaryModel: 'model-a',
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => fallback }],
+    });
+
+    const event = (await collect(backend))[0];
+    expect(event).toEqual(expect.objectContaining({
+      type: 'typed_error',
+      error: expect.objectContaining({
+        message: expect.stringContaining('primary · model-a — rate limited'),
+      }),
+    }));
+    if (event?.type === 'typed_error') expect(event.error.message).toContain('fallback · model-b — service unavailable');
+    expect(modelCooldownRegistry.isCoolingDown('fallback', 'model-b')).toBe(true);
+    expect(primary.prompts).toHaveLength(1);
+    expect(fallback.prompts).toHaveLength(1);
+    expect((await collect(backend))[0]).toEqual(expect.objectContaining({
+      type: 'typed_error',
+      error: expect.objectContaining({ title: 'Models temporarily unavailable' }),
+    }));
+    expect(primary.prompts).toHaveLength(1);
+    expect(fallback.prompts).toHaveLength(1);
+  });
+
+  test('does not use a denied mini fallback candidate', async () => {
+    const primary = fakeBackend([]);
+    primary.runMiniCompletion = async () => { throw new Error('503 service unavailable'); };
+    let deniedCreated = 0;
+    const allowed = fakeBackend([]);
+    allowed.runMiniCompletion = async () => 'allowed';
+    const backend = createModelFallbackBackend({
+      primary,
+      primaryConnectionSlug: 'primary',
+      primaryModel: 'model-a',
+      resolveCandidates: async () => [
+        { connectionSlug: 'denied', model: 'codex-mini-latest', chainIndex: 1, miniAllowed: false, create: () => { deniedCreated += 1; return fakeBackend([]); } },
+        { connectionSlug: 'allowed', model: 'model-c', chainIndex: 2, miniAllowed: true, create: () => allowed },
+      ],
+    });
+
+    expect(await backend.runMiniCompletion('title')).toBe('allowed');
+    expect(deniedCreated).toBe(0);
   });
 
   test('skips a cooling primary and manual retry clears its cooldown', async () => {

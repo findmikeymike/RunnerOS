@@ -87,4 +87,14 @@ describe('model fallback cooldown registry', () => {
     registry.clear('a', 'm');
     expect(registry.isCoolingDown('a', 'm')).toBeFalse();
   });
+
+  test('vision incompatibility does not cool a model for later text work', () => {
+    const registry = new ModelCooldownRegistry(() => 1_000);
+    expect(registry.markFailure({
+      connectionSlug: 'text-model',
+      model: 'model-a',
+      reason: 'unsupported_input',
+    })).toBeUndefined();
+    expect(registry.isCoolingDown('text-model', 'model-a')).toBeFalse();
+  });
 });

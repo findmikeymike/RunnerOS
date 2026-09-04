@@ -763,6 +763,17 @@ describe('WorkflowRunner', () => {
 
   test('workflow step records a compact agent execution receipt', async () => {
     const h = makeHarness({ stepOutputs: ['RECEIPT_OUT'] });
+    const modelAttempts = [
+      {
+        connectionSlug: 'primary', model: 'primary-model', outcome: 'failed' as const,
+        errorCode: 'rate-limit', startedAt: '2026-07-10T14:00:00.000Z', endedAt: '2026-07-10T14:00:01.000Z', chainIndex: 0,
+      },
+      {
+        connectionSlug: 'fallback', model: 'fallback-model', outcome: 'succeeded' as const,
+        startedAt: '2026-07-10T14:00:01.000Z', endedAt: '2026-07-10T14:00:02.000Z', chainIndex: 1,
+      },
+    ];
+    h.deps.getSessionModelAttempts = () => modelAttempts;
     const runner = new WorkflowRunner(h.deps);
 
     await runner.start({
@@ -799,6 +810,7 @@ describe('WorkflowRunner', () => {
     expect(receipt?.prompt.sha256).toBe(
       createHash('sha256').update(h.promptsSent[0]!.prompt).digest('hex'),
     );
+    expect(receipt?.modelAttempts).toEqual(modelAttempts);
     expect(JSON.stringify(receipt)).not.toContain('persona:researcher');
 
     const onDisk = readRun(workspaceRoot, completed.id);

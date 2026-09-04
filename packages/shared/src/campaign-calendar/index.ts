@@ -1,4 +1,5 @@
 import type { ContextDocMetadata, LoadedContextDoc } from '../workspace-context/index.ts';
+import type { ModelAttempt } from '../config/llm-connections.ts';
 
 export const CAMPAIGN_CALENDAR_CONTEXT_SLUG = 'campaign-calendar';
 
@@ -124,6 +125,8 @@ export interface CampaignJobRun {
   resultSummary?: string;
   externalReceipt?: CampaignExternalExecutionReceipt;
   error?: string;
+  /** Present when the run used a configured model fallback. */
+  modelAttempts?: ModelAttempt[];
 }
 
 export interface CampaignExternalExecutionReceipt {
@@ -659,6 +662,7 @@ export function createCampaignJobRun(input: {
   resultSummary?: string;
   externalReceipt?: CampaignExternalExecutionReceipt;
   error?: string;
+  modelAttempts?: ModelAttempt[];
 }): CampaignJobRun {
   const startedAt = cleanIso(input.startedAt) ?? new Date().toISOString();
   return {
@@ -672,6 +676,7 @@ export function createCampaignJobRun(input: {
     resultSummary: clean(input.resultSummary),
     externalReceipt: normalizeExternalReceipt(input.externalReceipt),
     error: clean(input.error),
+    modelAttempts: input.modelAttempts?.map(attempt => ({ ...attempt })),
   };
 }
 

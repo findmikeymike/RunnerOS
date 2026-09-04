@@ -20,7 +20,7 @@ import { FullscreenOverlayBase, Tooltip, TooltipTrigger, TooltipContent } from '
 import { useSetAtom } from 'jotai'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
 import { motion, AnimatePresence } from 'motion/react'
-import type { LlmConnectionWithStatus, ThinkingLevel, WorkspaceSettings, Workspace } from '../../../shared/types'
+import type { LlmConnectionWithStatus, ModelFallbackChain, ThinkingLevel, WorkspaceSettings, Workspace } from '../../../shared/types'
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVELS } from '@craft-agent/shared/agent/thinking-levels'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import {
@@ -149,6 +149,198 @@ function getConnectionProviderLabel(connection: LlmConnectionWithStatus): string
       : 'OpenAI-compatible endpoint'
   }
   return provider || 'AI provider'
+}
+
+function fallbackEntryModel(connection: LlmConnectionWithStatus | undefined): string {
+  if (!connection) return ''
+  return connection.defaultModel
+    ?? getModelOptionsForConnection(connection)[0]?.value
+    ?? ''
+}
+
+function ModelFallbackSettings({
+  connections,
+  onConnectionsChange,
+}: {
+  connections: LlmConnectionWithStatus[]
+  onConnectionsChange: () => Promise<void> | void
+}) {
+  const [scope, setScope] = useState('global')
+  const [globalChain, setGlobalChain] = useState<ModelFallbackChain>({ enabled: false, entries: [] })
+  const [draft, setDraft] = useState<ModelFallbackChain>({ enabled: false, entries: [] })
+  const [saving, setSaving] = useState(false)
+  const selectedConnection = connections.find(connection => connection.slug === scope)
+  const usesGlobal = scope !== 'global' && selectedConnection?.fallbackChain === undefined
+
+  useEffect(() => {
+    window.electronAPI?.getModelFallbackChain()
+      .then(chain => setGlobalChain(chain ?? { enabled: false, entries: [] }))
+      .catch(error => console.error('Failed to load model fallback chain:', error))
+  }, [])
+
+  useEffect(() => {
+    setDraft(scope === 'global'
+      ? globalChain
+      : (selectedConnection?.fallbackChain ?? globalChain))
+  }, [scope, selectedConnection?.fallbackChain, globalChain])
+
+  const save = useCallback(async (next: ModelFallbackChain | undefined) => {
+    if (!window.electronAPI) return
+    const previous = draft
+    if (next) setDraft(next)
+    setSaving(true)
+    try {
+      if (scope === 'global') {
+        const resolved = next ?? { enabled: false, entries: [] }
+        const result = await window.electronAPI.setModelFallbackChain(resolved)
+        if (!result.success) throw new Error(result.error ?? 'Could not save backup models')
+        setGlobalChain(resolved)
+      } else if (selectedConnection) {
+        const result = await window.electronAPI.setConnectionModelFallbackChain(
+          selectedConnection.slug,
+          next ?? null,
+        )
+        if (!result.success) throw new Error(result.error ?? 'Could not save connection backup models')
+        await onConnectionsChange()
+      }
+    } catch (error) {
+      setDraft(previous)
+      toast.error('Could not save backup models', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      })
+    } finally {
+      setSaving(false)
+    }
+  }, [draft, onConnectionsChange, scope, selectedConnection])
+
+  const setEntryConnection = useCallback((index: number, slug: string) => {
+    const entries = [...draft.entries]
+    if (slug === 'none') {
+      entries.splice(index)
+    } else {
+      const connection = connections.find(candidate => candidate.slug === slug)
+      if (!connection) return
+      entries[index] = { connectionSlug: slug, model: fallbackEntryModel(connection) }
+    }
+    void save({ ...draft, enabled: entries.length > 0, entries })
+  }, [connections, draft, save])
+
+  const setEntryModel = useCallback((index: number, model: string) => {
+    const entries = [...draft.entries]
+    const entry = entries[index]
+    if (!entry) return
+    entries[index] = { ...entry, model }
+    void save({ ...draft, entries })
+  }, [draft, save])
+
+  const brokenEntries = draft.entries.filter(entry => {
+    const connection = connections.find(candidate => candidate.slug === entry.connectionSlug)
+    return !connection || !connection.isAuthenticated
+  })
+  const connectionOptions = [
+    { value: 'none', label: 'None', description: 'Stop after the previous model.' },
+    ...connections.filter(connection => connection.isAuthenticated).map(connection => ({
+      value: connection.slug,
+      label: connection.name,
+      description: getConnectionProviderLabel(connection),
+    })),
+  ]
+
+  return (
+    <SettingsSection
+      title={
+        <div className="flex items-center gap-2">
+          Backup models
+          <InfoExplainer text="If your main model is unavailable, Runner tries these in order and shows you when it switches." />
+        </div>
+      }
+      description="Keep work moving through rate limits and provider outages."
+    >
+      <SettingsCard>
+        <SettingsMenuSelectRow
+          label="Applies when"
+          description="Set the app default or override one provider."
+          value={scope}
+          onValueChange={setScope}
+          options={[
+            { value: 'global', label: 'Global default', description: 'Used unless a provider has its own chain.' },
+            ...connections.map(connection => ({
+              value: connection.slug,
+              label: connection.name,
+              description: 'Provider-specific override',
+            })),
+          ]}
+        />
+        {scope !== 'global' && (
+          <SettingsToggle
+            label="Use global backup models"
+            description="Turn off to give this provider its own ordered backups."
+            checked={usesGlobal}
+            onCheckedChange={(checked) => {
+              if (checked) void save(undefined)
+              else void save({ enabled: false, entries: [] })
+            }}
+          />
+        )}
+        {!usesGlobal && (
+          <>
+            <SettingsToggle
+              label="Automatic fallback"
+              description="Try the backups below when the current model cannot continue."
+              checked={draft.enabled}
+              onCheckedChange={enabled => void save({ ...draft, enabled })}
+            />
+            <SettingsMenuSelectRow
+              label="Fallback 1"
+              description="First backup to try."
+              value={draft.entries[0]?.connectionSlug ?? 'none'}
+              onValueChange={value => setEntryConnection(0, value)}
+              options={connectionOptions}
+            />
+            {draft.entries[0] && (
+              <SettingsMenuSelectRow
+                label="Fallback 1 model"
+                description="Exact model used on that provider."
+                value={draft.entries[0].model ?? fallbackEntryModel(connections.find(connection => connection.slug === draft.entries[0]?.connectionSlug)!)}
+                onValueChange={value => setEntryModel(0, value)}
+                options={getModelOptionsForConnection(connections.find(connection => connection.slug === draft.entries[0]?.connectionSlug)).map(option => ({
+                  ...option,
+                  description: option.descriptionKey ? option.descriptionKey : option.description,
+                }))}
+              />
+            )}
+            {draft.entries[0] && (
+              <SettingsMenuSelectRow
+                label="Fallback 2"
+                description="Used only if the first backup also fails."
+                value={draft.entries[1]?.connectionSlug ?? 'none'}
+                onValueChange={value => setEntryConnection(1, value)}
+                options={connectionOptions}
+              />
+            )}
+            {draft.entries[1] && (
+              <SettingsMenuSelectRow
+                label="Fallback 2 model"
+                description="Exact model used on that provider."
+                value={draft.entries[1].model ?? fallbackEntryModel(connections.find(connection => connection.slug === draft.entries[1]?.connectionSlug)!)}
+                onValueChange={value => setEntryModel(1, value)}
+                options={getModelOptionsForConnection(connections.find(connection => connection.slug === draft.entries[1]?.connectionSlug)).map(option => ({
+                  ...option,
+                  description: option.descriptionKey ? option.descriptionKey : option.description,
+                }))}
+              />
+            )}
+            {brokenEntries.length > 0 && (
+              <div className="px-4 py-3 text-xs text-amber-300/75">
+                {brokenEntries.length} backup {brokenEntries.length === 1 ? 'entry needs' : 'entries need'} a connected provider before Runner can use it.
+              </div>
+            )}
+          </>
+        )}
+        {saving && <div className="px-4 py-2 text-[11px] text-white/34">Saving…</div>}
+      </SettingsCard>
+    </SettingsSection>
+  )
 }
 
 export const meta: DetailsPageMeta = {
@@ -1038,6 +1230,13 @@ export default function AiSettingsPage() {
                   </button>
                 </div>
               </SettingsSection>
+
+              {llmConnections.length > 0 && (
+                <ModelFallbackSettings
+                  connections={llmConnections}
+                  onConnectionsChange={refreshLlmConnections}
+                />
+              )}
 
               <AdvancedSettingsDisclosure>
                 {/* Default Settings - only show if connections exist */}

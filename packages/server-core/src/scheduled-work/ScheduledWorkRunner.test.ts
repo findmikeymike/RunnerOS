@@ -935,6 +935,38 @@ describe('ScheduledWorkRunner', () => {
     expect(saved.runs.at(-1)?.status).toBe('failed')
   })
 
+  test('records exhausted model chains as provider-unavailable attention', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder()])
+    const modelAttempts = [
+      {
+        connectionSlug: 'primary', model: 'model-a', outcome: 'failed' as const,
+        errorCode: 'rate_limited', startedAt: '2026-07-10T14:00:00.000Z', endedAt: '2026-07-10T14:00:01.000Z', chainIndex: 0,
+      },
+      {
+        connectionSlug: 'backup', model: 'model-b', outcome: 'failed' as const,
+        errorCode: 'service_unavailable', startedAt: '2026-07-10T14:00:01.000Z', endedAt: '2026-07-10T14:00:02.000Z', chainIndex: 1,
+      },
+    ]
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      withLock: createLock(),
+      executeAgentTask: async ({ onStarted }) => { await onStarted('session-exhausted'); return { sessionId: 'session-exhausted' } },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      getSessionModelAttempts: () => modelAttempts,
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => readWork(root).items[0]?.status === 'needs-attention')
+
+    const saved = readWork(root).items[0]!
+    expect(saved.attention?.reason).toBe('provider-unavailable')
+    expect(saved.attention?.message).toContain('backup · model-b — service unavailable')
+    expect(saved.runs.at(-1)?.modelAttempts).toEqual(modelAttempts)
+  })
+
   test('postprocesses a required intelligence report before marking the work done', async () => {
     const root = makeRoot()
     const manifest = buildManifest('intel-report', 'session-intel')
@@ -949,6 +981,16 @@ describe('ScheduledWorkRunner', () => {
       },
     })])
     const processed: string[] = []
+    const modelAttempts = [
+      {
+        connectionSlug: 'primary', model: 'primary-model', outcome: 'failed' as const,
+        errorCode: 'provider-unavailable', startedAt: '2026-07-10T14:00:00.000Z', endedAt: '2026-07-10T14:00:01.000Z', chainIndex: 0,
+      },
+      {
+        connectionSlug: 'fallback', model: 'fallback-model', outcome: 'succeeded' as const,
+        startedAt: '2026-07-10T14:00:01.000Z', endedAt: '2026-07-10T14:00:02.000Z', chainIndex: 1,
+      },
+    ]
     const runner = new ScheduledWorkRunner({
       canRunBackgroundWork: () => true,
       withLock: createLock(),
@@ -956,6 +998,7 @@ describe('ScheduledWorkRunner', () => {
       startWorkflow: async () => ({ runId: 'unused' }),
       readWorkflowRun: () => null,
       listOutputManifests: () => [manifest],
+      getSessionModelAttempts: () => modelAttempts,
       postProcessAgentTask: async ({ outputs }) => {
         processed.push(...outputs.map((output) => output.id))
         return { sharedIntelContextSlugs: ['shared-intel-content'] }
@@ -968,6 +1011,7 @@ describe('ScheduledWorkRunner', () => {
     expect(readWork(root).items[0]?.result).toEqual({
       type: 'agent-task', sessionId: 'session-intel', outputIds: ['intel-report'], sharedIntelContextSlugs: ['shared-intel-content'],
     })
+    expect(readWork(root).items[0]?.runs.at(-1)?.modelAttempts).toEqual(modelAttempts)
   })
 
   test('does not mark intelligence work done when report postprocessing fails', async () => {

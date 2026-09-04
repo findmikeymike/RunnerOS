@@ -126,6 +126,8 @@ export interface WorkflowRunnerDeps {
   getLastAssistantText: (sessionId: string) => string;
   /** Count tool results recorded in a step session. Used for explicit completion gates. */
   getSessionToolUseCount?: (sessionId: string) => number;
+  /** Model attempts retained by a hidden step session before it is deleted. */
+  getSessionModelAttempts?: (sessionId: string) => import('@craft-agent/shared/config').ModelAttempt[];
   /** List concrete Output bundles created by a step session. */
   getSessionOutputs?: (workspaceId: string, sessionId: string) => OutputManifest[];
   /**
@@ -907,6 +909,12 @@ export class WorkflowRunner {
       await this.sendMessageWithOptionalTimeout(active, session.id, stepPrompt, timeoutSeconds);
 
       if (active.abort.signal.aborted) return;
+
+      const modelAttempts = this.deps.getSessionModelAttempts?.(session.id) ?? [];
+      if (modelAttempts.length > 1 && stepRecord.executionReceipt) {
+        stepRecord.executionReceipt.modelAttempts = modelAttempts;
+        this.touch(active);
+      }
 
       const rawOutput = this.deps.getLastAssistantText(session.id);
       this.validateCompletion(active.snapshot.workspaceId, stepRecord, stepDef, session.id, rawOutput);

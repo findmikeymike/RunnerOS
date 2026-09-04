@@ -655,7 +655,7 @@ export abstract class BaseAgent implements AgentBackend {
 
     // Sync the centralized MCP client pool (if available)
     // Both MCP sources and API sources are routed through the pool.
-    if (this.config.mcpPool) {
+    if (this.config.mcpPool && !this.config.temporaryFallbackAttempt) {
       try {
         await this.config.mcpPool.sync(mcpServers, apiServers as Record<string, ApiServerConfig>);
       } catch (err) {

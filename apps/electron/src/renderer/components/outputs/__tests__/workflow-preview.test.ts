@@ -39,6 +39,12 @@ describe('parseWorkflowGraphSpec', () => {
           id: 'research',
           state: 'succeeded',
           attempts: 1,
+          executionReceipt: {
+            modelAttempts: [
+              { connectionSlug: 'primary', model: 'model-a', outcome: 'failed' },
+              { connectionSlug: 'backup', model: 'model-b', outcome: 'succeeded' },
+            ],
+          },
           agentMessageReceipts: [
             { receiptId: 'r1', targetAgentSlug: 'critic', status: 'succeeded' },
             { receiptId: 'r2', targetAgentSlug: 'fact-checker', status: 'succeeded' },
@@ -57,6 +63,7 @@ describe('parseWorkflowGraphSpec', () => {
         ['write', 'Write', 'writer', 'running'],
       ])
       expect(result.spec.nodes[0]?.subagents).toBe(2)
+      expect(result.spec.nodes[0]?.model).toBe('model-b')
       expect(result.spec.nodes[1]?.subagents).toBeUndefined()
     }
   })

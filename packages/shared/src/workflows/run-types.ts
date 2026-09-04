@@ -15,6 +15,7 @@ import type { WorkflowMetadata } from './types.ts';
 import type { PermissionMode } from '../agent/mode-types.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 import type { AgentMessageStatus } from '../agent-messaging/types.ts';
+import type { ModelAttempt } from '../config/llm-connections.ts';
 
 /** Compact per-step receipt of the agent bundle used to execute a step. */
 export interface WorkflowStepExecutionReceipt {
@@ -42,6 +43,8 @@ export interface WorkflowStepExecutionReceipt {
     chars: number;
     sha256: string;
   };
+  /** Present only when this step used the configured model fallback chain. */
+  modelAttempts?: ModelAttempt[];
 }
 
 /** Compact per-step trace of subagents spawned via `message_agent`. */

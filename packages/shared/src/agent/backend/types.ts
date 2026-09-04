@@ -287,6 +287,9 @@ export interface CoreBackendConfig {
       operation: 'chat' | 'mini' | 'query';
     }) => void;
   };
+
+  /** Internal: this backend borrows the owning session's pools and registries. */
+  temporaryFallbackAttempt?: boolean;
 }
 
 // ============================================================

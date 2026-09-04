@@ -392,8 +392,8 @@ import type { ExportResourcesOptions, ExportResult, ResourceImportMode, Resource
 export type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult };
 
 // LLM connection types
-import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, NetworkProxySettings } from '@craft-agent/shared/config';
-export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, NetworkProxySettings };
+import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, ModelFallbackChain, NetworkProxySettings } from '@craft-agent/shared/config';
+export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType, ModelFallbackChain, NetworkProxySettings };
 
 // =============================================================================
 // GUI-only types (not used by server/handler code)
@@ -1132,6 +1132,9 @@ export interface ElectronAPI {
   getDefaultThinkingLevel(): Promise<ThinkingLevel>
   setDefaultThinkingLevel(level: ThinkingLevel): Promise<{ success: boolean; error?: string }>
   setWorkspaceDefaultLlmConnection(workspaceId: string, slug: string | null): Promise<{ success: boolean; error?: string }>
+  getModelFallbackChain(): Promise<ModelFallbackChain | undefined>
+  setModelFallbackChain(chain: ModelFallbackChain): Promise<{ success: boolean; error?: string }>
+  setConnectionModelFallbackChain(slug: string, chain: ModelFallbackChain | null): Promise<{ success: boolean; error?: string }>
 
   // Automations
   getAutomations(workspaceId: string): Promise<unknown>

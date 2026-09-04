@@ -2155,7 +2155,7 @@ export class PiAgent extends BaseAgent {
     this.stopConfigWatcher();
 
     // Unregister session-scoped tool callbacks
-    if (this.config.session?.id) {
+    if (this.config.session?.id && !this.config.temporaryFallbackAttempt) {
       unregisterSessionScopedToolCallbacks(this.config.session.id);
     }
 

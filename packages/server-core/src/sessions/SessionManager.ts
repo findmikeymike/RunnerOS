@@ -3317,6 +3317,14 @@ export class SessionManager implements ISessionManager {
           if (session.isProcessing || (managed?.messageQueue.length ?? 0) > 0) return 'running'
           return session.lastFinalMessageId ? 'completed' : 'interrupted'
         },
+        getSessionModelAttempts: (sessionId) => {
+          const managed = this.sessions.get(sessionId)
+          if (!managed) return []
+          return [...managed.messages]
+            .reverse()
+            .find(message => (message.modelAttempts?.length ?? 0) > 1)
+            ?.modelAttempts ?? []
+        },
         isAgentSessionWaitingForUser: (sessionId) => this.isAutomationSessionWaitingForUser(sessionId),
         awaitAgentCompletionBarrier: async (sessionId) => {
           const managed = this.sessions.get(sessionId)
@@ -6122,6 +6130,14 @@ user a clickable link to where the thing now lives.`
             m.isError !== true
           )).length
         },
+        getSessionModelAttempts: (sessionId) => {
+          const managed = this.sessions.get(sessionId)
+          if (!managed) return []
+          return [...managed.messages]
+            .reverse()
+            .find(message => (message.modelAttempts?.length ?? 0) > 1)
+            ?.modelAttempts ?? []
+        },
         getSessionOutputs: (workspaceId, sessionId) => {
           const workspace = getWorkspaceByNameOrId(workspaceId)
           if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
@@ -7819,7 +7835,7 @@ user a clickable link to where the thing now lives.`
         modelFallback: {
           enabled: true,
           onAttempt: (attempt, operation) => {
-            if (operation !== 'chat') return
+            if (operation === 'mini') return
             managed.pendingModelAttempts = [...(managed.pendingModelAttempts ?? []), attempt]
             if (managed.activeModelFallbackMessageId) {
               const receiptMessage = managed.messages.find(message => message.id === managed.activeModelFallbackMessageId)
@@ -7828,10 +7844,15 @@ user a clickable link to where the thing now lives.`
             }
           },
           onSwitch: ({ from, to, reason, operation }) => {
-            if (operation !== 'chat') return
+            if (operation === 'mini') return
             const toConnection = getLlmConnection(to.connectionSlug)
             const fromConnection = getLlmConnection(from.connectionSlug)
-            const content = `Switched to ${toConnection?.name ?? to.connectionSlug} · ${to.model} because ${fromConnection?.name ?? from.connectionSlug} was unavailable (${reason.replaceAll('_', ' ')}).`
+            const needsConnectionAttention = reason === 'invalid_api_key'
+              || reason === 'invalid_credentials'
+              || reason === 'expired_oauth_token'
+              || reason === 'token_expired'
+              || reason === 'billing_error'
+            const content = `Switched to ${toConnection?.name ?? to.connectionSlug} · ${to.model} because ${fromConnection?.name ?? from.connectionSlug} was unavailable (${reason.replaceAll('_', ' ')}).${needsConnectionAttention ? ' Your primary connection needs attention in AI Settings.' : ''}`
             const notice: Message = {
               id: generateMessageId(),
               role: 'info',
