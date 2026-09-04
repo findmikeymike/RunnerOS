@@ -8,9 +8,9 @@ Checked means reviewed with the evidence below, not merged to main or live-certi
 - [x] Community email, imports, approval, retry and unsubscribe review. Fixes: `5420ca8c1`. Fresh evidence: 132 tests, full monorepo typecheck, renderer build. Live send/unsubscribe smoke and website redeployment remain required. See `community-email-v1-fixes.md`.
 - [x] Canvas output isolation: reviewed `ca0850b6e` with later hardening in `1e9363b28`, on `claude/artist-os-onboarding-0f75bd`. Fresh 78 tests across protocol, preview, board model and OutputService passed. Hidden real Electron fixture passed iframe and Browser Pane isolation, same-bundle scripts/styles/data, legacy redirect and forged-path checks. No meaningful isolation defect found in this pass.
 
-## Needs a Fix
+## Board Follow-up
 
-- [ ] Board navigation can discard unsaved edits in `1e9363b28`. `VisualBoardSurface.tsx:46` resets drafts on scope changes; `:102` clears the pending 700ms save without flushing or retaining it. Reproduced with the actual React component in hidden Electron and a fake persistence hook: add note, navigate after 100ms, return after 900ms -> notes before: 1, save calls: 0, notes after: 0. Preserve pending drafts or finish the scoped save before discarding them. Also cover navigation while a save is in flight with newer edits pending. This is separate from the working backend merge guards.
+- [x] Board navigation draft-loss fix committed as `cbc0db3d9` on `claude/artist-os-onboarding-0f75bd` (not yet integrated). Per-board save queues flush on navigation, serialize newer edits behind pending saves, and retain failed drafts for Retry. The actual React component and hook passed hidden Electron tests for quick navigation, return during a pending save with a second edit, failed-draft recovery, read-after-save ordering, and zero wrong-board writes. All 83 focused/controller/board/backend/protocol tests, Electron typecheck, and renderer build pass. Conflicting local drafts can be explicitly discarded through confirmed Reload saved board. The original repro lost a note with zero save calls.
 
 ## Next
 
@@ -21,5 +21,5 @@ Checked means reviewed with the evidence below, not merged to main or live-certi
 ## Worktrees
 
 - Community and checklist: `.worktrees/main/artist-os`, branch `codex/artist-website-engine`.
-- Canvas/board review: `.claude/worktrees/artist-os-onboarding-0f75bd`, HEAD `1e9363b28`. Its unrelated `.claude-flow/` files were untouched.
+- Canvas/board review: `.claude/worktrees/artist-os-onboarding-0f75bd`, HEAD `cbc0db3d9`. Its unrelated `.claude-flow/` files were untouched.
 - Unrelated creator-command-center specs in the working app tree were not included in either review commit.
