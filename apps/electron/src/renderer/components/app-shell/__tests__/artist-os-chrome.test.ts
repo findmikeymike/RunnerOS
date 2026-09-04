@@ -547,7 +547,7 @@ describe('Artist OS persistent shell chrome', () => {
     const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
 
     expect(hq).toContain("bg-[#0C0D0E] p-4")
-    expect(hq).toContain('bg-white/[0.035] p-3.5')
+    expect(hq).toContain('divide-x divide-white/[0.075] overflow-hidden rounded-[14px]')
   })
 
   test('places the lifecycle activity card below the Release Horizon', () => {
@@ -584,8 +584,8 @@ describe('Artist OS persistent shell chrome', () => {
     expect(hq).toContain('id="hq-home-operations" className="space-y-3"')
     expect(hq).toContain('<div id="hq-home-details">')
     expect(hq).toContain('<SignalsStrip')
-    expect(hq).toContain('group relative flex h-[104px] w-full min-w-0 flex-col overflow-hidden rounded-[14px]')
-    expect(hq).toContain('bg-white/[0.035] p-3.5')
+    expect(hq).toContain('group relative flex h-[104px] w-full min-w-0 flex-col overflow-hidden p-3.5')
+    expect(hq).toContain('divide-x divide-white/[0.075] overflow-hidden rounded-[14px]')
     expect(hq).toContain('backdrop-blur-2xl')
     expect(hq).not.toContain('border border-[#f97316]/35')
     expect(hq).toContain('ariaLabel="Open Spotify Pulse analysis"')
@@ -624,7 +624,7 @@ describe('Artist OS persistent shell chrome', () => {
     const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
     const strip = hq.slice(hq.indexOf('function SignalsStrip'), hq.indexOf('function SignalTile'))
     const spotify = strip.indexOf("label={spotifyPublicApi ? 'Popularity' : 'Streams'}")
-    const social = strip.indexOf('label="Instagram"')
+    const social = strip.indexOf('value={formatMetric(instagramSnapshot?.metrics.followers)}')
     const intel = hq.indexOf('<IntelPulseCard')
 
     expect(spotify).toBeGreaterThan(-1)

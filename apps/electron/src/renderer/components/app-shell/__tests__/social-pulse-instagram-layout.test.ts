@@ -15,6 +15,8 @@ describe('Social Pulse Instagram layout', () => {
     expect(source).toContain("const INSTAGRAM_SYNC_CRON = '20 9 * * 1'")
     expect(strip).toContain('Run Instagram Insights now — manual')
     expect(strip).toContain('Weekly Instagram Insights auto-run')
+    expect(strip).toContain('value={formatMetric(instagramSnapshot?.metrics.followers)}')
+    expect(strip).toContain('label="Change"')
     expect(strip).toContain('ariaLabel="Open Social Pulse analysis"')
     expect(strip).toContain('trendMode="bars"')
     expect(strip).toContain('instagramHistory.map((point) => point.followerDelta)')

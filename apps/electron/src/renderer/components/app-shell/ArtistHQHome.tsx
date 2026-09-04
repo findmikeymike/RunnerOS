@@ -2947,7 +2947,10 @@ function PulseRunControls({
     : `${weeklyLabel} is off — click to enable`
 
   return (
-    <div className="flex shrink-0 items-center gap-1" aria-label="Pulse run controls">
+    <div
+      className="inline-flex h-7 shrink-0 items-stretch divide-x divide-white/[0.08] overflow-hidden rounded-[7px] border border-white/[0.09] bg-white/[0.035]"
+      aria-label="Pulse run controls"
+    >
       <Tooltip>
         <TooltipTrigger asChild>
           <button
@@ -2959,7 +2962,7 @@ function PulseRunControls({
             disabled={busy || runDisabled}
             title={manualLabel}
             aria-label={manualLabel}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.09] bg-white/[0.035] text-white/58 transition-colors hover:border-white/[0.14] hover:bg-white/[0.08] hover:text-white/90 disabled:cursor-not-allowed disabled:opacity-35"
+            className="inline-flex h-full w-7 items-center justify-center text-white/58 transition-colors hover:bg-white/[0.08] hover:text-white/90 disabled:cursor-not-allowed disabled:opacity-35"
           >
             <Play className="h-3 w-3 fill-current" />
           </button>
@@ -2980,10 +2983,10 @@ function PulseRunControls({
             aria-label={weeklyTooltip}
             aria-pressed={active}
             className={cn(
-              'inline-flex h-6 w-6 items-center justify-center rounded-[6px] border transition-colors',
+              'inline-flex h-full w-7 items-center justify-center transition-colors',
               active
                 ? activeClassName
-                : 'border-white/[0.07] bg-white/[0.015] text-white/28 hover:bg-white/[0.05] hover:text-white/60',
+                : 'text-white/28 hover:bg-white/[0.05] hover:text-white/60',
               busy && 'cursor-wait opacity-55',
             )}
           >
@@ -3113,15 +3116,16 @@ function SignalsStrip({
     <section className="min-w-0">
       <div className="mb-2 flex h-6 items-center px-1">
         <p className="text-[9px] font-medium uppercase tracking-[0.16em] text-white/42">
-          Signals
+          Performance
           {spotifyDate ? <span className="text-white/24"> · {spotifyDate}</span> : null}
           {spotifySnapshot?.windowDays && !spotifyPublicApi ? <span className="text-white/24"> · {spotifySnapshot.windowDays} days</span> : null}
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <div className="relative min-w-0">
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+        <div className="relative grid min-w-0 grid-cols-2 divide-x divide-white/[0.075] overflow-hidden rounded-[14px] border border-white/[0.075] bg-white/[0.035] backdrop-blur-2xl">
           <SignalTile
+            embedded
             label={spotifyPublicApi ? 'Popularity' : 'Streams'}
             value={formatMetric(spotifyPublicApi ? spotifySnapshot?.metrics.popularity : spotifySnapshot?.metrics.streams)}
             trend={spotifyPublicApi ? [] : streamTrend}
@@ -3134,6 +3138,18 @@ function SignalsStrip({
             ariaLabel="Open Spotify Pulse analysis"
             onOpen={() => setSpotifyOpen(true)}
           />
+          <SignalTile
+            embedded
+            label="Listeners"
+            value={formatMetric(spotifySnapshot?.metrics.listeners)}
+            trend={listenerTrend}
+            foot={spotifySnapshot
+              ? growthFoot(growth?.listenersPercent, growth?.comparisonDate) ?? topTrackFoot(spotifySnapshot)
+              : spotifyPending}
+            footTone={growthTone(growth?.listenersPercent)}
+            ariaLabel="Open Spotify listener analysis"
+            onOpen={() => setSpotifyOpen(true)}
+          />
           <div className="absolute right-3 top-2.5 z-10">
             <PulseRunControls
               active={spotifyActive}
@@ -3141,40 +3157,29 @@ function SignalsStrip({
               runDisabled={spotifyRunDisabled}
               manualLabel="Run Spotify Pulse now — manual"
               weeklyLabel="Weekly Spotify auto-run"
-              activeClassName="border-[#f97316]/40 bg-[#f97316]/14 text-[#f97316]"
+              activeClassName="bg-[#f97316]/14 text-[#f97316]"
               onRun={onRunSpotify}
               onToggle={onToggleSpotify}
             />
           </div>
         </div>
-        <SignalTile
-          label="Listeners"
-          value={formatMetric(spotifySnapshot?.metrics.listeners)}
-          trend={listenerTrend}
-          foot={spotifySnapshot
-            ? growthFoot(growth?.listenersPercent, growth?.comparisonDate) ?? topTrackFoot(spotifySnapshot)
-            : spotifyPending}
-          footTone={growthTone(growth?.listenersPercent)}
-          ariaLabel="Open Spotify listener analysis"
-          onOpen={() => setSpotifyOpen(true)}
-        />
-        <SignalTile
-          label="Followers"
-          value={formatMetric(spotifySnapshot?.metrics.followers)}
-          trend={[]}
-          foot={spotifySnapshot
-            ? typeof spotifySnapshot.metrics.followers === 'number' ? 'Spotify' : 'Not in this snapshot'
-            : spotifyPending}
-          ariaLabel="Open Spotify follower analysis"
-          onOpen={() => setSpotifyOpen(true)}
-        />
-        <div className="relative min-w-0">
+        <div className="relative grid min-w-0 grid-cols-2 divide-x divide-white/[0.075] overflow-hidden rounded-[14px] border border-white/[0.075] bg-white/[0.035] backdrop-blur-2xl">
           <SignalTile
-            label="Instagram"
+            embedded
+            label="Followers"
+            value={formatMetric(instagramSnapshot?.metrics.followers)}
+            trend={[]}
+            foot={instagramFoot}
+            ariaLabel="Open Instagram follower analysis"
+            onOpen={() => setSocialOpen(true)}
+          />
+          <SignalTile
+            embedded
+            label="Change"
             value={formatSignedMetric(instagramSnapshot?.metrics.followerDelta)}
             trend={instagramHistory.map((point) => point.followerDelta)}
             trendMode="bars"
-            foot={instagramFoot}
+            foot={instagramSnapshot?.windowDays ? `${instagramSnapshot.windowDays} days` : instagramPending}
             ariaLabel="Open Social Pulse analysis"
             onOpen={() => setSocialOpen(true)}
           />
@@ -3194,7 +3199,7 @@ function SignalsStrip({
               runDisabled={instagramRunDisabled}
               manualLabel="Run Instagram Insights now — manual"
               weeklyLabel="Weekly Instagram Insights auto-run"
-              activeClassName="border-[#f97316]/40 bg-[#f97316]/14 text-[#f97316]"
+              activeClassName="bg-[#f97316]/14 text-[#f97316]"
               onRun={onRunInstagram}
               onToggle={onToggleInstagram}
             />
@@ -3223,6 +3228,7 @@ function SignalsStrip({
 }
 
 function SignalTile({
+  embedded = false,
   label,
   value,
   trend,
@@ -3232,6 +3238,7 @@ function SignalTile({
   ariaLabel,
   onOpen,
 }: {
+  embedded?: boolean
   label: string
   value: string
   trend: number[]
@@ -3247,7 +3254,10 @@ function SignalTile({
       type="button"
       aria-label={ariaLabel}
       onClick={onOpen}
-      className="group relative flex h-[104px] w-full min-w-0 flex-col overflow-hidden rounded-[14px] border border-white/[0.075] bg-white/[0.035] p-3.5 text-left backdrop-blur-2xl transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#f97316]/70"
+      className={cn(
+        'group relative flex h-[104px] w-full min-w-0 flex-col overflow-hidden p-3.5 text-left transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#f97316]/70',
+        embedded ? 'bg-transparent' : 'rounded-[14px] border border-white/[0.075] bg-white/[0.035] backdrop-blur-2xl',
+      )}
     >
       <span className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/42">{label}</span>
       <span className={cn(
