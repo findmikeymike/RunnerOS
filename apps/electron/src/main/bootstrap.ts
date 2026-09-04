@@ -1,3 +1,7 @@
+// First, and it has to stay first: this picks Pango's font backend, and Pango
+// reads it when libvips loads. Anything importing sharp above this line puts
+// a twenty-second stall back into every artwork render.
+import '@craft-agent/shared/config/pango-backend';
 import { app } from 'electron';
 import { join } from 'node:path';
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity';

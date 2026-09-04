@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -6,6 +6,28 @@ import sharp from 'sharp';
 import type { SessionToolContext } from '../context.ts';
 import type { CreateOutputToolInput, CreateOutputResult } from './outputs.ts';
 import { handleArtworkCompose } from './artwork-compose.ts';
+
+/**
+ * With `PANGOCAIRO_BACKEND=fontconfig` in the environment — which the root
+ * `test` script sets — this whole file runs in under a second. Without it,
+ * libvips rasterizes SVG text through Pango's CoreText backend and every
+ * render takes 20-45s on macOS. See packages/shared/src/config/pango-backend.ts.
+ *
+ * Bun ignores `process.env` writes for native libraries, so this file cannot
+ * set it itself. Rather than pick one number that hides the difference, the
+ * budget follows the environment: tight where the fix is present, so a real
+ * regression still shows up, and generous where it is not, so running this
+ * file directly is slow and explains itself rather than failing as a mystery.
+ */
+const TEXT_RENDERING_FIXED = process.platform !== 'darwin'
+  || process.env['PANGOCAIRO_BACKEND'] === 'fontconfig';
+if (!TEXT_RENDERING_FIXED) {
+  console.warn(
+    '[artwork_compose] PANGOCAIRO_BACKEND is unset, so each SVG text render will take 20-45s.\n'
+    + '  Run `bun run test`, or export PANGOCAIRO_BACKEND=fontconfig, for the normal sub-second path.',
+  );
+}
+setDefaultTimeout(TEXT_RENDERING_FIXED ? 10_000 : 300_000);
 
 let root: string;
 

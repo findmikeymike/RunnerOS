@@ -26,6 +26,7 @@
     "./config": "./src/config/index.ts",
     "./config/runtime-identity": "./src/config/runtime-identity.ts",
     "./config/paths": "./src/config/paths.ts",
+    "./config/pango-backend": "./src/config/pango-backend.ts",
     "./docs": "./src/docs/index.ts",
     "./docs/doc-links": "./src/docs/doc-links.ts",
     "./config/types": "./src/config/types.ts",
