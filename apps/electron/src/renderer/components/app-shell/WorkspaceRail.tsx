@@ -1,13 +1,14 @@
 import * as React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence } from "motion/react"
-import { Cloud, CloudOff, Disc3, FlaskConical, FolderPlus, Home, Plus } from "lucide-react"
+import { Check, ChevronDown, Cloud, CloudOff, Disc3, FlaskConical, FolderPlus, Home, Plus } from "lucide-react"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@craft-agent/ui"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   StyledDropdownMenuContent,
   StyledDropdownMenuItem,
+  StyledDropdownMenuSeparator,
 } from "@/components/ui/styled-dropdown"
 import { toast } from "sonner"
 import { useSetAtom } from "jotai"
@@ -325,20 +326,106 @@ export function WorkspaceRail({
 
       {orientation === 'horizontal' ? (
         <nav
-          className="titlebar-no-drag flex min-w-0 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          aria-label="Workspaces"
+          className="titlebar-no-drag flex min-w-0 items-center"
+          aria-label="Places"
         >
-          <div className="flex shrink-0 items-center gap-1.5">
-            {hqWorkspace ? renderWorkspaceButton(hqWorkspace, 'home') : null}
-            {campaignWorkspaces.map((workspace) => renderWorkspaceButton(workspace))}
+          <div
+            data-testid="artist-place-switcher"
+            className="artist-os-workspace-switcher flex h-8 shrink-0 items-center rounded-[11px] border border-white/[0.10] p-0.5"
+          >
+            {hqWorkspace ? (
+              <button
+                type="button"
+                onClick={(event) => void handleWorkspaceSelect(hqWorkspace, event.metaKey || event.ctrlKey)}
+                aria-current={hqWorkspace.id === activeWorkspaceId ? 'page' : undefined}
+                className={cn(
+                  'flex h-7 items-center gap-1.5 rounded-[8px] px-2.5 text-[11px] font-medium transition-colors',
+                  hqWorkspace.id === activeWorkspaceId
+                    ? 'bg-white/[0.12] text-white'
+                    : 'text-white/52 hover:bg-white/[0.055] hover:text-white/88',
+                )}
+              >
+                <Home className="h-3.5 w-3.5" strokeWidth={1.8} />
+                <span>HQ</span>
+              </button>
+            ) : null}
+
+            <span className="mx-0.5 h-4 w-px bg-white/[0.09]" aria-hidden="true" />
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-current={campaignWorkspaces.some((workspace) => workspace.id === activeWorkspaceId) ? 'page' : undefined}
+                  className={cn(
+                    'relative flex h-7 items-center gap-1.5 rounded-[8px] px-2.5 text-[11px] font-medium transition-colors',
+                    campaignWorkspaces.some((workspace) => workspace.id === activeWorkspaceId)
+                      ? 'bg-white/[0.12] text-white'
+                      : 'text-white/52 hover:bg-white/[0.055] hover:text-white/88',
+                  )}
+                >
+                  <Disc3 className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  <span>Campaigns</span>
+                  <ChevronDown className="h-3 w-3 text-white/40" strokeWidth={1.8} />
+                  {campaignWorkspaces.some((workspace) => workspaceUnreadMap?.[workspace.id]) ? (
+                    <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#fb923c]" />
+                  ) : null}
+                </button>
+              </DropdownMenuTrigger>
+              <StyledDropdownMenuContent side="bottom" align="start" sideOffset={8} minWidth="min-w-52">
+                {campaignWorkspaces.map((workspace) => {
+                  const active = workspace.id === activeWorkspaceId
+                  const disconnected = isRemoteDisconnected(workspace.id)
+                  return (
+                    <StyledDropdownMenuItem
+                      key={workspace.id}
+                      onClick={() => void handleWorkspaceSelect(workspace)}
+                      className="gap-2"
+                    >
+                      {disconnected
+                        ? <CloudOff className="h-3.5 w-3.5 text-white/38" />
+                        : <Disc3 className="h-3.5 w-3.5 text-white/48" />}
+                      <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
+                      {workspaceUnreadMap?.[workspace.id] ? <span className="h-1.5 w-1.5 rounded-full bg-[#fb923c]" /> : null}
+                      {active ? <Check className="h-3.5 w-3.5 text-white/70" /> : null}
+                    </StyledDropdownMenuItem>
+                  )
+                })}
+                {campaignWorkspaces.length > 0 ? <StyledDropdownMenuSeparator /> : null}
+                <StyledDropdownMenuItem onClick={handleNewCampaign}>
+                  <Plus className="h-3.5 w-3.5" />
+                  New Campaign
+                </StyledDropdownMenuItem>
+              </StyledDropdownMenuContent>
+            </DropdownMenu>
+
+            <span className="mx-0.5 h-4 w-px bg-white/[0.09]" aria-hidden="true" />
+
+            <button
+              type="button"
+              onClick={(event) => {
+                if (labWorkspace) {
+                  void handleWorkspaceSelect(labWorkspace, event.metaKey || event.ctrlKey)
+                } else {
+                  void handleNewLab()
+                }
+              }}
+              disabled={isCreatingLab}
+              aria-current={labWorkspace?.id === activeWorkspaceId ? 'page' : undefined}
+              className={cn(
+                'relative flex h-7 items-center gap-1.5 rounded-[8px] px-2.5 text-[11px] font-medium transition-colors disabled:opacity-45',
+                labWorkspace?.id === activeWorkspaceId
+                  ? 'bg-white/[0.12] text-white'
+                  : 'text-white/52 hover:bg-white/[0.055] hover:text-white/88',
+              )}
+            >
+              <FlaskConical className="h-3.5 w-3.5 text-[#fdba74]" strokeWidth={1.8} />
+              <span>{isCreatingLab ? 'Creating…' : 'Lab'}</span>
+              {labWorkspace && workspaceUnreadMap?.[labWorkspace.id] ? (
+                <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#fb923c]" />
+              ) : null}
+            </button>
           </div>
-          {addWorkspaceMenu('bottom')}
-          {labWorkspace && (
-            <>
-              <span className="mx-0.5 h-5 w-px shrink-0 bg-white/[0.12]" aria-hidden="true" />
-              {renderWorkspaceButton(labWorkspace, 'lab')}
-            </>
-          )}
         </nav>
       ) : (
         <aside className="titlebar-no-drag -mb-16 flex h-[calc(100%+64px)] w-[56px] shrink-0 flex-col items-center justify-end">

@@ -2365,7 +2365,19 @@ export function ArtistHQHome({
               }}
             />
             <HQCard>
-            <div className="mb-4 flex w-full items-center justify-end gap-2">
+            <NetworkCategoryGrid
+              categories={network.categories}
+              allPeople={network.people}
+              selectedCategoryId={selectedNetworkCategory}
+              onToggleCategory={(categoryId) => {
+                setSelectedNetworkCategory((value) => value === categoryId ? null : categoryId)
+              }}
+              onAddToCategory={(categoryId) => {
+                setDraft({ ...emptyNetworkDraft, category: categoryId })
+                setDraftOpen(true)
+              }}
+            />
+            <div className={cn(categoryFormOpen ? 'mb-3' : 'mb-7', 'flex w-full items-center justify-end gap-2')}>
               <div className="relative min-w-0 flex-1 sm:flex-none">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/28" />
                 <input
@@ -2407,7 +2419,7 @@ export function ArtistHQHome({
             </div>
 
             {categoryFormOpen && (
-              <div className="mb-4 max-w-2xl rounded-[14px] bg-white/[0.035] p-3">
+              <div className="mb-7 max-w-2xl rounded-[14px] bg-white/[0.035] p-3">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[11px] font-medium text-white/62">Categories</span>
                   <button
@@ -2580,16 +2592,8 @@ export function ArtistHQHome({
 
               <NetworkBoard
                 categories={network.categories}
-                allPeople={network.people}
                 people={filteredPeople}
                 selectedCategoryId={selectedNetworkCategory}
-                onToggleCategory={(categoryId) => {
-                  setSelectedNetworkCategory((value) => value === categoryId ? null : categoryId)
-                }}
-                onAddToCategory={(categoryId) => {
-                  setDraft({ ...emptyNetworkDraft, category: categoryId })
-                  setDraftOpen(true)
-                }}
                 onSelectPerson={openPerson}
                 onTogglePersonStar={togglePersonStar}
               />
@@ -4523,62 +4527,73 @@ function HqWorkLink({ label, onClick }: { label: string; onClick: () => void }) 
   return <button type="button" onClick={onClick} className="inline-flex h-7 items-center gap-1 rounded-[5px] border border-white/[0.07] px-2 text-[10px] font-medium text-white/52 hover:bg-white/[0.04]">{label}<ExternalLink className="h-3 w-3" /></button>
 }
 
-function NetworkBoard({
+function NetworkCategoryGrid({
   categories,
   allPeople,
-  people,
   selectedCategoryId,
   onToggleCategory,
   onAddToCategory,
+}: {
+  categories: ArtistNetworkCategoryDefinition[]
+  allPeople: ArtistNetworkPerson[]
+  selectedCategoryId: ArtistNetworkCategory | null
+  onToggleCategory: (categoryId: ArtistNetworkCategory) => void
+  onAddToCategory: (categoryId: ArtistNetworkCategory) => void
+}) {
+  return (
+    <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" aria-label="People categories">
+      {categories.map((category) => {
+        const count = allPeople.filter((person) => person.category === category.id).length
+        const selected = selectedCategoryId === category.id
+        return (
+          <div
+            key={category.id}
+            className={cn(
+              'group flex h-11 min-w-0 items-center rounded-[10px] transition-colors',
+              selected
+                ? 'bg-[#f97316]/14 shadow-[inset_0_0_0_1px_rgba(249,115,22,0.46)]'
+                : 'bg-white/[0.035] hover:bg-white/[0.07]',
+            )}
+          >
+            <button
+              type="button"
+              aria-pressed={selected}
+              onClick={() => onToggleCategory(category.id)}
+              className="flex h-full min-w-0 flex-1 items-center gap-2 pl-3 text-left"
+            >
+              <span className={cn('min-w-0 flex-1 truncate text-xs font-medium', selected ? 'text-orange-100/90' : 'text-white/62 group-hover:text-white/82')}>{category.label}</span>
+              <span className={cn('text-[10px] tabular-nums', selected ? 'text-orange-100/55' : 'text-white/25')}>{count}</span>
+            </button>
+            <button
+              type="button"
+              aria-label={`Add person to ${category.label}`}
+              onClick={() => onAddToCategory(category.id)}
+              className="mr-1 grid h-8 w-8 shrink-0 place-items-center rounded-[8px] text-[#f97316]/60 transition-colors hover:bg-black/15 hover:text-[#f97316]"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function NetworkBoard({
+  categories,
+  people,
+  selectedCategoryId,
   onSelectPerson,
   onTogglePersonStar,
 }: {
   categories: ArtistNetworkCategoryDefinition[]
-  allPeople: ArtistNetworkPerson[]
   people: ArtistNetworkPerson[]
   selectedCategoryId: ArtistNetworkCategory | null
-  onToggleCategory: (categoryId: ArtistNetworkCategory) => void
-  onAddToCategory: (categoryId: ArtistNetworkCategory) => void
   onSelectPerson: (person: ArtistNetworkPerson) => void
   onTogglePersonStar: (person: ArtistNetworkPerson) => void
 }) {
   return (
     <div>
-      <div className="mb-7 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" aria-label="People categories">
-        {categories.map((category) => {
-          const count = allPeople.filter((person) => person.category === category.id).length
-          const selected = selectedCategoryId === category.id
-          return (
-            <div
-              key={category.id}
-              className={cn(
-                'group flex h-11 min-w-0 items-center rounded-[10px] transition-colors',
-                selected
-                  ? 'bg-[#f97316]/14 shadow-[inset_0_0_0_1px_rgba(249,115,22,0.46)]'
-                  : 'bg-white/[0.035] hover:bg-white/[0.07]',
-              )}
-            >
-              <button
-                type="button"
-                aria-pressed={selected}
-                onClick={() => onToggleCategory(category.id)}
-                className="flex h-full min-w-0 flex-1 items-center gap-2 pl-3 text-left"
-              >
-                <span className={cn('min-w-0 flex-1 truncate text-xs font-medium', selected ? 'text-orange-100/90' : 'text-white/62 group-hover:text-white/82')}>{category.label}</span>
-                <span className={cn('text-[10px] tabular-nums', selected ? 'text-orange-100/55' : 'text-white/25')}>{count}</span>
-              </button>
-              <button
-                type="button"
-                aria-label={`Add person to ${category.label}`}
-                onClick={() => onAddToCategory(category.id)}
-                className="mr-1 grid h-8 w-8 shrink-0 place-items-center rounded-[8px] text-[#f97316]/60 transition-colors hover:bg-black/15 hover:text-[#f97316]"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )
-        })}
-      </div>
       <div className="space-y-8">
       {categories.map((category) => {
         const categoryPeople = people.filter((person) => person.category === category.id)

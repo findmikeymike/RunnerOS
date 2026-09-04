@@ -160,6 +160,7 @@ interface TopBarProps {
   onAddSessionPanel: () => void
   onAddBrowserPanel: () => void
   workspaceNavigation?: React.ReactNode
+  workspaceNavigationLeftInset?: number
   showSidebarButton?: boolean
   showProductMenu?: boolean
   showHistoryButtons?: boolean
@@ -190,6 +191,7 @@ export function TopBar({
   onAddSessionPanel,
   onAddBrowserPanel,
   workspaceNavigation,
+  workspaceNavigationLeftInset,
   showSidebarButton = true,
   showProductMenu = true,
   showHistoryButtons = true,
@@ -257,7 +259,7 @@ export function TopBar({
       className={cn(
         "fixed top-0 left-0 right-0 h-[48px] z-panel titlebar-drag-region",
         usesPersistentArtistChrome
-          ? "border-b border-white/10 bg-black text-white shadow-bottom-border-thin"
+          ? "artist-os-topbar-glass border-b border-white/10 text-white"
           : "bg-transparent",
       )}
     >
@@ -418,7 +420,16 @@ export function TopBar({
         </DropdownMenu>}
         </div>
 
-        {workspaceNavigation}
+        {workspaceNavigation ? (
+          <div
+            className="min-w-0 shrink-0"
+            style={workspaceNavigationLeftInset === undefined
+              ? undefined
+              : { marginLeft: Math.max(0, workspaceNavigationLeftInset - menuLeftPadding) }}
+          >
+            {workspaceNavigation}
+          </div>
+        ) : null}
 
         {/* Back / Forward */}
         {showHistoryButtons && <div className={cn("ml-1 flex min-w-0 items-center gap-1", isCompact ? "flex-1" : "w-auto")}>

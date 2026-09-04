@@ -31,7 +31,7 @@ describe('Artist OS persistent shell chrome', () => {
 
     expect(topBar).toContain("RENDERER_PRODUCT_VARIANT === 'artist-os'")
     expect(topBar).toContain('data-testid="persistent-mac-window-controls"')
-    expect(topBar).toContain('border-b border-white/10 bg-black text-white')
+    expect(topBar).toContain('artist-os-topbar-glass border-b border-white/10 text-white')
     expect(topBar).toContain('bg-[#ff5f57]')
     expect(topBar).toContain('bg-[#febc2e]')
     expect(topBar).toContain('bg-[#28c840]')
@@ -41,6 +41,22 @@ describe('Artist OS persistent shell chrome', () => {
     expect(windowManager).toContain("RUNTIME_IDENTITY.variant === 'artist-os' ? false : visible")
     expect(windowManager).toContain("window.on('restore', keepArtistTrafficLightsStable)")
     expect(windowManager).toContain('managed.window.setWindowButtonVisibility(shouldShow)')
+  })
+
+  test('groups HQ, Campaigns, and Lab beside the sidebar divider', () => {
+    const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
+    const rail = readFileSync(join(import.meta.dir, '..', 'WorkspaceRail.tsx'), 'utf8')
+    const topBar = readFileSync(join(import.meta.dir, '..', 'TopBar.tsx'), 'utf8')
+    const styles = readFileSync(join(import.meta.dir, '..', '..', '..', 'index.css'), 'utf8')
+
+    expect(shell).toContain('effectiveSidebarWidth + 14')
+    expect(topBar).toContain('workspaceNavigationLeftInset - menuLeftPadding')
+    expect(rail).toContain('data-testid="artist-place-switcher"')
+    expect(rail).toContain('<span>HQ</span>')
+    expect(rail).toContain('<span>Campaigns</span>')
+    expect(rail).toContain('New Campaign')
+    expect(rail).toContain("'Creating…' : 'Lab'")
+    expect(styles).toContain('.artist-os-workspace-switcher {')
   })
 
   test('names the HQ and campaign agent front door Command', () => {
@@ -122,6 +138,7 @@ describe('Artist OS persistent shell chrome', () => {
     expect(hq).toContain('aria-label={`Rename ${category.label}`}')
     expect(hq).toContain('aria-label={`Delete ${category.label}`}')
     expect(hq).toContain('aria-label="People categories"')
+    expect(hq.indexOf('<NetworkCategoryGrid')).toBeLessThan(hq.indexOf('aria-label="Search people"'))
     expect(hq).toContain('aria-pressed={selected}')
     expect(hq).toContain('aria-label={`Add person to ${category.label}`}')
     expect(hq).toContain('value === categoryId ? null : categoryId')

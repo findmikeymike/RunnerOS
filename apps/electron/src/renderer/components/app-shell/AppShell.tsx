@@ -2943,7 +2943,7 @@ function AppShellContent({
     return [
       {
         id: "nav:hq",
-        title: "HQ",
+        title: "Overview",
         icon: Globe,
         variant: hqHomeActive ? "default" : "ghost",
         onClick: () => handleArtistHQNavClick('home'),
@@ -3166,6 +3166,9 @@ function AppShellContent({
               orientation="horizontal"
             />
           ) : undefined}
+          workspaceNavigationLeftInset={usesWorkspaceHeader && !isAutoCompact
+            ? (isSidebarVisible ? effectiveSidebarWidth + 14 : 86)
+            : undefined}
           showSidebarButton={!usesWorkspaceHeader}
           showProductMenu={!usesWorkspaceHeader}
           showHistoryButtons={!usesWorkspaceHeader}
