@@ -186,6 +186,8 @@ export function createBackendFromResolvedContext(args: {
     getRecoveryMessages: coreConfig.getRecoveryMessages,
     onAttempt: coreConfig.modelFallback.onAttempt,
     onSwitch: coreConfig.modelFallback.onSwitch,
+    onAttention: coreConfig.modelFallback.onAttention,
+    onProtectedTurnStart: coreConfig.modelFallback.onProtectedTurnStart,
     resolveCandidates: async () => {
       const credentialManager = getCredentialManager();
       const connections = await Promise.all(getLlmConnections().map(async connection => ({

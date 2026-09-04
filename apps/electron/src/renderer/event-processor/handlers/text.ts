@@ -5,7 +5,7 @@
  * Pure functions that return new state - no side effects.
  */
 
-import type { SessionState, StreamingState, TextDeltaEvent, TextCompleteEvent } from '../types'
+import type { SessionState, StreamingState, TextDeltaEvent, TextCompleteEvent, ModelAttemptResetEvent } from '../types'
 import type { Message } from '../../../shared/types'
 import {
   findStreamingMessage,
@@ -141,6 +141,27 @@ export function handleTextComplete(
 
   return {
     session: appendMessage(session, newMessage, shouldUpdateTimestamp),
+    streaming: null,
+  }
+}
+
+/** Remove failed-attempt assistant text while preserving tool receipts. */
+export function handleModelAttemptReset(
+  state: SessionState,
+  event: ModelAttemptResetEvent,
+): SessionState {
+  const messageIds = new Set(event.messageIds)
+  const turnIds = new Set(event.turnIds ?? [])
+  const messages = state.session.messages.filter((message) => {
+    if (message.role !== 'assistant') return true
+    if (messageIds.has(message.id)) return false
+    if (message.turnId && turnIds.has(message.turnId)) return false
+    if (message.isStreaming || message.isPending) return false
+    return true
+  })
+
+  return {
+    session: { ...state.session, messages },
     streaming: null,
   }
 }

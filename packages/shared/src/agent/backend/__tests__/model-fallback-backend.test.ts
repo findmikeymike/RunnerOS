@@ -100,7 +100,64 @@ describe('model fallback backend', () => {
     ]);
   });
 
-  test('discards a failed partial response and yields only the successful fallback', async () => {
+  test('streams the primary immediately even when a fallback chain is configured', async () => {
+    let releasePrimary!: () => void;
+    const gate = new Promise<void>((resolve) => { releasePrimary = resolve; });
+    const primary = fakeBackend([]);
+    let protectedTurnStarted = false;
+    primary.chat = async function* () {
+      yield { type: 'text_delta', text: 'live', turnId: 'primary-turn' };
+      await gate;
+      yield { type: 'text_complete', text: 'live', turnId: 'primary-turn' };
+      yield { type: 'complete' };
+    };
+    const backend = createModelFallbackBackend({
+      primary,
+      primaryConnectionSlug: 'primary',
+      primaryModel: 'model-a',
+      onProtectedTurnStart: () => { protectedTurnStarted = true; },
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => fakeBackend([]) }],
+    });
+
+    const iterator = backend.chat('hello');
+    const first = await Promise.race([
+      iterator.next(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('stream was buffered')), 100)),
+    ]);
+    expect(first.value).toEqual({ type: 'text_delta', text: 'live', turnId: 'primary-turn' });
+    expect(protectedTurnStarted).toBe(true);
+    releasePrimary();
+    expect((await iterator.next()).value).toEqual({ type: 'text_complete', text: 'live', turnId: 'primary-turn' });
+    expect((await iterator.next()).value).toEqual({ type: 'complete' });
+  });
+
+  test('preserves text and tool event order when the primary succeeds', async () => {
+    const primary = fakeBackend([
+      { type: 'text_delta', text: 'Checking', turnId: 'turn-1' },
+      { type: 'text_complete', text: 'Checking', isIntermediate: true, turnId: 'turn-1' },
+      { type: 'tool_start', toolName: 'Read', toolUseId: 'read-1', input: {} },
+      { type: 'tool_result', toolName: 'Read', toolUseId: 'read-1', result: 'ok', isError: false },
+      { type: 'text_complete', text: 'Done', turnId: 'turn-2' },
+      { type: 'complete' },
+    ]);
+    const backend = createModelFallbackBackend({
+      primary,
+      primaryConnectionSlug: 'primary',
+      primaryModel: 'model-a',
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => fakeBackend([]) }],
+    });
+
+    expect((await collect(backend)).map(event => event.type)).toEqual([
+      'text_delta',
+      'text_complete',
+      'tool_start',
+      'tool_result',
+      'text_complete',
+      'complete',
+    ]);
+  });
+
+  test('retracts a failed partial response before streaming the successful fallback', async () => {
     const primary = fakeBackend([
       { type: 'text_delta', text: 'partial' },
       { type: 'typed_error', error: { code: 'rate_limited', title: 'Rate', message: 'wait', actions: [], canRetry: true } },
@@ -121,6 +178,8 @@ describe('model fallback backend', () => {
     });
 
     expect(await collect(backend)).toEqual([
+      { type: 'text_delta', text: 'partial' },
+      { type: 'model_attempt_reset', completedTextCount: 0 },
       { type: 'text_delta', text: 'answer' },
       { type: 'text_complete', text: 'answer' },
       { type: 'complete' },
@@ -147,7 +206,7 @@ describe('model fallback backend', () => {
     });
 
     const events = await collect(backend, 'do it');
-    expect(events.map(event => event.type)).toEqual(['tool_start', 'tool_result', 'text_complete', 'complete']);
+    expect(events.map(event => event.type)).toEqual(['text_delta', 'tool_start', 'tool_result', 'model_attempt_reset', 'text_complete', 'complete']);
     expect(fallback.prompts[0]).toContain('Do not repeat, retry, or recreate these operations');
     expect(fallback.prompts[0]).toContain('"toolName":"Edit"');
     expect(fallback.prompts[0]).toContain('"result":"updated"');
@@ -239,6 +298,28 @@ describe('model fallback backend', () => {
     expect(created).toBe(0);
   });
 
+  test('delivers partial text before propagating a user abort', async () => {
+    const primary = fakeBackend([]);
+    primary.chat = async function* () {
+      yield { type: 'text_delta', text: 'keep this', turnId: 'partial-turn' };
+      const error = new Error('Request was aborted.');
+      error.name = 'AbortError';
+      throw error;
+    };
+    let created = 0;
+    const backend = createModelFallbackBackend({
+      primary,
+      primaryConnectionSlug: 'primary',
+      primaryModel: 'model-a',
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => { created += 1; return fakeBackend([]); } }],
+    });
+
+    const iterator = backend.chat('hello');
+    expect((await iterator.next()).value).toEqual({ type: 'text_delta', text: 'keep this', turnId: 'partial-turn' });
+    expect(iterator.next()).rejects.toThrow('aborted');
+    expect(created).toBe(0);
+  });
+
   test('falls through candidate construction failures and empty responses', async () => {
     const primary = fakeBackend([{ type: 'complete' }]);
     const final = fakeBackend([{ type: 'text_complete', text: 'third works' }, { type: 'complete' }]);
@@ -295,6 +376,32 @@ describe('model fallback backend', () => {
 
     expect((await collect(backend))[0]?.type).toBe('typed_error');
     expect(created).toBe(0);
+  });
+
+  test('raises durable attention for auth failures even when the chain is exhausted', async () => {
+    const primary = fakeBackend([
+      { type: 'typed_error', error: { code: 'service_error', title: 'Down', message: 'down', actions: [], canRetry: true } },
+    ]);
+    const fallback = fakeBackend([
+      { type: 'typed_error', error: { code: 'invalid_api_key', title: 'Key', message: 'bad key', actions: [], canRetry: false } },
+    ]);
+    const attention: Array<{
+      connectionSlug: string;
+      model: string;
+      reason: string;
+      attentionReason: string;
+      operation: string;
+    }> = [];
+    const backend = createModelFallbackBackend({
+      primary,
+      primaryConnectionSlug: 'primary',
+      primaryModel: 'model-a',
+      resolveCandidates: async () => [{ connectionSlug: 'fallback', model: 'model-b', chainIndex: 1, create: () => fallback }],
+      onAttention: (item) => attention.push(item),
+    });
+
+    await collect(backend);
+    expect(attention).toEqual([{ connectionSlug: 'fallback', attentionReason: 'connection-auth-failed', model: 'model-b', reason: 'invalid_api_key', operation: 'chat' }]);
   });
 
   test('uses only one fallback for an unknown error', async () => {
@@ -389,6 +496,8 @@ describe('model fallback backend', () => {
 
     expect((await collect(backend))[0]).toEqual({ type: 'text_complete', text: 'fallback' });
     expect(primaryCalls).toBe(0);
+    expect(fallback.prompts[0]).toBe('hello');
+    expect(fallback.prompts[0]).not.toContain('primary model failed');
     const retried: AgentEvent[] = [];
     for await (const event of backend.chat('again', undefined, { isRetry: true })) retried.push(event);
     expect(retried[0]).toEqual({ type: 'text_complete', text: 'primary' });

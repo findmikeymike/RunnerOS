@@ -27,13 +27,17 @@ async function* streamManagerReply(
   const queue = createEventQueue<LlmTokenEvent>()
   let completeText = ''
   let streamedText = ''
+  let fallbackProtected = false
   let ended = false
 
   const finish = () => {
     if (ended) return
     ended = true
     const answer = (completeText || streamedText).trim()
-    if (answer) deps.onAssistantText?.(answer)
+    if (answer) {
+      if (fallbackProtected) queue.push({ text: answer })
+      deps.onAssistantText?.(answer)
+    }
     queue.push({ text: '', done: true })
     queue.end()
   }
@@ -45,12 +49,17 @@ async function* streamManagerReply(
 
   const unsubscribe = deps.onSessionEvent((event) => {
     if (!('sessionId' in event) || event.sessionId !== sessionId) return
-    if (event.type === 'text_delta') {
+    if (event.type === 'model_fallback_started') {
+      fallbackProtected = true
+    } else if (event.type === 'text_delta') {
       streamedText += event.delta
-      queue.push({ text: event.delta })
+      if (!fallbackProtected) queue.push({ text: event.delta })
     } else if (event.type === 'text_complete' && !event.isIntermediate) {
       completeText = event.text
-      if (!streamedText && event.text) queue.push({ text: event.text })
+      if (!fallbackProtected && !streamedText && event.text) queue.push({ text: event.text })
+    } else if (event.type === 'model_attempt_reset') {
+      completeText = ''
+      streamedText = ''
     } else if (event.type === 'complete') {
       finish()
     } else if (event.type === 'error') {

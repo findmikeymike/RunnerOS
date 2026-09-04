@@ -51,6 +51,19 @@ export interface TextCompleteEvent {
   messageId?: string
 }
 
+/** Retracts assistant text from a failed model attempt without touching tool receipts. */
+export interface ModelAttemptResetEvent {
+  type: 'model_attempt_reset'
+  sessionId: string
+  messageIds: string[]
+  turnIds?: string[]
+}
+
+export interface ModelFallbackStartedEvent {
+  type: 'model_fallback_started'
+  sessionId: string
+}
+
 /**
  * Tool start event - begins tool execution
  * Field names match SessionEvent from shared/types.ts
@@ -501,8 +514,10 @@ export interface GoalEvent {
  * Union of all agent events
  */
 export type AgentEvent =
+  | ModelFallbackStartedEvent
   | TextDeltaEvent
   | TextCompleteEvent
+  | ModelAttemptResetEvent
   | ToolStartEvent
   | ToolResultEvent
   | CompleteEvent

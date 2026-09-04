@@ -48,4 +48,33 @@ describe('Artist Manager voice transport', () => {
     }).toThrow('barge in')
     expect(cancelled).toBe(true)
   })
+
+  test('discards failed-attempt speech before voicing a fallback response', async () => {
+    let listener: ((event: SessionEvent) => void) | null = null
+    const transport = createArtistManagerVoiceTransport({
+      ensureSession: async () => ({ id: 'manager-session' }),
+      sendMessage: async (sessionId) => queueMicrotask(() => {
+        listener?.({ type: 'model_fallback_started', sessionId })
+        listener?.({ type: 'text_delta', sessionId, delta: 'Failed partial' })
+        listener?.({ type: 'model_attempt_reset', sessionId, messageIds: [] })
+        listener?.({ type: 'text_delta', sessionId, delta: 'Fallback answer' })
+        listener?.({ type: 'text_complete', sessionId, text: 'Fallback answer' })
+        listener?.({ type: 'complete', sessionId })
+      }),
+      cancelProcessing: async () => {},
+      onSessionEvent: (handler) => {
+        listener = handler
+        return () => { listener = null }
+      },
+    })
+
+    const stream = await transport.generateReply({
+      userText: 'Help',
+      contextJson: '[]',
+      signal: new AbortController().signal,
+    })
+    const chunks: string[] = []
+    for await (const event of stream) chunks.push(event.text)
+    expect(chunks.join('')).toBe('Fallback answer')
+  })
 })

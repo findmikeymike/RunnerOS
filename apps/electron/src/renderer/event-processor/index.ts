@@ -15,6 +15,8 @@ export type {
   Effect,
   TextDeltaEvent,
   TextCompleteEvent,
+  ModelAttemptResetEvent,
+  ModelFallbackStartedEvent,
   ToolStartEvent,
   ToolResultEvent,
   CompleteEvent,

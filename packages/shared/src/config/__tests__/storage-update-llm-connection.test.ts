@@ -151,6 +151,22 @@ describe('model fallback chain storage', () => {
     expect(readConnection('custom-compat')).not.toHaveProperty('fallbackChain')
   })
 
+  it('persists and clears durable fallback connection attention', () => {
+    const attention = {
+      reason: 'connection-auth-failed',
+      errorCode: 'invalid_api_key',
+      model: 'model-a',
+      observedAt: '2026-09-03T12:00:00.000Z',
+    }
+    const { runUpdate, runUpdateSource, readConnection } = setup([makeConnection()])
+
+    expect(runUpdate('custom-compat', { modelFallbackAttention: attention })).toBe(true)
+    expect(readConnection('custom-compat').modelFallbackAttention).toEqual(attention)
+
+    expect(runUpdateSource('custom-compat', '{ modelFallbackAttention: undefined }')).toBe(true)
+    expect(readConnection('custom-compat')).not.toHaveProperty('modelFallbackAttention')
+  })
+
   it('rejects an invalid per-connection chain without changing stored config', () => {
     const { runUpdate, readConnection } = setup([makeConnection({ defaultModel: 'model-a' })])
     const before = readConnection('custom-compat')

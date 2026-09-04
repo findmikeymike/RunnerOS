@@ -14,7 +14,7 @@ import { basename, dirname, join } from 'path'
 import { existsSync } from 'fs'
 import { readFile, writeFile, mkdir, rename } from 'fs/promises'
 import { createHash, randomUUID } from 'node:crypto'
-import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns, generateConversationSummary, resolveKeepBackgroundTasksAlive } from '@craft-agent/shared/agent'
+import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns, generateConversationSummary, resolveKeepBackgroundTasksAlive, modelFallbackAttentionReason } from '@craft-agent/shared/agent'
 import {
   resolveSessionConnection,
   createBackendFromConnection,
@@ -27,7 +27,7 @@ import {
   type BackendHostRuntimeContext,
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
-import { assertAdBrowserProvider, getAdBrowserAccount, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, listAdBrowserAccounts, resetManagedAnthropicAuthEnvVars } from '@craft-agent/shared/config'
+import { assertAdBrowserProvider, getAdBrowserAccount, getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, listAdBrowserAccounts, resetManagedAnthropicAuthEnvVars, updateLlmConnection } from '@craft-agent/shared/config'
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
@@ -7865,16 +7865,34 @@ user a clickable link to where the thing now lives.`
               this.persistSession(managed)
             }
           },
+          onAttention: ({ connectionSlug, model, reason, attentionReason }) => {
+            try {
+              const persisted = updateLlmConnection(connectionSlug, {
+                modelFallbackAttention: {
+                  reason: attentionReason,
+                  errorCode: reason,
+                  model,
+                  observedAt: new Date().toISOString(),
+                },
+              })
+              if (!persisted) {
+                sessionLog.warn(`Failed to persist model connection attention for ${connectionSlug}`)
+              }
+            } catch (error) {
+              // Connection-health disclosure must never prevent the actual
+              // fallback from completing the user's work.
+              sessionLog.warn(`Could not persist model connection attention for ${connectionSlug}: ${error instanceof Error ? error.message : String(error)}`)
+            }
+          },
+          onProtectedTurnStart: () => {
+            this.sendEvent({ type: 'model_fallback_started', sessionId: managed.id }, managed.workspace.id)
+          },
           onSwitch: ({ from, to, reason, operation }) => {
             if (operation === 'mini') return
             const toConnection = getLlmConnection(to.connectionSlug)
             const fromConnection = getLlmConnection(from.connectionSlug)
-            const needsConnectionAttention = reason === 'invalid_api_key'
-              || reason === 'invalid_credentials'
-              || reason === 'expired_oauth_token'
-              || reason === 'token_expired'
-              || reason === 'billing_error'
-            const content = `Switched to ${toConnection?.name ?? to.connectionSlug} · ${to.model} because ${fromConnection?.name ?? from.connectionSlug} was unavailable (${reason.replaceAll('_', ' ')}).${needsConnectionAttention ? ' Your primary connection needs attention in AI Settings.' : ''}`
+            const needsConnectionAttention = modelFallbackAttentionReason(reason) !== undefined
+            const content = `Switched to ${toConnection?.name ?? to.connectionSlug} · ${to.model} because ${fromConnection?.name ?? from.connectionSlug} was unavailable (${reason.replaceAll('_', ' ')}).${needsConnectionAttention ? ` ${fromConnection?.name ?? from.connectionSlug} needs attention in AI Settings.` : ''}`
             const notice: Message = {
               id: generateMessageId(),
               role: 'info',
@@ -13840,6 +13858,49 @@ user a clickable link to where the thing now lives.`
         // Queue delta for batched sending (performance: reduces IPC from 50+/sec to ~20/sec)
         this.queueDelta(sessionId, workspaceId, event.text, event.turnId)
         break
+
+      case 'model_attempt_reset': {
+        // Retract only assistant text from the failed attempt. Tool messages are
+        // deliberately retained because they may represent external effects.
+        const timer = this.deltaFlushTimers.get(sessionId)
+        if (timer) {
+          clearTimeout(timer)
+          this.deltaFlushTimers.delete(sessionId)
+        }
+        this.pendingDeltas.delete(sessionId)
+        managed.streamingText = ''
+
+        const removedMessageIds: string[] = []
+        let remaining = event.completedTextCount
+        for (let index = managed.messages.length - 1; index >= 0 && remaining > 0; index--) {
+          const message = managed.messages[index]!
+          if (message.role !== 'assistant') continue
+          removedMessageIds.push(message.id)
+          managed.messages.splice(index, 1)
+          remaining--
+        }
+
+        if (removedMessageIds.length > 0) {
+          managed.lastFinalMessageId = this.getLastFinalAssistantMessageId(managed.messages)
+          const lastRelevant = [...managed.messages].reverse().find(message =>
+            message.role === 'user'
+            || message.role === 'assistant'
+            || message.role === 'plan'
+            || message.role === 'tool'
+            || message.role === 'error',
+          )
+          managed.lastMessageRole = lastRelevant?.role as ManagedSession['lastMessageRole']
+          this.persistSession(managed)
+        }
+
+        this.sendEvent({
+          type: 'model_attempt_reset',
+          sessionId,
+          messageIds: removedMessageIds,
+          ...(event.turnIds?.length ? { turnIds: event.turnIds } : {}),
+        }, workspaceId)
+        break
+      }
 
       case 'text_complete': {
         const visibleText = isRecordDoctorSession(managed.spawnedFromAgent)

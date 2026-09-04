@@ -4,6 +4,7 @@ import type { ModelAttempt } from '../../config/llm-connections.ts';
 import type { ResolvedModelFallbackCandidate } from '../../config/model-fallback.ts';
 import {
   classifyModelFallback,
+  modelFallbackAttentionReason,
   modelCooldownRegistry,
   type ModelFallbackFailureCode,
 } from '../model-fallback.ts';
@@ -32,6 +33,31 @@ export interface ModelFallbackBackendOptions {
     reason: ModelFallbackFailureCode;
     operation: 'chat' | 'mini' | 'query';
   }) => void;
+  onAttention?: (attention: {
+    connectionSlug: string;
+    model: string;
+    reason: ModelFallbackFailureCode;
+    attentionReason: 'connection-auth-failed' | 'connection-billing-failed';
+    operation: 'chat' | 'mini' | 'query';
+  }) => void;
+  onProtectedTurnStart?: () => void;
+}
+
+function notifyAttention(
+  options: ModelFallbackBackendOptions,
+  attempt: { connectionSlug: string; model: string },
+  failure: AttemptFailure,
+  operation: 'chat' | 'mini' | 'query',
+): void {
+  const attentionReason = modelFallbackAttentionReason(failure.code);
+  if (!attentionReason) return;
+  options.onAttention?.({
+    connectionSlug: attempt.connectionSlug,
+    model: attempt.model,
+    reason: failure.code,
+    attentionReason,
+    operation,
+  });
 }
 
 interface AttemptFailure {
@@ -65,30 +91,18 @@ function thrownFailure(value: unknown): AttemptFailure {
   };
 }
 
-function completedWriteOperations(events: AgentEvent[]): {
-  results: Array<{ toolName: string; result: string }>;
-  events: AgentEvent[];
-} {
+function completedWriteOperations(events: AgentEvent[]): Array<{ toolName: string; result: string }> {
   const starts = new Map<string, Extract<AgentEvent, { type: 'tool_start' }>>();
   for (const event of events) {
     if (event.type === 'tool_start') starts.set(event.toolUseId, event);
   }
-  const completedIds = new Set<string>();
-  const results = events.flatMap((event) => {
+  return events.flatMap((event) => {
     if (event.type !== 'tool_result' || event.isError) return [];
     const start = starts.get(event.toolUseId);
     const toolName = event.toolName ?? start?.toolName;
     if (!toolName || !isWriteTool(toolName, start?.input ?? event.input)) return [];
-    completedIds.add(event.toolUseId);
     return [{ toolName, result: event.result }];
   });
-  return {
-    results,
-    events: events.filter(event =>
-      (event.type === 'tool_start' || event.type === 'tool_result')
-      && completedIds.has(event.toolUseId),
-    ),
-  };
 }
 
 function continuationPrompt(
@@ -113,12 +127,21 @@ function continuationPrompt(
     : 'The previous attempt produced no retained work. Answer the original request normally.'}\n</system-reminder>`;
 }
 
-function shouldBufferForFallback(event: AgentEvent): boolean {
-  return event.type === 'text_delta'
-    || event.type === 'text_complete'
-    || event.type === 'error'
+function shouldDeferForFallback(event: AgentEvent): boolean {
+  return event.type === 'error'
     || event.type === 'typed_error'
     || event.type === 'complete';
+}
+
+function attemptResetEvent(events: AgentEvent[]): Extract<AgentEvent, { type: 'model_attempt_reset' }> | undefined {
+  const textEvents = events.filter((event) => event.type === 'text_delta' || event.type === 'text_complete');
+  if (textEvents.length === 0) return undefined;
+  const turnIds = [...new Set(textEvents.flatMap((event) => event.turnId ? [event.turnId] : []))];
+  return {
+    type: 'model_attempt_reset',
+    completedTextCount: textEvents.filter((event) => event.type === 'text_complete').length,
+    ...(turnIds.length > 0 ? { turnIds } : {}),
+  };
 }
 
 function exhaustionMessage(attempts: ModelAttempt[]): string {
@@ -192,9 +215,10 @@ function makeReceipt(input: {
 /**
  * Wrap a backend with ordered, provider-neutral failover.
  *
- * Attempts are buffered until their outcome is known. A clean failed attempt is
- * discarded. If it completed writes, those events are retained and their results
- * are handed to the next model with an explicit no-replay instruction.
+ * Text and tool activity stays live. If an attempt fails, a reset event retracts
+ * only that attempt's assistant text before the next model starts. Completed write
+ * events remain visible and their results are handed to the next model with an
+ * explicit no-replay instruction.
  */
 export function createModelFallbackBackend(options: ModelFallbackBackendOptions): AgentBackend {
   const primary = options.primary;
@@ -220,6 +244,7 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
         yield* primary.chat(message, attachments, chatOptions);
         return;
       }
+      options.onProtectedTurnStart?.();
       const available = candidates.filter((candidate) =>
         !modelCooldownRegistry.isCoolingDown(candidate.connectionSlug, candidate.model),
       );
@@ -282,13 +307,13 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
             active = backend;
             applyAssignedProperties(backend);
             if (attempt.create) await backend.postInit();
-            const prompt = attempt.chainIndex === 0
+            const prompt = attemptOffset === 0
               ? message
               : continuationPrompt(message, carriedWriteResults, options.getRecoveryMessages?.() ?? []);
             for await (const event of backend.chat(prompt, attachments, chatOptions)) {
               buffered.push(event);
               failure ??= eventFailure(event);
-              if (!shouldBufferForFallback(event)) yield event;
+              if (!shouldDeferForFallback(event)) yield event;
             }
             const hasUsefulOutput = buffered.some(event =>
               event.type === 'text_complete'
@@ -326,7 +351,7 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
             options.onAttempt?.(receipt, 'chat');
           }
           for (const event of buffered) {
-            if (shouldBufferForFallback(event)) yield event;
+            if (shouldDeferForFallback(event)) yield event;
           }
           if (attempt.create) backend?.destroy();
           active = primary;
@@ -334,6 +359,7 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
         }
 
         const decision = classifyModelFallback(failure.code, { unknownFallbackAlreadyUsed });
+        notifyAttention(options, attempt, failure, 'chat');
         if (failure.code === 'unknown_error') unknownFallbackAlreadyUsed = true;
         const canContinue = decision !== 'stop' && attemptOffset + 1 < attempts.length;
         const failureReceipt = makeReceipt({
@@ -360,7 +386,9 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
           if (attemptReceipts.length > 1) {
             yield exhaustionEvent(attemptReceipts, failure);
           } else {
-            for (const event of buffered) yield event;
+            for (const event of buffered) {
+              if (shouldDeferForFallback(event)) yield event;
+            }
           }
           if (attempt.create) backend?.destroy();
           active = primary;
@@ -368,9 +396,11 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
         }
 
         const writes = completedWriteOperations(buffered);
-        if (writes.results.length > 0) {
-          carriedWriteResults = [...carriedWriteResults, ...writes.results];
+        if (writes.length > 0) {
+          carriedWriteResults = [...carriedWriteResults, ...writes];
         }
+        const reset = attemptResetEvent(buffered);
+        if (reset) yield reset;
         const next = attempts[attemptOffset + 1]!;
         options.onSwitch?.({
           from: { connectionSlug: attempt.connectionSlug, model: attempt.model },
@@ -444,6 +474,7 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
           }
           const failure = thrownFailure(error);
           const decision = classifyModelFallback(failure.code, { unknownFallbackAlreadyUsed });
+          notifyAttention(options, attempt, failure, 'mini');
           if (failure.code === 'unknown_error') unknownFallbackAlreadyUsed = true;
           const canContinue = decision !== 'stop' && index + 1 < attempts.length;
           const receipt = makeReceipt({
@@ -563,6 +594,7 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
           }
           const failure = thrownFailure(error);
           const decision = classifyModelFallback(failure.code, { unknownFallbackAlreadyUsed });
+          notifyAttention(options, attempt, failure, 'query');
           if (failure.code === 'unknown_error') unknownFallbackAlreadyUsed = true;
           const canContinue = decision !== 'stop' && index + 1 < attempts.length;
           const receipt = makeReceipt({

@@ -2840,6 +2840,9 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
     fallbackChain: Object.prototype.hasOwnProperty.call(updates, 'fallbackChain')
       ? updates.fallbackChain
       : existing.fallbackChain,
+    modelFallbackAttention: Object.prototype.hasOwnProperty.call(updates, 'modelFallbackAttention')
+      ? updates.modelFallbackAttention
+      : existing.modelFallbackAttention,
     modelSelectionMode: updates.modelSelectionMode !== undefined ? updates.modelSelectionMode : existing.modelSelectionMode,
     // Pi auth provider
     piAuthProvider: updates.piAuthProvider !== undefined ? updates.piAuthProvider : existing.piAuthProvider,

@@ -136,6 +136,13 @@ export interface ModelAttempt {
   chainIndex: number;
 }
 
+export interface ModelConnectionAttention {
+  reason: 'connection-auth-failed' | 'connection-billing-failed';
+  errorCode: string;
+  model: string;
+  observedAt: string;
+}
+
 /**
  * LLM Connection configuration.
  * Stored in config.llmConnections array.
@@ -170,6 +177,9 @@ export interface LlmConnection {
 
   /** Optional override for the global model fallback chain. */
   fallbackChain?: ModelFallbackChain;
+
+  /** Durable health issue discovered while falling back from this connection. */
+  modelFallbackAttention?: ModelConnectionAttention;
 
   /**
    * Ownership mode for the model list.

@@ -297,6 +297,12 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       await sessionManager.reinitializeAuth(setup.slug)
       deps.platform.logger?.info('Reinitialized auth after LLM connection setup')
 
+      // A successful credential setup/reauthentication resolves any durable
+      // fallback warning previously recorded for this connection.
+      if (!isNewConnection) {
+        updateLlmConnection(setup.slug, { modelFallbackAttention: undefined })
+      }
+
       // Clear "Setup later" flag now that user has configured a provider
       setSetupDeferred(false)
 
@@ -563,6 +569,7 @@ export function registerLlmConnectionsHandlers(server: RpcServer, deps: HandlerD
       }
 
       touchLlmConnection(slug)
+      updateLlmConnection(slug, { modelFallbackAttention: undefined })
 
       if (result.shouldRefreshModels) {
         getModelRefreshService().refreshNow(slug).catch(err => {

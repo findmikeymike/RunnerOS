@@ -13,7 +13,7 @@
  */
 
 import type { SessionState, AgentEvent, ProcessResult } from './types'
-import { handleTextDelta, handleTextComplete } from './handlers/text'
+import { handleTextDelta, handleTextComplete, handleModelAttemptReset } from './handlers/text'
 import { handleToolStart, handleToolResult, handleTaskBackgrounded, handleShellBackgrounded, handleTaskProgress, handleTaskCompleted } from './handlers/tool'
 import {
   handleComplete,
@@ -68,6 +68,9 @@ export function processEvent(
   event: AgentEvent
 ): ProcessResult {
   switch (event.type) {
+    case 'model_fallback_started':
+      return { state, effects: [] }
+
     case 'text_delta': {
       const newState = handleTextDelta(state, event)
       return { state: newState, effects: [] }
@@ -75,6 +78,11 @@ export function processEvent(
 
     case 'text_complete': {
       const newState = handleTextComplete(state, event)
+      return { state: newState, effects: [] }
+    }
+
+    case 'model_attempt_reset': {
+      const newState = handleModelAttemptReset(state, event)
       return { state: newState, effects: [] }
     }
 

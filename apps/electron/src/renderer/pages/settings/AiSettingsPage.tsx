@@ -486,10 +486,16 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
     if (validationState === 'validating') return { tone: 'muted', label: t("settings.ai.validating") }
     if (validationState === 'success') return { tone: 'good', label: t("settings.ai.connectionValid") }
     if (validationState === 'error') return { tone: 'bad', label: validationError || t("settings.ai.validationFailed") }
+    if (connection.modelFallbackAttention?.reason === 'connection-billing-failed') {
+      return { tone: 'bad', label: 'Check billing' }
+    }
+    if (connection.modelFallbackAttention?.reason === 'connection-auth-failed') {
+      return { tone: 'bad', label: 'Reconnect' }
+    }
     if (!connection.isAuthenticated) return { tone: 'bad', label: t("settings.ai.notAuthenticated") }
     if (connection.credentialSource === 'environment') return { tone: 'muted', label: 'Env' }
     return { tone: 'good', label: 'Ready' }
-  }, [connection.credentialSource, connection.isAuthenticated, t, validationError, validationState])
+  }, [connection.credentialSource, connection.isAuthenticated, connection.modelFallbackAttention?.reason, t, validationError, validationState])
 
   const providerLabel = getConnectionProviderLabel(connection)
   const showProviderLabel = providerLabel !== connection.name

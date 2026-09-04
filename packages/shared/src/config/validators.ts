@@ -91,6 +91,13 @@ const ModelFallbackChainSchema = z.object({
   entries: z.array(ModelFallbackEntrySchema).max(2),
 });
 
+const ModelConnectionAttentionSchema = z.object({
+  reason: z.enum(['connection-auth-failed', 'connection-billing-failed']),
+  errorCode: z.string().min(1),
+  model: z.string().min(1),
+  observedAt: z.string().datetime(),
+});
+
 const LlmConnectionSchema = z.object({
   slug: z.string().min(1),
   name: z.string().min(1),
@@ -100,6 +107,7 @@ const LlmConnectionSchema = z.object({
   models: z.array(z.union([z.string(), z.object({ id: z.string() }).passthrough()])).optional(),
   defaultModel: z.string().optional(),
   fallbackChain: ModelFallbackChainSchema.optional(),
+  modelFallbackAttention: ModelConnectionAttentionSchema.optional(),
   modelSelectionMode: z.enum(['automaticallySyncedFromProvider', 'userDefined3Tier']).optional(),
   customEndpoint: CustomEndpointSchema.optional(),
   createdAt: z.number(),

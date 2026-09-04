@@ -286,6 +286,16 @@ export interface CoreBackendConfig {
       reason: import('../model-fallback.ts').ModelFallbackFailureCode;
       operation: 'chat' | 'mini' | 'query';
     }) => void;
+    /** Durable connection-health hook for auth or billing failures. */
+    onAttention?: (attention: {
+      connectionSlug: string;
+      model: string;
+      reason: import('../model-fallback.ts').ModelFallbackFailureCode;
+      attentionReason: 'connection-auth-failed' | 'connection-billing-failed';
+      operation: 'chat' | 'mini' | 'query';
+    }) => void;
+    /** Announces a chat turn whose text may need rollback before fallback. */
+    onProtectedTurnStart?: () => void;
   };
 
   /** Internal: this backend borrows the owning session's pools and registries. */
