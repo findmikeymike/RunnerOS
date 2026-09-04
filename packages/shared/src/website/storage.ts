@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import {
   MAX_DEPLOY_HISTORY,
@@ -141,6 +142,51 @@ export function recordDeploy(
       ? { ...manifest.urls, [record.target]: record.url }
       : manifest.urls,
   });
+}
+
+/**
+ * Hash the design inputs: every template file plus the theme tokens.
+ *
+ * Content lives in `content/`, so a change confined there leaves this hash
+ * untouched. That is what lets publish tell a content update from a design
+ * update without trusting the caller's word for it.
+ */
+export function computeDesignHash(workspaceRootPath: string): string {
+  const hash = createHash('sha256');
+  const templates = websiteTemplatesDir(workspaceRootPath);
+
+  const walk = (dir: string, prefix: string): void => {
+    if (!existsSync(dir)) return;
+    for (const entry of readdirSync(dir).sort()) {
+      const full = join(dir, entry);
+      const rel = prefix ? `${prefix}/${entry}` : entry;
+      if (statSync(full).isDirectory()) walk(full, rel);
+      else hash.update(`${rel} ${createHash('sha256').update(readFileSync(full)).digest('hex')}\n`);
+    }
+  };
+  walk(templates, '');
+
+  const themeFile = websiteThemePath(workspaceRootPath);
+  if (existsSync(themeFile)) {
+    hash.update(`theme ${createHash('sha256').update(readFileSync(themeFile)).digest('hex')}\n`);
+  }
+  return hash.digest('hex');
+}
+
+/**
+ * What class of change is this build relative to what is live?
+ *
+ * Returns `undefined` when there is nothing to compare against — a first
+ * publish, or a deploy recorded before design hashes existed. The caller then
+ * falls back to the declared class, which is safe here because a first live
+ * publish is already gated by the one-time target approval.
+ */
+export function deriveChangeClass(
+  currentDesignHash: string | undefined,
+  publishedDesignHash: string | undefined,
+): ChangeClass | undefined {
+  if (!currentDesignHash || !publishedDesignHash) return undefined;
+  return currentDesignHash === publishedDesignHash ? 'content-only' : 'design';
 }
 
 // ---------------------------------------------------------------------------

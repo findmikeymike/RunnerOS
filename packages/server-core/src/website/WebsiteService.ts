@@ -6,6 +6,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 import {
   applySiteContentOperations,
+  computeDesignHash,
   defaultSiteContent,
   loadSiteContent,
   loadWebsiteManifest,
@@ -581,6 +582,9 @@ export class WebsiteService {
         lastBuild: {
           at: new Date().toISOString(),
           hash: String(receipt.hash),
+          // Recorded at build time so publish can classify the change without
+          // trusting the caller to say whether templates moved.
+          designHash: computeDesignHash(workspaceRootPath),
           auditScore: Number(receipt.auditScore ?? 0),
           warnings: Number(receipt.warnings ?? 0),
           fileCount: Number(receipt.fileCount ?? 0),

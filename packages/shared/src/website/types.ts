@@ -23,6 +23,8 @@ export interface DeployRecord {
   at: string;
   url: string;
   buildHash: string;
+  /** Design inputs at the moment this deploy shipped. Drives change class. */
+  designHash?: string;
   previousDeployId?: string;
   origin: { kind: 'user' | 'agent' | 'automation'; sessionId?: string; automationId?: string };
   status: 'live' | 'superseded' | 'rolled-back' | 'failed';
@@ -40,6 +42,14 @@ export interface WebsiteBuildSummary {
   at: string;
   /** sha256 over every emitted dist file, order-independent. */
   hash: string;
+  /**
+   * sha256 over the design inputs only (templates and theme tokens).
+   *
+   * Change class is derived from this rather than trusted from the caller:
+   * trusted mode must never auto-publish a design change, and a caller that
+   * mislabels one would otherwise walk straight past that law.
+   */
+  designHash?: string;
   auditScore: number;
   warnings: number;
   fileCount: number;

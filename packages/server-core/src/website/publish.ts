@@ -1,5 +1,6 @@
 import {
   checkApprovalBinding,
+  deriveChangeClass,
   listChangeReceipts,
   loadWebsiteManifest,
   recordCleanPublish,
@@ -94,6 +95,16 @@ export async function publishSite(
 
   let tier: 'free' | 'one-click' | 'trusted' = 'free'
 
+  // The caller's change class is a claim, not evidence. Derive it from the
+  // build's design inputs so a mislabelled template edit cannot ride trusted
+  // mode to production, and take whichever answer is stricter.
+  const derived = deriveChangeClass(
+    manifest.lastBuild.designHash,
+    lastPublishedDesignHash(manifest),
+  )
+  const changeClass: ChangeClass =
+    derived === 'design' || input.changeClass === 'design' ? 'design' : 'content-only'
+
   if (input.target === 'production') {
     if (!manifest.targetApproval) {
       return {
@@ -103,7 +114,7 @@ export async function publishSite(
         failure: 'no-target-approval',
       }
     }
-    const decision = resolveApprovalTier(manifest, input.changeClass)
+    const decision = resolveApprovalTier(manifest, changeClass)
     tier = decision.tier
     if (decision.requiresApproval) {
       const binding = checkApprovalBinding(input.approval, input.buildHash, { now: nowIso(deps) })
@@ -115,13 +126,10 @@ export async function publishSite(
 
   const adapter = await deps.resolveAdapter(manifest)
   const distDir = websiteDistDir(workspaceRootPath)
+  // Nothing is written before this returns, so a failed deploy leaves the
+  // manifest exactly as it was.
   const deployed = await adapter.deploy({ distDir, target: input.target, buildHash: input.buildHash })
   const at = nowIso(deps)
-
-  // Retain the exact bytes so rollback never depends on a host's version API.
-  if (input.target === 'production') {
-    retainDeploySnapshot(workspaceRootPath, deployed.deployId, distDir)
-  }
 
   const record: DeployRecord = {
     id: deployed.deployId,
@@ -129,6 +137,7 @@ export async function publishSite(
     at,
     url: deployed.url,
     buildHash: input.buildHash,
+    designHash: manifest.lastBuild.designHash,
     previousDeployId: liveDeploy(manifest, input.target)?.id,
     origin: input.origin,
     status: 'live',
@@ -147,6 +156,19 @@ export async function publishSite(
     trustedModeOffered = !before && Boolean(next.publishPolicy.trustedEligibleAt)
   }
   saveWebsiteManifest(workspaceRootPath, next)
+
+  // Retain the exact bytes so rollback never depends on a host's version API.
+  // This runs after the manifest is saved: the site is already live, so a
+  // failure here must not hide the deploy. It only costs the ability to roll
+  // back to this one build, which `siteHistory` reports honestly.
+  let retained = true
+  if (input.target === 'production') {
+    try {
+      retainDeploySnapshot(workspaceRootPath, deployed.deployId, distDir)
+    } catch {
+      retained = false
+    }
+  }
 
   // Preview deploys are routine and would bury the real history.
   let receiptId: string | undefined
@@ -167,7 +189,7 @@ export async function publishSite(
       before: record.previousDeployId ? { deployId: record.previousDeployId, url: manifest.urls.production } : undefined,
       after: { deployId: deployed.deployId, url: deployed.url, buildHash: input.buildHash },
       preview: input.previewOutputId ? { outputId: input.previewOutputId } : undefined,
-      rollback: record.previousDeployId
+      rollback: record.previousDeployId && retained
         ? { kind: 'deploy', target: record.previousDeployId }
         : { kind: 'none' },
       audit: { score: manifest.lastBuild.auditScore, warnings: manifest.lastBuild.warnings },
@@ -320,6 +342,11 @@ export function approvePublishTarget(
 
 function liveDeploy(manifest: WebsiteManifest, target: DeployTarget): DeployRecord | undefined {
   return manifest.history.find(entry => entry.target === target && entry.status === 'live')
+}
+
+/** The design inputs of whatever is currently live in production. */
+function lastPublishedDesignHash(manifest: WebsiteManifest): string | undefined {
+  return manifest.history.find(entry => entry.target === 'production' && entry.status === 'live')?.designHash
 }
 
 function supersede(history: DeployRecord[], target: DeployTarget): DeployRecord[] {

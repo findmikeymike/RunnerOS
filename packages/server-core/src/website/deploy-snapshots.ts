@@ -1,5 +1,5 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { websiteRoot } from '@craft-agent/shared/website'
 
 /**
@@ -43,6 +43,15 @@ export function retainDeploySnapshot(
 ): string {
   if (!existsSync(distDir)) throw new Error(`No build to retain at ${distDir}`)
   const target = deploySnapshotDir(workspaceRootPath, deployId)
+
+  // A rollback re-deploys from a snapshot, and a host may hand back the same
+  // deploy id it gave that snapshot. Clearing the target first would delete
+  // the very bytes being copied, so treat that case as already retained.
+  if (resolve(target) === resolve(distDir)) {
+    pruneDeploySnapshots(workspaceRootPath)
+    return target
+  }
+
   mkdirSync(deploySnapshotsRoot(workspaceRootPath), { recursive: true })
   rmSync(target, { recursive: true, force: true })
   cpSync(distDir, target, { recursive: true, dereference: true })

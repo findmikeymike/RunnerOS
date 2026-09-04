@@ -24,7 +24,7 @@ function workspace(manifest?: Partial<WebsiteManifest>): string {
   writeFileSync(join(dist, 'index.html'), '<h1>site</h1>', 'utf8')
   saveWebsiteManifest(root, {
     ...defaultWebsiteManifest(),
-    lastBuild: { at: '2026-09-01T00:00:00.000Z', hash: 'hash-a', auditScore: 92, warnings: 1, fileCount: 1, bytes: 13 },
+    lastBuild: { at: '2026-09-01T00:00:00.000Z', hash: 'hash-a', designHash: 'design-1', auditScore: 92, warnings: 1, fileCount: 1, bytes: 13 },
     targetApproval: { approvedAt: '2026-09-01T00:00:00.000Z', approvedBy: 'user', target: 'lowtide.workers.dev' },
     ...manifest,
   })
@@ -237,6 +237,53 @@ describe('trusted mode', () => {
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.needsApproval).toBe(true)
       expect(deploys).toHaveLength(0)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a template edit mislabelled as content-only is still caught and stopped', async () => {
+    let seed = defaultWebsiteManifest()
+    for (let i = 0; i < 5; i += 1) seed = recordCleanPublish(seed)
+    const root = workspace({ publishPolicy: grantTrustedMode(seed).publishPolicy })
+    try {
+      const { adapter } = fakeAdapter()
+      // First publish establishes what design is currently live.
+      await publishSite(root, publishInput({ approval: undefined }), deps(adapter))
+
+      // Templates changed, but the caller claims this is only content.
+      const manifest = loadWebsiteManifest(root)!
+      saveWebsiteManifest(root, {
+        ...manifest,
+        lastBuild: { ...manifest.lastBuild!, designHash: 'design-2' },
+      })
+
+      const { adapter: second, deploys } = fakeAdapter()
+      const result = await publishSite(
+        root,
+        publishInput({ changeClass: 'content-only', approval: undefined }),
+        deps(second),
+      )
+
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.needsApproval).toBe(true)
+      expect(deploys).toHaveLength(0)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('an unchanged design keeps a content publish on the trusted path', async () => {
+    let seed = defaultWebsiteManifest()
+    for (let i = 0; i < 5; i += 1) seed = recordCleanPublish(seed)
+    const root = workspace({ publishPolicy: grantTrustedMode(seed).publishPolicy })
+    try {
+      const { adapter } = fakeAdapter()
+      await publishSite(root, publishInput({ approval: undefined }), deps(adapter))
+      const second = await publishSite(root, publishInput({ approval: undefined }), deps(adapter))
+
+      expect(second.ok).toBe(true)
+      if (second.ok) expect(second.tier).toBe('trusted')
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
