@@ -386,6 +386,42 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+Object.defineProperty(context, 'communityListContacts', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.communityListContactsFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'communityStats', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.communityStatsFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'communityDraftEmail', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.communityDraftEmailFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'communityRequestSend', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.communityRequestSendFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'communityJobStatus', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.communityJobStatusFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'communityTagContacts', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.communityTagContactsFn; },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'websiteCaptureSync', {
     get() { return getSessionScopedToolCallbacks(sessionId)?.websiteCaptureSyncFn; },
     configurable: true,

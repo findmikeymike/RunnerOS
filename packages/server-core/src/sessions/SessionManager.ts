@@ -207,6 +207,8 @@ import {
 import { findArtistHqWorkspace } from '../hq-state/snapshot'
 import { WebsiteService, type WebsiteToolResult } from '../website/WebsiteService'
 import { loadWebsiteManifest, type ApprovalBinding } from '@craft-agent/shared/website'
+import { CommunityToolService } from '../community/CommunityToolService'
+import type { CommunityMailResult } from '../community/CommunityMailService'
 import { publishLatestSpotifySnapshotContext } from '../pulses/spotify-snapshot-publisher'
 import { recoverInterruptedWorkspaceMigrations } from '../workspaces/workspace-migration-recovery'
 import {
@@ -2080,6 +2082,22 @@ export class SessionManager implements ISessionManager {
     const hq = findArtistHqWorkspace()
     if (!hq) return { ok: false, error: 'Artist HQ workspace is not configured.' }
     return run({ service: this.websiteService, rootPath: hq.rootPath, workspaceId: hq.id })
+  }
+
+  private readonly communityTools = new CommunityToolService()
+
+  /**
+   * Run a community operation against the Artist HQ workspace.
+   *
+   * The fan list is an HQ object, so a campaign session reads the same list
+   * rather than a second one.
+   */
+  private async withArtistHqCommunity(
+    run: (workspaceRootPath: string) => CommunityMailResult | Promise<CommunityMailResult>,
+  ): Promise<CommunityMailResult> {
+    const hq = findArtistHqWorkspace()
+    if (!hq) return { ok: false, error: 'Artist HQ workspace is not configured.' }
+    return run(hq.rootPath)
   }
 
   private resolveMachineId(workspaceRootPath: string): string {
@@ -8879,6 +8897,26 @@ user a clickable link to where the thing now lives.`
               agentSlug: managed.spawnedFromAgent?.agentSlug,
             },
           }),
+        ),
+        // Community. Reading, drafting, and tagging are free; sending is not
+        // reachable from here at all — `community_request_send` only asks.
+        communityStatsFn: async () => this.withArtistHqCommunity(
+          root => this.communityTools.stats(root),
+        ),
+        communityListContactsFn: async (input) => this.withArtistHqCommunity(
+          root => this.communityTools.listContacts(root, input as never),
+        ),
+        communityJobStatusFn: async (input) => this.withArtistHqCommunity(
+          root => this.communityTools.jobStatus(root, input.jobId),
+        ),
+        communityDraftEmailFn: async (input) => this.withArtistHqCommunity(
+          root => this.communityTools.draftEmail(root, this.resolveMachineId(root), input as never),
+        ),
+        communityRequestSendFn: async (input) => this.withArtistHqCommunity(
+          root => this.communityTools.requestSend(root, input.jobId),
+        ),
+        communityTagContactsFn: async (input) => this.withArtistHqCommunity(
+          root => this.communityTools.tagContacts(root, this.resolveMachineId(root), input as never),
         ),
         websiteCaptureSyncFn: async (input) => this.withArtistHqWebsite(
           website => website.service.syncCapture(website.rootPath, {

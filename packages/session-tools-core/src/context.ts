@@ -452,6 +452,18 @@ export interface SessionToolContext {
   websiteHistory?(input: import('./handlers/website.ts').WebsiteHistoryInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
   /** What is actually live, checked against the host. */
   websiteStatus?(input: import('./handlers/website.ts').WebsiteStatusInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
+  /** Read the fan list. Addresses are withheld unless drafting a personal email. */
+  communityListContacts?(input: import('./handlers/community.ts').CommunityListContactsInput): Promise<import('./handlers/community.ts').CommunityToolResult>;
+  /** List health: size, reachable, dormant, last send, cadence note. */
+  communityStats?(input: import('./handlers/community.ts').CommunityStatsInput): Promise<import('./handlers/community.ts').CommunityToolResult>;
+  /** Draft a fan email. Free; the artist approves before anything sends. */
+  communityDraftEmail?(input: import('./handlers/community.ts').CommunityDraftEmailInput): Promise<import('./handlers/community.ts').CommunityToolResult>;
+  /** Ask the artist to send a draft. Never sends. */
+  communityRequestSend?(input: import('./handlers/community.ts').CommunityRequestSendInput): Promise<import('./handlers/community.ts').CommunityToolResult>;
+  /** Where a drafted or sent email stands. */
+  communityJobStatus?(input: import('./handlers/community.ts').CommunityJobStatusInput): Promise<import('./handlers/community.ts').CommunityToolResult>;
+  /** Add or remove tags across contacts. */
+  communityTagContacts?(input: import('./handlers/community.ts').CommunityTagContactsInput): Promise<import('./handlers/community.ts').CommunityToolResult>;
   /** Pull new site signups into the Community fan list. */
   websiteCaptureSync?(input: import('./handlers/website.ts').WebsiteCaptureSyncInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;
   /** Point an owned domain at the site. Records the previous DNS first. */

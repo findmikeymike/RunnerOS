@@ -196,6 +196,24 @@ export interface SessionScopedToolCallbacks {
   websiteStatusFn?: (
     input: import('@craft-agent/session-tools-core').WebsiteStatusInput,
   ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;
+  communityListContactsFn?: (
+    input: import('@craft-agent/session-tools-core').CommunityListContactsInput,
+  ) => Promise<import('@craft-agent/session-tools-core').CommunityToolResult>;
+  communityStatsFn?: (
+    input: import('@craft-agent/session-tools-core').CommunityStatsInput,
+  ) => Promise<import('@craft-agent/session-tools-core').CommunityToolResult>;
+  communityDraftEmailFn?: (
+    input: import('@craft-agent/session-tools-core').CommunityDraftEmailInput,
+  ) => Promise<import('@craft-agent/session-tools-core').CommunityToolResult>;
+  communityRequestSendFn?: (
+    input: import('@craft-agent/session-tools-core').CommunityRequestSendInput,
+  ) => Promise<import('@craft-agent/session-tools-core').CommunityToolResult>;
+  communityJobStatusFn?: (
+    input: import('@craft-agent/session-tools-core').CommunityJobStatusInput,
+  ) => Promise<import('@craft-agent/session-tools-core').CommunityToolResult>;
+  communityTagContactsFn?: (
+    input: import('@craft-agent/session-tools-core').CommunityTagContactsInput,
+  ) => Promise<import('@craft-agent/session-tools-core').CommunityToolResult>;
   websiteCaptureSyncFn?: (
     input: import('@craft-agent/session-tools-core').WebsiteCaptureSyncInput,
   ) => Promise<import('@craft-agent/session-tools-core').WebsiteToolResult>;

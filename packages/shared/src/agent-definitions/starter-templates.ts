@@ -2502,6 +2502,15 @@ Default output format:
       outputs: 'A drafted email waiting for your approval, an honest "not worth sending" with the reason, or a readout of the list.',
       tags: ['community', 'email', 'fans', 'newsletter', 'retention', 'growth'],
       skills: ['artist-community-craft', 'artist-comms-strategist'],
+      trustedWorkerTools: [
+        'community_stats',
+        'community_list_contacts',
+        'community_job_status',
+        'community_draft_email',
+        'community_request_send',
+        'community_tag_contacts',
+        'get_artist_context',
+      ],
       routing: {
         bestFor: [
           'deciding whether something is worth emailing the fan list about',

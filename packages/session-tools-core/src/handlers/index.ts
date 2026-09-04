@@ -217,6 +217,25 @@ export type {
   WebsiteToolResult,
 } from './website.ts';
 
+// Community: the fan list. Drafting is free; sending is the artist's call.
+export {
+  handleCommunityListContacts,
+  handleCommunityStats,
+  handleCommunityDraftEmail,
+  handleCommunityRequestSend,
+  handleCommunityJobStatus,
+  handleCommunityTagContacts,
+} from './community.ts';
+export type {
+  CommunityListContactsInput,
+  CommunityStatsInput,
+  CommunityDraftEmailInput,
+  CommunityRequestSendInput,
+  CommunityJobStatusInput,
+  CommunityTagContactsInput,
+  CommunityToolResult,
+} from './community.ts';
+
 // Create Workflow (workflow-creator skill)
 export { handleCreateWorkflow } from './create-workflow.ts';
 export type {

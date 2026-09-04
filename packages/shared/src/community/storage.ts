@@ -309,7 +309,9 @@ function upsertContactRecord(
       : options.consentEvidenceSource
         ? { source: options.consentEvidenceSource, capturedAt: options.now ?? nowIso() }
         : existing?.consentEvidence,
-    tags: Array.from(new Set([...(existing?.tags ?? []), ...tags])),
+    tags: input.replaceTags
+      ? Array.from(new Set(tags))
+      : Array.from(new Set([...(existing?.tags ?? []), ...tags])),
     segments: Array.from(new Set([...(existing?.segments ?? []), segment])),
     notes: clean(input.notes) ?? existing?.notes,
     lastContactedAt: existing?.lastContactedAt,

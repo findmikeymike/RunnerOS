@@ -191,6 +191,14 @@ export interface UpsertCommunityContactInput {
     ipHash?: string;
     formId?: string;
   };
+  /**
+   * Replace the tag list instead of merging into it.
+   *
+   * Merging is the safe default for imports and signups, which should never
+   * silently drop a tag someone else set. Removing a tag is impossible under
+   * that rule, so an explicit caller opts in.
+   */
+  replaceTags?: boolean;
 }
 
 export interface ImportCommunityCsvInput {

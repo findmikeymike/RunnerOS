@@ -88,6 +88,14 @@ import {
   handleWebsiteDomainCheck,
 } from './handlers/website.ts';
 import {
+  handleCommunityListContacts,
+  handleCommunityStats,
+  handleCommunityDraftEmail,
+  handleCommunityRequestSend,
+  handleCommunityJobStatus,
+  handleCommunityTagContacts,
+} from './handlers/community.ts';
+import {
   handleSaveMemory,
   handleUpdateMemory,
   handleForgetMemory,
@@ -908,6 +916,41 @@ export const WebsiteDomainSetSchema = z.object({
 });
 
 export const WebsiteDomainCheckSchema = z.object({}).strict();
+
+export const CommunityListContactsSchema = z.object({
+  segment: z.string().max(60).optional().describe('Only contacts in this segment.'),
+  tag: z.string().max(60).optional().describe('Only contacts carrying this tag.'),
+  consent: z.enum(['unknown', 'opted-in', 'transactional-only', 'unsubscribed', 'bounced']).optional(),
+  city: z.string().max(80).optional().describe('Only contacts in this city. Use for show announcements.'),
+  query: z.string().max(120).optional().describe('Match against name, city, or tags.'),
+  limit: z.number().int().min(1).max(200).optional().describe('Defaults to 50.'),
+  forPersonalEmail: z.boolean().optional()
+    .describe('Return email addresses. Only for a one-to-one message, and capped at 10.'),
+});
+
+export const CommunityStatsSchema = z.object({}).strict();
+
+export const CommunityDraftEmailSchema = z.object({
+  title: z.string().min(1).max(120).describe('Internal name for this email.'),
+  subject: z.string().min(1).max(150).describe('What the fan sees. Say what is inside; do not tease.'),
+  bodyMarkdown: z.string().min(1).max(20000).describe('The email itself. One idea, one link, under 200 words.'),
+  segmentIds: z.array(z.string().max(60)).min(1).max(10).describe('Who this reaches. A show goes to the city, not everyone.'),
+  purpose: z.enum(['announcement', 'newsletter', 'personal-outreach', 'transactional']).optional(),
+});
+
+export const CommunityRequestSendSchema = z.object({
+  jobId: z.string().min(1).max(120),
+});
+
+export const CommunityJobStatusSchema = z.object({
+  jobId: z.string().min(1).max(120),
+});
+
+export const CommunityTagContactsSchema = z.object({
+  contactIds: z.array(z.string().max(120)).min(1).max(500),
+  addTags: z.array(z.string().max(60)).max(10).optional(),
+  removeTags: z.array(z.string().max(60)).max(10).optional(),
+});
 
 export const WebsiteCaptureSyncSchema = z.object({
   limit: z.number().int().min(1).max(100).optional()
@@ -1815,6 +1858,18 @@ Use only after the user explicitly confirms the operation. Read the current coor
 
   website_domain_check: `Re-check whether a connected domain is live yet. Use after the artist updates DNS. Read-only.`,
 
+  community_stats: `Read the health of the fan list: size, how many are reachable, how many joined recently, how many have gone dormant, the segments, and when the last email went out. Read this before deciding whether anything is worth sending — the cadence note tells you plainly whether another email this soon needs a real reason. Read-only.`,
+
+  community_list_contacts: `Read the fan list, filtered by segment, tag, city, consent, or a text match. Email addresses are withheld: choosing an audience and drafting a broadcast never need them, and the send engine resolves them itself from the approved audience. Pass \`forPersonalEmail: true\` only when writing one message to one person; that path returns addresses and is capped at 10. Read-only.`,
+
+  community_draft_email: `Draft a fan email against a segment. Free and reversible — a draft the artist rejects costs nothing, an email they wish they had not sent cannot be recalled. Returns how many fans it would reach and how many were excluded for suppression or missing consent. Drafting does not send.`,
+
+  community_request_send: `Tell the artist a drafted email is ready to go out. This never sends: it checks the draft is complete and has an audience, then returns what the artist needs to decide. Say it is waiting for them; do not attempt to send it yourself.`,
+
+  community_job_status: `Where a drafted or sent email stands: status, audience size, how many actually went out, and how many failed. Read-only.`,
+
+  community_tag_contacts: `Add or remove tags across up to 500 contacts. Use for segmenting — marking a city, an event, a group who claimed something. Tags are how a future email reaches the right people instead of everyone.`,
+
   website_capture_sync: `Pull new signups from the site's capture door into the Community fan list. Each one arrives with its consent evidence (form, timestamp, hashed IP), which is what lets it receive a broadcast later. Already-known and unsubscribed addresses are skipped and counted rather than re-added. Safe to run any time; it sends nothing.`,
 
   website_seo_audit: `Audit the local built site against the baseline: titles, descriptions, one h1 per page, canonical links, Open Graph tags, image alt text and size, internal links, structured data, secret-pattern leaks, and page weight. Live-URL audit arrives with existing-site support in a later slice. Returns a score out of 100 and a fix for each finding. Read-only.`,
@@ -2196,6 +2251,12 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'website_status', description: TOOL_DESCRIPTIONS.website_status, inputSchema: WebsiteStatusSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleWebsiteStatus },
   { name: 'website_deploy', description: TOOL_DESCRIPTIONS.website_deploy, inputSchema: DeployWebsiteSchema, executionMode: 'registry', safeMode: 'block', handler: handleDeployWebsite },
   { name: 'website_rollback', description: TOOL_DESCRIPTIONS.website_rollback, inputSchema: RollbackWebsiteSchema, executionMode: 'registry', safeMode: 'block', handler: handleRollbackWebsite },
+  { name: 'community_stats', description: TOOL_DESCRIPTIONS.community_stats, inputSchema: CommunityStatsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleCommunityStats },
+  { name: 'community_list_contacts', description: TOOL_DESCRIPTIONS.community_list_contacts, inputSchema: CommunityListContactsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleCommunityListContacts },
+  { name: 'community_job_status', description: TOOL_DESCRIPTIONS.community_job_status, inputSchema: CommunityJobStatusSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleCommunityJobStatus },
+  { name: 'community_draft_email', description: TOOL_DESCRIPTIONS.community_draft_email, inputSchema: CommunityDraftEmailSchema, executionMode: 'registry', safeMode: 'block', handler: handleCommunityDraftEmail },
+  { name: 'community_request_send', description: TOOL_DESCRIPTIONS.community_request_send, inputSchema: CommunityRequestSendSchema, executionMode: 'registry', safeMode: 'block', handler: handleCommunityRequestSend },
+  { name: 'community_tag_contacts', description: TOOL_DESCRIPTIONS.community_tag_contacts, inputSchema: CommunityTagContactsSchema, executionMode: 'registry', safeMode: 'block', handler: handleCommunityTagContacts },
   { name: 'website_capture_sync', description: TOOL_DESCRIPTIONS.website_capture_sync, inputSchema: WebsiteCaptureSyncSchema, executionMode: 'registry', safeMode: 'block', handler: handleWebsiteCaptureSync },
   { name: 'website_domain_check', description: TOOL_DESCRIPTIONS.website_domain_check, inputSchema: WebsiteDomainCheckSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleWebsiteDomainCheck },
   { name: 'website_domain_set', description: TOOL_DESCRIPTIONS.website_domain_set, inputSchema: WebsiteDomainSetSchema, executionMode: 'registry', safeMode: 'block', handler: handleWebsiteDomainSet },
