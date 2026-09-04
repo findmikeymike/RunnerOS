@@ -86,8 +86,8 @@ export interface WebsiteAssetRecord {
 export interface ExternalSiteRecord {
   url: string;
   platform: string;
-  /** True only where real edits are possible without driving a browser. */
-  editableThroughApi: boolean;
+  /** Where the artist logs in to change this site, in one line. */
+  howToEdit: string;
   inspectedAt: string;
   /** One entry per page read, in the order they were found. */
   inventory: Array<{ url: string; title?: string }>;

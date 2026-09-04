@@ -1388,7 +1388,7 @@ export class WebsiteService {
     const record: ExternalSiteRecord = {
       url: result.url!,
       platform: result.platform!,
-      editableThroughApi: result.editableThroughApi ?? false,
+      howToEdit: result.howToEdit ?? 'Ask the artist where they log in to edit this site.',
       inspectedAt: result.inspectedAt!,
       inventory: (result.pages ?? []).map(page => ({ url: page.url, title: page.title })),
       capture: result.capture ?? { present: false },
@@ -1442,9 +1442,9 @@ function matchesStoredSite(stored: string, candidate: string): boolean {
 /**
  * Turn a stored reading into something an agent can act on.
  *
- * `canEdit` is the part that matters: on a closed builder the agent has to
- * drive the browser or hand the artist copy to paste, and saying so up front
- * is better than letting it discover that halfway through a task.
+ * `howToEdit` is the part that matters: every one of these sites is changed by
+ * opening its own admin, and saying where that is up front beats letting the
+ * agent discover it halfway through a task.
  */
 function describeStoredSite(record: ExternalSiteRecord): Record<string, unknown> {
   const age = Date.now() - Date.parse(record.inspectedAt)
@@ -1455,9 +1455,7 @@ function describeStoredSite(record: ExternalSiteRecord): Record<string, unknown>
     pages: record.inventory,
     capture: record.capture,
     findings: record.findings,
-    canEdit: record.editableThroughApi
-      ? `${record.platform} exposes an API, so edits can be made directly.`
-      : `${record.platform} has no editing API here. Changes mean driving the site's own editor in a browser, or writing the copy for the artist to paste.`,
+    howToEdit: record.howToEdit,
     ...(Number.isFinite(age) && age > EXTERNAL_STALE_MS
       ? { note: 'This reading is over a week old. Call again with refresh to see the site as it is now.' }
       : {}),

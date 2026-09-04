@@ -3,6 +3,7 @@ import {
   analyzePage,
   detectPlatform,
   findCaptureForm,
+  howToEdit,
   inspectExternalSite,
   internalLinks,
   reviewSite,
@@ -43,10 +44,13 @@ describe('knowing what built the site', () => {
     expect(detectPlatform('<html><body>Hello</body></html>')).toBe('unknown')
   })
 
-  test('only WordPress can be edited without a browser', () => {
-    expect(detectPlatform('<link href="/wp-content/x.css">')).toBe('wordpress')
-    // Everything else means the agent drives the browser or hands over copy.
-    expect(findCaptureForm('').present).toBe(false)
+  test('every platform is edited through its own admin, and says which', () => {
+    // WordPress has a REST API and we deliberately do not use it: a page
+    // builder keeps the layout in postmeta, so an API write would land
+    // somewhere nobody renders. Driving the real editor is the accurate route.
+    expect(howToEdit('wordpress')).toContain('/wp-admin')
+    expect(howToEdit('squarespace')).toContain('squarespace.com')
+    expect(howToEdit('unknown')).toContain('Ask the artist')
   })
 })
 

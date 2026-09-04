@@ -60,9 +60,39 @@ export function detectPlatform(html: string, headers: Record<string, string> = {
   return 'unknown'
 }
 
-/** Whether the artist can edit this site through an API rather than a browser. */
-export function editableThroughApi(platform: SitePlatform): boolean {
-  return platform === 'wordpress'
+/**
+ * How an edit to this site actually gets made.
+ *
+ * Every one of these is "open the admin and use its editor". WordPress has a
+ * REST API and we deliberately do not use it: on a site built with Elementor,
+ * Divi or WPBakery the page lives in postmeta and `post_content` is a stub, so
+ * an API write lands somewhere nobody renders and reports success. Driving the
+ * real editor is the accurate route.
+ *
+ * What differs per platform is where the artist logs in, which is the one
+ * thing worth telling the agent up front.
+ */
+export function howToEdit(platform: SitePlatform): string {
+  switch (platform) {
+    case 'wordpress':
+      return 'Log in at /wp-admin and edit the page in whatever editor the site uses. Do not assume Gutenberg; a page builder stores its layout somewhere else.'
+    case 'squarespace':
+      return 'Log in at squarespace.com and edit the page there.'
+    case 'wix':
+      return 'Log in at wix.com and edit the page in the Wix editor.'
+    case 'shopify':
+      return 'Log in to the Shopify admin and edit the page or theme content there.'
+    case 'bandzoogle':
+      return 'Log in at bandzoogle.com and edit the page there.'
+    case 'webflow':
+      return 'Log in at webflow.com. Only CMS content is editable without republishing the whole site.'
+    case 'linktree':
+      return 'Log in at linktr.ee. This is a link list, not a site — there is not much here to change.'
+    case 'static':
+      return 'This is a static site deployed from somewhere. Editing it means changing its source, which the artist has to point you at.'
+    default:
+      return 'Ask the artist where they log in to edit this site.'
+  }
 }
 
 export interface CaptureFinding {
@@ -275,7 +305,7 @@ export interface InspectResult {
   error?: string
   url?: string
   platform?: SitePlatform
-  editableThroughApi?: boolean
+  howToEdit?: string
   pages?: PageReport[]
   capture?: CaptureFinding
   findings?: SiteFinding[]
@@ -348,7 +378,7 @@ export async function inspectExternalSite(
     ok: true,
     url: base.toString(),
     platform,
-    editableThroughApi: editableThroughApi(platform),
+    howToEdit: howToEdit(platform),
     pages,
     capture,
     findings: reviewSite(pages, capture),

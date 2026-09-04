@@ -82,13 +82,13 @@ describe('reading a site the artist already has', () => {
 
       const findings = read.findings as Array<{ message: string }>
       expect(findings.some(item => item.message.includes('mailchimp'))).toBe(true)
-      expect(read.canEdit).toContain('browser')
+      expect(read.howToEdit).toContain('squarespace.com')
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
   })
 
-  test('a WordPress site is reported as editable without a browser', async () => {
+  test('a WordPress site is pointed at its own admin, not at an API', async () => {
     const root = workspace()
     try {
       const service = new WebsiteService(getSiteBuilderPath())
@@ -99,7 +99,7 @@ describe('reading a site the artist already has', () => {
       })
 
       expect(read.platform).toBe('wordpress')
-      expect(read.canEdit).toContain('directly')
+      expect(read.howToEdit).toContain('/wp-admin')
       expect(loadWebsiteManifest(root)!.mode).toBe('wordpress')
     } finally {
       rmSync(root, { recursive: true, force: true })
