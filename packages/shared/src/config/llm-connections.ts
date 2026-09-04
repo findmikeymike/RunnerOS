@@ -111,6 +111,31 @@ export interface CustomEndpointConfig {
   supportsImages?: boolean;
 }
 
+export interface ModelFallbackEntry {
+  /** Connection slug from StoredConfig.llmConnections. */
+  connectionSlug: string;
+  /** Model id within that connection. Omit to use its default model. */
+  model?: string;
+}
+
+export interface ModelFallbackChain {
+  /** Ordered fallbacks. V1 supports at most two. */
+  entries: ModelFallbackEntry[];
+  /** Disabled chains preserve fail-fast behavior. */
+  enabled: boolean;
+}
+
+export interface ModelAttempt {
+  connectionSlug: string;
+  model: string;
+  outcome: 'succeeded' | 'failed';
+  errorCode?: string;
+  startedAt: string;
+  endedAt: string;
+  /** 0 = primary, 1 = fallback 1, 2 = fallback 2. */
+  chainIndex: number;
+}
+
 /**
  * LLM Connection configuration.
  * Stored in config.llmConnections array.
@@ -142,6 +167,9 @@ export interface LlmConnection {
 
   /** Default model for this connection */
   defaultModel?: string;
+
+  /** Optional override for the global model fallback chain. */
+  fallbackChain?: ModelFallbackChain;
 
   /**
    * Ownership mode for the model list.

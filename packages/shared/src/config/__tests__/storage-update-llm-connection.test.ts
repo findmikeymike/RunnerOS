@@ -41,11 +41,14 @@ function setup(llmConnections: any[]) {
   )
 
   function runUpdate(slug: string, updates: Record<string, unknown>): boolean {
-    const updatesJson = JSON.stringify(updates)
+    return runUpdateSource(slug, JSON.stringify(updates))
+  }
+
+  function runUpdateSource(slug: string, updatesSource: string): boolean {
     const run = Bun.spawnSync([
       process.execPath,
       '--eval',
-      `import { updateLlmConnection } from '${STORAGE_MODULE_PATH}'; const ok = updateLlmConnection(${JSON.stringify(slug)}, ${updatesJson}); process.exit(ok ? 0 : 1);`,
+      `import { updateLlmConnection } from '${STORAGE_MODULE_PATH}'; const ok = updateLlmConnection(${JSON.stringify(slug)}, ${updatesSource}); process.exit(ok ? 0 : 1);`,
     ], {
       env: { ...process.env, CRAFT_CONFIG_DIR: configDir },
       stdout: 'pipe',
@@ -62,7 +65,24 @@ function setup(llmConnections: any[]) {
     return config.llmConnections.find((c: any) => c.slug === slug)
   }
 
-  return { configDir, configPath, runUpdate, readConnection }
+  function runSetGlobal(chain: unknown): boolean {
+    const run = Bun.spawnSync([
+      process.execPath,
+      '--eval',
+      `import { setModelFallbackChain } from '${STORAGE_MODULE_PATH}'; const ok = setModelFallbackChain(${JSON.stringify(chain)}); process.exit(ok ? 0 : 1);`,
+    ], {
+      env: { ...process.env, CRAFT_CONFIG_DIR: configDir },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    return run.exitCode === 0
+  }
+
+  function readConfig(): any {
+    return JSON.parse(readFileSync(configPath, 'utf-8'))
+  }
+
+  return { configDir, configPath, runUpdate, runUpdateSource, runSetGlobal, readConnection, readConfig }
 }
 
 function makeConnection(overrides: Record<string, unknown> = {}) {
@@ -113,5 +133,45 @@ describe('updateLlmConnection – customEndpoint', () => {
 
     const conn = readConnection('custom-compat')
     expect(conn.customEndpoint).toEqual({ api: 'anthropic-messages' })
+  })
+})
+
+describe('model fallback chain storage', () => {
+  it('persists and clears a per-connection override', () => {
+    const chain = { enabled: true, entries: [{ connectionSlug: 'backup', model: 'model-b' }] }
+    const { runUpdate, runUpdateSource, readConnection } = setup([
+      makeConnection({ defaultModel: 'model-a' }),
+      makeConnection({ slug: 'backup', defaultModel: 'model-b' }),
+    ])
+
+    expect(runUpdate('custom-compat', { fallbackChain: chain })).toBe(true)
+    expect(readConnection('custom-compat').fallbackChain).toEqual(chain)
+
+    expect(runUpdateSource('custom-compat', '{ fallbackChain: undefined }')).toBe(true)
+    expect(readConnection('custom-compat')).not.toHaveProperty('fallbackChain')
+  })
+
+  it('rejects an invalid per-connection chain without changing stored config', () => {
+    const { runUpdate, readConnection } = setup([makeConnection({ defaultModel: 'model-a' })])
+    const before = readConnection('custom-compat')
+
+    expect(runUpdate('custom-compat', {
+      fallbackChain: { enabled: true, entries: [{ connectionSlug: 'custom-compat', model: 'model-a' }] },
+    })).toBe(false)
+    expect(readConnection('custom-compat')).toEqual(before)
+  })
+
+  it('persists a valid global chain and rejects invalid replacements', () => {
+    const valid = { enabled: true, entries: [{ connectionSlug: 'backup', model: 'model-b' }] }
+    const { runSetGlobal, readConfig } = setup([makeConnection()])
+
+    expect(runSetGlobal(valid)).toBe(true)
+    expect(readConfig().modelFallbackChain).toEqual(valid)
+
+    expect(runSetGlobal({ enabled: true, entries: [
+      { connectionSlug: 'backup', model: 'model-b' },
+      { connectionSlug: 'backup', model: 'model-b' },
+    ] })).toBe(false)
+    expect(readConfig().modelFallbackChain).toEqual(valid)
   })
 })

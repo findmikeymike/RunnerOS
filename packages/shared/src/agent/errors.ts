@@ -7,28 +7,31 @@
 
 import { getProviderMetadata } from '../config/provider-metadata.ts';
 
-export type ErrorCode =
-  | 'invalid_api_key'
-  | 'invalid_credentials'    // Generic credential issue (from diagnostics)
-  | 'response_too_large'
-  | 'expired_oauth_token'
-  | 'token_expired'          // Workspace token expired (from diagnostics)
-  | 'rate_limited'
-  | 'service_error'
-  | 'service_unavailable'    // Service unavailable (from diagnostics)
-  | 'network_error'
-  | 'proxy_error'           // Proxy/firewall/captive portal intercepted the request
-  | 'mcp_auth_required'
-  | 'mcp_unreachable'        // MCP server unreachable (from diagnostics)
-  | 'billing_error'          // HTTP 402 Payment Required
-  | 'model_no_tool_support'  // Model doesn't support tool/function calling
-  | 'invalid_model'          // Model ID not found
-  | 'data_policy_error'      // OpenRouter data policy restriction
-  | 'invalid_request'        // API rejected the request (e.g., bad image, invalid content)
-  | 'image_too_large'        // Image exceeds API dimension/size limits
-  | 'provider_error'         // AI provider experiencing issues (overloaded, unavailable)
-  | 'queued_message_replay_failed'  // A message queued during an active turn could not be auto-replayed (#616)
-  | 'unknown_error';
+export const ERROR_CODES = [
+  'invalid_api_key',
+  'invalid_credentials',
+  'response_too_large',
+  'expired_oauth_token',
+  'token_expired',
+  'rate_limited',
+  'service_error',
+  'service_unavailable',
+  'network_error',
+  'proxy_error',
+  'mcp_auth_required',
+  'mcp_unreachable',
+  'billing_error',
+  'model_no_tool_support',
+  'invalid_model',
+  'data_policy_error',
+  'invalid_request',
+  'image_too_large',
+  'provider_error',
+  'queued_message_replay_failed',
+  'unknown_error',
+] as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[number];
 
 /** Provider info attached to errors for user-facing context */
 export interface ProviderInfo {

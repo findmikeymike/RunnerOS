@@ -20,6 +20,7 @@ import { safeJsonParse, readJsonFileSync } from '../utils/files.ts';
 import { EntityColorSchema } from '../colors/validate.ts';
 import { THINKING_LEVEL_IDS } from '../agent/thinking-levels.ts';
 import { isValidProviderAuthCombination } from './llm-connections.ts';
+import { validateModelFallbackChain } from './model-fallback.ts';
 
 // ============================================================
 // Config Directory
@@ -80,6 +81,16 @@ const CustomEndpointSchema = z.object({
   supportsImages: z.boolean().optional(),
 });
 
+const ModelFallbackEntrySchema = z.object({
+  connectionSlug: z.string().trim().min(1),
+  model: z.string().trim().min(1).optional(),
+});
+
+const ModelFallbackChainSchema = z.object({
+  enabled: z.boolean(),
+  entries: z.array(ModelFallbackEntrySchema).max(2),
+});
+
 const LlmConnectionSchema = z.object({
   slug: z.string().min(1),
   name: z.string().min(1),
@@ -88,6 +99,7 @@ const LlmConnectionSchema = z.object({
   baseUrl: z.string().optional(),
   models: z.array(z.union([z.string(), z.object({ id: z.string() }).passthrough()])).optional(),
   defaultModel: z.string().optional(),
+  fallbackChain: ModelFallbackChainSchema.optional(),
   modelSelectionMode: z.enum(['automaticallySyncedFromProvider', 'userDefined3Tier']).optional(),
   customEndpoint: CustomEndpointSchema.optional(),
   createdAt: z.number(),
@@ -114,6 +126,7 @@ export const StoredConfigSchema = z.object({
   llmConnections: z.array(LlmConnectionSchema).optional(),
   defaultLlmConnection: z.string().optional(),
   defaultThinkingLevel: z.enum([...THINKING_LEVEL_IDS, 'think'] as [string, ...string[]]).transform(v => v === 'think' ? 'medium' : v).optional(),
+  modelFallbackChain: ModelFallbackChainSchema.optional(),
   developer: DeveloperConfigSchema.optional(),
   // Note: tokenDisplay, showCost, cumulativeUsage, defaultPermissionMode removed
   // Permission mode and cyclable modes are now per-workspace in workspace config.json
@@ -239,6 +252,27 @@ export function validateConfig(): ValidationResult {
             suggestion: 'Check supported auth types for this provider',
           });
         }
+
+        for (const issue of validateModelFallbackChain(conn.fallbackChain ?? { enabled: false, entries: [] }, {
+          connectionSlug: conn.slug,
+          model: conn.defaultModel,
+        })) {
+          errors.push({
+            file: 'config.json',
+            path: `llmConnections[${i}].fallbackChain`,
+            message: `Invalid model fallback chain: ${issue}`,
+            severity: 'error',
+          });
+        }
+      }
+
+      for (const issue of validateModelFallbackChain(config.modelFallbackChain ?? { enabled: false, entries: [] })) {
+        errors.push({
+          file: 'config.json',
+          path: 'modelFallbackChain',
+          message: `Invalid global model fallback chain: ${issue}`,
+          severity: 'error',
+        });
       }
 
       // Validate defaultLlmConnection references an existing connection

@@ -6,6 +6,7 @@ export { resolveKeepBackgroundTasksAlive } from './backend/claude/persistent-inp
 // Export PiAgent for direct use
 export { PiAgent, PiBackend } from './pi-agent.ts';
 export * from './errors.ts';
+export * from './model-fallback.ts';
 export * from './options.ts';
 
 // Export session-scoped-tools - tools scoped to a specific session

@@ -42,8 +42,9 @@ export type {
 import type { Workspace, AuthType } from '@craft-agent/core/types';
 
 // Import LLM connection types and constants
-import type { LlmConnection } from './llm-connections.ts';
+import type { LlmConnection, ModelFallbackChain } from './llm-connections.ts';
 import { isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection, isPiProvider, toBedrockNativeId, type LlmProviderType } from './llm-connections.ts';
+import { validateModelFallbackChain } from './model-fallback.ts';
 import {
   getModelProvider,
   getModelById,
@@ -55,6 +56,7 @@ export interface StoredConfig {
   llmConnections?: LlmConnection[];
   defaultLlmConnection?: string;  // Slug of default connection for new sessions
   defaultThinkingLevel?: ThinkingLevel;  // App-level default thinking level for new sessions
+  modelFallbackChain?: ModelFallbackChain;  // Global fallback order for failed model calls
 
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
@@ -2779,6 +2781,14 @@ export function addLlmConnection(connection: LlmConnection): boolean {
     return false;
   }
 
+  if (
+    connection.fallbackChain
+    && validateModelFallbackChain(connection.fallbackChain, {
+      connectionSlug: connection.slug,
+      model: connection.defaultModel,
+    }).length > 0
+  ) return false;
+
   // Add connection with timestamp
   config.llmConnections.push({
     ...connection,
@@ -2827,6 +2837,9 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
     baseUrl: updates.baseUrl !== undefined ? updates.baseUrl : existing.baseUrl,
     models: updates.models !== undefined ? updates.models : existing.models,
     defaultModel: updates.defaultModel !== undefined ? updates.defaultModel : existing.defaultModel,
+    fallbackChain: Object.prototype.hasOwnProperty.call(updates, 'fallbackChain')
+      ? updates.fallbackChain
+      : existing.fallbackChain,
     modelSelectionMode: updates.modelSelectionMode !== undefined ? updates.modelSelectionMode : existing.modelSelectionMode,
     // Pi auth provider
     piAuthProvider: updates.piAuthProvider !== undefined ? updates.piAuthProvider : existing.piAuthProvider,
@@ -2837,6 +2850,16 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
   };
 
   const updated = connections[index]!;
+  if (
+    updated.fallbackChain
+    && validateModelFallbackChain(updated.fallbackChain, {
+      connectionSlug: updated.slug,
+      model: updated.defaultModel,
+    }).length > 0
+  ) {
+    connections[index] = existing;
+    return false;
+  }
   if (updated.providerType === 'pi') {
     const beforeModelIds = toModelIds(existing.models);
     const afterModelIds = toModelIds(updated.models);
@@ -2872,6 +2895,19 @@ export function updateLlmConnection(slug: string, updates: Partial<Omit<LlmConne
     }
   }
 
+  saveConfig(config);
+  return true;
+}
+
+export function getModelFallbackChain(): ModelFallbackChain | undefined {
+  return loadStoredConfig()?.modelFallbackChain;
+}
+
+export function setModelFallbackChain(chain: ModelFallbackChain | undefined): boolean {
+  const config = loadStoredConfig();
+  if (!config) return false;
+  if (chain && validateModelFallbackChain(chain).length > 0) return false;
+  config.modelFallbackChain = chain;
   saveConfig(config);
   return true;
 }
