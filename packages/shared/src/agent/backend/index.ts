@@ -79,6 +79,7 @@ export {
   // Connection validation
   validateConnection,
 } from './factory.ts';
+export { createModelFallbackBackend } from './model-fallback-backend.ts';
 
 // Shared infrastructure
 export { BaseEventAdapter } from './base-event-adapter.ts';

@@ -1452,6 +1452,9 @@ interface ManagedSession {
   stopRequested?: boolean
   lastMessageAt: number
   streamingText: string
+  /** Attempts for the current turn; attached to the durable fallback notice/final reply. */
+  pendingModelAttempts?: import('@craft-agent/shared/config').ModelAttempt[]
+  activeModelFallbackMessageId?: string
   // Incremented each time a new message starts processing.
   // Used to detect if a follow-up message has superseded the current one (stale-request guard).
   processingGeneration: number
@@ -7813,6 +7816,42 @@ user a clickable link to where the thing now lives.`
         },
         debugMode: _platform?.isDebugMode ? { enabled: true, logFilePath: _platform.getLogFilePath?.() } : undefined,
         enable1MContext: await (async () => { const { getEnable1MContext } = await import('@craft-agent/shared/config/storage'); return getEnable1MContext(); })(),
+        modelFallback: {
+          enabled: true,
+          onAttempt: (attempt, operation) => {
+            if (operation !== 'chat') return
+            managed.pendingModelAttempts = [...(managed.pendingModelAttempts ?? []), attempt]
+            if (managed.activeModelFallbackMessageId) {
+              const receiptMessage = managed.messages.find(message => message.id === managed.activeModelFallbackMessageId)
+              if (receiptMessage) receiptMessage.modelAttempts = [...managed.pendingModelAttempts]
+              this.persistSession(managed)
+            }
+          },
+          onSwitch: ({ from, to, reason, operation }) => {
+            if (operation !== 'chat') return
+            const toConnection = getLlmConnection(to.connectionSlug)
+            const fromConnection = getLlmConnection(from.connectionSlug)
+            const content = `Switched to ${toConnection?.name ?? to.connectionSlug} · ${to.model} because ${fromConnection?.name ?? from.connectionSlug} was unavailable (${reason.replaceAll('_', ' ')}).`
+            const notice: Message = {
+              id: generateMessageId(),
+              role: 'info',
+              content,
+              timestamp: this.monotonic(),
+              infoLevel: 'warning',
+              modelAttempts: [...(managed.pendingModelAttempts ?? [])],
+            }
+            managed.activeModelFallbackMessageId = notice.id
+            managed.messages.push(notice)
+            this.persistSession(managed)
+            this.sendEvent({
+              type: 'info',
+              sessionId: managed.id,
+              message: content,
+              level: 'warning',
+              timestamp: notice.timestamp,
+            }, managed.workspace.id)
+          },
+        },
         // Image resize callback — prevents oversized images from entering conversation history
         onImageResize: async (filePath: string, maxSizeBytes: number): Promise<string | null> => {
           try {
@@ -12245,6 +12284,8 @@ user a clickable link to where the thing now lives.`
       throw err
     }
     managed.streamingText = ''
+    managed.pendingModelAttempts = []
+    managed.activeModelFallbackMessageId = undefined
     managed.processingGeneration++
     managed.turnStartFinalMessageId = this.getLastFinalAssistantMessageId(managed.messages)
 
@@ -13769,6 +13810,9 @@ user a clickable link to where the thing now lives.`
           isIntermediate: event.isIntermediate,
           turnId: event.turnId,
           parentToolUseId: event.parentToolUseId,
+          ...(!event.isIntermediate && (managed.pendingModelAttempts?.length ?? 0) > 1
+            ? { modelAttempts: [...managed.pendingModelAttempts!] }
+            : {}),
         }
         managed.messages.push(assistantMessage)
         managed.streamingText = ''

@@ -270,6 +270,23 @@ export interface CoreBackendConfig {
     apiServers: Record<string, unknown>;
     enabledSlugs: string[];
   };
+
+  /** Host-owned model fallback orchestration. Disabled for connection tests. */
+  modelFallback?: {
+    enabled: boolean;
+    /** Durable audit hook. The host decides where receipts are persisted. */
+    onAttempt?: (
+      attempt: import('../../config/llm-connections.ts').ModelAttempt,
+      operation: 'chat' | 'mini' | 'query',
+    ) => void;
+    /** Visible, non-error status when the active attempt changes models. */
+    onSwitch?: (notice: {
+      from: { connectionSlug: string; model: string };
+      to: { connectionSlug: string; model: string };
+      reason: import('../model-fallback.ts').ModelFallbackFailureCode;
+      operation: 'chat' | 'mini' | 'query';
+    }) => void;
+  };
 }
 
 // ============================================================

@@ -318,6 +318,16 @@ export interface Message {
   agentMessage?: AgentMessageNoticeMetadata;
   /** Durable chat Goal lifecycle marker. */
   goalEvent?: ChatGoalEventMetadata;
+  /** Provider/model attempts for a turn that used configured fallback. */
+  modelAttempts?: Array<{
+    connectionSlug: string;
+    model: string;
+    outcome: 'succeeded' | 'failed';
+    errorCode?: string;
+    startedAt: string;
+    endedAt: string;
+    chainIndex: number;
+  }>;
   /** Durable session-task audit/recovery marker. */
   taskEvent?: SessionTaskEventMetadata;
   /** Annotation payloads for this message */
@@ -418,6 +428,16 @@ export interface StoredMessage {
   agentMessage?: AgentMessageNoticeMetadata;
   /** Durable chat Goal lifecycle marker. */
   goalEvent?: ChatGoalEventMetadata;
+  /** Provider/model attempts for a turn that used configured fallback. */
+  modelAttempts?: Array<{
+    connectionSlug: string;
+    model: string;
+    outcome: 'succeeded' | 'failed';
+    errorCode?: string;
+    startedAt: string;
+    endedAt: string;
+    chainIndex: number;
+  }>;
   /** Durable session-task audit/recovery marker. */
   taskEvent?: SessionTaskEventMetadata;
   /** Annotations persisted at message level */

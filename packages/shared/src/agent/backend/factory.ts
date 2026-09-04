@@ -27,9 +27,13 @@ import { ClaudeAgent } from '../claude-agent.ts';
 import { PiAgent } from '../pi-agent.ts';
 import {
   getLlmConnection,
+  getLlmConnections,
   getDefaultLlmConnection,
+  getModelFallbackChain,
   type LlmConnection,
 } from '../../config/storage.ts';
+import { resolveModelFallbackChain } from '../../config/model-fallback.ts';
+import { createModelFallbackBackend } from './model-fallback-backend.ts';
 // Import deprecated type for legacy migration function only
 import type { LlmConnectionType, CustomEndpointConfig } from '../../config/llm-connections.ts';
 // Import validation helpers for provider-auth combinations
@@ -156,6 +160,83 @@ export const createAgent = createBackend;
  * Provider-specific runtime resolution happens via internal driver registry.
  */
 export function createBackendFromResolvedContext(args: {
+  context: ResolvedBackendContext;
+  coreConfig: CoreBackendConfig;
+  hostRuntime: BackendHostRuntimeContext;
+  providerOptions?: BackendProviderOptions;
+}): AgentBackend {
+  const { context, coreConfig, hostRuntime, providerOptions } = args;
+  const primary = createRawBackendFromResolvedContext(args);
+  if (!coreConfig.modelFallback?.enabled || !context.connection) return primary;
+
+  const primaryConnection = context.connection;
+  return createModelFallbackBackend({
+    primary,
+    primaryConnectionSlug: primaryConnection.slug,
+    primaryModel: context.resolvedModel,
+    getRecoveryMessages: coreConfig.getRecoveryMessages,
+    onAttempt: coreConfig.modelFallback.onAttempt,
+    onSwitch: coreConfig.modelFallback.onSwitch,
+    resolveCandidates: async () => {
+      const credentialManager = getCredentialManager();
+      const connections = await Promise.all(getLlmConnections().map(async connection => ({
+        ...connection,
+        isAuthenticated: connection.authType === 'none'
+          || await credentialManager.hasLlmCredentials(connection.slug, connection.authType),
+      })));
+      const resolution = resolveModelFallbackChain({
+        primaryConnectionSlug: primaryConnection.slug,
+        primaryModel: context.resolvedModel,
+        connections,
+        globalChain: getModelFallbackChain(),
+      });
+
+      return resolution.candidates.map(candidate => ({
+        ...candidate,
+        create: () => {
+          const candidateContext = resolveBackendContext({
+            sessionConnectionSlug: candidate.connectionSlug,
+            managedModel: candidate.model,
+          });
+          const candidateSession = coreConfig.session
+            ? {
+              ...coreConfig.session,
+              sdkSessionId: undefined,
+              branchFromSdkSessionId: undefined,
+              branchFromSessionPath: undefined,
+              branchFromSdkCwd: undefined,
+              branchFromSdkTurnId: undefined,
+              model: candidate.model,
+              llmConnection: candidate.connectionSlug,
+            }
+            : undefined;
+          return createRawBackendFromResolvedContext({
+            context: candidateContext,
+            hostRuntime,
+            providerOptions: { piAuthProvider: candidateContext.connection?.piAuthProvider },
+            coreConfig: {
+              ...coreConfig,
+              session: candidateSession,
+              model: candidate.model,
+              miniModel: candidateContext.connection
+                ? (candidateContext.connection.defaultModel ?? candidate.model)
+                : candidate.model,
+              modelFallback: undefined,
+              onSdkSessionIdUpdate: undefined,
+              onSdkSessionIdCleared: undefined,
+              getBranchSeedMessages: undefined,
+              markBranchSeedApplied: undefined,
+              getTransferredSessionSummary: undefined,
+              markTransferredSessionSummaryApplied: undefined,
+            },
+          });
+        },
+      }));
+    },
+  });
+}
+
+function createRawBackendFromResolvedContext(args: {
   context: ResolvedBackendContext;
   coreConfig: CoreBackendConfig;
   hostRuntime: BackendHostRuntimeContext;
