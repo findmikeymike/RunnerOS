@@ -3,6 +3,8 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { WebsiteService } from '../../website/WebsiteService'
+import { collectRoutineSignals } from '../../website/signals'
+import type { WebsiteRoutineConfig } from '@craft-agent/shared/website'
 import {
   approvePublishTarget,
   approveWebsiteBuild,
@@ -25,6 +27,9 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.website.CAPTURE_SYNC,
   RPC_CHANNELS.website.DOMAIN_SET,
   RPC_CHANNELS.website.DOMAIN_CHECK,
+  RPC_CHANNELS.website.RUN_ROUTINE,
+  RPC_CHANNELS.website.SET_ROUTINE,
+  RPC_CHANNELS.website.CLEAR_BRIEF,
 ] as const
 
 function resolveWorkspace(workspaceId: string): { rootPath: string; id: string } {
@@ -184,5 +189,29 @@ export function registerWebsiteHandlers(server: RpcServer, _deps: HandlerDeps): 
   server.handle(RPC_CHANNELS.website.DOMAIN_CHECK, async (_ctx, workspaceId: string) => {
     const workspace = resolveWorkspace(workspaceId)
     return service.checkDomain(workspace.rootPath)
+  })
+
+  /** Run the routine now. Also the "manual" cadence's only trigger. */
+  server.handle(RPC_CHANNELS.website.RUN_ROUTINE, async (_ctx, workspaceId: string) => {
+    const workspace = resolveWorkspace(workspaceId)
+    const signals = collectRoutineSignals(workspace.rootPath)
+    return service.runRoutine(workspace.rootPath, {
+      machineId: await machineIdFor(workspace.rootPath),
+      origin: { kind: 'user' },
+    }, {
+      signals,
+      unmappedEvents: signals.unmappedEvents,
+      previewTarget: { workspaceRootPath: workspace.rootPath, workspaceId: workspace.id },
+    })
+  })
+
+  server.handle(RPC_CHANNELS.website.SET_ROUTINE, async (_ctx, workspaceId: string, config: WebsiteRoutineConfig) => {
+    const workspace = resolveWorkspace(workspaceId)
+    return service.setRoutine(workspace.rootPath, config)
+  })
+
+  server.handle(RPC_CHANNELS.website.CLEAR_BRIEF, async (_ctx, workspaceId: string) => {
+    const workspace = resolveWorkspace(workspaceId)
+    return service.clearBrief(workspace.rootPath)
   })
 }

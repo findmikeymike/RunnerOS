@@ -909,6 +909,14 @@ export interface ElectronAPI {
   syncWebsiteCapture(workspaceId: string, input?: { limit?: number }): Promise<Record<string, unknown>>
   setWebsiteDomain(workspaceId: string, domain: string): Promise<Record<string, unknown>>
   checkWebsiteDomain(workspaceId: string): Promise<Record<string, unknown>>
+  runWebsiteRoutine(workspaceId: string): Promise<Record<string, unknown>>
+  setWebsiteRoutine(workspaceId: string, config: {
+    cadence: 'weekly' | 'monthly' | 'manual'
+    dayOfWeek?: number
+    dayOfMonth?: number
+    hour?: number
+  }): Promise<Record<string, unknown>>
+  clearWebsiteBrief(workspaceId: string): Promise<Record<string, unknown>>
   getCommunity(workspaceId: string): Promise<CommunityState>
   addCommunityContact(workspaceId: string, input: UpsertCommunityContactInput): Promise<CommunityState>
   importCommunityCsv(workspaceId: string, input: Omit<ImportCommunityCsvInput, 'assertedBy'> & { assertedBy?: string }): Promise<CommunityState>

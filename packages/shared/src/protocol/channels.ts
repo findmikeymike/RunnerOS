@@ -337,6 +337,9 @@ export const RPC_CHANNELS = {
     CAPTURE_SYNC: 'website:captureSync',
     DOMAIN_SET: 'website:domainSet',
     DOMAIN_CHECK: 'website:domainCheck',
+    RUN_ROUTINE: 'website:runRoutine',
+    SET_ROUTINE: 'website:setRoutine',
+    CLEAR_BRIEF: 'website:clearBrief',
   },
 
   community: {

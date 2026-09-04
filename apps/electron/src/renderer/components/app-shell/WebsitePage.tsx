@@ -53,6 +53,33 @@ interface WebsiteStatus {
   targetApproved?: boolean
   liveDeploy?: { id: string; at: string; url: string; buildHash: string }
   hostError?: string
+  routine?: RoutineConfig
+  pendingBrief?: Brief
+}
+
+type Cadence = 'weekly' | 'monthly' | 'manual'
+
+interface RoutineConfig {
+  cadence: Cadence
+  dayOfWeek?: number
+  dayOfMonth?: number
+  hour?: number
+  lastRunAt?: string
+}
+
+interface Brief {
+  runId: string
+  weekOf: string
+  cadence: Cadence
+  site?: {
+    buildHash: string
+    summary: string
+    auditScore: number
+    tier: 'one-click' | 'trusted'
+  }
+  subscribers?: { imported: number; duplicates: number; skippedSuppressed: number }
+  notes: string[]
+  nothingToDo?: true
 }
 
 function relative(at: string): string {
@@ -249,6 +276,30 @@ export function WebsitePage({ workspaceId }: WebsitePageProps) {
           ) : null}
         </section>
 
+        {status.pendingBrief ? (
+          <BriefCard
+            brief={status.pendingBrief}
+            busy={busy}
+            onPublish={(buildHash, summary) => void run(
+              'publishBrief',
+              () => window.electronAPI.publishWebsite(workspaceId, { buildHash, summary }),
+              'Site published.',
+            )}
+            onDismiss={() => void run('dismissBrief', () => window.electronAPI.clearWebsiteBrief(workspaceId), 'Cleared.')}
+          />
+        ) : null}
+
+        <RoutineCadence
+          routine={status.routine}
+          busy={busy}
+          onRun={() => void run('routine', () => window.electronAPI.runWebsiteRoutine(workspaceId), 'Checked the site.')}
+          onChange={(config) => void run(
+            'cadence',
+            () => window.electronAPI.setWebsiteRoutine(workspaceId, config),
+            'Saved.',
+          )}
+        />
+
         <TrustedMode
           status={status}
           trustedOn={trustedOn}
@@ -436,6 +487,202 @@ function TrustedMode({
         >
           {trustedOn ? 'Turn off' : 'Turn on'}
         </button>
+      </div>
+    </section>
+  )
+}
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+const CADENCE_OPTIONS: Array<{ value: Cadence; label: string; hint: string }> = [
+  { value: 'weekly', label: 'Weekly', hint: 'Good if you play shows or release often.' },
+  { value: 'monthly', label: 'Monthly', hint: 'Good if a few things change a year.' },
+  { value: 'manual', label: 'Only when I ask', hint: 'Nothing runs on its own.' },
+]
+
+/**
+ * How often the site keeps itself current.
+ *
+ * Manual is the default and a real choice, not a disabled state: an artist
+ * who releases once a year does not want a weekly card.
+ */
+function RoutineCadence({
+  routine,
+  busy,
+  onRun,
+  onChange,
+}: {
+  routine?: RoutineConfig
+  busy: string | null
+  onRun: () => void
+  onChange: (config: { cadence: Cadence; dayOfWeek?: number; dayOfMonth?: number; hour?: number }) => void
+}) {
+  const cadence = routine?.cadence ?? 'manual'
+  const hour = routine?.hour ?? 9
+  const active = CADENCE_OPTIONS.find(option => option.value === cadence)
+
+  return (
+    <section className="mt-4 rounded-[14px] border border-white/[0.06] bg-white/[0.02] p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-[12px] font-medium text-white/70">Keep the site current</h2>
+          <p className="mt-1 max-w-md text-[11px] leading-5 text-white/40">
+            Adds new releases and shows, retires pre-save links once a song is out, and pulls in
+            anyone who signed up. {active?.hint}
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={onRun}
+          className="h-8 shrink-0 rounded-[8px] border border-white/[0.08] px-3 text-[12px] text-white/70 transition-colors hover:bg-white/[0.04] disabled:opacity-40"
+        >
+          {busy === 'routine' ? 'Checking…' : 'Check now'}
+        </button>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        {CADENCE_OPTIONS.map(option => (
+          <button
+            key={option.value}
+            type="button"
+            disabled={busy !== null}
+            onClick={() => onChange({ cadence: option.value, hour })}
+            className={cn(
+              'h-7 rounded-[7px] px-2.5 text-[11px] transition-colors disabled:opacity-40',
+              cadence === option.value
+                ? 'bg-white/90 text-black'
+                : 'border border-white/[0.08] text-white/55 hover:bg-white/[0.04]',
+            )}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      {cadence !== 'manual' ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/40">
+          <span>Run</span>
+          {cadence === 'weekly' ? (
+            <select
+              value={routine?.dayOfWeek ?? 1}
+              disabled={busy !== null}
+              onChange={(event) => onChange({ cadence, dayOfWeek: Number(event.target.value), hour })}
+              className="h-7 rounded-[7px] border border-white/[0.08] bg-transparent px-2 text-[11px] text-white/70 outline-none focus:border-white/20"
+            >
+              {DAY_NAMES.map((name, index) => (
+                <option key={name} value={index} className="bg-neutral-900">{name}</option>
+              ))}
+            </select>
+          ) : (
+            <select
+              value={routine?.dayOfMonth ?? 1}
+              disabled={busy !== null}
+              onChange={(event) => onChange({ cadence, dayOfMonth: Number(event.target.value), hour })}
+              className="h-7 rounded-[7px] border border-white/[0.08] bg-transparent px-2 text-[11px] text-white/70 outline-none focus:border-white/20"
+            >
+              {/* Capped at 28 so the routine still fires in February. */}
+              {Array.from({ length: 28 }, (_, index) => index + 1).map(day => (
+                <option key={day} value={day} className="bg-neutral-900">{day}</option>
+              ))}
+            </select>
+          )}
+          <span>at</span>
+          <select
+            value={hour}
+            disabled={busy !== null}
+            onChange={(event) => onChange({ cadence, dayOfWeek: routine?.dayOfWeek, dayOfMonth: routine?.dayOfMonth, hour: Number(event.target.value) })}
+            className="h-7 rounded-[7px] border border-white/[0.08] bg-transparent px-2 text-[11px] text-white/70 outline-none focus:border-white/20"
+          >
+            {Array.from({ length: 24 }, (_, index) => index).map(value => (
+              <option key={value} value={value} className="bg-neutral-900">
+                {value % 12 === 0 ? 12 : value % 12}:00 {value < 12 ? 'AM' : 'PM'}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
+      {routine?.lastRunAt ? (
+        <p className="mt-3 text-[10px] uppercase tracking-[0.12em] text-white/25">
+          Last checked {relative(routine.lastRunAt)}
+        </p>
+      ) : null}
+    </section>
+  )
+}
+
+/** What the last run found, and the one decision it needs. */
+function BriefCard({
+  brief,
+  busy,
+  onPublish,
+  onDismiss,
+}: {
+  brief: Brief
+  busy: string | null
+  onPublish: (buildHash: string, summary: string) => void
+  onDismiss: () => void
+}) {
+  const needsClick = brief.site && brief.site.tier === 'one-click'
+
+  return (
+    <section className={cn(
+      'mt-4 rounded-[14px] border p-4',
+      needsClick ? 'border-emerald-300/20 bg-emerald-300/[0.04]' : 'border-white/[0.06] bg-white/[0.02]',
+    )}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-[12px] font-medium text-white/75">
+            {brief.nothingToDo ? 'Nothing needed' : 'From the last check'}
+          </h2>
+
+          {brief.site ? (
+            <p className="mt-1.5 text-[13px] leading-5 text-white/80">{brief.site.summary}</p>
+          ) : null}
+
+          {brief.subscribers && brief.subscribers.imported > 0 ? (
+            <p className="mt-1.5 text-[12px] text-white/55">
+              {brief.subscribers.imported} new {brief.subscribers.imported === 1 ? 'fan' : 'fans'} from the site
+            </p>
+          ) : null}
+
+          {brief.notes.length > 0 ? (
+            <ul className="mt-2 space-y-1">
+              {brief.notes.map(note => (
+                <li key={note} className="text-[11px] leading-5 text-white/40">{note}</li>
+              ))}
+            </ul>
+          ) : null}
+
+          {brief.site?.tier === 'trusted' ? (
+            <p className="mt-2 text-[10px] uppercase tracking-[0.12em] text-emerald-100/50">
+              Published automatically
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          {needsClick && brief.site ? (
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => onPublish(brief.site!.buildHash, brief.site!.summary)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-emerald-200/90 px-3 text-[12px] font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-40"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              {busy === 'publishBrief' ? 'Publishing…' : 'Publish'}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={onDismiss}
+            className="text-[11px] text-white/35 underline-offset-2 hover:text-white/60 hover:underline disabled:opacity-40"
+          >
+            {needsClick ? 'Not now' : 'Dismiss'}
+          </button>
+        </div>
       </div>
     </section>
   )

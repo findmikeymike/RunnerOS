@@ -960,6 +960,9 @@ export class WebsiteService {
       publishPolicy: manifest.publishPolicy,
       trustedModeEligible: isTrustedModeEligible(manifest),
       targetApproved: Boolean(manifest.targetApproval),
+      routine: manifest.routine ?? DEFAULT_ROUTINE,
+      routineDescription: describeCadence(manifest.routine ?? DEFAULT_ROUTINE),
+      pendingBrief: manifest.pendingBrief,
       liveDeploy: live ? { id: live.id, at: live.at, url: live.url, buildHash: live.buildHash } : undefined,
     }
 
@@ -1163,6 +1166,7 @@ export class WebsiteService {
       today?: string
       previewTarget?: WebsitePreviewTarget
       runId?: string
+      unmappedEvents?: Array<{ id: string; date: string; title: string }>
     } = {},
   ): Promise<WebsiteToolResult> {
     const missing = this.requireSite(workspaceRootPath)
@@ -1178,6 +1182,16 @@ export class WebsiteService {
 
     const plan = planSiteUpdate(content, signals, today)
     const notes = plan.findings.filter(finding => !finding.actionable).map(finding => finding.detail)
+
+    // Calendar entries that read like shows but have no city and venue. Say
+    // so rather than guessing: a wrong venue on a public site is worse than
+    // a missing one.
+    const unmapped = options.unmappedEvents ?? []
+    if (unmapped.length > 0) {
+      notes.push(unmapped.length === 1
+        ? `One calendar entry looks like a show but has no city and venue: "${unmapped[0]!.title}". Add it from the Website page.`
+        : `${unmapped.length} calendar entries look like shows but have no city and venue. Add them from the Website page.`)
+    }
 
     // Pull signups regardless of whether the site itself changed: a fan who
     // signed up is worth reporting even in an otherwise quiet week.
