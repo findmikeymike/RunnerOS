@@ -710,17 +710,25 @@ export const GetWebsiteManifestSchema = z.object({
   includeHistory: z.boolean().optional().describe('Include the deploy history list. Off by default.'),
 });
 
-const SiteReleaseLinksSchema = z.object({
-  spotify: z.string().url().optional(),
-  apple: z.string().url().optional(),
-  youtube: z.string().url().optional(),
-  bandcamp: z.string().url().optional(),
-  presave: z.string().url().optional(),
-  smart: z.string().url().optional(),
-}).strict();
-
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const HTTP_URL = z.string().url().refine((value) => {
+  const parsed = new URL(value);
+  return ['http:', 'https:'].includes(parsed.protocol) && !parsed.username && !parsed.password;
+}, 'URL must use http or https and cannot contain credentials');
+const CANONICAL_BASE_URL = HTTP_URL.refine((value) => {
+  const parsed = new URL(value);
+  return !parsed.search && !parsed.hash;
+}, 'Canonical base URL cannot contain a query string or fragment');
+
+const SiteReleaseLinksSchema = z.object({
+  spotify: HTTP_URL.optional(),
+  apple: HTTP_URL.optional(),
+  youtube: HTTP_URL.optional(),
+  bandcamp: HTTP_URL.optional(),
+  presave: HTTP_URL.optional(),
+  smart: HTTP_URL.optional(),
+}).strict();
 
 /**
  * One structured edit to the website content contract. Mirrors
@@ -745,7 +753,7 @@ export const SiteContentOperationSchema = z.discriminatedUnion('op', [
       siteName: z.string().min(1).max(120).optional(),
       defaultDescription: z.string().max(300).optional(),
       ogImageAssetId: z.string().optional(),
-      canonicalBase: z.string().url().optional(),
+      canonicalBase: CANONICAL_BASE_URL.optional(),
     }),
   }),
   z.object({
@@ -768,7 +776,7 @@ export const SiteContentOperationSchema = z.discriminatedUnion('op', [
       date: z.string().regex(ISO_DATE),
       city: z.string().min(1).max(120),
       venue: z.string().min(1).max(160),
-      ticketUrl: z.string().url().optional(),
+      ticketUrl: HTTP_URL.optional(),
       soldOut: z.boolean().optional(),
       calendarEventId: z.string().optional(),
     }),
@@ -778,7 +786,7 @@ export const SiteContentOperationSchema = z.discriminatedUnion('op', [
     value: z.object({
       id: z.string().min(1).max(64),
       title: z.string().min(1).max(200),
-      youtubeId: z.string().max(64).optional(),
+      youtubeId: z.string().regex(/^[A-Za-z0-9_-]+$/).max(64).optional(),
       assetId: z.string().optional(),
       featured: z.boolean().optional(),
     }),
@@ -788,7 +796,7 @@ export const SiteContentOperationSchema = z.discriminatedUnion('op', [
     value: z.object({
       id: z.string().min(1).max(64),
       label: z.string().min(1).max(80),
-      url: z.string().url(),
+      url: HTTP_URL,
       kind: z.enum(['social', 'store', 'other']),
     }),
   }),
@@ -798,7 +806,7 @@ export const SiteContentOperationSchema = z.discriminatedUnion('op', [
       id: z.string().min(1).max(64),
       outlet: z.string().min(1).max(160),
       quote: z.string().max(600).optional(),
-      url: z.string().url().optional(),
+      url: HTTP_URL.optional(),
       date: z.string().regex(ISO_DATE).optional(),
     }),
   }),
@@ -809,7 +817,7 @@ export const SiteContentOperationSchema = z.discriminatedUnion('op', [
       date: z.string().regex(ISO_DATE),
       title: z.string().min(1).max(200),
       body: z.string().max(8000),
-      embedUrl: z.string().url().optional(),
+      embedUrl: HTTP_URL.optional(),
       assetId: z.string().optional(),
     }),
   }),
@@ -833,7 +841,7 @@ export const SiteContentOperationSchema = z.discriminatedUnion('op', [
       reward: z.object({
         kind: z.enum(['download', 'stream', 'none']),
         assetId: z.string().optional(),
-        url: z.string().url().optional(),
+        url: HTTP_URL.optional(),
       }).optional(),
     }),
   }),
@@ -847,7 +855,7 @@ export const SiteContentOperationSchema = z.discriminatedUnion('op', [
 
 export const CreateWebsiteSchema = z.object({
   artistName: z.string().min(1).max(120).describe('Display name for the site. Usually the artist or project name.'),
-  template: z.string().max(40).optional().describe('Starter template. Defaults to "minimal".'),
+  template: z.string().regex(SLUG).max(40).optional().describe('Starter template. Defaults to "minimal".'),
 });
 
 export const SetWebsiteContentSchema = z.object({
@@ -863,9 +871,7 @@ export const PreviewWebsiteSchema = z.object({
   build: z.boolean().optional().describe('Rebuild before previewing. Defaults to true.'),
 });
 
-export const AuditWebsiteSchema = z.object({
-  url: z.string().url().optional().describe('Audit this live URL instead of the local build.'),
-});
+export const AuditWebsiteSchema = z.object({}).strict();
 
 export const GetArtistContextSchema = z.object({
   topic: z.enum(['profile', 'branding', 'voice', 'month-plan', 'growth', 'intel', 'calendar', 'timeline', 'network', 'community', 'vault']),
@@ -1756,7 +1762,7 @@ Use only after the user explicitly confirms the operation. Read the current coor
 
   website_preview: `Build (unless \`build: false\`) and serve the site locally, then publish it as a web Output so it renders in the Visual sidecar. Use this to show the artist a change before anything goes live. Returns the preview URL and the Output id.`,
 
-  website_seo_audit: `Audit the built site — or a live \`url\` for a site the artist already has — against the baseline: titles, descriptions, one h1 per page, canonical links, Open Graph tags, image alt text, internal links, structured data, and page weight. Returns a score out of 100 and a fix for each finding. Read-only.`,
+  website_seo_audit: `Audit the local built site against the baseline: titles, descriptions, one h1 per page, canonical links, Open Graph tags, image alt text and size, internal links, structured data, secret-pattern leaks, and page weight. Live-URL audit arrives with existing-site support in a later slice. Returns a score out of 100 and a fix for each finding. Read-only.`,
 
   search_artist_network: `Search the global Artist Network by name, email, role, category, relationship notes, tags, or what someone can help with. Read-only and available to every agent. Use a specific query tied to the current song, release, campaign, opportunity, or person; results are capped and the full contact list is never injected. A match or saved email is not permission to contact anyone.`,
 

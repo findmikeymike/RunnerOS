@@ -95,6 +95,8 @@ function checkStaticBoundaries(repoRoot: string): void {
   assert(commonBuilder.includes('appId: com.findmikeymike.runner'), 'Runner app ID changed unexpectedly');
   assert(commonBuilder.includes('productName: Runner'), 'Runner product name changed unexpectedly');
   assert(!commonBuilder.includes('schemes:'), 'Shared package config must not register a product protocol');
+  assert((commonBuilder.match(/from: \.\.\/\.\.\/tools\/site-builder/g) ?? []).length === 3, 'Every packaged platform must copy the website builder runtime');
+  assert((commonBuilder.match(/to: app\/tools\/site-builder/g) ?? []).length === 3, 'Every packaged platform must install the website builder at its runtime lookup path');
   assert(runnerBuilder.includes('extends: ./electron-builder.common.yml'), 'Runner package does not extend the shared config');
   assert(artistBuilder.includes('extends: ./electron-builder.common.yml'), 'Artist OS package does not extend the shared config');
   assert(

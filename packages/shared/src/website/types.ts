@@ -46,6 +46,26 @@ export interface WebsiteBuildSummary {
   bytes: number;
 }
 
+export type WebsiteAssetKind = 'image' | 'video' | 'audio' | 'download';
+
+/**
+ * Immutable, web-ready snapshot of one approved Vault or Release Kit asset.
+ * `path` is relative to `website/assets/`; the builder verifies `sha256`
+ * before copying it into disposable `dist/`.
+ */
+export interface WebsiteAssetRecord {
+  id: string;
+  path: string;
+  sha256: string;
+  kind: WebsiteAssetKind;
+  mimeType?: string;
+  source: {
+    kind: 'vault' | 'release-kit';
+    id: string;
+    sha256: string;
+  };
+}
+
 export interface WebsiteManifest {
   version: 1;
   mode: WebsiteMode;
@@ -74,6 +94,7 @@ export interface WebsiteManifest {
     lastDrainAt?: string;
     drainCursor?: string;
   };
+  assets: WebsiteAssetRecord[];
   createdAt: string;
   updatedAt: string;
 }

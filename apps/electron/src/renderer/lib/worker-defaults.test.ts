@@ -2,6 +2,11 @@ import { describe, expect, test } from 'bun:test'
 import { defaultWorkerSlugs, LAB_DEFAULT_WORKER_SLUGS } from './worker-defaults'
 
 describe('worker page defaults', () => {
+  test('Site Builder appears by default in Artist HQ and Campaign workers', () => {
+    expect(defaultWorkerSlugs(false)).toContain('site-builder')
+    expect(defaultWorkerSlugs(true)).toContain('site-builder')
+  })
+
   test('College Radio appears by default in Artist HQ and Campaign workers', () => {
     expect(defaultWorkerSlugs(false)).toContain('college-radio-agent')
     expect(defaultWorkerSlugs(true)).toContain('college-radio-agent')

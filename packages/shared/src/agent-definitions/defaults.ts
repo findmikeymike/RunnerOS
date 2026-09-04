@@ -62,6 +62,7 @@ export function isAgentAllowedInArtistWorkspace(
 /** Fallback capability broker available in both Artist HQ and campaigns. */
 export const HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS = [
   ANYTHING_AGENT_SLUG,
+  'site-builder',
 ] as const
 
 /** Initial Creative Lab team. Applied only when the app creates a new Lab root. */

@@ -1656,6 +1656,10 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
     return 'Brand & Story'
   }
 
+  if (slug === 'site-builder') {
+    return 'Website'
+  }
+
   if (slug === 'artist-os-release-manager') {
     return 'Release Operations'
   }
@@ -1720,6 +1724,7 @@ function agentDomainRank(domain: string) {
     'Song Development',
     'Creative',
     'Brand & Story',
+    'Website',
     'Content Creation',
     'Socials',
     'Promotion',

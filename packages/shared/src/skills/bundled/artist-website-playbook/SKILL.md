@@ -49,9 +49,10 @@ Traffic that leaves without joining is traffic you paid for twice. Rules:
 - The reward has to be real. A "sneak peek" that never arrives is worse than
   no door at all.
 
-Signups flow into the Community fan list with consent evidence attached, so
-the artist can email them legally later. That link is the reason the door
-exists — a form that only collects addresses into a spreadsheet is a dead end.
+Do not enable a signup form until Artist OS reports that a capture backend is
+connected. Capture and Community sync arrive in the capture-door slice; until
+then the builder deliberately hides signup forms rather than shipping a dead
+door.
 
 ## SEO that matters for a musician
 

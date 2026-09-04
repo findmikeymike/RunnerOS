@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process'
 import { createServer, type Server } from 'node:http'
-import { existsSync, readFileSync, statSync } from 'node:fs'
-import { extname, join, resolve } from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { extname, join, resolve, sep } from 'node:path'
+import { createHash, randomUUID } from 'node:crypto'
+import sharp from 'sharp'
 import {
   applySiteContentOperations,
   defaultSiteContent,
@@ -10,11 +11,26 @@ import {
   loadWebsiteManifest,
   saveSiteContent,
   saveWebsiteManifest,
+  websiteAssetsDir,
   websiteDistDir,
   websiteExists,
+  websiteRoot,
   type SiteContentOperation,
+  type WebsiteAssetKind,
+  type WebsiteAssetRecord,
   type WebsiteManifest,
 } from '@craft-agent/shared/website'
+import {
+  loadArtistVaultManifest,
+  resolveArtistVaultAssetPath,
+  type VaultAssetRecord,
+} from '@craft-agent/shared/artist-vault'
+import {
+  getReleaseKitManifestPath,
+  loadReleaseKitManifest,
+  resolveReleaseKitItemPath,
+  type ReleaseKitItem,
+} from '@craft-agent/shared/release-kit'
 import { createOutputBundle, readOutputManifest, writeOutputManifest } from '@craft-agent/shared/outputs'
 import { OUTPUT_SHOW_IN_CANVAS_TAG } from '@craft-agent/shared/outputs/constants'
 
@@ -28,6 +44,15 @@ export interface WebsiteServiceOrigin {
   sessionId?: string
   agentSlug?: string
   agentName?: string
+}
+
+export interface WebsitePreviewTarget {
+  workspaceRootPath: string
+  workspaceId: string
+}
+
+export interface WebsiteAssetContext {
+  workspaceRootPath: string
 }
 
 const MIME: Record<string, string> = {
@@ -48,6 +73,112 @@ const MIME: Record<string, string> = {
   '.woff2': 'font/woff2',
   '.mp3': 'audio/mpeg',
   '.mp4': 'video/mp4',
+}
+
+const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif'])
+const BUILDER_TIMEOUT_MS = 60_000
+const BUILDER_OUTPUT_LIMIT = 1_000_000
+
+function hashFile(path: string): string {
+  return createHash('sha256').update(readFileSync(path)).digest('hex')
+}
+
+function containedAssetPath(root: string, relativePath: string): string | null {
+  const normalized = relativePath.replace(/\\/g, '/')
+  if (!normalized || normalized.includes('\0') || normalized.startsWith('/') || normalized.split('/').some(part => !part || part === '.' || part === '..')) return null
+  const base = resolve(root)
+  const target = resolve(base, normalized)
+  return target.startsWith(`${base}${sep}`) ? target : null
+}
+
+function isSafeManagedPath(root: string, candidate: string): boolean {
+  const base = resolve(root)
+  const target = resolve(candidate)
+  if (target !== base && !target.startsWith(`${base}${sep}`)) return false
+  if (existsSync(base) && lstatSync(base).isSymbolicLink()) return false
+  let current = base
+  const relativeParts = target.slice(base.length).split(sep).filter(Boolean)
+  for (const part of relativeParts) {
+    current = join(current, part)
+    if (existsSync(current) && lstatSync(current).isSymbolicLink()) return false
+  }
+  return true
+}
+
+function isRealFileInside(root: string, path: string): boolean {
+  if (!existsSync(path) || lstatSync(path).isSymbolicLink() || !statSync(path).isFile()) return false
+  const realRoot = realpathSync(root)
+  const realFile = realpathSync(path)
+  return realFile.startsWith(`${realRoot}${sep}`)
+}
+
+function referencedAssetIds(content: ReturnType<typeof loadSiteContent>): Set<string> {
+  if (!content) return new Set()
+  return new Set([
+    content.seo.ogImageAssetId,
+    ...content.releases.map(item => item.artworkAssetId),
+    ...content.videos.map(item => item.assetId),
+    ...content.journal.map(item => item.assetId),
+    ...content.signup.forms.map(item => item.reward?.assetId),
+  ].filter((id): id is string => Boolean(id)))
+}
+
+function websiteAssetKind(path: string, mimeType?: string): WebsiteAssetKind {
+  if (mimeType?.startsWith('image/') || IMAGE_EXTENSIONS.has(extname(path).toLowerCase())) return 'image'
+  if (mimeType?.startsWith('video/')) return 'video'
+  if (mimeType?.startsWith('audio/')) return 'audio'
+  return 'download'
+}
+
+interface ResolvedWebsiteAsset {
+  id: string
+  path: string
+  sha256: string
+  mimeType?: string
+  sourceKind: WebsiteAssetRecord['source']['kind']
+}
+
+function resolveVaultAsset(workspaceRootPath: string, id: string): ResolvedWebsiteAsset | null {
+  const asset = loadArtistVaultManifest(workspaceRootPath).assets.find(candidate => candidate.id === id)
+  if (!asset) return null
+  if (!asset.usableByAgents || !['approved', 'final'].includes(asset.status) || asset.rightsStatus !== 'safe-to-use') {
+    throw new Error(`Vault asset is not approved and safe for website use: ${id}`)
+  }
+  return resolvedVaultRecord(workspaceRootPath, asset)
+}
+
+function resolvedVaultRecord(workspaceRootPath: string, asset: VaultAssetRecord): ResolvedWebsiteAsset {
+  const path = resolveArtistVaultAssetPath(workspaceRootPath, asset)
+  if (!path || !asset.sha256 || !isRealFileInside(workspaceRootPath, path) || hashFile(path) !== asset.sha256) {
+    throw new Error(`Vault asset failed integrity verification: ${asset.id}`)
+  }
+  return { id: asset.id, path, sha256: asset.sha256, mimeType: asset.mimeType, sourceKind: 'vault' }
+}
+
+function resolveReleaseKitAsset(workspaceRootPath: string, id: string): ResolvedWebsiteAsset | null {
+  const manifestPath = getReleaseKitManifestPath(workspaceRootPath)
+  if (!existsSync(manifestPath)) return null
+  let identity: { workspaceId?: string; campaignId?: string }
+  try {
+    identity = JSON.parse(readFileSync(manifestPath, 'utf8')) as typeof identity
+  } catch {
+    throw new Error('Release Kit manifest is invalid.')
+  }
+  if (!identity.workspaceId || !identity.campaignId) throw new Error('Release Kit manifest identity is missing.')
+  const item = loadReleaseKitManifest(workspaceRootPath, identity.workspaceId, identity.campaignId).items.find(candidate => candidate.id === id)
+  if (!item) return null
+  if (item.status !== 'ready' || item.usage.restrictions.blockedFromUse || item.usage.restrictions.needsRightsClearance || item.usage.restrictions.artistLikenessRestricted) {
+    throw new Error(`Release Kit asset is not approved for website use: ${id}`)
+  }
+  return resolvedReleaseKitRecord(workspaceRootPath, item)
+}
+
+function resolvedReleaseKitRecord(workspaceRootPath: string, item: ReleaseKitItem): ResolvedWebsiteAsset {
+  const path = resolveReleaseKitItemPath(workspaceRootPath, item.relativePath)
+  if (!isRealFileInside(workspaceRootPath, path) || hashFile(path) !== item.sha256) {
+    throw new Error(`Release Kit asset failed integrity verification: ${item.id}`)
+  }
+  return { id: item.id, path, sha256: item.sha256, mimeType: item.mimeType, sourceKind: 'release-kit' }
 }
 
 function firstExistingPath(candidates: string[], fallback: string): string {
@@ -102,8 +233,25 @@ interface PreviewServer {
  */
 export class WebsiteService {
   private readonly previews = new Map<string, PreviewServer>()
+  private readonly operationTails = new Map<string, Promise<void>>()
 
   constructor(private readonly toolPath: string = getSiteBuilderPath()) {}
+
+  private async withWebsiteLock<T>(workspaceRootPath: string, operation: () => Promise<T>): Promise<T> {
+    const key = resolve(workspaceRootPath)
+    const previous = this.operationTails.get(key) ?? Promise.resolve()
+    let release!: () => void
+    const gate = new Promise<void>(resolveGate => { release = resolveGate })
+    const tail = previous.catch(() => undefined).then(() => gate)
+    this.operationTails.set(key, tail)
+    await previous.catch(() => undefined)
+    try {
+      return await operation()
+    } finally {
+      release()
+      if (this.operationTails.get(key) === tail) this.operationTails.delete(key)
+    }
+  }
 
   private cli(): string {
     return join(this.toolPath, 'bin', 'site.mjs')
@@ -113,14 +261,31 @@ export class WebsiteService {
     return new Promise((resolvePromise) => {
       const child = spawn(process.execPath, [this.cli(), ...args], {
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, NODE_OPTIONS: '' },
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: '' },
       })
       let stdout = ''
       let stderr = ''
-      child.stdout.on('data', chunk => { stdout += String(chunk) })
-      child.stderr.on('data', chunk => { stderr += String(chunk) })
-      child.on('error', error => resolvePromise({ code: -1, stdout, stderr: String(error) }))
-      child.on('close', code => resolvePromise({ code: code ?? -1, stdout, stderr }))
+      let settled = false
+      let timedOut = false
+      const append = (current: string, chunk: unknown): string => `${current}${String(chunk)}`.slice(-BUILDER_OUTPUT_LIMIT)
+      const finish = (result: { code: number; stdout: string; stderr: string }) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolvePromise(result)
+      }
+      const timer = setTimeout(() => {
+        timedOut = true
+        child.kill('SIGKILL')
+      }, BUILDER_TIMEOUT_MS)
+      child.stdout.on('data', chunk => { stdout = append(stdout, chunk) })
+      child.stderr.on('data', chunk => { stderr = append(stderr, chunk) })
+      child.on('error', error => finish({ code: -1, stdout, stderr: String(error) }))
+      child.on('close', code => finish({
+        code: timedOut ? -1 : (code ?? -1),
+        stdout,
+        stderr: timedOut ? `${stderr}\nWebsite builder timed out after 60 seconds.`.trim() : stderr,
+      }))
     })
   }
 
@@ -135,7 +300,14 @@ export class WebsiteService {
   }
 
   private requireSite(workspaceRootPath: string): WebsiteToolResult | null {
-    if (websiteExists(workspaceRootPath)) return null
+    const managedRoot = websiteRoot(workspaceRootPath)
+    const manifestPath = join(managedRoot, 'site.json')
+    if (websiteExists(workspaceRootPath)) {
+      if (!isSafeManagedPath(workspaceRootPath, manifestPath)) {
+        return { ok: false, error: 'The website folder contains an unsafe symbolic link.', mode: 'none' }
+      }
+      return null
+    }
     return {
       ok: false,
       error: 'No website exists in this workspace yet. Create one first, then edit and build it.',
@@ -149,6 +321,10 @@ export class WebsiteService {
     workspaceRootPath: string,
     input: { includeHistory?: boolean } = {},
   ): Promise<WebsiteToolResult> {
+    if (websiteExists(workspaceRootPath)) {
+      const unsafe = this.requireSite(workspaceRootPath)
+      if (unsafe) return unsafe
+    }
     const manifest = loadWebsiteManifest(workspaceRootPath)
     if (!manifest) {
       return {
@@ -194,6 +370,13 @@ export class WebsiteService {
     workspaceRootPath: string,
     input: { artistName: string; template?: string },
   ): Promise<WebsiteToolResult> {
+    return this.withWebsiteLock(workspaceRootPath, () => this.createUnlocked(workspaceRootPath, input))
+  }
+
+  private async createUnlocked(
+    workspaceRootPath: string,
+    input: { artistName: string; template?: string },
+  ): Promise<WebsiteToolResult> {
     if (websiteExists(workspaceRootPath)) {
       return { ok: false, error: 'A website already exists in this workspace.' }
     }
@@ -219,12 +402,29 @@ export class WebsiteService {
     workspaceRootPath: string,
     input: { operations: unknown[] },
   ): Promise<WebsiteToolResult> {
+    return this.withWebsiteLock(workspaceRootPath, () => this.setContentUnlocked(workspaceRootPath, input))
+  }
+
+  private async setContentUnlocked(
+    workspaceRootPath: string,
+    input: { operations: unknown[] },
+  ): Promise<WebsiteToolResult> {
     const missing = this.requireSite(workspaceRootPath)
     if (missing) return missing
+    if (!isSafeManagedPath(workspaceRootPath, join(websiteRoot(workspaceRootPath), 'content', 'site.json'))) {
+      return { ok: false, error: 'The website content path contains an unsafe symbolic link.' }
+    }
 
     const operations = input.operations as SiteContentOperation[]
     if (!Array.isArray(operations) || operations.length === 0) {
       return { ok: false, error: 'No operations supplied.' }
+    }
+    const manifest = loadWebsiteManifest(workspaceRootPath)
+    if (operations.some(operation => operation.op === 'set-signup-enabled' && operation.value === true) && manifest?.capture.backend === 'none') {
+      return {
+        ok: false,
+        error: 'Signup cannot be enabled until a capture connection is configured. The site will not show a dead form.',
+      }
     }
 
     const current = loadSiteContent(workspaceRootPath) ?? defaultSiteContent('Artist')
@@ -245,12 +445,125 @@ export class WebsiteService {
     }
   }
 
+  private async stageReferencedAssets(
+    websiteWorkspaceRootPath: string,
+    assetContext: WebsiteAssetContext = { workspaceRootPath: websiteWorkspaceRootPath },
+  ): Promise<void> {
+    const managedRoot = websiteRoot(websiteWorkspaceRootPath)
+    if (!isSafeManagedPath(websiteWorkspaceRootPath, join(managedRoot, 'content', 'site.json'))) {
+      throw new Error('The website content path contains an unsafe symbolic link.')
+    }
+    const content = loadSiteContent(websiteWorkspaceRootPath)
+    const manifest = loadWebsiteManifest(websiteWorkspaceRootPath)
+    if (!content || !manifest) return
+
+    const ids = referencedAssetIds(content)
+    const assetsRoot = websiteAssetsDir(websiteWorkspaceRootPath)
+    if (existsSync(managedRoot) && lstatSync(managedRoot).isSymbolicLink()) throw new Error('website/ cannot be a symbolic link.')
+    if (existsSync(assetsRoot) && lstatSync(assetsRoot).isSymbolicLink()) throw new Error('website/assets cannot be a symbolic link.')
+    const existingById = new Map((manifest.assets ?? []).map(asset => [asset.id, asset]))
+    const staged: WebsiteAssetRecord[] = []
+    if (!isSafeManagedPath(websiteWorkspaceRootPath, join(assetsRoot, 'files'))) throw new Error('website/assets contains an unsafe symbolic link.')
+    mkdirSync(join(assetsRoot, 'files'), { recursive: true })
+    if (!realpathSync(assetsRoot).startsWith(`${realpathSync(managedRoot)}${sep}`)) throw new Error('website/assets escapes website/.')
+
+    for (const id of [...ids].sort()) {
+      const existing = existingById.get(id)
+      const existingPath = existing ? containedAssetPath(assetsRoot, existing.path) : null
+      const existingIsValid = Boolean(
+        existing
+        && existingPath
+        && existsSync(existingPath)
+        && !lstatSync(existingPath).isSymbolicLink()
+        && statSync(existingPath).isFile()
+        && hashFile(existingPath) === existing.sha256,
+      )
+      const contextDiffers = assetContext.workspaceRootPath !== websiteWorkspaceRootPath
+      const resolved = contextDiffers
+        ? resolveReleaseKitAsset(assetContext.workspaceRootPath, id)
+          ?? resolveVaultAsset(assetContext.workspaceRootPath, id)
+          ?? resolveVaultAsset(websiteWorkspaceRootPath, id)
+          ?? resolveReleaseKitAsset(websiteWorkspaceRootPath, id)
+        : resolveVaultAsset(websiteWorkspaceRootPath, id)
+          ?? resolveReleaseKitAsset(websiteWorkspaceRootPath, id)
+      if (!resolved) {
+        if (existing && existingIsValid) {
+          staged.push(existing)
+          continue
+        }
+        throw new Error(`Website asset was not found in the approved Vault or Release Kit: ${id}`)
+      }
+      if (
+        existing
+        && existing.source.kind === resolved.sourceKind
+        && existing.source.id === resolved.id
+        && existing.source.sha256 === resolved.sha256
+        && existingIsValid
+      ) {
+        staged.push(existing)
+        continue
+      }
+
+      const kind = websiteAssetKind(resolved.path, resolved.mimeType)
+      const key = createHash('sha256').update(id).digest('hex').slice(0, 16)
+      const sourceExtension = extname(resolved.path).toLowerCase()
+      const outputExtension = kind === 'image' ? '.webp' : sourceExtension
+      if (!outputExtension) throw new Error(`Website asset has no supported file extension: ${id}`)
+      const relativePath = `files/${key}-${resolved.sha256.slice(0, 12)}${outputExtension}`
+      const target = containedAssetPath(assetsRoot, relativePath)
+      if (!target) throw new Error(`Could not create a safe staged path for website asset: ${id}`)
+      const temp = `${target}.tmp-${process.pid}-${randomUUID()}`
+
+      try {
+        if (kind === 'image') {
+          await sharp(resolved.path, { animated: sourceExtension === '.gif', failOn: 'error', limitInputPixels: 100_000_000 })
+            .rotate()
+            .resize({ width: 2400, height: 2400, fit: 'inside', withoutEnlargement: true })
+            .webp({ quality: 84, effort: 4 })
+            .toFile(temp)
+        } else {
+          writeFileSync(temp, readFileSync(resolved.path))
+        }
+        renameSync(temp, target)
+      } catch (error) {
+        rmSync(temp, { force: true })
+        throw new Error(`Could not prepare website asset ${id}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+
+      staged.push({
+        id,
+        path: relativePath,
+        sha256: hashFile(target),
+        kind,
+        mimeType: kind === 'image' ? 'image/webp' : resolved.mimeType,
+        source: { kind: resolved.sourceKind, id: resolved.id, sha256: resolved.sha256 },
+      })
+    }
+
+    saveWebsiteManifest(websiteWorkspaceRootPath, { ...manifest, assets: staged })
+  }
+
   async build(
     workspaceRootPath: string,
     _input: { audit?: boolean } = {},
+    assetContext: WebsiteAssetContext = { workspaceRootPath },
+  ): Promise<WebsiteToolResult> {
+    return this.withWebsiteLock(workspaceRootPath, () => this.buildUnlocked(workspaceRootPath, _input, assetContext))
+  }
+
+  private async buildUnlocked(
+    workspaceRootPath: string,
+    _input: { audit?: boolean } = {},
+    assetContext: WebsiteAssetContext = { workspaceRootPath },
   ): Promise<WebsiteToolResult> {
     const missing = this.requireSite(workspaceRootPath)
     if (missing) return missing
+
+    try {
+      await this.stageReferencedAssets(workspaceRootPath, assetContext)
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
 
     const { code, stdout, stderr } = await this.runBuilder(['build', workspaceRootPath, '--json'])
     const receipt = this.parseReceipt(stdout)
@@ -290,14 +603,15 @@ export class WebsiteService {
 
   async audit(
     workspaceRootPath: string,
-    input: { url?: string } = {},
+    _input: object = {},
   ): Promise<WebsiteToolResult> {
-    if (input.url) {
-      return {
-        ok: false,
-        error: 'Auditing a live URL is not available yet. Build the local site and audit that instead.',
-      }
-    }
+    return this.withWebsiteLock(workspaceRootPath, () => this.auditUnlocked(workspaceRootPath, _input))
+  }
+
+  private async auditUnlocked(
+    workspaceRootPath: string,
+    _input: object = {},
+  ): Promise<WebsiteToolResult> {
     const missing = this.requireSite(workspaceRootPath)
     if (missing) return missing
 
@@ -311,21 +625,25 @@ export class WebsiteService {
 
   async preview(
     workspaceRootPath: string,
-    workspaceId: string,
+    target: WebsitePreviewTarget,
     input: { build?: boolean } = {},
     origin: WebsiteServiceOrigin = {},
+    assetContext: WebsiteAssetContext = { workspaceRootPath },
   ): Promise<WebsiteToolResult> {
     const missing = this.requireSite(workspaceRootPath)
     if (missing) return missing
 
     if (input.build !== false) {
-      const built = await this.build(workspaceRootPath)
+      const built = await this.build(workspaceRootPath, {}, assetContext)
       if (!built.ok) return built
     }
 
     const dist = websiteDistDir(workspaceRootPath)
     if (!existsSync(dist)) {
       return { ok: false, error: 'No build output. Build first.' }
+    }
+    if (!isSafeManagedPath(workspaceRootPath, dist)) {
+      return { ok: false, error: 'The website preview path contains an unsafe symbolic link.' }
     }
 
     let preview: PreviewServer
@@ -339,9 +657,9 @@ export class WebsiteService {
     const manifest = loadWebsiteManifest(workspaceRootPath)
     const outputId = randomUUID()
 
-    createOutputBundle(workspaceRootPath, {
+    createOutputBundle(target.workspaceRootPath, {
       id: outputId,
-      workspaceId,
+      workspaceId: target.workspaceId,
       title: 'Website preview',
       // `web` is a preview mode, not an output kind; the built site is code.
       kind: 'code',
@@ -360,9 +678,9 @@ export class WebsiteService {
     })
 
     // `web` preview mode is what routes the link into the Visual sidecar frame.
-    const created = readOutputManifest(workspaceRootPath, outputId)
+    const created = readOutputManifest(target.workspaceRootPath, outputId)
     if (created) {
-      writeOutputManifest(workspaceRootPath, { ...created, preview: { mode: 'web' } })
+      writeOutputManifest(target.workspaceRootPath, { ...created, preview: { mode: 'web' } })
     }
 
     return {
@@ -385,12 +703,18 @@ export class WebsiteService {
       this.previews.delete(workspaceRootPath)
     }
 
-    const root = resolve(dist)
+    const root = realpathSync(dist)
     const server = createServer((req, res) => {
-      const requested = decodeURIComponent((req.url ?? '/').split('?')[0] ?? '/')
+      let requested: string
+      try {
+        requested = decodeURIComponent((req.url ?? '/').split('?')[0] ?? '/')
+      } catch {
+        res.writeHead(400).end('Bad request')
+        return
+      }
       const candidate = resolve(root, `.${requested}`)
       // Contain every request inside the build output.
-      if (candidate !== root && !candidate.startsWith(`${root}/`)) {
+      if (candidate !== root && !candidate.startsWith(`${root}${sep}`)) {
         res.writeHead(403).end('Forbidden')
         return
       }
@@ -403,6 +727,10 @@ export class WebsiteService {
           return
         }
         res.writeHead(404).end('Not found')
+        return
+      }
+      if (lstatSync(target).isSymbolicLink() || !realpathSync(target).startsWith(`${root}${sep}`)) {
+        res.writeHead(403).end('Forbidden')
         return
       }
       res.writeHead(200, {

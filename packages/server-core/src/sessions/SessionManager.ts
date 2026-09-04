@@ -3937,6 +3937,7 @@ export class SessionManager implements ISessionManager {
           DEFAULT_ACTIVATED_AGENT_SLUGS,
           CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
           HQ_DEFAULT_ACTIVATED_AGENT_SLUGS,
+          HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
           ensureBuiltInAgentSkillsForSlug,
           getGlobalAgentDir,
           hasReleaseManagerIdentity,
@@ -3954,6 +3955,7 @@ export class SessionManager implements ISessionManager {
         const artistDefaultAgentSlugs = [
           ...HQ_DEFAULT_ACTIVATED_AGENT_SLUGS,
           ...CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS,
+          ...HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS.filter(agentSlug => agentSlug !== ANYTHING_AGENT_SLUG),
         ]
         const artistDefaultAgentsPreviouslyInstalled = new Set<string>(
           artistDefaultAgentSlugs.filter(agentSlug => Boolean(loadGlobalAgent(agentSlug))),
@@ -4017,7 +4019,8 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'the-excavator'
             || a.slug === 'update-system-agent'
             || a.slug === 'catalog-royalty-agent'
-            || a.slug === 'legal-agent',
+            || a.slug === 'legal-agent'
+            || a.slug === 'site-builder',
         )
         const { ensured } = ensureRequiredAgents(required)
         if (ensured > 0) {
@@ -4186,6 +4189,12 @@ export class SessionManager implements ISessionManager {
               agentSlug,
               scopes: new Set(['campaign']),
             })),
+            ...HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS
+              .filter(agentSlug => agentSlug !== ANYTHING_AGENT_SLUG)
+              .map(agentSlug => ({
+                agentSlug,
+                scopes: new Set(['hq', 'campaign']),
+              })),
           ]
           for (const { agentSlug, scopes } of artistDefaultAgentTargets) {
             const installedAgent = loadGlobalAgent(agentSlug)
@@ -8827,18 +8836,32 @@ user a clickable link to where the thing now lives.`
           website => website.service.setContent(website.rootPath, input),
         ),
         buildWebsiteFn: async (input) => this.withArtistHqWebsite(
-          website => website.service.build(website.rootPath, input),
+          website => website.service.build(website.rootPath, input, { workspaceRootPath: managed.workspace.rootPath }),
         ),
         auditWebsiteFn: async (input) => this.withArtistHqWebsite(
           website => website.service.audit(website.rootPath, input),
         ),
-        previewWebsiteFn: async (input) => this.withArtistHqWebsite(
-          website => website.service.preview(website.rootPath, website.workspaceId, input, {
-            sessionId: managed.id,
-            agentSlug: managed.spawnedFromAgent?.agentSlug,
-            agentName: managed.spawnedFromAgent?.agentName,
-          }),
-        ),
+        previewWebsiteFn: async (input) => this.withArtistHqWebsite(async (website) => {
+          const result = await website.service.preview(
+            website.rootPath,
+            { workspaceRootPath: managed.workspace.rootPath, workspaceId: managed.workspace.id },
+            input,
+            {
+              sessionId: managed.id,
+              agentSlug: managed.spawnedFromAgent?.agentSlug,
+              agentName: managed.spawnedFromAgent?.agentName,
+            },
+            { workspaceRootPath: managed.workspace.rootPath },
+          )
+          if (result.ok) {
+            this.eventSink?.(
+              RPC_CHANNELS.outputs.UPDATED,
+              { to: 'workspace', workspaceId: managed.workspace.id },
+              managed.workspace.id,
+            )
+          }
+          return result
+        }),
         setSessionLabelsFn: (sessionId: string | undefined, labels: string[]) => {
           this.setSessionLabels(sessionId ?? managed.id, labels)
         },

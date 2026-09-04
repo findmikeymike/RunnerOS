@@ -1,23 +1,28 @@
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative, posix } from 'node:path';
+import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { extname, join, relative, posix } from 'node:path';
+import { scanForSecrets } from './render.mjs';
 
 const WEIGHTS = { error: 12, warning: 5, notice: 2 };
 const PAGE_BYTE_BUDGET = 1_000_000;
+const IMAGE_BYTE_BUDGET = 1_000_000;
+const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif']);
 
-function walk(dir) {
-  if (!existsSync(dir)) return [];
-  const out = [];
+function walk(dir, symlinks = []) {
+  if (!existsSync(dir)) return { files: [], symlinks };
+  const files = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
-    if (statSync(full).isDirectory()) out.push(...walk(full));
-    else out.push(full);
+    const info = lstatSync(full);
+    if (info.isSymbolicLink()) symlinks.push(full);
+    else if (info.isDirectory()) files.push(...walk(full, symlinks).files);
+    else if (info.isFile()) files.push(full);
   }
-  return out;
+  return { files, symlinks };
 }
 
 function attr(tag, name) {
-  const match = new RegExp(`${name}\\s*=\\s*"([^"]*)"`, 'i').exec(tag);
-  return match ? match[1] : null;
+  const match = new RegExp(`${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(tag);
+  return match ? (match[1] ?? match[2] ?? match[3]) : null;
 }
 
 function findings(html, pagePath, distFiles) {
@@ -46,14 +51,23 @@ function findings(html, pagePath, distFiles) {
   }
 
   for (const tag of html.match(/<img[^>]*>/gi) ?? []) {
-    if (attr(tag, 'alt') === null) {
-      add('warning', 'img-alt-missing', `Image without alt: ${attr(tag, 'src') ?? '(no src)'}`, 'Add descriptive alt text.');
+    const src = attr(tag, 'src');
+    if (attr(tag, 'alt') === null) add('warning', 'img-alt-missing', `Image without alt: ${src ?? '(no src)'}`, 'Add descriptive alt text.');
+    if (!src || /^(https?:|data:)/i.test(src)) continue;
+    const clean = src.split(/[?#]/)[0].replace(/^\//, '');
+    if (!clean || clean.split('/').some(part => part === '..') || !distFiles.has(clean)) {
+      add('error', 'img-missing', `Image has no built file: ${src}`, 'Use a referenced asset id that resolves during build.');
     }
   }
 
-  for (const tag of html.match(/<a[^>]+href\s*=\s*"[^"]*"[^>]*>/gi) ?? []) {
+  for (const tag of html.match(/<a\b[^>]*>/gi) ?? []) {
     const href = attr(tag, 'href');
-    if (!href || /^(https?:|mailto:|tel:|#|data:)/i.test(href)) continue;
+    if (!href) continue;
+    if (/^(javascript:|data:|vbscript:)/i.test(href)) {
+      add('error', 'link-unsafe', `Unsafe link scheme: ${href.split(':')[0]}:`, 'Use an http or https URL.');
+      continue;
+    }
+    if (/^(https?:|mailto:|tel:|#)/i.test(href)) continue;
     const clean = href.split(/[?#]/)[0];
     const target = clean.endsWith('/') ? posix.join(clean, 'index.html') : clean;
     const normalized = target.replace(/^\//, '');
@@ -75,14 +89,63 @@ export function auditDist(distDir) {
     return { score: 0, findings: [{ severity: 'error', rule: 'no-build', page: '', message: 'No dist/ directory. Run build first.', fix: 'Run site-builder build.' }], pages: 0 };
   }
 
-  const files = walk(distDir);
+  if (lstatSync(distDir).isSymbolicLink()) {
+    return { score: 0, findings: [{ severity: 'error', rule: 'symlink-found', page: '', message: 'dist/ is a symbolic link.', fix: 'Rebuild into a real local dist/ directory.' }], pages: 0, warnings: 1 };
+  }
+
+  const walked = walk(distDir);
+  const files = walked.files;
   const distFiles = new Set(files.map(file => relative(distDir, file).replaceAll('\\', '/')));
   const htmlFiles = files.filter(file => file.endsWith('.html'));
 
   const all = [];
+  for (const file of walked.symlinks) {
+    const rel = relative(distDir, file).replaceAll('\\', '/');
+    all.push({
+      severity: 'error',
+      rule: 'symlink-found',
+      page: rel,
+      message: 'Symbolic links are not valid website output.',
+      fix: 'Remove the symbolic link and rebuild from referenced assets.',
+    });
+  }
   for (const file of htmlFiles) {
     const pagePath = relative(distDir, file).replaceAll('\\', '/');
     all.push(...findings(readFileSync(file, 'utf8'), pagePath, distFiles));
+  }
+
+  if (!distFiles.has('index.html')) {
+    all.push({
+      severity: 'error',
+      rule: 'home-missing',
+      page: '',
+      message: 'The build has no index.html home page.',
+      fix: 'Rebuild the site and restore the home template.',
+    });
+  }
+
+  for (const file of files) {
+    const rel = relative(distDir, file).replaceAll('\\', '/');
+    const extension = extname(file).toLowerCase();
+    if (IMAGE_EXTENSIONS.has(extension) && statSync(file).size > IMAGE_BYTE_BUDGET) {
+      all.push({
+        severity: 'warning',
+        rule: 'image-heavy',
+        page: rel,
+        message: `Image is ${(statSync(file).size / 1024).toFixed(0)} KB.`,
+        fix: 'Use a web-ready image under 1 MB.',
+      });
+    }
+    const secrets = scanForSecrets(readFileSync(file).toString('utf8'), rel);
+    for (const secret of secrets) {
+      all.push({
+        severity: 'error',
+        rule: 'secret-found',
+        page: rel,
+        message: `Credential-shaped value found at line ${secret.line}: ${secret.kind}.`,
+        fix: 'Remove the credential and rebuild before preview or publish.',
+      });
+    }
   }
 
   const home = join(distDir, 'index.html');

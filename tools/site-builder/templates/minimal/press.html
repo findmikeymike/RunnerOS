@@ -39,7 +39,7 @@
   {{#if releases}}
   <section>
     <h2>Releases</h2>
-    <ul>{{#each releases}}<li>{{this.title}} · {{this.type}} · {{this.date}}</li>{{/each}}</ul>
+    <ul>{{#each releases}}<li>{{#if this.artworkUrl}}<img class="release-artwork" src="{{this.artworkUrl}}" alt="{{this.title}} artwork" loading="lazy">{{/if}}{{this.title}} · {{this.type}} · {{this.date}}</li>{{/each}}</ul>
   </section>
   {{/if}}
 

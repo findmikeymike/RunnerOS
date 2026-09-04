@@ -134,6 +134,7 @@ export function defaultWebsiteManifest(): WebsiteManifest {
     publishPolicy: { contentOnly: 'needs-you', design: 'needs-you', routines: {} },
     history: [],
     capture: { backend: 'none', formIds: [] },
+    assets: [],
     createdAt: at,
     updatedAt: at,
   };
@@ -177,7 +178,7 @@ export function defaultSiteContent(artistName: string): SiteContent {
     journal: [],
     pages: [],
     signup: {
-      enabled: true,
+      enabled: false,
       forms: [{
         id: 'newsletter',
         headline: 'Get the next one first',

@@ -3,13 +3,15 @@ import { createServer } from 'node:http';
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   readdirSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, extname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, extname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { buildSite } from '../lib/render.mjs';
@@ -19,6 +21,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const toolRoot = resolve(here, '..');
 const args = process.argv.slice(2);
 const command = args.shift() ?? 'help';
+const SAFE_TEMPLATE_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function usage() {
   console.log(`runner-site
@@ -82,6 +85,42 @@ function writeJson(path, value) {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
 
+function isInside(root, candidate) {
+  const base = resolve(root);
+  const target = resolve(candidate);
+  return target === base || target.startsWith(`${base}${sep}`);
+}
+
+function assertManagedWebsite(root, website) {
+  if (!isInside(root, website)) fail('Website path escapes the workspace.');
+  if (existsSync(website) && lstatSync(website).isSymbolicLink()) {
+    fail('website/ cannot be a symbolic link.');
+  }
+  if (existsSync(website) && !isInside(realpathSync(root), realpathSync(website))) {
+    fail('website/ escapes the workspace.');
+  }
+}
+
+function assertSafeManagedPath(root, path, label) {
+  if (!isInside(root, path)) fail(`${label} escapes website/.`);
+  let current = resolve(root);
+  const parts = resolve(path).slice(current.length).split(sep).filter(Boolean);
+  for (const part of parts) {
+    current = join(current, part);
+    if (existsSync(current) && lstatSync(current).isSymbolicLink()) fail(`${label} cannot contain a symbolic link.`);
+  }
+  if (existsSync(path) && !isInside(realpathSync(root), realpathSync(path))) fail(`${label} escapes website/.`);
+}
+
+function assertNoSymlinks(dir, label) {
+  for (const entry of readdirSync(dir)) {
+    const path = join(dir, entry);
+    const info = lstatSync(path);
+    if (info.isSymbolicLink()) fail(`${label} contains a symbolic link.`);
+    if (info.isDirectory()) assertNoSymlinks(path, label);
+  }
+}
+
 // ---------------------------------------------------------------------------
 
 function cmdInit() {
@@ -89,12 +128,29 @@ function cmdInit() {
   const name = flag('name');
   if (typeof name !== 'string') fail('Missing --name "Artist Name".');
   const templateName = typeof flag('template') === 'string' ? flag('template') : 'minimal';
-  const templateSource = join(toolRoot, 'templates', templateName);
-  if (!existsSync(templateSource)) fail(`Unknown template: ${templateName}`);
+  if (!SAFE_TEMPLATE_NAME.test(templateName)) fail(`Unknown template: ${templateName}`);
+  const templatesRoot = realpathSync(join(toolRoot, 'templates'));
+  const templateSource = resolve(templatesRoot, templateName);
+  if (!isInside(templatesRoot, templateSource) || !existsSync(templateSource)) fail(`Unknown template: ${templateName}`);
+  if (lstatSync(templateSource).isSymbolicLink() || !lstatSync(templateSource).isDirectory()) {
+    fail(`Invalid template: ${templateName}`);
+  }
+  assertNoSymlinks(templateSource, `Template ${templateName}`);
 
   const p = paths(root);
+  assertManagedWebsite(root, p.website);
+  for (const [path, label] of [
+    [p.manifest, 'website/site.json'],
+    [p.content, 'website/content/site.json'],
+    [p.theme, 'website/theme/tokens.json'],
+    [p.templates, 'website/site'],
+    [p.assets, 'website/assets'],
+  ]) assertSafeManagedPath(p.website, path, label);
   if (existsSync(p.manifest) && !hasFlag('force')) {
     fail('A website already exists here. Pass --force to re-scaffold templates.');
+  }
+  if (existsSync(p.templates) && lstatSync(p.templates).isSymbolicLink()) {
+    fail('website/site cannot be a symbolic link.');
   }
 
   mkdirSync(p.assets, { recursive: true });
@@ -109,6 +165,7 @@ function cmdInit() {
       publishPolicy: { contentOnly: 'needs-you', design: 'needs-you', routines: {} },
       history: [],
       capture: { backend: 'none', formIds: ['newsletter'] },
+      assets: [],
       createdAt: at,
       updatedAt: at,
     });
@@ -119,7 +176,7 @@ function cmdInit() {
       artist: { name, bio: { short: '', long: '' } },
       releases: [], shows: [], videos: [], links: [], press: [], journal: [], pages: [],
       signup: {
-        enabled: true,
+        enabled: false,
         forms: [{
           id: 'newsletter',
           headline: 'Get the next one first',
@@ -150,11 +207,22 @@ function cmdInit() {
 
 function runBuild(root) {
   const p = paths(root);
+  assertManagedWebsite(root, p.website);
+  for (const [path, label] of [
+    [p.manifest, 'website/site.json'],
+    [p.content, 'website/content/site.json'],
+    [p.theme, 'website/theme/tokens.json'],
+    [p.templates, 'website/site'],
+    [p.assets, 'website/assets'],
+    [p.dist, 'website/dist'],
+  ]) assertSafeManagedPath(p.website, path, label);
+  const manifest = readJson(p.manifest, 'site.json');
   const content = readJson(p.content, 'content/site.json');
   const theme = readJson(p.theme, 'theme/tokens.json');
   if (!existsSync(p.templates)) fail(`No templates at ${p.templates}. Run "init" first.`);
   return buildSite({
     content,
+    manifest,
     theme,
     templatesDir: p.templates,
     assetsDir: p.assets,
@@ -197,7 +265,9 @@ function cmdBuild() {
 
 function cmdAudit() {
   const root = workspaceRoot();
-  const result = auditDist(paths(root).dist);
+  const p = paths(root);
+  if (existsSync(p.dist)) assertSafeManagedPath(p.website, p.dist, 'website/dist');
+  const result = auditDist(p.dist);
   if (hasFlag('json')) {
     console.log(JSON.stringify({ ok: true, ...result }, null, 2));
     return;
@@ -234,13 +304,21 @@ function cmdServe() {
   const root = workspaceRoot();
   const dist = paths(root).dist;
   if (!existsSync(dist)) fail('No dist/. Run "build" first.');
+  assertSafeManagedPath(paths(root).website, dist, 'website/dist');
+  const distRoot = realpathSync(dist);
   const port = Number(flag('port', 4321)) || 4321;
 
   const server = createServer((req, res) => {
-    const url = decodeURIComponent((req.url ?? '/').split('?')[0]);
+    let url;
+    try {
+      url = decodeURIComponent((req.url ?? '/').split('?')[0]);
+    } catch {
+      res.writeHead(400).end('Bad request');
+      return;
+    }
     // Contain every request inside dist/.
-    const candidate = resolve(dist, `.${url}`);
-    if (!candidate.startsWith(resolve(dist))) {
+    const candidate = resolve(distRoot, `.${url}`);
+    if (candidate !== distRoot && !candidate.startsWith(`${distRoot}${sep}`)) {
       res.writeHead(403).end('Forbidden');
       return;
     }
@@ -253,6 +331,10 @@ function cmdServe() {
         return;
       }
       res.writeHead(404).end('Not found');
+      return;
+    }
+    if (lstatSync(target).isSymbolicLink() || !realpathSync(target).startsWith(`${distRoot}${sep}`)) {
+      res.writeHead(403).end('Forbidden');
       return;
     }
     res.writeHead(200, { 'content-type': MIME[extname(target)] ?? 'application/octet-stream' });
@@ -268,6 +350,8 @@ function cmdPack() {
   const root = workspaceRoot();
   const dist = paths(root).dist;
   if (!existsSync(dist)) fail('No dist/. Run "build" first.');
+  assertSafeManagedPath(paths(root).website, dist, 'website/dist');
+  assertNoSymlinks(dist, 'website/dist');
   const out = typeof flag('out') === 'string'
     ? resolve(process.cwd(), flag('out'))
     : join(paths(root).website, 'site.zip');

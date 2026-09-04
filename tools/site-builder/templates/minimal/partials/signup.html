@@ -8,6 +8,8 @@
     <input id="signup-email" type="email" name="email" required autocomplete="email" placeholder="you@email.com">
     <button type="submit">Join</button>
   </form>
+  {{#if site.primarySignup.reward.assetUrl}}<p><a href="{{site.primarySignup.reward.assetUrl}}" download>Get the download</a></p>{{/if}}
+  {{#if site.primarySignup.reward.url}}<p><a href="{{site.primarySignup.reward.url}}" rel="noopener">Open reward</a></p>{{/if}}
   <p class="fine">Unsubscribe any time. Your address is never sold or shared.</p>
 </section>
 {{/if}}

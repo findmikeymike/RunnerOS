@@ -39,6 +39,11 @@ tool.** The spec routed site creation through the UI setup flow in Slice 2,
 which would have left Slice 1 with no way to create a site at all. It creates
 local files only and connects no account.
 
+Slice 1 safety behavior: signup is disabled and omitted while capture backend
+is `none`; capture and Community sync remain Slice 4 work. Referenced Vault or
+Release Kit assets are staged only when approved, converted to metadata-free
+WebP when they are images, recorded by hash, and verified again by the builder.
+
 Not built: every deploy adapter, publishing, domains, capture doors, external
 site modes, the Website Agent, routines, and the Website page. `website_preview`
 serves locally; nothing in the tree can reach an external host.

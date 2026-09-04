@@ -9,9 +9,35 @@ import {
   getToolDefsAsJsonSchema,
   CreateAutomationSchema,
   CreateWorkflowSchema,
+  AuditWebsiteSchema,
+  CreateWebsiteSchema,
+  SiteContentOperationSchema,
 } from './tool-defs.ts';
 
 describe('session tool filtering helpers', () => {
+  it('keeps website paths and links inside the supported local-safe contract', () => {
+    expect(CreateWebsiteSchema.safeParse({ artistName: 'Vera', template: '../../private' }).success).toBe(false);
+    expect(AuditWebsiteSchema.safeParse({ url: 'https://example.com' }).success).toBe(false);
+    for (const url of ['javascript:alert(1)', 'data:text/html,<script>alert(1)</script>', 'https://user:pass@example.com']) {
+      expect(SiteContentOperationSchema.safeParse({
+        op: 'upsert-link',
+        value: { id: 'bad', label: 'Bad', url, kind: 'social' },
+      }).success).toBe(false);
+    }
+    expect(SiteContentOperationSchema.safeParse({
+      op: 'upsert-link',
+      value: { id: 'good', label: 'Good', url: 'https://example.com/path', kind: 'social' },
+    }).success).toBe(true);
+    expect(SiteContentOperationSchema.safeParse({
+      op: 'set-seo',
+      value: { canonicalBase: 'https://example.com/artist?token=private#top' },
+    }).success).toBe(false);
+    expect(SiteContentOperationSchema.safeParse({
+      op: 'set-seo',
+      value: { canonicalBase: 'https://example.com/artist' },
+    }).success).toBe(true);
+  });
+
   it('excludes developer feedback tool when includeDeveloperFeedback is false', () => {
     const defs = getSessionToolDefs({ includeDeveloperFeedback: false });
     const names = defs.map(d => d.name);

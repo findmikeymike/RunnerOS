@@ -100,6 +100,10 @@ signup, primarySignup, year, themeCss, jsonLd, pages, hasPressPage) and `meta`
 `featuredRelease`, `releases`, `upcomingShows`, `pastShows`, `videos`,
 `featuredVideo`, and `journal`.
 
+Referenced approved assets expose renderer-owned URLs: `artworkUrl` on
+releases, `assetUrl` on videos and journal entries, `meta.ogImage`, and
+`reward.assetUrl` on signup rewards. Never construct an asset path yourself.
+
 Partials live in `site/partials/`. `head` emits the whole `<head>` including
 Open Graph tags and the schema.org graph — always include it, or the audit
 will flag missing structured data.

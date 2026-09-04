@@ -12,6 +12,7 @@
     {{#if site.artist.tagline}}<p class="tagline">{{site.artist.tagline}}</p>{{/if}}
     {{#if featuredRelease}}
     <div class="hero-release">
+      {{#if featuredRelease.artworkUrl}}<img class="release-artwork" src="{{featuredRelease.artworkUrl}}" alt="{{featuredRelease.title}} artwork">{{/if}}
       <p class="eyebrow">Out now</p>
       <p class="release-title">{{featuredRelease.title}}</p>
       <div class="listen">
@@ -33,6 +34,7 @@
     <ul class="releases">
       {{#each releases}}
       <li class="release">
+        {{#if this.artworkUrl}}<img class="release-artwork" src="{{this.artworkUrl}}" alt="{{this.title}} artwork" loading="lazy">{{/if}}
         <div class="release-meta">
           <p class="release-name">{{this.title}}</p>
           <p class="fine">{{this.type}} · {{this.date}}</p>
@@ -79,7 +81,9 @@
     <div class="video-frame">
       <iframe src="https://www.youtube-nocookie.com/embed/{{featuredVideo.youtubeId}}" title="{{featuredVideo.title}}" loading="lazy" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
     </div>
-    {{/if}}
+    {{else}}{{#if featuredVideo.assetUrl}}
+    <div class="video-frame"><video src="{{featuredVideo.assetUrl}}" controls preload="metadata"></video></div>
+    {{/if}}{{/if}}
     <p class="fine">{{featuredVideo.title}}</p>
   </section>
   {{/if}}
@@ -96,6 +100,7 @@
     <h2>Latest</h2>
     {{#each journal}}
     <article class="journal-entry">
+      {{#if this.assetUrl}}<img src="{{this.assetUrl}}" alt="{{this.title}}" loading="lazy">{{/if}}
       <h3>{{this.title}}</h3>
       <p class="fine">{{this.date}}</p>
       <p>{{this.body}}</p>

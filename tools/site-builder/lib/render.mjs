@@ -1,7 +1,17 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, copyFileSync } from 'node:fs';
-import { dirname, extname, join, relative } from 'node:path';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { render } from './template.mjs';
+
+const SAFE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const SHA256 = /^[a-f0-9]{64}$/;
+const MAX_ASSET_BYTES = 100 * 1024 * 1024;
+const ASSET_EXTENSIONS = {
+  image: new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif']),
+  video: new Set(['.mp4', '.webm']),
+  audio: new Set(['.mp3', '.m4a', '.wav']),
+  download: new Set(['.pdf', '.zip', '.mp3', '.m4a', '.wav', '.mp4', '.webm']),
+};
 
 /**
  * Credential shapes that must never reach a published site. Matched against
@@ -39,10 +49,90 @@ function walk(dir) {
   const out = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
-    if (statSync(full).isDirectory()) out.push(...walk(full));
-    else out.push(full);
+    const info = lstatSync(full);
+    if (info.isSymbolicLink()) throw new Error(`Refusing symbolic link: ${full}`);
+    if (info.isDirectory()) out.push(...walk(full));
+    else if (info.isFile()) out.push(full);
   }
   return out;
+}
+
+function isInside(root, candidate) {
+  const base = resolve(root);
+  const target = resolve(candidate);
+  return target === base || target.startsWith(`${base}${sep}`);
+}
+
+function safeRelativePath(value, label) {
+  if (typeof value !== 'string' || !value || value.includes('\0') || isAbsolute(value)) {
+    throw new Error(`${label} must be a relative path.`);
+  }
+  const normalized = value.replaceAll('\\', '/');
+  if (normalized.split('/').some(part => !part || part === '.' || part === '..')) {
+    throw new Error(`${label} contains an unsafe path segment.`);
+  }
+  return normalized;
+}
+
+function outputPath(outDir, relativePath) {
+  const safe = safeRelativePath(relativePath, 'Generated output path');
+  const target = resolve(outDir, safe);
+  if (!isInside(outDir, target)) throw new Error(`Generated output escapes dist/: ${relativePath}`);
+  return target;
+}
+
+function httpUrl(value, label) {
+  if (value === undefined || value === null || value === '') return undefined;
+  let parsed;
+  try {
+    parsed = new URL(String(value));
+  } catch {
+    throw new Error(`${label} must be a valid http(s) URL.`);
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) {
+    throw new Error(`${label} must use http or https and cannot contain credentials.`);
+  }
+  return parsed.toString();
+}
+
+function validateTheme(theme) {
+  if (!theme || typeof theme !== 'object') throw new Error('Theme tokens are missing.');
+  const cssValue = /^[^;{}<>\r\n]+$/;
+  for (const [name, value] of Object.entries(theme.colors ?? {})) {
+    if (typeof value !== 'string' || !cssValue.test(value)) throw new Error(`Unsafe theme color: ${name}`);
+  }
+  for (const name of ['displayFamily', 'bodyFamily']) {
+    const value = theme.type?.[name];
+    if (typeof value !== 'string' || !cssValue.test(value)) throw new Error(`Unsafe theme type token: ${name}`);
+  }
+  for (const [name, min, max] of [['displayWeight', 100, 900], ['scale', 0.75, 2], ['radius', 0, 64], ['maxWidth', 320, 2400]]) {
+    const value = name in (theme.type ?? {}) ? theme.type[name] : theme[name];
+    if (!Number.isFinite(value) || value < min || value > max) throw new Error(`Invalid theme number: ${name}`);
+  }
+}
+
+function validateContent(content) {
+  if (!content || typeof content !== 'object' || !content.artist || !content.seo) throw new Error('Site content is invalid.');
+  for (const page of content.pages ?? []) {
+    if (!SAFE_SLUG.test(String(page.slug)) || String(page.slug).length > 80) throw new Error(`Invalid page slug: ${String(page.slug)}`);
+  }
+  const urls = [
+    ['seo.canonicalBase', content.seo.canonicalBase],
+    ...(content.links ?? []).map(link => [`link ${link.id ?? link.label}`, link.url]),
+    ...(content.press ?? []).map(item => [`press ${item.id}`, item.url]),
+    ...(content.shows ?? []).map(show => [`show ${show.id} ticketUrl`, show.ticketUrl]),
+    ...(content.journal ?? []).map(entry => [`journal ${entry.id} embedUrl`, entry.embedUrl]),
+    ...(content.signup?.forms ?? []).map(form => [`signup ${form.id} reward URL`, form.reward?.url]),
+    ...(content.releases ?? []).flatMap(release => Object.entries(release.links ?? {}).map(([key, value]) => [`release ${release.id} ${key}`, value])),
+  ];
+  for (const [label, value] of urls) httpUrl(value, label);
+  if (content.seo.canonicalBase) {
+    const canonical = new URL(content.seo.canonicalBase);
+    if (canonical.search || canonical.hash) throw new Error('seo.canonicalBase cannot contain a query string or fragment.');
+  }
+  for (const video of content.videos ?? []) {
+    if (video.youtubeId && !/^[A-Za-z0-9_-]{1,64}$/.test(video.youtubeId)) throw new Error(`Invalid YouTube video id: ${video.id}`);
+  }
 }
 
 function loadTemplates(templatesDir) {
@@ -103,7 +193,14 @@ function jsonLd(content, base) {
       ...(show.ticketUrl ? { offers: { '@type': 'Offer', url: show.ticketUrl } } : {}),
     });
   }
-  return JSON.stringify({ '@context': 'https://schema.org', '@graph': graph });
+  return JSON.stringify({ '@context': 'https://schema.org', '@graph': graph })
+    .replace(/[<>&\u2028\u2029]/g, character => ({
+      '<': '\\u003c',
+      '>': '\\u003e',
+      '&': '\\u0026',
+      '\u2028': '\\u2028',
+      '\u2029': '\\u2029',
+    })[character]);
 }
 
 function pageMeta(content, { path, title, description, noindex }) {
@@ -117,6 +214,9 @@ function pageMeta(content, { path, title, description, noindex }) {
     ogTitle: title,
     ogDescription: description || content.seo.defaultDescription,
     ogUrl: absoluteUrl(base, path),
+    ogImage: content.seo.ogImageUrl
+      ? (base ? absoluteUrl(base, content.seo.ogImageUrl) : content.seo.ogImageUrl)
+      : undefined,
   };
 }
 
@@ -127,27 +227,191 @@ function partitionShows(shows, today) {
   return { upcoming, past };
 }
 
-export function buildSite({ content, theme, templatesDir, assetsDir, outDir, today }) {
+function referencedAssetIds(content) {
+  return new Set([
+    content.seo?.ogImageAssetId,
+    ...(content.releases ?? []).map(item => item.artworkAssetId),
+    ...(content.videos ?? []).map(item => item.assetId),
+    ...(content.journal ?? []).map(item => item.assetId),
+    ...(content.signup?.forms ?? []).map(item => item.reward?.assetId),
+  ].filter(Boolean));
+}
+
+function expectedAssetKinds(content) {
+  const expected = new Map();
+  const add = (id, kind, label) => {
+    if (!id) return;
+    const current = expected.get(id) ?? [];
+    current.push({ kind, label });
+    expected.set(id, current);
+  };
+  add(content.seo?.ogImageAssetId, 'image', 'Open Graph image');
+  for (const release of content.releases ?? []) add(release.artworkAssetId, 'image', `release ${release.id} artwork`);
+  for (const video of content.videos ?? []) add(video.assetId, 'video', `video ${video.id}`);
+  for (const entry of content.journal ?? []) add(entry.assetId, 'image', `journal ${entry.id} image`);
+  return expected;
+}
+
+function stripImageMetadata(bytes, extension) {
+  if (extension === '.jpg' || extension === '.jpeg') {
+    if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return bytes;
+    const parts = [bytes.subarray(0, 2)];
+    let offset = 2;
+    while (offset + 1 < bytes.length) {
+      if (bytes[offset] !== 0xff) { parts.push(bytes.subarray(offset)); break; }
+      const marker = bytes[offset + 1];
+      if (marker === 0xda || marker === 0xd9) { parts.push(bytes.subarray(offset)); break; }
+      if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+        parts.push(bytes.subarray(offset, offset + 2));
+        offset += 2;
+        continue;
+      }
+      if (offset + 4 > bytes.length) return bytes;
+      const segmentLength = bytes.readUInt16BE(offset + 2);
+      const end = offset + 2 + segmentLength;
+      if (segmentLength < 2 || end > bytes.length) return bytes;
+      if (![0xe1, 0xed, 0xfe].includes(marker)) parts.push(bytes.subarray(offset, end));
+      offset = end;
+    }
+    return Buffer.concat(parts);
+  }
+  if (extension === '.png') {
+    const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    if (bytes.length < 8 || !bytes.subarray(0, 8).equals(signature)) return bytes;
+    const parts = [bytes.subarray(0, 8)];
+    const removed = new Set(['eXIf', 'tEXt', 'zTXt', 'iTXt', 'tIME']);
+    let offset = 8;
+    while (offset + 12 <= bytes.length) {
+      const length = bytes.readUInt32BE(offset);
+      const end = offset + 12 + length;
+      if (end > bytes.length) return bytes;
+      const type = bytes.toString('ascii', offset + 4, offset + 8);
+      if (!removed.has(type)) parts.push(bytes.subarray(offset, end));
+      offset = end;
+      if (type === 'IEND') break;
+    }
+    return Buffer.concat(parts);
+  }
+  if (extension === '.webp' && bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') {
+    const chunks = [];
+    let offset = 12;
+    while (offset + 8 <= bytes.length) {
+      const size = bytes.readUInt32LE(offset + 4);
+      const end = offset + 8 + size + (size % 2);
+      if (end > bytes.length) return bytes;
+      const type = bytes.toString('ascii', offset, offset + 4);
+      if (type !== 'EXIF' && type !== 'XMP ') {
+        const chunk = Buffer.from(bytes.subarray(offset, end));
+        if (type === 'VP8X' && size > 0) chunk[8] &= ~0x0c;
+        chunks.push(chunk);
+      }
+      offset = end;
+    }
+    const body = Buffer.concat(chunks);
+    const header = Buffer.from(bytes.subarray(0, 12));
+    header.writeUInt32LE(body.length + 4, 4);
+    return Buffer.concat([header, body]);
+  }
+  return bytes;
+}
+
+function prepareAssets(content, manifest, assetsDir) {
+  const referenced = referencedAssetIds(content);
+  const expectedKinds = expectedAssetKinds(content);
+  if (referenced.size === 0) return { copied: [], urls: new Map() };
+  if (!assetsDir || !existsSync(assetsDir) || lstatSync(assetsDir).isSymbolicLink()) {
+    throw new Error('Referenced website assets are unavailable.');
+  }
+  const root = realpathSync(assetsDir);
+  const records = Array.isArray(manifest?.assets) ? manifest.assets : [];
+  const byId = new Map();
+  for (const record of records) {
+    if (!record || typeof record.id !== 'string' || byId.has(record.id)) throw new Error('Website asset manifest has duplicate or invalid ids.');
+    byId.set(record.id, record);
+  }
+  const copied = [];
+  const urls = new Map();
+  for (const id of [...referenced].sort()) {
+    const record = byId.get(id);
+    if (!record) throw new Error(`Referenced website asset is not staged: ${id}`);
+    const rel = safeRelativePath(record.path, `Asset ${id} path`);
+    const source = resolve(root, rel);
+    if (!isInside(root, source) || !existsSync(source) || lstatSync(source).isSymbolicLink() || !statSync(source).isFile()) {
+      throw new Error(`Referenced website asset is missing or unsafe: ${id}`);
+    }
+    if (!isInside(root, realpathSync(source))) throw new Error(`Referenced website asset escapes assets/: ${id}`);
+    const extension = extname(source).toLowerCase();
+    if (!ASSET_EXTENSIONS[record.kind]?.has(extension)) throw new Error(`Unsupported ${record.kind} asset type for ${id}: ${extension || '(none)'}`);
+    for (const expectation of expectedKinds.get(id) ?? []) {
+      if (record.kind !== expectation.kind) {
+        throw new Error(`${expectation.label} requires an asset of type ${expectation.kind}, but ${id} is ${record.kind}.`);
+      }
+    }
+    if (!SHA256.test(String(record.sha256))) throw new Error(`Invalid website asset hash: ${id}`);
+    if (statSync(source).size > MAX_ASSET_BYTES) throw new Error(`Website asset exceeds the 100 MB build limit: ${id}`);
+    const raw = readFileSync(source);
+    const actual = createHash('sha256').update(raw).digest('hex');
+    if (actual !== record.sha256) throw new Error(`Website asset hash mismatch: ${id}`);
+    const secretFindings = scanForSecrets(raw.toString('utf8'), `assets/${rel}`);
+    if (secretFindings.length) {
+      const detail = secretFindings.map(item => `${item.file}:${item.line} ${item.kind}`).join(', ');
+      throw new Error(`Refusing to build: credential-shaped values found in ${detail}`);
+    }
+    const contents = record.kind === 'image' ? stripImageMetadata(raw, extension) : raw;
+    const path = `assets/${rel}`;
+    copied.push({ path, contents });
+    urls.set(id, `/${path.split('/').map(encodeURIComponent).join('/')}`);
+  }
+  return { copied, urls };
+}
+
+export function buildSite({ content, manifest, theme, templatesDir, assetsDir, outDir, today }) {
+  validateContent(content);
+  validateTheme(theme);
+  if (!existsSync(templatesDir) || lstatSync(templatesDir).isSymbolicLink() || !statSync(templatesDir).isDirectory()) {
+    throw new Error('Template directory is missing or unsafe.');
+  }
   const { templates, partials } = loadTemplates(templatesDir);
   if (!templates.home) throw new Error(`No home.html template found in ${templatesDir}`);
 
+  const preparedAssets = prepareAssets(content, manifest, assetsDir);
+  const assetUrl = id => id ? preparedAssets.urls.get(id) : undefined;
+  const renderContent = {
+    ...content,
+    seo: { ...content.seo, ogImageUrl: assetUrl(content.seo.ogImageAssetId) },
+    releases: content.releases.map(item => ({ ...item, artworkUrl: assetUrl(item.artworkAssetId) })),
+    videos: content.videos.map(item => ({ ...item, assetUrl: assetUrl(item.assetId) })),
+    journal: content.journal.map(item => ({ ...item, assetUrl: assetUrl(item.assetId) })),
+    signup: {
+      ...content.signup,
+      forms: content.signup.forms.map(item => ({
+        ...item,
+        reward: item.reward ? { ...item.reward, assetUrl: assetUrl(item.reward.assetId) } : undefined,
+      })),
+    },
+  };
+
   const day = today ?? new Date().toISOString().slice(0, 10);
-  const { upcoming, past } = partitionShows(content.shows, day);
-  const featuredRelease = content.releases.find(r => r.featured) ?? content.releases[0];
-  const indexablePages = content.pages.filter(page => !page.noindex);
+  const { upcoming, past } = partitionShows(renderContent.shows, day);
+  const featuredRelease = renderContent.releases.find(r => r.featured) ?? renderContent.releases[0];
+  const indexablePages = renderContent.pages.filter(page => !page.noindex);
+  const captureEnabled = manifest?.capture?.backend && manifest.capture.backend !== 'none';
+  const allowedFormIds = new Set(manifest?.capture?.formIds ?? []);
 
   const site = {
-    artist: content.artist,
-    seo: content.seo,
-    links: content.links,
-    socialLinks: content.links.filter(l => l.kind === 'social'),
-    storeLinks: content.links.filter(l => l.kind === 'store'),
-    signup: content.signup,
-    primarySignup: content.signup.enabled ? content.signup.forms[0] : undefined,
+    artist: renderContent.artist,
+    seo: renderContent.seo,
+    links: renderContent.links,
+    socialLinks: renderContent.links.filter(l => l.kind === 'social'),
+    storeLinks: renderContent.links.filter(l => l.kind === 'store'),
+    signup: renderContent.signup,
+    primarySignup: captureEnabled && renderContent.signup.enabled
+      ? renderContent.signup.forms.find(form => allowedFormIds.has(form.id))
+      : undefined,
     year: new Date(`${day}T00:00:00Z`).getUTCFullYear(),
     themeCss: themeCss(theme),
-    jsonLd: jsonLd(content, content.seo.canonicalBase),
-    hasPressPage: content.press.length > 0 || Boolean(content.artist.press?.email),
+    jsonLd: jsonLd(renderContent, renderContent.seo.canonicalBase),
+    hasPressPage: renderContent.press.length > 0 || Boolean(renderContent.artist.press?.email),
     pages: indexablePages.map(page => ({ slug: page.slug, title: page.title })),
   };
 
@@ -158,14 +422,14 @@ export function buildSite({ content, theme, templatesDir, assetsDir, outDir, tod
     template: 'home',
     data: {
       site,
-      meta: pageMeta(content, { path: '/', title: content.seo.siteName, description: content.seo.defaultDescription }),
+      meta: pageMeta(renderContent, { path: '/', title: renderContent.seo.siteName, description: renderContent.seo.defaultDescription }),
       featuredRelease,
-      releases: content.releases,
+      releases: renderContent.releases,
       upcomingShows: upcoming,
       pastShows: past.slice(0, 12),
-      videos: content.videos,
-      featuredVideo: content.videos.find(v => v.featured) ?? content.videos[0],
-      journal: content.journal.slice(0, 3),
+      videos: renderContent.videos,
+      featuredVideo: renderContent.videos.find(v => v.featured) ?? renderContent.videos[0],
+      journal: renderContent.journal.slice(0, 3),
     },
   });
 
@@ -175,25 +439,25 @@ export function buildSite({ content, theme, templatesDir, assetsDir, outDir, tod
       template: 'press',
       data: {
         site,
-        meta: pageMeta(content, {
+        meta: pageMeta(renderContent, {
           path: '/press/',
           title: `Press · ${content.seo.siteName}`,
           description: `Press kit, quotes, and booking contact for ${content.artist.name}.`,
         }),
-        press: content.press,
-        releases: content.releases.slice(0, 6),
+        press: renderContent.press,
+        releases: renderContent.releases.slice(0, 6),
       },
     });
   }
 
-  for (const page of content.pages) {
+  for (const page of renderContent.pages) {
     if (!templates.page) break;
     documents.push({
       path: join(page.slug, 'index.html'),
       template: 'page',
       data: {
         site,
-        meta: pageMeta(content, {
+        meta: pageMeta(renderContent, {
           path: `/${page.slug}/`,
           title: `${page.title} · ${content.seo.siteName}`,
           description: page.body.slice(0, 150).replace(/\s+/g, ' ').trim(),
@@ -210,7 +474,7 @@ export function buildSite({ content, theme, templatesDir, assetsDir, outDir, tod
       template: 'notfound',
       data: {
         site,
-        meta: pageMeta(content, { path: '/404.html', title: 'Not found', description: 'That page does not exist.', noindex: true }),
+        meta: pageMeta(renderContent, { path: '/404.html', title: 'Not found', description: 'That page does not exist.', noindex: true }),
       },
     });
   }
@@ -231,7 +495,7 @@ export function buildSite({ content, theme, templatesDir, assetsDir, outDir, tod
     emitted.push({ path: 'styles.css', contents: css });
   }
 
-  const canonicalBase = content.seo.canonicalBase;
+  const canonicalBase = renderContent.seo.canonicalBase;
   if (canonicalBase) {
     const urls = documents
       .filter(doc => !doc.data.meta.noindex)
@@ -249,14 +513,7 @@ export function buildSite({ content, theme, templatesDir, assetsDir, outDir, tod
     emitted.push({ path: 'robots.txt', contents: 'User-agent: *\nAllow: /\n' });
   }
 
-  // Copy referenced assets.
-  const copied = [];
-  if (assetsDir && existsSync(assetsDir)) {
-    for (const file of walk(assetsDir)) {
-      const rel = join('assets', relative(assetsDir, file));
-      copied.push({ from: file, path: rel.replaceAll('\\', '/') });
-    }
-  }
+  const copied = preparedAssets.copied;
 
   if (secrets.length > 0) {
     const detail = secrets.map(s => `${s.file}:${s.line} ${s.kind}`).join('\n  ');
@@ -269,18 +526,18 @@ export function buildSite({ content, theme, templatesDir, assetsDir, outDir, tod
   const files = [];
 
   for (const file of [...emitted].sort((a, b) => a.path.localeCompare(b.path))) {
-    const target = join(outDir, file.path);
+    const target = outputPath(outDir, file.path);
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, file.contents, 'utf8');
-    hash.update(`${file.path} ${createHash('sha256').update(file.contents).digest('hex')}\n`);
+    hash.update(`${file.path}\0${createHash('sha256').update(file.contents).digest('hex')}\n`);
     files.push({ path: file.path, bytes: Buffer.byteLength(file.contents) });
   }
   for (const asset of copied.sort((a, b) => a.path.localeCompare(b.path))) {
-    const target = join(outDir, asset.path);
+    const target = outputPath(outDir, asset.path);
     mkdirSync(dirname(target), { recursive: true });
-    copyFileSync(asset.from, target);
-    const bytes = statSync(target).size;
-    hash.update(`${asset.path} ${createHash('sha256').update(readFileSync(target)).digest('hex')}\n`);
+    writeFileSync(target, asset.contents);
+    const bytes = asset.contents.length;
+    hash.update(`${asset.path}\0${createHash('sha256').update(asset.contents).digest('hex')}\n`);
     files.push({ path: asset.path, bytes });
   }
 
