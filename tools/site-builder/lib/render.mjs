@@ -4,6 +4,12 @@ import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node
 import { render } from './template.mjs';
 
 const SAFE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * Emitted beside the static files, not treated as one. The deploy adapter
+ * uploads this as the Worker module and keeps it out of the asset manifest.
+ */
+export const CAPTURE_WORKER_FILE = '_worker.js';
 const SHA256 = /^[a-f0-9]{64}$/;
 const MAX_ASSET_BYTES = 100 * 1024 * 1024;
 const ASSET_EXTENSIONS = {
@@ -511,6 +517,18 @@ export function buildSite({ content, manifest, theme, templatesDir, assetsDir, o
     });
   } else {
     emitted.push({ path: 'robots.txt', contents: 'User-agent: *\nAllow: /\n' });
+  }
+
+  // The capture door ships with the site only when a form is actually live,
+  // so a site without signup deploys as pure static assets with no worker.
+  if (site.primarySignup) {
+    const workerSource = readIfExists(join(templatesDir, '..', 'functions', 'signup.js'))
+      ?? readIfExists(join(templatesDir, 'functions', 'signup.js'));
+    if (!workerSource) {
+      throw new Error('Signup is enabled but the capture function template is missing.');
+    }
+    secrets.push(...scanForSecrets(workerSource, CAPTURE_WORKER_FILE));
+    emitted.push({ path: CAPTURE_WORKER_FILE, contents: workerSource });
   }
 
   const copied = preparedAssets.copied;

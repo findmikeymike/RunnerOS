@@ -793,9 +793,11 @@ export class WebsiteService {
     }
 
     const credentials = getCredentialManager()
-    const [token, accountId] = await Promise.all([
+    const [token, accountId, resendKey, signupSalt] = await Promise.all([
       credentials.getUserSecret('CLOUDFLARE_API_TOKEN'),
       credentials.getUserSecret('CLOUDFLARE_ACCOUNT_ID'),
+      credentials.getUserSecret('RESEND_API_KEY'),
+      credentials.getUserSecret('SIGNUP_SALT'),
     ])
     if (!token) throw new Error('Save CLOUDFLARE_API_TOKEN in Settings before publishing.')
 
@@ -810,6 +812,11 @@ export class WebsiteService {
       accountId: resolvedAccount,
       scriptName,
       zoneId: manifest.domain?.state === 'active' ? manifest.provider?.kvNamespaceId : undefined,
+      // Bound to the capture worker on the host. These never enter the built
+      // site, and the salt keeps the hashed IP unlinkable across artists.
+      captureSecrets: manifest.capture.backend === 'resend'
+        ? { RESEND_API_KEY: resendKey ?? undefined, SIGNUP_SALT: signupSalt ?? undefined }
+        : undefined,
     })
   }
 

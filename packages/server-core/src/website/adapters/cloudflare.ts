@@ -45,6 +45,9 @@ export interface CloudflareManifestEntry {
   size: number
 }
 
+/** Emitted by the builder as code, never served as a static asset. */
+export const CAPTURE_WORKER_FILE = '_worker.js'
+
 export function buildAssetManifest(distDir: string): {
   manifest: Record<string, CloudflareManifestEntry>
   byHash: Map<string, { path: string; contents: Buffer }>
@@ -53,8 +56,11 @@ export function buildAssetManifest(distDir: string): {
   const byHash = new Map<string, { path: string; contents: Buffer }>()
 
   for (const file of walk(distDir)) {
+    const relativePath = relative(distDir, file).replaceAll('\\', '/')
+    // Uploading the worker as an asset would publish its source at a URL.
+    if (relativePath === CAPTURE_WORKER_FILE) continue
     const contents = readFileSync(file)
-    const key = `/${relative(distDir, file).replaceAll('\\', '/')}`
+    const key = `/${relativePath}`
     const hash = assetHash(contents, file)
     manifest[key] = { hash, size: contents.byteLength }
     // Two paths with identical bytes and extension share a hash; upload once.
@@ -77,6 +83,11 @@ export interface CloudflareAdapterOptions {
   fetchImpl?: FetchLike
   /** Zone id, required only for custom domains. */
   zoneId?: string
+  /**
+   * Secrets bound to the capture worker. Uploaded as `secret_text`, so they
+   * live on the host rather than in the built site.
+   */
+  captureSecrets?: Record<string, string | undefined>
 }
 
 export class CloudflareWorkersAdapter implements SiteDeployAdapter {
@@ -195,16 +206,42 @@ export class CloudflareWorkersAdapter implements SiteDeployAdapter {
       throw new AdapterError('Cloudflare did not return an asset completion token.')
     }
 
-    const metadata = {
+    const workerPath = join(input.distDir, CAPTURE_WORKER_FILE)
+    const hasWorker = existsSync(workerPath)
+
+    const metadata: Record<string, unknown> = {
       compatibility_date: COMPATIBILITY_DATE,
       assets: {
         jwt: completionToken,
-        config: { html_handling: 'auto-trailing-slash', not_found_handling: '404-page' },
+        config: {
+          html_handling: 'auto-trailing-slash',
+          not_found_handling: '404-page',
+          // Only the capture route runs code; everything else is served
+          // straight from assets.
+          ...(hasWorker ? { run_worker_first: ['/api/*'] } : {}),
+        },
       },
+    }
+
+    if (hasWorker) {
+      metadata.main_module = CAPTURE_WORKER_FILE
+      metadata.bindings = [
+        { type: 'assets', name: 'ASSETS' },
+        ...Object.entries(this.options.captureSecrets ?? {})
+          .filter((entry): entry is [string, string] => Boolean(entry[1]))
+          .map(([name, text]) => ({ type: 'secret_text', name, text })),
+      ]
     }
 
     const form = new FormData()
     form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
+    if (hasWorker) {
+      form.append(
+        CAPTURE_WORKER_FILE,
+        new Blob([readFileSync(workerPath)], { type: 'application/javascript+module' }),
+        CAPTURE_WORKER_FILE,
+      )
+    }
 
     const result = await this.call<{ id?: string; etag?: string; startup_time_ms?: number }>(
       `/accounts/${this.options.accountId}/workers/scripts/${script}`,

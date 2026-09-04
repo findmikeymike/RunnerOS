@@ -174,6 +174,90 @@ describe('cloudflare deploy', () => {
   })
 })
 
+describe('the capture worker', () => {
+  async function metadataFrom(call: Call): Promise<Record<string, unknown>> {
+    const form = call.body as FormData
+    const part = form.get('metadata') as Blob
+    return JSON.parse(await part.text()) as Record<string, unknown>
+  }
+
+  test('the worker source is never uploaded as a static asset', () => {
+    const dist = distWith({ 'index.html': '<h1>hi</h1>', '_worker.js': 'export default {}' })
+    try {
+      const { manifest, byHash } = buildAssetManifest(dist)
+      // Serving it as an asset would publish the function's source at a URL.
+      expect(Object.keys(manifest)).toEqual(['/index.html'])
+      expect(byHash.size).toBe(1)
+    } finally {
+      rmSync(dist, { recursive: true, force: true })
+    }
+  })
+
+  test('a build with a worker deploys it as the module with its secrets bound', async () => {
+    const dist = distWith({ 'index.html': '<h1>hi</h1>', '_worker.js': 'export default {}' })
+    try {
+      const { manifest } = buildAssetManifest(dist)
+      const hashes = Object.values(manifest).map(entry => entry.hash)
+      const { fetchImpl, calls } = fakeFetch([
+        { body: { success: true, result: { jwt: 'upload-jwt', buckets: [[hashes[0]!]] } } },
+        { body: { success: true, result: { jwt: 'completion-jwt' } } },
+        { body: { success: true, result: { id: 'v1' } } },
+      ])
+
+      const adapter = new CloudflareWorkersAdapter({
+        token: 'cf-token',
+        accountId: 'acct-1',
+        scriptName: 'lowtide',
+        fetchImpl,
+        captureSecrets: { RESEND_API_KEY: 're_live', SIGNUP_SALT: 'salt-1', ABSENT: undefined },
+      })
+      await adapter.deploy({ distDir: dist, target: 'production', buildHash: 'h' })
+
+      const metadata = await metadataFrom(calls.at(-1)!)
+      expect(metadata.main_module).toBe('_worker.js')
+
+      const bindings = metadata.bindings as Array<{ type: string; name: string; text?: string }>
+      expect(bindings.find(b => b.type === 'assets')?.name).toBe('ASSETS')
+      expect(bindings.find(b => b.name === 'RESEND_API_KEY')).toMatchObject({
+        type: 'secret_text',
+        text: 're_live',
+      })
+      // A secret the artist has not saved must not become an empty binding.
+      expect(bindings.some(b => b.name === 'ABSENT')).toBe(false)
+
+      // Only the capture route runs code; the rest is served from assets.
+      const assets = metadata.assets as { config?: { run_worker_first?: string[] } }
+      expect(assets.config?.run_worker_first).toEqual(['/api/*'])
+
+      const form = calls.at(-1)!.body as FormData
+      expect(form.get('_worker.js')).toBeInstanceOf(Blob)
+    } finally {
+      rmSync(dist, { recursive: true, force: true })
+    }
+  })
+
+  test('a site with no signup deploys as pure assets with no worker', async () => {
+    const dist = distWith({ 'index.html': '<h1>hi</h1>' })
+    try {
+      const { manifest } = buildAssetManifest(dist)
+      const hashes = Object.values(manifest).map(entry => entry.hash)
+      const { fetchImpl, calls } = fakeFetch([
+        { body: { success: true, result: { jwt: 'upload-jwt', buckets: [[hashes[0]!]] } } },
+        { body: { success: true, result: { jwt: 'completion-jwt' } } },
+        { body: { success: true, result: { id: 'v1' } } },
+      ])
+      await adapter(fetchImpl).deploy({ distDir: dist, target: 'production', buildHash: 'h' })
+
+      const metadata = await metadataFrom(calls.at(-1)!)
+      expect(metadata.main_module).toBeUndefined()
+      expect(metadata.bindings).toBeUndefined()
+      expect((metadata.assets as { config?: Record<string, unknown> }).config?.run_worker_first).toBeUndefined()
+    } finally {
+      rmSync(dist, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('cloudflare domains', () => {
   test('without a zone the adapter returns nameserver steps and never claims active', async () => {
     const { fetchImpl, calls } = fakeFetch([{ body: { success: true, result: {} } }])

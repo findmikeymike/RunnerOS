@@ -156,6 +156,16 @@ function cmdInit() {
   mkdirSync(p.assets, { recursive: true });
   cpSync(templateSource, p.templates, { recursive: true });
 
+  // The capture function is shared by every template and is only emitted into
+  // a build when a signup form is actually live.
+  const functionsSource = join(templatesRoot, 'functions');
+  if (existsSync(functionsSource)) {
+    assertNoSymlinks(functionsSource, 'Capture functions');
+    const functionsTarget = join(p.website, 'functions');
+    assertSafeManagedPath(p.website, functionsTarget, 'website/functions');
+    cpSync(functionsSource, functionsTarget, { recursive: true });
+  }
+
   const at = new Date().toISOString();
   if (!existsSync(p.manifest)) {
     writeJson(p.manifest, {
