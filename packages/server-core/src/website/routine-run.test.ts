@@ -14,6 +14,7 @@ import {
   type WebsiteBrief,
 } from '@craft-agent/shared/website'
 import { WebsiteService, getSiteBuilderPath, type WebsiteToolResult } from './WebsiteService'
+import { createOutputBundle, readOutputManifest } from '@craft-agent/shared/outputs'
 
 const CONTEXT = { machineId: 'machine-1', origin: { kind: 'automation' as const, automationId: 'site-routine' } }
 const TODAY = '2026-09-15'
@@ -40,6 +41,89 @@ function brief(result: WebsiteToolResult): WebsiteBrief {
 }
 
 describe('running the routine', () => {
+  test('a failed refresh retains the old approval identity until the successful retry replaces it', async () => {
+    const { root, service } = await site()
+    try {
+      let previews = 0
+      service.preview = async () => {
+        const id = `00000000-0000-4000-8000-00000000000${++previews}`
+        createOutputBundle(root, { id, workspaceId: 'test', title: id, kind: 'code', status: 'draft', origin: { source: 'session' } })
+        return { ok: true, outputId: id }
+      }
+      const options = { today: TODAY, signals: signals({ posted: [post('refresh', 'Update')] }), previewTarget: { workspaceRootPath: root, workspaceId: 'test' } }
+      await service.runRoutine(root, CONTEXT, options)
+      const manifest = loadWebsiteManifest(root)!
+      saveWebsiteManifest(root, { ...manifest, lastBuild: { ...manifest.lastBuild!, hash: 'manual-build' } })
+      const build = service.build.bind(service)
+      service.build = async () => ({ ok: false, error: 'Temporary' })
+      expect((await service.runRoutine(root, CONTEXT, options)).ok).toBe(false)
+      expect(loadWebsiteManifest(root)!.pendingRoutine!.previousPreviewOutputId).toBe('00000000-0000-4000-8000-000000000001')
+      service.build = build
+      expect((await service.runRoutine(root, CONTEXT, options)).ok).toBe(true)
+      expect(readOutputManifest(root, '00000000-0000-4000-8000-000000000001')!.approval!.state).toBe('changes_requested')
+      expect(readOutputManifest(root, '00000000-0000-4000-8000-000000000002')!.approval!.state).toBe('pending')
+    } finally { service.dispose(); rmSync(root, { recursive: true, force: true }) }
+  })
+
+  test('temporary trusted publish failure remains retryable', async () => {
+    const { root, service } = await site()
+    try {
+      let manifest = loadWebsiteManifest(root)!
+      for (let i = 0; i < 5; i++) manifest = recordCleanPublish(manifest)
+      saveWebsiteManifest(root, { ...grantTrustedMode(manifest), targetApproval: { target: 'test', approvedBy: 'user', approvedAt: new Date().toISOString() } })
+      let attempts = 0
+      service.deploy = async () => { attempts++; return attempts === 1 ? { ok: false, error: '503 temporary' } : { ok: true, receiptId: 'sent' } }
+      const options = { today: TODAY, signals: signals({ posted: [post('publish-retry', 'Update')] }) }
+      expect((await service.runRoutine(root, CONTEXT, options)).ok).toBe(false)
+      expect(loadWebsiteManifest(root)!.pendingRoutine).toBeDefined()
+      expect((await service.runRoutine(root, CONTEXT, options)).ok).toBe(true)
+      expect(attempts).toBe(2)
+      expect(loadWebsiteManifest(root)!.pendingRoutine).toBeUndefined()
+    } finally { service.dispose(); rmSync(root, { recursive: true, force: true }) }
+  })
+
+  test('a quiet run refreshes an approval invalidated by a manual rebuild', async () => {
+    const { root, service } = await site()
+    try {
+      const options = { today: TODAY, signals: signals({ posted: [post('stale', 'Update')] }) }
+      const first = await service.runRoutine(root, CONTEXT, options)
+      const content = loadSiteContent(root)!
+      saveSiteContent(root, { ...content, journal: [...content.journal, { ...content.journal[0]!, id: 'manual', title: 'Manually added' }] })
+      expect((await service.build(root)).ok).toBe(true)
+      const second = await service.runRoutine(root, CONTEXT, options)
+      expect(brief(second).site!.buildHash).not.toBe(brief(first).site!.buildHash)
+      expect(brief(second).site!.buildHash).toBe(loadWebsiteManifest(root)!.lastBuild!.hash)
+    } finally { service.dispose(); rmSync(root, { recursive: true, force: true }) }
+  })
+
+  test('a failed build remains retryable after a service restart, without duplicate content', async () => {
+    const { root, service } = await site()
+    const retryService = new WebsiteService(getSiteBuilderPath())
+    try {
+      service.build = async () => ({ ok: false, error: 'Temporary build failure' })
+      const options = { today: TODAY, signals: signals({ posted: [post('retry', 'Retry this update.')] }) }
+      expect((await service.runRoutine(root, CONTEXT, options)).ok).toBe(false)
+      expect(loadWebsiteManifest(root)!.pendingRoutine).toBeDefined()
+      const result = await retryService.runRoutine(root, CONTEXT, options)
+      expect(result.ok).toBe(true)
+      expect(brief(result).site?.buildHash).toBeDefined()
+      expect(loadWebsiteManifest(root)!.pendingRoutine).toBeUndefined()
+      expect(loadSiteContent(root)!.journal).toHaveLength(1)
+      const quiet = await retryService.runRoutine(root, CONTEXT, options)
+      expect(brief(quiet).site?.buildHash).toBe(brief(result).site?.buildHash)
+    } finally { service.dispose(); retryService.dispose(); rmSync(root, { recursive: true, force: true }) }
+  })
+
+  test('failed preview stays retryable instead of silently losing the approval handoff', async () => {
+    const { root, service } = await site()
+    try {
+      service.preview = async () => ({ ok: false, error: 'Preview unavailable' })
+      const result = await service.runRoutine(root, CONTEXT, { today: TODAY, signals: signals({ posted: [post('preview-retry', 'Update')] }), previewTarget: { workspaceRootPath: root, workspaceId: 'test' } })
+      expect(result.ok).toBe(false)
+      expect(loadWebsiteManifest(root)!.pendingRoutine).toBeDefined()
+    } finally { service.dispose(); rmSync(root, { recursive: true, force: true }) }
+  })
+
   test('a post already public reaches the site, is built, and waits for one click', async () => {
     const { root, service } = await site()
     try {

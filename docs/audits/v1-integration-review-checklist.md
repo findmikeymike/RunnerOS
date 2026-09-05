@@ -14,7 +14,7 @@ Checked means reviewed with the evidence below, not merged to main or live-certi
 
 ## Next
 
-- [ ] Website final integration scan: 250 existing tests pass; five meaningful publishing, unsubscribe routing, routine retry, cadence replacement, and rollback bookkeeping findings remain. See `website-final-integration-review.md`. Review performed; fixes and live acceptance pending.
+- [x] Website final integration code review and all five fixes: verified snapshots/locking, unsubscribe routing, durable retries/approval cleanup, backend cadence transaction, and safe rollback retention. Targeted independent reviews clean after follow-ups; tests, shared/server/Electron typechecks and renderer build pass. See `website-final-integration-review.md` for exact evidence. Included in the website hardening fix commit; main integration and live acceptance are still pending.
 - [ ] Apply the reviewed branch commits to main and rerun destination-tree checks. No merge or push was performed in this review.
 - [ ] Live board/PDF acceptance after integration. Isolated protocol evidence is not a full app UI acceptance test.
 

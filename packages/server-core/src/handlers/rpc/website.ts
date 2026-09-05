@@ -4,6 +4,7 @@ import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { WebsiteService, settleSitePreviewApproval } from '../../website/WebsiteService'
 import { collectRoutineSignals } from '../../website/signals'
+import { reconcileWebsiteRoutine, setWebsiteRoutine } from '../../website/routine-schedule'
 import type { WebsiteRoutineConfig } from '@craft-agent/shared/website'
 import {
   approvePublishTarget,
@@ -59,6 +60,7 @@ export function registerWebsiteHandlers(server: RpcServer, _deps: HandlerDeps): 
 
   server.handle(RPC_CHANNELS.website.STATUS, async (_ctx, workspaceId: string) => {
     const workspace = resolveWorkspace(workspaceId)
+    await reconcileWebsiteRoutine(workspace.rootPath)
     return service.status(workspace.rootPath)
   })
 
@@ -216,7 +218,9 @@ export function registerWebsiteHandlers(server: RpcServer, _deps: HandlerDeps): 
 
   server.handle(RPC_CHANNELS.website.SET_ROUTINE, async (_ctx, workspaceId: string, config: WebsiteRoutineConfig) => {
     const workspace = resolveWorkspace(workspaceId)
-    return service.setRoutine(workspace.rootPath, config)
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'team.settings.update')
+    return setWebsiteRoutine(workspace.rootPath, config)
   })
 
   server.handle(RPC_CHANNELS.website.CLEAR_BRIEF, async (_ctx, workspaceId: string) => {

@@ -39,6 +39,8 @@ export interface WebsiteDomainState {
 }
 
 export interface WebsiteBuildSummary {
+  /** Digest of the exact deployable files, verified again before publishing. */
+  artifactHash?: string;
   at: string;
   /** sha256 over every emitted dist file, order-independent. */
   hash: string;
@@ -148,6 +150,8 @@ export interface WebsiteManifest {
   pendingApproval?: { boundTo: string; approvedAt: string; expiresAt?: string };
   history: DeployRecord[];
   lastBuild?: WebsiteBuildSummary;
+  /** Routine content is saved, but its build/preview has not finished yet. */
+  pendingRoutine?: { changes: string[]; why: string[]; changeClass: ChangeClass; previousPreviewOutputId?: string };
   capture: {
     backend: 'resend' | 'kv' | 'none';
     formIds: string[];

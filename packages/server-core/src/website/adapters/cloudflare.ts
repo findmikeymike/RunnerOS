@@ -216,9 +216,8 @@ export class CloudflareWorkersAdapter implements SiteDeployAdapter {
         config: {
           html_handling: 'auto-trailing-slash',
           not_found_handling: '404-page',
-          // Only the capture route runs code; everything else is served
-          // straight from assets.
-          ...(hasWorker ? { run_worker_first: ['/api/*'] } : {}),
+          // Fan-facing form navigation must reach the worker, not the static 404.
+          ...(hasWorker ? { run_worker_first: ['/api/*', '/unsubscribe'] } : {}),
         },
       },
     }

@@ -69,7 +69,7 @@ async function readAutomaticScheduleOccupancy(workspaceRoots: string[]): Promise
 // Per-workspace config mutex: serializes read-modify-write cycles on automations.json
 // to prevent concurrent IPC calls from clobbering each other's changes.
 const configMutexes = new Map<string, Promise<void>>()
-function withConfigMutex<T>(workspaceRoot: string, fn: () => Promise<T>): Promise<T> {
+export function withConfigMutex<T>(workspaceRoot: string, fn: () => Promise<T>): Promise<T> {
   const prev = configMutexes.get(workspaceRoot) ?? Promise.resolve()
   const next = prev.then(fn, fn) // run fn regardless of previous result
   configMutexes.set(workspaceRoot, next.then(() => {}, () => {}))

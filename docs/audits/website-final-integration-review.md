@@ -1,5 +1,28 @@
 # Website Final Integration Review
 
+## Fix Verification - 2026-09-04
+
+All five findings below are addressed in this fix commit; not yet deployed or integrated into main.
+
+- [x] Publish uses a private byte-verified snapshot, shared cross-instance site locking, and latest-manifest merges. Changed build bytes are refused. Retained bytes match uploaded bytes. Slow domain/capture updates no longer erase publish history.
+- [x] `/unsubscribe` is explicitly worker-first. The adapter test checks emitted routing metadata and executes browser-navigation form handling. A real Cloudflare deployment/browser acceptance check remains required.
+- [x] Routine changes carry durable retry state across build/preview/publish failure and restart. Quiet runs retain unanswered approvals; stale previews are refreshed, and superseded preview IDs survive failures so duplicate pending approvals are settled.
+- [x] Cadence updates are backend-owned, retain a stable automation identity, and use validated atomic config replacement under the existing config mutex. A transaction journal recovers interrupted manifest/config updates; status refuses to invent a cadence if recovery cannot verify state.
+- [x] Rollback records live history and revokes trusted mode before optional retention/receipt writes. Warnings surface without claiming the remote rollback failed. Retention stages and verifies complete bytes before promotion, so partial backups are never offered as rollback targets.
+
+Fresh evidence:
+
+- Combined website/shared/builder run: 229 pass, 0 fail. The service files were then run separately because Bun's combined invocation did not list their individual assertions.
+- Explicit `publish.test.ts`, `routine-run.test.ts`, `WebsiteService.test.ts`: 53 pass, 0 fail, including isolated localhost previews.
+- Final `deploy-snapshots.test.ts` plus `publish.test.ts`: 24 pass, 0 fail after retention hardening.
+- Backend cadence failure/concurrency suite: 11 pass, 0 fail. Snapshot/lock suite: 2 pass, 0 fail. Capture/adapter suite: 28 pass, 0 fail. These counts overlap the combined run; do not sum them as unique tests.
+- `bun run typecheck` in server-core and Electron, plus root `bun run typecheck:shared`: pass.
+- Electron `bun run build:renderer --outDir /tmp/artist-os-website-fixes-renderer`: pass, 1m37s. Existing Jotai deprecation, gray-matter eval, and bundle warnings remain.
+- Independent targeted review found follow-up stale manifest, retry/approval, and partial-retention issues; all fixed with regression tests. Final targeted routine and rollback reviews found no remaining meaningful defects.
+- `git diff --check`: pass. No app restart, external publish, email send, domain change, commit, or push. Other agents' voice changes and unrelated specs were preserved.
+
+## Original Findings (History)
+
 Reviewed on `codex/artist-website-engine`, code at `4faf3f454`. Review only; no production code changed or live host contacted.
 
 ## Necessary Fixes
@@ -22,4 +45,4 @@ Reviewed on `codex/artist-website-engine`, code at `4faf3f454`. Review only; no 
 - Cadence UI does create a real automation on its happy path; the claim that it only saves a label is rejected.
 - Existing-site support was not live-certified against a real CMS. Domain cutover, signup delivery, unsubscribe navigation, and production rollback still require deliberate live acceptance after fixes.
 
-Do not mark website integration complete until these findings are fixed and checked.
+Code fixes are checked above. Live hosting/capture acceptance and integration into main remain separate gates.

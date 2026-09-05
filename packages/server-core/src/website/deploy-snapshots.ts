@@ -1,6 +1,7 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { websiteRoot } from '@craft-agent/shared/website'
+import { hashBuildDirectory } from './build-snapshot'
 
 /**
  * Retained build output, one directory per production deploy.
@@ -40,6 +41,7 @@ export function retainDeploySnapshot(
   workspaceRootPath: string,
   deployId: string,
   distDir: string,
+  options: { copy?: typeof cpSync } = {},
 ): string {
   if (!existsSync(distDir)) throw new Error(`No build to retain at ${distDir}`)
   const target = deploySnapshotDir(workspaceRootPath, deployId)
@@ -53,8 +55,18 @@ export function retainDeploySnapshot(
   }
 
   mkdirSync(deploySnapshotsRoot(workspaceRootPath), { recursive: true })
-  rmSync(target, { recursive: true, force: true })
-  cpSync(distDir, target, { recursive: true, dereference: true })
+  const pending = mkdtempSync(join(deploySnapshotsRoot(workspaceRootPath), '.pending-'))
+  const staged = join(pending, 'build')
+  try {
+    const expected = hashBuildDirectory(distDir)
+    const copy = options.copy ?? cpSync
+    copy(distDir, staged, { recursive: true, dereference: false })
+    if (hashBuildDirectory(staged) !== expected) throw new Error('The retained build is incomplete.')
+    rmSync(target, { recursive: true, force: true })
+    renameSync(staged, target)
+  } finally {
+    rmSync(pending, { recursive: true, force: true })
+  }
   pruneDeploySnapshots(workspaceRootPath)
   return target
 }
@@ -69,7 +81,7 @@ export function pruneDeploySnapshots(
 
   const entries = readdirSync(root)
     .map(name => ({ name, path: join(root, name) }))
-    .filter(entry => existsSync(entry.path) && statSync(entry.path).isDirectory())
+    .filter(entry => !entry.name.startsWith('.') && existsSync(entry.path) && statSync(entry.path).isDirectory())
     .sort((a, b) => statSync(b.path).mtimeMs - statSync(a.path).mtimeMs)
 
   const removed: string[] = []

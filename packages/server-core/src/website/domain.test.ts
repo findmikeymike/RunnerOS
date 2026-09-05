@@ -50,6 +50,23 @@ function serviceWithAdapter(overrides: Record<string, unknown> = {}): WebsiteSer
 }
 
 describe('domain cutover', () => {
+  test('a slow domain response preserves newer publish state', async () => {
+    const root = workspace()
+    try {
+      const current = loadWebsiteManifest(root)!
+      saveWebsiteManifest(root, { ...current, domain: { name: 'lowtide.com', state: 'pending-dns' } })
+      const service = serviceWithAdapter({ checkDomain: async () => {
+        const latest = loadWebsiteManifest(root)!
+        saveWebsiteManifest(root, { ...latest, urls: { production: 'https://new.example' }, history: [{ id: 'new', target: 'production', at: new Date().toISOString(), url: 'https://new.example', buildHash: 'new', origin: { kind: 'user' }, status: 'live' }] })
+        return { name: 'lowtide.com', state: 'active' }
+      } })
+      expect((await service.checkDomain(root)).ok).toBe(true)
+      expect(loadWebsiteManifest(root)!.history[0]!.id).toBe('new')
+      expect(loadWebsiteManifest(root)!.urls.production).toBe('https://new.example')
+      service.dispose()
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
   test('the previous DNS is recorded before any instruction is given', async () => {
     const root = workspace()
     try {

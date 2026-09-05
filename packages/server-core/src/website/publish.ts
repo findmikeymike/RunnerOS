@@ -18,12 +18,14 @@ import {
 } from '@craft-agent/shared/website'
 import type { SiteDeployAdapter } from './adapters/types'
 import { deploySnapshotDir, hasDeploySnapshot, retainDeploySnapshot } from './deploy-snapshots'
+import { hashBuildDirectory, snapshotBuild, withWebsiteLock } from './build-snapshot'
 
 export interface PublishDeps {
   /** Resolves the configured adapter, or explains why it cannot be built. */
   resolveAdapter: (manifest: WebsiteManifest) => Promise<SiteDeployAdapter>
   machineId: string
   now?: () => string
+  retainSnapshot?: typeof retainDeploySnapshot
 }
 
 export interface PublishInput {
@@ -73,6 +75,10 @@ export async function publishSite(
   input: PublishInput,
   deps: PublishDeps,
 ): Promise<PublishResult> {
+  return withWebsiteLock(workspaceRootPath, () => publishSiteUnlocked(workspaceRootPath, input, deps))
+}
+
+async function publishSiteUnlocked(workspaceRootPath: string, input: PublishInput, deps: PublishDeps): Promise<PublishResult> {
   const manifest = loadWebsiteManifest(workspaceRootPath)
   if (!manifest) return { ok: false, error: 'No website in this workspace yet.', failure: 'no-site' }
   if (manifest.mode !== 'managed') {
@@ -124,8 +130,11 @@ export async function publishSite(
     }
   }
 
+  if (!manifest.lastBuild.artifactHash) return { ok: false, error: 'Rebuild the site before publishing so its files can be verified.', failure: 'stale-build' }
+  const snapshot = snapshotBuild(websiteDistDir(workspaceRootPath), manifest.lastBuild.artifactHash)
+  try {
   const adapter = await deps.resolveAdapter(manifest)
-  const distDir = websiteDistDir(workspaceRootPath)
+  const distDir = snapshot.path
   // Nothing is written before this returns, so a failed deploy leaves the
   // manifest exactly as it was.
   const deployed = await adapter.deploy({ distDir, target: input.target, buildHash: input.buildHash })
@@ -143,13 +152,14 @@ export async function publishSite(
     status: 'live',
   }
 
+  const latest = loadWebsiteManifest(workspaceRootPath) ?? manifest
   let next: WebsiteManifest = {
-    ...manifest,
-    history: [record, ...supersede(manifest.history, input.target)],
-    urls: { ...manifest.urls, [input.target]: deployed.url },
+    ...latest,
+    history: [record, ...supersede(latest.history, input.target)],
+    urls: { ...latest.urls, [input.target]: deployed.url },
     // One approval covers one publish. Spend it so the same click cannot
     // ship a second, different build later.
-    ...(input.target === 'production' ? { pendingApproval: undefined } : {}),
+    ...(input.target === 'production' && latest.pendingApproval?.boundTo === input.buildHash ? { pendingApproval: undefined } : {}),
   }
 
   let trustedModeOffered = false
@@ -209,6 +219,7 @@ export async function publishSite(
     receiptId,
     ...(trustedModeOffered ? { trustedModeOffered: true } : {}),
   }
+  } finally { snapshot.dispose() }
 }
 
 export interface RollbackInput {
@@ -219,7 +230,7 @@ export interface RollbackInput {
 }
 
 export type RollbackResult =
-  | { ok: true; deployId: string; url: string; receiptId: string; trustedModeRevoked: boolean }
+  | { ok: true; deployId: string; url: string; receiptId?: string; trustedModeRevoked: boolean; warnings?: string[] }
   | { ok: false; error: string }
 
 /**
@@ -233,6 +244,10 @@ export async function rollbackSite(
   input: RollbackInput,
   deps: PublishDeps,
 ): Promise<RollbackResult> {
+  return withWebsiteLock(workspaceRootPath, () => rollbackSiteUnlocked(workspaceRootPath, input, deps))
+}
+
+async function rollbackSiteUnlocked(workspaceRootPath: string, input: RollbackInput, deps: PublishDeps): Promise<RollbackResult> {
   const manifest = loadWebsiteManifest(workspaceRootPath)
   if (!manifest) return { ok: false, error: 'No website in this workspace yet.' }
 
@@ -252,15 +267,16 @@ export async function rollbackSite(
     }
   }
 
+  const source = deploySnapshotDir(workspaceRootPath, target.id)
+  const snapshot = snapshotBuild(source, hashBuildDirectory(source))
+  try {
   const adapter = await deps.resolveAdapter(manifest)
   const deployed = await adapter.deploy({
-    distDir: deploySnapshotDir(workspaceRootPath, target.id),
+    distDir: snapshot.path,
     target: 'production',
     buildHash: target.buildHash,
   })
   const at = nowIso(deps)
-
-  retainDeploySnapshot(workspaceRootPath, deployed.deployId, deploySnapshotDir(workspaceRootPath, target.id))
 
   const record: DeployRecord = {
     id: deployed.deployId,
@@ -268,23 +284,33 @@ export async function rollbackSite(
     at,
     url: deployed.url,
     buildHash: target.buildHash,
+    designHash: target.designHash,
     previousDeployId: current?.id,
     origin: input.origin,
     status: 'live',
   }
 
-  const wasTrusted = manifest.publishPolicy.contentOnly === 'auto'
-  const history = supersede(manifest.history, 'production').map(entry =>
+  const latest = loadWebsiteManifest(workspaceRootPath) ?? manifest
+  const wasTrusted = latest.publishPolicy.contentOnly === 'auto'
+  const history = supersede(latest.history, 'production').map(entry =>
     entry.id === current?.id ? { ...entry, status: 'rolled-back' as const } : entry)
 
   saveWebsiteManifest(
     workspaceRootPath,
     revokeTrustedMode(
-      { ...manifest, history: [record, ...history], urls: { ...manifest.urls, production: deployed.url } },
+      { ...latest, history: [record, ...history], urls: { ...latest.urls, production: deployed.url }, pendingApproval: undefined },
       { now: at },
     ),
   )
 
+  const warnings: string[] = []
+  try {
+    (deps.retainSnapshot ?? retainDeploySnapshot)(workspaceRootPath, deployed.deployId, snapshot.path)
+  } catch {
+    warnings.push('The site was restored, but a local backup of this restored version could not be saved.')
+  }
+  let receiptId: string | undefined
+  try {
   const receipt = writeChangeReceipt(workspaceRootPath, deps.machineId, {
     kind: 'site-rollback',
     origin: input.origin,
@@ -296,14 +322,20 @@ export async function rollbackSite(
     after: { deployId: deployed.deployId, url: deployed.url, buildHash: target.buildHash },
     rollback: { kind: 'none' },
   }, { now: at })
+  receiptId = receipt.id
+  } catch {
+    warnings.push('The site was restored, but its change receipt could not be saved.')
+  }
 
   return {
     ok: true,
     deployId: deployed.deployId,
     url: deployed.url,
-    receiptId: receipt.id,
+    receiptId,
     trustedModeRevoked: wasTrusted,
+    ...(warnings.length ? { warnings } : {}),
   }
+  } finally { snapshot.dispose() }
 }
 
 export interface SiteHistoryEntry extends DeployRecord {

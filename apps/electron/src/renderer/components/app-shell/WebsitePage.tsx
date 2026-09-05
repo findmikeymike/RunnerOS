@@ -94,9 +94,6 @@ function relative(at: string): string {
   return `${minutes}m ago`
 }
 
-/** Stable name so the routine's schedule can be found and replaced. */
-const WEBSITE_ROUTINE_AUTOMATION = 'Website Refresh'
-
 const TIER_LABEL: Record<string, string> = {
   free: 'automatic',
   'one-click': 'you approved',
@@ -108,6 +105,7 @@ export function WebsitePage({ workspaceId }: WebsitePageProps) {
   const [deploys, setDeploys] = React.useState<DeployEntry[]>([])
   const [receipts, setReceipts] = React.useState<ReceiptEntry[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
   const [busy, setBusy] = React.useState<string | null>(null)
   const [domainDraft, setDomainDraft] = React.useState('')
 
@@ -120,9 +118,11 @@ export function WebsitePage({ workspaceId }: WebsitePageProps) {
         window.electronAPI.getWebsiteHistory(workspaceId, 20),
       ])
       setStatus(next as unknown as WebsiteStatus)
+      setLoadError(null)
       setDeploys(((history as unknown as { deploys?: DeployEntry[] })?.deploys) ?? [])
       setReceipts(((history as unknown as { receipts?: ReceiptEntry[] })?.receipts) ?? [])
     } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Could not read the website.')
       toast.error(error instanceof Error ? error.message : 'Could not read the website.')
     } finally {
       setLoading(false)
@@ -142,56 +142,23 @@ export function WebsitePage({ workspaceId }: WebsitePageProps) {
       const result = await action()
       if (result?.ok === false) {
         toast.error(String(result.error ?? 'That did not work.'))
+        await refresh(false)
         return null
       }
       toast.success(success)
+      if (Array.isArray(result.warnings)) {
+        for (const warning of result.warnings) if (typeof warning === 'string') toast.warning(warning)
+      }
       await refresh(false)
       return result
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'That did not work.')
+      await refresh(false)
       return null
     } finally {
       setBusy(null)
     }
   }, [refresh])
-
-  /**
-   * Make the schedule match the artist's choice.
-   *
-   * The cadence is stored on the manifest, but only an automation actually
-   * fires, so the two are kept in step here: create one when a cadence is
-   * picked, update its cron when it changes, remove it on manual.
-   */
-  const syncSchedule = React.useCallback(async (cron: string | null) => {
-    const listed = await window.electronAPI.getAutomations(workspaceId) as
-      | Array<{ id: string; event: string; name?: string; matcherIndex: number }>
-      | null
-    const existing = (Array.isArray(listed) ? listed : [])
-      .find(item => item.event === 'SchedulerTick' && item.name === WEBSITE_ROUTINE_AUTOMATION)
-
-    if (!cron) {
-      if (existing) await window.electronAPI.deleteAutomation(workspaceId, existing.event, existing.matcherIndex)
-      return
-    }
-
-    const matcher: Record<string, unknown> = {
-      name: WEBSITE_ROUTINE_AUTOMATION,
-      cron,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      permissionMode: 'safe',
-      labels: ['website', 'artist-hq', 'scheduled'],
-      actions: [{
-        type: 'prompt',
-        agentSlug: 'website-agent',
-        prompt: 'Scheduled site check. Do only the obvious work: pull in anyone who signed up, and add content the artist already posted publicly as a site update. Do not add shows, reshuffle the home page, or change a release you were not asked about. Build and preview. Anything else you notice, report it as something worth a look and leave it alone. Do not publish unless the artist has already turned on automatic publishing for content changes.',
-      }],
-    }
-
-    if (existing) {
-      await window.electronAPI.deleteAutomation(workspaceId, existing.event, existing.matcherIndex)
-    }
-    await window.electronAPI.createAutomationFromTemplate(workspaceId, 'SchedulerTick', matcher)
-  }, [workspaceId])
 
   const buildHash = status?.lastBuild?.hash
   const liveHash = status?.liveDeploy?.buildHash
@@ -206,13 +173,13 @@ export function WebsitePage({ workspaceId }: WebsitePageProps) {
     )
   }
 
-  if (!status?.ok) {
+  if (loadError || !status?.ok) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
         <Globe className="h-6 w-6 text-white/25" />
-        <p className="text-[13px] text-white/50">No website in this workspace yet.</p>
+        <p className="text-[13px] text-white/50">{loadError ?? 'No website in this workspace yet.'}</p>
         <p className="max-w-sm text-[11px] leading-5 text-white/30">
-          Ask your Website Agent to build one, or say &ldquo;build me a site&rdquo; in any session.
+          {loadError ? 'Could not verify the current website settings. Try again shortly.' : <>Ask your Website Agent to build one, or say &ldquo;build me a site&rdquo; in any session.</>}
         </p>
       </div>
     )
@@ -334,13 +301,7 @@ export function WebsitePage({ workspaceId }: WebsitePageProps) {
           routine={status.routine}
           busy={busy}
           onRun={() => void run('routine', () => window.electronAPI.runWebsiteRoutine(workspaceId), 'Checked the site.')}
-          onChange={(config) => void run('cadence', async () => {
-            const saved = await window.electronAPI.setWebsiteRoutine(workspaceId, config)
-            if (saved?.ok === false) return saved
-            // Only touch the schedule once the cadence is safely stored.
-            await syncSchedule((saved as { cron?: string | null }).cron ?? null)
-            return { ...saved, ok: true }
-          }, 'Saved.')}
+          onChange={(config) => void run('cadence', () => window.electronAPI.setWebsiteRoutine(workspaceId, config), 'Saved.')}
         />
 
         <TrustedMode

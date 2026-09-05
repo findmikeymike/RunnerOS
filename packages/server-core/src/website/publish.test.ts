@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -22,6 +22,7 @@ import {
   siteHistory,
 } from './publish'
 import { hasDeploySnapshot, pruneDeploySnapshots } from './deploy-snapshots'
+import { hashBuildDirectory, withWebsiteLock } from './build-snapshot'
 import type { AdapterDeployInput, SiteDeployAdapter } from './adapters/types'
 
 function workspace(manifest?: Partial<WebsiteManifest>): string {
@@ -31,7 +32,7 @@ function workspace(manifest?: Partial<WebsiteManifest>): string {
   writeFileSync(join(dist, 'index.html'), '<h1>site</h1>', 'utf8')
   saveWebsiteManifest(root, {
     ...defaultWebsiteManifest(),
-    lastBuild: { at: '2026-09-01T00:00:00.000Z', hash: 'hash-a', designHash: 'design-1', auditScore: 92, warnings: 1, fileCount: 1, bytes: 13 },
+    lastBuild: { at: '2026-09-01T00:00:00.000Z', hash: 'hash-a', artifactHash: hashBuildDirectory(dist), designHash: 'design-1', auditScore: 92, warnings: 1, fileCount: 1, bytes: 13 },
     targetApproval: { approvedAt: '2026-09-01T00:00:00.000Z', approvedBy: 'user', target: 'lowtide.workers.dev' },
     ...manifest,
   })
@@ -100,6 +101,63 @@ describe('preview publishing', () => {
 })
 
 describe('production publishing', () => {
+  test('uploads and retains approved bytes despite a later dist edit, preserving newer settings', async () => {
+    const root = workspace()
+    let uploadedPath = ''
+    try {
+      const { adapter } = fakeAdapter()
+      const deploy = adapter.deploy
+      adapter.deploy = async input => {
+        uploadedPath = input.distDir
+        expect(readFileSync(join(input.distDir, 'index.html'), 'utf8')).toBe('<h1>site</h1>')
+        return deploy(input)
+      }
+      const result = await publishSite(root, publishInput(), {
+        ...deps(adapter),
+        resolveAdapter: async () => {
+          writeFileSync(join(websiteDistDir(root), 'index.html'), 'unapproved B')
+          const current = loadWebsiteManifest(root)!
+          saveWebsiteManifest(root, { ...current, routine: { cadence: 'monthly' }, lastBuild: { ...current.lastBuild!, hash: 'hash-b' } })
+          return adapter
+        },
+      })
+      expect(result.ok).toBe(true)
+      expect(loadWebsiteManifest(root)!.lastBuild!.hash).toBe('hash-b')
+      expect(loadWebsiteManifest(root)!.routine!.cadence).toBe('monthly')
+      expect(existsSync(uploadedPath)).toBe(false)
+      expect(readFileSync(join(root, 'website/.deploys/deploy-1/index.html'), 'utf8')).toBe('<h1>site</h1>')
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
+  test('refuses changed bytes before adapter resolution', async () => {
+    const root = workspace()
+    try {
+      const { adapter, deploys } = fakeAdapter()
+      writeFileSync(join(websiteDistDir(root), 'index.html'), 'changed')
+      await expect(publishSite(root, publishInput(), deps(adapter))).rejects.toThrow('Build files changed')
+      expect(deploys).toHaveLength(0)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
+  test('a queued publish rechecks its hash after a build completes', async () => {
+    const root = workspace()
+    try {
+      const { adapter, deploys } = fakeAdapter()
+      let release!: () => void
+      const gate = new Promise<void>(resolve => { release = resolve })
+      const build = withWebsiteLock(root, async () => {
+        await gate
+        const current = loadWebsiteManifest(root)!
+        saveWebsiteManifest(root, { ...current, lastBuild: { ...current.lastBuild!, hash: 'hash-b' } })
+      })
+      const publish = publishSite(root, publishInput(), deps(adapter))
+      release()
+      await build
+      expect((await publish).ok).toBe(false)
+      expect(deploys).toHaveLength(0)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
   test('without target approval it refuses and never calls the adapter', async () => {
     const root = workspace({ targetApproval: undefined })
     try {
@@ -376,6 +434,27 @@ describe('trusted mode', () => {
 })
 
 describe('rollback', () => {
+  test('retention failure cannot hide a successful rollback or keep trusted mode enabled', async () => {
+    let seed = defaultWebsiteManifest()
+    for (let i = 0; i < 5; i++) seed = recordCleanPublish(seed)
+    const root = workspace({ publishPolicy: grantTrustedMode(seed).publishPolicy })
+    try {
+      const { adapter } = fakeAdapter()
+      await publishSite(root, publishInput(), deps(adapter))
+      await publishSite(root, publishInput(), deps(adapter))
+      const result = await rollbackSite(root, { origin: { kind: 'user' } }, { ...deps(adapter), retainSnapshot: () => { throw new Error('Disk full') } })
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.warnings).toHaveLength(1)
+      const latest = loadWebsiteManifest(root)!
+      expect(latest.history[0]!.id).toBe('deploy-3')
+      expect(latest.history[0]!.designHash).toBe('design-1')
+      expect(latest.publishPolicy.contentOnly).toBe('needs-you')
+      expect(latest.publishPolicy.cleanPublishStreak).toBe(0)
+      expect(latestChangeReceipt(root, 'site-rollback')!.after!.deployId).toBe('deploy-3')
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
   test('restores the previous deploy, writes a receipt, and revokes trusted mode', async () => {
     let seed = defaultWebsiteManifest()
     for (let i = 0; i < 5; i += 1) seed = recordCleanPublish(seed)

@@ -10,6 +10,7 @@ import type { FetchLike, SiteDeployAdapter } from './adapters/types'
 import { publishSite, recentReceipts, rollbackSite, siteHistory, type PublishDeps } from './publish'
 import { ResendCaptureSource, type CaptureSource } from './capture-sources'
 import { inspectExternalSite } from './inspect'
+import { hashBuildDirectory, withWebsiteLock } from './build-snapshot'
 import {
   applySiteContentOperations,
   computeDesignHash,
@@ -262,24 +263,11 @@ interface PreviewServer {
  */
 export class WebsiteService {
   private readonly previews = new Map<string, PreviewServer>()
-  private readonly operationTails = new Map<string, Promise<void>>()
 
   constructor(private readonly toolPath: string = getSiteBuilderPath()) {}
 
   private async withWebsiteLock<T>(workspaceRootPath: string, operation: () => Promise<T>): Promise<T> {
-    const key = resolve(workspaceRootPath)
-    const previous = this.operationTails.get(key) ?? Promise.resolve()
-    let release!: () => void
-    const gate = new Promise<void>(resolveGate => { release = resolveGate })
-    const tail = previous.catch(() => undefined).then(() => gate)
-    this.operationTails.set(key, tail)
-    await previous.catch(() => undefined)
-    try {
-      return await operation()
-    } finally {
-      release()
-      if (this.operationTails.get(key) === tail) this.operationTails.delete(key)
-    }
+    return withWebsiteLock(workspaceRootPath, operation)
   }
 
   private cli(): string {
@@ -569,7 +557,7 @@ export class WebsiteService {
       })
     }
 
-    saveWebsiteManifest(websiteWorkspaceRootPath, { ...manifest, assets: staged })
+    saveWebsiteManifest(websiteWorkspaceRootPath, { ...(loadWebsiteManifest(websiteWorkspaceRootPath) ?? manifest), assets: staged })
   }
 
   async build(
@@ -610,6 +598,7 @@ export class WebsiteService {
         lastBuild: {
           at: new Date().toISOString(),
           hash: String(receipt.hash),
+          artifactHash: hashBuildDirectory(websiteDistDir(workspaceRootPath)),
           // Recorded at build time so publish can classify the change without
           // trusting the caller to say whether templates moved.
           designHash: computeDesignHash(workspaceRootPath),
@@ -922,6 +911,7 @@ export class WebsiteService {
           url: result.url,
           receiptId: result.receiptId,
           trustedModeRevoked: result.trustedModeRevoked,
+          warnings: result.warnings,
         }
         : { ok: false, error: result.error }
     } catch (error) {
@@ -1036,14 +1026,13 @@ export class WebsiteService {
       )
 
       const at = new Date().toISOString()
-      saveWebsiteManifest(workspaceRootPath, {
-        ...manifest,
-        capture: {
-          ...manifest.capture,
-          lastDrainAt: at,
-          // Re-scan after the final page to pick up changes to older contacts.
-          drainCursor: fetched.cursor,
-        },
+      await this.withWebsiteLock(workspaceRootPath, async () => {
+        const latest = loadWebsiteManifest(workspaceRootPath)
+        if (!latest || latest.capture.backend !== manifest.capture.backend || latest.capture.drainCursor !== manifest.capture.drainCursor) return
+        saveWebsiteManifest(workspaceRootPath, {
+          ...latest,
+          capture: { ...latest.capture, lastDrainAt: at, drainCursor: fetched.cursor },
+        })
       })
 
       let receiptId: string | undefined
@@ -1110,7 +1099,10 @@ export class WebsiteService {
       const adapter = await this.resolveAdapter(manifest)
       const state = await adapter.setDomain(domain)
 
-      saveWebsiteManifest(workspaceRootPath, { ...manifest, domain: state })
+      await this.withWebsiteLock(workspaceRootPath, async () => {
+        const latest = loadWebsiteManifest(workspaceRootPath)
+        if (latest) saveWebsiteManifest(workspaceRootPath, { ...latest, domain: state })
+      })
 
       const receipt = writeChangeReceipt(workspaceRootPath, context.machineId, {
         kind: 'domain-cutover',
@@ -1157,7 +1149,10 @@ export class WebsiteService {
     try {
       const adapter = await this.resolveAdapter(manifest)
       const state = await adapter.checkDomain(manifest.domain.name)
-      saveWebsiteManifest(workspaceRootPath, { ...manifest, domain: state })
+      await this.withWebsiteLock(workspaceRootPath, async () => {
+        const latest = loadWebsiteManifest(workspaceRootPath)
+        if (latest && latest.domain?.name === manifest.domain?.name) saveWebsiteManifest(workspaceRootPath, { ...latest, domain: state })
+      })
       return { ok: true, domain: state }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
@@ -1185,25 +1180,45 @@ export class WebsiteService {
       runId?: string
     } = {},
   ): Promise<WebsiteToolResult> {
+    return withWebsiteLock(workspaceRootPath, () => this.runRoutineUnlocked(workspaceRootPath, context, options), 'routine')
+  }
+
+  private async runRoutineUnlocked(
+    workspaceRootPath: string,
+    context: { machineId: string; origin: ChangeReceiptOrigin },
+    options: { signals?: RoutineSignals; today?: string; previewTarget?: WebsitePreviewTarget; runId?: string },
+  ): Promise<WebsiteToolResult> {
     const missing = this.requireSite(workspaceRootPath)
     if (missing) return missing
 
-    const manifest = loadWebsiteManifest(workspaceRootPath)
-    const content = loadSiteContent(workspaceRootPath)
-    if (!manifest || !content) return { ok: false, error: 'No website in this workspace yet.' }
-
     const today = options.today ?? new Date().toISOString().slice(0, 10)
     const runId = options.runId ?? `run-${randomUUID().replace(/-/g, '').slice(0, 12)}`
-    const signals = options.signals ?? { ...emptySignals(), auditScore: manifest.lastBuild?.auditScore }
-
-    const plan = planScheduledUpdate(content, signals, today)
-    // Observations are carried as text. Nothing acts on them; they exist so
-    // the artist can raise them with the agent when they choose to.
-    const observations = readSituation(content, signals, today)
 
     // Pull signups regardless of whether the site itself changed: a fan who
     // signed up is worth reporting even in an otherwise quiet week.
     const capture = await this.syncCapture(workspaceRootPath, context)
+    const prepared = await this.withWebsiteLock(workspaceRootPath, async () => {
+      const manifest = loadWebsiteManifest(workspaceRootPath)
+      const content = loadSiteContent(workspaceRootPath)
+      if (!manifest || !content) return null
+      const signals = options.signals ?? { ...emptySignals(), auditScore: manifest.lastBuild?.auditScore }
+      const plan = planScheduledUpdate(content, signals, today)
+      const pending = manifest.pendingRoutine
+      const previousSite = manifest.pendingBrief?.site
+      const staleApproval = previousSite?.tier === 'one-click' && previousSite.buildHash !== manifest.lastBuild?.hash
+      plan.changes = [...new Set([...(pending?.changes ?? []), ...plan.changes])]
+      if (staleApproval && !plan.changes.length) plan.changes.push('Updated the site preview to the current build')
+      plan.why = [...new Set([...(pending?.why ?? []), ...plan.why])]
+      if (pending?.changeClass === 'design') plan.changeClass = 'design'
+      if (plan.operations.length || pending || staleApproval) {
+        // Record the retry obligation before content changes, so interruption cannot lose it.
+        saveWebsiteManifest(workspaceRootPath, { ...manifest, pendingRoutine: { changes: plan.changes, why: plan.why, changeClass: plan.changeClass, previousPreviewOutputId: pending?.previousPreviewOutputId ?? previousSite?.previewOutputId } })
+        if (plan.operations.length) saveSiteContent(workspaceRootPath, applySiteContentOperations(content, plan.operations).content)
+      }
+      return { manifest, plan, observations: readSituation(content, signals, today), needsBuild: Boolean(plan.operations.length || pending || staleApproval) }
+    })
+    if (!prepared) return { ok: false, error: 'No website in this workspace yet.' }
+    const { manifest, plan, observations, needsBuild } = prepared
     const subscribers = capture.ok && typeof capture.imported === 'number'
       ? {
         imported: capture.imported as number,
@@ -1213,7 +1228,14 @@ export class WebsiteService {
       }
       : undefined
 
-    if (plan.operations.length === 0) {
+    if (!needsBuild) {
+      const previous = manifest.pendingBrief
+      const liveHash = manifest.history.find(entry => entry.target === 'production' && entry.status === 'live')?.buildHash
+      if (previous?.site?.tier === 'one-click' && previous.site.buildHash !== liveHash) {
+        const brief = { ...previous, ...(subscribers && subscribers.imported > 0 ? { subscribers } : {}) }
+        this.storeBrief(workspaceRootPath, brief)
+        return { ok: true, brief, summary: describeBrief(brief) }
+      }
       const brief: WebsiteBrief = {
         runId,
         weekOf: today,
@@ -1225,9 +1247,6 @@ export class WebsiteService {
       this.storeBrief(workspaceRootPath, brief)
       return { ok: true, brief, summary: describeBrief(brief) }
     }
-
-    const applied = applySiteContentOperations(content, plan.operations)
-    saveSiteContent(workspaceRootPath, applied.content)
 
     const build = await this.build(workspaceRootPath, {}, { workspaceRootPath })
     if (!build.ok) {
@@ -1259,6 +1278,7 @@ export class WebsiteService {
         { workspaceRootPath },
       )
       if (preview.ok) previewOutputId = preview.outputId as string | undefined
+      else return { ok: false, error: String(preview.error ?? 'Could not prepare the preview. Run the routine again to retry.') }
     }
 
     // Trusted mode is the only path that publishes without a click, and the
@@ -1268,6 +1288,7 @@ export class WebsiteService {
     const decision = resolveApprovalTier(after, plan.changeClass)
     let deployReceiptId: string | undefined
     let tier: 'one-click' | 'trusted' = 'one-click'
+    let publishFailure: string | undefined
 
     if (!decision.requiresApproval && after.targetApproval) {
       const published = await this.deploy(workspaceRootPath, {
@@ -1283,6 +1304,7 @@ export class WebsiteService {
         tier = 'trusted'
         deployReceiptId = published.receiptId as string | undefined
       } else {
+        if (!published.needsApproval) publishFailure = String(published.error ?? 'Could not publish the site. Retry the routine.')
         observations.push({
           kind: 'low-seo',
           headline: `Could not publish automatically: ${String(published.error)}`,
@@ -1319,6 +1341,18 @@ export class WebsiteService {
       ...(subscribers && subscribers.imported > 0 ? { subscribers } : {}),
     }
     this.storeBrief(workspaceRootPath, brief)
+    const completed = loadWebsiteManifest(workspaceRootPath)
+    if (completed) saveWebsiteManifest(workspaceRootPath, {
+      ...completed,
+      pendingRoutine: publishFailure && completed.pendingRoutine
+        ? { ...completed.pendingRoutine, previousPreviewOutputId: previewOutputId ?? completed.pendingRoutine.previousPreviewOutputId }
+        : undefined,
+    })
+    const previousPreviewOutputId = manifest.pendingRoutine?.previousPreviewOutputId ?? manifest.pendingBrief?.site?.previewOutputId
+    if (previousPreviewOutputId !== previewOutputId) {
+      settleSitePreviewApproval(options.previewTarget?.workspaceRootPath ?? workspaceRootPath, previousPreviewOutputId, 'changes_requested', 'Replaced by the current site preview.')
+    }
+    if (publishFailure) return { ok: false, error: publishFailure, brief }
 
     return { ok: true, brief, summary: describeBrief(brief), changes: plan.changes }
   }

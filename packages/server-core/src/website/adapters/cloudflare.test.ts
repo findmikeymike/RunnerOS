@@ -225,9 +225,16 @@ describe('the capture worker', () => {
       // A secret the artist has not saved must not become an empty binding.
       expect(bindings.some(b => b.name === 'ABSENT')).toBe(false)
 
-      // Only the capture route runs code; the rest is served from assets.
+      // Both API requests and fan-facing form navigation must bypass static 404 handling.
       const assets = metadata.assets as { config?: { run_worker_first?: string[] } }
-      expect(assets.config?.run_worker_first).toEqual(['/api/*'])
+      expect(assets.config?.run_worker_first).toEqual(['/api/*', '/unsubscribe'])
+      const worker = (await import('../../../../../tools/site-builder/templates/functions/signup.js')).default
+      const navigation = new Request('https://lowtide.com/unsubscribe', { headers: { 'Sec-Fetch-Mode': 'navigate' } })
+      const routedToWorker = assets.config!.run_worker_first!.includes(new URL(navigation.url).pathname)
+      expect(routedToWorker).toBe(true)
+      const response = await worker.fetch(navigation, { RESEND_API_KEY: 'test' })
+      expect(response.status).toBe(200)
+      expect(await response.text()).toContain('<form')
 
       const form = calls.at(-1)!.body as FormData
       expect(form.get('_worker.js')).toBeInstanceOf(Blob)
