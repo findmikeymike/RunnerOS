@@ -21,6 +21,7 @@ export interface PendingOAuthFlow {
   clientId: string;
   clientSecret?: string;
   tokenEndpoint: string;
+  resource?: string;
   provider: OAuthProvider;
   requestedScopes?: string[];
   googleService?: import('../sources/types.ts').GoogleService;

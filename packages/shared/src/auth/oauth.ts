@@ -102,7 +102,8 @@ export class CraftOAuth {
     code: string,
     codeVerifier: string,
     clientId: string,
-    port: number
+    port: number,
+    resource?: string
   ): Promise<OAuthTokens> {
     const redirectUri = `http://localhost:${port}${CALLBACK_PATH}`;
 
@@ -113,6 +114,7 @@ export class CraftOAuth {
       client_id: clientId,
       code_verifier: codeVerifier,
     });
+    if (resource) params.set('resource', resource);
 
     const response = await fetch(tokenEndpoint, {
       method: 'POST',
@@ -157,6 +159,8 @@ export class CraftOAuth {
       refresh_token: refreshToken,
       client_id: clientId,
     });
+    const resource = metadata.resource ?? normalizeUrl(this.config.mcpUrl);
+    params.set('resource', resource);
 
     const response = await fetch(metadata.token_endpoint, {
       method: 'POST',
@@ -277,6 +281,8 @@ export class CraftOAuth {
     authUrl.searchParams.set('state', state);
     authUrl.searchParams.set('code_challenge', pkce.challenge);
     authUrl.searchParams.set('code_challenge_method', 'S256');
+    const resource = metadata.resource ?? normalizeUrl(this.config.mcpUrl);
+    authUrl.searchParams.set('resource', resource);
 
     // 6. Open browser for authorization
     this.callbacks.onStatus('Opening browser for authorization...');
@@ -294,7 +300,8 @@ export class CraftOAuth {
       authCode,
       pkce.verifier,
       clientId,
-      port
+      port,
+      resource
     );
     this.callbacks.onStatus('Tokens received successfully!');
 
@@ -465,7 +472,7 @@ function shouldFallbackToDefaultMcpClient(error: unknown): boolean {
 async function registerMcpOAuthClient(
   registrationEndpoint: string,
   redirectUri: string
-): Promise<{ client_id: string; client_secret?: string }> {
+): Promise<{ client_id: string; client_secret?: string; scope?: string }> {
   let response: Response;
   try {
     response = await fetch(registrationEndpoint, {
@@ -489,7 +496,7 @@ async function registerMcpOAuthClient(
     throw new McpClientRegistrationError(`Failed to register OAuth client: ${error}`, response.status);
   }
 
-  return response.json() as Promise<{ client_id: string; client_secret?: string }>;
+  return response.json() as Promise<{ client_id: string; client_secret?: string; scope?: string }>;
 }
 
 /**
@@ -500,7 +507,8 @@ async function exchangeMcpCodeForTokens(
   code: string,
   codeVerifier: string,
   clientId: string,
-  redirectUri: string
+  redirectUri: string,
+  resource?: string
 ): Promise<OAuthTokens> {
   const params = new URLSearchParams({
     grant_type: 'authorization_code',
@@ -509,6 +517,7 @@ async function exchangeMcpCodeForTokens(
     client_id: clientId,
     code_verifier: codeVerifier,
   });
+  if (resource) params.set('resource', resource);
 
   const response = await fetch(tokenEndpoint, {
     method: 'POST',
@@ -561,11 +570,13 @@ export async function prepareMcpOAuth(
 
   let clientId: string;
   let clientSecret: string | undefined;
+  let scope: string | undefined;
   if (metadata.registration_endpoint) {
     try {
       const client = await registerMcpOAuthClient(metadata.registration_endpoint, redirectUri);
       clientId = client.client_id;
       clientSecret = client.client_secret;
+      scope = client.scope;
     } catch (error) {
       if (!shouldFallbackToDefaultMcpClient(error)) {
         throw error;
@@ -581,18 +592,24 @@ export async function prepareMcpOAuth(
   }
 
   const authUrl = new URL(metadata.authorization_endpoint);
+  const resource = metadata.resource ?? normalizeUrl(mcpUrl);
   authUrl.searchParams.set('response_type', 'code');
   authUrl.searchParams.set('client_id', clientId);
   authUrl.searchParams.set('redirect_uri', redirectUri);
   authUrl.searchParams.set('state', state);
   authUrl.searchParams.set('code_challenge', pkce.challenge);
   authUrl.searchParams.set('code_challenge_method', 'S256');
+  authUrl.searchParams.set('resource', resource);
+  if (scope) {
+    authUrl.searchParams.set('scope', scope);
+  }
 
   return {
     authUrl: authUrl.toString(),
     state,
     codeVerifier: pkce.verifier,
     tokenEndpoint: metadata.token_endpoint,
+    resource,
     clientId,
     clientSecret,
     redirectUri,
@@ -610,7 +627,8 @@ export async function exchangeMcpOAuth(params: OAuthExchangeParams): Promise<OAu
       params.code,
       params.codeVerifier,
       params.clientId,
-      params.redirectUri
+      params.redirectUri,
+      params.resource
     );
 
     return {
@@ -626,6 +644,57 @@ export async function exchangeMcpOAuth(params: OAuthExchangeParams): Promise<OAu
       error: error instanceof Error ? error.message : 'MCP OAuth exchange failed',
     };
   }
+}
+
+export interface McpOAuthTokensToRevoke {
+  accessToken?: string;
+  refreshToken?: string;
+  clientId?: string;
+  clientSecret?: string;
+}
+
+/**
+ * Revoke stored MCP OAuth tokens at the authorization server when supported.
+ * Returns false only when the server does not advertise a revocation endpoint.
+ * A rejected revocation throws so callers can preserve the local credential for retry.
+ */
+export async function revokeMcpOAuthTokens(
+  mcpUrl: string,
+  tokens: McpOAuthTokensToRevoke,
+): Promise<boolean> {
+  const metadata = await discoverOAuthMetadata(mcpUrl);
+  if (!metadata?.revocation_endpoint) return false;
+
+  const endpointSafety = isUrlSafeToFetch(metadata.revocation_endpoint);
+  if (!endpointSafety.safe) {
+    throw new Error(`Unsafe OAuth revocation endpoint: ${endpointSafety.reason}`);
+  }
+
+  const candidates = [
+    tokens.refreshToken ? { token: tokens.refreshToken, hint: 'refresh_token' } : null,
+    tokens.accessToken ? { token: tokens.accessToken, hint: 'access_token' } : null,
+  ].filter((candidate): candidate is { token: string; hint: string } => candidate !== null);
+
+  for (const candidate of candidates) {
+    const body = new URLSearchParams({
+      token: candidate.token,
+      token_type_hint: candidate.hint,
+    });
+    if (tokens.clientId) body.set('client_id', tokens.clientId);
+    if (tokens.clientSecret) body.set('client_secret', tokens.clientSecret);
+
+    const response = await fetchWithTimeout(metadata.revocation_endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`Failed to revoke OAuth token (${response.status}): ${detail}`);
+    }
+  }
+
+  return true;
 }
 
 /**
@@ -645,6 +714,10 @@ export interface OAuthMetadata {
   authorization_endpoint: string;
   token_endpoint: string;
   registration_endpoint?: string;
+  scopes_supported?: string[];
+  revocation_endpoint?: string;
+  /** RFC 9728 protected resource identifier, merged during discovery. */
+  resource?: string;
 }
 
 /**
@@ -801,7 +874,7 @@ function parseResourceMetadataFromHeader(wwwAuthenticate: string | null): string
 async function fetchProtectedResourceMetadata(
   metadataUrl: string,
   onLog?: (message: string) => void
-): Promise<string | null> {
+): Promise<{ authorizationServer: string; resource: string } | null> {
   // SSRF protection: validate URL before fetching
   const urlCheck = isUrlSafeToFetch(metadataUrl);
   if (!urlCheck.safe) {
@@ -841,7 +914,7 @@ async function fetchProtectedResourceMetadata(
     }
 
     onLog?.(`  ✓ Found authorization server`);
-    return authServer;
+    return { authorizationServer: authServer, resource: data.resource };
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       onLog?.(`  ✗ Request timeout fetching protected resource metadata`);
@@ -921,15 +994,16 @@ async function discoverViaProtectedResource(
     onLog?.(`  Found resource_metadata hint`);
 
     // Fetch protected resource metadata to get authorization server
-    const authServerUrl = await fetchProtectedResourceMetadata(resourceMetadataUrl, onLog);
-    if (!authServerUrl) {
+    const protectedResource = await fetchProtectedResourceMetadata(resourceMetadataUrl, onLog);
+    if (!protectedResource) {
       return null;
     }
 
     // Fetch authorization server metadata (normalize URL to avoid double slashes)
-    const normalizedAuthServer = normalizeUrl(authServerUrl);
+    const normalizedAuthServer = normalizeUrl(protectedResource.authorizationServer);
     const authServerMetadataUrl = `${normalizedAuthServer}/.well-known/oauth-authorization-server`;
-    return await tryFetchAuthServerMetadata(authServerMetadataUrl, onLog);
+    const metadata = await tryFetchAuthServerMetadata(authServerMetadataUrl, onLog);
+    return metadata ? { ...metadata, resource: protectedResource.resource } : null;
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     onLog?.(`  ✗ RFC 9728 discovery failed: ${msg}`);

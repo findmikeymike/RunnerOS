@@ -1259,6 +1259,10 @@ export function shouldPromptInAskMode(
 
   // --- MCP mutations ---
   if (toolName.startsWith('mcp__')) {
+    // Monid paid reads are governed by the spend guard at execution time.
+    // Do not turn every low-cost data call into a manual approval prompt.
+    if (toolName === 'mcp__monid__run') return null;
+
     // Check if it would be blocked in safe mode (= it's a mutation)
     const safeModeResult = shouldAllowToolInMode(
       toolName, input, 'safe', { plansFolderPath }

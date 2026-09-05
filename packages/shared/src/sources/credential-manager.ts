@@ -29,7 +29,7 @@ import { buildAuthorizationHeader } from './api-tools.ts';
 import type { CredentialId, StoredCredential } from '../credentials/types.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { CONFIG_DIR } from '../config/paths.ts';
-import { CraftOAuth, getMcpBaseUrl, prepareMcpOAuth, exchangeMcpOAuth, type OAuthCallbacks, type OAuthTokens } from '../auth/oauth.ts';
+import { CraftOAuth, getMcpBaseUrl, prepareMcpOAuth, exchangeMcpOAuth, revokeMcpOAuthTokens, type OAuthCallbacks, type OAuthTokens } from '../auth/oauth.ts';
 import { type OAuthSessionContext } from '../auth/types.ts';
 import { OAUTH_RELAY_CALLBACK_URL, wrapPreparedOAuthFlowForRelay } from '../auth/oauth-relay.ts';
 import type { PreparedOAuthFlow, OAuthExchangeParams, OAuthExchangeResult, OAuthProvider } from '../auth/oauth-flow-types.ts';
@@ -476,6 +476,26 @@ export class SourceCredentialManager {
       deleted = (await manager.delete(id)) || deleted;
     }
     return deleted;
+  }
+
+  /** Revoke remote MCP OAuth tokens when supported, then delete the local credential. */
+  async revoke(source: LoadedSource): Promise<boolean> {
+    const credential = await this.load(source);
+    const mcpUrl = source.config.mcp?.url;
+    const isMcpOAuth = source.config.type === 'mcp'
+      && source.config.mcp?.authType === 'oauth'
+      && Boolean(mcpUrl);
+
+    if (credential && isMcpOAuth && mcpUrl) {
+      await revokeMcpOAuthTokens(mcpUrl, {
+        accessToken: credential.value,
+        refreshToken: credential.refreshToken,
+        clientId: credential.clientId,
+        clientSecret: credential.clientSecret,
+      });
+    }
+
+    return this.delete(source);
   }
 
   /**

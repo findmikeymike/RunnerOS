@@ -781,6 +781,32 @@ describe('runPreToolUseChecks', () => {
       expect(result.type).toBe('allow');
     });
 
+    it('does not prompt for budget-governed Monid runs in allow-all mode', () => {
+      mockEffectivePermissionMode = 'allow-all';
+
+      const result = runPreToolUseChecks(createInput({
+        toolName: 'mcp__monid__run',
+        input: { provider: 'apify', endpoint: '/tweet-scraper', input: { maxItems: 10 } },
+        permissionMode: 'allow-all',
+        activeSourceSlugs: ['monid'],
+        allSourceSlugs: ['monid'],
+      }));
+
+      expect(result.type).toBe('allow');
+    });
+
+    it('does not prompt for budget-governed Monid runs in ask mode', () => {
+      const result = runPreToolUseChecks(createInput({
+        toolName: 'mcp__monid__run',
+        input: { provider: 'apify', endpoint: '/tweet-scraper', input: { maxItems: 10 } },
+        permissionMode: 'ask',
+        activeSourceSlugs: ['monid'],
+        allSourceSlugs: ['monid'],
+      }));
+
+      expect(result.type).toBe('allow');
+    });
+
     it('does not prompt in safe mode (blocked at step 1 instead)', () => {
       mockShouldAllowToolInMode.mockImplementation(() => ({
         allowed: false,
@@ -1138,6 +1164,20 @@ describe('shouldPromptInAskMode', () => {
   // --- MCP mutations ---
 
   describe('MCP mutations', () => {
+    it('auto-allows Monid runs because execution enforces spend limits', () => {
+      mockShouldAllowToolInMode.mockImplementation(
+        (_tool: string, _input: Record<string, unknown>, mode: string) =>
+          mode === 'safe' ? { allowed: false, reason: 'mutation' } : { allowed: true, reason: '' }
+      );
+
+      const result = shouldPromptInAskMode('mcp__monid__run', { provider: 'apify' }, pm, {
+        workspaceRootPath: '/test',
+        activeSourceSlugs: ['monid'],
+      });
+
+      expect(result).toBeNull();
+    });
+
     it('prompts for MCP mutations (blocked in safe mode)', () => {
       mockShouldAllowToolInMode.mockImplementation(
         (_tool: string, _input: Record<string, unknown>, mode: string) =>

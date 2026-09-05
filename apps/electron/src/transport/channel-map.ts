@@ -136,6 +136,8 @@ export const CHANNEL_MAP = {
   initZero: invoke(RPC_CHANNELS.secrets.INIT_ZERO),
   fundZero: invoke(RPC_CHANNELS.secrets.FUND_ZERO),
   claimZeroWelcome: invoke(RPC_CHANNELS.secrets.CLAIM_ZERO_WELCOME),
+  getMonidBudget: invoke(RPC_CHANNELS.secrets.MONID_BUDGET_GET),
+  setMonidBudget: invoke(RPC_CHANNELS.secrets.MONID_BUDGET_SET),
 
   // Onboarding
   getAuthState: invoke(RPC_CHANNELS.onboarding.GET_AUTH_STATE),

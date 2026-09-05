@@ -21,7 +21,7 @@ import type {
 import { validateSourceConfig } from '../config/validators.ts';
 import { debug } from '../utils/debug.ts';
 import { readJsonFileSync } from '../utils/files.ts';
-import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getLottieSource, getVideoStudioSource, getRawVideoEditorSource, getSquadSource, getGenesisLyricSource, getLyricsTranscriberSource, getGoogleAdsSource, getAdsOperatorSource, getGoogleCalendarSource, getGmailSource, getGoogleDriveSource, getMetaAdsSource, getNotebookLmSource, getYouTubeResearchSource, getYouTubeIntelligenceSource, getOpenSlideSource, getZeroSource, getMediaGenerationSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
+import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getLottieSource, getVideoStudioSource, getRawVideoEditorSource, getSquadSource, getGenesisLyricSource, getLyricsTranscriberSource, getGoogleAdsSource, getAdsOperatorSource, getGoogleCalendarSource, getGmailSource, getGoogleDriveSource, getMetaAdsSource, getNotebookLmSource, getYouTubeResearchSource, getYouTubeIntelligenceSource, getOpenSlideSource, getMonidSource, getZeroSource, getMediaGenerationSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
 import { resolveRuntimeIdentity } from '../config/runtime-identity.ts';
@@ -463,6 +463,29 @@ export function loadSource(workspaceRootPath: string, sourceSlug: string): Loade
 }
 
 /**
+ * Persist a built-in source into the active workspace before a stateful setup
+ * flow (such as OAuth) mutates its connection status. The workspace copy then
+ * takes precedence over the built-in definition on future loads.
+ */
+export function materializeBuiltinSource(source: LoadedSource): LoadedSource {
+  if (!source.isBuiltin) return source;
+
+  const existing = loadSource(source.workspaceRootPath, source.config.slug);
+  if (existing) return existing;
+
+  saveSourceConfig(source.workspaceRootPath, source.config);
+  if (source.guide?.raw) {
+    saveSourceGuide(source.workspaceRootPath, source.config.slug, source.guide);
+  }
+
+  const materialized = loadSource(source.workspaceRootPath, source.config.slug);
+  if (!materialized) {
+    throw new Error(`Failed to install built-in source: ${source.config.slug}`);
+  }
+  return materialized;
+}
+
+/**
  * Load all sources for a workspace
  */
 export function loadWorkspaceSources(workspaceRootPath: string): LoadedSource[] {
@@ -565,6 +588,8 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
         sources.push({ ...getYouTubeIntelligenceSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'open-slide') {
         sources.push({ ...getOpenSlideSource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'monid') {
+        sources.push({ ...getMonidSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'zero') {
         sources.push({ ...getZeroSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'media-generation') {

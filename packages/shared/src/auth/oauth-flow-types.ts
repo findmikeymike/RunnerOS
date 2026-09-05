@@ -19,6 +19,8 @@ export interface PreparedOAuthFlow {
   state: string
   codeVerifier: string       // PKCE verifier (empty string for providers that don't use PKCE)
   tokenEndpoint: string
+  /** RFC 8707 protected resource identifier for MCP OAuth flows. */
+  resource?: string
   clientId: string
   clientSecret?: string      // Google requires client_secret for Desktop apps
   redirectUri: string        // provider-specific redirect URI used in auth URL + token exchange
@@ -37,6 +39,8 @@ export interface OAuthExchangeParams {
   code: string
   codeVerifier: string
   tokenEndpoint: string
+  /** RFC 8707 protected resource identifier for MCP OAuth flows. */
+  resource?: string
   clientId: string
   clientSecret?: string
   redirectUri: string

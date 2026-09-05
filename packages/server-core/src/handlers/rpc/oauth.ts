@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId, getWorkspaces } from '@craft-agent/shared/config'
-import { loadAllSources, loadGlobalSource, getSourceCredentialManager, getSourcesBySlugs, readGlobalSourcesManifest } from '@craft-agent/shared/sources'
+import { loadAllSources, loadGlobalSource, getSourceCredentialManager, getSourcesBySlugs, materializeBuiltinSource, readGlobalSourcesManifest } from '@craft-agent/shared/sources'
 import { createPendingFlow, revokeGoogleToken } from '@craft-agent/shared/auth'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -80,6 +80,7 @@ export async function completeOAuthFlow(opts: {
       code,
       codeVerifier: flow.codeVerifier,
       tokenEndpoint: flow.tokenEndpoint,
+      resource: flow.resource,
       clientId: flow.clientId,
       clientSecret: flow.clientSecret,
       redirectUri: flow.redirectUri,
@@ -146,11 +147,17 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
     }
 
     const [workspaceSource] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
-    const source = credentialScope === 'global'
+    let source = credentialScope === 'global'
       ? loadGlobalSource(sourceSlug)
       : workspaceSource
     if (!source) {
       throw new Error(`Source not found: ${sourceSlug}`)
+    }
+
+    // Built-in OAuth sources have no writable config until a user connects.
+    // Install a workspace copy so auth state survives reloads and restarts.
+    if (source.isBuiltin && credentialScope !== 'global') {
+      source = materializeBuiltinSource(source)
     }
 
     const prepared = await credManager.prepareOAuth(source, { callbackPort, callbackUrl })
@@ -165,6 +172,7 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
       clientId: prepared.clientId,
       clientSecret: prepared.clientSecret,
       tokenEndpoint: prepared.tokenEndpoint,
+      resource: prepared.resource,
       provider: prepared.provider,
       requestedScopes: prepared.requestedScopes,
       googleService: prepared.googleService,
@@ -278,7 +286,11 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
       }
     }
 
-    await credManager.deleteEffective(source)
+    if (source.config.provider === 'google') {
+      await credManager.deleteEffective(source)
+    } else {
+      await credManager.revoke(source)
+    }
     await syncGoogleAdsCredentialCache(source)
     credManager.markSourceNeedsReauth(source, 'Signed out by user')
 

@@ -336,6 +336,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.secrets.INIT_ZERO,
   RPC_CHANNELS.secrets.FUND_ZERO,
   RPC_CHANNELS.secrets.CLAIM_ZERO_WELCOME,
+  RPC_CHANNELS.secrets.MONID_BUDGET_GET,
+  RPC_CHANNELS.secrets.MONID_BUDGET_SET,
 
   // llmConnections — LLM config lives on server running workspace
   RPC_CHANNELS.llmConnections.LIST,

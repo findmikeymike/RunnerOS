@@ -176,6 +176,8 @@ export const RPC_CHANNELS = {
     INIT_ZERO: 'secrets:initZero',
     FUND_ZERO: 'secrets:fundZero',
     CLAIM_ZERO_WELCOME: 'secrets:claimZeroWelcome',
+    MONID_BUDGET_GET: 'secrets:monidBudgetGet',
+    MONID_BUDGET_SET: 'secrets:monidBudgetSet',
   },
   onboarding: {
     GET_AUTH_STATE: 'onboarding:getAuthState',

@@ -121,6 +121,13 @@ export interface ZeroStatus {
   error?: string
 }
 
+export interface MonidBudgetStatus {
+  singleCallCapUsd: number
+  weeklyCapUsd: number
+  spentLast7DaysUsd: number
+  remainingWeeklyUsd: number
+}
+
 export interface VideoStudioImportResult {
   ok: boolean
   outputId: string
@@ -841,6 +848,8 @@ export interface ElectronAPI {
   initZero(workspaceId: string): Promise<{ success: boolean; output?: string; error?: string }>
   fundZero(workspaceId: string, amount?: string): Promise<{ success: boolean; fundingUrl?: string; output?: string; error?: string }>
   claimZeroWelcome(workspaceId: string): Promise<{ success: boolean; output?: string; error?: string }>
+  getMonidBudget(workspaceId: string): Promise<MonidBudgetStatus>
+  setMonidBudget(workspaceId: string, args: { singleCallCapUsd: number; weeklyCapUsd: number }): Promise<MonidBudgetStatus>
 
   // Onboarding
   getAuthState(): Promise<AuthState>

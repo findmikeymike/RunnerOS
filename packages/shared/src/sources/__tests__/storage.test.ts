@@ -58,6 +58,7 @@ const {
   listGlobalSourceSlugs,
   loadAllSources,
   getSourcesBySlugs,
+  materializeBuiltinSource,
   isSourceUsable,
   loadSourceConfig,
   createSource,
@@ -605,6 +606,39 @@ describe('loadAllSources', () => {
     expect(found!.config.type).toBe('mcp');
     expect(found!.config.mcp?.transport).toBe('stdio');
     expect(found!.config.mcp?.authType).toBe('none');
+  });
+
+  test('includes Monid as a built-in remote OAuth MCP source', () => {
+    const ws = makeWorkspace();
+    const all = loadAllSources(ws);
+    const found = all.find((s: LoadedSource) => s.config.slug === 'monid');
+
+    expect(found).toBeDefined();
+    expect(found!.tier).toBe('project');
+    expect(found!.config.mcp).toEqual({
+      transport: 'http',
+      url: 'https://mcp.monid.ai/v1',
+      authType: 'oauth',
+    });
+    expect(isSourceUsable(found!)).toBe(false);
+  });
+
+  test('materializes built-in OAuth sources so connection state can persist', () => {
+    const ws = makeWorkspace();
+    const builtin = loadAllSources(ws).find((s: LoadedSource) => s.config.slug === 'monid');
+    expect(builtin).toBeDefined();
+
+    const installed = materializeBuiltinSource(builtin!);
+    expect(installed.isBuiltin).toBeUndefined();
+    expect(installed.tier).toBe('workspace');
+    expect(installed.folderPath).toBe(join(ws, 'sources', 'monid'));
+    expect(installed.guide?.raw).toContain('Discover a focused capability');
+
+    expect(markLoadedSourceAuthenticated(installed)).toBe(true);
+    const reloaded = getSourcesBySlugs(ws, ['monid'])[0];
+    expect(reloaded?.tier).toBe('workspace');
+    expect(reloaded?.config.connectionStatus).toBe('connected');
+    expect(isSourceUsable(reloaded!)).toBe(true);
   });
 
   test('includes printing-press-social as a project local source', () => {

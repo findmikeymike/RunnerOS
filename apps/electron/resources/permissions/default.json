@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-27T00:00:00Z",
+  "version": "2026-09-04",
   "allowedBashPatterns": [
     {
       "pattern": "^ls\\b",
@@ -1055,6 +1055,10 @@
     }
   ],
   "allowedMcpPatterns": [
+    {
+      "pattern": "^mcp__monid__discover$",
+      "comment": "Discover Monid endpoints without permitting paid execution"
+    },
     {
       "pattern": "search",
       "comment": "Search operations across MCP sources"

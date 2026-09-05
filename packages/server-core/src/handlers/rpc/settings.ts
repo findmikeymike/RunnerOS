@@ -16,6 +16,7 @@ import { isValidWorkingDirectory } from '../../utils/path-validation'
 import type { SharedFolderProvider } from '@craft-agent/shared/workspaces'
 import { assertGlobalSecretVaultPermission, assertSessionFilesWritePermission } from './team-permission-helpers'
 import { scheduleHqStateContextRefresh } from '../../hq-state/refresh'
+import { monidBudgetStore } from '@craft-agent/shared/mcp'
 
 const execFileAsync = promisify(execFile)
 const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
@@ -200,6 +201,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.secrets.INIT_ZERO,
   RPC_CHANNELS.secrets.FUND_ZERO,
   RPC_CHANNELS.secrets.CLAIM_ZERO_WELCOME,
+  RPC_CHANNELS.secrets.MONID_BUDGET_GET,
+  RPC_CHANNELS.secrets.MONID_BUDGET_SET,
   RPC_CHANNELS.dialog.OPEN_FOLDER,
 ] as const
 
@@ -359,6 +362,21 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) }
     }
+  })
+
+  server.handle(RPC_CHANNELS.secrets.MONID_BUDGET_GET, async (_ctx, workspaceId?: string) => {
+    const workspaceError = await assertSecretWorkspaceOwner(workspaceId)
+    if (workspaceError) throw new Error(workspaceError.error)
+    return monidBudgetStore.getStatus()
+  })
+
+  server.handle(RPC_CHANNELS.secrets.MONID_BUDGET_SET, async (_ctx, workspaceId: string | undefined, args: {
+    singleCallCapUsd: number
+    weeklyCapUsd: number
+  }) => {
+    const workspaceError = await assertSecretWorkspaceOwner(workspaceId)
+    if (workspaceError) throw new Error(workspaceError.error)
+    return monidBudgetStore.updateLimits(args.singleCallCapUsd, args.weeklyCapUsd)
   })
 
   // ============================================================

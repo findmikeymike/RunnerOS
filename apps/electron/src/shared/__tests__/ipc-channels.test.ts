@@ -333,6 +333,8 @@ const EXPECTED_CHANNELS: string[] = [
   "secrets:initZero",
   "secrets:installZero",
   "secrets:list",
+  "secrets:monidBudgetGet",
+  "secrets:monidBudgetSet",
   "secrets:save",
   "secrets:testGenius",
   "secrets:zeroBudgetConfigure",

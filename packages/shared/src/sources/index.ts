@@ -63,6 +63,7 @@ export {
   isIconUrl,
   // Load operations
   loadSource,
+  materializeBuiltinSource,
   loadWorkspaceSources,
   loadAllSources,
   getEnabledSources,
@@ -128,6 +129,7 @@ export {
   getLottieSource,
   getVideoStudioSource,
   getGenesisLyricSource,
+  getMonidSource,
   getZeroSource,
   getDocsSource,
   getBuiltinSources,

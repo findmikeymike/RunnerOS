@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { CheckCircle2, ChevronDown, ExternalLink, Info, KeyRound, Loader2, LogOut, Mail, RefreshCcw, Save, Trash2, WalletCards, XCircle } from 'lucide-react'
+import { CheckCircle2, ChevronDown, ExternalLink, Globe2, Info, KeyRound, Loader2, LogOut, Mail, RefreshCcw, Save, Trash2, WalletCards, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { SettingsCard, SettingsSection } from '@/components/settings'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
-import type { LoadedSource, SourceCredentialScopeResult, UserSecretSummary, ZeroStatus } from '../../../shared/types'
+import type { LoadedSource, MonidBudgetStatus, SourceCredentialScopeResult, UserSecretSummary, ZeroStatus } from '../../../shared/types'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { navigate, routes } from '@/lib/navigate'
 
@@ -707,10 +707,17 @@ export default function SecretsSettingsPage() {
   const { activeWorkspaceId } = useAppShellContext()
   const [secrets, setSecrets] = React.useState<UserSecretSummary[]>([])
   const [sources, setSources] = React.useState<LoadedSource[]>([])
+  const [monid, setMonid] = React.useState<SourceCredentialScopeResult | null>(null)
+  const [monidBudget, setMonidBudget] = React.useState<MonidBudgetStatus | null>(null)
+  const [monidSingleCap, setMonidSingleCap] = React.useState('0.50')
+  const [monidWeeklyCap, setMonidWeeklyCap] = React.useState('10.00')
   const [zero, setZero] = React.useState<ZeroStatus | null>(null)
   const [selectedGroup, setSelectedGroup] = React.useState(SECRET_GROUPS[0] ?? '')
   const [draftValues, setDraftValues] = React.useState<Record<string, string>>({})
   const [loading, setLoading] = React.useState(false)
+  const [connectingMonid, setConnectingMonid] = React.useState(false)
+  const [disconnectingMonid, setDisconnectingMonid] = React.useState(false)
+  const [savingMonidBudget, setSavingMonidBudget] = React.useState(false)
   const [installing, setInstalling] = React.useState(false)
   const [busyServiceId, setBusyServiceId] = React.useState<string | null>(null)
   const [expandedServiceId, setExpandedServiceId] = React.useState<string | null>(null)
@@ -746,6 +753,8 @@ export default function SecretsSettingsPage() {
     setZero(null)
     setSources([])
     setGmailScope(null)
+    setMonid(null)
+    setMonidBudget(null)
     try {
       if (!activeWorkspaceId) {
         setAccessMessage('Select an active workspace to manage saved keys and connected service credentials.')
@@ -757,13 +766,19 @@ export default function SecretsSettingsPage() {
       setAccessMessage('Only the workspace Owner can view or change saved keys and connected service credentials.')
       setCanManageSecrets(canManage)
       if (!canManage) return
-      const [secretRows, zeroStatus, sourceRows, nextGmailScope] = await Promise.all([
+      const [secretRows, zeroStatus, sourceRows, nextGmailScope, monidStatus, monidBudgetStatus] = await Promise.all([
         window.electronAPI.listSecrets(activeWorkspaceId),
         window.electronAPI.getZeroStatus(activeWorkspaceId),
         window.electronAPI.getSources(activeWorkspaceId).catch(() => [] as LoadedSource[]),
         window.electronAPI.getSourceCredentialScope(activeWorkspaceId, 'gmail').catch(() => null),
+        window.electronAPI.getSourceCredentialScope(activeWorkspaceId, 'monid').catch(() => null),
+        window.electronAPI.getMonidBudget(activeWorkspaceId),
       ])
       setSecrets(secretRows)
+      setMonid(monidStatus)
+      setMonidBudget(monidBudgetStatus)
+      setMonidSingleCap(monidBudgetStatus.singleCallCapUsd.toFixed(2))
+      setMonidWeeklyCap(monidBudgetStatus.weeklyCapUsd.toFixed(2))
       setZero(zeroStatus)
       setZeroBudgetDraft(zeroStatus.budget?.weeklyLimitUsd === null || zeroStatus.budget?.weeklyLimitUsd === undefined
         ? ''
@@ -781,7 +796,6 @@ export default function SecretsSettingsPage() {
       setLoading(false)
     }
   }, [activeWorkspaceId])
-
   const connectGmail = React.useCallback(async () => {
     if (!activeWorkspaceId) return
     setBusyServiceId('google-workspace')
@@ -1126,6 +1140,66 @@ export default function SecretsSettingsPage() {
     )
   }
 
+  const connectMonid = async () => {
+    if (!activeWorkspaceId) {
+      toast.error('Open a workspace before connecting Monid')
+      return
+    }
+
+    setConnectingMonid(true)
+    try {
+      const result = await window.electronAPI.performOAuth({ sourceSlug: 'monid' })
+      if (!result.success) {
+        toast.error(result.error || 'Could not connect Monid')
+        return
+      }
+      toast.success('Monid connected')
+      await load()
+    } finally {
+      setConnectingMonid(false)
+    }
+  }
+
+  const disconnectMonid = async () => {
+    setDisconnectingMonid(true)
+    try {
+      const result = await window.electronAPI.oauthRevoke('monid')
+      if (!result.success) {
+        toast.error('Could not disconnect Monid')
+        return
+      }
+      toast.success('Monid disconnected')
+      await load()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not disconnect Monid')
+    } finally {
+      setDisconnectingMonid(false)
+    }
+  }
+
+  const saveMonidBudget = async () => {
+    const singleCallCapUsd = Number(monidSingleCap)
+    const weeklyCapUsd = Number(monidWeeklyCap)
+    if (!Number.isFinite(singleCallCapUsd) || singleCallCapUsd < 0 || !Number.isFinite(weeklyCapUsd) || weeklyCapUsd < 0) {
+      toast.error('Enter valid non-negative spend limits')
+      return
+    }
+
+    setSavingMonidBudget(true)
+    try {
+      if (!activeWorkspaceId) return
+      const status = await window.electronAPI.setMonidBudget(activeWorkspaceId, { singleCallCapUsd, weeklyCapUsd })
+      setMonidBudget(status)
+      setMonidSingleCap(status.singleCallCapUsd.toFixed(2))
+      setMonidWeeklyCap(status.weeklyCapUsd.toFixed(2))
+      toast.success('Monid spend limits saved')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not save Monid spend limits')
+    } finally {
+      setSavingMonidBudget(false)
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       <PanelHeader />
@@ -1152,7 +1226,8 @@ export default function SecretsSettingsPage() {
                         : service.id === 'zero'
                           ? zero?.installed === true && zero.walletConfigured
                         : serviceStatus(service, savedByName, sourceBySlug, draftValues) === 'ready'
-                    )).length
+                    )).length + (group === 'Essential' && monid?.hasEffectiveCredential ? 1 : 0)
+                    const serviceCount = groupServices.length + (group === 'Essential' ? 1 : 0)
                     return (
                       <button
                         key={group}
@@ -1166,7 +1241,7 @@ export default function SecretsSettingsPage() {
                         ].join(' ')}
                       >
                         <span>{group}</span>
-                        <span className={`text-[11px] ${group === 'Essential' ? 'text-[#f68245]/65' : 'text-white/34'}`}>{readyCount}/{groupServices.length}</span>
+                        <span className={`text-[11px] ${group === 'Essential' ? 'text-[#f68245]/65' : 'text-white/34'}`}>{readyCount}/{serviceCount}</span>
                       </button>
                     )
                   })}
@@ -1174,6 +1249,67 @@ export default function SecretsSettingsPage() {
               </SettingsCard>
 
               <div className="space-y-3">
+                {selectedGroup === 'Essential' ? (
+                  <SettingsCard className="!border-0 bg-[#111113] shadow-none">
+                    <div className="p-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <Globe2 className="h-4 w-4 text-[#f68245]" />
+                            <h3 className="text-sm font-semibold text-white/90">Monid</h3>
+                            {monid?.hasEffectiveCredential
+                              ? <CheckCircle2 className="h-4 w-4 text-emerald-400/80" />
+                              : <XCircle className="h-4 w-4 text-white/22" />}
+                            <span className="rounded-full bg-[#f05a28]/12 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#ff9a62]">Primary agent tool</span>
+                          </div>
+                          <p className="mt-1 max-w-3xl text-xs leading-4 text-white/38">
+                            One connected account gives agents external search, social, enrichment, media, and structured data tools. In-budget calls run automatically.
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          {monid?.hasEffectiveCredential ? (
+                            <>
+                              <Button variant="outline" size="sm" onClick={connectMonid} disabled={connectingMonid || disconnectingMonid}>
+                                {connectingMonid ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                                Reconnect
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={disconnectMonid} disabled={connectingMonid || disconnectingMonid}>
+                                {disconnectingMonid ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                                Disconnect
+                              </Button>
+                            </>
+                          ) : (
+                            <Button size="sm" onClick={connectMonid} disabled={connectingMonid}>
+                              {connectingMonid ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                              Connect Monid
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-4 flex flex-wrap items-end gap-3 rounded-[10px] bg-white/[0.025] px-3 py-3">
+                        <label className="space-y-1 text-[11px] text-white/45">
+                          <span>Single call max</span>
+                          <div className="flex h-8 w-28 items-center rounded-[8px] border border-white/[0.07] bg-black/20 px-2.5 focus-within:border-[#fb923c]/45">
+                            <span className="text-xs text-white/32">$</span>
+                            <input type="number" min="0" step="0.01" value={monidSingleCap} onChange={(event) => setMonidSingleCap(event.target.value)} className="min-w-0 flex-1 bg-transparent px-1.5 text-right text-sm text-white/82 outline-none" />
+                          </div>
+                        </label>
+                        <label className="space-y-1 text-[11px] text-white/45">
+                          <span>Rolling 7-day max</span>
+                          <div className="flex h-8 w-28 items-center rounded-[8px] border border-white/[0.07] bg-black/20 px-2.5 focus-within:border-[#fb923c]/45">
+                            <span className="text-xs text-white/32">$</span>
+                            <input type="number" min="0" step="0.01" value={monidWeeklyCap} onChange={(event) => setMonidWeeklyCap(event.target.value)} className="min-w-0 flex-1 bg-transparent px-1.5 text-right text-sm text-white/82 outline-none" />
+                          </div>
+                        </label>
+                        <Button variant="outline" size="sm" className="h-8" onClick={saveMonidBudget} disabled={savingMonidBudget}>
+                          {savingMonidBudget ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-2 h-3.5 w-3.5" />}
+                          Save limits
+                        </Button>
+                        {monidBudget ? <span className="pb-2 text-[11px] text-white/35">${monidBudget.spentLast7DaysUsd.toFixed(2)} spent · ${monidBudget.remainingWeeklyUsd.toFixed(2)} left</span> : null}
+                      </div>
+                    </div>
+                  </SettingsCard>
+                ) : null}
                 {services.map((service) => {
                   const presets = service.presetNames.map((name) => PRESET_BY_NAME.get(name)).filter(Boolean) as SecretPreset[]
                   const status = service.id === 'google-workspace'
