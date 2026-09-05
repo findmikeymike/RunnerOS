@@ -34,7 +34,12 @@ Review fixes landed alongside (see §7): the chat-launch path now passes
 a chat-launched campaign worker could lose the asset contract; both stores now
 refuse to write back a file that did not fully parse, closing a silent-data-loss
 path on hand-edited files that predates this work; and a zero memory budget
-still reports that memory exists.
+still reports that memory exists. A second review pass (`5429b7158`) then found
+the sessions-log serializer writing files its own parser could not read — a
+markdown rule in a summary truncated the entry, and a crafted summary could
+inject a phantom one — plus an archive path that silently dropped unparseable
+entries; all closed, with the parser now mirroring memory's fence tracking and
+frontmatter check rather than merely claiming to.
 
 Corrections to earlier assumptions, found while building: `compact_boundary`
 carries no summary text, so [`05-sessions-log.md`](./05-sessions-log.md)'s "capture
