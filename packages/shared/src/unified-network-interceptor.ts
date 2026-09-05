@@ -2091,6 +2091,67 @@ function synthesizeMalformedBodyResponse(
 // INTERCEPTED FETCH
 // ============================================================================
 
+// ---------------------------------------------------------------------------
+// OmniRoute transient failures
+// ---------------------------------------------------------------------------
+
+/**
+ * OmniRoute rotates across its own pool when a provider is exhausted, but some
+ * failures it cannot absorb — an upstream socket closing mid-flight — come back
+ * as an error carrying an explicit instruction to try again:
+ *
+ *   x-omniroute-recovery-action: retry
+ *   x-omniroute-recovery-next-step: The combo failed transiently. Retry ...
+ *
+ * Nothing read that, so a failure the gateway expected us to shrug off reached
+ * the artist as a dead turn. The keyless gateway is the default connection and
+ * has no fallback chain configured, so there was no second line either.
+ *
+ * Deliberately narrow: only when the gateway itself says `retry`, only when the
+ * request failed, and only twice. No other provider sends this header, so no
+ * other traffic can be affected.
+ */
+const OMNIROUTE_RECOVERY_HEADER = 'x-omniroute-recovery-action';
+const OMNIROUTE_MAX_RETRIES = 2;
+const OMNIROUTE_RETRY_BASE_DELAY_MS = 400;
+
+export function omniRouteWantsRetry(response: {
+  ok: boolean;
+  headers: { get(name: string): string | null };
+}): boolean {
+  if (response.ok) return false;
+  return response.headers.get(OMNIROUTE_RECOVERY_HEADER)?.trim().toLowerCase() === 'retry';
+}
+
+/**
+ * Can this request be sent a second time?
+ *
+ * A string body can. A stream has already been consumed by the first attempt,
+ * and replaying it would send an empty or truncated request — worse than the
+ * error we are trying to avoid.
+ */
+export function isReplayableRequestBody(body: unknown): boolean {
+  return body === undefined || body === null || typeof body === 'string';
+}
+
+export async function sendHonouringOmniRouteRetry(
+  send: () => Promise<Response>,
+  replayable: boolean,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((wake) => setTimeout(wake, ms)),
+): Promise<Response> {
+  let response = await send();
+  if (!replayable) return response;
+
+  for (let attempt = 0; attempt < OMNIROUTE_MAX_RETRIES && omniRouteWantsRetry(response); attempt += 1) {
+    // Release the failed response so the connection can be reused.
+    try { await response.body?.cancel(); } catch { /* already closed */ }
+    await sleep(OMNIROUTE_RETRY_BASE_DELAY_MS * (attempt + 1));
+    debugLog(`[omniroute] Gateway asked us to retry; attempt ${attempt + 2}`);
+    response = await send();
+  }
+  return response;
+}
+
 const originalFetch = globalThis.fetch.bind(globalThis);
 
 async function interceptedFetch(
@@ -2168,7 +2229,10 @@ async function interceptedFetch(
         rememberLastOutgoingRequest(url, parsed, adapter);
 
         debugLog(`[${adapter.name}] Intercepted request to ${url}`);
-        const response = await originalFetch(url, finalInit);
+        const response = await sendHonouringOmniRouteRetry(
+          () => originalFetch(url, finalInit),
+          isReplayableRequestBody(finalBody),
+        );
 
         // Process SSE response through adapter's stream processor
         const contentType = response.headers.get('content-type') ?? '';
@@ -2204,7 +2268,13 @@ async function interceptedFetch(
 
   const proxy = getProxyForUrl(url);
   const proxyInit = proxy ? { ...init, proxy } : init;
-  const response = await originalFetch(input, proxyInit);
+  // A Request carries its own body, which may already be a consumed stream, so
+  // only a plain replayable init is eligible on this path.
+  const replayable = !(input instanceof Request) && isReplayableRequestBody(proxyInit?.body);
+  const response = await sendHonouringOmniRouteRetry(
+    () => originalFetch(input, proxyInit),
+    replayable,
+  );
   return logResponse(response, url, startTime);
 }
 
