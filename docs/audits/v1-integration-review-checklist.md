@@ -14,7 +14,7 @@ Checked means reviewed with the evidence below, not merged to main or live-certi
 
 ## Next
 
-- [ ] Website final integration scan: publish/rollback, approval binding, schedules and existing-site editing. Earlier website reviews are reported complete; final pass is still pending.
+- [ ] Website final integration scan: 250 existing tests pass; five meaningful publishing, unsubscribe routing, routine retry, cadence replacement, and rollback bookkeeping findings remain. See `website-final-integration-review.md`. Review performed; fixes and live acceptance pending.
 - [ ] Apply the reviewed branch commits to main and rerun destination-tree checks. No merge or push was performed in this review.
 - [ ] Live board/PDF acceptance after integration. Isolated protocol evidence is not a full app UI acceptance test.
 

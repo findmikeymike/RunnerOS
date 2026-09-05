@@ -1,0 +1,25 @@
+# Website Final Integration Review
+
+Reviewed on `codex/artist-website-engine`, code at `4faf3f454`. Review only; no production code changed or live host contacted.
+
+## Necessary Fixes
+
+1. **P1: Publishing can upload a different build than the artist approved.** `packages/server-core/src/website/publish.ts:129` awaits adapter resolution and deploys mutable `dist/` after checking the manifest only once. `WebsiteService.deploy` does not participate in its build lock. A deterministic injected-adapter probe completed another build during resolution: publish returned success, uploaded `unapproved B`, recorded build `A`, and overwrote the newer manifest's lastBuild back to `A`. Freeze and verify the upload bytes, serialize shared mutations across service instances, and preserve intervening manifest changes. Retained rollback bytes must match the uploaded snapshot too.
+
+2. **P1: The generated unsubscribe page is omitted from Cloudflare's worker-first routes.** `packages/server-core/src/website/adapters/cloudflare.ts:219` configures only `/api/*`, with `not_found_handling: '404-page'` and compatibility date `2026-09-01`. The worker handles `/unsubscribe`, but browser navigation to it follows static-asset/404 handling instead. A non-navigation health fetch is not proof the fan-facing page opens. Route `/unsubscribe` explicitly and add a deployment-routing/browser-navigation check, not only a direct worker.fetch test. Cloudflare documents this navigation behavior: https://developers.cloudflare.com/workers/static-assets/routing/static-site-generation/ . No live deployment was tested.
+
+3. **P2: A failed routine build is not retried on the next run.** `WebsiteService.ts:1226` saves content before building. If build fails, the next plan sees those operations already applied and takes the no-operations return, replacing the failed brief. Probe: first result false, second true, only one build invocation total, no lastBuild and no site preview in the second brief. Persist pending work or detect content/build divergence and retry before declaring no work. Also preserve unresolved preview/approval work rather than replacing it with a quiet brief.
+
+4. **P2: Changing cadence can delete the working schedule before its replacement exists.** `apps/electron/src/renderer/components/app-shell/WebsitePage.tsx:193` deletes the old automation, then creates the replacement; cadence was already saved at line 338. A failed create leaves the manifest claiming a weekly/monthly routine with no actual schedule. Use a backend update/transaction with a stable automation identity and expose truthful state on failure. This is a source-verified failure path, not a live scheduler reproduction.
+
+5. **P2: Rollback can succeed remotely but fail before recording the result or disabling trusted mode.** `publish.ts:263` calls `retainDeploySnapshot` without handling failure, before saving live history and revoking trusted mode. A local copy/disk failure after successful deploy leaves the app reporting the old live version and keeps auto-publishing enabled. Normal publish already handles this class of snapshot failure; apply equivalent post-deploy bookkeeping to rollback. Source-verified; no disk failure injected. Preserve the restored designHash as part of the new record as well.
+
+## Evidence
+
+- `bun test packages/shared/src/website packages/server-core/src/website tools/site-builder`: 206 pass, 0 fail, 15 files. Bun directory discovery omitted three tracked service/publish test files, so those were run explicitly.
+- `env CRAFT_CONFIG_DIR=/tmp/website-review-test-config bun test ./packages/server-core/src/website/publish.test.ts ./packages/server-core/src/website/routine-run.test.ts ./packages/server-core/src/website/WebsiteService.test.ts`: 44 pass, 0 fail. Initial sandbox run failed three loopback preview cases; permitted localhost rerun passed all 44.
+- Local scratch probes reproduced findings 1 and 3. No artist files, credentials, messages, or external deployment used. Probe script removed after review.
+- Cadence UI does create a real automation on its happy path; the claim that it only saves a label is rejected.
+- Existing-site support was not live-certified against a real CMS. Domain cutover, signup delivery, unsubscribe navigation, and production rollback still require deliberate live acceptance after fixes.
+
+Do not mark website integration complete until these findings are fixed and checked.
