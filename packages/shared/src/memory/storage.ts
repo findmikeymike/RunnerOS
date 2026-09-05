@@ -43,6 +43,7 @@ import {
   type MemoryParseWarning,
   type MemoryScope,
   type MemoryStorageOptions,
+  type MemoryWorkspaceScope,
   type SaveMemoryInput,
   type UpdateMemoryInput,
 } from './types.ts';
@@ -217,6 +218,11 @@ function parseEntry(rawFrontmatter: string, rawBody: string): { entry?: MemoryEn
     return { warnings };
   }
 
+  const rawScope = typeof data.workspaceScope === 'string' ? data.workspaceScope.trim() : '';
+  const workspaceScope = MEMORY_WORKSPACE_SCOPES.includes(rawScope as MemoryWorkspaceScope)
+    ? (rawScope as MemoryWorkspaceScope)
+    : undefined;
+
   return {
     entry: {
       name: entryName,
@@ -224,11 +230,20 @@ function parseEntry(rawFrontmatter: string, rawBody: string): { entry?: MemoryEn
       created,
       updated: updated || undefined,
       expires: expires || undefined,
+      // Absent provenance is not a warning: every entry written before this
+      // existed has none, and they are all effectively HQ-scoped.
+      workspaceScope,
+      workspaceId: typeof data.workspaceId === 'string' ? data.workspaceId.trim() || undefined : undefined,
+      workspaceLabel: typeof data.workspaceLabel === 'string'
+        ? data.workspaceLabel.replace(/\s+/g, ' ').trim() || undefined
+        : undefined,
       body: parsed.content.trim(),
     },
     warnings,
   };
 }
+
+const MEMORY_WORKSPACE_SCOPES: readonly MemoryWorkspaceScope[] = ['hq', 'campaign', 'lab', 'general'];
 
 function coerceYamlDate(value: unknown): string | undefined {
   if (typeof value === 'string') return value.trim();
@@ -372,6 +387,9 @@ export function serializeMemoryFile(envelope: MemoryFileEnvelope, entries: Memor
       ];
       if (entry.updated) lines.push(`updated: ${quoteYamlString(entry.updated)}`);
       if (entry.expires) lines.push(`expires: ${quoteYamlString(entry.expires)}`);
+      if (entry.workspaceScope) lines.push(`workspaceScope: ${entry.workspaceScope}`);
+      if (entry.workspaceId) lines.push(`workspaceId: ${quoteYamlString(entry.workspaceId)}`);
+      if (entry.workspaceLabel) lines.push(`workspaceLabel: ${quoteYamlString(entry.workspaceLabel.replace(/\s+/g, ' ').trim())}`);
       lines.push('---', '', entry.body.trimEnd());
       return lines.join('\n').trimEnd();
     })
@@ -819,6 +837,11 @@ export async function saveMemoryEntry(
       type: input.type,
       created: todayIsoDate(),
       expires: input.expires?.trim() || undefined,
+      // Stamped at write time, because it is only knowable here: nothing later
+      // can reconstruct which workspace an agent was standing in.
+      workspaceScope: input.workspaceScope,
+      workspaceId: input.workspaceId?.trim() || undefined,
+      workspaceLabel: input.workspaceLabel?.replace(/\s+/g, ' ').trim() || undefined,
       body: input.body.trim(),
     };
     loaded.entries.push(entry);

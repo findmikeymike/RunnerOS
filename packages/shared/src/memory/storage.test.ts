@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -546,5 +546,66 @@ describe('memory event log rotation', () => {
 
     const generations = readdirSync(root).filter((f) => f.startsWith('.memory-events'));
     expect(generations.sort()).toEqual([MEMORY_EVENTS_FILE, MEMORY_EVENTS_ROTATED_FILE].sort());
+  });
+});
+
+describe('memory provenance round-trip', () => {
+  test('stamps and reloads where a fact was learned', async () => {
+    await saveMemoryEntry({
+      scope: 'agent',
+      agentSlug: 'artist-manager',
+      name: 'rollout-plan',
+      type: 'project',
+      body: 'We lead this rollout with the B-side.',
+      workspaceScope: 'campaign',
+      workspaceId: 'ws-neon',
+      workspaceLabel: 'Neon Nights',
+    }, options);
+
+    const [entry] = listAgentMemoryEntries('artist-manager', options);
+    expect(entry!.workspaceScope).toBe('campaign');
+    expect(entry!.workspaceId).toBe('ws-neon');
+    expect(entry!.workspaceLabel).toBe('Neon Nights');
+  });
+
+  test('a save with no provenance stays unstamped rather than guessing', async () => {
+    await saveMemoryEntry({
+      scope: 'user',
+      name: 'timezone',
+      type: 'user',
+      body: 'Detroit.',
+    }, options);
+
+    const [entry] = listUserMemoryEntries(options);
+    expect(entry!.workspaceScope).toBeUndefined();
+    expect(entry!.workspaceId).toBeUndefined();
+  });
+
+  test('survives an apostrophe in the workspace label', async () => {
+    await saveMemoryEntry({
+      scope: 'agent',
+      agentSlug: 'artist-manager',
+      name: 'note',
+      type: 'project',
+      body: 'Body.',
+      workspaceScope: 'campaign',
+      workspaceId: 'ws-1',
+      workspaceLabel: "Mikey's Comeback",
+    }, options);
+
+    expect(listAgentMemoryEntries('artist-manager', options)[0]!.workspaceLabel).toBe("Mikey's Comeback");
+  });
+
+  test('ignores an unrecognised scope rather than trusting a hand-edit', () => {
+    const file = getAgentMemoryFile('artist-manager', options);
+    mkdirSync(join(root, 'agents', 'artist-manager'), { recursive: true });
+    writeFileSync(file, [
+      '---', 'agent: artist-manager', 'version: 1', '---', '',
+      '---', "name: 'note'", 'type: project', "created: '2026-03-14'", 'workspaceScope: nonsense', '---', '', 'Body.', '',
+    ].join('\n'), 'utf-8');
+
+    const entries = listAgentMemoryEntries('artist-manager', options);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.workspaceScope).toBeUndefined();
   });
 });

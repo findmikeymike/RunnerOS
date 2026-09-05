@@ -122,3 +122,82 @@ describe('memory section budget', () => {
     expect(text).not.toContain('not shown here');
   });
 });
+
+describe('campaign provenance', () => {
+  const campaign = (name: string, workspaceId: string, label: string, type: MemoryEntry['type'] = 'project'): MemoryEntry => ({
+    name,
+    type,
+    created: '2026-03-14',
+    updated: '2026-03-14',
+    workspaceScope: 'campaign',
+    workspaceId,
+    workspaceLabel: label,
+    body: 'We lead this rollout with the B-side.',
+  });
+
+  test('a campaign fact read inside its own campaign needs no hint', () => {
+    const text = buildMemorySectionsText([], [campaign('rollout', 'ws-neon', 'Neon Nights')], {
+      currentWorkspaceId: 'ws-neon',
+    });
+    expect(text).not.toContain('learned in');
+  });
+
+  test('the same fact read elsewhere says where and when it was learned', () => {
+    const text = buildMemorySectionsText([], [campaign('rollout', 'ws-neon', 'Neon Nights')], {
+      currentWorkspaceId: 'ws-hq',
+    });
+    expect(text).toContain('learned in: Neon Nights on 2026-03-14');
+  });
+
+  test('an entry written before provenance existed reads exactly as it always did', () => {
+    const legacy = makeMemory('old-fact', 'Body.');
+    const text = buildMemorySectionsText([], [legacy], { currentWorkspaceId: 'ws-hq' });
+    expect(text).toContain('"old-fact"');
+    expect(text).not.toContain('learned in');
+  });
+
+  test('an HQ fact never carries a campaign hint', () => {
+    const hq: MemoryEntry = { ...campaign('voice', 'ws-hq', 'Artist HQ', 'user'), workspaceScope: 'hq' };
+    expect(buildMemorySectionsText([], [hq], { currentWorkspaceId: 'ws-neon' })).not.toContain('learned in');
+  });
+
+  test('over budget, a stale campaign note yields to a career-wide fact', () => {
+    // The campaign note is newer, so pure recency would keep it and drop the
+    // career-wide fact. Relevance has to win.
+    const careerWide = { ...makeMemory('artist-voice', 'Dry and understated.', '2026-01-01'), type: 'user' as const };
+    const foreign = campaign('rollout', 'ws-neon', 'Neon Nights');
+
+    const selection = selectRenderableMemoryEntries([careerWide, foreign], {
+      maxEntries: 1,
+      currentWorkspaceId: 'ws-hq',
+    });
+
+    expect(selection.entries.map((e) => e.name)).toEqual(['artist-voice']);
+    expect(selection.omitted).toBe(1);
+  });
+
+  test('inside its own campaign that note is not demoted', () => {
+    const careerWide = { ...makeMemory('artist-voice', 'Dry and understated.', '2026-01-01'), type: 'user' as const };
+    const local = campaign('rollout', 'ws-neon', 'Neon Nights');
+
+    const selection = selectRenderableMemoryEntries([careerWide, local], {
+      maxEntries: 1,
+      currentWorkspaceId: 'ws-neon',
+    });
+
+    // Recency decides again, and the campaign note is the newer of the two.
+    expect(selection.entries.map((e) => e.name)).toEqual(['rollout']);
+  });
+
+  test('only project notes are demoted — a preference learned in a campaign is still a preference', () => {
+    const feedback = { ...campaign('caption-style', 'ws-neon', 'Neon Nights', 'feedback'), created: '2026-03-14' };
+    const olderCareerWide = { ...makeMemory('artist-voice', 'Dry.', '2026-01-01'), type: 'user' as const };
+
+    const selection = selectRenderableMemoryEntries([olderCareerWide, feedback], {
+      maxEntries: 1,
+      currentWorkspaceId: 'ws-hq',
+    });
+
+    expect(selection.entries.map((e) => e.name)).toEqual(['caption-style']);
+  });
+});

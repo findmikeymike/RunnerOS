@@ -46,6 +46,11 @@ export interface MemorySectionOptions {
   maxEntries?: number;
   /** Max characters per section. Defaults to `DEFAULT_MAX_MEMORY_CHARS`. */
   maxChars?: number;
+  /**
+   * Workspace the agent is running in. Enables the provenance hint on facts
+   * learned elsewhere, and lets the budget prefer facts that still apply here.
+   */
+  currentWorkspaceId?: string;
 }
 
 export interface MemorySectionSelection {
@@ -76,19 +81,28 @@ export function selectRenderableMemoryEntries(
   const maxEntries = Math.max(0, opts.maxEntries ?? DEFAULT_MAX_MEMORY_ENTRIES);
   const maxChars = Math.max(0, opts.maxChars ?? DEFAULT_MAX_MEMORY_CHARS);
 
-  const totalChars = entries.reduce((sum, entry) => sum + formatEntry(entry).length, 0);
+  const totalChars = entries.reduce((sum, entry) => sum + formatEntry(entry, opts.currentWorkspaceId).length, 0);
   if (entries.length <= maxEntries && totalChars <= maxChars) {
     return { entries: [...entries], omitted: 0 };
   }
 
   const order = new Map(entries.map((entry, index) => [entry, index]));
-  const byRecency = [...entries].sort((a, b) => entryTimestamp(b) - entryTimestamp(a));
+  // Rank before recency: a project note from a campaign the agent is not in is
+  // the most likely thing in the store to be stale, so it yields the budget
+  // first. It stays findable through `recall_memory` — it just stops competing
+  // with facts that still apply here. Everything else keeps recency order.
+  const priority = (entry: MemoryEntry): number => (
+    entry.type === 'project' && isForeignCampaignEntry(entry, opts.currentWorkspaceId) ? 1 : 0
+  );
+  const byRelevance = [...entries].sort((a, b) => (
+    priority(a) - priority(b) || entryTimestamp(b) - entryTimestamp(a)
+  ));
 
   const kept: MemoryEntry[] = [];
   let usedChars = 0;
-  for (const entry of byRecency) {
+  for (const entry of byRelevance) {
     if (kept.length >= maxEntries) break;
-    const cost = formatEntry(entry).length;
+    const cost = formatEntry(entry, opts.currentWorkspaceId).length;
     // Always admit the newest entry, even if it alone exceeds the budget —
     // an empty section would hide that memory exists at all.
     if (kept.length > 0 && usedChars + cost > maxChars) continue;
@@ -126,10 +140,25 @@ function quoteBody(body: string): string {
     .join('\n');
 }
 
-function formatEntry(entry: MemoryEntry): string {
+/**
+ * Whether this entry was learned somewhere other than where the agent is now.
+ *
+ * A campaign fact read inside its own campaign is simply current, so it gets no
+ * hint. Read anywhere else it needs one, or "we lead this rollout with the
+ * B-side" is indistinguishable from how the artist releases every record.
+ */
+function isForeignCampaignEntry(entry: MemoryEntry, currentWorkspaceId?: string): boolean {
+  if (entry.workspaceScope !== 'campaign') return false;
+  return !entry.workspaceId || entry.workspaceId !== currentWorkspaceId;
+}
+
+function formatEntry(entry: MemoryEntry, currentWorkspaceId?: string): string {
   const meta = [
     `type: ${entry.type}`,
     entry.expires ? `expires: ${entry.expires}` : undefined,
+    isForeignCampaignEntry(entry, currentWorkspaceId)
+      ? `learned in: ${entry.workspaceLabel || 'another campaign'} on ${entry.created}`
+      : undefined,
   ]
     .filter(Boolean)
     .join('; ');
@@ -145,6 +174,7 @@ export function buildMemoryEntrySection(
   header: string,
   entries: ReadonlyArray<MemoryEntry>,
   omitted = 0,
+  currentWorkspaceId?: string,
 ): string {
   if (entries.length === 0 && omitted <= 0) return '';
   // Say what is missing and how to reach it. An agent that knows memories were
@@ -154,7 +184,7 @@ export function buildMemoryEntrySection(
   const note = omitted > 0
     ? `[${omitted} older ${omitted === 1 ? 'entry is' : 'entries are'} not shown here. Search them with recall_memory.]`
     : '';
-  const body = entries.map(formatEntry).join('\n\n');
+  const body = entries.map((entry) => formatEntry(entry, currentWorkspaceId)).join('\n\n');
   const parts = [body, note].filter((part) => part.length > 0);
   return `${header}\n${MEMORY_TRUST_NOTICE}\n\n${parts.join('\n\n')}`;
 }
@@ -174,8 +204,8 @@ export function buildMemorySectionsText(
   const user = selectRenderableMemoryEntries(selectActiveMemoryEntries(userEntries, opts), opts);
   const agent = selectRenderableMemoryEntries(selectActiveMemoryEntries(agentEntries, opts), opts);
   const sections = [
-    buildMemoryEntrySection(USER_MEMORY_HEADER, user.entries, user.omitted),
-    buildMemoryEntrySection(AGENT_MEMORY_HEADER, agent.entries, agent.omitted),
+    buildMemoryEntrySection(USER_MEMORY_HEADER, user.entries, user.omitted, opts.currentWorkspaceId),
+    buildMemoryEntrySection(AGENT_MEMORY_HEADER, agent.entries, agent.omitted, opts.currentWorkspaceId),
   ].filter((section) => section.length > 0);
   return sections.join('\n\n');
 }

@@ -46,12 +46,33 @@ export interface MemoryFileEnvelope {
   agent?: string;
 }
 
+/**
+ * Which kind of workspace a memory was written in.
+ *
+ * Memory is global per agent, so without this a fact learned inside one
+ * campaign reads in every other campaign — and in HQ — as though it were a
+ * standing truth about the artist. "We lead this rollout with the B-side" is
+ * not "this is how we release records".
+ */
+export type MemoryWorkspaceScope = 'hq' | 'campaign' | 'lab' | 'general';
+
 export interface MemoryEntry {
   name: string;
   type: MemoryEntryType;
   created: string;
   updated?: string;
   expires?: string;
+  /**
+   * Where this was learned. Absent on entries written before provenance
+   * existed, which are treated as HQ — what they effectively were.
+   *
+   * Deliberately not a nested object: the file is meant to be hand-edited, and
+   * every other field in this frontmatter is a flat scalar.
+   */
+  workspaceScope?: MemoryWorkspaceScope;
+  workspaceId?: string;
+  /** Human-readable workspace name, for the rendered provenance hint. */
+  workspaceLabel?: string;
   body: string;
 }
 
@@ -82,6 +103,10 @@ export interface SaveMemoryInput {
   type: MemoryEntryType;
   body: string;
   expires?: string;
+  /** Where this is being learned. Stamped by the caller that owns the session. */
+  workspaceScope?: MemoryWorkspaceScope;
+  workspaceId?: string;
+  workspaceLabel?: string;
   /**
    * Bypass the tombstone block. Defaults to false. Set true ONLY for
    * user-initiated saves (UI manual add); agent tool calls must leave it

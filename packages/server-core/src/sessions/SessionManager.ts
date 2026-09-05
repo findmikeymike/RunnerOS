@@ -660,6 +660,11 @@ async function mutateMemory(
       type,
       body,
       expires: typeof input.expires === 'string' ? input.expires : undefined,
+      // Only knowable at write time — nothing later can reconstruct which
+      // workspace the agent was standing in when it learned this.
+      workspaceScope: input.workspaceScope as SaveMemoryInput['workspaceScope'],
+      workspaceId: typeof input.workspaceId === 'string' ? input.workspaceId : undefined,
+      workspaceLabel: typeof input.workspaceLabel === 'string' ? input.workspaceLabel : undefined,
       event,
     } satisfies SaveMemoryInput)
     return { ok: true, scope, name: saved.name, file: undefined }
@@ -2988,6 +2993,7 @@ export class SessionManager implements ISessionManager {
         userMemoryEntries,
         agentMemoryEntries,
         artistWorkspaceScope: ws.artistWorkspaceScope,
+        currentWorkspaceId: ws.id,
         recentSessions: loadRecentSessionEntries(agent.slug),
       },
     )
@@ -8858,7 +8864,17 @@ user a clickable link to where the thing now lives.`
             return { ok: false, scope, name: input.name, error: directUserMemoryPolicyError(managed.spawnedFromAgent) }
           }
           const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
-          const result = await mutateMemory('save', scope, { ...input }, agentSlug, {
+          const result = await mutateMemory('save', scope, {
+            ...input,
+            // USER.md is the cross-agent, career-wide layer by definition, so a
+            // campaign stamp there would be misleading. Only agent memory,
+            // which is where release-specific facts land, carries provenance.
+            ...(scope === 'agent' ? {
+              workspaceScope: managed.workspace.artistWorkspaceScope,
+              workspaceId: managed.workspace.id,
+              workspaceLabel: managed.workspace.name,
+            } : {}),
+          }, agentSlug, {
             source: 'agent_tool',
             runId: managed.id,
             actor: managed.spawnedFromAgent?.agentSlug ?? 'session',

@@ -119,6 +119,12 @@ export interface AgentPromptMemoryOptions {
    * artist and one that knows where they left off.
    */
   recentSessions?: SessionLogEntry[];
+  /**
+   * Workspace this session runs in. Lets memory learned in another campaign
+   * carry a provenance hint, and lets the injection budget prefer facts that
+   * still apply here.
+   */
+  currentWorkspaceId?: string;
 }
 
 /**
@@ -146,6 +152,7 @@ export function composeAgentSystemPrompt(
   const memorySection = buildMemorySection(
     memory.userMemoryEntries ?? [],
     memory.agentMemoryEntries ?? [],
+    memory.currentWorkspaceId,
   );
   const recentSessionsSection = buildRecentSessionsSection(memory.recentSessions ?? []);
   const agentCatalogSection = buildAgentCatalogSection(agentCatalog);
@@ -371,8 +378,9 @@ export function buildAgentCatalogSection(agents: AgentCatalogEntry[]): string {
 export function buildMemorySection(
   userEntries: MemoryEntry[],
   agentEntries: MemoryEntry[],
+  currentWorkspaceId?: string,
 ): string {
-  return buildMemorySectionsText(userEntries, agentEntries);
+  return buildMemorySectionsText(userEntries, agentEntries, { currentWorkspaceId });
 }
 
 function collectSkillBullets(declaredSlugs: string[], skills: PromptSkill[]): string[] {

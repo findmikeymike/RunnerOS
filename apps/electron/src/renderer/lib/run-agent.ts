@@ -80,6 +80,7 @@ export function buildAgentCreateSessionOptions(
     userMemoryEntries?: MemoryEntry[]
     agentMemoryEntries?: MemoryEntry[]
     recentSessions?: SessionLogEntry[]
+    currentWorkspaceId?: string
     /**
      * Which kind of Artist OS workspace this session runs in. The server path
      * has always passed this; the chat path did not, and fell back to sniffing
@@ -129,6 +130,7 @@ export function buildAgentCreateSessionOptions(
           agentMemoryEntries: context.agentMemoryEntries,
           artistWorkspaceScope: context.artistWorkspaceScope,
           recentSessions: context.recentSessions,
+          currentWorkspaceId: context.currentWorkspaceId,
         },
       )
     : agent.systemPrompt
@@ -296,9 +298,9 @@ export async function openAgentSessionComposer(params: {
   // gets a composed system prompt (persona body + bundle footer) and any
   // missing slugs are dropped from agentSkillSlugs/enabledSourceSlugs.
   const context = launchSkills && params.sources
-    ? { skills: launchSkills, sources: params.sources, contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries, artistWorkspaceScope, recentSessions }
+    ? { skills: launchSkills, sources: params.sources, contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries, artistWorkspaceScope, recentSessions, currentWorkspaceId: params.workspaceId }
     : contextDocs.length > 0 || userMemoryEntries.length > 0 || agentMemoryEntries.length > 0 || (params.agentCatalog?.length ?? 0) > 0 || artistWorkspaceScope || recentSessions.length > 0
-      ? { skills: [], sources: [], contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries, artistWorkspaceScope, recentSessions }
+      ? { skills: [], sources: [], contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries, artistWorkspaceScope, recentSessions, currentWorkspaceId: params.workspaceId }
       : undefined
 
   const session = await params.onCreateSession(
