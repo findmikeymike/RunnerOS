@@ -14,9 +14,9 @@ const PROVIDER_PREFERRED_TIERS: Record<string, { best: string; default_: string;
     cheap: 'pi/openrouter/owl-alpha',
   },
   omniroute: {
-    best: 'auto/best',
-    default_: 'auto',
-    cheap: 'auto/fast',
+    best: 'auto/best-free',
+    default_: 'auto/best-free',
+    cheap: 'auto/best-free',
   },
 }
 

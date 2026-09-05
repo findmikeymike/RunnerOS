@@ -98,7 +98,7 @@ const ANTHROPIC_PRESETS: Preset[] = [
   { key: 'openai-us', label: 'OpenAI US', url: 'https://us.api.openai.com/v1', placeholder: 'sk-...' },
   { key: 'google', label: 'Google AI Studio', url: 'https://generativelanguage.googleapis.com/v1beta', placeholder: 'AIza...' },
   { key: 'openrouter', label: 'OpenRouter', url: 'https://openrouter.ai/api/v1', placeholder: 'sk-or-...' },
-  { key: 'omniroute', label: 'OmniRoute Gateway', url: '', placeholder: 'OmniRoute inference key' },
+  { key: 'omniroute', label: 'OmniRoute Auto', url: 'http://127.0.0.1:20128/v1' },
   { key: 'azure-openai-responses', label: 'Azure OpenAI', url: '', placeholder: 'Paste your key here...' },
   { key: 'amazon-bedrock', label: 'Amazon Bedrock', url: 'https://bedrock-runtime.us-east-1.amazonaws.com', placeholder: 'AKIA...' },
   { key: 'groq', label: 'Groq', url: 'https://api.groq.com/openai/v1', placeholder: 'gsk_...' },
@@ -312,6 +312,8 @@ export function ApiKeyInput({
     // (Default provider presets hide the field entirely, others default to provider model IDs when empty)
     if (preset.key === 'ollama') {
       setConnectionDefaultModel('qwen3-coder')
+    } else if (preset.key === 'omniroute') {
+      setConnectionDefaultModel('auto/best-free')
     } else if (preset.key === 'openrouter' || preset.key === 'vercel-ai-gateway') {
       setConnectionDefaultModel(providerType === 'openai' ? COMPAT_OPENAI_DEFAULTS : COMPAT_ANTHROPIC_DEFAULTS)
     } else if (preset.key === 'minimax-global' || preset.key === 'minimax-cn') {
@@ -459,7 +461,7 @@ export function ApiKeyInput({
   return (
     <form id={formId} onSubmit={handleSubmit} className="space-y-6">
       {/* API Key — hidden for Bedrock (uses IAM/Environment auth) */}
-      {!isBedrock && (<div className="space-y-2">
+      {!isBedrock && !isOmniRoute && (<div className="space-y-2">
         <Label htmlFor="api-key">API Key</Label>
         <div className={cn(
           "relative rounded-md shadow-minimal transition-colors",
@@ -521,7 +523,7 @@ export function ApiKeyInput({
           </DropdownMenu>
         </div>
         {/* Base URL input - hidden for default provider presets (Anthropic/OpenAI) and Bedrock */}
-        {!isDefaultProviderPreset && !isBedrock && (
+        {!isDefaultProviderPreset && !isBedrock && !isOmniRoute && (
           <div className={cn(
             "rounded-md shadow-minimal transition-colors",
             "bg-foreground-2 focus-within:bg-background"
@@ -558,8 +560,16 @@ export function ApiKeyInput({
             <p className="text-xs text-destructive">{omniDiscoveryError}</p>
           )}
           <p className="text-xs leading-relaxed text-foreground/40">
-            {t('apiSetup.omniroute.dataNotice')}
+            Built into Artist OS. Starts on a free-only automatic route; no key or CLI required.
           </p>
+          <button
+            type="button"
+            onClick={() => window.electronAPI.openUrl('http://127.0.0.1:20128/dashboard/providers')}
+            disabled={isDisabled}
+            className="text-xs font-medium text-foreground/60 hover:text-foreground disabled:opacity-40"
+          >
+            Add OpenRouter or another paid provider
+          </button>
         </div>
       )}
 

@@ -1,5 +1,7 @@
 # Build artifacts for DMG packaging
-vendor/
+vendor/*
+!vendor/omniroute-runtime/
+vendor/omniroute-runtime/node_modules/
 packages/
 release/
 release-artist-os/

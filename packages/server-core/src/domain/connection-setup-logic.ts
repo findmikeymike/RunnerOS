@@ -176,6 +176,12 @@ export const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
     authType: 'api_key',
     // piAuthProvider set dynamically from setup.piAuthProvider
   },
+  'omniroute': {
+    name: 'OmniRoute Auto',
+    providerType: 'pi_compat',
+    authType: 'none',
+    piAuthProvider: 'omniroute',
+  },
 }
 
 // ============================================================
@@ -242,14 +248,20 @@ export function createBuiltInConnection(slug: string, baseUrl?: string | null): 
     name = `${name} ${suffixMatch[1]}`
   }
 
+  const isEmbeddedOmniRoute = baseSlug === 'omniroute'
+
   return {
     slug,
     name,
     providerType,
     authType,
-    models: getDefaultModelsForConnection(providerType, template.piAuthProvider),
-    defaultModel: getDefaultModelForConnection(providerType, template.piAuthProvider),
-    modelSelectionMode: providerType === 'pi' ? 'automaticallySyncedFromProvider' : undefined,
+    baseUrl: isEmbeddedOmniRoute ? normalizeOmniRouteBaseUrl(baseUrl ?? undefined) : undefined,
+    customEndpoint: isEmbeddedOmniRoute ? { api: 'openai-completions' } : undefined,
+    models: isEmbeddedOmniRoute ? ['auto/best-free', 'auto/best-free', 'auto/best-free'] : getDefaultModelsForConnection(providerType, template.piAuthProvider),
+    defaultModel: isEmbeddedOmniRoute ? 'auto/best-free' : getDefaultModelForConnection(providerType, template.piAuthProvider),
+    modelSelectionMode: isEmbeddedOmniRoute
+      ? 'userDefined3Tier'
+      : providerType === 'pi' ? 'automaticallySyncedFromProvider' : undefined,
     piAuthProvider: template.piAuthProvider,
     createdAt: Date.now(),
   }

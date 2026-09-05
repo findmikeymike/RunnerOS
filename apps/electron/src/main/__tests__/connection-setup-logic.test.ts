@@ -100,6 +100,23 @@ describe('createBuiltInConnection', () => {
     expect(conn.modelSelectionMode).toBe('automaticallySyncedFromProvider')
   })
 
+  it('creates a keyless embedded OmniRoute auto connection', () => {
+    const conn = createBuiltInConnection('omniroute', 'http://127.0.0.1:20128')
+
+    expect(conn).toMatchObject({
+      slug: 'omniroute',
+      name: 'OmniRoute Auto',
+      providerType: 'pi_compat',
+      authType: 'none',
+      baseUrl: 'http://127.0.0.1:20128/v1',
+      customEndpoint: { api: 'openai-completions' },
+      models: ['auto/best-free', 'auto/best-free', 'auto/best-free'],
+      defaultModel: 'auto/best-free',
+      piAuthProvider: 'omniroute',
+      modelSelectionMode: 'userDefined3Tier',
+    })
+  })
+
   it('handles numeric suffix slugs (anthropic-api-2) by deriving from base template', () => {
     const conn = createBuiltInConnection('anthropic-api-2')
     expect(conn.slug).toBe('anthropic-api-2')

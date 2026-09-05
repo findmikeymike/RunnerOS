@@ -17,13 +17,13 @@ describe('ApiKeyInput tier hydration helpers', () => {
       { id: 'provider/model', name: 'Provider model', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: false },
       { id: 'auto/fast', name: 'Fast', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: false },
       { id: 'auto', name: 'Auto', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: false },
-      { id: 'auto/best', name: 'Best', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: true },
+      { id: 'auto/best-free', name: 'Best free', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: true },
     ]
 
     expect(resolveTierModels(models, undefined, 'omniroute')).toEqual({
-      best: 'auto/best',
-      default_: 'auto',
-      cheap: 'auto/fast',
+      best: 'auto/best-free',
+      default_: 'auto/best-free',
+      cheap: 'auto/best-free',
     })
   })
 

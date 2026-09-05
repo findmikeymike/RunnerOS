@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
+import { createBuiltInConnection } from '@craft-agent/server-core/domain'
 import { createHash, randomUUID } from 'crypto'
 import { hostname, homedir } from 'os'
 import * as Sentry from '@sentry/electron/main'
@@ -91,7 +92,7 @@ import { setSearchPlatform, setImageProcessor } from '@craft-agent/server-core/s
 import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
 import { loadWindowState, saveWindowState } from './window-state'
-import { getWorkspaces, getWorkspaceByNameOrId, loadStoredConfig, addWorkspace, saveConfig } from '@craft-agent/shared/config'
+import { getWorkspaces, getWorkspaceByNameOrId, loadStoredConfig, addWorkspace, saveConfig, getLlmConnections, addLlmConnection, updateLlmConnection } from '@craft-agent/shared/config'
 import { getDefaultWorkspacesDir } from '@craft-agent/shared/workspaces'
 import { initializeDocs } from '@craft-agent/shared/docs'
 import { initializeReleaseNotes } from '@craft-agent/shared/release-notes'
@@ -108,6 +109,11 @@ import { registerOutputAssetHandler } from './output-asset-protocol'
 import { registerProsodyIpcHandlers } from './prosody-engine'
 import { registerChatDictationIpcHandlers } from './chat-dictation'
 import { createArtistManagerMoonshine, type ArtistManagerMoonshine } from './artist-manager-moonshine'
+import {
+  EmbeddedOmniRoute,
+  EMBEDDED_OMNIROUTE_BASE_URL,
+  resolveEmbeddedOmniRoutePaths,
+} from './embedded-omniroute'
 import log, { isDebugMode, mainLog, getLogFilePath, getMessagingGatewayLogFilePath, messagingGatewayLog } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { registerPiModelResolver } from '@craft-agent/shared/config'
@@ -236,6 +242,7 @@ let messagingHandle: MessagingBootstrapHandle | null = null
 let triggerServerHandle: { url: string; stop: () => Promise<void> } | null = null
 let artistManagerVoiceProxy: ArtistManagerVoiceProxy | null = null
 let artistManagerMoonshine: ArtistManagerMoonshine | null = null
+let embeddedOmniRoute: EmbeddedOmniRoute | null = null
 
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
@@ -366,6 +373,29 @@ async function createInitialWindows(): Promise<void> {
     mainLog.info('Created default workspace on first run')
   }
 
+  // Every Artist OS profile gets the local keyless route. Existing users keep
+  // their selected/default provider; first-time users get OmniRoute by default
+  // because addLlmConnection makes the first connection the default.
+  const existingLlmConnections = getLlmConnections()
+  if (RUNTIME_IDENTITY.variant === 'artist-os') {
+    const existingOmniRoute = existingLlmConnections.find((connection) => connection.piAuthProvider === 'omniroute')
+    if (!existingOmniRoute) {
+      const connection = createBuiltInConnection('omniroute', EMBEDDED_OMNIROUTE_BASE_URL)
+      if (addLlmConnection(connection)) {
+        mainLog.info('[omniroute] Added keyless Auto connection for first use')
+      }
+    } else if (
+      existingOmniRoute.defaultModel === 'auto/best-free'
+      && existingOmniRoute.models?.join(',') === 'auto/best-free,auto,auto/fast'
+    ) {
+      updateLlmConnection(existingOmniRoute.slug, {
+        models: ['auto/best-free', 'auto/best-free', 'auto/best-free'],
+        modelSelectionMode: 'userDefined3Tier',
+      })
+      mainLog.info('[omniroute] Hardened initial model tiers to the free-only route')
+    }
+  }
+
   const validWorkspaceIds = workspaces.map(ws => ws.id)
 
   if (savedState?.windows.length) {
@@ -404,6 +434,24 @@ app.whenReady().then(async () => {
   process.env.CRAFT_IS_PACKAGED = app.isPackaged ? 'true' : 'false'
 
   if (RUNTIME_IDENTITY.variant === 'artist-os') {
+    const paths = resolveEmbeddedOmniRoutePaths({
+      appRootPath: app.getAppPath(),
+      resourcesPath: process.resourcesPath,
+      dataRoot: RUNTIME_IDENTITY.dataRoot,
+      isPackaged: app.isPackaged,
+    })
+    if (paths) {
+      embeddedOmniRoute = new EmbeddedOmniRoute(paths, {
+        info: (message) => mainLog.info(message),
+        warn: (message) => mainLog.warn(message),
+        error: (message) => mainLog.error(message),
+      })
+      const result = await embeddedOmniRoute.start()
+      if (!result.ready) mainLog.error(`[omniroute] ${result.error}`)
+    } else {
+      mainLog.error('[omniroute] Bundled runtime paths could not be resolved')
+    }
+
     await initializeDesktopLicensing()
     artistManagerVoiceProxy = await startArtistManagerVoiceProxy()
   }
@@ -1387,6 +1435,12 @@ async function performQuitCleanup(): Promise<void> {
     try { await artistManagerMoonshine.close() }
     catch (error) { mainLog.error('[moonshine] cleanup failed:', error) }
     artistManagerMoonshine = null
+  }
+
+  if (embeddedOmniRoute) {
+    try { await embeddedOmniRoute.stop() }
+    catch (error) { mainLog.error('[omniroute] cleanup failed:', error) }
+    embeddedOmniRoute = null
   }
 
   if (sessionManager) {

@@ -1,0 +1,8 @@
+{
+  "name": "artist-os-omniroute-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "omniroute": "3.8.50"
+  }
+}

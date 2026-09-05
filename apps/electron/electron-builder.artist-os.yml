@@ -14,6 +14,18 @@ directories:
   output: release-artist-os
   buildResources: resources
 
+beforePack: scripts/beforePack.cjs
+
+# The embedded gateway is Artist OS-only. Prepare its production dependency
+# tree at package time, then copy it outside the app's excluded node_modules.
+extraResources:
+  - from: vendor/omniroute-runtime
+    to: app/omniroute-runtime
+    filter:
+      - "package.json"
+      - "package-lock.json"
+      - "node_modules/**/*"
+
 extraMetadata:
   main: dist/main.cjs
   productName: Artist OS
