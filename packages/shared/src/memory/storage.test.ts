@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -20,7 +20,13 @@ import {
   serializeMemoryFile,
   updateMemoryEntry,
 } from './storage.ts';
-import type { MemoryEntry, MemoryStorageOptions } from './types.ts';
+import {
+  MEMORY_EVENTS_FILE,
+  MEMORY_EVENTS_MAX_BYTES,
+  MEMORY_EVENTS_ROTATED_FILE,
+  type MemoryEntry,
+  type MemoryStorageOptions,
+} from './types.ts';
 
 let root: string;
 let options: MemoryStorageOptions;
@@ -498,5 +504,47 @@ describe('CRUD', () => {
     const events = listMemoryEvents('user', undefined, options);
     expect(events).toHaveLength(1);
     expect(events[0]!.action).toBe('save');
+  });
+});
+
+describe('memory event log rotation', () => {
+  test('rotates past the size ceiling and keeps reads continuous across generations', async () => {
+    const eventFile = getMemoryEventsFile('user', undefined, options);
+
+    const first = await appendMemoryEvent('save', 'user', undefined, 'oldest', options);
+    // Push the active log past its ceiling without writing a million events.
+    writeFileSync(eventFile, `${'x'.repeat(MEMORY_EVENTS_MAX_BYTES)}\n${readFileSync(eventFile, 'utf-8')}`, 'utf-8');
+
+    const second = await appendMemoryEvent('save', 'user', undefined, 'newest', options);
+
+    const rotated = join(root, MEMORY_EVENTS_ROTATED_FILE);
+    expect(existsSync(rotated)).toBe(true);
+    // The active file restarted, so it holds only the event that triggered it.
+    expect(readFileSync(eventFile, 'utf-8').trim().split('\n')).toHaveLength(1);
+
+    // Both generations are still visible, oldest first.
+    const names = listMemoryEvents('user', undefined, options).map((e) => e.entryName);
+    expect(names).toEqual(['oldest', 'newest']);
+    expect(listMemoryEvents('user', undefined, options).map((e) => e.id)).toEqual([first.id, second.id]);
+  });
+
+  test('does not rotate while the log is under the ceiling', async () => {
+    await appendMemoryEvent('save', 'user', undefined, 'a', options);
+    await appendMemoryEvent('save', 'user', undefined, 'b', options);
+
+    expect(existsSync(join(root, MEMORY_EVENTS_ROTATED_FILE))).toBe(false);
+    expect(listMemoryEvents('user', undefined, options).map((e) => e.entryName)).toEqual(['a', 'b']);
+  });
+
+  test('a second rotation replaces the previous generation rather than accumulating files', async () => {
+    const eventFile = getMemoryEventsFile('user', undefined, options);
+    for (const name of ['one', 'two', 'three']) {
+      await appendMemoryEvent('save', 'user', undefined, name, options);
+      writeFileSync(eventFile, `${'x'.repeat(MEMORY_EVENTS_MAX_BYTES)}\n${readFileSync(eventFile, 'utf-8')}`, 'utf-8');
+    }
+    await appendMemoryEvent('save', 'user', undefined, 'four', options);
+
+    const generations = readdirSync(root).filter((f) => f.startsWith('.memory-events'));
+    expect(generations.sort()).toEqual([MEMORY_EVENTS_FILE, MEMORY_EVENTS_ROTATED_FILE].sort());
   });
 });

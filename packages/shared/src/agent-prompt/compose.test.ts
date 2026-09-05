@@ -10,6 +10,7 @@ import {
   buildAgentCatalogSection,
   buildManagerBriefPromptSectionFromDocs,
   buildWorkspaceContextSection,
+  WORKSPACE_CONTEXT_MAX_CHARS,
   composeAgentSystemPrompt,
   managerBriefReceiptFromDocs,
   type PromptAgent,
@@ -236,6 +237,39 @@ describe('composeAgentSystemPrompt', () => {
 });
 
 describe('buildWorkspaceContextSection', () => {
+  test('stays under the budget by dropping whole docs and naming them', () => {
+    const big = 'z'.repeat(WORKSPACE_CONTEXT_MAX_CHARS);
+    const section = buildWorkspaceContextSection([
+      doc('artist-profile', 'Artist Profile', big),
+      doc('mission-brief', 'Mission Brief', big),
+    ]);
+
+    expect(section).toContain('## Artist Profile');
+    expect(section).not.toContain('## Mission Brief');
+    expect(section).toContain('1 context doc was withheld');
+    expect(section).toContain('mission-brief');
+    expect(section).toContain('get_workspace_context');
+  });
+
+  test('never truncates a doc body mid-sentence', () => {
+    const body = `${'a'.repeat(WORKSPACE_CONTEXT_MAX_CHARS)}TAIL`;
+    const section = buildWorkspaceContextSection([doc('artist-profile', 'Artist Profile', body)]);
+
+    // The single admitted doc is whole, even though it alone exceeds the budget.
+    expect(section).toContain('TAIL');
+  });
+
+  test('says nothing about omissions when everything fits', () => {
+    const section = buildWorkspaceContextSection([
+      doc('artist-profile', 'Artist Profile', 'short'),
+      doc('mission-brief', 'Mission Brief', 'also short'),
+    ]);
+
+    expect(section).toContain('## Artist Profile');
+    expect(section).toContain('## Mission Brief');
+    expect(section).not.toContain('withheld');
+  });
+
   test('skips disabled, empty, and shared-intel docs', () => {
     const section = buildWorkspaceContextSection([
       doc('goals', 'Goals', 'Ship it.'),

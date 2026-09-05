@@ -764,6 +764,7 @@ export const RecallMemorySchema = z.object({
   query: z.string().min(1).describe('What to look for in durable memory. Ask a concise semantic question or keyword phrase.'),
   scopes: z.array(MemoryScopeSchema).min(1).optional().describe('Optional scopes to search. Defaults to USER.md plus this agent MEMORY.md when available.'),
   limit: z.number().int().min(1).max(25).optional().describe('Maximum matches to return. Defaults to 8, maximum 25.'),
+  full: z.boolean().optional().describe('Return whole entry bodies instead of excerpts. Defaults to false; ask for it only when an excerpt was not enough.'),
 });
 
 const OutputKindSchema = z.enum([
@@ -1652,9 +1653,13 @@ Use this when the user asks you to forget something, when a memory is wrong and 
 
 Do NOT use this for normal short-term context cleanup; only durable memory entries should be forgotten.`,
 
-  recall_memory: `Search durable memory without bloating the prompt.
+  recall_memory: `Search durable memory for entries that are not already in your prompt.
 
 Use this when the current task may depend on prior user preferences, agent feedback, project state, or references that are not already visible in the prompt. This is read-only.
+
+Returns matching excerpts. Pass \`full: true\` only when an excerpt was not enough — whole bodies are much larger, and asking for them by reflex costs the prompt budget this tool exists to protect.
+
+Also use this when a memory section says older entries were not shown: they are still here and searchable.
 
 Defaults to USER.md plus this agent's MEMORY.md when the session has an active agent. Narrow \`scopes\` only when you explicitly need user-wide or agent-only memory.`,
 

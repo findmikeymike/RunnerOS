@@ -10,6 +10,23 @@ export const MEMORY_FILE = 'MEMORY.md';
 export const USER_MEMORY_FILE = 'USER.md';
 export const DELETED_MEMORIES_FILE = '.deleted-memories.json';
 export const MEMORY_EVENTS_FILE = '.memory-events.jsonl';
+
+/**
+ * Previous generation of the event log, kept so rotation bounds the file
+ * without throwing away the audit trail.
+ */
+export const MEMORY_EVENTS_ROTATED_FILE = '.memory-events.1.jsonl';
+
+/**
+ * Size at which the active event log is rotated.
+ *
+ * This log is the busiest writer in the memory system: one line per recalled
+ * entry per recall call, plus one per injected entry per session launch. It was
+ * append-only with no pruning, so it grew without limit for the lifetime of an
+ * install. Rotating at 1 MB and keeping a single previous generation bounds it
+ * at roughly 2 MB per scope while preserving recent history.
+ */
+export const MEMORY_EVENTS_MAX_BYTES = 1_000_000;
 export const MEMORY_REVIEW_QUEUE_FILE = '.memory-review-queue.json';
 export const MEMORY_SCHEMA_VERSION = 1;
 

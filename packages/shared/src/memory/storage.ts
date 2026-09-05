@@ -12,6 +12,7 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  statSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -23,6 +24,8 @@ import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 import {
   DELETED_MEMORIES_FILE,
   MEMORY_EVENTS_FILE,
+  MEMORY_EVENTS_MAX_BYTES,
+  MEMORY_EVENTS_ROTATED_FILE,
   MEMORY_ENTRY_TYPES,
   MEMORY_FILE,
   MEMORY_SCHEMA_VERSION,
@@ -562,6 +565,28 @@ function createMemoryEvent(
   };
 }
 
+/**
+ * Move the active event log aside once it grows past its ceiling.
+ *
+ * Callers already hold the memory file mutex, so this is safe against a
+ * concurrent append. Rotation replaces any previous generation rather than
+ * accumulating numbered files: two files bounded in size beats an unbounded
+ * archive nobody reads. A failure here must never block the write that
+ * triggered it — losing a rotation is recoverable, losing the event is not.
+ */
+function rotateMemoryEventsIfNeeded(eventFile: string): void {
+  try {
+    if (!existsSync(eventFile)) return;
+    if (statSync(eventFile).size < MEMORY_EVENTS_MAX_BYTES) return;
+    const rotated = join(dirname(eventFile), MEMORY_EVENTS_ROTATED_FILE);
+    // rename() will not overwrite an existing target on Windows.
+    rmSync(rotated, { force: true });
+    renameSync(eventFile, rotated);
+  } catch {
+    // Keep appending to the oversized file rather than dropping the event.
+  }
+}
+
 function appendMemoryEventUnlocked(
   action: MemoryEventAction,
   scope: MemoryScope,
@@ -573,6 +598,7 @@ function appendMemoryEventUnlocked(
   const event = createMemoryEvent(action, scope, agentSlug, entryName, metadata);
   const eventFile = getMemoryEventsFile(scope, agentSlug, options);
   mkdirSync(dirname(eventFile), { recursive: true });
+  rotateMemoryEventsIfNeeded(eventFile);
   appendFileSync(eventFile, `${JSON.stringify(event)}\n`, 'utf-8');
   return event;
 }
@@ -602,6 +628,17 @@ export function listMemoryEvents(
   options?: MemoryStorageOptions,
 ): MemoryEvent[] {
   const eventFile = getMemoryEventsFile(scope, agentSlug, options);
+  // Read the rotated generation first so history stays continuous across a
+  // rotation — otherwise the log would appear to lose everything the moment it
+  // rolled over, and counts derived from it would silently drop.
+  const rotatedFile = join(dirname(eventFile), MEMORY_EVENTS_ROTATED_FILE);
+  return [
+    ...parseMemoryEventFile(rotatedFile),
+    ...parseMemoryEventFile(eventFile),
+  ];
+}
+
+function parseMemoryEventFile(eventFile: string): MemoryEvent[] {
   if (!existsSync(eventFile)) return [];
   return readFileSync(eventFile, 'utf-8')
     .split('\n')

@@ -29,6 +29,11 @@ export interface RecallMemoryToolInput {
   query: string;
   scopes?: MemoryScope[];
   limit?: number;
+  /**
+   * Return whole entry bodies instead of excerpts. Off by default: 25 full
+   * bodies can be larger than the memory section this tool exists to avoid.
+   */
+  full?: boolean;
 }
 
 export interface MemoryMutationResult {
@@ -44,7 +49,8 @@ export interface RecalledMemoryEntry {
   agentSlug?: string;
   name: string;
   type: MemoryType;
-  content: string;
+  /** Whole body. Present only when the caller asked for `full`. */
+  content?: string;
   score: number;
   reason: string;
   excerpt: string;
@@ -262,6 +268,7 @@ export async function handleRecallMemory(
     query: args.query.trim(),
     scopes: args.scopes,
     limit,
+    full: args.full === true,
   };
 
   try {
@@ -269,17 +276,26 @@ export async function handleRecallMemory(
     if (!result.ok) {
       return errorResponse(result.error ?? 'Failed to recall memory.');
     }
-    const entries = result.results ?? [];
-    return memorySuccess(
-      entries.length === 0
-        ? `No matching memories for "${input.query}".`
-        : `Recalled ${entries.length} memories for "${input.query}".`,
-      {
-        ok: true,
-        query: result.query ?? input.query,
-        results: entries,
-      },
-    );
+    // Excerpts by default. Returning every full body alongside a duplicate
+    // excerpt of the same text made a single recall bigger than the memory
+    // section this tool is meant to keep out of the prompt.
+    const entries = (result.results ?? []).map((entry) => {
+      if (input.full) return entry;
+      const { content: _omitted, ...rest } = entry;
+      return rest;
+    });
+
+    const summary = entries.length === 0
+      ? `No matching memories for "${input.query}".`
+      : input.full
+        ? `Recalled ${entries.length} memories for "${input.query}".`
+        : `Recalled ${entries.length} memories for "${input.query}" as excerpts. Re-run with full: true for whole entries.`;
+
+    return memorySuccess(summary, {
+      ok: true,
+      query: result.query ?? input.query,
+      results: entries,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return errorResponse(`Failed to recall memory: ${message}`);

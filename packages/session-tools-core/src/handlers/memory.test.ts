@@ -304,7 +304,9 @@ describe('memory handlers', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(captured).toEqual({ query: 'writing style', scopes: ['user'], limit: 5 });
+    expect(captured).toEqual({ query: 'writing style', scopes: ['user'], limit: 5, full: false });
+    // Excerpt only by default — the whole body is withheld so a recall cannot
+    // cost more prompt than the memory section it is meant to replace.
     expect(result.structuredContent).toEqual({
       ok: true,
       query: 'writing style',
@@ -312,12 +314,42 @@ describe('memory handlers', () => {
         scope: 'user',
         name: 'Preferred writing style',
         type: 'feedback',
-        content: 'Use direct language.',
         score: 7,
         reason: 'Matched writing',
         excerpt: 'Use direct language.',
       }],
     });
-    expect((result.content[0] as any).text).toContain('Recalled 1 memories');
+    expect((result.content[0] as any).text).toContain('as excerpts');
+    expect((result.content[0] as any).text).toContain('full: true');
+  });
+
+  it('recall_memory returns whole bodies only when full is requested', async () => {
+    let captured: RecallMemoryToolInput | undefined;
+    const ctx = makeCtx({
+      recallMemory: async (input) => {
+        captured = input;
+        return {
+          ok: true,
+          query: input.query,
+          results: [{
+            scope: 'user',
+            name: 'Preferred writing style',
+            type: 'feedback',
+            content: 'Use direct language, and never pad a sentence.',
+            score: 7,
+            reason: 'Matched writing',
+            excerpt: 'Use direct language...',
+          }],
+        };
+      },
+    });
+
+    const result = await handleRecallMemory(ctx, { query: 'writing style', full: true });
+
+    expect(captured?.full).toBe(true);
+    const entry = (result.structuredContent as any).results[0];
+    expect(entry.content).toBe('Use direct language, and never pad a sentence.');
+    expect(entry.excerpt).toBe('Use direct language...');
+    expect((result.content[0] as any).text).not.toContain('as excerpts');
   });
 });
