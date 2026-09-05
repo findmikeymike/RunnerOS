@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
-import { createBuiltInConnection } from '@craft-agent/server-core/domain'
+import { createBuiltInConnection, planOmniRouteTierRepair } from '@craft-agent/server-core/domain'
 import { createHash, randomUUID } from 'crypto'
 import { hostname, homedir } from 'os'
 import * as Sentry from '@sentry/electron/main'
@@ -384,13 +384,15 @@ async function createInitialWindows(): Promise<void> {
       if (addLlmConnection(connection)) {
         mainLog.info('[omniroute] Added keyless Auto connection for first use')
       }
-    } else if (existingOmniRoute.models?.join(',') === 'auto/best-free,auto/best-free,auto/best-free') {
-      updateLlmConnection(existingOmniRoute.slug, {
-        models: ['auto/best-free', 'auto', 'auto/fast'],
-        defaultModel: 'auto',
-        modelSelectionMode: 'userDefined3Tier',
-      })
-      mainLog.info('[omniroute] Restored distinct free, auto, and fast model tiers')
+    } else {
+      // Only ever rewrite tier sets this app wrote itself as a default; a set
+      // the artist picked is left exactly as it is. See planOmniRouteTierRepair
+      // for why this repairs once rather than on every launch.
+      const repair = planOmniRouteTierRepair(existingOmniRoute.models)
+      if (repair) {
+        updateLlmConnection(existingOmniRoute.slug, { ...repair, modelSelectionMode: 'userDefined3Tier' })
+        mainLog.info('[omniroute] Pinned the default tier to the free route')
+      }
     }
   }
 

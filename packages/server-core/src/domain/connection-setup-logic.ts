@@ -257,8 +257,13 @@ export function createBuiltInConnection(slug: string, baseUrl?: string | null): 
     authType,
     baseUrl: isEmbeddedOmniRoute ? normalizeOmniRouteBaseUrl(baseUrl ?? undefined) : undefined,
     customEndpoint: isEmbeddedOmniRoute ? { api: 'openai-completions' } : undefined,
-    models: isEmbeddedOmniRoute ? ['auto/best-free', 'auto', 'auto/fast'] : getDefaultModelsForConnection(providerType, template.piAuthProvider),
-    defaultModel: isEmbeddedOmniRoute ? 'auto' : getDefaultModelForConnection(providerType, template.piAuthProvider),
+    // The default tier is pinned to the free route rather than `auto`. `auto`
+    // means "best available", which is free today only because a fresh profile
+    // has no paid keys — the moment someone adds one it can start spending.
+    // Artists get this connection without asking for it, so it must not be a
+    // route that quietly becomes billable.
+    models: isEmbeddedOmniRoute ? [...OMNIROUTE_DEFAULT_TIERS] : getDefaultModelsForConnection(providerType, template.piAuthProvider),
+    defaultModel: isEmbeddedOmniRoute ? OMNIROUTE_DEFAULT_TIERS[0] : getDefaultModelForConnection(providerType, template.piAuthProvider),
     modelSelectionMode: isEmbeddedOmniRoute
       ? 'userDefined3Tier'
       : providerType === 'pi' ? 'automaticallySyncedFromProvider' : undefined,
@@ -306,4 +311,43 @@ export function validateModelList(
   }
 
   return { valid: true }
+}
+
+/**
+ * The tier set every embedded OmniRoute connection should hold.
+ *
+ * Both the free routes: `auto` is deliberately absent because it means "best
+ * available", which is free today only while a profile has no paid keys.
+ */
+export const OMNIROUTE_DEFAULT_TIERS = ['auto/best-free', 'auto/best-free', 'auto/fast'] as const
+
+/**
+ * Tier sets this app shipped as a default and may therefore correct.
+ *
+ * The first collapsed all three tiers onto the free route and erased the fast
+ * tier. The second restored them but made `auto` the default. Neither was a
+ * choice anyone made, so replacing them is a correction rather than an
+ * override — and anything not listed here is left alone.
+ */
+const MACHINE_WRITTEN_OMNIROUTE_TIERS: readonly string[] = [
+  'auto/best-free,auto/best-free,auto/best-free',
+  'auto/best-free,auto,auto/fast',
+]
+
+/**
+ * What an existing OmniRoute connection should be rewritten to, if anything.
+ *
+ * Returns null when the stored tiers are the artist's own, or already correct.
+ * The corrected shape is never itself a machine-written shape, so this repairs
+ * once and then stops: a rule that rewrites its own output is exactly how the
+ * original all-free bug reapplied itself on every launch.
+ */
+export function planOmniRouteTierRepair(
+  // A connection's models can be full definitions rather than ids. Only the
+  // string form can match a shipped default, and a joined object never will,
+  // so an unusual shape simply falls through and is left alone.
+  storedModels: readonly (string | ModelDefinition)[] | undefined,
+): { models: string[]; defaultModel: string } | null {
+  if (!MACHINE_WRITTEN_OMNIROUTE_TIERS.includes((storedModels ?? []).join(','))) return null
+  return { models: [...OMNIROUTE_DEFAULT_TIERS], defaultModel: OMNIROUTE_DEFAULT_TIERS[0] }
 }

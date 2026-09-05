@@ -3,6 +3,7 @@ import {
   validateSetupTestInput,
   isLoopbackBaseUrl,
   normalizeOmniRouteBaseUrl,
+  planOmniRouteTierRepair,
   setupTestRequiresApiKey,
   validateOmniRouteEndpoint,
 } from './connection-setup-logic'
@@ -79,5 +80,34 @@ describe('OmniRoute endpoint handling', () => {
       valid: false,
       error: 'OmniRoute credentials must use the API key field, not the server URL.',
     })
+  })
+})
+
+describe('planOmniRouteTierRepair', () => {
+  it('pins the default tier to the free route for both shipped defaults', () => {
+    for (const stale of [
+      ['auto/best-free', 'auto/best-free', 'auto/best-free'],
+      ['auto/best-free', 'auto', 'auto/fast'],
+    ]) {
+      expect(planOmniRouteTierRepair(stale)).toEqual({
+        models: ['auto/best-free', 'auto/best-free', 'auto/fast'],
+        defaultModel: 'auto/best-free',
+      })
+    }
+  })
+
+  it('repairs once and then stops', () => {
+    // A rule that rewrites its own output reapplies on every launch. That is
+    // exactly how the original all-free bug kept coming back, so the corrected
+    // shape must never itself look like something to correct.
+    const repaired = planOmniRouteTierRepair(['auto/best-free', 'auto', 'auto/fast'])!
+    expect(planOmniRouteTierRepair(repaired.models)).toBeNull()
+  })
+
+  it('leaves a set the artist chose alone', () => {
+    expect(planOmniRouteTierRepair(['auto/best-coding', 'auto/smart', 'auto/cheap'])).toBeNull()
+    expect(planOmniRouteTierRepair(['auto/best-free', 'auto/fast', 'auto/best-free'])).toBeNull()
+    expect(planOmniRouteTierRepair(undefined)).toBeNull()
+    expect(planOmniRouteTierRepair([])).toBeNull()
   })
 })

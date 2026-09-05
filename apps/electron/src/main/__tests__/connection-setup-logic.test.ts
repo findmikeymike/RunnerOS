@@ -100,7 +100,7 @@ describe('createBuiltInConnection', () => {
     expect(conn.modelSelectionMode).toBe('automaticallySyncedFromProvider')
   })
 
-  it('creates a keyless embedded OmniRoute auto connection', () => {
+  it('creates a keyless embedded OmniRoute connection pinned to free routes', () => {
     const conn = createBuiltInConnection('omniroute', 'http://127.0.0.1:20128')
 
     expect(conn).toMatchObject({
@@ -110,8 +110,10 @@ describe('createBuiltInConnection', () => {
       authType: 'none',
       baseUrl: 'http://127.0.0.1:20128/v1',
       customEndpoint: { api: 'openai-completions' },
-      models: ['auto/best-free', 'auto', 'auto/fast'],
-      defaultModel: 'auto',
+      // Not `auto`: that means "best available" and turns billable the moment
+      // a paid key exists. Artists get this connection without asking for it.
+      models: ['auto/best-free', 'auto/best-free', 'auto/fast'],
+      defaultModel: 'auto/best-free',
       piAuthProvider: 'omniroute',
       modelSelectionMode: 'userDefined3Tier',
     })

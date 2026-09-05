@@ -28,10 +28,10 @@ describe('ApiKeyInput tier hydration helpers', () => {
     { id: 'auto/best-free', name: 'Best free', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: true },
   ]
 
-  it('uses OmniRoute auto routes even though the gateway never lists bare auto', () => {
+  it('defaults every tier to a free route', () => {
     expect(resolveTierModels(OMNIROUTE_MODELS, undefined, 'omniroute')).toEqual({
       best: 'auto/best-free',
-      default_: 'auto',
+      default_: 'auto/best-free',
       cheap: 'auto/fast',
     })
   })
@@ -49,7 +49,7 @@ describe('ApiKeyInput tier hydration helpers', () => {
 
   it('still drops a saved model the gateway genuinely does not have', () => {
     expect(resolveTierModels(OMNIROUTE_MODELS, ['auto/best-free', 'retired/model', 'auto/fast'], 'omniroute').default_)
-      .toBe('auto')
+      .toBe('auto/best-free')
   })
 
   it('does not let one provider\'s unlisted routes leak into another', () => {

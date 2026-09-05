@@ -13,9 +13,13 @@ const PROVIDER_PREFERRED_TIERS: Record<string, { best: string; default_: string;
     default_: 'pi/deepseek/deepseek-v4-pro',
     cheap: 'pi/openrouter/owl-alpha',
   },
+  // Best and default are the same route on purpose: the best free model is
+  // also the right default when the artist has not chosen to spend anything.
+  // `auto` is deliberately not here — it means "best available", which turns
+  // billable the moment a paid key exists.
   omniroute: {
     best: 'auto/best-free',
-    default_: 'auto',
+    default_: 'auto/best-free',
     cheap: 'auto/fast',
   },
 }
