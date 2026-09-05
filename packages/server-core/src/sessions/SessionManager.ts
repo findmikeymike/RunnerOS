@@ -241,6 +241,7 @@ import {
   appendSessionLogEntry,
   buildSessionLogEntry,
   listSessionLogEntries,
+  searchSessionLogEntries,
   type SessionLogEntry,
 } from '@craft-agent/shared/sessions-log'
 import {
@@ -8895,6 +8896,35 @@ user a clickable link to where the thing now lives.`
         },
         recallMemoryFn: async (input) => {
           return recallSessionMemory(input, managed.id, managed.spawnedFromAgent?.agentSlug)
+        },
+        recallSessionFn: async (input) => {
+          const agentSlug = managed.spawnedFromAgent?.agentSlug
+          // The log is per agent, so a session with no agent has no history of
+          // its own to search.
+          if (!agentSlug) {
+            return { ok: false, error: 'This session has no agent, so it has no session history.' }
+          }
+          try {
+            const entries = listSessionLogEntries(agentSlug)
+            const matches = searchSessionLogEntries(entries, input.query ?? '', input.limit ?? 10)
+            return {
+              ok: true,
+              ...(input.query ? { query: input.query } : {}),
+              results: matches.map(({ entry }) => ({
+                sessionId: entry.sessionId,
+                date: entry.date,
+                summary: entry.summary,
+                ...(entry.turnCount != null ? { turnCount: entry.turnCount } : {}),
+                ...(entry.durationMinutes != null ? { durationMinutes: entry.durationMinutes } : {}),
+                ...(entry.outcome ? { outcome: entry.outcome } : {}),
+                ...(entry.topics?.length ? { topics: entry.topics } : {}),
+                ...(entry.nextAction ? { nextAction: entry.nextAction } : {}),
+                ...(entry.workspaceLabel ? { workspaceLabel: entry.workspaceLabel } : {}),
+              })),
+            }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
         },
         createOutputFn: async (input) => {
           const workflow = managed.launchReceipt?.workflow

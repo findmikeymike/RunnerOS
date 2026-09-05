@@ -366,6 +366,14 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'recallSession', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.recallSessionFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'createOutput', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.createOutputFn;

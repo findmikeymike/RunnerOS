@@ -214,6 +214,7 @@ export {
   handleUpdateMemory,
   handleForgetMemory,
   handleRecallMemory,
+  handleRecallSession,
   // Outputs
   handleCreateOutput,
   handleMediaProviderRequest,
@@ -360,6 +361,9 @@ export type {
   UpdateMemoryToolInput,
   ForgetMemoryToolInput,
   RecallMemoryToolInput,
+  RecallSessionToolInput,
+  RecallSessionResult,
+  RecalledSession,
   MemoryMutationResult,
   RecalledMemoryEntry,
   RecallMemoryResult,

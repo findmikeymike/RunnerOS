@@ -301,3 +301,73 @@ export async function handleRecallMemory(
     return errorResponse(`Failed to recall memory: ${message}`);
   }
 }
+
+// ============================================================================
+// recall_session
+// ============================================================================
+
+export interface RecallSessionToolInput {
+  /** Omit to get the most recent sessions. */
+  query?: string;
+  limit?: number;
+}
+
+export interface RecalledSession {
+  sessionId: string;
+  date: string;
+  summary: string;
+  turnCount?: number;
+  durationMinutes?: number;
+  outcome?: string;
+  topics?: string[];
+  nextAction?: string;
+  workspaceLabel?: string;
+}
+
+export interface RecallSessionResult {
+  ok: boolean;
+  query?: string;
+  results?: RecalledSession[];
+  error?: string;
+}
+
+export async function handleRecallSession(
+  ctx: SessionToolContext,
+  args: RecallSessionToolInput,
+): Promise<ToolResult> {
+  if (!ctx.recallSession) {
+    return errorResponse('recall_session is not available in this context.');
+  }
+
+  if (args.query !== undefined && typeof args.query !== 'string') {
+    return errorResponse('query must be a string when provided.');
+  }
+  const limit = normalizeLimit(args.limit);
+  if (Number.isNaN(limit) || (limit !== undefined && (limit < 1 || limit > 25))) {
+    return errorResponse('limit must be a number between 1 and 25.');
+  }
+
+  const query = args.query?.trim() ?? '';
+  try {
+    const result = await ctx.recallSession({ query, limit });
+    if (!result.ok) {
+      return errorResponse(result.error ?? 'Failed to recall sessions.');
+    }
+    const entries = result.results ?? [];
+    if (entries.length === 0) {
+      return memorySuccess(
+        query ? `No past sessions matched "${query}".` : 'No past sessions recorded yet.',
+        { ok: true, ...(query ? { query } : {}), results: [] },
+      );
+    }
+    return memorySuccess(
+      query
+        ? `Found ${entries.length} past ${entries.length === 1 ? 'session' : 'sessions'} matching "${query}".`
+        : `The ${entries.length} most recent ${entries.length === 1 ? 'session' : 'sessions'}.`,
+      { ok: true, ...(query ? { query } : {}), results: entries },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return errorResponse(`Failed to recall sessions: ${message}`);
+  }
+}

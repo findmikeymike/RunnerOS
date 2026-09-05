@@ -16,6 +16,7 @@ import {
   type PromptAgent,
   type PromptContextDoc,
 } from './compose.ts';
+import type { SessionLogEntry } from '../sessions-log/types.ts';
 import { buildCampaignManagerBrief, buildHqStateContextDoc, campaignStateContextMetadata, serializeCampaignManagerBrief, type ManagerBriefV1 } from '../hq-state/index.ts';
 
 const agent = (overrides: Partial<PromptAgent['metadata']> = {}, systemPrompt = 'Persona.'): PromptAgent => ({
@@ -256,7 +257,12 @@ describe('composeAgentSystemPrompt', () => {
 });
 
 describe('recent sessions in the composed prompt', () => {
-  const session = (sessionId, date, summary, extra = {}) => ({ sessionId, date, summary, ...extra });
+  const session = (
+    sessionId: string,
+    date: string,
+    summary: string,
+    extra: Partial<SessionLogEntry> = {},
+  ): SessionLogEntry => ({ sessionId, date, summary, ...extra });
 
   test('is absent when the agent has no history, so a new agent reads exactly as before', () => {
     const result = composeAgentSystemPrompt(agent(), [], [], [], [], { recentSessions: [] });
