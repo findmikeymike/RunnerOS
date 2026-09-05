@@ -24,7 +24,7 @@ not overturn that decision — it extends it.
 | A — on-demand context delivery, `deliveryAlwaysFor`, slug-pinned system policy | **shipped** | `fb9337ea3` |
 | B — memory/context injection caps, `recall_memory` excerpts, event-log rotation | **shipped** | `b21be6665` |
 | C — `SESSIONS.md` end to end: store, write trigger, prompt injection, `recall_session` | **shipped**; UI "Past" tab still pending | `a52aa419b`, `5429b7158`, `bc7048f95`, `56201255f` |
-| D — campaign provenance on memory | not started | |
+| D — campaign provenance on memory | **shipped** | `c01f90427` |
 | E — stemming (step 1) | **shipped**; FTS5 (step 2) still gated on entry counts | `70356dd14` |
 | F — entity links + join | not started | |
 | G — semantic recall (gated) | not started | |
