@@ -20,6 +20,29 @@ const PROVIDER_PREFERRED_TIERS: Record<string, { best: string; default_: string;
   },
 }
 
+/**
+ * Routes a gateway answers but never lists in `/models`.
+ *
+ * OmniRoute's `/models` is a catalogue of concrete models. `auto` is the
+ * general router, resolved server-side, so it serves requests happily while
+ * never appearing in that catalogue — verified against the running gateway:
+ * 477 models listed, `auto` absent, and a completion against `auto` returns
+ * 200.
+ *
+ * Checking tiers against the catalogue alone therefore rejected the whole
+ * OmniRoute preset and fell through to the generic cost picker, which handed
+ * back arbitrary models from the 477.
+ */
+const PROVIDER_UNLISTED_ROUTES: Record<string, readonly string[]> = {
+  omniroute: ['auto'],
+}
+
+/** Is this id usable on the provider, whether or not it is enumerated? */
+function isUsableModel(id: string, listed: Set<string>, provider?: string): boolean {
+  if (listed.has(id)) return true
+  return provider ? (PROVIDER_UNLISTED_ROUTES[provider]?.includes(id) ?? false) : false
+}
+
 function pickProviderTierDefaults(
   models: PiModelInfo[],
   provider?: string,
@@ -28,8 +51,9 @@ function pickProviderTierDefaults(
   const preferred = PROVIDER_PREFERRED_TIERS[provider]
   if (!preferred) return null
 
-  const valid = new Set(models.map(m => m.id))
-  if (!valid.has(preferred.best) || !valid.has(preferred.default_) || !valid.has(preferred.cheap)) {
+  const listed = new Set(models.map(m => m.id))
+  const usable = (id: string) => isUsableModel(id, listed, provider)
+  if (!usable(preferred.best) || !usable(preferred.default_) || !usable(preferred.cheap)) {
     return null
   }
 
@@ -56,10 +80,15 @@ export function resolveTierModels(models: PiModelInfo[], savedModels?: string[],
   const saved = (savedModels ?? []).filter(Boolean)
   if (saved.length === 0) return defaults
 
-  const valid = new Set(models.map(m => m.id))
-  const best = saved[0] && valid.has(saved[0]) ? saved[0] : defaults.best
-  const default_ = saved[1] && valid.has(saved[1]) ? saved[1] : defaults.default_
-  const cheap = saved[2] && valid.has(saved[2]) ? saved[2] : defaults.cheap
+  // Same allowance as the defaults above: a saved `auto` is a working route,
+  // not a stale id, so it must survive being reopened in settings. Without
+  // this, opening the connection silently rewrote the middle tier to whatever
+  // the generic picker chose and saving persisted it.
+  const listed = new Set(models.map(m => m.id))
+  const keep = (id: string | undefined) => Boolean(id) && isUsableModel(id!, listed, provider)
+  const best = keep(saved[0]) ? saved[0]! : defaults.best
+  const default_ = keep(saved[1]) ? saved[1]! : defaults.default_
+  const cheap = keep(saved[2]) ? saved[2]! : defaults.cheap
 
   return { best, default_, cheap }
 }

@@ -12,15 +12,48 @@ const MODELS = [
 ]
 
 describe('ApiKeyInput tier hydration helpers', () => {
-  it('uses OmniRoute auto routes when the gateway advertises them', () => {
-    const models = [
-      { id: 'provider/model', name: 'Provider model', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: false },
-      { id: 'auto/fast', name: 'Fast', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: false },
-      { id: 'auto', name: 'Auto', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: false },
-      { id: 'auto/best-free', name: 'Best free', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: true },
-    ]
+  /**
+   * The real gateway lists `auto/best-free` and `auto/fast` but NOT bare
+   * `auto` — it is the general router, resolved server-side, and answers
+   * requests without ever appearing in `/models`. Checked against the running
+   * gateway: 477 models listed, no `auto`, and a completion against `auto`
+   * returns 200.
+   *
+   * This fixture used to include `auto`, which is why these tests stayed green
+   * while every real setup fell through to the generic cost picker.
+   */
+  const OMNIROUTE_MODELS = [
+    { id: 'provider/model', name: 'Provider model', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: false },
+    { id: 'auto/fast', name: 'Fast', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: false },
+    { id: 'auto/best-free', name: 'Best free', costInput: 0, costOutput: 0, contextWindow: 0, reasoning: true },
+  ]
 
-    expect(resolveTierModels(models, undefined, 'omniroute')).toEqual({
+  it('uses OmniRoute auto routes even though the gateway never lists bare auto', () => {
+    expect(resolveTierModels(OMNIROUTE_MODELS, undefined, 'omniroute')).toEqual({
+      best: 'auto/best-free',
+      default_: 'auto',
+      cheap: 'auto/fast',
+    })
+  })
+
+  it('keeps a saved auto route when the connection is reopened', () => {
+    // Reopening the connection in settings rehydrates these dropdowns, and
+    // saving persists whatever they hold. Dropping `auto` here silently
+    // replaced the artist's default model with an arbitrary one.
+    expect(resolveTierModels(OMNIROUTE_MODELS, ['auto/best-free', 'auto', 'auto/fast'], 'omniroute')).toEqual({
+      best: 'auto/best-free',
+      default_: 'auto',
+      cheap: 'auto/fast',
+    })
+  })
+
+  it('still drops a saved model the gateway genuinely does not have', () => {
+    expect(resolveTierModels(OMNIROUTE_MODELS, ['auto/best-free', 'retired/model', 'auto/fast'], 'omniroute').default_)
+      .toBe('auto')
+  })
+
+  it('does not let one provider\'s unlisted routes leak into another', () => {
+    expect(pickTierDefaults(OMNIROUTE_MODELS, 'openrouter')).not.toEqual({
       best: 'auto/best-free',
       default_: 'auto',
       cheap: 'auto/fast',
