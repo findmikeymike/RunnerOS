@@ -255,6 +255,38 @@ describe('composeAgentSystemPrompt', () => {
   });
 });
 
+describe('recent sessions in the composed prompt', () => {
+  const session = (sessionId, date, summary, extra = {}) => ({ sessionId, date, summary, ...extra });
+
+  test('is absent when the agent has no history, so a new agent reads exactly as before', () => {
+    const result = composeAgentSystemPrompt(agent(), [], [], [], [], { recentSessions: [] });
+    expect(result).not.toContain('Recent sessions');
+  });
+
+  test('gives the agent where it left off, with the next step it intended', () => {
+    const result = composeAgentSystemPrompt(agent(), [], [], [], [], {
+      recentSessions: [
+        session('s3', '2026-09-05', 'Settled the release date.', { durationMinutes: 107, workspaceLabel: 'Neon Nights', nextAction: 'Send the announce draft.' }),
+        session('s2', '2026-09-03', 'Reviewed playlist pitches.'),
+      ],
+    });
+
+    expect(result).toContain('Recent sessions');
+    expect(result).toContain('Settled the release date.');
+    expect(result).toContain('Neon Nights');
+    expect(result).toContain('Send the announce draft.');
+  });
+
+  test('stays bounded and points at the tool for the rest', () => {
+    const many = Array.from({ length: 12 }, (_, i) => session(`s${i}`, '2026-09-01', `Session ${i}.`));
+    const result = composeAgentSystemPrompt(agent(), [], [], [], [], { recentSessions: many });
+
+    expect(result).toContain('9 older sessions are not shown');
+    expect(result).toContain('recall_session');
+    expect(result).not.toContain('Session 11.');
+  });
+});
+
 describe('buildWorkspaceContextSection', () => {
   test('stays under the budget by dropping whole docs and naming them', () => {
     const big = 'z'.repeat(WORKSPACE_CONTEXT_MAX_CHARS);

@@ -238,6 +238,12 @@ import {
   type UpdateMemoryInput,
 } from '@craft-agent/shared/memory'
 import {
+  appendSessionLogEntry,
+  buildSessionLogEntry,
+  listSessionLogEntries,
+  type SessionLogEntry,
+} from '@craft-agent/shared/sessions-log'
+import {
   buildSharedIntelDocs,
   buildSignalIntelCandidates,
   buildYouTubeIntelCandidates,
@@ -613,6 +619,20 @@ async function loadAgentMemoryEntries(agentSlug: string): Promise<WorkflowMemory
     return listAgentMemoryEntries(agentSlug)
   } catch (error) {
     sessionLog.warn(`[memory] Failed to load agent memory for workflow context (${agentSlug}):`, error)
+    return []
+  }
+}
+
+/**
+ * Recent sessions for this agent, newest first. A damaged or unreadable log
+ * costs the agent its "where we left off" note; it must not stop a session from
+ * starting.
+ */
+function loadRecentSessionEntries(agentSlug: string): SessionLogEntry[] {
+  try {
+    return listSessionLogEntries(agentSlug)
+  } catch (error) {
+    sessionLog.warn(`[sessions-log] Failed to load recent sessions for ${agentSlug}:`, error)
     return []
   }
 }
@@ -2963,7 +2983,12 @@ export class SessionManager implements ISessionManager {
       usableSources,
       contextDocs,
       agentCatalog,
-      { userMemoryEntries, agentMemoryEntries, artistWorkspaceScope: ws.artistWorkspaceScope },
+      {
+        userMemoryEntries,
+        agentMemoryEntries,
+        artistWorkspaceScope: ws.artistWorkspaceScope,
+        recentSessions: loadRecentSessionEntries(agent.slug),
+      },
     )
     const managerBriefReceipt = managerBriefReceiptFromDocs(contextDocs)
     return {
@@ -11181,6 +11206,42 @@ user a clickable link to where the thing now lives.`
     return undefined
   }
 
+  /**
+   * Keep this session's `SESSIONS.md` entry current.
+   *
+   * Runs after every completed turn rather than at some "session end", because
+   * a persistent session has no reliable end and `appendSessionLogEntry`
+   * replaces by session id — so re-recording keeps one always-current entry
+   * instead of accumulating duplicates. Costs no model call: the summary is the
+   * title the app already generated.
+   *
+   * Failure here must never disturb the conversation. A missing log line is an
+   * inconvenience; a turn that errors because of one is a bug.
+   */
+  private recordSessionLogEntry(managed: ManagedSession): void {
+    const agentSlug = managed.spawnedFromAgent?.agentSlug
+    // The log is per agent. A plain chat session has no agent to file it under.
+    if (!agentSlug) return
+    if (managed.hidden || managed.systemPromptPreset === 'mini') return
+
+    try {
+      const entry = buildSessionLogEntry({
+        sessionId: managed.id,
+        title: managed.name,
+        messages: managed.messages,
+        workspaceId: managed.workspace.id,
+        workspaceLabel: managed.workspace.name,
+        workspaceScope: managed.workspace.artistWorkspaceScope,
+      })
+      if (!entry) return
+      appendSessionLogEntry(agentSlug, entry)
+    } catch (error) {
+      // Includes the deliberate refusal to overwrite a log that failed to
+      // parse, which the artist has to repair by hand.
+      sessionLog.warn(`[sessions-log] Could not record session ${managed.id} for ${agentSlug}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
   private scheduleMemorySidecarReview(managed: ManagedSession, finalMessageId: string | undefined): void {
     if (!finalMessageId) return
     if (!managed.agent) return
@@ -13049,6 +13110,7 @@ user a clickable link to where the thing now lives.`
 
       if (reason === 'complete' && didReceiveNewFinalMessage) {
         this.scheduleMemorySidecarReview(managed, currentFinalMessageId)
+        this.recordSessionLogEntry(managed)
       }
 
       let reservation: ChatGoalReservation | undefined

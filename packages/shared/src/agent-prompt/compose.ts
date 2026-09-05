@@ -44,6 +44,8 @@ import {
 } from '../hq-state/index.ts';
 import { buildMemorySectionsText } from '../memory/render.ts';
 import type { MemoryEntry } from '../memory/types.ts';
+import { buildRecentSessionsSection } from '../sessions-log/render.ts';
+import type { SessionLogEntry } from '../sessions-log/types.ts';
 import { buildSharedIntelPromptSection, isSharedIntelContextSlug } from '../shared-intel/index.ts';
 
 const SECTION_DELIMITER = '\n\n---\n\n';
@@ -110,6 +112,13 @@ export interface AgentPromptMemoryOptions {
   userMemoryEntries?: MemoryEntry[];
   agentMemoryEntries?: MemoryEntry[];
   artistWorkspaceScope?: 'hq' | 'campaign' | 'lab' | 'general';
+  /**
+   * This agent's recent sessions, newest first. Only the first few are
+   * rendered; the rest stay searchable. Memory holds durable facts, this holds
+   * what actually happened — the difference between an agent that knows the
+   * artist and one that knows where they left off.
+   */
+  recentSessions?: SessionLogEntry[];
 }
 
 /**
@@ -138,6 +147,7 @@ export function composeAgentSystemPrompt(
     memory.userMemoryEntries ?? [],
     memory.agentMemoryEntries ?? [],
   );
+  const recentSessionsSection = buildRecentSessionsSection(memory.recentSessions ?? []);
   const agentCatalogSection = buildAgentCatalogSection(agentCatalog);
   const canvasGuidanceSection = buildCanvasGuidanceSection(agent);
   const footer = buildAgentBundleFooter(agent, skills, sources);
@@ -148,6 +158,9 @@ export function composeAgentSystemPrompt(
   if (contextSection) parts.push(contextSection);
   if (sharedIntelSection) parts.push(sharedIntelSection);
   if (memorySection) parts.push(memorySection);
+  // After memory: durable facts are the stronger context, and recent sessions
+  // read as the "where we left off" note that follows them.
+  if (recentSessionsSection) parts.push(recentSessionsSection);
   if (agentCatalogSection) parts.push(agentCatalogSection);
   if (canvasGuidanceSection) parts.push(canvasGuidanceSection);
   if (footer) parts.push(footer);

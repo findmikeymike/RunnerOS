@@ -25,6 +25,12 @@ export {
 } from './storage.ts';
 
 export {
+  buildSessionLogEntry,
+  type SessionLogSource,
+  type SessionLogSourceMessage,
+} from './session-entry.ts';
+
+export {
   DEFAULT_RECENT_SESSIONS,
   RECENT_SESSIONS_HEADER,
   RECENT_SESSION_SUMMARY_MAX_CHARS,

@@ -568,6 +568,8 @@ export const RPC_CHANNELS = {
     CHANGED: 'releaseKit:changed',
   },
   memory: {
+    /** List one agent's SESSIONS.md entries, newest first. */
+    LIST_AGENT_SESSIONS: 'memory:listAgentSessions',
     /** List one agent's MEMORY.md entries. */
     LIST_AGENT: 'memory:listAgent',
     /** List shared USER.md entries. */

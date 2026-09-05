@@ -2,6 +2,7 @@ import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { MemoryEntry, LoadedMemoryFile } from '@craft-agent/shared/memory/types'
+import type { SessionLogEntry } from '@craft-agent/shared/sessions-log'
 import { selectActiveMemoryEntries } from '@craft-agent/shared/memory/render'
 import { resolveAgentReferences, hasMissingReferences, describeMissingReferences } from '@/lib/agent-references'
 import { composeAgentSystemPrompt, managerBriefReceiptFromDocs } from '@/lib/compose-agent-prompt'
@@ -78,6 +79,7 @@ export function buildAgentCreateSessionOptions(
     agentCatalog?: AgentDefinitionDTO[]
     userMemoryEntries?: MemoryEntry[]
     agentMemoryEntries?: MemoryEntry[]
+    recentSessions?: SessionLogEntry[]
     /**
      * Which kind of Artist OS workspace this session runs in. The server path
      * has always passed this; the chat path did not, and fell back to sniffing
@@ -126,6 +128,7 @@ export function buildAgentCreateSessionOptions(
           userMemoryEntries: context.userMemoryEntries,
           agentMemoryEntries: context.agentMemoryEntries,
           artistWorkspaceScope: context.artistWorkspaceScope,
+          recentSessions: context.recentSessions,
         },
       )
     : agent.systemPrompt
@@ -269,6 +272,7 @@ export async function openAgentSessionComposer(params: {
     loadUserMemoryEntries(),
     loadAgentMemoryEntries(params.agent.slug),
   ])
+  const recentSessions = await loadRecentSessionEntries(params.agent.slug)
 
   // Surface a one-off toast if the agent declares slugs that don't resolve in
   // this workspace. The session still spawns without them; the warning is so
@@ -292,9 +296,9 @@ export async function openAgentSessionComposer(params: {
   // gets a composed system prompt (persona body + bundle footer) and any
   // missing slugs are dropped from agentSkillSlugs/enabledSourceSlugs.
   const context = launchSkills && params.sources
-    ? { skills: launchSkills, sources: params.sources, contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries, artistWorkspaceScope }
-    : contextDocs.length > 0 || userMemoryEntries.length > 0 || agentMemoryEntries.length > 0 || (params.agentCatalog?.length ?? 0) > 0 || artistWorkspaceScope
-      ? { skills: [], sources: [], contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries, artistWorkspaceScope }
+    ? { skills: launchSkills, sources: params.sources, contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries, artistWorkspaceScope, recentSessions }
+    : contextDocs.length > 0 || userMemoryEntries.length > 0 || agentMemoryEntries.length > 0 || (params.agentCatalog?.length ?? 0) > 0 || artistWorkspaceScope || recentSessions.length > 0
+      ? { skills: [], sources: [], contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries, artistWorkspaceScope, recentSessions }
       : undefined
 
   const session = await params.onCreateSession(
@@ -344,6 +348,21 @@ export async function loadUserMemoryEntries(): Promise<MemoryEntry[]> {
     return normalizeMemoryEntries(result)
   } catch (err) {
     console.warn('[memory] failed to load USER.md; agent will run without user memory:', err)
+    return []
+  }
+}
+
+/**
+ * This agent's recent sessions for the "where we left off" prompt section.
+ *
+ * A failure here is never worth blocking a launch: the agent simply starts
+ * without knowing what it did last, exactly as it did before the log existed.
+ */
+export async function loadRecentSessionEntries(agentSlug: string): Promise<SessionLogEntry[]> {
+  try {
+    return (await window.electronAPI.listAgentSessions?.(agentSlug)) ?? []
+  } catch (err) {
+    console.warn(`[sessions-log] failed to load SESSIONS.md for "${agentSlug}":`, err)
     return []
   }
 }

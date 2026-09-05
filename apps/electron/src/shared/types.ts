@@ -30,6 +30,7 @@ import type {
 
 // Mode types from dedicated subpath export (avoids pulling in SDK)
 import type { PermissionMode } from '@craft-agent/shared/agent/modes';
+import type { SessionLogEntry } from '@craft-agent/shared/sessions-log';
 import type {
   ArtistOSActivateInputV1,
   ArtistOSLicenseCommandResultV1,
@@ -1257,6 +1258,8 @@ export interface ElectronAPI {
 
   // Memory (global USER.md + per-agent MEMORY.md)
   listAgentMemory(agentSlug: string): Promise<LoadedMemoryFileDTO>
+  /** One agent's recent sessions, newest first. */
+  listAgentSessions(agentSlug: string): Promise<SessionLogEntry[]>
   listUserMemory(): Promise<LoadedMemoryFileDTO>
   recallMemory(payload: RecallMemoryInput): Promise<MemoryRecallResult[]>
   listMemoryEvents(payload: {

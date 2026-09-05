@@ -3,6 +3,7 @@
  */
 
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { listSessionLogEntries, type SessionLogEntry } from '@craft-agent/shared/sessions-log'
 import {
   deleteMemoryEntry,
   enqueueMemoryReviewItem,
@@ -243,6 +244,16 @@ async function applyMemoryReview(payload: ApplyMemoryReviewInput): Promise<Memor
 
 export function registerMemoryHandlers(server: RpcServer, deps: HandlerDeps): void {
   void deps
+
+  server.handle(RPC_CHANNELS.memory.LIST_AGENT_SESSIONS, async (_ctx, agentSlug: string): Promise<SessionLogEntry[]> => {
+    // A damaged log costs the agent its "where we left off" note; it must not
+    // stop a chat session from opening.
+    try {
+      return listSessionLogEntries(agentSlug)
+    } catch {
+      return []
+    }
+  })
 
   server.handle(RPC_CHANNELS.memory.LIST_AGENT, async (_ctx, agentSlug: string): Promise<LoadedMemoryFile> => {
     const loaded = loadAgentMemory(agentSlug)
