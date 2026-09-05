@@ -67,6 +67,13 @@ export interface ZeroStatus {
   error?: string
 }
 
+export interface MonidBudgetStatus {
+  singleCallCapUsd: number
+  weeklyCapUsd: number
+  spentLast7DaysUsd: number
+  remainingWeeklyUsd: number
+}
+
 export interface VideoStudioImportResult {
   ok: boolean
   outputId: string
@@ -527,6 +534,8 @@ export interface ElectronAPI {
   deleteSecret(name: string): Promise<{ success: boolean }>
   getZeroStatus(): Promise<ZeroStatus>
   installZero(): Promise<{ success: boolean; error?: string }>
+  getMonidBudget(): Promise<MonidBudgetStatus>
+  setMonidBudget(args: { singleCallCapUsd: number; weeklyCapUsd: number }): Promise<MonidBudgetStatus>
 
   // Onboarding
   getAuthState(): Promise<AuthState>
@@ -610,7 +619,7 @@ export interface ElectronAPI {
 
   // OAuth (server-owned credentials, client-orchestrated flow)
   performOAuth(args: { sourceSlug: string; sessionId?: string; authRequestId?: string; credentialScope?: 'workspace' | 'global' | 'workspace-override' }): Promise<{ success: boolean; error?: string; email?: string }>
-  oauthRevoke(sourceSlug: string): Promise<{ success: boolean }>
+  oauthRevoke(args: { sourceSlug: string }): Promise<{ success: boolean }>
 
   // Session content search (full-text search via ripgrep)
   searchSessionContent(workspaceId: string, query: string, searchId?: string): Promise<SessionSearchResult[]>

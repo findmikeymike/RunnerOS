@@ -25,6 +25,8 @@ import {
   detectExtensionFromMagic,
   sanitizeFilename,
 } from '../utils/binary-detection.ts';
+import { evaluateMonidSpendLimit, extractMonidActualCostUsd } from './monid-spend-guard.ts';
+import { monidBudgetStore, type MonidBudgetStore } from './monid-budget.ts';
 
 /**
  * Configuration for an in-process API source server.
@@ -126,10 +128,13 @@ export class McpClientPool {
   /** Called after sync() connects/disconnects sources, so clients can be notified */
   onToolsChanged?: () => void;
 
-  constructor(options?: { debug?: (msg: string) => void; workspaceRootPath?: string; sessionPath?: string }) {
+  private readonly monidBudget: MonidBudgetStore;
+
+  constructor(options?: { debug?: (msg: string) => void; workspaceRootPath?: string; sessionPath?: string; monidBudgetStore?: MonidBudgetStore }) {
     this.debugFn = options?.debug;
     this.workspaceRootPath = options?.workspaceRootPath;
     this.sessionPath = options?.sessionPath;
+    this.monidBudget = options?.monidBudgetStore ?? monidBudgetStore;
   }
 
   /**
@@ -385,11 +390,45 @@ export class McpClientPool {
       };
     }
 
+    let monidReservationId: string | undefined;
     try {
+      if (slug === 'monid' && originalName === 'run') {
+        const provider = args.provider;
+        const endpoint = args.endpoint;
+        if (typeof provider !== 'string' || typeof endpoint !== 'string') {
+          return {
+            content: 'Monid run blocked: provider and endpoint are required for price verification.',
+            isError: true,
+            sourceSlug: slug,
+          };
+        }
+
+        const budget = this.monidBudget.getStatus();
+        const inspection = await client.callTool('inspect', { provider, endpoint });
+        const spendDecision = evaluateMonidSpendLimit(inspection, args, budget.singleCallCapUsd);
+        if (!spendDecision.allowed) {
+          return { content: spendDecision.reason, isError: true, sourceSlug: slug };
+        }
+        monidReservationId = this.monidBudget.reserve(spendDecision.projectedMaxUsd);
+        this.debug(
+          `Monid spend check passed for ${provider}${endpoint}: projected max $${spendDecision.projectedMaxUsd.toFixed(2)} ` +
+          `(single-call cap $${budget.singleCallCapUsd.toFixed(2)}, weekly remaining $${budget.remainingWeeklyUsd.toFixed(2)})`
+        );
+      }
+
       const result = await client.callTool(originalName, args) as {
         content?: Array<{ type: string; text?: unknown; data?: string; mimeType?: string }>;
         isError?: boolean;
       };
+
+      if (monidReservationId) {
+        if (result.isError) {
+          this.monidBudget.release(monidReservationId);
+        } else {
+          this.monidBudget.commit(monidReservationId, extractMonidActualCostUsd(result));
+        }
+        monidReservationId = undefined;
+      }
 
       const contentBlocks = result.content || [];
       const parts: string[] = [];
@@ -442,6 +481,7 @@ export class McpClientPool {
         isError: !!result.isError,
       };
     } catch (err) {
+      if (monidReservationId) this.monidBudget.release(monidReservationId);
       return {
         content: `MCP tool "${originalName}" (source: ${slug}) failed: ${err instanceof Error ? err.message : String(err)}`,
         isError: true,

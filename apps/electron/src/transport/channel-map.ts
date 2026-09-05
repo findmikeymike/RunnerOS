@@ -129,6 +129,8 @@ export const CHANNEL_MAP = {
   deleteSecret: invoke(RPC_CHANNELS.secrets.DELETE),
   getZeroStatus: invoke(RPC_CHANNELS.secrets.ZERO_STATUS),
   installZero: invoke(RPC_CHANNELS.secrets.INSTALL_ZERO),
+  getMonidBudget: invoke(RPC_CHANNELS.secrets.MONID_BUDGET_GET),
+  setMonidBudget: invoke(RPC_CHANNELS.secrets.MONID_BUDGET_SET),
 
   // Onboarding
   getAuthState: invoke(RPC_CHANNELS.onboarding.GET_AUTH_STATE),

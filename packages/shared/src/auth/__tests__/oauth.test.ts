@@ -1,5 +1,5 @@
 import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
-import { getMcpBaseUrl, discoverOAuthMetadata, prepareMcpOAuth } from '../oauth';
+import { CraftOAuth, getMcpBaseUrl, discoverOAuthMetadata, prepareMcpOAuth, exchangeMcpOAuth, revokeMcpOAuthTokens } from '../oauth';
 
 // ============================================================
 // Unit tests for internal helpers exported only for testing
@@ -97,7 +97,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://mcp.craft.do/my/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toMatchObject(authServerMetadata);
     });
 
     it('falls back to RFC 8414 when HEAD returns non-401', async () => {
@@ -214,7 +214,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://example.com/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toMatchObject(authServerMetadata);
     });
 
     it('falls back to POST when both HEAD and GET return 405 (Streamable HTTP)', async () => {
@@ -256,7 +256,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://example.com/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toMatchObject(authServerMetadata);
     });
 
     it('falls back when authorization_servers is empty array', async () => {
@@ -403,7 +403,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://example.com/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toMatchObject(authServerMetadata);
     });
 
     it('parses resource_metadata with single quotes', async () => {
@@ -437,7 +437,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://example.com/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toMatchObject(authServerMetadata);
     });
   });
 
@@ -725,7 +725,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://example.com/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toMatchObject(authServerMetadata);
     });
 
     it('falls back when WWW-Authenticate header is null', async () => {
@@ -780,7 +780,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://example.com/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toMatchObject(authServerMetadata);
     });
 
     it('falls back when resource_metadata value has no quotes', async () => {
@@ -1034,7 +1034,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://example.com/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toMatchObject(authServerMetadata);
     });
 
     it('handles authorization server URL at root (no path)', async () => {
@@ -1067,7 +1067,7 @@ describe('discoverOAuthMetadata', () => {
       });
 
       const result = await discoverOAuthMetadata('https://example.com/mcp');
-      expect(result).toEqual(authServerMetadata);
+      expect(result).toMatchObject(authServerMetadata);
     });
   });
 
@@ -1150,6 +1150,56 @@ describe('prepareMcpOAuth', () => {
     globalThis.fetch = originalFetch;
   });
 
+  it('binds RFC 9728 resource metadata to authorization and token exchange', async () => {
+    mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (url === 'https://mcp.monid.ai/v1' && options?.method === 'HEAD') {
+        return Promise.resolve(new Response(null, {
+          status: 401,
+          headers: {
+            'WWW-Authenticate': 'Bearer resource_metadata="https://mcp.monid.ai/.well-known/oauth-protected-resource/v1"',
+          },
+        }));
+      }
+      if (url === 'https://mcp.monid.ai/.well-known/oauth-protected-resource/v1') {
+        return Promise.resolve(new Response(JSON.stringify({
+          resource: 'https://mcp.monid.ai/v1',
+          authorization_servers: ['https://clerk.app.monid.ai'],
+        }), { status: 200 }));
+      }
+      if (url === 'https://clerk.app.monid.ai/.well-known/oauth-authorization-server') {
+        return Promise.resolve(new Response(JSON.stringify({
+          authorization_endpoint: 'https://clerk.app.monid.ai/oauth/authorize',
+          token_endpoint: 'https://clerk.app.monid.ai/oauth/token',
+        }), { status: 200 }));
+      }
+      if (url === 'https://clerk.app.monid.ai/oauth/token' && options?.method === 'POST') {
+        return Promise.resolve(new Response(JSON.stringify({ access_token: 'token' }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('Not Found', { status: 404 }));
+    });
+
+    const prepared = await prepareMcpOAuth('https://mcp.monid.ai/v1', { callbackPort: 8914 });
+    expect(prepared.resource).toBe('https://mcp.monid.ai/v1');
+    expect(new URL(prepared.authUrl).searchParams.get('resource')).toBe('https://mcp.monid.ai/v1');
+
+    const exchanged = await exchangeMcpOAuth({
+      code: 'auth-code',
+      codeVerifier: prepared.codeVerifier,
+      tokenEndpoint: prepared.tokenEndpoint,
+      clientId: prepared.clientId,
+      redirectUri: prepared.redirectUri,
+      resource: prepared.resource,
+    });
+    expect(exchanged.success).toBe(true);
+
+    const tokenCall = mockFetch.mock.calls.find(([url, options]) =>
+      url === 'https://clerk.app.monid.ai/oauth/token' && (options as RequestInit | undefined)?.method === 'POST'
+    );
+    expect(tokenCall).toBeDefined();
+    const tokenBody = new URLSearchParams((tokenCall?.[1] as RequestInit).body as string);
+    expect(tokenBody.get('resource')).toBe('https://mcp.monid.ai/v1');
+  });
+
   it('falls back to the default client ID when registration is forbidden', async () => {
     mockFetch.mockImplementation((url: string, options?: RequestInit) => {
       if (options?.method === 'HEAD') {
@@ -1192,6 +1242,7 @@ describe('prepareMcpOAuth', () => {
         return Promise.resolve(new Response(JSON.stringify({
           client_id: 'dynamic-client',
           client_secret: 'secret-123',
+          scope: 'openid profile offline_access',
         }), { status: 200 }));
       }
       return Promise.resolve(new Response('Not Found', { status: 404 }));
@@ -1202,6 +1253,7 @@ describe('prepareMcpOAuth', () => {
     expect(result.clientId).toBe('dynamic-client');
     expect(result.clientSecret).toBe('secret-123');
     expect(result.authUrl).toContain('client_id=dynamic-client');
+    expect(new URL(result.authUrl).searchParams.get('scope')).toBe('openid profile offline_access');
   });
 
   it('throws on unexpected registration failures instead of silently falling back', async () => {
@@ -1223,5 +1275,110 @@ describe('prepareMcpOAuth', () => {
     });
 
     await expect(prepareMcpOAuth('https://example.com/mcp', { callbackPort: 8914 })).rejects.toThrow('Failed to register OAuth client: Server error');
+  });
+});
+
+describe('CraftOAuth refresh', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('binds refresh requests to the MCP resource', async () => {
+    const mockFetch = mock((url: string, options?: RequestInit) => {
+      if (url === 'https://example.com/mcp' && options?.method === 'HEAD') {
+        return Promise.resolve(new Response(null, { status: 200 }));
+      }
+      if (url === 'https://example.com/.well-known/oauth-authorization-server') {
+        return Promise.resolve(new Response(JSON.stringify({
+          authorization_endpoint: 'https://example.com/oauth/authorize',
+          token_endpoint: 'https://example.com/oauth/token',
+        }), { status: 200 }));
+      }
+      if (url === 'https://example.com/oauth/token' && options?.method === 'POST') {
+        const body = new URLSearchParams(options.body as string);
+        expect(body.get('resource')).toBe('https://example.com/mcp');
+        return Promise.resolve(new Response(JSON.stringify({ access_token: 'new-token' }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('Not Found', { status: 404 }));
+    });
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
+
+    const oauth = new CraftOAuth(
+      { mcpUrl: 'https://example.com/mcp' },
+      { onStatus: () => {}, onError: () => {} },
+    );
+    const tokens = await oauth.refreshAccessToken('refresh-token', 'client-id');
+    expect(tokens.accessToken).toBe('new-token');
+  });
+});
+
+describe('revokeMcpOAuthTokens', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('revokes both refresh and access tokens at the discovered endpoint', async () => {
+    const revoked: Array<{ token: string | null; hint: string | null }> = [];
+    const mockFetch = mock((url: string, options?: RequestInit) => {
+      if (url === 'https://mcp.monid.ai/v1' && options?.method === 'HEAD') {
+        return Promise.resolve(new Response(null, { status: 200 }));
+      }
+      if (url === 'https://mcp.monid.ai/.well-known/oauth-authorization-server') {
+        return Promise.resolve(new Response(JSON.stringify({
+          authorization_endpoint: 'https://clerk.app.monid.ai/oauth/authorize',
+          token_endpoint: 'https://clerk.app.monid.ai/oauth/token',
+          revocation_endpoint: 'https://clerk.app.monid.ai/oauth/token/revoke',
+        }), { status: 200 }));
+      }
+      if (url === 'https://clerk.app.monid.ai/oauth/token/revoke' && options?.method === 'POST') {
+        const body = new URLSearchParams(options.body as string);
+        revoked.push({ token: body.get('token'), hint: body.get('token_type_hint') });
+        expect(body.get('client_id')).toBe('client-id');
+        return Promise.resolve(new Response(null, { status: 200 }));
+      }
+      return Promise.resolve(new Response('Not Found', { status: 404 }));
+    });
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
+
+    const remotelyRevoked = await revokeMcpOAuthTokens('https://mcp.monid.ai/v1', {
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      clientId: 'client-id',
+    });
+
+    expect(remotelyRevoked).toBe(true);
+    expect(revoked).toEqual([
+      { token: 'refresh-token', hint: 'refresh_token' },
+      { token: 'access-token', hint: 'access_token' },
+    ]);
+  });
+
+  it('fails closed when the remote revocation endpoint rejects a token', async () => {
+    const mockFetch = mock((url: string, options?: RequestInit) => {
+      if (url === 'https://mcp.monid.ai/v1' && options?.method === 'HEAD') {
+        return Promise.resolve(new Response(null, { status: 200 }));
+      }
+      if (url === 'https://mcp.monid.ai/.well-known/oauth-authorization-server') {
+        return Promise.resolve(new Response(JSON.stringify({
+          authorization_endpoint: 'https://clerk.app.monid.ai/oauth/authorize',
+          token_endpoint: 'https://clerk.app.monid.ai/oauth/token',
+          revocation_endpoint: 'https://clerk.app.monid.ai/oauth/token/revoke',
+        }), { status: 200 }));
+      }
+      if (url === 'https://clerk.app.monid.ai/oauth/token/revoke') {
+        return Promise.resolve(new Response('denied', { status: 503 }));
+      }
+      return Promise.resolve(new Response('Not Found', { status: 404 }));
+    });
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
+
+    await expect(revokeMcpOAuthTokens('https://mcp.monid.ai/v1', {
+      accessToken: 'access-token',
+      clientId: 'client-id',
+    })).rejects.toThrow('Failed to revoke OAuth token');
   });
 });

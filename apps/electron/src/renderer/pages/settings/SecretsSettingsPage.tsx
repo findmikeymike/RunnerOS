@@ -1,12 +1,13 @@
 import * as React from 'react'
-import { CheckCircle2, ExternalLink, Info, KeyRound, Loader2, Plus, RefreshCcw, Trash2, WalletCards } from 'lucide-react'
+import { CheckCircle2, ExternalLink, Globe2, Info, KeyRound, Loader2, Plus, RefreshCcw, Trash2, WalletCards } from 'lucide-react'
 import { toast } from 'sonner'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { SettingsCard, SettingsMenuSelect, SettingsSection } from '@/components/settings'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
-import type { UserSecretSummary, ZeroStatus } from '../../../shared/types'
+import type { MonidBudgetStatus, SourceCredentialScopeResult, UserSecretSummary, ZeroStatus } from '../../../shared/types'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { navigate, routes } from '@/lib/navigate'
 
@@ -286,12 +287,19 @@ const SECRET_GROUPS = Array.from(new Set(SECRET_PRESETS.map((preset) => preset.g
 export default function SecretsSettingsPage() {
   const { activeWorkspaceId } = useAppShellContext()
   const [secrets, setSecrets] = React.useState<UserSecretSummary[]>([])
+  const [monid, setMonid] = React.useState<SourceCredentialScopeResult | null>(null)
+  const [monidBudget, setMonidBudget] = React.useState<MonidBudgetStatus | null>(null)
+  const [monidSingleCap, setMonidSingleCap] = React.useState('0.50')
+  const [monidWeeklyCap, setMonidWeeklyCap] = React.useState('10.00')
   const [zero, setZero] = React.useState<ZeroStatus | null>(null)
   const [name, setName] = React.useState('')
   const [value, setValue] = React.useState('')
   const [selectedGroup, setSelectedGroup] = React.useState(SECRET_GROUPS[0] ?? '')
   const [selectedPresetName, setSelectedPresetName] = React.useState('')
   const [loading, setLoading] = React.useState(false)
+  const [connectingMonid, setConnectingMonid] = React.useState(false)
+  const [disconnectingMonid, setDisconnectingMonid] = React.useState(false)
+  const [savingMonidBudget, setSavingMonidBudget] = React.useState(false)
   const [installing, setInstalling] = React.useState(false)
 
   const groupPresets = React.useMemo(
@@ -308,16 +316,24 @@ export default function SecretsSettingsPage() {
   const load = React.useCallback(async () => {
     setLoading(true)
     try {
-      const [secretRows, zeroStatus] = await Promise.all([
+      const [secretRows, monidStatus, monidBudgetStatus, zeroStatus] = await Promise.all([
         window.electronAPI.listSecrets(),
+        activeWorkspaceId
+          ? window.electronAPI.getSourceCredentialScope(activeWorkspaceId, 'monid')
+          : Promise.resolve(null),
+        window.electronAPI.getMonidBudget(),
         window.electronAPI.getZeroStatus(),
       ])
       setSecrets(secretRows)
+      setMonid(monidStatus)
+      setMonidBudget(monidBudgetStatus)
+      setMonidSingleCap(monidBudgetStatus.singleCallCapUsd.toFixed(2))
+      setMonidWeeklyCap(monidBudgetStatus.weeklyCapUsd.toFixed(2))
       setZero(zeroStatus)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [activeWorkspaceId])
 
   React.useEffect(() => {
     void load()
@@ -392,11 +408,143 @@ export default function SecretsSettingsPage() {
     }
   }
 
+  const connectMonid = async () => {
+    if (!activeWorkspaceId) {
+      toast.error('Open a workspace before connecting Monid')
+      return
+    }
+
+    setConnectingMonid(true)
+    try {
+      const result = await window.electronAPI.performOAuth({ sourceSlug: 'monid' })
+      if (!result.success) {
+        toast.error(result.error || 'Could not connect Monid')
+        return
+      }
+      toast.success('Monid connected')
+      await load()
+    } finally {
+      setConnectingMonid(false)
+    }
+  }
+
+  const disconnectMonid = async () => {
+    setDisconnectingMonid(true)
+    try {
+      const result = await window.electronAPI.oauthRevoke({ sourceSlug: 'monid' })
+      if (!result.success) {
+        toast.error('Could not disconnect Monid')
+        return
+      }
+      toast.success('Monid disconnected')
+      await load()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not disconnect Monid')
+    } finally {
+      setDisconnectingMonid(false)
+    }
+  }
+
+  const saveMonidBudget = async () => {
+    const singleCallCapUsd = Number(monidSingleCap)
+    const weeklyCapUsd = Number(monidWeeklyCap)
+    if (!Number.isFinite(singleCallCapUsd) || singleCallCapUsd < 0 || !Number.isFinite(weeklyCapUsd) || weeklyCapUsd < 0) {
+      toast.error('Enter valid non-negative spend limits')
+      return
+    }
+
+    setSavingMonidBudget(true)
+    try {
+      const status = await window.electronAPI.setMonidBudget({ singleCallCapUsd, weeklyCapUsd })
+      setMonidBudget(status)
+      setMonidSingleCap(status.singleCallCapUsd.toFixed(2))
+      setMonidWeeklyCap(status.weeklyCapUsd.toFixed(2))
+      toast.success('Monid spend limits saved')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not save Monid spend limits')
+    } finally {
+      setSavingMonidBudget(false)
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       <PanelHeader title="Secrets" />
       <ScrollArea className="flex-1">
         <div className="space-y-6 p-6">
+          <SettingsSection title="Agent tools">
+            <SettingsCard>
+              <div className="flex items-start justify-between gap-4 p-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Globe2 className="h-4 w-4 text-white/55" />
+                    Monid
+                    <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/45">
+                      Primary
+                    </span>
+                  </div>
+                  <p className="mt-2 max-w-xl text-xs leading-5 text-white/45">
+                    Connect one account so agents can discover and use external search, social, enrichment, media, and data tools. Calls run automatically inside your limits and stop before crossing either cap.
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-end gap-3">
+                    <label className="space-y-1 text-[11px] text-white/45">
+                      <span>Single call max</span>
+                      <div className="flex items-center gap-1">
+                        <span>$</span>
+                        <Input className="h-8 w-24" type="number" min="0" step="0.01" value={monidSingleCap} onChange={(event) => setMonidSingleCap(event.target.value)} />
+                      </div>
+                    </label>
+                    <label className="space-y-1 text-[11px] text-white/45">
+                      <span>Rolling 7-day max</span>
+                      <div className="flex items-center gap-1">
+                        <span>$</span>
+                        <Input className="h-8 w-24" type="number" min="0" step="0.01" value={monidWeeklyCap} onChange={(event) => setMonidWeeklyCap(event.target.value)} />
+                      </div>
+                    </label>
+                    <Button variant="outline" size="sm" className="h-8" onClick={saveMonidBudget} disabled={savingMonidBudget}>
+                      {savingMonidBudget ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                      Save limits
+                    </Button>
+                    {monidBudget ? (
+                      <span className="pb-2 text-[11px] text-white/35">
+                        ${monidBudget.spentLast7DaysUsd.toFixed(2)} spent · ${monidBudget.remainingWeeklyUsd.toFixed(2)} left
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 flex items-center gap-1.5 text-xs">
+                    {monid?.hasEffectiveCredential ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/80" />
+                        <span className="text-emerald-300/75">Connected</span>
+                      </>
+                    ) : (
+                      <span className="text-white/35">Not connected</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  {monid?.hasEffectiveCredential ? (
+                    <>
+                      <Button variant="outline" size="sm" onClick={connectMonid} disabled={connectingMonid || disconnectingMonid}>
+                        {connectingMonid ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                        Reconnect
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={disconnectMonid} disabled={connectingMonid || disconnectingMonid}>
+                        {disconnectingMonid ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                        Disconnect
+                      </Button>
+                    </>
+                  ) : (
+                    <Button size="sm" onClick={connectMonid} disabled={!activeWorkspaceId || connectingMonid}>
+                      {connectingMonid ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                      Connect or create account
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </SettingsCard>
+          </SettingsSection>
+
           <SettingsSection title="Zero">
             <SettingsCard>
               <div className="flex items-start justify-between gap-4 p-4">

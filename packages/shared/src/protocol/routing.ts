@@ -204,6 +204,8 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.secrets.DELETE,
   RPC_CHANNELS.secrets.ZERO_STATUS,
   RPC_CHANNELS.secrets.INSTALL_ZERO,
+  RPC_CHANNELS.secrets.MONID_BUDGET_GET,
+  RPC_CHANNELS.secrets.MONID_BUDGET_SET,
 
   // server config — local embedded server settings
   RPC_CHANNELS.settings.GET_SERVER_CONFIG,

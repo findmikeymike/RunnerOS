@@ -12,6 +12,7 @@ import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
 import { isValidWorkingDirectory } from '../../utils/path-validation'
+import { monidBudgetStore } from '@craft-agent/shared/mcp'
 
 const execFileAsync = promisify(execFile)
 const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
@@ -113,6 +114,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.secrets.DELETE,
   RPC_CHANNELS.secrets.ZERO_STATUS,
   RPC_CHANNELS.secrets.INSTALL_ZERO,
+  RPC_CHANNELS.secrets.MONID_BUDGET_GET,
+  RPC_CHANNELS.secrets.MONID_BUDGET_SET,
   RPC_CHANNELS.dialog.OPEN_FOLDER,
 ] as const
 
@@ -161,6 +164,17 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) }
     }
+  })
+
+  server.handle(RPC_CHANNELS.secrets.MONID_BUDGET_GET, async () => {
+    return monidBudgetStore.getStatus()
+  })
+
+  server.handle(RPC_CHANNELS.secrets.MONID_BUDGET_SET, async (_ctx, args: {
+    singleCallCapUsd: number
+    weeklyCapUsd: number
+  }) => {
+    return monidBudgetStore.updateLimits(args.singleCallCapUsd, args.weeklyCapUsd)
   })
 
   // ============================================================

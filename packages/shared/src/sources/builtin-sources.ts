@@ -19,6 +19,7 @@ const VIDEO_STUDIO_SLUG = 'video-studio';
 const GOOGLE_ADS_SLUG = 'google-ads';
 const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
 const OPEN_SLIDE_SLUG = 'open-slide';
+const MONID_SLUG = 'monid';
 const ZERO_SLUG = 'zero';
 const SHOPIFY_SLUG = 'shopify';
 const PRINTIFY_SLUG = 'printify';
@@ -254,6 +255,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getGoogleAdsSource(workspaceId, workspaceRootPath),
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
     getOpenSlideSource(workspaceId, workspaceRootPath),
+    getMonidSource(workspaceId, workspaceRootPath),
     getZeroSource(workspaceId, workspaceRootPath),
     getShopifySource(workspaceId, workspaceRootPath),
     getPrintifySource(workspaceId, workspaceRootPath),
@@ -803,6 +805,67 @@ export function getOpenSlideSource(workspaceId: string, workspaceRootPath: strin
 }
 
 /**
+ * Built-in Monid tool marketplace.
+ *
+ * Monid is remote Streamable HTTP MCP, so users only authenticate in the app.
+ * No local CLI or provider-by-provider credentials are required.
+ */
+export function getMonidSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const config: FolderSourceConfig = {
+    id: 'builtin-monid',
+    name: 'Monid',
+    slug: MONID_SLUG,
+    enabled: true,
+    provider: 'monid',
+    type: 'mcp',
+    mcp: {
+      transport: 'http',
+      url: 'https://mcp.monid.ai/v1',
+      authType: 'oauth',
+    },
+    tagline: 'Discover, inspect, and run external tools through one connected account.',
+    icon: '🌐',
+    isAuthenticated: false,
+    connectionStatus: 'needs_auth',
+    connectionError: 'Connect your Monid account in Settings.',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: '',
+    config,
+    guide: {
+      raw: [
+        '# Monid',
+        '',
+        'Use Monid when the task needs external search, scraping, enrichment, social data, business data, media, or another capability RunnerOS does not already provide directly.',
+        '',
+        'Workflow:',
+        '1. Discover a focused capability for the exact job.',
+        '2. Inspect the selected endpoint before running it. Check its schema, price, verification, health, and expected runtime.',
+        '3. Prefer healthy or stable verified endpoints when fit is otherwise equal.',
+        '4. Start with one query and a small result limit (usually 5-10).',
+        '5. Run only after the input and expected maximum cost are clear.',
+        '6. Read response hints before choosing the next operation.',
+        '7. For interactive work, poll asynchronous runs every 5-10 seconds. Treat BLOCKED as terminal.',
+        '8. Report material cost and provider failures plainly.',
+        '',
+        'Hard rules:',
+        '- Use a dedicated connected RunnerOS source first when it already covers the service.',
+        '- Never guess an endpoint schema or silently broaden a paid request.',
+        '- In-budget reads run automatically under the user\'s single-call and rolling 7-day caps. Do not ask for per-call approval.',
+        '- Ask before any external mutation, send, publish, purchase, upload, delete, or account change.',
+        '- Do not treat discovery results as proof that an endpoint works; use health and the actual run result.',
+        '- Do not retry a BLOCKED run unchanged. Report the control that stopped it.',
+        '- Use Zero only as a fallback when it is already available and Monid has no suitable working endpoint.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
  * Built-in source for the Zero CLI capability marketplace.
  *
  * Zero is intentionally modeled as a local CLI source. Its live capability
@@ -1083,6 +1146,7 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === GOOGLE_ADS_SLUG
     || slug === YOUTUBE_RESEARCH_SLUG
     || slug === OPEN_SLIDE_SLUG
+    || slug === MONID_SLUG
     || slug === ZERO_SLUG
     || slug === SHOPIFY_SLUG
     || slug === PRINTIFY_SLUG;
