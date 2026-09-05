@@ -89,6 +89,8 @@ export const artistProfileDoc = defineArtistTextDoc<ArtistProfile>({
   description:
     'Global artist identity, audience, brand, music, and operating context for workers.',
   routing: { mode: 'broadcast' },
+  // Who the artist is. No agent should have to ask for this.
+  delivery: 'always',
   fields: [
     'artistName',
     'mission',

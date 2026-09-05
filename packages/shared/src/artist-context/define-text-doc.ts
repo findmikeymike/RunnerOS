@@ -37,6 +37,13 @@ export interface ArtistTextDocDefinition<T extends ArtistTextRecord> {
   label: string;
   description: string;
   routing: ContextDocMetadata['routing'];
+  /**
+   * Prompt delivery policy. Omitted means `on-demand` — the doc stays reachable
+   * through `get_workspace_context` but is not injected into every prompt.
+   */
+  delivery?: ContextDocMetadata['delivery'];
+  /** Agents that always receive this doc, overriding `delivery` for them alone. */
+  deliveryAlwaysFor?: readonly string[];
   /** Fields normalized on read and write. */
   fields: readonly ArtistTextField<T>[];
   /** Fields counted toward completion. Defaults to `fields`. */
@@ -71,6 +78,10 @@ export function defineArtistTextDoc<T extends ArtistTextRecord>(
     description,
     routing,
     enabled: true,
+    ...(definition.delivery ? { delivery: definition.delivery } : {}),
+    ...(definition.deliveryAlwaysFor?.length
+      ? { deliveryAlwaysFor: [...definition.deliveryAlwaysFor] }
+      : {}),
   });
 
   const empty = (): T => ({ version: 1, updatedAt: new Date().toISOString() }) as T;

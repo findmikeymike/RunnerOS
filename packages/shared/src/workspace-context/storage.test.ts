@@ -378,11 +378,59 @@ describe('delivery-aware context routing', () => {
     ]);
   });
 
-  test('prompt injection excludes on-demand docs', () => {
+  test('prompt injection takes only docs that opted in', () => {
+    // `legacy-broadcast` has no delivery field. It is authorized (the agent can
+    // still fetch it) but no longer injected: on-demand is the default for every
+    // agent, so a doc is auto-injected only when it says so.
     expect(loadPromptContextDocsForAgent(workspace, 'writer').map((d) => d.slug)).toEqual([
       'always-writer',
-      'legacy-broadcast',
       'private-writer',
+    ]);
+  });
+
+  test('a doc with no delivery field stays readable while no longer being injected', () => {
+    const legacy = loadContextDoc(workspace, 'legacy-broadcast')!;
+    expect(legacy.metadata.delivery).toBeUndefined();
+    expect(canAgentAccessContextDoc(legacy, 'writer')).toBe(true);
+    expect(shouldInjectContextDoc(legacy, 'writer')).toBe(false);
+  });
+
+  test('deliveryAlwaysFor injects for named agents only, without narrowing access', () => {
+    upsertContextDoc(workspace, {
+      slug: 'branding-like',
+      metadata: {
+        name: 'Branding Like',
+        routing: { mode: 'broadcast' },
+        enabled: true,
+        delivery: 'on-demand',
+        deliveryAlwaysFor: ['art-director'],
+      },
+      body: 'brand dna',
+    });
+    const doc = loadContextDoc(workspace, 'branding-like')!;
+
+    expect(shouldInjectContextDoc(doc, 'art-director')).toBe(true);
+    expect(shouldInjectContextDoc(doc, 'writer')).toBe(false);
+    // The point of the field: routing stays broadcast, so an agent that does not
+    // get it injected can still read it when a job calls for it.
+    expect(canAgentAccessContextDoc(doc, 'writer')).toBe(true);
+  });
+
+  test('deliveryAlwaysFor round-trips through serialize and parse', () => {
+    upsertContextDoc(workspace, {
+      slug: 'round-trip',
+      metadata: {
+        name: 'Round Trip',
+        routing: { mode: 'broadcast' },
+        enabled: true,
+        delivery: 'on-demand',
+        deliveryAlwaysFor: ['art-director', 'video-director'],
+      },
+      body: 'x',
+    });
+    expect(loadContextDoc(workspace, 'round-trip')!.metadata.deliveryAlwaysFor).toEqual([
+      'art-director',
+      'video-director',
     ]);
   });
 
