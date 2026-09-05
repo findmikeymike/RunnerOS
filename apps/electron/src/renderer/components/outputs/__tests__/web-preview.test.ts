@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { OutputManifestDTO } from '@/hooks/useOutputs'
 import { isLocalWebPreviewUrl, resolveWebPreviewTarget } from '../web-preview'
 import { isGeneratedOutputPreviewUrl } from '../OutputWebPreview'
+import { GENERATED_OUTPUT_SANDBOX, LOCAL_PREVIEW_SANDBOX, sandboxForPreviewUrl } from '../web-preview'
 import { buildRunnerOutputAssetUrl, parseRunnerOutputAssetUrl } from '@craft-agent/shared/outputs'
 
 function manifest(url: string, mode: 'external-link' | 'web' = 'external-link'): OutputManifestDTO {
@@ -140,7 +141,7 @@ describe('web preview target resolution', () => {
 
   test('resolves generated HTML assets to runner-output protocol previews', () => {
     expect(resolveWebPreviewTarget(htmlAssetManifest())).toEqual({
-      url: 'runner-output://asset/workspace-1/output-html/site/index.html',
+      url: buildRunnerOutputAssetUrl('workspace-1', 'output-html', 'site/index.html'),
       label: 'index.html',
       displayHost: 'generated output',
     })
@@ -150,7 +151,7 @@ describe('web preview target resolution', () => {
     expect(resolveWebPreviewTarget(htmlAssetManifest({
       preview: undefined,
     }))).toEqual({
-      url: 'runner-output://asset/workspace-1/output-html/site/index.html',
+      url: buildRunnerOutputAssetUrl('workspace-1', 'output-html', 'site/index.html'),
       label: 'index.html',
       displayHost: 'generated output',
     })
@@ -189,7 +190,7 @@ describe('web preview target resolution', () => {
         },
       ],
     }))).toEqual({
-      url: 'runner-output://asset/workspace-1/output-html/site/index.html',
+      url: buildRunnerOutputAssetUrl('workspace-1', 'output-html', 'site/index.html'),
       label: 'Deck preview',
       displayHost: 'generated output',
     })
@@ -223,7 +224,8 @@ describe('runner-output URL helpers', () => {
 
   test('round trips safe output asset URLs', () => {
     const url = buildRunnerOutputAssetUrl('workspace 1', 'output-1', 'site/my page.html')
-    expect(url).toBe('runner-output://asset/workspace%201/output-1/site/my%20page.html')
+    expect(new URL(url).hostname).toStartWith('asset.')
+    expect(new URL(url).pathname).toBe('/workspace%201/output-1/site/my%20page.html')
     expect(parseRunnerOutputAssetUrl(url)).toEqual({
       workspaceId: 'workspace 1',
       outputId: 'output-1',
@@ -233,7 +235,7 @@ describe('runner-output URL helpers', () => {
 
   test('round trips absolute workspace output asset URLs for legacy session outputs', () => {
     const url = buildRunnerOutputAssetUrl('workspace-1', 'output-1', '/Users/michael/workspace/sessions/session-1/data/index.html')
-    expect(url).toBe('runner-output://asset/workspace-1/output-1/%2FUsers%2Fmichael%2Fworkspace%2Fsessions%2Fsession-1%2Fdata%2Findex.html')
+    expect(new URL(url).pathname).toBe('/workspace-1/output-1/%2FUsers%2Fmichael%2Fworkspace%2Fsessions%2Fsession-1%2Fdata%2Findex.html')
     expect(parseRunnerOutputAssetUrl(url)).toEqual({
       workspaceId: 'workspace-1',
       outputId: 'output-1',
@@ -243,5 +245,44 @@ describe('runner-output URL helpers', () => {
 
   test('rejects traversal output asset URLs', () => {
     expect(parseRunnerOutputAssetUrl('runner-output://asset/workspace-1/output-1/%2E%2E/secret.html')).toBeNull()
+  })
+
+  test('binds an origin to the exact workspace/output, including Unicode and case', () => {
+    const pairs = [['ws', 'one'], ['ws', 'two'], ['WS', 'one'], ['é', 'one'], ['e', 'one']]
+    const urls = pairs.map(([ws, output]) => buildRunnerOutputAssetUrl(ws!, output!, 'index.html'))
+    expect(new Set(urls.map((url) => new URL(url).host)).size).toBe(pairs.length)
+    for (const url of urls) expect(parseRunnerOutputAssetUrl(url)).not.toBeNull()
+    const forged = new URL(urls[0]!)
+    forged.pathname = new URL(urls[1]!).pathname
+    expect(parseRunnerOutputAssetUrl(forged.href)).toBeNull()
+    const relative = new URL('data.json', urls[0]!)
+    expect(parseRunnerOutputAssetUrl(relative.href)?.assetPath).toBe('data.json')
+  })
+})
+
+describe('preview iframe sandbox', () => {
+  test('generated HTML retains its scoped origin for same-output data loading', () => {
+    const sandbox = sandboxForPreviewUrl('runner-output://asset/workspace-1/output-1/index.html')
+
+    // The handler redirects old URLs and binds scoped hosts to an exact output.
+    expect(sandbox).toContain('allow-same-origin')
+    expect(sandbox).toBe(GENERATED_OUTPUT_SANDBOX)
+    expect(sandbox).toContain('allow-scripts')
+  })
+
+  test('a localhost dev server keeps same-origin, which real sites need to render', () => {
+    const sandbox = sandboxForPreviewUrl('http://localhost:4187/index.html')
+
+    expect(sandbox).toBe(LOCAL_PREVIEW_SANDBOX)
+    expect(sandbox).toContain('allow-same-origin')
+  })
+
+  test('never grants allow-popups or allow-top-navigation to either source', () => {
+    for (const url of ['runner-output://asset/w/o/index.html', 'http://localhost:4187/']) {
+      const sandbox = sandboxForPreviewUrl(url)
+      expect(sandbox).not.toContain('allow-popups')
+      expect(sandbox).not.toContain('allow-top-navigation')
+      expect(sandbox).not.toContain('allow-modals')
+    }
   })
 })

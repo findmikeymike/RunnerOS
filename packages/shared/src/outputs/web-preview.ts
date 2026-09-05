@@ -82,12 +82,21 @@ export function buildRunnerOutputAssetUrl(workspaceId: string, outputId: string,
   const segments = isAbsoluteLikeAssetPath(assetPath)
     ? encodeURIComponent(assetPath)
     : assetPath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
-  return `${RUNNER_OUTPUT_SCHEME}://asset/${encodeURIComponent(workspaceId)}/${encodeURIComponent(outputId)}/${segments}`;
+  return `${RUNNER_OUTPUT_SCHEME}://${outputAssetHost(workspaceId, outputId)}/${encodeURIComponent(workspaceId)}/${encodeURIComponent(outputId)}/${segments}`;
+}
+
+/** Collision-free, browser-safe origin for the exact workspace/output pair. */
+function outputAssetHost(workspaceId: string, outputId: string): string {
+  const hex = Array.from(new TextEncoder().encode(JSON.stringify([workspaceId, outputId])),
+    (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const host = `asset.${hex.match(/.{1,60}/g)!.join('.')}`;
+  if (host.length > 253) throw new Error('Output preview identifiers exceed the supported URL length');
+  return host;
 }
 
 export function parseRunnerOutputAssetUrl(value: string): { workspaceId: string; outputId: string; assetPath: string } | null {
   const parsed = parseUrl(value);
-  if (!parsed || parsed.protocol !== `${RUNNER_OUTPUT_SCHEME}:` || parsed.hostname !== 'asset') return null;
+  if (!parsed || parsed.protocol !== `${RUNNER_OUTPUT_SCHEME}:` || parsed.username || parsed.password || parsed.port) return null;
   const segments = parsed.pathname.split('/').filter(Boolean).map((segment) => {
     try {
       return decodeURIComponent(segment);
@@ -98,6 +107,11 @@ export function parseRunnerOutputAssetUrl(value: string): { workspaceId: string;
   const [workspaceId, outputId, ...assetSegments] = segments;
   const assetPath = assetSegments.join('/');
   if (!workspaceId || !outputId || !isSafeProtocolAssetPath(assetPath)) return null;
+  // Old links are accepted only for the protocol handler's canonical redirect.
+  // A scoped host may never address another workspace/output through its path.
+  try {
+    if (parsed.hostname !== 'asset' && parsed.hostname !== outputAssetHost(workspaceId, outputId)) return null;
+  } catch { return null; }
   return { workspaceId, outputId, assetPath };
 }
 
