@@ -165,3 +165,86 @@ describe('sessions log archival', () => {
     expect(live.some((e) => e.sessionId === archived.entries[0]!.sessionId)).toBe(false);
   });
 });
+
+describe('sessions log survives prose that looks like structure', () => {
+  test('a horizontal rule inside a summary round-trips intact', () => {
+    const summary = 'Decided on the release date.\n\n---\n\nNext: send the mix for approval.';
+    appendSessionLogEntry('concierge', entry({ sessionId: 's1', date: '2026-09-01', summary }), options);
+    appendSessionLogEntry('concierge', entry({ sessionId: 's2', date: '2026-09-02' }), options);
+
+    const entries = listSessionLogEntries('concierge', options);
+    expect(entries.map((e) => e.sessionId)).toEqual(['s2', 's1']);
+    expect(entries[1]!.summary).toBe(summary);
+    expect(loadSessionsLog('concierge', options).parseWarnings).toEqual([]);
+  });
+
+  test('a fenced code block containing --- round-trips intact', () => {
+    const summary = 'Wrote the YAML:\n\n```yaml\n---\nname: x\n---\n```\n\nDone.';
+    appendSessionLogEntry('concierge', entry({ sessionId: 's1', date: '2026-09-01', summary }), options);
+
+    expect(listSessionLogEntries('concierge', options)[0]!.summary).toBe(summary);
+    expect(loadSessionsLog('concierge', options).parseWarnings).toEqual([]);
+  });
+
+  test('a summary that would read back as a phantom entry is refused at write time', () => {
+    const injected = 'para\n---\nsessionId: evil\ndate: 2020-01-01\n---\nhijacked';
+    expect(() => appendSessionLogEntry('concierge', entry({ sessionId: 's1', date: '2026-09-01', summary: injected }), options))
+      .toThrow(/would be read as a session entry/);
+    expect(existsSync(getSessionsLogFile('concierge', options))).toBe(false);
+  });
+
+  test('text before the first entry is reported, not silently dropped on the next write', () => {
+    const file = getSessionsLogFile('concierge', options);
+    mkdirSync(join(root, 'agents', 'concierge'), { recursive: true });
+    writeFileSync(file, [
+      '---', 'agent: concierge', 'version: 1', '---', '',
+      '# A heading someone typed by hand', '',
+      '---', "sessionId: 'good'", "date: '2026-09-02'", '---', '', 'Real work.', '',
+    ].join('\n'), 'utf-8');
+
+    const loaded = loadSessionsLog('concierge', options);
+    expect(loaded.entries.map((e) => e.sessionId)).toEqual(['good']);
+    expect(loaded.parseWarnings.map((w) => w.code)).toContain('invalid-entry-frontmatter');
+    expect(() => appendSessionLogEntry('concierge', entry({ sessionId: 'new', date: '2026-09-03' }), options))
+      .toThrow(/could not be read/);
+  });
+});
+
+describe('sessions log archive safety', () => {
+  function fillLive(count: number): void {
+    for (let i = 0; i < count; i += 1) {
+      appendSessionLogEntry('concierge', entry({ sessionId: `l${i}`, date: '2026-06-15' }), options);
+    }
+  }
+
+  test('refuses to overflow into an archive it could not fully read', () => {
+    const archive = getSessionsArchiveFile('concierge', '2026', options);
+    mkdirSync(join(root, 'agents', 'concierge', 'SESSIONS-archive'), { recursive: true });
+    const damaged = [
+      '---', 'agent: concierge', 'version: 1', '---', '',
+      '---', "sessionId: 'old-good'", "date: '2026-01-05'", '---', '', 'Old work.', '',
+      '---', "date: '2026-01-04'", '---', '', 'Damaged by hand.', '',
+    ].join('\n');
+    writeFileSync(archive, damaged, 'utf-8');
+    fillLive(SESSIONS_LOG_MAX_ENTRIES);
+
+    expect(() => appendSessionLogEntry('concierge', entry({ sessionId: 'newest', date: '2026-12-31' }), options))
+      .toThrow(/archive could not be read/);
+    expect(readFileSync(archive, 'utf-8')).toBe(damaged);
+  });
+
+  test('re-archiving the same tail after a partial failure converges instead of duplicating', () => {
+    fillLive(SESSIONS_LOG_MAX_ENTRIES);
+    // Simulate the window after the archive was written but before the live
+    // file was trimmed: the entry that will roll off already sits in the archive.
+    const archive = getSessionsArchiveFile('concierge', '2026', options);
+    mkdirSync(join(root, 'agents', 'concierge', 'SESSIONS-archive'), { recursive: true });
+    const rollingOff = listSessionLogEntries('concierge', options).at(-1)!;
+    writeFileSync(archive, serializeSessionsLog({ version: SESSIONS_LOG_SCHEMA_VERSION, agent: 'concierge' }, [rollingOff]), 'utf-8');
+
+    appendSessionLogEntry('concierge', entry({ sessionId: 'newest', date: '2026-12-31' }), options);
+
+    const archived = parseSessionsLog(readFileSync(archive, 'utf-8'), 'concierge').entries;
+    expect(archived.filter((e) => e.sessionId === rollingOff.sessionId)).toHaveLength(1);
+  });
+});

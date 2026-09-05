@@ -766,7 +766,7 @@ function assertMemoryFileWritable(loaded: LoadedMemoryFile): void {
     .map((w) => (w.entryName ? `${w.entryName}: ${w.message}` : w.message))
     .join('; ');
   throw new Error(
-    `Refusing to save ${loaded.filePath}: it has ${warnings.length} entr${warnings.length === 1 ? 'y' : 'ies'} that could not be read, `
+    `Refusing to save ${loaded.filePath}: ${warnings.length} part${warnings.length === 1 ? '' : 's'} of the file could not be read, `
     + `and saving would delete ${warnings.length === 1 ? 'it' : 'them'}. Fix the file by hand first. ${details}`,
   );
 }

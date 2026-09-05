@@ -95,6 +95,7 @@ export function serializeSessionsLog(
 ): string {
   const body = entries
     .map((entry) => {
+      assertSummaryIsPlainProse(entry.summary);
       const lines = [
         '---',
         `sessionId: ${quoteYamlString(entry.sessionId)}`,
@@ -168,12 +169,10 @@ export function parseSessionsLog(
   }
 
   const entries: SessionLogEntry[] = [];
-  const { blocks, unclosed } = splitEntryBlocks(head.content);
-  if (unclosed) {
-    warnings.push(warn('invalid-entry-frontmatter', 'Session entry is missing a closing frontmatter delimiter.'));
-  }
+  const split = splitEntryBlocks(head.content);
+  warnings.push(...split.warnings);
 
-  for (const block of blocks) {
+  for (const block of split.blocks) {
     let parsed: matter.GrayMatterFile<string>;
     try {
       parsed = matter(`---\n${block.frontmatter.trim()}\n---\n${block.body.trim()}`);
@@ -227,37 +226,126 @@ export function parseSessionsLog(
 }
 
 /**
- * Pair up `---` delimiter lines into entry blocks.
+ * Line numbers of `---` delimiters, ignoring any inside a fenced code block.
  *
- * Splitting on a regex does not work here: the line that closes one entry's
- * frontmatter looks exactly like the line that opens the next, so a naive split
- * cuts every entry in half. Delimiters are paired instead — open, close, then
- * body running to the next open — which is how `memory/storage.ts` reads the
- * same idiom.
+ * A summary is prose written by a model, and prose contains horizontal rules
+ * and code fences. Treating every bare `---` as structure made the serializer
+ * write files its own parser truncated on re-read — and, with the write guard,
+ * wedged the log for good. Mirrors `collectEntryDelimiterLines` in
+ * `memory/storage.ts`.
+ */
+function collectDelimiterLines(lines: readonly string[]): number[] {
+  const delimiters: number[] = [];
+  let fence: string | null = null;
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+    const fenceMatch = trimmed.match(/^(```+|~~~+)/);
+    if (fence) {
+      if (trimmed.startsWith(fence)) fence = null;
+    } else if (fenceMatch) {
+      fence = fenceMatch[1]!.startsWith('`') ? '```' : '~~~';
+    } else if (trimmed === '---') {
+      delimiters.push(index);
+    }
+  });
+  return delimiters;
+}
+
+/**
+ * What a `---` … `---` block is.
+ *
+ * - `entry`: carries a `sessionId`, so it opens a real entry.
+ * - `broken`: parses as YAML that names session fields but has no `sessionId`
+ *   — almost certainly an entry someone damaged by hand. It must NOT be
+ *   silently absorbed into the previous entry's body and written back that
+ *   way; it is reported so the write guard refuses.
+ * - `prose`: anything else, e.g. a horizontal rule in a summary. Body text.
+ */
+function classifyBlock(rawFrontmatter: string): 'entry' | 'broken' | 'prose' {
+  let parsed: matter.GrayMatterFile<string>;
+  try {
+    parsed = matter(`---\n${rawFrontmatter.trim()}\n---\n`);
+  } catch {
+    return 'prose';
+  }
+  const data = parsed.data as Record<string, unknown>;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return 'prose';
+  if (data.sessionId !== undefined && data.sessionId !== null) return 'entry';
+  const sessionKeys = ['date', 'summary', 'outcome', 'topics', 'nextAction', 'turnCount', 'durationMinutes', 'workspaceId'];
+  return sessionKeys.some((key) => key in data) ? 'broken' : 'prose';
+}
+
+interface EntryBlock {
+  frontmatter: string;
+  body: string;
+}
+
+/**
+ * Pair delimiters into entry blocks.
+ *
+ * A `---` opens an entry only when the text up to the next delimiter reads as
+ * session frontmatter; otherwise it is part of a body. Splitting on a regex
+ * cannot work here: the line closing one entry's frontmatter is identical to
+ * the line opening the next, and a rule inside a summary is identical to both.
  */
 function splitEntryBlocks(content: string): {
-  blocks: Array<{ frontmatter: string; body: string }>;
-  unclosed: boolean;
+  blocks: EntryBlock[];
+  warnings: SessionsLogParseWarning[];
 } {
   const lines = content.split(/\r?\n/);
-  const delimiters: number[] = [];
-  lines.forEach((line, index) => {
-    if (line.trim() === '---') delimiters.push(index);
-  });
+  const delimiters = collectDelimiterLines(lines);
+  const blocks: EntryBlock[] = [];
+  const warnings: SessionsLogParseWarning[] = [];
 
-  const blocks: Array<{ frontmatter: string; body: string }> = [];
-  let index = 0;
-  for (; index + 1 < delimiters.length; index += 2) {
-    const open = delimiters[index]!;
-    const close = delimiters[index + 1]!;
-    const nextOpen = delimiters[index + 2] ?? lines.length;
-    blocks.push({
-      frontmatter: lines.slice(open + 1, close).join('\n'),
-      body: lines.slice(close + 1, nextOpen).join('\n'),
-    });
+  const kindAt = (i: number): 'entry' | 'broken' | 'prose' =>
+    i + 1 < delimiters.length
+      ? classifyBlock(lines.slice(delimiters[i]! + 1, delimiters[i + 1]!).join('\n'))
+      : 'prose';
+
+  const nextOpen = (from: number): number => {
+    for (let i = from; i + 1 < delimiters.length; i += 1) {
+      const kind = kindAt(i);
+      if (kind === 'entry') return i;
+      if (kind === 'broken') {
+        warnings.push(warn('missing-session-id', 'Session entry is missing sessionId.'));
+        // Skip the whole damaged block so its body is not glued onto a neighbour.
+        i += 1;
+      }
+    }
+    return -1;
+  };
+
+  let open = nextOpen(0);
+  const firstStart = open === -1 ? lines.length : delimiters[open]!;
+  if (lines.slice(0, firstStart).join('\n').trim()) {
+    warnings.push(warn('invalid-entry-frontmatter', 'Text before the first session entry would be lost on the next write.'));
   }
 
-  return { blocks, unclosed: index < delimiters.length };
+  while (open !== -1) {
+    const close = open + 1;
+    const following = nextOpen(close + 1);
+    const bodyEnd = following === -1 ? lines.length : delimiters[following]!;
+    blocks.push({
+      frontmatter: lines.slice(delimiters[open]! + 1, delimiters[close]!).join('\n'),
+      body: lines.slice(delimiters[close]! + 1, bodyEnd).join('\n'),
+    });
+    open = following;
+  }
+
+  return { blocks, warnings };
+}
+
+/**
+ * A summary that the parser would read as structure cannot be stored as
+ * written. Refusing here, at the single write path, is what makes the parser's
+ * "a `---` in prose is just prose" rule safe: nothing can be serialized that
+ * later reads back as a phantom entry or truncates its neighbour.
+ */
+function assertSummaryIsPlainProse(summary: string): void {
+  const probe = splitEntryBlocks(summary);
+  if (probe.blocks.length > 0 || probe.warnings.some((w) => w.code === 'missing-session-id')) {
+    throw new Error('Session summary contains text that would be read as a session entry; it cannot be stored as written.');
+  }
 }
 
 /** `gray-matter` turns unquoted YAML dates into `Date`; normalize both shapes. */
@@ -342,11 +430,29 @@ function archiveOverflow(
 
   for (const [year, yearEntries] of byYear) {
     const file = getSessionsArchiveFile(agentSlug, year, options);
-    const existing = existsSync(file)
-      ? parseSessionsLog(readFileSync(file, 'utf-8'), agentSlug).entries
-      : [];
-    const merged = sortNewestFirst([...existing, ...yearEntries]);
-    writeFileAtomic(file, serializeSessionsLog({ version: SESSIONS_LOG_SCHEMA_VERSION, agent: agentSlug }, merged));
+    let existing: SessionLogEntry[] = [];
+    if (existsSync(file)) {
+      const parsed = parseSessionsLog(readFileSync(file, 'utf-8'), agentSlug);
+      // The archive is the "nothing is deleted" tier. Writing it back after a
+      // partial parse would delete exactly what the live-file guard protects.
+      if (parsed.warnings.length > 0) {
+        throw new Error(
+          `Refusing to write ${file}: ${parsed.warnings.length} part${parsed.warnings.length === 1 ? '' : 's'} of the archive could not be read and would be lost. Fix the file by hand first.`,
+        );
+      }
+      existing = parsed.entries;
+    }
+    // The archive is written before the live file is trimmed, so a failure
+    // between the two leaves an entry in both places rather than neither. That
+    // makes the retry path re-archive the same tail; dedupe by sessionId so it
+    // converges instead of duplicating.
+    const merged = new Map<string, SessionLogEntry>();
+    for (const entry of existing) merged.set(entry.sessionId, entry);
+    for (const entry of yearEntries) merged.set(entry.sessionId, entry);
+    writeFileAtomic(
+      file,
+      serializeSessionsLog({ version: SESSIONS_LOG_SCHEMA_VERSION, agent: agentSlug }, sortNewestFirst([...merged.values()])),
+    );
   }
 
   return kept;
@@ -382,7 +488,7 @@ export function appendSessionLogEntry(
       .map((w) => (w.sessionId ? `${w.sessionId}: ${w.message}` : w.message))
       .join('; ');
     throw new Error(
-      `Refusing to write ${current.filePath}: ${current.parseWarnings.length} entr${current.parseWarnings.length === 1 ? 'y' : 'ies'} could not be read `
+      `Refusing to write ${current.filePath}: ${current.parseWarnings.length} part${current.parseWarnings.length === 1 ? '' : 's'} of the file could not be read `
       + `and would be lost. Fix the file by hand first. ${details}`,
     );
   }

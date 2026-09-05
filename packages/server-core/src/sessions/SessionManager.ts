@@ -11214,6 +11214,11 @@ user a clickable link to where the thing now lives.`
       this.broadcastMemoryChanged(result.scope, result.scope === 'agent' ? result.agentSlug ?? null : null)
       if (result.applied) {
         sessionLog.info(`[memory] Sidecar auto-saved ${result.scope} memory ${result.name ?? '(unknown)'} for session ${managed.id}`)
+      } else if (result.applyError) {
+        // An auto-save that could not be written — usually a memory file that
+        // needs hand repair. Say so, rather than letting it surface only when
+        // the queued item fails again on approval.
+        sessionLog.warn(`[memory] Sidecar could not auto-save for session ${managed.id}; queued review item ${result.itemId ?? '(unknown)'} instead: ${result.applyError}`)
       } else {
         sessionLog.info(`[memory] Sidecar queued review item ${result.itemId ?? '(unknown)'} for session ${managed.id}`)
       }
