@@ -15,8 +15,8 @@ const PROVIDER_PREFERRED_TIERS: Record<string, { best: string; default_: string;
   },
   omniroute: {
     best: 'auto/best-free',
-    default_: 'auto/best-free',
-    cheap: 'auto/best-free',
+    default_: 'auto',
+    cheap: 'auto/fast',
   },
 }
 

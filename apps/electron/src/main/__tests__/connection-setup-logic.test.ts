@@ -110,8 +110,8 @@ describe('createBuiltInConnection', () => {
       authType: 'none',
       baseUrl: 'http://127.0.0.1:20128/v1',
       customEndpoint: { api: 'openai-completions' },
-      models: ['auto/best-free', 'auto/best-free', 'auto/best-free'],
-      defaultModel: 'auto/best-free',
+      models: ['auto/best-free', 'auto', 'auto/fast'],
+      defaultModel: 'auto',
       piAuthProvider: 'omniroute',
       modelSelectionMode: 'userDefined3Tier',
     })

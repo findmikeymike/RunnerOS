@@ -257,8 +257,8 @@ export function createBuiltInConnection(slug: string, baseUrl?: string | null): 
     authType,
     baseUrl: isEmbeddedOmniRoute ? normalizeOmniRouteBaseUrl(baseUrl ?? undefined) : undefined,
     customEndpoint: isEmbeddedOmniRoute ? { api: 'openai-completions' } : undefined,
-    models: isEmbeddedOmniRoute ? ['auto/best-free', 'auto/best-free', 'auto/best-free'] : getDefaultModelsForConnection(providerType, template.piAuthProvider),
-    defaultModel: isEmbeddedOmniRoute ? 'auto/best-free' : getDefaultModelForConnection(providerType, template.piAuthProvider),
+    models: isEmbeddedOmniRoute ? ['auto/best-free', 'auto', 'auto/fast'] : getDefaultModelsForConnection(providerType, template.piAuthProvider),
+    defaultModel: isEmbeddedOmniRoute ? 'auto' : getDefaultModelForConnection(providerType, template.piAuthProvider),
     modelSelectionMode: isEmbeddedOmniRoute
       ? 'userDefined3Tier'
       : providerType === 'pi' ? 'automaticallySyncedFromProvider' : undefined,

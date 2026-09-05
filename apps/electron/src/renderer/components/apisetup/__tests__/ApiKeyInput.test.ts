@@ -22,8 +22,8 @@ describe('ApiKeyInput tier hydration helpers', () => {
 
     expect(resolveTierModels(models, undefined, 'omniroute')).toEqual({
       best: 'auto/best-free',
-      default_: 'auto/best-free',
-      cheap: 'auto/best-free',
+      default_: 'auto',
+      cheap: 'auto/fast',
     })
   })
 

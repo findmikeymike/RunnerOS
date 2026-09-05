@@ -384,15 +384,13 @@ async function createInitialWindows(): Promise<void> {
       if (addLlmConnection(connection)) {
         mainLog.info('[omniroute] Added keyless Auto connection for first use')
       }
-    } else if (
-      existingOmniRoute.defaultModel === 'auto/best-free'
-      && existingOmniRoute.models?.join(',') === 'auto/best-free,auto,auto/fast'
-    ) {
+    } else if (existingOmniRoute.models?.join(',') === 'auto/best-free,auto/best-free,auto/best-free') {
       updateLlmConnection(existingOmniRoute.slug, {
-        models: ['auto/best-free', 'auto/best-free', 'auto/best-free'],
+        models: ['auto/best-free', 'auto', 'auto/fast'],
+        defaultModel: 'auto',
         modelSelectionMode: 'userDefined3Tier',
       })
-      mainLog.info('[omniroute] Hardened initial model tiers to the free-only route')
+      mainLog.info('[omniroute] Restored distinct free, auto, and fast model tiers')
     }
   }
 
