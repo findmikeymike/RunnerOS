@@ -3,6 +3,7 @@ import {
   listUserMemoryEntries,
 } from './storage.ts';
 import { selectActiveMemoryEntries } from './render.ts';
+import { stemToken, stemmedWordSet } from './stem.ts';
 import type {
   MemoryEntry,
   MemoryRecallResult,
@@ -106,17 +107,24 @@ function scoreEntry(
   const type = normalize(scoped.entry.type);
   const body = normalize(scoped.entry.body);
   const haystack = `${name} ${type} ${body}`;
+  // Stem sets let an inflected query reach the entry it means. A stem hit
+  // scores as a word hit, not a lesser one: "playlists" finding a note about
+  // the artist's playlist is the same quality of match as "playlist" would be.
+  const nameStems = stemmedWordSet(name);
+  const typeStems = stemmedWordSet(type);
+  const bodyStems = stemmedWordSet(body);
   let score = 0;
   let phraseScore = 0;
   const matched: string[] = [];
 
   for (const token of tokens) {
+    const stem = stemToken(token);
     let tokenScore = 0;
-    if (hasWord(name, token)) tokenScore += 7;
+    if (hasWord(name, token) || nameStems.has(stem)) tokenScore += 7;
     else if (name.includes(token)) tokenScore += 4;
-    if (hasWord(type, token)) tokenScore += 3;
+    if (hasWord(type, token) || typeStems.has(stem)) tokenScore += 3;
     else if (type.includes(token)) tokenScore += 1;
-    if (hasWord(body, token)) tokenScore += 2;
+    if (hasWord(body, token) || bodyStems.has(stem)) tokenScore += 2;
     else if (body.includes(token)) tokenScore += 1;
     if (tokenScore > 0) {
       score += tokenScore;
@@ -181,8 +189,14 @@ function buildExcerpt(body: string, tokens: readonly string[]): string {
   const compact = body.replace(/\s+/g, ' ').trim();
   if (compact.length <= 220) return compact;
   const lower = compact.toLowerCase();
+  // Fall back to the stem so an excerpt still centres on the hit when the match
+  // was inflected — otherwise a stem-matched entry always excerpts from its
+  // first character, which is rarely the relevant part.
   const firstHit = tokens
-    .map((token) => lower.indexOf(token))
+    .flatMap((token) => {
+      const raw = lower.indexOf(token);
+      return raw >= 0 ? [raw] : [lower.indexOf(stemToken(token))];
+    })
     .filter((index) => index >= 0)
     .sort((a, b) => a - b)[0] ?? 0;
   const start = Math.max(0, firstHit - 70);

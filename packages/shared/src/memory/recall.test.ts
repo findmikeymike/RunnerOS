@@ -170,3 +170,52 @@ describe('recallMemoryEntries', () => {
     expect(results.map((result) => result.entry.name)).toEqual(['active launch note']);
   });
 });
+
+describe('recall survives the way people actually phrase questions', () => {
+  const now = new Date().toISOString();
+  const scoped = (name: string, body: string) => ({
+    scope: 'agent' as const,
+    agentSlug: 'artist-manager',
+    entry: { name, type: 'project' as const, created: now, updated: now, body },
+  });
+
+  const store = [
+    scoped('playlist-strategy', 'Mikey targets indie editorial playlist placements.'),
+    scoped('press-bio', 'Third person, no hype adjectives, mentions the Detroit scene.'),
+    scoped('release-cadence', 'Ships a single every six weeks, album once a year.'),
+  ];
+
+  /**
+   * Every one of these returned zero results before stemming — not a worse
+   * ranking, nothing at all, because an entry with no token or phrase hit is
+   * dropped outright. An artist does not phrase a question the way they
+   * phrased the note.
+   */
+  test.each([
+    ['playlists', 'playlist-strategy'],
+    ['releases', 'release-cadence'],
+    ['shipping', 'release-cadence'],
+    ['placements', 'playlist-strategy'],
+  ])('%p finds %p', (query, expected) => {
+    const results = rankMemoryEntries(query, store, 3);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0]!.entry.name).toBe(expected);
+  });
+
+  test('an exact match still outranks an inflected one', () => {
+    const exact = rankMemoryEntries('playlist', store, 3)[0]!;
+    const inflected = rankMemoryEntries('playlists', store, 3)[0]!;
+    expect(exact.entry.name).toBe(inflected.entry.name);
+    expect(exact.score).toBeGreaterThan(inflected.score);
+  });
+
+  test('still returns nothing for a genuinely unrelated query', () => {
+    expect(rankMemoryEntries('quarterly tax filing', store, 3)).toEqual([]);
+  });
+
+  test('excerpt centres on an inflected hit rather than the start of the body', () => {
+    const long = scoped('notes', `${'padding. '.repeat(40)}The playlist placements matter here.${' tail.'.repeat(40)}`);
+    const [result] = rankMemoryEntries('placements', [long], 1);
+    expect(result!.excerpt).toContain('placements');
+  });
+});
