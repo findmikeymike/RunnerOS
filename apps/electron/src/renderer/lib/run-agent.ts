@@ -7,6 +7,26 @@ import { resolveAgentReferences, hasMissingReferences, describeMissingReferences
 import { composeAgentSystemPrompt, managerBriefReceiptFromDocs } from '@/lib/compose-agent-prompt'
 import type { AgentDefinitionDTO, ContextDocDTO, CreateSessionOptions, Session, LoadedSkill, LoadedSource } from '../../shared/types'
 
+/**
+ * Look up the Artist OS workspace kind for a workspace id.
+ *
+ * Returns undefined — never throws — when the lookup fails or the workspace has
+ * no scope, so prompt composition falls back to its heuristic instead of the
+ * launch failing over a piece of metadata.
+ */
+export async function resolveArtistWorkspaceScope(
+  workspaceId: string,
+  getWorkspaces: () => Promise<Array<{ id: string; artistWorkspaceScope?: string }>> =
+    () => window.electronAPI.getWorkspaces(),
+): Promise<'hq' | 'campaign' | 'lab' | 'general' | undefined> {
+  try {
+    const scope = (await getWorkspaces()).find((workspace) => workspace.id === workspaceId)?.artistWorkspaceScope
+    return scope === 'hq' || scope === 'campaign' || scope === 'lab' || scope === 'general' ? scope : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export async function ensureAgentDeclaredSkillsEnabled(params: {
   agent: AgentDefinitionDTO
   workspaceId: string
@@ -58,6 +78,15 @@ export function buildAgentCreateSessionOptions(
     agentCatalog?: AgentDefinitionDTO[]
     userMemoryEntries?: MemoryEntry[]
     agentMemoryEntries?: MemoryEntry[]
+    /**
+     * Which kind of Artist OS workspace this session runs in. The server path
+     * has always passed this; the chat path did not, and fell back to sniffing
+     * sentinel context docs to decide whether the asset contract applies. Once
+     * those docs went on-demand the sniff had nothing to fire on, so a
+     * chat-launched worker in a campaign silently lost the contract while a
+     * workflow-launched one kept it.
+     */
+    artistWorkspaceScope?: 'hq' | 'campaign' | 'lab' | 'general'
   },
 ): CreateSessionOptions {
   let skillSlugs = agent.metadata.skills ?? []
@@ -96,6 +125,7 @@ export function buildAgentCreateSessionOptions(
         {
           userMemoryEntries: context.userMemoryEntries,
           agentMemoryEntries: context.agentMemoryEntries,
+          artistWorkspaceScope: context.artistWorkspaceScope,
         },
       )
     : agent.systemPrompt
@@ -253,13 +283,18 @@ export async function openAgentSessionComposer(params: {
     }
   }
 
+  // Resolve the workspace kind so the composed prompt matches what the server
+  // builds for the same agent. A lookup failure degrades to the old heuristic
+  // rather than blocking the launch.
+  const artistWorkspaceScope = await resolveArtistWorkspaceScope(params.workspaceId)
+
   // When live skills/sources are available, pass them through so the session
   // gets a composed system prompt (persona body + bundle footer) and any
   // missing slugs are dropped from agentSkillSlugs/enabledSourceSlugs.
   const context = launchSkills && params.sources
-    ? { skills: launchSkills, sources: params.sources, contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries }
-    : contextDocs.length > 0 || userMemoryEntries.length > 0 || agentMemoryEntries.length > 0 || (params.agentCatalog?.length ?? 0) > 0
-      ? { skills: [], sources: [], contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries }
+    ? { skills: launchSkills, sources: params.sources, contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries, artistWorkspaceScope }
+    : contextDocs.length > 0 || userMemoryEntries.length > 0 || agentMemoryEntries.length > 0 || (params.agentCatalog?.length ?? 0) > 0 || artistWorkspaceScope
+      ? { skills: [], sources: [], contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries, artistWorkspaceScope }
       : undefined
 
   const session = await params.onCreateSession(

@@ -750,7 +750,29 @@ function ensureLoadableMemoryFile(
   return loaded;
 }
 
+/**
+ * Refuse to write back a file that did not fully parse.
+ *
+ * `loaded.entries` holds only what parsed. Serializing it over a file that also
+ * contained a malformed entry would delete that entry — silently, and on a file
+ * the artist is told they can edit by hand. A refused save with the offending
+ * entries named is recoverable; a vanished entry is not.
+ */
+function assertMemoryFileWritable(loaded: LoadedMemoryFile): void {
+  const warnings = loaded.parseWarnings ?? [];
+  if (warnings.length === 0) return;
+  const details = warnings
+    .slice(0, 5)
+    .map((w) => (w.entryName ? `${w.entryName}: ${w.message}` : w.message))
+    .join('; ');
+  throw new Error(
+    `Refusing to save ${loaded.filePath}: it has ${warnings.length} entr${warnings.length === 1 ? 'y' : 'ies'} that could not be read, `
+    + `and saving would delete ${warnings.length === 1 ? 'it' : 'them'}. Fix the file by hand first. ${details}`,
+  );
+}
+
 function writeMemoryFile(loaded: LoadedMemoryFile): LoadedMemoryFile {
+  assertMemoryFileWritable(loaded);
   writeFileAtomic(loaded.filePath, serializeMemoryFile(loaded.envelope, loaded.entries));
   return loaded;
 }

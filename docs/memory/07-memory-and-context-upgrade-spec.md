@@ -17,6 +17,32 @@ real profile on disk. Where a number is an estimate it says so.
 Read [`README.md`](./README.md) first for why memory is markdown. This spec does
 not overturn that decision — it extends it.
 
+## Implementation status (2026-09-05)
+
+| Slice | Status | Commit |
+|---|---|---|
+| A — on-demand context delivery, `deliveryAlwaysFor`, slug-pinned system policy | **shipped** | `fb9337ea3` |
+| B — memory/context injection caps, `recall_memory` excerpts, event-log rotation | **shipped** | `b21be6665` |
+| C — `SESSIONS.md` store, rendering, search, archival | **foundation shipped**; injection, `recall_session`, write trigger, UI tab pending | `a52aa419b` |
+| D — campaign provenance on memory | not started | |
+| E — stemming, then FTS5 | not started | |
+| F — entity links + join | not started | |
+| G — semantic recall (gated) | not started | |
+
+Review fixes landed alongside (see §7): the chat-launch path now passes
+`artistWorkspaceScope` — Slice A had made the heuristic fallback unreliable, so
+a chat-launched campaign worker could lose the asset contract; both stores now
+refuse to write back a file that did not fully parse, closing a silent-data-loss
+path on hand-edited files that predates this work; and a zero memory budget
+still reports that memory exists.
+
+Corrections to earlier assumptions, found while building: `compact_boundary`
+carries no summary text, so [`05-sessions-log.md`](./05-sessions-log.md)'s "capture
+the compaction summary" trigger does not exist — session titles, already
+model-generated, are the cheap source to reuse instead. And `trustedWorkerTools`
+is an auto-approval list, not an availability gate; both context tools are
+available to every agent without approval, which is what makes Slice A safe.
+
 ## 1. Problem
 
 The memory *store* is fine. The **injection policy** is what breaks at scale, and

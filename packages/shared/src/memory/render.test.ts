@@ -102,6 +102,14 @@ describe('memory section budget', () => {
     expect(text).toContain('1 older entry is not shown here');
   });
 
+  test('a zero budget still tells the agent memory exists rather than vanishing', () => {
+    const text = buildMemorySectionsText([], makeSeries(4), { maxEntries: 0 });
+
+    expect(text).toContain('4 older entries are not shown here');
+    expect(text).toContain('recall_memory');
+    expect(text).not.toContain('Entry name:');
+  });
+
   test('expired entries are filtered before the budget is applied', () => {
     const entries = [
       makeMemory('live', 'a', '2026-06-01'),

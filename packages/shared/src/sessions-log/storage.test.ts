@@ -116,6 +116,23 @@ describe('sessions log storage', () => {
     expect(loaded.parseWarnings.map((w) => w.code)).toContain('missing-session-id');
   });
 
+  test('refuses to write over a file it could not fully read, so a hand-edit never causes silent loss', () => {
+    const file = getSessionsLogFile('concierge', options);
+    mkdirSync(join(root, 'agents', 'concierge'), { recursive: true });
+    const original = [
+      '---', 'agent: concierge', 'version: 1', '---', '',
+      '---', "sessionId: 'good'", "date: '2026-09-02'", '---', '', 'Real work.', '',
+      '---', "date: '2026-09-01'", '---', '', 'Entry with no session id — a typo the artist made by hand.', '',
+    ].join('\n');
+    writeFileSync(file, original, 'utf-8');
+
+    expect(() => appendSessionLogEntry('concierge', entry({ sessionId: 'new', date: '2026-09-03' }), options))
+      .toThrow(/could not be read/);
+
+    // The malformed entry is still on disk, untouched, for the artist to fix.
+    expect(readFileSync(file, 'utf-8')).toBe(original);
+  });
+
   test('flags an envelope naming a different agent', () => {
     const text = serializeSessionsLog({ version: SESSIONS_LOG_SCHEMA_VERSION, agent: 'someone-else' }, []);
     expect(parseSessionsLog(text, 'concierge').warnings.map((w) => w.code)).toContain('invalid-envelope');

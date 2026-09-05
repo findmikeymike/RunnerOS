@@ -135,6 +135,25 @@ describe('composeAgentSystemPrompt', () => {
   });
 
   /**
+   * Regression. Once context docs went on-demand, a worker's injectable doc
+   * list holds only opt-in docs — no hq-state-of-play, mission-assets, or
+   * release-kit sentinel for the heuristic to fire on. A launch path that does
+   * not pass the workspace scope explicitly therefore drops the asset contract
+   * for exactly the agents that most need it. The server path always passed
+   * scope; the chat path now does too. This pins the failure so it cannot
+   * quietly return.
+   */
+  test('a campaign worker keeps the asset contract only when scope is passed explicitly', () => {
+    const injectable = [doc('artist-profile', 'Artist Profile', 'who the artist is')];
+
+    const withoutScope = composeAgentSystemPrompt(agent(), [], [], injectable, [], {});
+    const withScope = composeAgentSystemPrompt(agent(), [], [], injectable, [], { artistWorkspaceScope: 'campaign' });
+
+    expect(withoutScope).not.toContain(ARTIST_ASSET_CONTRACT_HEADER);
+    expect(withScope).toContain(ARTIST_ASSET_CONTRACT_HEADER);
+  });
+
+  /**
    * The server path used to omit this section, so an agent spawned by a
    * workflow, pulse, or `message_agent` delegation could be delegated to but
    * had no catalog to delegate onward with.

@@ -372,6 +372,20 @@ export function appendSessionLogEntry(
   if (!entry.summary.trim()) throw new Error('Session log entry requires a summary');
 
   const current = loadSessionsLog(agentSlug, options);
+  // `entries` holds only what parsed. Writing it back over a file that also
+  // held a malformed entry would delete that entry silently. Refuse instead,
+  // naming what needs fixing — the file is meant to be hand-editable, and a
+  // refused write is recoverable where a vanished entry is not.
+  if (current.parseWarnings.length > 0) {
+    const details = current.parseWarnings
+      .slice(0, 5)
+      .map((w) => (w.sessionId ? `${w.sessionId}: ${w.message}` : w.message))
+      .join('; ');
+    throw new Error(
+      `Refusing to write ${current.filePath}: ${current.parseWarnings.length} entr${current.parseWarnings.length === 1 ? 'y' : 'ies'} could not be read `
+      + `and would be lost. Fix the file by hand first. ${details}`,
+    );
+  }
   const withoutDuplicate = current.entries.filter((e) => e.sessionId !== entry.sessionId);
   const next = archiveOverflow(agentSlug, sortNewestFirst([entry, ...withoutDuplicate]), options);
 

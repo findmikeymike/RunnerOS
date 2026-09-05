@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { buildAgentCreateSessionOptions, ensureAgentDeclaredSkillsEnabled, sendAgentDraft } from './run-agent'
+import { buildAgentCreateSessionOptions, ensureAgentDeclaredSkillsEnabled, resolveArtistWorkspaceScope, sendAgentDraft } from './run-agent'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { AgentDefinitionDTO, LoadedSource } from '../../shared/types'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
@@ -254,5 +254,26 @@ describe('ensureAgentDeclaredSkillsEnabled', () => {
 
     expect(result).toEqual([])
     expect(reloaded).toBe(false)
+  })
+})
+
+describe('artist workspace scope reaches the composed prompt', () => {
+  const contractHeader = 'Artist OS asset contract:'
+
+  test('resolves the scope for a known workspace and degrades to undefined otherwise', async () => {
+    const workspaces = [{ id: 'ws-1', artistWorkspaceScope: 'campaign' }, { id: 'ws-2' }]
+    expect(await resolveArtistWorkspaceScope('ws-1', async () => workspaces)).toBe('campaign')
+    expect(await resolveArtistWorkspaceScope('ws-2', async () => workspaces)).toBeUndefined()
+    expect(await resolveArtistWorkspaceScope('missing', async () => workspaces)).toBeUndefined()
+    expect(await resolveArtistWorkspaceScope('ws-1', async () => [{ id: 'ws-1', artistWorkspaceScope: 'bogus' }])).toBeUndefined()
+    expect(await resolveArtistWorkspaceScope('ws-1', async () => { throw new Error('offline') })).toBeUndefined()
+  })
+
+  test('forwards the scope so a chat-launched campaign worker keeps the asset contract', () => {
+    const without = buildAgentCreateSessionOptions(makeAgent(), { skills: [], sources: [] })
+    const withScope = buildAgentCreateSessionOptions(makeAgent(), { skills: [], sources: [], artistWorkspaceScope: 'campaign' })
+
+    expect(without.customSystemPrompt ?? '').not.toContain(contractHeader)
+    expect(withScope.customSystemPrompt ?? '').toContain(contractHeader)
   })
 })

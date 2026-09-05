@@ -146,14 +146,17 @@ export function buildMemoryEntrySection(
   entries: ReadonlyArray<MemoryEntry>,
   omitted = 0,
 ): string {
-  if (entries.length === 0) return '';
-  const body = entries.map(formatEntry).join('\n\n');
-  if (omitted <= 0) return `${header}\n${MEMORY_TRUST_NOTICE}\n\n${body}`;
+  if (entries.length === 0 && omitted <= 0) return '';
   // Say what is missing and how to reach it. An agent that knows memories were
   // held back can search for them; one that silently got a truncated list
-  // concludes they do not exist.
-  const note = `[${omitted} older ${omitted === 1 ? 'entry is' : 'entries are'} not shown here. Search them with recall_memory.]`;
-  return `${header}\n${MEMORY_TRUST_NOTICE}\n\n${body}\n\n${note}`;
+  // concludes they do not exist. That holds even when nothing at all fit — a
+  // budget of zero still owes the agent the fact that memory exists.
+  const note = omitted > 0
+    ? `[${omitted} older ${omitted === 1 ? 'entry is' : 'entries are'} not shown here. Search them with recall_memory.]`
+    : '';
+  const body = entries.map(formatEntry).join('\n\n');
+  const parts = [body, note].filter((part) => part.length > 0);
+  return `${header}\n${MEMORY_TRUST_NOTICE}\n\n${parts.join('\n\n')}`;
 }
 
 /**
