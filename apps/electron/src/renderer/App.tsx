@@ -763,11 +763,16 @@ export default function App() {
             break
           }
           case 'auto_retry': {
+            // Voice owns its action lifecycle. A generic chat retry can replay
+            // work after Stop/workspace switch; source activation asks the user
+            // to continue explicitly until a voice continuation protocol exists.
+            if (isVoiceManagedSession(effect.sessionId)) break
             // A source was auto-activated, automatically re-send the original message
             // Add suffix to indicate the source was activated
             const messageWithSuffix = `${effect.originalMessage}\n\n[${effect.sourceSlug} activated]`
             // Use setTimeout to ensure the previous turn has fully completed
             setTimeout(() => {
+              if (isVoiceManagedSession(effect.sessionId)) return
               window.electronAPI.sendMessage(effect.sessionId, messageWithSuffix)
             }, 100)
             break
@@ -2214,3 +2219,4 @@ function FilePreviewRenderer({
       return null
   }
 }
+import { isVoiceManagedSession } from '@/lib/voice-managed-sessions'

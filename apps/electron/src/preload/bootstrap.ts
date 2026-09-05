@@ -483,6 +483,7 @@ client.onConnectionStateChanged((state) => {
 ;(api as ElectronAPI).getArtistManagerVoiceProxyInfo = () => ipcRenderer.invoke('__artist-manager-voice:proxy-info')
 ;(api as ElectronAPI).getArtistManagerVoiceProviderStatus = () => ipcRenderer.invoke('__artist-manager-voice:provider-status')
 ;(api as ElectronAPI).createArtistManagerVoiceAssemblyToken = () => ipcRenderer.invoke('__artist-manager-voice:assembly-token')
+;(api as ElectronAPI).invokeArtistManagerMoonshine = (request) => ipcRenderer.invoke('__artist-manager-moonshine:invoke', request)
 ;(api as ElectronAPI).getChatDictationAvailability = () => ipcRenderer.invoke('__chat-dictation:availability')
 ;(api as ElectronAPI).requestChatDictationAccess = () => ipcRenderer.invoke('__chat-dictation:request-access')
 ;(api as ElectronAPI).transcribeChatDictation = (input) => ipcRenderer.invoke('__chat-dictation:transcribe', input)

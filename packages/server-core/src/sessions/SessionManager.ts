@@ -8673,8 +8673,8 @@ user a clickable link to where the thing now lives.`
           // Release browser overlay + session binding because the agent is paused awaiting user auth.
           void releaseBrowserOwnershipOnForcedStop(this.browserPaneManager, managed.id)
 
-          // Send complete event so renderer knows processing stopped (include tokenUsage for real-time updates)
-          this.sendEvent({ type: 'complete', sessionId: managed.id, tokenUsage: managed.tokenUsage }, managed.workspace.id)
+          // Auth handoff pauses work; it is not a final answer or a tool-success receipt.
+          this.sendEvent({ type: 'complete', sessionId: managed.id, tokenUsage: managed.tokenUsage, handoff: 'auth' }, managed.workspace.id)
         }
 
         // Emit auth_request event to renderer
@@ -13260,6 +13260,8 @@ user a clickable link to where the thing now lives.`
           sessionId,
           tokenUsage: managed.tokenUsage,
           hasUnread: managed.hasUnread,
+          // Forced UI cleanup is not proof that the agent/tool generator exited.
+          ...(reason === 'timeout' ? { stopReason: 'timeout' as const } : {}),
         }, managed.workspace.id)
       })
 

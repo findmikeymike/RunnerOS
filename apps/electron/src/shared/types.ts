@@ -592,6 +592,20 @@ export interface ArtistManagerVoiceProviderStatus {
   ready: boolean
 }
 
+export type ArtistManagerMoonshineRequest =
+  | { method: 'status' }
+  | { method: 'install'; modelId: string }
+  | { method: 'start'; modelId: string; sessionId: string }
+  | { method: 'feed'; sessionId: string; audio: Uint8Array; sampleRateHz: number; channels: number }
+  | { method: 'poll' | 'cancel' | 'stop'; sessionId: string }
+  | { method: 'finalize' | 'finish'; sessionId: string; turn: number }
+
+export type ArtistManagerMoonshineStatus = {
+  available: boolean
+  tiers: import('../../../../vendor/voice-core-electron/main/moonshineModels').ElectronMoonshineTierStatus[]
+  error?: string
+}
+
 export type ChatDictationPermission = 'granted' | 'denied' | 'restricted' | 'not-determined' | 'unknown'
 
 export interface ChatDictationResult {
@@ -1460,6 +1474,7 @@ export interface ElectronAPI {
   getArtistManagerVoiceProxyInfo(): Promise<ArtistManagerVoiceProxyInfo>
   getArtistManagerVoiceProviderStatus(): Promise<ArtistManagerVoiceProviderStatus>
   createArtistManagerVoiceAssemblyToken(): Promise<string>
+  invokeArtistManagerMoonshine(request: ArtistManagerMoonshineRequest): Promise<unknown>
   getChatDictationAvailability(): Promise<ChatDictationAvailability>
   requestChatDictationAccess(): Promise<ChatDictationPermission>
   transcribeChatDictation(input: { audioData: Uint8Array; mimeType: string }): Promise<ChatDictationResult>

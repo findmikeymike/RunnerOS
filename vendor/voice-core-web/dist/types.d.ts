@@ -103,6 +103,8 @@ export type VoiceRuntimeConfig = {
     requireCrossOriginIsolation?: boolean;
     preferSharedArrayBuffer?: boolean;
     echoCancellation?: boolean;
+    /** Enables amplitude-only interruption detection. Disable when speaker echo cannot be reliably removed. */
+    localBargeIn?: boolean;
     noiseSuppression?: boolean;
     autoGainControl?: boolean;
     inputDeviceId?: string;

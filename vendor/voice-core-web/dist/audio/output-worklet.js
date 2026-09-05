@@ -15,6 +15,7 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
         this.inactiveGraceSamples = Math.max(128, Math.round(sampleRate * 0.12));
         this.inactiveSamplesRemaining = 0;
         this.reportedUnderrun = false;
+        this.flushRequestId = null;
         this.queueHighWaterSamples = Math.round(sampleRate * 0.75);
         this.queueLowWaterSamples = Math.round(sampleRate * 0.35);
         this.maxQueuedSamples = Math.round(sampleRate * 1.5);
@@ -31,6 +32,7 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
                     return;
                 }
                 this.pending.push(frames);
+                this.flushRequestId = null;
                 this.queuedSamples += frames.length;
                 this.syncBackpressureState();
                 this.port.postMessage({
@@ -46,7 +48,12 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
                 this.reportedUnderrun = false;
                 return;
             }
+            if (event.data?.type === "flushOutput") {
+                this.flushRequestId = event.data.requestId;
+                return;
+            }
             if (event.data?.type === "clearOutput") {
+                this.flushRequestId = null;
                 this.pending = [];
                 this.offset = 0;
                 this.queuedSamples = 0;
@@ -121,9 +128,13 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
                     this.port.postMessage({ type: "playbackState", active: false });
                 }
             }
+            if (!this.active && this.tailRampRemaining === 0 && this.flushRequestId !== null) {
+                this.port.postMessage({ type: "outputFlushed", requestId: this.flushRequestId });
+                this.flushRequestId = null;
+            }
             return true;
         }
-        if (!this.active && this.queuedSamples < this.prebufferSamples) {
+        if (!this.active && this.queuedSamples < this.prebufferSamples && this.flushRequestId === null) {
             return true;
         }
         if (!this.active) {

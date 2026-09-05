@@ -30,7 +30,7 @@ export declare class VoiceCoreWeb {
     private transports;
     private sttUnsubscribe;
     private sttErrorUnsubscribe;
-    private sttSendChain;
+    private readonly sttSendQueue;
     private sttLifecycleChain;
     private sttLifecycleGeneration;
     private sttSendGeneration;
@@ -51,10 +51,13 @@ export declare class VoiceCoreWeb {
     private readonly lifecycleQueue;
     private destroyed;
     private cleanupRequired;
+    private startupGeneration;
+    private startupFailure;
     constructor(config?: VoiceRuntimeConfig);
     start(): Promise<void>;
     private startInternal;
     stop(): Promise<void>;
+    private assertStartupCurrent;
     private stopInternal;
     destroy(): Promise<void>;
     isRunning(): boolean;

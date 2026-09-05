@@ -6,7 +6,7 @@ const CONFIG_KEYS = new Set([
     "inworldVoiceId", "voiceId", "inworldModelId", "openAiModel",
     "openAiMaxOutputTokens", "openAiTtsModel", "openAiTtsVoice", "systemPrompt",
     "sampleRateHint", "outputSampleRateHz", "requireCrossOriginIsolation",
-    "preferSharedArrayBuffer", "echoCancellation", "noiseSuppression",
+    "preferSharedArrayBuffer", "echoCancellation", "localBargeIn", "noiseSuppression",
     "autoGainControl", "inputDeviceId", "outputDeviceId", "inputBatchFrames",
     "endpointing",
 ]);
@@ -29,7 +29,7 @@ const STRING_LIMITS = {
 };
 const BOOLEAN_KEYS = [
     "requireCommercialAccess", "allowInsecureBrowserProviderKeys",
-    "requireCrossOriginIsolation", "preferSharedArrayBuffer", "echoCancellation",
+    "requireCrossOriginIsolation", "preferSharedArrayBuffer", "echoCancellation", "localBargeIn",
     "noiseSuppression", "autoGainControl",
 ];
 export function validateVoiceRuntimeConfig(value) {

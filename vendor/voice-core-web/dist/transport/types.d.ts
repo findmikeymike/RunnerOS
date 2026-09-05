@@ -34,6 +34,8 @@ export type WebTransportBundle = {
     tts?: WebTtsTransport;
 };
 export interface WebSttTransport {
+    /** Local transports may stay warm while input audio is gated during assistant output. */
+    keepAliveDuringAssistant?: boolean;
     start(): Promise<void>;
     cancelStart?(): void;
     stop(): Promise<void>;
@@ -42,6 +44,10 @@ export interface WebSttTransport {
     onError?(handler: (error: Error) => void): () => void;
 }
 export interface WebLlmTransport {
+    /** Action agents opt out: replaying an empty reply can repeat tools. */
+    retryEmptyResponse?: boolean;
+    /** Wait for outstanding agent cancellation before admitting a new runtime. */
+    stop?(): Promise<void>;
     generateReply(request: LlmGenerateRequest): Promise<AsyncIterable<LlmTokenEvent>>;
 }
 export interface WebTtsTransport {

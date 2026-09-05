@@ -3,6 +3,7 @@ type ChatterboxWorkerClientOptions = {
     createWorker?: () => Worker;
     onDiagnostic?: (message: string) => void;
     requestTimeoutMs?: number;
+    cancellationDeadlineMs?: number;
 };
 type LoadRequest = {
     modelBaseUrl: string;
@@ -25,11 +26,13 @@ export declare class ChatterboxWorkerClient {
     private readonly createWorkerImpl;
     private readonly onDiagnostic?;
     private readonly requestTimeoutMs;
+    private readonly cancellationDeadlineMs;
     private worker;
     private nextId;
     private readonly pending;
     private loadedKey;
     private activeSynthesisId;
+    private readonly cancelledSyntheses;
     constructor(options?: ChatterboxWorkerClientOptions);
     load(request: LoadRequest): Promise<number>;
     synthesize(request: SynthesisRequest): Promise<Extract<ChatterboxWorkerResponse, {
@@ -41,6 +44,8 @@ export declare class ChatterboxWorkerClient {
     private sendWithId;
     private ensureWorker;
     private disposeWorker;
+    private cancelActiveSynthesis;
+    private clearCancellationDeadline;
     private allocateId;
 }
 export {};

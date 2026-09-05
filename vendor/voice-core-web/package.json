@@ -16,18 +16,43 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
+    "./cloud": {
+      "types": "./dist/cloud.d.ts",
+      "import": "./dist/cloud.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./cloud": {
-      "types": "./dist/cloud.d.ts",
-      "import": "./dist/cloud.js"
+    "./server": {
+      "types": "./server/voicecore-session.mjs.d.ts",
+      "import": "./server/voicecore-session.mjs"
+    },
+    "./server/entitlement": {
+      "types": "./server/voicecore-entitlement.mjs.d.ts",
+      "import": "./server/voicecore-entitlement.mjs"
+    },
+    "./server/llm-credential": {
+      "types": "./server/voicecore-llm-credential.mjs.d.ts",
+      "import": "./server/voicecore-llm-credential.mjs"
+    },
+    "./server/operator-gateway": {
+      "types": "./server/voicecore-operator-gateway.mjs.d.ts",
+      "import": "./server/voicecore-operator-gateway.mjs"
     }
   },
   "files": [
     "README.md",
     "dist",
-    "pkg"
-  ]
+    "pkg",
+    "server"
+  ],
+  "dependencies": {
+    "@huggingface/transformers": "4.2.0"
+  },
+  "overrides": {
+    "adm-zip": "0.6.0",
+    "nanoid": "3.3.18",
+    "sharp": "0.35.4"
+  }
 }

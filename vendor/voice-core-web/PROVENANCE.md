@@ -1,8 +1,8 @@
-# Voice Core Web provenance
+# Voice Core consumer snapshot
 
-- Source: `Conversation AI System/voice-core-rs-moonshine-stt-refresh/voice-core-rs/wrappers/web`
-- Package: `@voice-core/web@0.1.0`
-- Imported: 2026-08-30
-- Contents: built browser SDK (`dist`) and its matching WASM package (`pkg`)
+Source revision: 652111cefe263f6d0c60428fa9c0f30b2d58ea97
+Source had SDK edits at export: true
 
-This checked-in package replaces the ignored, machine-local Voice HNIC vendor tree used by the prototype branch. It makes Artist OS voice builds reproducible while preserving the upstream Voice Core boundary.
+Rebuild the upstream Web TypeScript and WASM before exporting. Run tools/export-runner-voice-sdk.mjs with this repository path. Exact imported runtime hashes are in ../voice-core-snapshot.json. Electron modules are copied unchanged from the same source tree. No credentials, native binaries or model packs are included.
+
+The cloud entry point avoids optional WebGPU inference imports; the full SDK entry point retains its optional model-provider dependencies.

@@ -3,15 +3,18 @@ export class ChatterboxWorkerClient {
     createWorkerImpl;
     onDiagnostic;
     requestTimeoutMs;
+    cancellationDeadlineMs;
     worker = null;
     nextId = 1;
     pending = new Map();
     loadedKey = null;
     activeSynthesisId = null;
+    cancelledSyntheses = new Map();
     constructor(options = {}) {
         this.createWorkerImpl = options.createWorker ?? (() => new Worker(new URL("./worker.js", import.meta.url), { type: "module" }));
         this.onDiagnostic = options.onDiagnostic;
         this.requestTimeoutMs = validateTimeout(options.requestTimeoutMs ?? 180_000);
+        this.cancellationDeadlineMs = validateCancellationDeadline(options.cancellationDeadlineMs ?? 2_000);
     }
     async load(request) {
         const key = createChatterboxLoadKey(request);
@@ -35,8 +38,23 @@ export class ChatterboxWorkerClient {
             throw createAbortError();
         if (this.activeSynthesisId !== null)
             throw new Error("Chatterbox synthesis is already in progress");
+        const requestedLoadKey = createChatterboxLoadKey(request);
         this.activeSynthesisId = -1;
-        const abort = () => this.disposeWorker(createAbortError());
+        const abort = () => {
+            const synthesisId = this.activeSynthesisId;
+            if (synthesisId !== null && synthesisId > 0) {
+                this.cancelActiveSynthesis(synthesisId);
+            }
+            else if (synthesisId === -1 && this.loadedKey === requestedLoadKey) {
+                // A warm load resolves on the next microtask. Nothing has reached the
+                // worker yet, so the post-load abort check can reject without reload.
+                return;
+            }
+            else {
+                // Model loading and other setup work has no cooperative interrupt seam.
+                this.disposeWorker(createAbortError());
+            }
+        };
         request.signal.addEventListener("abort", abort, { once: true });
         try {
             await this.load(request);
@@ -142,6 +160,21 @@ export class ChatterboxWorkerClient {
                 this.onDiagnostic?.(message.message);
                 return;
             }
+            if (message.type === "synthesis_cancelled") {
+                const cancelled = this.cancelledSyntheses.get(message.synthesisId);
+                if (!cancelled || cancelled.cancelRequestId !== message.id) {
+                    this.disposeWorker(new Error("Chatterbox cancellation ownership violation"));
+                    return;
+                }
+                this.clearCancellationDeadline(message.synthesisId);
+                return;
+            }
+            if (this.cancelledSyntheses.has(message.id)) {
+                // The caller already received AbortError. Any stale terminal result is
+                // lifecycle evidence only and must never reach playback. Keep the
+                // cancellation lease until the worker acknowledges it or times out.
+                return;
+            }
             const pending = this.pending.get(message.id);
             if (!pending)
                 return;
@@ -170,11 +203,48 @@ export class ChatterboxWorkerClient {
         this.loadedKey = null;
         if (worker)
             worker.terminate();
+        for (const cancelled of this.cancelledSyntheses.values())
+            clearTimeout(cancelled.timeout);
+        this.cancelledSyntheses.clear();
         for (const pending of this.pending.values()) {
             clearTimeout(pending.timeout);
             pending.reject(error ?? new Error("Chatterbox worker disposed"));
         }
         this.pending.clear();
+    }
+    cancelActiveSynthesis(synthesisId) {
+        const pending = this.pending.get(synthesisId);
+        if (pending) {
+            clearTimeout(pending.timeout);
+            this.pending.delete(synthesisId);
+            pending.reject(createAbortError());
+        }
+        const worker = this.worker;
+        if (!worker)
+            return;
+        const cancelRequestId = this.allocateId();
+        try {
+            worker.postMessage({
+                id: cancelRequestId,
+                type: "cancel_synthesis",
+                synthesisId,
+            });
+        }
+        catch (error) {
+            this.disposeWorker(error instanceof Error ? error : new Error("Chatterbox cancellation post failed"));
+            return;
+        }
+        const timeout = setTimeout(() => {
+            this.cancelledSyntheses.delete(synthesisId);
+            this.disposeWorker(new Error("Chatterbox cooperative cancellation timed out"));
+        }, this.cancellationDeadlineMs);
+        this.cancelledSyntheses.set(synthesisId, { cancelRequestId, timeout });
+    }
+    clearCancellationDeadline(synthesisId) {
+        const cancelled = this.cancelledSyntheses.get(synthesisId);
+        if (cancelled)
+            clearTimeout(cancelled.timeout);
+        this.cancelledSyntheses.delete(synthesisId);
     }
     allocateId() {
         for (let attempts = 0; attempts < Number.MAX_SAFE_INTEGER; attempts += 1) {
@@ -204,6 +274,12 @@ function parseResponse(value) {
     }
     if (message.type === "dispose_complete" || message.type === "dispose_voice_complete") {
         return exactKeys(message, ["id", "type"]) ? message : null;
+    }
+    if (message.type === "synthesis_cancelled") {
+        return exactKeys(message, ["id", "type", "synthesisId"])
+            && Number.isSafeInteger(message.synthesisId)
+            && Number(message.synthesisId) > 0
+            ? message : null;
     }
     if (message.type === "error") {
         return exactKeys(message, ["id", "type", "message"])
@@ -251,6 +327,12 @@ function cloneArrayBuffer(buffer, byteOffset, byteLength) {
 function validateTimeout(value) {
     if (!Number.isSafeInteger(value) || value < 1_000 || value > 600_000) {
         throw new Error("Chatterbox request timeout must be 1-600 seconds");
+    }
+    return value;
+}
+function validateCancellationDeadline(value) {
+    if (!Number.isSafeInteger(value) || value < 50 || value > 10_000) {
+        throw new Error("Chatterbox cancellation deadline must be 50-10000 milliseconds");
     }
     return value;
 }

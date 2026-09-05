@@ -1,7 +1,7 @@
 export declare const GENERATED_LLM_MODEL_CATALOG: {
     readonly schemaVersion: 1;
-    readonly catalogVersion: "2026-07-13";
-    readonly updatedAt: "2026-07-13T00:00:00Z";
+    readonly catalogVersion: "2026-08-30";
+    readonly updatedAt: "2026-08-30T00:00:00Z";
     readonly kind: "recommended_models";
     readonly providers: readonly [{
         readonly id: "openai";
@@ -29,8 +29,8 @@ export declare const GENERATED_LLM_MODEL_CATALOG: {
             readonly label: "Qwen 3.5 9B";
             readonly tier: "economy";
         }, {
-            readonly id: "MiniMaxAI/MiniMax-M3";
-            readonly label: "MiniMax M3";
+            readonly id: "MiniMaxAI/MiniMax-M2.7";
+            readonly label: "MiniMax M2.7";
             readonly tier: "balanced";
         }, {
             readonly id: "meta-llama/Llama-3.3-70B-Instruct-Turbo";

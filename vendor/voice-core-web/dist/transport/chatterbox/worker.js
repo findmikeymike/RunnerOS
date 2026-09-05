@@ -3,6 +3,8 @@ import { ChatterboxConditioningCache } from "./conditioningCache.js";
 import { createChatterboxSessionFetch } from "./sessionFetch.js";
 import { validateVoiceCoreSessionToken } from "../../sessionSecurity.js";
 let runtime = null;
+let activeSynthesis = null;
+const queuedCancellationAcks = new Map();
 let commandChain = Promise.resolve();
 const nativeFetch = globalThis.fetch.bind(globalThis);
 function post(message, transfer = []) {
@@ -86,6 +88,7 @@ async function ensureLoaded(request) {
             featureExtractor: new transformers.ChatterboxFeatureExtractor(preprocessorConfig),
             key,
             conditioning: new ChatterboxConditioningCache(),
+            createStoppingCriteria: () => new transformers.InterruptableStoppingCriteria(),
         };
         return performance.now() - loadStarted;
     }
@@ -103,7 +106,22 @@ async function synthesize(request) {
     let inputValues = null;
     let waveform = null;
     const synthesisStarted = performance.now();
+    const stoppingCriteria = runtime.createStoppingCriteria();
+    const active = {
+        requestId: request.id,
+        cancelRequestId: null,
+        stoppingCriteria,
+    };
+    activeSynthesis = active;
+    const queuedCancelRequestId = queuedCancellationAcks.get(request.id);
+    if (queuedCancelRequestId !== undefined) {
+        queuedCancellationAcks.delete(request.id);
+        active.cancelRequestId = queuedCancelRequestId;
+        stoppingCriteria.interrupt();
+    }
     try {
+        if (stoppingCriteria.interrupted)
+            return;
         const textInputs = runtime.tokenizer(request.text);
         const conditioningKey = `${request.voiceId}:${request.referenceSha256}`;
         let conditioning = runtime.conditioning.get(conditioningKey);
@@ -117,6 +135,8 @@ async function synthesize(request) {
         }
         if (!conditioning)
             throw new Error("Chatterbox voice conditioning is unavailable");
+        if (stoppingCriteria.interrupted)
+            return;
         inputIds = textInputs.input_ids;
         attentionMask = textInputs.attention_mask;
         waveform = await runtime.model.generate({
@@ -129,7 +149,10 @@ async function synthesize(request) {
             max_new_tokens: request.maxNewTokens,
             do_sample: false,
             repetition_penalty: request.repetitionPenalty,
+            stopping_criteria: stoppingCriteria,
         });
+        if (stoppingCriteria.interrupted)
+            return;
         const samples = new Float32Array(waveform.data);
         if (samples.length === 0
             || samples.length > DEFAULT_CHATTERBOX_SAMPLE_RATE * MAX_CHATTERBOX_OUTPUT_SECONDS
@@ -150,7 +173,29 @@ async function synthesize(request) {
         disposeMaybe(inputValues);
         disposeMaybe(attentionMask);
         disposeMaybe(inputIds);
+        if (activeSynthesis === active)
+            activeSynthesis = null;
+        queuedCancellationAcks.delete(request.id);
+        if (stoppingCriteria.interrupted) {
+            post({
+                id: active.cancelRequestId ?? request.id,
+                type: "synthesis_cancelled",
+                synthesisId: request.id,
+            });
+        }
     }
+}
+function handleCancellation(request) {
+    assertExactKeys(request, ["id", "type", "synthesisId"]);
+    if (!validRequestId(request.id) || !validRequestId(request.synthesisId)) {
+        throw new Error("Invalid Chatterbox cancellation request");
+    }
+    if (activeSynthesis?.requestId === request.synthesisId) {
+        activeSynthesis.cancelRequestId = request.id;
+        activeSynthesis.stoppingCriteria.interrupt();
+        return;
+    }
+    queuedCancellationAcks.set(request.synthesisId, request.id);
 }
 async function handleRequest(request) {
     const candidateId = request?.id;
@@ -189,6 +234,16 @@ async function handleRequest(request) {
     }
 }
 self.addEventListener("message", (event) => {
+    if (event.data?.type === "cancel_synthesis") {
+        try {
+            handleCancellation(event.data);
+        }
+        catch (error) {
+            const id = validRequestId(event.data?.id) ? event.data.id : 0;
+            post({ id, type: "error", message: safeErrorMessage(error) });
+        }
+        return;
+    }
     commandChain = commandChain.then(() => handleRequest(event.data));
 });
 function validateLoadRequest(request) {

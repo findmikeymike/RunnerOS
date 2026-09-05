@@ -107,6 +107,7 @@ import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-p
 import { registerOutputAssetHandler } from './output-asset-protocol'
 import { registerProsodyIpcHandlers } from './prosody-engine'
 import { registerChatDictationIpcHandlers } from './chat-dictation'
+import { createArtistManagerMoonshine, type ArtistManagerMoonshine } from './artist-manager-moonshine'
 import log, { isDebugMode, mainLog, getLogFilePath, getMessagingGatewayLogFilePath, messagingGatewayLog } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { registerPiModelResolver } from '@craft-agent/shared/config'
@@ -234,6 +235,7 @@ let messagingHandle: MessagingBootstrapHandle | null = null
 // before-quit handler can stop it cleanly.
 let triggerServerHandle: { url: string; stop: () => Promise<void> } | null = null
 let artistManagerVoiceProxy: ArtistManagerVoiceProxy | null = null
+let artistManagerMoonshine: ArtistManagerMoonshine | null = null
 
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
@@ -606,6 +608,30 @@ app.whenReady().then(async () => {
     ipcMain.handle('__artist-manager-voice:assembly-token', () => {
       if (!artistManagerVoiceProxy) throw new Error('Artist Manager voice is unavailable in this app mode')
       return artistManagerVoiceProxy.createAssemblyAiToken()
+    })
+    artistManagerMoonshine = createArtistManagerMoonshine({
+      isPackaged: app.isPackaged,
+      resourcesDirectory: app.isPackaged ? process.resourcesPath : join(__dirname, '..', '.voice-core-dev', 'resources'),
+      userDataDirectory: app.getPath('userData'),
+    })
+    const observedVoiceSenders = new WeakSet<Electron.WebContents>()
+    ipcMain.handle('__artist-manager-moonshine:invoke', async (event, request: unknown) => {
+      const sender = event.sender
+      if (sender.isDestroyed() || event.senderFrame !== sender.mainFrame
+        || !windowManager?.getAllWindows().some(({ window }) => window.webContents === sender)) {
+        throw new Error('Moonshine is restricted to the app main window')
+      }
+      if (!observedVoiceSenders.has(sender)) {
+        observedVoiceSenders.add(sender)
+        const release = () => { void artistManagerMoonshine?.releaseOwner(sender.id).catch(error => mainLog.warn('[moonshine] owner cleanup failed', error)) }
+        sender.once('destroyed', release)
+        sender.on('render-process-gone', release)
+        sender.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+          if (isMainFrame && !isInPlace) release()
+        })
+      }
+      if (!artistManagerMoonshine) throw new Error('Moonshine is unavailable')
+      return artistManagerMoonshine.invoke(sender.id, request)
     })
     registerProsodyIpcHandlers()
     registerChatDictationIpcHandlers()
@@ -1356,6 +1382,12 @@ async function performQuitCleanup(): Promise<void> {
     return
   }
   quitCleanupRan = true
+
+  if (artistManagerMoonshine) {
+    try { await artistManagerMoonshine.close() }
+    catch (error) { mainLog.error('[moonshine] cleanup failed:', error) }
+    artistManagerMoonshine = null
+  }
 
   if (sessionManager) {
     try {

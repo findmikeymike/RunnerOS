@@ -6,6 +6,7 @@ export { encodePocketInstallStatus, encodeVoiceRecord, parsePocketInstallStatus,
 export { createAssemblyAiSttTransport, createAssemblyAiTemporaryTokenFetcher, } from "./transport/assemblyai";
 export { createInworldTtsTransport } from "./transport/inworld";
 export { checkPocketTtsHealth, createPocketTtsTransport } from "./transport/pocket";
+export { checkChatterboxMlxHealth, createChatterboxMlxTransport } from "./transport/chatterboxMlx";
 export { createChatterboxTtsTransport, createChatterboxTurboWebGpuTransport, } from "./transport/chatterbox/index";
 export { createMockTransportBundle, MockSttTransport } from "./transport/mock";
 export { createOpenAiTransportBundle } from "./transport/openai";

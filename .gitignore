@@ -114,3 +114,4 @@ tools/**/dist/
 tools/**/*.log
 tools/**/runtime-manifest.json
 tools/**/.DS_Store
+apps/electron/.voice-core-dev/

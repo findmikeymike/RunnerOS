@@ -12,6 +12,7 @@ declare class VoiceCoreOutputProcessor {
     inactiveGraceSamples: number;
     inactiveSamplesRemaining: number;
     reportedUnderrun: boolean;
+    flushRequestId: any;
     queueHighWaterSamples: number;
     queueLowWaterSamples: number;
     maxQueuedSamples: number;

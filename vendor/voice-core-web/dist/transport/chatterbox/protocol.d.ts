@@ -39,6 +39,10 @@ export type ChatterboxWorkerRequest = {
     repetitionPenalty: number;
 } | {
     id: number;
+    type: "cancel_synthesis";
+    synthesisId: number;
+} | {
+    id: number;
     type: "dispose_voice";
     voiceId: string;
 } | {
@@ -65,6 +69,10 @@ export type ChatterboxWorkerResponse = {
 } | {
     id: number;
     type: "dispose_voice_complete";
+} | {
+    id: number;
+    type: "synthesis_cancelled";
+    synthesisId: number;
 } | {
     id: number;
     type: "error";

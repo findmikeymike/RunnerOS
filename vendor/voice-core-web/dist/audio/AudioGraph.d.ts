@@ -13,9 +13,16 @@ export declare class AudioGraph {
     private outputQueuePressureHandler;
     private outputDebugHandler;
     private outputErrorHandler;
+    private inputErrorHandler;
+    private captureFailure;
+    private captureMonitoring;
+    private detachCaptureListeners;
+    private outputFlushedHandler;
+    private outputFlushSequence;
+    private pendingOutputFlush;
     private readonly outputResampler;
-    private inputDeliveryActive;
-    private pendingInputDelivery;
+    private readonly inputResampler;
+    private readonly inputDelivery;
     private inputDeliveryGeneration;
     private startGeneration;
     private pendingStartCancellation;
@@ -23,19 +30,25 @@ export declare class AudioGraph {
     start(config: VoiceRuntimeConfig): Promise<void>;
     stop(): Promise<void>;
     getSampleRate(): number | null;
+    assertCaptureHealthy(): void;
     cancelPendingStart(): void;
     enqueueOutputFrames(frames: Float32Array, sampleRateHz: number, channels: number): Promise<void>;
     private postOutputSlice;
     clearOutputQueue(): void;
     setInputFramesHandler(handler: ((frames: Float32Array, sampleRateHz: number, channels: number) => void | Promise<void>) | null): void;
     setOutputPlaybackHandler(handler: ((active: boolean) => void) | null): void;
+    setOutputFlushedHandler(handler: (() => void) | null): void;
+    flushOutputQueue(): void;
     setOutputQueuePressureHandler(handler: ((active: boolean, queuedSamples: number) => void) | null): void;
     setOutputDebugHandler(handler: ((message: string) => void) | null): void;
     setOutputErrorHandler(handler: ((error: Error) => void) | null): void;
+    setInputErrorHandler(handler: ((error: Error) => void) | null): void;
     private normalizeOutputFrames;
     private enqueueInputDelivery;
+    private reportInputFailure;
     private downmixToMono;
     private cancelPendingOutputRequests;
+    private awaitStartupStep;
     private withMediaStartTimeout;
 }
 //# sourceMappingURL=AudioGraph.d.ts.map

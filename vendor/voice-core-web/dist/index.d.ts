@@ -12,6 +12,8 @@ export { createInworldTtsTransport } from "./transport/inworld";
 export type { InworldTtsTransportOptions } from "./transport/inworld";
 export { checkPocketTtsHealth, createPocketTtsTransport } from "./transport/pocket";
 export type { PocketTtsTransportOptions } from "./transport/pocket";
+export { checkChatterboxMlxHealth, createChatterboxMlxTransport } from "./transport/chatterboxMlx";
+export type { ChatterboxMlxTransportOptions } from "./transport/chatterboxMlx";
 export { createChatterboxTtsTransport, createChatterboxTurboWebGpuTransport, } from "./transport/chatterbox/index";
 export type { ChatterboxTtsTransportOptions, ChatterboxTurboWebGpuTransportOptions, } from "./transport/chatterbox/index";
 export type { ChatterboxDtype, ChatterboxDtypeMap } from "./transport/chatterbox/protocol";

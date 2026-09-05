@@ -31,6 +31,7 @@ type ApiToChannelMapKeys = Exclude<
   | 'getArtistManagerVoiceProxyInfo' // direct IPC — local authenticated voice proxy
   | 'getArtistManagerVoiceProviderStatus' // direct IPC — returns booleans, never secrets
   | 'createArtistManagerVoiceAssemblyToken' // direct IPC — mints a short-lived STT token
+  | 'invokeArtistManagerMoonshine' // direct IPC — native audio stays in the local Electron host
   | 'getChatDictationAvailability' // direct IPC — checks the local packaged transcription runtime
   | 'requestChatDictationAccess' // direct IPC — local operating-system microphone permission
   | 'transcribeChatDictation' // direct IPC — local audio never crosses the workspace transport

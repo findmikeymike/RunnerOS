@@ -1,8 +1,12 @@
 import { AudioGraph } from "./audio/AudioGraph";
+import { BoundedAudioDispatcher } from "./audio/BoundedAudioDispatcher";
 import { assertBrowserSupport, probeBrowserCapabilities } from "./runtime/featureProbe";
 import { RuntimeWorkerClient } from "./runtime/worker";
 import { SerialTaskQueue } from "./runtime/SerialTaskQueue";
 import { validateVoiceRuntimeConfig } from "./runtime/config";
+import { shouldDetectLocalBargeIn } from "./runtime/bargeInPolicy";
+import { resumeTranscriptionOnlyIfNeeded } from "./runtime/transcriptionOnly";
+import { shouldSendSttAudio } from "./runtime/sttAudioGate";
 import { assertVoiceIdSupported } from "./voiceAssets";
 export class VoiceCoreWeb {
     static OUTPUT_POLL_IDLE_MS = 25;
@@ -33,7 +37,11 @@ export class VoiceCoreWeb {
     transports = {};
     sttUnsubscribe = null;
     sttErrorUnsubscribe = null;
-    sttSendChain = Promise.resolve();
+    sttSendQueue = new BoundedAudioDispatcher(async (audio) => {
+        if (audio.generation !== this.sttSendGeneration || !this.running || this.sttPausedForAssistant)
+            return;
+        await audio.transport.sendAudio(audio.samples, audio.sampleRateHz, audio.channels);
+    }, (error) => { void this.failRuntime(error); }, "Speech recognition");
     sttLifecycleChain = Promise.resolve();
     sttLifecycleGeneration = 0;
     sttSendGeneration = 0;
@@ -54,6 +62,8 @@ export class VoiceCoreWeb {
     lifecycleQueue = new SerialTaskQueue();
     destroyed = false;
     cleanupRequired = false;
+    startupGeneration = 0;
+    startupFailure = null;
     constructor(config = {}) {
         const validatedConfig = validateVoiceRuntimeConfig(config);
         assertVoiceIdSupported(validatedConfig.voiceId);
@@ -64,6 +74,13 @@ export class VoiceCoreWeb {
                 void this.failRuntime(error instanceof Error ? error : new Error(String(error)));
             });
         });
+        this.audioGraph.setOutputFlushedHandler(() => {
+            if (!this.running || this.responseAbortController !== null)
+                return;
+            void this.runtimeWorker.notifyOutputPlaybackFinished().catch((error) => {
+                void this.failRuntime(error instanceof Error ? error : new Error(String(error)));
+            });
+        });
         this.audioGraph.setOutputQueuePressureHandler((active, queuedSamples) => {
             this.handleOutputQueuePressure(active, queuedSamples);
         });
@@ -71,6 +88,9 @@ export class VoiceCoreWeb {
             this.emit({ type: "debug", message });
         });
         this.audioGraph.setOutputErrorHandler((error) => {
+            void this.failRuntime(error);
+        });
+        this.audioGraph.setInputErrorHandler((error) => {
             void this.failRuntime(error);
         });
         this.runtimeWorker.setMessageHandler((message) => {
@@ -97,9 +117,13 @@ export class VoiceCoreWeb {
         });
     }
     async start() {
-        return this.enqueueLifecycle(() => this.startInternal());
+        const generation = this.startupGeneration;
+        return this.enqueueLifecycle(() => this.startInternal(generation));
     }
-    async startInternal() {
+    async startInternal(generation = this.startupGeneration) {
+        if (generation !== this.startupGeneration)
+            throw new Error("VoiceCore startup was cancelled");
+        this.startupFailure = null;
         if (this.destroyed) {
             throw new Error("VoiceCore has been destroyed");
         }
@@ -108,6 +132,7 @@ export class VoiceCoreWeb {
         }
         if (this.cleanupRequired) {
             await this.stopInternal();
+            this.assertStartupCurrent(generation);
         }
         try {
             this.cleanupRequired = true;
@@ -121,18 +146,27 @@ export class VoiceCoreWeb {
             this.emit({ type: "capabilities", capabilities: this.capabilities });
             assertBrowserSupport(this.config, this.capabilities);
             await this.runtimeWorker.init(this.config);
+            this.assertStartupCurrent(generation);
+            // Open STT before the microphone so native-model warmup cannot discard
+            // the first words spoken after Start is pressed.
+            await this.startTransports();
+            this.assertStartupCurrent(generation);
             await this.audioGraph.start(this.config);
+            this.assertStartupCurrent(generation);
             await this.runtimeWorker.setConfig({
                 ...this.config,
                 outputSampleRateHz: this.audioGraph.getSampleRate() ?? undefined,
             });
+            this.assertStartupCurrent(generation);
             await this.runtimeWorker.start();
-            await this.startTransports();
+            this.assertStartupCurrent(generation);
+            this.audioGraph.assertCaptureHealthy();
             this.setRuntimeStatus("running");
             this.cleanupRequired = false;
             this.scheduleDrainOutputAudio(0);
         }
         catch (error) {
+            const startError = this.startupFailure ?? error;
             const rollback = await Promise.allSettled([
                 this.audioGraph.stop(),
                 this.stopTransports(),
@@ -143,15 +177,24 @@ export class VoiceCoreWeb {
             this.setRuntimeStatus("error");
             this.emit({
                 type: "error",
-                message: error instanceof Error ? error.message : String(error),
+                message: startError instanceof Error ? startError.message : String(startError),
             });
-            throw error;
+            throw startError;
         }
     }
     async stop() {
+        this.startupGeneration++;
+        this.sttSendGeneration++;
+        this.sttSendQueue.reset();
         this.audioGraph.cancelPendingStart();
         this.transports.stt?.cancelStart?.();
         return this.enqueueLifecycle(() => this.stopInternal());
+    }
+    assertStartupCurrent(generation) {
+        if (generation !== this.startupGeneration)
+            throw new Error("VoiceCore startup was cancelled");
+        if (this.startupFailure)
+            throw this.startupFailure;
     }
     async stopInternal() {
         if (!this.running && !this.cleanupRequired) {
@@ -199,6 +242,9 @@ export class VoiceCoreWeb {
         }
     }
     async destroy() {
+        this.startupGeneration++;
+        this.sttSendGeneration++;
+        this.sttSendQueue.reset();
         this.audioGraph.cancelPendingStart();
         this.transports.stt?.cancelStart?.();
         return this.enqueueLifecycle(async () => {
@@ -436,6 +482,11 @@ export class VoiceCoreWeb {
                 if (!this.running || generation !== this.outputDrainGeneration)
                     break;
                 if (!chunkJson || chunkJson === "null") {
+                    // An underrun between synthesized sentences is not end-of-response.
+                    // Only flush the browser queue after synthesis and Rust draining finish.
+                    if (this.responseAbortController === null && this.state === "speaking") {
+                        this.audioGraph.flushOutputQueue();
+                    }
                     break;
                 }
                 const chunk = JSON.parse(chunkJson);
@@ -488,13 +539,16 @@ export class VoiceCoreWeb {
             return;
         }
         this.detectLocalBargeIn(frames);
+        const generation = this.sttSendGeneration;
         const pcm16 = new Int16Array(frames.length);
         for (let i = 0; i < frames.length; i += 1) {
             const clamped = Math.max(-1, Math.min(1, frames[i]));
             pcm16[i] = clamped < 0 ? clamped * 32768 : clamped * 32767;
         }
         await this.runtimeWorker.feedInputAudio(pcm16, sampleRateHz, channels);
-        if (this.transports.stt) {
+        if (generation !== this.sttSendGeneration)
+            return;
+        if (this.transports.stt && shouldSendSttAudio(this.running, this.sttTransportRunning, this.sttPausedForAssistant)) {
             this.enqueueSttSend(new Int16Array(pcm16), sampleRateHz, channels);
         }
     }
@@ -517,7 +571,15 @@ export class VoiceCoreWeb {
         this.drainTimerId = null;
     }
     async failRuntime(error) {
-        if (this.runtimeFailureActive || !this.running)
+        if (this.runtimeFailureActive)
+            return;
+        if (this.runtimeStatus === "starting") {
+            this.startupFailure ??= error;
+            this.audioGraph.cancelPendingStart();
+            this.transports.stt?.cancelStart?.();
+            return;
+        }
+        if (!this.running)
             return;
         this.runtimeFailureActive = true;
         this.emit({ type: "error", message: error.message });
@@ -547,7 +609,7 @@ export class VoiceCoreWeb {
             this.scheduleDrainOutputAudio(0);
             return;
         }
-        await this.runtimeWorker.notifyOutputPlaybackFinished();
+        // The worklet's explicit flush acknowledgement owns final completion.
     }
     handleOutputQueuePressure(active, queuedSamples) {
         if (this.outputBackpressured === active) {
@@ -567,7 +629,7 @@ export class VoiceCoreWeb {
     async startTransports() {
         this.sttLifecycleGeneration += 1;
         this.sttSendGeneration += 1;
-        this.sttSendChain = Promise.resolve();
+        this.sttSendQueue.reset();
         await this.sttLifecycleChain.catch(() => undefined);
         this.sttTransportRunning = false;
         this.sttPausedForAssistant = false;
@@ -586,10 +648,8 @@ export class VoiceCoreWeb {
             });
         });
         this.sttErrorUnsubscribe = this.transports.stt.onError?.((error) => {
-            this.emit({
-                type: "error",
-                message: error.message,
-            });
+            this.sttTransportRunning = false;
+            void this.failRuntime(error);
         }) ?? null;
         if (this.state === "thinking" || this.state === "speaking") {
             this.sttPausedForAssistant = true;
@@ -622,6 +682,7 @@ export class VoiceCoreWeb {
         const cleanupErrors = [];
         this.sttLifecycleGeneration += 1;
         this.sttSendGeneration += 1;
+        this.sttSendQueue.reset();
         this.sttUnsubscribe?.();
         this.sttErrorUnsubscribe?.();
         this.sttUnsubscribe = null;
@@ -642,6 +703,14 @@ export class VoiceCoreWeb {
         if (this.transports.tts?.stop) {
             try {
                 await this.transports.tts.stop();
+            }
+            catch (error) {
+                cleanupErrors.push(error);
+            }
+        }
+        if (this.transports.llm?.stop) {
+            try {
+                await this.transports.llm.stop();
             }
             catch (error) {
                 cleanupErrors.push(error);
@@ -686,7 +755,10 @@ export class VoiceCoreWeb {
             this.clearSttRestartTimer();
             this.sttPausedForAssistant = true;
             this.sttSendGeneration += 1;
-            this.sttSendChain = Promise.resolve();
+            this.sttSendQueue.reset();
+            if (this.transports.stt.keepAliveDuringAssistant) {
+                return;
+            }
             const generation = this.sttLifecycleGeneration;
             const transport = this.transports.stt;
             this.queueSttLifecycle(async () => {
@@ -717,7 +789,11 @@ export class VoiceCoreWeb {
                     !transport ||
                     this.state !== "listening" ||
                     !this.sttPausedForAssistant ||
-                    this.sttTransportRunning) {
+                    (!transport.keepAliveDuringAssistant && this.sttTransportRunning)) {
+                    return;
+                }
+                if (transport.keepAliveDuringAssistant && this.sttTransportRunning) {
+                    this.sttPausedForAssistant = false;
                     return;
                 }
                 this.sttTransportOwned = true;
@@ -787,7 +863,7 @@ export class VoiceCoreWeb {
         this.emit({ type: "userSpeechStarted" });
     }
     detectLocalBargeIn(frames) {
-        if (this.state !== "speaking" && this.state !== "thinking") {
+        if (!shouldDetectLocalBargeIn(this.config.localBargeIn, this.state)) {
             this.resetBargeInDetector();
             return;
         }
@@ -840,7 +916,7 @@ export class VoiceCoreWeb {
         this.bargeInTriggered = false;
     }
     async generateAssistantResponse(userText) {
-        if (!this.transports.llm) {
+        if (await resumeTranscriptionOnlyIfNeeded(Boolean(this.transports.llm), () => this.runtimeWorker.startListening())) {
             return;
         }
         const generation = this.responseGeneration + 1;
@@ -858,7 +934,7 @@ export class VoiceCoreWeb {
                 speakableBuffer,
                 synthesisChain,
             } = await this.streamAssistantReply(userText, contextJson, controller, generation, synthesisChain));
-            if (!assistantText.trim()) {
+            if (!assistantText.trim() && this.transports.llm?.retryEmptyResponse !== false) {
                 ({
                     assistantText,
                     speakableBuffer,
@@ -900,6 +976,10 @@ export class VoiceCoreWeb {
             }
             controller.abort();
             await synthesisChain.catch(() => undefined);
+            if (generation !== this.responseGeneration)
+                return;
+            this.abortResponsePipeline();
+            await this.runtimeWorker.triggerBargeIn();
             this.emit({
                 type: "error",
                 message: error instanceof Error ? error.message : String(error),
@@ -911,6 +991,7 @@ export class VoiceCoreWeb {
         finally {
             if (this.responseAbortController === controller) {
                 this.responseAbortController = null;
+                this.scheduleDrainOutputAudio(0);
             }
         }
     }
@@ -1101,26 +1182,9 @@ export class VoiceCoreWeb {
         if (!this.transports.stt) {
             return;
         }
-        const generation = this.sttSendGeneration;
-        this.sttSendChain = this.sttSendChain
-            .catch(() => undefined)
-            .then(async () => {
-            if (generation !== this.sttSendGeneration ||
-                !this.running ||
-                !this.transports.stt) {
-                return;
-            }
-            await this.transports.stt.sendAudio(samples, sampleRateHz, channels);
-        })
-            .catch((error) => {
-            if (generation !== this.sttSendGeneration) {
-                return;
-            }
-            this.emit({
-                type: "error",
-                message: error instanceof Error ? error.message : String(error),
-            });
-        });
+        this.sttSendQueue.submit({ samples, sampleRateHz, channels,
+            generation: this.sttSendGeneration, transport: this.transports.stt,
+        }, samples.length / sampleRateHz / channels * 1_000);
     }
 }
 //# sourceMappingURL=VoiceCoreWeb.js.map

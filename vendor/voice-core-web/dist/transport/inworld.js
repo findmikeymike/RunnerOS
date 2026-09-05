@@ -6,6 +6,10 @@ const DEFAULT_SAMPLE_RATE_HZ = 16_000;
 const DEFAULT_BUFFER_THRESHOLD = 100;
 const CONTEXT_ID = "ctx-1";
 const CROSSFADE_SAMPLES = 480;
+const MAX_QUEUED_AUDIO_MS = 60_000;
+const CONTEXT_READY_TIMEOUT_MS = 15_000;
+const AUDIO_IDLE_TIMEOUT_MS = 30_000;
+const SESSION_TIMEOUT_MS = 120_000;
 export function createInworldTtsTransport(options = {}) {
     if (options.inworldRuntimeKey?.trim()) {
         throw new Error("Inworld runtime keys are not supported in browser memory; configure a trusted WebSocket proxy");
@@ -30,31 +34,53 @@ class InworldTtsTransport {
     async synthesize(request) {
         const session = await this.createStreamingSession(request.signal);
         await session.pushText(request.text, true);
-        void session.finish();
+        await session.finish();
         return session;
     }
 }
 async function createInworldStreamingSession(options, signal) {
+    if (signal.aborted) {
+        throw new DOMException("Inworld TTS cancelled", "AbortError");
+    }
     const socketUrl = buildWebSocketUrl(options.webSocketUrl, options.sessionToken);
     const socket = new WebSocket(socketUrl);
     socket.binaryType = "arraybuffer";
-    const queue = createAsyncQueue(options.sampleRateHz * 2, (chunk) => chunk.frames.length / Math.max(1, chunk.channels));
+    const queue = createAsyncQueue(options.sampleRateHz * (MAX_QUEUED_AUDIO_MS / 1_000), (chunk) => chunk.frames.length / Math.max(1, chunk.channels), `Inworld TTS audio queue exceeded ${MAX_QUEUED_AUDIO_MS}ms`);
     let prevChunkTail = null;
     let finished = false;
     let contextReady = false;
     let flushed = false;
+    let terminalError = null;
+    let readyTimer;
+    let idleTimer;
+    let sessionTimer;
     let readyResolve = null;
     let readyReject = null;
     const ready = new Promise((resolve, reject) => {
         readyResolve = resolve;
         readyReject = reject;
     });
+    // A session can fail before its caller starts sending text.
+    void ready.catch(() => undefined);
     const cleanup = () => {
+        clearTimeout(readyTimer);
+        clearTimeout(idleTimer);
+        clearTimeout(sessionTimer);
         socket.removeEventListener("open", handleOpen);
         socket.removeEventListener("message", handleMessage);
         socket.removeEventListener("error", handleError);
         socket.removeEventListener("close", handleClose);
         signal.removeEventListener("abort", handleAbort);
+    };
+    const closeSocket = () => {
+        try {
+            if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+                socket.close();
+            }
+        }
+        catch {
+            // A connecting socket may reject close; deadlines and listeners are still cleared.
+        }
     };
     const finish = () => {
         if (finished) {
@@ -62,32 +88,46 @@ async function createInworldStreamingSession(options, signal) {
         }
         finished = true;
         cleanup();
+        readyResolve?.();
         flushTail(queue, prevChunkTail, options.sampleRateHz);
         prevChunkTail = null;
         queue.end();
+        closeSocket();
     };
     const fail = (error) => {
         if (finished) {
             return;
         }
         finished = true;
+        terminalError = error;
         cleanup();
+        prevChunkTail = null;
         readyReject?.(error);
         queue.throw(error);
+        closeSocket();
+    };
+    const resetAudioDeadline = () => {
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => fail(new Error("Inworld TTS audio timed out")), AUDIO_IDLE_TIMEOUT_MS);
     };
     const handleOpen = () => {
-        socket.send(JSON.stringify({
-            create: {
-                voiceId: options.voiceId,
-                modelId: options.modelId,
-                audioConfig: {
-                    audioEncoding: "LINEAR16",
-                    sampleRateHertz: options.sampleRateHz,
+        try {
+            socket.send(JSON.stringify({
+                create: {
+                    voiceId: options.voiceId,
+                    modelId: options.modelId,
+                    audioConfig: {
+                        audioEncoding: "LINEAR16",
+                        sampleRateHertz: options.sampleRateHz,
+                    },
+                    bufferCharThreshold: options.bufferCharThreshold,
                 },
-                bufferCharThreshold: options.bufferCharThreshold,
-            },
-            contextId: CONTEXT_ID,
-        }));
+                contextId: CONTEXT_ID,
+            }));
+        }
+        catch (error) {
+            fail(error instanceof Error ? error : new Error(String(error)));
+        }
     };
     const handleMessage = (event) => {
         let payload;
@@ -108,11 +148,13 @@ async function createInworldStreamingSession(options, signal) {
         }
         if (result.contextCreated) {
             contextReady = true;
+            clearTimeout(readyTimer);
             readyResolve?.();
             return;
         }
         const audioContent = result.audioChunk?.audioContent;
         if (audioContent) {
+            resetAudioDeadline();
             try {
                 const pcm16 = decodeAudioChunk(audioContent);
                 if (pcm16.length > 0) {
@@ -148,74 +190,64 @@ async function createInworldStreamingSession(options, signal) {
         if (finished) {
             return;
         }
-        if (event.code === 1000 || event.code === 1005) {
-            finish();
-            return;
-        }
-        fail(new Error(`Inworld TTS socket closed (${event.code}) ${event.reason}`.trim()));
+        fail(new Error(`Inworld TTS socket closed before ${contextReady ? "audio completed" : "context was ready"} (${event.code}) ${event.reason ?? ""}`.trim()));
     };
     const handleAbort = () => {
-        try {
-            if (contextReady && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({
-                    close_context: {},
-                    contextId: CONTEXT_ID,
-                }));
-            }
-            socket.close();
-        }
-        catch {
-            // Best effort.
-        }
-        finally {
-            finish();
-        }
+        fail(new DOMException("Inworld TTS cancelled", "AbortError"));
     };
     socket.addEventListener("open", handleOpen);
     socket.addEventListener("message", handleMessage);
     socket.addEventListener("error", handleError);
     socket.addEventListener("close", handleClose);
     signal.addEventListener("abort", handleAbort, { once: true });
+    readyTimer = setTimeout(() => fail(new Error("Inworld TTS context readiness timed out")), CONTEXT_READY_TIMEOUT_MS);
+    sessionTimer = setTimeout(() => fail(new Error("Inworld TTS session timed out")), SESSION_TIMEOUT_MS);
     const sendText = async (text, flush) => {
+        if (terminalError)
+            throw terminalError;
         const trimmed = text.trim();
         if (!trimmed || finished) {
             return;
         }
         if (trimmed.length > 1000) {
-            throw new Error(`Text too long: ${trimmed.length} chars (max 1000 per send_text)`);
+            const error = new Error(`Text too long: ${trimmed.length} chars (max 1000 per send_text)`);
+            fail(error);
+            throw error;
         }
         await ready;
         if (finished || socket.readyState !== WebSocket.OPEN) {
-            throw new Error("Inworld TTS socket is not open");
+            throw terminalError ?? new Error("Inworld TTS socket is not open");
         }
         if (flush) {
             flushed = true;
         }
-        socket.send(JSON.stringify({
-            send_text: {
-                text: trimmed,
-                ...(flush ? { flush_context: {} } : {}),
-            },
-            contextId: CONTEXT_ID,
-        }));
+        try {
+            socket.send(JSON.stringify({
+                send_text: {
+                    text: trimmed,
+                    ...(flush ? { flush_context: {} } : {}),
+                },
+                contextId: CONTEXT_ID,
+            }));
+            resetAudioDeadline();
+        }
+        catch (error) {
+            const failure = error instanceof Error ? error : new Error(String(error));
+            fail(failure);
+            throw failure;
+        }
     };
     const finishSession = async () => {
+        if (terminalError)
+            throw terminalError;
         if (finished) {
             return;
         }
         if (!flushed) {
             finish();
-            try {
-                if (socket.readyState === WebSocket.OPEN) {
-                    socket.close();
-                }
-            }
-            catch {
-                // Best effort.
-            }
             return;
         }
-        await ready.catch(() => undefined);
+        await ready;
     };
     return {
         pushText: sendText,
@@ -223,6 +255,8 @@ async function createInworldStreamingSession(options, signal) {
         async *[Symbol.asyncIterator]() {
             try {
                 for await (const chunk of queue) {
+                    if (signal.aborted)
+                        throw new DOMException("Inworld TTS cancelled", "AbortError");
                     yield chunk;
                 }
             }
@@ -363,7 +397,7 @@ function applyEdgeFade(samples, sampleRate) {
         samples[tailIndex] = Math.round(samples[tailIndex] * (1 - gain));
     }
 }
-function createAsyncQueue(maxQueuedWeight = Number.POSITIVE_INFINITY, weightOf = () => 1) {
+export function createAsyncQueue(maxQueuedWeight = Number.POSITIVE_INFINITY, weightOf = () => 1, overflowMessage = "Inworld TTS audio queue capacity exceeded") {
     const values = [];
     const waiters = [];
     let done = false;
@@ -381,7 +415,7 @@ function createAsyncQueue(maxQueuedWeight = Number.POSITIVE_INFINITY, weightOf =
             }
             const weight = Math.max(0, weightOf(value));
             if (!Number.isFinite(weight) || queuedWeight + weight > maxQueuedWeight) {
-                error = new Error("Inworld TTS audio queue exceeded 2000ms");
+                error = new Error(overflowMessage);
                 while (waiters.length)
                     waiters.shift()?.({ value: undefined, done: true });
                 return;
@@ -397,6 +431,8 @@ function createAsyncQueue(maxQueuedWeight = Number.POSITIVE_INFINITY, weightOf =
         },
         throw(nextError) {
             error = nextError;
+            values.length = 0;
+            queuedWeight = 0;
             while (waiters.length) {
                 const waiter = waiters.shift();
                 if (waiter) {

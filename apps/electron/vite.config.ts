@@ -58,6 +58,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      // Resolve the checked-in snapshot, not Bun's potentially stale file-package cache.
+      '@voice-core/web/cloud': resolve(__dirname, '../../vendor/voice-core-web/dist/cloud.js'),
       '@': resolve(__dirname, 'src/renderer'),
       '@config': resolve(__dirname, '../../packages/shared/src/config'),
       // Force all React imports to use the root node_modules React
