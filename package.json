@@ -43,7 +43,9 @@
     "adm-zip": "^0.6.0",
     "linkify-it": "^5.0.2",
     "postcss": "^8.5.28",
-    "tar": "^7.5.22"
+    "tar": "^7.5.22",
+    "protobufjs": "^7.6.5",
+    "libsignal": "^6.0.0"
   },
   "scripts": {
     "test": "CRAFT_BUNDLED_ASSETS_ROOT=${CRAFT_BUNDLED_ASSETS_ROOT:-$PWD/apps/electron} PANGOCAIRO_BACKEND=${PANGOCAIRO_BACKEND:-fontconfig} bun test --path-ignore-patterns='**/release-artist-os/**' --path-ignore-patterns='**/dist/**' && for f in $(find ./packages ./apps ./tools -name '*.isolated.ts' -not -path '*/node_modules/*' -not -path '*/release-artist-os/*'); do bun test \"$f\" || exit 1; done",
