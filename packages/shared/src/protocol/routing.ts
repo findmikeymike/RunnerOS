@@ -349,6 +349,9 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.llmConnections.SET_WORKSPACE_DEFAULT,
   RPC_CHANNELS.llmConnections.REFRESH_MODELS,
   RPC_CHANNELS.llmConnections.DISCOVER_OMNIROUTE_MODELS,
+  RPC_CHANNELS.llmConnections.GET_FALLBACK_CHAIN,
+  RPC_CHANNELS.llmConnections.SET_FALLBACK_CHAIN,
+  RPC_CHANNELS.llmConnections.SET_CONNECTION_FALLBACK_CHAIN,
   RPC_CHANNELS.llmConnections.CHANGED,
 
   // chatgpt — OAuth via capability passthrough
@@ -551,6 +554,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
 
   // memory — global USER.md + per-agent MEMORY.md on the owning server
   RPC_CHANNELS.memory.LIST_AGENT,
+  RPC_CHANNELS.memory.LIST_AGENT_SESSIONS,
   RPC_CHANNELS.memory.LIST_USER,
   RPC_CHANNELS.memory.RECALL,
   RPC_CHANNELS.memory.LIST_EVENTS,
