@@ -1,9 +1,9 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-09-04
+last_verified: 2026-09-06
 worktree: /Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os
-branch: codex/agent-adds
+branch: main
 scope: onboarding
 ---
 
