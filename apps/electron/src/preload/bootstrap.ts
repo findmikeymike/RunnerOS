@@ -143,7 +143,10 @@ if (isClientOnly) {
       mode: 'remote',
       requestTimeout: 90_000,
       clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
-      tlsRejectUnauthorized: false,
+      // Validate the remote server's certificate. Set CRAFT_INSECURE_TLS=1 to
+      // accept self-signed certs — a deliberate, per-machine opt-out rather than
+      // the silent default it used to be.
+      tlsRejectUnauthorized: process.env.CRAFT_INSECURE_TLS !== '1',
     })
     initialWorkspaceClient.connect()
   } else {
@@ -169,7 +172,10 @@ if (isClientOnly) {
       mode: 'remote',
       requestTimeout: 90_000,
       clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
-      tlsRejectUnauthorized: false,
+      // Validate the remote server's certificate. Set CRAFT_INSECURE_TLS=1 to
+      // accept self-signed certs — a deliberate, per-machine opt-out rather than
+      // the silent default it used to be.
+      tlsRejectUnauthorized: process.env.CRAFT_INSECURE_TLS !== '1',
     })
   })
 

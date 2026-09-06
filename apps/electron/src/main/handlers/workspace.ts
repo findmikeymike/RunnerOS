@@ -26,7 +26,10 @@ export async function connectToRemote(url: string, token: string, workspaceId?: 
     productVariant: RUNTIME_IDENTITY.variant,
     workspaceId,
     autoReconnect: false,
-    tlsRejectUnauthorized: false,
+    // Validate the remote server's certificate. Set CRAFT_INSECURE_TLS=1 to
+      // accept self-signed certs — a deliberate, per-machine opt-out rather than
+      // the silent default it used to be.
+      tlsRejectUnauthorized: process.env.CRAFT_INSECURE_TLS !== '1',
   })
 
   const connected = await new Promise<boolean>((resolve) => {
@@ -46,7 +49,12 @@ export async function connectToRemote(url: string, token: string, workspaceId?: 
   })
 
   if (!connected) {
-    const error = client.getConnectionState().lastError?.message ?? 'Connection failed'
+    const raw = client.getConnectionState().lastError?.message ?? 'Connection failed'
+    // A rejected certificate surfaces as an opaque socket error. Name the
+    // cause and the opt-out so a self-signed remote server is diagnosable.
+    const error = /certificate|self[- ]signed|CERT_|unable to verify/i.test(raw)
+      ? `${raw} — the server's TLS certificate was not trusted. Use a certificate from a public CA, or set CRAFT_INSECURE_TLS=1 on this machine to accept self-signed certificates.`
+      : raw
     client.destroy()
     return { client: null, error }
   }
