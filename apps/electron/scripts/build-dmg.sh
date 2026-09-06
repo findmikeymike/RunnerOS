@@ -46,6 +46,13 @@ copy_claude_sdk() {
     require_path "$ELECTRON_DIR/node_modules/@anthropic-ai/${native_package}/${native_binary}" "Packaged Claude native executable" "Claude SDK copy failed."
 }
 
+# sharp's native binaries ship as per-platform @img packages that electron-builder
+# copies via extraResources — silently copying nothing if they were not installed
+# for this arch. One gate, shared with the root electron:dist:* scripts.
+gate_sharp_natives() {
+    bun run "$ROOT_DIR/scripts/gate-sharp-natives.ts" gate --platform darwin --arch "$ARCH"
+}
+
 # Sync secrets from 1Password if CLI is available
 if command -v op &> /dev/null; then
     echo "1Password CLI detected, syncing secrets..."
@@ -152,6 +159,7 @@ chmod +x "$ELECTRON_DIR/vendor/bun/bun"
 # 4. Copy Claude SDK from root node_modules (main package + native executable package).
 # electron-builder only sees apps/electron/, so both packages must exist there.
 copy_claude_sdk
+gate_sharp_natives
 
 # 4b. Verify app-owned lyrics transcription runtime is bundled.
 echo "Verifying Lyrics Transcriber runtime..."

@@ -119,6 +119,16 @@ mac:
       filter:
         - "claude-agent-sdk/**/*"
         - "claude-agent-sdk-*/**/*"
+    # sharp's JavaScript is bundled into main.cjs by esbuild, but its native
+    # binaries live in per-platform @img packages that `files:` excludes along
+    # with everything else under node_modules. Without these the packaged app
+    # dies at boot with 'Could not load the "sharp" module'. Same shape as the
+    # Claude SDK native package above.
+    - from: ../../node_modules/@img
+      to: app/node_modules/@img
+      filter:
+        - "sharp-darwin-*/**/*"
+        - "sharp-libvips-darwin-*/**/*"
     # Managed local motion/video tool with its own node_modules.
     - from: ../../tools/hypermotion
       to: app/tools/hypermotion
@@ -281,6 +291,16 @@ win:
         - "claude-agent-sdk-*/**/*"
         - "!vendor/ripgrep/arm64-linux/**"
         - "!vendor/ripgrep/x64-linux/**"
+    # sharp's JavaScript is bundled into main.cjs by esbuild, but its native
+    # binaries live in per-platform @img packages that `files:` excludes along
+    # with everything else under node_modules. Without these the packaged app
+    # dies at boot with 'Could not load the "sharp" module'. Same shape as the
+    # Claude SDK native package above.
+    - from: ../../node_modules/@img
+      to: app/node_modules/@img
+      filter:
+        - "sharp-win32-*/**/*"
+        - "sharp-libvips-win32-*/**/*"
     # Managed local motion/video tool with its own node_modules.
     - from: ../../tools/hypermotion
       to: app/tools/hypermotion
@@ -406,6 +426,16 @@ linux:
         - "claude-agent-sdk/**/*"
         - "claude-agent-sdk-*/**/*"
         - "!vendor/ripgrep/x64-win32/**"
+    # sharp's JavaScript is bundled into main.cjs by esbuild, but its native
+    # binaries live in per-platform @img packages that `files:` excludes along
+    # with everything else under node_modules. Without these the packaged app
+    # dies at boot with 'Could not load the "sharp" module'. Same shape as the
+    # Claude SDK native package above.
+    - from: ../../node_modules/@img
+      to: app/node_modules/@img
+      filter:
+        - "sharp-linux-*/**/*"
+        - "sharp-libvips-linux-*/**/*"
     # Managed local motion/video tool with its own node_modules.
     - from: ../../tools/hypermotion
       to: app/tools/hypermotion
