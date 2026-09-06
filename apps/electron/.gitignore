@@ -5,6 +5,7 @@ vendor/omniroute-runtime/node_modules/
 packages/
 release/
 release-artist-os/
+.voice-core-release/
 node_modules/@anthropic-ai/
 
 # Platform-specific uv binaries (downloaded during build)

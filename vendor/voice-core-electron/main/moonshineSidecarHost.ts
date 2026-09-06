@@ -14,8 +14,9 @@ import {
   type MoonshineModelId,
 } from "./moonshineModels.js";
 
-const APP_IDENTIFIER = "com.voicecore.electron";
+const DEFAULT_APP_IDENTIFIER = "com.voicecore.electron";
 const HOST_EXECUTABLE = "voice-core-moonshine-host";
+const HOST_BUNDLE = "VoiceCoreMoonshineHost.app";
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const MAX_PENDING_REQUESTS = 64;
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -132,7 +133,7 @@ type SidecarRequestParameters = {
 
 type SidecarHello = {
   protocolVersion: 1;
-  appIdentifier: typeof APP_IDENTIFIER;
+  appIdentifier: string;
   protectedStorageAvailable: boolean;
 } & (
   | { mode: "candidate-assets-only"; runtimeAvailable: false }
@@ -158,6 +159,8 @@ export type MoonshineSidecarLaunchOptions = {
   userDataDirectory: string;
   /** Trusted main-process configuration only, never renderer input. */
   executablePath?: string;
+  /** Must equal the identifier sealed into the helper's code signature. */
+  expectedAppIdentifier?: string;
 };
 
 export class MoonshineSidecarTerminationError extends Error {
@@ -179,7 +182,15 @@ export function resolveMoonshineSidecarExecutable(
     return options.executablePath;
   }
   return options.isPackaged
-    ? path.join(options.resourcesDirectory, "voice-core", "bin", HOST_EXECUTABLE)
+    ? path.join(
+      options.resourcesDirectory,
+      "voice-core",
+      "bin",
+      HOST_BUNDLE,
+      "Contents",
+      "MacOS",
+      HOST_EXECUTABLE,
+    )
     : path.resolve(options.mainModuleDirectory, "../../../../target/debug", HOST_EXECUTABLE);
 }
 
@@ -201,6 +212,9 @@ export async function launchMoonshineSidecarHost(
     const spawned = spawn(executable, [], {
       stdio: ["pipe", "pipe", "pipe", appDataFd, resourcesFd],
       windowsHide: true,
+      env: options.isPackaged
+        ? process.env
+        : { ...process.env, VOICECORE_MOONSHINE_DEV_ALLOW_MIRRORED_ANCHOR: "1" },
     });
     if (!spawned.stdin || !spawned.stdout || !spawned.stderr) {
       spawned.kill();
@@ -212,7 +226,10 @@ export async function launchMoonshineSidecarHost(
     if (resourcesFd !== undefined) closeSync(resourcesFd);
   }
 
-  const host = new ElectronMoonshineSidecarHost(child);
+  const host = new ElectronMoonshineSidecarHost(
+    child,
+    validateExpectedAppIdentifier(options.expectedAppIdentifier ?? DEFAULT_APP_IDENTIFIER),
+  );
   try {
     await host.initialize();
     return host;
@@ -232,6 +249,7 @@ function assertRegularExecutable(executable: string): void {
 
 export class ElectronMoonshineSidecarHost implements ElectronMoonshineHost {
   readonly #child: SidecarProcess;
+  readonly #expectedAppIdentifier: string;
   readonly #pending = new Map<number, PendingRequest>();
   #buffer = Buffer.alloc(0);
   #hello: SidecarHello | null = null;
@@ -239,8 +257,9 @@ export class ElectronMoonshineSidecarHost implements ElectronMoonshineHost {
   #closed = false;
   #termination: Promise<void> | null = null;
 
-  constructor(child: SidecarProcess) {
+  constructor(child: SidecarProcess, expectedAppIdentifier = DEFAULT_APP_IDENTIFIER) {
     this.#child = child;
+    this.#expectedAppIdentifier = expectedAppIdentifier;
     child.stdout.on("data", (chunk: Buffer) => this.#acceptOutput(chunk));
     child.stderr.on("data", () => {
       // Drain fixed native diagnostics without forwarding them to the renderer.
@@ -250,7 +269,7 @@ export class ElectronMoonshineSidecarHost implements ElectronMoonshineHost {
   }
 
   async initialize(): Promise<void> {
-    const hello = parseHello(await this.#request("hello"));
+    const hello = parseHello(await this.#request("hello"), this.#expectedAppIdentifier);
     if (this.#closed) throw new Error("Moonshine native host is unavailable");
     this.#hello = hello;
   }
@@ -578,13 +597,20 @@ export class ElectronMoonshineSidecarHost implements ElectronMoonshineHost {
   }
 }
 
-function parseHello(value: unknown): SidecarHello {
+function validateExpectedAppIdentifier(value: string): string {
+  if (value.length === 0 || value.length > 255 || !/^[A-Za-z0-9.-]+$/.test(value)) {
+    throw new Error("Moonshine native host identity is invalid");
+  }
+  return value;
+}
+
+function parseHello(value: unknown, expectedAppIdentifier: string): SidecarHello {
   const validMode = isRecord(value)
     && ((value.mode === "candidate-assets-only" && value.runtimeAvailable === false)
       || (value.mode === "candidate-native" && value.runtimeAvailable === true));
   if (!isRecord(value)
     || value.protocolVersion !== 1
-    || value.appIdentifier !== APP_IDENTIFIER
+    || value.appIdentifier !== expectedAppIdentifier
     || !validMode
     || typeof value.protectedStorageAvailable !== "boolean") {
     throw new Error("Moonshine native host handshake is invalid");

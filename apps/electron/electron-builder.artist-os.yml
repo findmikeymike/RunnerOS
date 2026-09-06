@@ -38,6 +38,12 @@ publish:
 mac:
   icon: resources/artist-os-icon.icns
   artifactName: Artist-OS-${version}-${arch}.${ext}
+  # Use the fingerprint directly. Certificate display names are not unique.
+  sign: scripts/signArtistMac.cjs
+  # The helper is independently provisioned for its exact Keychain group.
+  # Preserve that signature while electron-builder signs the outer app.
+  signIgnore:
+    - "voice-core/bin/VoiceCoreMoonshineHost\\.app($|/)"
   extendInfo:
     # Artist OS does not receive Runner's Assets.car in afterPack; retain its .icns fallback.
     CFBundleIconName: null

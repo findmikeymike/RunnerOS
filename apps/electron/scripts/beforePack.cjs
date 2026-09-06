@@ -3,7 +3,11 @@ const { existsSync } = require('node:fs')
 const { join } = require('node:path')
 
 exports.default = async function beforePack(context) {
-  const runtimeDir = join(context.appDir, 'vendor', 'omniroute-runtime')
+  const projectDir = context?.packager?.projectDir
+  if (typeof projectDir !== 'string' || !projectDir) {
+    throw new Error('electron-builder did not provide the project directory')
+  }
+  const runtimeDir = join(projectDir, 'vendor', 'omniroute-runtime')
   const serverPath = join(runtimeDir, 'node_modules', 'omniroute', 'dist', 'server-ws.mjs')
   if (existsSync(serverPath)) return
 

@@ -145,6 +145,9 @@ export function createArtistManagerMoonshine(options: { isPackaged: boolean; res
       ...options,
       mainModuleDirectory: options.resourcesDirectory,
       executablePath: join(options.resourcesDirectory, 'voice-core', 'bin', 'voice-core-moonshine-host'),
+      expectedAppIdentifier: options.isPackaged
+        ? 'com.findmikeymike.artistos.voicecore.moonshine'
+        : 'com.voicecore.electron.development',
     })
   })
   return new ArtistManagerMoonshine(host)

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": "652111cefe263f6d0c60428fa9c0f30b2d58ea97",
-  "sourceDirty": true,
+  "revision": "36a66fa55500cc6a082f12480b3be8cec020eb0e",
+  "sourceDirty": false,
   "files": {
     "voice-core-web/dist/VoiceCoreWeb.d.ts": "3cc9c23975b3d2389634e8986784546da9ce44069e587592da304d4485806887",
     "voice-core-web/dist/VoiceCoreWeb.d.ts.map": "8f05bfacd1d4b4bb16e9428e680e8353f4b1f98e818e354315c48f85f17c9b01",
@@ -177,10 +177,12 @@
     "voice-core-electron/main/moonshineHostSupervisor.ts": "3bacb4852972f668415b5e67f605f60f95f85962ac728c294ca61d9a5352c423",
     "voice-core-electron/main/moonshineInstallCoordinator.ts": "a0a7a0d5886df671d92703c3b58cb20dcfe1e082bc7a58e6dce499570ded9b2f",
     "voice-core-electron/main/moonshineModels.ts": "11da7ec38dde6e73a1dc917e91469cbf7c869931120cb563b9f2ab701774bd5a",
-    "voice-core-electron/main/moonshineSidecarHost.ts": "3bf1fafea621dea63fce626549e507b68eba65446d4558f09f5e6120cdd5657c",
+    "voice-core-electron/main/moonshineSidecarHost.ts": "62e5a366e96795ae7b443817d72a6e9378ad33a8b38a5d387aa1d1af229ae440",
     "voice-core-electron/renderer/deviceSelectionPolicy.ts": "5f047db14a571a2d3d8266172f44ece725466effcb665e5187d3751daebe654e",
     "voice-core-electron/renderer/inworldTtsPolicy.ts": "1364220214ce88378bef6c4fbf04e089a257ad581e36648a821f23e438c2ed9f",
     "voice-core-electron/renderer/moonshineSttTransport.ts": "d8dea9e6c0266b062890c5e6513ef8717feba8d1c0071dcc67151819893b9708",
-    "voice-core-electron/renderer/sttTransportPolicy.ts": "bc5e7301169785719eb4e2abe88f25aaca37efcab2fa1511c88860d0add91125"
+    "voice-core-electron/renderer/sttTransportPolicy.ts": "bc5e7301169785719eb4e2abe88f25aaca37efcab2fa1511c88860d0add91125",
+    "voice-core-electron/resources/voice-core/moonshine-release-catalog-v1.json": "7060c267c912e3156b87c646e3bc970eac1ac8bdd964cf0a794b83e6f1250614",
+    "voice-core-electron/tools/package-macos-moonshine-helper.mjs": "638c8eef7d938573b5104cf69fe7a2db7ae4f35fcf361cdfde8e6a6b19b20eb3"
   }
 }
