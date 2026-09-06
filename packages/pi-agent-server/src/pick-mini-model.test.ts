@@ -24,29 +24,27 @@ function createMockRegistry(
 }
 
 describe('pickProviderAppropriateMiniModel', () => {
-  it('returns undefined for anthropic so caller falls through to Haiku', () => {
-    // The caller gates this with `authProvider === 'anthropic' ? undefined : pick...`
-    // but we also guarantee the helper itself would return Opus-4-7 first — which is
-    // NOT what we want as a mini. Test that the caller's gate is sufficient by showing
-    // the helper would otherwise pick a non-mini candidate for anthropic.
+  it('returns Haiku for anthropic, agreeing with the path the caller takes anyway', () => {
+    // The caller still gates anthropic with
+    // `authProvider === 'anthropic' ? undefined : pick...` and keeps its own
+    // Haiku default. This used to disagree with that gate — reading the chat
+    // list, it would have handed back Opus — so the gate was load-bearing. Now
+    // both routes agree, and the gate is belt and braces rather than the only
+    // thing preventing an expensive mini.
     const registry = createMockRegistry({
       anthropic: [
-        { id: 'claude-opus-4-7', name: 'Claude Opus 4.7' },
+        { id: 'claude-opus-4-8', name: 'Claude Opus 4.8' },
         { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5' },
       ],
     });
 
-    const result = pickProviderAppropriateMiniModel('anthropic', registry, false);
-    // Helper picks the first RESOLVABLE entry; the registry here offers 4.7 but not 4.8,
-    // so 4.7 is what comes back. Either way it is an Opus, which is the point.
-    // Documenting why the caller must NOT invoke this helper for anthropic auth.
-    expect(result).toBe('claude-opus-4-7');
+    expect(pickProviderAppropriateMiniModel('anthropic', registry, false)).toBe('claude-haiku-4-5');
   });
 
   it('openai-codex: skips unresolvable candidates and returns the first that resolves', () => {
-    // The Codex preference list now leads with the 5.6 family. Registering only
-    // gpt-5.5 — which sits behind those — proves the walk actually skips ahead
-    // rather than returning the head blindly.
+    // The mini list leads with the cheap tier. Registering only gpt-5.5 — which
+    // sits behind those — proves the walk actually skips ahead rather than
+    // returning the head blindly.
     const registry = createMockRegistry({
       'openai-codex': [{ id: 'gpt-5.5', name: 'GPT 5.5' }],
     });
@@ -55,11 +53,10 @@ describe('pickProviderAppropriateMiniModel', () => {
     expect(result).toBe('gpt-5.5');
   });
 
-  it('openai-codex: returns the flagship when everything resolves, which is why this is a compatibility fallback and not a cheap mini', () => {
-    // Worth stating plainly. This helper exists to find *a model that works under
-    // the user's auth*, not a cheap one, so when the whole catalog resolves it
-    // hands back Sol. The caller only reaches it when the requested model is
-    // incompatible, and it gates anthropic away for the same reason.
+  it('openai-codex: picks the cheap tier over the flagship when both resolve', () => {
+    // This is the whole point of the mini list. Reading the chat list here
+    // returned Sol, the flagship, to write chat titles — roughly five times
+    // Luna's price for a sentence.
     const registry = createMockRegistry({
       'openai-codex': [
         { id: 'gpt-5.6-sol', name: 'GPT 5.6 Sol' },
@@ -67,7 +64,17 @@ describe('pickProviderAppropriateMiniModel', () => {
       ],
     });
 
-    expect(pickProviderAppropriateMiniModel('openai-codex', registry, false)).toBe('gpt-5.6-sol');
+    expect(pickProviderAppropriateMiniModel('openai-codex', registry, false)).toBe('gpt-5.6-luna');
+  });
+
+  it('falls back to the chat list for a provider with no mini list', () => {
+    // amazon-bedrock is intentionally absent from the mini map, so its behaviour
+    // must be exactly what it was before: first resolvable chat candidate.
+    const registry = createMockRegistry({
+      'amazon-bedrock': [{ id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6' }],
+    });
+
+    expect(pickProviderAppropriateMiniModel('amazon-bedrock', registry, false)).toBe('claude-sonnet-4-6');
   });
 
   it('openai-codex: returns undefined when no preferred candidate resolves', () => {
@@ -80,18 +87,17 @@ describe('pickProviderAppropriateMiniModel', () => {
     expect(result).toBeUndefined();
   });
 
-  it('openai: returns first resolvable candidate from preferred list', () => {
-    // PI_PREFERRED_DEFAULTS.openai = ['gpt-5.5', 'gpt-5.2', 'gpt-5.1', ...].
-    // gpt-5.5 is resolvable → returned first.
+  it('openai: prefers a mini-class model over a full one', () => {
+    // The mini list leads with the nano/mini tier, so gpt-5-mini wins over the
+    // larger gpt-5.5 even though both resolve.
     const registry = createMockRegistry({
       openai: [
         { id: 'gpt-5.5', name: 'GPT 5.5' },
-        { id: 'gpt-5.2', name: 'GPT 5.2' },
+        { id: 'gpt-5-mini', name: 'GPT 5 mini' },
       ],
     });
 
-    const result = pickProviderAppropriateMiniModel('openai', registry, false);
-    expect(result).toBe('gpt-5.5');
+    expect(pickProviderAppropriateMiniModel('openai', registry, false)).toBe('gpt-5-mini');
   });
 
   it('unknown provider: returns undefined', () => {

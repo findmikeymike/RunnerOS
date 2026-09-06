@@ -579,6 +579,42 @@ export const PI_PREFERRED_DEFAULTS: Record<string, string[]> = {
   'amazon-bedrock': ['claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
 };
 
+/**
+ * Preferred models for utility work — titles, summaries, and the mini agent —
+ * per Pi auth provider. Cheapest capable model first, which is the opposite of
+ * {@link PI_PREFERRED_DEFAULTS}.
+ *
+ * The two lists exist because they answer different questions. The one above
+ * answers "what should this connection chat with", so it leads with the
+ * flagship. This one answers "what should write a chat title", where the
+ * flagship is simply waste — on Codex that is Sol at $5/$30 per million versus
+ * Luna at $1/$6 for work that fits in a sentence.
+ *
+ * Only ids verified against `getPiModelsForAuthProvider` belong here, and a
+ * provider may be omitted: the picker falls back to the chat list, which is the
+ * previous behaviour. Anthropic is listed for completeness even though the
+ * caller keeps its own Haiku path and never reaches this map.
+ */
+export const PI_MINI_PREFERRED_DEFAULTS: Record<string, string[]> = {
+  anthropic: ['claude-haiku-4-5'],
+  openai: ['gpt-5-nano', 'gpt-5.4-nano', 'gpt-5-mini', 'gpt-5.4-mini', 'gpt-5.6-luna'],
+  // gpt-5.3-codex-spark is safe here: the denylist only rejects *codex-mini*
+  // variants under ChatGPT-account auth, and spark is not one.
+  'openai-codex': ['gpt-5.6-luna', 'gpt-5.4-mini', 'gpt-5.3-codex-spark', 'gpt-5.6-terra', 'gpt-5.5'],
+  // Deliberately mirrors the stability caveat on the chat list above: the pro
+  // preview models are excluded, flash-lite leads because this is utility work.
+  google: ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3-flash-preview'],
+  deepseek: ['deepseek-v4-flash', 'deepseek-v4-pro'],
+  // Copilot names its Claude models with dots rather than dashes. Verified
+  // against the live catalog; the dashed spelling used elsewhere does not match
+  // there.
+  'github-copilot': ['claude-haiku-4.5'],
+  // amazon-bedrock is deliberately absent. Its catalog uses region-prefixed
+  // native ids (au./us./eu./global.), so a bare id here would be a guess, and
+  // guessing buys nothing: omitting a provider falls back to the chat list,
+  // which is exactly the behaviour it has today.
+};
+
 export function getDefaultModelsForConnection(providerType: LlmProviderType, piAuthProvider?: string): Array<ModelDefinition | string> {
   if (providerType === 'pi') {
     const models = _piModelResolver(piAuthProvider);

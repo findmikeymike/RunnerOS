@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { getPiApiKeyProviders, getPiModelsForAuthProvider } from '../src/config/models-pi.ts';
-import { PI_PREFERRED_DEFAULTS } from '../src/config/llm-connections.ts';
+import { PI_MINI_PREFERRED_DEFAULTS, PI_PREFERRED_DEFAULTS } from '../src/config/llm-connections.ts';
 
 describe('models-pi filtering', () => {
   it('excludes codex-mini-latest for openai models', () => {
@@ -49,6 +49,30 @@ describe('models-pi filtering', () => {
     const served = servedIds('openai-codex');
     const unserved = (PI_PREFERRED_DEFAULTS['openai-codex'] ?? []).filter(id => !resolves(served, id));
     expect(unserved).toEqual([]);
+  });
+
+  it('keeps every utility-model entry resolvable, with no exceptions', () => {
+    // Unlike the chat lists, this map has no tolerated dead entries: it was
+    // written by checking each id against the live catalog, and a provider with
+    // nothing verifiable was left out entirely rather than guessed at. Bedrock
+    // is the omitted one — its ids are region-prefixed — and omission falls back
+    // to the chat list, so no provider loses behaviour.
+    for (const [provider, list] of Object.entries(PI_MINI_PREFERRED_DEFAULTS)) {
+      const served = servedIds(provider);
+      expect({ provider, unserved: list.filter(id => !resolves(served, id)) })
+        .toEqual({ provider, unserved: [] });
+    }
+  });
+
+  it('leads every utility list with something cheaper than that provider\'s chat default', () => {
+    // The regression this guards is subtle: both maps are hand-maintained, and
+    // if the utility list ever starts with the chat flagship it silently stops
+    // saving anything while still looking intentional.
+    for (const provider of Object.keys(PI_MINI_PREFERRED_DEFAULTS)) {
+      const chatHead = (PI_PREFERRED_DEFAULTS[provider] ?? [])[0];
+      const miniHead = PI_MINI_PREFERRED_DEFAULTS[provider]![0];
+      if (chatHead) expect(miniHead).not.toBe(chatHead);
+    }
   });
 
   it('documents the two preference entries that intentionally do not resolve', () => {
