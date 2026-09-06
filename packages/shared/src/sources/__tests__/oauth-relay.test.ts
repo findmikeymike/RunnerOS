@@ -60,6 +60,9 @@ function createMcpSource(overrides: Partial<FolderSourceConfig> = {}): LoadedSou
 describe('SourceCredentialManager.prepareOAuth relay wrapping', () => {
   const credManager = new SourceCredentialManager();
   let originalClientSecret: string | undefined;
+  // Without restoring this, every later test file in the process inherits a
+  // stub that 404s every request it does not recognise.
+  const realFetch = globalThis.fetch;
 
   beforeEach(() => {
     originalClientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
@@ -81,6 +84,7 @@ describe('SourceCredentialManager.prepareOAuth relay wrapping', () => {
   });
 
   afterEach(() => {
+    globalThis.fetch = realFetch;
     if (originalClientSecret === undefined) {
       delete process.env.GOOGLE_OAUTH_CLIENT_SECRET;
     } else {

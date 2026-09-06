@@ -117,6 +117,11 @@ async function registerServer(): Promise<{
   }
 }
 
+// `globalThis.fetch` is replaced below. Without putting the real one back,
+// every test file that runs later in the same process inherits this stub and
+// silently talks to a fake Google Calendar.
+const realFetch = globalThis.fetch
+
 describe('google workspace calendar sync', () => {
   beforeEach(() => {
     contextDocs = new Map()
@@ -134,6 +139,7 @@ describe('google workspace calendar sync', () => {
   })
 
   afterEach(() => {
+    globalThis.fetch = realFetch
     mock.restore()
   })
 
