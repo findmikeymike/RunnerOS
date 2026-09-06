@@ -105,18 +105,46 @@ git ls-remote --heads origin "$(git branch --show-current)"
 
 That last one matters. A branch with no remote exists on exactly one laptop.
 
-## Snapshot, 2026-09-06
+## Snapshot, 2026-09-06 (end of day)
 
 | Worktree | Branch | Behind / ahead of trunk |
 |---|---|---|
 | `.worktrees/integration/artist-os-reviewed` | `main` | 0 / 0 — trunk |
-| `.worktrees/main/artist-os` | `codex/artist-website-engine` | 8 / 16 |
-| `.worktrees/active/artist-os-social-variants` | `codex/artist-os-social-variants-v2` | 83 / 0 |
-| `.worktrees/active/artist-os-social-variants-hardening` | `codex/artist-os-social-variants-hardening` | 82 / 0 |
-| `.worktrees/active/launch-os` | `launch-os/main` | 0 / 35 — different product |
+| `.worktrees/main/artist-os` | `codex/artist-website-engine` | 0 / 0 — level with trunk |
+| `.claude/worktrees/artist-os-onboarding-0f75bd` | `claude/artist-os-onboarding-0f75bd` | merged into trunk; branch itself now behind |
+| `.worktrees/active/artist-os-social-variants` | `codex/artist-os-social-variants-v2` | fully merged |
+| `.worktrees/active/artist-os-social-variants-hardening` | `codex/artist-os-social-variants-hardening` | fully merged |
+| `/` (repo root) | `codex/agent-adds` | see below |
+| `.worktrees/active/launch-os` | `launch-os/main` | different product |
 
-The Artist OS branches showing "ahead 0" are fully merged; their worktrees are
-finished and safe to leave alone.
+Branches marked merged are finished; their worktrees are safe to leave alone.
 
-`codex/artist-website-engine` holds 16 commits that exist on **one machine
-only** — it has never been pushed. Until it is, a dead drive loses all of it.
+**Trunk is 38 commits ahead of `origin/main` and none of it is pushed.** Until
+it is, everything from 2026-09-04 onward exists on one machine only.
+
+### What landed on 2026-09-06, in order
+
+1. `codex/artist-website-engine` caught up from `origin/main` (8 commits, two
+   spec-index conflicts) and was fast-forwarded onto trunk.
+2. `claude/artist-os-onboarding-0f75bd` merged in (17 commits, one conflict:
+   both branches had fixed the same resource-bundle test; theirs was kept).
+   It surfaced one undeclared RPC channel, fixed as `141ef45f6`.
+3. Trunk fast-forwarded again. Suite: 8075 pass, 9 fail, all nine
+   pre-existing.
+
+### `codex/agent-adds` is a mirage — do not merge it
+
+It reads as 23 unmerged commits and produces 51 conflicts on a dry run, but
+every feature line on it was checked against trunk **by content** and is
+already there: all 17 Video Studio commits are byte-identical, the 53-file
+runtime port is byte-identical, and monid, the lottie source, the webhook slug
+fix and the settings presets all exist on trunk. Git counts them as unmerged
+only because that history was rebased. Merging it would re-fight conflicts to
+arrive at code trunk already has.
+
+The one thing on it trunk lacks is `dc48b0611`'s TLS half: remote workspace
+connections currently run with `tlsRejectUnauthorized: false` in three places
+(`main/handlers/workspace.ts`, `preload/bootstrap.ts` twice). The fix flips
+that to validate by default with a `CRAFT_INSECURE_TLS=1` escape hatch. It is
+the right default but it breaks anyone using a self-signed remote server, so
+it is a product decision, not a merge. Once decided, archive the branch.
