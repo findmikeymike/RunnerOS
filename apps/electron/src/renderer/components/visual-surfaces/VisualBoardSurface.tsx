@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useVisualBoard } from '@/hooks/useVisualBoard'
 import type { OutputSummaryDTO } from '@/hooks/useOutputs'
+import { getBoardDraft, type BoardSaveState } from './board-draft'
 
 interface VisualBoardSurfaceProps {
   workspaceId: string
@@ -21,7 +22,7 @@ interface VisualBoardSurfaceProps {
   refreshKey?: string
 }
 
-type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
+type SaveState = BoardSaveState
 
 export function VisualBoardSurface({
   workspaceId,
@@ -31,18 +32,14 @@ export function VisualBoardSurface({
   refreshKey,
 }: VisualBoardSurfaceProps) {
   const { board, loading, error, refresh, saveBoard } = useVisualBoard(workspaceId, sessionId)
-  const [draft, setDraft] = React.useState<VisualBoardSnapshot | null>(null)
-  const [dirty, setDirty] = React.useState(false)
-  const [saveState, setSaveState] = React.useState<SaveState>('idle')
-  const versionRef = React.useRef(0)
+  const controller = React.useMemo(() => getBoardDraft(workspaceId, sessionId), [workspaceId, sessionId])
+  const { draft, status: saveState, error: saveError } = React.useSyncExternalStore(controller.subscribe, controller.getSnapshot)
+  const dirty = saveState === 'dirty' || saveState === 'saving' || saveState === 'error'
 
   React.useEffect(() => {
-    if (!board) return
-    setDraft(removePlaceholderNotes(board))
-    setDirty(false)
-    setSaveState('saved')
-    versionRef.current += 1
-  }, [board])
+    if (!board || board.workspaceId !== workspaceId || board.sessionId !== sessionId) return
+    controller.hydrate(removePlaceholderNotes(board))
+  }, [board, workspaceId, sessionId, controller])
 
   React.useEffect(() => {
     if (!refreshKey || dirty) return
@@ -52,31 +49,18 @@ export function VisualBoardSurface({
   }, [dirty, refresh, refreshKey])
 
   React.useEffect(() => {
-    if (!draft || !dirty) return
-    setSaveState('dirty')
-    const version = versionRef.current
-    const timeout = window.setTimeout(() => {
-      setSaveState('saving')
-      saveBoard(removePlaceholderNotes(draft)).then((result) => {
-        if (versionRef.current !== version) return
-        setDraft(removePlaceholderNotes(result.board))
-        setDirty(false)
-        setSaveState('saved')
-      }).catch(() => {
-        if (versionRef.current === version) setSaveState('error')
-      })
-    }, 700)
+    if (saveState !== 'dirty') return
+    const timeout = window.setTimeout(() => { void controller.flush(saveBoard) }, 700)
     return () => window.clearTimeout(timeout)
-  }, [dirty, draft, saveBoard])
+  }, [controller, draft, saveState, saveBoard])
+
+  // Flush the old board on navigation; its controller also finishes edits
+  // queued behind an in-flight save without touching the newly opened board.
+  React.useEffect(() => () => { void controller.flush(saveBoard) }, [controller, saveBoard])
 
   const updateDraft = React.useCallback((updater: (board: VisualBoardSnapshot) => VisualBoardSnapshot) => {
-    setDraft((current) => {
-      if (!current) return current
-      versionRef.current += 1
-      setDirty(true)
-      return updater(current)
-    })
-  }, [])
+    controller.edit(updater)
+  }, [controller])
 
   const addNote = React.useCallback(() => {
     const now = new Date().toISOString()
@@ -168,6 +152,20 @@ export function VisualBoardSurface({
           {saveLabel(saveState)}
         </div>
       </div>
+
+      {saveError && <div role="alert" className="shrink-0 px-3 py-2 text-xs text-destructive">
+        <p>{saveError}</p>
+        <Button type="button" size="sm" variant="ghost" onClick={() => controller.retry()}>
+          Retry save
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={() => {
+          if (!window.confirm('Discard your unsaved board edits and reload the saved board?')) return
+          controller.discard()
+          void refresh()
+        }}>
+          Reload saved board
+        </Button>
+      </div>}
 
       <div className="min-h-0 flex-1 overflow-auto bg-[#050505] p-3">
         {draft.cards.length === 0 ? (

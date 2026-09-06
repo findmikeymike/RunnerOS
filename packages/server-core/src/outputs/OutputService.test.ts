@@ -6,8 +6,9 @@ import { randomUUID } from 'node:crypto';
 import { OutputService } from './OutputService';
 import { readRun, writeRun, type WorkflowRunSnapshot } from '@craft-agent/shared/workflows';
 import { withOutputFinalsRegistryLock } from '@craft-agent/shared/outputs';
+import { buildRunnerOutputAssetUrl } from '@craft-agent/shared/outputs/web-preview';
 import { OUTPUT_SHOW_IN_CANVAS_TAG } from '@craft-agent/shared/outputs/constants';
-import { VISUAL_BOARD_ASSET_PATH, type VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
+import { VISUAL_BOARD_ASSET_PATH, rebaseVisualBoardDraft, type VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
 import { VISUAL_SURFACE_EVENTS_ASSET_PATH } from '@craft-agent/shared/visual-surface-events';
 
 function makeRunSnapshot(runId: string, workspaceId: string): WorkflowRunSnapshot {
@@ -566,7 +567,7 @@ describe('OutputService visual boards', () => {
       canInspectInBrowserPane: true,
       previewSurface: 'browser-pane',
       webPreview: {
-        url: `runner-output://asset/ws/${generated.outputId}/index.html`,
+        url: buildRunnerOutputAssetUrl('ws', generated.outputId!, 'index.html'),
         displayHost: 'generated output',
         kind: 'generated-html',
       },
@@ -1043,3 +1044,174 @@ describe('OutputService visual boards', () => {
     expect(duplicateWrongKind.error).toContain('requires a video output');
   });
 });
+
+describe('OutputService visual board concurrent edits', () => {
+  // Concrete note type, not the card union: the union does not narrow when a
+  // spread overrides `body`, and an output card has no `body`.
+  function noteCard(id: string, at: string) {
+    return { id, type: 'note' as const, title: id, body: id, createdAt: at, updatedAt: at };
+  }
+
+  function setup() {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-board-merge-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const service = new OutputService({ getWorkspaceRootPath: () => root });
+    return { root, service };
+  }
+
+  it('keeps a card the agent pinned while the panel was open', () => {
+    const { service } = setup();
+    const initial = service.getOrCreateVisualBoard('ws', 'session-1');
+
+    // What the renderer loaded, and is about to save back.
+    const clientLoadedAt = new Date(Date.now() - 60_000).toISOString();
+    const clientSnapshot: VisualBoardSnapshot = {
+      ...initial.board,
+      cards: [noteCard('artist-note', clientLoadedAt)],
+      updatedAt: clientLoadedAt,
+    };
+    const loaded = service.saveVisualBoard('ws', 'session-1', clientSnapshot).board;
+
+    // The agent pins something after the client's copy was taken.
+    const pinned = service.applyVisualSurfaceEvent(
+      'ws',
+      'session-1',
+      { action: 'add_note', title: 'Agent finding', body: 'Landed mid-edit.' },
+      'agent',
+    );
+    expect(pinned.ok).toBe(true);
+
+    // The artist edits their own note and saves the stale snapshot.
+    const edited: VisualBoardSnapshot = {
+      ...loaded,
+      cards: [{ ...noteCard('artist-note', clientLoadedAt), body: 'edited' }],
+      // The real renderer advances this timestamp on every edit.
+      updatedAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+    const saved = service.saveVisualBoard('ws', 'session-1', edited);
+
+    const titles = saved.board.cards.map((card) => card.title);
+    expect(titles).toContain('Agent finding');
+    expect(saved.board.cards.find((card) => card.id === 'artist-note')).toMatchObject({ body: 'edited' });
+    expect(saved.board.cards).toHaveLength(2);
+  });
+
+  it('still honours a real delete of a card the artist could see', () => {
+    const { service } = setup();
+    const initial = service.getOrCreateVisualBoard('ws', 'session-1');
+
+    const old = new Date(Date.now() - 120_000).toISOString();
+    const withTwo: VisualBoardSnapshot = {
+      ...initial.board,
+      cards: [noteCard('keep', old), noteCard('remove-me', old)],
+      updatedAt: new Date(Date.now() - 60_000).toISOString(),
+    };
+    const loaded = service.saveVisualBoard('ws', 'session-1', withTwo).board;
+
+    // Both cards predate the client's snapshot, so dropping one is a real delete.
+    const afterDelete = service.saveVisualBoard('ws', 'session-1', {
+      ...loaded,
+      cards: [noteCard('keep', old)],
+    });
+
+    expect(afterDelete.board.cards.map((card) => card.id)).toEqual(['keep']);
+  });
+
+  it('does not resurrect cards on a save from a client that is already current', () => {
+    const { service } = setup();
+    const initial = service.getOrCreateVisualBoard('ws', 'session-1');
+    const now = new Date().toISOString();
+
+    const saved = service.saveVisualBoard('ws', 'session-1', {
+      ...initial.board,
+      cards: [noteCard('only', now)],
+      updatedAt: now,
+    });
+
+    expect(saved.board.cards.map((card) => card.id)).toEqual(['only']);
+  });
+
+  it('preserves same-millisecond additions and independent remote edits/deletes', () => {
+    const { service } = setup();
+    const at = new Date().toISOString();
+    const loaded = service.saveVisualBoard('ws', 'session-1', {
+      ...service.getOrCreateVisualBoard('ws', 'session-1').board,
+      cards: [noteCard('local', at), noteCard('remote', at), noteCard('deleted', at)],
+    }).board;
+    service.saveVisualBoard('ws', 'session-1', { ...loaded, cards: [
+      loaded.cards[0]!, { ...noteCard('remote', at), body: 'remote edit' }, noteCard('added', at),
+    ] });
+    const saved = service.saveVisualBoard('ws', 'session-1', { ...loaded, cards: [
+      { ...noteCard('local', at), body: 'local edit' }, ...loaded.cards.slice(1),
+    ], updatedAt: new Date(Date.now() + 60_000).toISOString() });
+    expect(saved.board.cards.map((card) => card.id).sort()).toEqual(['added', 'local', 'remote']);
+    expect(saved.board.cards.find((card) => card.id === 'remote')).toMatchObject({ body: 'remote edit' });
+    expect(saved.board.cards.find((card) => card.id === 'local')).toMatchObject({ body: 'local edit' });
+  });
+
+  it('rejects overlapping edits and delete-versus-edit without writing', () => {
+    const { service } = setup();
+    const at = new Date().toISOString();
+    const loaded = service.saveVisualBoard('ws', 'session-1', {
+      ...service.getOrCreateVisualBoard('ws', 'session-1').board, cards: [noteCard('same', at)],
+    }).board;
+    const remote = service.saveVisualBoard('ws', 'session-1', { ...loaded,
+      cards: [{ ...noteCard('same', at), body: 'remote edit' }],
+    }).board;
+    expect(() => service.saveVisualBoard('ws', 'session-1', { ...loaded,
+      cards: [{ ...noteCard('same', at), body: 'local edit' }],
+    })).toThrow('changed elsewhere');
+    expect(() => service.saveVisualBoard('ws', 'session-1', { ...loaded, cards: [] })).toThrow('changed elsewhere');
+    expect(service.getOrCreateVisualBoard('ws', 'session-1').board).toEqual(remote);
+  });
+
+  it('rejects capacity conflicts instead of silently dropping unseen additions', () => {
+    const { service } = setup();
+    const loaded = service.getOrCreateVisualBoard('ws', 'session-1').board;
+    service.applyVisualSurfaceEvent('ws', 'session-1', { action: 'add_note', title: 'Agent', body: 'keep' });
+    const at = new Date().toISOString();
+    expect(() => service.saveVisualBoard('ws', 'session-1', { ...loaded,
+      cards: Array.from({ length: 100 }, (_, i) => noteCard(`local-${i}`, at)),
+    })).toThrow('Board is full');
+    expect(service.getOrCreateVisualBoard('ws', 'session-1').board.cards).toHaveLength(1);
+  });
+
+  it('rejects duplicate output pins with different card IDs without writing', async () => {
+    const { service } = setup();
+    const output = await service.createFromSessionTool({ workspaceId: 'ws', sessionId: 'session-1',
+      output: { title: 'Report', kind: 'report', summary: 'Report' },
+    });
+    const loaded = service.getOrCreateVisualBoard('ws', 'session-1').board;
+    service.applyVisualSurfaceEvent('ws', 'session-1', { action: 'pin_output', outputId: output.outputId! });
+    const at = new Date().toISOString();
+    expect(() => service.saveVisualBoard('ws', 'session-1', { ...loaded, cards: [{
+      id: 'local-pin', type: 'output', title: 'Report', outputId: output.outputId!, kind: 'report', createdAt: at, updatedAt: at,
+    }] })).toThrow('already pinned');
+    expect(service.getOrCreateVisualBoard('ws', 'session-1').board.cards).toHaveLength(1);
+  });
+
+  it('upgrades legacy reads and refuses saves without observed state', () => {
+    const { root, service } = setup();
+    const initial = service.getOrCreateVisualBoard('ws', 'session-1');
+    const path = join(root, 'outputs', initial.output.id, VISUAL_BOARD_ASSET_PATH);
+    const stored = JSON.parse(readFileSync(path, 'utf8'));
+    expect(stored.observedState).toBeUndefined();
+    expect(service.getOrCreateVisualBoard('ws', 'session-1').board.observedState).toBeDefined();
+    expect(() => service.saveVisualBoard('ws', 'session-1', stored)).toThrow('Reopen the board');
+  });
+
+  it('saves typing queued during an earlier save without conflicting with itself', () => {
+    const { service } = setup();
+    const at = new Date().toISOString();
+    const submitted = { ...service.getOrCreateVisualBoard('ws', 'session-1').board,
+      cards: [noteCard('artist', at)],
+    };
+    const current = { ...submitted, cards: [{ ...noteCard('artist', at), body: 'typed during save' }] };
+    service.applyVisualSurfaceEvent('ws', 'session-1', { action: 'add_note', title: 'Agent', body: 'keep' });
+    const first = service.saveVisualBoard('ws', 'session-1', submitted).board;
+    const second = service.saveVisualBoard('ws', 'session-1', rebaseVisualBoardDraft(submitted, current, first)).board;
+    expect(second.cards).toHaveLength(2);
+    expect(second.cards.find((card) => card.id === 'artist')).toMatchObject({ body: 'typed during save' });
+    expect(second.cards.find((card) => card.title === 'Agent')).toBeDefined();
+  });
+})

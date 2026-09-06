@@ -32,11 +32,32 @@ export interface VisualBoardSnapshot {
   cards: VisualBoardCard[];
   createdAt: string;
   updatedAt: string;
+  /** Server-issued state observed by the editor; local edits must preserve it. */
+  observedState?: { title: string; cards: Array<{ id: string; hash: string }> };
 }
 
 export const VISUAL_BOARD_MAX_CARDS = 100;
 export const VISUAL_BOARD_MAX_TITLE_LENGTH = 120;
 export const VISUAL_BOARD_MAX_BODY_LENGTH = 4000;
+
+/** Keep edits typed during an in-flight save, based on the server's new state. */
+export function rebaseVisualBoardDraft(
+  submitted: VisualBoardSnapshot,
+  current: VisualBoardSnapshot,
+  saved: VisualBoardSnapshot,
+): VisualBoardSnapshot {
+  const submittedCards = new Map(submitted.cards.map((card) => [card.id, card]));
+  const currentCards = new Map(current.cards.map((card) => [card.id, card]));
+  const savedCards = new Map(saved.cards.map((card) => [card.id, card]));
+  for (const id of new Set([...submittedCards.keys(), ...currentCards.keys()])) {
+    if (JSON.stringify(submittedCards.get(id)) === JSON.stringify(currentCards.get(id))) continue;
+    const card = currentCards.get(id);
+    if (card) savedCards.set(id, card);
+    else savedCards.delete(id);
+  }
+  return { ...saved, cards: [...savedCards.values()], updatedAt: current.updatedAt,
+    title: current.title === submitted.title ? saved.title : current.title };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -81,6 +102,15 @@ export function isVisualBoardSnapshot(
   if (typeof value.title !== 'string' || !value.title || value.title.length > VISUAL_BOARD_MAX_TITLE_LENGTH) return false;
   if (!isIsoDateString(value.createdAt) || !isIsoDateString(value.updatedAt)) return false;
   if (!Array.isArray(value.cards) || value.cards.length > VISUAL_BOARD_MAX_CARDS) return false;
+  if (value.observedState !== undefined) {
+    const state = value.observedState;
+    if (!isRecord(state) || typeof state.title !== 'string' || !Array.isArray(state.cards)
+      || state.cards.length > VISUAL_BOARD_MAX_CARDS
+      || !state.cards.every((card: unknown) => isRecord(card) && typeof card.id === 'string'
+        && typeof card.hash === 'string' && /^[a-f0-9]{64}$/.test(card.hash))) return false;
+    if (new Set(state.cards.map((card) => card.id)).size !== state.cards.length) return false;
+  }
+  if (new Set(value.cards.map((card) => isRecord(card) ? card.id : undefined)).size !== value.cards.length) return false;
   return value.cards.every(isVisualBoardCard);
 }
 

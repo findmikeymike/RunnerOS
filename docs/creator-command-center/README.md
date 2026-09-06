@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-08-31
+last_verified: 2026-09-04
 source_of_truth: true
 ---
 
@@ -39,24 +39,29 @@ Core Artist HQ and campaign workspace specs live here.
 - [28 Track Intelligence: Lyrics, Timing, And Musical Metadata](./28-track-intelligence-spec.md)
 - [29 X Editorial System](./29-x-editorial-system-spec.md)
 - [30 Release Manager And Essentials Execution](./30-release-manager-essentials-execution-spec.md)
+- [31 Catalog And Royalty Reconciliation](./31-catalog-royalty-reconciliation-spec.md) — agent and skill shipped; import, reconciliation, and filing slices remain
 - [32 Computer Use Provider Strategy](./32-computer-use-provider-strategy-spec.md)
 - [33 Automations: Input-Aware Setup And The One List](./33-automations-input-aware-setup-spec.md)
 - [35 Guided Social Variant Sets](./35-social-video-repurposing-spec.md)
-- [39 Artist Website: Managed Site, Website Agent, And Site Builder](./39-artist-website-agent-spec.md) — Slice 1 shipped: `website/` object, bundled builder, six session tools, Site Builder agent
+- [37 Model Fallback Chain](./37-model-fallback-chain-spec.md)
+- [39 Artist Website: Managed Site, Website Agent, And Site Builder](./39-artist-website-agent-spec.md) — builder, publishing, and Website Agent implemented; live acceptance remains
+- [40 Artist HQ Legal & Deals Agent](./40-music-legal-agent-spec.md)
 
 ## Not Yet Built
 
 Specs written but with no implementation in the tree. They live in
 [`todo/`](./todo/) so this index only lists work that exists.
 
-- [31 Catalog And Royalty Reconciliation](./todo/31-catalog-royalty-reconciliation-spec.md) — BMI/ASCAP vs Spotify
 - [36 Capability Evolution Engine](./todo/36-capability-evolution-engine-spec.md)
-- [37 Model Fallback Chain](./todo/37-model-fallback-chain-spec.md)
-- [38 Community Email Engine And The Community Agent](./todo/38-community-email-engine-spec.md) — Resend fan lane, Gmail personal lane, inbox, doors, Community Agent
-- [41 The Autonomous Website And Community Loop](./todo/41-autonomous-website-and-community-loop-spec.md) — master spec over 38 and 39: weekly loop, Monday Brief, approval tiers, Change Receipts, four slices
 - [42 Campaign Release Path And Manager Orchestration](./todo/42-campaign-release-path-orchestration-spec.md) — date-aware Essentials path, approved campaign packets, and Artist Manager guidance over existing workers
 - [43 Approved Branding Amendments](./todo/43-approved-branding-amendments-spec.md) — approved, append-only Branding additions from durable agent Outputs without replacing artist-written context
 - [44 State-Aware First-Use Guide](./todo/44-state-aware-first-use-guide-spec.md) — optional first-use setup inside the existing question-mark Guide, completed from real app state instead of page visits
+- [45 HQ / Campaign Scope Clarity](./todo/45-hq-campaign-scope-clarity-spec.md) — one rule for shared work, timeline inside campaigns, channel-collision warnings
+
+Implementation and live acceptance tracking (spec files retained at their existing paths):
+
+- [38 Community Email Engine And The Community Agent](./todo/38-community-email-engine-spec.md) — sending, imports, approvals, and Community Agent implemented; live send/unsubscribe acceptance remains
+- [41 The Autonomous Website And Community Loop](./todo/41-autonomous-website-and-community-loop-spec.md) — publishing, capture, cadence, and routine implemented; live acceptance remains
 
 When one ships, move it back up into the numbered list above.
 

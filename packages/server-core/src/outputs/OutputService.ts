@@ -332,7 +332,7 @@ export class OutputService {
       try {
         const content = readOutputAssetText(this.resolveAssetPath(workspaceId, existing.id, VISUAL_BOARD_ASSET_PATH));
         const board = parseVisualBoardSnapshot(content, { workspaceId, sessionId });
-        if (board) return { output: existing, board };
+        if (board) return { output: existing, board: this.withObservedBoardState(board) };
       } catch {
         // Fall through and repair the existing board output below.
       }
@@ -366,14 +366,79 @@ export class OutputService {
   saveVisualBoard(workspaceId: string, sessionId: string, snapshot: VisualBoardSnapshot): { output: OutputManifest; board: VisualBoardSnapshot } {
     assertVisualBoardSnapshot(snapshot, { workspaceId, sessionId });
     this.assertVisualBoardOutputCards(workspaceId, sessionId, snapshot);
+    const root = this.deps.getWorkspaceRootPath(workspaceId);
     const existing = this.findVisualBoardManifest(workspaceId, sessionId)
       ?? this.getOrCreateVisualBoard(workspaceId, sessionId).output;
-    const saved = this.writeVisualBoardToOutput(workspaceId, existing, {
-      ...snapshot,
+    // Read-modify-write: the merge below re-reads the board, so the lock keeps a
+    // concurrent `applyVisualSurfaceEvent` from landing between the read and the
+    // write and being overwritten.
+    const saved = withOutputBundleLock(root, existing.id, () => this.writeVisualBoardToOutput(workspaceId, existing, {
+      ...this.mergeObservedBoard(workspaceId, sessionId, snapshot),
       updatedAt: new Date().toISOString(),
-    });
+    }));
     this.emitUpdated(workspaceId);
     return saved;
+  }
+
+  private boardCardHash(card: VisualBoardSnapshot['cards'][number]): string {
+    // Stable across JSON property order; timestamps are data, never versions.
+    return createHash('sha256').update(JSON.stringify([
+      card.id, card.type, card.title, card.createdAt, card.updatedAt,
+      ...(card.type === 'note' ? [card.body] : [card.outputId, card.kind, card.summary ?? null]),
+    ])).digest('hex');
+  }
+
+  private withObservedBoardState(board: VisualBoardSnapshot): VisualBoardSnapshot {
+    return { ...board, observedState: {
+      title: board.title,
+      cards: board.cards.map((card) => ({ id: card.id, hash: this.boardCardHash(card) })),
+    } };
+  }
+
+  /** Three-way merge against what the editor actually saw, under the bundle lock. */
+  private mergeObservedBoard(
+    workspaceId: string,
+    sessionId: string,
+    incoming: VisualBoardSnapshot,
+  ): VisualBoardSnapshot {
+    const manifest = this.findVisualBoardManifest(workspaceId, sessionId);
+    if (!manifest || !incoming.observedState) throw new Error('Board changed. Reopen the board before saving; your draft has not been saved.');
+
+    let disk: VisualBoardSnapshot | null = null;
+    try {
+      const content = readOutputAssetText(this.resolveAssetPath(workspaceId, manifest.id, VISUAL_BOARD_ASSET_PATH));
+      disk = parseVisualBoardSnapshot(content, { workspaceId, sessionId });
+    } catch {
+      throw new Error('Board could not be read. Your draft has not been saved.');
+    }
+    if (!disk) throw new Error('Board could not be read. Your draft has not been saved.');
+
+    const base = incoming.observedState;
+    const baseline = new Map(base.cards.map((card) => [card.id, card.hash]));
+    const local = new Map(incoming.cards.map((card) => [card.id, card]));
+    const remote = new Map(disk.cards.map((card) => [card.id, card]));
+    const cards: VisualBoardSnapshot['cards'] = [];
+    // Unseen remote additions stay at the front; otherwise preserve local order.
+    const ids = new Set([...disk.cards.filter((card) => !local.has(card.id)).map((card) => card.id), ...local.keys()]);
+    for (const id of ids) {
+      const ours = local.get(id);
+      const theirs = remote.get(id);
+      const before = baseline.get(id);
+      const oursHash = ours && this.boardCardHash(ours);
+      const theirsHash = theirs && this.boardCardHash(theirs);
+      if (oursHash !== before && theirsHash !== before && oursHash !== theirsHash) {
+        throw new Error('This card changed elsewhere while you were editing. Your draft is kept here; copy your changes before reopening the board.');
+      }
+      const chosen = oursHash === before ? theirs : ours;
+      if (chosen) cards.push(chosen);
+    }
+    if (cards.length > VISUAL_BOARD_MAX_CARDS) throw new Error(`Board is full after concurrent changes (${VISUAL_BOARD_MAX_CARDS} cards maximum). Your draft has not been saved.`);
+    const outputIds = cards.flatMap((card) => card.type === 'output' ? [card.outputId] : []);
+    if (new Set(outputIds).size !== outputIds.length) throw new Error('This output was already pinned elsewhere. Your draft has not been saved; reopen the board to see the existing pin.');
+    if (incoming.title !== base.title && disk.title !== base.title && incoming.title !== disk.title) {
+      throw new Error('Board title changed elsewhere. Your draft has not been saved.');
+    }
+    return { ...disk, cards, title: incoming.title === base.title ? disk.title : incoming.title };
   }
 
   applyVisualSurfaceEvent(
@@ -384,38 +449,52 @@ export class OutputService {
   ): ApplyVisualSurfaceEventResult {
     try {
       const payload = normalizeVisualSurfaceEventInput(input);
-      const current = this.getOrCreateVisualBoard(workspaceId, sessionId);
-      const now = new Date().toISOString();
-      const event: VisualSurfaceEventRecord = {
-        schemaVersion: 1,
-        id: randomUUID(),
-        workspaceId,
-        sessionId,
-        action: payload.action,
-        payload,
-        source,
-        createdAt: now,
-      };
+      const root = this.deps.getWorkspaceRootPath(workspaceId);
+      // Resolve (creating if needed) outside the lock, because the board's
+      // output id is what we lock on.
+      const boardOutputId = this.getOrCreateVisualBoard(workspaceId, sessionId).output.id;
 
-      const applied = this.applyVisualEventToBoard(workspaceId, sessionId, current.board, event, now);
-      const board = applied.board;
-      assertVisualBoardSnapshot(board, { workspaceId, sessionId });
-      this.assertVisualBoardOutputCards(workspaceId, sessionId, board);
-      const saved = this.writeVisualBoardToOutput(workspaceId, current.output, board);
-      try {
-        this.appendVisualSurfaceEvent(workspaceId, saved.output, event);
-      } catch (err) {
-        this.writeVisualBoardToOutput(workspaceId, saved.output, current.board);
-        throw err;
-      }
-      this.emitUpdated(workspaceId);
-      return {
-        ok: true,
-        eventId: event.id,
-        outputId: saved.output.id,
-        board: saved.board,
-        receipt: this.visualEventReceipt(event, saved.board, applied.applied),
-      };
+      // Everything below is a read-modify-write of board.json. Without the lock
+      // an agent tool call and a user edit (`saveVisualBoard`) interleave and
+      // the later write silently drops the earlier one. `withOutputBundleLock`
+      // is re-entrant, so the nested resolve below is safe; a lock timeout
+      // surfaces through the catch as `{ ok: false }` rather than a torn board.
+      return withOutputBundleLock(root, boardOutputId, () => {
+        // Re-read inside the lock: another writer may have landed between the
+        // resolve above and the lock being granted.
+        const current = this.getOrCreateVisualBoard(workspaceId, sessionId);
+        const now = new Date().toISOString();
+        const event: VisualSurfaceEventRecord = {
+          schemaVersion: 1,
+          id: randomUUID(),
+          workspaceId,
+          sessionId,
+          action: payload.action,
+          payload,
+          source,
+          createdAt: now,
+        };
+
+        const applied = this.applyVisualEventToBoard(workspaceId, sessionId, current.board, event, now);
+        const board = applied.board;
+        assertVisualBoardSnapshot(board, { workspaceId, sessionId });
+        this.assertVisualBoardOutputCards(workspaceId, sessionId, board);
+        const saved = this.writeVisualBoardToOutput(workspaceId, current.output, board);
+        try {
+          this.appendVisualSurfaceEvent(workspaceId, saved.output, event);
+        } catch (err) {
+          this.writeVisualBoardToOutput(workspaceId, saved.output, current.board);
+          throw err;
+        }
+        this.emitUpdated(workspaceId);
+        return {
+          ok: true,
+          eventId: event.id,
+          outputId: saved.output.id,
+          board: saved.board,
+          receipt: this.visualEventReceipt(event, saved.board, applied.applied),
+        };
+      });
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
@@ -679,7 +758,8 @@ export class OutputService {
     const file = join(outputDir, VISUAL_BOARD_ASSET_PATH);
     const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
     try {
-      writeFileSync(tmp, JSON.stringify(board, null, 2) + '\n', 'utf-8');
+      const { observedState: _observedState, ...persistedBoard } = board;
+      writeFileSync(tmp, JSON.stringify(persistedBoard, null, 2) + '\n', 'utf-8');
       renameSync(tmp, file);
     } catch (err) {
       try { rmSync(tmp, { force: true }); } catch { /* ignore */ }
@@ -714,7 +794,7 @@ export class OutputService {
       tags: [...new Set([...(output.tags ?? []), VISUAL_BOARD_TAG, VISUAL_BOARD_SESSION_TAG])],
     };
     writeOutputManifest(root, nextOutput);
-    return { output: nextOutput, board };
+    return { output: nextOutput, board: this.withObservedBoardState(board) };
   }
 
   async createFromSessionTool(input: {

@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-09-03
+last_verified: 2026-09-04
 source_of_truth: true
 ---
 
@@ -16,15 +16,16 @@ an implementing agent as-is.
 
 | Spec | What it does | Verified unbuilt by |
 | --- | --- | --- |
-| [31 Catalog And Royalty Reconciliation](./31-catalog-royalty-reconciliation-spec.md) | Compiles every released song from Spotify and squares it against BMI/ASCAP registrations to find unregistered works | no `ISWC` handling anywhere in `packages/` |
 | [36 Capability Evolution Engine](./36-capability-evolution-engine-spec.md) | Turns weekly intel and usage friction into a few proposed system upgrades the artist can try, keep, then routinize | no `EvolutionProposal` or evolution service |
-| [37 Model Fallback Chain](./37-model-fallback-chain-spec.md) | User-picked Fallback 1 and 2 so a rate-limited model does not kill a session, workflow step, or scheduled run | no fallback logic in `agent/` or `config/`; workflow retries the same model (`runner.ts:712-752`) |
-| [38 Community Email Engine And The Community Agent](./38-community-email-engine-spec.md) | Finishes the fan-list loop: Resend sending with one-click approve, inbound fan mail, engagement, capture doors, agent tools, and a Community Agent starter; Gmail stays the personal lane | no Resend API call anywhere; `community-email.ts:25-30` is a stub; no job status transition after create; no `community_*` session tools |
-| [41 The Autonomous Website And Community Loop](./41-autonomous-website-and-community-loop-spec.md) | Master spec over 38 and 39: the weekly loop that updates the site, drains signups into Community, drafts the fan email, and puts one Monday Brief in Needs You; shared contracts for approval tiers, Change Receipts, subscriber handoff, and agent briefs; four slices with acceptance tests | no `ChangeReceipt`, `MondayBrief`, or `ApprovalPolicy` anywhere; no `website-agent` or `community-agent` starter; no deploy adapter |
 | [42 Campaign Release Path And Manager Orchestration](./42-campaign-release-path-orchestration-spec.md) | Turns Essentials into a date-aware five-phase release path and gives Artist Manager one deterministic Continue action over existing workers | no `CampaignReleasePath`, phase compiler, approved campaign packets, or content-intent contract |
 | [43 Approved Branding Amendments](./43-approved-branding-amendments-spec.md) | Turns agreed Branding Agent work into a durable Output and an artist-approved, append-only Branding amendment without replacing user text | no `ArtistBrandingAmendment`, `BrandingAmendmentProposal`, or dedicated branding amendment tools |
 | [44 State-Aware First-Use Guide](./44-state-aware-first-use-guide-spec.md) | Extends the existing question-mark Guide with an optional first-use setup path whose progress comes from real AI, Brain, Vault, and first-work state | no `ArtistSetupSnapshot`, onboarding presentation state, setup mode, or coach-mark target contract |
+| [45 HQ / Campaign Scope Clarity](./45-hq-campaign-scope-clarity-spec.md) | One stated rule for where shared work lives, the unified timeline shown inside campaigns, and cross-owner channel-collision warnings — no new space, no new store | `collectArtistTimeline` has no RPC and only `manager-tools.ts` calls it; no `TimelineCollision` or `channel` on `TimelineEntry` |
 | [46 Electron Runtime Upgrade](./46-electron-runtime-upgrade-spec.md) | Evaluates and performs a measured upgrade from Electron 39 to a current supported line, covering browser panes, packaging, notifications, protocols, and OS compatibility | root package and lockfile still resolve `electron@39.8.10` |
+
+Specs 38 and 41 remain at their existing paths for cross-reference stability,
+but are implemented, not unbuilt. See the V1 integration review checklist for
+remaining live acceptance checks.
 
 ## Rules For This Folder
 
@@ -43,18 +44,12 @@ an implementing agent as-is.
 
 Independent of each other; ordered by leverage per unit of work.
 
-1. **37 Model Fallback Chain** — smallest, and it stops unattended work from
-   dying on a busy free-tier model. Everything else benefits.
+1. **45 HQ / Campaign Scope Clarity** — Slices A and B are pure visibility on
+   the existing timeline read model, no new store. Removes a real source of
+   day-to-day confusion; Slice C waits on observing A and B.
 2. **36 Capability Evolution Engine** — ship Slice 3 and stop to measure before
    building the draft and activation machinery.
-3. **41 Autonomous Website And Community Loop** — build its Slice A first;
-   it is the publishing and capture layer that 38 and 39 both wait on, and
-   it defines the receipts and approval tiers every later slice writes to.
-   Then 38 and 39 slices ship as steps of this loop rather than separately.
-4. **38 Community Email Engine** — the fan list already exists and is well
-   modeled; Slices 1 through 3 turn it into a working sender with no agent
-   work, and Slice 4 gives the Community Agent hands. Highest compounding
-   payoff for any artist with fans.
-4. **31 Catalog And Royalty Reconciliation** — highest real-world payoff for an
-   artist with a back catalog, but depends on a Spotify path and browser
-   sessions for BMI/ASCAP.
+
+Specs 31, 37, and 40 left this folder on 2026-09-04: 37 and 40 shipped in
+full; 31 shipped its agent and skill and now lives in the parent folder as
+`partially-implemented` with remaining slices in the backlog.

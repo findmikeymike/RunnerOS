@@ -3,7 +3,7 @@ status: implemented
 owner: agent
 last_verified: 2026-09-03
 source_of_truth: true
-related: ../13-scheduled-work-composer-execution-spec.md, ../33-automations-input-aware-setup-spec.md
+related: ./13-scheduled-work-composer-execution-spec.md, ./33-automations-input-aware-setup-spec.md
 ---
 
 # Model Fallback Chain
