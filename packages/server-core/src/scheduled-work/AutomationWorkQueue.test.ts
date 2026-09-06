@@ -14,14 +14,22 @@ import { cancelPendingAutomationWorkForMatcher, queueAutomationWork } from './Au
 import { supplyScheduledWorkInputs } from './ScheduledWorkInputSupply'
 import { withWorkspaceContextLock } from './workspace-context-lock'
 
+// Captured before mock.module re-points the live `actual*` namespaces at the
+// mocks; calling through the namespace from a fallback recurses forever.
+// See google-workspace.test.ts for the full story.
+const realReadActivatedAgents = actualAgentDefinitions.readActivatedAgents
+const realLoadGlobalAgent = actualAgentDefinitions.loadGlobalAgent
+const realReadActivatedWorkflows = actualWorkflows.readActivatedWorkflows
+const realLoadGlobalWorkflow = actualWorkflows.loadGlobalWorkflow
+
 mock.module('@craft-agent/shared/agent-definitions', () => ({
   ...actualAgentDefinitions,
   readActivatedAgents: (rootPath: string) => rootPath.includes('automation-work-queue-')
     ? { version: 1, active: ['youtube-intel'] }
-    : actualAgentDefinitions.readActivatedAgents(rootPath),
+    : realReadActivatedAgents(rootPath),
   loadGlobalAgent: (slug: string) => slug === 'youtube-intel'
     ? { slug, metadata: { name: 'YouTube Intel', description: 'Creates YouTube intelligence reports.' }, systemPrompt: 'Research YouTube.', path: '/tmp/youtube-intel', source: 'global' }
-    : actualAgentDefinitions.loadGlobalAgent(slug),
+    : realLoadGlobalAgent(slug),
 }))
 
 const demoWorkflow = {
@@ -48,10 +56,10 @@ mock.module('@craft-agent/shared/workflows', () => ({
   ...actualWorkflows,
   readActivatedWorkflows: (rootPath: string) => rootPath.includes('automation-work-queue-')
     ? { version: 1, active: ['process-file'] }
-    : actualWorkflows.readActivatedWorkflows(rootPath),
+    : realReadActivatedWorkflows(rootPath),
   loadGlobalWorkflow: (slug: string) => slug === 'process-file'
     ? demoWorkflow
-    : actualWorkflows.loadGlobalWorkflow(slug),
+    : realLoadGlobalWorkflow(slug),
 }))
 
 const roots: string[] = []

@@ -14,21 +14,29 @@ import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-
 import { persistHnicScheduleWork } from './HnicScheduledWork'
 import { materializeReleaseKitItem } from '@craft-agent/shared/release-kit'
 
+// Captured before mock.module re-points the live `actual*` namespaces at the
+// mocks; calling through the namespace from a fallback recurses forever.
+// See google-workspace.test.ts for the full story.
+const realReadActivatedAgents = actualAgentDefinitions.readActivatedAgents
+const realLoadGlobalAgent = actualAgentDefinitions.loadGlobalAgent
+const realReadActivatedWorkflows = actualWorkflows.readActivatedWorkflows
+const realLoadGlobalWorkflow = actualWorkflows.loadGlobalWorkflow
+
 mock.module('@craft-agent/shared/agent-definitions', () => ({
   ...actualAgentDefinitions,
   readActivatedAgents: (rootPath: string) => rootPath.includes('hnic-scheduled-work-')
     ? { version: 1, active: ['youtube-intel'] }
-    : actualAgentDefinitions.readActivatedAgents(rootPath),
+    : realReadActivatedAgents(rootPath),
   loadGlobalAgent: (slug: string) => slug === 'youtube-intel'
     ? { slug, metadata: { name: 'YouTube Intel', description: 'Creates reports.' }, systemPrompt: 'Research.', path: '/tmp/youtube-intel', source: 'global' }
-    : actualAgentDefinitions.loadGlobalAgent(slug),
+    : realLoadGlobalAgent(slug),
 }))
 
 mock.module('@craft-agent/shared/workflows', () => ({
   ...actualWorkflows,
   readActivatedWorkflows: (rootPath: string) => rootPath.includes('hnic-scheduled-work-')
     ? { version: 1, active: ['input-workflow', 'legacy-input-workflow'] }
-    : actualWorkflows.readActivatedWorkflows(rootPath),
+    : realReadActivatedWorkflows(rootPath),
   loadGlobalWorkflow: (slug: string) => {
     if (slug === 'legacy-input-workflow') {
       return {
@@ -68,7 +76,7 @@ mock.module('@craft-agent/shared/workflows', () => ({
         path: '/tmp/input-workflow',
         source: 'global',
       }
-      : actualWorkflows.loadGlobalWorkflow(slug)
+      : realLoadGlobalWorkflow(slug)
   },
 }))
 

@@ -39,9 +39,16 @@ const workspaceRoot = '/tmp/runneros-scheduled-work-test'
 const campaignRoot = '/tmp/runneros-scheduled-work-x-campaign-test'
 const workspace = { id: 'ws-1', name: 'Scheduled Work Test', rootPath: workspaceRoot, artistWorkspaceScope: 'hq' as const }
 const campaignWorkspace = { id: 'campaign-x', name: 'X Campaign', rootPath: campaignRoot, artistWorkspaceScope: 'campaign' as const }
+// Every fallback below must go through one of these captured references, not
+// the live `actual*` namespace: mock.module re-points the namespace at the
+// mock, so a namespace call from inside a fallback recurses forever.
+// See google-workspace.test.ts for the full story.
 const loadActualContextDoc = actualWorkspaceContext.loadContextDoc
 const upsertActualContextDoc = actualWorkspaceContext.upsertContextDoc
 const loadAllActualContextDocs = actualWorkspaceContext.loadAllContextDocs
+const realGetWorkspaceByNameOrId = actualConfig.getWorkspaceByNameOrId
+const realReadActivatedAgents = actualAgentDefinitions.readActivatedAgents
+const realLoadGlobalAgent = actualAgentDefinitions.loadGlobalAgent
 
 let contextDocs = new Map<string, LoadedContextDoc>()
 let upsertCalls: string[] = []
@@ -57,7 +64,7 @@ mock.module('@craft-agent/shared/config', () => ({
       ? workspace
       : workspaceId === campaignWorkspace.id
         ? campaignWorkspace
-        : actualConfig.getWorkspaceByNameOrId(workspaceId)
+        : realGetWorkspaceByNameOrId(workspaceId)
   ),
 }))
 
@@ -96,10 +103,10 @@ mock.module('@craft-agent/shared/agent-definitions', () => ({
   ...actualAgentDefinitions,
   readActivatedAgents: (rootPath: string) => rootPath === workspaceRoot
     ? { version: 1, active: activeAgentSlugs }
-    : actualAgentDefinitions.readActivatedAgents(rootPath),
+    : realReadActivatedAgents(rootPath),
   loadGlobalAgent: (slug: string) => slug === 'content-genius'
     ? { slug, metadata: { name: 'Content Genius', description: 'Writes campaign content.' }, systemPrompt: 'Write.', path: '/tmp/content-genius', source: 'global' }
-    : actualAgentDefinitions.loadGlobalAgent(slug),
+    : realLoadGlobalAgent(slug),
 }))
 
 mock.module('@craft-agent/shared/workspaces', () => ({

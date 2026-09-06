@@ -81,12 +81,18 @@ const typedWorkflow: LoadedWorkflow = {
 
 const workflows = new Map([workflow, stringWorkflow, typedWorkflow].map((candidate) => [candidate.slug, candidate]))
 
+// Captured before mock.module re-points the live `actualWorkflows` namespace
+// at the mock; calling through it from a fallback recurses forever.
+// See google-workspace.test.ts for the full story.
+const realLoadGlobalWorkflow = actualWorkflows.loadGlobalWorkflow
+const realReadActivatedWorkflows = actualWorkflows.readActivatedWorkflows
+
 mock.module('@craft-agent/shared/workflows', () => ({
   ...actualWorkflows,
-  loadGlobalWorkflow: (slug: string) => workflows.get(slug) ?? actualWorkflows.loadGlobalWorkflow(slug),
+  loadGlobalWorkflow: (slug: string) => workflows.get(slug) ?? realLoadGlobalWorkflow(slug),
   readActivatedWorkflows: (rootPath: string) => rootPath.includes('scheduled-input-supply-')
     ? { version: 1, active: [...workflows.keys()] }
-    : actualWorkflows.readActivatedWorkflows(rootPath),
+    : realReadActivatedWorkflows(rootPath),
 }))
 
 const roots: string[] = []

@@ -18,10 +18,23 @@ const googleSource = {
   config: { slug: 'google-calendar', name: 'Google Calendar' },
 }
 
+// Capture the real implementations before mock.module runs. In Bun the
+// `actual*` namespace imports above are live bindings that get re-pointed at
+// the mocked module, so a fallback written as `actualX.fn(...)` calls the mock
+// itself. That is a tail call, JSC eliminates the frame, and the result is an
+// infinite loop at 100% CPU with no stack overflow — which is how this file
+// hung the whole server-core suite whenever a later test file reached one of
+// these fallbacks with a root that was not ours.
+const realGetWorkspaceByNameOrId = actualConfig.getWorkspaceByNameOrId
+const realGetSourcesBySlugs = actualSources.getSourcesBySlugs
+const realLoadContextDoc = actualWorkspaceContext.loadContextDoc
+const realUpsertContextDoc = actualWorkspaceContext.upsertContextDoc
+const realLoadAllContextDocs = actualWorkspaceContext.loadAllContextDocs
+
 mock.module('@craft-agent/shared/config', () => ({
   ...actualConfig,
   getWorkspaceByNameOrId: (workspaceId: string) => (
-    workspaceId === workspace.id ? workspace : actualConfig.getWorkspaceByNameOrId(workspaceId)
+    workspaceId === workspace.id ? workspace : realGetWorkspaceByNameOrId(workspaceId)
   ),
 }))
 
@@ -30,7 +43,7 @@ mock.module('@craft-agent/shared/sources', () => ({
   getSourcesBySlugs: (rootPath: string, slugs: string[]) => (
     rootPath === workspaceRoot && slugs.includes('google-calendar')
       ? [googleSource]
-      : actualSources.getSourcesBySlugs(rootPath, slugs)
+      : realGetSourcesBySlugs(rootPath, slugs)
   ),
   getSourceCredentialManager: () => ({
     getToken: async () => tokenValue,
@@ -43,9 +56,9 @@ mock.module('@craft-agent/shared/workspace-context', () => ({
   ...actualWorkspaceContext,
   loadContextDoc: (rootPath: string, slug: string) => rootPath === workspaceRoot
     ? contextDocs.get(slug) ?? null
-    : actualWorkspaceContext.loadContextDoc(rootPath, slug),
+    : realLoadContextDoc(rootPath, slug),
   upsertContextDoc: (rootPath: string, doc: { slug: string; metadata: ContextDocMetadata; body: string }) => {
-    if (rootPath !== workspaceRoot) return actualWorkspaceContext.upsertContextDoc(rootPath, doc as never)
+    if (rootPath !== workspaceRoot) return realUpsertContextDoc(rootPath, doc as never)
     const loaded: LoadedContextDoc = {
       slug: doc.slug,
       metadata: doc.metadata,
@@ -56,7 +69,7 @@ mock.module('@craft-agent/shared/workspace-context', () => ({
     contextDocs.set(doc.slug, loaded)
     return loaded
   },
-  loadAllContextDocs: (rootPath: string) => rootPath === workspaceRoot ? [...contextDocs.values()] : actualWorkspaceContext.loadAllContextDocs(rootPath),
+  loadAllContextDocs: (rootPath: string) => rootPath === workspaceRoot ? [...contextDocs.values()] : realLoadAllContextDocs(rootPath),
 }))
 
 function calendarBody(events: unknown[]): string {

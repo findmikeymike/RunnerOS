@@ -11,12 +11,17 @@ const TEST_WORKSPACE = {
   rootPath: join(tmpdir(), 'craft-webui-oauth-workspace'),
 };
 
+// Captured before mock.module re-points the live `actualConfig` namespace at
+// the mock; calling through it from a fallback recurses forever.
+// See google-workspace.test.ts for the full story.
+const realGetWorkspaceByNameOrId = actualConfig.getWorkspaceByNameOrId;
+
 mock.module('@craft-agent/shared/config', () => ({
   ...actualConfig,
   getWorkspaceByNameOrId: (workspaceId: string) => (
     workspaceId === TEST_WORKSPACE.id
       ? TEST_WORKSPACE
-      : actualConfig.getWorkspaceByNameOrId(workspaceId)
+      : realGetWorkspaceByNameOrId(workspaceId)
   ),
 }));
 
