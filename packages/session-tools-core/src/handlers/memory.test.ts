@@ -3,12 +3,15 @@ import type { SessionToolContext } from '../context.ts';
 import {
   handleForgetMemory,
   handleRecallMemory,
+  handleRecallSession,
   handleSaveMemory,
   handleUpdateMemory,
   type ForgetMemoryToolInput,
   type MemoryMutationResult,
   type RecallMemoryResult,
   type RecallMemoryToolInput,
+  type RecallSessionResult,
+  type RecallSessionToolInput,
   type SaveMemoryToolInput,
   type UpdateMemoryToolInput,
 } from './memory.ts';
@@ -18,6 +21,7 @@ function makeCtx(opts?: {
   updateMemory?: (input: UpdateMemoryToolInput) => Promise<MemoryMutationResult>;
   forgetMemory?: (input: ForgetMemoryToolInput) => Promise<MemoryMutationResult>;
   recallMemory?: (input: RecallMemoryToolInput) => Promise<RecallMemoryResult>;
+  recallSession?: (input: RecallSessionToolInput) => Promise<RecallSessionResult>;
 }): SessionToolContext {
   const ctx: Partial<SessionToolContext> = {
     sessionId: 't',
@@ -41,6 +45,7 @@ function makeCtx(opts?: {
   if (opts?.updateMemory) ctx.updateMemory = opts.updateMemory;
   if (opts?.forgetMemory) ctx.forgetMemory = opts.forgetMemory;
   if (opts?.recallMemory) ctx.recallMemory = opts.recallMemory;
+  if (opts?.recallSession) ctx.recallSession = opts.recallSession;
   return ctx as SessionToolContext;
 }
 
@@ -304,7 +309,9 @@ describe('memory handlers', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(captured).toEqual({ query: 'writing style', scopes: ['user'], limit: 5 });
+    expect(captured).toEqual({ query: 'writing style', scopes: ['user'], limit: 5, full: false });
+    // Excerpt only by default — the whole body is withheld so a recall cannot
+    // cost more prompt than the memory section it is meant to replace.
     expect(result.structuredContent).toEqual({
       ok: true,
       query: 'writing style',
@@ -312,12 +319,105 @@ describe('memory handlers', () => {
         scope: 'user',
         name: 'Preferred writing style',
         type: 'feedback',
-        content: 'Use direct language.',
         score: 7,
         reason: 'Matched writing',
         excerpt: 'Use direct language.',
       }],
     });
-    expect((result.content[0] as any).text).toContain('Recalled 1 memories');
+    expect((result.content[0] as any).text).toContain('as excerpts');
+    expect((result.content[0] as any).text).toContain('full: true');
+  });
+
+  it('recall_memory returns whole bodies only when full is requested', async () => {
+    let captured: RecallMemoryToolInput | undefined;
+    const ctx = makeCtx({
+      recallMemory: async (input) => {
+        captured = input;
+        return {
+          ok: true,
+          query: input.query,
+          results: [{
+            scope: 'user',
+            name: 'Preferred writing style',
+            type: 'feedback',
+            content: 'Use direct language, and never pad a sentence.',
+            score: 7,
+            reason: 'Matched writing',
+            excerpt: 'Use direct language...',
+          }],
+        };
+      },
+    });
+
+    const result = await handleRecallMemory(ctx, { query: 'writing style', full: true });
+
+    expect(captured?.full).toBe(true);
+    const entry = (result.structuredContent as any).results[0];
+    expect(entry.content).toBe('Use direct language, and never pad a sentence.');
+    expect(entry.excerpt).toBe('Use direct language...');
+    expect((result.content[0] as any).text).not.toContain('as excerpts');
+  });
+});
+
+describe('recall_session', () => {
+  it('reports plainly when an agent has no history yet, rather than looking broken', async () => {
+    const ctx = makeCtx({ recallSession: async () => ({ ok: true, results: [] }) });
+    const result = await handleRecallSession(ctx, {});
+
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain('No past sessions recorded yet');
+  });
+
+  it('passes an empty query through so the agent gets its most recent sessions', async () => {
+    let captured: RecallSessionToolInput | undefined;
+    const ctx = makeCtx({
+      recallSession: async (input) => {
+        captured = input;
+        return { ok: true, results: [{ sessionId: 's1', date: '2026-09-05', summary: 'Settled the release date.' }] };
+      },
+    });
+
+    const result = await handleRecallSession(ctx, {});
+
+    expect(captured).toEqual({ query: '', limit: undefined });
+    expect((result.content[0] as any).text).toContain('most recent');
+    expect((result.structuredContent as any).results[0].summary).toBe('Settled the release date.');
+  });
+
+  it('trims a query and reports it back', async () => {
+    const ctx = makeCtx({
+      recallSession: async (input) => ({
+        ok: true,
+        query: input.query,
+        results: [{ sessionId: 's1', date: '2026-09-05', summary: 'Merch drop planning.' }],
+      }),
+    });
+
+    const result = await handleRecallSession(ctx, { query: '  merch  ' });
+
+    expect((result.structuredContent as any).query).toBe('merch');
+    expect((result.content[0] as any).text).toContain('matching "merch"');
+  });
+
+  it('rejects a limit outside the supported range', async () => {
+    const ctx = makeCtx({ recallSession: async () => ({ ok: true, results: [] }) });
+    expect((await handleRecallSession(ctx, { limit: 0 })).isError).toBe(true);
+    expect((await handleRecallSession(ctx, { limit: 99 })).isError).toBe(true);
+  });
+
+  it('surfaces a backend refusal instead of pretending there is no history', async () => {
+    const ctx = makeCtx({
+      recallSession: async () => ({ ok: false, error: 'Refusing to write: file could not be read.' }),
+    });
+    const result = await handleRecallSession(ctx, {});
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain('could not be read');
+  });
+
+  it('is unavailable rather than silently empty when the context does not provide it', async () => {
+    const result = await handleRecallSession(makeCtx({}), {});
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain('not available');
   });
 });

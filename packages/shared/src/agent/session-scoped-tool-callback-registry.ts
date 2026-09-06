@@ -246,6 +246,10 @@ export interface SessionScopedToolCallbacks {
   recallMemoryFn?: (
     input: import('@craft-agent/session-tools-core').RecallMemoryToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').RecallMemoryResult>;
+  /** Search this agent's past sessions. */
+  recallSessionFn?: (
+    input: import('@craft-agent/session-tools-core').RecallSessionToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').RecallSessionResult>;
   /** Publish a first-class output from the current session. */
   createOutputFn?: (
     input: import('@craft-agent/session-tools-core').CreateOutputToolInput,

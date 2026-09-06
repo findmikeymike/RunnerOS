@@ -505,6 +505,12 @@ export interface SessionToolContext {
   recallMemory?(input: import('./handlers/memory.ts').RecallMemoryToolInput): Promise<import('./handlers/memory.ts').RecallMemoryResult>;
 
   /**
+   * Search this agent's past sessions. Distinct from `recallMemory`: memory
+   * holds durable facts, this holds what happened and when.
+   */
+  recallSession?(input: import('./handlers/memory.ts').RecallSessionToolInput): Promise<import('./handlers/memory.ts').RecallSessionResult>;
+
+  /**
    * Delegate a bounded task to another saved agent. Backend creates a hidden
    * child session, enforces readiness/permission limits, and returns a receipt.
    */

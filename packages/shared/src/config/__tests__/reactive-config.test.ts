@@ -31,6 +31,39 @@ function wait(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * Poll until `predicate` holds, or give up after `timeoutMs`.
+ *
+ * The push tests depend on a real `fs.watch` event plus a 200ms debounce, so a
+ * fixed sleep is a bet on how loaded the machine is. That bet lost
+ * intermittently under parallel suite runs — four consecutive isolated runs of
+ * this file produced 0, 1, 2, and 1 failures. Polling asserts exactly the same
+ * thing without the bet, and returns as soon as the callback lands rather than
+ * always paying the full wait.
+ *
+ * Deliberately does not throw on timeout: letting the real `expect` fail
+ * afterwards gives a far more useful message than "waitFor timed out".
+ */
+async function waitFor(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await wait(10);
+  }
+}
+
+/**
+ * `fs.watch` is not reliably effective the instant it returns — on macOS the
+ * first change can land in a window before the OS registration takes hold. In
+ * production that is invisible, because the watcher is established at startup
+ * and config changes come minutes later. In a test that writes microseconds
+ * after subscribing it is the difference between green and red, so give the
+ * watcher a beat before changing the file.
+ */
+async function settleWatcher(): Promise<void> {
+  await wait(60);
+}
+
 describe('reactive-config', () => {
   let tmpDir: string;
   let configPath: string;
@@ -108,10 +141,10 @@ describe('reactive-config', () => {
         received = cfg;
       });
 
+      await settleWatcher();
       writeFileSync(configPath, makeConfig({ defaultThinkingLevel: 'high' }));
 
-      // Wait long enough for fs.watch event + debounce.
-      await wait(900);
+      await waitFor(() => received !== null);
 
       expect(received).not.toBeNull();
       expect((received as { defaultThinkingLevel?: string }).defaultThinkingLevel).toBe('high');
@@ -130,8 +163,9 @@ describe('reactive-config', () => {
         seen.push(`b:${(cfg as { defaultThinkingLevel?: string }).defaultThinkingLevel ?? '?'}`);
       });
 
+      await settleWatcher();
       writeFileSync(configPath, makeConfig({ defaultThinkingLevel: 'high' }));
-      await wait(900);
+      await waitFor(() => seen.length >= 2);
 
       expect(seen).toContain('a:high');
       expect(seen).toContain('b:high');
@@ -147,13 +181,15 @@ describe('reactive-config', () => {
         count += 1;
       });
 
+      await settleWatcher();
       writeFileSync(configPath, makeConfig({ defaultThinkingLevel: 'high' }));
-      await wait(900);
+      await waitFor(() => count === 1);
       expect(count).toBe(1);
 
       unsubscribe();
 
       writeFileSync(configPath, makeConfig({ defaultThinkingLevel: 'low' }));
+      // Absence cannot be polled for: this one has to settle on a real clock.
       await wait(900);
       expect(count).toBe(1); // unchanged after unsubscribe
     });
@@ -168,8 +204,9 @@ describe('reactive-config', () => {
         good = true;
       });
 
+      await settleWatcher();
       writeFileSync(configPath, makeConfig({ defaultThinkingLevel: 'high' }));
-      await wait(900);
+      await waitFor(() => good);
 
       expect(good).toBe(true);
 

@@ -59,6 +59,12 @@ export interface MemorySidecarResult {
   scope?: MemoryScope
   agentSlug?: string
   name?: string
+  /**
+   * Why an auto-apply fell back to the review queue. Without this the storage
+   * guard's "your MEMORY.md needs repair" error vanished into a review item the
+   * user would only see fail again on approval.
+   */
+  applyError?: string
 }
 
 export interface MemorySidecarApplyResult {
@@ -123,6 +129,7 @@ export class MemorySidecarService {
       }
     }
 
+    let applyError: string | undefined
     if (this.applyMemory && shouldAutoApplyAgentSave(proposal, this.autoApplyAgentConfidence)) {
       const applied = await this.tryApplyMemory(proposal)
       if (applied.ok) {
@@ -134,10 +141,17 @@ export class MemorySidecarService {
           name: applied.name ?? proposal.name,
         }
       }
+      applyError = applied.error
     }
 
     const item = enqueueMemoryReviewItem(proposal, this.storage)
-    return { queued: true, itemId: item.id, scope: item.scope, agentSlug: item.agentSlug }
+    return {
+      queued: true,
+      itemId: item.id,
+      scope: item.scope,
+      agentSlug: item.agentSlug,
+      ...(applyError ? { applyError } : {}),
+    }
   }
 
   private async tryApplyMemory(proposal: EnqueueMemoryReviewInput): Promise<MemorySidecarApplyResult> {

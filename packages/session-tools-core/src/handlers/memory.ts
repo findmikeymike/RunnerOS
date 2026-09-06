@@ -29,6 +29,11 @@ export interface RecallMemoryToolInput {
   query: string;
   scopes?: MemoryScope[];
   limit?: number;
+  /**
+   * Return whole entry bodies instead of excerpts. Off by default: 25 full
+   * bodies can be larger than the memory section this tool exists to avoid.
+   */
+  full?: boolean;
 }
 
 export interface MemoryMutationResult {
@@ -44,7 +49,8 @@ export interface RecalledMemoryEntry {
   agentSlug?: string;
   name: string;
   type: MemoryType;
-  content: string;
+  /** Whole body. Present only when the caller asked for `full`. */
+  content?: string;
   score: number;
   reason: string;
   excerpt: string;
@@ -262,6 +268,7 @@ export async function handleRecallMemory(
     query: args.query.trim(),
     scopes: args.scopes,
     limit,
+    full: args.full === true,
   };
 
   try {
@@ -269,19 +276,98 @@ export async function handleRecallMemory(
     if (!result.ok) {
       return errorResponse(result.error ?? 'Failed to recall memory.');
     }
-    const entries = result.results ?? [];
-    return memorySuccess(
-      entries.length === 0
-        ? `No matching memories for "${input.query}".`
-        : `Recalled ${entries.length} memories for "${input.query}".`,
-      {
-        ok: true,
-        query: result.query ?? input.query,
-        results: entries,
-      },
-    );
+    // Excerpts by default. Returning every full body alongside a duplicate
+    // excerpt of the same text made a single recall bigger than the memory
+    // section this tool is meant to keep out of the prompt.
+    const entries = (result.results ?? []).map((entry) => {
+      if (input.full) return entry;
+      const { content: _omitted, ...rest } = entry;
+      return rest;
+    });
+
+    const summary = entries.length === 0
+      ? `No matching memories for "${input.query}".`
+      : input.full
+        ? `Recalled ${entries.length} memories for "${input.query}".`
+        : `Recalled ${entries.length} memories for "${input.query}" as excerpts. Re-run with full: true for whole entries.`;
+
+    return memorySuccess(summary, {
+      ok: true,
+      query: result.query ?? input.query,
+      results: entries,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return errorResponse(`Failed to recall memory: ${message}`);
+  }
+}
+
+// ============================================================================
+// recall_session
+// ============================================================================
+
+export interface RecallSessionToolInput {
+  /** Omit to get the most recent sessions. */
+  query?: string;
+  limit?: number;
+}
+
+export interface RecalledSession {
+  sessionId: string;
+  date: string;
+  summary: string;
+  turnCount?: number;
+  durationMinutes?: number;
+  outcome?: string;
+  topics?: string[];
+  nextAction?: string;
+  workspaceLabel?: string;
+}
+
+export interface RecallSessionResult {
+  ok: boolean;
+  query?: string;
+  results?: RecalledSession[];
+  error?: string;
+}
+
+export async function handleRecallSession(
+  ctx: SessionToolContext,
+  args: RecallSessionToolInput,
+): Promise<ToolResult> {
+  if (!ctx.recallSession) {
+    return errorResponse('recall_session is not available in this context.');
+  }
+
+  if (args.query !== undefined && typeof args.query !== 'string') {
+    return errorResponse('query must be a string when provided.');
+  }
+  const limit = normalizeLimit(args.limit);
+  if (Number.isNaN(limit) || (limit !== undefined && (limit < 1 || limit > 25))) {
+    return errorResponse('limit must be a number between 1 and 25.');
+  }
+
+  const query = args.query?.trim() ?? '';
+  try {
+    const result = await ctx.recallSession({ query, limit });
+    if (!result.ok) {
+      return errorResponse(result.error ?? 'Failed to recall sessions.');
+    }
+    const entries = result.results ?? [];
+    if (entries.length === 0) {
+      return memorySuccess(
+        query ? `No past sessions matched "${query}".` : 'No past sessions recorded yet.',
+        { ok: true, ...(query ? { query } : {}), results: [] },
+      );
+    }
+    return memorySuccess(
+      query
+        ? `Found ${entries.length} past ${entries.length === 1 ? 'session' : 'sessions'} matching "${query}".`
+        : `The ${entries.length} most recent ${entries.length === 1 ? 'session' : 'sessions'}.`,
+      { ok: true, ...(query ? { query } : {}), results: entries },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return errorResponse(`Failed to recall sessions: ${message}`);
   }
 }

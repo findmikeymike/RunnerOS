@@ -72,6 +72,21 @@ export interface ContextDocMetadata {
    * regular agents, while Concierge treats it as on-demand.
    */
   delivery?: ContextDocDelivery;
+  /**
+   * Agents that always receive this doc in their prompt, overriding `delivery`
+   * for them alone.
+   *
+   * Exists because `delivery` is one value for every agent while some docs are
+   * only always-relevant to part of the roster — branding is load-bearing for
+   * visual and video agents and merely nice-to-have for a legal or royalty
+   * worker. Expressing that through `routing` instead would be wrong: routing
+   * controls *access*, so narrowing it would make the doc invisible to everyone
+   * else rather than merely un-injected.
+   *
+   * Missing or empty behaves exactly as `delivery` alone, so existing docs are
+   * unaffected.
+   */
+  deliveryAlwaysFor?: string[];
   /** If true, Concierge receives no routing override for this doc. */
   private?: boolean;
   /** Goal status — when set, this doc is a Pulse goal. */
@@ -82,10 +97,71 @@ export interface ContextDocMetadata {
   deadline?: string;
 }
 
+/**
+ * Agents that always receive `artist-branding`, even though the doc is
+ * on-demand for everyone else.
+ *
+ * Mirrors `visualAgent: true` in the agent definitions — the existing signal
+ * for "produces something the audience looks at" — plus `branding-agent`,
+ * which owns the doc without being a visual agent itself. A new visual agent
+ * should be added here too.
+ *
+ * Lives in this module rather than beside the doc definition so
+ * `SYSTEM_CONTEXT_DOC_DELIVERY` below can reference it without
+ * workspace-context importing artist-context, which would be a cycle.
+ */
+export const ARTIST_BRANDING_ALWAYS_AGENT_SLUGS = [
+  'hypermotion-agent',
+  'video-director',
+  'lottie-animation-agent',
+  'video-editor-agent',
+  'lyric-video-agent',
+  'raw-video-editor',
+  'art-director',
+  'open-slide-agent',
+  'shopify-agent',
+  'print-agent',
+  'branding-agent',
+] as const;
+
+/**
+ * Delivery policy for product-generated context docs, applied by slug and
+ * taking precedence over whatever the file on disk happens to say.
+ *
+ * These docs are written by Artist OS, not by the artist. Their frontmatter is
+ * only rewritten when something edits the doc, so a workspace created before a
+ * policy change would otherwise keep the old behavior indefinitely — an
+ * `artist-profile` written months ago has no `delivery` field at all and would
+ * silently stop being injected. Pinning the policy by slug makes it take effect
+ * everywhere at once and keeps it identical across workspaces.
+ *
+ * The previous implementation did the same thing for `artist-network` with a
+ * hardcoded slug check; this is that idea made explicit and extensible.
+ *
+ * Artist-authored docs are deliberately absent from this map: they are governed
+ * by their own frontmatter, which the artist controls.
+ */
+export const SYSTEM_CONTEXT_DOC_DELIVERY: Readonly<Record<string, {
+  delivery: ContextDocDelivery;
+  alwaysFor?: readonly string[];
+}>> = {
+  // Who the artist is, and how they sound. No agent should have to ask.
+  'artist-profile': { delivery: 'always' },
+  'artist-voice': { delivery: 'always' },
+  // What the current campaign is for.
+  'mission-brief': { delivery: 'always' },
+  // Brand DNA: in front of the agents that make audience-facing artifacts,
+  // readable by everyone else.
+  'artist-branding': { delivery: 'on-demand', alwaysFor: ARTIST_BRANDING_ALWAYS_AGENT_SLUGS },
+  // A contact library is a lookup surface, never prompt furniture.
+  'artist-network': { delivery: 'on-demand' },
+};
+
 export type ContextDocParseWarningCode =
   | 'invalid-agents'
   | 'invalid-enabled'
   | 'invalid-delivery'
+  | 'invalid-delivery-always-for'
   | 'invalid-private'
   | 'invalid-status'
   | 'invalid-priority'

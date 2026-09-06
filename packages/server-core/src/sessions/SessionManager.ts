@@ -242,6 +242,13 @@ import {
   type UpdateMemoryInput,
 } from '@craft-agent/shared/memory'
 import {
+  appendSessionLogEntry,
+  buildSessionLogEntry,
+  listSessionLogEntries,
+  searchSessionLogEntries,
+  type SessionLogEntry,
+} from '@craft-agent/shared/sessions-log'
+import {
   buildSharedIntelDocs,
   buildSignalIntelCandidates,
   buildYouTubeIntelCandidates,
@@ -621,6 +628,20 @@ async function loadAgentMemoryEntries(agentSlug: string): Promise<WorkflowMemory
   }
 }
 
+/**
+ * Recent sessions for this agent, newest first. A damaged or unreadable log
+ * costs the agent its "where we left off" note; it must not stop a session from
+ * starting.
+ */
+function loadRecentSessionEntries(agentSlug: string): SessionLogEntry[] {
+  try {
+    return listSessionLogEntries(agentSlug)
+  } catch (error) {
+    sessionLog.warn(`[sessions-log] Failed to load recent sessions for ${agentSlug}:`, error)
+    return []
+  }
+}
+
 async function mutateMemory(
   operation: 'save' | 'update' | 'delete',
   scope: MemoryScope,
@@ -643,6 +664,11 @@ async function mutateMemory(
       type,
       body,
       expires: typeof input.expires === 'string' ? input.expires : undefined,
+      // Only knowable at write time — nothing later can reconstruct which
+      // workspace the agent was standing in when it learned this.
+      workspaceScope: input.workspaceScope as SaveMemoryInput['workspaceScope'],
+      workspaceId: typeof input.workspaceId === 'string' ? input.workspaceId : undefined,
+      workspaceLabel: typeof input.workspaceLabel === 'string' ? input.workspaceLabel : undefined,
       event,
     } satisfies SaveMemoryInput)
     return { ok: true, scope, name: saved.name, file: undefined }
@@ -3017,7 +3043,13 @@ export class SessionManager implements ISessionManager {
       usableSources,
       contextDocs,
       agentCatalog,
-      { userMemoryEntries, agentMemoryEntries, artistWorkspaceScope: ws.artistWorkspaceScope },
+      {
+        userMemoryEntries,
+        agentMemoryEntries,
+        artistWorkspaceScope: ws.artistWorkspaceScope,
+        currentWorkspaceId: ws.id,
+        recentSessions: loadRecentSessionEntries(agent.slug),
+      },
     )
     const managerBriefReceipt = managerBriefReceiptFromDocs(contextDocs)
     return {
@@ -9027,7 +9059,17 @@ user a clickable link to where the thing now lives.`
             return { ok: false, scope, name: input.name, error: directUserMemoryPolicyError(managed.spawnedFromAgent) }
           }
           const agentSlug = scope === 'agent' ? managed.spawnedFromAgent?.agentSlug : undefined
-          const result = await mutateMemory('save', scope, { ...input }, agentSlug, {
+          const result = await mutateMemory('save', scope, {
+            ...input,
+            // USER.md is the cross-agent, career-wide layer by definition, so a
+            // campaign stamp there would be misleading. Only agent memory,
+            // which is where release-specific facts land, carries provenance.
+            ...(scope === 'agent' ? {
+              workspaceScope: managed.workspace.artistWorkspaceScope,
+              workspaceId: managed.workspace.id,
+              workspaceLabel: managed.workspace.name,
+            } : {}),
+          }, agentSlug, {
             source: 'agent_tool',
             runId: managed.id,
             actor: managed.spawnedFromAgent?.agentSlug ?? 'session',
@@ -9065,6 +9107,35 @@ user a clickable link to where the thing now lives.`
         },
         recallMemoryFn: async (input) => {
           return recallSessionMemory(input, managed.id, managed.spawnedFromAgent?.agentSlug)
+        },
+        recallSessionFn: async (input) => {
+          const agentSlug = managed.spawnedFromAgent?.agentSlug
+          // The log is per agent, so a session with no agent has no history of
+          // its own to search.
+          if (!agentSlug) {
+            return { ok: false, error: 'This session has no agent, so it has no session history.' }
+          }
+          try {
+            const entries = listSessionLogEntries(agentSlug)
+            const matches = searchSessionLogEntries(entries, input.query ?? '', input.limit ?? 10)
+            return {
+              ok: true,
+              ...(input.query ? { query: input.query } : {}),
+              results: matches.map(({ entry }) => ({
+                sessionId: entry.sessionId,
+                date: entry.date,
+                summary: entry.summary,
+                ...(entry.turnCount != null ? { turnCount: entry.turnCount } : {}),
+                ...(entry.durationMinutes != null ? { durationMinutes: entry.durationMinutes } : {}),
+                ...(entry.outcome ? { outcome: entry.outcome } : {}),
+                ...(entry.topics?.length ? { topics: entry.topics } : {}),
+                ...(entry.nextAction ? { nextAction: entry.nextAction } : {}),
+                ...(entry.workspaceLabel ? { workspaceLabel: entry.workspaceLabel } : {}),
+              })),
+            }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
         },
         createOutputFn: async (input) => {
           const workflow = managed.launchReceipt?.workflow
@@ -11376,6 +11447,42 @@ user a clickable link to where the thing now lives.`
     return undefined
   }
 
+  /**
+   * Keep this session's `SESSIONS.md` entry current.
+   *
+   * Runs after every completed turn rather than at some "session end", because
+   * a persistent session has no reliable end and `appendSessionLogEntry`
+   * replaces by session id — so re-recording keeps one always-current entry
+   * instead of accumulating duplicates. Costs no model call: the summary is the
+   * title the app already generated.
+   *
+   * Failure here must never disturb the conversation. A missing log line is an
+   * inconvenience; a turn that errors because of one is a bug.
+   */
+  private recordSessionLogEntry(managed: ManagedSession): void {
+    const agentSlug = managed.spawnedFromAgent?.agentSlug
+    // The log is per agent. A plain chat session has no agent to file it under.
+    if (!agentSlug) return
+    if (managed.hidden || managed.systemPromptPreset === 'mini') return
+
+    try {
+      const entry = buildSessionLogEntry({
+        sessionId: managed.id,
+        title: managed.name,
+        messages: managed.messages,
+        workspaceId: managed.workspace.id,
+        workspaceLabel: managed.workspace.name,
+        workspaceScope: managed.workspace.artistWorkspaceScope,
+      })
+      if (!entry) return
+      appendSessionLogEntry(agentSlug, entry)
+    } catch (error) {
+      // Includes the deliberate refusal to overwrite a log that failed to
+      // parse, which the artist has to repair by hand.
+      sessionLog.warn(`[sessions-log] Could not record session ${managed.id} for ${agentSlug}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
   private scheduleMemorySidecarReview(managed: ManagedSession, finalMessageId: string | undefined): void {
     if (!finalMessageId) return
     if (!managed.agent) return
@@ -11409,6 +11516,11 @@ user a clickable link to where the thing now lives.`
       this.broadcastMemoryChanged(result.scope, result.scope === 'agent' ? result.agentSlug ?? null : null)
       if (result.applied) {
         sessionLog.info(`[memory] Sidecar auto-saved ${result.scope} memory ${result.name ?? '(unknown)'} for session ${managed.id}`)
+      } else if (result.applyError) {
+        // An auto-save that could not be written — usually a memory file that
+        // needs hand repair. Say so, rather than letting it surface only when
+        // the queued item fails again on approval.
+        sessionLog.warn(`[memory] Sidecar could not auto-save for session ${managed.id}; queued review item ${result.itemId ?? '(unknown)'} instead: ${result.applyError}`)
       } else {
         sessionLog.info(`[memory] Sidecar queued review item ${result.itemId ?? '(unknown)'} for session ${managed.id}`)
       }
@@ -13239,6 +13351,7 @@ user a clickable link to where the thing now lives.`
 
       if (reason === 'complete' && didReceiveNewFinalMessage) {
         this.scheduleMemorySidecarReview(managed, currentFinalMessageId)
+        this.recordSessionLogEntry(managed)
       }
 
       let reservation: ChatGoalReservation | undefined

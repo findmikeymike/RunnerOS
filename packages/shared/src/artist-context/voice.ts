@@ -34,6 +34,9 @@ export const artistVoiceDoc = defineArtistTextDoc<ArtistVoice>({
   label: 'Artist Voice',
   description: 'How the artist talks, writes captions, and wants social copy to sound.',
   routing: { mode: 'targeted', agents: [...ARTIST_VOICE_TARGET_AGENT_SLUGS] },
+  // How the artist sounds. Always injected — but routing already narrows this to
+  // the agents that write in their voice, so "always" means always for them.
+  delivery: 'always',
   fields: [
     'summary',
     'speakingStyle',

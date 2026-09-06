@@ -10,6 +10,23 @@ export const MEMORY_FILE = 'MEMORY.md';
 export const USER_MEMORY_FILE = 'USER.md';
 export const DELETED_MEMORIES_FILE = '.deleted-memories.json';
 export const MEMORY_EVENTS_FILE = '.memory-events.jsonl';
+
+/**
+ * Previous generation of the event log, kept so rotation bounds the file
+ * without throwing away the audit trail.
+ */
+export const MEMORY_EVENTS_ROTATED_FILE = '.memory-events.1.jsonl';
+
+/**
+ * Size at which the active event log is rotated.
+ *
+ * This log is the busiest writer in the memory system: one line per recalled
+ * entry per recall call, plus one per injected entry per session launch. It was
+ * append-only with no pruning, so it grew without limit for the lifetime of an
+ * install. Rotating at 1 MB and keeping a single previous generation bounds it
+ * at roughly 2 MB per scope while preserving recent history.
+ */
+export const MEMORY_EVENTS_MAX_BYTES = 1_000_000;
 export const MEMORY_REVIEW_QUEUE_FILE = '.memory-review-queue.json';
 export const MEMORY_SCHEMA_VERSION = 1;
 
@@ -29,12 +46,33 @@ export interface MemoryFileEnvelope {
   agent?: string;
 }
 
+/**
+ * Which kind of workspace a memory was written in.
+ *
+ * Memory is global per agent, so without this a fact learned inside one
+ * campaign reads in every other campaign — and in HQ — as though it were a
+ * standing truth about the artist. "We lead this rollout with the B-side" is
+ * not "this is how we release records".
+ */
+export type MemoryWorkspaceScope = 'hq' | 'campaign' | 'lab' | 'general';
+
 export interface MemoryEntry {
   name: string;
   type: MemoryEntryType;
   created: string;
   updated?: string;
   expires?: string;
+  /**
+   * Where this was learned. Absent on entries written before provenance
+   * existed, which are treated as HQ — what they effectively were.
+   *
+   * Deliberately not a nested object: the file is meant to be hand-edited, and
+   * every other field in this frontmatter is a flat scalar.
+   */
+  workspaceScope?: MemoryWorkspaceScope;
+  workspaceId?: string;
+  /** Human-readable workspace name, for the rendered provenance hint. */
+  workspaceLabel?: string;
   body: string;
 }
 
@@ -65,6 +103,10 @@ export interface SaveMemoryInput {
   type: MemoryEntryType;
   body: string;
   expires?: string;
+  /** Where this is being learned. Stamped by the caller that owns the session. */
+  workspaceScope?: MemoryWorkspaceScope;
+  workspaceId?: string;
+  workspaceLabel?: string;
   /**
    * Bypass the tombstone block. Defaults to false. Set true ONLY for
    * user-initiated saves (UI manual add); agent tool calls must leave it

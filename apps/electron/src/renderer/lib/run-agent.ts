@@ -2,10 +2,31 @@ import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { MemoryEntry, LoadedMemoryFile } from '@craft-agent/shared/memory/types'
+import type { SessionLogEntry } from '@craft-agent/shared/sessions-log'
 import { selectActiveMemoryEntries } from '@craft-agent/shared/memory/render'
 import { resolveAgentReferences, hasMissingReferences, describeMissingReferences } from '@/lib/agent-references'
 import { composeAgentSystemPrompt, managerBriefReceiptFromDocs } from '@/lib/compose-agent-prompt'
 import type { AgentDefinitionDTO, ContextDocDTO, CreateSessionOptions, Session, LoadedSkill, LoadedSource } from '../../shared/types'
+
+/**
+ * Look up the Artist OS workspace kind for a workspace id.
+ *
+ * Returns undefined — never throws — when the lookup fails or the workspace has
+ * no scope, so prompt composition falls back to its heuristic instead of the
+ * launch failing over a piece of metadata.
+ */
+export async function resolveArtistWorkspaceScope(
+  workspaceId: string,
+  getWorkspaces: () => Promise<Array<{ id: string; artistWorkspaceScope?: string }>> =
+    () => window.electronAPI.getWorkspaces(),
+): Promise<'hq' | 'campaign' | 'lab' | 'general' | undefined> {
+  try {
+    const scope = (await getWorkspaces()).find((workspace) => workspace.id === workspaceId)?.artistWorkspaceScope
+    return scope === 'hq' || scope === 'campaign' || scope === 'lab' || scope === 'general' ? scope : undefined
+  } catch {
+    return undefined
+  }
+}
 
 export async function ensureAgentDeclaredSkillsEnabled(params: {
   agent: AgentDefinitionDTO
@@ -58,6 +79,17 @@ export function buildAgentCreateSessionOptions(
     agentCatalog?: AgentDefinitionDTO[]
     userMemoryEntries?: MemoryEntry[]
     agentMemoryEntries?: MemoryEntry[]
+    recentSessions?: SessionLogEntry[]
+    currentWorkspaceId?: string
+    /**
+     * Which kind of Artist OS workspace this session runs in. The server path
+     * has always passed this; the chat path did not, and fell back to sniffing
+     * sentinel context docs to decide whether the asset contract applies. Once
+     * those docs went on-demand the sniff had nothing to fire on, so a
+     * chat-launched worker in a campaign silently lost the contract while a
+     * workflow-launched one kept it.
+     */
+    artistWorkspaceScope?: 'hq' | 'campaign' | 'lab' | 'general'
   },
 ): CreateSessionOptions {
   let skillSlugs = agent.metadata.skills ?? []
@@ -96,6 +128,9 @@ export function buildAgentCreateSessionOptions(
         {
           userMemoryEntries: context.userMemoryEntries,
           agentMemoryEntries: context.agentMemoryEntries,
+          artistWorkspaceScope: context.artistWorkspaceScope,
+          recentSessions: context.recentSessions,
+          currentWorkspaceId: context.currentWorkspaceId,
         },
       )
     : agent.systemPrompt
@@ -239,6 +274,7 @@ export async function openAgentSessionComposer(params: {
     loadUserMemoryEntries(),
     loadAgentMemoryEntries(params.agent.slug),
   ])
+  const recentSessions = await loadRecentSessionEntries(params.agent.slug)
 
   // Surface a one-off toast if the agent declares slugs that don't resolve in
   // this workspace. The session still spawns without them; the warning is so
@@ -253,13 +289,18 @@ export async function openAgentSessionComposer(params: {
     }
   }
 
+  // Resolve the workspace kind so the composed prompt matches what the server
+  // builds for the same agent. A lookup failure degrades to the old heuristic
+  // rather than blocking the launch.
+  const artistWorkspaceScope = await resolveArtistWorkspaceScope(params.workspaceId)
+
   // When live skills/sources are available, pass them through so the session
   // gets a composed system prompt (persona body + bundle footer) and any
   // missing slugs are dropped from agentSkillSlugs/enabledSourceSlugs.
   const context = launchSkills && params.sources
-    ? { skills: launchSkills, sources: params.sources, contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries }
-    : contextDocs.length > 0 || userMemoryEntries.length > 0 || agentMemoryEntries.length > 0 || (params.agentCatalog?.length ?? 0) > 0
-      ? { skills: [], sources: [], contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries }
+    ? { skills: launchSkills, sources: params.sources, contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries, artistWorkspaceScope, recentSessions, currentWorkspaceId: params.workspaceId }
+    : contextDocs.length > 0 || userMemoryEntries.length > 0 || agentMemoryEntries.length > 0 || (params.agentCatalog?.length ?? 0) > 0 || artistWorkspaceScope || recentSessions.length > 0
+      ? { skills: [], sources: [], contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries, artistWorkspaceScope, recentSessions, currentWorkspaceId: params.workspaceId }
       : undefined
 
   const session = await params.onCreateSession(
@@ -309,6 +350,21 @@ export async function loadUserMemoryEntries(): Promise<MemoryEntry[]> {
     return normalizeMemoryEntries(result)
   } catch (err) {
     console.warn('[memory] failed to load USER.md; agent will run without user memory:', err)
+    return []
+  }
+}
+
+/**
+ * This agent's recent sessions for the "where we left off" prompt section.
+ *
+ * A failure here is never worth blocking a launch: the agent simply starts
+ * without knowing what it did last, exactly as it did before the log existed.
+ */
+export async function loadRecentSessionEntries(agentSlug: string): Promise<SessionLogEntry[]> {
+  try {
+    return (await window.electronAPI.listAgentSessions?.(agentSlug)) ?? []
+  } catch (err) {
+    console.warn(`[sessions-log] failed to load SESSIONS.md for "${agentSlug}":`, err)
     return []
   }
 }

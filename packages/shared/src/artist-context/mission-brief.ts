@@ -267,6 +267,8 @@ export function missionBriefMetadata(brief: MissionBrief): ContextDocMetadata {
     name: brief.title ? `Campaign Brief: ${brief.title}` : 'Campaign Brief',
     description: 'Current creative campaign context for command center and workers.',
     routing: { mode: 'broadcast' },
+    // What this campaign is for. Always injected inside the campaign that owns it.
+    delivery: 'always',
     enabled: true,
     status: brief.status === 'empty' ? undefined : 'active',
     priority: brief.status === 'full' ? 'high' : 'normal',

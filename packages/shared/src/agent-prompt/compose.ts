@@ -44,6 +44,8 @@ import {
 } from '../hq-state/index.ts';
 import { buildMemorySectionsText } from '../memory/render.ts';
 import type { MemoryEntry } from '../memory/types.ts';
+import { buildRecentSessionsSection } from '../sessions-log/render.ts';
+import type { SessionLogEntry } from '../sessions-log/types.ts';
 import { buildSharedIntelPromptSection, isSharedIntelContextSlug } from '../shared-intel/index.ts';
 
 const SECTION_DELIMITER = '\n\n---\n\n';
@@ -110,6 +112,19 @@ export interface AgentPromptMemoryOptions {
   userMemoryEntries?: MemoryEntry[];
   agentMemoryEntries?: MemoryEntry[];
   artistWorkspaceScope?: 'hq' | 'campaign' | 'lab' | 'general';
+  /**
+   * This agent's recent sessions, newest first. Only the first few are
+   * rendered; the rest stay searchable. Memory holds durable facts, this holds
+   * what actually happened — the difference between an agent that knows the
+   * artist and one that knows where they left off.
+   */
+  recentSessions?: SessionLogEntry[];
+  /**
+   * Workspace this session runs in. Lets memory learned in another campaign
+   * carry a provenance hint, and lets the injection budget prefer facts that
+   * still apply here.
+   */
+  currentWorkspaceId?: string;
 }
 
 /**
@@ -137,7 +152,9 @@ export function composeAgentSystemPrompt(
   const memorySection = buildMemorySection(
     memory.userMemoryEntries ?? [],
     memory.agentMemoryEntries ?? [],
+    memory.currentWorkspaceId,
   );
+  const recentSessionsSection = buildRecentSessionsSection(memory.recentSessions ?? []);
   const agentCatalogSection = buildAgentCatalogSection(agentCatalog);
   const canvasGuidanceSection = buildCanvasGuidanceSection(agent);
   const footer = buildAgentBundleFooter(agent, skills, sources);
@@ -148,6 +165,9 @@ export function composeAgentSystemPrompt(
   if (contextSection) parts.push(contextSection);
   if (sharedIntelSection) parts.push(sharedIntelSection);
   if (memorySection) parts.push(memorySection);
+  // After memory: durable facts are the stronger context, and recent sessions
+  // read as the "where we left off" note that follows them.
+  if (recentSessionsSection) parts.push(recentSessionsSection);
   if (agentCatalogSection) parts.push(agentCatalogSection);
   if (canvasGuidanceSection) parts.push(canvasGuidanceSection);
   if (footer) parts.push(footer);
@@ -204,8 +224,23 @@ export function buildAgentBundleFooter(
 }
 
 /**
+ * Ceiling on the always-injected workspace context block.
+ *
+ * Delivery policy already keeps this small — only docs that opted in reach this
+ * function at all — so this is a backstop against one doc growing without
+ * anyone noticing, not the primary control. Generous on purpose: it should
+ * essentially never fire, and if it does, that is a signal the always-on set
+ * needs revisiting rather than a routine trim.
+ */
+export const WORKSPACE_CONTEXT_MAX_CHARS = 24_000;
+
+/**
  * Renders each context doc as a `## Name` block. Shared-intel docs are excluded
  * here because they get their own section with their own trust framing.
+ *
+ * Over budget, whole docs are dropped and named. Truncating a doc mid-sentence
+ * would leave an agent confidently acting on half a brief; being told a doc was
+ * withheld lets it fetch the doc with `get_workspace_context` instead.
  */
 export function buildWorkspaceContextSection(docs: PromptContextDoc[]): string {
   const usable = docs.filter(
@@ -217,11 +252,26 @@ export function buildWorkspaceContextSection(docs: PromptContextDoc[]): string {
       && doc.body.trim().length > 0,
   );
   if (usable.length === 0) return '';
-  const blocks = usable.map((doc) => {
+
+  const blocks: string[] = [];
+  const dropped: string[] = [];
+  let used = 0;
+  for (const doc of usable) {
     const heading = doc.metadata.name.trim() || doc.slug;
-    return `## ${heading}\n\n${doc.body.trim()}`;
-  });
-  return `${WORKSPACE_CONTEXT_HEADER}\n\n${blocks.join('\n\n')}`;
+    const block = `## ${heading}\n\n${doc.body.trim()}`;
+    // Always admit the first doc: an empty section would hide that context exists.
+    if (blocks.length > 0 && used + block.length > WORKSPACE_CONTEXT_MAX_CHARS) {
+      dropped.push(doc.slug);
+      continue;
+    }
+    blocks.push(block);
+    used += block.length;
+  }
+
+  const note = dropped.length > 0
+    ? `\n\n[${dropped.length} context ${dropped.length === 1 ? 'doc was' : 'docs were'} withheld to keep this prompt bounded: ${dropped.join(', ')}. Read ${dropped.length === 1 ? 'it' : 'them'} with get_workspace_context.]`
+    : '';
+  return `${WORKSPACE_CONTEXT_HEADER}\n\n${blocks.join('\n\n')}${note}`;
 }
 
 /** Converts the one derived HQ document into one bounded HNIC-only prompt section. */
@@ -328,8 +378,9 @@ export function buildAgentCatalogSection(agents: AgentCatalogEntry[]): string {
 export function buildMemorySection(
   userEntries: MemoryEntry[],
   agentEntries: MemoryEntry[],
+  currentWorkspaceId?: string,
 ): string {
-  return buildMemorySectionsText(userEntries, agentEntries);
+  return buildMemorySectionsText(userEntries, agentEntries, { currentWorkspaceId });
 }
 
 function collectSkillBullets(declaredSlugs: string[], skills: PromptSkill[]): string[] {

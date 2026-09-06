@@ -255,6 +255,7 @@ export {
   handleUpdateMemory,
   handleForgetMemory,
   handleRecallMemory,
+  handleRecallSession,
 } from './memory.ts';
 
 // Outputs
@@ -307,6 +308,9 @@ export type {
   UpdateMemoryToolInput,
   ForgetMemoryToolInput,
   RecallMemoryToolInput,
+  RecallSessionToolInput,
+  RecallSessionResult,
+  RecalledSession,
   MemoryMutationResult,
   RecalledMemoryEntry,
   RecallMemoryResult,

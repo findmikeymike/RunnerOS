@@ -10,11 +10,13 @@ import {
   buildAgentCatalogSection,
   buildManagerBriefPromptSectionFromDocs,
   buildWorkspaceContextSection,
+  WORKSPACE_CONTEXT_MAX_CHARS,
   composeAgentSystemPrompt,
   managerBriefReceiptFromDocs,
   type PromptAgent,
   type PromptContextDoc,
 } from './compose.ts';
+import type { SessionLogEntry } from '../sessions-log/types.ts';
 import { buildCampaignManagerBrief, buildHqStateContextDoc, campaignStateContextMetadata, serializeCampaignManagerBrief, type ManagerBriefV1 } from '../hq-state/index.ts';
 
 const agent = (overrides: Partial<PromptAgent['metadata']> = {}, systemPrompt = 'Persona.'): PromptAgent => ({
@@ -134,6 +136,25 @@ describe('composeAgentSystemPrompt', () => {
   });
 
   /**
+   * Regression. Once context docs went on-demand, a worker's injectable doc
+   * list holds only opt-in docs — no hq-state-of-play, mission-assets, or
+   * release-kit sentinel for the heuristic to fire on. A launch path that does
+   * not pass the workspace scope explicitly therefore drops the asset contract
+   * for exactly the agents that most need it. The server path always passed
+   * scope; the chat path now does too. This pins the failure so it cannot
+   * quietly return.
+   */
+  test('a campaign worker keeps the asset contract only when scope is passed explicitly', () => {
+    const injectable = [doc('artist-profile', 'Artist Profile', 'who the artist is')];
+
+    const withoutScope = composeAgentSystemPrompt(agent(), [], [], injectable, [], {});
+    const withScope = composeAgentSystemPrompt(agent(), [], [], injectable, [], { artistWorkspaceScope: 'campaign' });
+
+    expect(withoutScope).not.toContain(ARTIST_ASSET_CONTRACT_HEADER);
+    expect(withScope).toContain(ARTIST_ASSET_CONTRACT_HEADER);
+  });
+
+  /**
    * The server path used to omit this section, so an agent spawned by a
    * workflow, pulse, or `message_agent` delegation could be delegated to but
    * had no catalog to delegate onward with.
@@ -235,7 +256,77 @@ describe('composeAgentSystemPrompt', () => {
   });
 });
 
+describe('recent sessions in the composed prompt', () => {
+  const session = (
+    sessionId: string,
+    date: string,
+    summary: string,
+    extra: Partial<SessionLogEntry> = {},
+  ): SessionLogEntry => ({ sessionId, date, summary, ...extra });
+
+  test('is absent when the agent has no history, so a new agent reads exactly as before', () => {
+    const result = composeAgentSystemPrompt(agent(), [], [], [], [], { recentSessions: [] });
+    expect(result).not.toContain('Recent sessions');
+  });
+
+  test('gives the agent where it left off, with the next step it intended', () => {
+    const result = composeAgentSystemPrompt(agent(), [], [], [], [], {
+      recentSessions: [
+        session('s3', '2026-09-05', 'Settled the release date.', { durationMinutes: 107, workspaceLabel: 'Neon Nights', nextAction: 'Send the announce draft.' }),
+        session('s2', '2026-09-03', 'Reviewed playlist pitches.'),
+      ],
+    });
+
+    expect(result).toContain('Recent sessions');
+    expect(result).toContain('Settled the release date.');
+    expect(result).toContain('Neon Nights');
+    expect(result).toContain('Send the announce draft.');
+  });
+
+  test('stays bounded and points at the tool for the rest', () => {
+    const many = Array.from({ length: 12 }, (_, i) => session(`s${i}`, '2026-09-01', `Session ${i}.`));
+    const result = composeAgentSystemPrompt(agent(), [], [], [], [], { recentSessions: many });
+
+    expect(result).toContain('9 older sessions are not shown');
+    expect(result).toContain('recall_session');
+    expect(result).not.toContain('Session 11.');
+  });
+});
+
 describe('buildWorkspaceContextSection', () => {
+  test('stays under the budget by dropping whole docs and naming them', () => {
+    const big = 'z'.repeat(WORKSPACE_CONTEXT_MAX_CHARS);
+    const section = buildWorkspaceContextSection([
+      doc('artist-profile', 'Artist Profile', big),
+      doc('mission-brief', 'Mission Brief', big),
+    ]);
+
+    expect(section).toContain('## Artist Profile');
+    expect(section).not.toContain('## Mission Brief');
+    expect(section).toContain('1 context doc was withheld');
+    expect(section).toContain('mission-brief');
+    expect(section).toContain('get_workspace_context');
+  });
+
+  test('never truncates a doc body mid-sentence', () => {
+    const body = `${'a'.repeat(WORKSPACE_CONTEXT_MAX_CHARS)}TAIL`;
+    const section = buildWorkspaceContextSection([doc('artist-profile', 'Artist Profile', body)]);
+
+    // The single admitted doc is whole, even though it alone exceeds the budget.
+    expect(section).toContain('TAIL');
+  });
+
+  test('says nothing about omissions when everything fits', () => {
+    const section = buildWorkspaceContextSection([
+      doc('artist-profile', 'Artist Profile', 'short'),
+      doc('mission-brief', 'Mission Brief', 'also short'),
+    ]);
+
+    expect(section).toContain('## Artist Profile');
+    expect(section).toContain('## Mission Brief');
+    expect(section).not.toContain('withheld');
+  });
+
   test('skips disabled, empty, and shared-intel docs', () => {
     const section = buildWorkspaceContextSection([
       doc('goals', 'Goals', 'Ship it.'),

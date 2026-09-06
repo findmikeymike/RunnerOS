@@ -29,6 +29,7 @@ import {
   CONTEXT_DOC_GOAL_STATUSES,
   CONTEXT_DOC_SLUG_REGEX,
   CONTEXT_FILE,
+  SYSTEM_CONTEXT_DOC_DELIVERY,
   type ContextDocGoalPriority,
   type ContextDocGoalStatus,
   type ContextDocDelivery,
@@ -236,6 +237,47 @@ function coerceDelivery(
   return 'on-demand';
 }
 
+function coerceDeliveryAlwaysFor(
+  value: unknown,
+  warnings: ContextDocParseWarning[],
+): string[] | undefined {
+  if (value == null) return undefined;
+  const raw = typeof value === 'string' ? [value] : value;
+  if (!Array.isArray(raw)) {
+    warnings.push(
+      warning(
+        'deliveryAlwaysFor',
+        'invalid-delivery-always-for',
+        'deliveryAlwaysFor must be an agent slug or a list of agent slugs; ignoring it.',
+      ),
+    );
+    return undefined;
+  }
+
+  const slugs: string[] = [];
+  let ignored = 0;
+  for (const entry of raw) {
+    const slug = typeof entry === 'string' ? normalizeAgentSlug(entry) : '';
+    if (!slug) {
+      ignored += 1;
+      continue;
+    }
+    if (!slugs.includes(slug)) slugs.push(slug);
+  }
+
+  if (ignored > 0) {
+    warnings.push(
+      warning(
+        'deliveryAlwaysFor',
+        'invalid-delivery-always-for',
+        `deliveryAlwaysFor contained ${ignored} entr${ignored === 1 ? 'y' : 'ies'} that were ignored.`,
+      ),
+    );
+  }
+
+  return slugs.length > 0 ? slugs : undefined;
+}
+
 function coercePrivate(value: unknown, warnings: ContextDocParseWarning[]): boolean | undefined {
   if (value == null) return undefined;
   if (typeof value === 'boolean') return value;
@@ -271,6 +313,7 @@ export function parseContextFile(
   const routing = coerceRouting(data.agents, warnings);
   const enabled = coerceEnabled(data.enabled, warnings);
   const delivery = coerceDelivery(data.delivery, warnings);
+  const deliveryAlwaysFor = coerceDeliveryAlwaysFor(data.deliveryAlwaysFor, warnings);
   const isPrivate = coercePrivate(data.private, warnings);
   const status = coerceGoalStatus(data.status, warnings);
   const priority = coerceGoalPriority(data.priority, warnings);
@@ -278,6 +321,7 @@ export function parseContextFile(
 
   const metadata: ContextDocMetadata = { name, description, routing, enabled };
   if (delivery) metadata.delivery = delivery;
+  if (deliveryAlwaysFor) metadata.deliveryAlwaysFor = deliveryAlwaysFor;
   if (isPrivate != null) metadata.private = isPrivate;
   if (status) metadata.status = status;
   if (priority) metadata.priority = priority;
@@ -298,6 +342,7 @@ export function serializeContextDoc(metadata: ContextDocMetadata, body: string):
   // Only serialize enabled when false; default-true stays implicit and clean.
   if (!metadata.enabled) data.enabled = false;
   if (metadata.delivery) data.delivery = metadata.delivery;
+  if (metadata.deliveryAlwaysFor?.length) data.deliveryAlwaysFor = metadata.deliveryAlwaysFor;
   if (metadata.private) data.private = true;
   if (metadata.status) data.status = metadata.status;
   if (metadata.priority) data.priority = metadata.priority;
@@ -430,8 +475,19 @@ export function canAgentAccessContextDoc(
 /**
  * Whether a context doc should be injected into an agent prompt.
  *
- * Missing delivery preserves legacy `always` behavior for regular/ad-hoc
- * agents, but defaults to `on-demand` for Concierge to prevent context bloat.
+ * `on-demand` is the default for every agent. A doc is auto-injected only when
+ * it says so — either `delivery: always` for the whole roster, or by naming the
+ * agent in `deliveryAlwaysFor`.
+ *
+ * This used to default to `always` for everyone except the Concierge, which was
+ * exempted "to prevent context bloat". The bloat was not Concierge-specific: a
+ * worker in a populated workspace received every context doc in full on every
+ * turn — measured at ~18,900 tokens in a lightly-used development profile, with
+ * a single generated file manifest accounting for ~10,900 of it. Docs that are
+ * no longer injected remain fully reachable through `list_workspace_context` /
+ * `get_workspace_context`, which every agent can call without approval.
+ *
+ * See docs/memory/07-memory-and-context-upgrade-spec.md, Slice A.
  */
 export function shouldInjectContextDoc(
   doc: LoadedContextDoc,
@@ -439,10 +495,14 @@ export function shouldInjectContextDoc(
 ): boolean {
   if (!canAgentAccessContextDoc(doc, agentSlug)) return false;
   const normalizedAgentSlug = normalizeAgentSlug(agentSlug);
-  const delivery = doc.slug === 'artist-network'
-    ? 'on-demand'
-    : doc.metadata.delivery
-      ?? (normalizedAgentSlug === CONCIERGE_SLUG ? 'on-demand' : 'always');
+
+  // Product-generated docs answer to the policy, not to their own frontmatter,
+  // which may predate it. See SYSTEM_CONTEXT_DOC_DELIVERY.
+  const systemPolicy = SYSTEM_CONTEXT_DOC_DELIVERY[doc.slug];
+  const delivery = systemPolicy?.delivery ?? doc.metadata.delivery;
+  const alwaysFor = systemPolicy?.alwaysFor ?? doc.metadata.deliveryAlwaysFor;
+
+  if (normalizedAgentSlug && alwaysFor?.includes(normalizedAgentSlug)) return true;
   return delivery === 'always';
 }
 

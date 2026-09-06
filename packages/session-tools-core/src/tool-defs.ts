@@ -101,6 +101,7 @@ import {
   handleUpdateMemory,
   handleForgetMemory,
   handleRecallMemory,
+  handleRecallSession,
 } from './handlers/memory.ts';
 import { handleCreateOutput, handlePromoteOutputToFinal } from './handlers/outputs.ts';
 import { handleGetSocialVariantSet, handleRecordSocialVariantResult, handleListUsableSocialVariants } from './handlers/social-variants.ts';
@@ -1033,6 +1034,12 @@ export const RecallMemorySchema = z.object({
   query: z.string().min(1).describe('What to look for in durable memory. Ask a concise semantic question or keyword phrase.'),
   scopes: z.array(MemoryScopeSchema).min(1).optional().describe('Optional scopes to search. Defaults to USER.md plus this agent MEMORY.md when available.'),
   limit: z.number().int().min(1).max(25).optional().describe('Maximum matches to return. Defaults to 8, maximum 25.'),
+  full: z.boolean().optional().describe('Return whole entry bodies instead of excerpts. Defaults to false; ask for it only when an excerpt was not enough.'),
+});
+
+export const RecallSessionSchema = z.object({
+  query: z.string().optional().describe('What to look for across past sessions. Omit to get the most recent ones.'),
+  limit: z.number().int().min(1).max(25).optional().describe('Maximum sessions to return. Defaults to 10, maximum 25.'),
 });
 
 const OutputKindSchema = z.enum([
@@ -1961,11 +1968,23 @@ Use this when the user asks you to forget something, when a memory is wrong and 
 
 Do NOT use this for normal short-term context cleanup; only durable memory entries should be forgotten.`,
 
-  recall_memory: `Search durable memory without bloating the prompt.
+  recall_memory: `Search durable memory for entries that are not already in your prompt.
 
 Use this when the current task may depend on prior user preferences, agent feedback, project state, or references that are not already visible in the prompt. This is read-only.
 
+Returns matching excerpts. Pass \`full: true\` only when an excerpt was not enough — whole bodies are much larger, and asking for them by reflex costs the prompt budget this tool exists to protect.
+
+Also use this when a memory section says older entries were not shown: they are still here and searchable.
+
 Defaults to USER.md plus this agent's MEMORY.md when the session has an active agent. Narrow \`scopes\` only when you explicitly need user-wide or agent-only memory.`,
+
+  recall_session: `Search your own past sessions with this user.
+
+Use this when they refer to earlier work — "what did we decide about the single", "pick up where we left off", "when did we last touch the merch drop". Omit \`query\` to see the most recent sessions.
+
+This is history, not facts. Durable preferences and standing instructions live in memory: use \`recall_memory\` for those. Use this when the question is about what happened and when.
+
+Your prompt already lists the last few sessions; reach for this when you need older ones, or when a memory section said entries were not shown.`,
 
   create_output: `Publish a first-class user-facing output from this session.
 
@@ -2280,6 +2299,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'update_memory', description: TOOL_DESCRIPTIONS.update_memory, inputSchema: UpdateMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdateMemory },
   { name: 'forget_memory', description: TOOL_DESCRIPTIONS.forget_memory, inputSchema: ForgetMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleForgetMemory },
   { name: 'recall_memory', description: TOOL_DESCRIPTIONS.recall_memory, inputSchema: RecallMemorySchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleRecallMemory },
+  { name: 'recall_session', description: TOOL_DESCRIPTIONS.recall_session, inputSchema: RecallSessionSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleRecallSession },
   { name: 'create_output', description: TOOL_DESCRIPTIONS.create_output, inputSchema: CreateOutputSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateOutput },
   { name: 'get_social_variant_set', description: TOOL_DESCRIPTIONS.get_social_variant_set, inputSchema: GetSocialVariantSetSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetSocialVariantSet },
   { name: 'record_social_variant_result', description: TOOL_DESCRIPTIONS.record_social_variant_result, inputSchema: RecordSocialVariantResultSchema, executionMode: 'registry', safeMode: 'block', handler: handleRecordSocialVariantResult },

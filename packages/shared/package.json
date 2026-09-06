@@ -40,6 +40,7 @@
     "./artist-vault": "./src/artist-vault/index.ts",
     "./artist-context": "./src/artist-context/index.ts",
     "./agent-prompt": "./src/agent-prompt/index.ts",
+    "./sessions-log": "./src/sessions-log/index.ts",
     "./memory": "./src/memory/index.ts",
     "./memory/render": "./src/memory/render.ts",
     "./memory/types": "./src/memory/types.ts",
