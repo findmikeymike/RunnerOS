@@ -301,9 +301,10 @@ app has already run once.
 
 ## 8. Dependency advisories — what is fixed, and what is knowingly not
 
-Run `bun audit`. It reported 30 vulnerable packages on 2026-09-06; a pass that
-day took it to 10. Do not "fix" the remaining ten without reading this first,
-because most of them have already been looked at and rejected for a reason.
+Run `bun audit`. It reported 30 vulnerable packages on 2026-09-06, one of them
+critical. Two passes that day took it to 9, with no critical and nothing
+reachable that has an available fix. Do not "fix" the remaining nine without
+reading this first — every one has been looked at and rejected for a reason.
 
 **What the packaged app actually exposes.** `apps/electron/electron-builder.common.yml`
 excludes everything under `node_modules` and ships only bundled output plus a
@@ -320,12 +321,35 @@ silently ignored, and the vulnerable copy stayed on disk. Verify with
 the same major; forcing a consumer across a major is how you turn an advisory
 into an outage.
 
+### Two that needed more than a version bump
+
+**The critical one is gone.** `protobufjs` 6.8.8 came in through `libsignal`,
+which `@whiskeysockets/baileys` pulls straight from a GitHub ref that pins that
+exact version. A flat `protobufjs` override does not touch it — bun leaves an
+exactly-pinned nested copy alone, so the fix looks applied and is not; check the
+tree, not the manifest. What works is overriding `libsignal` itself to `^6.0.0`,
+the version published on npm, which depends on a patched protobuf. That is
+precisely what baileys 7 does. Its twelve exports are identical to the pinned
+build's, and protobuf encode/decode, ECDH agreement and signature verification
+were all exercised against it before landing.
+
+**`js-yaml` is still listed and that is expected.** `gray-matter` pins a v3
+parser, 4.0.3 is its latest release, and a flat override would drag our own v4
+usage back to an API that no longer exists. Instead `gray-matter` is handed an
+explicit engine backed by js-yaml 4, in
+`packages/shared/src/config/frontmatter.ts` and its twin in `session-tools-core`.
+The vulnerable copy stays installed because gray-matter requires it at module
+load, so `bun audit` keeps reporting it — but nothing routes through it. **Never
+import `gray-matter` directly**; a test in
+`packages/shared/src/config/__tests__/frontmatter.test.ts` fails if you do,
+because nothing else would notice.
+
 ### Accepted, with reasons
 
 | What | Why it stays |
 | --- | --- |
-| `protobufjs` 6.8.8 (critical), `music-metadata`, `file-type`, `uuid` | All reached only through `@whiskeysockets/baileys` → the WhatsApp worker. The only upstream fix is baileys 7, which is a release candidate. Revisit when 7.0.0 ships stable. |
-| `js-yaml` 3.14.2 (high) | `gray-matter` pins `^3.13.1` and 4.0.3 is its latest, so there is no upstream fix. A flat override would drag our own `js-yaml` 4 usage back to the v3 API. Fixing it properly means passing `gray-matter` a custom engine backed by our own js-yaml, in the four files that call `matter()`. |
+| `music-metadata`, `file-type`, `uuid` | Reached only through baileys → the WhatsApp worker. baileys 6 pins majors that no override can cross safely; baileys 7 moves to fixed versions but was still a release candidate. Revisit when 7.0.0 ships stable. |
+| `js-yaml` 3.14.2 | Installed but no longer executed. See above. |
 | `nanoid` 3.3.3 (excalidraw) | The advisory needs a non-integer or negative size argument; excalidraw calls `nanoid()` with none. An override would also drag a sibling package down a major. |
 | `brace-expansion`, `@xmldom/xmldom` | Build-time only. v1, v2 and v4 copies coexist, so no single override can satisfy them. |
 | `extract-zip` | No fixed version has been published. |

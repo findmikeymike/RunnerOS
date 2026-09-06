@@ -122,6 +122,14 @@ npm-style nested overrides and Yarn-style `resolutions` path keys — both were
 tried on 2026-09-06 and silently did nothing while looking like they worked.
 Always confirm with `bun audit` afterwards rather than trusting the entry.
 
+An override also will not touch a nested copy whose parent pins it to an exact
+version, or one that arrives through a git ref. Override the parent instead. In
+either case check the installed tree rather than trusting the manifest:
+
+```bash
+find node_modules -type d -name '<package>'
+```
+
 Only override inside the same major. Forcing a consumer across a major boundary
 is how an advisory becomes an outage.
 
@@ -163,15 +171,22 @@ Do not spend a day rediscovering these. Each one is written up properly in
   10-second timeout; a single album cover took 16.4 seconds through the real
   handler. Measure in a fresh process if you try again; a warm font cache will
   tell you everything is fine when it is not.
-- **The WhatsApp library chain** — carries the only critical advisory in the
-  tree, through `libsignal` and an old protobuf. The upstream fix is a major
-  version that was still a release candidate. Revisit when it ships stable.
-- **`gray-matter`'s YAML parser** — pins a v3 parser it has never updated, and
-  no override can fix it without dragging our own v4 usage backwards. The real
-  fix is to hand `gray-matter` an explicit engine.
-- **`nanoid`, `uuid`, `brace-expansion`, `@xmldom/xmldom`, `extract-zip`** —
-  either build-time only, or not reachable with the arguments the advisory
-  needs, or no fixed version has been published.
+- **`nanoid`, `uuid`, `brace-expansion`, `@xmldom/xmldom`, `extract-zip`,
+  `music-metadata`, `file-type`** — either build-time only, or not reachable
+  with the arguments the advisory needs, or no fixed version has been published,
+  or pinned across a major by the WhatsApp library in a way no override crosses
+  safely.
+
+Two that were fixed the same day, and are worth knowing about because neither
+was a version bump:
+
+- **The critical protobuf** came in through `libsignal`, pulled from a GitHub
+  ref pinning an exact version that a flat override does not touch. Overriding
+  `libsignal` to the published `^6.0.0` fixed it, which is what the WhatsApp
+  library's own next major does.
+- **`gray-matter`'s YAML parser** is now bypassed by handing `gray-matter` an
+  explicit engine backed by our own js-yaml 4. `bun audit` still lists js-yaml
+  because the old copy is installed; it is no longer executed.
 
 ---
 
@@ -196,7 +211,7 @@ bun run build
 bun run test
 ```
 
-The suite baseline is **7991 pass, 1 skip, 0 fail** across 685 files, plus the
+The suite baseline is **8005 pass, 1 skip, 0 fail** across 686 files, plus the
 isolated files the `test` script runs one process at a time. If your change
 moves the pass count, find out why before landing.
 

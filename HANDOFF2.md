@@ -35,7 +35,7 @@ printed, not estimates.
 
 | What | How it was checked | Result |
 | --- | --- | --- |
-| Test suite | `bun run test` | 7991 pass, 1 skip, 0 fail, across 685 files |
+| Test suite | `bun run test` | 8005 pass, 1 skip, 0 fail, across 686 files |
 | Isolated tests | the loop in the root `test` script, one process each | all pass |
 | Types | `bun run typecheck:all` | clean across all nine packages |
 | Validation | `bun run validate:ci` | clean, including 6 locales at 1476 keys each |
@@ -43,7 +43,9 @@ printed, not estimates.
 | CI, Tests workflow | GitHub Actions, 6 shards on macOS and Linux | green |
 | CI, Validate workflow | GitHub Actions | green |
 | Image pipeline | `sharp` round trip, and the artwork suite | passes in ~187ms |
-| Dependency advisories | `bun audit` | 30 vulnerable packages reduced to 10, the rest documented |
+| Dependency advisories | `bun audit` | 30 vulnerable packages reduced to 9, no critical, remainder documented |
+| Frontmatter engine swap | parsed every real file on this machine and in the repo with both engines | 603 user files and 224 repo files, all identical |
+| WhatsApp signal library | export surface, protobuf round trip, ECDH agreement, signature verify, worker bundle build | all pass on the patched version |
 
 The suite is order-independent under sharding. That took real work and is easy
 to break again: mocking a whole package poisons that package's own tests, so
@@ -65,7 +67,18 @@ build shipped without them once and died at boot.
 
 Dependency advisories were cleared where a version bump could do it. The
 auto-updater was the one that mattered: it leaked authorization headers across
-a cross-origin redirect. What remains is listed with reasons in GIT-FACTS §8.
+a cross-origin redirect.
+
+Two more needed something other than a bump. The only critical advisory arrived
+through the WhatsApp worker's signal library, pinned to an exact old protobuf by
+a git reference that a normal override does not reach; overriding that library
+to its published version cleared it, which is what the library's own next major
+release does. The one remaining reachable issue was an old YAML parser that
+`gray-matter` will not unpin, now bypassed by giving `gray-matter` an explicit
+engine. That swap was checked against 603 of the artist's real frontmatter files
+and 224 in this repo, all of which parse identically.
+
+What remains is listed with reasons in GIT-FACTS §8.
 
 ## Not verified, and honest about it
 
@@ -89,13 +102,10 @@ described as working.
   `typecheck:staged`, `lint:i18n:staged`, `electron:dev:menu`. The most
   consequential is `release` — there is no release automation in the tree.
   Detail in [docs/updates/regular-updates-check.md](docs/updates/regular-updates-check.md) §6.
-- **One reachable high-severity advisory has no clean dependency fix.**
-  `gray-matter` pins an old YAML parser, and that parser reads agent memory
-  files. The fix is a code change, not a bump.
-- **The WhatsApp worker carries the only critical advisory** in the tree,
-  through an old protobuf inside its signal library. The upstream fix was still
-  a release candidate when this was written.
 - **`validate-server.yml` pins an older bun** than the other four workflows.
+- **`bun audit` still reports js-yaml**, and will keep doing so. The vulnerable
+  copy is installed because `gray-matter` requires it at module load; nothing
+  routes through it any more. GIT-FACTS §8 explains the arrangement.
 
 ## Keeping it this way
 
