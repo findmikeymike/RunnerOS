@@ -34,8 +34,17 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 *.tsbuildinfo
 .wrangler
 .mintlify
+
+# Agent tooling scratch. These are per-machine state directories that various
+# agent harnesses create in whatever worktree they are run from. .omc and .swarm
+# were already listed; the other three were not, so they showed up as untracked
+# noise in `git status` in eight worktrees at once and made it harder to see
+# which files were actually somebody's unfinished work.
 .omc/
 .swarm/
+.claude-flow/
+.playwright-mcp/
+.planning/
 
 # OSS sync temp directory
 .oss-sync-temp/
