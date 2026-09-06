@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import matter from 'gray-matter';
+import { matter } from "./frontmatter";
 import { existsSync, readFileSync } from 'node:fs';
 import type { ValidationResult, ValidationIssue } from './types.ts';
 
