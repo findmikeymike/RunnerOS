@@ -186,11 +186,10 @@ Empty output means trunk already has it. Archive the branch instead of merging.
 
 ## 6. Current state — 2026-09-06
 
-- Trunk is `main` at `4b490c412`, in `.worktrees/main/artist-os`, pushed.
-- The suite is **8075 pass, 9 fail**. Those nine are known and pre-existing:
-  three social-variant Output RPC, two lyrics-transcriber, one CLI TLS, one Pi
-  metadata schema, one State of Play layout, one unnamed. Do not report them
-  as your regression, and do not claim green until they are fixed.
+- Trunk is `main` at `23b403e9c`, in `.worktrees/main/artist-os`, pushed.
+- The suite is **green: 8090 pass, 0 fail**. Keep it that way. If you make it
+  red, fix it before you hand off — a red suite means CI can no longer tell
+  anyone about a *new* break, which is the whole point of having it.
 - CI (`.github/workflows/test.yml`) runs on every push and PR, macOS and Linux,
   six shards each.
 - One open decision: remote workspace connections currently skip TLS

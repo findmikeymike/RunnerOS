@@ -43,11 +43,11 @@ PANGOCAIRO_BACKEND=fontconfig bun test \
   --path-ignore-patterns='**/dist/**'
 ```
 
-## Known-failing tests — not your regression
+## The suite is green — keep it that way
 
-The suite is **8075 pass, 9 fail**. Those nine are pre-existing and documented
-in GIT-FACTS. Do not claim green until they are actually fixed, and do not
-report them as something you broke.
+**8090 pass, 0 fail.** There are no known-failing tests to excuse. If your
+change makes the suite red, fix it before handing off: a red suite means CI can
+no longer tell anyone about a new break.
 
 ## Other docs
 
