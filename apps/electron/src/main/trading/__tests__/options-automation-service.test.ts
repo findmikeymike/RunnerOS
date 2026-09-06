@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-import { OPTIONS_CONNECTION_SCHEMA_VERSION, type OptionsConnection } from '@trade-god/contracts'
+import { OPTIONS_CONNECTION_SCHEMA_VERSION, optionsAutomationRouteSchema, type OptionsConnection } from '@trade-god/contracts'
 import { FileOptionsAutomationReceiptStore, FileOptionsAutomationStore, sha256 } from '@trade-god/execution'
 import { OptionsAutomationService } from '../options-automation-service.ts'
 
@@ -42,7 +42,7 @@ describe('options automation service', () => {
     expect((await service.list())[0]).toMatchObject({ automatic_authority_active: false })
   })
 
-  test('refuses source identity edits and archives append-only', async () => {
+  test('allows a draft source to be corrected before trading history exists and archives append-only', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'options-automation-service-')); roots.push(root)
     const account = connection()
     const service = new OptionsAutomationService(new FileOptionsAutomationStore(root), new FileOptionsAutomationReceiptStore(root),
@@ -51,7 +51,33 @@ describe('options automation service', () => {
       author_id: 'trader-one', connection_id: account.connection_id, max_spread_abs: '0.10', max_spread_pct: '10',
       max_chase_abs: '0.10', max_chase_pct: '8', min_debit_per_trade: '100', max_contracts_per_order: 10, max_debit_per_trade: '150' }
     const saved = await service.save(input)
-    await expect(service.save({ ...input, route_id: saved.route.route_id, author_id: 'other-trader' })).rejects.toThrow('cannot be edited')
-    expect(await service.archive(saved.route.route_id)).toMatchObject({ state: 'archived', revision: 2 })
+    const edited = await service.save({ ...input, route_id: saved.route.route_id, author_id: 'other-trader',
+      channel_url: 'https://discord.com/channels/guild-one/channel-two' })
+    expect(edited.route).toMatchObject({ revision: 1, channel_id: 'channel-two', author_id: 'other-trader' })
+    expect(edited.route.route_id).not.toBe(saved.route.route_id)
+    expect(await storeRoute(root, saved.route.route_id)).toMatchObject({ state: 'archived', revision: 2 })
+    expect(await service.archive(edited.route.route_id)).toMatchObject({ state: 'archived', revision: 2 })
+  })
+
+  test('refuses Discord identity changes after a route leaves draft state', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'options-automation-service-')); roots.push(root)
+    const account = connection()
+    const store = new FileOptionsAutomationStore(root)
+    const service = new OptionsAutomationService(store, new FileOptionsAutomationReceiptStore(root),
+      async () => account, async () => false, () => now)
+    const input = { display_name: 'SPY calls', channel_url: 'https://discord.com/channels/guild-one/channel-one',
+      author_id: 'trader-one', connection_id: account.connection_id, max_spread_abs: '0.10', max_spread_pct: '10',
+      max_chase_abs: '0.10', max_chase_pct: '8', min_debit_per_trade: '100', max_contracts_per_order: 10, max_debit_per_trade: '150' }
+    const saved = await service.save(input)
+    const activeBody = { ...saved.route, revision: 2, state: 'paused' as const, content_checksum: undefined }
+    delete (activeBody as { content_checksum?: string }).content_checksum
+    await store.saveRoute(optionsAutomationRouteSchema.parse({ ...activeBody, content_checksum: sha256(activeBody) }))
+
+    await expect(service.save({ ...input, route_id: saved.route.route_id, author_id: 'other-trader' }))
+      .rejects.toThrow('has trading history and cannot be changed')
   })
 })
+
+async function storeRoute(root: string, routeId: string) {
+  return new FileOptionsAutomationStore(root).getRoute(routeId)
+}

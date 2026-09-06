@@ -201,13 +201,26 @@ export class ExecutionGateway {
         'Stop movement requires protection sized to the confirmed open position.',
       )
     }
-    const stopPrice = target === 'breakeven' ? receipt.average_fill_price : target
-    if (!stopPrice) {
+    const requestedStopPrice = target === 'breakeven' ? receipt.average_fill_price : target
+    if (!requestedStopPrice) {
       throw new ExecutionGatewayError(
         'RECONCILIATION_DIVERGENCE',
         'Breakeven movement requires a verified average fill price.',
       )
     }
+    // A split fill produces an average that is not on the instrument tick grid
+    // (two ES fills at 5601.25 and 5601.50 average to 5601.375). Sending that
+    // price is rejected by the provider, which halts the trade and kills the
+    // connection while the position keeps its original stop. Breakeven is
+    // therefore snapped toward the losing side, which keeps the stop valid
+    // relative to the market and can never tighten past the trader's intent.
+    // An explicit trader-supplied price is never silently moved.
+    const instrumentTickSize = record.intent.instrument.tick_size
+    const stopPrice = instrumentTickSize === undefined
+      ? requestedStopPrice
+      : target === 'breakeven'
+        ? alignStopToTick(requestedStopPrice, instrumentTickSize, record.intent.side)
+        : assertStopOnTick(requestedStopPrice, instrumentTickSize)
     const currentStop = stop.stop_price
     if (!currentStop) {
       throw new ExecutionGatewayError(
@@ -885,6 +898,7 @@ export class ExecutionGateway {
     ) {
       return record
     }
+    await this.assertManagementAllowed(record.intent, connection, payload)
     this.assertManagementState(record, payload)
     const adapter = this.adapterForRecord(record)
     const capability = managementCapability(payload.operation)
@@ -1218,6 +1232,36 @@ export class ExecutionGateway {
 
   async setSourceKill(sourceId: string, enabled: boolean): Promise<void> {
     await this.options.store.setSourceKill(sourceId, enabled)
+  }
+
+  // A halt must stop discretionary mutations, not just new entries. Moving or
+  // canceling a protective order while the account is halted is exactly the
+  // action an operator pulled the switch to prevent. Flatten stays permitted
+  // because eliminating exposure is the intended outcome of a halt, and the
+  // emergency protection-failure path issues its flatten after setting the kill.
+  private async assertManagementAllowed(
+    intent: OrderIntent,
+    connection: TradingConnection,
+    payload: ExecutionManagementPayload,
+  ): Promise<void> {
+    if (payload.operation === 'flatten') return
+    if (this.emergencyHalted || this.emergencyConnectionHaltEpochs.has(connection.connection_id)) {
+      throw new ExecutionGatewayError(
+        'KILL_SWITCH_ENABLED',
+        `Management operation ${payload.operation} is blocked by the emergency halt latch; only a flatten may proceed.`,
+      )
+    }
+    const control = await this.options.store.readControl()
+    if (
+      control.global_kill
+      || control.connection_kills.includes(connection.connection_id)
+      || control.source_kills.includes(intent.source.source_id)
+    ) {
+      throw new ExecutionGatewayError(
+        'KILL_SWITCH_ENABLED',
+        `Management operation ${payload.operation} is blocked by an active kill switch; only a flatten may proceed.`,
+      )
+    }
   }
 
   private async assertExecutionAllowed(
@@ -1795,7 +1839,11 @@ export class ExecutionGateway {
     if (result.status === 'filled' && !result.protection_verified) {
       await this.options.store.update(intentId, (record) => {
         if (record.state !== 'protection-unknown') {
-          if (record.state !== 'filled') transition(record, 'filled', result.reason, this.now())
+          // `closing` has no legal edge to `filled`; routing through it would
+          // throw before the connection kill and emergency flatten below.
+          if (record.state !== 'filled' && record.state !== 'closing') {
+            transition(record, 'filled', result.reason, this.now())
+          }
           transition(record, 'protection-unknown', 'Filled position lacks verified protection.', this.now())
         }
         record.receipt = this.buildReceipt({
@@ -1957,6 +2005,50 @@ const isActiveProtectionOrder = (order: ExecutionProtectionOrder): boolean => (
   || order.status === 'partially-filled'
 )
 
+const decimalScale = (value: string): number => value.split('.')[1]?.length ?? 0
+
+const scaledDecimal = (value: string, scale: number): bigint => {
+  const [whole = '0', fraction = ''] = value.split('.')
+  if (fraction.length > scale) throw new ExecutionGatewayError('RISK_DENIED', 'Price precision exceeds the instrument tick scale.')
+  return BigInt(`${whole}${fraction.padEnd(scale, '0')}`)
+}
+
+const canonicalFromScaled = (value: bigint, scale: number): string => {
+  if (scale === 0) return value.toString()
+  const digits = value.toString().padStart(scale + 1, '0')
+  const whole = digits.slice(0, digits.length - scale)
+  const fraction = digits.slice(digits.length - scale).replace(/0+$/, '')
+  return fraction ? `${whole}.${fraction}` : whole
+}
+
+// Snaps a derived stop onto the instrument tick grid. A long stop rounds down
+// and a short stop rounds up, so the stop always lands on the losing side of the
+// requested price and stays a valid resting order relative to the market.
+const alignStopToTick = (price: string, tickSize: string, side: OrderIntent['side']): string => {
+  const scale = Math.max(decimalScale(price), decimalScale(tickSize))
+  const tick = scaledDecimal(tickSize, scale)
+  if (tick <= 0n) throw new ExecutionGatewayError('RISK_DENIED', 'Instrument tick size must be positive to align a stop.')
+  const value = scaledDecimal(price, scale)
+  const remainder = value % tick
+  if (remainder === 0n) return canonicalFromScaled(value, scale)
+  const aligned = side === 'buy' ? value - remainder : value - remainder + tick
+  if (aligned <= 0n) throw new ExecutionGatewayError('RISK_DENIED', 'Tick-aligned stop price is not positive.')
+  return canonicalFromScaled(aligned, scale)
+}
+
+const assertStopOnTick = (price: string, tickSize: string): string => {
+  const scale = Math.max(decimalScale(price), decimalScale(tickSize))
+  const tick = scaledDecimal(tickSize, scale)
+  if (tick <= 0n) throw new ExecutionGatewayError('RISK_DENIED', 'Instrument tick size must be positive to move a stop.')
+  if (scaledDecimal(price, scale) % tick !== 0n) {
+    throw new ExecutionGatewayError(
+      'RISK_DENIED',
+      `Requested stop price ${price} is not an exact multiple of the ${tickSize} instrument tick.`,
+    )
+  }
+  return price
+}
+
 const TERMINAL_EXECUTION_STATES = new Set<ExecutionLifecycleState>([
   'risk-denied', 'closed', 'rejected', 'canceled', 'expired', 'error',
 ])
@@ -2003,7 +2095,10 @@ const ALLOWED_TRANSITIONS: Record<ExecutionLifecycleState, ExecutionLifecycleSta
   filled: ['protecting', 'protection-unknown', 'closing', 'reconcile-halted', 'error'],
   protecting: ['protected', 'protection-unknown', 'closing', 'reconcile-halted', 'error'],
   protected: ['closing', 'reconcile-halted', 'error'],
-  closing: ['protected', 'closed', 'reconcile-halted', 'error'],
+  // `protection-unknown` is reachable from `closing` so that a position which
+  // reconciles as filled-but-unprotected mid-close can still reach the
+  // connection kill and the emergency flatten instead of throwing INVALID_STATE.
+  closing: ['protected', 'closed', 'protection-unknown', 'reconcile-halted', 'error'],
   closed: [],
   'submit-unknown': [
     'acknowledged',

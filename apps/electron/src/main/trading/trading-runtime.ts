@@ -48,6 +48,8 @@ import {
   TradingSignalRouteStore,
   type TradingSignalRoute,
 } from './trading-signal-route-store.ts'
+import { DiscordSourceStore } from './discord-source-store.ts'
+import { DiscordSourceCatalogService } from './discord-source-catalog-service.ts'
 import {
   ExecutionGateway,
   ExecutionGatewayError,
@@ -409,6 +411,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   const tradingSignalRouteStore = options.connectionDirectory
     ? new TradingSignalRouteStore(options.connectionDirectory, options.now)
     : undefined
+  const discordSourceStore = options.connectionDirectory
+    ? new DiscordSourceStore(options.connectionDirectory, options.now)
+    : undefined
   const mirrorGroupStore = options.executionDirectory && tradingConnectionStore
     ? new FileMirrorGroupStore(
         options.executionDirectory,
@@ -485,6 +490,13 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   const optionsCertificationApplicationStore = optionsEvidenceRoot ? new FileOptionsCertificationApplicationStore(optionsEvidenceRoot, options.now) : undefined
   const optionsManualAuthorityStore = optionsEvidenceRoot ? new FileOptionsManualAuthorityStore(optionsEvidenceRoot, options.now) : undefined
   const optionsAutomationStore = optionsEvidenceRoot ? new FileOptionsAutomationStore(optionsEvidenceRoot) : undefined
+  const discordSourceCatalogService = discordSourceStore
+    ? new DiscordSourceCatalogService({
+        store: discordSourceStore,
+        ...(tradingSignalRouteStore ? { listFuturesRoutes: () => tradingSignalRouteStore.list() } : {}),
+        ...(optionsAutomationStore ? { listOptionsRoutes: () => optionsAutomationStore.listRoutes() } : {}),
+      })
+    : undefined
   const optionsAutopilotAuthorityStore = optionsEvidenceRoot ? new FileOptionsAutopilotAuthorityStore(optionsEvidenceRoot, options.now) : undefined
   const optionsAutopilotCertificationStore = optionsEvidenceRoot ? new FileOptionsAutopilotCertificationStore(optionsEvidenceRoot) : undefined
   const optionsExpirationCustodyStore = optionsEvidenceRoot ? new FileOptionsExpirationCustodyStore(optionsEvidenceRoot) : undefined
@@ -606,6 +618,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     if (!status.provider_read_fresh) throw new Error('Verify this broker account again before changing paper-trading access.')
     return status.connection
   }
+  const webullOptionsAdapters = new Map<string, { checksum: string; adapter: WebullOptionsAdapter }>()
   const optionsProviderAdapter = async (connectionId: string): Promise<{ connection: Awaited<ReturnType<typeof optionsConnectionById>>; adapter: OptionsProviderAdapter }> => {
     const { connection, credential } = await optionsConnectionService!.resolveMainProcessCredential(connectionId)
     const adapter = options.optionsProviderAdapterFactory
@@ -618,15 +631,22 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
           credential_generation: connection.credential_generation,
           now: options.now,
         })
-      : new WebullOptionsAdapter({
-          connection_id: connection.connection_id,
-          account_id: connection.account_ref,
-          app_key: credential.app_key!,
-          app_secret: credential.app_secret!,
-          ...(credential.access_token ? { access_token: credential.access_token } : {}),
-          credential_generation: connection.credential_generation,
-          now: options.now,
-        })
+      : (() => {
+          const cached = webullOptionsAdapters.get(connection.connection_id)
+          if (cached?.checksum === connection.content_checksum) return cached.adapter
+          cached?.adapter.dispose()
+          const next = new WebullOptionsAdapter({
+            connection_id: connection.connection_id,
+            account_id: connection.account_ref,
+            app_key: credential.app_key!,
+            app_secret: credential.app_secret!,
+            ...(credential.access_token ? { access_token: credential.access_token } : {}),
+            credential_generation: connection.credential_generation,
+            now: options.now,
+          })
+          webullOptionsAdapters.set(connection.connection_id, { checksum: connection.content_checksum, adapter: next })
+          return next
+        })()
     return { connection, adapter }
   }
   const optionsAutomaticExecutionRoot = optionsEvidenceRoot ? path.join(optionsEvidenceRoot, 'automatic-execution') : undefined
@@ -649,6 +669,15 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         receipts: optionsAutomationReceiptStore,
         plans: optionsAutomationPlanStore,
         resolveConnection: optionsConnectionById,
+        activeHalts: async ({ connectionId, sourceRouteId }) => {
+          if (!executionStore) return []
+          const control = await executionStore.readControl()
+          const halts: string[] = []
+          if (control.global_kill) halts.push('global halt')
+          if (control.connection_kills.includes(connectionId)) halts.push('account halt')
+          if (control.source_kills.includes(sourceRouteId)) halts.push('source halt')
+          return halts
+        },
         assertConnectionReady: (connectionId) => {
           const timeoutIssue = [...optionsAutomaticRecoveryErrors.entries()]
             .find(([key]) => key.startsWith(`timeout:${connectionId}:`))?.[1]
@@ -689,13 +718,21 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             optionsAutopilotCertificationStore?.getEligible(connection, options.now()),
             optionsCertificationApplicationStore?.getActive(connection, options.now()),
           ])
-          if (!application) return { ready: false, issue: 'Apply the account safety test first.' }
-          if (!certification) return { ready: false, issue: 'Automatic safety test not completed.' }
-          if (certification.base_application_id !== application.application_id
-            || certification.base_application_checksum !== application.content_checksum) {
-            return { ready: false, issue: 'Automatic safety test no longer matches this account.' }
+          const sandboxCertification = connection.provider === 'webull' && connection.environment === 'sandbox'
+            ? await optionsCertificationStore?.getEligible(connection, options.now())
+            : undefined
+          const exactCertification = certification ?? sandboxCertification
+          if (!application) return { ready: false, issue: 'Run the one guided paper test first.' }
+          if (!exactCertification) return { ready: false, issue: 'Run the one guided paper test first.' }
+          const applicationMatches = certification
+            ? certification.base_application_id === application.application_id
+              && certification.base_application_checksum === application.content_checksum
+            : sandboxCertification?.certification_id === application.certification_id
+              && sandboxCertification.content_checksum === application.certification_checksum
+          if (!applicationMatches) {
+            return { ready: false, issue: 'The paper test no longer matches this account.' }
           }
-          return { ready: true, expires_at: certification.expires_at }
+          return { ready: true, expires_at: exactCertification.expires_at }
         },
       )
     : undefined
@@ -1251,6 +1288,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     scheduleTradovateUserSyncRefresh()
   })
   let discordManagementRecoveryError: unknown
+  const discordManagementReadyHandles = discordTradeManager && mirrorDiscordTradeManager && discordManagementFamilyResolver
+    ? { single: discordTradeManager, mirror: mirrorDiscordTradeManager, family: discordManagementFamilyResolver }
+    : undefined
   const discordManagementReady = discordTradeManager && mirrorDiscordTradeManager && discordManagementFamilyResolver
     ? executionSupervisionReady.then(async () => {
         if (executionRecoveryError) throw executionRecoveryError
@@ -1264,6 +1304,27 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
           discordManagementRecoveryError = error
         })
     : Promise.resolve()
+  // A follow-up that arrives before its entry is protected is parked as
+  // deferred. Without this sweep it would only be reconsidered on the next app
+  // start, so "half off, stop to BE" sent seconds after an entry would sit
+  // unexecuted while the trade ran. The sweep is idempotent and bounded by the
+  // manager's own deferral window.
+  const discordDeferredSweepTimer = discordManagementReadyHandles
+    ? setInterval(() => {
+        void discordManagementReady.then(async () => {
+          if (discordManagementRecoveryError) return
+          try {
+            await discordManagementReadyHandles.single.recoverPending()
+            await discordManagementReadyHandles.mirror.recoverPending()
+            await discordManagementReadyHandles.family.recoverPending()
+          } catch {
+            // A sweep failure must not crash the runtime; the next tick retries
+            // and every durable receipt keeps its own fail-closed status.
+          }
+        }).catch(() => undefined)
+      }, 5_000)
+    : undefined
+  discordDeferredSweepTimer?.unref()
   const unsubscribeAlert = alertLedger && options.onAlert
     ? alertLedger.subscribe(options.onAlert)
     : undefined
@@ -1342,6 +1403,13 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       ? { getIbkrGatewayHealth: (environment) => marketDataManager.ibkrGatewayHealth(environment) }
       : {}),
     getSyntheticChartFixture: (input) => Promise.resolve(buildSyntheticEsChartFixture(input)),
+    ...(discordSourceCatalogService
+      ? {
+          listDiscordSources: () => discordSourceCatalogService.list(),
+          saveDiscordSource: (input) => discordSourceCatalogService.save(input),
+          archiveDiscordSource: (sourceId) => discordSourceCatalogService.archive(sourceId),
+        }
+      : {}),
     ...(tradingConnectionService
       ? {
           listTradingConnections: () => tradingConnectionService.list(),
@@ -1472,6 +1540,23 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             await optionsCertificationRecoveryReady
             if (input.connection_id) {
               await assertOptionsConnectionMutable(input.connection_id)
+              const current = await optionsConnectionById(input.connection_id)
+              if (current.account_ref !== input.account_ref.trim()) {
+                if (input.allow_account_ref_change !== true) {
+                  throw new Error('Confirm the account ID correction before saving it.')
+                }
+                if (optionsAutomationStore && (await optionsAutomationStore.listRoutes())
+                  .some((route) => route.connection_id === input.connection_id && route.state !== 'archived')) {
+                  throw new Error('Remove this account from every Discord source before changing its Account ID.')
+                }
+                const status = (await listOptionsConnectionStatuses())
+                  .find((candidate) => candidate.connection.connection_id === input.connection_id)
+                if (!status || status.provider_read_verified || status.certification.state !== 'not-run'
+                  || status.manual_authority || (status.manual_orders?.length ?? 0) > 0
+                  || (status.management_records?.length ?? 0) > 0) {
+                  throw new Error('This Account ID can only be corrected before verification, safety testing, or trading begins.')
+                }
+              }
               await revokeOptionsAutopilotForConnection(input.connection_id, 'credential-change')
               await optionsManualAuthorityStore!.revokeForConnection(input.connection_id, 'credential-change')
             }
@@ -1515,13 +1600,18 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             const { connection, adapter } = await optionsProviderAdapter(current.connection_id)
             if (connection.content_checksum !== current.content_checksum) throw new Error('Options account changed before the safety test started.')
             await optionsCertificationCoordinator!.recoverIncompleteSessions(connection, adapter, options.optionsSingleInstanceAuthority === true)
-            await optionsCertificationCoordinator!.run({
+            const evidence = await optionsCertificationCoordinator!.run({
               connection,
               max_test_debit: input.max_test_debit,
               expires_at: input.expires_at,
               contract: input.contract,
               operator_confirmed: input.operator_confirmed,
             }, adapter)
+            await optionsCertificationApplicationStore!.apply({
+              connection,
+              certification_id: evidence.certification_id,
+              operator_confirmed: true,
+            })
             const status = (await listOptionsConnectionStatuses()).find((candidate) => candidate.connection.connection_id === connection.connection_id)
             if (!status) throw new Error('Options account disappeared after its safety test.')
             return status
@@ -1626,7 +1716,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
                 },
                 saveOptionsAutomationSource: (input) => withOptionsMutation(async () => {
                   await optionsAutomaticExecutionRecoveryReady
-                  const connection = await freshOptionsConnectionById(input.connection_id)
+                  // Saving a Discord route is inert configuration. Fresh broker
+                  // verification is required later by activation, not here.
+                  const connection = await optionsConnectionById(input.connection_id)
                   if (input.route_id) {
                     const current = await optionsAutomationStore!.getRoute(input.route_id)
                     if (current.connection_id !== connection.connection_id) {
@@ -1804,6 +1896,12 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             await executionSupervisionReady
             if (paperActivationRecoveryError) throw paperActivationRecoveryError
             if (executionRecoveryError) throw executionRecoveryError
+            // Opening a position whose follow-up management path is still
+            // recovering, or is known broken, would leave a live trade that no
+            // Discord instruction can close. Entry waits for the same readiness
+            // the management receiver requires.
+            await discordManagementReady
+            if (discordManagementRecoveryError) throw discordManagementRecoveryError
             const payload = discoTraderPushPayloadSchema.parse(input)
             if (payload.kind !== 'ticket' || !payload.ticket || !resolveDiscoTraderRoute) {
               throw new ExecutionGatewayError(
@@ -1936,6 +2034,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     setSpecialistModel: (model) => { specialistModel = model },
     dispose: async () => {
       unsubscribeAlert?.()
+      if (discordDeferredSweepTimer) clearInterval(discordDeferredSweepTimer)
       if (optionsWorkingOrderTimer) clearInterval(optionsWorkingOrderTimer)
       if (optionsExpirationTimer) clearInterval(optionsExpirationTimer)
       await discordManagementReady
@@ -1944,6 +2043,8 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       userSyncRefreshTimer = undefined
       await reconciliationSupervisor?.stop()
       tradovatePaperRuntime?.stop()
+      for (const cached of webullOptionsAdapters.values()) cached.adapter.dispose()
+      webullOptionsAdapters.clear()
       const [alertServer, alertTunnel] = await Promise.all([alertServerPromise, alertTunnelPromise])
       await Promise.all([disposeTradingIpc(), marketDataManager?.stop(), alertTunnel?.stop(), alertServer?.stop()])
     },

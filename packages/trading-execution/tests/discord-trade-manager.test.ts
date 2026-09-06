@@ -489,10 +489,43 @@ describe('Discord trade manager', () => {
     expect(gateway.log).toEqual([])
 
     Object.assign(pendingEntry, protectedEntry)
-    expect(await manager.recoverPending()).toEqual([])
+    // The deferred follow-up is retried by the sweep itself; it must not wait
+    // for the same Discord message to be delivered a second time.
+    const swept = await manager.recoverPending()
+    expect(swept).toHaveLength(1)
+    expect(swept[0]).toMatchObject({ status: 'completed' })
+    expect(gateway.log).toEqual(['reconcile', 'flatten'])
+
     const recovered = await manager.ingestMessage(followUp)
     expect(recovered).toMatchObject({ status: 'completed' })
     expect(gateway.log).toEqual(['reconcile', 'flatten'])
+  })
+
+  test('blocks a deferred follow-up whose entry never became manageable in time', async () => {
+    const source = artifact()
+    const protectedEntry = protectedRecord(source)
+    const pendingEntry = structuredClone(protectedEntry)
+    pendingEntry.state = 'created'
+    delete pendingEntry.claim
+    delete pendingEntry.command
+    delete pendingEntry.receipt
+    const gateway = new FakeGateway([pendingEntry])
+    let currentTime = NOW
+    const manager = new FileDiscordTradeManager({
+      directory: await mkdtemp(path.join(tmpdir(), 'discord-trade-manager-stale-')),
+      gateway,
+      source: new SourceReader([source]),
+      now: () => currentTime,
+    })
+    const followUp = message('all out', { reply_to_message_id: source.source_message_id })
+    expect(await manager.ingestMessage(followUp)).toMatchObject({ status: 'deferred' })
+
+    // The entry only becomes protected long after the deferral window closed.
+    currentTime = new Date(Date.parse(NOW) + 60 * 60_000).toISOString()
+    Object.assign(pendingEntry, protectedEntry)
+    const swept = await manager.recoverPending()
+    expect(swept[0]).toMatchObject({ status: 'blocked' })
+    expect(gateway.log).toEqual([])
   })
 
   test('executes the same explicit reduction from two distinct Discord messages', async () => {

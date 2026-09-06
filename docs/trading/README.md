@@ -56,6 +56,11 @@ This is the routing table for humans and agents. Read only what the current job 
 
 ## Options Automation Specification
 
+- `specs/execution/robinhood-agentic-options-adapter.md` — implementation-ready
+  research and rollout contract for Robinhood's official Trading MCP. OAuth,
+  read-only qualification, exact Agentic-account custody, schema drift, and
+  live-only certification are specified; no Robinhood code or mutation is yet
+  implemented.
 - `specs/execution/discord-single-leg-options-autopilot.md` — implemented
   paper/sandbox control plane for exact Discord-routed, single-leg long call/put
   execution through independently certified IBKR or Webull adapters. Contract

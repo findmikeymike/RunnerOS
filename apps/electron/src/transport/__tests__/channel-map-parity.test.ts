@@ -48,6 +48,9 @@ type ApiToChannelMapKeys = Exclude<
   | 'applyTradingConnectionCertification' // direct local trusted certification application IPC
   | 'setTradingConnectionPaperExecution' // direct local paper execution enable IPC
   | 'listTradingSignalRoutes' // direct local trading signal-route IPC
+  | 'listDiscordSources' // direct local market-neutral Discord catalog IPC
+  | 'saveDiscordSource' // direct local market-neutral Discord catalog IPC
+  | 'archiveDiscordSource' // direct local market-neutral Discord catalog IPC
   | 'saveTradingSignalRoute' // direct local trading signal-route IPC
   | 'removeTradingSignalRoute' // direct local trading signal-route IPC
   | 'listMirrorGroups' // direct local Mirror Group configuration IPC

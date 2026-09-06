@@ -91,6 +91,7 @@ export function PanelStackContainer({
   // In compact mode, hide navigator when content is selected (show list OR content, not both)
   const hasNavigator = isCompact ? (navigatorWidth > 0 && !hasSelectedContent) : navigatorWidth > 0
   const isMultiPanel = visiblePanels.length > 1
+  const isSeamlessSinglePanel = visiblePanels.length === 1 && !hasNavigator
   const visibleVisualSurface =
     activeVisualSurface && (!activeVisualSurface.sessionId || activeVisualSurface.sessionId === focusedSessionId)
       ? activeVisualSurface
@@ -98,8 +99,8 @@ export function PanelStackContainer({
   const isLeftEdge = !hasSidebar && !hasNavigator
   const shouldCenterSinglePanel = !isCompact && visiblePanels.length === 1 && !hasNavigator && !hasSidebar
   const stackGap = hasSidebar && !hasNavigator ? 24 : PANEL_GAP
-  const topBreathingRoom = hasSidebar ? 18 : 0
-  const bottomBreathingRoom = 2
+  const topBreathingRoom = isSeamlessSinglePanel ? 0 : hasSidebar ? 18 : 0
+  const bottomBreathingRoom = isSeamlessSinglePanel ? 0 : 2
 
   // Auto-scroll to newly pushed content panel
   useEffect(() => {
@@ -146,7 +147,7 @@ export function PanelStackContainer({
         // Extend to window bottom so scrollbar sits at the very edge
         marginBottom: -bottomBreathingRoom,
         // Keep the rightmost panel off the window edge while leaving room for shadows.
-        paddingRight: isCompact ? PANEL_EDGE_INSET : PANEL_TRAILING_INSET,
+        paddingRight: isSeamlessSinglePanel ? 0 : isCompact ? PANEL_EDGE_INSET : PANEL_TRAILING_INSET,
       }}
     >
       {/* Inner flex container — flex-grow: 1 fills viewport, content can overflow for scroll.

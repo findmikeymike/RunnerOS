@@ -172,6 +172,10 @@ export class FileProviderOptionsCertificationCoordinator {
           max_test_debit: input.max_test_debit,
           expires_at: input.expires_at,
         }, runner, this.now)
+        if (!evidence.eligible_level) {
+          const failed = evidence.scenarios.find((scenario) => scenario.status !== 'pass')
+          throw new Error(`Options paper test failed${failed ? ` at ${failed.scenario}: ${failed.detail}` : '.'}`)
+        }
         await journal.append('session', 'completed', {
           certification_id: evidence.certification_id,
           certification_checksum: evidence.content_checksum,

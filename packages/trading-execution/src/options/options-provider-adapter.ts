@@ -59,4 +59,5 @@ export interface OptionsProviderAdapter {
   cancelOrder(accountId: string, providerOrderId: string, clientOrderId: string): Promise<OptionsProviderOrder>
   getOrderByClientId(accountId: string, clientOrderId: string): Promise<OptionsProviderOrder | null>
   snapshotAccount(accountId: string): Promise<OptionsProviderAccountSnapshot>
+  dispose?(): Promise<void> | void
 }

@@ -13,6 +13,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@trade-god/contracts": "workspace:*"
+    "@grpc/grpc-js": "^1.14.4",
+    "@trade-god/contracts": "workspace:*",
+    "protobufjs": "^8.6.5"
   }
 }

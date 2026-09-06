@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
-  ArrowRight,
   Bot,
   Check,
   CheckCircle2,
@@ -12,9 +11,11 @@ import {
   MessageSquare,
   PlugZap,
   RefreshCw,
-  ShieldCheck,
   WalletCards,
 } from 'lucide-react'
+import { openTradingConnections } from './trading-connections-navigation'
+import FuturesRoutingPanel from './FuturesRoutingPanel'
+import TradeGodPageHeader from './TradeGodPageHeader'
 import { TRADE_DESK_AGENT } from '@craft-agent/shared/agent-definitions/trade-god-starter-templates'
 import { toast } from 'sonner'
 
@@ -33,6 +34,7 @@ type SourceState = 'checking' | 'unconfigured' | 'ready' | 'offline' | 'conflict
 
 interface DiscoTraderControlCenterPageProps {
   workspaceId?: string
+  mode?: 'desk' | 'connections'
 }
 
 const SOURCE_SLUG = 'discotrader'
@@ -88,6 +90,7 @@ const openTradeGodView = (view: 'accounts' | 'trades') => {
 
 export default function DiscoTraderControlCenterPage({
   workspaceId,
+  mode = 'desk',
 }: DiscoTraderControlCenterPageProps) {
   const {
     allAgents,
@@ -354,74 +357,62 @@ export default function DiscoTraderControlCenterPage({
   const accountVerified = verifiedConnections > 0
   const activated = readyConnections > 0 && globalExecutionKill === false && connectionKillCount === 0
   const activationAvailable = setupComplete && accountVerified && readyConnections > 0
+  const nextStep = !setupComplete
+    ? 'Connect Discord'
+    : !accountConnected
+      ? 'Add a futures account'
+      : !accountVerified || readyConnections === 0
+        ? 'Finish account checks'
+        : activated
+          ? 'Monitoring approved signals'
+          : 'Review and turn on paper trading'
 
   return (
-    <div className="runneros-glass-route h-full overflow-y-auto bg-[#090b0e] text-[#eef0f3]">
-      <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-6 px-6 py-8 xl:px-10">
-        <header className="flex flex-wrap items-start justify-between gap-5">
-          <div>
-            <p className="text-xs font-medium text-[#8b93a1]">Discord copy trading</p>
-            <h1 className="mt-1 text-[30px] font-semibold tracking-[-0.035em]">DiscoTrader</h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-[#858d99]">
-              Copy trades from the Discord traders you choose into your selected paper accounts.
-            </p>
-          </div>
-          <div className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] ${
-            activated
-              ? 'border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-300'
-              : 'border-white/[0.09] bg-white/[0.025] text-[#9aa2ad]'
-          }`}>
-            {activated ? <CheckCircle2 className="size-3.5" /> : <LockKeyhole className="size-3.5" />}
-            {activated ? 'Paper trading is on' : 'Paper trading is off'}
-          </div>
-        </header>
+    <div className={mode === 'desk' ? 'runneros-glass-route trade-god-page-surface h-full overflow-y-auto text-[#eef0f3]' : 'text-foreground'}>
+      <div className={mode === 'desk' ? 'tg-page-container flex flex-col gap-6' : 'w-full pt-5'}>
+        {mode === 'desk' ? <>
+        <TradeGodPageHeader
+          eyebrow="Futures automation"
+          icon={<Bot className="size-3.5" />}
+          title="Futures Desk"
+          description="Your connected prop accounts, approved Discord traders, futures trades, and next safe action."
+          actions={<>
+            <button type="button" onClick={() => openTradingConnections('futures')} className="tg-control-secondary">
+              <WalletCards className="size-3.5" /> Manage connections
+            </button>
+            <div className="tg-header-status">
+              {activated ? <CheckCircle2 className="size-3.5 text-emerald-600" /> : <LockKeyhole className="size-3.5" />}
+              {activated ? 'Paper trading is on' : 'Paper trading is off'}
+            </div>
+          </>}
+        />
 
-        <section className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0d1014] shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
-          <div className="border-b border-white/[0.06] px-6 py-5">
-            <h2 className="text-base font-semibold tracking-[-0.01em]">Get started</h2>
-            <p className="mt-1 text-xs text-[#747d89]">Three steps. You stay in control of every account and limit.</p>
+        <section className="flex flex-wrap items-center gap-2 border-y border-white/[0.07] py-3.5">
+          <StatusPill label="Discord" value={setupComplete ? 'Connected' : 'Not connected'} positive={setupComplete} />
+          <StatusPill label="Accounts" value={String(connectionCount)} />
+          <StatusPill label="Ready" value={String(readyConnections)} positive={readyConnections > 0} />
+          <div className="ml-auto flex items-center gap-2 text-xs"><span className="text-[#707b87]">Next</span><span className="font-semibold text-white">{nextStep}</span></div>
+        </section>
+
+        <section className={`flex flex-wrap items-center justify-between gap-5 rounded-2xl border px-5 py-5 ${activated ? 'border-emerald-400/15 bg-emerald-400/[0.035]' : 'border-white/[0.08] bg-white/[0.018]'}`}>
+          <div className="flex min-w-0 items-start gap-3">
+            <div className={`mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl ${activated ? 'bg-emerald-400/[0.09] text-emerald-200' : 'bg-white/[0.045] text-[#929ca8]'}`}>
+              {activated ? <CheckCircle2 className="size-4" /> : <LockKeyhole className="size-4" />}
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold">{activated ? 'Paper trading is running' : activationAvailable ? 'Ready for your review' : 'Setup is not complete'}</h2>
+              <p className="mt-1 text-xs leading-5 text-[#77818d]">
+                {activated ? 'Approved Discord signals can reach only the futures accounts and limits you selected.' : activationAvailable ? 'Review the exact accounts and limits before allowing new paper trades.' : 'Connect Discord and your accounts in Connections, then choose the route below and finish its safety checks.'}
+              </p>
+            </div>
           </div>
-          <div className="divide-y divide-white/[0.06]">
-            <SetupAction
-              number="1"
-              icon={<MessageSquare className="size-4" />}
-              title="Connect Discord"
-              description="Link the DiscoTrader feed that watches your chosen Discord channels."
-              complete={setupComplete}
-              status={setupComplete ? 'Connected' : sourceState === 'checking' ? 'Checking…' : 'Not connected'}
-              actionLabel={setupComplete ? 'Manage' : 'Connect Discord'}
-              onAction={() => setConnectDialogOpen(true)}
-            />
-            <SetupAction
-              number="2"
-              icon={<WalletCards className="size-4" />}
-              title="Add your accounts"
-              description="Connect each paper account, then choose which Discord trader it follows."
-              complete={accountConnected}
-              status={accountConnected ? `${connectionCount} account${connectionCount === 1 ? '' : 's'}` : 'No accounts yet'}
-              actionLabel={accountConnected ? 'Manage accounts' : 'Add account'}
-              onAction={() => openTradeGodView('accounts')}
-            />
-            <SetupAction
-              number="3"
-              icon={<ShieldCheck className="size-4" />}
-              title="Turn on paper trading"
-              description="Review your accounts and limits once, then allow new paper trades."
-              complete={activated}
-              status={activated ? 'On' : activationAvailable ? 'Ready to review' : 'Finish setup first'}
-              actionLabel={activated ? 'Pause new trades' : 'Review & turn on'}
-              onAction={() => void handleGlobalExecutionKill()}
-              disabled={!activated && !activationAvailable || activationBusy}
-              busy={activationBusy}
-            />
+          <div className="flex flex-wrap items-center gap-2">
+            {!activationAvailable && !activated && <button type="button" onClick={() => openTradingConnections('futures')} className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/[0.1] bg-white/[0.045] px-3.5 text-[11px] font-medium text-white/85 hover:bg-white/[0.075]"><WalletCards className="size-3.5" /> Finish connections</button>}
+            {(activationAvailable || activated) && <button type="button" onClick={() => void handleGlobalExecutionKill()} disabled={activationBusy} className={`inline-flex h-9 items-center gap-2 rounded-xl px-3.5 text-[11px] font-semibold disabled:opacity-40 ${activated ? 'border border-white/[0.1] bg-white/[0.04] text-white/80 hover:bg-white/[0.07]' : 'bg-emerald-200 text-emerald-950 hover:bg-emerald-100'}`}>{activationBusy && <Loader2 className="size-3.5 animate-spin" />}{activated ? 'Pause new trades' : 'Review & turn on'}</button>}
           </div>
         </section>
 
-        <section className="grid gap-3 md:grid-cols-3" aria-label="How DiscoTrader works">
-          <HowItWorksCard number="1" title="A signal arrives" description="DiscoTrader reads a post from a trader you approved." />
-          <HowItWorksCard number="2" title="Your rules are checked" description="The app confirms the right account, trade, size, and safety limits." />
-          <HowItWorksCard number="3" title="The paper trade is managed" description="Entries and follow-ups stay attached to the correct account and trade." />
-        </section>
+        <FuturesRoutingPanel />
 
         <button
           type="button"
@@ -484,10 +475,35 @@ export default function DiscoTraderControlCenterPage({
             )}
           </div>
         </details>
+        </> : (
+          <section className="border-y border-foreground/[0.08] py-5">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${setupComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                  <MessageSquare className="size-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-semibold">Discord signal service</h2>
+                  <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">Connect the Discord watcher once. Save traders below, then route them inside Futures or Options.</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setConnectDialogOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-xl border border-border bg-background px-3.5 text-[11px] font-semibold text-foreground shadow-minimal hover:bg-secondary">
+                {setupComplete ? <CheckCircle2 className="size-3.5 text-emerald-700" /> : <PlugZap className="size-3.5 text-amber-700" />}
+                {setupComplete ? 'Manage Discord' : 'Connect Discord'}
+              </button>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <StatusPill label="Discord" value={sourceState === 'ready' ? 'Online' : sourceState === 'checking' ? 'Checking' : 'Not connected'} positive={sourceState === 'ready'} light />
+              <StatusPill label="Trade helper" value={workerActive && workerMatchesTemplate ? 'Ready' : 'Not ready'} positive={workerActive && workerMatchesTemplate} light />
+              <StatusPill label="Webhook" value={webhookSecretConfigured ? 'Saved' : 'Missing'} positive={webhookSecretConfigured} light />
+            </div>
+            {(sourceError || agentsError) && <div className="mt-4 rounded-xl border border-amber-300/40 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">{sourceError || agentsError}</div>}
+          </section>
+        )}
       </div>
 
       <Dialog open={connectDialogOpen} onOpenChange={setConnectDialogOpen}>
-        <DialogContent className="max-h-[88vh] max-w-xl overflow-y-auto border border-white/[0.09] bg-[#0d1014] p-0 text-white shadow-2xl">
+        <DialogContent className="max-h-[88vh] max-w-xl overflow-y-auto border border-white/[0.09] bg-[#0d1014] p-0 text-white shadow-modal-small">
           <DialogHeader className="border-b border-white/[0.07] px-6 pb-5 pt-6 pr-14">
             <div className="mb-3 flex size-10 items-center justify-center rounded-xl border border-amber-300/15 bg-amber-300/[0.07] text-amber-200">
               <MessageSquare className="size-5" />
@@ -567,64 +583,8 @@ export default function DiscoTraderControlCenterPage({
   )
 }
 
-function SetupAction({
-  number,
-  icon,
-  title,
-  description,
-  complete,
-  status,
-  actionLabel,
-  onAction,
-  disabled = false,
-  busy = false,
-}: {
-  number: string
-  icon: React.ReactNode
-  title: string
-  description: string
-  complete: boolean
-  status: string
-  actionLabel: string
-  onAction: () => void
-  disabled?: boolean
-  busy?: boolean
-}) {
-  return (
-    <div className="grid gap-4 px-6 py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-      <div className="flex min-w-0 items-start gap-4">
-        <div className={`flex size-10 shrink-0 items-center justify-center rounded-xl border ${complete ? 'border-emerald-400/15 bg-emerald-400/[0.06] text-emerald-300' : 'border-white/[0.08] bg-white/[0.025] text-[#8c95a1]'}`}>
-          {complete ? <CheckCircle2 className="size-4" /> : icon}
-        </div>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium text-[#e4e7eb]"><span className="mr-2 text-[#5f6875]">{number}.</span>{title}</p>
-            <span className={`rounded-full px-2 py-0.5 text-[10px] ${complete ? 'bg-emerald-400/[0.07] text-emerald-300' : 'bg-white/[0.04] text-[#7a8490]'}`}>{status}</span>
-          </div>
-          <p className="mt-1.5 text-xs leading-5 text-[#747d89]">{description}</p>
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={onAction}
-        disabled={disabled}
-        className="inline-flex h-9 min-w-[132px] items-center justify-center gap-2 rounded-lg border border-white/[0.1] bg-white/[0.035] px-4 text-xs font-medium text-[#d5dae0] transition hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-35"
-      >
-        {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
-        {actionLabel}<ArrowRight className="size-3.5" />
-      </button>
-    </div>
-  )
-}
-
-function HowItWorksCard({ number, title, description }: { number: string; title: string; description: string }) {
-  return (
-    <div className="rounded-xl border border-white/[0.07] bg-white/[0.015] p-5">
-      <div className="flex size-6 items-center justify-center rounded-full bg-white/[0.05] text-[10px] font-semibold text-[#9aa2ad]">{number}</div>
-      <p className="mt-4 text-sm font-medium text-[#d9dde2]">{title}</p>
-      <p className="mt-1.5 text-xs leading-5 text-[#6f7884]">{description}</p>
-    </div>
-  )
+function StatusPill({ label, value, positive = false, light = false }: { label: string; value: string; positive?: boolean; light?: boolean }) {
+  return <div className={light ? 'inline-flex items-center gap-2 rounded-full bg-secondary px-3 py-1.5 text-[11px]' : 'inline-flex items-center gap-2 rounded-full bg-white/[0.04] px-3 py-1.5 text-[11px]'}><span className={light ? 'text-muted-foreground' : 'text-[#77828e]'}>{label}</span><span className={positive ? light ? 'font-semibold text-emerald-700' : 'font-semibold text-emerald-300' : light ? 'font-semibold text-foreground' : 'font-semibold text-white'}>{value}</span></div>
 }
 
 function AdvancedRow({ label, value }: { label: string; value: string }) {

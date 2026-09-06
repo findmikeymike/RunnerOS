@@ -239,6 +239,31 @@ if (process.defaultApp) {
 import { applyConfiguredProxySettings } from './network-proxy'
 void applyConfiguredProxySettings()
 
+// Only a genuinely permanent failure may be reported to DiscoTrader as a 4xx.
+// A transient state such as a reconnecting connection, a busy gateway, or an
+// active kill switch used to be answered `422 invalid payload`, which told the
+// sender its message was malformed. It stopped retrying and the replay key was
+// retained, so the signal was lost with a diagnostic that blamed the sender.
+// Anything not listed here answers 503 so the sender can safely retry; entry
+// and management intake both deduplicate on immutable Discord message identity.
+const PERMANENT_TRADE_SIGNAL_ERROR_CODES = new Set([
+  'INTENT_CHECKSUM_MISMATCH',
+  'RECORD_INTEGRITY_FAILURE',
+  'AUTHORIZATION_MISMATCH',
+  'INTENT_EXPIRED',
+  'RISK_DENIED',
+  'ACCOUNT_MISMATCH',
+  'ENVIRONMENT_MISMATCH',
+])
+
+function isPermanentTradeSignalError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  if (error.name === 'ZodError') return true
+  if (error.name !== 'ExecutionGatewayError') return false
+  const code = (error as Error & { code?: unknown }).code
+  return typeof code === 'string' && PERMANENT_TRADE_SIGNAL_ERROR_CODES.has(code)
+}
+
 // Accept self-signed / untrusted certificates when connecting to a user-configured remote server.
 // Only bypasses cert validation for the exact CRAFT_SERVER_URL origin — all other connections
 // use standard certificate verification. Without this, wss:// to self-signed servers fails with
@@ -986,10 +1011,7 @@ app.whenReady().then(async () => {
                     },
                   }
                 } catch (error) {
-                  const isPayloadError = (
-                    error instanceof Error
-                    && (error.name === 'ZodError' || error.name === 'ExecutionGatewayError')
-                  )
+                  const isPayloadError = isPermanentTradeSignalError(error)
                   mainLog.warn('[trade-god] DiscoTrader entry push rejected:', error)
                   return {
                     handled: true,
@@ -1021,10 +1043,7 @@ app.whenReady().then(async () => {
                   },
                 }
               } catch (error) {
-                const isPayloadError = (
-                  error instanceof Error
-                  && (error.name === 'ZodError' || error.name === 'ExecutionGatewayError')
-                )
+                const isPayloadError = isPermanentTradeSignalError(error)
                 mainLog.warn('[trade-god] Discord management push rejected:', error)
                 return {
                   handled: true,

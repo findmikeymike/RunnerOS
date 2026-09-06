@@ -119,4 +119,33 @@ describe('options autopilot activation review', () => {
     await expect(service.commit(review.review_id, review.content_checksum, true)).rejects.toThrow('expired')
     expect((await automation.getRoute(source.route_id)).revision).toBe(1)
   })
+
+  test('uses the one applied Webull sandbox lifecycle as exact sandbox-only automation evidence', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'options-auto-activation-')); roots.push(root)
+    const connection = sum({ ...account(), provider: 'webull' as const, environment: 'sandbox' as const,
+      auth_profile: 'webull-individual-hmac' as const, adapter_id: 'webull-options-api', adapter_version: '1.1.0',
+      provider_contract_version: 'webull-trading-api-options-sandbox-events-2026-08-27', account_ref: 'sandbox-one',
+      endpoint: 'https://api.sandbox.webull.com', content_checksum: undefined }) as OptionsConnection
+    const app = sum({ ...application(connection), provider: 'webull' as const, environment: 'sandbox' as const,
+      account_ref: connection.account_ref, adapter_id: connection.adapter_id, adapter_version: connection.adapter_version,
+      provider_contract_version: connection.provider_contract_version, connection_checksum: connection.content_checksum,
+      content_checksum: undefined }) as OptionsCertificationApplication
+    const base = { certification_id: app.certification_id, content_checksum: app.certification_checksum,
+      expires_at: app.certification_expires_at }
+    const rules = sum({ ...policy(), environment: 'sandbox' as const, provider_slug: 'webull', adapter_id: connection.adapter_id,
+      account_id: connection.account_ref, required_certification: 'options-sandbox-entry-certified' as const, content_checksum: undefined }) as OptionsEntryPolicy
+    const source = sum({ ...route(connection, rules), provider: 'webull' as const, environment: 'sandbox' as const,
+      account_id: connection.account_ref, required_certification: 'options-sandbox-entry-certified' as const, content_checksum: undefined }) as OptionsAutomationRoute
+    const automation = new FileOptionsAutomationStore(root); await automation.savePolicy(rules); await automation.saveRoute(source)
+    const authorities = new FileOptionsAutopilotAuthorityStore(root, () => '2026-08-26T14:30:00.000Z')
+    ;(authorities as unknown as { baseCertifications: { getEligible(): Promise<typeof base> } }).baseCertifications = { getEligible: async () => base }
+    const service = new OptionsAutopilotActivationService(root, automation, authorities, new FileOptionsAutopilotCertificationStore(root),
+      { getActive: async () => app } as unknown as FileOptionsCertificationApplicationStore, async () => connection,
+      () => '2026-08-26T14:30:00.000Z')
+    ;(service as unknown as { baseCertifications: { getEligible(): Promise<typeof base> } }).baseCertifications = { getEligible: async () => base }
+    const review = await service.prepare(source.route_id, '2026-08-26T16:00:00.000Z')
+    expect(review.next_policy.required_certification).toBe('options-sandbox-entry-certified')
+    const authority = await service.commit(review.review_id, review.content_checksum, true)
+    expect(authority).toMatchObject({ provider: 'webull', environment: 'sandbox', certification_level: 'options-sandbox-entry-certified' })
+  })
 })

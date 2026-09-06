@@ -123,6 +123,41 @@ describe('OptionsConnectionService', () => {
     expect(await service.remove(first.connection.connection_id)).toBe(true)
     expect(values.size).toBe(0)
   })
+
+  it('lets an unused connection correct its account ID without re-entering secrets', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'options-connections-'))
+    roots.push(root)
+    const { vault, values } = createVault()
+    const service = new OptionsConnectionService(root, vault, { verify: async (connection) => proofFor(connection) }, () => '2026-08-26T12:00:00.000Z')
+    const saved = await service.save({
+      provider: 'webull',
+      account_ref: 'wrong-account',
+      account_label: 'Webull Sandbox',
+      credential: JSON.stringify({ app_key: 'app-key-123', app_secret: 'app-secret-value-123456' }),
+    })
+
+    const corrected = await service.save({
+      connection_id: saved.connection.connection_id,
+      allow_account_ref_change: true,
+      provider: 'webull',
+      account_ref: 'X814641270869235712',
+      account_label: 'My Webull Paper',
+      credential: '',
+    })
+
+    expect(corrected.connection.account_ref).toBe('X814641270869235712')
+    expect(corrected.connection.account_label).toBe('My Webull Paper')
+    expect(values.size).toBe(1)
+    await service.verify(corrected.connection.connection_id)
+    await expect(service.save({
+      connection_id: corrected.connection.connection_id,
+      allow_account_ref_change: true,
+      provider: 'webull',
+      account_ref: 'another-account',
+      account_label: 'My Webull Paper',
+      credential: '',
+    })).rejects.toThrow('can no longer be edited')
+  })
 })
 
 describe('Webull signature', () => {
@@ -181,7 +216,7 @@ describe('ReadOnlyOptionsProviderVerifier', () => {
       requests.push({ url: input, method: init?.method ?? 'GET', headers: new Headers(init?.headers) })
       const pathname = new URL(input).pathname
       const body = pathname.endsWith('/accounts/list')
-        ? { data: [{ account_id: 'sandbox-other' }] }
+        ? { data: [{ account_id: 'sandbox-other', account_type: 'OPTIONS' }] }
         : { data: [] }
       return { ok: true, status: 200, json: async () => body }
     }, () => '2026-08-26T12:00:00.000Z')
@@ -189,7 +224,7 @@ describe('ReadOnlyOptionsProviderVerifier', () => {
     await expect(verifier.verify(
       connectionFor('webull', 'sandbox-1'),
       JSON.stringify({ app_key: 'app-key-123', app_secret: 'app-secret-value-123456' }),
-    )).rejects.toThrow('exact configured sandbox account')
+    )).rejects.toThrow('Available sandbox accounts: sandbox-other (OPTIONS)')
     expect(requests).toHaveLength(1)
     expect(new URL(requests[0]!.url).origin).toBe('https://api.sandbox.webull.com')
     expect(requests[0]!.method).toBe('GET')

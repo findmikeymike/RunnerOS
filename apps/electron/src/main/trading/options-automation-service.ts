@@ -85,13 +85,23 @@ export class OptionsAutomationService {
     const source = parseDiscordChannelUrl(input.channel_url)
     const connection = await this.resolveConnection(input.connection_id)
     if (connection.environment !== 'paper' && connection.environment !== 'sandbox') throw new Error('Options automation is paper or sandbox only.')
-    const prior = input.route_id ? await this.store.getRoute(input.route_id) : undefined
+    const existing = input.route_id ? await this.store.getRoute(input.route_id) : undefined
+    let prior = existing
     if (prior?.state === 'archived') throw new Error('Archived Discord sources cannot be changed; add it again as a new source.')
-    if (prior && (prior.guild_id !== source.guild_id || prior.channel_id !== source.channel_id
-      || prior.thread_id !== (input.thread_id?.trim() || null) || prior.author_id !== input.author_id.trim())) {
-      throw new Error('Discord identity cannot be edited. Archive this source and add the new one.')
+    const identityChanged = prior && (prior.guild_id !== source.guild_id || prior.channel_id !== source.channel_id
+      || prior.thread_id !== (input.thread_id?.trim() || null) || prior.author_id !== input.author_id.trim())
+    if (prior && identityChanged) {
+      const priorRouteId = prior.route_id
+      const hasTradingHistory = (await this.receipts.list()).some((receipt) => receipt.route_id === priorRouteId)
+      if (prior.state !== 'draft' || hasTradingHistory) {
+        throw new Error('This Discord source has trading history and cannot be changed. Remove it and add the replacement.')
+      }
+      prior = undefined
     }
     const timestamp = this.now()
+    const requiredCertification = connection.provider === 'webull' && connection.environment === 'sandbox'
+      ? 'options-sandbox-entry-certified' as const
+      : 'options-paper-autopilot-certified' as const
     const routeId = prior?.route_id ?? `options-route-${randomUUID()}`
     const revision = (prior?.revision ?? 0) + 1
     const policyId = prior?.policy_id ?? `options-policy-${randomUUID()}`
@@ -123,7 +133,7 @@ export class OptionsAutomationService {
         custody_certification_checksum: '0'.repeat(64),
       },
       environment: connection.environment, provider_slug: connection.provider, adapter_id: connection.adapter_id,
-      required_certification: 'options-paper-autopilot-certified' as const, certification_checksum: '0'.repeat(64),
+      required_certification: requiredCertification, certification_checksum: '0'.repeat(64),
       connection_id: connection.connection_id, account_id: connection.account_ref, source_route_id: routeId,
       global_halt_required: true as const, account_halt_required: true as const, source_halt_required: true as const,
       mandate_expires_at: new Date(Date.parse(timestamp) + 24 * 60 * 60 * 1_000).toISOString(), created_at: timestamp,
@@ -138,13 +148,14 @@ export class OptionsAutomationService {
       connection_checksum: connection.content_checksum, account_id: connection.account_ref,
       provider: connection.provider, environment: connection.environment, policy_id: policy.policy_id,
       policy_revision: policy.revision, policy_checksum: policy.content_checksum,
-      required_certification: 'options-paper-autopilot-certified' as const,
+      required_certification: requiredCertification,
       state: 'draft' as const, created_at: prior?.created_at ?? timestamp, updated_at: timestamp,
     }
     const route = optionsAutomationRouteSchema.parse({ ...routeBody, content_checksum: sha256(routeBody) })
     await this.store.saveRoute(route)
+    if (existing && identityChanged) await this.archive(existing.route_id)
     return { route, policy, recent_receipts: [], automatic_authority_active: false, activation_ready: false,
-      activation_issue: 'Automatic safety test not completed.', expiration_assessments: [] }
+      activation_issue: 'Run the one guided paper test, then turn automation on.', expiration_assessments: [] }
   }
 
   async archive(routeId: string): Promise<OptionsAutomationRoute> {

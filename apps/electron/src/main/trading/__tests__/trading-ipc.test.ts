@@ -62,6 +62,9 @@ describe('Trade God IPC registration', () => {
         return route
       },
       removeTradingSignalRoute: async (id) => { calls.push(`routes:remove:${id}`); return true },
+      listDiscordSources: async () => [],
+      saveDiscordSource: async (input) => ({ source_id: 'discord-one', ...input }) as any,
+      archiveDiscordSource: async (sourceId) => ({ source_id: sourceId, state: 'archived' }) as any,
       listMirrorGroups: async () => { calls.push('mirror-groups:list'); return [] },
       saveMirrorGroup: async (input) => {
         calls.push('mirror-groups:save')
@@ -160,6 +163,9 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.LIST_SIGNAL_ROUTES,
       TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE,
       TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE,
+      TRADE_GOD_IPC.LIST_DISCORD_SOURCES,
+      TRADE_GOD_IPC.SAVE_DISCORD_SOURCE,
+      TRADE_GOD_IPC.ARCHIVE_DISCORD_SOURCE,
       TRADE_GOD_IPC.LIST_MIRROR_GROUPS,
       TRADE_GOD_IPC.SAVE_MIRROR_GROUP,
       TRADE_GOD_IPC.DISCOTRADER_WEBHOOK_SECRET_STATUS,
@@ -372,6 +378,9 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.LIST_SIGNAL_ROUTES,
       TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE,
       TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE,
+      TRADE_GOD_IPC.LIST_DISCORD_SOURCES,
+      TRADE_GOD_IPC.SAVE_DISCORD_SOURCE,
+      TRADE_GOD_IPC.ARCHIVE_DISCORD_SOURCE,
       TRADE_GOD_IPC.LIST_MIRROR_GROUPS,
       TRADE_GOD_IPC.SAVE_MIRROR_GROUP,
       TRADE_GOD_IPC.DISCOTRADER_WEBHOOK_SECRET_STATUS,

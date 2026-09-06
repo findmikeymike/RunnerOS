@@ -58,16 +58,6 @@ export function PanelSlot({
   const setFocusedPanel = useSetAtom(focusedPanelIdAtom)
   const parentContext = useAppShellContext()
   const navState = parseRouteToNavigationState(entry.route)
-  const isCreatorCommandCenter = navState?.navigator === 'sessions'
-  const isFullWidthRoute = isCreatorCommandCenter
-    || navState?.navigator === 'campaign'
-    || navState?.navigator === 'agenda'
-    || navState?.navigator === 'community'
-    || navState?.navigator === 'vault'
-    || navState?.navigator === 'agents'
-    || navState?.navigator === 'automations'
-    || navState?.navigator === 'workflows'
-    || navState?.navigator === 'settings'
 
   const handleClose = useCallback(() => {
     closePanel(entry.id)
@@ -122,8 +112,8 @@ export function PanelSlot({
         data-compact={isCompact || undefined}
         className={cn(
           'h-full overflow-hidden relative @container/panel',
-          !isOnly && isFocusedPanel ? 'shadow-panel-focused z-[1]' : 'shadow-middle z-0',
-          'runneros-glass-panel-strong',
+          isOnly ? 'shadow-none z-0' : isFocusedPanel ? 'shadow-panel-focused z-[1]' : 'shadow-middle z-0',
+          !isOnly && 'runneros-glass-panel-strong',
         )}
         style={{
           // In multi-panel, unfocused panels override --background so all
@@ -137,11 +127,11 @@ export function PanelSlot({
             : {}
           ),
           // Corner radii: edge corners (touching window boundary) vs interior corners
-          borderTopLeftRadius: RADIUS_INNER,
-          borderBottomLeftRadius: isAtLeftEdge ? RADIUS_EDGE : RADIUS_INNER,
-          borderTopRightRadius: RADIUS_INNER,
-          borderBottomRightRadius: isAtRightEdge ? RADIUS_EDGE : RADIUS_INNER,
-          ...(isOnly && !isCompact && isFullWidthRoute
+          borderTopLeftRadius: isOnly ? 0 : RADIUS_INNER,
+          borderBottomLeftRadius: isOnly ? 0 : isAtLeftEdge ? RADIUS_EDGE : RADIUS_INNER,
+          borderTopRightRadius: isOnly ? 0 : RADIUS_INNER,
+          borderBottomRightRadius: isOnly ? 0 : isAtRightEdge ? RADIUS_EDGE : RADIUS_INNER,
+          ...(isOnly && !isCompact
             ? {
                 flexGrow: 1,
                 flexShrink: 1,
@@ -149,21 +139,13 @@ export function PanelSlot({
                 width: 'auto',
                 minWidth: 0,
               }
-            : isOnly && !isCompact
-            ? {
-                flexGrow: 0,
-                flexShrink: 1,
-                flexBasis: 'min(58vw, 920px)',
-                width: 'min(58vw, 920px)',
-                minWidth: 'min(640px, 100%)',
-              }
             : isOnly
             ? { flexGrow: 1, minWidth: 0 }
             : { flexGrow: proportion, flexShrink: 1, flexBasis: 0, minWidth: PANEL_MIN_WIDTH }
           ),
         }}
       >
-        <div className="h-full flex flex-col">
+        <div className="trade-god-light-shell h-full flex flex-col bg-background text-foreground">
           <AppShellProvider value={contextOverride}>
             <MainContentPanel
               navStateOverride={navState}

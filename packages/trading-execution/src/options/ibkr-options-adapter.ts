@@ -361,11 +361,23 @@ const parseIncrementRules = (rules: Record<string, unknown>): Array<{ minimum_pr
 }
 const normalizeIbkrStatus = (status?: string, filled = 0, quantity = 1): OptionsProviderOrder['status'] => {
   const normalized = status?.toLowerCase() ?? ''
+  // A requested-but-unconfirmed cancel is still live at the exchange and can
+  // still fill. Treating it as terminal would release the debit reservation and
+  // abandon a real position, so only an exact terminal cancel ends ownership.
+  if (isPendingCancelStatus(normalized)) {
+    if (filled >= quantity) return 'filled'
+    return filled > 0 ? 'partially-filled' : 'working'
+  }
   if (normalized.includes('cancel')) return filled > 0 ? 'partially-filled-canceled' : 'canceled'
   if (filled >= quantity) return 'filled'
   if (filled > 0) return 'partially-filled'
   if (['submitted', 'presubmitted', 'pending submit', 'working'].some((value) => normalized.includes(value))) return 'working'
   throw new Error(`IBKR returned an unsupported order status: ${status ?? 'missing'}.`)
+}
+const isPendingCancelStatus = (lowercaseStatus: string): boolean => {
+  const compact = lowercaseStatus.replace(/[\s_-]+/g, '')
+  return ['pendingcancel', 'cancelpending', 'cancelrequested', 'cancelling', 'canceling']
+    .some((value) => compact.includes(value))
 }
 const ibkrStatusAppearsWorking = (status?: string): boolean => {
   const normalized = status?.toLowerCase() ?? ''

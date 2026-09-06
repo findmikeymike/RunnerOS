@@ -45,6 +45,7 @@ export type DiscordManagementDispatchResult =
 
 export class FileDiscordManagementFamilyResolver {
   private queue: Promise<void> = Promise.resolve()
+  private readonly maxDeferralMs: number
 
   constructor(private readonly options: {
     directory: string
@@ -52,7 +53,14 @@ export class FileDiscordManagementFamilyResolver {
     mirror: DiscordManagementFamilyHandler<MirrorManagementReceipt>
     options?: DiscordManagementFamilyHandler<OptionsDiscordFollowupReceipt>
     now?: () => string
-  }) {}
+    maxDeferralMs?: number
+  }) {
+    this.maxDeferralMs = options.maxDeferralMs ?? 15 * 60_000
+  }
+
+  private now(): string {
+    return this.options.now?.() ?? new Date().toISOString()
+  }
 
   ingestPush(input: unknown): Promise<DiscordManagementDispatchResult> {
     const payload = discoTraderPushPayloadSchema.parse(input)
@@ -118,13 +126,24 @@ export class FileDiscordManagementFamilyResolver {
       }
       const selected = familiesWithCandidates[0]
       if (!selected?.resolved || !selected.strategy) {
-        const retryable = selected?.retryable
-          || (familiesWithCandidates.length === 0 && (single.retryable || mirror.retryable))
+        // A deferral only covers the short window while an entry reaches a
+        // protected state. Past that window the instruction is stale and must
+        // not be revived by a later sweep or an app restart.
+        const withinDeferralWindow = (
+          Date.parse(this.now()) - Date.parse(message.posted_at)
+        ) <= this.maxDeferralMs
+        const retryable = Boolean(
+          selected?.retryable
+          || (familiesWithCandidates.length === 0 && (single.retryable || mirror.retryable)),
+        ) && withinDeferralWindow
+        const staleDeferral = !retryable && !withinDeferralWindow
         return this.create({
           source_message: message,
           status: retryable ? 'deferred' : 'blocked', candidates,
           evidence: ['No gateway mutation was attempted.'],
-          error: selected?.error ?? single.error ?? mirror.error ?? options.error ?? 'No trade family matches this message.',
+          error: staleDeferral
+            ? 'Deferred Discord follow-up expired before its trade became manageable.'
+            : selected?.error ?? single.error ?? mirror.error ?? options.error ?? 'No trade family matches this message.',
         }, existing)
       }
       const target = targetFor(selected.family, selected.resolved)

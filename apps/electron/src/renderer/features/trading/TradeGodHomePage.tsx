@@ -30,7 +30,8 @@ import DiscoTraderControlCenterPage from './DiscoTraderControlCenterPage'
 import TradeGodTradesPage from './TradeGodTradesPage'
 import TradeGodSignalsPage from './TradeGodSignalsPage'
 import OptionsControlCenterPage from './OptionsControlCenterPage'
-import TradingConnectionsSettingsPage from '@/pages/settings/TradingConnectionsSettingsPage'
+import TradeGodConnectionsPage from './TradeGodConnectionsPage'
+import TradeGodPageHeader from './TradeGodPageHeader'
 import { marketCandleSeriesToChartBars } from './chart-series-adapter'
 import type { SyntheticChartTimeframe } from '../../../main/trading/synthetic-chart-fixture'
 
@@ -311,30 +312,23 @@ const TradeGodHomePage: React.FC<TradeGodHomePageProps> = ({ workspaceId, worksp
   if (activeView === 'trades') return <TradeGodTradesPage />
   if (activeView === 'signals') return <TradeGodSignalsPage />
   if (activeView === 'options') return <OptionsControlCenterPage />
-  if (activeView === 'accounts') return <TradingConnectionsSettingsPage workspaceId={workspaceId} />
+  if (activeView === 'accounts') return <TradeGodConnectionsPage workspaceId={workspaceId} />
 
   return (
-    <div className="runneros-glass-route h-full overflow-y-auto bg-[#090c0f] text-[#eaecef]">
-      <div className="mx-auto flex w-full max-w-[1560px] flex-col gap-4 px-5 py-5 xl:px-8 xl:py-7">
-        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-[#252b33] pb-5">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-300">
-              <Activity className="h-4 w-4" /> {hubLabel}
+    <div className="runneros-glass-route trade-god-page-surface h-full overflow-y-auto text-[#eaecef]">
+      <div className="tg-page-container flex flex-col gap-6">
+        <TradeGodPageHeader
+          eyebrow={hubLabel}
+          icon={<Activity className="size-3.5" />}
+          title="Futures Overview"
+          description="Market state, catalysts, and signals—ordered by what needs your attention now."
+          actions={(
+            <div className="tg-header-status">
+              {gatewayReady ? <ShieldCheck className="size-3.5 text-emerald-600" /> : <Radio className="size-3.5 text-amber-600" />}
+              {gatewayReady ? 'Paper Gateway authenticated · quotes not yet wired' : 'Preview mode · market data offline'}
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight">Futures Overview</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#929aa5]">
-              Market state, catalysts, and signals—ordered by what needs your attention now.
-            </p>
-          </div>
-          <div className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs ${
-            gatewayReady
-              ? 'border-[#0ecb81]/20 bg-[#0ecb81]/[0.06] text-[#8fe8bd]'
-              : 'border-amber-300/20 bg-amber-300/[0.06] text-amber-100'
-          }`}>
-            {gatewayReady ? <ShieldCheck className="h-3.5 w-3.5" /> : <Radio className="h-3.5 w-3.5" />}
-            {gatewayReady ? 'Paper Gateway authenticated · quotes not yet wired' : 'Preview mode · market data offline'}
-          </div>
-        </header>
+          )}
+        />
 
         <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4" aria-label="Desk state">
           <DeskStateCard

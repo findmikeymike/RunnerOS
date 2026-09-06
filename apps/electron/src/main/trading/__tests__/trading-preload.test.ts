@@ -44,6 +44,9 @@ test('preload adapter invokes only the local Trade God channels', async () => {
     'connection-old',
   ) as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.removeTradingSignalRoute('route-1') as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.listDiscordSources() as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.saveDiscordSource({ display_name: 'Austin' } as any) as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.archiveDiscordSource('discord-one') as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.listMirrorGroups() as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.saveMirrorGroup({ mirror_group_id: 'group-one' } as any) as any)
     .toEqual({ artifact_id: 'artifact-preload' })
@@ -104,6 +107,9 @@ test('preload adapter invokes only the local Trade God channels', async () => {
     { channel: TRADE_GOD_IPC.LIST_SIGNAL_ROUTES, args: [] },
     { channel: TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE, args: [{ route_id: 'route-1' }, 'connection-old'] },
     { channel: TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE, args: ['route-1'] },
+    { channel: TRADE_GOD_IPC.LIST_DISCORD_SOURCES, args: [] },
+    { channel: TRADE_GOD_IPC.SAVE_DISCORD_SOURCE, args: [{ display_name: 'Austin' }] },
+    { channel: TRADE_GOD_IPC.ARCHIVE_DISCORD_SOURCE, args: ['discord-one'] },
     { channel: TRADE_GOD_IPC.LIST_MIRROR_GROUPS, args: [] },
     { channel: TRADE_GOD_IPC.SAVE_MIRROR_GROUP, args: [{ mirror_group_id: 'group-one' }] },
     { channel: TRADE_GOD_IPC.EXECUTION_CONTROL, args: [] },

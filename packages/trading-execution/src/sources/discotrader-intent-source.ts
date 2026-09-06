@@ -508,15 +508,38 @@ const positiveDecimal = (value: string, label: string): number => {
   return number
 }
 
+// Binary floating point cannot represent decimal ticks exactly: 0.30 / 0.10 is
+// 2.9999999999999996 and 0.07 / 0.01 is 7.000000000000001, so a plain division
+// rejected legitimate stop distances on every instrument whose tick is not a
+// binary fraction. The division is done on scaled integers instead.
 const exactTickCount = (points: number, tickSize: number): number => {
-  const ticks = points / tickSize
-  if (!Number.isSafeInteger(ticks) || ticks <= 0) {
+  const scale = Math.max(decimalPlaces(points), decimalPlaces(tickSize))
+  const scaledPoints = Math.round(points * 10 ** scale)
+  const scaledTick = Math.round(tickSize * 10 ** scale)
+  if (
+    !Number.isSafeInteger(scaledPoints)
+    || !Number.isSafeInteger(scaledTick)
+    || scaledTick <= 0
+    || scaledPoints <= 0
+    || scaledPoints % scaledTick !== 0
+  ) {
     throw new ExecutionGatewayError(
       'RISK_DENIED',
       'DiscoTrader stop distance is not an exact positive instrument tick count.',
     )
   }
-  return ticks
+  return scaledPoints / scaledTick
+}
+
+const decimalPlaces = (value: number): number => {
+  const text = value.toString()
+  if (text.includes('e') || text.includes('E')) {
+    throw new ExecutionGatewayError(
+      'RISK_DENIED',
+      'DiscoTrader tick arithmetic requires plain decimal notation.',
+    )
+  }
+  return text.split('.')[1]?.length ?? 0
 }
 
 const canonicalPositiveDecimal = (value: number, label: string): string => {

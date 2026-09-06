@@ -168,11 +168,24 @@ export class OptionsExecutionGateway {
 
   async recoverNonTerminal(skipIntentIds: ReadonlySet<string> = new Set()): Promise<number> {
     let recovered = 0
+    const failures: Error[] = []
     for (const record of await this.executions.listRecords()) {
-      if (record.state === 'canceled-flat' || record.state === 'not-sent') continue
+      if (isTerminalOptionsExecutionState(record.state)) continue
       if (skipIntentIds.has(record.intent_id)) continue
-      await this.reconcile(record.intent_id)
-      recovered += 1
+      // One unrecoverable record must not abandon recovery for every record
+      // after it; collect the failures and report them once the sweep is done.
+      try {
+        await this.reconcile(record.intent_id)
+        recovered += 1
+      } catch (error) {
+        failures.push(error instanceof Error ? error : new Error(String(error)))
+      }
+    }
+    if (failures.length > 0) {
+      throw new OptionsExecutionGatewayError(
+        'OPTIONS_PROVIDER_DIVERGENCE',
+        `Options execution recovery could not reconcile ${failures.length} record(s): ${failures.map((failure) => failure.message).join('; ')}`,
+      )
     }
     return recovered
   }
@@ -186,16 +199,20 @@ export class OptionsExecutionGateway {
     if (await transaction.activeSetChecksum() !== reservation.active_reservation_set_checksum) {
       throw new OptionsExecutionGatewayError('OPTIONS_PREVIEW_STALE_OR_DRIFTED', 'Account reservations changed before preview.')
     }
-    const admissionSnapshot = await this.adapter.snapshotAccount(reservation.account_id)
-    this.assertPreflightFlat(admissionSnapshot, reservation.account_id, reservation.canonical_contract_id)
-    if (sha256(admissionSnapshot) !== reservation.account_capacity_snapshot_checksum) {
-      throw new OptionsExecutionGatewayError('OPTIONS_PREVIEW_STALE_OR_DRIFTED', 'Provider account truth changed after debit admission.')
-    }
-    this.assertQuote(await this.adapter.quote(reservation.canonical_contract_id), evidence.quote)
-
-    const request = this.providerRequest(evidence, reservation)
     let preview: OptionsProviderPreview
+    let request: OptionsProviderOrderRequest
     try {
+      // These admission checks run inside the compensating block: a drift failure
+      // on a flat account must return the reserved debit rather than strand it,
+      // because reserved capacity is otherwise never reclaimed.
+      const admissionSnapshot = await this.adapter.snapshotAccount(reservation.account_id)
+      this.assertPreflightFlat(admissionSnapshot, reservation.account_id, reservation.canonical_contract_id)
+      if (sha256(admissionSnapshot) !== reservation.account_capacity_snapshot_checksum) {
+        throw new OptionsExecutionGatewayError('OPTIONS_PREVIEW_STALE_OR_DRIFTED', 'Provider account truth changed after debit admission.')
+      }
+      this.assertQuote(await this.adapter.quote(reservation.canonical_contract_id), evidence.quote)
+
+      request = this.providerRequest(evidence, reservation)
       const previewResponse = await this.adapter.preview(request)
       preview = this.buildPreview(evidence, reservation, request, previewResponse)
       await this.executions.savePreview(preview)
@@ -214,9 +231,15 @@ export class OptionsExecutionGateway {
       }
     } catch (error) {
       if (error instanceof OptionsExecutionStoreError) throw error
-      const flat = await this.adapter.snapshotAccount(reservation.account_id)
-      this.assertPreflightFlat(flat, reservation.account_id, reservation.canonical_contract_id)
-      await transaction.release(this.releaseProof(reservation, flat, [], 'not-sent'))
+      try {
+        const flat = await this.adapter.snapshotAccount(reservation.account_id)
+        this.assertPreflightFlat(flat, reservation.account_id, reservation.canonical_contract_id)
+        await transaction.release(this.releaseProof(reservation, flat, [], 'not-sent'))
+      } catch {
+        // Reserved capacity stays held when the account cannot be proven flat: a
+        // release proof is impossible and the unexplained exposure needs review.
+        // The original failure is still surfaced rather than masked by this one.
+      }
       throw error
     }
 
@@ -272,7 +295,7 @@ export class OptionsExecutionGateway {
     transaction: OptionsReservationAccountTransaction,
   ): Promise<OptionsExecutionRecord> {
     let record = await this.executions.getRecord(supplied.intent_id)
-    if (record.state === 'canceled-flat' || record.state === 'not-sent') return record
+    if (isTerminalOptionsExecutionState(record.state)) return record
     const command = await this.executions.getCommand(record.command_id)
     this.assertCommandRecord(command, record)
     const resolved = await this.adapter.resolveContract(parseCanonicalContract(record.canonical_contract_id))
@@ -518,7 +541,10 @@ export class OptionsExecutionGateway {
     assertChecksum(route)
     const descriptor = this.adapter.descriptor
     if (authority.mode !== 'automatic-paper'
-      || authority.certification_level !== 'options-paper-autopilot-certified'
+      || authority.certification_level !== route.required_certification
+      || authority.certification_level !== policy.required_certification
+      || (authority.certification_level === 'options-sandbox-entry-certified'
+        && !(authority.provider === 'webull' && authority.environment === 'sandbox'))
       || authority.authority_id !== input.mandate_id
       || authority.content_checksum !== input.mandate_checksum
       || authority.route_id !== policy.source_route_id
@@ -837,4 +863,11 @@ function parseCanonicalContract(canonicalId: string): { underlying: string; expi
 
 function safeError(error: unknown): string {
   return error instanceof Error ? error.message.slice(0, 240) : 'Unknown provider submission failure'
+}
+
+// A settled record holds no provider exposure and owns no reservation, so
+// reconciling it would compare a filled entry against an already-closed position
+// and report a false divergence.
+function isTerminalOptionsExecutionState(state: OptionsExecutionRecord['state']): boolean {
+  return state === 'canceled-flat' || state === 'not-sent' || state === 'closed-flat'
 }

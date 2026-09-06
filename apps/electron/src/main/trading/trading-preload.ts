@@ -30,6 +30,7 @@ import type {
   TradingConnectionStatus,
 } from './trading-connection-service.ts'
 import type { TradingSignalRoute } from './trading-signal-route-store.ts'
+import type { DiscordSource, SaveDiscordSourceInput } from './discord-source-store.ts'
 import type { OptionsConnectionStatus, SaveOptionsConnectionInput, StartOptionsCertificationInput } from './options-connection-service.ts'
 import type { OptionsAutomationSourceStatus, SaveOptionsAutomationSourceInput } from './options-automation-service.ts'
 
@@ -66,6 +67,9 @@ export interface TradingPreloadApi {
     expectedPreviousTargetKey?: string,
   ): Promise<TradingSignalRoute>
   removeTradingSignalRoute(routeId: string): Promise<boolean>
+  listDiscordSources(): Promise<DiscordSource[]>
+  saveDiscordSource(input: SaveDiscordSourceInput): Promise<DiscordSource>
+  archiveDiscordSource(sourceId: string): Promise<DiscordSource>
   listMirrorGroups(): Promise<MirrorGroup[]>
   saveMirrorGroup(input: SaveMirrorGroupInput): Promise<MirrorGroup>
   getDiscoTraderWebhookSecretStatus(): Promise<{ configured: boolean }>
@@ -174,6 +178,9 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
       invoke(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE, route, expectedPreviousTargetKey) as Promise<TradingSignalRoute>
     ),
     removeTradingSignalRoute: (routeId) => invoke(TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE, routeId) as Promise<boolean>,
+    listDiscordSources: () => invoke(TRADE_GOD_IPC.LIST_DISCORD_SOURCES) as Promise<DiscordSource[]>,
+    saveDiscordSource: (input) => invoke(TRADE_GOD_IPC.SAVE_DISCORD_SOURCE, input) as Promise<DiscordSource>,
+    archiveDiscordSource: (sourceId) => invoke(TRADE_GOD_IPC.ARCHIVE_DISCORD_SOURCE, sourceId) as Promise<DiscordSource>,
     listMirrorGroups: () => invoke(TRADE_GOD_IPC.LIST_MIRROR_GROUPS) as Promise<MirrorGroup[]>,
     saveMirrorGroup: (input) => invoke(TRADE_GOD_IPC.SAVE_MIRROR_GROUP, input) as Promise<MirrorGroup>,
     getDiscoTraderWebhookSecretStatus: () => (

@@ -420,7 +420,12 @@ export class TradovateFetchClient implements TradovateRestClient {
             accountId: credential.account_id,
             contractId: positions[0]!.contractId,
             admin: false,
-            customTag50: tag,
+            // customTag50 is bounded at 50 characters, unlike the 64-character
+            // clOrdId used for cancel and modify. Sending the longer management
+            // tag here risked the provider rejecting the one order that fires
+            // unattended, leaving a naked position behind an emergency halt.
+            customTag50: tradovateManagementCustomTag(input.managementCommand),
+            isAutomated: true,
           }),
         },
         true,
@@ -1255,6 +1260,12 @@ const tradovateClientOrderId = (command: ExecutionCommand): string => (
 
 const tradovateManagementTag = (command: ExecutionManagementCommand): string => (
   `tg-m-${command.idempotency_key.slice(0, 59)}`
+)
+
+// customTag50 is limited to 50 characters by the provider, so it is derived
+// separately from the 64-character clOrdId management tag.
+const tradovateManagementCustomTag = (command: ExecutionManagementCommand): string => (
+  `tg-m-${command.idempotency_key.slice(0, 45)}`
 )
 
 const parsePositiveProviderId = (value: string): number => {

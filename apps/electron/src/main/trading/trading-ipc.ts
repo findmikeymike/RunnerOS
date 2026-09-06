@@ -30,6 +30,7 @@ import type {
   TradingConnectionStatus,
 } from './trading-connection-service.ts'
 import type { TradingSignalRoute } from './trading-signal-route-store.ts'
+import type { DiscordSource, SaveDiscordSourceInput } from './discord-source-store.ts'
 import type { OptionsConnectionStatus, SaveOptionsConnectionInput, StartOptionsCertificationInput } from './options-connection-service.ts'
 import type { OptionsAutomationSourceStatus, SaveOptionsAutomationSourceInput } from './options-automation-service.ts'
 
@@ -57,6 +58,9 @@ export const TRADE_GOD_IPC = {
   LIST_SIGNAL_ROUTES: 'trade-god:signal-routes:list',
   SAVE_SIGNAL_ROUTE: 'trade-god:signal-routes:save',
   REMOVE_SIGNAL_ROUTE: 'trade-god:signal-routes:remove',
+  LIST_DISCORD_SOURCES: 'trade-god:discord-sources:list',
+  SAVE_DISCORD_SOURCE: 'trade-god:discord-sources:save',
+  ARCHIVE_DISCORD_SOURCE: 'trade-god:discord-sources:archive',
   LIST_MIRROR_GROUPS: 'trade-god:mirror-groups:list',
   SAVE_MIRROR_GROUP: 'trade-god:mirror-groups:save',
   DISCOTRADER_WEBHOOK_SECRET_STATUS: 'trade-god:discotrader:webhook-secret-status',
@@ -119,6 +123,9 @@ export interface TradingIpcManager {
     expectedPreviousTargetKey?: string,
   ): Promise<TradingSignalRoute>
   removeTradingSignalRoute?(routeId: string): Promise<boolean>
+  listDiscordSources?(): Promise<DiscordSource[]>
+  saveDiscordSource?(input: SaveDiscordSourceInput): Promise<DiscordSource>
+  archiveDiscordSource?(sourceId: string): Promise<DiscordSource>
   listMirrorGroups?(): Promise<MirrorGroup[]>
   saveMirrorGroup?(input: SaveMirrorGroupInput): Promise<MirrorGroup>
   getDiscoTraderWebhookSecretStatus?(): Promise<{ configured: boolean }>
@@ -294,6 +301,19 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
   ipcMain.handle(TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE, (_event, routeId: unknown) => {
     if (!manager.removeTradingSignalRoute) throw new Error('Trading signal routes are unavailable.')
     return manager.removeTradingSignalRoute(String(routeId))
+  })
+  ipcMain.handle(TRADE_GOD_IPC.LIST_DISCORD_SOURCES, () => {
+    if (!manager.listDiscordSources) throw new Error('Discord connections are unavailable.')
+    return manager.listDiscordSources()
+  })
+  ipcMain.handle(TRADE_GOD_IPC.SAVE_DISCORD_SOURCE, (_event, input: unknown) => {
+    if (!manager.saveDiscordSource) throw new Error('Discord connections are unavailable.')
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Discord connection details are invalid.')
+    return manager.saveDiscordSource(input as SaveDiscordSourceInput)
+  })
+  ipcMain.handle(TRADE_GOD_IPC.ARCHIVE_DISCORD_SOURCE, (_event, sourceId: unknown) => {
+    if (!manager.archiveDiscordSource) throw new Error('Discord connections are unavailable.')
+    return manager.archiveDiscordSource(String(sourceId))
   })
   ipcMain.handle(TRADE_GOD_IPC.LIST_MIRROR_GROUPS, () => {
     if (!manager.listMirrorGroups) throw new Error('Mirror Groups are unavailable.')
@@ -486,6 +506,9 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES)
     ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE)
     ipcMain.removeHandler(TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE)
+    ipcMain.removeHandler(TRADE_GOD_IPC.LIST_DISCORD_SOURCES)
+    ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_DISCORD_SOURCE)
+    ipcMain.removeHandler(TRADE_GOD_IPC.ARCHIVE_DISCORD_SOURCE)
     ipcMain.removeHandler(TRADE_GOD_IPC.LIST_MIRROR_GROUPS)
     ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_MIRROR_GROUP)
     ipcMain.removeHandler(TRADE_GOD_IPC.DISCOTRADER_WEBHOOK_SECRET_STATUS)

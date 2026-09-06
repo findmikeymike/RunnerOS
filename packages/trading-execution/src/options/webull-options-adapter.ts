@@ -11,13 +11,14 @@ import {
 
 import { sha256 } from '../canonical.ts'
 import { FixedDecimal } from './fixed-decimal.ts'
-import { isOptionPriceOnTick } from './option-tick.ts'
+import { isOptionPriceOnTick, optionTickForPrice } from './option-tick.ts'
 import type {
   OptionsProviderAccountSnapshot,
   OptionsProviderAdapter,
   OptionsProviderOrder,
   OptionsProviderOrderRequest,
 } from './options-provider-adapter.ts'
+import { WebullTradeEventStream, type WebullTradeEventTransport } from './webull-trade-event-stream.ts'
 
 const WEBULL_ENDPOINT = 'https://api.sandbox.webull.com'
 
@@ -26,6 +27,9 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<{ ok: boolean; s
 export class WebullOptionsAdapter implements OptionsProviderAdapter {
   readonly descriptor: OptionsProviderAdapter['descriptor']
   private readonly contracts = new Map<string, OptionContractIdentity>()
+  private readonly ownedClientOrderIds = new Set<string>()
+  private readonly events: WebullTradeEventStream
+  private streamGap?: string
 
   constructor(private readonly config: {
     connection_id: string
@@ -37,43 +41,69 @@ export class WebullOptionsAdapter implements OptionsProviderAdapter {
     fetch?: FetchLike
     now?: () => string
     nonce?: () => string
+    event_transport?: WebullTradeEventTransport
   }) {
     this.descriptor = {
       adapter_id: 'webull-options-api',
-      adapter_version: '1.0.0',
-      provider_contract_version: 'webull-trading-api-options-sandbox-2026-08-26',
+      adapter_version: '1.1.0',
+      provider_contract_version: 'webull-trading-api-options-sandbox-events-2026-08-27',
       environment: 'sandbox',
       credential_generation: config.credential_generation,
       preview_supported: true,
     }
+    this.events = new WebullTradeEventStream({
+      account_id: config.account_id,
+      app_key: config.app_key,
+      app_secret: config.app_secret,
+      transport: config.event_transport,
+      now: () => new Date(this.now()),
+      nonce: config.nonce,
+      onGap: (reason) => { this.streamGap = reason },
+    })
   }
 
   async resolveContract(query: { underlying: string; expiration: string; strike: string; right: 'call' | 'put' }): Promise<OptionContractIdentity> {
     const underlying = query.underlying.trim().toUpperCase()
     const strike = FixedDecimal.from(query.strike).toString()
     const response = await this.get('/trading/instruments/options/contracts/list', {
-      symbol: underlying,
-      status: 'ACTIVE',
-      option_expire_date: query.expiration,
+      category: 'US_OPTION',
+      underlying_symbols: underlying,
+      status: 'LISTING',
+      start_date: query.expiration,
+      end_date: query.expiration,
+      option_type: query.right.toUpperCase(),
+      strike_price_gte: strike,
+      strike_price_lte: strike,
+      show_deliverables: 'TRUE',
     })
     const matches = rows(response).filter((row) => (
-      field(row, 'symbol')?.toUpperCase() === underlying
-      && field(row, 'option_expire_date', 'expire_date') === query.expiration
+      field(row, 'underlying_symbol')?.toUpperCase() === underlying
+      && field(row, 'expiration_date') === query.expiration
       && equalDecimal(row.strike_price ?? row.strike, strike)
       && field(row, 'option_type', 'right')?.toUpperCase() === query.right.toUpperCase()
-      && field(row, 'market')?.toUpperCase() === 'US'
       && field(row, 'currency')?.toUpperCase() === 'USD'
       && equalDecimal(row.multiplier, '100')
-      && field(row, 'status')?.toUpperCase() === 'ACTIVE'
+      && field(row, 'status')?.toUpperCase() === 'LISTING'
+      && field(row, 'tradable_status')?.toUpperCase() === 'OC'
+      && field(row, 'def_type')?.toUpperCase() === 'STANDARD'
+      && field(row, 'settlement_method')?.toUpperCase() === 'PHYSICAL'
     ))
     if (matches.length !== 1) throw new Error('Webull did not return one exact active standard US option contract.')
     const found = matches[0]!
     const instrumentId = field(found, 'instrument_id', 'option_id')
-    const providerSymbol = field(found, 'option_symbol', 'ticker', 'instrument_symbol')
-    const minimumTick = decimal(found.tick_size ?? found.price_increment)
-    const tickRuleType = field(found, 'tick_rule_type')?.toUpperCase()
-    if (!instrumentId || !providerSymbol || !minimumTick) throw new Error('Webull option contract omitted exact instrument or tick evidence.')
-    if (tickRuleType !== 'CONSTANT') throw new Error('Webull option contract did not prove a constant tick rule across the admitted price range.')
+    const providerSymbol = field(found, 'symbol')
+    if (!instrumentId || !providerSymbol || typeof found.ppind !== 'boolean') {
+      throw new Error('Webull option contract omitted exact instrument or penny-program evidence.')
+    }
+    // Webull exposes the contract's Penny Program Indicator rather than a
+    // bespoke tick table. Apply the standard US option bands conservatively.
+    const allPricePenny = found.ppind && ['SPY', 'QQQ', 'IWM'].includes(underlying)
+    const minimumTick = found.ppind ? '0.01' : '0.05'
+    const incrementBands = allPricePenny
+      ? [{ minimum_price: '0', increment: '0.01' }]
+      : found.ppind
+      ? [{ minimum_price: '0', increment: '0.01' }, { minimum_price: '3', increment: '0.05' }]
+      : [{ minimum_price: '0', increment: '0.05' }, { minimum_price: '3', increment: '0.10' }]
     const resolvedAt = this.now()
     const body = {
       contract_schema_version: OPTION_CONTRACT_IDENTITY_SCHEMA_VERSION,
@@ -92,7 +122,7 @@ export class WebullOptionsAdapter implements OptionsProviderAdapter {
       listing_eligible: true,
       smart_routing_eligible: true,
       minimum_tick: minimumTick,
-      increment_bands: [{ minimum_price: '0', increment: minimumTick }],
+      increment_bands: incrementBands,
       resolved_at: resolvedAt,
     }
     const contract = optionContractIdentitySchema.parse({ ...body, content_checksum: sha256(body) })
@@ -104,19 +134,29 @@ export class WebullOptionsAdapter implements OptionsProviderAdapter {
     const contract = this.requireContract(canonicalContractId)
     const matches = rows(await this.get('/market-data/options/snapshots/list', {
       symbols: contract.provider_symbol,
+      category: 'US_OPTION',
     })).filter((row) => field(row, 'instrument_id') === contract.provider_instrument_id || field(row, 'symbol') === contract.provider_symbol)
     if (matches.length !== 1) throw new Error('Webull did not return one exact option snapshot.')
     const row = matches[0]!
-    if (field(row, 'market_data_type', 'quote_type')?.toUpperCase() !== 'REALTIME' || row.is_delayed !== false) {
-      throw new Error('Webull OPRA realtime non-display quote permission is not proven.')
-    }
     const bid = requiredDecimal(row.bid_price ?? row.bid)
     const ask = requiredDecimal(row.ask_price ?? row.ask)
     const bidSize = nonnegativeInteger(row.bid_size ?? row.bid_quantity)
     const askSize = nonnegativeInteger(row.ask_size ?? row.ask_quantity)
     const providerTimestamp = timestamp(row.quote_time ?? row.timestamp)
-    if (row.halted !== false) throw new Error('Webull option snapshot did not explicitly prove the contract is trading.')
     const receivedAt = this.now()
+    const quoteAgeMs = Math.max(0, Date.parse(receivedAt) - Date.parse(providerTimestamp))
+    const applicableTick = optionTickForPrice(contract, ask)
+    const quoteIssues: string[] = []
+    if (FixedDecimal.from(bid).compare('0') <= 0) quoteIssues.push('no positive bid')
+    if (FixedDecimal.from(ask).compare(bid) < 0) quoteIssues.push('ask is below bid')
+    if (bidSize < 1) quoteIssues.push('no bid size')
+    if (askSize < 1) quoteIssues.push('no ask size')
+    if (quoteAgeMs > 1_000) quoteIssues.push(`quote is ${quoteAgeMs} ms old (maximum 1000 ms)`)
+    if (!isOptionPriceOnTick(contract, bid)) quoteIssues.push(`bid ${bid} is off the ${applicableTick} tick`)
+    if (!isOptionPriceOnTick(contract, ask)) quoteIssues.push(`ask ${ask} is off the ${applicableTick} tick`)
+    if (quoteIssues.length > 0) {
+      throw new Error(`Webull option quote failed safety checks: ${quoteIssues.join('; ')}. Choose a liquid contract with a live bid and ask, then retry.`)
+    }
     const body = {
       quote_schema_version: OPTION_QUOTE_SNAPSHOT_SCHEMA_VERSION,
       quote_id: `webull-quote-${sha256({ instrument: contract.provider_instrument_id, providerTimestamp, receivedAt }).slice(0, 24)}`,
@@ -133,11 +173,11 @@ export class WebullOptionsAdapter implements OptionsProviderAdapter {
       provider_timestamp: providerTimestamp,
       received_at: receivedAt,
       decision_at: receivedAt,
-      quote_age_ms: Math.max(0, Date.parse(receivedAt) - Date.parse(providerTimestamp)),
+      quote_age_ms: quoteAgeMs,
       delayed: false,
       indicative: false,
       halted: false,
-      minimum_tick: contract.minimum_tick,
+      minimum_tick: applicableTick,
       provenance: 'webull-openapi:/market-data/options/snapshots/list',
     }
     return optionQuoteSnapshotSchema.parse({ ...body, content_checksum: sha256(body) })
@@ -153,20 +193,58 @@ export class WebullOptionsAdapter implements OptionsProviderAdapter {
     return { estimated_debit: debit, estimated_fees: fees, buying_power_impact: impact }
   }
 
-  async submit(_request: OptionsProviderOrderRequest): Promise<OptionsProviderOrder> {
-    throw new Error('Webull sandbox submission is blocked until retained certification proves long-open position semantics.')
+  async submit(request: OptionsProviderOrderRequest): Promise<OptionsProviderOrder> {
+    this.assertRequest(request)
+    await this.ensureEventTruth()
+    const existing = await this.getOrderByClientId(request.account_id, request.client_order_id)
+    if (existing) { this.assertExactOrder(existing, request); return existing }
+    if (request.action === 'SELL_TO_CLOSE') await this.assertExactClose(request)
+    this.ownedClientOrderIds.add(request.client_order_id)
+    const response = object(await this.post('/trading/orders/place', webullOrderBody(request, this.requireContract(request.canonical_contract_id))))
+    const providerOrderId = field(response, 'order_id') ?? field(object(response.data), 'order_id')
+    if (!providerOrderId) throw new Error('Webull accepted no exact provider order identity.')
+    const exact = await this.pollExactOrder(request.account_id, request.client_order_id)
+    if (!exact || exact.provider_order_id !== providerOrderId) {
+      throw new Error('Webull accepted the order but exact order truth is not available; automation remains halted for reconciliation.')
+    }
+    this.assertExactOrder(exact, request)
+    return exact
   }
 
-  async submitCertificationUnknown(_request: OptionsProviderOrderRequest): Promise<void> {
-    throw new Error('Webull sandbox unknown-submit mutation is blocked until sequenced order truth is certified.')
+  async submitCertificationUnknown(request: OptionsProviderOrderRequest): Promise<void> {
+    this.assertRequest(request)
+    await this.ensureEventTruth()
+    if (await this.getOrderByClientId(request.account_id, request.client_order_id)) {
+      throw new Error('Webull unknown-submit probe requires a fresh client order ID.')
+    }
+    this.ownedClientOrderIds.add(request.client_order_id)
+    const response = object(await this.post('/trading/orders/place', webullOrderBody(request, this.requireContract(request.canonical_contract_id))))
+    if (!(field(response, 'order_id') ?? field(object(response.data), 'order_id'))) {
+      throw new Error('Webull unknown-submit probe has no provider acceptance evidence.')
+    }
+    // Intentionally stop after acceptance. Certification must adopt the order
+    // by its reserved client ID without resubmitting it.
   }
 
-  async cancelOrder(_accountId: string, _providerOrderId: string, _clientOrderId: string): Promise<OptionsProviderOrder> {
-    throw new Error('Webull sandbox cancellation is blocked until sequenced order truth is attached and certified.')
+  async cancelOrder(accountId: string, providerOrderId: string, clientOrderId: string): Promise<OptionsProviderOrder> {
+    if (accountId !== this.config.account_id || !providerOrderId || !clientOrderId) throw new Error('Webull cancel target is incomplete.')
+    await this.ensureEventTruth()
+    const prior = await this.getOrderByClientId(accountId, clientOrderId)
+    if (!prior || prior.provider_order_id !== providerOrderId) throw new Error('Webull cancel target does not match exact provider truth.')
+    if (prior.status === 'canceled' || prior.status === 'partially-filled-canceled') return prior
+    if (prior.status !== 'working' && prior.status !== 'partially-filled') throw new Error('Webull order is not cancelable.')
+    await this.post('/trading/orders/cancel', { account_id: accountId, client_order_id: clientOrderId })
+    const exact = await this.pollExactOrder(accountId, clientOrderId)
+    if (!exact || exact.provider_order_id !== providerOrderId
+      || (exact.status !== 'canceled' && exact.status !== 'partially-filled-canceled')) {
+      throw new Error('Webull cancel outcome is not yet exact; automation remains halted for reconciliation.')
+    }
+    return exact
   }
 
   async getOrderByClientId(accountId: string, clientOrderId: string): Promise<OptionsProviderOrder | null> {
     if (accountId !== this.config.account_id) throw new Error('Webull order account does not match the configured sandbox account.')
+    this.ownedClientOrderIds.add(clientOrderId)
     const response = await this.get('/trading/orders/get', { account_id: accountId, client_order_id: clientOrderId })
     const candidates = rows(response)
     if (candidates.length === 0 && Object.keys(object(response)).length === 0) return null
@@ -177,16 +255,45 @@ export class WebullOptionsAdapter implements OptionsProviderAdapter {
 
   async snapshotAccount(accountId: string): Promise<OptionsProviderAccountSnapshot> {
     if (accountId !== this.config.account_id) throw new Error('Webull snapshot account does not match the configured sandbox account.')
-    throw new Error('Webull current account truth is uncertified: its open-order list may lag and no sequenced order-event reconciliation is attached.')
+    await this.ensureEventTruth()
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const generation = this.events.generation
+      const [positionsRaw, ordersRaw, ownedOrders] = await Promise.all([
+        this.get('/trading/assets/positions/list', { account_id: accountId }),
+        this.get('/trading/orders/open-orders/list', { account_id: accountId }),
+        Promise.all([...this.ownedClientOrderIds].map((id) => this.getOrderByClientId(accountId, id))),
+      ])
+      const positions = rows(positionsRaw).flatMap((row) => {
+        const instrumentId = field(row, 'instrument_id', 'option_id')
+        const assetType = field(row, 'instrument_type', 'asset_type', 'category')?.toUpperCase()
+        if (assetType && !assetType.includes('OPTION')) return []
+        if (!instrumentId) throw new Error('Webull option position omitted instrument identity.')
+        const contract = [...this.contracts.values()].find((item) => item.provider_instrument_id === instrumentId)
+        const quantity = signedInteger(row.quantity ?? row.position_qty ?? row.qty)
+        if (quantity === 0) return []
+        return [{ canonical_contract_id: contract?.canonical_id ?? `UNOWNED:${instrumentId}`, quantity, average_price: requiredDecimal(row.average_price ?? row.cost_price ?? row.avg_price) }]
+      })
+      const openOrders = rows(ordersRaw).map((row) => this.normalizeOrder(row, accountId))
+      const merged = new Map<string, OptionsProviderOrder>()
+      for (const order of [...openOrders, ...ownedOrders.filter((value): value is OptionsProviderOrder => Boolean(value))]) merged.set(order.client_order_id, order)
+      if (generation === this.events.generation && this.events.isHealthy()) return { account_id: accountId, positions, orders: [...merged.values()] }
+    }
+    throw new Error('Webull account changed during reconciliation; retry after the event stream settles.')
   }
+
+  dispose(): void { this.events.stop() }
 
   private normalizeOrder(row: Record<string, unknown>, accountId: string): OptionsProviderOrder {
     const clientOrderId = requiredField(row, 'client_order_id')
     const providerOrderId = requiredField(row, 'order_id')
     const instrumentId = requiredField(row, 'instrument_id')
     const contract = [...this.contracts.values()].find((candidate) => candidate.provider_instrument_id === instrumentId)
-    if (field(row, 'side')?.toUpperCase() !== 'BUY' || field(row, 'order_type')?.toUpperCase() !== 'LIMIT' || field(row, 'time_in_force')?.toUpperCase() !== 'DAY'
-      || field(row, 'option_strategy')?.toUpperCase() !== 'SINGLE' || field(row, 'combo_type')?.toUpperCase() !== 'NORMAL') {
+    const side = field(row, 'side')?.toUpperCase()
+    const action = field(row, 'position_intent')?.toUpperCase() === 'SELL_TO_CLOSE' || side === 'SELL' ? 'SELL_TO_CLOSE' : 'BUY_TO_OPEN'
+    const strategy = field(row, 'option_strategy')?.toUpperCase()
+    const combo = field(row, 'combo_type')?.toUpperCase()
+    if ((side !== 'BUY' && side !== 'SELL') || field(row, 'order_type')?.toUpperCase() !== 'LIMIT' || field(row, 'time_in_force')?.toUpperCase() !== 'DAY'
+      || (strategy && strategy !== 'SINGLE') || (combo && combo !== 'NORMAL')) {
       throw new Error('Webull order truth is outside the certified long single-leg scope.')
     }
     const quantity = positiveInteger(row.quantity)
@@ -196,7 +303,7 @@ export class WebullOptionsAdapter implements OptionsProviderAdapter {
       account_id: accountId,
       canonical_contract_id: contract?.canonical_id ?? `UNOWNED:${instrumentId}`,
       provider_instrument_id: instrumentId,
-      action: 'BUY_TO_OPEN',
+      action,
       order_type: 'limit',
       limit_price: requiredDecimal(row.limit_price),
       quantity,
@@ -216,6 +323,42 @@ export class WebullOptionsAdapter implements OptionsProviderAdapter {
       throw new Error('Webull request exceeds the certified single-leg sandbox scope.')
     }
     assertWebullRequest(request, contract)
+  }
+
+  private async ensureEventTruth(): Promise<void> {
+    if (!this.events.isHealthy()) {
+      this.streamGap = undefined
+      await this.events.start()
+    }
+    if (!this.events.isHealthy() || this.streamGap) {
+      const gap = this.streamGap
+      this.streamGap = undefined
+      throw new Error(`Webull order events are not current${gap ? `: ${gap}` : '.'}`)
+    }
+  }
+
+  private async pollExactOrder(accountId: string, clientOrderId: string): Promise<OptionsProviderOrder | null> {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const exact = await this.getOrderByClientId(accountId, clientOrderId)
+      if (exact) return exact
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+    return null
+  }
+
+  private async assertExactClose(request: OptionsProviderOrderRequest): Promise<void> {
+    const snapshot = await this.snapshotAccount(request.account_id)
+    const position = snapshot.positions.find((item) => item.canonical_contract_id === request.canonical_contract_id)
+    const working = snapshot.orders.filter((item) => item.status === 'working' || item.status === 'partially-filled')
+    if (snapshot.positions.length !== 1 || position?.quantity !== request.quantity || working.length !== 0) {
+      throw new Error('Webull close must match one exact unencumbered long option position.')
+    }
+  }
+
+  private assertExactOrder(order: OptionsProviderOrder, request: OptionsProviderOrderRequest): void {
+    for (const key of ['account_id', 'canonical_contract_id', 'provider_instrument_id', 'action', 'order_type', 'limit_price', 'quantity', 'time_in_force', 'regular_hours_only', 'client_order_id'] as const) {
+      if (order[key] !== request[key]) throw new Error(`Webull duplicate order differs at ${key}.`)
+    }
   }
 
   private requireContract(id: string): OptionContractIdentity {
@@ -250,8 +393,15 @@ export class WebullOptionsAdapter implements OptionsProviderAdapter {
       ...(bodyText ? { body: bodyText } : {}),
       signal: AbortSignal.timeout(10_000),
     })
-    if (!response.ok) throw new Error(`Webull sandbox API failed with HTTP ${response.status}.`)
-    return response.json()
+    const payload = await response.json().catch(() => undefined)
+    if (!response.ok) {
+      const exact = object(payload)
+      const code = field(exact, 'error_code')
+      const message = field(exact, 'message')
+      const detail = [code, message].filter(Boolean).join(': ').replace(/[\r\n]+/g, ' ').slice(0, 240)
+      throw new Error(`Webull sandbox API failed with HTTP ${response.status}${detail ? ` (${detail})` : ''}.`)
+    }
+    return payload
   }
 
   private now(): string { return (this.config.now ?? (() => new Date().toISOString()))() }
@@ -259,6 +409,7 @@ export class WebullOptionsAdapter implements OptionsProviderAdapter {
 
 export function webullOrderBody(request: OptionsProviderOrderRequest, contract: OptionContractIdentity): Record<string, unknown> {
   assertWebullRequest(request, contract)
+  const side = request.action === 'BUY_TO_OPEN' ? 'BUY' : 'SELL'
   return {
     account_id: request.account_id,
     new_orders: [{
@@ -268,14 +419,16 @@ export function webullOrderBody(request: OptionsProviderOrderRequest, contract: 
       limit_price: request.limit_price,
       quantity: String(request.quantity),
       option_strategy: 'SINGLE',
-      side: 'BUY',
+      side,
+      position_intent: request.action,
       time_in_force: 'DAY',
       entrust_type: 'QTY',
       instrument_type: 'OPTION',
       market: 'US',
       symbol: contract.underlying,
       legs: [{
-        side: 'BUY',
+        side,
+        position_intent: request.action,
         quantity: String(request.quantity),
         symbol: contract.underlying,
         strike_price: contract.strike,
@@ -290,8 +443,8 @@ export function webullOrderBody(request: OptionsProviderOrderRequest, contract: 
 
 const assertWebullRequest = (request: OptionsProviderOrderRequest, contract: OptionContractIdentity): void => {
   if (contract.provider !== 'webull' || request.canonical_contract_id !== contract.canonical_id
-    || request.provider_instrument_id !== contract.provider_instrument_id || request.action !== 'BUY_TO_OPEN'
-    || request.order_type !== 'limit' || request.quantity !== 1 || request.time_in_force !== 'day'
+    || request.provider_instrument_id !== contract.provider_instrument_id || !['BUY_TO_OPEN', 'SELL_TO_CLOSE'].includes(request.action)
+    || request.order_type !== 'limit' || !Number.isSafeInteger(request.quantity) || request.quantity < 1 || request.quantity > 100 || request.time_in_force !== 'day'
     || request.regular_hours_only !== true || !/^tg(?:opt|cert)-[a-z0-9-]+$/i.test(request.client_order_id)
     || request.client_order_id.length > 32 || !isOptionPriceOnTick(contract, request.limit_price)) {
     throw new Error('Webull request exceeds the certified single-leg sandbox scope.')
@@ -335,7 +488,10 @@ const requiredField = (row: Record<string, unknown>, ...keys: string[]): string 
 const decimal = (value: unknown): string | undefined => {
   const raw = typeof value === 'string' ? value.trim() : typeof value === 'number' && Number.isFinite(value) ? String(value) : ''
   if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(raw)) return undefined
-  return FixedDecimal.from(raw).toString()
+  const [whole, fraction] = raw.split('.')
+  const significantFraction = fraction && fraction.length > 6 ? fraction.replace(/0+$/, '') : fraction
+  const canonical = significantFraction ? `${whole}.${significantFraction}` : whole!
+  return FixedDecimal.from(canonical).toString()
 }
 const requiredDecimal = (value: unknown): string => {
   const parsed = decimal(value)
@@ -356,6 +512,11 @@ const positiveInteger = (value: unknown): number => {
   if (parsed < 1) throw new Error('Webull response returned a nonpositive quantity.')
   return parsed
 }
+const signedInteger = (value: unknown): number => {
+  const parsed = Number(typeof value === 'string' || typeof value === 'number' ? value : NaN)
+  if (!Number.isSafeInteger(parsed)) throw new Error('Webull response returned an invalid signed quantity.')
+  return parsed
+}
 const timestamp = (value: unknown): string => {
   const milliseconds = typeof value === 'number' ? value : Number(typeof value === 'string' ? value : NaN)
   const parsed = Number.isFinite(milliseconds) ? new Date(milliseconds).toISOString() : typeof value === 'string' ? new Date(value).toISOString() : ''
@@ -364,9 +525,21 @@ const timestamp = (value: unknown): string => {
 }
 const normalizeWebullStatus = (status: string, filled: number, quantity: number): OptionsProviderOrder['status'] => {
   const normalized = status.toUpperCase()
+  // A requested-but-unconfirmed cancel is still live at the exchange and can
+  // still fill. Treating it as terminal would release the debit reservation and
+  // abandon a real position, so only an exact terminal cancel ends ownership.
+  if (isWebullPendingCancelStatus(normalized)) {
+    if (filled >= quantity) return 'filled'
+    return filled > 0 ? 'partially-filled' : 'working'
+  }
   if (normalized.includes('CANCEL')) return filled > 0 ? 'partially-filled-canceled' : 'canceled'
   if (filled >= quantity || normalized === 'FILLED') return 'filled'
   if (filled > 0 || normalized === 'PARTIALLY_FILLED') return 'partially-filled'
   if (['SUBMITTED', 'PENDING', 'WORKING', 'NEW'].some((candidate) => normalized.includes(candidate))) return 'working'
   throw new Error(`Webull returned an unsupported order status: ${status}.`)
+}
+const isWebullPendingCancelStatus = (uppercaseStatus: string): boolean => {
+  const compact = uppercaseStatus.replace(/[\s_-]+/g, '')
+  return ['PENDINGCANCEL', 'CANCELPENDING', 'CANCELREQUESTED', 'CANCELLING', 'CANCELING']
+    .some((candidate) => compact.includes(candidate))
 }

@@ -24,6 +24,7 @@ import {
 
 import { canonicalJson, sha256 } from '../canonical.ts'
 import { FileOptionsAutopilotCertificationJournal } from './options-autopilot-certification.ts'
+import { FileOptionsCertificationStore } from './options-certification.ts'
 
 export class FileOptionsAutopilotCertificationStore {
   private readonly directory: string
@@ -127,12 +128,14 @@ export class FileOptionsAutopilotAuthorityStore {
   private readonly revocations: string
   private readonly locks: string
   private readonly certifications: FileOptionsAutopilotCertificationStore
+  private readonly baseCertifications: FileOptionsCertificationStore
 
   constructor(root: string, private readonly now: () => string = () => new Date().toISOString()) {
     this.activations = path.join(root, 'options-automation', 'authorities')
     this.revocations = path.join(root, 'options-automation', 'revocations')
     this.locks = path.join(root, 'options-automation', 'authority-locks')
     this.certifications = new FileOptionsAutopilotCertificationStore(root)
+    this.baseCertifications = new FileOptionsCertificationStore(root)
   }
 
   async activate(input: {
@@ -148,8 +151,15 @@ export class FileOptionsAutopilotAuthorityStore {
     const connection = verify(input.connection, optionsConnectionSchema, 'Options connection')
     const application = verify(input.base_application, optionsCertificationApplicationSchema, 'Options certification application')
     const timestamp = this.now()
-    const certification = await this.certifications.getEligible(connection, timestamp)
+    const fullCertification = await this.certifications.getEligible(connection, timestamp)
+    const baseCertification = connection.provider === 'webull' && connection.environment === 'sandbox'
+      ? await this.baseCertifications.getEligible(connection, timestamp)
+      : undefined
+    const certification = fullCertification ?? baseCertification
     if (!certification) throw new Error('Exact options autopilot certification is unavailable.')
+    const certificationLevel = fullCertification
+      ? 'options-paper-autopilot-certified' as const
+      : 'options-sandbox-entry-certified' as const
     if (route.state !== 'paused') throw new Error('Finish and pause the exact options route before activation review.')
     if (input.operator_confirmed !== true) throw new Error('Automatic paper authority requires explicit confirmation.')
     if (route.policy_id !== policy.policy_id || route.policy_revision !== policy.revision || route.policy_checksum !== policy.content_checksum
@@ -157,12 +167,15 @@ export class FileOptionsAutopilotAuthorityStore {
       || route.account_id !== connection.account_ref || route.provider !== connection.provider || route.environment !== connection.environment
       || policy.source_route_id !== route.route_id || policy.connection_id !== connection.connection_id
       || policy.account_id !== connection.account_ref || policy.certification_checksum !== certification.content_checksum
-      || policy.required_certification !== 'options-paper-autopilot-certified'
+      || policy.required_certification !== certificationLevel
       || application.connection_id !== connection.connection_id || application.connection_checksum !== connection.content_checksum
-      || certification.base_application_id !== application.application_id
-      || certification.base_application_checksum !== application.content_checksum
-      || certification.base_certification_id !== application.certification_id
-      || certification.base_certification_checksum !== application.certification_checksum) {
+      || (fullCertification
+        ? fullCertification.base_application_id !== application.application_id
+          || fullCertification.base_application_checksum !== application.content_checksum
+          || fullCertification.base_certification_id !== application.certification_id
+          || fullCertification.base_certification_checksum !== application.certification_checksum
+        : baseCertification?.certification_id !== application.certification_id
+          || baseCertification.content_checksum !== application.certification_checksum)) {
       throw new Error('Options autopilot authority evidence does not bind one exact route, policy, account, and certification.')
     }
     const expiry = Math.min(Date.parse(input.valid_until), Date.parse(policy.mandate_expires_at), Date.parse(certification.expires_at))
@@ -182,7 +195,7 @@ export class FileOptionsAutopilotAuthorityStore {
       provider: connection.provider, environment: connection.environment, account_id: connection.account_ref,
       adapter_id: connection.adapter_id, adapter_version: connection.adapter_version,
       provider_contract_version: connection.provider_contract_version, certification_id: certification.certification_id,
-      certification_checksum: certification.content_checksum, certification_level: 'options-paper-autopilot-certified' as const,
+      certification_checksum: certification.content_checksum, certification_level: certificationLevel,
       certification_expires_at: certification.expires_at, certification_application_id: application.application_id,
       certification_application_checksum: application.content_checksum, mode: 'automatic-paper' as const,
       valid_from: timestamp, valid_until: input.valid_until, operator_confirmed_at: timestamp, created_at: timestamp,

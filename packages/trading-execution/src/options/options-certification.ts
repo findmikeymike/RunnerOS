@@ -107,6 +107,10 @@ export async function runRestrictedOptionsCertification(
   }
   const finalTruth = await runner.finalTruth()
   const journalHeadChecksum = await runner.journalHeadChecksum()
+  const completedAt = now()
+  const certificationExpiresAt = connection.provider === 'webull' && connection.environment === 'sandbox'
+    ? new Date(Date.parse(completedAt) + 30 * 24 * 60 * 60 * 1_000).toISOString()
+    : input.expires_at
   const allPassed = scenarios.every((scenario) => scenario.status === 'pass')
     && finalTruth.position_quantity === 0
     && finalTruth.working_order_count === 0
@@ -130,8 +134,8 @@ export async function runRestrictedOptionsCertification(
     allowed_contract_id: runner.allowed_contract_id,
     allowed_provider_instrument_id: runner.allowed_provider_instrument_id,
     started_at: startedAt,
-    completed_at: now(),
-    expires_at: input.expires_at,
+    completed_at: completedAt,
+    expires_at: certificationExpiresAt,
     scenarios,
     mutation_count: finalTruth.mutation_count,
     final_position_quantity: finalTruth.position_quantity,

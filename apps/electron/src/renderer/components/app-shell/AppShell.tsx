@@ -2487,8 +2487,8 @@ function AppShellContent({
         },
         {
           id: "nav:trade-god-discotrader",
-          title: "DiscoTrader",
-          icon: Bot,
+          title: "Futures",
+          icon: CandlestickChart,
           variant: isTradeGodNavigation(navState) && tradeGodView === 'discotrader' ? "default" : "ghost",
           onClick: () => openTradeGodView('discotrader'),
         },
@@ -2501,7 +2501,7 @@ function AppShellContent({
         },
         {
           id: "nav:trade-god-accounts",
-          title: "Accounts",
+          title: "Connections",
           icon: WalletCards,
           variant: isTradeGodNavigation(navState) && tradeGodView === 'accounts' ? "default" : "ghost",
           onClick: () => openTradeGodView('accounts'),
@@ -2850,7 +2850,14 @@ function AppShellContent({
       <div
         ref={shellRef}
         className="runneros-glass-shell flex items-stretch relative"
-        style={{ height: '100%', paddingTop: 48, paddingRight: PANEL_EDGE_INSET, paddingBottom: 64, paddingLeft: 0, gap: 0 }}
+        style={{
+          height: '100%',
+          paddingTop: 48,
+          paddingRight: 0,
+          paddingBottom: 0,
+          paddingLeft: 0,
+          gap: 0,
+        }}
       >
         {!effectiveSidebarAndNavigatorHidden && !isAutoCompact && (
           <WorkspaceRail

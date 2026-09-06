@@ -748,6 +748,39 @@ describe('execution gateway', () => {
     expect(adapter.manageCount).toBe(1)
   })
 
+  test('snaps a split-fill breakeven onto the instrument tick grid', async () => {
+    const adapter = new FakeAdapter()
+    // Two ES fills at 5601.25 and 5601.50 average to 5601.375, which is not a
+    // multiple of the 0.25 tick. Sending it verbatim is rejected by the provider,
+    // which halts the trade and kills the connection.
+    adapter.reconciliation = { ...adapter.reconciliation, average_fill_price: '5601.375' }
+    const { gateway, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+    await gateway.execute(intent.intent_id)
+
+    expect(await gateway.prepareStopMove(intent.intent_id, 'breakeven')).toMatchObject({
+      stop_price: '5601.25',
+    })
+  })
+
+  test('blocks a discretionary management mutation while a kill switch is active', async () => {
+    const adapter = new FakeAdapter()
+    const { gateway, connection, store } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+    await gateway.execute(intent.intent_id)
+
+    const prepared = await gateway.prepareStopMove(intent.intent_id, 'breakeven')
+    await store.setConnectionKill(connection.connection_id, true)
+
+    await expect(gateway.modifyOrder(intent.intent_id, prepared)).rejects.toMatchObject({
+      code: 'KILL_SWITCH_ENABLED',
+    })
+    // Flatten stays available so a halt can still eliminate exposure.
+    expect((await gateway.flatten(intent.intent_id, 'Halted exit.')).state).toBe('closed')
+  })
+
   test('prepares breakeven only from the single reconciled provider stop', async () => {
     const adapter = new FakeAdapter()
     const { gateway, connection } = await setup(makeConnection(), [adapter])
@@ -763,6 +796,9 @@ describe('execution gateway', () => {
       time_in_force: 'day',
     })
     await expect(gateway.prepareStopMove(intent.intent_id, '5597.75')).rejects.toMatchObject({
+      code: 'RISK_DENIED',
+    })
+    await expect(gateway.prepareStopMove(intent.intent_id, '5600.30')).rejects.toMatchObject({
       code: 'RISK_DENIED',
     })
 

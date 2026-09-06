@@ -263,7 +263,15 @@ export class FileExecutionStore {
           )) {
             return { record: latest, claimed: false }
           }
-          return { record: latest, claimed: false }
+          // The marker exists but no command was ever recorded, so a previous
+          // attempt died between claiming and persisting. Returning `claimed:
+          // false` here reported success to the caller while the mutation never
+          // happened, so a "stop to BE" follow-up could be receipted as complete
+          // with the stop untouched. This must fail closed for reconciliation.
+          throw new ExecutionGatewayError(
+            'RECONCILIATION_DIVERGENCE',
+            'A previous management attempt claimed this action but never recorded a command; reconcile the trade before retrying.',
+          )
         }
         else throw error
       }

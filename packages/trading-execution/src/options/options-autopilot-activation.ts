@@ -15,6 +15,7 @@ import {
 
 import { canonicalJson, sha256 } from '../canonical.ts'
 import { FileOptionsCertificationApplicationStore } from './options-certification-application.ts'
+import { FileOptionsCertificationStore } from './options-certification.ts'
 import { FileOptionsAutomationStore } from './options-automation-store.ts'
 import { FileOptionsAutopilotAuthorityStore, FileOptionsAutopilotCertificationStore } from './options-autopilot-authority.ts'
 
@@ -40,6 +41,7 @@ export type OptionsAutopilotActivationReview = {
 
 export class OptionsAutopilotActivationService {
   private readonly reviewDirectory: string
+  private readonly baseCertifications: FileOptionsCertificationStore
 
   constructor(
     root: string,
@@ -51,6 +53,7 @@ export class OptionsAutopilotActivationService {
     private readonly now: () => string = () => new Date().toISOString(),
   ) {
     this.reviewDirectory = path.join(root, 'options-automation', 'activation-reviews')
+    this.baseCertifications = new FileOptionsCertificationStore(root)
   }
 
   async prepare(routeId: string, validUntil: string): Promise<OptionsAutopilotActivationReview> {
@@ -58,12 +61,17 @@ export class OptionsAutopilotActivationService {
     if (current.state === 'archived') throw new Error('Removed Discord sources cannot be activated.')
     const connection = await this.resolveConnection(current.connection_id)
     const timestamp = this.now()
-    const certification = await this.certifications.getEligible(connection, timestamp)
+    const fullCertification = await this.certifications.getEligible(connection, timestamp)
+    const baseCertification = connection.provider === 'webull' && connection.environment === 'sandbox'
+      ? await this.baseCertifications.getEligible(connection, timestamp)
+      : undefined
+    const certification = fullCertification ?? baseCertification
     const application = await this.applications.getActive(connection, timestamp)
-    if (!certification) throw new Error('Automatic paper trading still needs its full broker safety test.')
+    if (!certification) throw new Error('Run the one guided paper test before turning automation on.')
     if (!application) throw new Error('Apply the current account safety test before enabling automation.')
-    if (certification.base_application_id !== application.application_id
-      || certification.base_application_checksum !== application.content_checksum) {
+    if (fullCertification
+      ? fullCertification.base_application_id !== application.application_id || fullCertification.base_application_checksum !== application.content_checksum
+      : baseCertification?.certification_id !== application.certification_id || baseCertification.content_checksum !== application.certification_checksum) {
       throw new Error('Automatic safety evidence does not match the currently applied account test.')
     }
     const expiry = Date.parse(validUntil)
@@ -78,13 +86,14 @@ export class OptionsAutopilotActivationService {
     const policyBody = {
       ...currentPolicy,
       revision,
+      required_certification: fullCertification ? 'options-paper-autopilot-certified' as const : 'options-sandbox-entry-certified' as const,
       certification_checksum: certification.content_checksum,
       mandate_expires_at: validUntil,
       expiration_custody: {
         ...currentPolicy.expiration_custody,
-        provider_calendar_checksum: certification.provider_calendar_checksum,
-        account_exercise_setting_checksum: certification.account_exercise_setting_checksum,
-        custody_certification_checksum: certification.custody_certification_checksum,
+        provider_calendar_checksum: fullCertification?.provider_calendar_checksum ?? sha256({ certification: certification.content_checksum, scope: 'sandbox-session-calendar' }),
+        account_exercise_setting_checksum: fullCertification?.account_exercise_setting_checksum ?? sha256({ certification: certification.content_checksum, scope: 'sandbox-no-exercise-authority' }),
+        custody_certification_checksum: fullCertification?.custody_certification_checksum ?? sha256({ certification: certification.content_checksum, scope: 'sandbox-session-only-custody' }),
       },
       created_at: timestamp,
       content_checksum: undefined,
@@ -134,10 +143,21 @@ export class OptionsAutopilotActivationService {
     if (Date.parse(review.expires_at) <= Date.parse(this.now())) throw new Error('The automation review expired. Review it again.')
     const connection = await this.resolveConnection(review.connection_id)
     if (connection.content_checksum !== review.connection_checksum) throw new Error('The broker account changed. Review automation again.')
-    const certification = await this.certifications.getEligible(connection, this.now())
+    const fullCertification = await this.certifications.getEligible(connection, this.now())
+    const baseCertification = connection.provider === 'webull' && connection.environment === 'sandbox'
+      ? await this.baseCertifications.getEligible(connection, this.now())
+      : undefined
+    const certification = fullCertification ?? baseCertification
     const application = await this.applications.getActive(connection, this.now())
-    if (certification?.certification_id !== review.certification_id || certification.content_checksum !== review.certification_checksum
-      || application?.application_id !== review.base_application_id || application.content_checksum !== review.base_application_checksum) {
+    const applicationMatches = fullCertification
+      ? fullCertification.base_application_id === application?.application_id
+        && fullCertification.base_application_checksum === application?.content_checksum
+      : Boolean(baseCertification
+        && baseCertification.certification_id === application?.certification_id
+        && baseCertification.content_checksum === application?.certification_checksum)
+    if (!certification || certification.certification_id !== review.certification_id || certification.content_checksum !== review.certification_checksum
+      || application?.application_id !== review.base_application_id || application.content_checksum !== review.base_application_checksum
+      || !applicationMatches) {
       throw new Error('The account safety evidence changed. Review automation again.')
     }
     const current = await this.automation.getRoute(review.route_id)

@@ -57,6 +57,7 @@ export interface DiscordTradeManagerOptions {
   source: DiscordIntentSourceReader
   now?: () => string
   maxMessageAgeMs?: number
+  maxDeferralMs?: number
   afterGatewayAction?: (
     receipt: DiscordManagementReceipt,
     action: DiscordManagementActionReceipt,
@@ -97,11 +98,13 @@ export const buildDiscordManagementMessage = (
 export class FileDiscordTradeManager {
   private readonly now: () => string
   private readonly maxMessageAgeMs: number
+  private readonly maxDeferralMs: number
   private queue: Promise<void> = Promise.resolve()
 
   constructor(private readonly options: DiscordTradeManagerOptions) {
     this.now = options.now ?? (() => new Date().toISOString())
     this.maxMessageAgeMs = options.maxMessageAgeMs ?? 24 * 60 * 60_000
+    this.maxDeferralMs = options.maxDeferralMs ?? 15 * 60_000
   }
 
   async ingestPush(input: unknown): Promise<DiscordManagementReceipt> {
@@ -273,14 +276,21 @@ export class FileDiscordTradeManager {
   }
 
   async recoverPending(): Promise<DiscordManagementReceipt[]> {
-    const receipts = await this.listReceipts()
-    const recovered: DiscordManagementReceipt[] = []
-    for (const receipt of receipts) {
-      if (receipt.status === 'prepared' || receipt.status === 'executing') {
-        recovered.push(await this.executeReceipt(receipt))
+    return this.withLock(async () => {
+      const receipts = await this.listReceipts()
+      const recovered: DiscordManagementReceipt[] = []
+      for (const receipt of receipts) {
+        if (receipt.status === 'prepared' || receipt.status === 'executing') {
+          recovered.push(await this.executeReceipt(receipt))
+        } else if (receipt.status === 'deferred') {
+          // A follow-up that arrived before its entry was protected waits here.
+          // Without this sweep it would only ever be reconsidered if the same
+          // Discord message were delivered again.
+          recovered.push(await this.retryDeferred(receipt))
+        }
       }
-    }
-    return recovered
+      return recovered
+    })
   }
 
   private async retryDeferred(
@@ -288,7 +298,9 @@ export class FileDiscordTradeManager {
   ): Promise<DiscordManagementReceipt> {
     const message = receipt.source_message
     const parsed = parseDiscordManagementText(message.raw_text)
-    const policyError = this.messagePolicyError(message) ?? parsed.error
+    const policyError = this.messagePolicyError(message)
+      ?? this.deferralExpiryError(message)
+      ?? parsed.error
     if (policyError) {
       return this.updateReceipt(receipt, (current) => {
         current.status = 'blocked'
@@ -395,6 +407,17 @@ export class FileDiscordTradeManager {
     }))
     await previous.catch(() => undefined)
     try { return await operation() } finally { release() }
+  }
+
+  // A follow-up is deferred only while its entry is still reaching a protected
+  // state, which takes seconds. Retrying one hours later would apply a stale
+  // instruction to a trade the trader has long since moved on from, so the
+  // deferral window is far shorter than the general staleness window.
+  private deferralExpiryError(message: DiscordManagementMessage): string | undefined {
+    const age = Date.parse(this.now()) - Date.parse(message.posted_at)
+    return age > this.maxDeferralMs
+      ? 'Deferred Discord follow-up expired before its trade became manageable.'
+      : undefined
   }
 
   private messagePolicyError(message: DiscordManagementMessage): string | undefined {

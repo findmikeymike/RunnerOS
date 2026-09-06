@@ -151,6 +151,10 @@ export class OptionsAutomaticEntryCoordinator {
     }>
     resolveConnection(connectionId: string): Promise<OptionsConnection>
     assertConnectionReady?: (connectionId: string) => void | Promise<void>
+    // Reports which of the policy's required halts are currently active. The
+    // policy declares global/account/source halts as mandatory controls, so an
+    // active halt must stop a new automatic entry.
+    activeHalts?: (input: { connectionId: string; sourceRouteId: string }) => Promise<string[]> | string[]
     now?: () => string
   }) {}
 
@@ -208,6 +212,20 @@ export class OptionsAutomaticEntryCoordinator {
       detail: 'No exact options account route is assigned to this Discord trader and channel.',
     }))
     await this.options.assertConnectionReady?.(route.connection_id)
+    // The policy declares global, account, and source halts as required controls.
+    // Nothing previously consulted them, so a halted account still accepted new
+    // automatic entries.
+    const halts = await this.options.activeHalts?.({
+      connectionId: route.connection_id,
+      sourceRouteId: route.route_id,
+    }) ?? []
+    if (halts.length > 0) {
+      return this.options.receipts.save(this.baseReceipt(input, now(), rawChecksum, {
+        signal_checksum: parsed.signal.content_checksum, route_id: route.route_id, route_checksum: route.content_checksum,
+        connection_id: route.connection_id, state: 'blocked', reason_codes: ['OPTIONS_HALT_ACTIVE'],
+        detail: `Automatic options entry is halted: ${halts.join(', ')}.`,
+      }))
+    }
     const policy = await this.options.automation.getPolicy(route.policy_id, route.policy_revision)
     const connection = await this.options.resolveConnection(route.connection_id)
     const authority = await this.options.authorities.getActive(route, policy, connection, now())
@@ -224,12 +242,27 @@ export class OptionsAutomaticEntryCoordinator {
     let decision = decideOptionsEntry({ signal: parsed.signal, contract, quote, policy, route_checksum: route.content_checksum,
       account_checksum: connection.content_checksum, decision_at: quote.decision_at, estimated_fee_per_contract: '0' })
     if (decision.action === 'marketable_limit' || decision.action === 'passive_limit') {
-      const preview = await adapter.preview({
-        account_id: connection.account_ref, canonical_contract_id: contract.canonical_id,
-        provider_instrument_id: contract.provider_instrument_id, action: 'BUY_TO_OPEN', order_type: 'limit',
-        limit_price: decision.limit_price!, quantity: decision.planned_quantity, time_in_force: 'day', regular_hours_only: true,
-        client_order_id: `options-fee-preview-${sha256(decision.content_checksum).slice(0, 32)}`,
-      })
+      // A provider that refuses this shape — for example an adapter certified for
+      // exactly one contract when debit-range sizing planned more — must leave a
+      // durable blocked receipt. Letting the rejection escape recorded nothing,
+      // so the same message was retried identically on every replay and restart.
+      let preview: Awaited<ReturnType<typeof adapter.preview>>
+      try {
+        preview = await adapter.preview({
+          account_id: connection.account_ref, canonical_contract_id: contract.canonical_id,
+          provider_instrument_id: contract.provider_instrument_id, action: 'BUY_TO_OPEN', order_type: 'limit',
+          limit_price: decision.limit_price!, quantity: decision.planned_quantity, time_in_force: 'day', regular_hours_only: true,
+          client_order_id: `options-fee-preview-${sha256(decision.content_checksum).slice(0, 32)}`,
+        })
+      } catch (error) {
+        return this.options.receipts.save(this.baseReceipt(input, now(), rawChecksum, {
+          signal_checksum: parsed.signal.content_checksum, route_id: route.route_id, route_checksum: route.content_checksum,
+          connection_id: connection.connection_id, policy_checksum: policy.content_checksum,
+          authority_checksum: authority.content_checksum, decision_checksum: decision.content_checksum,
+          state: 'blocked', reason_codes: ['OPTIONS_PREVIEW_REJECTED'],
+          detail: `The provider refused the planned order shape: ${error instanceof Error ? error.message.slice(0, 240) : 'unknown preview failure'}`,
+        }))
+      }
       const feePerContract = FixedDecimal.from(preview.estimated_fees).divideInteger(decision.planned_quantity).toCanonicalString(4)
       decision = decideOptionsEntry({ signal: parsed.signal, contract, quote, policy, route_checksum: route.content_checksum,
         account_checksum: connection.content_checksum, decision_at: quote.decision_at, estimated_fee_per_contract: feePerContract })
@@ -244,6 +277,21 @@ export class OptionsAutomaticEntryCoordinator {
       }))
     }
     const snapshot = await adapter.snapshotAccount(connection.account_ref)
+    // The execution gateway can only submit into a provably flat account. Admitting
+    // a reservation the gateway will always refuse would strand reserved debit
+    // capacity forever, because a release proof itself requires a flat account.
+    const existingWorkingOrders = snapshot.orders.filter(
+      (order) => order.status === 'working' || order.status === 'partially-filled',
+    )
+    if (snapshot.positions.length > 0 || existingWorkingOrders.length > 0) {
+      return this.options.receipts.save(this.baseReceipt(input, now(), rawChecksum, {
+        signal_checksum: parsed.signal.content_checksum, route_id: route.route_id, route_checksum: route.content_checksum,
+        connection_id: connection.connection_id, policy_checksum: policy.content_checksum,
+        authority_checksum: authority.content_checksum, decision_checksum: decision.content_checksum,
+        state: 'blocked', reason_codes: ['OPTIONS_ACCOUNT_NOT_FLAT'],
+        detail: 'The account already holds an option position or working order, so no new automatic entry was reserved.',
+      }))
+    }
     const reservationId = `options-reservation:${sha256({ decision: decision.content_checksum, authority: authority.content_checksum }).slice(0, 32)}`
     const reservation = await reservations.admit({
       reservation_id: reservationId, intent_id: decision.decision_id, connection_id: connection.connection_id,

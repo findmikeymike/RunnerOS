@@ -778,9 +778,177 @@ html[data-font="inter"] {
   .runneros-glass-shell {
     position: relative;
     overflow: hidden;
-    background: #000;
+    background:
+      radial-gradient(ellipse at 24% -8%, rgba(35, 75, 122, 0.12), transparent 48%),
+      linear-gradient(145deg, #040914 0%, #060d18 52%, #030811 100%);
     isolation: isolate;
     transform: translateZ(0);
+  }
+
+  .trade-god-page-surface {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  .trade-god-light-shell,
+  .trade-god-page-surface,
+  .trade-god-connections-light {
+    color-scheme: light;
+    --background: #ffffff;
+    --background-elevated: #f8fafc;
+    --foreground: #0f172a;
+    --foreground-rgb: 15, 23, 42;
+    --accent: #1d4ed8;
+    --success: #047857;
+    --destructive: #be123c;
+    --info: #a16207;
+    --secondary: rgba(15, 23, 42, 0.05);
+    --secondary-foreground: #0f172a;
+    --muted: rgba(15, 23, 42, 0.05);
+    --muted-foreground: #64748b;
+    --card: #ffffff;
+    --card-foreground: #0f172a;
+    --popover: #ffffff;
+    --popover-foreground: #0f172a;
+    --border: rgba(15, 23, 42, 0.1);
+    --input: rgba(15, 23, 42, 0.12);
+    --ring: rgba(29, 78, 216, 0.35);
+  }
+
+  .trade-god-light-shell {
+    background: #ffffff !important;
+    color: #0f172a;
+  }
+
+  .trade-god-light-shell .trade-god-page-surface [class*="text-white"],
+  .trade-god-light-shell .trade-god-page-surface [class*="text-[#e"],
+  .trade-god-light-shell .trade-god-page-surface [class*="text-[#f"] {
+    color: #0f172a !important;
+  }
+
+  .trade-god-light-shell .trade-god-page-surface [class*="text-[#6"],
+  .trade-god-light-shell .trade-god-page-surface [class*="text-[#7"],
+  .trade-god-light-shell .trade-god-page-surface [class*="text-[#8"],
+  .trade-god-light-shell .trade-god-page-surface [class*="text-[#9"] {
+    color: #64748b !important;
+  }
+
+  .trade-god-light-shell .trade-god-page-surface [class*="border-white"],
+  .trade-god-light-shell .trade-god-page-surface [class*="border-[#2"],
+  .trade-god-light-shell .trade-god-page-surface [class*="border-[#3"],
+  .trade-god-light-shell .trade-god-page-surface [class*="border-[#4"] {
+    border-color: rgba(15, 23, 42, 0.1) !important;
+  }
+
+  .trade-god-light-shell .trade-god-page-surface [class*="bg-white/"] {
+    background-color: #f8fafc !important;
+  }
+
+  .trade-god-light-shell .trade-god-page-surface [class*="bg-[#080a0d]"],
+  .trade-god-light-shell .trade-god-page-surface [class*="bg-[#090c0f]"],
+  .trade-god-light-shell .trade-god-page-surface [class*="bg-[#090c10]"],
+  .trade-god-light-shell .trade-god-page-surface [class*="bg-[#0a0d11]"],
+  .trade-god-light-shell .trade-god-page-surface [class*="bg-[#0b0e14]"],
+  .trade-god-light-shell .trade-god-page-surface [class*="bg-[#0d1014]"],
+  .trade-god-light-shell .trade-god-page-surface [class*="bg-[#11151a]"],
+  .trade-god-light-shell .trade-god-page-surface [class*="bg-[#151a20]"],
+  .trade-god-light-shell .trade-god-page-surface [class*="bg-[#191e24]"] {
+    background-color: #f8fafc !important;
+  }
+
+  .trade-god-light-shell button[class*="rounded-xl"] {
+    border-radius: 8px !important;
+  }
+
+  .tg-page-container {
+    width: 100%;
+    max-width: 1440px;
+    margin-inline: auto;
+    padding: 32px 36px 40px;
+  }
+
+  @media (max-width: 767px) {
+    .tg-page-container {
+      padding: 24px 20px 32px;
+    }
+  }
+
+  .tg-header-status {
+    display: inline-flex;
+    min-height: 34px;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(15, 23, 42, 0.1);
+    border-radius: 9999px;
+    background: #f8fafc;
+    padding: 6px 11px;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1;
+  }
+
+  .tg-control-primary,
+  .tg-control-secondary {
+    display: inline-flex;
+    min-height: 36px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 8px;
+    padding: 0 13px;
+    font-size: 12px;
+    font-weight: 550;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    box-shadow: none;
+    transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+  }
+
+  .tg-control-primary {
+    border: 1px solid #111827;
+    background: #111827;
+    color: #ffffff;
+  }
+
+  .tg-control-primary:hover {
+    border-color: #273244;
+    background: #273244;
+  }
+
+  .tg-control-secondary {
+    border: 1px solid rgba(15, 23, 42, 0.14);
+    background: #ffffff;
+    color: #0f172a;
+  }
+
+  .tg-control-secondary:hover {
+    border-color: rgba(15, 23, 42, 0.24);
+    background: #f8fafc;
+  }
+
+  .tg-control-primary:focus-visible,
+  .tg-control-secondary:focus-visible {
+    outline: 2px solid rgba(94, 106, 210, 0.45);
+    outline-offset: 2px;
+  }
+
+  .tg-control-primary:disabled,
+  .tg-control-secondary:disabled {
+    cursor: not-allowed;
+    opacity: 0.42;
+  }
+
+  .tg-status-positive {
+    border-color: color-mix(in srgb, var(--success) 24%, transparent);
+    background: color-mix(in srgb, var(--success) 9%, transparent);
+    color: color-mix(in oklab, var(--success) 58%, var(--foreground));
+  }
+
+  .tg-status-warning {
+    border-color: color-mix(in srgb, var(--info) 24%, transparent);
+    background: color-mix(in srgb, var(--info) 9%, transparent);
+    color: color-mix(in oklab, var(--info) 58%, var(--foreground));
   }
 
   .runneros-app-backdrop {

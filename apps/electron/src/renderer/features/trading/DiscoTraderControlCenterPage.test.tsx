@@ -15,25 +15,29 @@ const {
   isSelectableSignalSource,
 } = await import('./discotrader-signal-sources.ts')
 
-test('renders a plain-language approval-gated DiscoTrader setup path', () => {
-  const html = renderToStaticMarkup(
+test('keeps Futures operations in the desk and Discord setup in Connections', () => {
+  const desk = renderToStaticMarkup(
     <DiscoTraderControlCenterPage workspaceId="trading" />,
   )
+  const setup = renderToStaticMarkup(
+    <DiscoTraderControlCenterPage mode="connections" workspaceId="trading" />,
+  )
 
-  expect(html).toContain('DiscoTrader')
-  expect(html).toContain('Paper trading is off')
-  expect(html).toContain('Connect Discord')
-  expect(html).toContain('Add your accounts')
-  expect(html).toContain('Turn on paper trading')
-  expect(html).toContain('A signal arrives')
-  expect(html).toContain('View active and past trades')
-  expect(html).toContain('Add account')
-  expect(html).toContain('Advanced troubleshooting')
-  expect(html).not.toContain('DT_MCP_TOKEN')
-  expect(html).not.toContain('DT_SHARED_SECRET')
-  expect(html).not.toContain('Install the Trade Desk worker')
-  expect(html).not.toContain('execution custody')
-  expect(html).not.toContain('Autonomous execution enabled')
+  expect(desk).toContain('Futures Desk')
+  expect(desk).toContain('Paper trading is off')
+  expect(desk).toContain('Manage connections')
+  expect(desk).toContain('View active and past trades')
+  expect(desk).toContain('Advanced troubleshooting')
+  expect(desk).not.toContain('Discord signal service')
+  expect(desk).not.toContain('Choose your accounts')
+  expect(setup).toContain('Discord signal service')
+  expect(setup).toContain('Connect Discord')
+  expect(setup).not.toContain('Futures Desk')
+  expect(desk).not.toContain('DT_MCP_TOKEN')
+  expect(desk).not.toContain('DT_SHARED_SECRET')
+  expect(desk).not.toContain('Install the Trade Desk worker')
+  expect(desk).not.toContain('execution custody')
+  expect(desk).not.toContain('Autonomous execution enabled')
 })
 
 test('accepts only the exact loopback DiscoTrader source contract', () => {

@@ -339,7 +339,10 @@ function parseOptionsManagementText(rawText: string): { actions: OptionsParsedAc
   if (/\b(?:do not|don't|dont|never|cannot|can't|cant|won't|wont|shouldn't|shouldnt)\s+(?:cancel|pull)\b/.test(normalized)) {
     return { actions: [], error: 'Negated cancel instructions are not executable.' }
   }
-  const cancel = /\b(?:no\s+fill|not\s+filled|did(?:n't|\s+not)\s+fill|cancel(?:\s+(?:it|the\s+order|order|entry))?|pull(?:\s+(?:it|the\s+order|order))?)\b/i.exec(rawText)
+  // `pull` requires an explicit object. A bare match turned ordinary chat such
+  // as "expecting a pull back here" or "let's pull the trigger" into a live
+  // cancel of the working entry.
+  const cancel = /\b(?:no\s+fill|not\s+filled|did(?:n't|\s+not)\s+fill|cancel(?:\s+(?:it|this|that|the\s+order|order|entry))?|pull(?:\s+(?:it|this|that|the\s+order|order|entry)))\b/i.exec(rawText)
   if (!cancel) return parsed
   if (parsed.actions.length > 0) return { actions: [], error: 'Canceling an entry cannot be combined with a close or stop instruction.' }
   return { actions: [{ operation: 'cancel-entry', source_phrase: cancel[0] }] }

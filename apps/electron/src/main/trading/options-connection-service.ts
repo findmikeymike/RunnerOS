@@ -21,14 +21,13 @@ import type { TradingCredentialVault } from './trading-connection-service.ts'
 const IBKR_ENDPOINT = 'https://api.ibkr.com/v1/api'
 const WEBULL_ENDPOINT = 'https://api.sandbox.webull.com'
 const PROOF_TTL_MS = 10 * 60 * 1000
-const ADAPTER_VERSION = '1.0.0'
-
-const providerContract = (provider: OptionsProvider): { adapterId: string; contractVersion: string } => provider === 'ibkr'
-  ? { adapterId: 'ibkr-options-api', contractVersion: 'ibkr-web-api-options-paper-2026-08-26' }
-  : { adapterId: 'webull-options-api', contractVersion: 'webull-trading-api-options-sandbox-2026-08-26' }
+const providerContract = (provider: OptionsProvider): { adapterId: string; adapterVersion: string; contractVersion: string } => provider === 'ibkr'
+  ? { adapterId: 'ibkr-options-api', adapterVersion: '1.0.0', contractVersion: 'ibkr-web-api-options-paper-2026-08-26' }
+  : { adapterId: 'webull-options-api', adapterVersion: '1.1.0', contractVersion: 'webull-trading-api-options-sandbox-events-2026-08-27' }
 
 export interface SaveOptionsConnectionInput {
   connection_id?: string
+  allow_account_ref_change?: true
   provider: OptionsProvider
   account_ref: string
   account_label: string
@@ -263,14 +262,27 @@ export class OptionsConnectionService {
     return this.withMutationLock(async () => {
       const provider = input.provider
       const connectionId = normalizeId(input.connection_id ?? `${provider}-${input.account_ref}`)
-      const credential = canonicalJson(parseCredential(provider, input.credential.trim()))
-      const generation = createHash('sha256').update(randomUUID()).digest('hex')
       let existing: OptionsConnection | undefined
       try { existing = await this.store.get(connectionId) } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
       }
-      if (existing && (existing.provider !== provider || existing.account_ref !== input.account_ref.trim())) {
+      const suppliedCredential = input.credential.trim()
+      const retainedCredential = existing && !suppliedCredential
+        ? await this.vault.getSecret(credentialName(connectionId))
+        : null
+      const rawCredential = suppliedCredential || retainedCredential
+      if (!rawCredential) throw new Error('Provider credentials are required.')
+      const credential = canonicalJson(parseCredential(provider, rawCredential))
+      const generation = createHash('sha256').update(randomUUID()).digest('hex')
+      const accountRefChanged = Boolean(existing && existing.account_ref !== input.account_ref.trim())
+      if (existing && existing.provider !== provider) {
         throw new Error('Provider and account identity cannot be changed. Remove this connection first.')
+      }
+      if (existing && accountRefChanged) {
+        const proof = await this.store.getProof(connectionId)
+        if (input.allow_account_ref_change !== true || existing.state !== 'credentials-saved' || proof) {
+          throw new Error('This account ID can no longer be edited because the connection has already been verified or used.')
+        }
       }
       const now = this.now()
       const adapter = providerContract(provider)
@@ -281,7 +293,7 @@ export class OptionsConnectionService {
         environment: provider === 'ibkr' ? 'paper' : 'sandbox',
         auth_profile: provider === 'ibkr' ? 'ibkr-oauth-access-token' : 'webull-individual-hmac',
         adapter_id: adapter.adapterId,
-        adapter_version: ADAPTER_VERSION,
+        adapter_version: adapter.adapterVersion,
         provider_contract_version: adapter.contractVersion,
         account_ref: input.account_ref.trim(),
         account_label: input.account_label.trim(),
@@ -304,7 +316,21 @@ export class OptionsConnectionService {
 
   async verify(connectionId: string): Promise<OptionsConnectionStatus> {
     return this.withMutationLock(async () => {
-      const connection = await this.store.get(connectionId)
+      let connection = await this.store.get(connectionId)
+      const installed = providerContract(connection.provider)
+      if (connection.adapter_id !== installed.adapterId || connection.adapter_version !== installed.adapterVersion
+        || connection.provider_contract_version !== installed.contractVersion) {
+        connection = seal({
+          ...connection,
+          adapter_id: installed.adapterId,
+          adapter_version: installed.adapterVersion,
+          provider_contract_version: installed.contractVersion,
+          state: 'credentials-saved' as const,
+          updated_at: this.now(),
+          content_checksum: connection.content_checksum,
+        })
+        await this.store.save(connection)
+      }
       await this.store.removeProof(connectionId)
       const credential = await this.vault.getSecret(credentialName(connectionId))
       if (!credential) throw new Error('Saved provider credentials are missing.')
@@ -420,9 +446,21 @@ export class ReadOnlyOptionsProviderVerifier implements OptionsProviderReadVerif
   private async verifyWebull(connection: OptionsConnection, credential: Record<string, string>): Promise<OptionsProviderReadProof> {
     if (connection.endpoint !== WEBULL_ENDPOINT) throw new Error('Webull read-only enrollment is restricted to the official sandbox endpoint.')
     const accounts = await this.webullGet('/trading/accounts/list', credential)
-    const account = asArray((accounts as Record<string, unknown>)?.data ?? accounts)
-      .find((item) => stringField(item, ['account_id', 'accountId']) === connection.account_ref)
-    if (!account) throw new Error('Webull did not return the exact configured sandbox account.')
+    const accountList = asArray((accounts as Record<string, unknown>)?.data ?? accounts)
+    const account = accountList.find((item) => stringField(item, ['account_id', 'accountId']) === connection.account_ref)
+    if (!account) {
+      const availableAccounts = accountList
+        .map((item) => {
+          const id = stringField(item, ['account_id', 'accountId'])
+          const type = stringField(item, ['account_type', 'accountType', 'type'])
+          return id ? `${id}${type ? ` (${type})` : ''}` : ''
+        })
+        .filter(Boolean)
+      const available = availableAccounts.length > 0
+        ? ` Available sandbox accounts: ${availableAccounts.join(', ')}.`
+        : ' No sandbox accounts were returned for these credentials.'
+      throw new Error(`The saved Account ID does not match this Webull sandbox key.${available} Click Edit and choose the exact Account ID.`)
+    }
     const query = { account_id: connection.account_ref }
     const [balance, positions, orders] = await Promise.all([
       this.webullGet('/trading/assets/balances/get', credential, query),

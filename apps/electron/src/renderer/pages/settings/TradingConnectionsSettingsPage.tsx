@@ -106,6 +106,7 @@ type MirrorGroupDraft = {
 
 interface TradingConnectionsSettingsPageProps {
   embedded?: boolean
+  showRouting?: boolean
   workspaceId?: string
   onConnectionsChanged?: () => void
   signalSourceCatalog?: DiscoTraderSignalSourceCatalog | null
@@ -142,6 +143,7 @@ const EMPTY_MIRROR_GROUP_DRAFT: MirrorGroupDraft = {
 
 export default function TradingConnectionsSettingsPage({
   embedded = false,
+  showRouting = true,
   workspaceId,
   onConnectionsChanged,
   signalSourceCatalog: suppliedSignalSourceCatalog = null,
@@ -573,27 +575,27 @@ export default function TradingConnectionsSettingsPage({
   ))
 
   const body = (
-    <div className={`mx-auto w-full space-y-6 px-6 py-8 ${embedded ? 'max-w-none' : 'max-w-[1120px]'}`}>
+    <div className={`mx-auto w-full space-y-6 ${embedded ? 'max-w-none px-0 py-6 text-foreground' : 'max-w-[1120px] px-6 py-8'}`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-medium text-[#8b93a1]">Trading setup</p>
-            <h1 className={`mt-1 font-semibold tracking-[-0.03em] ${embedded ? 'text-xl' : 'text-[30px]'}`}>Accounts</h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-[#858d99]">Connect each paper account, then choose which Discord trader it follows.</p>
+            {!embedded && <p className="text-xs font-medium text-[#8b93a1]">Trading setup</p>}
+            <h1 className={`font-semibold tracking-[-0.03em] ${embedded ? 'text-xl' : 'mt-1 text-[30px]'}`}>{embedded ? 'Futures accounts' : 'Accounts'}</h1>
+            <p className={`mt-2 max-w-xl text-sm leading-6 ${embedded ? 'text-muted-foreground' : 'text-[#858d99]'}`}>Connect and verify every futures prop account here.</p>
           </div>
           <Button size="sm" className="mt-1" onClick={() => setEditing(true)}>
             <Plus className="mr-1.5 size-4" />
             Add account
           </Button>
         </div>
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-white/[0.06] py-3 text-[11px] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-foreground/[0.08] py-3 text-[11px] text-muted-foreground">
             <span><strong className="font-medium text-foreground">{connections.length}</strong> accounts</span>
             <span><strong className="font-medium text-foreground">{ready}</strong> ready to trade</span>
             {originConfirmed > 0 && <span><strong className="font-medium text-foreground">{originConfirmed}</strong> browser sessions</span>}
-            <span className="ml-auto inline-flex items-center gap-1.5 text-amber-200"><ShieldCheck className="size-3.5" /> Locked by default</span>
+            <span className="tg-status-warning ml-auto inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1"><ShieldCheck className="size-3.5" /> Locked by default</span>
           </div>
 
           <Dialog open={editing} onOpenChange={setEditing}>
-            <DialogContent className="max-h-[88vh] max-w-2xl overflow-y-auto border border-white/[0.09] bg-[#0d1014] p-0 text-white shadow-2xl">
+            <DialogContent className="max-h-[88vh] max-w-2xl overflow-y-auto border border-white/[0.09] bg-[#0d1014] p-0 text-white shadow-modal-small">
               <DialogHeader className="border-b border-white/[0.07] px-6 pb-5 pt-6 pr-14">
                 <DialogTitle className="text-xl tracking-[-0.02em]">Connect a trading account</DialogTitle>
                 <DialogDescription className="max-w-lg leading-5 text-[#7d8692]">
@@ -706,7 +708,7 @@ export default function TradingConnectionsSettingsPage({
             </DialogContent>
           </Dialog>
 
-          {(connections.length > 1 || mirrorGroups.length > 0 || editingMirrorGroup) && <details className="group rounded-xl border border-white/[0.07] bg-white/[0.015]" open={editingMirrorGroup}>
+          {showRouting && (connections.length > 1 || mirrorGroups.length > 0 || editingMirrorGroup) && <details className="group rounded-xl border border-white/[0.07] bg-white/[0.015]" open={editingMirrorGroup}>
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4">
               <div><p className="text-sm font-medium">Copy one trader to multiple accounts</p><p className="mt-1 text-xs text-muted-foreground">Advanced setup · paper preview only</p></div>
               <span className="text-xs text-muted-foreground group-open:hidden">Show</span>
@@ -864,13 +866,13 @@ export default function TradingConnectionsSettingsPage({
           <section aria-label="Trading accounts">
             <div className="space-y-3">
               {connections.map((status) => (
-                <SettingsCard key={status.connection.connection_id}>
+                <SettingsCard key={status.connection.connection_id} className={embedded ? 'border-foreground/[0.08] bg-background' : undefined}>
                   <SettingsCardContent className="space-y-4 p-5">
                     <div className="flex flex-col gap-4 md:flex-row md:items-center">
-                      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04]">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-foreground/10 bg-foreground/[0.04]">
                         {status.connection.transport_preference === 'browser'
-                          ? <ExternalLink className="size-4 text-cyan-300" />
-                          : <KeyRound className="size-4 text-amber-300" />}
+                          ? <ExternalLink className="size-4 text-blue-600" />
+                          : <KeyRound className="size-4 text-amber-600" />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -1000,13 +1002,13 @@ export default function TradingConnectionsSettingsPage({
                         </Button>
                       </div>
                     </div>
-                    <details className="group rounded-lg border border-white/[0.07] bg-black/10">
+                    <details className="group rounded-lg border border-foreground/[0.08] bg-foreground/[0.025]">
                       <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-xs text-muted-foreground">
                         Advanced account checks
                         <span className="group-open:hidden">Show</span>
                         <span className="hidden group-open:inline">Hide</span>
                       </summary>
-                      <div className="space-y-3 border-t border-white/[0.06] p-4">
+                      <div className="space-y-3 border-t border-foreground/[0.07] p-4">
                         <p className="text-[11px] leading-5 text-muted-foreground">
                           Account ID {status.connection.account_ref} · {status.connection.certifications.length} completed checks
                         </p>
@@ -1024,10 +1026,11 @@ export default function TradingConnectionsSettingsPage({
                         authorization.connection_id === status.connection.connection_id
                       ))}
                       busy={busy}
+                      light={embedded}
                       onBusyChange={setBusy}
                       onChanged={load}
                     />
-                    <AccountDiscordRoutes
+                    {showRouting && <AccountDiscordRoutes
                       connectionId={status.connection.connection_id}
                       targetLabel="account"
                       routes={routes}
@@ -1064,17 +1067,17 @@ export default function TradingConnectionsSettingsPage({
                         if (pendingReassignment) void saveSignalRoute(signalRouteTargetKey(pendingReassignment))
                       }}
                       onRemove={(routeId) => void removeSignalRoute(routeId)}
-                    />
+                    />}
                   </SettingsCardContent>
                 </SettingsCard>
               ))}
               {!connections.length && busy !== 'load' && (
-                <div className="flex flex-col items-center rounded-2xl border border-dashed border-white/[0.1] bg-white/[0.015] px-6 py-14 text-center">
-                  <div className="flex size-11 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-[#8b94a0]">
+                <div className="flex flex-col items-center rounded-2xl border border-dashed border-foreground/[0.14] bg-foreground/[0.015] px-6 py-14 text-center">
+                  <div className="flex size-11 items-center justify-center rounded-xl border border-foreground/[0.1] bg-foreground/[0.04] text-muted-foreground">
                     <WalletCards className="size-5" />
                   </div>
                   <h2 className="mt-4 text-base font-medium">No accounts yet</h2>
-                  <p className="mt-2 max-w-sm text-xs leading-5 text-muted-foreground">Add a paper account, check the connection, then choose which Discord trader it follows.</p>
+                  <p className="mt-2 max-w-sm text-xs leading-5 text-muted-foreground">Add a futures prop account, then verify its connection.</p>
                   <Button size="sm" className="mt-5" onClick={() => setEditing(true)}>
                     <Plus className="mr-1.5 size-4" /> Add your first account
                   </Button>
@@ -1083,7 +1086,7 @@ export default function TradingConnectionsSettingsPage({
             </div>
           </section>
 
-          {orphanedRoutes.length > 0 && (
+          {showRouting && orphanedRoutes.length > 0 && (
             <SettingsSection
               title="Orphaned Discord routes"
               description="These legacy routes point to accounts that no longer exist. They cannot execute."
@@ -1116,8 +1119,8 @@ export default function TradingConnectionsSettingsPage({
             </SettingsSection>
           )}
 
-          <div className="flex items-start gap-3 border-t border-white/[0.06] pt-4 text-[11px] leading-5 text-muted-foreground">
-            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-amber-200" />
+          <div className="flex items-start gap-3 border-t border-foreground/[0.08] pt-4 text-[11px] leading-5 text-muted-foreground">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-amber-700" />
             <span>New accounts stay off until you finish their safety checks and choose clear trading limits.</span>
           </div>
     </div>
@@ -1126,7 +1129,7 @@ export default function TradingConnectionsSettingsPage({
   if (embedded) return body
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#090b0e] text-[#eef0f3]">
+    <div className="trade-god-page-surface flex h-full min-h-0 flex-col text-[#eef0f3]">
       <ScrollArea className="min-h-0 flex-1">{body}</ScrollArea>
     </div>
   )
@@ -1136,12 +1139,14 @@ function PaperMandateControl({
   status,
   authorization,
   busy,
+  light,
   onBusyChange,
   onChanged,
 }: {
   status: Awaited<ReturnType<typeof window.electronAPI.listTradingConnections>>[number]
   authorization?: ExecutionAuthorization
   busy: string | null
+  light: boolean
   onBusyChange: (value: string | null) => void
   onChanged: () => Promise<void>
 }) {
@@ -1249,7 +1254,7 @@ function PaperMandateControl({
   }
 
   return (
-    <div className="rounded-lg border border-amber-400/15 bg-amber-400/[0.025] p-3">
+    <div className={`rounded-lg border p-3 ${light ? 'border-amber-200 bg-amber-50' : 'border-amber-400/15 bg-amber-400/[0.025]'}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1330,7 +1335,7 @@ function PaperMandateControl({
         </div>
       )}
 
-      <p className="mt-3 text-[10px] leading-4 text-amber-100/60">
+      <p className={light ? 'mt-3 text-[10px] leading-4 text-amber-800/75' : 'mt-3 text-[10px] leading-4 text-amber-100/60'}>
         Paper trading stays off until Discord, the account checks, and the final review are complete.
       </p>
     </div>
@@ -1561,14 +1566,14 @@ function CertificationMatrix(props: {
 }) {
   if (!props.evidence) {
     return (
-      <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2 text-[11px] text-muted-foreground">
+      <div className="rounded-lg border border-foreground/10 bg-foreground/[0.04] px-3 py-2 text-[11px] text-muted-foreground">
         No adapter certification evidence. Connection remains disabled.
       </div>
     )
   }
   const passed = props.evidence.scenarios.filter((scenario) => scenario.status === 'pass').length
   return (
-    <div className="grid gap-2 rounded-lg border border-white/10 bg-black/10 p-3 text-[11px] md:grid-cols-4">
+    <div className="grid gap-2 rounded-lg border border-foreground/10 bg-foreground/[0.04] p-3 text-[11px] md:grid-cols-4">
       <div>
         <p className="text-muted-foreground">Adapter evidence</p>
         <p className="mt-1 font-mono">{props.evidence.adapter_id} {props.evidence.adapter_version}</p>
@@ -1615,7 +1620,7 @@ function Field(props: {
 
 function Guardrail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.025] p-4">
+    <div className="rounded-xl border border-foreground/10 bg-foreground/[0.025] p-4">
       <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
       <p className="mt-1 text-sm font-medium">{value}</p>
     </div>
@@ -1624,7 +1629,7 @@ function Guardrail({ label, value }: { label: string; value: string }) {
 
 function Badge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+    <span className="rounded-full border border-foreground/10 bg-foreground/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
       {children}
     </span>
   )
@@ -1633,8 +1638,8 @@ function Badge({ children }: { children: React.ReactNode }) {
 function StatusBadge({ children, positive }: { children: React.ReactNode; positive: boolean }) {
   return (
     <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${positive
-      ? 'border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-200'
-      : 'border-amber-400/20 bg-amber-400/[0.08] text-amber-200'}`}>
+      ? 'tg-status-positive'
+      : 'tg-status-warning'}`}>
       {children}
     </span>
   )
@@ -1647,4 +1652,4 @@ const slugify = (value: string): string => value
   .replace(/^-|-$/g, '')
   .slice(0, 60) || 'prop-firm'
 
-const inputClass = 'h-9 w-full rounded-lg border border-white/10 bg-black/20 px-3 text-sm outline-none transition focus:border-amber-400/50'
+const inputClass = 'h-9 w-full rounded-lg border border-foreground/10 bg-foreground/[0.04] px-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-amber-500/50'

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { Activity, AlertTriangle, BrainCircuit, Database, Play, ShieldCheck, Square } from 'lucide-react'
 import { CANONICAL_ORDER_FLOW_CONFIGURATION, type HealthResponse, type OrderFlowArtifact, type OrderFlowInterpretation } from '@trade-god/contracts'
+import TradeGodPageHeader from './TradeGodPageHeader'
 
 type RuntimeState = 'checking' | 'ready' | 'error'
 
@@ -118,21 +119,20 @@ const TradeGodWorkbenchPage: React.FC = () => {
   const statusLabel = runtimeState === 'checking' ? 'Checking runtime' : runtimeState === 'ready' ? 'Ready' : 'Unavailable'
 
   return (
-    <div className="runneros-glass-route h-full overflow-y-auto bg-[#07090d] text-white">
-      <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-5 px-6 py-6 xl:px-9">
-        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-white/[0.08] pb-5">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-amber-300/80">
-              <Activity className="h-4 w-4" /> Trade God
+    <div className="runneros-glass-route trade-god-page-surface h-full overflow-y-auto text-white">
+      <div className="tg-page-container flex flex-col gap-6">
+        <TradeGodPageHeader
+          eyebrow="Trade God"
+          icon={<Activity className="size-3.5" />}
+          title="Order Flow Engine"
+          description="Phase 0 diagnostic workbench. Deterministic evidence only—no broker, live data, or execution capability."
+          actions={(
+            <div className="tg-header-status">
+              <span className={`size-2 rounded-full ${runtimeState === 'ready' ? 'bg-emerald-500' : runtimeState === 'error' ? 'bg-red-500' : 'animate-pulse bg-amber-500'}`} />
+              {statusLabel}
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight">Order Flow Engine</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/48">Phase 0 diagnostic workbench. Deterministic evidence only—no broker, live data, or execution capability.</p>
-          </div>
-          <div className="flex items-center gap-2 rounded-full border border-white/[0.09] bg-white/[0.04] px-3 py-2 text-xs text-white/70">
-            <span className={`h-2 w-2 rounded-full ${runtimeState === 'ready' ? 'bg-emerald-400' : runtimeState === 'error' ? 'bg-red-400' : 'animate-pulse bg-amber-300'}`} />
-            {statusLabel}
-          </div>
-        </header>
+          )}
+        />
 
         <section className="grid gap-4 lg:grid-cols-[1.1fr_1.9fr]">
           <div className="rounded-2xl border border-white/[0.08] bg-white/[0.035] p-5">

@@ -484,6 +484,9 @@ export interface ElectronAPI {
   listTradingSignalRoutes(): Promise<import('../main/trading/trading-signal-route-store').TradingSignalRoute[]>
   saveTradingSignalRoute(route: import('../main/trading/trading-signal-route-store').TradingSignalRoute, expectedPreviousTargetKey?: string): Promise<import('../main/trading/trading-signal-route-store').TradingSignalRoute>
   removeTradingSignalRoute(routeId: string): Promise<boolean>
+  listDiscordSources(): Promise<import('../main/trading/discord-source-store').DiscordSource[]>
+  saveDiscordSource(input: import('../main/trading/discord-source-store').SaveDiscordSourceInput): Promise<import('../main/trading/discord-source-store').DiscordSource>
+  archiveDiscordSource(sourceId: string): Promise<import('../main/trading/discord-source-store').DiscordSource>
   listMirrorGroups(): Promise<import('@trade-god/contracts').MirrorGroup[]>
   saveMirrorGroup(input: import('@trade-god/execution').SaveMirrorGroupInput): Promise<import('@trade-god/contracts').MirrorGroup>
   getDiscoTraderWebhookSecretStatus(): Promise<{ configured: boolean }>

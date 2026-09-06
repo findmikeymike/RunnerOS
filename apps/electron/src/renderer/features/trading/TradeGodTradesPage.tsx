@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowDownRight, ArrowUpRight, Clock3, RefreshCw, ShieldCheck } from 'lucide-react'
 
 import type { ExecutionLifecycleState, ExecutionRecord } from '@trade-god/contracts'
+import TradeGodPageHeader from './TradeGodPageHeader'
 
 const ACTIVE_STATES = new Set<ExecutionLifecycleState>([
   'acknowledged', 'partially-filled', 'filled', 'protecting', 'protected', 'closing',
@@ -65,22 +66,22 @@ const TradeGodTradesPage: React.FC = () => {
   const visible = records.filter((record) => tabForRecord(record) === activeTab)
 
   return (
-    <div className="h-full overflow-y-auto bg-[#090b0e] text-[#eef0f3]">
-      <div className="mx-auto w-full max-w-[1420px] px-6 py-7 xl:px-9">
-        <header className="flex items-start justify-between gap-5 border-b border-white/[0.07] pb-6">
-          <div>
-            <p className="text-xs font-medium text-[#8b93a1]">Execution ledger</p>
-            <h1 className="mt-1 text-[28px] font-semibold tracking-[-0.03em]">Trades</h1>
-            <p className="mt-2 text-sm text-[#858d99]">Every routed trade, its account, protection, and current state.</p>
-          </div>
-          <button onClick={() => void load()} className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-xs text-[#aab1bc] hover:bg-white/[0.06]">
-            <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
-          </button>
-        </header>
+    <div className="trade-god-page-surface h-full overflow-y-auto text-[#eef0f3]">
+      <div className="tg-page-container">
+        <TradeGodPageHeader
+          eyebrow="Execution ledger"
+          title="Trades"
+          description="Every routed trade, its account, protection, and current state."
+          actions={(
+            <button onClick={() => void load()} className="tg-control-secondary">
+              <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
+            </button>
+          )}
+        />
 
         <div className="mt-6 inline-flex rounded-lg bg-white/[0.04] p-1">
           {(['active', 'pending', 'closed'] as TradeTab[]).map((tab) => (
-            <button key={tab} onClick={() => setActiveTab(tab)} className={`rounded-md px-4 py-2 text-xs font-medium capitalize transition-colors ${activeTab === tab ? 'bg-[#252a32] text-white shadow-sm' : 'text-[#858d99] hover:text-white'}`}>
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`rounded-md px-4 py-2 text-xs font-medium capitalize transition-colors ${activeTab === tab ? 'bg-[#252a32] text-white shadow-minimal' : 'text-[#858d99] hover:text-white'}`}>
               {tab} <span className="ml-1.5 text-[10px] text-[#707886]">{counts[tab]}</span>
             </button>
           ))}

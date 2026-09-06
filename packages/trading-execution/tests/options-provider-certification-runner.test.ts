@@ -95,6 +95,26 @@ describe('provider options certification runner', () => {
     expect(adapter.provider.mutationCount).toBe(0)
   })
 
+  test('retains a failed provider run as failed and surfaces its first real cause', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'options-provider-cert-'))
+    roots.push(root)
+    const adapter = new CertifyingAdapter()
+    adapter.resolveContract = async () => { throw new Error('Webull rejected the exact contract query.') }
+    const coordinator = new FileProviderOptionsCertificationCoordinator(root, () => NOW, async () => {})
+    await expect(coordinator.run({
+      connection: connection(),
+      max_test_debit: '150',
+      expires_at: '2026-08-26T15:10:00.000Z',
+      contract: { underlying: 'SPY', expiration: '2026-09-18', strike: '650', right: 'call' },
+      operator_confirmed: true,
+    }, adapter)).rejects.toThrow('exact-standard-contract: Webull rejected the exact contract query')
+
+    const [sessionId] = await readdir(path.join(root, 'options-certification-sessions'))
+    const journal = new FileOptionsCertificationJournal(root, sessionId!, connection().connection_id)
+    expect((await journal.list()).at(-1)).toMatchObject({ scenario: 'session', phase: 'failed' })
+    await expect(readdir(path.join(root, 'options-certifications'))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   test('rehydrates an interrupted accepted entry from disk and contains it flat', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'options-provider-cert-'))
     roots.push(root)
