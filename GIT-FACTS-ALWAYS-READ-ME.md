@@ -251,7 +251,11 @@ All three now refuse to package if sharp's native binaries are missing for the
 target arch (`scripts/gate-sharp-natives.ts`). That gate exists because a
 package without them shipped on 2026-09-05 and died at boot.
 
-**`bun run build` works again** (fixed 2026-09-06). It runs lint first, so
+**`bun run build` works from the repo root** (fixed 2026-09-06). Until then the
+root script pointed at `scripts/build.ts`, deleted in January 2026, so the root
+alias failed while `apps/electron`'s own build was fine — the docs said "build"
+and meant two different things. The root alias now delegates to the app build.
+It runs lint first, so
 an arbitrary `shadow-[...]` class fails the build on purpose: name the shadow
 as a token in `packages/ui/src/styles/index.css`, allow it in
 `apps/electron/eslint.config.mjs`, and use the name. `build:validate` checks the
@@ -289,10 +293,72 @@ app has already run once.
   anyone about a *new* break, which is the whole point of having it.
 - CI (`.github/workflows/test.yml`) runs on every push and PR, macOS and Linux,
   six shards each.
-- One open decision: remote workspace connections currently skip TLS
-  certificate validation in three places. The fix exists on `codex/agent-adds`
-  but changes behaviour for self-signed remote servers. Product call, not a
-  merge.
+- Remote workspace TLS validation is **landed**, not open — all three call
+  sites validate by default. See §6 for the `CRAFT_INSECURE_TLS=1` opt-out.
+- Dependency advisories and what has been accepted: §8.
+
+---
+
+## 8. Dependency advisories — what is fixed, and what is knowingly not
+
+Run `bun audit`. It reported 30 vulnerable packages on 2026-09-06; a pass that
+day took it to 10. Do not "fix" the remaining ten without reading this first,
+because most of them have already been looked at and rejected for a reason.
+
+**What the packaged app actually exposes.** `apps/electron/electron-builder.common.yml`
+excludes everything under `node_modules` and ships only bundled output plus a
+short `extraResources` allowlist. So an advisory on a build-time package —
+eslint, electron-builder, vite, `@types/*` — cannot reach a user. Check which
+side of that line a finding falls on before treating it as urgent.
+
+**How to fix a transitive pin.** Bun honours a flat `overrides` entry in the
+root `package.json` and that cleared two thirds of these. It does **not** honour
+npm-style nested overrides (`"parent": { "child": "x" }`) or Yarn-style
+`resolutions` path keys (`"parent/child": "x"`) — both were tried, both were
+silently ignored, and the vulnerable copy stayed on disk. Verify with
+`bun audit` rather than assuming the entry did anything. Only override inside
+the same major; forcing a consumer across a major is how you turn an advisory
+into an outage.
+
+### Accepted, with reasons
+
+| What | Why it stays |
+| --- | --- |
+| `protobufjs` 6.8.8 (critical), `music-metadata`, `file-type`, `uuid` | All reached only through `@whiskeysockets/baileys` → the WhatsApp worker. The only upstream fix is baileys 7, which is a release candidate. Revisit when 7.0.0 ships stable. |
+| `js-yaml` 3.14.2 (high) | `gray-matter` pins `^3.13.1` and 4.0.3 is its latest, so there is no upstream fix. A flat override would drag our own `js-yaml` 4 usage back to the v3 API. Fixing it properly means passing `gray-matter` a custom engine backed by our own js-yaml, in the four files that call `matter()`. |
+| `nanoid` 3.3.3 (excalidraw) | The advisory needs a non-integer or negative size argument; excalidraw calls `nanoid()` with none. An override would also drag a sibling package down a major. |
+| `brace-expansion`, `@xmldom/xmldom` | Build-time only. v1, v2 and v4 copies coexist, so no single override can satisfy them. |
+| `extract-zip` | No fixed version has been published. |
+| `sharp` 0.34.5 (high, libvips CVEs) | **Do not bump this.** See below. |
+
+### The sharp trap, measured twice
+
+`sharp` 0.34.5 carries four inherited libvips CVEs, and upgrading to 0.35.4
+looks like an obvious win. It is not, and this has now been measured
+independently on two occasions.
+
+The reasoning is written out in full at the top of
+`packages/shared/src/config/pango-backend.ts` — read it before you touch the
+pin. Short version: on macOS, rendering SVG `<text>` through libvips is
+pathologically slow unless Pango uses its fontconfig backend, and libvips 8.18
+(which ships inside sharp 0.35) regresses that backend badly. Confirmed on
+2026-09-06 by bumping to 0.35.4 and running the suite: `artwork_compose` went
+from **187ms to a 10-second timeout**, and calling the handler directly took
+**16.4 seconds for a single cover**. That is the Art Director agent stalling on
+every render in the shipped app.
+
+Reverted. If you try again, the thing to measure is
+`packages/session-tools-core/src/handlers/artwork-compose.test.ts` in a **fresh
+process** — the cost is paid per process, and a warm fontconfig cache will lie
+to you. A microbenchmark that renders in a loop will report 70ms and tell you
+nothing.
+
+Note also that `@img/sharp-*` and `@img/sharp-libvips-*` are pinned explicitly
+in root `optionalDependencies` for packaging. They must move in lockstep with
+`sharp` or the packaged app dies at boot, which is what
+`scripts/gate-sharp-natives.ts` exists to catch.
+
+---
 
 Deeper detail on worktree layout lives in
 [docs/REPO-TOPOLOGY.md](docs/REPO-TOPOLOGY.md). Onboarding lives in

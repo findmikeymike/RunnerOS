@@ -39,6 +39,12 @@
  * fresh process pays it again. Against 60-115ms here, both options are worse,
  * so an upgrade needs this measured rather than assumed.
  *
+ * Re-measured 2026-09-06, when the libvips CVEs in 0.34.5 made 0.35.4 look
+ * like an easy win. It is not: on 0.35.4 the artwork_compose suite went from
+ * 187ms to a 10s timeout, and one cover took 16.4s through the real handler.
+ * Reverted. Measure in a fresh process — the cost is per-process, so a warm
+ * cache or a benchmark that loops will report 70ms and tell you nothing.
+ *
  * macOS only. Linux already defaults to fontconfig, and Windows Pango uses its
  * own backend that this would break.
  *
