@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-10
+last_verified: 2026-09-06
 source_of_truth: true
 ---
 
@@ -11,16 +11,20 @@ Start here when you need project context without reading the whole repo.
 
 ## Read First
 
-1. [CURRENT.md](./CURRENT.md) - live branch/status notes.
-2. [../HANDOFF.md](../HANDOFF.md) - zero-context takeover brief for the current build.
-3. [creator-command-center/23-release-kit-architecture-spec.md](./creator-command-center/23-release-kit-architecture-spec.md) - current HQ Vault, Campaign Assets, Outputs, and Release Kit contract.
-4. [creator-command-center/14-state-of-play-opportunity-engine-spec.md](./creator-command-center/14-state-of-play-opportunity-engine-spec.md) - approved evolution contract for State of Play V2.
-5. [creator-command-center/15-artist-os-runtime-isolation-plan.md](./creator-command-center/15-artist-os-runtime-isolation-plan.md) - release-gating plan for making Artist OS a fully separate application from Runner.
-6. [system-map](./system-map/) - generated map of workers, skills, sources, Scheduled Work, launch surfaces, and approval boundaries.
-7. [creator-command-center](./creator-command-center/) - Artist HQ / campaign workspace specs.
-8. [user](./user/) - concise user-facing guides for surfaces, advanced abilities, and service keys.
-9. [backlog/tool-licensing-packaging-audit.md](./backlog/tool-licensing-packaging-audit.md) - release gate for bundled/downloaded local runtimes.
-10. [backlog/windows-version.md](./backlog/windows-version.md) - Windows parity/runtime backlog.
+1. [../GIT-FACTS-ALWAYS-READ-ME.md](../GIT-FACTS-ALWAYS-READ-ME.md) - where work lives and how it lands. Authority over every other file here.
+2. [../HANDOFF1.md](../HANDOFF1.md) - onboarding: what the product is and how it is wired.
+3. [../HANDOFF2.md](../HANDOFF2.md) - what has been verified, what is known broken, what nobody has checked.
+4. [updates/regular-updates-check.md](./updates/regular-updates-check.md) - read before bumping any dependency.
+5. [CURRENT.md](./CURRENT.md) - live branch/status notes. Last verified 2026-08-30 and points at a retired worktree; treat as background, not instructions.
+6. [../HANDOFF.md](../HANDOFF.md) - superseded by HANDOFF1 and HANDOFF2. Useful for architectural background only.
+7. [creator-command-center/23-release-kit-architecture-spec.md](./creator-command-center/23-release-kit-architecture-spec.md) - current HQ Vault, Campaign Assets, Outputs, and Release Kit contract.
+8. [creator-command-center/14-state-of-play-opportunity-engine-spec.md](./creator-command-center/14-state-of-play-opportunity-engine-spec.md) - approved evolution contract for State of Play V2.
+9. [creator-command-center/15-artist-os-runtime-isolation-plan.md](./creator-command-center/15-artist-os-runtime-isolation-plan.md) - release-gating plan for making Artist OS a fully separate application from Runner.
+10. [system-map](./system-map/) - generated map of workers, skills, sources, Scheduled Work, launch surfaces, and approval boundaries.
+11. [creator-command-center](./creator-command-center/) - Artist HQ / campaign workspace specs.
+12. [user](./user/) - concise user-facing guides for surfaces, advanced abilities, and service keys.
+13. [backlog/tool-licensing-packaging-audit.md](./backlog/tool-licensing-packaging-audit.md) - release gate for bundled/downloaded local runtimes.
+14. [backlog/windows-version.md](./backlog/windows-version.md) - Windows parity/runtime backlog.
 
 Current active work:
 
@@ -47,6 +51,7 @@ Current active work:
 
 ## Main Areas
 
+- [updates](./updates/) - keeping dependencies and the runtime current: the quarterly pass, what breaks what, and upgrades already tried and reverted.
 - [specs](./specs/) - standalone specs that do not belong to a larger feature folder.
 - [backlog](./backlog/) - accepted future work, deferred integrations, and cleanup ideas.
 - [audits](./audits/) - security, runtime, and technical debt reports.

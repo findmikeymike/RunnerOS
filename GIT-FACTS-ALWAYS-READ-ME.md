@@ -362,4 +362,8 @@ in root `optionalDependencies` for packaging. They must move in lockstep with
 
 Deeper detail on worktree layout lives in
 [docs/REPO-TOPOLOGY.md](docs/REPO-TOPOLOGY.md). Onboarding lives in
-[HANDOFF1.md](HANDOFF1.md). **This file wins if they disagree.**
+[HANDOFF1.md](HANDOFF1.md). What has and has not been verified lives in
+[HANDOFF2.md](HANDOFF2.md). Before bumping any dependency, read
+[docs/updates/regular-updates-check.md](docs/updates/regular-updates-check.md) —
+it maps what breaks what, and lists the upgrades already tried and reverted.
+**This file wins if they disagree.**

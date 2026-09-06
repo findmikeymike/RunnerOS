@@ -13,6 +13,10 @@ Read this before touching anything. It covers what the product is, how agents
 and context are wired, which docs to trust, and how to verify work. It does not
 track feature status — see the spec index for that.
 
+For what has actually been verified versus what is merely assumed to work, read
+[HANDOFF2.md](HANDOFF2.md). For keeping dependencies current without breaking
+the app, read [docs/updates/regular-updates-check.md](docs/updates/regular-updates-check.md).
+
 ## What it is
 
 Artist OS is an Electron desktop app for musicians where AI agents take real

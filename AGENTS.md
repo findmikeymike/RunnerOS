@@ -54,5 +54,7 @@ no longer tell anyone about a new break.
 
 - [docs/REPO-TOPOLOGY.md](docs/REPO-TOPOLOGY.md) — worktree layout in depth
 - [HANDOFF1.md](HANDOFF1.md) — codebase onboarding
+- [HANDOFF2.md](HANDOFF2.md) — what is verified, what is known broken, what is unchecked
+- [docs/updates/regular-updates-check.md](docs/updates/regular-updates-check.md) — read before bumping any dependency
 
 GIT-FACTS wins if any of these disagree.
