@@ -45,7 +45,8 @@ PANGOCAIRO_BACKEND=fontconfig bun test \
 
 ## The suite is green — keep it that way
 
-**8090 pass, 0 fail.** There are no known-failing tests to excuse. If your
+**Zero failures**, sharded and isolated (`bun run test` runs both; CI runs
+`--shard=N/6` plus an `isolated` job). There are no known-failing tests to excuse. If your
 change makes the suite red, fix it before handing off: a red suite means CI can
 no longer tell anyone about a new break.
 

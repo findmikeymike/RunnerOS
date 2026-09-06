@@ -14,6 +14,9 @@ import { cancelPendingAutomationWorkForMatcher, queueAutomationWork } from './Au
 import { supplyScheduledWorkInputs } from './ScheduledWorkInputSupply'
 import { withWorkspaceContextLock } from './workspace-context-lock'
 
+/** Everything after the first parameter — forwards whatever arity the real function has. */
+type Tail<T extends unknown[]> = T extends [unknown, ...infer R] ? R : never
+
 // Captured before mock.module re-points the live `actual*` namespaces at the
 // mocks; calling through the namespace from a fallback recurses forever.
 // See google-workspace.test.ts for the full story.
@@ -22,14 +25,19 @@ const realLoadGlobalAgent = actualAgentDefinitions.loadGlobalAgent
 const realReadActivatedWorkflows = actualWorkflows.readActivatedWorkflows
 const realLoadGlobalWorkflow = actualWorkflows.loadGlobalWorkflow
 
+  // Every fallback must forward *all* arguments to the captured real. Bun's
+  // mock.module re-points the package's live bindings, so the real
+  // writeGlobalAgent(input, { globalAgentsDir }) reloads through THIS stub —
+  // and a fallback that drops `options` silently reads the default directory.
+  // That is how 50 unrelated storage tests failed only under sharded CI.
 mock.module('@craft-agent/shared/agent-definitions', () => ({
   ...actualAgentDefinitions,
-  readActivatedAgents: (rootPath: string) => rootPath.includes('automation-work-queue-')
+  readActivatedAgents: (rootPath: string, ...rest: Tail<Parameters<typeof realReadActivatedAgents>>) => rootPath.includes('automation-work-queue-')
     ? { version: 1, active: ['youtube-intel'] }
-    : realReadActivatedAgents(rootPath),
-  loadGlobalAgent: (slug: string) => slug === 'youtube-intel'
+    : realReadActivatedAgents(rootPath, ...rest),
+  loadGlobalAgent: (slug: string, ...rest: Tail<Parameters<typeof realLoadGlobalAgent>>) => slug === 'youtube-intel'
     ? { slug, metadata: { name: 'YouTube Intel', description: 'Creates YouTube intelligence reports.' }, systemPrompt: 'Research YouTube.', path: '/tmp/youtube-intel', source: 'global' }
-    : realLoadGlobalAgent(slug),
+    : realLoadGlobalAgent(slug, ...rest),
 }))
 
 const demoWorkflow = {
@@ -54,12 +62,12 @@ const demoWorkflow = {
 
 mock.module('@craft-agent/shared/workflows', () => ({
   ...actualWorkflows,
-  readActivatedWorkflows: (rootPath: string) => rootPath.includes('automation-work-queue-')
+  readActivatedWorkflows: (rootPath: string, ...rest: Tail<Parameters<typeof realReadActivatedWorkflows>>) => rootPath.includes('automation-work-queue-')
     ? { version: 1, active: ['process-file'] }
-    : realReadActivatedWorkflows(rootPath),
-  loadGlobalWorkflow: (slug: string) => slug === 'process-file'
+    : realReadActivatedWorkflows(rootPath, ...rest),
+  loadGlobalWorkflow: (slug: string, ...rest: Tail<Parameters<typeof realLoadGlobalWorkflow>>) => slug === 'process-file'
     ? demoWorkflow
-    : realLoadGlobalWorkflow(slug),
+    : realLoadGlobalWorkflow(slug, ...rest),
 }))
 
 const roots: string[] = []

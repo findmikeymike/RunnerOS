@@ -1,3 +1,10 @@
+// Runs in its own process (root `test` script + CI "isolated" job).
+// This file replaces the whole @craft-agent/shared/memory package with stubs.
+// mock.module re-points the package's live bindings, so inside `bun test` those
+// stubs became *the* memory functions for the memory package's own tests that
+// happened to share the process (21 failures), and the missing exports broke
+// create-managed-session's import. Spreading the real module in does not help:
+// the stubs still win for the names they cover. Isolation is the only honest fix.
 import { beforeEach, describe, expect, it, mock } from 'bun:test'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { HandlerFn, RequestContext, RpcServer } from '../../transport/types'

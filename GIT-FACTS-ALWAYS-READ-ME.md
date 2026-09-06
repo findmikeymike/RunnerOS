@@ -171,6 +171,33 @@ session. Always pass:
 **Never `git add -A`.** Other agents have uncommitted files in this tree right
 now. Stage your own paths, explicitly, by name. Never `git checkout .`.
 
+**A mock fallback must forward every argument to the captured real.** Bun's
+`mock.module` re-points the package's *live bindings*, so the real
+`writeGlobalAgent(input, { globalAgentsDir })` calls `loadGlobalAgent` through
+your stub. Write `(slug, options) => mine ?? realLoadGlobalAgent(slug, options)`,
+never `realLoadGlobalAgent(slug)`. Three fallbacks that dropped `options` made
+50 unrelated storage tests read the wrong directory — only under sharded CI.
+
+**A mock that stubs a whole package belongs in `*.isolated.ts`.** Spreading
+the real module into the factory does not neutralise the stubs: for every
+name the stub covers, the package's *own* tests in the same process now get
+the stub. `memory.test.ts` did this and broke 21 memory-package tests once
+sharding put them together. Partial mocks with a scoped fallback are fine in
+`bun test`; wholesale replacement is not.
+
+**Reproduce CI with `--shard=N/6`, not with a list of files.** Positional
+arguments put `bun test` in *filter* mode, which loads modules differently and
+hid the leak above in every pairwise check. Discovery runs (`bun test`,
+`--shard`) are the truth. To find a polluter inside discovery mode, exclude
+halves of the file set with repeated `--path-ignore-patterns=<exact path>`
+flags while `-t` limits execution to the victim.
+
+**`bun test <path>.isolated.ts` runs nothing.** A bare path is a name filter;
+`.isolated.ts` matches no test pattern, so bun prints "filters did not match"
+and exits 1. Prefix with `./` to make it a path. The root `test` script did
+this wrong from the day the convention started, so no isolated test had ever
+run anywhere; two had rotted.
+
 **A branch that looks unmerged may already be merged.** `codex/agent-adds`
 reads as 23 unmerged commits and 51 conflicts, but every line of it is already
 on trunk byte-for-byte; the history was rebased, so git cannot tell. Before
@@ -212,12 +239,27 @@ All three now refuse to package if sharp's native binaries are missing for the
 target arch (`scripts/gate-sharp-natives.ts`). That gate exists because a
 package without them shipped on 2026-09-05 and died at boot.
 
-**`bun run build` (and so `bun run start`) is broken on `main` for two
-pre-existing reasons unrelated to Electron:** six design-rule lint errors, and
-`build:validate` referencing a script that does not exist. Packaging does not
-run either step, which is how nobody noticed. Until they are fixed, build for a
-dev launch with the individual steps (`build:main`, `build:preload`,
-`build:preload-toolbar`, `build:interceptor`, `build:renderer`, `build:copy`).
+**`bun run build` works again** (fixed 2026-09-06). It runs lint first, so
+an arbitrary `shadow-[...]` class fails the build on purpose: name the shadow
+as a token in `packages/ui/src/styles/index.css`, allow it in
+`apps/electron/eslint.config.mjs`, and use the name. `build:validate` checks the
+bundled asset directories exist after `build:copy`.
+
+**Remote workspaces validate TLS certificates by default** (since 2026-09-06).
+A self-signed remote server fails to connect with an error that says so. The
+per-machine opt-out is `CRAFT_INSECURE_TLS=1`; the CLI has `--tls-ca` for a
+custom CA instead. Do not flip the default back.
+
+**Tests that mock a Node builtin (`os`, `fs`, `path`) or set env at module
+level must be `*.isolated.ts`.** `mock.module` on a builtin is process-global
+and permanent, and shard order decides who loads first. `bun test` does not
+pick up `.isolated.ts`; the root `test` script and the CI `isolated` job run
+each one in its own process.
+
+**CI needs `CRAFT_BUNDLED_ASSETS_ROOT`** (set in the workflow and the root
+`test` script). Tests that load config defaults sync them from
+`apps/electron/resources`; without it they pass only on a machine where the
+app has already run once.
 
 **Electron 44 requires macOS 13.** That is a product decision recorded in
 [docs/creator-command-center/46-electron-runtime-upgrade-spec.md](docs/creator-command-center/46-electron-runtime-upgrade-spec.md);

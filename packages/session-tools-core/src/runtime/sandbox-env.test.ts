@@ -62,10 +62,13 @@ describe('sandbox-env', () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'sandbox-env-node-'));
     createdDirs.push(dataDir);
 
+    // Pass an explicit base env. The builder inherits the ambient environment by
+    // design, and CI's uv setup action exports UV_CACHE_DIR — so asserting
+    // "undefined" against process.env tested the runner, not the builder.
     const env = createScriptRuntimeEnv({
       language: 'node',
       dataDir,
-    });
+    }, { PATH: process.env.PATH });
 
     expect(env.TMPDIR).toBe(join(dataDir, '.tmp'));
     expect(env.UV_CACHE_DIR).toBeUndefined();

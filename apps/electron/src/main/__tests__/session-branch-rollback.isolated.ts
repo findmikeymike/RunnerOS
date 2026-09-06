@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test'
+import * as actualWorkspaces from '@craft-agent/shared/workspaces'
+import * as actualConfig from '@craft-agent/shared/config'
 
 const workspaceRootPath = '/tmp/ws-rollback'
 const workspace = {
@@ -63,6 +65,7 @@ mock.module('../logger', () => {
 })
 
 mock.module('@craft-agent/shared/config', () => ({
+  ...actualConfig,
   getWorkspaceByNameOrId: (id: string) => (id === workspace.id ? workspace : null),
   getWorkspaces: () => [workspace],
   loadConfigDefaults: () => ({
@@ -117,6 +120,9 @@ mock.module('@craft-agent/shared/config', () => ({
 }))
 
 mock.module('@craft-agent/shared/workspaces', () => ({
+  // Keep every real export; override only what this test controls. A partial
+  // mock is *the* module for every later import in this process.
+  ...actualWorkspaces,
   loadWorkspaceConfig: () => ({
     defaults: {
       permissionMode: 'ask',

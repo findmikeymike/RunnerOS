@@ -10,6 +10,15 @@
 import { describe, it, expect } from 'bun:test';
 import { parseReadCommand } from '../read-patterns.ts';
 import { looksLikePowerShell, isPowerShellAvailable } from '../../powershell-validator.ts';
+import { setPowerShellValidatorRoot } from '../../powershell-validator.ts';
+import { join } from 'node:path';
+
+// The PowerShell validator needs its parser script's location before any
+// Bash-vs-PowerShell classification runs. The app sets it at startup; a test
+// process has to set it itself, or it only passes when some other test file
+// in the same process happened to set it first — which is exactly what made
+// this pass locally and fail on sharded CI runners that have pwsh installed.
+setPowerShellValidatorRoot(join(import.meta.dir, '..', '..'));
 
 // ============================================================
 // Bash Read Commands

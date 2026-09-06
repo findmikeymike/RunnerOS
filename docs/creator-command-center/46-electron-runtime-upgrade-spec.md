@@ -121,21 +121,19 @@ New Electron APIs (window-state restore, per-WebContents zoom, frame PDF
 export, main-process `net.WebSocket`) were **not** adopted. Adopt them for a
 product need, not because they exist.
 
-## Follow-ups surfaced (not fixed here)
+## Follow-ups surfaced — resolved 2026-09-06 (production hardening)
 
-- **`bun run build` / `bun run start` are broken on `main`** for two reasons
-  unrelated to Electron: six `Disallowed shadow class` lint errors
-  (ArtistHQHome 3600/3617/4658, LabSongPadPage 1268, LabWorkspaceHome 140,
-  ReleaseHorizon 164) and `build:validate` referencing a script that does not
-  exist. Packaging runs neither step. Fix the design rule or the classes;
-  restore or drop `validate-assets.ts`.
-- **CI is red on 10 of 12 shards for environmental reasons** while the suite is
-  green locally: 52 distinct tests, 37 of them one suite
-  (`library + activation interplay (using a fake global dir)`), plus symlink
-  containment, PowerShell gating, RPC profile registration (passes locally —
-  may be platform-dependent), sandbox-env, youtube-research key detection.
-  Until fixed, CI cannot gate anything.
-- The packaged app does not expose CDP; find out whether that is deliberate.
-- `.nvmrc` pinning Node 24 at the repo root would remove the "which Node is on
-  PATH" failure class entirely.
+- `bun run build` / `bun run start` restored: the six arbitrary shadows became
+  named tokens (`shadow-hairline-top`, `-card-lift`, `-panel-lift`,
+  `-accent-ring`, `-accent-ring-strong`) and `validate-assets.ts` was restored.
+- CI: all 52 env- and order-dependent failures fixed at their causes (see
+  GIT-FACTS §5 for the three new traps); `CRAFT_BUNDLED_ASSETS_ROOT` set in the
+  workflow and root `test` script; an `isolated` job now runs the `.isolated.ts`
+  files, which had never run anywhere.
+- Node floor: `.nvmrc` = 24, root and app `engines.node >= 22.12`.
+- Remote TLS validation on by default (`CRAFT_INSECURE_TLS=1` opt-out).
+- sharp gate wired into the Linux and Windows build scripts.
 
+Still open: the packaged app does not expose `--remote-debugging-port`
+(deliberate or not is unknown); Windows/Linux builds and a signed macOS build
+remain unverified on this machine.

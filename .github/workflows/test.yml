@@ -45,6 +45,10 @@ jobs:
       # propagate process.env to native libraries, so it has to be set here
       # rather than in code. Harmless on Linux, which already defaults to it.
       PANGOCAIRO_BACKEND: fontconfig
+      # Tests that load config defaults sync them from the bundled copy in the
+      # repo. Without this they only pass on machines where the app has already
+      # run once and left ~/.craft-agent/config-defaults.json behind.
+      CRAFT_BUNDLED_ASSETS_ROOT: ${{ github.workspace }}/apps/electron
 
     steps:
       - name: Checkout
@@ -71,3 +75,38 @@ jobs:
       # two keeps local and CI measuring the same thing.
       - name: Run tests
         run: bun test --shard=${{ matrix.shard }}/6 --path-ignore-patterns='**/release-artist-os/**' --path-ignore-patterns='**/dist/**'
+
+  # *.isolated.ts files mock process-global things (electron, os, fs) and must
+  # run one process each. `bun test` does not match that suffix, so the sharded
+  # job never runs them. Note the ./ prefix: a bare path is treated as a name
+  # filter, matches nothing, and exits 0 — which is why the root script's loop
+  # silently ran zero isolated tests until 2026-09-06.
+  isolated:
+    name: ${{ matrix.os }} isolated
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    env:
+      PANGOCAIRO_BACKEND: fontconfig
+      CRAFT_BUNDLED_ASSETS_ROOT: ${{ github.workspace }}/apps/electron
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Run isolated tests, one process each
+        run: |
+          set -e
+          for f in $(find ./packages ./apps ./tools -name '*.isolated.ts' -not -path '*/node_modules/*' -not -path '*/release-artist-os/*'); do
+            echo "== $f"; bun test "$f"
+          done
+

@@ -25,9 +25,15 @@ mock.module('@craft-agent/shared/config', () => ({
   ),
 }));
 
+const realAssertTeamPermission = actualWorkspaces.assertTeamPermission;
 mock.module('@craft-agent/shared/workspaces', () => ({
   ...actualWorkspaces,
-  assertTeamPermission: () => {},
+  // Only this file's workspace is exempt; everyone else gets the real check.
+  assertTeamPermission: (rootPath: string, ...rest: unknown[]) => (
+    rootPath === TEST_WORKSPACE.rootPath
+      ? undefined
+      : (realAssertTeamPermission as (...args: unknown[]) => unknown)(rootPath, ...rest)
+  ),
 }));
 
 import { createWebuiHandler } from '../http-server';

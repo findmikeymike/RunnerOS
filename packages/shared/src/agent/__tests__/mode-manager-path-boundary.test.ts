@@ -3,6 +3,14 @@ import { mkdtempSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { shouldAllowToolInMode, extractBashWriteTarget } from '../../agent/mode-manager.ts';
+import { setPowerShellValidatorRoot } from '../powershell-validator.ts';
+
+// The PowerShell validator needs its parser script's location before any
+// Bash-vs-PowerShell classification runs. The app sets it at startup; a test
+// process has to set it itself, or it only passes when some other test file
+// in the same process happened to set it first — which is exactly what made
+// this pass locally and fail on sharded CI runners that have pwsh installed.
+setPowerShellValidatorRoot(join(import.meta.dir, '..'));
 
 describe('mode-manager path containment for plans/data exceptions', () => {
   let base: string;

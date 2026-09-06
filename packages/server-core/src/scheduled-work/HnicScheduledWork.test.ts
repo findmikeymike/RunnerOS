@@ -14,6 +14,9 @@ import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-
 import { persistHnicScheduleWork } from './HnicScheduledWork'
 import { materializeReleaseKitItem } from '@craft-agent/shared/release-kit'
 
+/** Everything after the first parameter — forwards whatever arity the real function has. */
+type Tail<T extends unknown[]> = T extends [unknown, ...infer R] ? R : never
+
 // Captured before mock.module re-points the live `actual*` namespaces at the
 // mocks; calling through the namespace from a fallback recurses forever.
 // See google-workspace.test.ts for the full story.
@@ -22,22 +25,27 @@ const realLoadGlobalAgent = actualAgentDefinitions.loadGlobalAgent
 const realReadActivatedWorkflows = actualWorkflows.readActivatedWorkflows
 const realLoadGlobalWorkflow = actualWorkflows.loadGlobalWorkflow
 
+  // Every fallback must forward *all* arguments to the captured real. Bun's
+  // mock.module re-points the package's live bindings, so the real
+  // writeGlobalAgent(input, { globalAgentsDir }) reloads through THIS stub —
+  // and a fallback that drops `options` silently reads the default directory.
+  // That is how 50 unrelated storage tests failed only under sharded CI.
 mock.module('@craft-agent/shared/agent-definitions', () => ({
   ...actualAgentDefinitions,
-  readActivatedAgents: (rootPath: string) => rootPath.includes('hnic-scheduled-work-')
+  readActivatedAgents: (rootPath: string, ...rest: Tail<Parameters<typeof realReadActivatedAgents>>) => rootPath.includes('hnic-scheduled-work-')
     ? { version: 1, active: ['youtube-intel'] }
-    : realReadActivatedAgents(rootPath),
-  loadGlobalAgent: (slug: string) => slug === 'youtube-intel'
+    : realReadActivatedAgents(rootPath, ...rest),
+  loadGlobalAgent: (slug: string, ...rest: Tail<Parameters<typeof realLoadGlobalAgent>>) => slug === 'youtube-intel'
     ? { slug, metadata: { name: 'YouTube Intel', description: 'Creates reports.' }, systemPrompt: 'Research.', path: '/tmp/youtube-intel', source: 'global' }
-    : realLoadGlobalAgent(slug),
+    : realLoadGlobalAgent(slug, ...rest),
 }))
 
 mock.module('@craft-agent/shared/workflows', () => ({
   ...actualWorkflows,
-  readActivatedWorkflows: (rootPath: string) => rootPath.includes('hnic-scheduled-work-')
+  readActivatedWorkflows: (rootPath: string, ...rest: Tail<Parameters<typeof realReadActivatedWorkflows>>) => rootPath.includes('hnic-scheduled-work-')
     ? { version: 1, active: ['input-workflow', 'legacy-input-workflow'] }
-    : realReadActivatedWorkflows(rootPath),
-  loadGlobalWorkflow: (slug: string) => {
+    : realReadActivatedWorkflows(rootPath, ...rest),
+  loadGlobalWorkflow: (slug: string, ...rest: Tail<Parameters<typeof realLoadGlobalWorkflow>>) => {
     if (slug === 'legacy-input-workflow') {
       return {
         slug,
@@ -76,7 +84,7 @@ mock.module('@craft-agent/shared/workflows', () => ({
         path: '/tmp/input-workflow',
         source: 'global',
       }
-      : realLoadGlobalWorkflow(slug)
+      : realLoadGlobalWorkflow(slug, ...rest)
   },
 }))
 

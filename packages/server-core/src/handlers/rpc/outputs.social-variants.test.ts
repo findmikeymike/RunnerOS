@@ -21,7 +21,16 @@ let root: string;
 const getWorkspaceByNameOrId = mock((workspaceId: string) => workspaceId === WORKSPACE_ID
   ? { id: WORKSPACE_ID, name: 'Artist HQ', rootPath: root, artistWorkspaceScope: 'hq' as const }
   : null);
-const assertTeamPermission = mock(() => undefined);
+const realAssertTeamPermission = actualWorkspaces.assertTeamPermission;
+// Exempt only this file's fixture roots; forward everyone else to the real
+// check. An unconditional stub here is the answer for every later test in the
+// process (mock.module re-points the live binding) — the third such stub
+// found today, each one silently allowing 'owner-required' cases elsewhere.
+const assertTeamPermission = mock((rootPath: string, ...rest: unknown[]) => (
+  rootPath.includes('social-variant-rpc-')
+    ? { allowed: true }
+    : (realAssertTeamPermission as (...args: unknown[]) => unknown)(rootPath, ...rest)
+));
 
 mock.module('@craft-agent/shared/config', () => ({ ...actualConfig, getWorkspaceByNameOrId }));
 mock.module('@craft-agent/shared/workspaces', () => ({ ...actualWorkspaces, assertTeamPermission }));

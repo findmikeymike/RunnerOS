@@ -251,7 +251,16 @@ function syncConfigDefaults(): void {
  */
 export function loadConfigDefaults(): ConfigDefaults {
   if (!existsSync(CONFIG_DEFAULTS_FILE)) {
-    throw new Error('config-defaults.json not found at ' + CONFIG_DEFAULTS_FILE + '. Ensure ensureConfigDir() was called at startup.');
+    // Normally synced by ensureConfigDir() at app startup. A missing file is
+    // recoverable — resync from the bundled copy (or the built-in fallback)
+    // rather than throwing, so a fresh profile, a deleted file, or a test
+    // process that never ran startup all get the same defaults the app would.
+    mkdirSync(CONFIG_DIR, { recursive: true });
+    configDefaultsSynced = false;
+    syncConfigDefaults();
+  }
+  if (!existsSync(CONFIG_DEFAULTS_FILE)) {
+    throw new Error('config-defaults.json not found at ' + CONFIG_DEFAULTS_FILE + ' and could not be synced from bundled assets.');
   }
 
   const defaults = readJsonFileSync<ConfigDefaults>(CONFIG_DEFAULTS_FILE);

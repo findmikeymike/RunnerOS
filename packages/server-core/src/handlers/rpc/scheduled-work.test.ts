@@ -35,6 +35,9 @@ import type { ContextDocMetadata, LoadedContextDoc } from '@craft-agent/shared/w
 import type { HandlerFn, RequestContext, RpcServer } from '../../transport/types'
 import { materializeReleaseKitItem, updateReleaseKitItemUsage } from '@craft-agent/shared/release-kit'
 
+/** Everything after the first parameter — forwards whatever arity the real function has. */
+type Tail<T extends unknown[]> = T extends [unknown, ...infer R] ? R : never
+
 const workspaceRoot = '/tmp/runneros-scheduled-work-test'
 const campaignRoot = '/tmp/runneros-scheduled-work-x-campaign-test'
 const workspace = { id: 'ws-1', name: 'Scheduled Work Test', rootPath: workspaceRoot, artistWorkspaceScope: 'hq' as const }
@@ -54,7 +57,16 @@ let contextDocs = new Map<string, LoadedContextDoc>()
 let upsertCalls: string[] = []
 let failOnSlug: string | null = null
 let activeAgentSlugs = ['content-genius']
-const assertTeamPermission = mock((_rootPath: string, _action: string) => ({ allowed: true }))
+const realAssertTeamPermission = actualWorkspaces.assertTeamPermission
+// Scoped to this file's fixture roots and forwarded otherwise. An unconditional
+// `allowed: true` here became the answer for every later test in the process
+// (mock.module re-points the live binding), which is how team-permission
+// tests in other files stopped throwing 'owner-required' under sharded CI.
+const assertTeamPermission = mock((rootPath: string, action: string, ...rest: unknown[]) => (
+  rootPath.startsWith('/tmp/runneros-scheduled-work')
+    ? { allowed: true }
+    : (realAssertTeamPermission as (...args: unknown[]) => unknown)(rootPath, action, ...rest)
+))
 
 mock.module('@craft-agent/shared/config', () => ({
   ...actualConfig,
@@ -99,14 +111,19 @@ mock.module('@craft-agent/shared/workspace-context', () => ({
   ),
 }))
 
+  // Every fallback must forward *all* arguments to the captured real. Bun's
+  // mock.module re-points the package's live bindings, so the real
+  // writeGlobalAgent(input, { globalAgentsDir }) reloads through THIS stub —
+  // and a fallback that drops `options` silently reads the default directory.
+  // That is how 50 unrelated storage tests failed only under sharded CI.
 mock.module('@craft-agent/shared/agent-definitions', () => ({
   ...actualAgentDefinitions,
-  readActivatedAgents: (rootPath: string) => rootPath === workspaceRoot
+  readActivatedAgents: (rootPath: string, ...rest: Tail<Parameters<typeof realReadActivatedAgents>>) => rootPath === workspaceRoot
     ? { version: 1, active: activeAgentSlugs }
-    : realReadActivatedAgents(rootPath),
-  loadGlobalAgent: (slug: string) => slug === 'content-genius'
+    : realReadActivatedAgents(rootPath, ...rest),
+  loadGlobalAgent: (slug: string, ...rest: Tail<Parameters<typeof realLoadGlobalAgent>>) => slug === 'content-genius'
     ? { slug, metadata: { name: 'Content Genius', description: 'Writes campaign content.' }, systemPrompt: 'Write.', path: '/tmp/content-genius', source: 'global' }
-    : realLoadGlobalAgent(slug),
+    : realLoadGlobalAgent(slug, ...rest),
 }))
 
 mock.module('@craft-agent/shared/workspaces', () => ({

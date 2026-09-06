@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import * as actualConfigStorage from '@craft-agent/shared/config/storage'
+import * as actualConfig from '@craft-agent/shared/config'
 
 // Deliberately isolated because this file mocks the broad Settings import graph.
 // The root `bun run test` script executes every *.isolated.ts file separately.
@@ -14,6 +16,7 @@ const assertGlobalSecretVaultPermission = mock((workspaceId: string) => {
 })
 
 mock.module('@craft-agent/shared/config', () => ({
+  ...actualConfig,
   getPreferencesPath: () => '/tmp/preferences.json',
   getSessionDraft: () => null,
   setSessionDraft: () => undefined,
@@ -29,6 +32,9 @@ mock.module('@craft-agent/shared/config', () => ({
 }))
 
 mock.module('@craft-agent/shared/config/storage', () => ({
+  // Keep every real export; override only what this test controls. A partial
+  // mock is *the* module for every later import in this process.
+  ...actualConfigStorage,
   loadStoredConfig: () => ({}),
 }))
 

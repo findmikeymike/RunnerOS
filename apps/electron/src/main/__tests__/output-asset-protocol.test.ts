@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, symlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import * as actualConfig from '@craft-agent/shared/config'
 
 type ProtocolHandler = (request: Request) => Promise<Response>
 
@@ -17,6 +18,11 @@ const fromPartition = mock((_partition: string) => ({
   },
 }))
 
+// mock.module is process-global and never undone. A partial 'electron' stub
+// here becomes *the* electron for every test file that runs after this one in
+// the same process — which is how the RPC registration tests failed on sharded
+// CI with "Export named 'app' not found". Stub everything the main-process
+// handlers import, not just what this file uses.
 mock.module('electron', () => ({
   protocol: {
     handle: defaultHandle,
@@ -24,6 +30,37 @@ mock.module('electron', () => ({
   session: {
     fromPartition,
   },
+  ipcMain: { handle: () => {}, on: () => {} },
+  app: {
+    isPackaged: false,
+    getAppPath: () => '/',
+    getPath: () => '/',
+    quit: () => {},
+    on: () => {},
+    dock: { setIcon: () => {}, setBadge: () => {} },
+  },
+  nativeTheme: { shouldUseDarkColors: false },
+  nativeImage: {
+    createFromPath: () => ({ isEmpty: () => true }),
+    createFromDataURL: () => ({}),
+  },
+  dialog: {
+    showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+    showMessageBox: async () => ({ response: 0 }),
+  },
+  shell: {
+    openExternal: async () => {},
+    openPath: async () => '',
+    showItemInFolder: () => {},
+  },
+  BrowserWindow: {
+    fromWebContents: () => null,
+    getFocusedWindow: () => null,
+    getAllWindows: () => [],
+  },
+  BrowserView: class {},
+  Menu: { buildFromTemplate: () => ({ popup: () => {} }) },
+  Notification: class { static isSupported() { return false } on() {} show() {} },
 }))
 
 mock.module('../logger', () => ({
@@ -41,7 +78,11 @@ const workspaces = new Map<string, { rootPath: string; remoteServer?: unknown }>
 const ATTACKER_OUTPUT = '11111111-1111-4111-8111-111111111111'
 const VICTIM_OUTPUT = '22222222-2222-4222-8222-222222222222'
 
+// Same rule for the config module: keep every real export and override only
+// the one this test controls, so a later file's `import { getWorkspaces }`
+// still resolves.
 mock.module('@craft-agent/shared/config', () => ({
+  ...actualConfig,
   getWorkspaceByNameOrId: (id: string) => workspaces.get(id) ?? null,
 }))
 

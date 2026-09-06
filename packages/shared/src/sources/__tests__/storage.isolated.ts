@@ -1,3 +1,10 @@
+// Runs in its own process (see the root `test` script and the CI "isolated" job).
+// This file mocks `os` so homedir() points at a sandbox, and sets
+// CRAFT_CONFIG_DIR / PATH at module level. mock.module on a Node builtin is
+// process-global and cannot be undone, and any file that loads shared/config
+// *before* this one pins RUNTIME_IDENTITY to the real home first — which is
+// how the youtube-research case failed on CI only when a connection-setup test
+// happened to share its shard. Neither direction is safe inside `bun test`.
 /**
  * Tests for the global-tier source loaders and activation manifest.
  * Phase 1 of the Global Sources feature — read path only.
