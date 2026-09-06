@@ -58,6 +58,7 @@ import {
   stripPiPrefix,
   type CustomEndpointModelEntry,
   type CustomEndpointModelOverrides,
+  type CustomEndpointApi,
 } from './custom-endpoint-models.ts';
 
 // Direct source imports from shared (bundled by bun build)
@@ -71,6 +72,7 @@ import { createWebFetchTool } from './tools/web-fetch.ts';
 import { resolveSearchProvider } from './tools/search/resolve-provider.ts';
 import { createSearchTool } from './tools/search/create-search-tool.ts';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
+import { adaptCredentialForPiSdk, type PiCredential } from './adapt-credential.ts';
 import { applySystemPromptOverride } from './system-prompt-override.ts';
 
 // ============================================================
@@ -78,13 +80,8 @@ import { applySystemPromptOverride } from './system-prompt-override.ts';
 // ============================================================
 
 /** Credential union used in init and token_update messages */
-type PiCredential =
-  | { type: 'api_key'; key: string }
-  | { type: 'oauth'; access: string; refresh: string; expires: number }
-  | { type: 'iam'; accessKeyId: string; secretAccessKey: string; region?: string; sessionToken?: string };
 
 /** Custom endpoint protocol — determines which streaming adapter Pi SDK uses */
-type CustomEndpointApi = 'openai-completions' | 'anthropic-messages';
 
 /** Init message from main process — configures the Pi agent server */
 interface InitMessage {
@@ -436,6 +433,7 @@ function registerCustomEndpointModels(
       id,
       { supportsImages: initConfig?.customEndpoint?.supportsImages === true },
       customModelOverrides.get(id),
+      api,
     )),
   });
   debugLog(`Registered custom endpoint: ${baseUrl} with ${allIds.length} model(s) [${allIds.join(', ')}], api: ${api}`);
@@ -459,11 +457,14 @@ async function createAuthenticatedRegistry(): Promise<{
   const authStorage = moduleAuthStorage;
   if (initConfig?.piAuth) {
     const { provider, credential } = initConfig.piAuth;
-    // Pi SDK's Credential union doesn't include IAM as a first-class member, but
-    // Bedrock reads AWS env directly; this stored marker keeps the runtime's
-    // internal provider-tracking consistent regardless of credential shape.
-    await authStorage.modify(provider, async () => credential as unknown as Credential);
-    debugLog(`Injected ${credential.type} credential for provider: ${provider}`);
+    const adapted = adaptCredentialForPiSdk(provider, credential);
+    if (adapted) {
+      await authStorage.modify(provider, async () => adapted as unknown as Credential);
+      debugLog(`Injected ${credential.type} credential for provider: ${provider}${
+        adapted.type !== credential.type ? ` (stored as ${adapted.type} for SDK resolution)` : ''}`);
+    } else {
+      debugLog(`Not storing ${credential.type} credential for provider: ${provider} — resolves ambiently from env`);
+    }
   } else if (initConfig?.apiKey) {
     await authStorage.modify('anthropic', async () => ({ type: 'api_key', key: initConfig!.apiKey }));
     debugLog('Injected API key into auth storage (legacy fallback)');
@@ -1634,8 +1635,10 @@ async function processMessage(msg: InboundMessage): Promise<void> {
     case 'token_update':
       if (moduleAuthStorage) {
         const { provider, credential } = msg.piAuth;
-        // See ambient comment at the initial credential write — same shape reason.
-        await moduleAuthStorage.modify(provider, async () => credential as unknown as Credential);
+        const adapted = adaptCredentialForPiSdk(provider, credential);
+        if (adapted) {
+          await moduleAuthStorage.modify(provider, async () => adapted as unknown as Credential);
+        }
         if (initConfig) {
           initConfig.piAuth = msg.piAuth;
         }
