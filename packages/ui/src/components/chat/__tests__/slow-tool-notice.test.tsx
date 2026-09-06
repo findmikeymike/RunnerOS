@@ -1,13 +1,33 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import * as React from 'react'
+import i18n from 'i18next'
 
-mock.module('i18next', () => ({
-  default: {
-    t: (key: string, vars?: Record<string, unknown>) =>
-      key === 'turnCard.stillWorkingLong' ? `count:${vars?.duration}` : 'working',
-  },
-}))
+// Initialise the real i18next instead of mocking the module.
+//
+// `mock.module` is process-global in Bun and is never undone, so replacing
+// 'i18next' here handed every test file that ran afterwards a stub with no
+// `.init`. That surfaced far away, as "instance.init is not a function" in an
+// unrelated app-shell test, with nothing pointing back to this file. Using the
+// real module keeps the blast radius at zero and tests the actual
+// interpolation rather than a stand-in for it.
+if (!i18n.isInitialized) {
+  await i18n.init({
+    lng: 'en',
+    // The locale files use flat dotted keys ("turnCard.stillWorking"), not
+    // nested objects, so dots must not be treated as a path separator.
+    keySeparator: false,
+    resources: {
+      en: {
+        translation: {
+          'turnCard.stillWorking': 'still working…',
+          'turnCard.stillWorkingLong': 'still working — {{duration}}',
+        },
+      },
+    },
+    interpolation: { escapeValue: false },
+  })
+}
 
 const { SlowToolNotice } = await import('../SlowToolNotice')
 
@@ -30,12 +50,12 @@ describe('telling the artist a tool is still going', () => {
   })
 
   test('an unusual wait gets a word once it crosses the line', () => {
-    expect(at(10_000)).toContain('working')
+    expect(at(10_000)).toContain('still working')
   })
 
   test('a long wait shows the count', () => {
-    expect(at(45_000)).toContain('count:45s')
-    expect(at(134_000)).toContain('count:2:14')
+    expect(at(45_000)).toContain('45s')
+    expect(at(134_000)).toContain('2:14')
   })
 
   test('a long wait is never called slow', () => {
@@ -43,7 +63,7 @@ describe('telling the artist a tool is still going', () => {
     // the artist their working render is broken, so the notice reports the
     // number and lets them judge.
     const minutes = at(600_000)
-    expect(minutes).toContain('count:10:00')
+    expect(minutes).toContain('10:00')
     expect(minutes.toLowerCase()).not.toContain('slow')
   })
 
@@ -54,6 +74,6 @@ describe('telling the artist a tool is still going', () => {
   test('a row that mounts late still reports the true wait', () => {
     // Elapsed comes from the start time, not from a counter that begins on
     // mount, so scrolling a running tool back into view is honest.
-    expect(at(60_000)).toContain('count:1:00')
+    expect(at(60_000)).toContain('1:00')
   })
 })

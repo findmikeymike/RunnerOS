@@ -389,8 +389,13 @@ describe('CliRpcClient', () => {
 
 function generateSelfSignedCert(): { cert: string; key: string } | null {
   try {
+    // RSA, not EC. Bun's TLS is backed by BoringSSL, which rejects the
+    // prime256v1 key openssl emits here with
+    // "elliptic curve routines:OPENSSL_internal:DECODE_ERROR" — so the server
+    // never started and the whole wss:// path went untested. RSA parses
+    // cleanly, and key type is irrelevant to what this test covers.
     const keyResult = Bun.spawnSync({
-      cmd: ['openssl', 'req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1',
+      cmd: ['openssl', 'req', '-x509', '-newkey', 'rsa:2048',
         '-keyout', '/dev/stdout', '-out', '/dev/stdout',
         '-days', '1', '-nodes', '-subj', '/CN=localhost', '-batch'],
       stderr: 'pipe',

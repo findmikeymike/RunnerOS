@@ -16,6 +16,12 @@ function run(args, env = {}) {
   });
 }
 
+// These fakes are written without a file extension, because the tool resolves
+// them by the exact names `whisper-cli` and `ffmpeg`. Node treats an
+// extensionless file as CommonJS, so the bodies must use `require` and avoid
+// top-level `await` — an ESM body dies with a syntax error, the tool then
+// reports the binary as missing, and the resulting failure looks like a
+// packaging bug rather than a broken fixture.
 function fakeExecutable(dir, name, source) {
   const path = join(dir, name);
   writeFileSync(path, source);
@@ -31,13 +37,13 @@ function fakeRuntime() {
   writeFileSync(model, 'model');
   const ffmpeg = fakeExecutable(dir, 'ffmpeg', [
     '#!/usr/bin/env node',
-    'const fs = await import("node:fs");',
+    'const fs = require("node:fs");',
     'const out = process.argv.at(-1);',
     'fs.writeFileSync(out, "wav");',
   ].join('\n'));
   const whisper = fakeExecutable(dir, 'whisper-cli', [
     '#!/usr/bin/env node',
-    'const fs = await import("node:fs");',
+    'const fs = require("node:fs");',
     'const args = process.argv.slice(2);',
     'if (args.includes("--help")) process.exit(0);',
     'const outBase = args[args.indexOf("-of") + 1];',

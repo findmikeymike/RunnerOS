@@ -12,6 +12,10 @@ import type { HandlerFn, RequestContext, RpcServer } from '../../transport/types
 
 const WORKSPACE_ID = 'hq-workspace';
 const SOURCE_OUTPUT_ID = '11111111-1111-4111-8111-111111111111';
+// Publishing refuses a destination without an exact connected account, so a
+// variant set cannot be created without one. The setup drawer enforces the
+// same rule by disabling its submit button until an account is chosen.
+const X_PROFILE_ID = 'x-profile-1';
 let root: string;
 
 const getWorkspaceByNameOrId = mock((workspaceId: string) => workspaceId === WORKSPACE_ID
@@ -95,7 +99,7 @@ describe('social variant Output RPC', () => {
     const created = await create(context(), WORKSPACE_ID, {
       editorSessionId: 'editor-session',
       sourceSelections: [{ origin: 'output', sourceId: SOURCE_OUTPUT_ID, assetId: 'video' }],
-      destinationIntents: [{ platform: 'x', accountRole: 'primary', mode: 'standard' }],
+      destinationIntents: [{ platform: 'x', accountRole: 'primary', profileId: X_PROFILE_ID, mode: 'standard' }],
       variantsPerSource: 1,
       requestedByClientId: 'forged-client',
     }) as OutputManifest;
@@ -115,7 +119,7 @@ describe('social variant Output RPC', () => {
     await expect(create(context(), WORKSPACE_ID, {
       editorSessionId: 'editor-session',
       sourceSelections: [{ origin: 'output', sourceId: SOURCE_OUTPUT_ID, assetId: 'video' }],
-      destinationIntents: [{ platform: 'x', accountRole: 'primary', mode: 'standard' }],
+      destinationIntents: [{ platform: 'x', accountRole: 'primary', profileId: X_PROFILE_ID, mode: 'standard' }],
       variantsPerSource: 1,
     })).rejects.toThrow(/does not belong/);
   });
@@ -130,7 +134,7 @@ describe('social variant Output RPC', () => {
     const created = await create(context(), WORKSPACE_ID, {
       editorSessionId: 'editor-session',
       sourceSelections: [{ origin: 'output', sourceId: SOURCE_OUTPUT_ID, assetId: 'video' }],
-      destinationIntents: [{ platform: 'x', accountRole: 'primary', mode: 'standard' }],
+      destinationIntents: [{ platform: 'x', accountRole: 'primary', profileId: X_PROFILE_ID, mode: 'standard' }],
       variantsPerSource: 1,
     }) as OutputManifest;
     missing.add('editor-session');
@@ -151,7 +155,7 @@ describe('social variant Output RPC', () => {
     const created = await create(context(), WORKSPACE_ID, {
       editorSessionId: 'editor-session',
       sourceSelections: [{ origin: 'output', sourceId: SOURCE_OUTPUT_ID, assetId: 'video' }],
-      destinationIntents: [{ platform: 'x', accountRole: 'primary', mode: 'standard' }],
+      destinationIntents: [{ platform: 'x', accountRole: 'primary', profileId: X_PROFILE_ID, mode: 'standard' }],
       variantsPerSource: 1,
     }) as OutputManifest;
     await expect(rebind(context(), WORKSPACE_ID, {

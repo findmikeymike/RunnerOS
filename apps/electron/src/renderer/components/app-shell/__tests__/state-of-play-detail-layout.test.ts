@@ -11,7 +11,8 @@ describe('State of Play detail layout', () => {
 
     expect(detail).toContain('Recommended next')
     expect(detail).toContain('Needs attention')
-    expect(detail).toContain('Proactive mode')
+    // The proactive-mode toggle, renamed to say what it actually does.
+    expect(detail).toContain('Weekly manager check-in')
     expect(detail).not.toContain('System Evidence')
     expect(detail).not.toContain('StateOfPlayHistory')
     expect(detail).not.toContain('contextDocSlugs')

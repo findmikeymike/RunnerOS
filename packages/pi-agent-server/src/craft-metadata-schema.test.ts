@@ -47,7 +47,12 @@ describe('Craft metadata schema compatibility for Pi tools', () => {
       required?: string[];
     };
 
-    expect(widenedSchema.additionalProperties).toBe(false);
+    // Assert the widening *preserves* whatever the upstream tool declares,
+    // rather than pinning a literal. Pi 0.84.3's Edit schema does not set
+    // additionalProperties at all, so hardcoding `false` here asserted a fact
+    // about the SDK rather than about our code, and broke on an SDK bump.
+    const originalSchema = editTool.parameters as { additionalProperties?: unknown };
+    expect(widenedSchema.additionalProperties).toBe(originalSchema.additionalProperties);
     expect(widenedSchema.properties._displayName).toBeDefined();
     expect(widenedSchema.properties._intent).toBeDefined();
     expect(widenedSchema.required ?? []).not.toContain('_displayName');
