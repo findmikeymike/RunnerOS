@@ -32,6 +32,13 @@
  * the root `test` script sets it, and the standalone server entry relaunches
  * once with it set before importing the server runtime.
  *
+ * Do not upgrade sharp past 0.34.5 expecting this to still hold. Measured on
+ * 0.35.4 / libvips 8.18.6: the CoreText path improves (45s to ~5.5s per
+ * render) but the fontconfig path regresses badly — ~27s on the first render
+ * of *every* process, and no, the on-disk fontconfig cache does not help; a
+ * fresh process pays it again. Against 60-115ms here, both options are worse,
+ * so an upgrade needs this measured rather than assumed.
+ *
  * macOS only. Linux already defaults to fontconfig, and Windows Pango uses its
  * own backend that this would break.
  *
