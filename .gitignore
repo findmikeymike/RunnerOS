@@ -122,3 +122,8 @@ tools/**/*.log
 tools/**/runtime-manifest.json
 tools/**/.DS_Store
 apps/electron/.voice-core-dev/
+
+# vendored prebuilt — the generic `dist` rule above silently dropped 22 files from a
+# vendor update, leaving tracked code importing untracked files. Never ignore this dir.
+!vendor/voice-core-web/dist/
+!vendor/voice-core-web/dist/**
