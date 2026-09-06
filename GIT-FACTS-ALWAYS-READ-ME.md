@@ -184,7 +184,48 @@ Empty output means trunk already has it. Archive the branch instead of merging.
 
 ---
 
-## 6. Current state — 2026-09-06
+## 6. Runtime and tooling facts (Electron 44, since 2026-09-06)
+
+**Node ≥ 22.12 is required for anything that touches Electron or packaging.**
+Electron's installer, electron-builder 26.15 and Playwright all refuse older
+Node. The system default here is 18 and there are 22.x and 24.x under nvm.
+Put one first on PATH before packaging, or run the tool under `bun`:
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v24.8.0/bin:$PATH"
+```
+
+**`bun install` no longer downloads the Electron runtime.** Since Electron 42
+the binary is fetched on the first `electron` invocation, so
+`node_modules/electron/dist` is absent after a fresh install. Fetch it
+deliberately with `cd node_modules/electron && bun install.js` (bun, not node).
+
+**Packaging paths are not the same thing.**
+
+| Script | Signs? | Use it for |
+|---|---|---|
+| `bun run electron:dist:artist-os` | no | verification builds |
+| `bun run electron:dist:artist-os:mac` | yes — needs `VOICECORE_MOONSHINE_SIGN_IDENTITY` | releases |
+| `apps/electron/scripts/build-dmg.sh` | optional | the older Runner DMG path |
+
+All three now refuse to package if sharp's native binaries are missing for the
+target arch (`scripts/gate-sharp-natives.ts`). That gate exists because a
+package without them shipped on 2026-09-05 and died at boot.
+
+**`bun run build` (and so `bun run start`) is broken on `main` for two
+pre-existing reasons unrelated to Electron:** six design-rule lint errors, and
+`build:validate` referencing a script that does not exist. Packaging does not
+run either step, which is how nobody noticed. Until they are fixed, build for a
+dev launch with the individual steps (`build:main`, `build:preload`,
+`build:preload-toolbar`, `build:interceptor`, `build:renderer`, `build:copy`).
+
+**Electron 44 requires macOS 13.** That is a product decision recorded in
+[docs/creator-command-center/46-electron-runtime-upgrade-spec.md](docs/creator-command-center/46-electron-runtime-upgrade-spec.md);
+43 keeps Monterey and is a two-line change.
+
+---
+
+## 7. Current state — 2026-09-06
 
 - Trunk is `main` at `23b403e9c`, in `.worktrees/main/artist-os`, pushed.
 - The suite is **green: 8090 pass, 0 fail**. Keep it that way. If you make it

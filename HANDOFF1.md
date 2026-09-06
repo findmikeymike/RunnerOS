@@ -151,6 +151,13 @@ wrong about current state. Do not follow their "start here" instructions.
 `docs/creator-command-center/` holds ~44 numbered specs, the real design record.
 Read the one covering your area before writing code.
 
+## Runtime
+
+Electron **44.2.0** (Node 24, Chromium 152) since 2026-09-06. Node ≥ 22.12 on
+PATH for packaging or Electron's installer; `bun install` no longer fetches the
+Electron binary. Details, packaging paths and the sharp-natives gate:
+[GIT-FACTS-ALWAYS-READ-ME.md](GIT-FACTS-ALWAYS-READ-ME.md) §6.
+
 ## Verifying
 
     bun test <path>                              # targeted; fast

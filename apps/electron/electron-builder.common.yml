@@ -4,7 +4,7 @@ appId: com.findmikeymike.runner
 productName: Runner
 copyright: Copyright © 2026 RunnerOS
 
-electronVersion: "39.2.7"
+electronVersion: "44.2.0"
 
 # Hook to compile macOS 26+ Liquid Glass icon after packaging
 afterPack: scripts/afterPack.cjs
@@ -92,6 +92,15 @@ publish:
 
 # Disable ASAR to avoid decompression overhead and click delays
 asar: false
+
+# Nothing under node_modules ships (see the `files:` exclusion above); the native
+# code that does ship — sharp's prebuilt N-API binaries, the Claude SDK
+# executable — is copied via extraResources. So rebuilding node_modules against
+# Electron's ABI is pure cost, and it is where the Electron 44 upgrade first
+# failed: @electron/rebuild tried to rebuild @parcel/watcher and its node-abi
+# table did not know 44.2.0 yet. Rebuilding would have produced nothing that is
+# packaged anyway.
+npmRebuild: false
 
 mac:
   category: public.app-category.productivity

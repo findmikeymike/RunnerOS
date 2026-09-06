@@ -76,6 +76,19 @@ export function showNotification(
     handleNotificationClick(workspaceId, sessionId)
   })
 
+  // Electron 42+ delivers macOS notifications through UNNotification, which
+  // only works from a code-signed app. An unsigned dev build does not throw —
+  // it silently emits `failed`. Log it so a missing notification reads as
+  // "unsigned build" rather than as a bug in this code.
+  notification.on('failed', (_event, error) => {
+    mainLog.warn('Notification failed to display', {
+      error,
+      hint: process.platform === 'darwin'
+        ? 'macOS requires a code-signed app for notifications (Electron 42+). Unsigned dev builds cannot show them.'
+        : undefined,
+    })
+  })
+
   notification.show()
   mainLog.info('Notification shown:', { title, sessionId })
 }

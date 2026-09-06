@@ -21,7 +21,6 @@ an implementing agent as-is.
 | [43 Approved Branding Amendments](./43-approved-branding-amendments-spec.md) | Turns agreed Branding Agent work into a durable Output and an artist-approved, append-only Branding amendment without replacing user text | no `ArtistBrandingAmendment`, `BrandingAmendmentProposal`, or dedicated branding amendment tools |
 | [44 State-Aware First-Use Guide](./44-state-aware-first-use-guide-spec.md) | Extends the existing question-mark Guide with an optional first-use setup path whose progress comes from real AI, Brain, Vault, and first-work state | no `ArtistSetupSnapshot`, onboarding presentation state, setup mode, or coach-mark target contract |
 | [45 HQ / Campaign Scope Clarity](./45-hq-campaign-scope-clarity-spec.md) | One stated rule for where shared work lives, the unified timeline shown inside campaigns, and cross-owner channel-collision warnings — no new space, no new store | `collectArtistTimeline` has no RPC and only `manager-tools.ts` calls it; no `TimelineCollision` or `channel` on `TimelineEntry` |
-| [46 Electron Runtime Upgrade](./46-electron-runtime-upgrade-spec.md) | Evaluates and performs a measured upgrade from Electron 39 to a current supported line, covering browser panes, packaging, notifications, protocols, and OS compatibility | root package and lockfile still resolve `electron@39.8.10` |
 
 Specs 38 and 41 remain at their existing paths for cross-reference stability,
 but are implemented, not unbuilt. See the V1 integration review checklist for

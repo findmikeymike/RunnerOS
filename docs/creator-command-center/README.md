@@ -46,6 +46,7 @@ Core Artist HQ and campaign workspace specs live here.
 - [37 Model Fallback Chain](./37-model-fallback-chain-spec.md)
 - [39 Artist Website: Managed Site, Website Agent, And Site Builder](./39-artist-website-agent-spec.md) — builder, publishing, and Website Agent implemented; live acceptance remains
 - [40 Artist HQ Legal & Deals Agent](./40-music-legal-agent-spec.md)
+- [46 Electron Runtime Upgrade](./46-electron-runtime-upgrade-spec.md) — Electron 39 → 44.2.0 (Node 24, Chromium 152); sharp natives packaged; vendor dist integrity; macOS 12 dropped (decision recorded)
 
 ## Not Yet Built
 

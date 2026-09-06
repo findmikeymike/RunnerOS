@@ -74,7 +74,7 @@ setupI18n()
 const machineId = createHash('sha256').update(hostname() + homedir()).digest('hex').slice(0, 16)
 Sentry.setUser({ id: machineId })
 
-import { join, delimiter } from 'path'
+import { join, delimiter, dirname } from 'path'
 import { existsSync, readFileSync } from 'fs'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { SessionManager, setSessionPlatform, setSessionRuntimeHooks } from '@craft-agent/server-core/sessions'
@@ -651,11 +651,23 @@ app.whenReady().then(async () => {
       const result = await dialog.showMessageBox(win, spec)
       return { response: result.response }
     })
+    // Electron 43+ opens every dialog in ~/Downloads unless `defaultPath` is
+    // set, and stops the OS from remembering the last-used folder. Picking a
+    // workspace or a vault folder from Downloads every time is a regression
+    // for this app, so remember the last folder ourselves — the pattern the
+    // Electron breaking-changes notes recommend.
+    let lastOpenDialogDir: string | undefined
     ipcMain.handle('__dialog:showOpenDialog', async (event, spec) => {
       const win = BrowserWindow.fromWebContents(event.sender)
         || BrowserWindow.getFocusedWindow()
         || BrowserWindow.getAllWindows()[0]
-      const result = await dialog.showOpenDialog(win, spec)
+      const options = spec?.defaultPath || !lastOpenDialogDir
+        ? spec
+        : { ...spec, defaultPath: lastOpenDialogDir }
+      const result = await dialog.showOpenDialog(win, options)
+      if (!result.canceled && result.filePaths[0]) {
+        lastOpenDialogDir = dirname(result.filePaths[0])
+      }
       return { canceled: result.canceled, filePaths: result.filePaths }
     })
     ipcMain.handle('__visual:capture-element', async (event, rect: { x?: number; y?: number; width?: number; height?: number }) => {
