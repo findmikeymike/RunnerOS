@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { ChatGPTBackendSearchProvider, extractChatGptAccountId } from './chatgpt.ts';
+import { PI_PREFERRED_DEFAULTS } from '../../../../../shared/src/config/llm-connections.ts';
 
 const originalFetch = globalThis.fetch;
 
@@ -90,7 +91,11 @@ describe('ChatGPTBackendSearchProvider', () => {
     expect(calledUrl).toBe('https://chatgpt.com/backend-api/codex/responses');
     expect(calledHeaders.Authorization).toBe('Bearer my-access-token');
     expect(calledHeaders['chatgpt-account-id']).toBe('acc_12345');
-    expect(calledBody.model).toBe('gpt-5.5');
+    // Assert the rule, not a version. The search model is the head of the Codex
+    // preference list; pinning a literal here is what let the shipped code keep
+    // requesting a stale id long after the catalog moved on.
+    expect(calledBody.model).toBe(PI_PREFERRED_DEFAULTS['openai-codex']![0]);
+    expect(calledBody.model).not.toBe(undefined);
     expect(calledBody.store).toBe(false);
     expect(calledBody.stream).toBe(true);
     expect(calledBody.instructions).toContain('web search assistant');

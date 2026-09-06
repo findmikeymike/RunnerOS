@@ -11,10 +11,11 @@
 
 import type { WebSearchProvider, WebSearchResult } from '../types.ts';
 import { parseResponsesApiResults, type ResponsesApiResponse } from './responses-api-parser.ts';
+import { PI_PREFERRED_DEFAULTS } from '../../../../../shared/src/config/llm-connections.ts';
 
 /**
  * Codex backend request contract (search path):
- * - model: gpt-5.5
+ * - model: the first Codex preference (see below), not a literal
  * - store: false
  * - stream: true (backend may return JSON or SSE)
  * - instructions + tool_choice + text.verbosity
@@ -24,7 +25,24 @@ import { parseResponsesApiResults, type ResponsesApiResponse } from './responses
  *   - ./chatgpt.test.ts
  *   - ../SEARCH_PAYLOAD_CONTRACT.md
  */
-const DEFAULT_SEARCH_MODEL = 'gpt-5.5';
+
+/**
+ * Search model, derived rather than pinned.
+ *
+ * This was the literal 'gpt-5.5', and nothing passes a model in — the provider
+ * is constructed with a token and an account id only — so every search request
+ * used that one id unconditionally. When a pinned id is retired, search does not
+ * degrade, it stops: the account returns a 400 and there is no second attempt.
+ * Upstream hit exactly that (craft-agents-oss#1023).
+ *
+ * Taking the head of the Codex preference list means this tracks the same
+ * catalog the rest of the app offers and cannot drift into a stale literal.
+ * Upstream's full fix also retries down a bounded candidate chain on rejection;
+ * that part is not ported, because our provider has diverged from theirs and the
+ * failover path cannot be verified without a live ChatGPT-plan account.
+ */
+const CODEX_SEARCH_MODELS: readonly string[] = PI_PREFERRED_DEFAULTS['openai-codex'] ?? [];
+const DEFAULT_SEARCH_MODEL = CODEX_SEARCH_MODELS[0] ?? 'gpt-5.6-sol';
 const API_BASE = 'https://chatgpt.com/backend-api/codex';
 const JWT_CLAIM_PATH = 'https://api.openai.com/auth';
 const ERROR_TEXT_LIMIT = 600;

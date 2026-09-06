@@ -18,7 +18,10 @@ Required headers:
 - `Content-Type: application/json`
 
 Known-good body fields for search:
-- `model: "gpt-5.5"`
+- `model`: the first entry of `PI_PREFERRED_DEFAULTS['openai-codex']`, currently
+  `gpt-5.6-sol`. Deliberately derived rather than written here as a literal — a
+  pinned id in this payload is a single point of failure, because a retired model
+  returns a 400 and there is no retry.
 - `store: false`
 - `stream: true`
 - `instructions: string`
