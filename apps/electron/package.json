@@ -82,6 +82,7 @@
     "ws": "^8.19.0"
   },
   "devDependencies": {
+    "@types/three": "^0.184.1",
     "@types/ws": "^8.18.1"
   }
 }

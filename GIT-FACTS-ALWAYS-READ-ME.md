@@ -198,6 +198,18 @@ and exits 1. Prefix with `./` to make it a path. The root `test` script did
 this wrong from the day the convention started, so no isolated test had ever
 run anywhere; two had rotted.
 
+**A worktree cannot prove its dependencies are complete.** Node and
+TypeScript resolve modules by walking *up* parent directories, and every
+worktree here sits under `/Users/michaelb.williams/RunnerOS`, whose own
+`node_modules` belongs to a different branch. Anything missing from your
+lockfile is silently borrowed from there. `@types/three` was never declared;
+typecheck passed in every worktree and failed on CI for weeks. When CI cannot
+find a module you can, look for it six directories up before anywhere else:
+
+```bash
+bun run tsc --noEmit --explainFiles | grep -E '\.\./\.\./\.\./\.\./\.\./\.\./node_modules'
+```
+
 **A branch that looks unmerged may already be merged.** `codex/agent-adds`
 reads as 23 unmerged commits and 51 conflicts, but every line of it is already
 on trunk byte-for-byte; the history was rebased, so git cannot tell. Before
