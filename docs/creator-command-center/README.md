@@ -54,6 +54,9 @@ Specs written but with no implementation in the tree. They live in
 - [37 Model Fallback Chain](./todo/37-model-fallback-chain-spec.md)
 - [38 Community Email Engine And The Community Agent](./todo/38-community-email-engine-spec.md) — Resend fan lane, Gmail personal lane, inbox, doors, Community Agent
 - [41 The Autonomous Website And Community Loop](./todo/41-autonomous-website-and-community-loop-spec.md) — master spec over 38 and 39: weekly loop, Monday Brief, approval tiers, Change Receipts, four slices
+- [42 Campaign Release Path And Manager Orchestration](./todo/42-campaign-release-path-orchestration-spec.md) — date-aware Essentials path, approved campaign packets, and Artist Manager guidance over existing workers
+- [43 Approved Branding Amendments](./todo/43-approved-branding-amendments-spec.md) — approved, append-only Branding additions from durable agent Outputs without replacing artist-written context
+- [44 State-Aware First-Use Guide](./todo/44-state-aware-first-use-guide-spec.md) — optional first-use setup inside the existing question-mark Guide, completed from real app state instead of page visits
 
 When one ships, move it back up into the numbered list above.
 
