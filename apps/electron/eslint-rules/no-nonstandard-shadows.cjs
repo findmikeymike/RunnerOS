@@ -46,6 +46,11 @@ module.exports = {
       options.allowedClasses || [
         'shadow-none',
         'shadow-minimal',
+        'shadow-hairline-top',
+        'shadow-card-lift',
+        'shadow-panel-lift',
+        'shadow-accent-ring',
+        'shadow-accent-ring-strong',
         'shadow-tinted',
         'shadow-thin',
         'shadow-middle',

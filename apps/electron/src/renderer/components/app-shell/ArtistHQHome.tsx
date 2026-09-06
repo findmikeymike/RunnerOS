@@ -3597,7 +3597,7 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
 
   return (
     <>
-      <HQCard className="overflow-hidden border-white/[0.075] bg-white/[0.032] p-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl">
+      <HQCard className="overflow-hidden border-white/[0.075] bg-white/[0.032] p-0 shadow-hairline-top backdrop-blur-xl">
         <div className="flex min-h-12 items-center justify-between gap-3 border-b border-white/[0.055] px-3 sm:px-4">
           <div className="flex min-w-0 items-center gap-1" role="tablist" aria-label="Work activity">
             {([
@@ -3614,7 +3614,7 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
                 className={cn(
                   'relative inline-flex h-8 items-center gap-2 rounded-[7px] px-2.5 text-[11px] font-medium transition-[background-color,color,box-shadow] sm:px-3',
                   view === id
-                    ? 'bg-white/[0.055] text-white/90 shadow-[inset_0_0_0_1px_rgba(249,115,22,0.62),0_1px_2px_rgba(0,0,0,0.22)]'
+                    ? 'bg-white/[0.055] text-white/90 shadow-accent-ring-strong'
                     : 'text-white/38 hover:bg-white/[0.035] hover:text-white/68',
                 )}
               >
@@ -4655,7 +4655,7 @@ function NetworkCategoryGrid({
             className={cn(
               'group flex h-11 min-w-0 items-center rounded-[10px] transition-colors',
               selected
-                ? 'bg-[#f97316]/14 shadow-[inset_0_0_0_1px_rgba(249,115,22,0.46)]'
+                ? 'bg-[#f97316]/14 shadow-accent-ring'
                 : 'bg-white/[0.035] hover:bg-white/[0.07]',
             )}
           >

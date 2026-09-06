@@ -137,7 +137,7 @@ export function LabWorkspaceHome({ workspaceId }: LabWorkspaceHomeProps) {
                 <button
                   type="button"
                   onClick={() => navigate(routes.view.lab('pad'))}
-                  className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-5 text-xs font-semibold text-black shadow-sm transition-transform hover:scale-[1.02] active:scale-95"
+                  className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-5 text-xs font-semibold text-black shadow-minimal transition-transform hover:scale-[1.02] active:scale-95"
                 >
                   Open Pad
                   <ArrowRight className="h-3.5 w-3.5" />

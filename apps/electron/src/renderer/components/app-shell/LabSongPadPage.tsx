@@ -1265,7 +1265,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId }
         </div>
       ) : null}
       <div className="shrink-0 px-3 pt-3">
-        <div className="relative flex w-full items-center justify-between gap-4 overflow-hidden rounded-xl bg-white/[0.045] px-4 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.055),0_8px_28px_rgba(0,0,0,0.2)] backdrop-blur-xl before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_12%_-80%,rgba(251,146,60,0.13),transparent_48%)]">
+        <div className="relative flex w-full items-center justify-between gap-4 overflow-hidden rounded-xl bg-white/[0.045] px-4 py-2.5 shadow-card-lift backdrop-blur-xl before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_12%_-80%,rgba(251,146,60,0.13),transparent_48%)]">
           <div className="min-w-0 flex-1">
             <div className="mb-1 flex items-center gap-1.5 text-[8px] font-medium uppercase tracking-[0.17em] text-white/34">
               <FlaskConical className="h-3 w-3" />

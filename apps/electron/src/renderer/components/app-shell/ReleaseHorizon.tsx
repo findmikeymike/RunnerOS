@@ -161,7 +161,7 @@ export function ReleaseHorizon({
   }
 
   return (
-    <section className="overflow-hidden rounded-[18px] border border-white/[0.075] bg-white/[0.032] shadow-[inset_0_1px_0_rgba(255,255,255,0.045),0_22px_60px_rgba(0,0,0,0.16)] backdrop-blur-2xl">
+    <section className="overflow-hidden rounded-[18px] border border-white/[0.075] bg-white/[0.032] shadow-panel-lift backdrop-blur-2xl">
       <div className="flex flex-col gap-4 border-b border-white/[0.055] px-5 py-4 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[9px] font-medium uppercase tracking-[0.18em] text-white/34">

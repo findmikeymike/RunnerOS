@@ -76,6 +76,15 @@
     rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 12px 12px 0px,
     rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 24px 24px 0px;
 
+  /* Named lift + hairline shadows for the artist-facing panels. They used to be
+     arbitrary `shadow-[...]` values, which the no-nonstandard-shadows rule
+     rejects on purpose: an unnamed shadow cannot be tuned in one place. */
+  --shadow-hairline-top: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-card-lift: inset 0 1px 0 rgba(255, 255, 255, 0.055), 0 8px 28px rgba(0, 0, 0, 0.2);
+  --shadow-panel-lift: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 22px 60px rgba(0, 0, 0, 0.16);
+  --shadow-accent-ring: inset 0 0 0 1px rgba(249, 115, 22, 0.46);
+  --shadow-accent-ring-strong: inset 0 0 0 1px rgba(249, 115, 22, 0.62), 0 1px 2px rgba(0, 0, 0, 0.22);
+
   /* === Z-INDEX SCALE === */
   --z-base: 0;
   --z-local: 10;
@@ -360,6 +369,26 @@ html[data-font="inter"] {
   /* Custom shadow utilities */
   .shadow-minimal {
     box-shadow: var(--shadow-minimal);
+  }
+
+  .shadow-hairline-top {
+    box-shadow: var(--shadow-hairline-top);
+  }
+
+  .shadow-card-lift {
+    box-shadow: var(--shadow-card-lift);
+  }
+
+  .shadow-panel-lift {
+    box-shadow: var(--shadow-panel-lift);
+  }
+
+  .shadow-accent-ring {
+    box-shadow: var(--shadow-accent-ring);
+  }
+
+  .shadow-accent-ring-strong {
+    box-shadow: var(--shadow-accent-ring-strong);
   }
 
   .shadow-middle {

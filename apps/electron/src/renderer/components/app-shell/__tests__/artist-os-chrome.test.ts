@@ -572,7 +572,8 @@ describe('Artist OS persistent shell chrome', () => {
     expect(hq).toContain('min-w-0 flex-1 truncate text-xs font-semibold text-white/88')
     expect(hq).not.toContain('>Priority</p>')
     expect(hq).not.toContain('after:bg-[#f97316]')
-    expect(hq).toContain('inset_0_0_0_1px_rgba(249,115,22,0.62)')
+    // The accent ring is a named token now (see packages/ui/src/styles/index.css).
+    expect(hq).toContain('shadow-accent-ring-strong')
   })
 
   test('places the Pulse stack directly below the HQ header', () => {
