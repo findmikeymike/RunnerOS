@@ -244,6 +244,13 @@ let artistManagerVoiceProxy: ArtistManagerVoiceProxy | null = null
 let artistManagerMoonshine: ArtistManagerMoonshine | null = null
 let embeddedOmniRoute: EmbeddedOmniRoute | null = null
 
+/**
+ * How long startup waits for the embedded gateway before opening the app
+ * anyway. It normally answers in a second or two; this is headroom, not a
+ * budget the healthy path is expected to use.
+ */
+const OMNIROUTE_STARTUP_WAIT_MS = 8_000
+
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
 
@@ -446,8 +453,28 @@ app.whenReady().then(async () => {
         warn: (message) => mainLog.warn(message),
         error: (message) => mainLog.error(message),
       })
-      const result = await embeddedOmniRoute.start()
-      if (!result.ready) mainLog.error(`[omniroute] ${result.error}`)
+      // Wait for the gateway, but not indefinitely. `start()` polls for up to
+      // 45 seconds, and the window is not created until further down this
+      // function — so on a machine where the gateway cannot start, awaiting it
+      // outright means the artist stares at nothing for three quarters of a
+      // minute and then gets a window anyway.
+      //
+      // Bounding the wait rather than the work: the gateway keeps starting in
+      // the background and reports itself either way. The cost of moving on
+      // early is at most one failed message if the artist types faster than the
+      // gateway starts; the cost of waiting is a launch that looks broken.
+      const started = embeddedOmniRoute.start()
+      started
+        .then((result) => { if (!result.ready) mainLog.error(`[omniroute] ${result.error}`) })
+        .catch((error) => mainLog.error(`[omniroute] Gateway start failed: ${error instanceof Error ? error.message : String(error)}`))
+
+      const readyInTime = await Promise.race([
+        started.then((result) => result.ready).catch(() => false),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), OMNIROUTE_STARTUP_WAIT_MS)),
+      ])
+      if (!readyInTime) {
+        mainLog.warn(`[omniroute] Gateway not ready within ${OMNIROUTE_STARTUP_WAIT_MS}ms; opening the app and letting it finish in the background`)
+      }
     } else {
       mainLog.error('[omniroute] Bundled runtime paths could not be resolved')
     }
