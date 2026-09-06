@@ -1,18 +1,28 @@
 # Repo topology: which tree is real, and how work lands
 
+> **Start with [GIT-FACTS-ALWAYS-READ-ME.md](../GIT-FACTS-ALWAYS-READ-ME.md).**
+> That file is the authority and the rules. This one is the detail behind it.
+
 Written 2026-09-06. If the branch names below have moved on, trust the
 commands in "Check it yourself" over the snapshot at the bottom.
 
-## The one thing that confuses everyone
+## Trunk and the app are the same folder
 
-**Folder names do not match the branches inside them.**
+```
+.worktrees/main/artist-os     branch: main
+```
 
-`.worktrees/main/artist-os` is *not* on `main`. It is a working branch that
-happens to live in a folder called `main`. The actual `main` branch is checked
-out somewhere else entirely.
+That holds the `main` branch, the built `Artist OS.app`, and everything that
+ships. It matches `origin/main`.
 
-That single mismatch is the source of most "wait, where is my work?" moments.
-Never infer the branch from the path. Run `git branch --show-current`.
+This was **not** true until 2026-09-06. The folder called `main` used to hold a
+feature branch while the real `main` sat in `.worktrees/integration/`, and that
+mismatch cost a full session of "wait, where is my work?" The two were merged
+into one folder and the integration worktree deleted, so folder name, branch
+name, and the built app finally agree.
+
+The lesson outlives the fix: **never infer a branch from a path.** Run
+`git branch --show-current`.
 
 ## The shape of it
 
@@ -29,23 +39,19 @@ Worktrees are grouped by intent:
 
 | Path | Means |
 |---|---|
-| `.worktrees/integration/` | Reviewed, merged, trusted |
-| `.worktrees/main/` | Active development (despite the name) |
+| `.worktrees/main/artist-os` | **Trunk. The real app.** |
 | `.worktrees/active/` | Other products, in progress |
 | `.worktrees/archive/` | Finished or abandoned; ignore |
 | `.claude/worktrees/` | Agent scratch trees, short-lived |
 
+`.worktrees/integration/` no longer exists. It held a second checkout of `main`
+with no build in it, which is what created the confusion above.
+
 ## Trunk
 
-**`main` is the trunk for Artist OS.** It is the compiled, reviewed north
-star, and it is checked out at:
-
-```
-.worktrees/integration/artist-os-reviewed
-```
-
-`main` and `origin/main` should be identical. If they are not, that is a real
-problem worth stopping for.
+**`main` is the trunk for Artist OS**, checked out in
+`.worktrees/main/artist-os`. `main` and `origin/main` should be identical. If
+they are not, that is a real problem worth stopping for.
 
 ## How work lands
 
@@ -107,20 +113,18 @@ That last one matters. A branch with no remote exists on exactly one laptop.
 
 ## Snapshot, 2026-09-06 (end of day)
 
-| Worktree | Branch | Behind / ahead of trunk |
+| Worktree | Branch | State |
 |---|---|---|
-| `.worktrees/integration/artist-os-reviewed` | `main` | 0 / 0 — trunk |
-| `.worktrees/main/artist-os` | `codex/artist-website-engine` | 0 / 0 — level with trunk |
-| `.claude/worktrees/artist-os-onboarding-0f75bd` | `claude/artist-os-onboarding-0f75bd` | merged into trunk; branch itself now behind |
+| `.worktrees/main/artist-os` | `main` | **trunk, built app, pushed** |
+| `.claude/worktrees/artist-os-onboarding-0f75bd` | `claude/artist-os-onboarding-0f75bd` | merged into trunk; branch now behind |
 | `.worktrees/active/artist-os-social-variants` | `codex/artist-os-social-variants-v2` | fully merged |
 | `.worktrees/active/artist-os-social-variants-hardening` | `codex/artist-os-social-variants-hardening` | fully merged |
-| `/` (repo root) | `codex/agent-adds` | see below |
+| `/` (repo root) | `codex/agent-adds` | see below — do not merge |
 | `.worktrees/active/launch-os` | `launch-os/main` | different product |
 
 Branches marked merged are finished; their worktrees are safe to leave alone.
 
-**Trunk is 38 commits ahead of `origin/main` and none of it is pushed.** Until
-it is, everything from 2026-09-04 onward exists on one machine only.
+Trunk is at `4b490c412` and **pushed**. `origin/main` matches.
 
 ### What landed on 2026-09-06, in order
 
@@ -129,8 +133,11 @@ it is, everything from 2026-09-04 onward exists on one machine only.
 2. `claude/artist-os-onboarding-0f75bd` merged in (17 commits, one conflict:
    both branches had fixed the same resource-bundle test; theirs was kept).
    It surfaced one undeclared RPC channel, fixed as `141ef45f6`.
-3. Trunk fast-forwarded again. Suite: 8075 pass, 9 fail, all nine
-   pre-existing.
+3. Trunk fast-forwarded again, then pushed — 39 commits that had existed on one
+   laptop only. Suite: 8075 pass, 9 fail, all nine pre-existing.
+4. `.worktrees/integration/` deleted and `main` checked out in
+   `.worktrees/main/artist-os`, so the folder, the branch, and the built app
+   are finally one place.
 
 ### `codex/agent-adds` is a mirage — do not merge it
 

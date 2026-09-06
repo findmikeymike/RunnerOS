@@ -29,17 +29,17 @@ which swaps the data root, ports, keychain, and update feed. Core file:
 ## Where you are
 
 Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os`
-Branch: run `git branch --show-current` — do not trust this doc or the folder
-name for that.
+Branch: `main` — but always confirm with `git branch --show-current` rather
+than trusting this doc or the folder name.
 
 This is a **git worktree**, not the main checkout. Run everything from here and
 never `cd` to the repo root.
 
-**The folder is called `main` but `main` is not checked out here.** Trunk lives
-in `.worktrees/integration/artist-os-reviewed`. Read
-[docs/REPO-TOPOLOGY.md](docs/REPO-TOPOLOGY.md) before you branch, merge, or go
-looking for where your work went — it explains the worktree layout, which
-branch is trunk, and the four steps for landing work.
+As of 2026-09-06 this folder holds the `main` branch, the built app, and
+everything that ships. Read
+**[GIT-FACTS-ALWAYS-READ-ME.md](GIT-FACTS-ALWAYS-READ-ME.md)** before your
+first commit, branch, or merge — it is the authority on where work lives and
+how it gets onto `main`.
 
 The stash stack is shared with every other worktree and other agents are working
 concurrently. **Never use bare `git stash` / `git stash pop`** — you can pop
