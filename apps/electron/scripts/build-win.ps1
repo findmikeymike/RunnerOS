@@ -205,6 +205,8 @@ Write-Host "Verifying Lyrics Transcriber runtime..."
 Push-Location $RootDir
 try {
     bun run scripts/prepare-lyrics-runtime.ts gate --platform win32 --arch x64
+    bun run scripts/gate-sharp-natives.ts gate --platform win32 --arch x64
+    if ($LASTEXITCODE -ne 0) { throw "sharp native packages missing for win32-x64" }
 } finally {
     Pop-Location
 }

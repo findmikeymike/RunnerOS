@@ -149,6 +149,7 @@ copy_claude_sdk
 echo "Verifying Lyrics Transcriber runtime..."
 cd "$ROOT_DIR"
 bun run scripts/prepare-lyrics-runtime.ts gate --platform linux --arch "$ARCH"
+bun run scripts/gate-sharp-natives.ts gate --platform linux --arch "$ARCH"
 
 # 5. Copy interceptor
 INTERCEPTOR_SOURCE="$ROOT_DIR/packages/shared/src/unified-network-interceptor.ts"
