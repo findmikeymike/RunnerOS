@@ -37,21 +37,37 @@ describe('pickProviderAppropriateMiniModel', () => {
     });
 
     const result = pickProviderAppropriateMiniModel('anthropic', registry, false);
-    // Helper picks first entry from PI_PREFERRED_DEFAULTS.anthropic which is claude-opus-4-7.
+    // Helper picks the first RESOLVABLE entry; the registry here offers 4.7 but not 4.8,
+    // so 4.7 is what comes back. Either way it is an Opus, which is the point.
     // Documenting why the caller must NOT invoke this helper for anthropic auth.
     expect(result).toBe('claude-opus-4-7');
   });
 
-  it('openai-codex: skips denied codex-mini variants, returns first resolvable candidate', () => {
-    // PI_PREFERRED_DEFAULTS['openai-codex'] = ['gpt-5.5', 'gpt-5.2', ...].
-    // None of these are *codex-mini*, so isDeniedMiniModelId won't filter any.
-    // But we verify the filter works by registering only gpt-5.2 as resolvable.
+  it('openai-codex: skips unresolvable candidates and returns the first that resolves', () => {
+    // The Codex preference list now leads with the 5.6 family. Registering only
+    // gpt-5.5 — which sits behind those — proves the walk actually skips ahead
+    // rather than returning the head blindly.
     const registry = createMockRegistry({
-      'openai-codex': [{ id: 'gpt-5.2', name: 'GPT 5.2' }],
+      'openai-codex': [{ id: 'gpt-5.5', name: 'GPT 5.5' }],
     });
 
     const result = pickProviderAppropriateMiniModel('openai-codex', registry, false);
-    expect(result).toBe('gpt-5.2');
+    expect(result).toBe('gpt-5.5');
+  });
+
+  it('openai-codex: returns the flagship when everything resolves, which is why this is a compatibility fallback and not a cheap mini', () => {
+    // Worth stating plainly. This helper exists to find *a model that works under
+    // the user's auth*, not a cheap one, so when the whole catalog resolves it
+    // hands back Sol. The caller only reaches it when the requested model is
+    // incompatible, and it gates anthropic away for the same reason.
+    const registry = createMockRegistry({
+      'openai-codex': [
+        { id: 'gpt-5.6-sol', name: 'GPT 5.6 Sol' },
+        { id: 'gpt-5.6-luna', name: 'GPT 5.6 Luna' },
+      ],
+    });
+
+    expect(pickProviderAppropriateMiniModel('openai-codex', registry, false)).toBe('gpt-5.6-sol');
   });
 
   it('openai-codex: returns undefined when no preferred candidate resolves', () => {
