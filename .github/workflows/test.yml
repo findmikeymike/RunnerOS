@@ -63,5 +63,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # Same ignores as the root `test` script. A packaged build under
+      # apps/electron/release-artist-os holds ~490 copied test files. They are
+      # gitignored so CI never sees them, but a bare local run executes the
+      # copies and reports phantom failures from inside "Artist OS.app" — that
+      # accounted for 50 of the 68 failures first counted here. Matching the
+      # two keeps local and CI measuring the same thing.
       - name: Run tests
-        run: bun test --shard=${{ matrix.shard }}/6
+        run: bun test --shard=${{ matrix.shard }}/6 --path-ignore-patterns='**/release-artist-os/**' --path-ignore-patterns='**/dist/**'

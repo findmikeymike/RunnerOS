@@ -239,10 +239,10 @@ describe('resource-bundle', () => {
     it('exports automations as per-entry array', () => {
       const wsDir = createTestWorkspace(tmpDir)
       createTestAutomations(wsDir, {
-        UserPromptSubmit: [
+        LabelAdd: [
           { id: 'aaa111', name: 'Greeting', actions: [{ type: 'prompt', prompt: 'hello' }] },
         ],
-        SessionStart: [
+        FileWatch: [
           { id: 'bbb222', name: 'Init', actions: [{ type: 'prompt', prompt: 'init' }] },
         ],
       })
@@ -256,14 +256,14 @@ describe('resource-bundle', () => {
 
       const greeting = bundle.resources.automations!.find(a => a.id === 'aaa111')!
       expect(greeting.name).toBe('Greeting')
-      expect(greeting.event).toBe('UserPromptSubmit')
+      expect(greeting.event).toBe('LabelAdd')
       expect(greeting.matcher.actions).toHaveLength(1)
     })
 
     it('exports automations selectively by ID', () => {
       const wsDir = createTestWorkspace(tmpDir)
       createTestAutomations(wsDir, {
-        UserPromptSubmit: [
+        LabelAdd: [
           { id: 'aaa111', name: 'First', actions: [{ type: 'prompt', prompt: 'a' }] },
           { id: 'bbb222', name: 'Second', actions: [{ type: 'prompt', prompt: 'b' }] },
         ],
@@ -278,7 +278,7 @@ describe('resource-bundle', () => {
     it('exports automations selectively by name', () => {
       const wsDir = createTestWorkspace(tmpDir)
       createTestAutomations(wsDir, {
-        UserPromptSubmit: [
+        LabelAdd: [
           { id: 'aaa111', name: 'My Automation', actions: [{ type: 'prompt', prompt: 'a' }] },
           { id: 'bbb222', name: 'Other', actions: [{ type: 'prompt', prompt: 'b' }] },
         ],
@@ -293,7 +293,7 @@ describe('resource-bundle', () => {
     it('warns when name selector matches multiple automations', () => {
       const wsDir = createTestWorkspace(tmpDir)
       createTestAutomations(wsDir, {
-        UserPromptSubmit: [
+        LabelAdd: [
           { id: 'aaa111', name: 'Dup Name', actions: [{ type: 'prompt', prompt: 'a' }] },
           { id: 'bbb222', name: 'Dup Name', actions: [{ type: 'prompt', prompt: 'b' }] },
         ],
@@ -309,7 +309,7 @@ describe('resource-bundle', () => {
     it('warns for unmatched automation selector', () => {
       const wsDir = createTestWorkspace(tmpDir)
       createTestAutomations(wsDir, {
-        UserPromptSubmit: [
+        LabelAdd: [
           { id: 'aaa111', name: 'Real', actions: [{ type: 'prompt', prompt: 'a' }] },
         ],
       })
@@ -322,7 +322,7 @@ describe('resource-bundle', () => {
     it('sanitizes webhook auth on export', () => {
       const wsDir = createTestWorkspace(tmpDir)
       createTestAutomations(wsDir, {
-        UserPromptSubmit: [{
+        LabelAdd: [{
           id: 'aaa111',
           name: 'Webhook Test',
           actions: [{
@@ -351,7 +351,7 @@ describe('resource-bundle', () => {
     it('preserves templated header values on export', () => {
       const wsDir = createTestWorkspace(tmpDir)
       createTestAutomations(wsDir, {
-        UserPromptSubmit: [{
+        LabelAdd: [{
           id: 'aaa111',
           actions: [{
             type: 'webhook',
@@ -371,7 +371,7 @@ describe('resource-bundle', () => {
     it('automations: true is backward-compatible with "all"', () => {
       const wsDir = createTestWorkspace(tmpDir)
       createTestAutomations(wsDir, {
-        UserPromptSubmit: [
+        LabelAdd: [
           { id: 'aaa111', actions: [{ type: 'prompt', prompt: 'a' }] },
         ],
       })
@@ -538,7 +538,7 @@ describe('resource-bundle', () => {
         exportedAt: Date.now(),
         resources: {
           automations: [
-            { id: 'aaa111', event: 'UserPromptSubmit', matcher: { id: 'aaa111', actions: [{ type: 'prompt', prompt: 'hi' }] } },
+            { id: 'aaa111', event: 'LabelAdd', matcher: { id: 'aaa111', actions: [{ type: 'prompt', prompt: 'hi' }] } },
           ],
         },
       }
@@ -553,8 +553,8 @@ describe('resource-bundle', () => {
         exportedAt: Date.now(),
         resources: {
           automations: [
-            { id: 'aaa111', event: 'UserPromptSubmit', matcher: { id: 'aaa111', actions: [{ type: 'prompt', prompt: 'a' }] } },
-            { id: 'aaa111', event: 'SessionStart', matcher: { id: 'aaa111', actions: [{ type: 'prompt', prompt: 'b' }] } },
+            { id: 'aaa111', event: 'LabelAdd', matcher: { id: 'aaa111', actions: [{ type: 'prompt', prompt: 'a' }] } },
+            { id: 'aaa111', event: 'FileWatch', matcher: { id: 'aaa111', actions: [{ type: 'prompt', prompt: 'b' }] } },
           ],
         },
       }
@@ -570,8 +570,8 @@ describe('resource-bundle', () => {
         exportedAt: Date.now(),
         resources: {
           automations: [
-            { id: 'aaa111', name: 'Same Name', event: 'UserPromptSubmit', matcher: { id: 'aaa111', actions: [{ type: 'prompt', prompt: 'a' }] } },
-            { id: 'bbb222', name: 'Same Name', event: 'SessionStart', matcher: { id: 'bbb222', actions: [{ type: 'prompt', prompt: 'b' }] } },
+            { id: 'aaa111', name: 'Same Name', event: 'LabelAdd', matcher: { id: 'aaa111', actions: [{ type: 'prompt', prompt: 'a' }] } },
+            { id: 'bbb222', name: 'Same Name', event: 'FileWatch', matcher: { id: 'bbb222', actions: [{ type: 'prompt', prompt: 'b' }] } },
           ],
         },
       }
@@ -602,7 +602,7 @@ describe('resource-bundle', () => {
         exportedAt: Date.now(),
         resources: {
           automations: [
-            { id: 'aaa111', event: 'UserPromptSubmit', matcher: { id: 'aaa111', actions: [] } },
+            { id: 'aaa111', event: 'LabelAdd', matcher: { id: 'aaa111', actions: [] } },
           ],
         },
       }
@@ -810,7 +810,7 @@ describe('resource-bundle', () => {
         exportedAt: Date.now(),
         resources: {
           automations: [
-            makeAutomationEntry({ id: 'aaa111', name: 'Auto 1', event: 'UserPromptSubmit' }),
+            makeAutomationEntry({ id: 'aaa111', name: 'Auto 1', event: 'LabelAdd' }),
           ],
         },
       }
@@ -820,14 +820,14 @@ describe('resource-bundle', () => {
       expect(result.automations.imported).toEqual(['Auto 1'])
       const config = JSON.parse(readFileSync(join(wsDir, 'automations.json'), 'utf-8'))
       expect(config.version).toBe(2)
-      expect(config.automations.UserPromptSubmit).toHaveLength(1)
-      expect(config.automations.UserPromptSubmit[0].id).toBe('aaa111')
+      expect(config.automations.LabelAdd).toHaveLength(1)
+      expect(config.automations.LabelAdd[0].id).toBe('aaa111')
     })
 
     it('merges automations into existing config', async () => {
       const wsDir = createTestWorkspace(tmpDir)
       createTestAutomations(wsDir, {
-        UserPromptSubmit: [
+        LabelAdd: [
           { id: 'existing1', name: 'Existing', actions: [{ type: 'prompt', prompt: 'old' }] },
         ],
       })
@@ -837,7 +837,7 @@ describe('resource-bundle', () => {
         exportedAt: Date.now(),
         resources: {
           automations: [
-            makeAutomationEntry({ id: 'new1', name: 'New Auto', event: 'SessionStart' }),
+            makeAutomationEntry({ id: 'new1', name: 'New Auto', event: 'FileWatch' }),
           ],
         },
       }
@@ -847,17 +847,17 @@ describe('resource-bundle', () => {
       expect(result.automations.imported).toEqual(['New Auto'])
       const config = JSON.parse(readFileSync(join(wsDir, 'automations.json'), 'utf-8'))
       // Existing automation should be preserved
-      expect(config.automations.UserPromptSubmit).toHaveLength(1)
-      expect(config.automations.UserPromptSubmit[0].id).toBe('existing1')
+      expect(config.automations.LabelAdd).toHaveLength(1)
+      expect(config.automations.LabelAdd[0].id).toBe('existing1')
       // New automation should be added
-      expect(config.automations.SessionStart).toHaveLength(1)
-      expect(config.automations.SessionStart[0].id).toBe('new1')
+      expect(config.automations.FileWatch).toHaveLength(1)
+      expect(config.automations.FileWatch[0].id).toBe('new1')
     })
 
     it('skips automations with existing ID in skip mode', async () => {
       const wsDir = createTestWorkspace(tmpDir)
       createTestAutomations(wsDir, {
-        UserPromptSubmit: [
+        LabelAdd: [
           { id: 'aaa111', name: 'Original', actions: [{ type: 'prompt', prompt: 'original' }] },
         ],
       })
@@ -867,7 +867,7 @@ describe('resource-bundle', () => {
         exportedAt: Date.now(),
         resources: {
           automations: [
-            makeAutomationEntry({ id: 'aaa111', name: 'Updated', event: 'UserPromptSubmit' }),
+            makeAutomationEntry({ id: 'aaa111', name: 'Updated', event: 'LabelAdd' }),
           ],
         },
       }
@@ -877,13 +877,13 @@ describe('resource-bundle', () => {
       expect(result.automations.skipped).toEqual(['Updated'])
       // Original should be preserved
       const config = JSON.parse(readFileSync(join(wsDir, 'automations.json'), 'utf-8'))
-      expect(config.automations.UserPromptSubmit[0].name).toBe('Original')
+      expect(config.automations.LabelAdd[0].name).toBe('Original')
     })
 
     it('overwrites automation by ID in overwrite mode', async () => {
       const wsDir = createTestWorkspace(tmpDir)
       createTestAutomations(wsDir, {
-        UserPromptSubmit: [
+        LabelAdd: [
           { id: 'aaa111', name: 'Original', actions: [{ type: 'prompt', prompt: 'original' }] },
           { id: 'bbb222', name: 'Untouched', actions: [{ type: 'prompt', prompt: 'keep' }] },
         ],
@@ -894,7 +894,7 @@ describe('resource-bundle', () => {
         exportedAt: Date.now(),
         resources: {
           automations: [
-            makeAutomationEntry({ id: 'aaa111', name: 'Replaced', event: 'UserPromptSubmit' }),
+            makeAutomationEntry({ id: 'aaa111', name: 'Replaced', event: 'LabelAdd' }),
           ],
         },
       }
@@ -904,7 +904,7 @@ describe('resource-bundle', () => {
       expect(result.automations.imported).toEqual(['Replaced'])
       const config = JSON.parse(readFileSync(join(wsDir, 'automations.json'), 'utf-8'))
       // Replaced automation
-      const names = config.automations.UserPromptSubmit.map((m: any) => m.name)
+      const names = config.automations.LabelAdd.map((m: any) => m.name)
       expect(names).toContain('Replaced')
       // Untouched automation should survive
       expect(names).toContain('Untouched')
@@ -913,7 +913,7 @@ describe('resource-bundle', () => {
     it('preserves existing version field on import', async () => {
       const wsDir = createTestWorkspace(tmpDir)
       createTestAutomations(wsDir, {
-        UserPromptSubmit: [
+        LabelAdd: [
           { id: 'existing1', actions: [{ type: 'prompt', prompt: 'old' }] },
         ],
       }, 2)
@@ -923,7 +923,7 @@ describe('resource-bundle', () => {
         exportedAt: Date.now(),
         resources: {
           automations: [
-            makeAutomationEntry({ id: 'new1', event: 'SessionStart' }),
+            makeAutomationEntry({ id: 'new1', event: 'FileWatch' }),
           ],
         },
       }
@@ -937,7 +937,7 @@ describe('resource-bundle', () => {
     it('selectively clears history and retry queue for overwritten IDs', async () => {
       const wsDir = createTestWorkspace(tmpDir)
       createTestAutomations(wsDir, {
-        UserPromptSubmit: [
+        LabelAdd: [
           { id: 'aaa111', actions: [{ type: 'prompt', prompt: 'old' }] },
           { id: 'bbb222', actions: [{ type: 'prompt', prompt: 'keep' }] },
         ],
@@ -963,7 +963,7 @@ describe('resource-bundle', () => {
         exportedAt: Date.now(),
         resources: {
           automations: [
-            makeAutomationEntry({ id: 'aaa111', event: 'UserPromptSubmit' }),
+            makeAutomationEntry({ id: 'aaa111', event: 'LabelAdd' }),
           ],
         },
       }
@@ -990,7 +990,7 @@ describe('resource-bundle', () => {
         exportedAt: Date.now(),
         resources: {
           automations: [
-            makeAutomationEntry({ id: 'aaa111', event: 'UserPromptSubmit' }),
+            makeAutomationEntry({ id: 'aaa111', event: 'LabelAdd' }),
           ],
         },
       }
@@ -1010,7 +1010,7 @@ describe('resource-bundle', () => {
         exportedAt: Date.now(),
         resources: {
           automations: [
-            makeAutomationEntry({ id: 'aaa111', name: 'Fresh Start', event: 'UserPromptSubmit' }),
+            makeAutomationEntry({ id: 'aaa111', name: 'Fresh Start', event: 'LabelAdd' }),
           ],
         },
       }
@@ -1020,7 +1020,7 @@ describe('resource-bundle', () => {
       expect(result.automations.imported).toEqual(['Fresh Start'])
       const config = JSON.parse(readFileSync(join(wsDir, 'automations.json'), 'utf-8'))
       expect(config.version).toBe(2)
-      expect(config.automations.UserPromptSubmit[0].id).toBe('aaa111')
+      expect(config.automations.LabelAdd[0].id).toBe('aaa111')
     })
 
     it('rejects import when merged config has invalid regex', async () => {
@@ -1032,7 +1032,7 @@ describe('resource-bundle', () => {
         resources: {
           automations: [{
             id: 'aaa111',
-            event: 'UserPromptSubmit',
+            event: 'LabelAdd',
             matcher: {
               id: 'aaa111',
               matcher: '(a+)+$', // ReDoS pattern
@@ -1161,7 +1161,7 @@ describe('resource-bundle', () => {
     it('preserves automations through round-trip', async () => {
       const srcDir = createTestWorkspace(join(tmpDir, 'src'))
       createTestAutomations(srcDir, {
-        UserPromptSubmit: [
+        LabelAdd: [
           { id: 'aaa111', name: 'Greet', actions: [{ type: 'prompt', prompt: 'hello' }] },
         ],
         SchedulerTick: [
@@ -1181,8 +1181,8 @@ describe('resource-bundle', () => {
 
       const config = JSON.parse(readFileSync(join(dstDir, 'automations.json'), 'utf-8'))
       expect(config.version).toBe(2)
-      expect(config.automations.UserPromptSubmit).toHaveLength(1)
-      expect(config.automations.UserPromptSubmit[0].name).toBe('Greet')
+      expect(config.automations.LabelAdd).toHaveLength(1)
+      expect(config.automations.LabelAdd[0].name).toBe('Greet')
       expect(config.automations.SchedulerTick).toHaveLength(1)
       expect(config.automations.SchedulerTick[0].cron).toBe('0 9 * * 1-5')
     })

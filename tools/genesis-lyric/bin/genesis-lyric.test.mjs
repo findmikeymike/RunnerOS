@@ -4,8 +4,12 @@ import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const BIN = new URL('./genesis-lyric.mjs', import.meta.url).pathname;
+// `.pathname` leaves a path percent-encoded, so any directory with a space
+// in it resolves to a module that does not exist — which is exactly what
+// happens inside "Artist OS.app". fileURLToPath decodes it.
+const BIN = fileURLToPath(new URL('./genesis-lyric.mjs', import.meta.url));
 
 function run(args, env = {}) {
   return spawnSync(process.execPath, [BIN, ...args, '--json'], {
