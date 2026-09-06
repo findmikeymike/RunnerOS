@@ -77,8 +77,66 @@ function readBrief(path) {
   }
 }
 
+function firstNonEmpty(...values) {
+  return values.map((value) => value?.trim()).find(Boolean);
+}
+
+/**
+ * Squad's vendored Python needs 3.11+ (it uses `dataclass(slots=True)`).
+ * Stock macOS still ships 3.9, so resolving a bare `python3` left storyboard
+ * broken for most users with a raw TypeError. The app already bundles its own
+ * uv and exposes it as CRAFT_UV — that is how genesis-lyric gets a modern
+ * interpreter, and squad now takes the same path.
+ *
+ * `--no-project` is load-bearing. vendor/squad has a pyproject.toml, so
+ * without it uv builds a 72 MB virtualenv (48 packages) on first run and
+ * fails outright with no network. Storyboard, recipe and preflight only need
+ * the standard library, so they must never pay that cost. Callers who want
+ * the native production path (openai/langgraph/pillow) point SQUAD_PYTHON at
+ * an interpreter that already has them; `doctor` reports which runtime was
+ * chosen so that is diagnosable rather than guesswork.
+ */
+const UV_ARGS_PREFIX = ['run', '--no-project', '--python', '3.12'];
+
+function resolvePythonRuntime() {
+  const explicit = firstNonEmpty(process.env.SQUAD_PYTHON);
+  if (explicit) return { command: explicit, argsPrefix: [], source: 'squad_python' };
+
+  const uv = firstNonEmpty(process.env.CRAFT_UV);
+  if (uv) return { command: uv, argsPrefix: UV_ARGS_PREFIX, source: 'craft_uv' };
+
+  // Dev and CI: the packaged app always sets CRAFT_UV, but a checkout does
+  // not. Falling back to uv on PATH keeps the tests measuring the same
+  // runtime users get, rather than whatever python3 the machine happens to
+  // have. This mirrors resolveScriptRuntime() in session-tools-core.
+  const uvOnPath = resolveUvOnPath();
+  if (uvOnPath) return { command: uvOnPath, argsPrefix: UV_ARGS_PREFIX, source: 'uv_path' };
+
+  const python = firstNonEmpty(process.env.PYTHON);
+  if (python) return { command: python, argsPrefix: [], source: 'python_env' };
+
+  return { command: 'python3', argsPrefix: [], source: 'path' };
+}
+
+function resolveUvOnPath() {
+  const probe = spawnSync(process.platform === 'win32' ? 'where' : 'which', ['uv'], { encoding: 'utf-8' });
+  if (probe.status !== 0) return undefined;
+  return firstNonEmpty((probe.stdout || '').split('\n')[0]);
+}
+
+/**
+ * `uv run` takes a command, so inline code needs an explicit `python` before
+ * `-c`; a plain interpreter takes `-c` directly.
+ */
+function inlinePythonArgs(runtime, code) {
+  const viaUv = runtime.argsPrefix.length > 0;
+  return viaUv
+    ? [...runtime.argsPrefix, 'python', '-c', code]
+    : ['-c', code];
+}
+
 function runPython(script, scriptArgs) {
-  const python = process.env.SQUAD_PYTHON || process.env.PYTHON || 'python3';
+  const runtime = resolvePythonRuntime();
   const briefIndex = scriptArgs.indexOf('--brief-file');
   const briefPath = briefIndex >= 0 ? scriptArgs[briefIndex + 1] : undefined;
   const runtimeCwd = briefPath ? dirname(resolve(briefPath)) : process.cwd();
@@ -86,7 +144,7 @@ function runPython(script, scriptArgs) {
     ...process.env,
     PYTHONPATH: [vendorRoot, process.env.PYTHONPATH].filter(Boolean).join(process.platform === 'win32' ? ';' : ':'),
   };
-  return spawnSync(python, [join(vendorRoot, 'scripts', script), ...scriptArgs], {
+  return spawnSync(runtime.command, [...runtime.argsPrefix, join(vendorRoot, 'scripts', script), ...scriptArgs], {
     cwd: runtimeCwd,
     env,
     encoding: 'utf-8',
@@ -141,11 +199,11 @@ function commandExists(bin) {
 }
 
 function pythonRuntimeState() {
-  const python = process.env.SQUAD_PYTHON || process.env.PYTHON || 'python3';
-  const result = spawnSync(python, [
-    '-c',
+  const runtime = resolvePythonRuntime();
+  const result = spawnSync(runtime.command, inlinePythonArgs(
+    runtime,
     'import importlib.util,json; names=["openai","langgraph","PIL","fal_client"]; print(json.dumps({name: importlib.util.find_spec(name) is not None for name in names}))',
-  ], { encoding: 'utf-8' });
+  ), { encoding: 'utf-8' });
   let modules = {};
   if (result.status === 0) {
     try {
@@ -154,10 +212,15 @@ function pythonRuntimeState() {
       modules = {};
     }
   }
+  const versionGate = spawnSync(runtime.command, inlinePythonArgs(
+    runtime,
+    'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)',
+  ), { encoding: 'utf-8' });
   return {
-    command: python,
+    command: runtime.command,
+    source: runtime.source,
     available: result.status === 0,
-    version_supported: result.status === 0 && spawnSync(python, ['-c', 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)']).status === 0,
+    version_supported: result.status === 0 && versionGate.status === 0,
     modules,
   };
 }
@@ -401,7 +464,7 @@ if (command === 'help' || command === '--help' || command === '-h') {
     mode: 'runneros_squad_doctor',
     tool_root: toolRoot,
     vendor_root: vendorRoot,
-    python: process.env.SQUAD_PYTHON || process.env.PYTHON || 'python3',
+    python: python.command,
     providers: state,
     python_runtime: python,
     storyboard_ready: python.available && python.version_supported,

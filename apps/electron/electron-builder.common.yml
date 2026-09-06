@@ -162,6 +162,14 @@ mac:
       to: app/tools/squad
       filter:
         - "**/*"
+        # vendor/squad has a pyproject.toml, so any `uv run` there that omits
+        # --no-project leaves a 72 MB .venv behind. extraResources ignores the
+        # top-level `files:` exclusions, so without these a developer's local
+        # virtualenv would be copied straight into the shipped app.
+        - "!**/.venv/**"
+        - "!**/__pycache__/**"
+        - "!**/*.egg-info/**"
+        - "!**/*.pyc"
     # Managed local Google Ads CLI wrapper and bundled platform binary.
     - from: ../../tools/google-ads
       to: app/tools/google-ads
@@ -316,6 +324,14 @@ win:
       to: app/tools/squad
       filter:
         - "**/*"
+        # vendor/squad has a pyproject.toml, so any `uv run` there that omits
+        # --no-project leaves a 72 MB .venv behind. extraResources ignores the
+        # top-level `files:` exclusions, so without these a developer's local
+        # virtualenv would be copied straight into the shipped app.
+        - "!**/.venv/**"
+        - "!**/__pycache__/**"
+        - "!**/*.egg-info/**"
+        - "!**/*.pyc"
     # Managed local Google Ads CLI wrapper and bundled platform binary.
     - from: ../../tools/google-ads
       to: app/tools/google-ads
@@ -433,6 +449,14 @@ linux:
       to: app/tools/squad
       filter:
         - "**/*"
+        # vendor/squad has a pyproject.toml, so any `uv run` there that omits
+        # --no-project leaves a 72 MB .venv behind. extraResources ignores the
+        # top-level `files:` exclusions, so without these a developer's local
+        # virtualenv would be copied straight into the shipped app.
+        - "!**/.venv/**"
+        - "!**/__pycache__/**"
+        - "!**/*.egg-info/**"
+        - "!**/*.pyc"
     # Managed local Google Ads CLI wrapper and bundled platform binary.
     - from: ../../tools/google-ads
       to: app/tools/google-ads

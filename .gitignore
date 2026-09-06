@@ -50,6 +50,13 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 __pycache__/
 *.pyc
 
+# Python virtualenvs and build metadata. tools/squad/vendor/squad is an
+# installable project, so running uv/pip there can drop a 72 MB .venv into the
+# tree; these must never be committed or packaged.
+.venv/
+*.egg-info/
+uv.lock
+
 # Finder (MacOS) folder config
 .DS_Store
 
