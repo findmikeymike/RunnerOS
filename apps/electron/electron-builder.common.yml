@@ -128,6 +128,12 @@ mac:
       to: app/tools/hypermotion/node_modules
       filter:
         - "**/*"
+        # Native addons here name their platform folders plainly, so the
+        # `files:` exclusions above (which target vendor/ and resources/bin,
+        # and do not apply to extraResources anyway) never reached them.
+        # onnxruntime-node ships all three; only darwin can run here.
+        - "!onnxruntime-node/bin/napi-v*/win32/**"
+        - "!onnxruntime-node/bin/napi-v*/linux/**"
     # Dependency-free Artist Website builder runtime.
     - from: ../../tools/site-builder
       to: app/tools/site-builder
@@ -276,6 +282,12 @@ win:
       to: app/tools/hypermotion/node_modules
       filter:
         - "**/*"
+        # Native addons here name their platform folders plainly, so the
+        # `files:` exclusions above (which target vendor/ and resources/bin,
+        # and do not apply to extraResources anyway) never reached them.
+        # onnxruntime-node ships all three; only win32 can run here.
+        - "!onnxruntime-node/bin/napi-v*/darwin/**"
+        - "!onnxruntime-node/bin/napi-v*/linux/**"
     # Dependency-free Artist Website builder runtime.
     - from: ../../tools/site-builder
       to: app/tools/site-builder
@@ -387,6 +399,12 @@ linux:
       to: app/tools/hypermotion/node_modules
       filter:
         - "**/*"
+        # Native addons here name their platform folders plainly, so the
+        # `files:` exclusions above (which target vendor/ and resources/bin,
+        # and do not apply to extraResources anyway) never reached them.
+        # onnxruntime-node ships all three; only linux can run here.
+        - "!onnxruntime-node/bin/napi-v*/darwin/**"
+        - "!onnxruntime-node/bin/napi-v*/win32/**"
     # Dependency-free Artist Website builder runtime.
     - from: ../../tools/site-builder
       to: app/tools/site-builder
