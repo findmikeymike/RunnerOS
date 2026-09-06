@@ -1,9 +1,9 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-08-20
+last_verified: 2026-09-06
 source_of_truth: true
-upstream_baseline: craft-agents-oss v0.11.4
+upstream_baseline: craft-agents-oss v0.13.1
 ---
 
 # Craft Upstream Porting Ledger — Artist OS / Runner
@@ -12,7 +12,7 @@ upstream_baseline: craft-agents-oss v0.11.4
 
 This is the transfer document for applying the same proven Craft OSS reliability updates to another Runner-derived product. Port capabilities selectively; do not merge an upstream release wholesale. Each product must retain its own runtime identity, storage, credentials, ports, protocol, updater channel, and packaging identity.
 
-Audit window: Craft OSS `v0.9.0` through `v0.11.4` (April 30–August 6, 2026). Artist OS implementation branch: `codex/artist-os-runtime-isolation`.
+Audit window: Craft OSS `v0.9.0` through `v0.13.1` (April 30–September 2, 2026). Artist OS implementation branch: `codex/artist-os-runtime-isolation`.
 
 ## Ported Capabilities and Exact Code
 
@@ -36,6 +36,11 @@ Audit window: Craft OSS `v0.9.0` through `v0.11.4` (April 30–August 6, 2026). 
 | Explore-mode blocked tools return control to model | v0.11.4 compatibility fix for SDK 0.3.220 | `packages/shared/src/agent/mode-manager.ts`; `packages/shared/src/agent/__tests__/mode-manager-block.test.ts` | Unit test and live Sonnet blocked-Write recovery smoke passed 2026-08-20 |
 | Always-on, product-isolated updater log | v0.10.4 | `apps/electron/src/main/logger.ts`; `apps/electron/src/main/auto-update.ts` | Inspect active product's `logs/auto-update.log` |
 | Installer handoff cleanup and failed-handoff relaunch | v0.11.3 | `apps/electron/src/main/auto-update.ts`; `apps/electron/src/main/index.ts` | Packaged update smoke required |
+| Current Claude model generation: Opus 4.8, Sonnet 5, Fable 5 and 5.1 | v0.13.1 and earlier | `packages/shared/src/config/models.ts`; `packages/shared/src/config/llm-connections.ts` (registry, Bedrock maps for us/eu/global/base, `PI_PREFERRED_DEFAULTS`) | Registry and connection tests; `DEFAULT_MODEL` now resolves to Opus 4.8 |
+| Mythos-class always-on adaptive thinking | v0.13.1 | `packages/shared/src/config/models.ts` (`isAdaptiveThinkingAlwaysOnModel`); `packages/shared/src/agent/claude-agent.ts` (`resolveClaudeThinkingOptions`) | `claude-thinking-config.test.ts`. Required by the row above, not optional: Fable and Mythos reject `thinking: { type: 'disabled' }`, so listing them without this makes them fail at request time |
+| Claude Agent SDK `0.3.258` | v0.13.1 | root `package.json`; `packages/core/package.json`; `packages/shared/package.json`; `bun.lock` | Suite and typechecks. Brings thinking-token reporting and per-model cost basis. Live Claude smoke still open |
+| Pi SDK credential adaptation for OAuth-only providers and Bedrock IAM | v0.12.1, v0.13.0 | `packages/pi-agent-server/src/adapt-credential.ts` (new); `packages/pi-agent-server/src/index.ts` (init injection and `token_update`) | `adapt-credential.test.ts`. We stored both shapes verbatim, which was correct before Pi SDK 0.81 and wrong after; we run 0.84, so ChatGPT Plus and Bedrock IAM were both affected. Live smoke on each connection still open |
+| Custom OpenAI-compatible endpoints omit the `store` parameter | v0.12.1 | `packages/pi-agent-server/src/custom-endpoint-models.ts`; `packages/pi-agent-server/src/index.ts` | `custom-endpoint-models.test.ts`. Strict gateways reject unknown parameters with a 400, which made those connections unusable |
 
 ## Product-Isolation Adaptations That Must Not Be Copied Literally
 
@@ -96,7 +101,13 @@ Use these only as evidence and diff references; current files have moved and inc
 | Local Network entitlement text | v0.11.0 | Deferred pending packaged entitlement review | LAN Ollama or LAN MCP is formally supported |
 | Automation Test early-ack timeout fix | v0.11.0 | Not yet ported | Automation Test reproduces the 30-second false timeout |
 | `archive_session`, filter-inheritance, local `%20` links, CJK capitalization, Windows path/Git Bash fixes | v0.11.3 | Not blindly ported; each needs current-code reproduction because this fork diverged | A targeted current-code test proves the bug exists |
-| Newer model-catalog additions and migrations (Fable 5, Sonnet 5, GPT-5.6, Opus migrations) | v0.10.3–v0.11.4 | Not bulk-copied; provider availability and names must be verified against live APIs | Model/provider verification lane |
+| Newer model-catalog additions, non-Claude half (GPT-5.6 family and other provider catalogs) | v0.10.3–v0.13.1 | Still not bulk-copied; provider availability and names must be verified against live APIs. The Claude half was ported on 2026-09-06 — see the Ported table | Model/provider verification lane |
+| ChatGPT web-search model failover | v0.12.1 | Not ported. Our provider has diverged from upstream's pre-fix baseline by roughly 130 lines, and a three-way merge conflicts in three places including the request body itself. Upstream's rewrite replaces a pinned model with a bounded candidate chain | Someone can exercise it against a live ChatGPT-plan account; the change is unverifiable without one |
+| GitHub Copilot OAuth hardening (app-owned flows, network timeouts, compliant polling) | v0.12.1 | Not ported by product decision — Copilot connections are not used here. It is the closest thing to a security fix in the window, so revisit if that changes | Copilot becomes a supported connection |
+| Pages, and its scheduling, grants, publishing and sandboxed rendering | v0.13.0 | Do not port. Roughly 100 files of a mini-app builder surface; overlaps nothing Artist OS wants and adds a large security surface | Never, unless the product deliberately grows a page builder |
+| Moonshot / Kimi K3 and Minimax connection presets | v0.12.1 | Deferred; new provider presets rather than a fix | An artist workflow needs those providers |
+| New upstream domain, update feed and static docs site | v0.12.0 | Not portable. Artist OS owns its runtime identity, updater channel and docs | Never |
+| WhatsApp LID self-identity diagnostic | v0.12.1 | Not ported. It is a log line in `upsert.ts`, a file this fork does not have, and our `worker.ts` has diverged | A real LID-migration bug is reproduced here |
 | macOS Intel support removal | v0.10.1 | Explicitly rejected as an inherited decision | Artist OS makes its own support policy |
 | Broad mobile/compact UI and full i18n changes | v0.9.x–v0.11.x | Deferred product work | Dedicated responsive/localization phase |
 
