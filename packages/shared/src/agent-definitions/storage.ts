@@ -27,7 +27,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import matter from 'gray-matter';
+import { matter, stringifyFrontmatter, type GrayMatterFile } from "../config/frontmatter";
 import { atomicWriteFileSync } from '../utils/files.ts';
 import type { PermissionMode } from '../agent/mode-types.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
@@ -263,7 +263,7 @@ function coerceTags(value: unknown, warnings: AgentParseWarning[]): string[] | u
  * rather than throwing — bad agents shouldn't crash the whole library load.
  */
 export function parseAgentFile(content: string): { metadata: AgentMetadata; systemPrompt: string; warnings: AgentParseWarning[] } | null {
-  let parsed: matter.GrayMatterFile<string>;
+  let parsed: GrayMatterFile<string>;
   try {
     parsed = matter(content);
   } catch {
@@ -475,7 +475,7 @@ export function serializeAgent(metadata: AgentMetadata, systemPrompt: string): s
     if (Object.keys(routing).length > 0) data.routing = routing;
   }
 
-  return matter.stringify(systemPrompt.trimEnd() + '\n', data);
+  return stringifyFrontmatter(systemPrompt.trimEnd() + '\n', data);
 }
 
 export interface CreateAgentInput {
@@ -545,7 +545,7 @@ function writeBuiltInAgentMigration(
   const data = { ...(original.data as Record<string, unknown>) };
   for (const key of SERIALIZED_AGENT_METADATA_KEYS) delete data[key];
   Object.assign(data, supported);
-  writeFileSync(file, matter.stringify(input.systemPrompt.trimEnd() + '\n', data), 'utf-8');
+  writeFileSync(file, stringifyFrontmatter(input.systemPrompt.trimEnd() + '\n', data), 'utf-8');
 
   const loaded = loadGlobalAgent(input.slug, options);
   if (!loaded) throw new Error(`Failed to re-load migrated agent "${input.slug}"`);

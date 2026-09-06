@@ -18,7 +18,8 @@
     "zod-to-json-schema": "^3.25.0",
     "gray-matter": "^4.0.3",
     "croner": "^10.0.1",
-    "sharp": "0.34.5"
+    "sharp": "0.34.5",
+    "js-yaml": "^4.3.0"
   },
   "devDependencies": {
     "typescript": "^5.8.2"

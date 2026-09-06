@@ -22,7 +22,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { atomicWriteFileSync } from '../utils/files.ts';
-import matter from 'gray-matter';
+import { matter, stringifyFrontmatter, type GrayMatterFile } from "../config/frontmatter";
 import { CONCIERGE_SLUG, AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 import {
   CONTEXT_DOC_GOAL_PRIORITIES,
@@ -295,7 +295,7 @@ function coercePrivate(value: unknown, warnings: ContextDocParseWarning[]): bool
 export function parseContextFile(
   content: string,
 ): { metadata: ContextDocMetadata; body: string; warnings: ContextDocParseWarning[] } | null {
-  let parsed: matter.GrayMatterFile<string>;
+  let parsed: GrayMatterFile<string>;
   try {
     parsed = matter(content);
   } catch {
@@ -347,7 +347,7 @@ export function serializeContextDoc(metadata: ContextDocMetadata, body: string):
   if (metadata.status) data.status = metadata.status;
   if (metadata.priority) data.priority = metadata.priority;
   if (metadata.deadline) data.deadline = metadata.deadline;
-  return matter.stringify(body.trimEnd() + '\n', data);
+  return stringifyFrontmatter(body.trimEnd() + '\n', data);
 }
 
 // ============================================================================

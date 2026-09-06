@@ -21,7 +21,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import matter from 'gray-matter';
+import { matter, type GrayMatterFile } from "../config/frontmatter";
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 import {
@@ -156,7 +156,7 @@ export function parseSessionsLog(
   const warnings: SessionsLogParseWarning[] = [];
   const fallback: SessionsLogEnvelope = { version: SESSIONS_LOG_SCHEMA_VERSION, agent: expectedAgentSlug };
 
-  let head: matter.GrayMatterFile<string>;
+  let head: GrayMatterFile<string>;
   try {
     head = matter(content);
   } catch {
@@ -173,7 +173,7 @@ export function parseSessionsLog(
   warnings.push(...split.warnings);
 
   for (const block of split.blocks) {
-    let parsed: matter.GrayMatterFile<string>;
+    let parsed: GrayMatterFile<string>;
     try {
       parsed = matter(`---\n${block.frontmatter.trim()}\n---\n${block.body.trim()}`);
     } catch {
@@ -262,7 +262,7 @@ function collectDelimiterLines(lines: readonly string[]): number[] {
  * - `prose`: anything else, e.g. a horizontal rule in a summary. Body text.
  */
 function classifyBlock(rawFrontmatter: string): 'entry' | 'broken' | 'prose' {
-  let parsed: matter.GrayMatterFile<string>;
+  let parsed: GrayMatterFile<string>;
   try {
     parsed = matter(`---\n${rawFrontmatter.trim()}\n---\n`);
   } catch {

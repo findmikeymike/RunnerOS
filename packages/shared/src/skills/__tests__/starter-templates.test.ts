@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, relative, sep } from 'node:path';
-import matter from 'gray-matter';
+import { matter } from "../../config/frontmatter";
 import { STARTER_SKILLS } from '../starter-templates.ts';
 import { BUNDLED_STARTER_SKILLS } from '../bundled.generated.ts';
 import { CREATOR_SYSTEM_SKILL_SLUGS } from '../system.ts';

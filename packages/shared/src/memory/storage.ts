@@ -18,7 +18,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import matter from 'gray-matter';
+import { matter, type GrayMatterFile } from "../config/frontmatter";
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 import {
@@ -177,7 +177,7 @@ function parseEnvelope(
 
 function parseEntry(rawFrontmatter: string, rawBody: string): { entry?: MemoryEntry; warnings: MemoryParseWarning[] } {
   const warnings: MemoryParseWarning[] = [];
-  let parsed: matter.GrayMatterFile<string>;
+  let parsed: GrayMatterFile<string>;
   try {
     parsed = matter(`---\n${rawFrontmatter.trim()}\n---\n${rawBody.trim()}`);
   } catch {
@@ -284,7 +284,7 @@ function collectEntryDelimiterLines(content: string): DelimiterLine[] {
 }
 
 function looksLikeEntryFrontmatter(rawFrontmatter: string): boolean {
-  let parsed: matter.GrayMatterFile<string>;
+  let parsed: GrayMatterFile<string>;
   try {
     parsed = matter(`---\n${rawFrontmatter.trim()}\n---\n`);
   } catch {
@@ -358,7 +358,7 @@ export function parseMemoryFile(
   scope: MemoryScope,
   expectedAgentSlug?: string,
 ): { envelope: MemoryFileEnvelope; entries: MemoryEntry[]; warnings: MemoryParseWarning[] } | null {
-  let parsed: matter.GrayMatterFile<string>;
+  let parsed: GrayMatterFile<string>;
   try {
     parsed = matter(content);
   } catch {

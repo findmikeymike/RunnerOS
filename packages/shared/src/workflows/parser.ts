@@ -1,4 +1,4 @@
-import matter from 'gray-matter';
+import { matter, stringifyFrontmatter, type GrayMatterFile } from "../config/frontmatter";
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 import type { OutputKind } from '../outputs/types.ts';
 import { isValidWorkflowOutputSchema } from './output-schema.ts';
@@ -322,7 +322,7 @@ function coerceCompletionContract(
 export function parseWorkflowFile(
   content: string,
 ): { metadata: WorkflowMetadata; body: string; warnings: WorkflowParseWarning[] } | null {
-  let parsed: matter.GrayMatterFile<string>;
+  let parsed: GrayMatterFile<string>;
   try {
     parsed = matter(content);
   } catch {
@@ -470,7 +470,7 @@ export function serializeWorkflow(metadata: WorkflowMetadata, body: string): str
     return out;
   });
 
-  return matter.stringify(body.trimEnd() + '\n', data);
+  return stringifyFrontmatter(body.trimEnd() + '\n', data);
 }
 
 function hasUnsupportedExecutionField(data: Record<string, unknown>): boolean {

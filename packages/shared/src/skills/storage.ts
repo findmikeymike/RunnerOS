@@ -18,7 +18,7 @@ import {
 } from 'fs';
 import { dirname, join } from 'path';
 import { createHash, randomUUID } from 'crypto';
-import matter from 'gray-matter';
+import { matter } from "../config/frontmatter";
 import type { LoadedSkill, SkillMetadata, SkillSource } from './types.ts';
 import {
   classifySkillCategory,
