@@ -1,4 +1,4 @@
-import { matter, stringifyFrontmatter, type GrayMatterFile } from "../config/frontmatter";
+import { matter, stringifyFrontmatter, type GrayMatterFile } from '../config/frontmatter';
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 import type { OutputKind } from '../outputs/types.ts';
 import { isValidWorkflowOutputSchema } from './output-schema.ts';

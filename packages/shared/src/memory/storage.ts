@@ -18,7 +18,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { matter, type GrayMatterFile } from "../config/frontmatter";
+import { matter, type GrayMatterFile } from '../config/frontmatter';
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 import {

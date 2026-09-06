@@ -22,7 +22,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { atomicWriteFileSync } from '../utils/files.ts';
-import { matter, stringifyFrontmatter, type GrayMatterFile } from "../config/frontmatter";
+import { matter, stringifyFrontmatter, type GrayMatterFile } from '../config/frontmatter';
 import { CONCIERGE_SLUG, AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 import {
   CONTEXT_DOC_GOAL_PRIORITIES,

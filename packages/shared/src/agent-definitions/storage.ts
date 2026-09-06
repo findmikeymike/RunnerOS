@@ -27,7 +27,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import { matter, stringifyFrontmatter, type GrayMatterFile } from "../config/frontmatter";
+import { matter, stringifyFrontmatter, type GrayMatterFile } from '../config/frontmatter';
 import { atomicWriteFileSync } from '../utils/files.ts';
 import type { PermissionMode } from '../agent/mode-types.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';

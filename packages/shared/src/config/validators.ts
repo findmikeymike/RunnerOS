@@ -702,7 +702,7 @@ export function validateAllSources(workspaceId: string): ValidationResult {
 // Skill Validators
 // ============================================================
 
-import { matter } from "./frontmatter";
+import { matter } from './frontmatter';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
 import { basename, extname } from 'path';
 
