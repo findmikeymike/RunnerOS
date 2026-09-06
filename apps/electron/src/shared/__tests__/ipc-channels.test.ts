@@ -177,6 +177,7 @@ const EXPECTED_CHANNELS: string[] = [
   "memory:delete",
   "memory:enqueueReview",
   "memory:listAgent",
+  "memory:listAgentSessions",
   "memory:listEvents",
   "memory:listReviewQueue",
   "memory:listUser",

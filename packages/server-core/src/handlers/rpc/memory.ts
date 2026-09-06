@@ -39,6 +39,7 @@ import type { HandlerDeps } from '../handler-deps'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.memory.LIST_AGENT,
+  RPC_CHANNELS.memory.LIST_AGENT_SESSIONS,
   RPC_CHANNELS.memory.LIST_USER,
   RPC_CHANNELS.memory.RECALL,
   RPC_CHANNELS.memory.LIST_EVENTS,
