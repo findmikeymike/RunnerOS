@@ -118,8 +118,18 @@ describe('Opus 4.6 registry presence', () => {
     expect(ids).toContain('claude-opus-4-6');
   });
 
-  it('resolves "Opus" shortName to 4.7 (first match wins)', () => {
-    // 4.7 is listed first in MODEL_REGISTRY so default Opus callers unchanged.
-    expect(getModelIdByShortName('Opus')).toBe('claude-opus-4-7');
+  it('resolves "Opus" shortName to the newest Opus (first match wins)', () => {
+    // The rule being pinned is "first match wins", not any particular version.
+    // This asserted 4.7 until Opus 4.8 was added above it on 2026-09-06, which
+    // is the intended effect: callers naming "Opus" abstractly, DEFAULT_MODEL
+    // among them, follow the newest release rather than freezing on an old one.
+    expect(getModelIdByShortName('Opus')).toBe('claude-opus-4-8');
+  });
+
+  it('keeps every Opus generation reachable by its exact id', () => {
+    const ids = ANTHROPIC_MODELS.map(m => m.id);
+    expect(ids).toContain('claude-opus-4-8');
+    expect(ids).toContain('claude-opus-4-7');
+    expect(ids).toContain('claude-opus-4-6');
   });
 });

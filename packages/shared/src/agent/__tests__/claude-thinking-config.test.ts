@@ -56,6 +56,35 @@ describe('resolveClaudeThinkingOptions', () => {
     })
   })
 
+  it('falls back to adaptive at low effort on Mythos-class models, which cannot disable thinking', () => {
+    // Fable and Mythos reject `thinking: { type: 'disabled' }` outright, so
+    // sending it does not merely waste tokens — the request fails. 'low' effort
+    // is the shallowest setting these models actually accept.
+    for (const model of ['claude-fable-5-1', 'claude-fable-5']) {
+      expect(resolveClaudeThinkingOptions({
+        thinkingLevel: 'off',
+        model,
+        providerType: 'anthropic',
+        minimizeThinking: false,
+      })).toEqual({
+        thinking: { type: 'adaptive' },
+        effort: 'low',
+      })
+    }
+  })
+
+  it('applies the same floor to Mythos-class models when thinking is minimized', () => {
+    expect(resolveClaudeThinkingOptions({
+      thinkingLevel: 'medium',
+      model: 'claude-fable-5-1',
+      providerType: 'anthropic',
+      minimizeThinking: true,
+    })).toEqual({
+      thinking: { type: 'adaptive' },
+      effort: 'low',
+    })
+  })
+
   it('disables thinking entirely when level is off on adaptive backends', () => {
     const result = resolveClaudeThinkingOptions({
       thinkingLevel: 'off',

@@ -704,6 +704,14 @@ export function isValidProviderAuthCombination(
  * Source: Pi SDK registry (models.generated.js) — us.* variants
  */
 const BEDROCK_MODEL_MAP: Record<string, string> = {
+  'claude-opus-4-8': 'us.anthropic.claude-opus-4-8',
+  'claude-sonnet-5': 'us.anthropic.claude-sonnet-5',
+  'claude-fable-5-1': 'us.anthropic.claude-fable-5-1',
+  'claude-fable-5': 'us.anthropic.claude-fable-5',
+  'anthropic.claude-opus-4-8': 'us.anthropic.claude-opus-4-8',
+  'anthropic.claude-sonnet-5': 'us.anthropic.claude-sonnet-5',
+  'anthropic.claude-fable-5-1': 'us.anthropic.claude-fable-5-1',
+  'anthropic.claude-fable-5': 'us.anthropic.claude-fable-5',
   'claude-opus-4-7': 'us.anthropic.claude-opus-4-7-v1',
   'claude-sonnet-4-6': 'us.anthropic.claude-sonnet-4-6',
   'claude-haiku-4-5-20251001': 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
@@ -722,6 +730,22 @@ const BEDROCK_MODEL_MAP: Record<string, string> = {
 
 /** Reverse map: all known Bedrock ID variants → bare Anthropic ID */
 const BEDROCK_REVERSE_MAP: Record<string, string> = {
+  'us.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'us.anthropic.claude-sonnet-5': 'claude-sonnet-5',
+  'us.anthropic.claude-fable-5-1': 'claude-fable-5-1',
+  'us.anthropic.claude-fable-5': 'claude-fable-5',
+  'eu.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'eu.anthropic.claude-sonnet-5': 'claude-sonnet-5',
+  'eu.anthropic.claude-fable-5-1': 'claude-fable-5-1',
+  'eu.anthropic.claude-fable-5': 'claude-fable-5',
+  'global.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'global.anthropic.claude-sonnet-5': 'claude-sonnet-5',
+  'global.anthropic.claude-fable-5-1': 'claude-fable-5-1',
+  'global.anthropic.claude-fable-5': 'claude-fable-5',
+  'anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'anthropic.claude-sonnet-5': 'claude-sonnet-5',
+  'anthropic.claude-fable-5-1': 'claude-fable-5-1',
+  'anthropic.claude-fable-5': 'claude-fable-5',
   // US inference profiles
   'us.anthropic.claude-opus-4-7-v1': 'claude-opus-4-7',
   'us.anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',

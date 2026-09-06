@@ -14,6 +14,10 @@
 // Must stay in sync with BEDROCK_MODEL_MAP in llm-connections.ts.
 const BEDROCK_TO_BARE: Record<string, string> = {
   // US inference profile IDs (primary)
+  'us.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'us.anthropic.claude-sonnet-5': 'claude-sonnet-5',
+  'us.anthropic.claude-fable-5-1': 'claude-fable-5-1',
+  'us.anthropic.claude-fable-5': 'claude-fable-5',
   'us.anthropic.claude-opus-4-7-v1': 'claude-opus-4-7',
   'us.anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',
   'us.anthropic.claude-haiku-4-5-20251001-v1:0': 'claude-haiku-4-5-20251001',
@@ -21,6 +25,10 @@ const BEDROCK_TO_BARE: Record<string, string> = {
   'us.anthropic.claude-opus-4-5-20251101-v1:0': 'claude-opus-4-5-20251101',
   'us.anthropic.claude-sonnet-4-5-20250929-v1:0': 'claude-sonnet-4-5-20250929',
   // EU inference profile IDs
+  'eu.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'eu.anthropic.claude-sonnet-5': 'claude-sonnet-5',
+  'eu.anthropic.claude-fable-5-1': 'claude-fable-5-1',
+  'eu.anthropic.claude-fable-5': 'claude-fable-5',
   'eu.anthropic.claude-opus-4-7-v1': 'claude-opus-4-7',
   'eu.anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',
   'eu.anthropic.claude-haiku-4-5-20251001-v1:0': 'claude-haiku-4-5-20251001',
@@ -28,11 +36,19 @@ const BEDROCK_TO_BARE: Record<string, string> = {
   'eu.anthropic.claude-opus-4-5-20251101-v1:0': 'claude-opus-4-5-20251101',
   'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': 'claude-sonnet-4-5-20250929',
   // Global inference profile IDs
+  'global.anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'global.anthropic.claude-sonnet-5': 'claude-sonnet-5',
+  'global.anthropic.claude-fable-5-1': 'claude-fable-5-1',
+  'global.anthropic.claude-fable-5': 'claude-fable-5',
   'global.anthropic.claude-opus-4-7-v1': 'claude-opus-4-7',
   'global.anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',
   'global.anthropic.claude-haiku-4-5-20251001-v1:0': 'claude-haiku-4-5-20251001',
   'global.anthropic.claude-opus-4-6-v1': 'claude-opus-4-6',
   // Base IDs (no region prefix)
+  'anthropic.claude-opus-4-8': 'claude-opus-4-8',
+  'anthropic.claude-sonnet-5': 'claude-sonnet-5',
+  'anthropic.claude-fable-5-1': 'claude-fable-5-1',
+  'anthropic.claude-fable-5': 'claude-fable-5',
   'anthropic.claude-opus-4-7-v1': 'claude-opus-4-7',
   'anthropic.claude-sonnet-4-6': 'claude-sonnet-4-6',
   'anthropic.claude-haiku-4-5-20251001-v1:0': 'claude-haiku-4-5-20251001',
@@ -92,10 +108,21 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
   // Anthropic Claude Models
   // ----------------------------------------
   {
+    id: 'claude-opus-4-8',
+    name: 'Opus 4.8',
+    // Listed before 4.7 deliberately: shortName lookups resolve to the first
+    // match, so 'Opus' — and therefore DEFAULT_MODEL — now means 4.8.
+    shortName: 'Opus',
+    description: 'Most capable for complex work',
+    descriptionKey: 'model.opusDesc',
+    provider: 'anthropic',
+    contextWindow: 1_000_000,
+  },
+  {
     id: 'claude-opus-4-7',
     name: 'Opus 4.7',
     shortName: 'Opus',
-    description: 'Most capable for complex work',
+    description: 'Previous Opus release',
     descriptionKey: 'model.opusDesc',
     provider: 'anthropic',
     contextWindow: 1_000_000,
@@ -107,14 +134,24 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
   {
     id: 'claude-opus-4-6',
     name: 'Opus 4.6',
-    // shortName intentionally collides with 4.7. 4.7 is listed first, so
-    // findModelIdByShortName('Opus') keeps returning 4.7 — zero behavior
-    // change for callers that reference "Opus" abstractly.
+    // shortName intentionally collides with the newer Opus entries. 4.8 is
+    // listed first, so findModelIdByShortName('Opus') resolves there and
+    // callers that reference "Opus" abstractly follow the newest release.
     shortName: 'Opus',
     description: 'Previous Opus release',
     descriptionKey: 'model.opusDesc',
     provider: 'anthropic',
     contextWindow: 200_000,
+  },
+  {
+    id: 'claude-sonnet-5',
+    name: 'Sonnet 5',
+    // Listed before 4.6 so 'Sonnet' resolves to the newer one.
+    shortName: 'Sonnet',
+    description: 'Best combination of speed and intelligence',
+    descriptionKey: 'model.sonnetDesc',
+    provider: 'anthropic',
+    contextWindow: 1_000_000,
   },
   {
     id: 'claude-sonnet-4-6',
@@ -133,6 +170,27 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
     descriptionKey: 'model.haikuDesc',
     provider: 'anthropic',
     contextWindow: 200_000,
+  },
+  // Mythos-class. Adaptive thinking is always on for these — see
+  // isAdaptiveThinkingAlwaysOnModel below, which the API requires.
+  {
+    id: 'claude-fable-5-1',
+    name: 'Fable 5.1',
+    // Listed before Fable 5 so 'Fable' resolves to the newer one.
+    shortName: 'Fable',
+    description: 'Next-generation model for complex work',
+    descriptionKey: 'model.fableDesc',
+    provider: 'anthropic',
+    contextWindow: 1_000_000,
+  },
+  {
+    id: 'claude-fable-5',
+    name: 'Fable 5',
+    shortName: 'Fable',
+    description: 'Previous Fable generation',
+    descriptionKey: 'model.fableDesc',
+    provider: 'anthropic',
+    contextWindow: 1_000_000,
   },
 
   // ----------------------------------------
@@ -285,6 +343,23 @@ export function isOpusModel(modelId: string): boolean {
 export function isClaudeModel(modelId: string): boolean {
   const lower = modelId.toLowerCase();
   return lower.startsWith('claude-') || lower.includes('/claude') || lower.includes('.claude');
+}
+
+/**
+ * Mythos-class models (Claude Fable / Mythos) where adaptive thinking is ALWAYS
+ * ON and `thinking: { type: 'disabled' }` is rejected outright by the Messages
+ * API. There is no way to turn thinking off on these; the shallowest setting
+ * available is adaptive thinking at 'low' effort. Opus, Sonnet and Haiku are
+ * unaffected and still accept `disabled`.
+ *
+ * This is a correctness dependency of listing any Fable model, not a
+ * refinement: without it, choosing Fable with thinking off sends a parameter
+ * the API refuses, and the model simply fails to run.
+ *
+ * Matches bare, pi/-prefixed and Bedrock-native id forms.
+ */
+export function isAdaptiveThinkingAlwaysOnModel(modelId: string): boolean {
+  return /claude-(fable|mythos)/i.test(modelId);
 }
 
 
