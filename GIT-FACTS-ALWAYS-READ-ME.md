@@ -227,7 +227,9 @@ dev launch with the individual steps (`build:main`, `build:preload`,
 
 ## 7. Current state — 2026-09-06
 
-- Trunk is `main` at `23b403e9c`, in `.worktrees/main/artist-os`, pushed.
+- Trunk is `main` in `.worktrees/main/artist-os`, pushed. Runtime: Electron 44.2.0
+  (Node 24, Chromium 152) since 2026-09-06 — see §6. `git log -1 main` for the SHA;
+  this file will not keep it current.
 - The suite is **green: 8090 pass, 0 fail**. Keep it that way. If you make it
   red, fix it before you hand off — a red suite means CI can no longer tell
   anyone about a *new* break, which is the whole point of having it.
