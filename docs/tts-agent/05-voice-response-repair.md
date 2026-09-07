@@ -212,3 +212,26 @@ the context and session histories differ, so it is not a controlled distribution
 Physical listening quality and microphone-start clipping are still not certified.
 Runtime stopped after the four tests. Scalar evidence:
 `/private/tmp/artist-os-focused-voice-live.json`.
+
+## Microphone comparison
+
+The user then tested the microphone live with focused Flash/low and the same
+devices/style, run `7eb55cbd-f2a3-4e5d-912b-ee0aa12c1d1a`. Listening appeared at
+3.023 s; first capture was 60 ms later. The first two accepted utterances each
+contained 17 characters / four words, rather than the prior one-word symptom.
+Finalization took 98 ms and 133 ms. Playback began 2.053 s and 1.218 s after the
+accepted final transcripts, respectively.
+
+The user continued for nine completed turns, all without errors, fallback or
+tools. Playback-start waits after final transcription were 2.053, 1.218, 2.504,
+1.611, 1.412, 4.048, 5.467, 1.798 and 2.115 s (median 2.053 s). The 5.467 s
+outlier remains part of the result; this is not a consistent sub-two-second
+guarantee. This fresh voice start followed the typed trials in a warm app, and
+does not prove first-install/cold-machine or before-Listening speech behavior.
+The original clipping symptom was not reproduced; no STT fix is claimed.
+
+The conversation also showed a tendency to redirect creative/content discussion
+toward the brief's checklist. Focused voice is the strongest tested v1 candidate,
+with conversational judgment and reliable action handoff still requiring polish.
+The user stopped the microphone run; UI returned to Ready. Scalar evidence:
+`/private/tmp/artist-os-focused-microphone-live.json`.
