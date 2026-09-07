@@ -24,6 +24,8 @@
     "./auth/callback-page": "./src/auth/callback-page.ts",
     "./auth/types": "./src/auth/types.ts",
     "./config": "./src/config/index.ts",
+    "./config/artist-manager-voice-settings": "./src/config/artist-manager-voice-settings.ts",
+    "./config/artist-manager-voice-storage": "./src/config/artist-manager-voice-storage.ts",
     "./config/runtime-identity": "./src/config/runtime-identity.ts",
     "./config/paths": "./src/config/paths.ts",
     "./config/pango-backend": "./src/config/pango-backend.ts",
