@@ -7,6 +7,30 @@ Fast-forwarded to canonical `d27bafa7d` before the final gate.
 
 Specification: [47 Signals / Your World](../creator-command-center/47-signals-your-world-spec.md).
 
+## Main Integration Gate (2026-09-07)
+
+All three reviewed Signals slices plus hardening/info UI commit `a77d54441`
+were combined with current product main `2531ca001` without code conflicts.
+Main's original uncommitted planning spec/index edits were preserved verbatim
+in `312a19f29`, merged into this branch, then reconciled to the implemented
+parent-folder spec. The original remains recoverable in git history; no
+unrelated user or agent changes were discarded.
+
+Fresh post-code-merge gates all exited 0:
+
+- `PANGOCAIRO_BACKEND=fontconfig bun run test`: 8,783 passed, 1 existing
+  installed-CUA-contract skip, 0 failed. `/tmp/signals-main-integration-tests.log`.
+- `bun run typecheck:all`: `/tmp/signals-main-integration-typecheck.log`.
+- `CRAFT_PRODUCT_VARIANT=artist-os bun run electron:build:main`:
+  `/tmp/signals-main-integration-main-build.log`.
+- `CRAFT_PRODUCT_VARIANT=artist-os bun run electron:build:renderer`:
+  `/tmp/signals-main-integration-renderer-build.log`.
+
+Only documentation reconciliation followed these gates. The user authorized
+commit, fast-forward landing and pushing main. Remote confirmation is checked
+after the push rather than inferred from these tests. No app restart or paid
+provider run was performed; live Monid acceptance remains outstanding.
+
 ## Holistic Hardening (2026-09-07)
 
 Working against committed Slice 3 `7ca3dd2d4`, still on the feature worktree.

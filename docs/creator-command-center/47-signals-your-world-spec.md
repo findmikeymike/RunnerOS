@@ -22,21 +22,15 @@ reports do not become permanent artist beliefs or automatic production jobs.
 
 ## Implementation Status
 
-Implementation branch: `codex/signals-your-world`, based on current main in
-`/tmp/artist-os-signals-world`. Slice 1 has contracts, host entry points, durable
-evidence/coverage, tracked admission/retry, and new opt-in workflows. Slice 1's
-independent review and final regression/typecheck/main-process build gates passed;
-see [implementation evidence](../audits/signals-your-world.md).
-Slice 2 now implements the two-track reader, explicit setup adoption, weekly
-controls, one-off links, report metadata and audio eligibility. Its independent
-review, rendered checks, and final merged-base regression/typecheck/build gates
-passed. Slice 3 now implements bounded worker retrieval and deliberate draft
-handoff, including persistent source validation at Send and failed-send recovery.
-Its independent review/fix, rendered checks, final 8,653-test suite, monorepo
-typecheck, and Artist OS main/renderer build gates passed. Slice 3 is committed
-as `7ca3dd2d4`; landing into main and approved live acceptance remain.
-These changes remain on the feature branch, not the main running app. No live
-agent scan or paid transcript/audio call is claimed by the fixture tests.
+All three slices are implemented and independently reviewed: collection and
+lifecycle (`572d5ed6f`), reader/setup/audio (`da73c5a5a`), and bounded retrieval
+with deliberate worker handoffs (`7ca3dd2d4`). Follow-up report, retry, provider
+and existing-install hardening, including the Signals info popover, is committed
+as `a77d54441`. Implementation branch: `codex/signals-your-world`.
+See [implementation and integration evidence](../audits/signals-your-world.md)
+for the post-main-merge regression/typecheck/build gates and landing record.
+Live-account acceptance remains separate: no live agent scan or paid
+transcript/audio call is claimed by the fixture tests.
 
 The follow-up hardening slice adds native YouTube -> Monid metadata, and native
 transcripts -> Monid -> Zero. Completed transcript evidence is reused before
