@@ -24,6 +24,13 @@ const LOCAL_EOU_SILENCE_MS = 500;
 const LOCAL_EOU_MIN_RMS_THRESHOLD = 0.00025;
 const LOCAL_EOU_MAX_RMS_THRESHOLD = 0.0015;
 const LOCAL_EOU_NOISE_MULTIPLIER = 2.5;
+// A second, conservative boundary for an AGC/room floor above the quiet threshold.
+// Require a sustained energy drop, stable noise, and no new recognized words.
+const ROOM_NOISE_EOU_MS = 1_200;
+const ROOM_NOISE_SPEECH_RATIO = 0.25;
+const ROOM_NOISE_MAX_RMS = 0.01;
+const ROOM_NOISE_MAX_VARIATION = 1.5;
+const SPEECH_REFERENCE_WINDOW_MS = 300;
 const SPEECH_GATE_MIN_RMS_THRESHOLD = 0.0015;
 const SPEECH_GATE_NOISE_MULTIPLIER = 4;
 const SPEECH_GATE_CONFIRM_MS = 150;
@@ -64,6 +71,13 @@ export class ElectronMoonshineSttTransport implements WebSttTransportContract {
   #latestPartial = "";
   #silenceMs = 0;
   #noiseFloorRms: number | null = null;
+  #speechReferenceRms = 0;
+  #referenceWindow: Array<{ level: number; durationMs: number }> = [];
+  #referenceWindowMs = 0;
+  #roomNoiseMs = 0;
+  #roomNoiseMinRms = Infinity;
+  #roomNoiseMaxRms = 0;
+  #lastPartialChangeAudioMs = 0;
   #speechGateOpen = false;
   #speechCandidateMs = 0;
   #speechGateNoiseFloorRms: number | null = null;
@@ -222,11 +236,54 @@ export class ElectronMoonshineSttTransport implements WebSttTransportContract {
     this.#silenceMs = level <= threshold
       ? this.#silenceMs + durationMs
       : 0;
-    if (this.#silenceMs < LOCAL_EOU_SILENCE_MS) return;
+    const roomNoiseEnded = this.#observeRoomNoiseBoundary(level, durationMs);
+    if (this.#silenceMs < LOCAL_EOU_SILENCE_MS && !roomNoiseEnded) return;
     const turn = this.#turn;
     this.#pendingFinalizationTurn = turn;
     this.#armFinalizationDeadline();
     await this.#waitForTurnOperation(this.#api.finalizeMoonshineRuntime(turn));
+  }
+
+  #observeRoomNoiseBoundary(level: number, durationMs: number): boolean {
+    this.#referenceWindow.push({ level, durationMs });
+    this.#referenceWindowMs += durationMs;
+    while (this.#referenceWindowMs > SPEECH_REFERENCE_WINDOW_MS && this.#referenceWindow.length > 1) {
+      const first = this.#referenceWindow[0];
+      const excess = this.#referenceWindowMs - SPEECH_REFERENCE_WINDOW_MS;
+      const removedMs = Math.min(first.durationMs, excess);
+      first.durationMs -= removedMs;
+      this.#referenceWindowMs -= removedMs;
+      if (first.durationMs === 0) this.#referenceWindow.shift();
+    }
+    if (this.#referenceWindowMs >= SPEECH_REFERENCE_WINDOW_MS) {
+      // A weighted median avoids raising the speech reference on a single click.
+      const ordered = [...this.#referenceWindow].sort((a, b) => a.level - b.level);
+      let elapsedMs = 0;
+      for (const item of ordered) {
+        elapsedMs += item.durationMs;
+        if (elapsedMs >= this.#referenceWindowMs / 2) {
+          this.#speechReferenceRms = Math.max(this.#speechReferenceRms, item.level);
+          break;
+        }
+      }
+    }
+    const ceiling = Math.min(ROOM_NOISE_MAX_RMS, this.#speechReferenceRms * ROOM_NOISE_SPEECH_RATIO);
+    if (!this.#latestPartial || level > ceiling) {
+      this.#roomNoiseMs = 0;
+      this.#roomNoiseMinRms = Infinity;
+      this.#roomNoiseMaxRms = 0;
+      return false;
+    }
+    this.#roomNoiseMinRms = Math.min(this.#roomNoiseMinRms, level);
+    this.#roomNoiseMaxRms = Math.max(this.#roomNoiseMaxRms, level);
+    if (this.#roomNoiseMaxRms > Math.max(LOCAL_EOU_MIN_RMS_THRESHOLD, this.#roomNoiseMinRms) * ROOM_NOISE_MAX_VARIATION) {
+      this.#roomNoiseMs = 0;
+      this.#roomNoiseMinRms = level;
+      this.#roomNoiseMaxRms = level;
+    }
+    this.#roomNoiseMs += durationMs;
+    return this.#roomNoiseMs >= ROOM_NOISE_EOU_MS
+      && this.#utteranceAudioMs - this.#lastPartialChangeAudioMs >= ROOM_NOISE_EOU_MS;
   }
 
   #schedulePoll(epoch: number): void {
@@ -250,6 +307,9 @@ export class ElectronMoonshineSttTransport implements WebSttTransportContract {
         if (!this.#speechGateOpen) continue;
         if (!token.text.trim()) continue;
         if (!token.isFinal) {
+          if (token.text.trim() !== this.#latestPartial.trim()) {
+            this.#lastPartialChangeAudioMs = this.#utteranceAudioMs;
+          }
           this.#latestPartial = token.text;
           this.#emit({ type: "partial", text: token.text });
         }
@@ -326,6 +386,13 @@ export class ElectronMoonshineSttTransport implements WebSttTransportContract {
     this.#latestPartial = "";
     this.#silenceMs = 0;
     this.#noiseFloorRms = null;
+    this.#speechReferenceRms = 0;
+    this.#referenceWindow = [];
+    this.#referenceWindowMs = 0;
+    this.#roomNoiseMs = 0;
+    this.#roomNoiseMinRms = Infinity;
+    this.#roomNoiseMaxRms = 0;
+    this.#lastPartialChangeAudioMs = 0;
     this.#speechGateOpen = false;
     this.#speechCandidateMs = 0;
     this.#speechGateNoiseFloorRms = null;
@@ -362,7 +429,7 @@ export class ElectronMoonshineSttTransport implements WebSttTransportContract {
 
     this.#speechGateOpen = true;
     this.#utteranceTimer = setTimeout(() => {
-      this.#fail(new Error("Moonshine could not find the end of speech within 60 seconds. No command was submitted. Pause background audio and press Start to retry."));
+      this.#fail(new Error("Moonshine could not finish this turn within 60 seconds. No command was submitted. Try again in a quieter spot."));
     }, MAX_UTTERANCE_MS);
     const preroll = this.#speechPreroll;
     this.#speechPreroll = [];
@@ -381,7 +448,7 @@ export class ElectronMoonshineSttTransport implements WebSttTransportContract {
   async #feedChunk(pcm16: Int16Array, sampleRate: number, channels: number): Promise<void> {
     this.#utteranceAudioMs += pcm16.length / channels / sampleRate * 1_000;
     if (this.#utteranceAudioMs > MAX_UTTERANCE_MS) {
-      const error = new Error("Moonshine speech exceeded the 60-second turn limit. No command was submitted. Use shorter phrases and press Start to retry.");
+      const error = new Error("Moonshine could not finish this turn within the 60-second turn limit. No command was submitted. Try again in a quieter spot.");
       this.#fail(error);
       throw error;
     }

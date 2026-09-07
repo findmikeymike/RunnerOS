@@ -446,3 +446,38 @@ Evidence: `/private/tmp/artist-os-voice-greeting-live-results.json`.
 Settings verification: five pure model-option tests, eight browser checks
 against the actual page/components with mocked IPC, and Electron typecheck.
 Screenshot: `/private/tmp/artist-os-voice-settings-redesign/conversation-settings.png`.
+
+
+### Room-noise turn-finalization repair (2026-09-07)
+
+Reproduced the reported 60-second error using the actual Moonshine renderer
+transport with a ten-second synthetic phrase followed by a rising room floor:
+12 to 40 PCM and 40 to 72 PCM both failed. The existing endpoint detector
+freezes its noise floor after the first partial and caps its silence threshold;
+it can therefore treat background noise as continuing speech. Prewarm reuse
+called native start once and was not the reproduced cause. Historical live
+baselines and current settings both select Moonshine Balanced, not a tier downgrade.
+These fixtures prove the mechanism, not the exact acoustics of the user's call.
+
+The upstream renderer now retains the existing 500 ms quiet endpoint and adds
+a conservative 1,200 ms stable-room-floor endpoint: energy must remain at most
+25% of a robust 300 ms speech reference, below 0.01 RMS, vary by at most 1.5x,
+and the recognized partial must be unchanged for 1,200 ms of accepted audio.
+Word progress and renewed speech energy prevent accumulated silence from
+ending an active utterance. A single click cannot establish the speech reference.
+Native finalization acknowledgement is still required before text is promoted.
+The 60-second resource limit remains; its error no longer claims the user's
+phrase was too long. The snapshot imports only this changed renderer source;
+existing web/native artifacts are unchanged because their source did not change.
+
+Twenty-one renderer tests pass, including both noise reproductions, quiet
+continuing words, variable low speech energy, transient dips, a loud click and
+delayed native acknowledgement. Electron wrapper typechecks pass. Source
+reproduction now ends the two noisy fixtures after 1,200 ms with exactly one
+final and no errors; the quiet baseline remains 500 ms. Evidence:
+`/private/tmp/moonshine-room-noise-fixed-results.json` and
+`/private/tmp/moonshine-endpoint-tests.log`.
+
+This is an energy-plus-transcript heuristic, not neural VAD. A sufficiently
+quiet, steady utterance whose recognizer stops producing new words can still
+be ambiguous; live microphone verification remains necessary.
