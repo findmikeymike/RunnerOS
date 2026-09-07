@@ -174,6 +174,8 @@ import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
 import { findExactWorkflowStepOutput } from '../workflows/step-output'
 import { ScheduledWorkRunner, type ScheduledSocialExecutor, type ScheduledSocialPreparer } from '../scheduled-work/ScheduledWorkRunner'
 import { queueAutomationWork } from '../scheduled-work/AutomationWorkQueue'
+import { SignalService } from '../signals/SignalService'
+import { seedSignalWorkflows } from '../signals/seed-workflows'
 import {
   ChatGoalDriver,
   buildChatGoalContinuationPrompt,
@@ -2674,7 +2676,9 @@ export class SessionManager implements ISessionManager {
           const failures: unknown[] = []
           for (const pending of pendingWork) {
             try {
-              const queued = await queueAutomationWork(workspaceId, workspaceRootPath, pending, {
+              const queued = pending.action.execution.type === 'workflow-run' && pending.action.execution.triggerInputs?.signalContract === 'signals-v1'
+                ? await this.getSignalService().queueScheduled(workspaceId, pending)
+                : await queueAutomationWork(workspaceId, workspaceRootPath, pending, {
                 log: sessionLog,
                 emitContextChanged: (changedWorkspaceId, docs) => {
                   scheduleHqStateContextRefresh(workspaceRootPath)
@@ -3277,6 +3281,9 @@ export class SessionManager implements ISessionManager {
   }
 
   private broadcastWorkflowRunUpdated(event: WorkflowRunEvent): void {
+    if (event.type === 'run.completed' && event.run.trigger.inputs.signalContract === 'signals-v1') {
+      void this.getSignalService().reconcile(event.run.workspaceId).catch(() => {})
+    }
     if (event.type === 'escalation.created') {
       this.eventSink?.(
         RPC_CHANNELS.workflowRuns.ATTENTION_UPDATED,
@@ -3312,6 +3319,15 @@ export class SessionManager implements ISessionManager {
   /** Expose the workflow runner so RPC handlers can reach it via HandlerDeps. */
   getWorkflowRunner(): WorkflowRunner {
     return this.workflowRunner
+  }
+
+  private signalService?: SignalService
+  getSignalService(): SignalService {
+    return this.signalService ??= new SignalService({
+      admitRetry: (original, retry, orderIds) => this.getScheduledWorkRunner().admitSignalWorkflowRetry(getWorkspaceByNameOrId(original.workspaceId)!.rootPath, original, retry, orderIds),
+      wake: workspace => { void this.getScheduledWorkRunner().scanWorkspace(workspace.id, workspace.rootPath).catch(() => {}) },
+      changed: workspaceId => { this.eventSink?.(RPC_CHANNELS.outputs.UPDATED, { to: 'workspace', workspaceId }, workspaceId) },
+    })
   }
 
   async queueTrackedWorkAutomation(input: {
@@ -3382,6 +3398,11 @@ export class SessionManager implements ISessionManager {
           })
         },
         startWorkflow: async ({ workOrderId, workspace, workflowSlug, workflowDigest, triggerInputs, untrustedTriggerInputs }) => {
+          if (triggerInputs.signalContract === 'signals-v1') {
+            return this.getSignalService().startAdmitted(workspace.id, workOrderId, workflowSlug, workflowDigest, triggerInputs,
+              (workflow, request) => this.workflowRunner.start({ workflow, workspaceId: workspace.id, runId: request.identity.workflowRunId,
+                triggerInputs: normalizeWorkflowTriggerInputs(workflow, { ...triggerInputs, signalPacket: this.getSignalService().packetInput(request) }), untrustedTriggerInputs }));
+          }
           if (!readActivatedWorkflows(workspace.rootPath).active.includes(workflowSlug)) {
             throw new Error(`Workflow "${workflowSlug}" is not active in this workspace.`)
           }
@@ -3565,6 +3586,7 @@ export class SessionManager implements ISessionManager {
     signal: AbortSignal,
   ): Promise<void> {
     signal.throwIfAborted()
+    if (await this.getSignalService().complete(run, signal)) return
     if (run.workflowSlug !== WEEKLY_SIGNAL_SCAN_SLUG) return
     const workspace = getWorkspaceByNameOrId(run.workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${run.workspaceId}`)
@@ -6029,6 +6051,7 @@ user a clickable link to where the thing now lives.`
           WEEKLY_SIGNAL_SCAN_SLUG,
         } = await import('@craft-agent/shared/workflows')
         const { seeded: workflowsSeeded } = seedGlobalWorkflowLibraryIfEmpty(STARTER_WORKFLOWS)
+        seedSignalWorkflows()
         if (workflowsSeeded > 0) {
           sessionLog.info(`[workflows] Seeded ${workflowsSeeded} starter workflow(s) into global library`)
         }
@@ -6286,6 +6309,8 @@ user a clickable link to where the thing now lives.`
           return ws.rootPath
         },
         postProcessSucceededRun: (run, signal) => this.postProcessCompletedWorkflowRun(run, signal),
+        completeWithoutSteps: (run, signal) => this.getSignalService().completeEmpty(run, signal),
+        authorizeRerun: (original, retry) => this.getSignalService().authorizeRetry(original, retry),
         emit: (event) => this.broadcastWorkflowRunUpdated(event),
       })
 

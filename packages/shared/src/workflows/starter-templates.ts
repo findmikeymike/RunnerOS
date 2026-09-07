@@ -8,6 +8,7 @@
  */
 
 import type { WorkflowMetadata } from './types.ts';
+import { SIGNAL_CONTRACT_WORKFLOWS, SIGNAL_CONTRACT_WORKFLOW_SLUGS } from './signal-workflows.ts';
 import { SIGNAL_BRIEFING_INSTRUCTIONS } from '../shared-intel/briefing.ts';
 
 export const WEEKLY_CONTENT_PIPELINE_SLUG = 'weekly-content-pipeline';
@@ -1308,6 +1309,7 @@ export const STARTER_WORKFLOWS: ReadonlyArray<{
   industryOutreachPipeline,
   collegeRadioCampaign,
   merchProductBuilder,
+  ...SIGNAL_CONTRACT_WORKFLOWS,
 ];
 
 export const STARTER_WORKFLOW_SLUGS: readonly string[] = STARTER_WORKFLOWS.map((w) => w.slug);
@@ -1318,6 +1320,7 @@ export const STARTER_WORKFLOW_SLUGS: readonly string[] = STARTER_WORKFLOWS.map((
  * preserving user-edited copies.
  */
 export const ENSURED_STARTER_WORKFLOW_SLUGS = [
+  ...SIGNAL_CONTRACT_WORKFLOW_SLUGS,
   SOCIAL_COMMENT_REPLIES_SLUG,
   WEEKLY_SIGNAL_SCAN_SLUG,
   CONTENT_MASTERMIND_SLUG,
@@ -1329,10 +1332,11 @@ export const ENSURED_STARTER_WORKFLOW_SLUGS = [
 
 /** Automatically active in new Artist HQ workspaces. */
 export const HQ_DEFAULT_WORKFLOW_SLUGS = STARTER_WORKFLOW_SLUGS.filter(
-  (slug) => slug !== COLLEGE_RADIO_CAMPAIGN_SLUG && slug !== MERCH_PRODUCT_BUILDER_SLUG,
+  (slug) => slug !== COLLEGE_RADIO_CAMPAIGN_SLUG && slug !== MERCH_PRODUCT_BUILDER_SLUG
+    && !SIGNAL_CONTRACT_WORKFLOW_SLUGS.some(signalSlug => signalSlug === slug),
 );
 
 /** Automatically active in new Campaign workspaces. */
 export const CAMPAIGN_DEFAULT_WORKFLOW_SLUGS = STARTER_WORKFLOW_SLUGS.filter(
-  (slug) => slug !== WEEKLY_SIGNAL_SCAN_SLUG,
+  (slug) => slug !== WEEKLY_SIGNAL_SCAN_SLUG && !SIGNAL_CONTRACT_WORKFLOW_SLUGS.some(signalSlug => signalSlug === slug),
 );

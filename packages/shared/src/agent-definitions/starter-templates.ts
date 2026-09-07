@@ -11,6 +11,7 @@
 
 import type { CreateAgentInput } from './storage.ts'
 import { SIGNAL_BRIEFING_INSTRUCTIONS } from '../shared-intel/briefing.ts'
+import { signalTrackPromptPrefix } from './signal-track-prompts.ts'
 import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, SONG_DIRECTOR_SLUG, OPEN_SLIDE_AGENT_SLUG } from './types.ts'
 import { CONCIERGE_SYSTEM_SKILL_SLUGS, CREATOR_SYSTEM_SKILL_SLUGS } from '../skills/system.ts'
 import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts'
@@ -27,7 +28,7 @@ const PORTABLE_AGENT_LIBRARY_ROOT = RUNTIME_IDENTITY.variant === 'artist-os'
  * system prompt teaches it to *plan and decompose* rather than execute,
  * which is useful even before Rooms ship.
  */
-export const STARTER_AGENTS: CreateAgentInput[] = [
+const BASE_STARTER_AGENTS: CreateAgentInput[] = [
   {
     slug: ANYTHING_AGENT_SLUG,
     metadata: {
@@ -3209,3 +3210,8 @@ You are not here to be liked. You are here to make the work better.
 **Memory scope.** When you call \`save_memory\`, default to \`scope: agent\` — what the user finds useful in critique (harshness level, line-by-line vs. summary, etc.) is about your specific collaboration. Use \`scope: user\` only when the fact is about the user's general work standards (e.g., "user values root-cause over surface fixes across all domains") and would inform other agents too.`,
   },
 ]
+
+export const STARTER_AGENTS: CreateAgentInput[] = BASE_STARTER_AGENTS.map(agent => ({
+  ...agent,
+  systemPrompt: `${signalTrackPromptPrefix(agent.slug)}${agent.systemPrompt}`,
+}))

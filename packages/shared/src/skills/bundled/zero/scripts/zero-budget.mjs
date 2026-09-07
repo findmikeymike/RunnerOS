@@ -53,7 +53,7 @@ function validateArgs(command, values) {
     configure: new Set(['weekly-limit', 'json']),
     authorize: new Set(['capability', 'method', 'max-calls', 'max-total-pay', 'expires-in-hours', 'purpose', 'json']),
     revoke: new Set(['authorization', 'json']),
-    fetch: new Set(['capability', 'max-pay', 'method', 'data-json', 'authorization', 'json']),
+    fetch: new Set(['capability', 'max-pay', 'method', 'data-json', 'query-json', 'expected-read-contract', 'authorization', 'json']),
   }[command];
   if (!allowed) fail('Usage: zero-budget.mjs <status|configure|authorize|revoke|fetch> [options]');
   for (const key of Object.keys(values)) {
@@ -322,7 +322,13 @@ function inspectCapability(capability) {
   const digest = createHash('sha256').update(JSON.stringify({
     uid: result.uid, slug: result.slug, url: result.url, method,
   })).digest('hex');
-  return { uid: result.uid, slug: result.slug, url: result.url, method, digest };
+  const readContractDigest = createHash('sha256').update(JSON.stringify({
+    uid: result.uid, slug: result.slug, url: result.url, method: result.method,
+    availabilityStatus: result.availabilityStatus, displayCostAmount: result.displayCostAmount,
+    displayCostAsset: result.displayCostAsset, bodySchema: result.bodySchema,
+  })).digest('hex');
+  return { uid: result.uid, slug: result.slug, url: result.url, method, digest, readContractDigest,
+    querySchema: result.bodySchema?.properties?.input?.properties?.queryParams };
 }
 
 function configure(values) {
@@ -399,11 +405,65 @@ function revoke(values) {
   });
 }
 
+function buildQueryUrl(raw, inspected, method) {
+  if (raw !== undefined && method !== 'GET') fail('--query-json is only supported for GET capabilities.');
+  if (method !== 'GET') return inspected.url;
+  let query = {};
+  if (raw !== undefined) {
+    if (raw.length > 262_144) fail('--query-json exceeds the 256 KB automatic-call limit.');
+    try { query = JSON.parse(raw); } catch { fail('--query-json must be valid JSON.'); }
+    if (!isRecord(query)) fail('--query-json must be a JSON object of scalar values.');
+  }
+  const schema = inspected.querySchema;
+  if (schema === undefined && raw === undefined) return inspected.url;
+  if (!isRecord(schema) || schema.type !== 'object' || !isRecord(schema.properties)
+    || (schema.required !== undefined && (!Array.isArray(schema.required)
+      || schema.required.some(key => typeof key !== 'string' || !Object.hasOwn(schema.properties, key))))) {
+    fail('The live capability must declare a valid queryParams object schema.');
+  }
+  const url = new URL(inspected.url);
+  for (const key of schema.required ?? []) {
+    if (!Object.hasOwn(query, key) && !url.searchParams.has(key)) fail(`Missing required query parameter: ${key}`);
+  }
+  for (const [key, value] of Object.entries(query)) {
+    if (!Object.hasOwn(schema.properties, key)) fail(`Unknown query parameter: ${key}`);
+    if (url.searchParams.has(key)) fail(`Cannot override configured query parameter: ${key}`);
+    const rule = schema.properties[key];
+    if (!isRecord(rule) || !['string', 'number', 'integer', 'boolean'].includes(rule.type)) {
+      fail(`Query parameter ${key} must declare a supported primitive type.`);
+    }
+    const validType = rule.type === 'integer' ? Number.isSafeInteger(value)
+      : typeof value === rule.type && (rule.type !== 'number' || Number.isFinite(value));
+    if (!validType) fail(`Query parameter ${key} must be ${rule.type}.`);
+    if (rule.enum !== undefined && (!Array.isArray(rule.enum) || !rule.enum.includes(value))) {
+      fail(`Query parameter ${key} is outside its declared enum.`);
+    }
+    for (const [bound, invalid] of [
+      ['minimum', value < rule.minimum], ['maximum', value > rule.maximum],
+      ['exclusiveMinimum', value <= rule.exclusiveMinimum], ['exclusiveMaximum', value >= rule.exclusiveMaximum],
+      ['minLength', typeof value === 'string' && Array.from(value).length < rule.minLength],
+      ['maxLength', typeof value === 'string' && Array.from(value).length > rule.maxLength],
+    ]) {
+      if (rule[bound] !== undefined && (!Number.isFinite(rule[bound]) || invalid)) {
+        fail(`Query parameter ${key} violates ${bound}.`);
+      }
+    }
+    if (rule.pattern !== undefined) {
+      let pattern;
+      try { pattern = new RegExp(rule.pattern, 'u'); } catch { fail(`Query parameter ${key} has an invalid pattern.`); }
+      if (typeof value !== 'string' || !pattern.test(value)) fail(`Query parameter ${key} violates pattern.`);
+    }
+    url.searchParams.append(key, String(value));
+  }
+  return url.toString();
+}
+
 function buildFetchArgs(values, maxPay, inspected) {
   const method = normalizeMethod(values.method ?? inspected.method);
   if (method !== inspected.method) fail('Requested method does not match the inspected Zero capability.', 7);
   if (method === 'GET' && values['data-json']) fail('GET capabilities cannot receive --data-json.');
-  const args = ['fetch', inspected.url, '--capability', inspected.slug, '--method', method];
+  const url = buildQueryUrl(values['query-json'], inspected, method);
+  const args = ['fetch', url, '--capability', inspected.slug, '--method', method];
   if (values['data-json']) {
     if (values['data-json'].length > 262_144) fail('--data-json exceeds the 256 KB automatic-call limit.');
     try {
@@ -494,6 +554,12 @@ function settle(entryId, result, fallback) {
 function fetchCapability(values) {
   const maxPay = number(values['max-pay'], '--max-pay');
   const inspected = inspectCapability(values.capability);
+  const expected = values['expected-read-contract'];
+  if (expected !== undefined) {
+    if (!/^[a-f0-9]{64}$/i.test(expected)) fail('--expected-read-contract must be a 64-character SHA256 hex digest.');
+    if (inspected.method !== 'GET') fail('--expected-read-contract is only supported for GET capabilities.');
+    if (expected.toLowerCase() !== inspected.readContractDigest) fail('Zero read contract changed since preflight. Reinspect before spending.', 7);
+  }
   const built = buildFetchArgs(values, maxPay, inspected);
   const reservation = reserve(values, maxPay, inspected, built.method);
   const child = spawnSync(zeroCli(), built.args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });

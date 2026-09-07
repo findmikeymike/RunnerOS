@@ -30,6 +30,7 @@ import { join } from 'node:path';
 import { matter, stringifyFrontmatter, type GrayMatterFile } from '../config/frontmatter';
 import { atomicWriteFileSync } from '../utils/files.ts';
 import { SIGNAL_BRIEFING_INSTRUCTIONS } from '../shared-intel/briefing.ts';
+import { isPreviousSignalTrackPrompt } from './signal-track-prompts.ts';
 import type { PermissionMode } from '../agent/mode-types.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 import { normalizeThinkingLevel, THINKING_LEVEL_IDS } from '../agent/thinking-levels.ts';
@@ -615,8 +616,9 @@ export function ensureRequiredAgents(
       // Keep installed workflows byte-identical: schedules pin their definition
       // digest, but resolve this agent prompt live when the synthesis step starts.
       const suffix = `\n\n${SIGNAL_BRIEFING_INSTRUCTIONS}`;
-      if (a.slug === 'signal-analyst-agent' && a.systemPrompt.endsWith(suffix)
-        && existing.systemPrompt === a.systemPrompt.slice(0, -suffix.length)) {
+      if ((a.slug === 'signal-analyst-agent' && a.systemPrompt.endsWith(suffix)
+        && existing.systemPrompt === a.systemPrompt.slice(0, -suffix.length))
+        || isPreviousSignalTrackPrompt(a.slug, existing.systemPrompt, a.systemPrompt, suffix)) {
         replaceBuiltInAgentPromptText(a.slug, existing.systemPrompt, a.systemPrompt, options);
       }
       continue;

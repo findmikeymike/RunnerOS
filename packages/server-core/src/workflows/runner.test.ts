@@ -51,6 +51,25 @@ const MISSING_RUN_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const INACTIVE_RUN_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const TERMINAL_RUN_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 
+test('host empty completion persists supplied identity without creating agent sessions', async () => {
+  const h = makeHarness();
+  const runner = new WorkflowRunner({ ...h.deps, completeWithoutSteps: async () => true });
+  await runner.start({ workflow: makeWorkflow(), workspaceId: WORKSPACE_ID, triggerInputs: { topic: 'empty' }, runId: TERMINAL_RUN_ID });
+  await waitFor(() => lastCompleted(h.events) !== undefined);
+  expect(readRun(workspaceRoot, TERMINAL_RUN_ID)?.state).toBe('succeeded');
+  expect(h.sessions.size).toBe(0);
+  await expect(runner.start({ workflow: makeWorkflow(), workspaceId: WORKSPACE_ID, triggerInputs: { topic: 'empty' }, runId: TERMINAL_RUN_ID })).rejects.toThrow();
+});
+
+test('host provenance rejection fails before creating agent sessions', async () => {
+  const h = makeHarness();
+  const runner = new WorkflowRunner({ ...h.deps, completeWithoutSteps: async () => { throw new Error('Invalid host provenance'); } });
+  const started = await runner.start({ workflow: makeWorkflow(), workspaceId: WORKSPACE_ID, triggerInputs: { topic: 'empty' } });
+  await waitFor(() => lastCompleted(h.events) !== undefined);
+  expect(readRun(workspaceRoot, started.id)?.state).toBe('failed');
+  expect(h.sessions.size).toBe(0);
+});
+
 function makeWorkflow(metadata: Partial<WorkflowMetadata> = {}): LoadedWorkflow {
   const md: WorkflowMetadata = {
     name: 'Test',

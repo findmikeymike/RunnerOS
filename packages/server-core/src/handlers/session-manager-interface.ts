@@ -36,6 +36,7 @@ export interface WorkspaceMigrationRuntimeLease {
 }
 
 export interface ISessionManager {
+  getSignalService(): import('../signals/SignalService').SignalService
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------

@@ -120,3 +120,4 @@ export {
   CAMPAIGN_DEFAULT_WORKFLOW_SLUGS,
   SOCIAL_COMMENT_REPLIES_SLUG,
 } from './starter-templates.ts';
+export * from './signal-workflows.ts';

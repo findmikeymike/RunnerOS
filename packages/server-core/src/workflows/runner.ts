@@ -155,6 +155,10 @@ export interface WorkflowRunnerDeps {
   markWorkflowOutputError?: (run: WorkflowRunSnapshot, err: unknown) => Promise<WorkflowRunSnapshot> | WorkflowRunSnapshot;
   /** Run host-owned completion side effects after the default Output is finalized. */
   postProcessSucceededRun?: (run: WorkflowRunSnapshot, signal: AbortSignal) => Promise<void> | void;
+  /** A host-proven empty scan may complete without starting LLM sessions. */
+  completeWithoutSteps?: (run: WorkflowRunSnapshot, signal: AbortSignal) => Promise<boolean>;
+  /** Host authorizes the persisted old-to-new retry association before any step starts. */
+  authorizeRerun?: (original: WorkflowRunSnapshot, retry: WorkflowRunSnapshot) => Promise<void>;
   /** Emit a runner event for renderer subscribers. No-op safe. */
   emit?: (event: WorkflowRunEvent) => void;
 }
@@ -352,12 +356,14 @@ export class WorkflowRunner {
     workspaceId: string;
     triggerInputs: Record<string, unknown>;
     untrustedTriggerInputs?: string[];
+    runId?: string;
   }): Promise<WorkflowRunSnapshot> {
     const { workflow, workspaceId } = input;
     const triggerInputs = normalizeWorkflowTriggerInputs(workflow, input.triggerInputs);
     const key = concurrencyKey(workspaceId, workflow.slug);
     this.assertStepBudget(workflow.metadata.steps);
-    const runId = randomUUID();
+    const runId = input.runId ?? randomUUID();
+    if (input.runId && (!/^[a-f0-9-]{36}$/i.test(input.runId) || readRun(this.deps.getWorkspaceRootPath(workspaceId), input.runId))) throw new Error('Workflow run identity already exists or is invalid.');
     this.reserveConcurrencyKey(key, runId, workflow.slug, workspaceId);
 
     try {
@@ -516,6 +522,8 @@ export class WorkflowRunner {
         updatedAt: now,
       });
 
+      await this.deps.authorizeRerun?.(this.cloneSnapshot(original), this.cloneSnapshot(snapshot));
+
       this.emitEvent({ type: 'run.created', run: this.cloneSnapshot(active.snapshot) });
       this.emitEvent({ type: 'run.updated', run: this.cloneSnapshot(active.snapshot) });
       void this.runStepLoop(active);
@@ -523,7 +531,10 @@ export class WorkflowRunner {
       return this.cloneSnapshot(active.snapshot);
     } catch (error) {
       const active = this.active.get(runId);
-      if (active) this.releaseActiveRun(active);
+      if (active) {
+        active.snapshot.state = 'failed'; active.snapshot.completedAt = new Date().toISOString();
+        this.persist(active); this.releaseActiveRun(active);
+      }
       else this.releaseConcurrencyKey(key, runId);
       throw error;
     }
@@ -644,6 +655,14 @@ export class WorkflowRunner {
   }
 
   private async executeStepLoop(active: ActiveRun): Promise<void> {
+    if (await this.deps.completeWithoutSteps?.(this.cloneSnapshot(active.snapshot), active.abort.signal)) {
+      active.snapshot.state = active.abort.signal.aborted ? 'cancelled' : 'succeeded';
+      active.snapshot.completedAt = new Date().toISOString();
+      this.touch(active);
+      this.releaseActiveRun(active);
+      this.emitEvent({ type: 'run.completed', run: this.cloneSnapshot(active.snapshot) });
+      return;
+    }
     const runStartedAt = active.snapshot.createdAt;
     const workflow = active.snapshot.workflowSnapshot;
     let failed = false;

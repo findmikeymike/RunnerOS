@@ -703,6 +703,12 @@ export const RPC_CHANNELS = {
     READ_ASSET_DATA_URL: 'outputs:readAssetDataUrl',
     UPDATED: 'outputs:updated',
   },
+  signals: {
+    GET: 'signals:get',
+    RESOLVE_CHANNEL: 'signals:resolveChannel',
+    SAVE_CONFIG: 'signals:saveConfig',
+    START: 'signals:start',
+  },
   videoStudio: {
     IMPORT_MEDIA: 'video-studio:importMedia',
     INSPECT: 'video-studio:inspect',

@@ -1454,6 +1454,10 @@ export interface ElectronAPI {
   showOutputInFolder(workspaceId: string, outputId: string, assetIdOrPath?: string): Promise<void>
   readOutputAssetText(workspaceId: string, outputId: string, assetId?: string): Promise<string>
   readSignalBriefingAudio(workspaceId: string, outputId: string, expectedBriefing: string): Promise<{ audioDataUrl: string }>
+  getSignalState(workspaceId: string): Promise<import('@craft-agent/shared/shared-intel').SignalState>
+  resolveSignalChannel(workspaceId: string, url: string): Promise<import('@craft-agent/shared/shared-intel').SignalChannel>
+  saveSignalConfig(workspaceId: string, track: import('@craft-agent/shared/shared-intel').SignalTrack, config: import('@craft-agent/shared/shared-intel').SignalTrackConfig, expectedRevision: string): Promise<import('@craft-agent/shared/shared-intel').SignalState>
+  startSignalResearch(workspaceId: string, input: { track: import('@craft-agent/shared/shared-intel').SignalTrack; mode: import('@craft-agent/shared/shared-intel').SignalMode; idempotencyKey: string; links?: string[] }): Promise<import('@craft-agent/shared/shared-intel').SignalQueueResult>
   writeOutputAssetText(workspaceId: string, outputId: string, assetId: string, content: string): Promise<boolean>
   readOutputAssetDataUrl(workspaceId: string, outputId: string, assetId?: string): Promise<string>
   importVideoStudioMedia(workspaceId: string, outputId: string, options?: { mode?: 'files' | 'folder' }): Promise<VideoStudioImportResult>
