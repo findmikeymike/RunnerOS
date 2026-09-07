@@ -1,5 +1,6 @@
 import type { WebLlmTransport, LlmTokenEvent } from '@voice-core/web/cloud'
 import type { VoiceFocusEvent, VoiceFocusSession } from '../../shared/artist-manager-voice-focus'
+import type { VoiceHandoffProposal } from '../../shared/artist-manager-voice-handoff'
 import type { ElectronAPI } from '../../shared/types'
 import type { VoiceTimingDetails, VoiceTimingStage } from './artist-manager-voice-timing'
 
@@ -8,6 +9,7 @@ type Deps = {
   ensureSession(): Promise<VoiceFocusSession>
   refreshPrompt(): Promise<string>
   onTiming?(stage: VoiceTimingStage, details?: VoiceTimingDetails): void
+  onHandoffReady?(proposal: VoiceHandoffProposal): void
   onUserText?(text: string): void
   onAssistantText?(text: string): void
 }
@@ -53,12 +55,17 @@ export function createVoiceFocusTransport(deps: Deps): WebLlmTransport & { stop(
           unsubscribe = deps.api.onEvent((event: VoiceFocusEvent) => {
             if (event.sessionId !== session!.sessionId || event.turnId !== turnId || done || failure || signal.aborted) return
             if (event.type === 'error') { fail(new Error(event.message)); return }
+            if (event.type === 'completion') {
+              deps.onTiming?.('manager-complete', { finishReason: event.finishReason, outputTokens: event.outputTokens, reasoningTokens: event.reasoningTokens })
+              return
+            }
+            if (event.type === 'handoff_ready') { deps.onHandoffReady?.(event.proposal); return }
             if (event.type === 'text_delta') {
               if (first) { first = false; deps.onTiming?.('manager-first-text') }
               answer += event.delta
               deps.onAssistantText?.(answer)
               queue.push({ text: event.delta })
-            } else {
+            } else if (event.type === 'done') {
               done = true
               deps.onTiming?.('answer-delivered', { chars: answer.length })
               queue.push({ text: '', done: true })

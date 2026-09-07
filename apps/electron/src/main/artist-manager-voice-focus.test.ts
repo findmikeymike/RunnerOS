@@ -39,12 +39,12 @@ describe('focused voice service', () => {
     const session = await service.register(7, registration)
     const events: VoiceFocusEvent[] = []
     await service.startTurn(7, { sessionId: session.sessionId, turnId: 'one', text: 'Hello' }, event => events.push(event))
-    expect(events.map(event => event.type)).toEqual(['text_delta', 'done'])
+    expect(events.map(event => event.type)).toEqual(['text_delta', 'completion', 'done'])
     expect(requests).toHaveLength(1)
     expect(requests[0]![0].id).toBe('test-model')
     expect(requests[0]![1].tools).toEqual([])
     expect(requests[0]![1].messages).toHaveLength(1)
-    expect(requests[0]![2]).toMatchObject({ toolChoice: 'none', maxRetries: 0, reasoning: 'low', maxTokens: 512, apiKey: 'private-api-key-canary' })
+    expect(requests[0]![2]).toMatchObject({ toolChoice: 'none', maxRetries: 0, reasoning: 'low', maxTokens: 2048, apiKey: 'private-api-key-canary' })
     expect(JSON.stringify({ session, events })).not.toContain('private-api-key-canary')
     service.close()
   })
@@ -61,6 +61,54 @@ describe('focused voice service', () => {
       expect(requests).toHaveLength(0)
       expect(credentials()).toBe(0)
     }
+  })
+
+  it('keeps the non-reasoning budget at 512 tokens', async () => {
+    const { service, requests } = fixture()
+    const session = await service.register(7, { ...registration, thinking: 'off' })
+    await service.startTurn(7, { sessionId: session.sessionId, turnId: 'one', text: 'Hello' }, () => {})
+    expect(requests[0]![2]).toMatchObject({ maxTokens: 512, reasoning: undefined, maxRetries: 0 })
+    service.close()
+  })
+
+  it('reports length-truncated speech ending in Can without done, successful history, or replay', async () => {
+    const messagesPerRequest: number[] = []
+    const { service } = fixture({ async stream(_model, context) {
+      messagesPerRequest.push(context.messages.length)
+      return (async function* () {
+        yield { type: 'text_delta', delta: 'Here is one useful idea. Can' }
+        yield { type: 'done', reason: 'length', message: { usage: { output: 512, reasoning: 482 } } }
+      })()
+    } })
+    const session = await service.register(7, registration)
+    const events: VoiceFocusEvent[] = []
+    const turn = { sessionId: session.sessionId, turnId: 'one', text: 'Content ideas?' }
+    await service.startTurn(7, turn, event => events.push(event))
+    expect(messagesPerRequest).toEqual([1])
+    expect(events).toEqual([
+      { sessionId: session.sessionId, turnId: 'one', type: 'text_delta', delta: 'Here is one useful idea. Can' },
+      { sessionId: session.sessionId, turnId: 'one', type: 'completion', finishReason: 'length', outputTokens: 512, reasoningTokens: 482 },
+      { sessionId: session.sessionId, turnId: 'one', type: 'error', message: 'The voice reply was cut short. Please try again.' },
+    ])
+    await service.startTurn(7, { ...turn, turnId: 'two' }, () => {})
+    expect(messagesPerRequest).toEqual([1, 1])
+    service.close()
+  })
+
+  it('emits only valid completion scalars and no raw SDK payload', async () => {
+    const { service } = fixture({ async stream() {
+      return (async function* () {
+        yield { type: 'text_delta', delta: 'Answer.' }
+        yield { type: 'done', reason: 'private-reason-canary', message: { usage: { output: NaN, reasoning: -1 }, content: 'private-content-canary', errorMessage: 'private-key-canary' } }
+      })()
+    } })
+    const session = await service.register(7, registration)
+    const events: VoiceFocusEvent[] = []
+    await service.startTurn(7, { sessionId: session.sessionId, turnId: 'one', text: 'Hello' }, event => events.push(event))
+    expect(events[1]).toEqual({ sessionId: session.sessionId, turnId: 'one', type: 'completion', finishReason: 'other' })
+    expect(events.map(event => event.type)).toEqual(['text_delta', 'completion', 'error'])
+    expect(JSON.stringify(events)).not.toContain('canary')
+    service.close()
   })
 
   it('enforces window ownership and rejects duplicate turns', async () => {

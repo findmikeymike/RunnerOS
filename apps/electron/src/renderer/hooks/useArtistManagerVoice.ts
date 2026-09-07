@@ -4,6 +4,8 @@ import type { AgentDefinitionDTO, LoadedSkill, LoadedSource, ArtistManagerMoonsh
 import { VoiceCoreWeb, createAssemblyAiSttTransport, createInworldTtsTransport, type VoiceEvent } from '@voice-core/web/cloud'
 import { buildAgentCreateSessionOptions, ensureAgentDeclaredSkillsEnabled, loadAgentMemoryEntries, loadUserMemoryEntries } from '@/lib/run-agent'
 import { createArtistManagerVoiceTransport } from '@/lib/artist-manager-voice-transport'
+import { normalizeVoiceHandoffTargets, type VoiceHandoffTarget, type VoiceHandoffProposal } from '../../shared/artist-manager-voice-handoff'
+import { createVoiceHandoffCoordinator } from '@/lib/artist-manager-voice-handoff'
 import { createVoiceFocusTransport } from '@/lib/artist-manager-voice-focus-transport'
 import { buildVoiceFocusPrompt } from '@/lib/artist-manager-voice-focus-prompt'
 import { applyVoiceModelTrial, buildArtistManagerVoiceSessionOptions, type VoiceModelTrial } from '@/lib/artist-manager-voice-session-policy'
@@ -38,6 +40,8 @@ export type ArtistManagerVoiceState = {
 
 export function useArtistManagerVoice(input: {
   workspaceId: string; agents: AgentDefinitionDTO[]; skills: LoadedSkill[]; sources: LoadedSource[]
+  handoffTargets?: VoiceHandoffTarget[]
+  onOpenCommand?(proposal: VoiceHandoffProposal, isCurrent: () => boolean): Promise<void>
 }): ArtistManagerVoiceState {
   const [timingEnabled, setTimingEnabled] = React.useState(false)
   const [typedTrial, setTypedTrial] = React.useState(false)
@@ -72,8 +76,14 @@ export function useArtistManagerVoice(input: {
   const installBusy = React.useRef(false)
   const unsubscribe = React.useRef<(() => void) | null>(null)
   const stopEpoch = React.useRef(0)
+  const currentInput = React.useRef(input)
+  currentInput.current = input
+  const handoff = React.useRef<ReturnType<typeof createVoiceHandoffCoordinator> | null>(null)
+  const shutdownSucceeded = React.useRef(true)
 
-  const stop = React.useCallback(async () => {
+  const stop = React.useCallback(async (cancelHandoff = true) => {
+    if (cancelHandoff) handoff.current?.cancel()
+    shutdownSucceeded.current = false
     const epoch = ++stopEpoch.current
     timingRef.current?.stop(); timingRef.current = null; runtimeRef.current = null
     const cleanup = lifecycle.stop()
@@ -81,6 +91,7 @@ export function useArtistManagerVoice(input: {
     if (mounted.current) { setRunning(false); setStarting(false); setStopping(true); setSessionId(null); setStatus('Stopping audio and agent…') }
     try {
       await cleanup
+      if (epoch === stopEpoch.current) shutdownSucceeded.current = true
       if (mounted.current && epoch === stopEpoch.current) setStatus('Ready when you are')
     } catch (cause) {
       if (mounted.current && epoch === stopEpoch.current) {
@@ -139,6 +150,7 @@ export function useArtistManagerVoice(input: {
     if (installBusy.current) return
     let ticket: number
     try { ticket = lifecycle.begin() } catch { return }
+    handoff.current?.cancel(); handoff.current = null
     stopEpoch.current++; setStopping(false)
     setStarting(true); setError(null); setUserText(''); setAssistantText(''); setSessionId(null); setConversationSessionId(null); setStatus('Connecting voice…')
     const alive = () => mounted.current && lifecycle.owns(ticket)
@@ -225,6 +237,28 @@ export function useArtistManagerVoice(input: {
         getToken: () => window.electronAPI.createArtistManagerVoiceAssemblyToken(),
         speechModel: 'universal-streaming-multilingual', formatTurns: true,
       })
+      let handoffArmed = false
+      let handoffStopEpoch = -1
+      const handoffCurrent = () => mounted.current && currentInput.current.workspaceId === input.workspaceId && (alive() || stopEpoch.current === handoffStopEpoch)
+      const coordinator = createVoiceHandoffCoordinator({
+        stop: async () => {
+          const cleanup = stop(false)
+          handoffStopEpoch = stopEpoch.current
+          await cleanup
+          if (!shutdownSucceeded.current) throw new Error('Audio shutdown failed; Command was not opened.')
+        },
+        isCurrent: handoffCurrent,
+        open: async proposal => {
+          const latest = currentInput.current
+          const destinationCurrent = () => handoffCurrent() && normalizeVoiceHandoffTargets(currentInput.current.handoffTargets ?? []).some(target => target.slug === proposal.agentSlug)
+          if (!latest.onOpenCommand || !destinationCurrent()) {
+            throw new Error('That agent is no longer available. Open Command to choose another agent.')
+          }
+          await latest.onOpenCommand(proposal, destinationCurrent)
+          if (mounted.current) setOpenState(false)
+        },
+      })
+      handoff.current = coordinator
       const refreshFocusPrompt = async () => {
         lifecycle.assertOwner(ticket)
         const docs = await window.electronAPI.listWorkspaceContextDocsForAgent(input.workspaceId, CONCIERGE_SLUG)
@@ -242,11 +276,13 @@ export function useArtistManagerVoice(input: {
             const session = await window.electronAPI.artistManagerVoiceFocus.register({
               workspaceId: input.workspaceId, systemPrompt,
               model: modelTrial.model.trim() || undefined, thinking: modelTrial.thinking || 'low',
+              handoffTargets: input.onOpenCommand ? normalizeVoiceHandoffTargets(input.handoffTargets ?? []) : [],
             })
             if (alive()) trace?.mark('session-setup-ready', { sessionId: session.sessionId, model: session.model, connection: session.connection, thinking: session.thinking })
             return session
           },
           refreshPrompt: refreshFocusPrompt,
+          onHandoffReady: proposal => { if (alive()) { handoffArmed = true; coordinator.ready(proposal) } },
           onTiming: (stage, details) => trace?.mark(stage, details),
           onUserText: text => { if (alive()) setUserText(text) },
           onAssistantText: text => { if (alive()) setAssistantText(text) },
@@ -267,6 +303,10 @@ export function useArtistManagerVoice(input: {
         trace?.event(event)
         if (event.type === 'userSpeechPartial' || event.type === 'userSpeechComplete') setUserText(event.text)
         else if (event.type === 'assistantText') setAssistantText(event.text)
+        else if (event.type === 'bargeIn' && handoffArmed) { coordinator.cancel(); void stop() }
+        else if (event.type === 'agentSpeechComplete') {
+          void coordinator.finish().catch(cause => { if (mounted.current) setError(messageFromError(cause)) })
+        }
         else if (event.type === 'assistantActivity') setStatus(event.text)
         else if (event.type === 'stateChanged') setStatus(labelForVoiceState(event.state))
         else if (event.type === 'error' || event.type === 'captureError' || event.type === 'renderError') { setError(event.message); void stop() }
@@ -280,7 +320,7 @@ export function useArtistManagerVoice(input: {
       trace?.mark('error')
       if (alive()) { await stop(); if (mounted.current) setError(messageFromError(cause)) }
     } finally { if (alive()) setStarting(false) }
-  }, [timingEnabled, typedTrial, modelTrial, focusedTrial, input.agents, input.skills, input.sources, input.workspaceId, lifecycle, managerStyle, sttSelection, inputDeviceId, outputDeviceId, stop, refreshDevices])
+  }, [timingEnabled, typedTrial, modelTrial, focusedTrial, input.agents, input.skills, input.sources, input.workspaceId, input.handoffTargets, input.onOpenCommand, lifecycle, managerStyle, sttSelection, inputDeviceId, outputDeviceId, stop, refreshDevices])
 
   const canSendTyped = timingEnabled && typedTrial && running && !typedSending && status === 'Listening…'
   const sendTyped = async (text: string) => {

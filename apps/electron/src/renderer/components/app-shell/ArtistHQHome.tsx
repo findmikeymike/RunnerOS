@@ -609,11 +609,27 @@ export function ArtistHQHome({
     () => dedupeAgentsBySlug([...shellActiveAgents, ...workspaceActiveAgents, ...allAgents]),
     [allAgents, shellActiveAgents, workspaceActiveAgents],
   )
+  const voiceHandoffAgents = React.useMemo(
+    () => dedupeAgentsBySlug([...shellActiveAgents, ...workspaceActiveAgents]),
+    [shellActiveAgents, workspaceActiveAgents],
+  )
   const managerVoice = useArtistManagerVoice({
     workspaceId,
     agents: availableAgents,
     skills,
     sources,
+    handoffTargets: voiceHandoffAgents.map(agent => ({ slug: agent.slug, name: agent.metadata.name, description: agent.metadata.description })),
+    onOpenCommand: async (proposal, isCurrent) => {
+      const agent = voiceHandoffAgents.find(candidate => candidate.slug === proposal.agentSlug)
+      if (!agent || !isCurrent()) throw new Error('The selected Command agent is no longer available.')
+      await openAgentSessionComposer({
+        agent, workspaceId, onCreateSession, onInputChange,
+        skills, sources, agentCatalog: voiceHandoffAgents,
+        draftInput: `Agreed in our voice conversation: ${proposal.taskTitle}\n\n${proposal.brief}`,
+        autoSendDraft: false,
+        shouldContinue: isCurrent,
+      })
+    },
   })
   const [managerAskBusy, setManagerAskBusy] = React.useState(false)
   const askManager = React.useCallback(async (text: string) => {

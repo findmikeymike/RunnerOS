@@ -4,13 +4,16 @@ import type { LlmConnection } from '@craft-agent/shared/config/llm-connections'
 import {
   VOICE_FOCUS_LIMITS,
   type VoiceFocusCancelRequest,
+  type VoiceFocusCompletion,
   type VoiceFocusEvent,
   type VoiceFocusRegisterRequest,
   type VoiceFocusSession,
   type VoiceFocusTurnRequest,
 } from '../shared/artist-manager-voice-focus'
 
-type StreamEvent = { type: string; delta?: string; reason?: string }
+import { normalizeVoiceHandoffTargets, buildVoiceHandoffTool, parseVoiceHandoffProposal, isVoiceHandoffConfirmation, type VoiceHandoffTarget, type VoiceHandoffProposal } from '../shared/artist-manager-voice-handoff'
+
+type StreamEvent = { type: string; delta?: string; reason?: string; toolCall?: { name: string; arguments: unknown }; message?: { usage?: { output?: number; reasoning?: number } } }
 export type VoiceFocusResolvedConfig = { connection: LlmConnection; model: string }
 export type VoiceFocusDependencies = {
   resolveConfig(request: VoiceFocusRegisterRequest): Promise<VoiceFocusResolvedConfig>
@@ -71,10 +74,13 @@ type SessionState = {
   history: Exchange[]
   active?: ActiveTurn
   usedTurns: Set<string>
+  handoffTargets: VoiceHandoffTarget[]
+  pendingHandoff?: { proposal: VoiceHandoffProposal; expiresAt: number }
+  handedOff?: boolean
 }
 type OwnerState = { session?: SessionState }
 
-/** No agent, tool registration, tool execution, model retries, or saved-config writes. */
+/** Direct streaming with one confirmation-gated Command handoff; no general agent executor. */
 export class ArtistManagerVoiceFocusService {
   private readonly owners = new Map<number, OwnerState>()
   constructor(private readonly deps: VoiceFocusDependencies = productionDependencies) {}
@@ -99,7 +105,7 @@ export class ArtistManagerVoiceFocusService {
       assertEndpoint(model.baseUrl)
       if (this.owners.get(ownerId) !== owner) throw new Error('Voice setup was cancelled')
       const info: VoiceFocusSession = { sessionId: randomUUID(), connection: resolved.connection.slug, model: resolved.model, thinking: request.thinking ?? 'low' }
-      owner.session = { info, sdkModel: model, systemPrompt: request.systemPrompt, history: [], usedTurns: new Set() }
+      owner.session = { info, sdkModel: model, systemPrompt: request.systemPrompt, history: [], usedTurns: new Set(), handoffTargets: normalizeVoiceHandoffTargets(request.handoffTargets ?? []) }
       return { ...info }
     } catch (error) {
       if (this.owners.get(ownerId) === owner) this.owners.delete(ownerId)
@@ -112,6 +118,7 @@ export class ArtistManagerVoiceFocusService {
     assertText(request.turnId, 100, 'turn')
     assertText(request.text, VOICE_FOCUS_LIMITS.inputChars, 'input')
     if (request.systemPrompt !== undefined) assertText(request.systemPrompt, VOICE_FOCUS_LIMITS.promptChars, 'context')
+    if (session.handedOff) throw new Error('This voice conversation has handed off to Command')
     if (session.active) throw new Error('A voice response is already running')
     if (session.usedTurns.has(request.turnId)) throw new Error('Voice turn was already submitted')
     if (session.usedTurns.size >= 1000) throw new Error('Start a new focused voice conversation')
@@ -121,10 +128,11 @@ export class ArtistManagerVoiceFocusService {
     session.active = active
     const signal = active.controller.signal
     const current = () => this.owners.get(ownerId)?.session === session && session.active === active && !signal.aborted
-    const send = (event: { type: 'text_delta'; delta: string } | { type: 'done' }) => {
+    const send = (event: { type: 'text_delta'; delta: string } | { type: 'done' } | VoiceFocusCompletion | { type: 'handoff_ready'; proposal: VoiceHandoffProposal }) => {
       if (current()) emit({ ...event, sessionId: session.info.sessionId, turnId: request.turnId })
     }
     let timedOut = false
+    let incomplete = false
     const timer = setTimeout(() => { timedOut = true; active.controller.abort() }, this.deps.timeoutMs ?? VOICE_FOCUS_LIMITS.timeoutMs)
     let abortListener!: () => void
     const aborted = new Promise<never>((_, reject) => {
@@ -132,12 +140,24 @@ export class ArtistManagerVoiceFocusService {
       signal.addEventListener('abort', abortListener, { once: true })
     })
     const run = async () => {
+      const pending = session.pendingHandoff
+      session.pendingHandoff = undefined
+      if (pending && pending.expiresAt > Date.now() && isVoiceHandoffConfirmation(request.text)) {
+        // The app's previous turn named the destination and task. Consume once;
+        // a bare yes without that live offer cannot open anything.
+        session.handedOff = true
+        send({ type: 'text_delta', delta: `I'll open Command with ${pending.proposal.agentName} and put our plan in a draft for you to review and send.` })
+        send({ type: 'handoff_ready', proposal: pending.proposal })
+        send({ type: 'done' })
+        return
+      }
+      const handoffTool = buildVoiceHandoffTool(session.handoffTargets)
       const apiKey = await this.deps.getApiKey(session.info.connection)
       if (!current()) return
       if (!apiKey?.trim()) throw new Error('missing credential')
       const context: Context = {
         systemPrompt: session.systemPrompt,
-        tools: [],
+        tools: handoffTool ? [handoffTool as NonNullable<Context['tools']>[number]] : [],
         messages: session.history.flatMap<Context['messages'][number]>(exchange => [
           { role: 'user', content: exchange.user, timestamp: 0 },
           { role: 'assistant', content: [{ type: 'text', text: exchange.assistant }], api: session.sdkModel.api, provider: session.sdkModel.provider, model: session.sdkModel.id, stopReason: 'stop', timestamp: 0, usage: emptyUsage() },
@@ -145,27 +165,55 @@ export class ArtistManagerVoiceFocusService {
       }
       context.messages.push({ role: 'user', content: request.text, timestamp: Date.now() })
       const stream = await this.deps.stream(session.sdkModel, context, {
-        apiKey, signal, maxTokens: VOICE_FOCUS_LIMITS.outputTokens, maxRetries: 0,
+        apiKey, signal, maxTokens: session.info.thinking === 'off' ? VOICE_FOCUS_LIMITS.outputTokens : VOICE_FOCUS_LIMITS.reasoningOutputTokens, maxRetries: 0,
         reasoning: session.info.thinking === 'off' ? undefined : session.info.thinking,
-        toolChoice: 'none',
+        toolChoice: handoffTool ? 'auto' : 'none',
       })
       let text = ''
       let done = false
+      let proposal: VoiceHandoffProposal | null = null
+      let toolStarts = 0
       for await (const event of stream) {
         if (!current()) return
-        if (event.type.startsWith('toolcall') || event.type === 'error') throw new Error('provider response failed')
+        if (event.type === 'error') throw new Error('provider response failed')
+        if (event.type.startsWith('toolcall')) {
+          if (!handoffTool) throw new Error('unexpected tool')
+          if (event.type === 'toolcall_start' && ++toolStarts > 1) throw new Error('multiple handoffs')
+          if (event.type === 'toolcall_end') {
+            if (proposal || event.toolCall?.name !== 'open_command_chat') throw new Error('invalid handoff')
+            proposal = parseVoiceHandoffProposal(event.toolCall.arguments, randomUUID(), session.handoffTargets)
+            if (!proposal) throw new Error('invalid handoff')
+          }
+          continue
+        }
         if (event.type === 'text_delta' && event.delta) {
           if (text.length + event.delta.length > VOICE_FOCUS_LIMITS.outputChars) throw new Error('response limit')
           text += event.delta
-          send({ type: 'text_delta', delta: event.delta })
+          // A model can put an execution claim before its tool call. Hold this
+          // short reply until its final shape is known when handoff is available.
+          // Tool turns speak only the app's validated offer, never that preamble.
+          if (!handoffTool) send({ type: 'text_delta', delta: event.delta })
         } else if (event.type === 'done') {
-          if (event.reason !== 'stop' && event.reason !== 'length') throw new Error('unsupported completion')
+          send(completionMetadata(event))
+          if (event.reason === 'length') {
+            incomplete = true
+            throw new Error('reply truncated')
+          }
+          if (proposal ? event.reason !== 'toolUse' : event.reason !== 'stop' || toolStarts > 0) throw new Error('unsupported completion')
           done = true
           break
         }
       }
       if (!current()) return
-      if (!done || !text.trim()) throw new Error('incomplete response')
+      if (!done || (!text.trim() && !proposal)) throw new Error('incomplete response')
+      if (proposal) {
+        const offer = `How about I open Command with ${proposal.agentName} to work on ${proposal.taskTitle}? I'll carry our plan over as a draft for you to review and send.`
+        text = offer
+        send({ type: 'text_delta', delta: offer })
+        session.pendingHandoff = { proposal, expiresAt: Date.now() + 120_000 }
+      } else if (handoffTool) {
+        send({ type: 'text_delta', delta: text })
+      }
       session.history.push({ user: request.text, assistant: text })
       while (session.history.length > VOICE_FOCUS_LIMITS.historyTurns || historySize(session.history) > VOICE_FOCUS_LIMITS.historyChars) session.history.shift()
       send({ type: 'done' })
@@ -173,11 +221,12 @@ export class ArtistManagerVoiceFocusService {
     try {
       await Promise.race([run(), aborted])
     } catch {
+      session.pendingHandoff = undefined
       const shouldPublish = current() || (timedOut && this.owners.get(ownerId)?.session === session && session.active === active)
       active.controller.abort()
       if (shouldPublish) {
         try {
-          emit({ sessionId: session.info.sessionId, turnId: request.turnId, type: 'error', message: timedOut ? 'Voice response timed out. Please try again.' : 'Voice response failed. No fallback model was used.' })
+          emit({ sessionId: session.info.sessionId, turnId: request.turnId, type: 'error', message: timedOut ? 'Voice response timed out. Please try again.' : incomplete ? 'The voice reply was cut short. Please try again.' : 'Voice response failed. No fallback model was used.' })
         } catch { /* A destroyed renderer must not prevent provider cancellation. */ }
       }
     } finally {
@@ -220,4 +269,15 @@ function assertEndpoint(endpoint: string): void {
   if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) || url.username || url.password || url.search || url.hash) throw new Error('Unsupported voice endpoint')
 }
 function historySize(history: Exchange[]): number { return history.reduce((size, exchange) => size + exchange.user.length + exchange.assistant.length, 0) }
+function completionMetadata(event: StreamEvent): VoiceFocusCompletion {
+  const record: VoiceFocusCompletion = {
+    type: 'completion',
+    finishReason: event.reason === 'stop' || event.reason === 'length' || event.reason === 'toolUse' ? event.reason : 'other',
+  }
+  const output = event.message?.usage?.output
+  const reasoning = event.message?.usage?.reasoning
+  if (typeof output === 'number' && Number.isSafeInteger(output) && output >= 0) record.outputTokens = output
+  if (typeof reasoning === 'number' && Number.isSafeInteger(reasoning) && reasoning >= 0) record.reasoningTokens = reasoning
+  return record
+}
 function emptyUsage() { return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } }

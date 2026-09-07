@@ -235,3 +235,50 @@ toward the brief's checklist. Focused voice is the strongest tested v1 candidate
 with conversational judgment and reliable action handoff still requiring polish.
 The user stopped the microphone run; UI returned to Ready. Scalar evidence:
 `/private/tmp/artist-os-focused-microphone-live.json`.
+
+
+## Spoken completion and confirmed Command handoff
+
+The user reported one reply ending mid-question, “Can”, in microphone turn 7.
+That turn delivered 134 text characters; its three completed synthesis chunks
+were 35, 94 and 3 characters (plus two removed boundary spaces). Playback completed
+before the next capture. This points upstream of playback; the historical
+provider finish reason was not recorded, so token exhaustion is a hypothesis,
+not a retrospective certainty.
+
+Focused low reasoning now receives a 2048-token total output budget (reasoning
+included); off remains 512. Spoken answers still target 60 words. Provider
+completion reason and available output/reasoning counts enter scalar diagnostics.
+A length completion surfaces an incomplete-reply error instead of silently
+committing successful history or replaying partial speech.
+
+The prompt keeps the same Artist Manager identity, calls the work surface
+Command, and explains readiness without dashboard fractions or invented launch
+blockers. Exact counts remain factual: 2 of 21 completed means 19 open.
+
+Focused voice now exposes one bounded tool, `open_command_chat`, using a captured
+catalog of active agent names, slugs and short descriptions. A valid tool call
+only prepares an offer naming the destination and agreed task. The next clear,
+unqualified affirmative confirms it within two minutes. No provider round trip
+is needed for confirmation. Declining, qualifying the answer, changing topic,
+stopping or restarting invalidates that offer. Invalid/duplicate/failed tool
+output cannot open a chat.
+
+After the closing acknowledgement finishes playback, voice shuts down before
+Command opens a normal agent session. The agreed brief is prefilled and unsent;
+the artist reviews and sends it. Normal agent permissions, context and model
+settings apply there. Only the agreed brief carries over, not a saved voice
+transcript. Cleanup failure, interruption, stale workspace or unavailable target
+blocks navigation. This remains the opt-in focused candidate under Response
+timing; the normal Manager session path is unchanged.
+
+
+A real Flash/low trial selected Branding Agent correctly and confirmed in 0 ms,
+but streamed “Opening the draft now” before the app's confirmation offer. To
+prevent this, sessions with handoff available hold the short model reply until
+its completion shape is known. Tool turns discard all model preamble and speak
+only the app-generated offer. Ordinary turns then emit their completed reply;
+Voice Core still chunks synthesis/playback. This trades the remaining text
+streaming time for reliable handoff wording and avoids speaking a truncated
+reply in this mode. The no-handoff transport retains direct streaming. Measure
+this added wait in the integrated run rather than reusing earlier TTFT claims.

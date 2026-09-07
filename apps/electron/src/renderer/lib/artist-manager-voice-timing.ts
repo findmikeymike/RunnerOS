@@ -13,6 +13,7 @@ export type VoiceTimingStage =
 export type VoiceTimingDetails = {
   chars?: number; words?: number; sampleRate?: number; channels?: number
   tool?: number; failed?: boolean; request?: number; kind?: 'activity' | 'answer'
+  finishReason?: string; outputTokens?: number; reasoningTokens?: number
   sessionId?: string; model?: string; connection?: string; thinking?: string
 }
 export type VoiceTimingRecord = VoiceTimingDetails & {
@@ -43,11 +44,11 @@ export class VoiceTimingTrace {
     if (once) this.seen.add(key)
     // Copy only the allowed scalar fields, even if a caller passes a larger object.
     const record: VoiceTimingRecord = { run: this.run, turn, stage, elapsedMs: Math.max(0, Math.round(this.now() - this.startedAt)) }
-    for (const name of ['chars', 'words', 'sampleRate', 'channels', 'tool', 'request'] as const) {
+    for (const name of ['chars', 'words', 'sampleRate', 'channels', 'tool', 'request', 'outputTokens', 'reasoningTokens'] as const) {
       const value = details[name]
       if (typeof value === 'number' && Number.isFinite(value) && value >= 0) record[name] = value
     }
-    for (const name of ['sessionId', 'model', 'connection', 'thinking'] as const) {
+    for (const name of ['sessionId', 'model', 'connection', 'thinking', 'finishReason'] as const) {
       const value = details[name]
       if (typeof value === 'string' && /^[a-zA-Z0-9_./:-]{1,160}$/.test(value)) record[name] = value
     }

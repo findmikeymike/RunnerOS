@@ -115,3 +115,37 @@ describe('focused voice transport', () => {
     expect(h.starts).toHaveLength(0)
   })
 })
+
+
+test('completion metadata is not EOF and a length error remains a failure', async () => {
+  const timing: unknown[] = []
+  const h = fixture({ onTiming: (stage, details) => timing.push({ stage, details }) }), iterator = await h.request()
+  const first = iterator.next(); await tick()
+  const ids = { sessionId: session.sessionId, turnId: h.starts[0]!.turnId }
+  h.emit({ ...ids, type: 'text_delta', delta: 'An idea. Can' })
+  await first
+  h.emit({ ...ids, type: 'completion', finishReason: 'length', outputTokens: 512 })
+  h.emit({ ...ids, type: 'error', message: 'The voice reply was cut short.' })
+  await expect(iterator.next()).rejects.toThrow('cut short')
+  expect(timing).toContainEqual({ stage: 'manager-complete', details: { finishReason: 'length', outputTokens: 512, reasoningTokens: undefined } })
+  expect(timing.some(item => (item as { stage: string }).stage === 'answer-delivered')).toBe(false)
+  h.pending.resolve(); await h.transport.stop()
+})
+
+test('handoff notification is scoped to this turn and does not end acknowledgement speech', async () => {
+  const handoffs: unknown[] = []
+  const h = fixture({ onHandoffReady: proposal => handoffs.push(proposal) }), iterator = await h.request()
+  const first = iterator.next(); await tick()
+  const ids = { sessionId: session.sessionId, turnId: h.starts[0]!.turnId }
+  const proposal = { id: 'offer', agentSlug: 'concierge', agentName: 'Artist Manager', taskTitle: 'Release plan', brief: 'Review the agreed release plan.' }
+  h.emit({ ...ids, turnId: 'stale', type: 'handoff_ready', proposal })
+  expect(handoffs).toEqual([])
+  h.emit({ ...ids, type: 'handoff_ready', proposal })
+  h.emit({ ...ids, type: 'text_delta', delta: "I'll open Command." })
+  expect(await first).toEqual({ value: { text: "I'll open Command." }, done: false })
+  expect(handoffs).toEqual([proposal])
+  h.emit({ ...ids, type: 'done' })
+  expect(await iterator.next()).toEqual({ value: { text: '', done: true }, done: false })
+  await iterator.next()
+  h.pending.resolve(); await h.transport.stop()
+})

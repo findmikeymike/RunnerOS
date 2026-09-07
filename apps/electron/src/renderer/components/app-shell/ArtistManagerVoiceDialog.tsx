@@ -68,7 +68,7 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
             <DialogTitle className="mt-2 text-2xl font-medium tracking-[-0.03em]">Talk to your manager</DialogTitle>
             <DialogDescription className="max-w-md text-[12px] leading-5 text-white/46">
               {focused
-                ? 'Talk through priorities and decisions using your current artist brief. Open Manager chat when you want something done.'
+                ? 'Talk through priorities and decisions using your current artist brief. Agree on the next work, then confirm a handoff to Command.'
                 : 'A private voice conversation with the same manager that knows your artist context, release horizon, campaigns, and weekly signals.'}
             </DialogDescription>
           </DialogHeader>
@@ -211,7 +211,7 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
           }}>Open this conversation in chat · tools, connections and history</button> : null}
           <div className="relative mt-4 flex items-center justify-center gap-2 text-[10px] text-white/24">
             <Volume2 className="h-3 w-3" />
-            {focused ? 'Focused conversation · no tools · conversation is not saved to chat.' : 'Voice uses the private HQ manager session. It does not create a second AI brain.'}
+            {focused ? 'Focused conversation · confirmed handoff to Command · only the agreed brief carries over.' : 'Voice uses the private HQ manager session. It does not create a second AI brain.'}
           </div>
         </div>
       </DialogContent>

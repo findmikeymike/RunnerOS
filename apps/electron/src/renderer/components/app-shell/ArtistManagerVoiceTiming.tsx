@@ -17,9 +17,9 @@ export function ArtistManagerVoiceTiming({ voice }: { voice: ArtistManagerVoiceS
           <p>Records timing and counts in the app log. Does not record spoken text, audio, or keys. Choose the input before starting.</p>
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={voice.focusedTrial} disabled={busy} onChange={event => voice.setFocusedTrial(event.target.checked)} />
-            Test focused conversation (no tools)
+            Test focused conversation
           </label>
-          {voice.focusedTrial ? <p>Uses the artist brief to discuss priorities and decisions. Actions require Manager chat. This test conversation is not saved to chat.</p> : null}
+          {voice.focusedTrial ? <p>Uses the artist brief to discuss priorities and decisions. Agreed work can move to Command after you confirm. This test conversation is not saved to chat.</p> : null}
           <label className="block space-y-1">
             <span>Test model (blank uses Manager setting)</span>
             <input aria-label="Voice test model" value={voice.modelTrial.model} disabled={busy} maxLength={200} onChange={event => voice.setModelTrial({ ...voice.modelTrial, model: event.target.value })} className="block w-full rounded-lg border border-white/10 bg-[#171717] p-2" />

@@ -250,11 +250,15 @@ export async function openAgentSessionComposer(params: {
   autoSendDraft?: boolean
   /** Keep the current surface visible until a surrounding multi-step launch succeeds. */
   navigateOnCreate?: boolean
+  /** Cancel an asynchronous voice handoff if its workspace or conversation changes. */
+  shouldContinue?: () => boolean
   onSendMessage?: (
     sessionId: string,
     message: string,
   ) => boolean | void | Promise<boolean | void>
 }): Promise<Session> {
+  const assertCurrent = () => { if (params.shouldContinue && !params.shouldContinue()) throw new Error('Command handoff was cancelled.') }
+  assertCurrent()
   let launchSkills = params.skills
   if (launchSkills) {
     try {
@@ -268,6 +272,7 @@ export async function openAgentSessionComposer(params: {
     }
   }
 
+  assertCurrent()
   const contextDocs = params.contextDocs
     ?? await window.electronAPI.listWorkspaceContextDocsForAgent(params.workspaceId, params.agent.slug)
   const [userMemoryEntries, agentMemoryEntries] = await Promise.all([
@@ -303,10 +308,17 @@ export async function openAgentSessionComposer(params: {
       ? { skills: [], sources: [], contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries, artistWorkspaceScope, recentSessions, currentWorkspaceId: params.workspaceId }
       : undefined
 
+  assertCurrent()
   const session = await params.onCreateSession(
     params.workspaceId,
     buildAgentCreateSessionOptions(params.agent, context),
   )
+  assertCurrent()
+  // Seed a guarded handoff before navigation unmounts its voice owner. The shell
+  // stores this synchronously, so the new ChatPage reads it on its first render.
+  const draft = params.draftInput?.trim()
+  const seededHandoffDraft = Boolean(params.shouldContinue && draft && !params.autoSendDraft)
+  if (seededHandoffDraft) params.onInputChange(session.id, draft!)
   if (params.navigateOnCreate !== false) {
     if (window.location.hash.startsWith('#artist-hq/')) {
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
@@ -314,8 +326,7 @@ export async function openAgentSessionComposer(params: {
     navigate(routes.view.allSessions(session.id))
   }
 
-  const draft = params.draftInput?.trim()
-  if (draft) {
+  if (draft && !seededHandoffDraft) {
     if (params.autoSendDraft && params.onSendMessage) {
       await sendAgentDraft(params.onSendMessage, session.id, draft, params.agent.metadata.name)
     } else {
