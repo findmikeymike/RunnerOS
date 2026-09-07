@@ -356,3 +356,20 @@ that agent's normal model, context and permissions.
 The interim localStorage persistence patch above is superseded for voice
 model/style/hearing by the dedicated app configuration. Only measurement and
 existing hardware preferences remain local; typed diagnostic input is session-only.
+
+
+Production settings verification used an isolated copy of the profile and the
+actual storage/resolver/provider implementation. Two fresh service instances
+registered with no model or reasoning override and selected the saved
+`pi-api-key / pi/deepseek-v4-flash / low` route (registration 1 ms / 0 ms).
+A greeting produced first text in 1.264 s and completed in 1.452 s (13 words,
+normal stop). This is LLM-only timing, not microphone-to-playback timing.
+Manager file bytes and every other configuration field stayed unchanged;
+Command still resolves through the existing Pro default. The temporary
+credential copy was removed. Evidence: `/private/tmp/voice-settings-live-results.json`.
+
+The tested Flash/low, High energy, Moonshine Balanced configuration was then
+saved only in the Mikey Mike development profile (`~/.artist-os-dev`). Read-back
+verified the voice record and preservation of the Manager and all other
+configuration fields. The packaged app's separate `~/.artist-os` profile was
+not migrated or changed. Evidence: `/private/tmp/voice-settings-applied.json`.
