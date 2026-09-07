@@ -28,6 +28,16 @@ export type VoiceFocusDependencies = {
 const supportedApis = new Set(['openai-completions', 'openai-responses', 'anthropic-messages'])
 const bareModel = (id: string) => id.startsWith('pi/') ? id.slice(3) : id
 
+// A greeting needs no career snapshot. Keep the whole-utterance boundary narrow:
+// "hey, what agent helps with campaigns?" must still receive the full context.
+function isOpeningGreeting(text: string): boolean {
+  const normalized = text.toLowerCase().replace(/[’‘]/g, "'")
+    .replace(/[.,!?，。！？]/g, ' ').replace(/\s+/g, ' ').trim()
+  return /^(?:(?:um|uh) )?(?:(?:hello|hi|hey|yo)(?: there)?(?: (?:how are you|how's it going|what's up))?|how are you|how's it going|what's up|mm|hmm|um|uh)$/.test(normalized)
+}
+
+const OPENING_GREETING_PROMPT = 'You are the artist\'s Artist Manager speaking in a voice call. The artist has only greeted you or made a short opening sound. Reply warmly in one short sentence and invite them to say what they want to work on. Do not invent personal details or give a career update, song mention, metrics, briefing or task suggestion. Do not claim to have done any work.'
+
 export type VoiceSettingsRouteDependencies = {
   getConnection(slug: string): LlmConnection | null | Promise<LlmConnection | null>
   resolveModel: VoiceFocusDependencies['resolveModel']
@@ -72,7 +82,7 @@ export async function validateVoiceSettingsRoute(
   const settings = parseArtistManagerVoiceSettings(value)
   if (settings.connectionSlug === null || settings.model === null) return settings
   const connection = await deps.getConnection(settings.connectionSlug)
-  if (!connection || connection.slug !== settings.connectionSlug) throw new Error('The selected conversation voice connection no longer exists; choose it in Settings')
+  if (!connection || connection.slug !== settings.connectionSlug) throw new Error('The connection for your voice model no longer exists; choose a model in Settings → Conversation')
   await validateResolvedVoiceRoute(connection, settings.model, deps.resolveModel)
   return settings
 }
@@ -86,10 +96,10 @@ export async function resolveSavedVoiceFocusConfig(
   } = { getSettings: getArtistManagerVoiceSettings, getConnection: getConfiguredConnection },
 ): Promise<VoiceFocusResolvedConfig> {
   const saved = parseArtistManagerVoiceSettings(await deps.getSettings())
-  if (!saved.connectionSlug || !saved.model) throw new Error('Choose a conversation voice connection and model in Settings before starting')
+  if (!saved.connectionSlug || !saved.model) throw new Error('Choose a voice model in Settings → Conversation before starting')
   const settings = parseArtistManagerVoiceSettings({ ...saved, model: request.model ?? saved.model, thinking: request.thinking ?? saved.thinking })
   const connection = await deps.getConnection(saved.connectionSlug)
-  if (!connection || connection.slug !== saved.connectionSlug) throw new Error('The selected conversation voice connection no longer exists; choose it in Settings')
+  if (!connection || connection.slug !== saved.connectionSlug) throw new Error('The connection for your voice model no longer exists; choose a model in Settings → Conversation')
   return { connection, model: settings.model!, thinking: settings.thinking }
 }
 
@@ -192,12 +202,13 @@ export class ArtistManagerVoiceFocusService {
         send({ type: 'done' })
         return
       }
-      const handoffTool = buildVoiceHandoffTool(session.handoffTargets)
+      const greetingOnly = session.history.length === 0 && isOpeningGreeting(request.text)
+      const handoffTool = greetingOnly ? null : buildVoiceHandoffTool(session.handoffTargets)
       const apiKey = await this.deps.getApiKey(session.info.connection)
       if (!current()) return
       if (!apiKey?.trim()) throw new Error('missing credential')
       const context: Context = {
-        systemPrompt: session.systemPrompt,
+        systemPrompt: greetingOnly ? OPENING_GREETING_PROMPT : session.systemPrompt,
         tools: handoffTool ? [handoffTool as NonNullable<Context['tools']>[number]] : [],
         messages: session.history.flatMap<Context['messages'][number]>(exchange => [
           { role: 'user', content: exchange.user, timestamp: 0 },

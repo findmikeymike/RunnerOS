@@ -413,3 +413,36 @@ invalidation, missing configuration, cloud deferral and settings changes. It
 used the real native renderer transport and focused transport with mocked
 Electron/media/VoiceCore boundaries; it is not physical microphone or measured
 click-to-listening evidence. Report: `/private/tmp/artist-os-voice-warm-hook-harness/result.json`.
+
+
+### Cleaner settings and contextual openings (2026-09-07)
+
+Conversation settings now uses one searchable voice-model picker across
+supported, authenticated API-key connections. Each option carries both the
+model and its exact connection. Fast/Flash/Haiku/mini families are offered;
+unsupported authentication/protocols and specialized audio/image/search/coding
+models are excluded. Main still validates the exact SDK route at Save.
+Unsupported legacy selections are preserved until the user explicitly chooses
+a supported replacement. Hearing offers Moonshine Balanced or AssemblyAI;
+Inworld setup is a compact status badge and Services link. No Command setting
+or existing saved voice selection was changed by this UI update.
+
+For a first-turn greeting-only utterance, the focused service sends a short
+Manager greeting prompt without the artist snapshot or handoff catalog. The
+whole-utterance check does not catch substantive questions beginning with
+"um hey". Real work receives the normal snapshot, available agents and bounded
+conversation history. This removes irrelevant artist statistics from the
+opening request instead of relying only on another prompt admonition.
+
+An isolated production-provider check used the saved DeepSeek v4 Flash/low
+route with the real artist snapshot and available-agent catalog. A greeting
+returned a neutral 15-word reply in 2.512 seconds (first text 2.447 seconds).
+The user's exact creative campaign/video-agent question then received a
+42-word recommendation for Scroll Stopper in 2.110 seconds. Both completed
+normally without fallback. These are model timings; microphone detection and
+TTS playback are excluded. The temporary credential copy was removed.
+Evidence: `/private/tmp/artist-os-voice-greeting-live-results.json`.
+
+Settings verification: five pure model-option tests, eight browser checks
+against the actual page/components with mocked IPC, and Electron typecheck.
+Screenshot: `/private/tmp/artist-os-voice-settings-redesign/conversation-settings.png`.
