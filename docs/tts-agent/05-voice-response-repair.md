@@ -269,8 +269,9 @@ Command opens a normal agent session. The agreed brief is prefilled and unsent;
 the artist reviews and sends it. Normal agent permissions, context and model
 settings apply there. Only the agreed brief carries over, not a saved voice
 transcript. Cleanup failure, interruption, stale workspace or unavailable target
-blocks navigation. This remains the opt-in focused candidate under Response
-timing; the normal Manager session path is unchanged.
+blocks navigation. This was initially an opt-in focused candidate under Response
+timing. The Conversation settings integration below makes it the normal voice
+path; Command sessions remain unchanged.
 
 
 A real Flash/low trial selected Branding Agent correctly and confirmed in 0 ms,
@@ -331,3 +332,27 @@ Those user-selected values now persist alongside existing local voice/device
 preferences. Typed test input remains session-only so a later call uses the
 microphone. A packaged app is a separate build/profile and does not update when
 Git main or the development renderer changes.
+
+
+### Dedicated Conversation settings
+
+Settings → Conversation now owns a profile-level `artistManagerVoice` record:
+exact connection/model, off/low reasoning, speaking style and hearing provider.
+It is independent of Agent definitions, Command session settings, connection
+defaults and global fallback settings. No second Manager identity is created.
+The initial route is unconfigured; users explicitly choose their voice model.
+Save validates the exact supported API-key route without fetching credentials.
+Malformed stored settings are reported, not overwritten. Deleted connections
+and unavailable models fail explicitly rather than falling back to Command.
+
+Every normal conversation uses the focused runtime and reads these saved
+preferences at Start. Registration resolves that voice connection and model
+without consulting the Manager. Response timing only controls measurements;
+it cannot switch runtimes or models. The dialog links to Conversation settings
+and keeps local hardware selection/model installation together. Confirmed
+handoffs still open an unsent draft in the normal Command agent and preserve
+that agent's normal model, context and permissions.
+
+The interim localStorage persistence patch above is superseded for voice
+model/style/hearing by the dedicated app configuration. Only measurement and
+existing hardware preferences remain local; typed diagnostic input is session-only.

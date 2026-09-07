@@ -1,60 +1,15 @@
-import { useRef } from 'react'
 import { Mic, MicOff, RefreshCw, Volume2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import type { ArtistManagerVoiceState } from '@/hooks/useArtistManagerVoice'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '@/lib/navigate'
-import { handVoiceSessionToChat } from '@/lib/voice-managed-sessions'
-import { useAppShellContext, usePendingPermission, usePendingCredential } from '@/context/AppShellContext'
-import { StructuredInput } from './input/StructuredInput'
-import type { StructuredInputState, StructuredResponse } from './input/structured/types'
 import { ARTIST_MANAGER_VOICE_STYLES } from '@/lib/artist-manager-voice-style'
 import { ArtistManagerVoiceTiming } from './ArtistManagerVoiceTiming'
 
 export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceState }) {
   const { navigate } = useNavigation()
-  const { onRespondToPermission, onRespondToCredential } = useAppShellContext()
-  const permission = usePendingPermission(voice.sessionId ?? '')
-  const credential = usePendingCredential(voice.sessionId ?? '')
-  const pendingPermission = permission?.sessionId === voice.sessionId ? permission : undefined
-  const pendingCredential = credential?.sessionId === voice.sessionId ? credential : undefined
-  const structured: StructuredInputState | undefined = pendingPermission
-    ? pendingPermission.type === 'admin_approval'
-      ? { type: 'admin_approval', data: {
-          appName: pendingPermission.appName || pendingPermission.toolName || 'System action',
-          reason: pendingPermission.reason || pendingPermission.description,
-          impact: pendingPermission.impact,
-          command: pendingPermission.command || '',
-          requiresSystemPrompt: pendingPermission.requiresSystemPrompt ?? true,
-          rememberForMinutes: pendingPermission.rememberForMinutes ?? 10,
-        } }
-      : { type: 'permission', data: pendingPermission }
-    : pendingCredential ? { type: 'credential', data: pendingCredential } : undefined
-  const requestKey = voice.open && structured ? `${voice.sessionId}:${structured.type}:${pendingPermission?.requestId ?? pendingCredential?.requestId}` : null
-  const currentRequest = useRef(requestKey)
-  currentRequest.current = requestKey
-  const respondedRequest = useRef<string | null>(null)
-  const respond = (response: StructuredResponse) => {
-    // Only the visible request in this voice session can receive a response.
-    // An async credential response from an unmounted request must not submit.
-    if (!voice.open || !voice.sessionId || !requestKey || currentRequest.current !== requestKey || respondedRequest.current === requestKey || response.type !== structured?.type) return
-    if (response.type === 'permission' && pendingPermission) {
-      if (!onRespondToPermission) return
-      respondedRequest.current = requestKey
-      onRespondToPermission?.(voice.sessionId, pendingPermission.requestId, response.allowed, response.alwaysAllow)
-    } else if (response.type === 'admin_approval' && pendingPermission) {
-      if (!onRespondToPermission) return
-      respondedRequest.current = requestKey
-      onRespondToPermission?.(voice.sessionId, pendingPermission.requestId, response.approved, false, { rememberForMinutes: response.rememberForMinutes })
-    } else if (response.type === 'credential' && pendingCredential) {
-      if (!onRespondToCredential) return
-      respondedRequest.current = requestKey
-      onRespondToCredential?.(voice.sessionId, pendingCredential.requestId, response)
-    }
-  }
   const busy = voice.running || voice.starting || voice.stopping
-  const focused = voice.timingEnabled && voice.focusedTrial
   return (
     <Dialog open={voice.open} onOpenChange={(open) => {
       voice.setOpen(open)
@@ -67,39 +22,20 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
             <p className="text-[9px] font-medium uppercase tracking-[0.28em] text-orange-400/75">Artist HQ</p>
             <DialogTitle className="mt-2 text-2xl font-medium tracking-[-0.03em]">Talk to your manager</DialogTitle>
             <DialogDescription className="max-w-md text-[12px] leading-5 text-white/46">
-              {focused
-                ? 'Talk through priorities and decisions using your current artist brief. Agree on the next work, then confirm a handoff to Command.'
-                : 'A private voice conversation with the same manager that knows your artist context, release horizon, campaigns, and weekly signals.'}
+              Talk through priorities and decisions using your artist brief. Agree on the next work, then confirm a handoff to Command.
             </DialogDescription>
           </DialogHeader>
 
-          <fieldset disabled={busy} className="relative mt-5 disabled:opacity-55">
-            <legend className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/36">Manager style</legend>
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              {ARTIST_MANAGER_VOICE_STYLES.map((style) => {
-                const selected = voice.managerStyle === style.id
-                return (
-                  <button
-                    key={style.id}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => voice.setManagerStyle(style.id)}
-                    className={cn(
-                      'rounded-xl border px-3 py-2 text-xs font-medium transition-colors',
-                      selected
-                        ? 'border-orange-400/40 bg-orange-400/10 text-orange-100'
-                        : 'border-white/[0.07] bg-white/[0.025] text-white/46 hover:bg-white/[0.05] hover:text-white/75',
-                    )}
-                  >
-                    {style.label}
-                  </button>
-                )
-              })}
+          <div className="relative mt-5 flex items-center justify-between gap-3 text-xs text-white/55">
+            <div>
+              <p>{voice.voiceModel ? `Voice · ${voice.voiceModel.replace(/^pi\//, '')}` : 'Choose a voice model to get started'}</p>
+              <p className="mt-1 text-[11px] text-white/35">{ARTIST_MANAGER_VOICE_STYLES.find(style => style.id === voice.managerStyle)?.label} · Command keeps its own model</p>
             </div>
-            <p className="mt-2 text-[11px] leading-4 text-white/32">
-              {ARTIST_MANAGER_VOICE_STYLES.find((style) => style.id === voice.managerStyle)?.description}
-            </p>
-          </fieldset>
+            <button type="button" disabled={busy} className="shrink-0 text-orange-300 underline underline-offset-4 disabled:opacity-40" onClick={() => {
+              voice.setOpen(false)
+              navigate(routes.view.settings('conversation'))
+            }}>Conversation settings</button>
+          </div>
 
           <div className="relative mt-6 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">
             <div className="flex items-center justify-between gap-4">
@@ -110,6 +46,7 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
               <button
                 type="button"
                 onClick={() => void voice.refreshProviders()}
+                disabled={busy}
                 aria-label="Refresh voice setup"
                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] text-white/38 transition-colors hover:bg-white/[0.05] hover:text-white/75"
               >
@@ -132,7 +69,8 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
                 <p className="max-w-xs text-[12px] leading-5 text-white/32">
                   {voice.providerReady
                     ? 'Start the conversation, then speak naturally. Wait for the manager to finish before replying; speaking over playback is disabled to prevent echo.'
-                    : 'Choose an installed local hearing model below, or configure AssemblyAI. Speaking uses your Inworld TTS connection in Settings.'}
+                    : !voice.voiceRouteReady ? 'Choose your separate voice connection and model in Settings → Conversation.'
+                    : 'Choose an installed hearing model in Conversation settings, or install the selected model below. Speaking uses your Inworld TTS connection.'}
                 </p>
               </div>
             )}
@@ -144,24 +82,10 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
             ) : null}
           </div>
 
-          {structured ? (
-            <div className="relative mt-4" role="region" aria-label="Manager action requires your input">
-              <p className="mb-2 text-xs text-orange-200">Your manager needs your approval or credentials. Respond here, not by voice.</p>
-              <StructuredInput key={`${voice.sessionId}:${pendingPermission?.requestId ?? pendingCredential?.requestId}`} state={structured} onResponse={respond} />
-            </div>
-          ) : null}
-
           <details className="relative mt-4 text-xs text-white/65">
-            <summary className="cursor-pointer py-2">Voice settings</summary>
+            <summary className="cursor-pointer py-2">Audio devices and model installation</summary>
             <fieldset disabled={busy || voice.installing} className="mt-2 space-y-3 disabled:opacity-60">
-              <label className="block">Hearing
-                <select aria-label="Hearing provider and model" value={voice.sttSelection} onChange={(event) => voice.setSttSelection(event.target.value)} className="mt-1 block w-full rounded-lg border border-white/10 bg-[#171717] p-2">
-                  <option value="moonshine-small-streaming-en" disabled={!voice.moonshineAvailable}>Moonshine Balanced · local</option>
-                  <option value="moonshine-tiny-streaming-en" disabled={!voice.moonshineAvailable}>Moonshine Lightweight · local</option>
-                  <option value="moonshine-medium-streaming-en" disabled={!voice.moonshineAvailable}>Moonshine Quality · local</option>
-                  <option value="assembly_ai">AssemblyAI · cloud</option>
-                </select>
-              </label>
+              <p>Hearing: {voice.sttSelection === 'assembly_ai' ? 'AssemblyAI · cloud' : ({ 'moonshine-tiny-streaming-en': 'Moonshine Lightweight', 'moonshine-small-streaming-en': 'Moonshine Balanced', 'moonshine-medium-streaming-en': 'Moonshine Quality' } as Record<string, string>)[voice.sttSelection] || voice.sttSelection}</p>
               {voice.sttSelection !== 'assembly_ai' ? (
                 <div className="flex items-center justify-between gap-2">
                   <span>{voice.moonshineAvailable ? (voice.moonshineTiers.find((tier) => tier.modelId === voice.sttSelection)?.installState ?? 'Not installed') : 'Local hearing is unavailable in this build'}</span>
@@ -202,16 +126,9 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
             {voice.stopping ? 'Stopping…' : voice.starting ? 'Cancel connection' : voice.running ? 'End conversation' : 'Start conversation'}
           </button>
 
-          {voice.conversationSessionId ? <button type="button" disabled={voice.stopping} className="relative mt-3 w-full text-xs text-white/60 underline underline-offset-4" onClick={async () => {
-            const id = voice.conversationSessionId!
-            await voice.stop()
-            handVoiceSessionToChat(id)
-            voice.setOpen(false)
-            navigate(routes.view.allSessions(id))
-          }}>Open this conversation in chat · tools, connections and history</button> : null}
           <div className="relative mt-4 flex items-center justify-center gap-2 text-[10px] text-white/24">
             <Volume2 className="h-3 w-3" />
-            {focused ? 'Focused conversation · confirmed handoff to Command · only the agreed brief carries over.' : 'Voice uses the private HQ manager session. It does not create a second AI brain.'}
+            Focused conversation · confirmed handoff to Command · only the agreed brief carries over.
           </div>
         </div>
       </DialogContent>

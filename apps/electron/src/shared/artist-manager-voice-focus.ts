@@ -6,6 +6,7 @@ export type VoiceFocusThinking = 'off' | 'low'
 export type VoiceFocusRegisterRequest = {
   workspaceId: string
   systemPrompt: string
+  /** Diagnostic override only; still uses the saved voice connection. */
   model?: string
   thinking?: VoiceFocusThinking
   handoffTargets?: VoiceHandoffTarget[]

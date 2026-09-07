@@ -16,6 +16,7 @@ import type { SettingsSubpage } from '../../../shared/settings-registry'
 
 import AppSettingsPage from './AppSettingsPage'
 import AiSettingsPage from './AiSettingsPage'
+import ConversationSettingsPage from './ConversationSettingsPage'
 import SecretsSettingsPage from './SecretsSettingsPage'
 import SocialAccountsSettingsPage from './SocialAccountsSettingsPage'
 import SpotifySettingsPage from './SpotifySettingsPage'
@@ -40,6 +41,7 @@ import AboutSettingsPage from './AboutSettingsPage'
 export const SETTINGS_PAGE_COMPONENTS: Record<SettingsSubpage, ComponentType> = {
   app: AppSettingsPage,
   ai: AiSettingsPage,
+  conversation: ConversationSettingsPage,
   secrets: SecretsSettingsPage,
   'social-accounts': SocialAccountsSettingsPage,
   spotify: SpotifySettingsPage,

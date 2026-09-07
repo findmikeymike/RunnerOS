@@ -70,6 +70,8 @@ export type {
 
 // Thinking level types
 import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels';
+import type { ArtistManagerVoiceSettings } from '@craft-agent/shared/config/artist-manager-voice-settings';
+export type { ArtistManagerVoiceSettings } from '@craft-agent/shared/config/artist-manager-voice-settings';
 import type { VoiceFocusRegisterRequest, VoiceFocusSession, VoiceFocusTurnRequest, VoiceFocusCancelRequest, VoiceFocusEvent } from './artist-manager-voice-focus';
 import type { ChatGoalState, CreateChatGoalInput } from '@craft-agent/shared/sessions';
 import type { HqRecommendationCandidate, HqRecommendationDetail, HqRecommendationLaunchInput, HqRecommendationLaunchResult, HqRecommendationOutcome, HqRecommendationStore, HqRecommendationTransitionInput, HqRecommendationUsefulnessInput } from '@craft-agent/shared/hq-state';
@@ -1487,6 +1489,10 @@ export interface ElectronAPI {
     height: number
   }>
   getArtistManagerVoiceProxyInfo(): Promise<ArtistManagerVoiceProxyInfo>
+  artistManagerVoiceSettings: {
+    get(): Promise<ArtistManagerVoiceSettings>
+    update(settings: ArtistManagerVoiceSettings): Promise<ArtistManagerVoiceSettings>
+  }
   artistManagerVoiceFocus: {
     register(request: VoiceFocusRegisterRequest): Promise<VoiceFocusSession>
     startTurn(request: VoiceFocusTurnRequest): Promise<void>

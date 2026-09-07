@@ -10,6 +10,7 @@
  */
 
 import type { SettingsSubpage } from '../../../shared/types'
+import { Mic } from 'lucide-react'
 
 type IconProps = { className?: string }
 
@@ -241,6 +242,7 @@ export const PreferencesIcon = ({ className }: IconProps) => (
 export const SETTINGS_ICONS: Record<SettingsSubpage, React.ComponentType<IconProps>> = {
   app: AppSettingsIcon,
   ai: AiSettingsIcon,
+  conversation: Mic,
   secrets: PreferencesIcon,
   'social-accounts': SocialAccountsIcon,
   spotify: SpotifySettingsIcon,

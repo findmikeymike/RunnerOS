@@ -4,6 +4,7 @@ import {
   BriefcaseBusiness,
   KeyRound,
   MessageCircle,
+  Mic,
   Sparkles,
   type LucideIcon,
 } from 'lucide-react'
@@ -39,6 +40,14 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
     icon: Sparkles,
     landing: 'ai',
     pages: [{ id: 'ai', label: 'Models' }],
+  },
+  {
+    id: 'conversation',
+    label: 'Conversation',
+    description: 'Voice and hearing',
+    icon: Mic,
+    landing: 'conversation',
+    pages: [{ id: 'conversation', label: 'Conversation' }],
   },
   {
     id: 'connections',
@@ -102,7 +111,7 @@ export function SettingsPageSwitcher({ activeSubpage }: SettingsPageSwitcherProp
 
   return (
     <div className="w-full overflow-hidden rounded-[18px] border border-white/[0.07] bg-[#08080a]/94 p-2 shadow-middle backdrop-blur-xl">
-      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-7">
         {SETTINGS_GROUPS.map((group) => {
           const selected = group.id === activeGroup.id
           const Icon = group.icon

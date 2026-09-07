@@ -2,35 +2,30 @@ import * as React from 'react'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { AgentDefinitionDTO, LoadedSkill, LoadedSource, ArtistManagerMoonshineStatus } from '../../shared/types'
 import { VoiceCoreWeb, createAssemblyAiSttTransport, createInworldTtsTransport, type VoiceEvent } from '@voice-core/web/cloud'
-import { buildAgentCreateSessionOptions, ensureAgentDeclaredSkillsEnabled, loadAgentMemoryEntries, loadUserMemoryEntries } from '@/lib/run-agent'
-import { createArtistManagerVoiceTransport } from '@/lib/artist-manager-voice-transport'
 import { normalizeVoiceHandoffTargets, type VoiceHandoffTarget, type VoiceHandoffProposal } from '../../shared/artist-manager-voice-handoff'
 import { createVoiceHandoffCoordinator } from '@/lib/artist-manager-voice-handoff'
 import { createVoiceFocusTransport } from '@/lib/artist-manager-voice-focus-transport'
 import { buildVoiceFocusPrompt } from '@/lib/artist-manager-voice-focus-prompt'
-import { applyVoiceModelTrial, buildArtistManagerVoiceSessionOptions, type VoiceModelTrial } from '@/lib/artist-manager-voice-session-policy'
+import { DEFAULT_ARTIST_MANAGER_VOICE_SETTINGS, type ArtistManagerVoiceSettings } from '@craft-agent/shared/config/artist-manager-voice-settings'
 import { VoiceTimingTrace, observeVoiceStt, observeVoiceTts, type VoiceTimingRecord } from '@/lib/artist-manager-voice-timing'
 import { VoiceSessionLifecycle } from '@/lib/voice-session-lifecycle'
-import { markVoiceManagedSession } from '@/lib/voice-managed-sessions'
 import { createElectronMoonshineSttTransport } from '../../../../../vendor/voice-core-electron/renderer/moonshineSttTransport'
 import { parseMoonshineModelId, type ElectronMoonshineRuntimeStarted, type ElectronMoonshineRuntimePoll } from '../../../../../vendor/voice-core-electron/main/moonshineModels'
 import { ELECTRON_INWORLD_TTS_MODEL_ID } from '../../../../../vendor/voice-core-electron/renderer/inworldTtsPolicy'
 import {
-  normalizeArtistManagerVoiceStyle,
   type ArtistManagerVoiceStyleId,
 } from '@/lib/artist-manager-voice-style'
 
 export type ArtistManagerVoiceState = {
   timingEnabled: boolean; setTimingEnabled(value: boolean): void
   typedTrial: boolean; setTypedTrial(value: boolean): void
-  modelTrial: VoiceModelTrial; setModelTrial(value: VoiceModelTrial): void
-  focusedTrial: boolean; setFocusedTrial(value: boolean): void
+  voiceModel: string | null; voiceRouteReady: boolean
   timingRecords: VoiceTimingRecord[]; canSendTyped: boolean; sendTyped(text: string): Promise<void>
   open: boolean; running: boolean; starting: boolean; stopping: boolean; installing: boolean
   providerReady: boolean; assemblyAiReady: boolean; inworldReady: boolean; hearingReady: boolean
-  status: string; error: string | null; userText: string; assistantText: string; sessionId: string | null; conversationSessionId: string | null
-  sttSelection: string; setSttSelection(value: string): void
-  managerStyle: ArtistManagerVoiceStyleId; setManagerStyle(value: ArtistManagerVoiceStyleId): void
+  status: string; error: string | null; userText: string; assistantText: string
+  sttSelection: string
+  managerStyle: ArtistManagerVoiceStyleId
   moonshineAvailable: boolean; moonshineTiers: ArtistManagerMoonshineStatus['tiers']
   inputDeviceId: string; outputDeviceId: string; devices: MediaDeviceInfo[]
   setInputDeviceId(value: string): void; setOutputDeviceId(value: string): void
@@ -45,8 +40,6 @@ export function useArtistManagerVoice(input: {
 }): ArtistManagerVoiceState {
   const [timingEnabled, setTimingEnabled] = React.useState(() => readPreference('measure', 'false') === 'true')
   const [typedTrial, setTypedTrial] = React.useState(false)
-  const [modelTrial, setModelTrial] = React.useState<VoiceModelTrial>(() => ({ model: readPreference('trial-model', ''), thinking: readTrialThinking() }))
-  const [focusedTrial, setFocusedTrial] = React.useState(() => readPreference('focused', 'false') === 'true')
   const [typedSending, setTypedSending] = React.useState(false)
   const [timingRecords, setTimingRecords] = React.useState<VoiceTimingRecord[]>([])
   const timingRef = React.useRef<VoiceTimingTrace | null>(null)
@@ -59,8 +52,10 @@ export function useArtistManagerVoice(input: {
   const [installing, setInstalling] = React.useState(false)
   const [providers, setProviders] = React.useState({ assemblyAi: false, inworld: false, ready: false })
   const [moonshine, setMoonshine] = React.useState<ArtistManagerMoonshineStatus>({ available: false, tiers: [] })
-  const [sttSelection, setSelection] = React.useState(() => readPreference('stt', 'moonshine-small-streaming-en'))
-  const [managerStyle, setManagerStyleState] = React.useState(() => normalizeArtistManagerVoiceStyle(readPreference('style', 'sharp')))
+  const [voiceSettings, setVoiceSettings] = React.useState<ArtistManagerVoiceSettings>({ ...DEFAULT_ARTIST_MANAGER_VOICE_SETTINGS })
+  const [settingsLoaded, setSettingsLoaded] = React.useState(false)
+  const sttSelection = voiceSettings.sttSelection
+  const managerStyle = voiceSettings.style
   const [inputDeviceId, setInput] = React.useState(() => readPreference('input', ''))
   const [outputDeviceId, setOutput] = React.useState(() => readPreference('output', ''))
   const [devices, setDevices] = React.useState<MediaDeviceInfo[]>([])
@@ -68,8 +63,6 @@ export function useArtistManagerVoice(input: {
   const [error, setError] = React.useState<string | null>(null)
   const [userText, setUserText] = React.useState('')
   const [assistantText, setAssistantText] = React.useState('')
-  const [sessionId, setSessionId] = React.useState<string | null>(null)
-  const [conversationSessionId, setConversationSessionId] = React.useState<string | null>(null)
   const lifecycle = React.useRef(new VoiceSessionLifecycle<VoiceCoreWeb>()).current
   const mounted = React.useRef(true)
   const refreshEpoch = React.useRef(0)
@@ -88,7 +81,7 @@ export function useArtistManagerVoice(input: {
     timingRef.current?.stop(); timingRef.current = null; runtimeRef.current = null
     const cleanup = lifecycle.stop()
     unsubscribe.current?.(); unsubscribe.current = null
-    if (mounted.current) { setRunning(false); setStarting(false); setStopping(true); setSessionId(null); setStatus('Stopping audio and agent…') }
+    if (mounted.current) { setRunning(false); setStarting(false); setStopping(true); setStatus('Stopping audio and agent…') }
     try {
       await cleanup
       if (epoch === stopEpoch.current) shutdownSucceeded.current = true
@@ -104,7 +97,7 @@ export function useArtistManagerVoice(input: {
     mounted.current = true
     return () => { mounted.current = false; refreshEpoch.current++; void stop() }
   }, [stop])
-  React.useLayoutEffect(() => { setConversationSessionId(null); void stop() }, [input.workspaceId, stop])
+  React.useLayoutEffect(() => { void stop() }, [input.workspaceId, stop])
 
   const refreshDevices = React.useCallback(async () => {
     try {
@@ -115,14 +108,16 @@ export function useArtistManagerVoice(input: {
   const refreshProviders = React.useCallback(async () => {
     const epoch = ++refreshEpoch.current
     try {
-      const [cloud, local] = await Promise.all([
+      const [cloud, local, settings] = await Promise.all([
         window.electronAPI.getArtistManagerVoiceProviderStatus(),
         window.electronAPI.invokeArtistManagerMoonshine({ method: 'status' }) as Promise<ArtistManagerMoonshineStatus>,
+        window.electronAPI.artistManagerVoiceSettings.get(),
       ])
       if (!mounted.current || epoch !== refreshEpoch.current) return
-      setProviders(cloud); setMoonshine(local)
+      setProviders(cloud); setMoonshine(local); setVoiceSettings(settings); setSettingsLoaded(true)
     } catch (cause) {
       if (mounted.current && epoch === refreshEpoch.current) {
+        setSettingsLoaded(false)
         setProviders({ assemblyAi: false, inworld: false, ready: false })
         setMoonshine({ available: false, tiers: [] }); setError(messageFromError(cause))
       }
@@ -152,7 +147,7 @@ export function useArtistManagerVoice(input: {
     try { ticket = lifecycle.begin() } catch { return }
     handoff.current?.cancel(); handoff.current = null
     stopEpoch.current++; setStopping(false)
-    setStarting(true); setError(null); setUserText(''); setAssistantText(''); setSessionId(null); setConversationSessionId(null); setStatus('Connecting voice…')
+    setStarting(true); setError(null); setUserText(''); setAssistantText(''); setStatus('Connecting voice…')
     const alive = () => mounted.current && lifecycle.owns(ticket)
     const trace = timingEnabled ? new VoiceTimingTrace(crypto.randomUUID(), record => {
       if (!mounted.current) return
@@ -160,45 +155,19 @@ export function useArtistManagerVoice(input: {
       window.electronAPI.debugLog('[voice-timing]', JSON.stringify(record))
     }) : null
     timingRef.current = trace
-    // A fresh agent session per voice runtime prevents late cancellation crossing a restart.
-    let managerSession: Promise<{ id: string }> | null = null
-    const ensureManagerSession = () => {
-      lifecycle.assertOwner(ticket)
-      if (managerSession) return managerSession
-      managerSession = (async () => {
-        trace?.mark('session-setup-start')
-        let manager = input.agents.find(agent => agent.slug === CONCIERGE_SLUG) ?? null
-        if (!manager) manager = await window.electronAPI.getAgentDefinition(CONCIERGE_SLUG)
-        lifecycle.assertOwner(ticket)
-        if (!manager) throw new Error('The Artist Manager agent is not installed')
-        const [contextDocs, userMemoryEntries, agentMemoryEntries] = await Promise.all([
-          window.electronAPI.listWorkspaceContextDocsForAgent(input.workspaceId, manager.slug),
-          loadUserMemoryEntries(), loadAgentMemoryEntries(manager.slug),
-        ])
-        lifecycle.assertOwner(ticket)
-        const activeSkills = await ensureAgentDeclaredSkillsEnabled({ agent: manager, workspaceId: input.workspaceId, activeSkills: input.skills })
-        lifecycle.assertOwner(ticket)
-        const base = buildAgentCreateSessionOptions(manager, {
-          skills: activeSkills, sources: input.sources, contextDocs,
-          agentCatalog: input.agents.filter(agent => agent.slug !== manager!.slug), userMemoryEntries, agentMemoryEntries,
-        })
-        const session = await window.electronAPI.createSession(input.workspaceId, applyVoiceModelTrial(buildArtistManagerVoiceSessionOptions(
-          { ...base, customSystemPrompt: base.customSystemPrompt ?? manager.systemPrompt }, activeSkills, managerStyle,
-        ), timingEnabled, modelTrial))
-        markVoiceManagedSession(session.id)
-        lifecycle.assertOwner(ticket); setSessionId(session.id); setConversationSessionId(session.id)
-        trace?.mark('session-setup-ready', { sessionId: session.id, model: session.model, connection: session.llmConnection, thinking: session.thinkingLevel })
-        return { id: session.id }
-      })()
-      return managerSession
-    }
     try {
       await lifecycle.ready(ticket)
+      const settings = await window.electronAPI.artistManagerVoiceSettings.get()
+      lifecycle.assertOwner(ticket)
+      setVoiceSettings(settings); setSettingsLoaded(true)
+      if (!settings.connectionSlug || !settings.model) throw new Error('Choose a voice model in Settings → Conversation before starting.')
+      const selectedHearing = settings.sttSelection
+      const selectedStyle = settings.style
       const cloud = await window.electronAPI.getArtistManagerVoiceProviderStatus()
       lifecycle.assertOwner(ticket); setProviders(cloud)
       if (!cloud.inworld) throw new Error('Configure an Inworld key in Settings for spoken responses')
-      if (sttSelection === 'assembly_ai' && !cloud.assemblyAi) throw new Error('Configure AssemblyAI or select an installed Moonshine model')
-      const modelId = sttSelection === 'assembly_ai' ? null : parseMoonshineModelId(sttSelection)
+      if (selectedHearing === 'assembly_ai' && !cloud.assemblyAi) throw new Error('Configure AssemblyAI or select an installed Moonshine model')
+      const modelId = selectedHearing === 'assembly_ai' ? null : parseMoonshineModelId(selectedHearing)
       if (modelId) {
         const local = await window.electronAPI.invokeArtistManagerMoonshine({ method: 'status' }) as ArtistManagerMoonshineStatus
         lifecycle.assertOwner(ticket); setMoonshine(local)
@@ -263,11 +232,11 @@ export function useArtistManagerVoice(input: {
         lifecycle.assertOwner(ticket)
         const docs = await window.electronAPI.listWorkspaceContextDocsForAgent(input.workspaceId, CONCIERGE_SLUG)
         lifecycle.assertOwner(ticket)
-        return buildVoiceFocusPrompt(docs, managerStyle)
+        return buildVoiceFocusPrompt(docs, selectedStyle)
       }
       await runtime.setTransports({
         stt: observeVoiceStt(stt, trace, timingEnabled && typedTrial),
-        llm: timingEnabled && focusedTrial ? createVoiceFocusTransport({
+        llm: createVoiceFocusTransport({
           api: window.electronAPI.artistManagerVoiceFocus,
           ensureSession: async () => {
             trace?.mark('session-setup-start')
@@ -275,7 +244,6 @@ export function useArtistManagerVoice(input: {
             lifecycle.assertOwner(ticket)
             const session = await window.electronAPI.artistManagerVoiceFocus.register({
               workspaceId: input.workspaceId, systemPrompt,
-              model: modelTrial.model.trim() || undefined, thinking: modelTrial.thinking || 'low',
               handoffTargets: input.onOpenCommand ? normalizeVoiceHandoffTargets(input.handoffTargets ?? []) : [],
             })
             if (alive()) trace?.mark('session-setup-ready', { sessionId: session.sessionId, model: session.model, connection: session.connection, thinking: session.thinking })
@@ -284,14 +252,6 @@ export function useArtistManagerVoice(input: {
           refreshPrompt: refreshFocusPrompt,
           onHandoffReady: proposal => { if (alive()) { handoffArmed = true; coordinator.ready(proposal) } },
           onTiming: (stage, details) => trace?.mark(stage, details),
-          onUserText: text => { if (alive()) setUserText(text) },
-          onAssistantText: text => { if (alive()) setAssistantText(text) },
-        }) : createArtistManagerVoiceTransport({
-          ensureSession: ensureManagerSession,
-          onTiming: (stage, details) => trace?.mark(stage, details),
-          sendMessage: (id, text) => window.electronAPI.sendMessage(id, text),
-          cancelProcessing: id => window.electronAPI.cancelProcessing(id, true),
-          onSessionEvent: handler => window.electronAPI.onSessionEvent(handler),
           onUserText: text => { if (alive()) setUserText(text) },
           onAssistantText: text => { if (alive()) setAssistantText(text) },
         }),
@@ -320,7 +280,7 @@ export function useArtistManagerVoice(input: {
       trace?.mark('error')
       if (alive()) { await stop(); if (mounted.current) setError(messageFromError(cause)) }
     } finally { if (alive()) setStarting(false) }
-  }, [timingEnabled, typedTrial, modelTrial, focusedTrial, input.agents, input.skills, input.sources, input.workspaceId, input.handoffTargets, input.onOpenCommand, lifecycle, managerStyle, sttSelection, inputDeviceId, outputDeviceId, stop, refreshDevices])
+  }, [timingEnabled, typedTrial, input.workspaceId, input.handoffTargets, input.onOpenCommand, lifecycle, inputDeviceId, outputDeviceId, stop, refreshDevices])
 
   const canSendTyped = timingEnabled && typedTrial && running && !typedSending && status === 'Listening…'
   const sendTyped = async (text: string) => {
@@ -337,16 +297,16 @@ export function useArtistManagerVoice(input: {
   const change = <T extends string>(key: string, setter: React.Dispatch<React.SetStateAction<T>>, value: T) => { void stop(); setter(value); writePreference(key, value) }
   const hearingReady = sttSelection === 'assembly_ai' ? providers.assemblyAi
     : moonshine.available && moonshine.tiers.some(tier => tier.modelId === sttSelection && tier.registered && tier.installState === 'ready' && !tier.hasError)
+  const voiceRouteReady = settingsLoaded && Boolean(voiceSettings.connectionSlug && voiceSettings.model)
   return {
+    voiceModel: voiceSettings.model, voiceRouteReady,
     timingEnabled, setTimingEnabled: value => { if (!running && !starting && !stopping) { setTimingEnabled(value); writePreference('measure', String(value)) } },
     typedTrial, setTypedTrial: value => { if (!running && !starting && !stopping) setTypedTrial(value) },
-    modelTrial, setModelTrial: value => { if (!running && !starting && !stopping) { setModelTrial(value); writePreference('trial-model', value.model); writePreference('trial-thinking', value.thinking) } },
-    focusedTrial, setFocusedTrial: value => { if (!running && !starting && !stopping) { setFocusedTrial(value); writePreference('focused', String(value)) } },
     timingRecords, canSendTyped, sendTyped,
-    open, running, starting, stopping, installing, status, error, userText, assistantText, sessionId, conversationSessionId,
-    providerReady: hearingReady && providers.inworld, hearingReady, assemblyAiReady: providers.assemblyAi, inworldReady: providers.inworld,
-    sttSelection, setSttSelection: value => { if (value !== 'assembly_ai') parseMoonshineModelId(value); change('stt', setSelection, value) },
-    managerStyle, setManagerStyle: value => change('style', setManagerStyleState, normalizeArtistManagerVoiceStyle(value)),
+    open, running, starting, stopping, installing, status, error, userText, assistantText,
+    providerReady: voiceRouteReady && hearingReady && providers.inworld, hearingReady, assemblyAiReady: providers.assemblyAi, inworldReady: providers.inworld,
+    sttSelection,
+    managerStyle,
     moonshineAvailable: moonshine.available, moonshineTiers: moonshine.tiers, installMoonshine,
     inputDeviceId, outputDeviceId, devices, refreshDevices,
     setInputDeviceId: value => change('input', setInput, value), setOutputDeviceId: value => change('output', setOutput, value),
@@ -362,9 +322,4 @@ function readPreference(key: string, fallback: string): string {
 }
 function writePreference(key: string, value: string): void {
   try { localStorage.setItem('artist-manager-voice:' + key, value) } catch { /* Optional preferences. */ }
-}
-
-function readTrialThinking(): VoiceModelTrial['thinking'] {
-  const value = readPreference('trial-thinking', '')
-  return value === 'off' || value === 'low' ? value : ''
 }

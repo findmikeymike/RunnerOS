@@ -808,6 +808,8 @@
   "settings.appearance.usingDefaultTheme": "using default theme",
   "settings.appearance.workspaceThemes": "Workspace Themes",
   "settings.appearance.workspaceThemesDesc": "Override theme settings per workspace",
+  "settings.conversation.description": "Voice model, style, and hearing",
+  "settings.conversation.title": "Conversation",
   "settings.input.autoCapitalisation": "Auto capitalisation",
   "settings.input.autoCapitalisationDesc": "Automatically capitalise the first letter when typing a message.",
   "settings.input.cmdEnterKey": "⌘ Enter",

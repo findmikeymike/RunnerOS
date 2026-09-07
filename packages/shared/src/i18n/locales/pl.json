@@ -808,6 +808,8 @@
   "settings.appearance.usingDefaultTheme": "używa domyślnego motywu",
   "settings.appearance.workspaceThemes": "Motywy Workspace",
   "settings.appearance.workspaceThemesDesc": "Nadpisz ustawienia motywu dla każdego Workspace",
+  "settings.conversation.description": "Voice model, style, and hearing",
+  "settings.conversation.title": "Conversation",
   "settings.input.autoCapitalisation": "Automatyczna wielka litera",
   "settings.input.autoCapitalisationDesc": "Automatycznie pisz pierwszą literę wielką podczas wpisywania wiadomości.",
   "settings.input.cmdEnterKey": "⌘ Enter",

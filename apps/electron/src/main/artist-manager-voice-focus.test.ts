@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'bun:test'
 import type { Api, Model } from '@earendil-works/pi-ai'
 import type { LlmConnection } from '@craft-agent/shared/config/llm-connections'
-import { ArtistManagerVoiceFocusService, type VoiceFocusDependencies } from './artist-manager-voice-focus'
+import { DEFAULT_ARTIST_MANAGER_VOICE_SETTINGS } from '@craft-agent/shared/config/artist-manager-voice-settings'
+import { ArtistManagerVoiceFocusService, resolveSavedVoiceFocusConfig, validateVoiceSettingsRoute, type VoiceFocusDependencies } from './artist-manager-voice-focus'
 import { VOICE_FOCUS_LIMITS, type VoiceFocusEvent } from '../shared/artist-manager-voice-focus'
 
 const model = {
@@ -228,5 +229,66 @@ describe('focused voice service', () => {
     await expect(service.startTurn(7, { sessionId: session.sessionId, turnId: 'huge', text: 'Hello', systemPrompt: 'x'.repeat(VOICE_FOCUS_LIMITS.promptChars + 1) }, () => {})).rejects.toThrow('context')
     expect(requests).toHaveLength(12)
     service.close()
+  })
+})
+
+
+describe('independent saved conversation voice route', () => {
+  const saved = { ...DEFAULT_ARTIST_MANAGER_VOICE_SETTINGS, connectionSlug: connection.slug, model: 'pi/test-model', thinking: 'off' as const }
+
+  it('resolves only the saved voice connection/model/reasoning without Manager or global fallback', async () => {
+    const seen: string[] = []
+    const deps = { getSettings: () => saved, getConnection: (slug: string) => { seen.push(slug); return connection } }
+    expect(await resolveSavedVoiceFocusConfig({}, deps)).toEqual({ connection, model: saved.model, thinking: 'off' })
+    expect(await resolveSavedVoiceFocusConfig({ model: 'pi/another-model', thinking: 'low' }, deps)).toEqual({ connection, model: 'pi/another-model', thinking: 'low' })
+    expect(seen).toEqual([connection.slug, connection.slug])
+    expect(saved.model).toBe('pi/test-model')
+    expect(saved.thinking).toBe('off')
+    const { service } = fixture({ resolveConfig: request => resolveSavedVoiceFocusConfig(request, deps) })
+    const session = await service.register(7, { workspaceId: 'workspace', systemPrompt: 'Context' })
+    expect(session).toMatchObject({ model: saved.model, connection: connection.slug, thinking: 'off' })
+    service.close()
+  })
+
+  it('unconfigured, deleted or mismatched connection cannot fall back even with a diagnostic model', async () => {
+    let lookups = 0
+    await expect(resolveSavedVoiceFocusConfig({ model: saved.model }, { getSettings: () => ({ ...DEFAULT_ARTIST_MANAGER_VOICE_SETTINGS }), getConnection: () => { lookups++; return connection } })).rejects.toThrow('Settings')
+    expect(lookups).toBe(0)
+    for (const found of [null, { ...connection, slug: 'command-connection' }]) {
+      await expect(resolveSavedVoiceFocusConfig({}, { getSettings: () => saved, getConnection: () => found })).rejects.toThrow('no longer exists')
+    }
+  })
+
+  it('validates settings against the exact connection and SDK model without credentials or a provider call', async () => {
+    let credentialReads = 0
+    let providerCalls = 0
+    const resolved: string[] = []
+    const routeDeps = {
+      getConnection: (slug: string) => slug === connection.slug ? connection : null,
+      resolveModel: async (selected: LlmConnection, requested: string) => { resolved.push(selected.slug + ':' + requested); return model },
+      getApiKey: async () => { credentialReads++; return 'must-not-read' },
+      stream: async () => { providerCalls++; throw new Error('must-not-call') },
+    }
+    expect(await validateVoiceSettingsRoute(saved, routeDeps)).toEqual(saved)
+    expect(resolved).toEqual([connection.slug + ':pi/test-model'])
+    await expect(validateVoiceSettingsRoute({ ...saved, connectionSlug: 'deleted' }, routeDeps)).rejects.toThrow('no longer exists')
+    await expect(validateVoiceSettingsRoute({ ...saved, model: 'pi/other-provider-model' }, routeDeps)).rejects.toThrow('exact voice model')
+    expect(providerCalls).toBe(0)
+    expect(credentialReads).toBe(0)
+    resolved.length = 0
+    expect(await validateVoiceSettingsRoute({ ...DEFAULT_ARTIST_MANAGER_VOICE_SETTINGS }, routeDeps)).toEqual(DEFAULT_ARTIST_MANAGER_VOICE_SETTINGS)
+    expect(resolved).toEqual([])
+  })
+
+  it('rejects unsupported auth, protocol and unsafe endpoint during settings validation', async () => {
+    for (const candidate of [
+      { connection: { ...connection, authType: 'oauth' as const }, model },
+      { connection, model: { ...model, api: 'openai-codex-responses' as const } },
+      { connection, model: { ...model, baseUrl: 'https://name:secret@voice.example.test/v1' } },
+    ]) {
+      await expect(validateVoiceSettingsRoute(saved, {
+        getConnection: () => candidate.connection, resolveModel: async () => candidate.model,
+      })).rejects.toThrow()
+    }
   })
 })
