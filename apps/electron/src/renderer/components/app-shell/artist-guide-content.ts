@@ -210,9 +210,15 @@ export const ARTIST_GUIDE_CONNECTIONS: ArtistGuideConnection[] = [
     action: { id: 'settings.connections', label: 'Open Connections' },
   },
   {
+    id: 'inworld-tts', group: 'Creative providers', title: 'Inworld TTS',
+    unlocks: 'One voice connection for live Artist Manager speech and video-agent voiceovers.',
+    setup: 'Paste the Base64 API key from Inworld, then set the default agent voice ID or keep Ashley.',
+    action: { id: 'settings.connections', label: 'Open Connections' },
+  },
+  {
     id: 'voice-audio', group: 'Creative providers', title: 'Voice + Audio',
-    unlocks: 'Speech, voiceover, transcription, and audio intelligence through AssemblyAI, ElevenLabs, Fish Audio, or Inworld.',
-    setup: 'Create keys in the provider dashboards you use, then add only those keys under Voice + Audio.',
+    unlocks: 'Optional cloud transcription and alternate voice generation through AssemblyAI, ElevenLabs, or Fish Audio.',
+    setup: 'Create keys in the provider dashboards you use, then add only those optional connections.',
     action: { id: 'settings.connections', label: 'Open Connections' },
   },
   {

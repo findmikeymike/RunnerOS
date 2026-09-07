@@ -99,7 +99,7 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
                 <p className="max-w-xs text-[12px] leading-5 text-white/32">
                   {voice.providerReady
                     ? 'Start the conversation, then speak naturally. Wait for the manager to finish before replying; speaking over playback is disabled to prevent echo.'
-                    : 'Choose an installed local hearing model below, or configure AssemblyAI. Speaking requires an Inworld key in Settings.'}
+                    : 'Choose an installed local hearing model below, or configure AssemblyAI. Speaking uses your Inworld TTS connection in Settings.'}
                 </p>
               </div>
             )}
@@ -148,7 +148,7 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
                 </select>
               </label>
               <button type="button" onClick={() => void voice.refreshDevices()} className="text-white/65 underline underline-offset-4">Refresh audio devices</button>
-              <p>Speaking: Inworld Flash. Provider credentials stay in Settings.</p>
+              <p>Speaking: Inworld Flash with your saved default agent voice. Provider credentials stay in Settings.</p>
             </fieldset>
           </details>
 

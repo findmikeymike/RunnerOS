@@ -24,6 +24,17 @@
 
 export { CredentialManager, getCredentialManager, isValidUserSecretName, maskSecretValue, normalizeUserSecretName } from './manager.ts';
 export type { UserSecretSummary } from './manager.ts';
+export {
+  INWORLD_API_KEY_NAME,
+  INWORLD_VOICE_ID_NAME,
+  INWORLD_LEGACY_API_KEY_NAMES,
+  INWORLD_LEGACY_VOICE_ID_NAMES,
+  INWORLD_API_KEY_NAMES,
+  INWORLD_VOICE_ID_NAMES,
+  buildInworldBasicAuthorization,
+  resolveInworldApiKey,
+  resolveInworldVoiceId,
+} from './inworld.ts';
 export type { CredentialId, CredentialType, StoredCredential } from './types.ts';
 export { credentialIdToAccount, accountToCredentialId, SOURCE_CREDENTIAL_TYPES } from './types.ts';
 export type { CredentialBackend } from './backends/types.ts';

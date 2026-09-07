@@ -686,7 +686,7 @@ app.whenReady().then(async () => {
     })
     ipcMain.handle('__artist-manager-voice:proxy-info', () => {
       if (!artistManagerVoiceProxy) throw new Error('Artist Manager voice is unavailable in this app mode')
-      return artistManagerVoiceProxy.info
+      return artistManagerVoiceProxy.info()
     })
     ipcMain.handle('__artist-manager-voice:provider-status', () => {
       if (!artistManagerVoiceProxy) throw new Error('Artist Manager voice is unavailable in this app mode')

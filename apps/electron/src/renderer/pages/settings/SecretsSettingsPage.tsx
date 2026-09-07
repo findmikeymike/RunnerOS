@@ -57,6 +57,7 @@ export type SecretService = {
 }
 
 type ServiceStatus = 'ready' | 'needs'
+type InworldValidationState = 'none' | 'checking' | 'connected' | 'invalid' | 'unavailable'
 
 export const SECRET_PRESETS: SecretPreset[] = [
   {
@@ -236,17 +237,20 @@ export const SECRET_PRESETS: SecretPreset[] = [
   {
     group: 'AI / Media',
     name: 'INWORLD_API_KEY',
-    label: 'Inworld API key',
-    description: 'Used by voice/TTS workflows and env fallback source lookup.',
-    placeholder: 'Inworld key',
+    label: 'API key',
+    description: 'Paste the Base64 credentials from Inworld. One key powers Artist Manager speech and video-agent voiceovers.',
+    placeholder: 'Inworld Base64 API key',
     storage: 'env',
+    setupUrl: 'https://platform.inworld.ai/',
+    setupLabel: 'Get key',
   },
   {
     group: 'AI / Media',
-    name: 'INWORLD_RUNTIME_KEY',
-    label: 'Inworld runtime key',
-    description: 'Used by Inworld runtime voice and character workflows.',
-    placeholder: 'Inworld runtime key',
+    name: 'INWORLD_VOICE_ID',
+    label: 'Default agent voice',
+    description: 'Optional Inworld voice ID for Artist Manager speech and video voiceovers. Video projects can override it.',
+    placeholder: 'Ashley',
+    inputType: 'text',
     storage: 'env',
   },
   {
@@ -359,30 +363,6 @@ export const SECRET_PRESETS: SecretPreset[] = [
     label: 'Fish voice reference ID',
     description: 'Optional Fish TTS reference or voice ID for voiceover generation.',
     placeholder: 'reference id',
-    storage: 'env',
-  },
-  {
-    group: 'AI / Media',
-    name: 'SQUAD_INWORLD_TTS_API_KEY',
-    label: 'Inworld TTS API key (legacy alias)',
-    description: 'Legacy isolated alias. Prefer INWORLD_TTS_API_KEY for shared voice generation.',
-    placeholder: 'Inworld TTS key',
-    storage: 'env',
-  },
-  {
-    group: 'AI / Media',
-    name: 'INWORLD_TTS_API_KEY',
-    label: 'Inworld TTS API key',
-    description: 'Generic Inworld TTS fallback accepted by voiceover generation.',
-    placeholder: 'Inworld TTS key',
-    storage: 'env',
-  },
-  {
-    group: 'AI / Media',
-    name: 'SQUAD_INWORLD_TTS_VOICE_ID',
-    label: 'Inworld voice ID',
-    description: 'Optional Inworld voice ID for voiceover generation.',
-    placeholder: 'voice id',
     storage: 'env',
   },
   {
@@ -639,12 +619,20 @@ export const SERVICES: SecretService[] = [
     presetNames: ['PRINTIFY_API_TOKEN'],
   },
   {
+    id: 'inworld-tts',
+    group: 'Essential',
+    title: 'Inworld TTS',
+    description: 'One connection for live Artist Manager speech and video-agent voiceovers.',
+    presetNames: ['INWORLD_API_KEY', 'INWORLD_VOICE_ID'],
+    optionalPresetNames: ['INWORLD_VOICE_ID'],
+  },
+  {
     id: 'voice-audio',
     group: 'AI + Media',
-    title: 'Voice + Audio',
-    description: 'Speech, voiceover, transcription, and audio intelligence providers.',
-    presetNames: ['ASSEMBLYAI_API_KEY', 'ELEVENLABS_API_KEY', 'FISH_AUDIO_API_KEY', 'INWORLD_API_KEY', 'INWORLD_RUNTIME_KEY', 'INWORLD_TTS_API_KEY'],
-    optionalPresetNames: ['ASSEMBLYAI_API_KEY', 'ELEVENLABS_API_KEY', 'FISH_AUDIO_API_KEY', 'INWORLD_API_KEY', 'INWORLD_RUNTIME_KEY', 'INWORLD_TTS_API_KEY'],
+    title: 'Other Voice + Audio',
+    description: 'Optional cloud transcription and alternate voice providers.',
+    presetNames: ['ASSEMBLYAI_API_KEY', 'ELEVENLABS_API_KEY', 'FISH_AUDIO_API_KEY'],
+    optionalPresetNames: ['ASSEMBLYAI_API_KEY', 'ELEVENLABS_API_KEY', 'FISH_AUDIO_API_KEY'],
   },
   {
     id: 'media-generation',
@@ -696,7 +684,7 @@ export const SERVICES: SecretService[] = [
   },
 ]
 
-const ESSENTIAL_SERVICE_IDS = ['google-workspace', 'zero'] as const
+const ESSENTIAL_SERVICE_IDS = ['google-workspace', 'inworld-tts', 'zero'] as const
 const SECRET_GROUPS = [
   'Essential',
   ...Array.from(new Set(SERVICES.map((service) => service.group))).filter((group) => group !== 'Essential'),
@@ -729,6 +717,7 @@ export default function SecretsSettingsPage() {
   const [accessMessage, setAccessMessage] = React.useState('Only the workspace Owner can view or change saved keys and connected service credentials.')
   const [gmailScope, setGmailScope] = React.useState<SourceCredentialScopeResult | null>(null)
   const [gmailConnectionError, setGmailConnectionError] = React.useState<string | null>(null)
+  const [inworldValidation, setInworldValidation] = React.useState<InworldValidationState>('none')
   const [savedSecretsOpen, setSavedSecretsOpen] = React.useState(false)
 
   const services = React.useMemo(() => {
@@ -755,6 +744,7 @@ export default function SecretsSettingsPage() {
     setGmailScope(null)
     setMonid(null)
     setMonidBudget(null)
+    setInworldValidation('none')
     try {
       if (!activeWorkspaceId) {
         setAccessMessage('Select an active workspace to manage saved keys and connected service credentials.')
@@ -775,6 +765,14 @@ export default function SecretsSettingsPage() {
         window.electronAPI.getMonidBudget(activeWorkspaceId),
       ])
       setSecrets(secretRows)
+      if (secretRows.some((secret) => secret.name === 'INWORLD_API_KEY')) {
+        setInworldValidation('checking')
+        const validation = await window.electronAPI.testInworldTts(activeWorkspaceId).catch(() => ({
+          success: false,
+          kind: 'unavailable' as const,
+        }))
+        setInworldValidation(validation.success ? 'connected' : validation.kind === 'invalid' ? 'invalid' : 'unavailable')
+      }
       setMonid(monidStatus)
       setMonidBudget(monidBudgetStatus)
       setMonidSingleCap(monidBudgetStatus.singleCallCapUsd.toFixed(2))
@@ -1101,6 +1099,32 @@ export default function SecretsSettingsPage() {
       }
       return
     }
+    if (service.id === 'inworld-tts') {
+      setBusyServiceId(service.id)
+      setInworldValidation('checking')
+      try {
+        const result = await window.electronAPI.testInworldTts(
+          activeWorkspaceId,
+          draftValues.INWORLD_API_KEY?.trim(),
+          draftValues.INWORLD_VOICE_ID?.trim(),
+        )
+        if (!result.success) {
+          setInworldValidation(result.kind === 'invalid' ? 'invalid' : 'unavailable')
+          toast.error(result.error || 'Inworld connection failed')
+          return
+        }
+        setInworldValidation('connected')
+        toast.success(`Inworld connected · ${result.voiceId || 'Ashley'} voice`)
+      } catch (error) {
+        setInworldValidation('unavailable')
+        toast.error('Inworld connection failed', {
+          description: error instanceof Error ? error.message : String(error),
+        })
+      } finally {
+        setBusyServiceId(null)
+      }
+      return
+    }
     if (service.id === 'google-workspace') {
       toast.info('Google OAuth app keys are saved. Verify the signed-in Google account from its connected source or Calendar settings.')
       return
@@ -1328,7 +1352,11 @@ export default function SecretsSettingsPage() {
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <h3 className="text-sm font-semibold text-white/90">{service.title}</h3>
-                              <StatusIcon status={status} serviceId={service.id} />
+                              <StatusIcon
+                                status={status}
+                                serviceId={service.id}
+                                validation={service.id === 'inworld-tts' ? inworldValidation : undefined}
+                              />
                             </div>
                             <p className="mt-1 line-clamp-1 max-w-3xl text-xs leading-4 text-white/38">{service.description}</p>
                           </div>
@@ -1685,12 +1713,33 @@ function AnimateServiceFields({ open, children }: { open: boolean; children: Rea
   )
 }
 
-function StatusIcon({ status, serviceId }: { status: ServiceStatus; serviceId: string }) {
+function StatusIcon({
+  status,
+  serviceId,
+  validation,
+}: {
+  status: ServiceStatus
+  serviceId: string
+  validation?: InworldValidationState
+}) {
   const ready = status === 'ready'
-  const label = serviceId === 'zero'
-    ? ready ? 'Ready' : 'Needs setup'
-    : serviceId === 'google-workspace' && ready ? 'Keys saved' : ready ? 'Connected' : 'Not connected'
-  const icon = ready ? (
+  const label = validation === 'checking' ? 'Checking connection'
+    : validation === 'connected' ? 'Connected'
+      : validation === 'invalid' ? 'Invalid key or voice'
+        : validation === 'unavailable' ? 'Saved · Inworld unavailable'
+          : validation === 'none' && serviceId === 'inworld-tts' && ready ? 'Saved'
+            : serviceId === 'zero'
+            ? ready ? 'Ready' : 'Needs setup'
+            : serviceId === 'google-workspace' && ready ? 'Keys saved' : ready ? 'Connected' : 'Not connected'
+  const icon = validation === 'checking' ? (
+    <Loader2 className="h-3.5 w-3.5 animate-spin text-white/45" />
+  ) : validation === 'connected' ? (
+    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
+  ) : validation === 'invalid' ? (
+    <XCircle className="h-3.5 w-3.5 text-red-300" />
+  ) : validation === 'unavailable' ? (
+    <XCircle className="h-3.5 w-3.5 text-amber-300/80" />
+  ) : ready ? (
     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
   ) : (
     <XCircle className="h-3.5 w-3.5 text-white/32" />

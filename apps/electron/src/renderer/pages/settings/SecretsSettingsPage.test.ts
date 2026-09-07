@@ -57,4 +57,16 @@ describe('Keys settings registry', () => {
     expect(SERVICES.some((service) => service.id === 'trypost-provider')).toBe(false)
     expect(SERVICES.some((service) => service.id === 'postiz-provider')).toBe(false)
   })
+
+  test('exposes one canonical Inworld key with a separate default agent voice', () => {
+    const inworld = SERVICES.find((service) => service.id === 'inworld-tts')
+    expect(inworld?.group).toBe('Essential')
+    expect(inworld?.presetNames).toEqual(['INWORLD_API_KEY', 'INWORLD_VOICE_ID'])
+    expect(inworld?.optionalPresetNames).toEqual(['INWORLD_VOICE_ID'])
+
+    const exposedInworldNames = SECRET_PRESETS
+      .map((preset) => preset.name)
+      .filter((name) => name.startsWith('INWORLD_') || name.startsWith('SQUAD_INWORLD_'))
+    expect(exposedInworldNames).toEqual(['INWORLD_API_KEY', 'INWORLD_VOICE_ID'])
+  })
 })

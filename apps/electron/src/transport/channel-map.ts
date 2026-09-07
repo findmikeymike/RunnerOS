@@ -130,6 +130,7 @@ export const CHANNEL_MAP = {
   deleteSecret: invoke(RPC_CHANNELS.secrets.DELETE),
   onSecretsChanged: listener(RPC_CHANNELS.secrets.CHANGED),
   testGeniusAccessToken: invoke(RPC_CHANNELS.secrets.TEST_GENIUS),
+  testInworldTts: invoke(RPC_CHANNELS.secrets.TEST_INWORLD),
   getZeroStatus: invoke(RPC_CHANNELS.secrets.ZERO_STATUS),
   configureZeroBudget: invoke(RPC_CHANNELS.secrets.ZERO_BUDGET_CONFIGURE),
   installZero: invoke(RPC_CHANNELS.secrets.INSTALL_ZERO),

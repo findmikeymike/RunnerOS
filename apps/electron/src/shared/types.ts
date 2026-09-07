@@ -843,6 +843,7 @@ export interface ElectronAPI {
   deleteSecret(name: string, workspaceId: string): Promise<{ success: boolean; error?: string }>
   onSecretsChanged(callback: () => void): () => void
   testGeniusAccessToken(workspaceId: string, token?: string): Promise<{ success: boolean; error?: string; hits?: number }>
+  testInworldTts(workspaceId: string, apiKey?: string, voiceId?: string): Promise<{ success: boolean; error?: string; kind?: 'invalid' | 'unavailable'; voiceId?: string }>
   getZeroStatus(workspaceId: string): Promise<ZeroStatus>
   configureZeroBudget(workspaceId: string, weeklyLimitUsd: number): Promise<{ success: boolean; budget?: ZeroBudgetStatus; error?: string }>
   installZero(workspaceId: string): Promise<{ success: boolean; error?: string }>

@@ -2,7 +2,12 @@ import { createServer, type IncomingMessage, type Server } from 'node:http'
 import type { Socket } from 'node:net'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { WebSocket, WebSocketServer } from 'ws'
-import { getCredentialManager } from '@craft-agent/shared/credentials'
+import {
+  buildInworldBasicAuthorization,
+  getCredentialManager,
+  resolveInworldApiKey,
+  resolveInworldVoiceId,
+} from '@craft-agent/shared/credentials'
 
 const ASSEMBLYAI_TOKEN_URL = 'https://streaming.assemblyai.com/v3/token'
 const INWORLD_TTS_WS_URL = 'wss://api.inworld.ai/tts/v1/voice:streamBidirectional'
@@ -21,7 +26,7 @@ export type ArtistManagerVoiceProxyInfo = {
 }
 
 export type ArtistManagerVoiceProxy = {
-  info: ArtistManagerVoiceProxyInfo
+  info(): Promise<ArtistManagerVoiceProxyInfo>
   providerStatus(): Promise<ArtistManagerVoiceProviderStatus>
   createAssemblyAiToken(): Promise<string>
   close(): Promise<void>
@@ -54,11 +59,11 @@ export async function startArtistManagerVoiceProxy(): Promise<ArtistManagerVoice
   }
 
   return {
-    info: {
+    info: async () => ({
       webSocketUrl: `ws://127.0.0.1:${address.port}/inworld`,
       accessToken,
-      voiceId: process.env.INWORLD_VOICE_ID?.trim() || undefined,
-    },
+      voiceId: await readInworldVoiceId() ?? undefined,
+    }),
     providerStatus: getArtistManagerVoiceProviderStatus,
     createAssemblyAiToken,
     close: () => closeServer(server, browserWss),
@@ -68,7 +73,7 @@ export async function startArtistManagerVoiceProxy(): Promise<ArtistManagerVoice
 export async function getArtistManagerVoiceProviderStatus(): Promise<ArtistManagerVoiceProviderStatus> {
   const [assemblyAiKey, inworldKey] = await Promise.all([
     readSecret('ASSEMBLYAI_API_KEY'),
-    readSecret('INWORLD_RUNTIME_KEY'),
+    readInworldApiKey(),
   ])
   return {
     assemblyAi: Boolean(assemblyAiKey),
@@ -118,15 +123,15 @@ async function handleUpgrade(
     return
   }
 
-  const runtimeKey = await readSecret('INWORLD_RUNTIME_KEY')
-  if (!runtimeKey) {
+  const apiKey = await readInworldApiKey()
+  if (!apiKey) {
     rejectSocket(socket, '503 Service Unavailable')
     return
   }
 
   browserWss.handleUpgrade(req, socket, head, (browserSocket) => {
     bridgeSockets(browserSocket, new WebSocket(INWORLD_TTS_WS_URL, {
-      headers: { Authorization: buildInworldAuthorization(runtimeKey) },
+      headers: { Authorization: buildInworldBasicAuthorization(apiKey) },
     }))
   })
 }
@@ -155,9 +160,23 @@ function bridgeSockets(browserSocket: WebSocket, upstreamSocket: WebSocket): voi
   browserSocket.on('error', () => upstreamSocket.close())
 }
 
-async function readSecret(name: 'ASSEMBLYAI_API_KEY' | 'INWORLD_RUNTIME_KEY'): Promise<string | null> {
+async function readSecret(name: string): Promise<string | null> {
   const stored = await getCredentialManager().getUserSecret(name)
   return stored?.trim() || process.env[name]?.trim() || null
+}
+
+function readInworldApiKey(): Promise<string | null> {
+  return resolveInworldApiKey(
+    (name) => getCredentialManager().getUserSecret(name),
+    process.env,
+  )
+}
+
+function readInworldVoiceId(): Promise<string | null> {
+  return resolveInworldVoiceId(
+    (name) => getCredentialManager().getUserSecret(name),
+    process.env,
+  )
 }
 
 export function isAllowedVoiceProxyOrigin(origin: string | undefined): boolean {
@@ -187,10 +206,6 @@ export function withVoiceProxyAccessToken(webSocketUrl: string, accessToken: str
   const url = new URL(webSocketUrl)
   url.searchParams.set(ACCESS_TOKEN_QUERY, accessToken)
   return url.toString()
-}
-
-function buildInworldAuthorization(runtimeKey: string): string {
-  return `Basic ${runtimeKey.includes(':') ? Buffer.from(runtimeKey, 'utf8').toString('base64') : runtimeKey}`
 }
 
 function normalizeCloseCode(code: number): number {

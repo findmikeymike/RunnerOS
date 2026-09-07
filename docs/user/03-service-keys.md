@@ -41,11 +41,11 @@ Save image/video provider keys under **Settings -> Connections -> AI + Media -> 
 | Fal (`FAL_API_KEY`) | image/video/audio/3D model APIs | [Fal authentication docs](https://fal.ai/docs/api-reference/platform-apis/authentication) |
 | Replicate (`REPLICATE_API_TOKEN`) | model-specific image/video generation and editing | [Replicate HTTP API docs](https://replicate.com/docs/reference/http) |
 | WaveSpeed (`WAVESPEED_API_KEY`) | fast image/video generation APIs | [WaveSpeed authentication docs](https://wavespeed.ai/docs/docs-authentication) |
-| Inworld | character/voice/interactive AI services, if enabled | [Inworld API key docs](https://docs.inworld.ai/quickstart-tts) |
+| Inworld (`INWORLD_API_KEY`) | live Artist Manager speech and video-agent voiceovers from one Base64 key; `INWORLD_VOICE_ID` sets the shared default voice | [Inworld API key docs](https://docs.inworld.ai/quickstart-tts) |
 | ElevenLabs | voice/TTS/SFX, if enabled | [ElevenLabs API authentication](https://elevenlabs.io/docs/api-reference/authentication) |
 | HeyGen (`HEYGEN_API_KEY`) | avatar/video generation, if enabled | [HeyGen API key docs](https://developers.heygen.com/docs/api-key) |
 
-Older local builds may show `SQUAD_*` media keys. Treat those as legacy aliases. Prefer the shared names above for anything new.
+Older local builds may show `INWORLD_RUNTIME_KEY`, `INWORLD_TTS_API_KEY`, or `SQUAD_*` media keys. Artist OS migrates those Inworld aliases into `INWORLD_API_KEY`; prefer the shared names above for anything new.
 
 Optional provider defaults live in the same Media Generation card:
 

@@ -122,8 +122,18 @@ def load_settings(prefix: str = "SQUAD") -> Settings:
             or DEFAULT_FISH_TTS_REFERENCE_ID
         ),
         fish_tts_model_id=os.getenv(f"{prefix}_FISH_TTS_MODEL_ID", "s2-pro"),
-        inworld_tts_api_key=os.getenv(f"{prefix}_INWORLD_TTS_API_KEY") or os.getenv("INWORLD_TTS_API_KEY"),
-        inworld_tts_voice_id=os.getenv(f"{prefix}_INWORLD_TTS_VOICE_ID") or os.getenv("INWORLD_TTS_VOICE_ID") or "Ashley",
+        inworld_tts_api_key=(
+            os.getenv("INWORLD_API_KEY")
+            or os.getenv(f"{prefix}_INWORLD_TTS_API_KEY")
+            or os.getenv("INWORLD_TTS_API_KEY")
+            or os.getenv("INWORLD_RUNTIME_KEY")
+        ),
+        inworld_tts_voice_id=(
+            os.getenv("INWORLD_VOICE_ID")
+            or os.getenv(f"{prefix}_INWORLD_TTS_VOICE_ID")
+            or os.getenv("INWORLD_TTS_VOICE_ID")
+            or "Ashley"
+        ),
         heygen_api_key=os.getenv(f"{prefix}_HEYGEN_API_KEY") or os.getenv("HEYGEN_API_KEY"),
         heygen_avatar_id=os.getenv(f"{prefix}_HEYGEN_AVATAR_ID"),
         heygen_voice_id=os.getenv(f"{prefix}_HEYGEN_VOICE_ID"),

@@ -7,7 +7,18 @@ import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraf
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import { loadStoredConfig } from '@craft-agent/shared/config/storage'
 import { isValidThinkingLevel, normalizeThinkingLevel, THINKING_LEVEL_IDS } from '@craft-agent/shared/agent/thinking-levels'
-import { getCredentialManager, isValidUserSecretName, normalizeUserSecretName } from '@craft-agent/shared/credentials'
+import {
+  buildInworldBasicAuthorization,
+  getCredentialManager,
+  INWORLD_API_KEY_NAME,
+  INWORLD_LEGACY_API_KEY_NAMES,
+  INWORLD_LEGACY_VOICE_ID_NAMES,
+  INWORLD_VOICE_ID_NAME,
+  isValidUserSecretName,
+  normalizeUserSecretName,
+  resolveInworldApiKey,
+  resolveInworldVoiceId,
+} from '@craft-agent/shared/credentials'
 import { getWorkspaceOrThrow } from '@craft-agent/server-core/handlers'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -20,6 +31,8 @@ import { monidBudgetStore } from '@craft-agent/shared/mcp'
 
 const execFileAsync = promisify(execFile)
 const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
+const INWORLD_VOICE_PREVIEW_URL = 'https://api.inworld.ai/tts/v1/voice:preview'
+const INWORLD_CONVERSATION_MODEL_ID = 'inworld-tts-2-flash'
 const SHARED_FOLDER_PROVIDERS = new Set<SharedFolderProvider>([
   'google-drive',
   'dropbox',
@@ -49,8 +62,70 @@ async function commandExists(command: string): Promise<string | null> {
 }
 
 async function applyStoredSecretsToProcessEnv(): Promise<void> {
-  const env = await getCredentialManager().exportUserSecretsEnv()
+  const manager = getCredentialManager()
+  const stored = await manager.exportUserSecretsEnv()
+  const env = { ...stored }
+  const apiKey = await migrateStoredAliasGroupFromValues(INWORLD_API_KEY_NAME, INWORLD_LEGACY_API_KEY_NAMES, manager, stored)
+  const voiceId = await migrateStoredAliasGroupFromValues(INWORLD_VOICE_ID_NAME, INWORLD_LEGACY_VOICE_ID_NAMES, manager, stored)
+  if (apiKey) env[INWORLD_API_KEY_NAME] = apiKey
+  if (voiceId) env[INWORLD_VOICE_ID_NAME] = voiceId
   for (const [key, value] of Object.entries(env)) process.env[key] = value
+}
+
+let inworldMigration: Promise<void> | null = null
+
+async function migrateStoredInworldAliases(): Promise<void> {
+  if (inworldMigration) return inworldMigration
+  const run = (async () => {
+    const manager = getCredentialManager()
+    await migrateStoredAliasGroup(INWORLD_API_KEY_NAME, INWORLD_LEGACY_API_KEY_NAMES, manager)
+    await migrateStoredAliasGroup(INWORLD_VOICE_ID_NAME, INWORLD_LEGACY_VOICE_ID_NAMES, manager)
+  })()
+  inworldMigration = run
+  try {
+    await run
+  } finally {
+    if (inworldMigration === run) inworldMigration = null
+  }
+}
+
+async function migrateStoredAliasGroup(
+  canonicalName: string,
+  legacyNames: readonly string[],
+  manager: ReturnType<typeof getCredentialManager>,
+): Promise<void> {
+  const canonical = await manager.getUserSecret(canonicalName)
+  const legacy = await Promise.all(legacyNames.map(async (name) => ({ name, value: await manager.getUserSecret(name) })))
+  await migrateStoredAliasGroupFromValues(
+    canonicalName,
+    legacyNames,
+    manager,
+    Object.fromEntries([
+      [canonicalName, canonical ?? undefined],
+      ...legacy.map((entry) => [entry.name, entry.value ?? undefined]),
+    ]),
+  )
+}
+
+async function migrateStoredAliasGroupFromValues(
+  canonicalName: string,
+  legacyNames: readonly string[],
+  manager: ReturnType<typeof getCredentialManager>,
+  values: Readonly<Record<string, string | undefined>>,
+): Promise<string | undefined> {
+  const canonical = values[canonicalName]?.trim()
+  const migratedValue = canonical || legacyNames.map((name) => values[name]?.trim()).find(Boolean)
+  if (!migratedValue) return undefined
+
+  if (!canonical) await manager.setUserSecret(canonicalName, migratedValue)
+  process.env[canonicalName] = migratedValue
+
+  // Remove only aliases that hold the migrated value. Conflicting legacy values
+  // remain visible in Saved secrets rather than being destroyed silently.
+  for (const name of legacyNames) {
+    if (values[name]?.trim() === migratedValue) await manager.deleteUserSecret(name)
+  }
+  return migratedValue
 }
 
 function broadcastSecretsChanged(deps: HandlerDeps): void {
@@ -195,6 +270,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.secrets.SAVE,
   RPC_CHANNELS.secrets.DELETE,
   RPC_CHANNELS.secrets.TEST_GENIUS,
+  RPC_CHANNELS.secrets.TEST_INWORLD,
   RPC_CHANNELS.secrets.ZERO_STATUS,
   RPC_CHANNELS.secrets.ZERO_BUDGET_CONFIGURE,
   RPC_CHANNELS.secrets.INSTALL_ZERO,
@@ -214,6 +290,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
   server.handle(RPC_CHANNELS.secrets.LIST, async (_ctx, workspaceId?: string) => {
     const workspaceError = await assertSecretWorkspaceOwner(workspaceId)
     if (workspaceError) throw new Error(workspaceError.error)
+    await migrateStoredInworldAliases()
     return getCredentialManager().listUserSecrets()
   })
 
@@ -229,6 +306,9 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     }
     await getCredentialManager().setUserSecret(normalized, value)
     process.env[normalized] = value
+    if (normalized === INWORLD_API_KEY_NAME || normalized === INWORLD_VOICE_ID_NAME) {
+      await migrateStoredInworldAliases()
+    }
     broadcastSecretsChanged(deps)
     return { success: true }
   })
@@ -237,10 +317,15 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     const workspaceError = await assertSecretWorkspaceOwner(workspaceId)
     if (workspaceError) return workspaceError
     const normalized = normalizeUserSecretName(name)
-    const success = await getCredentialManager().deleteUserSecret(normalized)
-    delete process.env[normalized]
+    const linkedNames = normalized === INWORLD_API_KEY_NAME
+      ? [INWORLD_API_KEY_NAME, ...INWORLD_LEGACY_API_KEY_NAMES]
+      : normalized === INWORLD_VOICE_ID_NAME
+        ? [INWORLD_VOICE_ID_NAME, ...INWORLD_LEGACY_VOICE_ID_NAMES]
+        : [normalized]
+    const deleted = await Promise.all(linkedNames.map((name) => getCredentialManager().deleteUserSecret(name)))
+    for (const name of linkedNames) delete process.env[name]
     broadcastSecretsChanged(deps)
-    return { success }
+    return { success: deleted.some(Boolean) }
   })
 
   server.handle(RPC_CHANNELS.secrets.TEST_GENIUS, async (_ctx, workspaceId?: string, token?: string) => {
@@ -280,6 +365,64 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
         error: error instanceof Error && error.name === 'AbortError'
           ? 'Genius request timed out.'
           : error instanceof Error ? error.message : String(error),
+      }
+    } finally {
+      clearTimeout(timeout)
+    }
+  })
+
+  server.handle(RPC_CHANNELS.secrets.TEST_INWORLD, async (
+    _ctx,
+    workspaceId?: string,
+    submittedApiKey?: string,
+    submittedVoiceId?: string,
+  ) => {
+    const workspaceError = await assertSecretWorkspaceOwner(workspaceId)
+    if (workspaceError) return workspaceError
+    const manager = getCredentialManager()
+    const apiKey = submittedApiKey?.trim() || await resolveInworldApiKey(
+      (name) => manager.getUserSecret(name),
+      process.env,
+    )
+    if (!apiKey) return { success: false, kind: 'invalid' as const, error: 'Add the Inworld Base64 API key first.' }
+
+    const voiceId = submittedVoiceId?.trim() || await resolveInworldVoiceId(
+      (name) => manager.getUserSecret(name),
+      process.env,
+    ) || 'Ashley'
+    if (voiceId.length > 200 || /[\u0000-\u001f]/.test(voiceId)) {
+      return { success: false, kind: 'invalid' as const, error: 'Enter a valid Inworld voice ID.' }
+    }
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 10_000)
+    try {
+      const url = new URL(INWORLD_VOICE_PREVIEW_URL)
+      url.searchParams.set('voice_id', voiceId)
+      url.searchParams.set('model_id', INWORLD_CONVERSATION_MODEL_ID)
+      const response = await fetch(url, {
+        headers: {
+          Authorization: buildInworldBasicAuthorization(apiKey),
+          Accept: 'audio/mpeg',
+        },
+        signal: controller.signal,
+      })
+      await response.body?.cancel().catch(() => undefined)
+      if (response.ok) return { success: true, voiceId }
+      if (response.status === 401 || response.status === 403) {
+        return { success: false, kind: 'invalid' as const, error: 'Inworld rejected this API key.' }
+      }
+      if (response.status === 400 || response.status === 404) {
+        return { success: false, kind: 'invalid' as const, error: `Inworld could not use voice “${voiceId}” with TTS 2 Flash.` }
+      }
+      return { success: false, kind: 'unavailable' as const, error: `Inworld could not validate the connection (${response.status}).` }
+    } catch (error) {
+      return {
+        success: false,
+        kind: 'unavailable' as const,
+        error: error instanceof Error && error.name === 'AbortError'
+          ? 'Inworld validation timed out.'
+          : 'Inworld could not be reached. The saved key was not changed.',
       }
     } finally {
       clearTimeout(timeout)
