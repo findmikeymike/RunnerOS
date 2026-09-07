@@ -10,4 +10,5 @@ export { checkChatterboxMlxHealth, createChatterboxMlxTransport } from "./transp
 export { createChatterboxTtsTransport, createChatterboxTurboWebGpuTransport, } from "./transport/chatterbox/index";
 export { createMockTransportBundle, MockSttTransport } from "./transport/mock";
 export { createOpenAiTransportBundle } from "./transport/openai";
+export { AgentActivitySpeechController } from "./agentActivitySpeech";
 //# sourceMappingURL=index.js.map

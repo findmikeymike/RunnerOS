@@ -107,3 +107,31 @@ browser. These are development routes, not a production backend or rate limiter.
 Architecture note: browser providers remain JS-owned because native/network
 transport crates are not browser-compatible; the WASM boundary intentionally
 contains transport-light conversation state and audio normalization.
+
+## Natural speech during agent tools
+
+Action-capable hosts can emit short, host-authored status phrases without
+putting them in the assistant's answer or conversation history. Import
+`AgentActivitySpeechController` and push its emitted tokens into the same
+async queue used by the host's `WebLlmTransport`:
+
+```ts
+import { AgentActivitySpeechController, type LlmTokenEvent } from "@voice-core/web/cloud";
+
+const activity = new AgentActivitySpeechController({
+  emit: (token: LlmTokenEvent) => responseQueue.push(token),
+});
+
+// Map trusted host events, never model text or raw tool input.
+sessionEvents.on("tool_start", () => activity.toolStarted("checking"));
+sessionEvents.on("permission_request", () => activity.attentionRequired("approval"));
+sessionEvents.on("final_answer_started", () => activity.answerBeginning());
+sessionEvents.on("turn_finished", () => activity.finish());
+```
+
+The default controller waits briefly before speaking, emits at most one normal
+acknowledgement and one long-wait update, and cancels pending filler when the
+answer begins. `kind: "activity"` tokens are synthesized in order but excluded
+from assistant text, context, and completion claims. See
+`docs/SDK/AGENT-ACTIVITY-SPEECH.md` in the source repository for the host-event
+contract and safety rules.

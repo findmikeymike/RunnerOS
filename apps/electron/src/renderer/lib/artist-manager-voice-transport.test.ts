@@ -83,7 +83,9 @@ describe('Artist Manager voice transport', () => {
 const request = (signal = new AbortController().signal) => ({ userText: 'Act', contextJson: '[]', signal })
 async function drain(stream: AsyncIterable<{ text: string }>) {
   const chunks: string[] = []
-  for await (const event of stream) chunks.push(event.text)
+  for await (const event of stream as AsyncIterable<{ text: string; kind?: string }>) {
+    if (event.kind !== 'activity') chunks.push(event.text)
+  }
   return chunks.join('')
 }
 function deferred<T>() {
@@ -93,6 +95,80 @@ function deferred<T>() {
 }
 
 describe('Artist Manager voice action safety', () => {
+  test('speaks bounded host-authored activity without adding it to the final answer', async () => {
+    let listener!: (event: SessionEvent) => void
+    const transport = createArtistManagerVoiceTransport({
+      ensureSession: async () => ({ id: 's' }),
+      sendMessage: async () => {
+        listener({ type: 'tool_start', sessionId: 's', toolName: 'Search', toolUseId: 'search-1', toolInput: {} })
+        await new Promise(resolve => setTimeout(resolve, 10))
+        listener({ type: 'text_complete', sessionId: 's', text: 'I found it.' })
+        listener({ type: 'complete', sessionId: 's' })
+      },
+      cancelProcessing: async () => {},
+      onSessionEvent: h => { listener = h; return () => {} },
+      activitySpeech: {
+        acknowledgementDelayMs: 1,
+        longWaitDelayMs: 1_000,
+        phrases: { checking: ['Let me check that.'] },
+      },
+    })
+    const events: Array<{ text: string; kind?: string; done?: boolean }> = []
+    for await (const event of await transport.generateReply(request())) events.push(event)
+    expect(events).toEqual([
+      { kind: 'activity', text: 'Let me check that.' },
+      { text: 'I found it.' },
+      { text: '', done: true },
+    ])
+  })
+
+  test('fast tools finish before delayed activity speech can enter the response', async () => {
+    let listener!: (event: SessionEvent) => void
+    const transport = createArtistManagerVoiceTransport({
+      ensureSession: async () => ({ id: 's' }),
+      sendMessage: async () => {
+        listener({ type: 'tool_start', sessionId: 's', toolName: 'Read', toolUseId: 'read-1', toolInput: {} })
+        listener({ type: 'text_complete', sessionId: 's', text: 'Ready.' })
+        listener({ type: 'complete', sessionId: 's' })
+      },
+      cancelProcessing: async () => {},
+      onSessionEvent: h => { listener = h; return () => {} },
+      activitySpeech: { acknowledgementDelayMs: 25, longWaitDelayMs: 1_000 },
+    })
+    expect(await drain(await transport.generateReply(request()))).toBe('Ready.')
+  })
+
+  test('approval speech replaces pending generic tool activity', async () => {
+    let listener!: (event: SessionEvent) => void
+    const transport = createArtistManagerVoiceTransport({
+      ensureSession: async () => ({ id: 's' }),
+      sendMessage: async () => {
+        listener({ type: 'tool_start', sessionId: 's', toolName: 'Write', toolUseId: 'write-1', toolInput: {} })
+        listener({ type: 'permission_request', sessionId: 's', request: {} } as SessionEvent)
+        await new Promise(resolve => setTimeout(resolve, 10))
+        listener({ type: 'text_complete', sessionId: 's', text: 'Approved result.' })
+        listener({ type: 'complete', sessionId: 's' })
+      },
+      cancelProcessing: async () => {},
+      onSessionEvent: h => { listener = h; return () => {} },
+      activitySpeech: {
+        acknowledgementDelayMs: 1,
+        longWaitDelayMs: 1_000,
+        phrases: {
+          acting: ['I will take care of that.'],
+          approval: ['I need your approval before I continue.'],
+        },
+      },
+    })
+    const events: Array<{ text: string; kind?: string; done?: boolean }> = []
+    for await (const event of await transport.generateReply(request())) events.push(event)
+    expect(events).toEqual([
+      { kind: 'activity', text: 'I need your approval before I continue.' },
+      { text: 'Approved result.' },
+      { text: '', done: true },
+    ])
+  })
+
   test('auth handoff complete before auth_request never speaks success or dispatches again', async () => {
     let listener!: (event: SessionEvent) => void
     let sends = 0

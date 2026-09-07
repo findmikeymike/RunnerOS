@@ -218,6 +218,7 @@ export function useArtistManagerVoice(input: {
         if (!alive()) return
         if (event.type === 'userSpeechPartial' || event.type === 'userSpeechComplete') setUserText(event.text)
         else if (event.type === 'assistantText') setAssistantText(event.text)
+        else if (event.type === 'assistantActivity') setStatus(event.text)
         else if (event.type === 'stateChanged') setStatus(labelForVoiceState(event.state))
         else if (event.type === 'error' || event.type === 'captureError' || event.type === 'renderError') { setError(event.message); void stop() }
       })

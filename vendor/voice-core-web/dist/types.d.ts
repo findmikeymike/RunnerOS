@@ -163,6 +163,9 @@ export type VoiceBrowserExtensionEvent = {
     type: "assistantText";
     text: string;
 } | {
+    type: "assistantActivity";
+    text: string;
+} | {
     type: "assistantAudioStart";
 } | {
     type: "assistantAudioStop";

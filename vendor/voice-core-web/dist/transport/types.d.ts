@@ -8,6 +8,11 @@ export type SttTranscriptEvent = {
 export type LlmTokenEvent = {
     text: string;
     done?: boolean;
+    /**
+     * `activity` is short, host-authored speech played while an action agent is
+     * working. It is never part of the assistant answer or conversation history.
+     */
+    kind?: "answer" | "activity";
 };
 export type TtsAudioChunk = {
     frames: Float32Array;

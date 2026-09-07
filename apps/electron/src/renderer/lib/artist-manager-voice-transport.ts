@@ -1,5 +1,12 @@
 import type { SessionEvent } from '../../shared/types'
-import type { LlmGenerateRequest, LlmTokenEvent, WebLlmTransport } from '@voice-core/web/cloud'
+import {
+  AgentActivitySpeechController,
+  type AgentActivityKind,
+  type AgentActivitySpeechOptions,
+  type LlmGenerateRequest,
+  type LlmTokenEvent,
+  type WebLlmTransport,
+} from '@voice-core/web/cloud'
 
 export type ArtistManagerVoiceTransportDeps = {
   ensureSession(): Promise<{ id: string }>
@@ -11,6 +18,7 @@ export type ArtistManagerVoiceTransportDeps = {
   responseTimeoutMs?: number
   totalTimeoutMs?: number
   cancellationTimeoutMs?: number
+  activitySpeech?: Pick<AgentActivitySpeechOptions, 'acknowledgementDelayMs' | 'longWaitDelayMs' | 'phrases'>
 }
 
 export function createArtistManagerVoiceTransport(deps: ArtistManagerVoiceTransportDeps): WebLlmTransport {
@@ -84,6 +92,10 @@ async function* streamManagerReply(
   quarantine: () => void,
 ): AsyncIterable<LlmTokenEvent> {
   const queue = createEventQueue<LlmTokenEvent>()
+  const activitySpeech = new AgentActivitySpeechController({
+    emit: token => queue.push(token),
+    ...deps.activitySpeech,
+  })
   let completeText = ''
   let completed = false
   let dispatched = false
@@ -94,6 +106,7 @@ async function* streamManagerReply(
   const finish = () => {
     if (ended) return
     ended = true
+    activitySpeech.finish()
     const answer = completeText.trim() || 'The manager finished this turn without a spoken summary. No completion was confirmed.'
     if (answer) {
       queue.push({ text: answer })
@@ -105,6 +118,7 @@ async function* streamManagerReply(
   const fail = (error: Error) => {
     if (ended) return
     ended = true
+    activitySpeech.finish()
     queue.fail(error)
   }
   let responseTimeout: ReturnType<typeof setTimeout> | undefined
@@ -127,8 +141,16 @@ async function* streamManagerReply(
       || event.type === 'tool_result' || event.type === 'status' || event.type === 'auth_completed') {
       resetInactivity()
     }
+    if (event.type === 'tool_start') {
+      activitySpeech.toolStarted(classifyToolActivity(event.toolName))
+    } else if (event.type === 'permission_request') {
+      activitySpeech.attentionRequired('approval')
+    } else if (event.type === 'credential_request') {
+      activitySpeech.attentionRequired('credential')
+    }
     // Deltas include tool commentary; they cannot be retracted after speaking.
     if (event.type === 'text_complete' && !event.isIntermediate && !event.parentToolUseId) {
+      activitySpeech.answerBeginning()
       completeText = event.text
     } else if (event.type === 'model_attempt_reset') {
       completeText = ''
@@ -204,7 +226,15 @@ async function* streamManagerReply(
       }
     }
     unsubscribe()
+    activitySpeech.finish()
   }
+}
+
+function classifyToolActivity(toolName: string): AgentActivityKind {
+  const normalized = toolName.trim().toLowerCase()
+  if (/^(read|search|find|fetch|get|list|glob|grep|browser|web|inspect|query)/.test(normalized)) return 'checking'
+  if (/^(write|edit|create|delete|remove|move|send|schedule|publish|save|update|execute|run|bash)/.test(normalized)) return 'acting'
+  return 'working'
 }
 
 function throwIfAborted(signal: AbortSignal): void {

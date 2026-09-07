@@ -21,4 +21,6 @@ export { createMockTransportBundle, MockSttTransport } from "./transport/mock";
 export { createOpenAiTransportBundle } from "./transport/openai";
 export type { OpenAiTransportBundleOptions } from "./transport/openai";
 export type { LlmGenerateRequest, LlmTokenEvent, SttTranscriptEvent, TtsAudioChunk, TtsSynthesisRequest, WebLlmTransport, WebSttTransport, WebTransportBundle, WebTtsTransport, } from "./transport/types";
+export { AgentActivitySpeechController } from "./agentActivitySpeech";
+export type { AgentActivityKind, AgentActivitySpeechOptions, AgentAttentionKind, } from "./agentActivitySpeech";
 //# sourceMappingURL=index.d.ts.map

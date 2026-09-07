@@ -945,6 +945,13 @@ export class VoiceCoreWeb {
                 return;
             }
             if (!assistantText.trim() || !this.transports.tts) {
+                // Activity speech shares the response synthesis chain but never enters
+                // assistantText. Drain it before completing an otherwise empty turn.
+                await synthesisChain;
+                if (this.transports.tts) {
+                    await this.runtimeWorker.flushOutputAudio();
+                    this.scheduleDrainOutputAudio(0);
+                }
                 await this.pushAssistantText(assistantText, true);
                 this.lastAssistantPreviewText = "";
                 return;
@@ -1028,6 +1035,29 @@ export class VoiceCoreWeb {
                     speakableBuffer,
                     synthesisChain,
                 };
+            }
+            if (token.kind === "activity") {
+                if (token.done === true) {
+                    throw new Error("Agent activity speech cannot complete an assistant response");
+                }
+                const activityText = token.text.trim();
+                if ([...activityText].length > 160) {
+                    throw new Error("Agent activity speech exceeds 160 characters");
+                }
+                if (activityText) {
+                    this.emit({ type: "assistantActivity", text: activityText });
+                    if (this.transports.tts) {
+                        const speakableActivity = this.prepareTextForTts(activityText);
+                        if (speakableActivity) {
+                            synthesisChain = synthesisChain.then(async () => {
+                                if (controller.signal.aborted || generation !== this.responseGeneration)
+                                    return;
+                                await this.synthesizeAssistantChunk(speakableActivity, controller, generation);
+                            });
+                        }
+                    }
+                }
+                continue;
             }
             assistantText += token.text;
             speakableBuffer += token.text;
