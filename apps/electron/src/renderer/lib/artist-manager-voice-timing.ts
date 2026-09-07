@@ -6,7 +6,7 @@ export type VoiceTimingStage =
   | 'manager-queued' | 'session-setup-start' | 'session-setup-ready'
   | 'manager-request' | 'manager-first-text' | 'manager-final-text'
   | 'tool-start' | 'tool-result' | 'approval-wait' | 'auth-wait'
-  | 'model-fallback' | 'model-attempt-reset' | 'manager-complete' | 'answer-delivered'
+  | 'model-fallback-guard-start' | 'model-attempt-reset' | 'manager-complete' | 'answer-delivered'
   | 'activity-speech' | 'tts-request' | 'tts-first-audio' | 'tts-complete'
   | 'playback-start' | 'playback-complete' | 'error' | 'stop'
 

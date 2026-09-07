@@ -159,7 +159,7 @@ async function* streamManagerReply(
       else if (event.type === 'tool_result') timing(deps, 'tool-result', { tool: toolNumber(event.toolUseId), failed: event.isError === true })
       else if (event.type === 'permission_request') timing(deps, 'approval-wait')
       else if (event.type === 'credential_request' || event.type === 'auth_request') timing(deps, 'auth-wait')
-      else if (event.type === 'model_fallback_started') timing(deps, 'model-fallback')
+      else if (event.type === 'model_fallback_started') timing(deps, 'model-fallback-guard-start')
       else if (event.type === 'model_attempt_reset') { sawModelText = false; timing(deps, 'model-attempt-reset') }
       else if (event.type === 'complete') timing(deps, 'manager-complete', { failed: event.stopReason === 'timeout' || event.handoff === 'auth' })
     }

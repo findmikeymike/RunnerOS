@@ -57,8 +57,11 @@ final input. Raw late transcripts do not advance an active answer's turn.
 | accepted input → playback-start | Worklet playback onset; may be progress speech |
 
 `manager-first-text` may be intermediate commentary. It is recorded once per
-attempt; `model-attempt-reset` allows another first-text marker. Fallback and
-approval/auth waits are explicit. The SDK's misleadingly named llm-first-token
+attempt; `model-attempt-reset` allows another first-text marker.
+`model-fallback-guard-start` means the server enabled fallback protection for
+this turn; it does NOT mean the primary failed or a provider switched. Confirm
+actual switches from the session receipt and provider logs. Approval/auth waits
+are explicit. The SDK's misleadingly named llm-first-token
 is deliberately not used as the model-first-text measurement.
 
 Activity and answer TTS requests have separate kind labels, even if the answer

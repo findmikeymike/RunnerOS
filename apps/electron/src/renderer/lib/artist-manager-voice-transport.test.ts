@@ -539,7 +539,7 @@ describe('Artist Manager timing observer', () => {
     expect(await drain(await transport.generateReply(request()))).toBe('answer')
     expect(marks.map(m => m.stage)).toEqual([
       'manager-queued', 'manager-request', 'manager-first-text', 'tool-start', 'tool-result',
-      'model-fallback', 'model-attempt-reset', 'manager-first-text', 'manager-final-text', 'manager-complete', 'answer-delivered',
+      'model-fallback-guard-start', 'model-attempt-reset', 'manager-first-text', 'manager-final-text', 'manager-complete', 'answer-delivered',
     ])
     expect(marks.find(m => m.stage === 'tool-result')?.details).toEqual({ tool: 1, failed: true })
     expect(JSON.stringify(marks)).not.toContain('canary')
