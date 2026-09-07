@@ -4,6 +4,8 @@ import type { AgentDefinitionDTO, LoadedSkill, LoadedSource, ArtistManagerMoonsh
 import { VoiceCoreWeb, createAssemblyAiSttTransport, createInworldTtsTransport, type VoiceEvent } from '@voice-core/web/cloud'
 import { buildAgentCreateSessionOptions, ensureAgentDeclaredSkillsEnabled, loadAgentMemoryEntries, loadUserMemoryEntries } from '@/lib/run-agent'
 import { createArtistManagerVoiceTransport } from '@/lib/artist-manager-voice-transport'
+import { createVoiceFocusTransport } from '@/lib/artist-manager-voice-focus-transport'
+import { buildVoiceFocusPrompt } from '@/lib/artist-manager-voice-focus-prompt'
 import { applyVoiceModelTrial, buildArtistManagerVoiceSessionOptions, type VoiceModelTrial } from '@/lib/artist-manager-voice-session-policy'
 import { VoiceTimingTrace, observeVoiceStt, observeVoiceTts, type VoiceTimingRecord } from '@/lib/artist-manager-voice-timing'
 import { VoiceSessionLifecycle } from '@/lib/voice-session-lifecycle'
@@ -20,6 +22,7 @@ export type ArtistManagerVoiceState = {
   timingEnabled: boolean; setTimingEnabled(value: boolean): void
   typedTrial: boolean; setTypedTrial(value: boolean): void
   modelTrial: VoiceModelTrial; setModelTrial(value: VoiceModelTrial): void
+  focusedTrial: boolean; setFocusedTrial(value: boolean): void
   timingRecords: VoiceTimingRecord[]; canSendTyped: boolean; sendTyped(text: string): Promise<void>
   open: boolean; running: boolean; starting: boolean; stopping: boolean; installing: boolean
   providerReady: boolean; assemblyAiReady: boolean; inworldReady: boolean; hearingReady: boolean
@@ -39,6 +42,7 @@ export function useArtistManagerVoice(input: {
   const [timingEnabled, setTimingEnabled] = React.useState(false)
   const [typedTrial, setTypedTrial] = React.useState(false)
   const [modelTrial, setModelTrial] = React.useState<VoiceModelTrial>({ model: '', thinking: '' })
+  const [focusedTrial, setFocusedTrial] = React.useState(false)
   const [typedSending, setTypedSending] = React.useState(false)
   const [timingRecords, setTimingRecords] = React.useState<VoiceTimingRecord[]>([])
   const timingRef = React.useRef<VoiceTimingTrace | null>(null)
@@ -136,7 +140,7 @@ export function useArtistManagerVoice(input: {
     let ticket: number
     try { ticket = lifecycle.begin() } catch { return }
     stopEpoch.current++; setStopping(false)
-    setStarting(true); setError(null); setUserText(''); setAssistantText(''); setSessionId(null); setStatus('Connecting voice…')
+    setStarting(true); setError(null); setUserText(''); setAssistantText(''); setSessionId(null); setConversationSessionId(null); setStatus('Connecting voice…')
     const alive = () => mounted.current && lifecycle.owns(ticket)
     const trace = timingEnabled ? new VoiceTimingTrace(crypto.randomUUID(), record => {
       if (!mounted.current) return
@@ -221,9 +225,32 @@ export function useArtistManagerVoice(input: {
         getToken: () => window.electronAPI.createArtistManagerVoiceAssemblyToken(),
         speechModel: 'universal-streaming-multilingual', formatTurns: true,
       })
+      const refreshFocusPrompt = async () => {
+        lifecycle.assertOwner(ticket)
+        const docs = await window.electronAPI.listWorkspaceContextDocsForAgent(input.workspaceId, CONCIERGE_SLUG)
+        lifecycle.assertOwner(ticket)
+        return buildVoiceFocusPrompt(docs, managerStyle)
+      }
       await runtime.setTransports({
         stt: observeVoiceStt(stt, trace, timingEnabled && typedTrial),
-        llm: createArtistManagerVoiceTransport({
+        llm: timingEnabled && focusedTrial ? createVoiceFocusTransport({
+          api: window.electronAPI.artistManagerVoiceFocus,
+          ensureSession: async () => {
+            trace?.mark('session-setup-start')
+            const systemPrompt = await refreshFocusPrompt()
+            lifecycle.assertOwner(ticket)
+            const session = await window.electronAPI.artistManagerVoiceFocus.register({
+              workspaceId: input.workspaceId, systemPrompt,
+              model: modelTrial.model.trim() || undefined, thinking: modelTrial.thinking || 'low',
+            })
+            if (alive()) trace?.mark('session-setup-ready', { sessionId: session.sessionId, model: session.model, connection: session.connection, thinking: session.thinking })
+            return session
+          },
+          refreshPrompt: refreshFocusPrompt,
+          onTiming: (stage, details) => trace?.mark(stage, details),
+          onUserText: text => { if (alive()) setUserText(text) },
+          onAssistantText: text => { if (alive()) setAssistantText(text) },
+        }) : createArtistManagerVoiceTransport({
           ensureSession: ensureManagerSession,
           onTiming: (stage, details) => trace?.mark(stage, details),
           sendMessage: (id, text) => window.electronAPI.sendMessage(id, text),
@@ -253,7 +280,7 @@ export function useArtistManagerVoice(input: {
       trace?.mark('error')
       if (alive()) { await stop(); if (mounted.current) setError(messageFromError(cause)) }
     } finally { if (alive()) setStarting(false) }
-  }, [timingEnabled, typedTrial, modelTrial, input.agents, input.skills, input.sources, input.workspaceId, lifecycle, managerStyle, sttSelection, inputDeviceId, outputDeviceId, stop, refreshDevices])
+  }, [timingEnabled, typedTrial, modelTrial, focusedTrial, input.agents, input.skills, input.sources, input.workspaceId, lifecycle, managerStyle, sttSelection, inputDeviceId, outputDeviceId, stop, refreshDevices])
 
   const canSendTyped = timingEnabled && typedTrial && running && !typedSending && status === 'Listening…'
   const sendTyped = async (text: string) => {
@@ -274,6 +301,7 @@ export function useArtistManagerVoice(input: {
     timingEnabled, setTimingEnabled: value => { if (!running && !starting && !stopping) setTimingEnabled(value) },
     typedTrial, setTypedTrial: value => { if (!running && !starting && !stopping) setTypedTrial(value) },
     modelTrial, setModelTrial: value => { if (!running && !starting && !stopping) setModelTrial(value) },
+    focusedTrial, setFocusedTrial: value => { if (!running && !starting && !stopping) setFocusedTrial(value) },
     timingRecords, canSendTyped, sendTyped,
     open, running, starting, stopping, installing, status, error, userText, assistantText, sessionId, conversationSessionId,
     providerReady: hearingReady && providers.inworld, hearingReady, assemblyAiReady: providers.assemblyAi, inworldReady: providers.inworld,

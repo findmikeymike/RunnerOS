@@ -112,3 +112,46 @@ to send the existing full Artist Manager context to `api.deepseek.com`.
 No benchmark request ran and no credentials were decrypted. Temporary encrypted
 credential copies were removed. No comparative speed result or new model
 recommendation is claimed.
+
+## Authorized model comparison and focused voice candidate
+
+The user subsequently explicitly authorized sending the existing Artist Manager
+context to the configured DeepSeek endpoint, including testing a focused voice
+mode without tools. Both isolated Pi comparison matrices completed successfully:
+18 turns, no errors or tool calls. These are sequential individual observations,
+with provider caching, not latency distributions or end-to-end audio timings.
+
+| Context / model | Cold greeting, final text | Warm greeting, final text | Priority answer, final text |
+| --- | ---: | ---: | ---: |
+| Full / Pro medium | 3.867 s | 1.792 s | 5.267 s |
+| Full / Pro low | 2.651 s | 1.821 s | 11.696 s |
+| Full / Flash low | 1.354 s | 1.141 s | 2.027 s |
+| Compact / Pro medium | 2.519 s | 3.252 s | 3.137 s |
+| Compact / Pro low | 2.256 s | 1.529 s | 2.371 s |
+| Compact / Flash low | 1.090 s | 1.008 s | 1.578 s |
+
+Full voice context was 65,399 characters (17,437 input tokens in the first
+trial); the compact benchmark prompt was 2,631 characters. Compact Flash's
+priority reply began at 1.101 s and contained 38 words. Lower reasoning on Pro
+alone did not consistently reduce delay. Some Pro/medium greetings became
+unsolicited planning, motivating the strong delivery rule after the brief.
+The priority answers used supplied snapshot data, with no fresh tool lookup.
+
+Numeric evidence: `/private/tmp/artist-os-model-speed-results.json` and
+`/private/tmp/artist-os-model-speed-compact-results.json`. The latter also holds
+local answer text for quality inspection. Encrypted credential copies were
+removed after each run; saved settings were not changed.
+
+The candidate under Response timing uses a main-owned, streaming, tool-free
+model service. It creates no Agent/SessionManager runtime, registers no tools,
+does not replay failed or empty replies, and does not substitute models. API-key
+credentials stay in main. Unsupported auth/model/protocol combinations fail
+explicitly. Normal Manager chat and voice remain unchanged unless this test
+mode is selected. Focused transcripts are temporary and not saved to chat.
+
+Each turn receives the existing bounded Manager Brief with freshness warnings
+and provenance, refreshed through the normal authorized context API. The
+conversation can discuss goals, priorities and decisions; actions are referred
+to Manager chat. Recent successful conversation history is bounded. Cancellation
+is tied to the owning app window and handles pending registration, navigation,
+renderer loss and late provider events.

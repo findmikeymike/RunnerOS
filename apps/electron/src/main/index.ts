@@ -140,6 +140,7 @@ import {
   startArtistManagerVoiceProxy,
   type ArtistManagerVoiceProxy,
 } from './artist-manager-voice-proxy'
+import { ArtistManagerVoiceFocusService } from './artist-manager-voice-focus'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -241,6 +242,7 @@ let messagingHandle: MessagingBootstrapHandle | null = null
 // before-quit handler can stop it cleanly.
 let triggerServerHandle: { url: string; stop: () => Promise<void> } | null = null
 let artistManagerVoiceProxy: ArtistManagerVoiceProxy | null = null
+const artistManagerVoiceFocus = new ArtistManagerVoiceFocusService()
 let artistManagerMoonshine: ArtistManagerMoonshine | null = null
 let embeddedOmniRoute: EmbeddedOmniRoute | null = null
 
@@ -702,6 +704,39 @@ app.whenReady().then(async () => {
       userDataDirectory: app.getPath('userData'),
     })
     const observedVoiceSenders = new WeakSet<Electron.WebContents>()
+    const focusOwner = (event: Electron.IpcMainInvokeEvent) => {
+      const sender = event.sender
+      if (!artistManagerVoiceProxy || sender.isDestroyed() || event.senderFrame !== sender.mainFrame
+        || !windowManager?.getAllWindows().some(({ window }) => window.webContents === sender)) {
+        throw new Error('Focused voice is restricted to the local app main window')
+      }
+      if (!observedFocusSenders.has(sender)) {
+        observedFocusSenders.add(sender)
+        const release = () => artistManagerVoiceFocus.stopOwner(sender.id)
+        sender.once('destroyed', release)
+        sender.on('render-process-gone', release)
+        sender.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+          if (isMainFrame && !isInPlace) release()
+        })
+      }
+      return sender
+    }
+    const observedFocusSenders = new WeakSet<Electron.WebContents>()
+    ipcMain.handle('__artist-manager-voice-focus:register', (event, request) =>
+      artistManagerVoiceFocus.register(focusOwner(event).id, request))
+    ipcMain.handle('__artist-manager-voice-focus:turn', (event, request) => {
+      const sender = focusOwner(event)
+      return artistManagerVoiceFocus.startTurn(sender.id, request, value => {
+        if (!sender.isDestroyed()) sender.send('__artist-manager-voice-focus:event', value)
+      })
+    })
+    ipcMain.handle('__artist-manager-voice-focus:cancel', (event, request) =>
+      artistManagerVoiceFocus.cancel(focusOwner(event).id, request))
+    ipcMain.handle('__artist-manager-voice-focus:stop', (event, sessionId) => {
+      const owner = focusOwner(event).id
+      if (sessionId === undefined) artistManagerVoiceFocus.stopOwner(owner)
+      else artistManagerVoiceFocus.stop(owner, sessionId)
+    })
     ipcMain.handle('__artist-manager-moonshine:invoke', async (event, request: unknown) => {
       const sender = event.sender
       if (sender.isDestroyed() || event.senderFrame !== sender.mainFrame
@@ -1505,6 +1540,7 @@ async function performQuitCleanup(): Promise<void> {
   }
 
   if (artistManagerVoiceProxy) {
+    artistManagerVoiceFocus.close()
     try {
       await artistManagerVoiceProxy.close()
       artistManagerVoiceProxy = null
