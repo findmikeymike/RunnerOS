@@ -18,13 +18,14 @@ describe('Signal briefing contract', () => {
 
   test('returns null for old, empty, unavailable, and oversized reports', () => {
     for (const text of ['', '# Old report\nA summary.', '## Your Briefing',
-      report(briefing().replace('Insight', 'scan unavailable')),
-      report(briefing().replace('Insight', 'all lanes failed')),
-      report(briefing().replace('Insight', 'no usable findings')),
+      report('The scan was unavailable.'),
+      report('All lanes failed.'),
+      report('No usable findings.'),
       report(briefing().replace('Insight', 'x'.repeat(2500))), 'x'.repeat(100_001)]) {
       expect(parseSignalBriefing(text)).toBeNull();
     }
     expect(parseSignalBriefing(report(briefing().replace('Insight', 'One lane was unavailable')))).not.toBeNull();
+    expect(parseSignalBriefing(report(briefing().replace('Insight', 'There were no usable findings from the industry desk, but the platform findings matter.')))).not.toBeNull();
   });
 
   test('recognizes actual h2 boundaries, CRLF, closing hashes, and setext headings', () => {

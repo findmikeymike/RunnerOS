@@ -68,8 +68,7 @@ export function parseSignalBriefing(markdown: string): string | null {
   if (!found || text.length > 2_000
     || /[`*_<>{}\[\]|]|https?:\/\/|www\.|&(?:#\d+|#x[\da-f]+|[a-z]+);/i.test(text)
     || /^\s*(?:[-+#>]\s|\d+[.)]\s|\S.*\n(?:=+|-+)\s*$)/m.test(text)
-    || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/.test(text)
-    || /\b(?:scan (?:is |was )?unavailable|all (?:three )?(?:lanes|collectors) (?:are |were )?(?:unavailable|failed)|no (?:usable |supported )?findings|briefing (?:is |was )?unavailable)\b/i.test(text)) return null;
+    || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/.test(text)) return null;
   const words = text.split(/\s+/);
   return words.length >= 80 && words.length <= 180 ? words.join(' ') : null;
 }
