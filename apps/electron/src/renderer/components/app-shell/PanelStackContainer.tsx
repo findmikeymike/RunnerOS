@@ -328,6 +328,10 @@ export function PanelStackContainer({
             activeInstance={activeBrowserInstance}
             instances={browserInstances}
             presentation="inline"
+            inlineWidth={effectiveVisualSidecarWidth}
+            inlineMaxWidth={inlineVisualMaxWidth}
+            onInlineWidthChange={resizeVisualSidecar}
+            onInlineWidthCommit={persistVisualSidecarWidth}
             hasCanvas={!!visibleVisualSurface}
             onSelectInstance={setActiveBrowserInstanceId}
             onShowCanvas={showCanvasSidecar}

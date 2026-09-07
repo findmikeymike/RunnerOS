@@ -263,34 +263,6 @@ export function TopBar({
           : "bg-transparent",
       )}
     >
-      {isMac && usesPersistentArtistChrome && (
-        <div
-          className="titlebar-no-drag pointer-events-auto absolute left-[18px] top-0 z-[90] flex h-full items-center gap-2"
-          data-testid="persistent-mac-window-controls"
-        >
-          <button
-            type="button"
-            title="Close"
-            aria-label="Close window"
-            onClick={() => { void window.electronAPI.closeWindow() }}
-            className="h-3 w-3 rounded-full border border-black/20 bg-[#ff5f57]"
-          />
-          <button
-            type="button"
-            title="Minimize"
-            aria-label="Minimize window"
-            onClick={() => { void window.electronAPI.menuMinimize() }}
-            className="h-3 w-3 rounded-full border border-black/20 bg-[#febc2e]"
-          />
-          <button
-            type="button"
-            title="Zoom"
-            aria-label="Zoom window"
-            onClick={() => { void window.electronAPI.menuMaximize() }}
-            className="h-3 w-3 rounded-full border border-black/20 bg-[#28c840]"
-          />
-        </div>
-      )}
       <div className="flex h-full w-full items-center justify-between gap-2">
       {/* === LEFT: Sidebar + Menu + Navigation + Workspace === */}
       {/* Keep this container draggable. Only individual interactive controls should use titlebar-no-drag. */}

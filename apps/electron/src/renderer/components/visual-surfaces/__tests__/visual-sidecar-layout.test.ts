@@ -28,6 +28,22 @@ describe('visual sidecar layout', () => {
     expect(handle).toContain('data-testid="visual-sidecar-resize-handle"')
   })
 
+  it('keeps the adjustable width when Canvas is showing a website', () => {
+    const stack = readFileSync(
+      join(import.meta.dir, '..', '..', 'app-shell', 'PanelStackContainer.tsx'),
+      'utf8',
+    )
+    const browser = readFileSync(
+      join(import.meta.dir, '..', '..', 'browser', 'BrowserSidecarPanel.tsx'),
+      'utf8',
+    )
+
+    expect(stack).toContain('inlineWidth={effectiveVisualSidecarWidth}')
+    expect(stack).toContain('inlineMaxWidth={inlineVisualMaxWidth}')
+    expect(browser).toContain('<VisualSidecarResizeHandle')
+    expect(browser).toContain("style={presentation === 'inline' && inlineWidth ? { width: inlineWidth } : undefined}")
+  })
+
   it('explains the Canvas icon on hover and keyboard focus', () => {
     const toggle = readFileSync(join(import.meta.dir, '..', 'VisualSurfaceToggle.tsx'), 'utf8')
 

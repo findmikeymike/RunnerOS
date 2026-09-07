@@ -4,6 +4,7 @@ import type { BrowserInstanceInfo, BrowserPaneBounds } from '../../../shared/typ
 import { Button } from '@/components/ui/button'
 import { hasOpenOverlay } from '@/lib/overlay-detection'
 import { cn } from '@/lib/utils'
+import { VisualSidecarResizeHandle } from '@/components/visual-surfaces/VisualSidecarResizeHandle'
 import {
   cancelDeferredSidecarHide,
   deferSidecarHide,
@@ -15,6 +16,10 @@ interface BrowserSidecarPanelProps {
   activeInstance: BrowserInstanceInfo
   instances: BrowserInstanceInfo[]
   presentation: 'inline' | 'overlay'
+  inlineWidth?: number
+  inlineMaxWidth?: number
+  onInlineWidthChange?: (width: number) => void
+  onInlineWidthCommit?: (width: number) => void
   hasCanvas: boolean
   onSelectInstance: (instanceId: string) => void
   onShowCanvas: () => void
@@ -53,6 +58,10 @@ export const BrowserSidecarPanel: React.FC<BrowserSidecarPanelProps> = ({
   activeInstance,
   instances,
   presentation,
+  inlineWidth,
+  inlineMaxWidth,
+  onInlineWidthChange,
+  onInlineWidthCommit,
   hasCanvas,
   onSelectInstance,
   onShowCanvas,
@@ -200,13 +209,22 @@ export const BrowserSidecarPanel: React.FC<BrowserSidecarPanelProps> = ({
       data-browser-sidecar="open"
       data-browser-sidecar-mode={presentation}
       className={cn(
-        'z-[9] flex min-h-0 overflow-hidden rounded-[12px] border border-border/70 bg-background shadow-modal-small',
+        'relative z-[9] flex min-h-0 rounded-[12px] border border-border/70 bg-background shadow-modal-small',
         presentation === 'inline'
-          ? 'h-full w-[clamp(420px,38vw,580px)] shrink-0'
+          ? 'h-full shrink-0'
           : 'absolute bottom-2 right-2 top-2 w-[min(620px,calc(100%_-_16px))]',
       )}
+      style={presentation === 'inline' && inlineWidth ? { width: inlineWidth } : undefined}
     >
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {presentation === 'inline' && inlineWidth && inlineMaxWidth && onInlineWidthChange && onInlineWidthCommit ? (
+        <VisualSidecarResizeHandle
+          width={inlineWidth}
+          maxWidth={inlineMaxWidth}
+          onWidthChange={onInlineWidthChange}
+          onWidthCommit={onInlineWidthCommit}
+        />
+      ) : null}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[11px]">
         <header className="flex h-10 shrink-0 items-center gap-1.5 border-b border-border/55 bg-background/95 px-2">
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
             {instances.map((instance) => (

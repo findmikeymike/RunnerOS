@@ -22,25 +22,20 @@ describe('Artist OS persistent shell chrome', () => {
     expect(shell).not.toContain('<PanelLeftRounded')
   })
 
-  test('keeps clickable traffic lights and the header divider permanently rendered', () => {
+  test('uses native macOS traffic lights and keeps the header divider rendered', () => {
     const topBar = readFileSync(join(import.meta.dir, '..', 'TopBar.tsx'), 'utf8')
     const windowManager = readFileSync(
       join(import.meta.dir, '..', '..', '..', '..', 'main', 'window-manager.ts'),
       'utf8',
     )
-
     expect(topBar).toContain("RENDERER_PRODUCT_VARIANT === 'artist-os'")
-    expect(topBar).toContain('data-testid="persistent-mac-window-controls"')
     expect(topBar).toContain('artist-os-topbar-glass border-b border-white/10 text-white')
-    expect(topBar).toContain('bg-[#ff5f57]')
-    expect(topBar).toContain('bg-[#febc2e]')
-    expect(topBar).toContain('bg-[#28c840]')
-    expect(topBar).toContain('window.electronAPI.closeWindow()')
-    expect(topBar).toContain('window.electronAPI.menuMinimize()')
-    expect(topBar).toContain('window.electronAPI.menuMaximize()')
-    expect(windowManager).toContain("RUNTIME_IDENTITY.variant === 'artist-os' ? false : visible")
+    expect(topBar).not.toContain('data-testid="persistent-mac-window-controls"')
+    expect(windowManager).toContain('window.setWindowButtonVisibility(true)')
+    expect(windowManager).toContain("RUNTIME_IDENTITY.variant === 'artist-os'")
+    expect(windowManager).toContain('app.quit()')
     expect(windowManager).toContain("window.on('restore', keepArtistTrafficLightsStable)")
-    expect(windowManager).toContain('managed.window.setWindowButtonVisibility(shouldShow)')
+    expect(windowManager).toContain('managed.window.setWindowButtonVisibility(visible)')
   })
 
   test('groups HQ, Campaigns, and Lab beside the sidebar divider', () => {

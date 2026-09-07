@@ -196,9 +196,8 @@ export class WindowManager {
 
     const keepArtistTrafficLightsStable = () => {
       if (!isMac || RUNTIME_IDENTITY.variant !== 'artist-os' || window.isDestroyed()) return
-      // Artist OS renders persistent, clickable controls in the header. Hiding
-      // the native set prevents macOS from dimming, moving, or covering them.
-      window.setWindowButtonVisibility(false)
+      window.setWindowButtonVisibility(true)
+      window.setWindowButtonPosition({ x: 18, y: 16 })
     }
 
     // Show window when first paint is ready (faster perceived startup)
@@ -398,12 +397,24 @@ export class WindowManager {
         return
       }
 
+      const wcId = window.webContents.id
+      const isKeyboardClose = this.keyboardCloseIntents.has(wcId)
+
+      // Artist OS is a single-window product. Use the real macOS close control
+      // and quit directly; renderer-owned fake traffic lights sit inside a
+      // native reserved region and stopped receiving reliable clicks in
+      // Electron 44.
+      if (isMac && RUNTIME_IDENTITY.variant === 'artist-os' && !isKeyboardClose) {
+        event.preventDefault()
+        app.quit()
+        return
+      }
+
       // Check if renderer is ready (mainFrame exists) - if not, allow close directly
       if (!window.webContents.isDestroyed() && window.webContents.mainFrame) {
         event.preventDefault()
-        const wcId = window.webContents.id
         let source: WindowCloseRequestSource = 'window-button'
-        if (this.keyboardCloseIntents.has(wcId)) {
+        if (isKeyboardClose) {
           source = 'keyboard-shortcut'
           this.keyboardCloseIntents.delete(wcId)
           const keyboardIntentTimeout = this.keyboardCloseIntentTimeouts.get(wcId)
@@ -679,14 +690,11 @@ export class WindowManager {
 
     const managed = this.windows.get(webContentsId)
     if (managed && !managed.window.isDestroyed()) {
-      // Artist OS owns persistent renderer controls; keep native controls hidden
-      // so focus and overlay transitions cannot make the visible set disappear.
-      const shouldShow = RUNTIME_IDENTITY.variant === 'artist-os' ? false : visible
-      managed.window.setWindowButtonVisibility(shouldShow)
+      managed.window.setWindowButtonVisibility(visible)
       // Re-apply custom traffic light position after showing buttons
       // setWindowButtonVisibility can reset position to default, so we need
       // to restore the custom position using the modern setWindowButtonPosition API
-      if (shouldShow) {
+      if (visible) {
         managed.window.setWindowButtonPosition({ x: 18, y: 19 })
       }
     }
