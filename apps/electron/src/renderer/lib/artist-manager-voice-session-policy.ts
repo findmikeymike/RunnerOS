@@ -1,6 +1,22 @@
 import type { CreateSessionOptions, LoadedSkill } from '../../shared/types'
 import { buildArtistManagerVoiceStylePrompt, type ArtistManagerVoiceStyleId } from './artist-manager-voice-style'
 
+export type VoiceModelTrial = { model: string; thinking: '' | 'off' | 'low' }
+
+/** In-memory diagnostic overrides; never change the saved agent or connection. */
+export function applyVoiceModelTrial(base: CreateSessionOptions, enabled: boolean, trial: VoiceModelTrial): CreateSessionOptions {
+  if (!enabled) return base
+  const model = trial.model.trim() || base.model
+  const thinkingLevel = trial.thinking || base.thinkingLevel
+  return {
+    ...base, model, thinkingLevel,
+    launchReceipt: base.launchReceipt ? {
+      ...base.launchReceipt,
+      config: { ...base.launchReceipt.config, model, thinkingLevel },
+    } : undefined,
+  }
+}
+
 // These procedures are otherwise implicit on every Manager turn, including a
 // greeting. Inject their actual loaded bodies once, avoiding a model round trip
 // whose only purpose is to request the same instructions through Read.

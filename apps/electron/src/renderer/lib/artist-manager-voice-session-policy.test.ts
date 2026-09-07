@@ -1,12 +1,28 @@
 import { describe, expect, it } from 'bun:test'
 import type { CreateSessionOptions } from '../../shared/types'
-import { buildArtistManagerVoiceSessionOptions } from './artist-manager-voice-session-policy'
+import { applyVoiceModelTrial, buildArtistManagerVoiceSessionOptions } from './artist-manager-voice-session-policy'
 
 const procedure = (slug: string, content = `Complete instructions for ${slug}.`) => ({
   slug, content, path: `/workspace/skills/${slug}`,
 })
 
 describe('Artist Manager voice session policy', () => {
+  it('applies model trials only when diagnostics are enabled, preserving connection and approvals', () => {
+    const base: CreateSessionOptions = {
+      model: 'pi/deepseek-v4-pro', thinkingLevel: 'medium', llmConnection: 'pi-api-key',
+      permissionMode: 'safe', customSystemPrompt: 'Full artist context',
+      launchReceipt: { createdAt: 1, origin: 'concierge', summary: 'Voice', config: { model: 'pi/deepseek-v4-pro', thinkingLevel: 'medium', permissionMode: 'safe' }, injected: { systemPromptChars: 19, skills: [], sources: [], contextDocs: [] } },
+    }
+    const original = structuredClone(base)
+    const trial = { model: ' pi/deepseek-v4-flash ', thinking: 'low' as const }
+    expect(applyVoiceModelTrial(base, false, trial)).toBe(base)
+    const result = applyVoiceModelTrial(base, true, trial)
+    expect(result).toEqual({ ...base, model: 'pi/deepseek-v4-flash', thinkingLevel: 'low', launchReceipt: { ...base.launchReceipt!, config: { ...base.launchReceipt!.config, model: 'pi/deepseek-v4-flash', thinkingLevel: 'low' } } })
+    expect(applyVoiceModelTrial(base, true, { model: ' ', thinking: '' })).toEqual(base)
+    expect(applyVoiceModelTrial(base, true, { model: '', thinking: 'off' }).thinkingLevel).toBe('off')
+    expect(base).toEqual(original)
+  })
+
   it('preloads complete declared procedures while preserving conditional and custom skill prerequisites', () => {
     const skills = [
       procedure('artist-manager-operating-system', 'Keep this entire procedure.\n\nRead references/current-state.md when needed.\nFinal instruction.'),

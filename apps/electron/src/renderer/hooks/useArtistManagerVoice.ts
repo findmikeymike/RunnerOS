@@ -4,7 +4,7 @@ import type { AgentDefinitionDTO, LoadedSkill, LoadedSource, ArtistManagerMoonsh
 import { VoiceCoreWeb, createAssemblyAiSttTransport, createInworldTtsTransport, type VoiceEvent } from '@voice-core/web/cloud'
 import { buildAgentCreateSessionOptions, ensureAgentDeclaredSkillsEnabled, loadAgentMemoryEntries, loadUserMemoryEntries } from '@/lib/run-agent'
 import { createArtistManagerVoiceTransport } from '@/lib/artist-manager-voice-transport'
-import { buildArtistManagerVoiceSessionOptions } from '@/lib/artist-manager-voice-session-policy'
+import { applyVoiceModelTrial, buildArtistManagerVoiceSessionOptions, type VoiceModelTrial } from '@/lib/artist-manager-voice-session-policy'
 import { VoiceTimingTrace, observeVoiceStt, observeVoiceTts, type VoiceTimingRecord } from '@/lib/artist-manager-voice-timing'
 import { VoiceSessionLifecycle } from '@/lib/voice-session-lifecycle'
 import { markVoiceManagedSession } from '@/lib/voice-managed-sessions'
@@ -19,6 +19,7 @@ import {
 export type ArtistManagerVoiceState = {
   timingEnabled: boolean; setTimingEnabled(value: boolean): void
   typedTrial: boolean; setTypedTrial(value: boolean): void
+  modelTrial: VoiceModelTrial; setModelTrial(value: VoiceModelTrial): void
   timingRecords: VoiceTimingRecord[]; canSendTyped: boolean; sendTyped(text: string): Promise<void>
   open: boolean; running: boolean; starting: boolean; stopping: boolean; installing: boolean
   providerReady: boolean; assemblyAiReady: boolean; inworldReady: boolean; hearingReady: boolean
@@ -37,6 +38,7 @@ export function useArtistManagerVoice(input: {
 }): ArtistManagerVoiceState {
   const [timingEnabled, setTimingEnabled] = React.useState(false)
   const [typedTrial, setTypedTrial] = React.useState(false)
+  const [modelTrial, setModelTrial] = React.useState<VoiceModelTrial>({ model: '', thinking: '' })
   const [typedSending, setTypedSending] = React.useState(false)
   const [timingRecords, setTimingRecords] = React.useState<VoiceTimingRecord[]>([])
   const timingRef = React.useRef<VoiceTimingTrace | null>(null)
@@ -164,9 +166,9 @@ export function useArtistManagerVoice(input: {
           skills: activeSkills, sources: input.sources, contextDocs,
           agentCatalog: input.agents.filter(agent => agent.slug !== manager!.slug), userMemoryEntries, agentMemoryEntries,
         })
-        const session = await window.electronAPI.createSession(input.workspaceId, buildArtistManagerVoiceSessionOptions(
+        const session = await window.electronAPI.createSession(input.workspaceId, applyVoiceModelTrial(buildArtistManagerVoiceSessionOptions(
           { ...base, customSystemPrompt: base.customSystemPrompt ?? manager.systemPrompt }, activeSkills, managerStyle,
-        ))
+        ), timingEnabled, modelTrial))
         markVoiceManagedSession(session.id)
         lifecycle.assertOwner(ticket); setSessionId(session.id); setConversationSessionId(session.id)
         trace?.mark('session-setup-ready', { sessionId: session.id, model: session.model, connection: session.llmConnection, thinking: session.thinkingLevel })
@@ -251,7 +253,7 @@ export function useArtistManagerVoice(input: {
       trace?.mark('error')
       if (alive()) { await stop(); if (mounted.current) setError(messageFromError(cause)) }
     } finally { if (alive()) setStarting(false) }
-  }, [timingEnabled, typedTrial, input.agents, input.skills, input.sources, input.workspaceId, lifecycle, managerStyle, sttSelection, inputDeviceId, outputDeviceId, stop, refreshDevices])
+  }, [timingEnabled, typedTrial, modelTrial, input.agents, input.skills, input.sources, input.workspaceId, lifecycle, managerStyle, sttSelection, inputDeviceId, outputDeviceId, stop, refreshDevices])
 
   const canSendTyped = timingEnabled && typedTrial && running && !typedSending && status === 'Listening…'
   const sendTyped = async (text: string) => {
@@ -271,6 +273,7 @@ export function useArtistManagerVoice(input: {
   return {
     timingEnabled, setTimingEnabled: value => { if (!running && !starting && !stopping) setTimingEnabled(value) },
     typedTrial, setTypedTrial: value => { if (!running && !starting && !stopping) setTypedTrial(value) },
+    modelTrial, setModelTrial: value => { if (!running && !starting && !stopping) setModelTrial(value) },
     timingRecords, canSendTyped, sendTyped,
     open, running, starting, stopping, installing, status, error, userText, assistantText, sessionId, conversationSessionId,
     providerReady: hearingReady && providers.inworld, hearingReady, assemblyAiReady: providers.assemblyAi, inworldReady: providers.inworld,
