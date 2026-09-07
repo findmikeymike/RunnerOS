@@ -310,3 +310,13 @@ facts. The final prompt now requires the handoff brief to contain only work and
 direction actually agreed in the conversation, excluding snapshot campaign
 names/dates/blockers unless requested. The destination agent loads its own
 normal context, so this handoff does not need to duplicate it.
+
+
+Two fresh production-service sessions verified that final scope rule. Artist-wide
+visual directions produced a Branding Agent offer in 1.710 s; an evergreen
+identity guide took 1.975 s. Both retained the requested work and omitted
+snapshot campaign names, dates, readiness blockers and metrics. These were
+proposal-only checks (no navigation/execution), distinct from the earlier full
+UI handoff proof. Evidence: `/private/tmp/artist-os-voice-scope-live-results.json`.
+The UI test draft was subsequently labelled as test input and manually cleaned;
+it remains unsent and is not an approved creative direction.
