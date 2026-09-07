@@ -29,6 +29,7 @@ import {
 import { join } from 'node:path';
 import { matter, stringifyFrontmatter, type GrayMatterFile } from '../config/frontmatter';
 import { atomicWriteFileSync } from '../utils/files.ts';
+import { SIGNAL_BRIEFING_INSTRUCTIONS } from '../shared-intel/briefing.ts';
 import type { PermissionMode } from '../agent/mode-types.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 import { normalizeThinkingLevel, THINKING_LEVEL_IDS } from '../agent/thinking-levels.ts';
@@ -609,7 +610,17 @@ export function ensureRequiredAgents(
     // but parses to nothing, and a bare existence check would leave a
     // required agent (the Concierge among them) permanently broken. Reseed
     // when the file is missing OR unreadable.
-    if (existsSync(file) && loadGlobalAgent(a.slug, options)) continue;
+    const existing = existsSync(file) ? loadGlobalAgent(a.slug, options) : null;
+    if (existing) {
+      // Keep installed workflows byte-identical: schedules pin their definition
+      // digest, but resolve this agent prompt live when the synthesis step starts.
+      const suffix = `\n\n${SIGNAL_BRIEFING_INSTRUCTIONS}`;
+      if (a.slug === 'signal-analyst-agent' && a.systemPrompt.endsWith(suffix)
+        && existing.systemPrompt === a.systemPrompt.slice(0, -suffix.length)) {
+        replaceBuiltInAgentPromptText(a.slug, existing.systemPrompt, a.systemPrompt, options);
+      }
+      continue;
+    }
     mkdirSync(dir, { recursive: true });
     atomicWriteFileSync(file, serializeAgent(a.metadata, a.systemPrompt));
     ensured += 1;

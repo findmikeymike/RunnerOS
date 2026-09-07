@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test'
 import type { ElectronAPI } from '../../shared/types'
 import { CHANNEL_MAP } from '../channel-map'
+import { LOCAL_ONLY_CHANNELS, REMOTE_ELIGIBLE_CHANNELS, RPC_CHANNELS } from '@craft-agent/shared/protocol'
 
 type AnyFn = (...args: any[]) => any
 
@@ -57,6 +58,14 @@ void _missingFromMap
 void _extraInMap
 
 describe('CHANNEL_MAP runtime contract', () => {
+  it('routes saved Signals audio locally with a three-argument API', () => {
+    const channel = RPC_CHANNELS.outputs.READ_SIGNAL_BRIEFING_AUDIO
+    expect(CHANNEL_MAP.readSignalBriefingAudio).toMatchObject({ type: 'invoke', channel })
+    expect(LOCAL_ONLY_CHANNELS.has(channel)).toBe(true)
+    expect(REMOTE_ELIGIBLE_CHANNELS.has(channel)).toBe(false)
+    const _args: Parameters<ElectronAPI['readSignalBriefingAudio']> = ['workspace', 'output', 'visible briefing']
+    expect(_args).toHaveLength(3)
+  })
   it('has valid entry kinds and channels', () => {
     for (const [method, entry] of Object.entries(CHANNEL_MAP)) {
       expect(typeof method).toBe('string')

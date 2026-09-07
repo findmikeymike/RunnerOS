@@ -13,6 +13,7 @@ import { getWorkspaceAllowedDirs, validateFilePath } from '@craft-agent/server-c
 import type { HandlerDeps } from '../handler-deps';
 import { OutputService, pushOutputsUpdated, pushWorkflowRunUpdated } from '../../outputs/OutputService';
 import { SocialVariantSetService } from '../../outputs/SocialVariantSetService';
+import { SignalBriefingAudio } from '../../outputs/SignalBriefingAudio';
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.outputs.LIST,
@@ -32,6 +33,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.outputs.OPEN_FILE,
   RPC_CHANNELS.outputs.SHOW_IN_FOLDER,
   RPC_CHANNELS.outputs.READ_ASSET_TEXT,
+  RPC_CHANNELS.outputs.READ_SIGNAL_BRIEFING_AUDIO,
   RPC_CHANNELS.outputs.WRITE_ASSET_TEXT,
   RPC_CHANNELS.outputs.READ_ASSET_DATA_URL,
 ] as const;
@@ -154,6 +156,14 @@ async function writeTextAtomic(path: string, content: string): Promise<void> {
 }
 
 export function registerOutputsHandlers(server: RpcServer, deps: HandlerDeps): void {
+  const signalAudio = new SignalBriefingAudio({
+    getWorkspace: getWorkspaceByNameOrId,
+    getOutput: (workspaceId, outputId) => serviceFor(server).get(workspaceId, outputId),
+    safeOutputPath: (workspaceId, outputId) => resolveSafeOutputAssetPath(workspaceId, outputId, undefined, serviceFor(server)),
+  });
+  server.handle(RPC_CHANNELS.outputs.READ_SIGNAL_BRIEFING_AUDIO,
+    async (_ctx, workspaceId: string, outputId: string, expectedBriefing: string) => signalAudio.read(workspaceId, outputId, expectedBriefing));
+
   server.handle(
     RPC_CHANNELS.outputs.LIST,
     async (_ctx, workspaceId: string): Promise<OutputSummary[]> => {
