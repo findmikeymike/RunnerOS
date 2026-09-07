@@ -35,7 +35,7 @@ describe('Google Gmail connection UI', () => {
   })
 
   it('puts core services in a first, orange Essential group and exposes the Zero weekly limit', () => {
-    expect(settings).toContain("const ESSENTIAL_SERVICE_IDS = ['google-workspace', 'zero']")
+    expect(settings).toContain("const ESSENTIAL_SERVICE_IDS = ['google-workspace', 'inworld-tts', 'zero']")
     expect(settings).toContain("id: 'youtube-research',\n    group: 'Promotion'")
     expect(settings).toContain('Intel can use Zero when this is not connected.')
     expect(settings).toContain("const SECRET_GROUPS = [\n  'Essential'")
