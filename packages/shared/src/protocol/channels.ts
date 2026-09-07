@@ -698,6 +698,7 @@ export const RPC_CHANNELS = {
     OPEN_FILE: 'outputs:openFile',
     SHOW_IN_FOLDER: 'outputs:showInFolder',
     READ_ASSET_TEXT: 'outputs:readAssetText',
+    READ_SIGNAL_BRIEFING_AUDIO: 'outputs:readSignalBriefingAudio',
     WRITE_ASSET_TEXT: 'outputs:writeAssetText',
     READ_ASSET_DATA_URL: 'outputs:readAssetDataUrl',
     UPDATED: 'outputs:updated',

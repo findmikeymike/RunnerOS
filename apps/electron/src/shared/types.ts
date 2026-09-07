@@ -1452,6 +1452,7 @@ export interface ElectronAPI {
   openOutputFile(workspaceId: string, outputId: string, assetIdOrPath?: string): Promise<void>
   showOutputInFolder(workspaceId: string, outputId: string, assetIdOrPath?: string): Promise<void>
   readOutputAssetText(workspaceId: string, outputId: string, assetId?: string): Promise<string>
+  readSignalBriefingAudio(workspaceId: string, outputId: string, expectedBriefing: string): Promise<{ audioDataUrl: string }>
   writeOutputAssetText(workspaceId: string, outputId: string, assetId: string, content: string): Promise<boolean>
   readOutputAssetDataUrl(workspaceId: string, outputId: string, assetId?: string): Promise<string>
   importVideoStudioMedia(workspaceId: string, outputId: string, options?: { mode?: 'files' | 'folder' }): Promise<VideoStudioImportResult>

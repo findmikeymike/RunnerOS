@@ -1,4 +1,6 @@
 import * as React from 'react'
+import { SignalBriefingPlayer } from './SignalBriefingPlayer'
+import { useSignalReportContent } from '@/hooks/useSignalReportContent'
 import {
   Bot,
   CalendarClock,
@@ -36,7 +38,7 @@ import { navigate, routes } from '@/lib/navigate'
 import { resolvePulseExecutionTarget, type PulseExecutionTarget } from '@/lib/pulse-execution'
 import { openAgentSessionComposer } from '@/lib/run-agent'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
-import { appendSignalNugget, formatSignalDate, loadFullSignalOutputText, readableSignalBody, signalDocumentDate, signalFreshness } from '@/lib/artist-signals'
+import { appendSignalNugget, formatSignalDate, readableSignalBody, signalDocumentDate, signalFreshness } from '@/lib/artist-signals'
 import {
   createWeeklyManagerCheckInMatcher,
   isWeeklyManagerCheckInAutomation,
@@ -371,9 +373,7 @@ export function ArtistHQHome({
   const [intelConfigOpen, setIntelConfigOpen] = React.useState(false)
   const [intelBusy, setIntelBusy] = React.useState(false)
   const [selectedSignalKey, setSelectedSignalKey] = React.useState<string | null>(null)
-  const [selectedSignalContent, setSelectedSignalContent] = React.useState('')
   const [selectedSignalText, setSelectedSignalText] = React.useState('')
-  const [signalContentLoading, setSignalContentLoading] = React.useState(false)
   const [signalFullscreenOpen, setSignalFullscreenOpen] = React.useState(false)
   const [signalNuggetBusy, setSignalNuggetBusy] = React.useState(false)
   const signalReaderRef = React.useRef<HTMLDivElement | null>(null)
@@ -694,6 +694,7 @@ export function ArtistHQHome({
     () => signalLibraryItems.find((item) => item.key === selectedSignalKey) ?? signalLibraryItems[0] ?? null,
     [selectedSignalKey, signalLibraryItems],
   )
+  const { content: selectedSignalContent, loading: signalContentLoading } = useSignalReportContent(workspaceId, selectedSignalItem, getOutput)
   const activeCalendarEvents = React.useMemo(
     () => calendar.events.filter((event) => !event.deletedAt),
     [calendar.events],
@@ -995,42 +996,8 @@ export function ArtistHQHome({
   }, [selectedSignalKey, signalLibraryItems])
 
   React.useEffect(() => {
-    let cancelled = false
     setSelectedSignalText('')
-    if (!selectedSignalItem) {
-      setSelectedSignalContent('')
-      setSignalContentLoading(false)
-      return
-    }
-    if (selectedSignalItem.kind === 'context') {
-      setSelectedSignalContent(selectedSignalItem.body || selectedSignalItem.summary)
-      setSignalContentLoading(false)
-      return
-    }
-
-    const output = selectedSignalItem.output
-    if (!output) return
-    const fallback = output.preview?.inlineText || output.summary || 'This report has no readable text preview.'
-    setSelectedSignalContent(fallback)
-    setSignalContentLoading(true)
-    void loadFullSignalOutputText({
-      output,
-      getOutput,
-      readAssetText: (outputId, assetId) => window.electronAPI.readOutputAssetText(workspaceId, outputId, assetId),
-    })
-      .then((content) => {
-        if (!cancelled && content.trim()) setSelectedSignalContent(content)
-      })
-      .catch(() => {
-        // Keep the manifest summary visible when the primary asset is not text.
-      })
-      .finally(() => {
-        if (!cancelled) setSignalContentLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [getOutput, selectedSignalItem, workspaceId])
+  }, [selectedSignalItem?.key, selectedSignalContent])
 
   React.useEffect(() => {
     if (!selectedPersonId) return
@@ -2796,6 +2763,9 @@ export function ArtistHQHome({
                   </div>
                 </div>
 
+                {!signalContentLoading && selectedSignalItem?.output ? (
+                  <SignalBriefingPlayer workspaceId={workspaceId} output={selectedSignalItem.output} content={selectedSignalContent} />
+                ) : null}
                 <div ref={signalReaderRef} onMouseUp={captureSignalSelection} className="min-h-0 flex-1 overflow-y-auto px-1 py-5 selection:bg-orange-400/30">
                   {signalContentLoading ? (
                     <div className="flex h-72 items-center justify-center text-white/34">

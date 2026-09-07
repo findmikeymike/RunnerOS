@@ -15,6 +15,8 @@ import { RPC_CHANNELS } from './channels'
 // ---------------------------------------------------------------------------
 
 export const LOCAL_ONLY_CHANNELS = new Set<string>([
+  // Local credentials/cache only; the handler refuses remote workspaces.
+  RPC_CHANNELS.outputs.READ_SIGNAL_BRIEFING_AUDIO,
   // remote — local connectivity management (reaches out to remote server from local app)
   RPC_CHANNELS.remote.TEST_CONNECTION,
 

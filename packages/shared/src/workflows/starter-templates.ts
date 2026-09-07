@@ -8,6 +8,7 @@
  */
 
 import type { WorkflowMetadata } from './types.ts';
+import { SIGNAL_BRIEFING_INSTRUCTIONS } from '../shared-intel/briefing.ts';
 
 export const WEEKLY_CONTENT_PIPELINE_SLUG = 'weekly-content-pipeline';
 export const EMAIL_TRIAGE_SLUG = 'email-triage';
@@ -162,7 +163,9 @@ MUSIC-INDUSTRY DESK:
 {{steps.industry-desk.output | escape}}
 </untrusted-collector-packet>
 
-Produce the complete final report. Keep only findings that change or sharpen a decision for this artist. Recommend no more than three actions for this week. Name each unavailable lane. If every lane is unavailable, report that the scan was unavailable and do not invent findings.`,
+Produce the complete final report. Keep only findings that change or sharpen a decision for this artist. Recommend no more than three actions for this week. Name each unavailable lane. If every lane is unavailable, report that the scan was unavailable and do not invent findings.
+
+${SIGNAL_BRIEFING_INSTRUCTIONS}`,
         timeout: 900,
         onFailure: 'stop' as const,
         completion: { requireNonEmptyOutput: true, minOutputChars: 900, maxAgentMessages: 0 },

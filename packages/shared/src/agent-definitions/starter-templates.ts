@@ -10,6 +10,7 @@
  */
 
 import type { CreateAgentInput } from './storage.ts'
+import { SIGNAL_BRIEFING_INSTRUCTIONS } from '../shared-intel/briefing.ts'
 import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, SONG_DIRECTOR_SLUG, OPEN_SLIDE_AGENT_SLUG } from './types.ts'
 import { CONCIERGE_SYSTEM_SKILL_SLUGS, CREATOR_SYSTEM_SKILL_SLUGS } from '../skills/system.ts'
 import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts'
@@ -593,7 +594,9 @@ Write one clean Markdown report:
 ## Do this week
 ## Confidence and sources
 
-Keep it decisive and readable. The final report should normally fit within 1,200 words.`,
+Keep it decisive and readable. The final report should normally fit within 1,200 words.
+
+${SIGNAL_BRIEFING_INSTRUCTIONS}`,
   },
   {
     slug: 'hypermotion-agent',
