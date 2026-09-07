@@ -338,6 +338,7 @@ const EXPECTED_CHANNELS: string[] = [
   "secrets:monidBudgetSet",
   "secrets:save",
   "secrets:testGenius",
+  "secrets:testInworld",
   "secrets:zeroBudgetConfigure",
   "secrets:zeroStatus",
   "server:createWorkspace",
