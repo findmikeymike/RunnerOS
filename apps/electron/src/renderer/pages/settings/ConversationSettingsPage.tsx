@@ -140,7 +140,7 @@ export default function ConversationSettingsPage() {
   const hearingStatus = hearingError ? 'Hearing status is unavailable. Check setup in the conversation window.'
     : draft?.sttSelection === 'assembly_ai' ? cloud === null ? 'Checking hearing setup…' : cloud.assemblyAi ? 'AssemblyAI is connected.' : 'Add your AssemblyAI key in Services.'
     : moonshine === null ? 'Checking hearing setup…' : !moonshine.available ? 'Local hearing is unavailable in this build.'
-    : tier?.registered && tier.installState === 'ready' && !tier.hasError ? 'Installed and ready on this computer.' : 'Install this model in the conversation window under Audio devices and model installation.'
+    : tier?.registered && tier.installState === 'ready' && !tier.hasError ? 'Installed and ready on this computer.' : 'Install this model in the conversation window’s Call settings.'
 
   return (
     <div className="flex h-full flex-col">
@@ -178,7 +178,7 @@ export default function ConversationSettingsPage() {
               <SettingsMenuSelectRow inCard={false} label="Transcription" value={draft.sttSelection} disabled={disabled}
                 onValueChange={value => change({ sttSelection: value })} options={HEARING_OPTIONS} />
               <p className="text-xs leading-5 text-muted-foreground">{hearingStatus}</p>
-              <p className="text-xs leading-5 text-muted-foreground">Microphone, speaker, and local model installation controls are in the conversation window under Audio devices and model installation.</p>
+              <p className="text-xs leading-5 text-muted-foreground">Microphone, speaker, and local model installation controls are in the conversation window’s Call settings.</p>
               <p className="text-xs leading-5 text-muted-foreground">{cloud?.inworld === false ? 'Add your Inworld key in Services for spoken replies.' : 'Inworld provides the spoken voice.'}</p>
               <Button variant="link" className="h-auto p-0 text-xs" onClick={() => navigate(routes.view.settings('secrets'))}>Manage voice service keys</Button>
             </SettingsSection>

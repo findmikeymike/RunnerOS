@@ -373,3 +373,16 @@ saved only in the Mikey Mike development profile (`~/.artist-os-dev`). Read-back
 verified the voice record and preservation of the Manager and all other
 configuration fields. The packaged app's separate `~/.artist-os` profile was
 not migrated or changed. Evidence: `/private/tmp/voice-settings-applied.json`.
+
+
+### Call surface cleanup
+
+The conversation modal now presents a quiet portrait call surface: Manager
+name, short state label, an avatar area and compact call controls. The current
+avatar area is a neutral person icon pending the artist's supplied asset; it
+is not an animated avatar or lip-sync implementation. Captions are optional
+and off by default, resetting when the window closes. The gear reveals audio
+devices, installation, a Conversation settings link and collapsed timing
+diagnostics. Setup and errors remain reachable when a call cannot start.
+Start, connecting cancellation, End and window-close still use the existing
+voice lifecycle. This change does not alter model routing or the audio pipeline.
