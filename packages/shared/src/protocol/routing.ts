@@ -15,6 +15,17 @@ import { RPC_CHANNELS } from './channels'
 // ---------------------------------------------------------------------------
 
 export const LOCAL_ONLY_CHANNELS = new Set<string>([
+  // Artist Signals resolves the local Artist HQ and local evidence/credential stores.
+  RPC_CHANNELS.signals.GET,
+  RPC_CHANNELS.signals.RESOLVE_CHANNEL,
+  RPC_CHANNELS.signals.SAVE_CONFIG,
+  RPC_CHANNELS.signals.START,
+  RPC_CHANNELS.signals.IDEAS,
+  RPC_CHANNELS.signals.RESOLVE_IDEA,
+  RPC_CHANNELS.signals.FIND_HANDOFF,
+  RPC_CHANNELS.signals.BIND_HANDOFF,
+  RPC_CHANNELS.signals.GET_HANDOFF,
+  RPC_CHANNELS.signals.CLEAR_HANDOFF,
   // Local credentials/cache only; the handler refuses remote workspaces.
   RPC_CHANNELS.outputs.READ_SIGNAL_BRIEFING_AUDIO,
   // remote — local connectivity management (reaches out to remote server from local app)

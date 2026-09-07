@@ -14,7 +14,14 @@
  */
 
 import type { FileAttachment } from '@craft-agent/shared/protocol'
-import type { DraftAttachmentContent, DraftAttachmentRef } from '@craft-agent/shared/config'
+import type { DraftAttachmentContent, DraftAttachmentRef, SessionDraft } from '@craft-agent/shared/config'
+
+/** Empty local entries are deliberate edits, not invitations to reload stale disk text. */
+export function restoreMissingDraft(drafts: Map<string, SessionDraft>, sessionId: string, snapshot: SessionDraft): boolean {
+  if (drafts.has(sessionId)) return false
+  drafts.set(sessionId, snapshot)
+  return true
+}
 
 /** Per-attachment cap on inlined draft content. Huge pastes are dropped from the draft
  *  (with a warn) rather than bloating drafts.json. Tuned to the same 20 MB limit the

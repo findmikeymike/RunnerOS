@@ -133,6 +133,10 @@ export interface AppShellContextType {
 
   // Input draft callback
   onInputChange: (sessionId: string, value: string) => void
+  /** Includes deliberately empty drafts, so hydration cannot resurrect cleared text. */
+  hasDraft?: (sessionId: string) => boolean
+  /** Restore a persisted draft only when no local draft (including an empty edit) exists. */
+  restoreDraft?: (sessionId: string, draft: import('@craft-agent/shared/config').SessionDraft) => void
 
   // Attachment draft callback — persists attachment refs per session
   onAttachmentsChange: (sessionId: string, attachments: FileAttachment[]) => void

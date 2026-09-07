@@ -174,6 +174,11 @@ import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
 import { findExactWorkflowStepOutput } from '../workflows/step-output'
 import { ScheduledWorkRunner, type ScheduledSocialExecutor, type ScheduledSocialPreparer } from '../scheduled-work/ScheduledWorkRunner'
 import { queueAutomationWork } from '../scheduled-work/AutomationWorkQueue'
+import { SignalService } from '../signals/SignalService'
+import { acceptSignalHandoff, hasSignalHandoff, readSignalHandoffState, readSignalHandoff, writeSignalHandoff, clearSignalHandoff as clearStoredSignalHandoff, signalHandoffKey } from '../signals/handoff-store'
+import type { SignalEntryReference } from '@craft-agent/shared/shared-intel'
+import { SignalReader } from '../signals/SignalReader'
+import { seedSignalWorkflows } from '../signals/seed-workflows'
 import {
   ChatGoalDriver,
   buildChatGoalContinuationPrompt,
@@ -2674,7 +2679,9 @@ export class SessionManager implements ISessionManager {
           const failures: unknown[] = []
           for (const pending of pendingWork) {
             try {
-              const queued = await queueAutomationWork(workspaceId, workspaceRootPath, pending, {
+              const queued = pending.action.execution.type === 'workflow-run' && pending.action.execution.triggerInputs?.signalContract === 'signals-v1'
+                ? await this.getSignalService().queueScheduled(workspaceId, pending)
+                : await queueAutomationWork(workspaceId, workspaceRootPath, pending, {
                 log: sessionLog,
                 emitContextChanged: (changedWorkspaceId, docs) => {
                   scheduleHqStateContextRefresh(workspaceRootPath)
@@ -3277,6 +3284,9 @@ export class SessionManager implements ISessionManager {
   }
 
   private broadcastWorkflowRunUpdated(event: WorkflowRunEvent): void {
+    if (event.type === 'run.completed' && event.run.trigger.inputs.signalContract === 'signals-v1') {
+      void this.getSignalService().reconcile(event.run.workspaceId).catch(() => {})
+    }
     if (event.type === 'escalation.created') {
       this.eventSink?.(
         RPC_CHANNELS.workflowRuns.ATTENTION_UPDATED,
@@ -3312,6 +3322,19 @@ export class SessionManager implements ISessionManager {
   /** Expose the workflow runner so RPC handlers can reach it via HandlerDeps. */
   getWorkflowRunner(): WorkflowRunner {
     return this.workflowRunner
+  }
+
+  private signalService?: SignalService
+  private signalReader?: SignalReader
+  getSignalReader(): SignalReader {
+    return this.signalReader ??= new SignalReader()
+  }
+  getSignalService(): SignalService {
+    return this.signalService ??= new SignalService({
+      admitRetry: (original, retry, orderIds) => this.getScheduledWorkRunner().admitSignalWorkflowRetry(getWorkspaceByNameOrId(original.workspaceId)!.rootPath, original, retry, orderIds),
+      wake: workspace => { void this.getScheduledWorkRunner().scanWorkspace(workspace.id, workspace.rootPath).catch(() => {}) },
+      changed: workspaceId => { this.eventSink?.(RPC_CHANNELS.outputs.UPDATED, { to: 'workspace', workspaceId }, workspaceId) },
+    })
   }
 
   async queueTrackedWorkAutomation(input: {
@@ -3382,6 +3405,11 @@ export class SessionManager implements ISessionManager {
           })
         },
         startWorkflow: async ({ workOrderId, workspace, workflowSlug, workflowDigest, triggerInputs, untrustedTriggerInputs }) => {
+          if (triggerInputs.signalContract === 'signals-v1') {
+            return this.getSignalService().startAdmitted(workspace.id, workOrderId, workflowSlug, workflowDigest, triggerInputs,
+              (workflow, request) => this.workflowRunner.start({ workflow, workspaceId: workspace.id, runId: request.identity.workflowRunId,
+                triggerInputs: normalizeWorkflowTriggerInputs(workflow, { ...triggerInputs, signalPacket: this.getSignalService().packetInput(request) }), untrustedTriggerInputs }));
+          }
           if (!readActivatedWorkflows(workspace.rootPath).active.includes(workflowSlug)) {
             throw new Error(`Workflow "${workflowSlug}" is not active in this workspace.`)
           }
@@ -3565,6 +3593,7 @@ export class SessionManager implements ISessionManager {
     signal: AbortSignal,
   ): Promise<void> {
     signal.throwIfAborted()
+    if (await this.getSignalService().complete(run, signal)) return
     if (run.workflowSlug !== WEEKLY_SIGNAL_SCAN_SLUG) return
     const workspace = getWorkspaceByNameOrId(run.workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${run.workspaceId}`)
@@ -4757,6 +4786,13 @@ export class SessionManager implements ISessionManager {
           ).updated
           if (youtubeIntelligenceMetadataUpdated || youtubeIntelligencePromptUpdated || youtubeIntelligencePreferredTranscriptUpdated) {
             sessionLog.info('[agent-definitions] Added preferred guarded Zero transcript route to YouTube Intelligence Agent')
+          }
+          // Older installed prompts reach the recognized shipped form only
+          // after the legacy normalizers above. Upgrade both agents this startup.
+          const { migrateYouTubeRouting } = await import('@craft-agent/shared/agent-definitions')
+          const youtubeRoutingMigration = migrateYouTubeRouting()
+          if (youtubeRoutingMigration.updatedAgents.length || youtubeRoutingMigration.updatedSkills.length) {
+            sessionLog.info('[agent-definitions] Updated known shipped YouTube routing', youtubeRoutingMigration)
           }
           const rawVideoEditorDirectionSkillUpdated = ensureBuiltInAgentSkillsForSlug(
             'raw-video-editor',
@@ -6029,6 +6065,7 @@ user a clickable link to where the thing now lives.`
           WEEKLY_SIGNAL_SCAN_SLUG,
         } = await import('@craft-agent/shared/workflows')
         const { seeded: workflowsSeeded } = seedGlobalWorkflowLibraryIfEmpty(STARTER_WORKFLOWS)
+        seedSignalWorkflows()
         if (workflowsSeeded > 0) {
           sessionLog.info(`[workflows] Seeded ${workflowsSeeded} starter workflow(s) into global library`)
         }
@@ -6286,6 +6323,8 @@ user a clickable link to where the thing now lives.`
           return ws.rootPath
         },
         postProcessSucceededRun: (run, signal) => this.postProcessCompletedWorkflowRun(run, signal),
+        completeWithoutSteps: (run, signal) => this.getSignalService().completeEmpty(run, signal),
+        authorizeRerun: (original, retry, signal) => this.getSignalService().authorizeRetry(original, retry, signal),
         emit: (event) => this.broadcastWorkflowRunUpdated(event),
       })
 
@@ -8897,6 +8936,9 @@ user a clickable link to where the thing now lives.`
           managed.spawnedFromAgent?.agentSlug ?? null,
           input,
         ),
+        findSignalIdeasFn: async (input) => {
+          return this.getSignalReader().findForWorker(managed.workspace.id, managed.spawnedFromAgent?.agentSlug, input)
+        },
         searchArtistNetworkFn: async (input) => {
           const hq = findArtistHqWorkspace()
           return hq
@@ -12288,6 +12330,114 @@ user a clickable link to where the thing now lives.`
     return { accepted: true }
   }
 
+  private signalHandoffBindingTail: Promise<void> = Promise.resolve()
+
+  private isUnsentSignalSession(managed: ManagedSession): boolean {
+    return !managed.isArchived && !managed.isProcessing && managed.messageQueue.length === 0
+      && !managed.messages.some(message => message.role === 'user')
+      && !loadStoredSession(managed.workspace.rootPath, managed.id)?.messages.some(message => message.type === 'user')
+  }
+
+  private assertSignalHandoffWorker(workspace: ManagedSession['workspace'], slug: string): void {
+    const current = getWorkspaceByNameOrId(workspace.id)
+    if (!current || current.rootPath !== workspace.rootPath) throw new Error('The destination workspace is no longer available.')
+    if ((slug !== 'content-genius' && slug !== CONCIERGE_SLUG)
+      || (slug === 'content-genius' && current.artistWorkspaceScope !== 'campaign')
+      || (slug === CONCIERGE_SLUG && current.artistWorkspaceScope !== 'hq')
+      || !isAgentAllowedInArtistWorkspace(slug, current.artistWorkspaceScope)
+      || !loadActivatedAgents(current.rootPath).some(agent => agent.slug === slug)) {
+      throw new Error('This worker is not active in the selected workspace. Choose an available worker in Signals.')
+    }
+    assertTeamPermission(current.rootPath, 'agent.chat')
+  }
+
+  async getSignalHandoff(sessionId: string): Promise<SignalEntryReference | null> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) throw new Error('Session not found.')
+    if (!hasSignalHandoff(getSessionStoragePath(managed.workspace.rootPath, sessionId))) return null
+    assertTeamPermission(managed.workspace.rootPath, 'agent.chat')
+    const state = readSignalHandoffState(getSessionStoragePath(managed.workspace.rootPath, sessionId))
+    if (!state) return null
+    // Only the explicit post-flush receipt consumes a binding. An unrelated
+    // metadata save must never turn a rejected user message into acceptance.
+    if (state.acceptedMessageId && loadStoredSession(managed.workspace.rootPath, sessionId)?.messages
+      .some(message => message.type === 'user' && message.id === state.acceptedMessageId)) return null
+    return state.reference
+  }
+
+  async findSignalHandoff(workspaceId: string, workerSlug: string, reference: SignalEntryReference): Promise<string | null> {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found.')
+    this.assertSignalHandoffWorker(workspace, workerSlug)
+    const resolved = await this.getSignalReader().resolveReference(workspaceId, reference)
+    if (!resolved.ok || resolved.entries.length !== 1 || resolved.entries[0]?.kind !== 'idea') {
+      throw new Error('This research idea is no longer available. Reopen the report in Signals.')
+    }
+    return this.findUnsentSignalHandoff(workspaceId, workerSlug, reference)
+  }
+
+  private findUnsentSignalHandoff(workspaceId: string, workerSlug: string, reference: SignalEntryReference): string | null {
+    const key = signalHandoffKey(reference)
+    for (const managed of this.sessions.values()) {
+      if (managed.workspace.id !== workspaceId || managed.spawnedFromAgent?.agentSlug !== workerSlug || !this.isUnsentSignalSession(managed)) continue
+      try {
+        const pending = readSignalHandoff(getSessionStoragePath(managed.workspace.rootPath, managed.id))
+        if (pending && signalHandoffKey(pending) === key) return managed.id
+      } catch { /* An unrelated damaged draft must not block a new handoff. */ }
+    }
+    return null
+  }
+
+  async bindSignalHandoff(sessionId: string, reference: SignalEntryReference): Promise<string> {
+    const previous = this.signalHandoffBindingTail
+    let releaseBinding!: () => void
+    this.signalHandoffBindingTail = new Promise<void>(resolve => { releaseBinding = resolve })
+    await previous
+    let releaseSend: (() => void) | undefined
+    try {
+      releaseSend = await this.acquireSendMessageAdmissionLock(sessionId)
+      const managed = this.sessions.get(sessionId)
+      if (!managed || !this.isUnsentSignalSession(managed)) throw new Error('Research can only be attached to an unsent draft.')
+      const workerSlug = managed.spawnedFromAgent?.agentSlug ?? ''
+      this.assertSignalHandoffWorker(managed.workspace, workerSlug)
+      const resolved = await this.getSignalReader().resolveReference(managed.workspace.id, reference)
+      if (!resolved.ok || resolved.entries.length !== 1 || resolved.entries[0]?.kind !== 'idea') {
+        throw new Error('This research idea changed or is unavailable. Reopen the report in Signals.')
+      }
+      const existing = this.findUnsentSignalHandoff(managed.workspace.id, workerSlug, reference)
+      if (existing && existing !== sessionId) return existing
+      if (!this.isUnsentSignalSession(managed)) throw new Error('The draft was already sent.')
+      writeSignalHandoff(getSessionStoragePath(managed.workspace.rootPath, sessionId), reference)
+      return sessionId
+    } finally {
+      releaseSend?.()
+      releaseBinding()
+    }
+  }
+
+  async clearSignalHandoff(sessionId: string): Promise<void> {
+    const release = await this.acquireSendMessageAdmissionLock(sessionId)
+    try {
+      const managed = this.sessions.get(sessionId)
+      if (!managed) throw new Error('Session not found.')
+      assertTeamPermission(managed.workspace.rootPath, 'agent.chat')
+      clearStoredSignalHandoff(getSessionStoragePath(managed.workspace.rootPath, sessionId))
+    } finally { release() }
+  }
+
+  private async validateSignalHandoffBeforeSend(managed: ManagedSession, options?: SendMessageOptions): Promise<SignalEntryReference | null> {
+    if (!hasSignalHandoff(getSessionStoragePath(managed.workspace.rootPath, managed.id))) return null
+    const reference = await this.getSignalHandoff(managed.id)
+    if (!reference) return null
+    if (options?.inputOrigin !== 'human' || options.hidden) throw new Error('This research draft is waiting for the artist to press Send.')
+    this.assertSignalHandoffWorker(managed.workspace, managed.spawnedFromAgent?.agentSlug ?? '')
+    const resolved = await this.getSignalReader().resolveReference(managed.workspace.id, reference)
+    if (!resolved.ok || resolved.entries.length !== 1 || resolved.entries[0]?.kind !== 'idea') {
+      throw new Error('The Signals source changed or is no longer available. Review or discard the research handoff before sending.')
+    }
+    return reference
+  }
+
   async sendMessage(
     sessionId: string,
     message: string,
@@ -12328,6 +12478,10 @@ user a clickable link to where the thing now lives.`
     let admittedGoalState: ChatGoalState | undefined
     let admittedTurn: ChatGoalTurnContext | undefined
     let admittedGoalEvent: Message | undefined
+    let pendingSignalReference: SignalEntryReference | null = null
+    let signalAdmissionMessageId: string | undefined
+    let signalAdmissionAccepted = false
+    const previousLastMessageRole = managed.lastMessageRole
 
     try {
       // Clear any pending plan execution state when a new user message is sent.
@@ -12456,6 +12610,8 @@ user a clickable link to where the thing now lives.`
         }
       }
 
+      pendingSignalReference = await this.validateSignalHandoffBeforeSend(managed, options)
+
       // If currently processing, redirect mid-stream. Each backend decides its strategy:
       // - Pi: steers (injects message, events continue through existing stream)
       // - Claude: aborts internally, session layer queues for re-send
@@ -12483,6 +12639,7 @@ user a clickable link to where the thing now lives.`
           displayIntent: options?.displayIntent,
           ...(options?.hidden ? { hidden: true } : {}),
         }
+        if (pendingSignalReference) signalAdmissionMessageId = userMessage.id
         managed.messages.push(userMessage)
         if (steered) {
           managed.activeHumanMessageId = userMessage.inputOrigin === 'human' && !userMessage.hidden
@@ -12511,6 +12668,10 @@ user a clickable link to where the thing now lives.`
         // before we tell the renderer "accepted" — `persistSession` only
         // enqueues with a 500ms debounce. (#616 reliability fix.)
         await this.flushSession(managed.id)
+        if (pendingSignalReference) {
+          acceptSignalHandoff(getSessionStoragePath(managed.workspace.rootPath, managed.id), pendingSignalReference, userMessage.id)
+          signalAdmissionAccepted = true
+        }
         if (admittedGoalState) {
           if (admittedGoalEvent) {
             this.sendEvent({ type: 'goal_event', sessionId, message: admittedGoalEvent }, managed.workspace.id)
@@ -12544,6 +12705,7 @@ user a clickable link to where the thing now lives.`
           displayIntent: options?.displayIntent,
           ...(options?.hidden ? { hidden: true } : {}),
         }
+        if (pendingSignalReference) signalAdmissionMessageId = userMessage.id
         managed.messages.push(userMessage)
 
         // Keep an invisible system nudge out of the session-list preview.
@@ -12556,6 +12718,10 @@ user a clickable link to where the thing now lives.`
         // `persistSession` is debounced (500ms). #616.
         this.persistSession(managed)
         await this.flushSession(managed.id)
+        if (pendingSignalReference) {
+          acceptSignalHandoff(getSessionStoragePath(managed.workspace.rootPath, managed.id), pendingSignalReference, userMessage.id)
+          signalAdmissionAccepted = true
+        }
         if (admittedGoalState) {
           if (admittedGoalEvent) {
             this.sendEvent({ type: 'goal_event', sessionId, message: admittedGoalEvent }, managed.workspace.id)
@@ -12650,6 +12816,15 @@ user a clickable link to where the thing now lives.`
       }
       releaseAdmissionLockOnce()
     } catch (err) {
+      if (pendingSignalReference && signalAdmissionMessageId && !signalAdmissionAccepted) {
+        sessionPersistenceQueue.cancel(managed.id)
+        managed.messages = managed.messages.filter(message => message.id !== signalAdmissionMessageId)
+        managed.messageQueue = managed.messageQueue.filter(item => item.messageId !== signalAdmissionMessageId)
+        if (managed.activeHumanMessageId === signalAdmissionMessageId) managed.activeHumanMessageId = undefined
+        managed.lastMessageRole = previousLastMessageRole
+        this.persistSession(managed)
+        try { await this.flushSession(managed.id) } catch { /* Keep the binding and clean in-memory draft on a persistent disk failure. */ }
+      }
       goalAdmissionRollback?.()
       releaseAdmissionLockOnce()
       throw err
@@ -13210,10 +13385,16 @@ user a clickable link to where the thing now lives.`
           sessionLog.info(`[auth-retry] Retrying message for session ${sessionId}`)
           this.setProcessing(managed, false)
 
-          // Remove the user message that was added for this failed attempt
-          // so we don't get duplicate messages when retrying
           const lastUserMsgIndex = managed.messages.findLastIndex(m => m.role === 'user')
-          if (lastUserMsgIndex !== -1) {
+          const lastUserMessage = managed.messages[lastUserMsgIndex]
+          const handoffDirectory = getSessionStoragePath(managed.workspace.rootPath, sessionId)
+          const handoff = hasSignalHandoff(handoffDirectory) ? readSignalHandoffState(handoffDirectory) : null
+          // A Signals acceptance receipt belongs to this durable user turn,
+          // not to the provider attempt. Reuse it instead of orphaning the receipt.
+          const retryMessageId = lastUserMessage && handoff?.acceptedMessageId === lastUserMessage.id
+            && loadStoredSession(managed.workspace.rootPath, sessionId)?.messages.some(m => m.type === 'user' && m.id === lastUserMessage.id)
+            ? lastUserMessage.id : undefined
+          if (lastUserMsgIndex !== -1 && !retryMessageId) {
             managed.messages.splice(lastUserMsgIndex, 1)
           }
 
@@ -13225,7 +13406,7 @@ user a clickable link to where the thing now lives.`
             retryAttachments,
             retryStoredAttachments,
             retryOptions,
-            undefined,  // existingMessageId
+            retryMessageId,
             true        // _isAuthRetry - prevents infinite retry loop
           )
           sessionLog.info(`[auth-retry] Retry completed for session ${sessionId}`)

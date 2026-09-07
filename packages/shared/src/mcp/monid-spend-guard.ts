@@ -30,17 +30,24 @@ function findPrice(value: unknown, seen = new Set<unknown>()): MonidPrice | null
   const record = value as Record<string, unknown>;
   if (record.price && typeof record.price === 'object') {
     const price = record.price as Record<string, unknown>;
+    const money = price.amount && typeof price.amount === 'object' ? price.amount as Record<string, unknown> : null;
+    const amount = money ? money.value : price.amount;
+    const currency = money ? money.currency : price.currency;
+    const fee = price.flatFee && typeof price.flatFee === 'object' ? price.flatFee as Record<string, unknown> : null;
+    const flatFee = fee ? fee.value : price.flatFee ?? undefined;
+    if (flatFee !== undefined && (typeof flatFee !== 'number' || !Number.isFinite(flatFee) || flatFee < 0
+      || (fee && fee.currency !== currency))) return null;
     if (
       typeof price.type === 'string' &&
-      typeof price.amount === 'number' &&
-      Number.isFinite(price.amount) &&
-      typeof price.currency === 'string'
+      typeof amount === 'number' &&
+      Number.isFinite(amount) &&
+      typeof currency === 'string'
     ) {
       return {
         type: price.type,
-        amount: price.amount,
-        flatFee: typeof price.flatFee === 'number' && Number.isFinite(price.flatFee) ? price.flatFee : undefined,
-        currency: price.currency,
+        amount,
+        flatFee: flatFee as number | undefined,
+        currency,
       };
     }
   }
@@ -75,7 +82,17 @@ function findConservativeResultBound(value: unknown): number | null {
 }
 
 function roundUsd(value: number): number {
-  return Math.round(value * 1_000_000) / 1_000_000;
+  const micros = value * 1_000_000;
+  return Math.ceil(micros - Number.EPSILON * Math.abs(micros)) / 1_000_000;
+}
+
+function pinnedTranscriptBound(args: Record<string, unknown>): number | null {
+  if (args.provider !== 'apify' || args.endpoint !== '/starvibe/youtube-video-transcript') return null;
+  const input = args.input as Record<string, unknown> | undefined;
+  if (!input || Object.keys(input).some(key => !['youtube_url', 'language'].includes(key))
+    || input.language !== 'en' || typeof input.youtube_url !== 'string'
+    || !/^https:\/\/www\.youtube\.com\/watch\?v=[A-Za-z0-9_-]{11}$/.test(input.youtube_url)) return null;
+  return 1;
 }
 
 export function evaluateMonidSpendLimit(
@@ -83,6 +100,7 @@ export function evaluateMonidSpendLimit(
   runArgs: Record<string, unknown>,
   singleCallCapUsd = DEFAULT_MONID_SINGLE_CALL_CAP_USD,
 ): MonidSpendDecision {
+  if (!Number.isFinite(singleCallCapUsd) || singleCallCapUsd < 0) return { allowed: false, reason: 'Monid run blocked: invalid single-call cap.' };
   const price = findPrice(inspectResult);
   if (!price) {
     return { allowed: false, reason: 'Monid run blocked: inspect returned no verifiable price.' };
@@ -93,9 +111,10 @@ export function evaluateMonidSpendLimit(
 
   let projectedMaxUsd: number;
   if (price.type.toUpperCase() === 'PER_CALL') {
-    projectedMaxUsd = price.amount;
+    projectedMaxUsd = price.amount + (price.flatFee ?? 0);
   } else if (price.type.toUpperCase() === 'PER_RESULT') {
-    const resultBound = findConservativeResultBound(runArgs.input);
+    const resultBound = runArgs.provider === 'apify' && runArgs.endpoint === '/starvibe/youtube-video-transcript'
+      ? pinnedTranscriptBound(runArgs) : findConservativeResultBound(runArgs.input);
     if (!resultBound) {
       return {
         allowed: false,

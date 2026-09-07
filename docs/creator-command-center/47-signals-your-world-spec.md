@@ -1,9 +1,9 @@
 ---
-status: proposed
+status: partially-implemented
 owner: agent
 last_verified: 2026-09-07
 source_of_truth: true
-related: ../08-shared-intel-context-router-spec.md, ../19-artist-manager-brief-context-architecture-spec.md, ../33-automations-input-aware-setup-spec.md, ../../audits/signals-audio-briefing.md
+related: ./08-shared-intel-context-router-spec.md, ./19-artist-manager-brief-context-architecture-spec.md, ./33-automations-input-aware-setup-spec.md, ../audits/signals-audio-briefing.md
 ---
 
 # Signals: Industry And Your World
@@ -20,9 +20,42 @@ briefing. Your World connects discoveries to the artist's interests and creative
 identity. Relevant content workers retrieve useful report sections on demand;
 reports do not become permanent artist beliefs or automatic production jobs.
 
-This document specifies new work. None of the two-track behavior is implemented
-by writing this spec. Existing Signals, shared intel, scheduling, and audio are
-the foundation, not completed evidence for the additions below.
+## Implementation Status
+
+All three slices are implemented and independently reviewed: collection and
+lifecycle (`572d5ed6f`), reader/setup/audio (`da73c5a5a`), and bounded retrieval
+with deliberate worker handoffs (`7ca3dd2d4`). Follow-up report, retry, provider
+and existing-install hardening, including the Signals info popover, is committed
+as `a77d54441`. Implementation branch: `codex/signals-your-world`.
+See [implementation and integration evidence](../audits/signals-your-world.md)
+for the post-main-merge regression/typecheck/build gates and landing record.
+Live-account acceptance remains separate: no live agent scan or paid
+transcript/audio call is claimed by the fixture tests.
+
+The follow-up hardening slice adds native YouTube -> Monid metadata, and native
+transcripts -> Monid -> Zero. Completed transcript evidence is reused before
+another provider is called. Monid uses the existing OAuth connection and budget
+store, not a separate key or CLI. Pin `apify /streamers/youtube-scraper` for
+metadata and `apify /starvibe/youtube-video-transcript` for transcription. Inspect
+the current contract, price and health before a new paid operation; never search
+the marketplace during an ordinary scan. Transcript and single-video metadata
+calls have a $0.02 ceiling; a bounded 50-video channel listing has a $0.25 ceiling,
+always subject to the user's lower single-call and rolling weekly allowances.
+Metadata must contain absolute publication dates and canonical identities.
+Recent-upload listing cache expires after 15 minutes; channel resolution and
+single-video metadata cache expire after 24 hours. Transcript evidence is durable.
+A known interrupted Monid run resumes through read-only polling, not a second
+paid submission. An uncertain submission without a verified run ID is held for
+review. A new host-authorized scan may retry a confirmed terminal operation only
+after its cost is reconciled. Repeating the same attempt cannot submit another
+paid run; a different attempt cannot bypass an unresolved charge. A confirmed
+failed Monid run may fall back to Zero with its full projected Monid cost still
+counted against the budget when the exact charge is unknown. Pending/unknown
+execution remains blocked. Previous receipts are retained.
+Zero remains transcript-only because no compatible healthy discovery
+capability has been verified. Do not invent one or substitute trending results.
+Public provider documentation and fixture tests do not certify a live Monid run;
+the connected-account smoke test remains a separate acceptance gate.
 
 ## User Journey
 
@@ -107,10 +140,13 @@ The host supplies identity, workflow provenance, source IDs, and timestamps.
 Never infer track/mode from report title, markdown, model-supplied tags, selected
 UI tab, or the workspace that happens to be open at completion.
 
-HQ owns all track configuration and research. Campaign access resolves its
-linked Artist HQ using the existing resolver; no searching unrelated HQs or
-global fallback. Missing HQ linkage is a clear setup error. Retrieval and
-handoff preserve the requesting campaign while reading only its linked HQ.
+HQ owns all track configuration and research. Verified implementation detail:
+the current workspace model has no persisted campaign-to-HQ ID; it represents
+one artist with a single HQ. Resolve a campaign to that HQ only when exactly
+one local HQ exists. Zero or multiple HQs is a clear setup error, never a
+first-HQ fallback. Direct HQ requests remain explicitly scoped. Do not add a
+multi-artist workspace system as part of this feature. Retrieval and handoff
+preserve the requesting campaign while reading only its unambiguous artist HQ.
 
 ## Collection Contract
 
@@ -223,9 +259,11 @@ without a final report. Failed/unexamined videos remain retryable.
 
 ## Workflow And Agent Integration
 
-Preserve `weekly-signal-scan` as the existing Industry identity. Add a Your World
-scan workflow and a bounded video-only review workflow with validated track
-input. Proposed new slugs: `weekly-world-scan` and `signal-video-review`.
+Preserve `weekly-signal-scan` as the legacy Industry identity. New-contract
+Industry scans use `signals-industry-scan` so adopting the new contract never
+rewrites an installed definition or its approved digest. Add a Your World scan
+workflow and a bounded video-only review workflow with validated track input:
+`weekly-world-scan` and `signal-video-review`.
 Reuse collector helpers, transcript tools, validation, synthesis, and output
 finalization across them. Do not clone a second research stack.
 
@@ -534,5 +572,6 @@ with user authorization, update from main before verification, and land working
 slices promptly rather than accumulating a large unreviewed branch.
 
 Move this spec out of `todo/` when the first slice is actually implemented, mark
-it partially implemented, and record remaining gates honestly. This spec does
-not authorize building the feature yet; the next user instruction starts it.
+it partially implemented, and record remaining gates honestly. The user has
+authorized implementation. Paid live tests, app restarts, commits, and landing
+still require the corresponding approval.

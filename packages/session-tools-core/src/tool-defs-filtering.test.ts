@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'bun:test';
+import { findSignalIdeasSchema } from '@craft-agent/shared/shared-intel';
 import {
   SESSION_TOOL_DEFS,
   getSessionToolDefs,
@@ -15,6 +16,21 @@ import {
 } from './tool-defs.ts';
 
 describe('session tool filtering helpers', () => {
+  it('registers bounded read-only Signals lookup for ordinary, delegated and manager paths', () => {
+    const def = SESSION_TOOL_DEFS.find(tool => tool.name === 'find_signal_ideas')!;
+    expect(def.executionMode).toBe('registry'); expect(def.safeMode).toBe('allow'); expect(def.readOnly).toBe(true);
+    expect(getSessionSafeAllowedToolNames()).toContain('find_signal_ideas');
+    expect(getSessionToolNames()).toContain('find_signal_ideas');
+    expect(getToolDefsAsJsonSchema({ prefix: 'mcp__session__' }).some(tool => tool.name === 'mcp__session__find_signal_ideas')).toBe(true);
+    expect(def.inputSchema.safeParse({ query: 'x'.repeat(501) }).success).toBe(false);
+    expect(def.inputSchema.safeParse({ workspaceId: 'other' }).success).toBe(false);
+    const ref = { hqWorkspaceId: 'hq', outputId: 'output', contentHash: 'a'.repeat(64), entryId: 'idea:1' };
+    for (const input of [{}, { query: 'stars' }, { reference: ref }, { reference: { ...ref, entryId: undefined } },
+      { query: 'x'.repeat(501) }, { freshness: 'today' }, { reference: { ...ref, contentHash: 'wrong' } },
+      { reference: { ...ref, entryId: '../private' } }, { track: 'unknown' }, { reference: { ...ref, extra: true } }, { workspaceId: 'other' }]) {
+      expect(def.inputSchema.safeParse(input).success).toBe(findSignalIdeasSchema.safeParse(input).success);
+    }
+  });
   it('keeps website paths and links inside the supported local-safe contract', () => {
     expect(CreateWebsiteSchema.safeParse({ artistName: 'Vera', template: '../../private' }).success).toBe(false);
     expect(AuditWebsiteSchema.safeParse({ url: 'https://example.com' }).success).toBe(false);

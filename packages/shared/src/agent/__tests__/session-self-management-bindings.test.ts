@@ -322,6 +322,21 @@ describe('attachSessionSelfManagementBindings', () => {
     await expect(ctx.searchArtistNetwork!({ query: 'automotive sync', limit: 5 }))
       .resolves.toEqual({ ok: true, query: 'automotive sync', people: [] });
   });
+  it('Signals lookup uses current host callback without recreating the session', async () => {
+    const ctx = createBaseContext(sessionId);
+    attachSessionSelfManagementBindings(ctx, sessionId);
+    registerSessionScopedToolCallbacks(sessionId, {
+      findSignalIdeasFn: async () => ({ ok: true, mode: 'browse', entries: [] }),
+    });
+    expect((await ctx.findSignalIdeas!({})).ok).toBe(true);
+    const handler = SESSION_TOOL_REGISTRY.get('find_signal_ideas')!.handler!;
+    expect((await handler(ctx, {})).isError).not.toBe(true);
+    mergeSessionScopedToolCallbacks(sessionId, {
+      findSignalIdeasFn: async () => ({ ok: false, mode: 'reference', entries: [], unavailable: true }),
+    });
+    expect((await ctx.findSignalIdeas!({})).ok).toBe(false);
+    expect((await handler(ctx, {})).isError).toBe(true);
+  });
 
   it('getSessionInfo defaults to current session ID when called without arg', () => {
     const ctx = createBaseContext(sessionId);

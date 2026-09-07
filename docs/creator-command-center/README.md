@@ -48,6 +48,8 @@ Core Artist HQ and campaign workspace specs live here.
 - [40 Artist HQ Legal & Deals Agent](./40-music-legal-agent-spec.md)
 - [46 Electron Runtime Upgrade](./46-electron-runtime-upgrade-spec.md) — Electron 39 → 44.2.0 (Node 24, Chromium 152); sharp natives packaged; vendor dist integrity; macOS 12 dropped (decision recorded)
 
+- [47 Signals: Industry And Your World](./47-signals-your-world-spec.md) - all three slices and provider/reader hardening implemented and reviewed; live-account acceptance remains
+
 ## Not Yet Built
 
 Specs written but with no implementation in the tree. They live in
@@ -58,7 +60,6 @@ Specs written but with no implementation in the tree. They live in
 - [43 Approved Branding Amendments](./todo/43-approved-branding-amendments-spec.md) — approved, append-only Branding additions from durable agent Outputs without replacing artist-written context
 - [44 State-Aware First-Use Guide](./todo/44-state-aware-first-use-guide-spec.md) — optional first-use setup inside the existing question-mark Guide, completed from real app state instead of page visits
 - [45 HQ / Campaign Scope Clarity](./todo/45-hq-campaign-scope-clarity-spec.md) — one rule for shared work, timeline inside campaigns, channel-collision warnings
-- [47 Signals: Industry And Your World](./todo/47-signals-your-world-spec.md) — independent research tracks, one-off video reviews, audio briefings, and relevant intel retrieval by content workers
 
 Implementation and live acceptance tracking (spec files retained at their existing paths):
 

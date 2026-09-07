@@ -21,7 +21,6 @@ an implementing agent as-is.
 | [43 Approved Branding Amendments](./43-approved-branding-amendments-spec.md) | Turns agreed Branding Agent work into a durable Output and an artist-approved, append-only Branding amendment without replacing user text | no `ArtistBrandingAmendment`, `BrandingAmendmentProposal`, or dedicated branding amendment tools |
 | [44 State-Aware First-Use Guide](./44-state-aware-first-use-guide-spec.md) | Extends the existing question-mark Guide with an optional first-use setup path whose progress comes from real AI, Brain, Vault, and first-work state | no `ArtistSetupSnapshot`, onboarding presentation state, setup mode, or coach-mark target contract |
 | [45 HQ / Campaign Scope Clarity](./45-hq-campaign-scope-clarity-spec.md) | One stated rule for where shared work lives, the unified timeline shown inside campaigns, and cross-owner channel-collision warnings — no new space, no new store | `collectArtistTimeline` has no RPC and only `manager-tools.ts` calls it; no `TimelineCollision` or `channel` on `TimelineEntry` |
-| [47 Signals: Industry And Your World](./47-signals-your-world-spec.md) | Two independent research tracks, one-off video analysis, per-track audio reports, and bounded content-worker retrieval | no top-level Signals track contract, Your World workflow, or final-report idea retrieval tool |
 
 Specs 38 and 41 remain at their existing paths for cross-reference stability,
 but are implemented, not unbuilt. See the V1 integration review checklist for
@@ -39,6 +38,9 @@ remaining live acceptance checks.
   shipped; it now lives in the parent folder as `partially-implemented`.
 - Spec 39 (Artist Website) left this folder once Slice 1 shipped; it now lives
   in the parent folder as `partially-implemented`.
+- Spec 47 (Signals: Industry And Your World) moved to the parent folder once
+  its host foundation existed. Its current implementation and remaining acceptance
+  gates are tracked there; live-account acceptance remains separate from code integration.
 
 ## Suggested Order
 

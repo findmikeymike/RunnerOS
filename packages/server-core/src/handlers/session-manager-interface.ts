@@ -36,6 +36,12 @@ export interface WorkspaceMigrationRuntimeLease {
 }
 
 export interface ISessionManager {
+  getSignalService(): import('../signals/SignalService').SignalService
+  getSignalReader(): import('../signals/SignalReader').SignalReader
+  findSignalHandoff(workspaceId: string, workerSlug: string, reference: import('@craft-agent/shared/shared-intel').SignalEntryReference): Promise<string | null>
+  bindSignalHandoff(sessionId: string, reference: import('@craft-agent/shared/shared-intel').SignalEntryReference): Promise<string>
+  getSignalHandoff(sessionId: string): Promise<import('@craft-agent/shared/shared-intel').SignalEntryReference | null>
+  clearSignalHandoff(sessionId: string): Promise<void>
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------

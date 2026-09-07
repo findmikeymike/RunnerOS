@@ -17,6 +17,7 @@ import { WorkspacePicker } from '@/components/workspace'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
 import { SplashScreen } from '@/components/SplashScreen'
 import { TooltipProvider } from '@craft-agent/ui'
+import { removeRejectedOptimisticMessage } from '@/lib/guarded-draft-send'
 import { FocusProvider } from '@/context/FocusContext'
 import { ModalProvider } from '@/context/ModalContext'
 import { DismissibleLayerProvider } from '@/context/DismissibleLayerContext'
@@ -27,7 +28,7 @@ import { useSession } from '@/hooks/useSession'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { NavigationProvider } from '@/contexts/NavigationContext'
 import { navigate, routes } from './lib/navigate'
-import { attachmentFromContentRef, toDraftRef } from './lib/drafts'
+import { attachmentFromContentRef, toDraftRef, restoreMissingDraft } from './lib/drafts'
 import { stripMarkdown } from './utils/text'
 import { coerceInputText } from './lib/input-text'
 import { getSessionsToRefreshAfterStaleReconnect } from './lib/reconnect-recovery'
@@ -660,9 +661,7 @@ export default function App() {
     // Attachment files are not read here — hydration happens lazily when the session
     // is opened so app startup isn't delayed by reading potentially large files.
     window.electronAPI.getAllDrafts().then((drafts) => {
-      if (Object.keys(drafts).length > 0) {
-        sessionDraftsRef.current = new Map(Object.entries(drafts))
-      }
+      for (const [id, draft] of Object.entries(drafts)) restoreMissingDraft(sessionDraftsRef.current, id, draft)
     })
     // Load app-level theme
     window.electronAPI.getAppTheme().then(setAppTheme)
@@ -1161,6 +1160,7 @@ export default function App() {
   }, [updateSessionById])
 
   const handleSendMessage = useCallback(async (sessionId: string, message: string, attachments?: FileAttachment[], skillSlugs?: string[], externalBadges?: ContentBadge[]) => {
+    let optimisticMessageId: string | undefined
     try {
       const sessionAtSend = store.get(sessionAtomFamily(sessionId))
       // Capture pre-send processing state so we can flag mid-stream sends
@@ -1304,6 +1304,7 @@ export default function App() {
       }
 
       // Optimistic UI update - add user message and set processing state
+      optimisticMessageId = userMessage.id
       updateSessionById(sessionId, (s) => ({
         messages: [...s.messages, userMessage],
         isProcessing: true,
@@ -1322,7 +1323,7 @@ export default function App() {
       updateSessionById(sessionId, (s) => ({
         isProcessing: false,
         messages: [
-          ...s.messages,
+          ...removeRejectedOptimisticMessage(s.messages, optimisticMessageId),
           {
             id: generateMessageId(),
             role: 'error' as const,
@@ -1429,6 +1430,11 @@ export default function App() {
     draftSaveTimeoutRef.current.set(sessionId, timeout)
   }, [])
 
+  const restoreDraft = useCallback((sessionId: string, draft: SessionDraft) => {
+    restoreMissingDraft(sessionDraftsRef.current, sessionId, draft)
+  }, [])
+  const hasDraft = useCallback((sessionId: string) => sessionDraftsRef.current.has(sessionId), [])
+
   const handleInputChange = useCallback((sessionId: string, value: string) => {
     const text = coerceInputText(value)
     const existing = sessionDraftsRef.current.get(sessionId)
@@ -1439,12 +1445,7 @@ export default function App() {
         ? { attachments: existingAttachments }
         : {}),
     }
-    const isEmpty = !nextDraft.text && (!nextDraft.attachments || nextDraft.attachments.length === 0)
-    if (isEmpty) {
-      sessionDraftsRef.current.delete(sessionId)
-    } else {
-      sessionDraftsRef.current.set(sessionId, nextDraft)
-    }
+    sessionDraftsRef.current.set(sessionId, nextDraft)
     schedulePersistDraft(sessionId)
   }, [schedulePersistDraft])
 
@@ -1463,12 +1464,7 @@ export default function App() {
       text: coerceInputText(existing?.text),
       ...(refs.length > 0 ? { attachments: refs } : {}),
     }
-    const isEmpty = !nextDraft.text && (!nextDraft.attachments || nextDraft.attachments.length === 0)
-    if (isEmpty) {
-      sessionDraftsRef.current.delete(sessionId)
-    } else {
-      sessionDraftsRef.current.set(sessionId, nextDraft)
-    }
+    sessionDraftsRef.current.set(sessionId, nextDraft)
     schedulePersistDraft(sessionId)
   }, [schedulePersistDraft])
 
@@ -1698,9 +1694,8 @@ export default function App() {
       // and ensures no stale state from old workspace persists)
       setSessionOptions(new Map())
 
-      // 6. Clear message drafts from previous workspace
-      // (prevents memory growth on repeated workspace switches)
-      sessionDraftsRef.current.clear()
+      // Draft IDs are global. Keep local edits (including clears) while the
+      // destination hydrates; an older disk snapshot must not replace them.
 
       // 7. Reset sources and skills atoms to empty
       // (prevents stale data flash during workspace switch - AppShell will reload)
@@ -1785,6 +1780,8 @@ export default function App() {
     // Session options
     onSessionOptionsChange: handleSessionOptionsChange,
     onInputChange: handleInputChange,
+    restoreDraft,
+    hasDraft,
     onAttachmentsChange: handleAttachmentsChange,
     // New chat (via deep link navigation)
     openNewChat,
@@ -1803,6 +1800,8 @@ export default function App() {
     hydrateDraftAttachments,
     sessionOptions,
     handleCreateSession,
+    restoreDraft,
+    hasDraft,
     handleSendMessage,
     handleRenameSession,
     handleFlagSession,

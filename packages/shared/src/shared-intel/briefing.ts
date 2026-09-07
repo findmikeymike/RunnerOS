@@ -14,13 +14,13 @@ interface SignalReportIdentity {
   origin?: { source?: string; workflowSlug?: string; workflowRunId?: string; stepId?: string };
 }
 
-/** Eligibility only: confirming the run's finalOutputId requires a host lookup. */
+/** Candidate eligibility only: the host must validate finalOutputId and new-contract journal provenance. */
 export function isFinalSignalReport(output: SignalReportIdentity): boolean {
   return output.kind === 'report'
     && output.status === 'published'
     && Boolean(output.primary?.id?.trim() || output.primaryAssetId?.trim())
     && output.origin?.source === 'workflow'
-    && output.origin.workflowSlug === 'weekly-signal-scan'
+    && ['weekly-signal-scan', 'signals-industry-scan', 'weekly-world-scan', 'signal-video-review'].includes(output.origin.workflowSlug ?? '')
     && Boolean(output.origin.workflowRunId?.trim())
     && output.origin.stepId === 'synthesize'
     && !output.tags?.includes('signal-source-packet');

@@ -7,7 +7,8 @@ import { buildInworldBasicAuthorization, getCredentialManager, resolveInworldApi
 import type { OutputManifest } from '@craft-agent/shared/outputs';
 import { isFinalSignalReport, parseSignalBriefing } from '@craft-agent/shared/shared-intel';
 import { assertTeamPermission } from '@craft-agent/shared/workspaces';
-import { readRun, type WorkflowRunSnapshot } from '@craft-agent/shared/workflows';
+import { readRun } from '@craft-agent/shared/workflows';
+import { SignalFinalReportError, validateSignalFinalReport, validateSignalFinalReportContent, type SignalFinalReportRun } from '../signals/final-report';
 
 export const SIGNAL_AUDIO_MODEL = 'inworld-tts-2-flash';
 export const SIGNAL_AUDIO_LIMITS = { reportBytes: 1024 * 1024, textCharacters: 2000, audioBytes: 4 * 1024 * 1024, responseBytes: 6 * 1024 * 1024, timeoutMs: 45_000, concurrent: 4 } as const;
@@ -20,7 +21,7 @@ function fail(message: string, code?: string): never { throw new SignalBriefingA
 interface SignalBriefingAudioDeps {
   getWorkspace(id: string): { id: string; rootPath: string; remoteServer?: unknown } | null | undefined;
   getOutput(workspaceId: string, outputId: string): OutputManifest | null;
-  getRun?: (rootPath: string, runId: string) => Pick<WorkflowRunSnapshot, 'id' | 'workspaceId' | 'workflowSlug' | 'state' | 'finalOutputId'> | null;
+  getRun?: (rootPath: string, runId: string) => SignalFinalReportRun | null;
   safeOutputPath(workspaceId: string, outputId: string): Promise<string>;
   assertPermission?: (rootPath: string) => void;
   loadSecret?: (name: string) => Promise<string | null | undefined>;
@@ -126,13 +127,16 @@ export class SignalBriefingAudio {
         || output.status !== 'published' || !output.primary?.path || !/\.(md|markdown|txt)$/i.test(output.primary.path)) fail('Audio requires a saved final Signals report.');
       const run = (this.deps.getRun ?? readRun)(workspace.rootPath, output.origin.workflowRunId!);
       if (!run || run.id !== output.origin.workflowRunId || run.workspaceId !== workspaceId
-        || run.workflowSlug !== 'weekly-signal-scan' || run.state !== 'succeeded' || run.finalOutputId !== outputId) {
+        || run.workflowSlug !== output.origin.workflowSlug || run.state !== 'succeeded' || run.finalOutputId !== outputId) {
         fail('Audio requires the final report of a completed Signals run.', 'REPORT_NOT_FINAL');
       }
+      const metadata = run.workflowSlug === 'weekly-signal-scan' ? null
+        : validateSignalFinalReport(workspace.rootPath, workspaceId, output, run);
       const path = await this.deps.safeOutputPath(workspaceId, outputId);
       const root = await realpath(workspace.rootPath);
       if (!within(root, await realpath(path))) fail('Signals report path is not allowed.');
       const report = (await readBounded(path, SIGNAL_AUDIO_LIMITS.reportBytes)).toString('utf8');
+      if (metadata) validateSignalFinalReportContent(metadata, report);
       const briefing = parseSignalBriefing(report);
       if (!briefing) fail('This report has no audio briefing.');
       if (briefing.length > SIGNAL_AUDIO_LIMITS.textCharacters) fail('Signals briefing exceeds 2,000 characters.');
@@ -155,6 +159,7 @@ export class SignalBriefingAudio {
       this.pending.set(key, task);
       try { return await task; } finally { this.pending.delete(key); }
     } catch (error) {
+      if (error instanceof SignalFinalReportError) throw new SignalBriefingAudioError(error.message, error.code);
       if (error instanceof SignalBriefingAudioError) throw error;
       throw new SignalBriefingAudioError('Signals audio could not be prepared. Try again.');
     }

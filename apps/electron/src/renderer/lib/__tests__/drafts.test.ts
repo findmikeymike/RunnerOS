@@ -5,7 +5,25 @@ import {
   attachmentFromContentRef,
   isAbsolutePath,
   toDraftRef,
+  restoreMissingDraft,
 } from '../drafts'
+import type { SessionDraft } from '@craft-agent/shared/config'
+
+describe('restoreMissingDraft', () => {
+  it('hydrates absent drafts with their attachments', () => {
+    const drafts = new Map<string, SessionDraft>()
+    const saved = { text: 'research', attachments: [{ path: '/tmp/source.txt', name: 'source.txt' }] }
+    expect(restoreMissingDraft(drafts, 'draft', saved)).toBe(true)
+    expect(drafts.get('draft')).toEqual(saved)
+  })
+  it('preserves typing, attachment-only drafts and deliberate empty edits', () => {
+    for (const local of [{ text: 'my edit' }, { text: '', attachments: [{ path: '/tmp/local.txt', name: 'local.txt' }] }, { text: '' }]) {
+      const drafts = new Map<string, SessionDraft>([['draft', local]])
+      expect(restoreMissingDraft(drafts, 'draft', { text: 'old disk text' })).toBe(false)
+      expect(drafts.get('draft')).toBe(local)
+    }
+  })
+})
 
 function makeAttachment(overrides: Partial<FileAttachment> = {}): FileAttachment {
   return {

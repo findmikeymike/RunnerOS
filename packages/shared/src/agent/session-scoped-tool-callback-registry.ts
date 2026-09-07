@@ -165,6 +165,7 @@ export interface SessionScopedToolCallbacks {
   searchArtistNetworkFn?: (
     input: import('@craft-agent/session-tools-core').SearchArtistNetworkInput,
   ) => Promise<import('@craft-agent/session-tools-core').ManagerContextToolResult>;
+  findSignalIdeasFn?: (input: import('../shared-intel/signal-retrieval.ts').FindSignalIdeasInput) => Promise<import('../shared-intel/signal-retrieval.ts').SignalLookupResult>;
   /** Artist website: read the manifest, edit content, render, preview, audit. */
   getWebsiteManifestFn?: (
     input: import('@craft-agent/session-tools-core').GetWebsiteManifestInput,

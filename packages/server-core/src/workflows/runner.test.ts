@@ -51,6 +51,131 @@ const MISSING_RUN_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const INACTIVE_RUN_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const TERMINAL_RUN_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 
+test('host empty completion persists supplied identity without creating agent sessions', async () => {
+  const h = makeHarness();
+  const runner = new WorkflowRunner({ ...h.deps, completeWithoutSteps: async () => true });
+  await runner.start({ workflow: makeWorkflow(), workspaceId: WORKSPACE_ID, triggerInputs: { topic: 'empty' }, runId: TERMINAL_RUN_ID });
+  await waitFor(() => lastCompleted(h.events) !== undefined);
+  expect(readRun(workspaceRoot, TERMINAL_RUN_ID)?.state).toBe('succeeded');
+  expect(h.sessions.size).toBe(0);
+  await expect(runner.start({ workflow: makeWorkflow(), workspaceId: WORKSPACE_ID, triggerInputs: { topic: 'empty' }, runId: TERMINAL_RUN_ID })).rejects.toThrow();
+});
+
+describe('host retry recovery handoff', () => {
+  function originalRun(): WorkflowRunSnapshot {
+    const now = new Date().toISOString();
+    const original: WorkflowRunSnapshot = {
+      id: FAILED_RUN_ID, workflowSlug: 'test-flow', workspaceId: WORKSPACE_ID, state: 'failed',
+      trigger: { type: 'manual', inputs: { topic: 'old evidence' }, firedAt: now },
+      workflowSnapshot: { metadata: makeWorkflow().metadata, body: '' },
+      steps: [{ id: 'first', state: 'succeeded', attempts: 1, output: 'stale analysis' },
+        { id: 'second', state: 'failed', attempts: 1 }],
+      createdAt: now, updatedAt: now,
+    };
+    writeRun(workspaceRoot, original);
+    return original;
+  }
+  function refresh(retry: WorkflowRunSnapshot): WorkflowRunSnapshot {
+    return { ...retry, trigger: { ...retry.trigger, inputs: { topic: 'fresh evidence' } },
+      resumeFromStepId: 'first',
+      steps: retry.steps.map(step => ({ id: step.id, state: 'queued', attempts: 0 })) };
+  }
+
+  test('adopts refreshed evidence and preflights the newly resumed analysis agent', async () => {
+    const original = originalRun();
+    const h = makeHarness({ stepOutputs: ['fresh analysis', 'report'] });
+    const checked: string[] = [];
+    h.deps.preflightStepAgent = async (_workspace, agent) => { checked.push(agent); };
+    h.deps.authorizeRerun = async (_old, retry, signal) => {
+      expect(signal.aborted).toBe(false);
+      return refresh(retry);
+    };
+    const runner = new WorkflowRunner(h.deps);
+    const retry = await runner.rerunFromStep({ workspaceId: WORKSPACE_ID, runId: original.id });
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    expect(checked).toEqual(['writer', 'researcher']);
+    expect(retry.resumeFromStepId).toBe('first');
+    expect(h.promptsSent).toHaveLength(2);
+    expect(h.promptsSent[0]!.prompt).toContain('fresh evidence');
+    expect(h.promptsSent[1]!.prompt).toContain('fresh analysis');
+    expect(readRun(workspaceRoot, original.id)?.trigger).toEqual(original.trigger);
+    expect(readRun(workspaceRoot, original.id)?.steps).toEqual(original.steps);
+  });
+
+  for (const field of ['id', 'workspaceId', 'workflow', 'lineage', 'trigger', 'resume', 'steps'] as const) {
+    test(`rejects host refresh with changed ${field} boundary`, async () => {
+      const original = originalRun();
+      const h = makeHarness();
+      h.deps.authorizeRerun = async (_old, retry) => {
+        const next = refresh(retry);
+        if (field === 'id') next.id = MISSING_RUN_ID;
+        if (field === 'workspaceId') next.workspaceId = 'other-workspace';
+        if (field === 'workflow') next.workflowSnapshot.body = 'different workflow';
+        if (field === 'lineage') next.resumedFromRunId = MISSING_RUN_ID;
+        if (field === 'trigger') next.trigger.firedAt = 'changed';
+        if (field === 'resume') next.resumeFromStepId = 'missing';
+        if (field === 'steps') next.steps[0]!.output = 'stale analysis';
+        return next;
+      };
+      const runner = new WorkflowRunner(h.deps);
+      await expect(runner.rerunFromStep({ workspaceId: WORKSPACE_ID, runId: original.id })).rejects.toThrow('Host retry refresh');
+      expect(h.sessions.size).toBe(0);
+      expect(runner.getActiveRuns(WORKSPACE_ID)).toEqual([]);
+      const retryId = readRun(workspaceRoot, original.id)!.resumedByRunId!;
+      expect(readRun(workspaceRoot, retryId)?.state).toBe('failed');
+    });
+  }
+
+  test('missing newly resumed analysis agent fails before creating any sessions', async () => {
+    const original = originalRun();
+    const h = makeHarness({ unavailableAgentSlugs: ['researcher'] });
+    h.deps.authorizeRerun = async (_old, retry) => refresh(retry);
+    const runner = new WorkflowRunner(h.deps);
+    await expect(runner.rerunFromStep({ workspaceId: WORKSPACE_ID, runId: original.id })).rejects.toThrow('researcher');
+    expect(h.sessions.size).toBe(0);
+    expect(runner.getActiveRuns(WORKSPACE_ID)).toEqual([]);
+  });
+
+  for (const phase of ['authorization', 'analysis-preflight'] as const) {
+    test(`cancellation during ${phase} cannot resurrect the refreshed run`, async () => {
+      const original = originalRun();
+      const h = makeHarness();
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => { release = resolve; });
+      let entered = false;
+      let retryId = '';
+      let signal!: AbortSignal;
+      h.deps.authorizeRerun = async (_old, retry, abort) => {
+        retryId = retry.id; signal = abort;
+        if (phase === 'authorization') { entered = true; await gate; }
+        return refresh(retry);
+      };
+      h.deps.preflightStepAgent = async (_workspace, agent) => {
+        if (phase === 'analysis-preflight' && agent === 'researcher') { entered = true; await gate; }
+      };
+      const runner = new WorkflowRunner(h.deps);
+      const pending = runner.rerunFromStep({ workspaceId: WORKSPACE_ID, runId: original.id });
+      await waitFor(() => entered);
+      await runner.cancel(WORKSPACE_ID, retryId);
+      expect(signal.aborted).toBe(true);
+      release();
+      await expect(pending).rejects.toThrow();
+      expect(readRun(workspaceRoot, retryId)?.state).toBe('cancelled');
+      expect(h.sessions.size).toBe(0);
+      expect(runner.getActiveRuns(WORKSPACE_ID)).toEqual([]);
+    });
+  }
+});
+
+test('host provenance rejection fails before creating agent sessions', async () => {
+  const h = makeHarness();
+  const runner = new WorkflowRunner({ ...h.deps, completeWithoutSteps: async () => { throw new Error('Invalid host provenance'); } });
+  const started = await runner.start({ workflow: makeWorkflow(), workspaceId: WORKSPACE_ID, triggerInputs: { topic: 'empty' } });
+  await waitFor(() => lastCompleted(h.events) !== undefined);
+  expect(readRun(workspaceRoot, started.id)?.state).toBe('failed');
+  expect(h.sessions.size).toBe(0);
+});
+
 function makeWorkflow(metadata: Partial<WorkflowMetadata> = {}): LoadedWorkflow {
   const md: WorkflowMetadata = {
     name: 'Test',

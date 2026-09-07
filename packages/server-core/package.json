@@ -30,13 +30,16 @@
   "dependencies": {
     "@craft-agent/core": "workspace:*",
     "@craft-agent/shared": "workspace:*",
+    "sax": "1.4.4",
+    "parse5": "8.0.1",
     "jose": "^6.0.0",
     "ws": "^8.19.0",
     "sharp": "0.34.5",
     "@earendil-works/pi-ai": "0.84.3"
   },
   "devDependencies": {
-    "typescript": "^5.8.2",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "@types/sax": "1.2.7",
+    "typescript": "^5.8.2"
   }
 }

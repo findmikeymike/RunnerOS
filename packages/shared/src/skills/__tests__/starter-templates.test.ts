@@ -561,7 +561,7 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(skill!.files.some(file => file.path === 'scripts/zero-budget.mjs')).toBe(true);
   });
 
-  it('pins the guarded preferred Zero transcript capability in both YouTube skills', () => {
+  it('keeps pinned Zero transcription behind native and Monid with guarded spending', () => {
     for (const slug of ['youtube-research', 'youtube-intelligence']) {
       const skill = BUNDLED_STARTER_SKILLS.find(item => item.slug === slug);
       expect(skill).toBeDefined();
@@ -569,9 +569,22 @@ describe('BUNDLED_STARTER_SKILLS', () => {
       expect(parsed.content).toContain('youtube-video-transcript-extractor-70f8ca14');
       expect(parsed.content).toContain('zero get youtube-video-transcript-extractor-70f8ca14');
       expect(parsed.content).toContain('--max-pay 0.02');
-      expect(parsed.content).toContain('preflight fails');
-      expect(parsed.content).toMatch(/automatically (?:try|retry)/);
+      expect(parsed.content).toContain('native and Monid are unavailable');
+      expect(parsed.content).toContain('it must be healthy');
+      expect(parsed.content).toContain('Do not search for replacements during routine Signals runs');
+      expect(parsed.content).toMatch(/unresolved|pending charge/);
     }
+  });
+
+  it('pins distinct Monid metadata and timestamped transcript tools without mandatory CLI setup', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(item => item.slug === 'monid')!;
+    const { content } = matter(getSkillMd(skill));
+    expect(content).toContain('/starvibe/youtube-video-transcript');
+    expect(content).toContain('/streamers/youtube-scraper');
+    expect(content).toContain('Monid second');
+    expect(content).toContain('Maximum price is `$0.02`');
+    expect(content).toContain('Do not install the Monid CLI');
+    expect(content).toContain('collector owns provider calls');
   });
 
   it('bundles music-specific Meta conversion and visual hook doctrine', () => {

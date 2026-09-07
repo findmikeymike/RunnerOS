@@ -37,7 +37,7 @@ import {
   upsertContextDoc,
   type LoadedContextDoc,
 } from '@craft-agent/shared/workspace-context'
-import type { WorkflowRunSnapshot, WorkflowRunState } from '@craft-agent/shared/workflows'
+import { loadGlobalWorkflow, readActivatedWorkflows, type WorkflowRunSnapshot, type WorkflowRunState } from '@craft-agent/shared/workflows'
 import type { ModelAttempt } from '@craft-agent/shared/config'
 import { reconcileXEditorialSlateOrder } from '../x-editorial/slate-status'
 import {
@@ -1426,6 +1426,7 @@ export class ScheduledWorkRunner {
     workspaceId: string,
     order: ScheduledWorkOrder,
     now: Date,
+    explicitRetry = false,
   ): Promise<boolean> {
     if (this.deps.hasExternalBackgroundWork?.()) return false
     if (this.backgroundAdmissionOwner) return false
@@ -1433,7 +1434,7 @@ export class ScheduledWorkRunner {
     // Another concurrent scan may have reserved while session state was read.
     if (this.deps.hasExternalBackgroundWork?.()) return false
     if (this.backgroundAdmissionOwner) return false
-    if (!this.isOldestDueBackgroundOrder(workspaceRootPath, workspaceId, order, now)) return false
+    if (!this.isOldestDueBackgroundOrder(workspaceRootPath, workspaceId, order, now, explicitRetry)) return false
     // Keep this guard even while isOldestDueBackgroundOrder is synchronous.
     // It preserves the admission invariant if that scan ever gains async work.
     if (this.deps.hasExternalBackgroundWork?.()) return false
@@ -1450,6 +1451,52 @@ export class ScheduledWorkRunner {
   async isBackgroundLaneOccupied(currentRootPath: string, currentWorkspaceId: string): Promise<boolean> {
     if (this.backgroundAdmissionOwner) return true
     return this.hasOccupiedBackgroundLane(currentRootPath, currentWorkspaceId)
+  }
+
+  /** Generic Signals reruns still enter the tracked, installation-wide background lane. */
+  async admitSignalWorkflowRetry(root: string, original: WorkflowRunSnapshot, retry: WorkflowRunSnapshot, orderIds: string[]): Promise<void> {
+    const workspaceId = original.workspaceId;
+    const parsed = this.readWork(root, workspaceId);
+    const order = parsed.ok ? parsed.work.items.find(item => orderIds.includes(item.id)) : undefined;
+    const workflow = loadGlobalWorkflow(original.workflowSlug);
+    const previousId = order && currentWorkflowRunId(order);
+    let ancestor = original;
+    const visited = new Set<string>();
+    while (ancestor.id !== previousId && ancestor.resumedFromRunId && visited.size < 64 && !visited.has(ancestor.id)) {
+      visited.add(ancestor.id);
+      const parent = this.deps.readWorkflowRun(root, ancestor.resumedFromRunId);
+      if (!parent || parent.resumedByRunId !== ancestor.id || parent.workspaceId !== original.workspaceId || parent.workflowSlug !== original.workflowSlug
+        || scheduledWorkDefinitionDigest(parent.trigger) !== scheduledWorkDefinitionDigest(original.trigger)
+        || scheduledWorkDefinitionDigest(parent.workflowSnapshot) !== scheduledWorkDefinitionDigest(original.workflowSnapshot)) break;
+      ancestor = parent;
+    }
+    if (!order || order.deletedAt || order.legacyRef || order.execution.type !== 'workflow-run'
+      || !['running', 'scheduled', 'needs-attention'].includes(order.status)
+      || order.execution.triggerInputs.signalContract !== 'signals-v1'
+      || order.execution.triggerInputs.signalRequestId !== original.trigger.inputs.signalRequestId
+      || order.execution.workflowSlug !== original.workflowSlug || retry.workflowSlug !== original.workflowSlug
+      || retry.workspaceId !== workspaceId || retry.resumedFromRunId !== original.id
+      || (previousId !== original.id && previousId !== retry.id && ancestor.id !== previousId)
+      || !workflow || !readActivatedWorkflows(root).active.includes(original.workflowSlug)
+      || scheduledWorkDefinitionDigest({ metadata: workflow.metadata, body: workflow.body }) !== order.execution.workflowDigest
+      || scheduledWorkDefinitionDigest(original.workflowSnapshot) !== order.execution.workflowDigest) throw new Error('Signals tracked retry requires unchanged, approved workflow work.');
+    const fence = this.deps.getBackgroundFenceToken?.(root) ?? null;
+    if (!this.canWorkspaceJoinBackgroundLane(root)) throw new Error('Signals background execution is not authorized on this host.');
+    if (previousId === retry.id && order.status === 'running') return;
+    const now = this.deps.now?.() ?? new Date();
+    const key = activeBackgroundRunKey(root, order.id);
+    const candidate = { ...order, status: 'scheduled' as const, startAt: now.toISOString() };
+    if (!await this.tryReserveBackgroundLane(key, root, workspaceId, candidate, now, true)) throw new Error('Signals retry is waiting for the background lane. Retry when current work finishes.');
+    try {
+      if (!this.canContinue(root, fence)) throw new Error('Signals background authorization changed before retry.');
+      const pinned = scheduledWorkDefinitionDigest(order);
+      const result = await this.updateOrder(workspaceId, root, order.id, (current, updatedAt) => {
+        if (scheduledWorkDefinitionDigest(current) !== pinned) return null;
+        return { ...current, status: 'running', result: undefined, attention: undefined, updatedAt,
+          runs: [...current.runs, { ...createCampaignJobRun({ jobId: current.id, status: 'running', startedAt: updatedAt }), workflowRunId: retry.id }] };
+      });
+      if (!result.updated) throw new Error('Signals work changed during retry admission.');
+    } finally { this.releaseBackgroundAdmission(key); }
   }
 
   private async hasOccupiedBackgroundLane(currentRootPath: string, currentWorkspaceId: string): Promise<boolean> {
@@ -1485,6 +1532,7 @@ export class ScheduledWorkRunner {
     currentWorkspaceId: string,
     currentOrder: ScheduledWorkOrder,
     now: Date,
+    explicitRetry = false,
   ): boolean {
     const workspaces = [
       ...(this.deps.listWorkspaceRoots?.() ?? []),
@@ -1500,6 +1548,7 @@ export class ScheduledWorkRunner {
       const parsed = this.readWork(workspace.rootPath, workspace.id)
       if (!parsed.ok) continue
       for (const order of parsed.work.items) {
+        if (explicitRetry && workspace.id === currentWorkspaceId && workspace.rootPath === currentRootPath && order.id === currentOrder.id) continue
         if (order.status !== 'scheduled'
           || !isBackgroundExecution(order)
           || !this.shouldScanOrder(order, now)
@@ -1510,6 +1559,7 @@ export class ScheduledWorkRunner {
         candidates.push({ workspaceId: workspace.id, rootPath: workspace.rootPath, order })
       }
     }
+    if (explicitRetry) candidates.push({ workspaceId: currentWorkspaceId, rootPath: currentRootPath, order: currentOrder })
     candidates.sort((left, right) => compareScanPriority(left.order, right.order)
       || left.workspaceId.localeCompare(right.workspaceId)
       || left.rootPath.localeCompare(right.rootPath))

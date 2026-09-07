@@ -431,6 +431,7 @@ export interface SessionToolContext {
   getWorkspaceContext?(input: import('./handlers/manager-context.ts').GetWorkspaceContextInput): Promise<import('./handlers/manager-context.ts').ManagerContextToolResult>;
   /** Search the global Artist Network without injecting or returning the full contact list. */
   searchArtistNetwork?(input: import('./handlers/manager-context.ts').SearchArtistNetworkInput): Promise<import('./handlers/manager-context.ts').ManagerContextToolResult>;
+  findSignalIdeas?(input: import('@craft-agent/shared/shared-intel').FindSignalIdeasInput): Promise<import('@craft-agent/shared/shared-intel').SignalLookupResult>;
 
   /** Read the artist website manifest: mode, urls, domain, policy, last build. */
   getWebsiteManifest?(input: import('./handlers/website.ts').GetWebsiteManifestInput): Promise<import('./handlers/website.ts').WebsiteToolResult>;

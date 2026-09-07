@@ -11,6 +11,7 @@
 
 import type { CreateAgentInput } from './storage.ts'
 import { SIGNAL_BRIEFING_INSTRUCTIONS } from '../shared-intel/briefing.ts'
+import { signalTrackPromptPrefix, youtubeProviderPromptPrefix } from './signal-track-prompts.ts'
 import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, SONG_DIRECTOR_SLUG, OPEN_SLIDE_AGENT_SLUG } from './types.ts'
 import { CONCIERGE_SYSTEM_SKILL_SLUGS, CREATOR_SYSTEM_SKILL_SLUGS } from '../skills/system.ts'
 import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts'
@@ -27,7 +28,7 @@ const PORTABLE_AGENT_LIBRARY_ROOT = RUNTIME_IDENTITY.variant === 'artist-os'
  * system prompt teaches it to *plan and decompose* rather than execute,
  * which is useful even before Rooms ship.
  */
-export const STARTER_AGENTS: CreateAgentInput[] = [
+const BASE_STARTER_AGENTS: CreateAgentInput[] = [
   {
     slug: ANYTHING_AGENT_SLUG,
     metadata: {
@@ -442,8 +443,8 @@ Safety:
       inputs: 'Campaign brief, song ethos, audience lane, YouTube topic, keyword list, channel handle, playlist URL, video ID, transcript request, comment research, or embed-candidate task.',
       outputs: 'Ranked video candidates, transcript summaries, top comments, channel scans, related-video lists, campaign-adjacent cultural notes, and embed-ready recommendations.',
       tags: ['youtube', 'research', 'video', 'transcripts', 'comments', 'channels', 'seo'],
-      skills: ['youtube-research', 'create-viral-content', 'zero'],
-      optionalSources: ['youtube-research', 'zero'],
+      skills: ['youtube-research', 'create-viral-content', 'monid', 'zero'],
+      optionalSources: ['youtube-research', 'monid', 'zero'],
     },
     systemPrompt: `You are YouTube Research Agent, the RunnerOS specialist for read-only YouTube discovery and analysis.
 
@@ -480,9 +481,9 @@ Never use this agent for YouTube Studio posting, uploads, comments, or browser p
       inputs: 'YouTube channels, videos, transcripts, or a weekly intelligence brief with configured trusted channels.',
       outputs: 'A report Output with timestamped findings and categorized machine-readable intelligence nuggets.',
       tags: ['youtube', 'intelligence', 'transcripts', 'research', 'reports', 'agents'],
-      skills: ['youtube-intelligence', 'youtube-research', 'customer-research', 'content-strategy', 'zero'],
+      skills: ['youtube-intelligence', 'youtube-research', 'customer-research', 'content-strategy', 'monid', 'zero'],
       sources: ['youtube-intelligence'],
-      optionalSources: ['youtube-research', 'zero'],
+      optionalSources: ['youtube-research', 'monid', 'zero'],
       trustedWorkerTools: ['create_output'],
     },
     systemPrompt: `You are YouTube Intelligence Agent, the RunnerOS specialist for turning trusted YouTube sources into evidence-backed artist intelligence.
@@ -3209,3 +3210,8 @@ You are not here to be liked. You are here to make the work better.
 **Memory scope.** When you call \`save_memory\`, default to \`scope: agent\` — what the user finds useful in critique (harshness level, line-by-line vs. summary, etc.) is about your specific collaboration. Use \`scope: user\` only when the fact is about the user's general work standards (e.g., "user values root-cause over surface fixes across all domains") and would inform other agents too.`,
   },
 ]
+
+export const STARTER_AGENTS: CreateAgentInput[] = BASE_STARTER_AGENTS.map(agent => ({
+  ...agent,
+  systemPrompt: `${signalTrackPromptPrefix(agent.slug)}${youtubeProviderPromptPrefix(agent.slug)}${agent.systemPrompt}`,
+}))

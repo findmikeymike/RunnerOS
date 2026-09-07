@@ -9,6 +9,7 @@ import {
   buildAgentBundleFooter,
   buildAgentCatalogSection,
   buildManagerBriefPromptSectionFromDocs,
+  buildSignalIdeasGuidance,
   buildWorkspaceContextSection,
   WORKSPACE_CONTEXT_MAX_CHARS,
   composeAgentSystemPrompt,
@@ -37,6 +38,40 @@ const skill = (slug: string, name: string, description?: string) => ({
 
 const source = (slug: string, name: string, tagline?: string) => ({
   config: { slug, name, ...(tagline ? { tagline } : {}) },
+});
+
+describe('Signals worker guidance', () => {
+  const roles = ['content-genius', 'x-editorial', 'world-builder', 'branding-agent', 'community-agent', 'concierge', 'content-director'];
+
+  test('adds retrieval guidance to exactly the intended Artist OS roles without replacing custom personas', () => {
+    for (const slug of roles) {
+      for (const artistWorkspaceScope of ['hq', 'campaign'] as const) {
+        const persona = 'My custom artist instructions. Preserve these.';
+        const result = composeAgentSystemPrompt({ ...agent({}, persona), slug }, [], [], [], [], { artistWorkspaceScope });
+        expect(result.startsWith(persona)).toBe(true);
+        expect(result).toContain('find_signal_ideas');
+        expect(result).toContain('Unknown dates stay unknown');
+        expect(result).toContain('not the whole report or library');
+        expect(result).toContain('Research never authorizes');
+      }
+    }
+  });
+
+  test('does not subscribe production workers or generic and Lab sessions to Signals', () => {
+    for (const slug of ['scroll-stopper', 'anticipation-director', 'video-maker', 'toString', 'constructor', '__proto__', '']) {
+      expect(buildSignalIdeasGuidance({ ...agent(), slug }, 'campaign')).toBe('');
+    }
+    for (const scope of [undefined, 'general', 'lab'] as const) {
+      for (const slug of roles) expect(buildSignalIdeasGuidance({ ...agent(), slug }, scope)).toBe('');
+    }
+  });
+
+  test('keeps Content Genius small and non-music-capable while Content Director builds packages', () => {
+    expect(buildSignalIdeasGuidance({ ...agent(), slug: 'content-genius' }, 'campaign')).toContain('do not force a release tie-in');
+    expect(buildSignalIdeasGuidance({ ...agent(), slug: 'content-director' }, 'campaign')).toContain('Keep your package-building role');
+    expect(buildSignalIdeasGuidance({ ...agent(), slug: 'concierge' }, 'hq')).toContain('Do not create opportunities or Needs-you');
+    expect(buildSignalIdeasGuidance({ ...agent(), slug: 'branding-agent' }, 'hq')).toContain('without chasing trends');
+  });
 });
 
 function hqStateDoc(): PromptContextDoc {

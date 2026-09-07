@@ -325,6 +325,11 @@ export function attachSessionSelfManagementBindings(
     configurable: true,
     enumerable: true,
   });
+  Object.defineProperty(context, 'findSignalIdeas', {
+    get() { return getSessionScopedToolCallbacks(sessionId)?.findSignalIdeasFn; },
+    configurable: true,
+    enumerable: true,
+  });
 
   Object.defineProperty(context, 'getWebsiteManifest', {
     get() { return getSessionScopedToolCallbacks(sessionId)?.getWebsiteManifestFn; },

@@ -1,6 +1,7 @@
 import * as React from 'react'
-import { SignalBriefingPlayer } from './SignalBriefingPlayer'
-import { useSignalReportContent } from '@/hooks/useSignalReportContent'
+import { SignalsTracksPanel, type SignalNuggetInput } from './SignalsTracksPanel'
+import { SignalIdeaHandoff } from './SignalIdeaHandoff'
+import type { SignalEntryReference } from '@craft-agent/shared/shared-intel'
 import {
   Bot,
   CalendarClock,
@@ -32,13 +33,13 @@ import {
 } from 'lucide-react'
 import { useAtomValue } from 'jotai'
 import { toast } from 'sonner'
-import { DocumentFormattedMarkdownOverlay, Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
 import { resolvePulseExecutionTarget, type PulseExecutionTarget } from '@/lib/pulse-execution'
 import { openAgentSessionComposer } from '@/lib/run-agent'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
-import { appendSignalNugget, formatSignalDate, readableSignalBody, signalDocumentDate, signalFreshness } from '@/lib/artist-signals'
+import { appendSignalNugget, signalFreshness } from '@/lib/artist-signals'
 import {
   createWeeklyManagerCheckInMatcher,
   isWeeklyManagerCheckInAutomation,
@@ -73,7 +74,6 @@ import {
   StyledContextMenuItem,
 } from '@/components/ui/styled-context-menu'
 import { Switch } from '@/components/ui/switch'
-import { Info_Markdown } from '@/components/info'
 import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { ScheduledWorkComposer, type ScheduledWorkComposerEntry } from '@/components/calendar/ScheduledWorkComposer'
 import { StateOfPlayRefreshButton } from './StateOfPlayControls'
@@ -194,7 +194,7 @@ import {
   type HqHomeWorkerItem,
 } from '@/lib/artist-hq-home-feed'
 import { addDaysToDateKey, buildArtistTimeline, CAMPAIGN_STATE_CONTEXT_SLUG, dateKeyInTimezone, dateTimeInReferenceTimezone, type TimelineEntry } from '@craft-agent/shared/hq-state'
-import { isSharedIntelContextSlug } from '@craft-agent/shared/shared-intel'
+import { isSharedIntelContextSlug, signalWorkflowFor, type SignalTrack, type SignalMode } from '@craft-agent/shared/shared-intel'
 import { CAMPAIGN_CALENDAR_CONTEXT_SLUG, parseCampaignCalendarDocResult } from '@craft-agent/shared/campaign-calendar'
 import {
   ARTIST_RELEASE_HORIZON_CONTEXT_SLUG,
@@ -238,15 +238,6 @@ type CalendarEditDraft = CalendarDraft & {
 type ProfileDraft = Omit<ArtistProfile, 'version' | 'updatedAt'>
 type BrandingDraft = Omit<ArtistBranding, 'version' | 'updatedAt'>
 type VoiceDraft = Omit<ArtistVoice, 'version' | 'updatedAt'>
-type SignalLibraryItem = {
-  key: string
-  kind: 'output' | 'context'
-  title: string
-  summary: string
-  date?: string
-  output?: OutputSummaryDTO
-  body?: string
-}
 
 const HQ_HASH_PREFIX = '#artist-hq/'
 const SHOW_HQ_BANNER_FILTER = false
@@ -341,6 +332,8 @@ export function ArtistHQHome({
   onCreateAgendaTask,
   onDeleteAgendaTask,
 }: ArtistHQHomeProps) {
+  const [signalIdea, setSignalIdea] = React.useState<SignalEntryReference | null>(null)
+  React.useEffect(() => { setSignalIdea(null) }, [workspaceId])
   const {
     activeAgents: shellActiveAgents = [],
     llmConnections,
@@ -372,11 +365,6 @@ export function ArtistHQHome({
   const [categoryEditDraft, setCategoryEditDraft] = React.useState('')
   const [intelConfigOpen, setIntelConfigOpen] = React.useState(false)
   const [intelBusy, setIntelBusy] = React.useState(false)
-  const [selectedSignalKey, setSelectedSignalKey] = React.useState<string | null>(null)
-  const [selectedSignalText, setSelectedSignalText] = React.useState('')
-  const [signalFullscreenOpen, setSignalFullscreenOpen] = React.useState(false)
-  const [signalNuggetBusy, setSignalNuggetBusy] = React.useState(false)
-  const signalReaderRef = React.useRef<HTMLDivElement | null>(null)
   const [categoryDraft, setCategoryDraft] = React.useState('')
   const [selectedPersonId, setSelectedPersonId] = React.useState<string | null>(null)
   const [selectedDate, setSelectedDate] = React.useState(todayKey)
@@ -660,57 +648,6 @@ export function ArtistHQHome({
       setManagerAskBusy(false)
     }
   }, [availableAgents, onCreateSession, onInputChange, onSendMessage, skills, sources, workspaceId])
-  const researchDocs = React.useMemo(
-    () => docs.filter((doc) => (
-      doc.slug === SIGNAL_NUGGETS_CONTEXT_SLUG
-      || (
-        doc.slug !== ARTIST_INTEL_CONFIG_CONTEXT_SLUG
-        && doc.slug !== ARTIST_INTEL_REPORT_CONTEXT_SLUG
-        && /research|report|intel|analysis/i.test(`${doc.slug} ${doc.metadata.name} ${doc.metadata.description ?? ''}`)
-      )
-    )),
-    [docs],
-  )
-  const researchOutputs = React.useMemo(
-    () => outputs.filter(isResearchOutput),
-    [outputs],
-  )
-  const signalLibraryItems = React.useMemo<SignalLibraryItem[]>(() => {
-    const outputItems = researchOutputs.map((output) => ({
-      key: `output:${output.id}`,
-      kind: 'output' as const,
-      title: output.title,
-      summary: output.summary || output.origin?.agentName || 'Intelligence report',
-      date: output.completedAt || output.updatedAt || output.createdAt,
-      output,
-    }))
-    const contextItems = researchDocs.map((doc) => ({
-      key: `context:${doc.slug}`,
-      kind: 'context' as const,
-      title: doc.metadata.name,
-      summary: doc.metadata.description || 'Saved intelligence',
-      date: signalDocumentDate(doc.body),
-      body: readableSignalBody(doc.body),
-    }))
-    const reportFallback = !intelReport.outputId && (intelReport.title || intelReport.summary)
-      ? [{
-          key: 'context:latest-intel-summary',
-          kind: 'context' as const,
-          title: intelReport.title || 'Latest intelligence brief',
-          summary: intelReport.summary || 'Latest intelligence brief',
-          date: intelReport.generatedAt || intelReport.updatedAt,
-          body: `# ${intelReport.title || 'Latest intelligence brief'}\n\n${intelReport.summary || 'The latest run has not produced a written summary yet.'}`,
-        }]
-      : []
-    return [...outputItems, ...reportFallback, ...contextItems]
-      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-  }, [intelReport.generatedAt, intelReport.outputId, intelReport.summary, intelReport.title, intelReport.updatedAt, researchDocs, researchOutputs])
-  const latestSignalDate = signalLibraryItems[0]?.date ?? intelReport.generatedAt
-  const selectedSignalItem = React.useMemo(
-    () => signalLibraryItems.find((item) => item.key === selectedSignalKey) ?? signalLibraryItems[0] ?? null,
-    [selectedSignalKey, signalLibraryItems],
-  )
-  const { content: selectedSignalContent, loading: signalContentLoading } = useSignalReportContent(workspaceId, selectedSignalItem, getOutput)
   const activeCalendarEvents = React.useMemo(
     () => calendar.events.filter((event) => !event.deletedAt),
     [calendar.events],
@@ -1006,14 +943,6 @@ export function ArtistHQHome({
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
-  React.useEffect(() => {
-    if (selectedSignalKey && signalLibraryItems.some((item) => item.key === selectedSignalKey)) return
-    setSelectedSignalKey(signalLibraryItems[0]?.key ?? null)
-  }, [selectedSignalKey, signalLibraryItems])
-
-  React.useEffect(() => {
-    setSelectedSignalText('')
-  }, [selectedSignalItem?.key, selectedSignalContent])
 
   React.useEffect(() => {
     if (!selectedPersonId) return
@@ -1321,6 +1250,30 @@ export function ArtistHQHome({
     youtubeIntelligenceAgent,
   ])
 
+  const ensureTrackWorkflow = React.useCallback(async (track: SignalTrack, mode: SignalMode) => {
+    const slug = signalWorkflowFor(track, mode)
+    const workflow = allWorkflows.find(item => item.slug === slug)
+    if (!workflow) throw new Error('The Signals workflow is unavailable. Review it in Work before running.')
+    const workers = ['youtube-intelligence-agent', 'signal-analyst-agent']
+    for (const worker of workers) {
+      if (!allAgents.some(item => item.slug === worker)) throw new Error('A required Signals worker is unavailable.')
+      if (!workspaceActiveAgents.some(item => item.slug === worker)) await setAgentActive(worker, true)
+    }
+    if (!activeWorkflowSlugs.includes(slug)) await setWorkflowActive(slug, true)
+    return composerDefinitionDigest({ metadata: workflow.metadata, body: workflow.body })
+  }, [allWorkflows, allAgents, workspaceActiveAgents, activeWorkflowSlugs, setAgentActive, setWorkflowActive])
+
+  const saveTrackNugget = React.useCallback(async (input: SignalNuggetInput) => {
+    const existing = docs.find(doc => doc.slug === SIGNAL_NUGGETS_CONTEXT_SLUG)
+    await upsert({
+      slug: SIGNAL_NUGGETS_CONTEXT_SLUG,
+      metadata: existing?.metadata ?? { name: 'Signal Nuggets', description: 'Selected intelligence worth carrying into future artist and campaign work.', routing: { mode: 'broadcast' }, delivery: 'on-demand', enabled: true },
+      body: appendSignalNugget(existing?.body, { ...input, amendedAt: new Date().toISOString() }),
+      expectedBody: existing?.body ?? null,
+    })
+    toast.success('Saved to Signal Nuggets')
+  }, [docs, upsert])
+
   const toggleIntelPulse = React.useCallback(async () => {
     if (!intelConfigResult.ok) {
       toast.error(intelConfigResult.error)
@@ -1418,58 +1371,6 @@ export function ArtistHQHome({
     workspaceName,
   ])
 
-  const captureSignalSelection = React.useCallback(() => {
-    const selection = window.getSelection()
-    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
-      setSelectedSignalText('')
-      return
-    }
-    const range = selection.getRangeAt(0)
-    const commonNode = range.commonAncestorContainer
-    const commonElement = commonNode.nodeType === Node.ELEMENT_NODE
-      ? commonNode as Element
-      : commonNode.parentElement
-    if (!commonElement || !signalReaderRef.current?.contains(commonElement)) {
-      setSelectedSignalText('')
-      return
-    }
-    setSelectedSignalText(selection.toString().trim().slice(0, 4000))
-  }, [])
-
-  const saveSignalNugget = React.useCallback(async () => {
-    if (!selectedSignalText || !selectedSignalItem || signalNuggetBusy) return
-    setSignalNuggetBusy(true)
-    try {
-      const existing = docs.find((doc) => doc.slug === SIGNAL_NUGGETS_CONTEXT_SLUG)
-      const amendedAt = new Date().toISOString()
-      await upsert({
-        slug: SIGNAL_NUGGETS_CONTEXT_SLUG,
-        metadata: {
-          name: 'Signal Nuggets',
-          description: 'Selected intelligence worth carrying into future artist and campaign work.',
-          routing: { mode: 'broadcast' },
-          delivery: 'on-demand',
-          enabled: true,
-        },
-        body: appendSignalNugget(existing?.body, {
-          text: selectedSignalText,
-          sourceTitle: selectedSignalItem.title,
-          sourceKey: selectedSignalItem.key,
-          amendedAt,
-        }),
-        expectedBody: existing?.body ?? null,
-      })
-      setSelectedSignalText('')
-      window.getSelection()?.removeAllRanges()
-      toast.success('Saved to Signal Nuggets')
-    } catch (error) {
-      toast.error('Could not save this nugget', {
-        description: error instanceof Error ? error.message : String(error),
-      })
-    } finally {
-      setSignalNuggetBusy(false)
-    }
-  }, [docs, selectedSignalItem, selectedSignalText, signalNuggetBusy, upsert])
 
   const transitionHqRecommendation = React.useCallback(async (
     recommendationId: string,
@@ -2614,196 +2515,30 @@ export function ArtistHQHome({
         )}
 
         {tab === 'signals' && (
-          <section className="space-y-3" aria-label="Signals intelligence reader">
-            <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-              <div className="flex min-w-0 items-center gap-2.5 text-[11px] text-white/42">
-                <span className={cn('h-1.5 w-1.5 rounded-full', intelSyncActive ? 'bg-emerald-300' : 'bg-white/24')} />
-                <span>{intelSyncActive ? 'Weekly intelligence active' : 'Weekly intelligence paused'}</span>
-                {latestSignalDate ? (
-                  <span className="hidden sm:inline">· Latest {formatSignalDate(latestSignalDate)}</span>
-                ) : null}
-                {latestSignalFreshness?.status === 'aging' ? <span className="text-amber-200/60">· Aging</span> : null}
-                {latestSignalFreshness?.status === 'stale' ? <span className="text-orange-200/70">· Stale</span> : null}
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="inline-flex h-8 items-center gap-2 rounded-[9px] bg-white/[0.035] px-2.5 text-[11px] text-white/58">
-                  Weekly
-                  <Switch checked={intelSyncActive} onCheckedChange={() => { void toggleIntelPulse() }} disabled={intelBusy} />
-                </label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={() => setIntelConfigOpen(true)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] bg-white/[0.035] text-white/48 transition-colors hover:bg-white/[0.07] hover:text-white/82"
-                      aria-label="Edit intelligence sources"
-                    >
-                      <SlidersHorizontal className="h-3.5 w-3.5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">Edit YouTube channels</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="inline-flex">
-                      <button
-                        type="button"
-                        onClick={() => { void runIntelPulse() }}
-                        disabled={intelBusy || Boolean(signalRunDisabledReason)}
-                        className="inline-flex h-8 items-center gap-2 rounded-[9px] bg-white/90 px-3 text-[11px] font-semibold text-black transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        {intelBusy ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 fill-current" />}
-                        Run intelligence
-                      </button>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-xs text-xs">
-                    {signalRunDisabledReason || 'Run the YouTube, platform, and industry collectors now.'}
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            </div>
-
-            {signalNotice ? (
-              <div
-                aria-live="polite"
-                className={cn(
-                  'flex items-start gap-2.5 rounded-[12px] px-3.5 py-2.5 text-xs',
-                  signalNotice.tone === 'error' && 'bg-red-500/[0.09] text-red-100/82',
-                  signalNotice.tone === 'partial' && 'bg-amber-400/[0.08] text-amber-50/76',
-                  signalNotice.tone === 'stale' && 'bg-orange-400/[0.08] text-orange-50/74',
-                  signalNotice.tone === 'running' && 'bg-white/[0.035] text-white/64',
-                )}
-              >
-                {signalNotice.tone === 'running'
-                  ? <RefreshCw className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
-                  : <Radio className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
-                <div className="min-w-0">
-                  <div className="font-medium text-current">{signalNotice.title}</div>
-                  {signalNotice.detail ? <div className="mt-0.5 line-clamp-2 text-current opacity-65" title={signalNotice.detail}>{signalNotice.detail}</div> : null}
-                </div>
-              </div>
-            ) : null}
-
-            <div className="relative min-h-[520px] overflow-hidden rounded-[20px] bg-[#111214]/88 shadow-strong ring-1 ring-white/[0.07] backdrop-blur-2xl">
-              <div
-                className="pointer-events-none absolute inset-0 opacity-90"
-                style={{
-                  backgroundImage: 'radial-gradient(90% 68% at 50% 116%, rgba(249,115,22,0.12) 0%, rgba(249,115,22,0.025) 44%, transparent 72%), linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.012) 44%, rgba(0,0,0,0.14) 100%)',
-                }}
-              />
-              <div className="relative flex min-h-[520px] flex-col">
-                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/[0.055] px-5 py-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.16em] text-white/34">
-                      <Radio className="h-3 w-3 text-orange-300/75" />
-                      {selectedSignalItem?.kind === 'output' ? 'Intelligence report' : 'Saved intelligence'}
-                    </div>
-                    <h2 className="mt-2 truncate text-[18px] font-medium tracking-tight text-white/90">
-                      {selectedSignalItem?.title || 'Signals'}
-                    </h2>
-                    {selectedSignalItem ? (
-                      <p className="mt-1 line-clamp-1 max-w-3xl text-xs leading-5 text-white/42">
-                        {selectedSignalItem.summary}{selectedSignalItem.date ? ` · ${formatSignalDate(selectedSignalItem.date)}` : ''}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    {selectedSignalText ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            onClick={() => { void saveSignalNugget() }}
-                            disabled={signalNuggetBusy}
-                            className="inline-flex h-8 items-center gap-2 rounded-[9px] bg-orange-500/14 px-2.5 text-[11px] font-medium text-orange-200 transition-colors hover:bg-orange-500/22 disabled:opacity-40"
-                          >
-                            {signalNuggetBusy ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Diamond className="h-3.5 w-3.5" />}
-                            Save selection
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs">Add to the dated Signal Nuggets document</TooltipContent>
-                      </Tooltip>
-                    ) : null}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          type="button"
-                          className="inline-flex h-8 items-center gap-2 rounded-[9px] bg-white/[0.04] px-2.5 text-[11px] text-white/58 transition-colors hover:bg-white/[0.075] hover:text-white/86"
-                        >
-                          <Library className="h-3.5 w-3.5" />
-                          Library
-                          <ChevronDown className="h-3 w-3" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <StyledDropdownMenuContent align="end" className="w-80">
-                        {signalLibraryItems.length ? signalLibraryItems.map((item) => (
-                          <StyledDropdownMenuItem key={item.key} onClick={() => setSelectedSignalKey(item.key)} className="flex-col items-start gap-0.5 py-2.5">
-                            <span className="w-full truncate text-xs text-white/82">{item.title}</span>
-                            <span className="w-full truncate text-[10px] text-white/36">{item.date ? formatSignalDate(item.date) : item.summary}</span>
-                          </StyledDropdownMenuItem>
-                        )) : (
-                          <StyledDropdownMenuItem disabled>No reports yet</StyledDropdownMenuItem>
-                        )}
-                      </StyledDropdownMenuContent>
-                    </DropdownMenu>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => setSignalFullscreenOpen(true)}
-                          disabled={!selectedSignalContent}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] bg-white/[0.04] text-white/48 transition-colors hover:bg-white/[0.075] hover:text-white/86 disabled:opacity-30"
-                          aria-label="Read full report"
-                        >
-                          <Maximize2 className="h-3.5 w-3.5" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs">Read full report</TooltipContent>
-                    </Tooltip>
-                    {selectedSignalItem?.output ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            onClick={() => navigate(routes.view.output(selectedSignalItem.output!.id))}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] bg-white/[0.04] text-white/48 transition-colors hover:bg-white/[0.075] hover:text-white/86"
-                            aria-label="Open source output"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs">Open source output</TooltipContent>
-                      </Tooltip>
-                    ) : null}
-                  </div>
-                </div>
-
-                {!signalContentLoading && selectedSignalItem?.output ? (
-                  <SignalBriefingPlayer workspaceId={workspaceId} output={selectedSignalItem.output} content={selectedSignalContent} />
-                ) : null}
-                <div ref={signalReaderRef} onMouseUp={captureSignalSelection} className="min-h-0 flex-1 overflow-y-auto px-1 py-5 selection:bg-orange-400/30">
-                  {signalContentLoading ? (
-                    <div className="flex h-72 items-center justify-center text-white/34">
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                    </div>
-                  ) : selectedSignalContent ? (
-                    <Info_Markdown className="mx-auto max-w-[900px] px-6 pb-10 text-[14px] leading-7 text-white/70 [&_h1]:text-[24px] [&_h2]:mt-8 [&_h2]:text-[17px] [&_p]:leading-7">
-                      {selectedSignalContent}
-                    </Info_Markdown>
-                  ) : (
-                    <div className="flex h-72 flex-col items-center justify-center px-6 text-center">
-                      <Radio className="h-5 w-5 text-orange-300/60" />
-                      <p className="mt-3 text-sm font-medium text-white/72">No intelligence reports yet</p>
-                      <p className="mt-1 text-xs text-white/36">Run intelligence to create the first brief.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </section>
+          <SignalsTracksPanel
+            key={workspaceId}
+            workspaceId={workspaceId}
+            workspaceName={workspaceName || 'Artist HQ'}
+            outputs={outputs}
+            documents={docs}
+            getOutput={getOutput}
+            onSaveNugget={saveTrackNugget}
+            ensureWorkflow={ensureTrackWorkflow}
+            onDevelopIdea={setSignalIdea}
+            legacy={{
+              config: intelConfig,
+              busy: intelBusy,
+              weeklyEnabled: intelSyncActive,
+              runDisabledReason: signalRunDisabledReason,
+              notice: signalNotice,
+              onRun: runIntelPulse,
+              onToggleWeekly: toggleIntelPulse,
+              onConfigure: () => setIntelConfigOpen(true),
+            }}
+          />
         )}
       </div>
+      {signalIdea ? <SignalIdeaHandoff key={`${workspaceId}:${signalIdea.outputId}:${signalIdea.entryId}`} reference={signalIdea} onClose={() => setSignalIdea(null)} /> : null}
       {selectedPerson ? (
         <PersonDetailPanel
           person={selectedPerson}
@@ -2816,12 +2551,6 @@ export function ArtistHQHome({
           disabled={!networkResult.ok}
         />
       ) : null}
-      <DocumentFormattedMarkdownOverlay
-        content={selectedSignalContent}
-        isOpen={signalFullscreenOpen}
-        onClose={() => setSignalFullscreenOpen(false)}
-        typeBadge={{ label: 'Signals', icon: Radio }}
-      />
       <IntelConfigDialog
         open={intelConfigOpen}
         config={intelConfig}
@@ -4945,12 +4674,6 @@ function brandingToDraft(branding: ArtistBranding): BrandingDraft {
   }
 }
 
-function isResearchOutput(output: OutputSummaryDTO): boolean {
-  const text = `${output.title} ${output.summary ?? ''} ${output.kind} ${(output.tags ?? []).join(' ')} ${output.origin?.agentName ?? ''}`.toLowerCase()
-  return output.kind === 'report'
-    || output.origin?.source === 'deep-research'
-    || /\b(research|report|intel|analysis|spotify|youtube|trend)\b/.test(text)
-}
 
 function googleCalendarAutoSyncStorageKey(workspaceId: string): string {
   return `runneros:hq-google-calendar:${workspaceId}:last-auto-sync-at`

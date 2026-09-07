@@ -23,6 +23,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { accessSync, constants, statSync } from 'node:fs';
+import { isDeepStrictEqual } from 'node:util';
 import type { CreateSessionOptions } from '@craft-agent/shared/protocol';
 import {
   appendOutputSchemaInstruction,
@@ -155,6 +156,10 @@ export interface WorkflowRunnerDeps {
   markWorkflowOutputError?: (run: WorkflowRunSnapshot, err: unknown) => Promise<WorkflowRunSnapshot> | WorkflowRunSnapshot;
   /** Run host-owned completion side effects after the default Output is finalized. */
   postProcessSucceededRun?: (run: WorkflowRunSnapshot, signal: AbortSignal) => Promise<void> | void;
+  /** A host-proven empty scan may complete without starting LLM sessions. */
+  completeWithoutSteps?: (run: WorkflowRunSnapshot, signal: AbortSignal) => Promise<boolean>;
+  /** Host authorizes the persisted old-to-new retry association before any step starts. */
+  authorizeRerun?: (original: WorkflowRunSnapshot, retry: WorkflowRunSnapshot, signal: AbortSignal) => Promise<WorkflowRunSnapshot | void>;
   /** Emit a runner event for renderer subscribers. No-op safe. */
   emit?: (event: WorkflowRunEvent) => void;
 }
@@ -352,12 +357,14 @@ export class WorkflowRunner {
     workspaceId: string;
     triggerInputs: Record<string, unknown>;
     untrustedTriggerInputs?: string[];
+    runId?: string;
   }): Promise<WorkflowRunSnapshot> {
     const { workflow, workspaceId } = input;
     const triggerInputs = normalizeWorkflowTriggerInputs(workflow, input.triggerInputs);
     const key = concurrencyKey(workspaceId, workflow.slug);
     this.assertStepBudget(workflow.metadata.steps);
-    const runId = randomUUID();
+    const runId = input.runId ?? randomUUID();
+    if (input.runId && (!/^[a-f0-9-]{36}$/i.test(input.runId) || readRun(this.deps.getWorkspaceRootPath(workspaceId), input.runId))) throw new Error('Workflow run identity already exists or is invalid.');
     this.reserveConcurrencyKey(key, runId, workflow.slug, workspaceId);
 
     try {
@@ -516,6 +523,18 @@ export class WorkflowRunner {
         updatedAt: now,
       });
 
+      const refreshed = await this.deps.authorizeRerun?.(this.cloneSnapshot(original), this.cloneSnapshot(snapshot), active.abort.signal);
+      active.abort.signal.throwIfAborted();
+      if (refreshed) {
+        const refreshedIndex = this.validateRerunRefresh(snapshot, refreshed, startIndex);
+        // Collection recovery can invalidate copied analysis, moving the start earlier.
+        await this.preflightStepAgents(input.workspaceId, workflowSnapshot.metadata.steps.slice(refreshedIndex, startIndex));
+        active.abort.signal.throwIfAborted();
+        active.snapshot = this.cloneSnapshot(refreshed);
+        active.startIndex = refreshedIndex;
+        this.persist(active);
+      }
+
       this.emitEvent({ type: 'run.created', run: this.cloneSnapshot(active.snapshot) });
       this.emitEvent({ type: 'run.updated', run: this.cloneSnapshot(active.snapshot) });
       void this.runStepLoop(active);
@@ -523,10 +542,29 @@ export class WorkflowRunner {
       return this.cloneSnapshot(active.snapshot);
     } catch (error) {
       const active = this.active.get(runId);
-      if (active) this.releaseActiveRun(active);
+      if (active) {
+        active.snapshot.state = active.abort.signal.aborted ? 'cancelled' : 'failed'; active.snapshot.completedAt = new Date().toISOString();
+        this.persist(active); this.releaseActiveRun(active);
+      }
       else this.releaseConcurrencyKey(key, runId);
       throw error;
     }
+  }
+
+  private validateRerunRefresh(original: WorkflowRunSnapshot, refreshed: WorkflowRunSnapshot, startIndex: number): number {
+    const { trigger: oldTrigger, steps: oldSteps, resumeFromStepId: _oldStart, updatedAt: _oldUpdated, ...oldIdentity } = original;
+    const { trigger, steps, resumeFromStepId, updatedAt: _updated, ...identity } = refreshed;
+    const { inputs: _oldInputs, ...oldTriggerIdentity } = oldTrigger;
+    const { inputs: _inputs, ...triggerIdentity } = trigger;
+    const index = original.workflowSnapshot.metadata.steps.findIndex(step => step.id === resumeFromStepId);
+    if (!isDeepStrictEqual(identity, oldIdentity) || !isDeepStrictEqual(triggerIdentity, oldTriggerIdentity)
+      || index < 0 || index > startIndex || !Array.isArray(steps) || steps.length !== oldSteps.length
+      || steps.some((step, i) => i < index
+        ? !isDeepStrictEqual(step, oldSteps[i])
+        : !isDeepStrictEqual(step, { id: oldSteps[i]!.id, state: 'queued', attempts: 0 }))) {
+      throw new Error('Host retry refresh changed immutable run identity or supplied an invalid resume state.');
+    }
+    return index;
   }
 
   private reserveConcurrencyKey(
@@ -644,6 +682,14 @@ export class WorkflowRunner {
   }
 
   private async executeStepLoop(active: ActiveRun): Promise<void> {
+    if (await this.deps.completeWithoutSteps?.(this.cloneSnapshot(active.snapshot), active.abort.signal)) {
+      active.snapshot.state = active.abort.signal.aborted ? 'cancelled' : 'succeeded';
+      active.snapshot.completedAt = new Date().toISOString();
+      this.touch(active);
+      this.releaseActiveRun(active);
+      this.emitEvent({ type: 'run.completed', run: this.cloneSnapshot(active.snapshot) });
+      return;
+    }
     const runStartedAt = active.snapshot.createdAt;
     const workflow = active.snapshot.workflowSnapshot;
     let failed = false;

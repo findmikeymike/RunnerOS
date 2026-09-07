@@ -35,6 +35,17 @@ Always read response hints before choosing the next action. They may contain end
 - Inspect the current schema, price, health, and expected runtime every time. Do not reuse stale parameters from memory.
 - Map inspected body, query, and path inputs exactly to the corresponding MCP run fields. Never guess where a parameter belongs.
 
+## Pinned YouTube Routes
+
+For YouTube, use the connected native source first, Monid second, and the pinned Zero transcript tool last. Do not search the marketplace on every run:
+
+- Transcripts: provider `apify`, endpoint `/starvibe/youtube-video-transcript`. One canonical `youtube_url`, with `language: "en"`; never mix in a channel URL. Preserve timestamped segments and verify the returned video identity. Maximum price is `$0.02` per video, or the user's lower limit.
+- Channel/video metadata: provider `apify`, endpoint `/streamers/youtube-scraper`. Inspect the schema and use one `startUrls` entry with explicit result limits. This is separate from transcription; do not transcribe an entire channel just to resolve its name.
+- Inspect the pinned endpoint's current schema, price and availability before spending. A pin removes repeated discovery, not validation. If it no longer fits, report the unavailable route rather than shopping automatically.
+- For host-managed Signals runs, the collector owns provider calls, caching and paid-attempt receipts. Analyze its packets; do not independently call these tools to repeat collection. An interrupted or uncertain paid attempt must be reconciled before another provider is charged.
+
+Pin references: [Monid transcript recipe](https://monid.ai/blog/every-youtube-transcript-ready-for-your-llm), [Monid metadata recipe](https://monid.ai/blog/guides/youtube-scraper-past-the-quota). Public documentation is not proof of a successful live run.
+
 ## Cost controls
 
 - Discovery, inspection, and in-budget data runs may proceed without approval.

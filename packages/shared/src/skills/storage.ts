@@ -718,8 +718,9 @@ export function replaceRequiredGlobalSkillFileIfHashMatches(
   filePath: string,
   expectedSha256: string,
   replacementContent: string,
+  globalSkillsDir = GLOBAL_AGENT_SKILLS_DIR,
 ): { updated: boolean } {
-  const target = join(GLOBAL_AGENT_SKILLS_DIR, slug, filePath);
+  const target = join(globalSkillsDir, slug, filePath);
   if (!existsSync(target)) return { updated: false };
 
   const current = readFileSync(target, 'utf-8');

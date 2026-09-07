@@ -31098,6 +31098,17 @@ Always read response hints before choosing the next action. They may contain end
 - Inspect the current schema, price, health, and expected runtime every time. Do not reuse stale parameters from memory.
 - Map inspected body, query, and path inputs exactly to the corresponding MCP run fields. Never guess where a parameter belongs.
 
+## Pinned YouTube Routes
+
+For YouTube, use the connected native source first, Monid second, and the pinned Zero transcript tool last. Do not search the marketplace on every run:
+
+- Transcripts: provider \`apify\`, endpoint \`/starvibe/youtube-video-transcript\`. One canonical \`youtube_url\`, with \`language: "en"\`; never mix in a channel URL. Preserve timestamped segments and verify the returned video identity. Maximum price is \`$0.02\` per video, or the user's lower limit.
+- Channel/video metadata: provider \`apify\`, endpoint \`/streamers/youtube-scraper\`. Inspect the schema and use one \`startUrls\` entry with explicit result limits. This is separate from transcription; do not transcribe an entire channel just to resolve its name.
+- Inspect the pinned endpoint's current schema, price and availability before spending. A pin removes repeated discovery, not validation. If it no longer fits, report the unavailable route rather than shopping automatically.
+- For host-managed Signals runs, the collector owns provider calls, caching and paid-attempt receipts. Analyze its packets; do not independently call these tools to repeat collection. An interrupted or uncertain paid attempt must be reconciled before another provider is charged.
+
+Pin references: [Monid transcript recipe](https://monid.ai/blog/every-youtube-transcript-ready-for-your-llm), [Monid metadata recipe](https://monid.ai/blog/guides/youtube-scraper-past-the-quota). Public documentation is not proof of a successful live run.
+
 ## Cost controls
 
 - Discovery, inspection, and in-budget data runs may proceed without approval.
@@ -55957,6 +55968,8 @@ This is not a summarization skill. The goal is evidence-backed extraction: tacti
 
 For scheduled Artist HQ Intel Pulse runs:
 
+These legacy watchlist rules do not override a host-managed Signals/Your World request. For a host-managed request, use the supplied immutable selection and evidence packets; the collector owns discovery, deduplication and fallback execution.
+
 1. Read \`artist-intel-state\` when it exists.
 2. Request only the latest upload metadata for each configured channel.
 3. Skip the channel when that latest video ID is already recorded. Do not fetch a transcript and do not fall back to an older video.
@@ -55974,9 +55987,9 @@ node bin/youtube-intelligence.mjs doctor
 node bin/youtube-intelligence.mjs prepare --video "<url-or-id>" --out "<workspace>/youtube-intel/<video-id>"
 \`\`\`
 
-Default provider order is cache first, then local \`youtube-research\` when its optional API key is healthy. When that route is unavailable, use the bundled \`zero\` skill for the exact missing read-only metadata or transcript operation and pass retrieved transcript text through the transcript-file input. Every Zero GET must use its weekly budget guard. Supadata is only called when \`--allow-paid\` is passed.
+Default provider order is cache first, then local \`youtube-research\`, then the pinned Monid route in the bundled \`monid\` skill, then the pinned Zero transcript route below. A YouTube Data API key enables metadata; it does not grant third-party caption download rights. Monid metadata and transcript calls are separate, bounded operations. Every paid call uses the existing provider budget guard. Supadata is only called when \`--allow-paid\` is passed.
 
-For transcript retrieval through Zero, prefer exact capability \`youtube-video-transcript-extractor-70f8ca14\`. Before every use, inspect it with \`zero get youtube-video-transcript-extractor-70f8ca14 --agent anything-agent --formatted\`. Skip marketplace search only when the live result is healthy, its request schema still accepts the needed YouTube video URL or ID, and its price is at most \`$0.02\`. Run the call through \`zero-budget.mjs fetch\` with \`--max-pay 0.02\`, then provide the returned transcript through \`--transcript\`. Search and vet a replacement only when preflight fails. Never automatically retry a paid failure with another provider.
+For transcript retrieval through Zero, use exact capability \`youtube-video-transcript-extractor-70f8ca14\` only after native and Monid are unavailable. Before every use, inspect it with \`zero get youtube-video-transcript-extractor-70f8ca14 --agent anything-agent --formatted\`. Its live schema must accept the needed video URL or ID, it must be healthy, and its price must be at most \`$0.02\`. Run through \`zero-budget.mjs fetch\` with \`--max-pay 0.02\`, then provide the returned transcript through \`--transcript\`. Do not search for replacements during routine Signals runs. Never start a second paid provider while the first charge or run is unresolved; a confirmed terminal failure is different from a timeout.
 
 \`\`\`bash
 SUPADATA_API_KEY="..." node bin/youtube-intelligence.mjs prepare --video "<url-or-id>" --provider supadata --allow-paid --out "<workspace>/youtube-intel/<video-id>"
@@ -56142,9 +56155,9 @@ cd tools/youtube-research && node bin/youtube-research.mjs doctor
 cd tools/youtube-research && node bin/youtube-research.mjs which "search videos by keyword" --agent
 \`\`\`
 
-If auth is missing or the direct route is unhealthy, use the bundled \`zero\` skill for the exact missing read-only YouTube operation. Search narrowly for search, channel uploads, metadata, comments, or transcripts; inspect the provider and schema; then run GET retrieval through the saved weekly Zero allowance. Do not ask before each small retrieval inside that allowance. If Zero is unavailable or has no allowance, explain the two setup choices once: configure Zero or add an optional YouTube Data API key.
+If the direct route is unavailable, use the pinned YouTube metadata or transcript endpoint in the bundled \`monid\` skill. Inspect its current schema and cost, then use the existing single-call and weekly allowance. Monid is the second route; Zero is the final transcript fallback. Do not repeatedly search the marketplace for these known capabilities. If no suitable connection is usable, direct the user to Connections once. Do not claim the transcript endpoint can perform channel discovery or comments retrieval.
 
-For transcript retrieval, prefer exact Zero capability \`youtube-video-transcript-extractor-70f8ca14\`. Before every use, run \`zero get youtube-video-transcript-extractor-70f8ca14 --agent anything-agent --formatted\`. Skip marketplace search only when that live preflight says it is healthy, its request schema still accepts the needed YouTube video URL or ID, and its price is at most \`$0.02\`. Then call it through \`zero-budget.mjs fetch\` with \`--max-pay 0.02\`. If preflight fails, search and vet a replacement. If a paid call fails, do not automatically try another paid provider.
+For transcript retrieval after native and Monid are unavailable, use exact Zero capability \`youtube-video-transcript-extractor-70f8ca14\`. Before every use, run \`zero get youtube-video-transcript-extractor-70f8ca14 --agent anything-agent --formatted\`. Its live schema must accept the needed video URL or ID, it must be healthy, and its price must be at most \`$0.02\`. Then call it through \`zero-budget.mjs fetch\` with \`--max-pay 0.02\`. Do not search for replacements during routine Signals runs. Never duplicate an unresolved paid call or retry a pending charge through a different provider.
 
 Zero does not create or replace a Google API key. It is an alternate paid retrieval route.
 
@@ -56231,7 +56244,7 @@ function validateArgs(command, values) {
     configure: new Set(['weekly-limit', 'json']),
     authorize: new Set(['capability', 'method', 'max-calls', 'max-total-pay', 'expires-in-hours', 'purpose', 'json']),
     revoke: new Set(['authorization', 'json']),
-    fetch: new Set(['capability', 'max-pay', 'method', 'data-json', 'authorization', 'json']),
+    fetch: new Set(['capability', 'max-pay', 'method', 'data-json', 'query-json', 'expected-read-contract', 'authorization', 'json']),
   }[command];
   if (!allowed) fail('Usage: zero-budget.mjs <status|configure|authorize|revoke|fetch> [options]');
   for (const key of Object.keys(values)) {
@@ -56500,7 +56513,13 @@ function inspectCapability(capability) {
   const digest = createHash('sha256').update(JSON.stringify({
     uid: result.uid, slug: result.slug, url: result.url, method,
   })).digest('hex');
-  return { uid: result.uid, slug: result.slug, url: result.url, method, digest };
+  const readContractDigest = createHash('sha256').update(JSON.stringify({
+    uid: result.uid, slug: result.slug, url: result.url, method: result.method,
+    availabilityStatus: result.availabilityStatus, displayCostAmount: result.displayCostAmount,
+    displayCostAsset: result.displayCostAsset, bodySchema: result.bodySchema,
+  })).digest('hex');
+  return { uid: result.uid, slug: result.slug, url: result.url, method, digest, readContractDigest,
+    querySchema: result.bodySchema?.properties?.input?.properties?.queryParams };
 }
 
 function configure(values) {
@@ -56577,11 +56596,65 @@ function revoke(values) {
   });
 }
 
+function buildQueryUrl(raw, inspected, method) {
+  if (raw !== undefined && method !== 'GET') fail('--query-json is only supported for GET capabilities.');
+  if (method !== 'GET') return inspected.url;
+  let query = {};
+  if (raw !== undefined) {
+    if (raw.length > 262_144) fail('--query-json exceeds the 256 KB automatic-call limit.');
+    try { query = JSON.parse(raw); } catch { fail('--query-json must be valid JSON.'); }
+    if (!isRecord(query)) fail('--query-json must be a JSON object of scalar values.');
+  }
+  const schema = inspected.querySchema;
+  if (schema === undefined && raw === undefined) return inspected.url;
+  if (!isRecord(schema) || schema.type !== 'object' || !isRecord(schema.properties)
+    || (schema.required !== undefined && (!Array.isArray(schema.required)
+      || schema.required.some(key => typeof key !== 'string' || !Object.hasOwn(schema.properties, key))))) {
+    fail('The live capability must declare a valid queryParams object schema.');
+  }
+  const url = new URL(inspected.url);
+  for (const key of schema.required ?? []) {
+    if (!Object.hasOwn(query, key) && !url.searchParams.has(key)) fail(\`Missing required query parameter: \${key}\`);
+  }
+  for (const [key, value] of Object.entries(query)) {
+    if (!Object.hasOwn(schema.properties, key)) fail(\`Unknown query parameter: \${key}\`);
+    if (url.searchParams.has(key)) fail(\`Cannot override configured query parameter: \${key}\`);
+    const rule = schema.properties[key];
+    if (!isRecord(rule) || !['string', 'number', 'integer', 'boolean'].includes(rule.type)) {
+      fail(\`Query parameter \${key} must declare a supported primitive type.\`);
+    }
+    const validType = rule.type === 'integer' ? Number.isSafeInteger(value)
+      : typeof value === rule.type && (rule.type !== 'number' || Number.isFinite(value));
+    if (!validType) fail(\`Query parameter \${key} must be \${rule.type}.\`);
+    if (rule.enum !== undefined && (!Array.isArray(rule.enum) || !rule.enum.includes(value))) {
+      fail(\`Query parameter \${key} is outside its declared enum.\`);
+    }
+    for (const [bound, invalid] of [
+      ['minimum', value < rule.minimum], ['maximum', value > rule.maximum],
+      ['exclusiveMinimum', value <= rule.exclusiveMinimum], ['exclusiveMaximum', value >= rule.exclusiveMaximum],
+      ['minLength', typeof value === 'string' && Array.from(value).length < rule.minLength],
+      ['maxLength', typeof value === 'string' && Array.from(value).length > rule.maxLength],
+    ]) {
+      if (rule[bound] !== undefined && (!Number.isFinite(rule[bound]) || invalid)) {
+        fail(\`Query parameter \${key} violates \${bound}.\`);
+      }
+    }
+    if (rule.pattern !== undefined) {
+      let pattern;
+      try { pattern = new RegExp(rule.pattern, 'u'); } catch { fail(\`Query parameter \${key} has an invalid pattern.\`); }
+      if (typeof value !== 'string' || !pattern.test(value)) fail(\`Query parameter \${key} violates pattern.\`);
+    }
+    url.searchParams.append(key, String(value));
+  }
+  return url.toString();
+}
+
 function buildFetchArgs(values, maxPay, inspected) {
   const method = normalizeMethod(values.method ?? inspected.method);
   if (method !== inspected.method) fail('Requested method does not match the inspected Zero capability.', 7);
   if (method === 'GET' && values['data-json']) fail('GET capabilities cannot receive --data-json.');
-  const args = ['fetch', inspected.url, '--capability', inspected.slug, '--method', method];
+  const url = buildQueryUrl(values['query-json'], inspected, method);
+  const args = ['fetch', url, '--capability', inspected.slug, '--method', method];
   if (values['data-json']) {
     if (values['data-json'].length > 262_144) fail('--data-json exceeds the 256 KB automatic-call limit.');
     try {
@@ -56672,6 +56745,12 @@ function settle(entryId, result, fallback) {
 function fetchCapability(values) {
   const maxPay = number(values['max-pay'], '--max-pay');
   const inspected = inspectCapability(values.capability);
+  const expected = values['expected-read-contract'];
+  if (expected !== undefined) {
+    if (!/^[a-f0-9]{64}$/i.test(expected)) fail('--expected-read-contract must be a 64-character SHA256 hex digest.');
+    if (inspected.method !== 'GET') fail('--expected-read-contract is only supported for GET capabilities.');
+    if (expected.toLowerCase() !== inspected.readContractDigest) fail('Zero read contract changed since preflight. Reinspect before spending.', 7);
+  }
   const built = buildFetchArgs(values, maxPay, inspected);
   const reservation = reserve(values, maxPay, inspected, built.method);
   const child = spawnSync(zeroCli(), built.args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
@@ -56784,6 +56863,16 @@ GET retrieval inside the remaining allowance does not need another approval:
 \`\`\`bash
 node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs fetch --capability <exact-slug> --max-pay <per-call-usd> --json
 \`\`\`
+
+For GET capabilities that require query input, pass an inline object using the exact live schema keys:
+
+\`\`\`bash
+node ~/.artist-os/libraries/agents/skills/zero/scripts/zero-budget.mjs fetch --capability <exact-slug> --query-json '{"v":"<video-id>"}' --max-pay <per-call-usd> --json
+\`\`\`
+
+The guard validates \`--query-json\` against the inspected capability's \`bodySchema.properties.input.properties.queryParams\` before reserving any budget. Only declared string, number, integer, and boolean fields are accepted, with required fields, enums, and bounds enforced. Values are URL-encoded; existing provider URL query parameters cannot be overridden. Missing schemas, unknown keys, arrays/objects/null values, and query input on non-GET calls are rejected. This does not authorize a provider or price: complete the live health/schema/price preflight above first. A failed paid call is never automatically retried.
+
+To bind a GET call to that preflight, pass \`--expected-read-contract <sha256>\`. Compute SHA256 over \`JSON.stringify({uid,slug,url,method,availabilityStatus,displayCostAmount,displayCostAsset,bodySchema})\` using the exact inspected values and this key order (no schema sorting or value normalization). The guard re-inspects and rejects malformed digests or any mismatch before reservation or execution. This optional GET-only check does not change non-GET job authorization.
 
 For POST, PUT, PATCH, or DELETE, turn the whole user-requested job or saved workflow into one bounded authorization. This is one approval for the batch, not one approval per API call:
 
