@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { ArtistManagerMoonshine } from './artist-manager-moonshine'
+import { ArtistManagerMoonshine, artistManagerMoonshineExpectedAppIdentifier } from './artist-manager-moonshine'
 
 const modelId = 'moonshine-small-streaming-en'
 const sessionId = 'test-session-00001'
@@ -23,6 +23,10 @@ function fixture(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Artist OS Moonshine lease', () => {
+  test('expects the identity sealed into each shipped helper', () => {
+    expect(artistManagerMoonshineExpectedAppIdentifier(false)).toBe('com.voicecore.electron')
+    expect(artistManagerMoonshineExpectedAppIdentifier(true)).toBe('com.findmikeymike.artistos.voicecore.moonshine')
+  })
   test('missing native resources is an explicit status, not fallback transcription', async () => {
     const { invoke } = fixture({ ensureAvailable: async () => { throw new Error('missing') } })
     expect(await invoke('status')).toMatchObject({ available: false, tiers: [] })
