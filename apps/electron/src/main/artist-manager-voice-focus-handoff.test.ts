@@ -20,7 +20,7 @@ const toolEnd: ProviderEvent = { type: 'toolcall_end', toolCall: { name: 'open_c
 const toolDone: ProviderEvent = { type: 'done', reason: 'toolUse' }
 const ordinary: ProviderEvent[] = [{ type: 'text_delta', delta: 'What would you like to work on?' }, { type: 'done', reason: 'stop' }]
 
-async function fixture(firstResponse: ProviderEvent[] | (() => AsyncIterable<ProviderEvent>) = [toolEnd, toolDone]) {
+async function fixture(firstResponse: ProviderEvent[] | (() => AsyncIterable<ProviderEvent>) = [toolEnd, toolDone], intent: string | (() => AsyncIterable<ProviderEvent>) = 'continue') {
   const requests: Parameters<VoiceFocusDependencies['stream']>[] = []
   let credentials = 0
   const diagnostics: VoiceFocusDiagnostic[] = []
@@ -30,6 +30,10 @@ async function fixture(firstResponse: ProviderEvent[] | (() => AsyncIterable<Pro
     async getApiKey() { credentials++; return 'credential-canary' },
     async stream(...args) {
       requests.push(args)
+      if (args[2].maxTokens === 128 && typeof intent === 'function') return intent()
+      if (args[2].maxTokens === 128) return (async function* () {
+        yield { type: 'text_delta', delta: intent as string }; yield { type: 'done', reason: 'stop' }
+      })()
       if (requests.length === 1 && typeof firstResponse === 'function') return firstResponse()
       const events = requests.length === 1 ? firstResponse as ProviderEvent[] : ordinary
       return (async function* () { yield* events })()
@@ -49,6 +53,71 @@ function assertNoHandoff(events: VoiceFocusEvent[]) {
 }
 
 describe('focused voice confirmation-gated handoff', () => {
+  test('interrupting intent classification preserves the spoken offer without allowing late navigation', async () => {
+    let release!: () => void
+    let started!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const ready = new Promise<void>(resolve => { started = resolve })
+    const f = await fixture(undefined, async function* () {
+      started()
+      await gate
+      yield { type: 'text_delta', delta: 'confirm' }
+      yield { type: 'done', reason: 'stop' }
+    })
+    try {
+      await f.turn('offer', 'Prepare a release checklist')
+      const pending = f.turn('interrupted', 'That would be lovely, take me there')
+      await ready
+      f.service.cancel(7, { sessionId: f.session.sessionId, turnId: 'interrupted' })
+      const interrupted = await pending
+      assertNoHandoff(interrupted)
+      const confirmed = await f.turn('confirm', 'Yes go')
+      expect(confirmed.find(event => event.type === 'handoff_ready')).toMatchObject({ proposal: argumentsForHandoff })
+      release()
+      await new Promise(resolve => setTimeout(resolve, 0))
+      assertNoHandoff(interrupted)
+      expect(f.requests).toHaveLength(2)
+    } finally { release(); f.service.close() }
+  })
+
+  test('natural agreement outside the fast phrase list confirms the existing destination and brief', async () => {
+    const f = await fixture(undefined, 'confirm')
+    try {
+      await f.turn('offer', 'Prepare the release checklist')
+      const confirmed = await f.turn('confirm', "That would be perfect, take me over there when you're ready")
+      expect(confirmed.find(event => event.type === 'handoff_ready')).toMatchObject({ proposal: argumentsForHandoff })
+      expect(f.requests).toHaveLength(2)
+      expect(f.requests[1]![1].tools).toEqual([])
+      expect(f.requests[1]![1].systemPrompt).not.toContain(registration.systemPrompt)
+      expect(confirmed.filter(event => event.type === 'text_delta').map(event => event.delta).join('')).not.toContain('How about')
+    } finally { f.service.close() }
+  })
+
+  test('unclear reply asks a short follow-up and retains the offer for the next yes', async () => {
+    const f = await fixture(undefined, 'clarify')
+    try {
+      await f.turn('offer', 'Prepare the release checklist')
+      const unclear = await f.turn('unclear', 'Hmm, maybe that thing we talked about')
+      assertNoHandoff(unclear)
+      const reply = unclear.filter(event => event.type === 'text_delta').map(event => event.delta).join('')
+      expect(reply).toContain('keep talking')
+      expect(reply).not.toContain('How about')
+      const yes = await f.turn('yes', 'Yeah')
+      expect(yes.some(event => event.type === 'handoff_ready')).toBe(true)
+      expect(f.requests).toHaveLength(2)
+    } finally { f.service.close() }
+  })
+
+  test('continuing the conversation drops the old offer and prevents the same immediate offer loop', async () => {
+    const f = await fixture(undefined, 'continue')
+    try {
+      await f.turn('offer', 'Prepare the release checklist')
+      assertNoHandoff(await f.turn('discuss', 'Before that, what should I prioritize?'))
+      expect(f.requests.at(-1)![1].systemPrompt).toContain('Do not repeat the previous handoff offer')
+      expect(f.requests.at(-1)![1].tools).toEqual([])
+      assertNoHandoff(await f.turn('later', 'Yes'))
+    } finally { f.service.close() }
+  })
   test('yes go consumes the existing offer without asking the model to offer it again', async () => {
     const f = await fixture()
     try {
@@ -144,7 +213,7 @@ describe('focused voice confirmation-gated handoff', () => {
       await f.turn('offer', 'Prepare a checklist')
       assertNoHandoff(await f.turn('decline', 'Yes, but not now'))
       assertNoHandoff(await f.turn('later', 'Yes'))
-      expect(f.requests).toHaveLength(3)
+      expect(f.requests).toHaveLength(4)
       expect(f.credentials()).toBe(3)
     } finally { f.service.close() }
   })

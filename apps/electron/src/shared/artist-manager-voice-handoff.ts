@@ -84,7 +84,7 @@ const AFFIRMATIVE_UTTERANCES = new Set([
   'open that chat', 'yes open that chat', 'take me there', 'yes take me there',
 ])
 
-/** Whole-utterance allowlist: uncertainty, extra instructions and questions fail closed. */
+/** Zero-network shortcut for obvious assent; other wording gets a contextual intent check in main. */
 export function isVoiceHandoffConfirmation(text: string): boolean {
   if (typeof text !== 'string' || text.length > 100 || /[?？¿]/u.test(text) || UNSAFE_CONTROLS.test(text)) return false
   const normalized = text.toLowerCase().replace(/[’‘]/g, "'")
