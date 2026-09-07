@@ -575,6 +575,11 @@ export const PI_PREFERRED_DEFAULTS: Record<string, string[]> = {
   // April 2026 — and are deliberately excluded from defaults.
   google: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'],
   deepseek: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+  // z.ai coding plans. Without these the list is alphabetical, so a new
+  // connection landed on GLM 4.7 while 5.3 sat further down — the oldest model
+  // by accident of sorting. The CN endpoint carries two extras.
+  zai: ['glm-5.3', 'glm-5.2', 'glm-5.2-highspeed', 'glm-5-turbo', 'glm-4.7'],
+  'zai-coding-cn': ['glm-5.3', 'glm-5.2', 'glm-5.2-highspeed', 'glm-5.1', 'glm-5-turbo', 'glm-4.7', 'glm-4.6v'],
   'github-copilot': ['claude-sonnet-4-6', 'gpt-5', 'o4-mini', 'claude-haiku-4-5'],
   'amazon-bedrock': ['claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
 };
@@ -605,6 +610,11 @@ export const PI_MINI_PREFERRED_DEFAULTS: Record<string, string[]> = {
   // preview models are excluded, flash-lite leads because this is utility work.
   google: ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3-flash-preview'],
   deepseek: ['deepseek-v4-flash', 'deepseek-v4-pro'],
+  // Turbo and highspeed are z.ai's fast tiers. Without an entry here the swap
+  // fell through to a Claude model a z.ai key cannot reach, which surfaces as a
+  // misleading "no API key found".
+  zai: ['glm-5-turbo', 'glm-5.2-highspeed', 'glm-5.2'],
+  'zai-coding-cn': ['glm-5-turbo', 'glm-5.2-highspeed', 'glm-5.2'],
   // Copilot names its Claude models with dots rather than dashes. Verified
   // against the live catalog; the dashed spelling used elsewhere does not match
   // there.
