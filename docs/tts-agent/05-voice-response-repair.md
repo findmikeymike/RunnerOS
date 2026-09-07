@@ -86,3 +86,29 @@ directly comparable to the previous warm tool trial. Runtime stopped afterward.
 Scalar trace: `/private/tmp/artist-os-voice-response-final-live.json`.
 Next comparison should isolate reasoning/model speed while preserving the
 normal Manager's settings; do not attribute this remaining wait to the chunker.
+
+## Model comparison controls
+
+The collapsed Response timing panel now accepts a test model ID and lower
+reasoning (Low or Off). These overrides apply only when timing is enabled and
+only to the newly created voice session. Blank selections retain Manager
+settings; the current connection and approval policy are preserved. The launch
+receipt records the requested trial model and reasoning. Effective model and
+fallback events still need verification in live logs.
+
+The controls are in memory, lock while the runtime is starting/running/stopping,
+and never write the saved Manager or default connection. Review found no
+blocking issue. The regression test covers disabled diagnostics, default
+selections, explicit Off, non-mutation, and matching receipt configuration.
+After merging current main (including the Signals briefing work), the full
+repository test command, Electron typecheck, renderer production build, and
+185-file SDK snapshot check all passed. Verification logs are under
+`/private/tmp/artist-os-voice-trial-{suite,typecheck,build}.log`.
+
+The user selected a speed-first comparison: DeepSeek Pro/medium, Pro/low, and
+Flash/low. An isolated Pi benchmark was prepared conceptually, but automatic
+approval review rejected creating its harness twice, requiring explicit consent
+to send the existing full Artist Manager context to `api.deepseek.com`.
+No benchmark request ran and no credentials were decrypted. Temporary encrypted
+credential copies were removed. No comparative speed result or new model
+recommendation is claimed.
