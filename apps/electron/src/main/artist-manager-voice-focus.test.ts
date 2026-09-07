@@ -35,6 +35,18 @@ function fixture(overrides: Partial<VoiceFocusDependencies> = {}) {
 }
 
 describe('focused voice service', () => {
+  it('uses the saved Mikey persona for hello without exposing the career snapshot or tools', async () => {
+    const { service, requests } = fixture({ resolveConfig: async () => ({ connection, model: registration.model, style: 'laid-back' }) })
+    try {
+      const session = await service.register(7, { ...registration, systemPrompt: 'PRIVATE_ARTIST_CONTEXT' })
+      await service.startTurn(7, { sessionId: session.sessionId, turnId: 'hello', text: 'Hello' }, () => {})
+      expect(requests).toHaveLength(1)
+      expect(requests[0]![1].systemPrompt).toContain('You are Mikey')
+      expect(requests[0]![1].systemPrompt).toContain("what's on their mind")
+      expect(requests[0]![1].systemPrompt).not.toContain('PRIVATE_ARTIST_CONTEXT')
+      expect(requests[0]![1].tools).toEqual([])
+    } finally { service.close() }
+  })
   it('keeps an opening greeting free of artist stats, then restores context and destinations for real work', async () => {
     const { service, requests } = fixture()
     const snapshot = 'Private artist snapshot: Doin Me has 180k streams.'
@@ -274,8 +286,8 @@ describe('independent saved conversation voice route', () => {
   it('resolves only the saved voice connection/model/reasoning without Manager or global fallback', async () => {
     const seen: string[] = []
     const deps = { getSettings: () => saved, getConnection: (slug: string) => { seen.push(slug); return connection } }
-    expect(await resolveSavedVoiceFocusConfig({}, deps)).toEqual({ connection, model: saved.model, thinking: 'off' })
-    expect(await resolveSavedVoiceFocusConfig({ model: 'pi/another-model', thinking: 'low' }, deps)).toEqual({ connection, model: 'pi/another-model', thinking: 'low' })
+    expect(await resolveSavedVoiceFocusConfig({}, deps)).toEqual({ connection, model: saved.model, thinking: 'off', style: saved.style })
+    expect(await resolveSavedVoiceFocusConfig({ model: 'pi/another-model', thinking: 'low' }, deps)).toEqual({ connection, model: 'pi/another-model', thinking: 'low', style: saved.style })
     expect(seen).toEqual([connection.slug, connection.slug])
     expect(saved.model).toBe('pi/test-model')
     expect(saved.thinking).toBe('off')

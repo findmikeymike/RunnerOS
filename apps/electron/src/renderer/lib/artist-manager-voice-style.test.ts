@@ -14,7 +14,7 @@ describe('Artist Manager voice styles', () => {
   })
 
   test('keeps every style natural, action-oriented, and subtly independent', () => {
-    for (const style of ARTIST_MANAGER_VOICE_STYLES) {
+    for (const style of ARTIST_MANAGER_VOICE_STYLES.filter(style => style.id !== 'laid-back')) {
       const prompt = buildArtistManagerVoiceStylePrompt(style.id)
       expect(prompt).toContain('This changes delivery only')
       expect(prompt).toContain('ask for the next concrete move')

@@ -15,9 +15,10 @@ import {
 
 import { normalizeVoiceHandoffTargets, buildVoiceHandoffTool, parseVoiceHandoffProposal, isVoiceHandoffConfirmation, type VoiceHandoffTarget, type VoiceHandoffProposal } from '../shared/artist-manager-voice-handoff'
 import { resolveVoiceHandoffIntent } from './artist-manager-voice-handoff-intent'
+import { buildVoiceOpeningGreetingPrompt } from '../shared/artist-manager-voice-persona'
 
 type StreamEvent = { type: string; delta?: string; reason?: string; toolCall?: { name: string; arguments: unknown }; message?: { usage?: { output?: number; reasoning?: number } } }
-export type VoiceFocusResolvedConfig = { connection: LlmConnection; model: string; thinking?: ArtistManagerVoiceSettings['thinking'] }
+export type VoiceFocusResolvedConfig = { connection: LlmConnection; model: string; thinking?: ArtistManagerVoiceSettings['thinking']; style?: ArtistManagerVoiceSettings['style'] }
 export type VoiceFocusDiagnostic = {
   stage: 'turn' | 'intent' | 'offer' | 'clarification' | 'confirmed' | 'completed' | 'failed'
   sessionId: string
@@ -46,8 +47,6 @@ function isOpeningGreeting(text: string): boolean {
     .replace(/[.,!?，。！？]/g, ' ').replace(/\s+/g, ' ').trim()
   return /^(?:(?:um|uh) )?(?:(?:hello|hi|hey|yo)(?: there)?(?: (?:how are you|how's it going|what's up))?|how are you|how's it going|what's up|mm|hmm|um|uh)$/.test(normalized)
 }
-
-const OPENING_GREETING_PROMPT = 'You are the artist\'s Artist Manager speaking in a voice call. The artist has only greeted you or made a short opening sound. Reply warmly in one short sentence and invite them to say what they want to work on. Do not invent personal details or give a career update, song mention, metrics, briefing or task suggestion. Do not claim to have done any work.'
 
 export type VoiceSettingsRouteDependencies = {
   getConnection(slug: string): LlmConnection | null | Promise<LlmConnection | null>
@@ -111,7 +110,7 @@ export async function resolveSavedVoiceFocusConfig(
   const settings = parseArtistManagerVoiceSettings({ ...saved, model: request.model ?? saved.model, thinking: request.thinking ?? saved.thinking })
   const connection = await deps.getConnection(saved.connectionSlug)
   if (!connection || connection.slug !== saved.connectionSlug) throw new Error('The connection for your voice model no longer exists; choose a model in Settings → Conversation')
-  return { connection, model: settings.model!, thinking: settings.thinking }
+  return { connection, model: settings.model!, thinking: settings.thinking, style: settings.style }
 }
 
 const productionDependencies: VoiceFocusDependencies = {
@@ -138,6 +137,7 @@ type SessionState = {
   info: VoiceFocusSession
   sdkModel: Model<Api>
   systemPrompt: string
+  greetingPrompt: string
   history: Exchange[]
   active?: ActiveTurn
   usedTurns: Set<string>
@@ -170,7 +170,7 @@ export class ArtistManagerVoiceFocusService {
       const model = await validateResolvedVoiceRoute(resolved.connection, resolved.model, this.deps.resolveModel)
       if (this.owners.get(ownerId) !== owner) throw new Error('Voice setup was cancelled')
       const info: VoiceFocusSession = { sessionId: randomUUID(), connection: resolved.connection.slug, model: resolved.model, thinking: request.thinking ?? resolved.thinking ?? 'low' }
-      owner.session = { info, sdkModel: model, systemPrompt: request.systemPrompt, history: [], usedTurns: new Set(), handoffTargets: normalizeVoiceHandoffTargets(request.handoffTargets ?? []) }
+      owner.session = { info, sdkModel: model, systemPrompt: request.systemPrompt, greetingPrompt: buildVoiceOpeningGreetingPrompt(resolved.style), history: [], usedTurns: new Set(), handoffTargets: normalizeVoiceHandoffTargets(request.handoffTargets ?? []) }
       return { ...info }
     } catch (error) {
       if (this.owners.get(ownerId) === owner) this.owners.delete(ownerId)
@@ -264,7 +264,7 @@ export class ArtistManagerVoiceFocusService {
       if (!current()) return
       if (!apiKey?.trim()) throw new Error('missing credential')
       const context: Context = {
-        systemPrompt: greetingOnly ? OPENING_GREETING_PROMPT : session.systemPrompt + (continuingAfterOffer
+        systemPrompt: greetingOnly ? session.greetingPrompt : session.systemPrompt + (continuingAfterOffer
           ? '\n\nThe artist wants to continue talking or change the plan. Answer their latest reply naturally. Do not repeat the previous handoff offer in this reply, and do not claim the app lacks handoff capability. A new handoff can be offered on a later turn after the revised work is agreed.' : ''),
         tools: handoffTool ? [handoffTool as NonNullable<Context['tools']>[number]] : [],
         messages: session.history.flatMap<Context['messages'][number]>(exchange => [

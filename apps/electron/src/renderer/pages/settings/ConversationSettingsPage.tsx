@@ -118,7 +118,7 @@ export default function ConversationSettingsPage() {
         <div className="mx-auto max-w-4xl space-y-6 px-6 pb-8 pt-10">
           <div>
             <h1 className="text-base font-medium tracking-tight">{t('settings.conversation.title')}</h1>
-            <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">A quick conversation with your manager. Agreed work moves to Command after you confirm.</p>
+            <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">Talk music, career, and what’s on your mind. Move agreed work to Command when you’re ready.</p>
           </div>
           {loading ? <p role="status" className="text-sm text-muted-foreground">Loading conversation settings…</p> : draft ? <>
             <SettingsSection title="Conversation" description="Separate from Command’s model and permissions.">
@@ -133,7 +133,8 @@ export default function ConversationSettingsPage() {
                 <SettingsMenuSelectRow inCard={false} label="Reasoning" value={draft.thinking} disabled={disabled}
                   onValueChange={value => change({ thinking: value as ArtistManagerVoiceSettings['thinking'] })}
                   options={[{ value: 'low', label: 'Low', description: 'A little reasoning for practical decisions' }, { value: 'off', label: 'Off', description: 'Respond directly, when supported by the model' }]} />
-                <SettingsMenuSelectRow inCard={false} label="Tone" value={draft.style} disabled={disabled}
+                <SettingsMenuSelectRow inCard={false} label="Manager" value={draft.style} disabled={disabled}
+                  description={ARTIST_MANAGER_VOICE_STYLES.find(style => style.id === draft.style)?.description}
                   onValueChange={value => change({ style: value as ArtistManagerVoiceSettings['style'] })}
                   options={ARTIST_MANAGER_VOICE_STYLES.map(style => ({ value: style.id, label: style.label, description: style.description }))} />
               </div>

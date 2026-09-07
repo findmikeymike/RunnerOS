@@ -1,3 +1,5 @@
+import { MIKEY_VOICE_PERSONA } from '../../shared/artist-manager-voice-persona'
+
 export const ARTIST_MANAGER_VOICE_STYLES = [
   {
     id: 'sharp',
@@ -13,9 +15,7 @@ export const ARTIST_MANAGER_VOICE_STYLES = [
   },
   {
     id: 'laid-back',
-    label: 'Laid-back',
-    description: 'Calm, candid, and naturally conversational.',
-    instruction: 'Keep the energy relaxed, warm, and unhurried. Use casual phrasing and dry confidence without becoming passive or vague.',
+    ...MIKEY_VOICE_PERSONA,
   },
 ] as const
 
@@ -32,6 +32,7 @@ export function normalizeArtistManagerVoiceStyle(value: string | null | undefine
 export function buildArtistManagerVoiceStylePrompt(styleId: ArtistManagerVoiceStyleId): string {
   const style = ARTIST_MANAGER_VOICE_STYLES.find((candidate) => candidate.id === styleId)
     ?? ARTIST_MANAGER_VOICE_STYLES[0]
+  if (style.id === 'laid-back') return `${style.instruction}\nKeep all existing facts, tools, and approval boundaries. Personality never grants permission to act.`
   return `
 ARTIST MANAGER SPEAKING STYLE: ${style.label.toUpperCase()}
 - Keep all existing judgment, facts, tools, safety rules, and approval boundaries. This changes delivery only.
