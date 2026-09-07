@@ -1,4 +1,5 @@
 import type { SignalEntryReference, SignalLookupResult, SignalRetrievedEntry } from '@craft-agent/shared/shared-intel'
+import type { SessionDraft } from '@craft-agent/shared/config'
 
 export function sameSignalReference(a: SignalEntryReference, b: SignalEntryReference): boolean {
   return a.hqWorkspaceId === b.hqWorkspaceId && a.outputId === b.outputId
@@ -19,12 +20,31 @@ export function signalIdeaDraft(idea: SignalRetrievedEntry): string {
     `Develop this idea into a specific content concept. Keep research separate from my beliefs; do not create or publish assets yet.`,
     '', `Idea: ${idea.title}`, idea.excerpt,
     '', 'Supporting research:',
-    ...(idea.supportingFindings ?? []).map(finding => `- ${finding.excerpt}`),
+    ...(idea.supportingFindings ?? []).map(finding => `- ${finding.id} [sources: ${finding.sourceRefs.join(', ')}]: ${finding.excerpt}${finding.excerptTruncated ? ' [Excerpt shortened; read this finding in the referenced report for full context.]' : ''}`),
+    ...(idea.supportingFindingsOmitted ? [`${idea.supportingFindingsOmitted} additional supporting findings are not included in this brief.`] : []),
+    ...(idea.supportingFindingIds?.length ? [`Supporting finding IDs: ${idea.supportingFindingIds.join(', ')}.`] : []),
+    ...(idea.supportingFindingsOmitted || idea.supportingFindings?.some(finding => finding.excerptTruncated)
+      ? ['Use find_signal_ideas with the report reference and supporting finding ID to read shortened or omitted evidence before relying on it.'] : []),
     '', `Report: ${idea.reference.outputId} (${idea.createdAt})`,
     `Source HQ: ${idea.reference.hqWorkspaceId}; idea: ${idea.reference.entryId}; revision: ${idea.reference.contentHash}.`,
     `Track: ${idea.track}; mode: ${idea.mode}; timing: ${idea.temporalKind}; event date: ${idea.eventDate ?? 'unknown'}.`,
-    ...idea.sources.map(source => `- ${source.sourceUrl}${source.timestampSeconds !== undefined ? ` (timestamp ${source.timestampSeconds}s)` : ''}; published: ${source.sourcePublishedAt ?? 'unknown'}`),
+    ...idea.sources.map(source => `- ${source.sourceId}: ${source.sourceUrl}${source.timestampSeconds !== undefined ? ` (timestamp ${source.timestampSeconds}s)` : ''}; published: ${source.sourcePublishedAt ?? 'unknown'}`),
   ].join('\n')
+}
+
+/** Disk text may fill an unhydrated draft, never a deliberate local edit or clear. */
+export async function focusSignalDraft(deps: {
+  hasLocalDraft: () => boolean
+  load: () => Promise<SessionDraft | undefined>
+  restoreMissing: (draft: SessionDraft) => void
+  isCurrent: () => boolean
+  focus: (restore: () => void) => Promise<void>
+}): Promise<void> {
+  const stored = deps.hasLocalDraft() ? undefined : await deps.load()
+  if (!deps.isCurrent()) throw new Error('Idea handoff cancelled.')
+  await deps.focus(() => {
+    if (stored && !deps.hasLocalDraft()) deps.restoreMissing(stored)
+  })
 }
 
 export interface SignalHandoffLaunchDependencies {

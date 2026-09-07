@@ -51,7 +51,7 @@ export function SignalTrackSetupDialog({ open, config, adoption, weeklyEnabled, 
   return <Dialog open={open} onOpenChange={value => { if (!saving) onOpenChange(value) }}>
     <DialogContent className="flex max-h-[90vh] w-[calc(100vw-2rem)] max-w-xl flex-col overflow-hidden bg-[#151719] p-5 text-white">
       <DialogHeader><DialogTitle>{adoption ? 'Review Industry update' : `${signalTrackName(config.track)} channels`}</DialogTitle>
-        <DialogDescription>{adoption ? 'Your channels and existing schedule timing are preserved. Saving adopts the updated scan workflow.' : 'YouTube Data API connection required for channel and video metadata.'}</DialogDescription></DialogHeader>
+        <DialogDescription>{adoption ? 'Your channels and existing schedule timing are preserved. Saving adopts the updated scan workflow.' : 'Connect YouTube or Monid for channel metadata.'}</DialogDescription></DialogHeader>
       <div className="min-h-0 space-y-4 overflow-y-auto">
         {draft.sources.map(source => <div key={source.channelId} className="space-y-2 border-b border-white/10 pb-3">
           <div className="flex items-center gap-2"><input aria-label="Channel name" className={field} value={source.name} onChange={event => update(source.channelId, { name: event.target.value })} disabled={busy} />
@@ -99,7 +99,7 @@ export function SignalLinksDialog({ open, trackName, onOpenChange, onAnalyze }: 
     <textarea aria-label="YouTube video links" className={`${field} min-h-40`} value={text} disabled={busy} onChange={event => setText(event.target.value)} />
     {text.trim() && !parsed.ok ? <div role="alert" className="text-sm text-red-300">{parsed.errors.map((issue, index) => <p key={index}>{issue.index >= 0 ? `Link ${issue.index + 1}: ` : ''}{issue.message}</p>)}</div> : null}
     {error ? <p role="alert" className="text-sm text-red-300">{error}</p> : null}
-    <p className="text-xs text-white/50">YouTube Data API connection required. Transcript fallback uses your existing Zero allowance when needed.</p>
+    <p className="text-xs text-white/50">Connect YouTube or Monid for video metadata.</p>
     <div className="flex justify-end gap-2"><button className={button} disabled={busy} onClick={() => onOpenChange(false)}>Cancel</button><button className={button} disabled={busy || !parsed.ok} onClick={() => { void analyze() }}>{busy ? 'Queueing...' : 'Analyze'}</button></div>
   </DialogContent></Dialog>
 }

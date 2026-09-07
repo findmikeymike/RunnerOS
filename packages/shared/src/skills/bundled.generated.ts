@@ -31098,6 +31098,17 @@ Always read response hints before choosing the next action. They may contain end
 - Inspect the current schema, price, health, and expected runtime every time. Do not reuse stale parameters from memory.
 - Map inspected body, query, and path inputs exactly to the corresponding MCP run fields. Never guess where a parameter belongs.
 
+## Pinned YouTube Routes
+
+For YouTube, use the connected native source first, Monid second, and the pinned Zero transcript tool last. Do not search the marketplace on every run:
+
+- Transcripts: provider \`apify\`, endpoint \`/starvibe/youtube-video-transcript\`. One canonical \`youtube_url\`, with \`language: "en"\`; never mix in a channel URL. Preserve timestamped segments and verify the returned video identity. Maximum price is \`$0.02\` per video, or the user's lower limit.
+- Channel/video metadata: provider \`apify\`, endpoint \`/streamers/youtube-scraper\`. Inspect the schema and use one \`startUrls\` entry with explicit result limits. This is separate from transcription; do not transcribe an entire channel just to resolve its name.
+- Inspect the pinned endpoint's current schema, price and availability before spending. A pin removes repeated discovery, not validation. If it no longer fits, report the unavailable route rather than shopping automatically.
+- For host-managed Signals runs, the collector owns provider calls, caching and paid-attempt receipts. Analyze its packets; do not independently call these tools to repeat collection. An interrupted or uncertain paid attempt must be reconciled before another provider is charged.
+
+Pin references: [Monid transcript recipe](https://monid.ai/blog/every-youtube-transcript-ready-for-your-llm), [Monid metadata recipe](https://monid.ai/blog/guides/youtube-scraper-past-the-quota). Public documentation is not proof of a successful live run.
+
 ## Cost controls
 
 - Discovery, inspection, and in-budget data runs may proceed without approval.
@@ -55957,6 +55968,8 @@ This is not a summarization skill. The goal is evidence-backed extraction: tacti
 
 For scheduled Artist HQ Intel Pulse runs:
 
+These legacy watchlist rules do not override a host-managed Signals/Your World request. For a host-managed request, use the supplied immutable selection and evidence packets; the collector owns discovery, deduplication and fallback execution.
+
 1. Read \`artist-intel-state\` when it exists.
 2. Request only the latest upload metadata for each configured channel.
 3. Skip the channel when that latest video ID is already recorded. Do not fetch a transcript and do not fall back to an older video.
@@ -55974,9 +55987,9 @@ node bin/youtube-intelligence.mjs doctor
 node bin/youtube-intelligence.mjs prepare --video "<url-or-id>" --out "<workspace>/youtube-intel/<video-id>"
 \`\`\`
 
-Default provider order is cache first, then local \`youtube-research\` when its optional API key is healthy. When that route is unavailable, use the bundled \`zero\` skill for the exact missing read-only metadata or transcript operation and pass retrieved transcript text through the transcript-file input. Every Zero GET must use its weekly budget guard. Supadata is only called when \`--allow-paid\` is passed.
+Default provider order is cache first, then local \`youtube-research\`, then the pinned Monid route in the bundled \`monid\` skill, then the pinned Zero transcript route below. A YouTube Data API key enables metadata; it does not grant third-party caption download rights. Monid metadata and transcript calls are separate, bounded operations. Every paid call uses the existing provider budget guard. Supadata is only called when \`--allow-paid\` is passed.
 
-For transcript retrieval through Zero, prefer exact capability \`youtube-video-transcript-extractor-70f8ca14\`. Before every use, inspect it with \`zero get youtube-video-transcript-extractor-70f8ca14 --agent anything-agent --formatted\`. Skip marketplace search only when the live result is healthy, its request schema still accepts the needed YouTube video URL or ID, and its price is at most \`$0.02\`. Run the call through \`zero-budget.mjs fetch\` with \`--max-pay 0.02\`, then provide the returned transcript through \`--transcript\`. Search and vet a replacement only when preflight fails. Never automatically retry a paid failure with another provider.
+For transcript retrieval through Zero, use exact capability \`youtube-video-transcript-extractor-70f8ca14\` only after native and Monid are unavailable. Before every use, inspect it with \`zero get youtube-video-transcript-extractor-70f8ca14 --agent anything-agent --formatted\`. Its live schema must accept the needed video URL or ID, it must be healthy, and its price must be at most \`$0.02\`. Run through \`zero-budget.mjs fetch\` with \`--max-pay 0.02\`, then provide the returned transcript through \`--transcript\`. Do not search for replacements during routine Signals runs. Never start a second paid provider while the first charge or run is unresolved; a confirmed terminal failure is different from a timeout.
 
 \`\`\`bash
 SUPADATA_API_KEY="..." node bin/youtube-intelligence.mjs prepare --video "<url-or-id>" --provider supadata --allow-paid --out "<workspace>/youtube-intel/<video-id>"
@@ -56142,9 +56155,9 @@ cd tools/youtube-research && node bin/youtube-research.mjs doctor
 cd tools/youtube-research && node bin/youtube-research.mjs which "search videos by keyword" --agent
 \`\`\`
 
-If auth is missing or the direct route is unhealthy, use the bundled \`zero\` skill for the exact missing read-only YouTube operation. Search narrowly for search, channel uploads, metadata, comments, or transcripts; inspect the provider and schema; then run GET retrieval through the saved weekly Zero allowance. Do not ask before each small retrieval inside that allowance. If Zero is unavailable or has no allowance, explain the two setup choices once: configure Zero or add an optional YouTube Data API key.
+If the direct route is unavailable, use the pinned YouTube metadata or transcript endpoint in the bundled \`monid\` skill. Inspect its current schema and cost, then use the existing single-call and weekly allowance. Monid is the second route; Zero is the final transcript fallback. Do not repeatedly search the marketplace for these known capabilities. If no suitable connection is usable, direct the user to Connections once. Do not claim the transcript endpoint can perform channel discovery or comments retrieval.
 
-For transcript retrieval, prefer exact Zero capability \`youtube-video-transcript-extractor-70f8ca14\`. Before every use, run \`zero get youtube-video-transcript-extractor-70f8ca14 --agent anything-agent --formatted\`. Skip marketplace search only when that live preflight says it is healthy, its request schema still accepts the needed YouTube video URL or ID, and its price is at most \`$0.02\`. Then call it through \`zero-budget.mjs fetch\` with \`--max-pay 0.02\`. If preflight fails, search and vet a replacement. If a paid call fails, do not automatically try another paid provider.
+For transcript retrieval after native and Monid are unavailable, use exact Zero capability \`youtube-video-transcript-extractor-70f8ca14\`. Before every use, run \`zero get youtube-video-transcript-extractor-70f8ca14 --agent anything-agent --formatted\`. Its live schema must accept the needed video URL or ID, it must be healthy, and its price must be at most \`$0.02\`. Then call it through \`zero-budget.mjs fetch\` with \`--max-pay 0.02\`. Do not search for replacements during routine Signals runs. Never duplicate an unresolved paid call or retry a pending charge through a different provider.
 
 Zero does not create or replace a Google API key. It is an alternate paid retrieval route.
 

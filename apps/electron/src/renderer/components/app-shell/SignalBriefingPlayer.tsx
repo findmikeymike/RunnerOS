@@ -7,17 +7,18 @@ interface Props {
   workspaceId: string
   output: Parameters<typeof isFinalSignalReport>[0] & { id: string }
   content: string
+  showTranscriptControl?: boolean
 }
 
-export function SignalBriefingPlayer({ workspaceId, output, content }: Props) {
+export function SignalBriefingPlayer({ workspaceId, output, content, showTranscriptControl = true }: Props) {
   const briefing = parseSignalBriefing(content)
   if (!isFinalSignalReport(output)) return null
   if (!briefing) return <p className="border-b border-white/[0.055] px-5 py-3 text-xs text-white/45">Audio briefing unavailable for this report.</p>
   // Remount on report/voice text changes so pending responses cannot play another report.
-  return <BriefingPlayer key={`${workspaceId}:${output.id}:${content}`} workspaceId={workspaceId} outputId={output.id} briefing={briefing} />
+  return <BriefingPlayer key={`${workspaceId}:${output.id}:${content}`} workspaceId={workspaceId} outputId={output.id} briefing={briefing} showTranscriptControl={showTranscriptControl} />
 }
 
-export function BriefingPlayer({ workspaceId, outputId, briefing }: { workspaceId: string; outputId: string; briefing: string }) {
+export function BriefingPlayer({ workspaceId, outputId, briefing, showTranscriptControl = true }: { workspaceId: string; outputId: string; briefing: string; showTranscriptControl?: boolean }) {
   const [expanded, setExpanded] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const [audioUrl, setAudioUrl] = React.useState<string | null>(null)
@@ -90,12 +91,12 @@ export function BriefingPlayer({ workspaceId, outputId, briefing }: { workspaceI
             </select>
           </>
         )}
-        <Tooltip><TooltipTrigger asChild>
+        {showTranscriptControl && <Tooltip><TooltipTrigger asChild>
           <button type="button" aria-label="Read briefing" aria-expanded={expanded} aria-controls={textId}
             onClick={() => setExpanded(!expanded)} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white/60 hover:bg-white/[0.06] hover:text-white">
             <FileText className="h-3.5 w-3.5" />
           </button>
-        </TooltipTrigger><TooltipContent>Read briefing</TooltipContent></Tooltip>
+        </TooltipTrigger><TooltipContent>Read briefing</TooltipContent></Tooltip>}
         {(busy || audioUrl) && <Tooltip><TooltipTrigger asChild>
           <button type="button" aria-label="Close briefing audio" onClick={close}
             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white/50 hover:bg-white/[0.06] hover:text-white">

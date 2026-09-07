@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import type { SignalRetrievedEntry } from '@craft-agent/shared/shared-intel'
-import { launchSignalIdea, resolvedSignalIdea, signalCampaignChoices, signalIdeaDraft, type SignalHandoffLaunchDependencies } from './signal-idea-handoff'
+import { launchSignalIdea, focusSignalDraft, resolvedSignalIdea, signalCampaignChoices, signalIdeaDraft, type SignalHandoffLaunchDependencies } from './signal-idea-handoff'
+import { restoreMissingDraft } from './drafts'
+import type { SessionDraft } from '@craft-agent/shared/config'
 
 const reference = { hqWorkspaceId: 'hq', outputId: 'report', contentHash: 'a'.repeat(64), entryId: 'idea-1' }
 const idea: SignalRetrievedEntry = { reference, id: 'idea-1', kind: 'idea', title: 'A useful question', excerpt: 'Ask what changes for independent creators.', topics: [], sourceRefs: ['source'], temporalKind: 'unknown', track: 'your-world', mode: 'links', workflowRunId: 'run', createdAt: '2026-09-07', coverageStatus: 'partial', sources: [{ sourceId: 'source', sourceUrl: 'https://example.com/article', sourcePublishedAt: '2020-01-01' }], supportingFindings: [{ id: 'finding', excerpt: 'The evidence is limited.', sourceRefs: ['source'] }] }
@@ -68,5 +70,63 @@ describe('deliberate Signal handoff', () => {
     expect(draft).toContain('2020-01-01')
     expect(draft).toContain('event date: unknown')
     expect(draft).toContain('do not create or publish assets yet')
+  })
+  test('cancel during save then reopen the existing draft hydrates before same-workspace navigation', async () => {
+    const local = new Map<string, SessionDraft>()
+    let saved: SessionDraft | undefined
+    let current = true
+    const { deps } = dependencies({
+      isCurrent: () => current,
+      seed: async (_id, text) => { current = false; saved = { text } },
+    })
+    await expect(launchSignalIdea(reference, deps)).rejects.toThrow('cancelled')
+    expect(local.size).toBe(0)
+    current = true
+    let visible = ''
+    await launchSignalIdea(reference, { ...deps, find: async () => 'new', focus: async id => focusSignalDraft({
+      hasLocalDraft: () => local.has(id), load: async () => saved,
+      restoreMissing: draft => { restoreMissingDraft(local, id, draft) },
+      isCurrent: () => current, focus: async restore => { restore(); visible = local.get(id)?.text ?? '' },
+    }) })
+    expect(visible).toBe(signalIdeaDraft(idea))
+  })
+  test('focus never replaces existing text, attachment-only drafts, or a deliberate clear', async () => {
+    for (const draft of [{ text: 'my edit' }, { text: '', attachments: [{ path: '/tmp/local.txt', name: 'local.txt' }] }, { text: '' }]) {
+      const local = new Map<string, SessionDraft>([['draft', draft]])
+      await focusSignalDraft({ hasLocalDraft: () => local.has('draft'), load: async () => { throw new Error('must not load') },
+        restoreMissing: saved => { restoreMissingDraft(local, 'draft', saved) }, isCurrent: () => true, focus: async restore => { restore() } })
+      expect(local.get('draft')).toBe(draft)
+    }
+  })
+  test('typing or clearing during disk load wins, including attachments', async () => {
+    for (const edit of [{ text: '' }, { text: 'new', attachments: [{ path: '/tmp/new.txt', name: 'new.txt' }] }]) {
+      const local = new Map<string, SessionDraft>()
+      await focusSignalDraft({ hasLocalDraft: () => local.has('draft'), load: async () => { local.set('draft', edit); return { text: 'stale' } },
+        restoreMissing: saved => { restoreMissingDraft(local, 'draft', saved) }, isCurrent: () => true, focus: async restore => { restore() } })
+      expect(local.get('draft')).toBe(edit)
+    }
+  })
+  test('cancel during hydration never restores or navigates', async () => {
+    let current = true
+    await expect(focusSignalDraft({ hasLocalDraft: () => false, load: async () => { current = false; return { text: 'saved' } },
+      restoreMissing: () => { throw new Error('must not restore') }, isCurrent: () => current,
+      focus: async () => { throw new Error('must not focus') } })).rejects.toThrow('cancelled')
+  })
+  test('destination edits made after loading but before navigation restore also win', async () => {
+    const local = new Map<string, SessionDraft>()
+    await focusSignalDraft({ hasLocalDraft: () => local.has('draft'), load: async () => ({ text: 'old saved text' }),
+      restoreMissing: saved => { restoreMissingDraft(local, 'draft', saved) }, isCurrent: () => true,
+      focus: async restore => { local.set('draft', { text: '' }); restore() } })
+    expect(local.get('draft')).toEqual({ text: '' })
+  })
+  test('compact support labels literal abbreviations and carries finding and source identities', () => {
+    const compact = { ...idea, supportingFindingIds: ['finding', 'omitted'], supportingFindingsOmitted: 1,
+      supportingFindings: [{ ...idea.supportingFindings![0]!, excerptTruncated: true as const }] }
+    const text = signalIdeaDraft(compact)
+    expect(text).toContain('finding [sources: source]')
+    expect(text).toContain('Excerpt shortened')
+    expect(text).toContain('Supporting finding IDs: finding, omitted')
+    expect(text).toContain('1 additional supporting findings')
+    expect(text).toContain('source: https://example.com/article')
   })
 })

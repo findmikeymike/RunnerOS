@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { STARTER_AGENTS } from './starter-templates.ts';
 import { deleteGlobalAgent, ensureRequiredAgents, loadGlobalAgent, writeGlobalAgent } from './storage.ts';
-import { signalTrackPromptPrefix } from './signal-track-prompts.ts';
+import { signalTrackPromptPrefix, youtubeProviderPromptPrefix } from './signal-track-prompts.ts';
 import { SIGNAL_BRIEFING_INSTRUCTIONS } from '../shared-intel/briefing.ts';
 
 const roots: string[] = [];
@@ -20,7 +20,7 @@ describe('Signals v2 prompt compatibility', () => {
     test(`${slug}: upgrades exact shipped prompt and preserves metadata`, () => {
       const agent = STARTER_AGENTS.find(item => item.slug === slug)!;
       const opts = options();
-      const previous = agent.systemPrompt.slice(signalTrackPromptPrefix(slug).length);
+      const previous = agent.systemPrompt.slice(signalTrackPromptPrefix(slug).length + youtubeProviderPromptPrefix(slug).length);
       writeGlobalAgent({ ...agent, metadata: { ...agent.metadata, name: 'My name' }, systemPrompt: previous }, opts);
       ensureRequiredAgents([agent], opts);
       expect(loadGlobalAgent(slug, opts)?.systemPrompt).toBe(agent.systemPrompt);
@@ -53,5 +53,20 @@ describe('Signals v2 prompt compatibility', () => {
   });
   test('does not alter unrelated worker prompts', () => {
     expect(signalTrackPromptPrefix('content-director')).toBe('');
+    expect(youtubeProviderPromptPrefix('content-director')).toBe('');
+  });
+  for (const slug of ['youtube-research-agent', 'youtube-intelligence-agent']) test(`${slug}: exact pre-Monid routing updates without replacing customization or activation`, () => {
+    const agent = STARTER_AGENTS.find(item => item.slug === slug)!;
+    const opts = options();
+    const previous = agent.systemPrompt.replace(youtubeProviderPromptPrefix(slug), '');
+    writeGlobalAgent({ ...agent, systemPrompt: previous }, opts);
+    ensureRequiredAgents([agent], opts);
+    expect(loadGlobalAgent(slug, opts)?.systemPrompt).toBe(agent.systemPrompt);
+    expect(agent.metadata.optionalSources).toEqual(['youtube-research', 'monid', 'zero']);
+    expect(agent.metadata.skills).toContain('monid');
+    expect(youtubeProviderPromptPrefix(slug)).toContain('then Monid, then Zero');
+    writeGlobalAgent({ ...agent, systemPrompt: `${previous}\nMy custom routing.` }, opts);
+    ensureRequiredAgents([agent], opts);
+    expect(loadGlobalAgent(slug, opts)?.systemPrompt).toBe(`${previous}\nMy custom routing.`);
   });
 });

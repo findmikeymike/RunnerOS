@@ -7,6 +7,88 @@ Fast-forwarded to canonical `d27bafa7d` before the final gate.
 
 Specification: [47 Signals / Your World](../creator-command-center/47-signals-your-world-spec.md).
 
+## Holistic Hardening (2026-09-07)
+
+Working against committed Slice 3 `7ca3dd2d4`, still on the feature worktree.
+The following fixes are implemented; final combined gates are recorded below
+only after the independent reviews and test runs complete.
+
+- Native YouTube parsing matches the bundled CLI's actual nested results and
+  channel-upload envelope. Regression tests execute that CLI against a local
+  fixture server, not merely a mocked adapter response.
+- Retried workflows refresh failed/interrupted discovery without throwing away
+  usable evidence. Missing synthesis coverage remains partial. Admission and
+  restart recovery cannot run collection for an abandoned attempt.
+- Authentication retry retains the accepted handoff message identity. Cancelling
+  a handoff restores its unsent draft without overwriting newer user edits.
+  Bounded retrieval retains useful ideas and their source references.
+- The board puts the briefing and ideas first. Full reports open in the existing
+  scrolling document reader; failed loads show Retry, not a truncated document
+  pretending to be complete. History is dated, saved nuggets work on either
+  track, and snoozed schedules show the actual next run.
+- Native transcript collection falls back to Monid, then Zero. Monid metadata
+  collection supports channel resolution, recent uploads and one-off videos;
+  Zero remains transcript-only. Both Monid endpoints are pinned, with current
+  schema/price/health inspection and existing user budget limits before spending.
+- Paid operations keep durable receipts. Known interrupted runs resume polling;
+  unknown submissions do not start a second charge. Fresh host-authorized scans
+  can retry confirmed terminal, reconciled attempts. Successful transcripts are
+  cached across tracks before another provider is tried.
+- Existing shipped YouTube prompts and skill copies receive the routing update
+  through a narrowly scoped migration; customized and deleted copies remain
+  protected. The startup ordering is covered separately from template tests.
+
+### Evidence Boundaries
+
+Desktop and 390px renderer fixtures exercised long reports, report-load failure,
+empty tracks, nuggets, setup and snoozing. Screenshots include
+`/tmp/signals-fixed-desktop.png`, `/tmp/signals-fixed-mobile.png`, and
+`/tmp/signals-fixed-full-reader-mobile.png`. These use mocked ElectronAPI data;
+the real running app was not restarted or changed.
+
+Monid's published guides recommend `apify /starvibe/youtube-video-transcript`
+and `apify /streamers/youtube-scraper`. Their schemas informed bounded fixtures.
+The actual Artist OS credential store currently has no connected Monid token.
+No paid request, live account transcript, or end-to-end live report is claimed.
+Live MCP schema, price and response certification requires connecting Monid.
+
+### Independent Closure
+
+- Native CLI, provider routing, Monid receipts/resume and budgets: 56 tests,
+  296 assertions passed; no remaining actionable finding. A terminal failure
+  with unknown exact billing retains the full projected charge. It may use
+  Zero, but cannot authorize another Monid charge without cost settlement.
+- Existing-install migration: 181 tests, 2,047 assertions passed. Known fixture
+  hashes match committed bytes. The production SessionManager startup block
+  was executed in isolation with oldest prompts, old metadata, customized
+  bodies and repeated startup. A discovered whitespace-preservation gap was
+  fixed before the final gate. This is not a live app restart test.
+- Workflow retry/service: 58 service tests, 443 assertions passed. Independent
+  runner/service checks covered lane admission and refreshed retry evidence.
+- Handoff, bounded retrieval and renderer reviews closed all actionable
+  findings; no production provider or artist account was used by these tests.
+
+### Final Frozen Verification
+
+- `PANGOCAIRO_BACKEND=fontconfig bun run test`: exit 0; 8,444 regular plus
+  318 isolated tests passed, 1 existing installed-CUA-contract skip, 0 failed.
+  Log: `/tmp/signals-hardening-full-tests-closure.log`.
+- `bun run typecheck:all`: exit 0.
+  Log: `/tmp/signals-hardening-typecheck-closure.log`.
+- `CRAFT_PRODUCT_VARIANT=artist-os bun run electron:build:main`: exit 0.
+  Log: `/tmp/signals-hardening-main-build-closure.log`.
+- `CRAFT_PRODUCT_VARIANT=artist-os bun run electron:build:renderer`: exit 0.
+  Log: `/tmp/signals-hardening-renderer-build-closure.log`.
+- `git diff --check`: clean. Build bundle-size warnings remain; no packaged,
+  signed, deployed, live-provider or running-app certification is claimed.
+- Earlier gates caught an obsolete Zero-first skill assertion and the real
+  startup whitespace-preservation gap. Both were corrected and the complete
+  suite rerun on frozen code; these are not waived failures.
+- Work remains uncommitted on `codex/signals-your-world` at `7ca3dd2d4`.
+  Canonical main independently advanced to `2531ca001` during this work; this
+  task did not modify, merge into, or restart it. Main integration and its
+  post-merge regression gate are still separate work.
+
 ## Slice Gates
 
 | Slice | Implementation | Independent review | Verification |
@@ -72,12 +154,13 @@ and CLI output-size findings. Guard/helper tests use fixtures, not real payments
 No paid provider requests, live agent scans, artist data edits, or app restarts
 have been performed. Public read-only website fetches and bounded Zero capability
 metadata inspection were performed; these do not certify a complete live report.
-New deterministic YouTube metadata collection needs the existing YouTube Data
-API connection. No compatible healthy Zero channel-discovery fallback was found.
+YouTube metadata now prefers the existing YouTube Data API connection and falls
+back to the pinned Monid scraper. No compatible healthy Zero channel-discovery
+fallback was found; Zero remains transcript-only.
 Slice 1 committed as `572d5ed6f`. Slice 2 committed as `da73c5a5a`. Current main through
 `723dbb3cb` was merged into the feature branch as `86ee2fed9` before final Slice 3 verification; no Signals work
 has been landed into main or pushed by this task.
-Slice 3 remains uncommitted at this checkpoint.
+Slice 3 committed as `7ca3dd2d4`. Follow-up hardening below remains uncommitted.
 
 ## Final Slice 3 Verification
 

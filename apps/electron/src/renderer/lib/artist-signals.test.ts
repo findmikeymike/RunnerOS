@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'bun:test'
-import { appendSignalNugget, loadFullSignalOutputText, readableSignalBody, signalFreshness } from './artist-signals'
+import { appendSignalNugget, loadFullSignalOutputText, readableSignalBody, signalFreshness, signalPreviewText } from './artist-signals'
 
 describe('artist signals', () => {
+  test('bounds long normal and error previews without inventing missing content', () => {
+    expect(signalPreviewText(Array(1500).fill('Evidence').join(' ')).split(' ')).toHaveLength(120)
+    expect(signalPreviewText('  Short\n\npreview.  ')).toBe('Short preview.')
+    expect(signalPreviewText('## Heading\n\n**Strong** text.')).toBe('Heading Strong text.')
+    expect(signalPreviewText('')).toBe('')
+  })
   test('classifies fresh, aging, and stale signal briefs', () => {
     const now = new Date('2026-09-01T12:00:00.000Z')
 
@@ -66,13 +72,23 @@ describe('artist signals', () => {
     expect(reads).toEqual([{ outputId: 'output-1', assetId: 'primary-asset' }])
   })
 
-  test('keeps the preview when no readable primary asset exists', async () => {
-    const content = await loadFullSignalOutputText({
+  test('does not present a preview as the full report when the primary asset is missing', async () => {
+    await expect(loadFullSignalOutputText({
       output: { id: 'output-2', preview: { inlineText: 'Readable preview' } },
       getOutput: async () => null,
       readAssetText: async () => '',
-    })
+    })).rejects.toThrow('full report file is unavailable')
+  })
 
-    expect(content).toBe('Readable preview')
+  test('asset and manifest failures remain errors and a fresh attempt can recover', async () => {
+    let failed = true
+    const input = { output: { id: 'out', preview: { inlineText: 'Only a preview' } }, getOutput: async () => ({ primaryAssetId: 'report' }),
+      readAssetText: async () => { if (failed) throw new Error('Disk read failed'); return 'Complete report' } }
+    await expect(loadFullSignalOutputText(input)).rejects.toThrow('Disk read failed')
+    failed = false
+    expect(await loadFullSignalOutputText(input)).toBe('Complete report')
+    await expect(loadFullSignalOutputText({ ...input, getOutput: async () => { throw new Error('Manifest read failed') } })).rejects.toThrow('Manifest read failed')
+    await expect(loadFullSignalOutputText({ ...input, readAssetText: async () => '  ' })).rejects.toThrow('full report file is empty')
+    await expect(loadFullSignalOutputText({ ...input, output: { id: 'out', preview: { assetId: 'preview' } }, getOutput: async () => ({}) })).rejects.toThrow('full report file is unavailable')
   })
 })

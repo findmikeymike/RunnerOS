@@ -1,18 +1,18 @@
 import * as React from 'react'
-import { ExternalLink, Link2, Maximize2, Play, Plus, Radio, RefreshCw, SlidersHorizontal, Diamond } from 'lucide-react'
+import { Check, ExternalLink, Info, Link2, Maximize2, Play, Plus, Radio, RefreshCw, SlidersHorizontal, Diamond } from 'lucide-react'
 import { DocumentFormattedMarkdownOverlay } from '@craft-agent/ui'
-import { isFinalSignalReport, signalWorkflowFor, type SignalMode, type SignalTrack, type SignalTrackConfig, type SignalEntryReference } from '@craft-agent/shared/shared-intel'
+import { isFinalSignalReport, parseSignalBriefing, type SignalMode, type SignalTrack, type SignalTrackConfig, type SignalEntryReference } from '@craft-agent/shared/shared-intel'
 import type { ContextDocDTO } from '../../../shared/types'
 import type { OutputManifestDTO, OutputSummaryDTO } from '@/hooks/useOutputs'
 import type { ArtistIntelConfig } from '@/lib/artist-intel'
 import { parseArtistIntelReportDocResult } from '@/lib/artist-intel'
 import { useSignalTracks } from '@/hooks/useSignalTracks'
 import { useSignalReportContent } from '@/hooks/useSignalReportContent'
-import { formatSignalDate, readableSignalBody, signalDocumentDate } from '@/lib/artist-signals'
-import { legacySignalSchedule, legacySignalSources, signalDefaultKey, signalOutputRun, signalScheduleMatches, signalTrackName, signalWeeklyReadiness } from '@/lib/signal-tracks'
+import { formatSignalDate, readableSignalBody, signalDocumentDate, signalPreviewText } from '@/lib/artist-signals'
+import { legacySignalSchedule, legacySignalSources, signalDefaultKey, signalDocumentInTrack, signalLibraryLabels, signalNextRun, signalNuggetsKey, signalOutputRun, signalScheduleMatches, signalTrackName, signalWeeklyReadiness } from '@/lib/signal-tracks'
 import { Info_Markdown } from '@/components/info'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { navigate, routes } from '@/lib/navigate'
-import { computeNextRuns } from '@/components/automations/utils'
 import { SignalBriefingPlayer } from './SignalBriefingPlayer'
 import { SignalLinksDialog, SignalTrackSetupDialog } from './SignalTrackSetupDialog'
 import { SignalIdeasActions } from './SignalIdeaHandoff'
@@ -44,6 +44,9 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
   const [fullscreen, setFullscreen] = React.useState(false)
   const [selection, setSelection] = React.useState('')
   const [nuggetBusy, setNuggetBusy] = React.useState(false)
+  const [nuggetSaved, setNuggetSaved] = React.useState(false)
+  const [nuggetError, setNuggetError] = React.useState<string | null>(null)
+  const nuggetPending = React.useRef(false)
   const [actionError, setActionError] = React.useState<{ track: SignalTrack; message: string } | null>(null)
   const [adopting, setAdopting] = React.useState(false)
   const adoptionEpoch = React.useRef(0)
@@ -77,12 +80,12 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
       items.push({ key: `output:${output.id}`, kind: 'output', title: output.title, summary: output.summary ?? '',
         date: output.completedAt || output.createdAt, output, mode: run?.mode ?? (trustedLegacy ? 'scan' : undefined) })
     }
+    for (const doc of documents) {
+      if (!signalDocumentInTrack(doc, track)) continue
+      items.push({ key: `context:${doc.slug}`, kind: 'context', title: doc.slug === 'artist-signal-nuggets' ? 'Saved nuggets' : doc.metadata.name, summary: doc.metadata.description ?? '', date: signalDocumentDate(doc.body), body: readableSignalBody(doc.body) })
+    }
+    if (!items.some(item => item.key === signalNuggetsKey)) items.push({ key: signalNuggetsKey, kind: 'context', title: 'Saved nuggets', summary: '' })
     if (track === 'industry') {
-      for (const doc of documents) {
-        if (['artist-intel-config', 'artist-intel-report'].includes(doc.slug)) continue
-        if (doc.slug !== 'artist-signal-nuggets' && !/research|report|intel|analysis/i.test(`${doc.slug} ${doc.metadata.name} ${doc.metadata.description ?? ''}`)) continue
-        items.push({ key: `context:${doc.slug}`, kind: 'context', title: doc.metadata.name, summary: doc.metadata.description ?? '', date: signalDocumentDate(doc.body), body: readableSignalBody(doc.body) })
-      }
       const previous = parseArtistIntelReportDocResult(documents.find(doc => doc.slug === 'artist-intel-report'))
       if (previous.ok && !previous.report.outputId && (previous.report.title || previous.report.summary)) {
         items.push({ key: 'context:latest-intel-summary', kind: 'context', title: previous.report.title || 'Saved Industry summary', summary: previous.report.summary || '',
@@ -93,9 +96,26 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
   }, [outputs, documents, track, tracks.state])
   const selectedKey = signalDefaultKey(library, selections[track])
   const selected = library.find(item => item.key === selectedKey) ?? null
-  const { content, loading } = useSignalReportContent(workspaceId, selected, getOutput)
-  React.useEffect(() => { setSelection(''); setFullscreen(false) }, [selectedKey, track, workspaceId])
+  const { content, loading, error: contentError, retry } = useSignalReportContent(workspaceId, selected, getOutput)
+  const labels = React.useMemo(() => signalLibraryLabels(library), [library])
+  const briefing = !contentError && selected?.output ? parseSignalBriefing(content) : null
+  const previewText = signalPreviewText(contentError ? content : selected?.summary || content)
+  const boardContent = selected?.output ? briefing || previewText : content
+  const fullReportReady = Boolean(content) && !loading && !contentError
+  const readerIdentity = React.useRef('')
+  readerIdentity.current = `${workspaceId}:${track}:${selectedKey}`
+  React.useEffect(() => { setSelection(''); setFullscreen(false); setNuggetSaved(false); setNuggetError(null) }, [selectedKey, track, workspaceId])
   React.useEffect(() => { setSelection('') }, [content])
+  React.useEffect(() => {
+    if (fullscreen) return
+    const update = () => {
+      const value = window.getSelection()
+      const node = value?.rangeCount ? value.getRangeAt(0).commonAncestorContainer : null
+      setSelection(node && reader.current?.contains(node) ? value!.toString().trim().slice(0, 4000) : '')
+    }
+    document.addEventListener('selectionchange', update)
+    return () => document.removeEventListener('selectionchange', update)
+  }, [fullscreen])
   React.useEffect(() => {
     if (!tracks.state) return
     for (const kind of ['industry', 'your-world'] as const) {
@@ -143,20 +163,47 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
     finally { if (scope.current === owner && token === adoptionEpoch.current) setAdopting(false) }
   }
   const saveNugget = async () => {
-    if (!selected || !selection || nuggetBusy) return
-    setNuggetBusy(true)
-    try { await props.onSaveNugget({ text: selection, sourceTitle: selected.title, sourceKey: selected.key, track, outputId: selected.output?.id }); setSelection(''); window.getSelection()?.removeAllRanges() }
-    catch (cause) { reportError(cause) } finally { setNuggetBusy(false) }
+    if (!selected || !selection || nuggetPending.current) return
+    const owner = readerIdentity.current
+    nuggetPending.current = true
+    setNuggetBusy(true); setNuggetError(null); setNuggetSaved(false)
+    try {
+      await props.onSaveNugget({ text: selection, sourceTitle: selected.title, sourceKey: selected.key, track, outputId: selected.output?.id })
+      if (owner === readerIdentity.current) { setSelection(''); setNuggetSaved(true); window.getSelection()?.removeAllRanges() }
+    } catch (cause) { if (owner === readerIdentity.current) setNuggetError(cause instanceof Error ? cause.message : String(cause)) }
+    finally { nuggetPending.current = false; setNuggetBusy(false) }
   }
-  const status = currentLegacy ? legacy.notice?.title : latestRun ? ({ queued: 'Scan queued', running: 'Research running', 'no-change': 'No new findings', partial: 'Partial coverage', failed: 'Research needs attention', cancelled: 'Research cancelled', report: 'Report ready' }[latestRun.status]) : undefined
+  const status = contentError ? 'Report unavailable' : currentLegacy ? legacy.notice?.title : latestRun ? ({ queued: 'Scan queued', running: 'Research running', 'no-change': 'No new findings', partial: 'Partial coverage', failed: 'Research needs attention', cancelled: 'Research cancelled', report: 'Report ready' }[latestRun.status]) : undefined
   const detail = currentLegacy ? legacy.notice?.detail : latestRun?.error
-  const nextRuns = weekly && schedule?.cron ? computeNextRuns(schedule.cron, 1, schedule.timezone) : []
+  const nextRun = weekly && schedule ? signalNextRun(schedule) : null
+  const snoozed = weekly && schedule?.snoozedUntil && Date.parse(schedule.snoozedUntil) > Date.now()
+  const saveSelectionButton = <button className={`${control} !w-9 !px-0`} aria-label="Save selection" title={nuggetSaved ? 'Saved to nuggets' : 'Save selection'} disabled={nuggetBusy || !selection} onPointerDown={event => event.preventDefault()} onMouseDown={event => event.preventDefault()} onClick={() => { void saveNugget() }}>{nuggetSaved ? <Check size={15} /> : <Diamond size={15} />}</button>
   return <section aria-label="Signals intelligence reader" className="space-y-3">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div role="tablist" aria-label="Signals track" className="flex gap-1">
+      <div className="flex items-center gap-2">
+        <div role="tablist" aria-label="Signals track" className="flex gap-1">
         {(['industry', 'your-world'] as const).map((kind, index) => <button key={kind} role="tab" aria-selected={track === kind} tabIndex={track === kind ? 0 : -1}
           className={`${control} ${track === kind ? '!border-[#ff5a36] !text-[#ff5a36]' : ''}`}
           onClick={() => changeTrack(kind)} onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const next = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : 1 - index; changeTrack(next === 0 ? 'industry' : 'your-world'); (event.currentTarget.parentElement?.children[next] as HTMLButtonElement)?.focus() } }}>{signalTrackName(kind)}</button>)}
+        </div>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button type="button" aria-label="How Signals works" title="How Signals works" className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-white/45 transition-colors hover:bg-white/5 hover:text-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60"><Info size={17} /></button>
+          </PopoverTrigger>
+          <PopoverContent align="end" sideOffset={10} aria-label="How Signals works" className="w-[360px] max-w-[calc(100vw-40px)] max-h-[min(560px,var(--radix-popover-content-available-height))] overflow-y-auto rounded-lg border border-white/10 bg-[#151517] p-5 text-sm text-white/65 shadow-xl">
+            <h3 className="mb-4 font-semibold text-white/95">How Signals works</h3>
+            <div className="space-y-4 leading-relaxed">
+              <p><strong className="font-medium text-white/90">Industry</strong> follows music-business news. <strong className="font-medium text-white/90">Your World</strong> follows the interests, ideas and causes behind your music.</p>
+              <p>Add channels with the sliders button, then choose <strong className="font-medium text-white/90">Run scan</strong> or turn on <strong className="font-medium text-white/90">Weekly</strong>. Use <strong className="font-medium text-white/90">Analyze links</strong> for specific videos.</p>
+              <div className="border-t border-white/10 pt-4">
+                <h4 className="mb-1 font-medium text-white/90">Connections</h4>
+                <p>Set up YouTube Data API or connect Monid in Settings → Connections to discover channel videos. For reliable transcripts, connect Monid; Zero adds another backup.</p>
+                <p className="mt-2 text-xs text-white/50">Native YouTube first, Monid second, Zero last. Zero handles transcripts, not channel discovery. Paid fallbacks use your saved spending limits.</p>
+              </div>
+              <p>Each scan checks for new material and builds a report. Read the briefing, open the full report, save useful nuggets, or listen when a voice connection is set up.</p>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <label className={control}><input type="checkbox" aria-label={`${signalTrackName(track)} weekly scan`} checked={weekly} disabled={busy || (!currentLegacy && !config) || (track === 'your-world' && !config?.sources.length && !weekly)} onChange={() => { void toggleWeekly() }} />Weekly</label>
@@ -165,31 +212,37 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
         <button className={`${control} bg-white/90 !text-black`} aria-label="Run scan" title={currentLegacy ? legacy.runDisabledReason ?? 'Run scan' : 'Run scan'} disabled={busy || active || (currentLegacy ? !!legacy.runDisabledReason : !config || (track === 'your-world' && !config.sources.length))} onClick={() => { void runScan() }}><Play size={15} /><span className="hidden sm:inline">Run scan</span></button>
       </div>
     </div>
-    <div className="flex flex-wrap items-center gap-2 text-xs text-white/50"><span>Weekly {weekly ? 'active' : 'paused'}</span>{schedule?.snoozedUntil ? <span>Snoozed until {formatSignalDate(schedule.snoozedUntil)}</span> : null}{nextRuns?.[0] ? <span>Next {new Date(nextRuns[0]).toLocaleString()}</span> : null}
+    <div className="flex flex-wrap items-center gap-2 text-xs text-white/50"><span>Weekly {snoozed ? 'snoozed' : weekly ? 'active' : 'paused'}</span>{snoozed ? <span>Until {formatSignalDate(schedule!.snoozedUntil!)}</span> : null}{nextRun ? <span>Next {nextRun.toLocaleString()}</span> : null}
       {currentLegacy && tracks.state ? <button className="text-white/80 underline underline-offset-4" disabled={busy} onClick={() => { void adopt() }}>Review scan update</button> : null}
       {adopting ? <button className="text-white/80 underline underline-offset-4" onClick={() => { adoptionEpoch.current++; setAdopting(false) }}>Cancel update review</button> : null}</div>
     {!currentLegacy && readiness.needsRepair ? <div role="status" className="flex flex-wrap items-center gap-2 text-xs text-amber-200"><span>Weekly schedule and Signals settings do not match.</span><button className={control} disabled={busy || !config || (track === 'your-world' && !config.sources.length)} onClick={() => { void toggleWeekly() }}>Repair weekly scan</button></div> : null}
     {tracks.error || actionError?.track === track || status ? <div aria-live="polite" className="border-l-2 border-white/20 px-3 py-1 text-sm text-white/70">
       {tracks.error ? <p role="alert">{tracks.error}</p> : null}{actionError?.track === track ? <p role="alert" className="text-red-300">{actionError.message}</p> : null}{status ? <p>{status}</p> : null}{detail ? <p className="text-xs text-white/50">{detail}</p> : null}</div> : null}
-    <div className="min-h-[440px] border-t border-white/10 bg-[#111214]">
+    <div className="border-t border-white/10 bg-[#111214]">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 px-4 py-4">
         <div className="min-w-0 flex-1"><p className="text-xs text-white/45">{selected?.mode === 'links' ? 'Video review' : selected?.mode === 'scan' ? `${signalTrackName(track)} scan` : 'Saved intelligence'}</p>
           <h2 className="mt-1 break-words text-lg font-medium text-white">{selected?.title || signalTrackName(track)}</h2>{selected?.date ? <p className="mt-1 text-xs text-white/45">Report {formatSignalDate(selected.date)}</p> : null}</div>
-        <div className="flex w-full max-w-full flex-nowrap items-center gap-2 sm:w-auto">
-          {selection ? <button className={control} aria-label="Save selection" title="Save selection" disabled={nuggetBusy} onClick={() => { void saveNugget() }}><Diamond size={15} /><span className="hidden sm:inline">Save selection</span></button> : null}
+        <div className="flex w-full max-w-full flex-wrap items-center gap-2 sm:w-auto">
           <select aria-label={`${signalTrackName(track)} report library`} className={`${control} min-w-0 max-w-[240px] !shrink flex-1 truncate`} value={selectedKey ?? ''} onChange={event => setSelections(value => ({ ...value, [track]: event.target.value }))}>
-            {!library.length ? <option value="">No reports yet</option> : library.map(item => <option key={item.key} value={item.key}>{item.mode === 'links' ? 'Video review: ' : ''}{item.title}</option>)}</select>
-          <button className={`${control} !w-9 !px-0`} title="Read full report" aria-label="Read full report" disabled={!content} onClick={() => setFullscreen(true)}><Maximize2 size={15} /></button>
+            {!selectedKey ? <option value="">No reports yet</option> : null}{library.map(item => <option key={item.key} value={item.key}>{labels.get(item.key)}</option>)}</select>
+          <button className={`${control} !w-9 !px-0`} title="Saved nuggets" aria-label="Saved nuggets" onClick={() => setSelections(value => ({ ...value, [track]: signalNuggetsKey }))}><Diamond size={15} /></button>
           {selected?.output ? <button className={`${control} !w-9 !px-0`} title="Open source output" aria-label="Open source output" onClick={() => navigate(routes.view.output(selected.output!.id))}><ExternalLink size={15} /></button> : null}
         </div>
       </div>
-      {!loading && selected?.output ? <SignalBriefingPlayer key={`${workspaceId}:${track}:${selectedKey}:${fullscreen}`} workspaceId={workspaceId} output={selected.output} content={content} /> : null}
-      <div ref={reader} className="px-4 py-5 selection:bg-orange-400/30" onMouseUp={() => { const selectedText = window.getSelection(); const node = selectedText?.rangeCount ? selectedText.getRangeAt(0).commonAncestorContainer : null; setSelection(node && reader.current?.contains(node) ? selectedText!.toString().trim().slice(0, 4000) : '') }}>
-        {loading ? <div className="flex h-64 items-center justify-center"><RefreshCw size={18} className="animate-spin text-white/40" /></div> : content ? <Info_Markdown className="mx-auto max-w-[900px] break-words text-sm leading-7 text-white/75">{content}</Info_Markdown> : <div className="flex min-h-64 flex-col items-center justify-center gap-3 text-white/55"><Radio size={20} /><p>No {signalTrackName(track)} reports yet</p>{track === 'your-world' ? <div className="flex flex-wrap gap-2"><button className={control} disabled={!config} onClick={() => config && setSetup({ config, adoption: false })}><Plus size={15} />Add channels</button><button className={control} disabled={!tracks.state} onClick={() => setLinksOpen(true)}><Link2 size={15} />Analyze links</button></div> : null}</div>}
+      {contentError ? <div role="alert" className="space-y-2 break-words border-b border-white/10 px-4 py-3 text-sm text-red-300"><p>Could not load the full report. {contentError}</p><button className={control} disabled={loading} onClick={retry}><RefreshCw size={15} />Retry report</button></div> : null}
+      {!loading && !contentError && selected?.output ? <SignalBriefingPlayer key={`${workspaceId}:${track}:${selectedKey}:${fullscreen}`} workspaceId={workspaceId} output={selected.output} content={content} showTranscriptControl={false} /> : null}
+      {selected ? <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3">
+        <p className="text-xs text-white/50">{selected.output ? contentError ? 'Preview only - full report unavailable' : briefing ? 'Your briefing' : 'Report preview' : 'Saved intelligence'}</p>
+        <div className="flex items-center gap-2">{saveSelectionButton}<button className={control} disabled={!fullReportReady} onClick={() => { setSelection(''); setFullscreen(true) }}><Maximize2 size={15} />{selected.output ? 'Read full report' : 'Open reader'}</button></div>
+      </div> : null}
+      {nuggetError ? <p role="alert" className="break-words px-4 py-2 text-sm text-red-300">Could not save selection. {nuggetError}</p> : null}
+      {!loading && selected?.output && props.onDevelopIdea ? <SignalIdeasActions key={`ideas:${workspaceId}:${selected.output.id}`} workspaceId={workspaceId} outputId={selected.output.id} revision={content} onDevelop={props.onDevelopIdea} /> : null}
+      <div ref={reader} className={`px-4 py-4 selection:bg-orange-400/30 ${selected?.output ? '' : 'max-h-[420px] overflow-y-auto'}`}>
+        {loading ? <div role="status" className="flex h-24 items-center justify-center gap-2 text-xs text-white/50"><RefreshCw size={18} className="animate-spin" />Loading report</div> : boardContent ? selected?.output ? <p className="mx-auto max-w-[900px] break-words text-sm leading-6 text-white/75">{boardContent}</p> : <Info_Markdown className="mx-auto max-w-[900px] break-words text-sm leading-7 text-white/75">{boardContent}</Info_Markdown> : <div className="flex min-h-32 flex-col items-center justify-center gap-3 text-white/55"><Radio size={20} /><p>{selectedKey === signalNuggetsKey ? 'No saved nuggets yet' : contentError ? 'No preview available' : `No ${signalTrackName(track)} reports yet`}</p>{track === 'your-world' && !selected ? <div className="flex flex-wrap gap-2"><button className={control} disabled={!config} onClick={() => config && setSetup({ config, adoption: false })}><Plus size={15} />Add channels</button><button className={control} disabled={!tracks.state} onClick={() => setLinksOpen(true)}><Link2 size={15} />Analyze links</button></div> : null}</div>}
       </div>
     </div>
-    {!loading && selected?.output && props.onDevelopIdea ? <SignalIdeasActions key={`ideas:${workspaceId}:${selected.output.id}`} workspaceId={workspaceId} outputId={selected.output.id} revision={content} onDevelop={props.onDevelopIdea} /> : null}
-    <DocumentFormattedMarkdownOverlay content={content} isOpen={fullscreen} onClose={() => setFullscreen(false)} typeBadge={{ label: signalTrackName(track), icon: Radio }} />
+    {nuggetSaved ? <p role="status" className="px-4 text-xs text-white/60">Saved to nuggets</p> : null}
+    <DocumentFormattedMarkdownOverlay content={content} isOpen={fullscreen && fullReportReady} onClose={() => setFullscreen(false)} accessibleTitle={selected?.title} onSelectionChange={setSelection} headerActions={saveSelectionButton} error={nuggetError ?? undefined} errorLabel="Could not save selection" typeBadge={{ label: signalTrackName(track), icon: Radio }} />
     {setup ? <SignalTrackSetupDialog key={`setup:${workspaceId}:${setup.config.track}`} open config={setup.config} adoption={setup.adoption} weeklyEnabled={setup.adoption ? legacy.weeklyEnabled : weekly} onOpenChange={open => { if (!open) setSetup(null) }} resolveChannel={url => window.electronAPI.resolveSignalChannel(workspaceId, url)} onSave={next => tracks.save(next, setup.adoption)} /> : null}
     <SignalLinksDialog key={`links:${workspaceId}:${track}`} open={linksOpen} trackName={signalTrackName(track)} onOpenChange={setLinksOpen} onAnalyze={async (links, key) => { const owner = workspaceId; const target = track; const queued = await tracks.start(target, 'links', key, links); if (scope.current === owner) setPendingReviews(value => ({ ...value, [target]: queued.runId })) }} />
   </section>

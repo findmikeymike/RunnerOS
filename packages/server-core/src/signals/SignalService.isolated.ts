@@ -17,6 +17,7 @@ import { ScheduledWorkRunner } from '../scheduled-work/ScheduledWorkRunner';
 import { withWorkspaceContextLock } from '../scheduled-work/workspace-context-lock';
 import { createCampaignJobRun } from '@craft-agent/shared/campaign-calendar';
 import type { SignalReportMetadata } from '@craft-agent/shared/shared-intel';
+import { SIGNAL_WEBSITE_SOURCES, type SignalWebsitePacket } from './website-collector';
 
 const definitions = [createSignalContractWorkflow('your-world', 'scan'), createSignalContractWorkflow('industry', 'scan'), createSignalContractWorkflow('your-world', 'links')];
 const loaded = (slug: string) => { const value = definitions.find(item => item.slug === slug); return value ? { ...value, path: '/fixture/WORKFLOW.md', source: 'global' as const } : null; };
@@ -258,6 +259,13 @@ function trackRun(snapshot: WorkflowRunSnapshot) {
   upsertContextDoc(root, { slug: SCHEDULED_WORK_CONTEXT_SLUG, metadata: scheduledWorkMetadata(), body: serializeScheduledWorkBody({ ...parsed.work,
     items: parsed.work.items.map(order => ({ ...order, status: 'needs-attention', runs: [{ ...createCampaignJobRun({ jobId: order.id, status: 'failed', startedAt: now }), workflowRunId: snapshot.id }] })) }) });
 }
+function persistRetry(original: WorkflowRunSnapshot): WorkflowRunSnapshot {
+  const retry: WorkflowRunSnapshot = { ...original, id: randomUUID(), state: 'running', resumedFromRunId: original.id,
+    resumedByRunId: undefined, steps: original.workflowSnapshot.metadata.steps.map(step => ({ id: step.id, state: 'queued', attempts: 0 })) };
+  workflows.writeRun(root, { ...original, resumedByRunId: retry.id });
+  workflows.writeRun(root, retry);
+  return retry;
+}
 for (const status of ['running', 'needs-attention'] as const) test(`restart releases prepared ${status} work without a WorkflowRun`, async () => {
   const request = await prepared(); orderStatus(status);
   const restarted = new SignalService({ workspaces: () => [workspace], provider, permission });
@@ -279,6 +287,283 @@ test('explicit tracked-order retry reuses prepared evidence after start failure'
   const result = await service.startAdmitted('hq', request.orderIds[0]!, 'weekly-world-scan', request.workflowDigest, { signalRequestId: request.runId }, async () => ({ id: request.identity.workflowRunId }));
   expect(result.runId).toBe(request.identity.workflowRunId);
   expect(provider.transcript).toHaveBeenCalledTimes(1);
+});
+
+for (const mode of ['scan', 'links'] as const) for (const failure of ['unavailable', 'timeout'] as const) {
+  test(`${mode} tracked retry recovers ${failure} discovery without refetching successful metadata`, async () => {
+    const secondId = '01234567890';
+    const calls: string[] = [];
+    let restored = false;
+    const discover = async (id: string) => {
+      calls.push(id);
+      if (!restored && (id === channel2 || id === secondId)) {
+        if (failure === 'timeout') return new Promise<never>(() => {});
+        throw new Error('Metadata access unavailable');
+      }
+      return id === channel2 || id === secondId ? { ...metadata, videoId: secondId, channelId: channel2, sourceUrl: `https://www.youtube.com/watch?v=${secondId}` } : metadata;
+    };
+    provider.recent = mock(async id => ({ videos: [await discover(id)], complete: true }));
+    provider.video = mock(discover);
+    provider.transcript = mock(async (_root, id) => ({ videoId: id, provider: 'fixture', segments: [{ start: 0, end: 1, text: 'Useful finding.' }] }));
+    service = new SignalService({ workspaces: () => [workspace], provider, permission, now: () => now, preparationTimeoutMs: 40 });
+    await configure(true);
+    const queued = await service.start('hq', { track: 'your-world', mode, idempotencyKey: 'recover', links: [metadata.sourceUrl, `https://youtu.be/${secondId}`] });
+    const original = readSignals(root, 'hq').requests[0]!;
+    const slug = mode === 'links' ? 'signal-video-review' : 'weekly-world-scan';
+    await expect(service.startAdmitted('hq', queued.orderIds[0]!, slug, original.workflowDigest, { signalRequestId: queued.runId }, async () => { throw new Error('Stop before workflow creation'); })).rejects.toThrow();
+    const captured = readSignals(root, 'hq').requests[0]!.packets.map(packet => packet.contentHash);
+    restored = true;
+    const current = readSignals(root, 'hq').tracks['your-world'];
+    await service.saveConfig('hq', 'your-world', { ...current, sources: [] }, current.revision);
+    service = new SignalService({ workspaces: () => [workspace], provider, permission, now: () => '2026-09-15T12:00:00.000Z' });
+    orderStatus('scheduled');
+    const start = mock(async (_workflow: unknown, request: SignalRequest) => ({ id: request.identity.workflowRunId }));
+    await service.startAdmitted('hq', queued.orderIds[0]!, slug, original.workflowDigest, { signalRequestId: queued.runId }, start);
+    const saved = readSignals(root, 'hq').requests[0]!;
+    expect(saved.config).toEqual(original.config); expect(saved.createdAt).toBe(original.createdAt);
+    expect(saved.identity.workflowRunId).toBe(original.identity.workflowRunId);
+    expect(saved.identity.requestedVideoIds.sort()).toEqual([videoId, secondId].sort());
+    expect(saved.coverage).toHaveLength(2); expect(saved.coverage.every(item => item.status === 'checked')).toBe(true);
+    expect(saved.packets).toHaveLength(2); expect(saved.packets.map(packet => packet.contentHash)).toEqual(expect.arrayContaining(captured));
+    expect(calls).toEqual(mode === 'scan' ? [channelId, channel2, channel2] : [videoId, secondId, secondId]);
+    expect(provider.transcript).toHaveBeenCalledTimes(2); expect(start).toHaveBeenCalledTimes(1);
+    await service.prepare('hq', saved.runId, saved.orderIds[0]!, saved.workflowDigest);
+    expect(calls).toHaveLength(3); expect(provider.transcript).toHaveBeenCalledTimes(2);
+  });
+}
+
+for (const failure of ['throws', 'unavailable-packet'] as const) test(`Industry recovery replaces only ${failure} website receipt`, async () => {
+  let restored = false;
+  const websiteCalls: string[] = [];
+  const unavailableUrl = SIGNAL_WEBSITE_SOURCES[0];
+  provider.website = async url => {
+    websiteCalls.push(url);
+    if (url === unavailableUrl && !restored && failure === 'throws') throw new Error('offline');
+    return { version: 1, sourceUrl: url, checkedAt: now, windowStart: '2026-09-01T12:00:00.000Z', windowEnd: now,
+      status: url === unavailableUrl && !restored ? 'unavailable' : url === SIGNAL_WEBSITE_SOURCES[1] ? 'incomplete' : 'checked', items: [], truncated: false } satisfies SignalWebsitePacket;
+  };
+  const queued = await service.start('hq', { track: 'industry', mode: 'scan', idempotencyKey: 'web-recovery' });
+  const original = readSignals(root, 'hq').requests[0]!;
+  await expect(service.startAdmitted('hq', queued.orderIds[0]!, 'signals-industry-scan', original.workflowDigest, { signalRequestId: queued.runId }, async () => { throw new Error('Start failed'); })).rejects.toThrow();
+  const captured = readSignals(root, 'hq').requests[0]!.websites.filter(packet => packet.url !== unavailableUrl).map(packet => packet.contentHash);
+  restored = true; orderStatus('scheduled');
+  await service.startAdmitted('hq', queued.orderIds[0]!, 'signals-industry-scan', original.workflowDigest, { signalRequestId: queued.runId }, async (_workflow, request) => ({ id: request.identity.workflowRunId }));
+  const saved = readSignals(root, 'hq').requests[0]!;
+  expect(websiteCalls).toEqual([...SIGNAL_WEBSITE_SOURCES, unavailableUrl]);
+  expect(saved.coverage).toHaveLength(7); expect(saved.websites).toHaveLength(7);
+  expect(saved.websites.map(packet => packet.contentHash)).toEqual(expect.arrayContaining(captured));
+  expect(saved.coverage.find(source => source.sourceId === 'web:0')!.status).toBe('checked');
+  expect(saved.coverage.find(source => source.sourceId === 'web:1')!.status).toBe('incomplete');
+});
+
+for (const explicitEmpty of [false, true]) test(`synthesis ${explicitEmpty ? 'explicitly examines' : 'omits'} a collected video in final coverage`, async () => {
+  const secondId = '01234567890';
+  provider.recent = mock(async id => ({ videos: [{ ...metadata, channelId: id, videoId: id === channelId ? videoId : secondId, sourceUrl: `https://www.youtube.com/watch?v=${id === channelId ? videoId : secondId}` }], complete: true }));
+  provider.transcript = mock(async (_root, id) => ({ videoId: id, provider: 'fixture', segments: [{ start: 0, end: 1, text: 'Useful finding.' }] }));
+  const request = await prepared(true);
+  const snapshot = run(request, { ...report(), ...(explicitEmpty ? { examinedVideoIds: [videoId, secondId], noFindingVideoIds: [secondId] } : {}) });
+  workflows.writeRun(root, snapshot); await service.complete(snapshot, new AbortController().signal);
+  const saved = readSignals(root, 'hq').requests[0]!;
+  const reportMetadata = readEvidence<SignalReportMetadata>(root, saved.reportMetadataHash!);
+  expect(saved.status).toBe(explicitEmpty ? 'report' : 'partial');
+  expect(reportMetadata.coverageStatus).toBe(explicitEmpty ? 'complete' : 'partial');
+  expect(reportMetadata.warnings.join(' ')).toBe(explicitEmpty ? '' : `Videos without a validated synthesis outcome: ${secondId}.`);
+  expect(readSignals(root, 'hq').ledger).toHaveLength(explicitEmpty ? 2 : 1);
+});
+
+for (const mode of ['scan', 'links'] as const) for (const failedPhase of ['metadata', 'transcript'] as const) {
+  test(`actual ${mode} workflow retry refreshes ${failedPhase} evidence and restarts analysis once`, async () => {
+    const secondId = '01234567890';
+    let restored = false;
+    const discover = async (id: string) => {
+      if (!restored && failedPhase === 'metadata' && (id === channel2 || id === secondId)) throw new Error('Metadata access unavailable');
+      return id === channel2 || id === secondId ? { ...metadata, videoId: secondId, channelId: channel2, sourceUrl: `https://www.youtube.com/watch?v=${secondId}` } : metadata;
+    };
+    provider.recent = mock(async id => ({ videos: [await discover(id)], complete: true }));
+    provider.video = mock(discover);
+    provider.transcript = mock(async (_root, id) => {
+      if (!restored && failedPhase === 'transcript' && id === secondId) throw new Error('Transcript unavailable');
+      return { videoId: id, provider: 'fixture', segments: [{ start: 0, end: 1, text: `Evidence for ${id}` }] };
+    });
+    await configure(true);
+    const queued = await service.start('hq', { track: 'your-world', mode, idempotencyKey: 'workflow-recovery', links: [metadata.sourceUrl, `https://youtu.be/${secondId}`] });
+    const pending = readSignals(root, 'hq').requests[0]!;
+    const request = await service.prepare('hq', queued.runId, queued.orderIds[0]!, pending.workflowDigest);
+    const original = run(request, undefined, 'failed');
+    original.steps = [{ id: 'youtube-intel', state: 'succeeded', attempts: 1, output: 'Old partial analysis' }, { id: 'synthesize', state: 'failed', attempts: 1 }];
+    workflows.writeRun(root, original); trackRun(original);
+    const capturedHash = request.packets[0]!.contentHash;
+    restored = true;
+    const events: WorkflowRunEvent[] = [];
+    const prompts: string[] = [];
+    const runner = new WorkflowRunner({ createSession: async () => ({ id: randomUUID() }),
+      sendMessage: async (_id, prompt) => { prompts.push(prompt); },
+      getLastAssistantText: () => prompts.length === 1 ? 'Fresh analysis of both videos' : JSON.stringify({ ...report(), examinedVideoIds: [videoId, secondId], noFindingVideoIds: [secondId] }),
+      getSessionToolUseCount: () => 0, abortSession: async () => {}, getWorkspaceRootPath: () => root,
+      authorizeRerun: (old, next, signal) => service.authorizeRetry(old, next, signal),
+      completeWithoutSteps: (snapshot, signal) => service.completeEmpty(snapshot, signal),
+      postProcessSucceededRun: async (snapshot, signal) => { await service.complete(snapshot, signal); }, emit: event => events.push(event) });
+    const retry = await runner.rerunFromStep({ workspaceId: 'hq', runId: original.id, stepId: 'synthesize' });
+    for (let i = 0; i < 100 && !events.some(event => event.type === 'run.completed'); i++) await new Promise(resolve => setTimeout(resolve, 5));
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]).toContain(`Evidence for ${secondId}`);
+    expect(prompts[1]).toContain('Fresh analysis of both videos');
+    expect(events.find(event => event.type === 'run.completed')?.run.state).toBe('succeeded');
+    await service.reconcile('hq');
+    const saved = readSignals(root, 'hq').requests[0]!;
+    expect(saved.status).toBe('report'); expect(saved.config).toEqual(request.config);
+    expect(saved.identity.workflowRunId).toBe(request.identity.workflowRunId);
+    expect(saved.packets.some(packet => packet.contentHash === capturedHash)).toBe(true);
+    expect(saved.attempts).toEqual([{ fromRunId: original.id, runId: retry.id }]);
+    expect(workflows.readRun(root, original.id)!.trigger).toEqual(original.trigger);
+    expect(workflows.readRun(root, original.id)!.steps).toEqual(original.steps);
+    expect(mode === 'scan' ? provider.recent : provider.video).toHaveBeenCalledTimes(failedPhase === 'metadata' ? 3 : 2);
+    expect(provider.transcript).toHaveBeenCalledTimes(failedPhase === 'transcript' ? 3 : 2);
+    expect(provider.transcript).toHaveBeenLastCalledWith(root, secondId, expect.any(AbortSignal), retry.id);
+    if (failedPhase === 'metadata') expect(mode === 'scan' ? provider.recent : provider.video)
+      .toHaveBeenLastCalledWith(mode === 'scan' ? channel2 : secondId, expect.any(AbortSignal), root, retry.id);
+    expect(saved.coverage).toHaveLength(2); expect(saved.coverage.every(item => item.status === 'checked')).toBe(true);
+  });
+}
+
+test('recovered retry admission is idempotent and rejects altered trigger inputs', async () => {
+  let restored = false;
+  provider.recent = mock(async () => {
+    if (!restored) throw new Error('Metadata access unavailable');
+    return { videos: [metadata], complete: true };
+  });
+  const request = await prepared();
+  const original = run(request, undefined, 'failed'); workflows.writeRun(root, original); trackRun(original);
+  const retry = persistRetry(original); restored = true;
+  const [first, second] = await Promise.all([service.authorizeRetry(original, retry), service.authorizeRetry(original, retry)]);
+  expect(first?.trigger.inputs.signalPacket).toContain(videoId);
+  expect(second).toEqual(first);
+  expect(provider.recent).toHaveBeenCalledTimes(2); expect(provider.transcript).toHaveBeenCalledTimes(1);
+  expect(readSignals(root, 'hq').requests[0]!.attempts).toHaveLength(1);
+  const work = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, 'hq');
+  if (!work.ok) throw new Error('Missing work');
+  expect(work.work.items[0]!.runs).toHaveLength(2);
+  await expect(service.authorizeRetry(original, { ...retry, trigger: { ...retry.trigger, inputs: { ...retry.trigger.inputs, artist_name: 'tampered' } } })).rejects.toThrow('provenance');
+  expect(provider.recent).toHaveBeenCalledTimes(2);
+});
+
+test('cancelled collection recovery preserves valid evidence and resumes through a new admitted attempt', async () => {
+  let phase: 'initial' | 'cancel' | 'recover' = 'initial';
+  let reached!: () => void;
+  const collecting = new Promise<void>(resolve => { reached = resolve; });
+  const secondId = '01234567890';
+  provider.recent = mock(async id => ({ videos: [{ ...metadata, channelId: id, videoId: id === channelId ? videoId : secondId, sourceUrl: `https://www.youtube.com/watch?v=${id === channelId ? videoId : secondId}` }], complete: true }));
+  provider.transcript = mock(async (_root, id) => {
+    if (id === secondId && phase === 'initial') throw new Error('Transcript unavailable');
+    if (id === secondId && phase === 'cancel') { reached(); return new Promise<never>(() => {}); }
+    return { videoId: id, provider: 'fixture', segments: [{ start: 0, end: 1, text: 'Useful finding.' }] };
+  });
+  const request = await prepared(true);
+  const original = run(request, undefined, 'failed'); workflows.writeRun(root, original); trackRun(original);
+  const retry = persistRetry(original); phase = 'cancel';
+  const controller = new AbortController();
+  const pending = service.authorizeRetry(original, retry, controller.signal);
+  const rejected = expect(pending).rejects.toThrow('preparation failed');
+  await collecting; controller.abort(); await rejected;
+  const cancelled = readSignals(root, 'hq').requests[0]!;
+  expect(cancelled.collectionComplete).toBe(false); expect(cancelled.packets).toHaveLength(1);
+  expect(cancelled.packets[0]!.contentHash).toBe(request.packets[0]!.contentHash);
+  expect(readSignals(root, 'hq').ledger).toHaveLength(0);
+  const interrupted = { ...workflows.readRun(root, retry.id)!, state: 'interrupted' as const };
+  workflows.writeRun(root, interrupted);
+  const next = persistRetry(interrupted); phase = 'recover';
+  service = new SignalService({ workspaces: () => [workspace], provider, permission, now: () => now,
+    admitRetry: (old, fresh, ids) => trackedRunner.admitSignalWorkflowRetry(root, old, fresh, ids) });
+  const refreshed = await service.authorizeRetry(interrupted, next);
+  expect(refreshed?.trigger.inputs.signalPacket).toContain(secondId);
+  expect(readSignals(root, 'hq').requests[0]!.packets).toHaveLength(2);
+  expect(provider.recent).toHaveBeenCalledTimes(2);
+  expect(provider.transcript).toHaveBeenCalledTimes(4);
+});
+
+test('retry after a pre-admission crash collects only for the current attempt', async () => {
+  let restored = false;
+  provider.recent = mock(async () => {
+    if (!restored) throw new Error('Metadata unavailable');
+    return { videos: [metadata], complete: true };
+  });
+  const request = await prepared();
+  const original = run(request, undefined, 'failed'); workflows.writeRun(root, original); trackRun(original);
+  const crashed = { ...persistRetry(original), state: 'interrupted' as const };
+  workflows.writeRun(root, crashed);
+  const next = persistRetry(crashed); restored = true;
+  const refreshed = await service.authorizeRetry(crashed, next);
+  expect(refreshed?.trigger.inputs.signalPacket).toContain(videoId);
+  expect(workflows.readRun(root, crashed.id)!.trigger).toEqual(crashed.trigger);
+  expect(provider.recent).toHaveBeenCalledTimes(2);
+  expect(provider.transcript).toHaveBeenCalledTimes(1);
+  expect(readSignals(root, 'hq').requests[0]!.workflowRunId).toBe(next.id);
+});
+
+test('provider entry points receive the HQ root and deliberate host attempt scope', async () => {
+  const scopes: Array<string | undefined> = [];
+  provider.resolveChannel = mock(async (_url: string, _root?: string, scope?: string) => {
+    scopes.push(scope);
+    return { channelId, url: `https://www.youtube.com/channel/${channelId}`, name: 'Fixture', priority: 'medium' as const };
+  });
+  await service.resolveChannel('hq', '@fixture');
+  const initial = readSignals(root, 'hq').tracks['your-world'];
+  await service.saveConfig('hq', 'your-world', { ...initial, sources: [{ channelId, url: 'https://www.youtube.com/@fixture', name: 'Fixture', priority: 'medium' }] }, initial.revision);
+  expect(provider.resolveChannel).toHaveBeenNthCalledWith(1, '@fixture', root, expect.stringMatching(/^[a-f0-9-]{36}$/));
+  expect(provider.resolveChannel).toHaveBeenNthCalledWith(2, 'https://www.youtube.com/@fixture', root, expect.stringMatching(/^[a-f0-9-]{36}$/));
+  expect(scopes[0]).not.toBe(scopes[1]);
+  const queued = await service.start('hq', { track: 'your-world', mode: 'scan', idempotencyKey: 'scoped' });
+  const request = readSignals(root, 'hq').requests[0]!;
+  await service.prepare('hq', queued.runId, queued.orderIds[0]!, request.workflowDigest);
+  expect(provider.recent).toHaveBeenCalledWith(channelId, expect.any(AbortSignal), root, request.identity.workflowRunId);
+  expect(provider.transcript).toHaveBeenCalledWith(root, videoId, expect.any(AbortSignal), request.identity.workflowRunId);
+  const links = await service.start('hq', { track: 'your-world', mode: 'links', idempotencyKey: 'scoped-links', links: [metadata.sourceUrl] });
+  const linkRequest = readSignals(root, 'hq').requests.find(item => item.runId === links.runId)!;
+  await service.prepare('hq', links.runId, links.orderIds[0]!, linkRequest.workflowDigest);
+  expect(provider.video).toHaveBeenCalledWith(videoId, expect.any(AbortSignal), root, linkRequest.identity.workflowRunId);
+  expect(provider.transcript).toHaveBeenCalledWith(root, videoId, expect.any(AbortSignal), linkRequest.identity.workflowRunId);
+});
+
+test('channel resolution requires external execution permission but canonical offline edits do not', async () => {
+  await configure();
+  permission.mockImplementation((_root: string, action: string) => {
+    if (action === 'automation.external.execute') throw new Error('External execution denied');
+  });
+  await expect(service.resolveChannel('hq', '@fixture')).rejects.toThrow('External execution denied');
+  const current = readSignals(root, 'hq').tracks['your-world'];
+  await expect(service.saveConfig('hq', 'your-world', { ...current, sources: [{ ...current.sources[0]!, url: 'https://www.youtube.com/@fixture' }] }, current.revision)).rejects.toThrow('External execution denied');
+  expect(provider.resolveChannel).toHaveBeenCalledTimes(0);
+  await service.saveConfig('hq', 'your-world', { ...current, enabled: false, sources: current.sources.map(source => ({ ...source, notes: 'Offline edit' })) }, current.revision);
+  expect(readSignals(root, 'hq').tracks['your-world'].sources[0]!.notes).toBe('Offline edit');
+});
+
+test('superseded collection cannot overwrite or fail the newer attempt', async () => {
+  await configure();
+  const queued = await service.start('hq', { track: 'your-world', mode: 'scan', idempotencyKey: 'superseded' });
+  const request = readSignals(root, 'hq').requests[0]!;
+  const nextId = randomUUID();
+  provider.transcript = mock(async () => {
+    const state = readSignals(root, 'hq'); state.requests[0]!.workflowRunId = nextId; state.requests[0]!.status = 'running'; writeSignals(root, state);
+    return { videoId, provider: 'fixture', segments: [{ start: 0, end: 1, text: 'Old attempt evidence' }] };
+  });
+  await expect(service.prepare('hq', request.runId, queued.orderIds[0]!, request.workflowDigest)).rejects.toThrow();
+  const saved = readSignals(root, 'hq').requests[0]!;
+  expect(saved.workflowRunId).toBe(nextId); expect(saved.status).toBe('running');
+  expect(saved.error).toBeUndefined(); expect(saved.packets).toHaveLength(0);
+});
+
+test('pre-recovery journal retains valid metadata and packets without provider rediscovery', async () => {
+  const request = await prepared();
+  const journal = JSON.parse(readFileSync(join(root, 'signals/state.json'), 'utf8'));
+  delete journal.requests[0].discovery;
+  journal.requests[0].status = 'failed'; journal.requests[0].coverage[0].status = 'unavailable';
+  writeFileSync(join(root, 'signals/state.json'), JSON.stringify(journal));
+  orderStatus('scheduled');
+  await service.startAdmitted('hq', request.orderIds[0]!, 'weekly-world-scan', request.workflowDigest, { signalRequestId: request.runId }, async (_workflow, prepared) => ({ id: prepared.identity.workflowRunId }));
+  const saved = readSignals(root, 'hq').requests[0]!;
+  expect(provider.recent).toHaveBeenCalledTimes(1); expect(provider.transcript).toHaveBeenCalledTimes(1);
+  expect(saved.packets[0]!.contentHash).toBe(request.packets[0]!.contentHash);
+  expect(saved.coverage[0]!.status).toBe('incomplete');
 });
 
 for (const originalState of ['failed', 'interrupted', 'retry-crash', 'projection-crash'] as const) test(`actual rerunFromStep authorizes ${originalState} synthesis without recollection`, async () => {

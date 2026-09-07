@@ -13,8 +13,6 @@ This is not a summarization skill. The goal is evidence-backed extraction: tacti
 
 For scheduled Artist HQ Intel Pulse runs:
 
-These legacy watchlist rules do not override a host-managed Signals/Your World request. For a host-managed request, use the supplied immutable selection and evidence packets; the collector owns discovery, deduplication and fallback execution.
-
 1. Read `artist-intel-state` when it exists.
 2. Request only the latest upload metadata for each configured channel.
 3. Skip the channel when that latest video ID is already recorded. Do not fetch a transcript and do not fall back to an older video.
@@ -32,9 +30,9 @@ node bin/youtube-intelligence.mjs doctor
 node bin/youtube-intelligence.mjs prepare --video "<url-or-id>" --out "<workspace>/youtube-intel/<video-id>"
 ```
 
-Default provider order is cache first, then local `youtube-research`, then the pinned Monid route in the bundled `monid` skill, then the pinned Zero transcript route below. A YouTube Data API key enables metadata; it does not grant third-party caption download rights. Monid metadata and transcript calls are separate, bounded operations. Every paid call uses the existing provider budget guard. Supadata is only called when `--allow-paid` is passed.
+Default provider order is cache first, then local `youtube-research` when its optional API key is healthy. When that route is unavailable, use the bundled `zero` skill for the exact missing read-only metadata or transcript operation and pass retrieved transcript text through the transcript-file input. Every Zero GET must use its weekly budget guard. Supadata is only called when `--allow-paid` is passed.
 
-For transcript retrieval through Zero, use exact capability `youtube-video-transcript-extractor-70f8ca14` only after native and Monid are unavailable. Before every use, inspect it with `zero get youtube-video-transcript-extractor-70f8ca14 --agent anything-agent --formatted`. Its live schema must accept the needed video URL or ID, it must be healthy, and its price must be at most `$0.02`. Run through `zero-budget.mjs fetch` with `--max-pay 0.02`, then provide the returned transcript through `--transcript`. Do not search for replacements during routine Signals runs. Never start a second paid provider while the first charge or run is unresolved; a confirmed terminal failure is different from a timeout.
+For transcript retrieval through Zero, prefer exact capability `youtube-video-transcript-extractor-70f8ca14`. Before every use, inspect it with `zero get youtube-video-transcript-extractor-70f8ca14 --agent anything-agent --formatted`. Skip marketplace search only when the live result is healthy, its request schema still accepts the needed YouTube video URL or ID, and its price is at most `$0.02`. Run the call through `zero-budget.mjs fetch` with `--max-pay 0.02`, then provide the returned transcript through `--transcript`. Search and vet a replacement only when preflight fails. Never automatically retry a paid failure with another provider.
 
 ```bash
 SUPADATA_API_KEY="..." node bin/youtube-intelligence.mjs prepare --video "<url-or-id>" --provider supadata --allow-paid --out "<workspace>/youtube-intel/<video-id>"

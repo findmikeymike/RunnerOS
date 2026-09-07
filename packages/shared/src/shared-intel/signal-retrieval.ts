@@ -24,7 +24,8 @@ export interface SignalRetrievedEntry extends SignalFinding {
   workflowRunId: string; createdAt: string; coverageStatus: 'complete' | 'partial';
   sources: SignalReportSource[];
   supportingFindingIds?: string[];
-  supportingFindings?: Pick<SignalFinding, 'id' | 'excerpt' | 'sourceRefs'>[];
+  supportingFindings?: (Pick<SignalFinding, 'id' | 'excerpt' | 'sourceRefs'> & { excerptTruncated?: true })[];
+  supportingFindingsOmitted?: number;
   suggestedWorkerRoles?: SignalIdea['suggestedWorkerRoles'];
 }
 export interface SignalLookupResult {

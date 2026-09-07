@@ -4787,6 +4787,13 @@ export class SessionManager implements ISessionManager {
           if (youtubeIntelligenceMetadataUpdated || youtubeIntelligencePromptUpdated || youtubeIntelligencePreferredTranscriptUpdated) {
             sessionLog.info('[agent-definitions] Added preferred guarded Zero transcript route to YouTube Intelligence Agent')
           }
+          // Older installed prompts reach the recognized shipped form only
+          // after the legacy normalizers above. Upgrade both agents this startup.
+          const { migrateYouTubeRouting } = await import('@craft-agent/shared/agent-definitions')
+          const youtubeRoutingMigration = migrateYouTubeRouting()
+          if (youtubeRoutingMigration.updatedAgents.length || youtubeRoutingMigration.updatedSkills.length) {
+            sessionLog.info('[agent-definitions] Updated known shipped YouTube routing', youtubeRoutingMigration)
+          }
           const rawVideoEditorDirectionSkillUpdated = ensureBuiltInAgentSkillsForSlug(
             'raw-video-editor',
             ['raw-video-editor', 'raw-video-edit-direction', 'social-video-repurposing'],
@@ -6317,7 +6324,7 @@ user a clickable link to where the thing now lives.`
         },
         postProcessSucceededRun: (run, signal) => this.postProcessCompletedWorkflowRun(run, signal),
         completeWithoutSteps: (run, signal) => this.getSignalService().completeEmpty(run, signal),
-        authorizeRerun: (original, retry) => this.getSignalService().authorizeRetry(original, retry),
+        authorizeRerun: (original, retry, signal) => this.getSignalService().authorizeRetry(original, retry, signal),
         emit: (event) => this.broadcastWorkflowRunUpdated(event),
       })
 
@@ -13378,10 +13385,16 @@ user a clickable link to where the thing now lives.`
           sessionLog.info(`[auth-retry] Retrying message for session ${sessionId}`)
           this.setProcessing(managed, false)
 
-          // Remove the user message that was added for this failed attempt
-          // so we don't get duplicate messages when retrying
           const lastUserMsgIndex = managed.messages.findLastIndex(m => m.role === 'user')
-          if (lastUserMsgIndex !== -1) {
+          const lastUserMessage = managed.messages[lastUserMsgIndex]
+          const handoffDirectory = getSessionStoragePath(managed.workspace.rootPath, sessionId)
+          const handoff = hasSignalHandoff(handoffDirectory) ? readSignalHandoffState(handoffDirectory) : null
+          // A Signals acceptance receipt belongs to this durable user turn,
+          // not to the provider attempt. Reuse it instead of orphaning the receipt.
+          const retryMessageId = lastUserMessage && handoff?.acceptedMessageId === lastUserMessage.id
+            && loadStoredSession(managed.workspace.rootPath, sessionId)?.messages.some(m => m.type === 'user' && m.id === lastUserMessage.id)
+            ? lastUserMessage.id : undefined
+          if (lastUserMsgIndex !== -1 && !retryMessageId) {
             managed.messages.splice(lastUserMsgIndex, 1)
           }
 
@@ -13393,7 +13406,7 @@ user a clickable link to where the thing now lives.`
             retryAttachments,
             retryStoredAttachments,
             retryOptions,
-            undefined,  // existingMessageId
+            retryMessageId,
             true        // _isAuthRetry - prevents infinite retry loop
           )
           sessionLog.info(`[auth-retry] Retry completed for session ${sessionId}`)

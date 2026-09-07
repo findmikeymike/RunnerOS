@@ -153,3 +153,69 @@ test('running, queued, archived and already-used sessions cannot be rebound', as
   const used = draft('used'); used.messages.push({ id: 'one', role: 'user', content: 'existing', timestamp: 1 });
   for (const session of [running, queued, archived, used]) await expect(manager.bindSignalHandoff(session.id, reference)).rejects.toThrow('unsent draft');
 });
+
+async function captureAuthRetry(session: ReturnType<typeof draft>) {
+  session.lastSentMessage = 'Develop this';
+  session.lastSentOptions = { inputOrigin: 'human' };
+  const original = manager.sendMessage;
+  let received!: (args: Parameters<SessionManager['sendMessage']>) => void;
+  const next = new Promise<Parameters<SessionManager['sendMessage']>>(resolve => { received = resolve; });
+  manager.sendMessage = mock(async (...args: Parameters<SessionManager['sendMessage']>) => { received(args); });
+  try {
+    const retry = manager as unknown as { attemptAuthRetry: (id: string, managed: typeof session, workspaceId: string) => boolean };
+    expect(retry.attemptAuthRetry(session.id, session, 'campaign')).toBe(true);
+    return await next;
+  } finally { manager.sendMessage = original; }
+}
+
+test('actual auth-retry callback preserves the accepted Signals user ID and later source deletion cannot resurrect its guard', async () => {
+  const session = draft('auth-retry');
+  writeSignalHandoff(getSessionPath(root, session.id), reference);
+  await expect(manager.sendMessage(session.id, 'Develop this', undefined, undefined, { inputOrigin: 'human' }, undefined, undefined,
+    () => { throw new Error('stop-after-ack'); })).rejects.toThrow('stop-after-ack');
+  const accepted = readSignalHandoffState(getSessionPath(root, session.id))!.acceptedMessageId;
+  const args = await captureAuthRetry(session);
+  expect(args[5]).toBe(accepted);
+  expect(args[6]).toBe(true);
+  const internals = manager as unknown as { getOrCreateAgent: () => Promise<never> };
+  const originalAgent = internals.getOrCreateAgent;
+  const providerBoundary = mock(async () => { throw new Error('stop-before-provider'); });
+  internals.getOrCreateAgent = providerBoundary;
+  resolveReference.mockImplementation(async () => ({ ok: false, mode: 'reference', entries: [] }));
+  try {
+    await expect(manager.sendMessage(...args)).rejects.toThrow('stop-before-provider');
+    expect(providerBoundary).toHaveBeenCalledTimes(1);
+  } finally {
+    internals.getOrCreateAgent = originalAgent;
+    session.isProcessing = false;
+  }
+  await manager.renameSession(session.id, 'After auth retry');
+  await manager.flushSession(session.id);
+  expect(session.messages.filter(message => message.role === 'user').map(message => message.id)).toEqual([accepted!]);
+  expect(loadSession(root, session.id)!.messages.filter(message => message.type === 'user').map(message => message.id)).toEqual([accepted!]);
+  expect(await manager.getSignalHandoff(session.id)).toBeNull();
+  const ack = mock(() => { throw new Error('followup-accepted'); });
+  await expect(manager.sendMessage(session.id, 'Shorten that concept', undefined, undefined, { inputOrigin: 'human' }, undefined, undefined, ack)).rejects.toThrow('followup-accepted');
+  expect(ack).toHaveBeenCalledTimes(1);
+  expect(await manager.getSignalHandoff(session.id)).toBeNull();
+});
+
+test('auth retry cannot treat an orphan receipt as an accepted user message', async () => {
+  const session = draft('auth-orphan');
+  writeSignalHandoff(getSessionPath(root, session.id), reference);
+  acceptSignalHandoff(getSessionPath(root, session.id), reference, 'not-persisted');
+  session.messages.push({ id: 'not-persisted', role: 'user', content: 'Develop this', timestamp: 1 });
+  const args = await captureAuthRetry(session);
+  expect(args[5]).toBeUndefined();
+  expect(await manager.getSignalHandoff(session.id)).toEqual(reference);
+  resolveReference.mockImplementation(async () => ({ ok: false, mode: 'reference', entries: [] }));
+  await expect(manager.sendMessage(...args)).rejects.toThrow('Signals source changed');
+});
+
+test('ordinary auth retry retains its existing message-replacement behavior', async () => {
+  const session = draft('ordinary-auth');
+  session.messages.push({ id: 'ordinary', role: 'user', content: 'Develop this', timestamp: 1 });
+  const args = await captureAuthRetry(session);
+  expect(args[5]).toBeUndefined();
+  expect(session.messages.some(message => message.id === 'ordinary')).toBe(false);
+});

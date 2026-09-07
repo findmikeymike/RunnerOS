@@ -25,11 +25,23 @@ export function signalTrackPromptPrefix(slug: string): string {
   return instruction ? `${instruction}\n\n` : '';
 }
 
+export function youtubeProviderPromptPrefix(slug: string): string {
+  if (!['youtube-research-agent', 'youtube-intelligence-agent'].includes(slug)) return '';
+  return `Current YouTube provider order (overrides older Zero-first retrieval instructions below):
+Use verified cached evidence first, then the connected native YouTube route, then Monid, then Zero for transcripts only. Read the bundled monid skill: metadata is pinned to apify /streamers/youtube-scraper and transcripts to apify /starvibe/youtube-video-transcript. Inspect current schemas, availability and prices; do not search the marketplace during routine Signals runs. Respect the user's existing per-call and weekly budgets. A Data API key provides metadata, not third-party caption download rights. Never retry an uncertain paid submission through another provider. For host-managed Signals requests, use the collector's supplied packets instead of independently repeating collection. Missing or unverified evidence is a visible limitation, never a reason to invent findings.
+
+`;
+}
+
 /** Only exact previously shipped prompts qualify; user edits remain untouched. */
 export function isPreviousSignalTrackPrompt(slug: string, existing: string, current: string, briefingSuffix: string): boolean {
   const prefix = signalTrackPromptPrefix(slug);
-  if (!prefix || !current.startsWith(prefix)) return false;
-  const previous = current.slice(prefix.length);
+  const providerPrefix = youtubeProviderPromptPrefix(slug);
+  const previousRouting = providerPrefix && current.startsWith(`${prefix}${providerPrefix}`)
+    ? `${prefix}${current.slice(prefix.length + providerPrefix.length)}` : current;
+  if (providerPrefix && previousRouting !== current && existing === previousRouting) return true;
+  if (!prefix || !previousRouting.startsWith(prefix)) return false;
+  const previous = previousRouting.slice(prefix.length);
   return existing === previous || (slug === 'signal-analyst-agent'
     && previous.endsWith(briefingSuffix)
     && existing === previous.slice(0, -briefingSuffix.length));

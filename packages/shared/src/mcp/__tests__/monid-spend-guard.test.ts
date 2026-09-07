@@ -14,6 +14,20 @@ class TestMcpClientPool extends McpClientPool {
 }
 
 describe('Monid spend guard', () => {
+  it('accepts absent nullable fees in legacy and money-object prices', () => {
+    for (const amount of [0.01, { value: 0.01, currency: 'USD' }]) {
+      expect(evaluateMonidSpendLimit({ price: { type: 'PER_CALL', amount, currency: 'USD', flatFee: null } }, { input: {} }, 0.02))
+        .toEqual({ allowed: true, projectedMaxUsd: 0.01 });
+    }
+  });
+  it('bounds the pinned transcript singleton and accepts documented money objects', () => {
+    const price = { price: { type: 'PER_RESULT', amount: { value: 0.01, currency: 'USD' }, flatFee: { value: 0.001, currency: 'USD' } } };
+    const args = { provider: 'apify', endpoint: '/starvibe/youtube-video-transcript', input: { youtube_url: 'https://www.youtube.com/watch?v=abcdefghijk', language: 'en' } };
+    expect(evaluateMonidSpendLimit(price, args, 0.02)).toEqual({ allowed: true, projectedMaxUsd: 0.011 });
+    expect(evaluateMonidSpendLimit(price, args, 0.005).allowed).toBe(false);
+    expect(evaluateMonidSpendLimit(price, { ...args, input: { ...args.input, channel_url: 'https://youtube.com/@example', limit: 1 } }, 0.02).allowed).toBe(false);
+    expect(evaluateMonidSpendLimit(price, args, NaN).allowed).toBe(false);
+  });
   it('allows a per-call price within the hard cap', () => {
     expect(evaluateMonidSpendLimit(
       { price: { type: 'PER_CALL', amount: 0.003, currency: 'USD' } },

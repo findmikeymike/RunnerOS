@@ -12,6 +12,7 @@
  */
 
 import { ListTodo } from 'lucide-react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { Markdown } from '../markdown'
 import type { AnnotationV1 } from '@craft-agent/core'
 import type { ExternalOpenAnnotationRequest } from '../annotations/use-annotation-interaction-controller'
@@ -38,6 +39,11 @@ export interface DocumentFormattedMarkdownOverlayProps {
   typeBadge?: OverlayTypeBadge
   /** Optional error message — renders a tinted error banner above the content card */
   error?: string
+  errorLabel?: string
+  accessibleTitle?: string
+  /** Optional reader actions and selection callback; selection stays scoped to this document. */
+  headerActions?: ReactNode
+  onSelectionChange?: (text: string) => void
   /** Optional session id used for annotation payload source metadata */
   sessionId?: string
   /** Optional message id; when present with callbacks, overlay becomes annotatable */
@@ -68,6 +74,10 @@ export function DocumentFormattedMarkdownOverlay({
   filePath,
   typeBadge,
   error,
+  errorLabel = 'Write Failed',
+  accessibleTitle,
+  headerActions,
+  onSelectionChange,
   sessionId,
   messageId,
   annotations,
@@ -78,6 +88,18 @@ export function DocumentFormattedMarkdownOverlay({
   isStreaming = false,
   openAnnotationRequest,
 }: DocumentFormattedMarkdownOverlayProps) {
+  const documentRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!isOpen || !onSelectionChange) return
+    onSelectionChange('')
+    const update = () => {
+      const selection = window.getSelection()
+      const node = selection?.rangeCount ? selection.getRangeAt(0).commonAncestorContainer : null
+      onSelectionChange(node && documentRef.current?.contains(node) ? selection!.toString().trim().slice(0, 4000) : '')
+    }
+    document.addEventListener('selectionchange', update)
+    return () => { document.removeEventListener('selectionchange', update); onSelectionChange('') }
+  }, [isOpen, content, onSelectionChange])
   return (
     <FullscreenOverlayBase
       isOpen={isOpen}
@@ -85,7 +107,9 @@ export function DocumentFormattedMarkdownOverlay({
       filePath={filePath}
       typeBadge={typeBadge}
       copyContent={content}
-      error={error ? { label: 'Write Failed', message: error } : undefined}
+      accessibleTitle={accessibleTitle}
+      headerActions={headerActions}
+      error={error ? { label: errorLabel, message: error } : undefined}
     >
       {/* Content wrapper — min-h-full for vertical centering within FullscreenOverlayBase's scroll container.
           Scrolling and gradient fade mask are handled by FullscreenOverlayBase. */}
@@ -101,7 +125,7 @@ export function DocumentFormattedMarkdownOverlay({
           )}
 
           {/* Content area */}
-          <div className="px-10 pt-8 pb-8">
+          <div ref={documentRef} className="px-4 py-8 sm:px-10">
             <div className="text-sm">
               {messageId && onAddAnnotation ? (
                 <AnnotatableMarkdownDocument

@@ -93,14 +93,48 @@ export class SignalReader {
   }
   private bounded(entries: SignalRetrievedEntry[], mode: SignalLookupResult['mode'], failed = false): SignalLookupResult {
     const result: SignalLookupResult = { ok: true, mode, entries: [], ...(failed ? { unavailable: true as const } : {}) };
-    for (const entry of entries) {
+    for (const candidate of entries) {
       if (result.entries.length === SIGNAL_RETRIEVAL_LIMITS.entries) break;
+      const entry = this.compact(candidate, mode);
+      if (!entry) { result.unavailable = true; continue; }
       if (JSON.stringify({ ...result, entries: [...result.entries, entry] }).length <= SIGNAL_RETRIEVAL_LIMITS.characters) result.entries.push(entry);
       else result.unavailable = true;
     }
     // Adding the unavailable flag must also respect the envelope budget.
     while (JSON.stringify(result).length > SIGNAL_RETRIEVAL_LIMITS.characters) result.entries.pop();
     return result;
+  }
+  private compact(entry: SignalRetrievedEntry, mode: SignalLookupResult['mode']): SignalRetrievedEntry | null {
+    // Reserve the unavailable flag too, so later omissions cannot evict this entry.
+    const fits = (candidate: SignalRetrievedEntry) => JSON.stringify({ ok: true, mode, entries: [candidate], unavailable: true }).length <= SIGNAL_RETRIEVAL_LIMITS.characters;
+    if (fits(entry)) return entry;
+    if (entry.kind !== 'idea' || !entry.supportingFindings?.length) return null;
+    const abbreviate = (limit: number) => entry.supportingFindings!.map(finding => {
+      if (finding.excerpt.length <= limit) return finding;
+      const prefix = finding.excerpt.slice(0, limit);
+      const boundary = prefix.lastIndexOf(' ');
+      return { ...finding, excerpt: (boundary > 0 ? prefix.slice(0, boundary) : prefix).trimEnd(), excerptTruncated: true as const };
+    });
+    for (const limit of [300, 160, 80, 40]) {
+      const candidate = { ...entry, supportingFindings: abbreviate(limit) };
+      if (fits(candidate)) return candidate;
+    }
+    // Keep a complete source cover for the exact angle. Never drop citations
+    // from a retained finding or substitute a different finding's provenance.
+    const uncovered = new Set(entry.sourceRefs);
+    const support: NonNullable<SignalRetrievedEntry['supportingFindings']> = [];
+    const remaining = abbreviate(40);
+    while (uncovered.size) {
+      remaining.sort((a, b) => b.sourceRefs.filter(ref => uncovered.has(ref)).length - a.sourceRefs.filter(ref => uncovered.has(ref)).length
+        || JSON.stringify(a).length - JSON.stringify(b).length || a.id.localeCompare(b.id));
+      const next = remaining.shift();
+      if (!next || !next.sourceRefs.some(ref => uncovered.has(ref))) return null;
+      support.push(next);
+      next.sourceRefs.forEach(ref => uncovered.delete(ref));
+    }
+    const candidate = { ...entry, supportingFindings: support, supportingFindingsOmitted: entry.supportingFindings.length - support.length };
+    // If source identity alone cannot fit, fail closed rather than return a naked angle.
+    return fits(candidate) ? candidate : null;
   }
   async listIdeas(workspaceId: string, outputId: string): Promise<SignalLookupResult> {
     try {

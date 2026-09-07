@@ -1,4 +1,5 @@
 import { parseSharedIntelNote } from '@craft-agent/shared/shared-intel'
+import { stripMarkdown } from '../utils/text'
 
 interface SignalOutputTextRef {
   id: string
@@ -11,19 +12,21 @@ interface SignalOutputManifestRef {
   primary?: { id?: string }
 }
 
+export function signalPreviewText(content: string): string {
+  return stripMarkdown(content).split(/\s+/).slice(0, 120).join(' ')
+}
+
 export async function loadFullSignalOutputText(input: {
   output: SignalOutputTextRef
   getOutput: (outputId: string) => Promise<SignalOutputManifestRef | null>
   readAssetText: (outputId: string, assetId?: string) => Promise<string>
 }): Promise<string> {
-  const fallback = input.output.preview?.inlineText
-    || input.output.summary
-    || 'This report has no readable text preview.'
   const manifest = await input.getOutput(input.output.id)
-  const assetId = manifest?.primaryAssetId || manifest?.primary?.id || input.output.preview?.assetId
-  if (!assetId) return fallback
+  const assetId = manifest?.primaryAssetId || manifest?.primary?.id
+  if (!assetId) throw new Error('The full report file is unavailable.')
   const content = await input.readAssetText(input.output.id, assetId)
-  return content.trim() || fallback
+  if (!content.trim()) throw new Error('The full report file is empty.')
+  return content
 }
 
 export function signalDocumentDate(body: string): string | undefined {

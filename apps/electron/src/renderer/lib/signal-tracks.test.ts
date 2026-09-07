@@ -3,7 +3,7 @@ import type { SignalState, SignalTrackConfig } from '@craft-agent/shared/shared-
 import type { OutputSummaryDTO } from '../hooks/useOutputs'
 import { parseAutomationsConfig } from '../components/automations/types'
 import { emptyArtistIntelConfig } from './artist-intel'
-import { assertSignalScheduleCanRewrite, legacySignalSources, saveSignalSettingsTransaction, signalDefaultKey, signalOutputRun, signalScheduleMatches, signalWeeklyMatcher, signalWeeklyReadiness } from './signal-tracks'
+import { assertSignalScheduleCanRewrite, legacySignalSources, saveSignalSettingsTransaction, signalDefaultKey, signalDocumentInTrack, signalLibraryLabels, signalNextRun, signalNuggetsKey, signalOutputRun, signalScheduleMatches, signalWeeklyMatcher, signalWeeklyReadiness } from './signal-tracks'
 import { appendSignalNugget } from './artist-signals'
 
 const config: SignalTrackConfig = { version: 1, track: 'industry', enabled: false, cadence: 'manual', sinceDays: 7, maxPerChannel: 1, sources: [], revision: 'r1', updatedAt: '2026-09-07T00:00:00Z' }
@@ -11,6 +11,43 @@ const state: SignalState = { hqWorkspaceId: 'hq', tracks: { industry: config, 'y
 const output: OutputSummaryDTO = { id: 'output', workspaceId: 'hq', title: 'User renamed this', kind: 'report', status: 'published', createdAt: config.updatedAt, primaryAssetId: 'report', origin: { source: 'workflow', workflowRunId: 'workflow-run', workflowSlug: 'weekly-world-scan', stepId: 'synthesize' } }
 
 describe('Signals track UI contracts', () => {
+  test('next run respects future snoozes, expiry, exact due time and invalid schedules', () => {
+    const now = new Date('2026-09-07T22:00:00Z')
+    const schedule = { cron: '0 9 * * 1', timezone: 'America/Chicago' }
+    expect(signalNextRun(schedule, now)?.toISOString()).toBe('2026-09-14T14:00:00.000Z')
+    expect(signalNextRun({ ...schedule, snoozedUntil: '2026-10-07T15:00:00Z' }, now)?.toISOString()).toBe('2026-10-12T14:00:00.000Z')
+    expect(signalNextRun({ ...schedule, snoozedUntil: '2026-09-14T14:00:00Z' }, now)?.toISOString()).toBe('2026-09-14T14:00:00.000Z')
+    for (const snoozedUntil of ['invalid', '2026-09-01T00:00:00Z']) expect(signalNextRun({ ...schedule, snoozedUntil }, now)?.toISOString()).toBe('2026-09-14T14:00:00.000Z')
+    expect(signalNextRun({ cron: 'bad cron' }, now)).toBeNull()
+    expect(signalNextRun({}, now)).toBeNull()
+  })
+  test('library labels distinguish actual repeated titles and same-time reports', () => {
+    const items = [
+      { key: 'new', title: 'Your World Signal Brief', date: '2026-09-07T12:00:00Z' },
+      { key: 'old', title: 'Your World Signal Brief', date: '2026-08-31T12:00:00Z' },
+      { key: 'same', title: 'Your World Signal Brief', date: '2026-09-07T12:00:00Z' },
+      { key: 'renamed', title: 'Your World Signal Brief (2)', date: '2026-09-07T12:00:00Z' },
+      { key: 'undated', title: 'Your World Signal Brief', date: 'invalid' },
+      { key: 'review', title: 'Your World Video Review', mode: 'links' as const },
+      { key: signalNuggetsKey, title: 'Signal Nuggets' },
+    ]
+    const labels = signalLibraryLabels(items)
+    expect(new Set(labels.values()).size).toBe(items.length)
+    expect(labels.get('new')).toContain('2026')
+    expect(labels.get('same')).toEndWith('(2)')
+    expect(labels.get('undated')).toStartWith('Undated')
+    expect(labels.get('review')).toContain('Video review:')
+    expect(labels.get(signalNuggetsKey)).toBe('Saved nuggets')
+  })
+  test('shared nuggets are reachable in both tracks without becoming the default report', () => {
+    const nugget = { slug: 'artist-signal-nuggets', metadata: { name: 'My renamed excerpts' } }
+    for (const track of ['industry', 'your-world'] as const) expect(signalDocumentInTrack(nugget, track)).toBe(true)
+    expect(signalDocumentInTrack({ slug: 'other-report', metadata: { name: 'Industry report' } }, 'your-world')).toBe(false)
+    expect(signalDocumentInTrack({ slug: 'artist-intel-config', metadata: { name: 'Industry config' } }, 'industry')).toBe(false)
+    expect(signalDefaultKey([{ key: signalNuggetsKey }], null)).toBeNull()
+    expect(signalDefaultKey([{ key: signalNuggetsKey }], signalNuggetsKey)).toBe(signalNuggetsKey)
+    expect(signalDefaultKey([{ key: signalNuggetsKey }, { key: 'report' }], null)).toBe('report')
+  })
   test('weekly readiness requires both host settings and matcher; Work pause is not a mismatch', () => {
     expect(signalWeeklyReadiness(config, { enabled: true })).toEqual({ active: false, needsRepair: true })
     expect(signalWeeklyReadiness({ ...config, enabled: true, cadence: 'weekly' }, { enabled: true })).toEqual({ active: true, needsRepair: false })

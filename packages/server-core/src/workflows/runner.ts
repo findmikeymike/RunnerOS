@@ -23,6 +23,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { accessSync, constants, statSync } from 'node:fs';
+import { isDeepStrictEqual } from 'node:util';
 import type { CreateSessionOptions } from '@craft-agent/shared/protocol';
 import {
   appendOutputSchemaInstruction,
@@ -158,7 +159,7 @@ export interface WorkflowRunnerDeps {
   /** A host-proven empty scan may complete without starting LLM sessions. */
   completeWithoutSteps?: (run: WorkflowRunSnapshot, signal: AbortSignal) => Promise<boolean>;
   /** Host authorizes the persisted old-to-new retry association before any step starts. */
-  authorizeRerun?: (original: WorkflowRunSnapshot, retry: WorkflowRunSnapshot) => Promise<void>;
+  authorizeRerun?: (original: WorkflowRunSnapshot, retry: WorkflowRunSnapshot, signal: AbortSignal) => Promise<WorkflowRunSnapshot | void>;
   /** Emit a runner event for renderer subscribers. No-op safe. */
   emit?: (event: WorkflowRunEvent) => void;
 }
@@ -522,7 +523,17 @@ export class WorkflowRunner {
         updatedAt: now,
       });
 
-      await this.deps.authorizeRerun?.(this.cloneSnapshot(original), this.cloneSnapshot(snapshot));
+      const refreshed = await this.deps.authorizeRerun?.(this.cloneSnapshot(original), this.cloneSnapshot(snapshot), active.abort.signal);
+      active.abort.signal.throwIfAborted();
+      if (refreshed) {
+        const refreshedIndex = this.validateRerunRefresh(snapshot, refreshed, startIndex);
+        // Collection recovery can invalidate copied analysis, moving the start earlier.
+        await this.preflightStepAgents(input.workspaceId, workflowSnapshot.metadata.steps.slice(refreshedIndex, startIndex));
+        active.abort.signal.throwIfAborted();
+        active.snapshot = this.cloneSnapshot(refreshed);
+        active.startIndex = refreshedIndex;
+        this.persist(active);
+      }
 
       this.emitEvent({ type: 'run.created', run: this.cloneSnapshot(active.snapshot) });
       this.emitEvent({ type: 'run.updated', run: this.cloneSnapshot(active.snapshot) });
@@ -532,12 +543,28 @@ export class WorkflowRunner {
     } catch (error) {
       const active = this.active.get(runId);
       if (active) {
-        active.snapshot.state = 'failed'; active.snapshot.completedAt = new Date().toISOString();
+        active.snapshot.state = active.abort.signal.aborted ? 'cancelled' : 'failed'; active.snapshot.completedAt = new Date().toISOString();
         this.persist(active); this.releaseActiveRun(active);
       }
       else this.releaseConcurrencyKey(key, runId);
       throw error;
     }
+  }
+
+  private validateRerunRefresh(original: WorkflowRunSnapshot, refreshed: WorkflowRunSnapshot, startIndex: number): number {
+    const { trigger: oldTrigger, steps: oldSteps, resumeFromStepId: _oldStart, updatedAt: _oldUpdated, ...oldIdentity } = original;
+    const { trigger, steps, resumeFromStepId, updatedAt: _updated, ...identity } = refreshed;
+    const { inputs: _oldInputs, ...oldTriggerIdentity } = oldTrigger;
+    const { inputs: _inputs, ...triggerIdentity } = trigger;
+    const index = original.workflowSnapshot.metadata.steps.findIndex(step => step.id === resumeFromStepId);
+    if (!isDeepStrictEqual(identity, oldIdentity) || !isDeepStrictEqual(triggerIdentity, oldTriggerIdentity)
+      || index < 0 || index > startIndex || !Array.isArray(steps) || steps.length !== oldSteps.length
+      || steps.some((step, i) => i < index
+        ? !isDeepStrictEqual(step, oldSteps[i])
+        : !isDeepStrictEqual(step, { id: oldSteps[i]!.id, state: 'queued', attempts: 0 }))) {
+      throw new Error('Host retry refresh changed immutable run identity or supplied an invalid resume state.');
+    }
+    return index;
   }
 
   private reserveConcurrencyKey(

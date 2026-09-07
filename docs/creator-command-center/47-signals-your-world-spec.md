@@ -33,19 +33,35 @@ review, rendered checks, and final merged-base regression/typecheck/build gates
 passed. Slice 3 now implements bounded worker retrieval and deliberate draft
 handoff, including persistent source validation at Send and failed-send recovery.
 Its independent review/fix, rendered checks, final 8,653-test suite, monorepo
-typecheck, and Artist OS main/renderer build gates passed. Slice 3 is not yet
-committed; landing into main and approved live acceptance remain.
+typecheck, and Artist OS main/renderer build gates passed. Slice 3 is committed
+as `7ca3dd2d4`; landing into main and approved live acceptance remain.
 These changes remain on the feature branch, not the main running app. No live
 agent scan or paid transcript/audio call is claimed by the fixture tests.
 
-Provider reality: the new deterministic channel/video metadata path currently
-requires the existing YouTube Data API connection. Bounded live marketplace
-inspection found no compatible healthy Zero channel-discovery capability;
-do not invent one or silently substitute trending/search results. Legacy
-Industry execution stays unchanged. New setup must surface this prerequisite.
-Transcript fallback can reuse the existing Zero allowance through a live-checked
-timestamped capability at a $0.02 ceiling, after local/cache attempts. A failed
-or uncertain paid attempt is held for review, never automatically repeated.
+The follow-up hardening slice adds native YouTube -> Monid metadata, and native
+transcripts -> Monid -> Zero. Completed transcript evidence is reused before
+another provider is called. Monid uses the existing OAuth connection and budget
+store, not a separate key or CLI. Pin `apify /streamers/youtube-scraper` for
+metadata and `apify /starvibe/youtube-video-transcript` for transcription. Inspect
+the current contract, price and health before a new paid operation; never search
+the marketplace during an ordinary scan. Transcript and single-video metadata
+calls have a $0.02 ceiling; a bounded 50-video channel listing has a $0.25 ceiling,
+always subject to the user's lower single-call and rolling weekly allowances.
+Metadata must contain absolute publication dates and canonical identities.
+Recent-upload listing cache expires after 15 minutes; channel resolution and
+single-video metadata cache expire after 24 hours. Transcript evidence is durable.
+A known interrupted Monid run resumes through read-only polling, not a second
+paid submission. An uncertain submission without a verified run ID is held for
+review. A new host-authorized scan may retry a confirmed terminal operation only
+after its cost is reconciled. Repeating the same attempt cannot submit another
+paid run; a different attempt cannot bypass an unresolved charge. A confirmed
+failed Monid run may fall back to Zero with its full projected Monid cost still
+counted against the budget when the exact charge is unknown. Pending/unknown
+execution remains blocked. Previous receipts are retained.
+Zero remains transcript-only because no compatible healthy discovery
+capability has been verified. Do not invent one or substitute trending results.
+Public provider documentation and fixture tests do not certify a live Monid run;
+the connected-account smoke test remains a separate acceptance gate.
 
 ## User Journey
 

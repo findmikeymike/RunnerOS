@@ -2,9 +2,39 @@ import { signalWorkflowFor, type SignalMode, type SignalRunSummary, type SignalS
 import type { OutputSummaryDTO } from '../hooks/useOutputs'
 import type { AutomationListItem } from '../components/automations/types'
 import type { ArtistIntelConfig, ArtistIntelSource } from './artist-intel'
+import { Cron } from 'croner'
 
 export const signalTrackName = (track: SignalTrack) => track === 'industry' ? 'Industry' : 'Your World'
 export const signalScheduleKey = (hq: string, track: SignalTrack) => `signals:${hq}:${track}:weekly`
+export const signalNuggetsKey = 'context:artist-signal-nuggets'
+
+export function signalNextRun(schedule: { cron?: string; timezone?: string; snoozedUntil?: string }, now = new Date()): Date | null {
+  if (!schedule.cron) return null
+  const snooze = Date.parse(schedule.snoozedUntil ?? '')
+  const after = new Date(Number.isFinite(snooze) && snooze > now.getTime() ? snooze - 1 : now.getTime())
+  try { return new Cron(schedule.cron, schedule.timezone ? { timezone: schedule.timezone } : undefined).nextRun(after) }
+  catch { return null }
+}
+
+export function signalLibraryLabels(items: Array<{ key: string; title: string; date?: string; mode?: SignalMode }>): Map<string, string> {
+  const used = new Set<string>()
+  return new Map(items.map(item => {
+    const date = item.date ? new Date(item.date) : null
+    const stamp = date && Number.isFinite(date.getTime()) ? date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Undated'
+    const base = item.key === signalNuggetsKey ? 'Saved nuggets' : `${stamp} - ${item.mode === 'links' ? 'Video review: ' : ''}${item.title}`
+    let label = base
+    let occurrence = 1
+    while (used.has(label)) label = `${base} (${++occurrence})`
+    used.add(label)
+    return [item.key, label]
+  }))
+}
+
+export function signalDocumentInTrack(doc: { slug: string; metadata: { name: string; description?: string } }, track: SignalTrack): boolean {
+  if (doc.slug === 'artist-signal-nuggets') return true
+  return track === 'industry' && !['artist-intel-config', 'artist-intel-report'].includes(doc.slug)
+    && /research|report|intel|analysis/i.test(`${doc.slug} ${doc.metadata.name} ${doc.metadata.description ?? ''}`)
+}
 
 export function signalWeeklyReadiness(config: SignalTrackConfig | undefined, matcher: { enabled: boolean } | undefined): { active: boolean; needsRepair: boolean } {
   const configured = config?.enabled === true && config.cadence === 'weekly'
@@ -22,7 +52,7 @@ export function signalOutputRun(output: OutputSummaryDTO, state: SignalState): S
 
 export function signalDefaultKey(items: Array<{ key: string; mode?: SignalMode }>, selected: string | null): string | null {
   if (selected && items.some(item => item.key === selected)) return selected
-  return items.find(item => item.mode === 'scan')?.key ?? items[0]?.key ?? null
+  return items.find(item => item.mode === 'scan')?.key ?? items.find(item => item.key !== signalNuggetsKey)?.key ?? null
 }
 
 export function signalScheduleMatches(item: AutomationListItem, hq: string, track: SignalTrack): boolean {

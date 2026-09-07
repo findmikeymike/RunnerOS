@@ -4,7 +4,7 @@ import type { SignalEntryReference, SignalRetrievedEntry } from '@craft-agent/sh
 import type { AgentDefinitionDTO, Workspace } from '../../../shared/types'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAppShellContext } from '@/context/AppShellContext'
-import { launchSignalIdea, signalCampaignChoices, SignalDraftSaveError, sameSignalReference, resolvedSignalIdea } from '@/lib/signal-idea-handoff'
+import { launchSignalIdea, focusSignalDraft, signalCampaignChoices, SignalDraftSaveError, sameSignalReference, resolvedSignalIdea } from '@/lib/signal-idea-handoff'
 import { openAgentSessionComposer } from '@/lib/run-agent'
 import { navigate, routes } from '@/lib/navigate'
 
@@ -63,19 +63,23 @@ export function SignalIdeaHandoff({ reference, onClose }: { reference: SignalEnt
     return () => { current = false }
   }, [target, slug, worker])
   const close = () => { epoch.current++; onClose() }
-  const focusDraft = async (id: string, restore: boolean, isCurrent: () => boolean) => {
-    const stored = (await window.electronAPI.getAllDrafts())[id]
-    if (!isCurrent()) throw new Error('Idea handoff cancelled.')
-    const route = routes.view.allSessions(id)
-    if (shell.activeWorkspaceId !== target) {
-      if (!shell.onSelectWorkspaceAndNavigate) throw new Error('Workspace navigation is unavailable.')
-      await shell.onSelectWorkspaceAndNavigate(target, route)
-      if (stored) shell.restoreDraft?.(id, stored)
-    } else {
-      if (restore && stored) shell.restoreDraft?.(id, stored)
-      navigate(route)
-    }
-  }
+  const focusDraft = (id: string, isCurrent: () => boolean) => focusSignalDraft({
+    hasLocalDraft: () => shell.hasDraft?.(id) ?? true,
+    load: async () => (await window.electronAPI.getAllDrafts())[id],
+    restoreMissing: draft => shell.restoreDraft?.(id, draft),
+    isCurrent,
+    focus: async restore => {
+      const route = routes.view.allSessions(id)
+      if (shell.activeWorkspaceId !== target) {
+        if (!shell.onSelectWorkspaceAndNavigate) throw new Error('Workspace navigation is unavailable.')
+        restore()
+        await shell.onSelectWorkspaceAndNavigate(target, route)
+      } else {
+        restore()
+        navigate(route)
+      }
+    },
+  })
   const recoverDraft = async (save: boolean) => {
     if (!failedSeed || locked.current) return
     locked.current = true; setBusy(true)
@@ -86,12 +90,13 @@ export function SignalIdeaHandoff({ reference, onClose }: { reference: SignalEnt
         const pending = await window.electronAPI.getSignalHandoff(failedSeed.sessionId)
         if (!pending || !sameSignalReference(pending, reference)) throw new Error('This draft is no longer attached to the selected idea.')
         const stored = (await window.electronAPI.getAllDrafts())[failedSeed.sessionId]
+        if (epoch.current !== token) return
         // An uncertain prior save or another window's edits must win over retry text.
-        if (!stored && !shell.getDraft(failedSeed.sessionId) && !shell.getDraftAttachmentRefs(failedSeed.sessionId).length) {
+        if (!stored && shell.hasDraft?.(failedSeed.sessionId) === false) {
           await window.electronAPI.setDraft(failedSeed.sessionId, { text: failedSeed.draft })
         }
       }
-      await focusDraft(failedSeed.sessionId, true, () => epoch.current === token)
+      await focusDraft(failedSeed.sessionId, () => epoch.current === token)
       if (epoch.current === token) close()
     } catch (cause) { if (epoch.current === token) setError(cause instanceof Error ? cause.message : String(cause)) }
     finally { locked.current = false; if (epoch.current === token) setBusy(false) }
@@ -101,8 +106,8 @@ export function SignalIdeaHandoff({ reference, onClose }: { reference: SignalEnt
     locked.current = true; setBusy(true); setError(null)
     const token = epoch.current
     const isCurrent = () => epoch.current === token
-    const seeded = new Set<string>()
     try {
+      if (!shell.hasDraft || !shell.restoreDraft) throw new Error('Draft hydration is unavailable. Reopen Signals before developing this idea.')
       // The button explicitly names activation when the selected worker is inactive.
       if (!active) await window.electronAPI.setAgentDefinitionActive(target, slug, true)
       if (!isCurrent()) return
@@ -122,8 +127,8 @@ export function SignalIdeaHandoff({ reference, onClose }: { reference: SignalEnt
         },
         bind: id => window.electronAPI.bindSignalHandoff(id, reference),
         discardBlank: async id => { await shell.onDeleteSession(id, true) },
-        seed: async (id, text) => { await window.electronAPI.setDraft(id, { text }); seeded.add(id) },
-        focus: id => focusDraft(id, seeded.has(id), isCurrent),
+        seed: async (id, text) => { if (shell.hasDraft?.(id) === false) await window.electronAPI.setDraft(id, { text }) },
+        focus: id => focusDraft(id, isCurrent),
       })
       if (isCurrent()) close()
     } catch (cause) { if (isCurrent()) { if (cause instanceof SignalDraftSaveError) setFailedSeed(cause); setError(cause instanceof Error ? cause.message : String(cause)) } }

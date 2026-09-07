@@ -547,7 +547,12 @@ function writeBuiltInAgentMigration(
   const data = { ...(original.data as Record<string, unknown>) };
   for (const key of SERIALIZED_AGENT_METADATA_KEYS) delete data[key];
   Object.assign(data, supported);
-  writeFileSync(file, stringifyFrontmatter(input.systemPrompt.trimEnd() + '\n', data), 'utf-8');
+  // Preserve the original body's surrounding bytes. Metadata-only migrations
+  // must not erase the customization evidence used by exact-prompt upgrades.
+  const oldBody = original.content.trim();
+  const body = original.content.replace(oldBody, () => input.systemPrompt);
+  const header = stringifyFrontmatter('', data);
+  writeFileSync(file, header.slice(0, header.length - matter(header).content.length) + body, 'utf-8');
 
   const loaded = loadGlobalAgent(input.slug, options);
   if (!loaded) throw new Error(`Failed to re-load migrated agent "${input.slug}"`);
@@ -619,6 +624,8 @@ export function ensureRequiredAgents(
       if ((a.slug === 'signal-analyst-agent' && a.systemPrompt.endsWith(suffix)
         && existing.systemPrompt === a.systemPrompt.slice(0, -suffix.length))
         || isPreviousSignalTrackPrompt(a.slug, existing.systemPrompt, a.systemPrompt, suffix)) {
+        // loadGlobalAgent trims the body; do not erase whitespace-only edits.
+        if (matter(readFileSync(file, 'utf-8')).content !== `${existing.systemPrompt}\n`) continue;
         replaceBuiltInAgentPromptText(a.slug, existing.systemPrompt, a.systemPrompt, options);
       }
       continue;

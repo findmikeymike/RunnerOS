@@ -7,7 +7,7 @@ import type { Workspace } from '@craft-agent/core/types';
 import { createOutputBundle, deleteOutput, getOutputDir } from '@craft-agent/shared/outputs';
 import { createSignalContractWorkflow, writeRun, type WorkflowRunSnapshot } from '@craft-agent/shared/workflows';
 import type { SignalReportMetadata, SignalTrack, SignalMode, SignalEntryReference } from '@craft-agent/shared/shared-intel';
-import { SIGNAL_RETRIEVAL_WORKERS } from '@craft-agent/shared/shared-intel';
+import { SIGNAL_RETRIEVAL_WORKERS, parseSignalSynthesis } from '@craft-agent/shared/shared-intel';
 import { hash, readSignals, writeSignals, saveEvidence, type SignalRequest } from './storage';
 import { SignalReader } from './SignalReader';
 
@@ -193,4 +193,103 @@ test('oversized primary and credential-bearing source URL fail closed', async ()
   f.metadata.sources[0]!.sourceUrl = 'https://example.com/research'; f.persist();
   writeFileSync(f.path, 'x'.repeat(400_001));
   expect((await reader.listIdeas('hq', f.output.id)).ok).toBe(false);
+});
+
+function publishSupportedIdea(count: number, distinctSources = false, longIds = false) {
+  const fixture = publish();
+  fixture.metadata.sources = Array.from({ length: distinctSources ? count : 1 }, (_, i) => ({
+    sourceId: `source-${i}`, sourceUrl: `https://example.com/evidence/${i}`, sourcePublishedAt: '2026-09-01T00:00:00Z',
+  }));
+  fixture.metadata.findings = Array.from({ length: count }, (_, i) => ({
+    id: `finding-${i}${longIds ? '-identity'.repeat(14) : ''}`, title: `Finding ${i}`,
+    excerpt: `Finding ${i}. ${'A supported astronomy observation. '.repeat(16)}`,
+    topics: ['astronomy'], sourceRefs: [`source-${distinctSources ? i : 0}`], temporalKind: 'evergreen',
+  }));
+  const idea = fixture.metadata.ideas[0]!;
+  idea.sourceRefs = fixture.metadata.sources.map(source => source.sourceId);
+  idea.supportingFindingIds = fixture.metadata.findings.map(finding => finding.id);
+  const markdown = ['# Research', ...fixture.metadata.findings.map(finding => finding.excerpt), idea.excerpt].join('\n');
+  const validated = parseSignalSynthesis({ version: 1, outcome: 'report', markdown, examinedVideoIds: [],
+    findings: fixture.metadata.findings, ideas: fixture.metadata.ideas }, { identity: fixture.metadata.identity, sources: fixture.metadata.sources });
+  expect(validated.indexingStatus).toBe('ready');
+  expect(validated.warnings).toEqual([]);
+  fixture.metadata.contentHash = fixture.request.outputHash = fixture.reference.contentHash = hash(markdown);
+  writeFileSync(fixture.path, markdown);
+  fixture.persist();
+  return fixture;
+}
+
+for (const count of [6, 12]) for (const distinctSources of [false, true]) test(`compacts ${count} supports (${distinctSources ? 'distinct' : 'shared'} sources) without losing angle or provenance`, async () => {
+  const f = publishSupportedIdea(count, distinctSources);
+  for (const result of [await reader.listIdeas('hq', f.output.id), await reader.resolveReference('hq', f.reference),
+    await reader.find('campaign', { query: 'astronomy', kind: 'idea' })]) {
+    expect(result.ok).toBe(true);
+    expect(result.entries).toHaveLength(1);
+    expect(JSON.stringify(result).length).toBeLessThanOrEqual(4000);
+    const entry = result.entries[0]!;
+    expect(entry.reference).toEqual(f.reference);
+    expect(entry.excerpt).toBe(f.metadata.ideas[0]!.excerpt);
+    expect(entry.sourceRefs).toEqual(f.metadata.ideas[0]!.sourceRefs);
+    expect(entry.supportingFindingIds).toEqual(f.metadata.ideas[0]!.supportingFindingIds);
+    expect(entry.sources).toEqual(f.metadata.sources);
+    expect(entry.supportingFindings!.length).toBeGreaterThan(0);
+    expect(entry.supportingFindings!.some(finding => finding.excerptTruncated)).toBe(true);
+    for (const support of entry.supportingFindings!) {
+      const original = f.metadata.findings.find(finding => finding.id === support.id)!;
+      expect(original.excerpt.startsWith(support.excerpt)).toBe(true);
+      expect(support.sourceRefs).toEqual(original.sourceRefs);
+      for (const id of support.sourceRefs) expect(entry.sources.find(source => source.sourceId === id)).toEqual(f.metadata.sources.find(source => source.sourceId === id));
+      const full = await reader.resolveReference('hq', { ...entry.reference, entryId: support.id });
+      expect(full.entries[0]!.excerpt).toBe(original.excerpt.trim());
+    }
+    for (const id of entry.sourceRefs) {
+      expect(entry.supportingFindings!.some(finding => finding.sourceRefs.includes(id))).toBe(true);
+      expect(entry.sources.find(source => source.sourceId === id)).toEqual(f.metadata.sources.find(source => source.sourceId === id));
+    }
+  }
+  // Retrieval does not rewrite the saved index or its complete excerpts.
+  expect(f.metadata.findings.every(finding => finding.excerpt.length > 500)).toBe(true);
+});
+
+test('redundant support may be omitted only with full angle-source coverage and explicit counts', async () => {
+  const f = publishSupportedIdea(12, false, true);
+  const result = await reader.resolveReference('hq', f.reference);
+  expect(result.ok).toBe(true);
+  const entry = result.entries[0]!;
+  expect(entry.supportingFindingsOmitted).toBeGreaterThan(0);
+  expect(entry.supportingFindingsOmitted! + entry.supportingFindings!.length).toBe(12);
+  expect(entry.supportingFindingIds).toEqual(f.metadata.ideas[0]!.supportingFindingIds);
+  expect(entry.sources).toEqual(f.metadata.sources);
+  const omittedId = entry.supportingFindingIds!.find(id => !entry.supportingFindings!.some(finding => finding.id === id))!;
+  const omitted = await reader.resolveReference('hq', { ...entry.reference, entryId: omittedId });
+  expect(omitted.entries[0]!.id).toBe(omittedId);
+  expect(omitted.entries[0]!.sources).toEqual(f.metadata.sources);
+  expect(JSON.stringify(result).length).toBeLessThanOrEqual(4000);
+});
+
+test('irreducible oversized source provenance fails closed instead of returning an unsupported angle', async () => {
+  const f = publishSupportedIdea(6, true);
+  f.metadata.sources.forEach(source => { source.sourceUrl += `?evidence=${'x'.repeat(800)}`; });
+  f.persist();
+  const exact = await reader.resolveReference('hq', f.reference);
+  expect(exact.ok).toBe(false);
+  expect(exact.entries).toEqual([]);
+  expect(exact.unavailable).toBe(true);
+  const ordinary = publish();
+  const search = await reader.find('hq', { kind: 'idea' });
+  expect(search.entries.map(entry => entry.reference.outputId)).toEqual([ordinary.output.id]);
+  expect(search.unavailable).toBe(true);
+  expect(JSON.stringify(search).length).toBeLessThanOrEqual(4000);
+});
+
+test('omitting redundant support never drops its original source dates or identities', async () => {
+  const f = publishSupportedIdea(8, true, true);
+  f.metadata.ideas[0]!.sourceRefs = ['source-0'];
+  f.persist();
+  const result = await reader.resolveReference('hq', f.reference);
+  expect(result.ok).toBe(true);
+  const entry = result.entries[0]!;
+  expect(entry.supportingFindingsOmitted).toBeGreaterThan(0);
+  expect(entry.sources).toEqual(f.metadata.sources);
+  expect(JSON.stringify(result).length).toBeLessThanOrEqual(4000);
 });
