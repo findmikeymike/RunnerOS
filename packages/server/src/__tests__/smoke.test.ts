@@ -9,6 +9,8 @@
  */
 
 import { describe, it, expect, afterEach } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Subprocess } from 'bun'
 import WebSocket from 'ws'
@@ -16,6 +18,7 @@ import WebSocket from 'ws'
 const SERVER_ENTRY = join(import.meta.dir, '..', 'index.ts')
 const STARTUP_TIMEOUT = 15_000
 const TEST_TIMEOUT = 30_000
+const serverProcesses = new Map<Subprocess, string>()
 
 interface SpawnedServer {
   url: string
@@ -25,23 +28,45 @@ interface SpawnedServer {
   stop: () => Promise<void>
 }
 
+function spawnServerProcess(extraEnv: Record<string, string>) {
+  const { CLAUDECODE: _, ...parentEnv } = process.env
+  const configDir = mkdtempSync(join(tmpdir(), 'headless-server-smoke-'))
+
+  try {
+    const proc = Bun.spawn(['bun', 'run', SERVER_ENTRY], {
+      env: {
+        ...parentEnv,
+        ...extraEnv,
+        // Each child owns its profile and startup lock, regardless of suite env.
+        CRAFT_CONFIG_DIR: configDir,
+        CRAFT_PRODUCT_VARIANT: 'runner',
+        CRAFT_RPC_PORT: '0',
+        CRAFT_RPC_HOST: '127.0.0.1',
+        CRAFT_HEALTH_PORT: '0', // random port
+      },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    serverProcesses.set(proc, configDir)
+    return proc
+  } catch (error) {
+    rmSync(configDir, { recursive: true, force: true })
+    throw error
+  }
+}
+
+async function stopServerProcess(proc: Subprocess): Promise<void> {
+  const configDir = serverProcesses.get(proc)
+  if (!configDir) return
+  if (proc.exitCode === null) proc.kill('SIGTERM')
+  await proc.exited
+  rmSync(configDir, { recursive: true, force: true })
+  serverProcesses.delete(proc)
+}
+
 async function spawnTestServer(extraEnv?: Record<string, string>): Promise<SpawnedServer> {
   const token = crypto.randomUUID() + crypto.randomUUID() // 72 chars, well above 16 minimum
-  const { CLAUDECODE: _, ...parentEnv } = process.env
-
-  const proc = Bun.spawn(['bun', 'run', SERVER_ENTRY], {
-    env: {
-      ...parentEnv,
-      ...extraEnv,
-      CRAFT_SERVER_TOKEN: token,
-      CRAFT_PRODUCT_VARIANT: 'runner',
-      CRAFT_RPC_PORT: '0',
-      CRAFT_RPC_HOST: '127.0.0.1',
-      CRAFT_HEALTH_PORT: '0', // random port
-    },
-    stdout: 'pipe',
-    stderr: 'pipe',
-  })
+  const proc = spawnServerProcess({ ...extraEnv, CRAFT_SERVER_TOKEN: token })
 
   return new Promise<SpawnedServer>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -66,10 +91,7 @@ async function spawnTestServer(extraEnv?: Record<string, string>): Promise<Spawn
             token,
             healthPort: 0, // health port not printed; we skip health test if 0
             proc,
-            stop: async () => {
-              proc.kill('SIGTERM')
-              await proc.exited
-            },
+            stop: () => stopServerProcess(proc),
           })
           return
         }
@@ -130,10 +152,9 @@ describe('headless server smoke test', () => {
   let server: SpawnedServer | null = null
 
   afterEach(async () => {
-    if (server) {
-      await server.stop().catch(() => {})
-      server = null
-    }
+    // Includes startup failures/timeouts before spawnTestServer could resolve.
+    await Promise.all([...serverProcesses.keys()].map(stopServerProcess))
+    server = null
   })
 
   it('accepts valid token handshake', async () => {
@@ -151,18 +172,7 @@ describe('headless server smoke test', () => {
   }, TEST_TIMEOUT)
 
   it('rejects short token at startup', async () => {
-    const token = 'short'
-    const { CLAUDECODE: _, ...parentEnv } = process.env
-    const proc = Bun.spawn(['bun', 'run', SERVER_ENTRY], {
-      env: {
-        ...parentEnv,
-        CRAFT_SERVER_TOKEN: token,
-        CRAFT_RPC_PORT: '0',
-        CRAFT_RPC_HOST: '127.0.0.1',
-      },
-      stdout: 'pipe',
-      stderr: 'pipe',
-    })
+    const proc = spawnServerProcess({ CRAFT_SERVER_TOKEN: 'short' })
 
     const exitCode = await proc.exited
     expect(exitCode).not.toBe(0)
@@ -180,7 +190,7 @@ describe('headless server smoke test', () => {
     const exitCode = await server.proc.exited
     expect(exitCode).toBe(0)
 
-    // Mark as stopped so afterEach doesn't double-kill
+    // afterEach still removes the exited child's isolated profile.
     server = null
   }, TEST_TIMEOUT)
 })
