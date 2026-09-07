@@ -386,3 +386,30 @@ devices, installation, a Conversation settings link and collapsed timing
 diagnostics. Setup and errors remain reachable when a call cannot start.
 Start, connecting cancellation, End and window-close still use the existing
 voice lifecycle. This change does not alter model routing or the audio pipeline.
+
+
+### Prepare on open, capture on Call
+
+Opening the call modal now prepares the selected local Moonshine transport and
+registers the bounded voice Manager session. No microphone, cloud STT session,
+model request or TTS request starts during this preparation. Call waits for
+and reuses that same preparation; `VoiceCoreWeb.start()` remains the capture
+boundary. The native transport's existing idempotent start retains the warmed
+model. AssemblyAI remains unopened until Call. Inworld synthesis remains on
+demand; this does not claim that all network or audio-device startup disappears.
+
+Closing, unmounting, changing workspace/device/diagnostic options, or installing
+a model releases preparation. A dedicated cleanup wrapper covers native STT
+and the focused session even when Voice Core never started (its normal destroy
+path otherwise skips unstarted transports). Late preparation cannot start
+capture; quick Call is deduplicated against the in-flight preparation. Settings
+are checked again at Call; if another window changed them, capture is blocked
+and the next Call prepares the new configuration. Cleanup failure still blocks
+restart. Timing now distinguishes preparation, Call requested and Listening.
+
+An isolated real-hook harness verified warm-only zero-capture/zero-request
+behavior, reuse, quick Call, cancellation/late completion, reopen, device/timing
+invalidation, missing configuration, cloud deferral and settings changes. It
+used the real native renderer transport and focused transport with mocked
+Electron/media/VoiceCore boundaries; it is not physical microphone or measured
+click-to-listening evidence. Report: `/private/tmp/artist-os-voice-warm-hook-harness/result.json`.

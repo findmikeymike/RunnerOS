@@ -13,7 +13,7 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
     if (!voice.open) { setShowSetup(false); setShowCaptions(false) }
   }, [voice.open])
   const status = voice.stopping ? 'Ending call…' : voice.starting ? 'Connecting…'
-    : voice.installing ? 'Preparing audio…' : voice.error ? 'Connection needs attention'
+    : voice.preparing ? 'Warming up…' : voice.installing ? 'Preparing audio…' : voice.error ? 'Connection needs attention'
     : voice.running ? (voice.status === 'Working…' ? 'One moment…' : voice.status)
     : voice.providerReady ? 'Ready when you are' : 'Set up your conversation'
   const callLabel = voice.stopping ? 'Ending call' : voice.starting ? 'Cancel connection' : voice.running ? 'End call' : 'Start call'

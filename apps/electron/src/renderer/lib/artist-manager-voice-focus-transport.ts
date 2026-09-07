@@ -15,17 +15,37 @@ type Deps = {
 }
 
 /** Each text event is final-answer content from a model with no tool executor. */
-export function createVoiceFocusTransport(deps: Deps): WebLlmTransport & { stop(): Promise<void> } {
+export function createVoiceFocusTransport(deps: Deps): WebLlmTransport & { prepare(): Promise<void>; stop(): Promise<void> } {
   let stopped = false
+  let stopPromise: Promise<void> | undefined
   let sessionPromise: Promise<VoiceFocusSession> | undefined
   const active = new Set<AbortController>()
+  const ensurePreparedSession = () => {
+    if (stopped) throw new Error('Focused voice stopped')
+    return sessionPromise ??= deps.ensureSession()
+  }
   return {
     retryEmptyResponse: false,
-    async stop() {
+    async prepare() {
+      if (stopped) throw new Error('Focused voice stopped')
+      const controller = new AbortController()
+      active.add(controller)
+      try {
+        await abortable(ensurePreparedSession(), controller.signal)
+        if (stopped) throw new Error('Focused voice stopped')
+      } finally { active.delete(controller) }
+    },
+    stop() {
+      if (stopPromise) return stopPromise
+      let resolve!: () => void
+      let reject!: (reason: unknown) => void
+      stopPromise = new Promise<void>((yes, no) => { resolve = yes; reject = no })
       stopped = true
       for (const controller of active) controller.abort()
       // Main also cancels a registration that has not returned a session yet.
-      await deps.api.stop()
+      // Send immediately; repeated cleanup shares both success and failure.
+      try { deps.api.stop().then(resolve, reject) } catch (error) { reject(error) }
+      return stopPromise
     },
     async generateReply(request) {
       if (stopped || request.signal.aborted) throw new Error('Focused voice stopped')
@@ -48,8 +68,7 @@ export function createVoiceFocusTransport(deps: Deps): WebLlmTransport & { stop(
         try {
           if (signal.aborted || stopped) throw new Error('Focused voice stopped')
           deps.onTiming?.('manager-queued')
-          sessionPromise ??= deps.ensureSession()
-          session = await abortable(sessionPromise, signal)
+          session = await abortable(ensurePreparedSession(), signal)
           const systemPrompt = await abortable(deps.refreshPrompt(), signal)
           if (signal.aborted || stopped) throw new Error('Focused voice stopped')
           unsubscribe = deps.api.onEvent((event: VoiceFocusEvent) => {
