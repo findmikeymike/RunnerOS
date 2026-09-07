@@ -413,3 +413,108 @@ invalidation, missing configuration, cloud deferral and settings changes. It
 used the real native renderer transport and focused transport with mocked
 Electron/media/VoiceCore boundaries; it is not physical microphone or measured
 click-to-listening evidence. Report: `/private/tmp/artist-os-voice-warm-hook-harness/result.json`.
+
+
+### Cleaner settings and contextual openings (2026-09-07)
+
+Conversation settings now uses one searchable voice-model picker across
+supported, authenticated API-key connections. Each option carries both the
+model and its exact connection. Fast/Flash/Haiku/mini families are offered;
+unsupported authentication/protocols and specialized audio/image/search/coding
+models are excluded. Main still validates the exact SDK route at Save.
+Unsupported legacy selections are preserved until the user explicitly chooses
+a supported replacement. Hearing offers Moonshine Balanced or AssemblyAI;
+Inworld setup is a compact status badge and Services link. No Command setting
+or existing saved voice selection was changed by this UI update.
+
+For a first-turn greeting-only utterance, the focused service sends a short
+Manager greeting prompt without the artist snapshot or handoff catalog. The
+whole-utterance check does not catch substantive questions beginning with
+"um hey". Real work receives the normal snapshot, available agents and bounded
+conversation history. This removes irrelevant artist statistics from the
+opening request instead of relying only on another prompt admonition.
+
+An isolated production-provider check used the saved DeepSeek v4 Flash/low
+route with the real artist snapshot and available-agent catalog. A greeting
+returned a neutral 15-word reply in 2.512 seconds (first text 2.447 seconds).
+The user's exact creative campaign/video-agent question then received a
+42-word recommendation for Scroll Stopper in 2.110 seconds. Both completed
+normally without fallback. These are model timings; microphone detection and
+TTS playback are excluded. The temporary credential copy was removed.
+Evidence: `/private/tmp/artist-os-voice-greeting-live-results.json`.
+
+Settings verification: five pure model-option tests, eight browser checks
+against the actual page/components with mocked IPC, and Electron typecheck.
+Screenshot: `/private/tmp/artist-os-voice-settings-redesign/conversation-settings.png`.
+
+
+### Room-noise turn-finalization repair (2026-09-07)
+
+Reproduced the reported 60-second error using the actual Moonshine renderer
+transport with a ten-second synthetic phrase followed by a rising room floor:
+12 to 40 PCM and 40 to 72 PCM both failed. The existing endpoint detector
+freezes its noise floor after the first partial and caps its silence threshold;
+it can therefore treat background noise as continuing speech. Prewarm reuse
+called native start once and was not the reproduced cause. Historical live
+baselines and current settings both select Moonshine Balanced, not a tier downgrade.
+These fixtures prove the mechanism, not the exact acoustics of the user's call.
+
+The upstream renderer now retains the existing 500 ms quiet endpoint and adds
+a conservative 1,200 ms stable-room-floor endpoint: energy must remain at most
+25% of a robust 300 ms speech reference, below 0.01 RMS, vary by at most 1.5x,
+and the recognized partial must be unchanged for 1,200 ms of accepted audio.
+Word progress and renewed speech energy prevent accumulated silence from
+ending an active utterance. A single click cannot establish the speech reference.
+Native finalization acknowledgement is still required before text is promoted.
+The 60-second resource limit remains; its error no longer claims the user's
+phrase was too long. The snapshot imports only this changed renderer source;
+existing web/native artifacts are unchanged because their source did not change.
+
+Twenty-one renderer tests pass, including both noise reproductions, quiet
+continuing words, variable low speech energy, transient dips, a loud click and
+delayed native acknowledgement. Electron wrapper typechecks pass. Source
+reproduction now ends the two noisy fixtures after 1,200 ms with exactly one
+final and no errors; the quiet baseline remains 500 ms. Evidence:
+`/private/tmp/moonshine-room-noise-fixed-results.json` and
+`/private/tmp/moonshine-endpoint-tests.log`.
+
+This is an energy-plus-transcript heuristic, not neural VAD. A sufficiently
+quiet, steady utterance whose recognizer stops producing new words can still
+be ambiguous; live microphone verification remains necessary.
+
+
+### Spoken handoff confirmation loop (2026-09-07)
+
+The user's latest call has no detailed voice trace in the available logs;
+the most recent recorded trace is an older 19:27 UTC run. Do not attribute its
+events to this incident. A concrete matching failure is reproduced in the
+production service: after a valid tool proposal, "Yes, go." was absent from
+the whole-utterance confirmation allowlist, so the offer was cleared and the
+reply went back to the provider, allowing another offer instead of navigation.
+
+The allowlist now accepts short natural variants including "yes go", "yeah
+let's go", and "open the chat", plus a single leading um/uh. Negation,
+conditions, timing changes, additional work instructions and uncertain
+questions remain rejected. A regression first failed against the old service,
+then passed with the fix: one proposal model call, then immediate handoff_ready
+on "Yes, go." with no second provider or credential request.
+
+The main process now records bounded handoff state diagnostics (pending offer,
+confirmation match, tool count, stage and session/turn identifiers). The
+renderer records ready/playback/stop/navigation stages. No spoken text, brief,
+provider payload or credentials are included, and logging cannot interrupt the
+call. These diagnostics remain available in the development app even when the
+optional detailed timing switch is off.
+
+Live isolated-provider check using the configured Flash/low route and real
+agent catalog: Branding Agent proposal completed in 2.716 seconds, then
+"Yes, go." emitted the validated branding-agent destination immediately with
+zero provider calls and no error. This provider test does not navigate the
+user's live app. Evidence: `/private/tmp/artist-os-voice-loop-live-results.json`.
+
+Five actual-hook harness scenarios verify that playback completion waits for
+cleanup, opens once, then closes the modal; cancellation, cleanup failure,
+workspace changes and late duplicates cannot open the chat. Playback and
+navigation endpoints are mocked. Source inspection confirms the real composer
+opens an unsent draft using the destination agent's normal model, not the
+voice model. Evidence: `/private/tmp/artist-os-voice-handoff-hook-harness/result.json`.

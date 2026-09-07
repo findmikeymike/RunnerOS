@@ -35,6 +35,41 @@ function fixture(overrides: Partial<VoiceFocusDependencies> = {}) {
 }
 
 describe('focused voice service', () => {
+  it('keeps an opening greeting free of artist stats, then restores context and destinations for real work', async () => {
+    const { service, requests } = fixture()
+    const snapshot = 'Private artist snapshot: Doin Me has 180k streams.'
+    const session = await service.register(7, { ...registration, systemPrompt: snapshot,
+      handoffTargets: [{ slug: 'creative-director', name: 'Creative Director', description: 'Creative campaigns and video concepts' }],
+    })
+    await service.startTurn(7, { sessionId: session.sessionId, turnId: 'hello', text: 'Um, hey! How are you?' }, () => {})
+    expect(requests[0]![1].systemPrompt).not.toContain(snapshot)
+    expect(requests[0]![1].systemPrompt).toContain('Artist Manager')
+    expect(requests[0]![1].tools).toEqual([])
+    expect(requests[0]![2].toolChoice).toBe('none')
+    await service.startTurn(7, { sessionId: session.sessionId, turnId: 'work', text: "What's a great agent for creative campaigns and video content for a release?" }, () => {})
+    expect(requests[1]![1].systemPrompt).toBe(snapshot)
+    expect(requests[1]![1].tools?.[0]?.description).toContain('Creative Director')
+    expect(requests[1]![1].messages).toHaveLength(3)
+    expect(requests[1]![0]).toEqual(requests[0]![0])
+    service.close()
+  })
+
+  it('does not strip context from substantive first questions beginning with greetings or fillers', async () => {
+    for (const text of [
+      "Um hey what's a great agent for me to use if i need to work on um like really creative campaigns and ideas for um video content for a release",
+      'Hello, what should I do next?', 'How are you helping my release?', 'Hey, show my streaming stats',
+    ]) {
+      const { service, requests } = fixture()
+      const session = await service.register(7, { ...registration,
+        handoffTargets: [{ slug: 'creative-director', name: 'Creative Director' }],
+      })
+      await service.startTurn(7, { sessionId: session.sessionId, turnId: 'one', text }, () => {})
+      expect(requests[0]![1].systemPrompt).toBe(registration.systemPrompt)
+      expect(requests[0]![1].tools).toHaveLength(1)
+      service.close()
+    }
+  })
+
   it('streams without tools/executor, retries, fallback, or credentials in public messages', async () => {
     const { service, requests } = fixture()
     const session = await service.register(7, registration)

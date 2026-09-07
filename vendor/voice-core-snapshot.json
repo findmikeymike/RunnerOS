@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "a2abae999d8bf7802cd9b507aa53f1c84d8f3136",
+  "revision": "c348947065e3926b9f56f292fb9e086f23d04597",
   "sourceDirty": false,
   "files": {
     "voice-core-web/dist/VoiceCoreWeb.d.ts": "772511e30dfd85fc660fa345258958016217c36ba264fdfefd61c3384339c7ab",
@@ -184,7 +184,7 @@
     "voice-core-electron/main/moonshineSidecarHost.ts": "62e5a366e96795ae7b443817d72a6e9378ad33a8b38a5d387aa1d1af229ae440",
     "voice-core-electron/renderer/deviceSelectionPolicy.ts": "5f047db14a571a2d3d8266172f44ece725466effcb665e5187d3751daebe654e",
     "voice-core-electron/renderer/inworldTtsPolicy.ts": "1364220214ce88378bef6c4fbf04e089a257ad581e36648a821f23e438c2ed9f",
-    "voice-core-electron/renderer/moonshineSttTransport.ts": "d8dea9e6c0266b062890c5e6513ef8717feba8d1c0071dcc67151819893b9708",
+    "voice-core-electron/renderer/moonshineSttTransport.ts": "bcc677bf7b5eec8198a8ffffd9eeb121c4e22b3e889d750f43a3e7450e386951",
     "voice-core-electron/renderer/sttTransportPolicy.ts": "bc5e7301169785719eb4e2abe88f25aaca37efcab2fa1511c88860d0add91125",
     "voice-core-electron/resources/voice-core/moonshine-release-catalog-v1.json": "7060c267c912e3156b87c646e3bc970eac1ac8bdd964cf0a794b83e6f1250614",
     "voice-core-electron/tools/package-macos-moonshine-helper.mjs": "638c8eef7d938573b5104cf69fe7a2db7ae4f35fcf361cdfde8e6a6b19b20eb3"

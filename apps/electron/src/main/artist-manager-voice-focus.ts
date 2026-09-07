@@ -14,9 +14,20 @@ import {
 } from '../shared/artist-manager-voice-focus'
 
 import { normalizeVoiceHandoffTargets, buildVoiceHandoffTool, parseVoiceHandoffProposal, isVoiceHandoffConfirmation, type VoiceHandoffTarget, type VoiceHandoffProposal } from '../shared/artist-manager-voice-handoff'
+import { resolveVoiceHandoffIntent } from './artist-manager-voice-handoff-intent'
 
 type StreamEvent = { type: string; delta?: string; reason?: string; toolCall?: { name: string; arguments: unknown }; message?: { usage?: { output?: number; reasoning?: number } } }
 export type VoiceFocusResolvedConfig = { connection: LlmConnection; model: string; thinking?: ArtistManagerVoiceSettings['thinking'] }
+export type VoiceFocusDiagnostic = {
+  stage: 'turn' | 'intent' | 'offer' | 'clarification' | 'confirmed' | 'completed' | 'failed'
+  sessionId: string
+  turnId: string
+  pendingOffer?: boolean
+  confirmation?: boolean
+  targetCount?: number
+  toolCalls?: number
+  intent?: 'confirm' | 'continue' | 'clarify'
+}
 export type VoiceFocusDependencies = {
   resolveConfig(request: VoiceFocusRegisterRequest): Promise<VoiceFocusResolvedConfig>
   resolveModel(connection: LlmConnection, model: string): Promise<Model<Api>>
@@ -27,6 +38,16 @@ export type VoiceFocusDependencies = {
 
 const supportedApis = new Set(['openai-completions', 'openai-responses', 'anthropic-messages'])
 const bareModel = (id: string) => id.startsWith('pi/') ? id.slice(3) : id
+
+// A greeting needs no career snapshot. Keep the whole-utterance boundary narrow:
+// "hey, what agent helps with campaigns?" must still receive the full context.
+function isOpeningGreeting(text: string): boolean {
+  const normalized = text.toLowerCase().replace(/[’‘]/g, "'")
+    .replace(/[.,!?，。！？]/g, ' ').replace(/\s+/g, ' ').trim()
+  return /^(?:(?:um|uh) )?(?:(?:hello|hi|hey|yo)(?: there)?(?: (?:how are you|how's it going|what's up))?|how are you|how's it going|what's up|mm|hmm|um|uh)$/.test(normalized)
+}
+
+const OPENING_GREETING_PROMPT = 'You are the artist\'s Artist Manager speaking in a voice call. The artist has only greeted you or made a short opening sound. Reply warmly in one short sentence and invite them to say what they want to work on. Do not invent personal details or give a career update, song mention, metrics, briefing or task suggestion. Do not claim to have done any work.'
 
 export type VoiceSettingsRouteDependencies = {
   getConnection(slug: string): LlmConnection | null | Promise<LlmConnection | null>
@@ -72,7 +93,7 @@ export async function validateVoiceSettingsRoute(
   const settings = parseArtistManagerVoiceSettings(value)
   if (settings.connectionSlug === null || settings.model === null) return settings
   const connection = await deps.getConnection(settings.connectionSlug)
-  if (!connection || connection.slug !== settings.connectionSlug) throw new Error('The selected conversation voice connection no longer exists; choose it in Settings')
+  if (!connection || connection.slug !== settings.connectionSlug) throw new Error('The connection for your voice model no longer exists; choose a model in Settings → Conversation')
   await validateResolvedVoiceRoute(connection, settings.model, deps.resolveModel)
   return settings
 }
@@ -86,10 +107,10 @@ export async function resolveSavedVoiceFocusConfig(
   } = { getSettings: getArtistManagerVoiceSettings, getConnection: getConfiguredConnection },
 ): Promise<VoiceFocusResolvedConfig> {
   const saved = parseArtistManagerVoiceSettings(await deps.getSettings())
-  if (!saved.connectionSlug || !saved.model) throw new Error('Choose a conversation voice connection and model in Settings before starting')
+  if (!saved.connectionSlug || !saved.model) throw new Error('Choose a voice model in Settings → Conversation before starting')
   const settings = parseArtistManagerVoiceSettings({ ...saved, model: request.model ?? saved.model, thinking: request.thinking ?? saved.thinking })
   const connection = await deps.getConnection(saved.connectionSlug)
-  if (!connection || connection.slug !== saved.connectionSlug) throw new Error('The selected conversation voice connection no longer exists; choose it in Settings')
+  if (!connection || connection.slug !== saved.connectionSlug) throw new Error('The connection for your voice model no longer exists; choose a model in Settings → Conversation')
   return { connection, model: settings.model!, thinking: settings.thinking }
 }
 
@@ -129,7 +150,10 @@ type OwnerState = { session?: SessionState }
 /** Direct streaming with one confirmation-gated Command handoff; no general agent executor. */
 export class ArtistManagerVoiceFocusService {
   private readonly owners = new Map<number, OwnerState>()
-  constructor(private readonly deps: VoiceFocusDependencies = productionDependencies) {}
+  constructor(
+    private readonly deps: VoiceFocusDependencies = productionDependencies,
+    private readonly onDiagnostic?: (event: VoiceFocusDiagnostic) => void,
+  ) {}
 
   async register(ownerId: number, request: VoiceFocusRegisterRequest): Promise<VoiceFocusSession> {
     assertText(request.workspaceId, 200, 'workspace')
@@ -168,12 +192,19 @@ export class ArtistManagerVoiceFocusService {
     const active: ActiveTurn = { id: request.turnId, controller: new AbortController() }
     session.active = active
     const signal = active.controller.signal
+    const diagnostic = (details: Omit<VoiceFocusDiagnostic, 'sessionId' | 'turnId'>) => {
+      // Fixed scalar fields only: no speech, brief, provider payload or credentials.
+      try { this.onDiagnostic?.({ ...details, sessionId: session.info.sessionId, turnId: request.turnId }) } catch { /* Logging cannot break a call. */ }
+    }
     const current = () => this.owners.get(ownerId)?.session === session && session.active === active && !signal.aborted
     const send = (event: { type: 'text_delta'; delta: string } | { type: 'done' } | VoiceFocusCompletion | { type: 'handoff_ready'; proposal: VoiceHandoffProposal }) => {
       if (current()) emit({ ...event, sessionId: session.info.sessionId, turnId: request.turnId })
     }
     let timedOut = false
     let incomplete = false
+    // Keep an already offered destination if the artist interrupts the intent
+    // check. A later clear yes can still accept it, until its original expiry.
+    let pendingIntentUnresolved = false
     const timer = setTimeout(() => { timedOut = true; active.controller.abort() }, this.deps.timeoutMs ?? VOICE_FOCUS_LIMITS.timeoutMs)
     let abortListener!: () => void
     const aborted = new Promise<never>((_, reject) => {
@@ -181,23 +212,60 @@ export class ArtistManagerVoiceFocusService {
       signal.addEventListener('abort', abortListener, { once: true })
     })
     const run = async () => {
+      const remember = (text: string) => {
+        session.history.push({ user: request.text, assistant: text })
+        while (session.history.length > VOICE_FOCUS_LIMITS.historyTurns || historySize(session.history) > VOICE_FOCUS_LIMITS.historyChars) session.history.shift()
+      }
       const pending = session.pendingHandoff
+      const pendingOffer = Boolean(pending && pending.expiresAt > Date.now())
+      if (!pendingOffer) session.pendingHandoff = undefined
+      let confirmation = isVoiceHandoffConfirmation(request.text)
+      diagnostic({ stage: 'turn', pendingOffer, confirmation, targetCount: session.handoffTargets.length })
+      let apiKey: string | null | undefined
+      let continuingAfterOffer = false
+      if (pending && pendingOffer && !confirmation) {
+        pendingIntentUnresolved = true
+        apiKey = await this.deps.getApiKey(session.info.connection)
+        if (!current()) return
+        if (!apiKey?.trim()) throw new Error('missing credential')
+        const intent = await resolveVoiceHandoffIntent({
+          model: session.sdkModel, stream: this.deps.stream, apiKey,
+          proposal: pending.proposal, text: request.text, signal,
+        })
+        if (!current()) return
+        pendingIntentUnresolved = false
+        diagnostic({ stage: 'intent', intent })
+        confirmation = intent === 'confirm'
+        if (intent === 'clarify') {
+          const reply = `Want me to open ${pending.proposal.agentName} in Command, or keep talking? Say yes to open it.`
+          session.pendingHandoff = { ...pending, expiresAt: Date.now() + 120_000 }
+          remember(reply)
+          send({ type: 'text_delta', delta: reply })
+          diagnostic({ stage: 'clarification' })
+          send({ type: 'done' })
+          return
+        }
+        continuingAfterOffer = intent === 'continue'
+      }
       session.pendingHandoff = undefined
-      if (pending && pending.expiresAt > Date.now() && isVoiceHandoffConfirmation(request.text)) {
+      if (pending && pendingOffer && confirmation) {
         // The app's previous turn named the destination and task. Consume once;
         // a bare yes without that live offer cannot open anything.
         session.handedOff = true
+        diagnostic({ stage: 'confirmed' })
         send({ type: 'text_delta', delta: `I'll open Command with ${pending.proposal.agentName} and put our plan in a draft for you to review and send.` })
         send({ type: 'handoff_ready', proposal: pending.proposal })
         send({ type: 'done' })
         return
       }
-      const handoffTool = buildVoiceHandoffTool(session.handoffTargets)
-      const apiKey = await this.deps.getApiKey(session.info.connection)
+      const greetingOnly = session.history.length === 0 && isOpeningGreeting(request.text)
+      const handoffTool = greetingOnly || continuingAfterOffer ? null : buildVoiceHandoffTool(session.handoffTargets)
+      apiKey ??= await this.deps.getApiKey(session.info.connection)
       if (!current()) return
       if (!apiKey?.trim()) throw new Error('missing credential')
       const context: Context = {
-        systemPrompt: session.systemPrompt,
+        systemPrompt: greetingOnly ? OPENING_GREETING_PROMPT : session.systemPrompt + (continuingAfterOffer
+          ? '\n\nThe artist wants to continue talking or change the plan. Answer their latest reply naturally. Do not repeat the previous handoff offer in this reply, and do not claim the app lacks handoff capability. A new handoff can be offered on a later turn after the revised work is agreed.' : ''),
         tools: handoffTool ? [handoffTool as NonNullable<Context['tools']>[number]] : [],
         messages: session.history.flatMap<Context['messages'][number]>(exchange => [
           { role: 'user', content: exchange.user, timestamp: 0 },
@@ -252,17 +320,19 @@ export class ArtistManagerVoiceFocusService {
         text = offer
         send({ type: 'text_delta', delta: offer })
         session.pendingHandoff = { proposal, expiresAt: Date.now() + 120_000 }
+        diagnostic({ stage: 'offer', toolCalls: toolStarts || 1 })
       } else if (handoffTool) {
         send({ type: 'text_delta', delta: text })
       }
-      session.history.push({ user: request.text, assistant: text })
-      while (session.history.length > VOICE_FOCUS_LIMITS.historyTurns || historySize(session.history) > VOICE_FOCUS_LIMITS.historyChars) session.history.shift()
+      remember(text)
       send({ type: 'done' })
+      diagnostic({ stage: 'completed', toolCalls: proposal ? 1 : 0 })
     }
     try {
       await Promise.race([run(), aborted])
     } catch {
-      session.pendingHandoff = undefined
+      diagnostic({ stage: 'failed' })
+      if (!pendingIntentUnresolved) session.pendingHandoff = undefined
       const shouldPublish = current() || (timedOut && this.owners.get(ownerId)?.session === session && session.active === active)
       active.controller.abort()
       if (shouldPublish) {

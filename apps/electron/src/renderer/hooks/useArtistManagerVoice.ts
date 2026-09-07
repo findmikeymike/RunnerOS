@@ -216,6 +216,7 @@ export function useArtistManagerVoice(input: {
       let handoffStopEpoch = -1
       const handoffCurrent = () => mounted.current && currentInput.current.workspaceId === input.workspaceId && (alive() || stopEpoch.current === handoffStopEpoch)
       const coordinator = createVoiceHandoffCoordinator({
+        onDiagnostic: event => { window.electronAPI.debugLog('[voice-handoff]', JSON.stringify({ side: 'renderer', ...event })) },
         stop: async () => {
           const cleanup = stop(false)
           handoffStopEpoch = stopEpoch.current
