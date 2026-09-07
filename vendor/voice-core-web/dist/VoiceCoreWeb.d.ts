@@ -110,6 +110,7 @@ export declare class VoiceCoreWeb {
     private streamAssistantReply;
     private static readonly MIN_INCREMENTAL_TTS_CHUNK_CHARS;
     private static readonly CLAUSE_FALLBACK_CHARS;
+    private static readonly MAX_TTS_CHUNK_CHARS;
     private extractSpeakableText;
     private findLastClauseBoundary;
     private findFirstSpeakableBoundary;

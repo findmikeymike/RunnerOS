@@ -956,9 +956,12 @@ export class VoiceCoreWeb {
                 this.lastAssistantPreviewText = "";
                 return;
             }
-            const finalTail = speakableBuffer.trim();
-            if (finalTail) {
-                const speakableTail = this.prepareTextForTts(finalTail);
+            // A transport may end its iterator without a done event. Drain the tail
+            // through the same bounded chunker rather than bypassing it at EOF.
+            while (speakableBuffer.trim()) {
+                const extraction = this.extractSpeakableText(speakableBuffer, true);
+                speakableBuffer = extraction.remainder;
+                const speakableTail = this.prepareTextForTts(extraction.readyText);
                 if (speakableTail) {
                     synthesisChain = synthesisChain.then(async () => {
                         if (controller.signal.aborted || generation !== this.responseGeneration) {
@@ -1072,9 +1075,15 @@ export class VoiceCoreWeb {
                 await this.pushAssistantText(assistantText, false);
                 lastPreviewFlushAt = Date.now();
             }
-            const extraction = this.extractSpeakableText(speakableBuffer, token.done === true);
-            speakableBuffer = extraction.remainder;
-            if (extraction.readyText && this.transports.tts) {
+            // Agent adapters can deliver an entire answer in one event. Consume all
+            // ready boundaries, not just one boundary per incoming token.
+            while (speakableBuffer) {
+                const extraction = this.extractSpeakableText(speakableBuffer, token.done === true);
+                if (!extraction.readyText)
+                    break;
+                speakableBuffer = extraction.remainder;
+                if (!this.transports.tts)
+                    continue;
                 this.emitLatencyDebug("tts-chunk-ready");
                 const speakableText = this.prepareTextForTts(extraction.readyText);
                 if (!speakableText) {
@@ -1102,16 +1111,34 @@ export class VoiceCoreWeb {
     // once the buffer gets quite long.
     static MIN_INCREMENTAL_TTS_CHUNK_CHARS = 24;
     static CLAUSE_FALLBACK_CHARS = 120;
+    // Keep every speech request within the strictest current cloud transport
+    // limit (Inworld send_text). Count UTF-16 units, as that transport does.
+    static MAX_TTS_CHUNK_CHARS = 1000;
     extractSpeakableText(text, allowIncompleteTail) {
         const trimmed = text.trimStart();
         if (!trimmed) {
             return { readyText: "", remainder: "" };
         }
         const boundaryIndex = this.findFirstSpeakableBoundary(trimmed);
-        if (boundaryIndex > 0) {
+        if (boundaryIndex > 0 && boundaryIndex <= VoiceCoreWeb.MAX_TTS_CHUNK_CHARS) {
             const readyText = trimmed.slice(0, boundaryIndex).trim();
             const remainder = trimmed.slice(boundaryIndex).trimStart();
             return { readyText, remainder };
+        }
+        // A long sentence, unpunctuated response, or large final event must not
+        // exceed the provider limit. Prefer whitespace; split long words only when
+        // necessary, without cutting a UTF-16 surrogate pair in half.
+        if (trimmed.length >= VoiceCoreWeb.MAX_TTS_CHUNK_CHARS) {
+            let split = VoiceCoreWeb.MAX_TTS_CHUNK_CHARS;
+            const whitespace = trimmed.slice(0, split).search(/\s+\S*$/u);
+            if (whitespace > 0)
+                split = whitespace;
+            else if (/[\uD800-\uDBFF]/.test(trimmed[split - 1]))
+                split--;
+            return {
+                readyText: trimmed.slice(0, split).trim(),
+                remainder: trimmed.slice(split).trimStart(),
+            };
         }
         // Native fallback: once the buffer is long, split on a comma boundary.
         if (!allowIncompleteTail && trimmed.length >= VoiceCoreWeb.CLAUSE_FALLBACK_CHARS) {
@@ -1166,7 +1193,18 @@ export class VoiceCoreWeb {
         return -1;
     }
     async synthesizeAssistantChunk(text, controller, generation) {
-        if (!this.transports.tts || !text.trim()) {
+        if (!this.transports.tts || !text.trim() || controller.signal.aborted || generation !== this.responseGeneration) {
+            return;
+        }
+        // Formatting normalization can expand text (a newline becomes ". ").
+        // Enforce the bound on the final provider input as well as the raw buffer.
+        if (text.length > VoiceCoreWeb.MAX_TTS_CHUNK_CHARS) {
+            let remainder = text;
+            while (remainder && !controller.signal.aborted && generation === this.responseGeneration) {
+                const extraction = this.extractSpeakableText(remainder, true);
+                remainder = extraction.remainder;
+                await this.synthesizeAssistantChunk(extraction.readyText, controller, generation);
+            }
             return;
         }
         this.emitLatencyDebug(`tts-request-start chars=${text.length}`);
