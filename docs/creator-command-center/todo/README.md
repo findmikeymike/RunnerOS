@@ -39,8 +39,8 @@ remaining live acceptance checks.
 - Spec 39 (Artist Website) left this folder once Slice 1 shipped; it now lives
   in the parent folder as `partially-implemented`.
 - Spec 47 (Signals: Industry And Your World) moved to the parent folder once
-  its host foundation existed. Its final Slice 1 gate and remaining UI/retrieval
-  slices are tracked there; it is not a completed feature.
+  its host foundation existed. Its current implementation and remaining acceptance
+  gates are tracked there; it is not yet released in the main app.
 
 ## Suggested Order
 

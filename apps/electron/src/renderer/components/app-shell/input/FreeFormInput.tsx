@@ -82,6 +82,7 @@ import { SourceAvatar } from '@/components/ui/source-avatar'
 import { SourceSelectorPopover } from '@/components/ui/SourceSelectorPopover'
 import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
+import { settleGuardedDraft } from '@/lib/guarded-draft-send'
 import { derivePickerMode } from './picker-mode'
 import type { FileAttachment, FileSearchResult, LoadedSource, LoadedSkill, LlmConnectionWithStatus } from '../../../../shared/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
@@ -159,7 +160,8 @@ export interface FreeFormInputProps {
   /** Whether the session is currently processing */
   isProcessing?: boolean
   /** Callback when message is submitted (skillSlugs from @mentions) */
-  onSubmit: (message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => void
+  onSubmit: (message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => boolean | void | Promise<boolean | void>
+  preserveDraftUntilAccepted?: boolean
   /** Callback to stop processing. Pass silent=true to skip "Response interrupted" message */
   onStop?: (silent?: boolean) => void
   /** External ref for the input */
@@ -267,6 +269,7 @@ export function FreeFormInput({
   disabled = false,
   isProcessing = false,
   onSubmit,
+  preserveDraftUntilAccepted = false,
   onStop,
   inputRef: externalInputRef,
   currentModel,
@@ -1298,7 +1301,13 @@ export function FreeFormInput({
   }
 
   // Submit message - backend handles queueing and interruption
+  const guardedSendRef = React.useRef(false)
+  const guardedSendEpoch = React.useRef(0)
+  const currentSessionRef = React.useRef(sessionId); currentSessionRef.current = sessionId
+  const [guardedSendError, setGuardedSendError] = React.useState<string | null>(null)
+  React.useLayoutEffect(() => { guardedSendEpoch.current++; guardedSendRef.current = false; setGuardedSendError(null); return () => { guardedSendEpoch.current++ } }, [sessionId])
   const submitMessage = React.useCallback(() => {
+    if (preserveDraftUntilAccepted && guardedSendRef.current) return false
     const hasContent = input.trim() || attachments.length > 0 || followUpItems.length > 0
     if (!hasContent || disabled) return false
 
@@ -1321,11 +1330,40 @@ export function FreeFormInput({
 
     const attachmentSnapshot = attachments
 
-    onSubmit(
-      input.trim(),
-      attachmentSnapshot.length > 0 ? attachmentSnapshot : undefined,
-      mentions.skills.length > 0 ? mentions.skills : undefined
-    )
+    if (preserveDraftUntilAccepted) {
+      guardedSendRef.current = true
+      setGuardedSendError(null)
+      const owner = sessionId
+      const epoch = guardedSendEpoch.current
+      const sameOwner = () => currentSessionRef.current === owner && guardedSendEpoch.current === epoch
+      void settleGuardedDraft({
+        send: () => onSubmit(input.trim(), attachmentSnapshot.length ? attachmentSnapshot : undefined, mentions.skills.length ? mentions.skills : undefined),
+        text: input, attachments: attachmentSnapshot,
+        current: () => ({ text: inputRef.current, attachments: attachmentsRef.current, sameSession: sameOwner() }),
+        clearText: () => {
+          setInput(''); inputRef.current = ''
+          if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
+          onInputChange?.(''); prevInputValueRef.current = ''
+        },
+        clearAttachments: () => { setAttachments([]); onAttachmentsChange?.([]) },
+      }).then(accepted => {
+        if (!accepted && sameOwner()) setGuardedSendError('Message was not sent. Your draft is unchanged.')
+      }).catch(cause => {
+        if (sameOwner()) setGuardedSendError(cause instanceof Error ? cause.message : 'Send failed. Your draft is unchanged.')
+      }).finally(() => { if (sameOwner()) guardedSendRef.current = false })
+      return true
+    }
+
+    try {
+      Promise.resolve(onSubmit(
+        input.trim(),
+        attachmentSnapshot.length > 0 ? attachmentSnapshot : undefined,
+        mentions.skills.length > 0 ? mentions.skills : undefined
+      )).catch(cause => toast.error('Failed to send message', { description: cause instanceof Error ? cause.message : String(cause) }))
+    } catch (cause) {
+      toast.error('Failed to send message', { description: cause instanceof Error ? cause.message : String(cause) })
+      return false
+    }
     setInput('')
     setAttachments([])
     // Clear draft immediately (cancel any pending debounced sync)
@@ -1340,7 +1378,7 @@ export function FreeFormInput({
     })
 
     return true
-  }, [input, attachments, followUpItems, disabled, disableSend, onInputChange, onAttachmentsChange, onSubmit, skills, sources, optimisticSourceSlugs, onSourcesChange, onWorkingDirectoryChange, homeDir])
+  }, [input, attachments, followUpItems, disabled, disableSend, onInputChange, onAttachmentsChange, onSubmit, skills, sources, optimisticSourceSlugs, onSourcesChange, onWorkingDirectoryChange, homeDir, preserveDraftUntilAccepted, sessionId])
 
   // Listen for craft:submit-input events (simulate pressing the Send button)
   React.useEffect(() => {
@@ -1593,6 +1631,7 @@ export function FreeFormInput({
 
   return (
     <form onSubmit={handleSubmit}>
+      {guardedSendError ? <p role="alert" className="px-3 py-2 text-xs text-destructive">{guardedSendError}</p> : null}
       <div
         ref={containerRef}
         className={cn(

@@ -6,3 +6,4 @@ export * from './briefing.ts';
 export * from './signal-contracts.ts';
 export * from './signal-selection.ts';
 export * from './signal-report.ts';
+export * from './signal-retrieval.ts';

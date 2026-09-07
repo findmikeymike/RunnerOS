@@ -17,6 +17,7 @@ import { WorkspacePicker } from '@/components/workspace'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
 import { SplashScreen } from '@/components/SplashScreen'
 import { TooltipProvider } from '@craft-agent/ui'
+import { removeRejectedOptimisticMessage } from '@/lib/guarded-draft-send'
 import { FocusProvider } from '@/context/FocusContext'
 import { ModalProvider } from '@/context/ModalContext'
 import { DismissibleLayerProvider } from '@/context/DismissibleLayerContext'
@@ -1161,6 +1162,7 @@ export default function App() {
   }, [updateSessionById])
 
   const handleSendMessage = useCallback(async (sessionId: string, message: string, attachments?: FileAttachment[], skillSlugs?: string[], externalBadges?: ContentBadge[]) => {
+    let optimisticMessageId: string | undefined
     try {
       const sessionAtSend = store.get(sessionAtomFamily(sessionId))
       // Capture pre-send processing state so we can flag mid-stream sends
@@ -1304,6 +1306,7 @@ export default function App() {
       }
 
       // Optimistic UI update - add user message and set processing state
+      optimisticMessageId = userMessage.id
       updateSessionById(sessionId, (s) => ({
         messages: [...s.messages, userMessage],
         isProcessing: true,
@@ -1322,7 +1325,7 @@ export default function App() {
       updateSessionById(sessionId, (s) => ({
         isProcessing: false,
         messages: [
-          ...s.messages,
+          ...removeRejectedOptimisticMessage(s.messages, optimisticMessageId),
           {
             id: generateMessageId(),
             role: 'error' as const,
@@ -1427,6 +1430,10 @@ export default function App() {
       draftSaveTimeoutRef.current.delete(sessionId)
     }, DRAFT_SAVE_DEBOUNCE_MS)
     draftSaveTimeoutRef.current.set(sessionId, timeout)
+  }, [])
+
+  const restoreDraft = useCallback((sessionId: string, draft: SessionDraft) => {
+    sessionDraftsRef.current.set(sessionId, draft)
   }, [])
 
   const handleInputChange = useCallback((sessionId: string, value: string) => {
@@ -1785,6 +1792,7 @@ export default function App() {
     // Session options
     onSessionOptionsChange: handleSessionOptionsChange,
     onInputChange: handleInputChange,
+    restoreDraft,
     onAttachmentsChange: handleAttachmentsChange,
     // New chat (via deep link navigation)
     openNewChat,
@@ -1803,6 +1811,7 @@ export default function App() {
     hydrateDraftAttachments,
     sessionOptions,
     handleCreateSession,
+    restoreDraft,
     handleSendMessage,
     handleRenameSession,
     handleFlagSession,

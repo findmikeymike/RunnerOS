@@ -133,6 +133,8 @@ export interface AppShellContextType {
 
   // Input draft callback
   onInputChange: (sessionId: string, value: string) => void
+  /** Restore an already-persisted draft before cross-workspace navigation, including attachments. */
+  restoreDraft?: (sessionId: string, draft: import('@craft-agent/shared/config').SessionDraft) => void
 
   // Attachment draft callback — persists attachment refs per session
   onAttachmentsChange: (sessionId: string, attachments: FileAttachment[]) => void

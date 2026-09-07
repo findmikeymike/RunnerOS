@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { OutputManifest } from '@craft-agent/shared/outputs';
 import { isFinalSignalReport, SIGNAL_CONTRACT, signalWorkflowFor, validateSignalRunIdentity, type SignalReportMetadata } from '@craft-agent/shared/shared-intel';
 import type { WorkflowRunSnapshot } from '@craft-agent/shared/workflows';
-import { hash, readEvidence, readSignals } from './storage';
+import { hash, readEvidence, readSignals, type SignalStore } from './storage';
 
 export type SignalFinalReportRun = Pick<WorkflowRunSnapshot, 'id' | 'workspaceId' | 'workflowSlug' | 'state' | 'finalOutputId'>
   & Partial<Pick<WorkflowRunSnapshot, 'trigger'>>;
@@ -16,13 +16,15 @@ export class SignalFinalReportError extends Error {
 /** Read-only host proof for new-contract reports. Call before opening the primary asset.
  * Callers retain responsibility for local workspace access and safe asset resolution.
  */
-export function validateSignalFinalReport(root: string, workspaceId: string, output: OutputManifest, run: SignalFinalReportRun): SignalReportMetadata {
+export function validateSignalFinalReport(root: string, workspaceId: string, output: OutputManifest, run: SignalFinalReportRun, journal?: SignalStore): SignalReportMetadata {
   try {
     if (!isFinalSignalReport(output) || output.workspaceId !== workspaceId
       || run.workspaceId !== workspaceId || run.id !== output.origin.workflowRunId
       || run.state !== 'succeeded' || run.finalOutputId !== output.id
       || run.workflowSlug !== output.origin.workflowSlug) throw new Error();
-    const state = readSignals(root, workspaceId);
+    // A lookup can validate several reports against one freshly read journal.
+    const state = journal ?? readSignals(root, workspaceId);
+    if (state.version !== 1 || state.hqWorkspaceId !== workspaceId) throw new Error();
     const matches = state.requests.filter(request => request.outputId === output.id);
     if (matches.length !== 1) throw new Error();
     const request = matches[0]!;

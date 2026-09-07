@@ -30,7 +30,11 @@ see [implementation evidence](../audits/signals-your-world.md).
 Slice 2 now implements the two-track reader, explicit setup adoption, weekly
 controls, one-off links, report metadata and audio eligibility. Its independent
 review, rendered checks, and final merged-base regression/typecheck/build gates
-passed. Slice 3 (retrieval and deliberate worker handoff) is not implemented.
+passed. Slice 3 now implements bounded worker retrieval and deliberate draft
+handoff, including persistent source validation at Send and failed-send recovery.
+Its independent review/fix, rendered checks, final 8,653-test suite, monorepo
+typecheck, and Artist OS main/renderer build gates passed. Slice 3 is not yet
+committed; landing into main and approved live acceptance remain.
 These changes remain on the feature branch, not the main running app. No live
 agent scan or paid transcript/audio call is claimed by the fixture tests.
 

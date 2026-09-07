@@ -31,6 +31,7 @@ describe('Pi backend session tool parity', () => {
     expect(ordinary).not.toContain('mcp__session__get_manager_brief');
     expect(ordinary).toContain('mcp__session__get_workspace_context');
     expect(ordinary).toContain('mcp__session__search_artist_network');
+    expect(ordinary).toContain('mcp__session__find_signal_ideas');
     expect(manager).toContain('mcp__session__get_manager_brief');
     expect(manager).toContain('mcp__session__get_artist_context');
     expect(manager).toContain('mcp__session__get_campaign_context');

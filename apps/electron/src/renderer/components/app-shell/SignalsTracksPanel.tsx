@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { ExternalLink, Link2, Maximize2, Play, Plus, Radio, RefreshCw, SlidersHorizontal, Diamond } from 'lucide-react'
 import { DocumentFormattedMarkdownOverlay } from '@craft-agent/ui'
-import { isFinalSignalReport, signalWorkflowFor, type SignalMode, type SignalTrack, type SignalTrackConfig } from '@craft-agent/shared/shared-intel'
+import { isFinalSignalReport, signalWorkflowFor, type SignalMode, type SignalTrack, type SignalTrackConfig, type SignalEntryReference } from '@craft-agent/shared/shared-intel'
 import type { ContextDocDTO } from '../../../shared/types'
 import type { OutputManifestDTO, OutputSummaryDTO } from '@/hooks/useOutputs'
 import type { ArtistIntelConfig } from '@/lib/artist-intel'
@@ -15,6 +15,7 @@ import { navigate, routes } from '@/lib/navigate'
 import { computeNextRuns } from '@/components/automations/utils'
 import { SignalBriefingPlayer } from './SignalBriefingPlayer'
 import { SignalLinksDialog, SignalTrackSetupDialog } from './SignalTrackSetupDialog'
+import { SignalIdeasActions } from './SignalIdeaHandoff'
 
 export interface SignalNuggetInput { text: string; sourceTitle: string; sourceKey: string; track: SignalTrack; outputId?: string }
 export interface SignalsTracksPanelProps {
@@ -22,6 +23,7 @@ export interface SignalsTracksPanelProps {
   getOutput: (id: string) => Promise<OutputManifestDTO | null>;
   onSaveNugget: (input: SignalNuggetInput) => Promise<void>;
   ensureWorkflow: (track: SignalTrack, mode: SignalMode) => Promise<string>;
+  onDevelopIdea?: (reference: SignalEntryReference) => void;
   legacy: {
     config: ArtistIntelConfig; busy: boolean; weeklyEnabled: boolean; runDisabledReason?: string | null;
     notice?: { tone: string; title: string; detail?: string } | null;
@@ -186,6 +188,7 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
         {loading ? <div className="flex h-64 items-center justify-center"><RefreshCw size={18} className="animate-spin text-white/40" /></div> : content ? <Info_Markdown className="mx-auto max-w-[900px] break-words text-sm leading-7 text-white/75">{content}</Info_Markdown> : <div className="flex min-h-64 flex-col items-center justify-center gap-3 text-white/55"><Radio size={20} /><p>No {signalTrackName(track)} reports yet</p>{track === 'your-world' ? <div className="flex flex-wrap gap-2"><button className={control} disabled={!config} onClick={() => config && setSetup({ config, adoption: false })}><Plus size={15} />Add channels</button><button className={control} disabled={!tracks.state} onClick={() => setLinksOpen(true)}><Link2 size={15} />Analyze links</button></div> : null}</div>}
       </div>
     </div>
+    {!loading && selected?.output && props.onDevelopIdea ? <SignalIdeasActions key={`ideas:${workspaceId}:${selected.output.id}`} workspaceId={workspaceId} outputId={selected.output.id} revision={content} onDevelop={props.onDevelopIdea} /> : null}
     <DocumentFormattedMarkdownOverlay content={content} isOpen={fullscreen} onClose={() => setFullscreen(false)} typeBadge={{ label: signalTrackName(track), icon: Radio }} />
     {setup ? <SignalTrackSetupDialog key={`setup:${workspaceId}:${setup.config.track}`} open config={setup.config} adoption={setup.adoption} weeklyEnabled={setup.adoption ? legacy.weeklyEnabled : weekly} onOpenChange={open => { if (!open) setSetup(null) }} resolveChannel={url => window.electronAPI.resolveSignalChannel(workspaceId, url)} onSave={next => tracks.save(next, setup.adoption)} /> : null}
     <SignalLinksDialog key={`links:${workspaceId}:${track}`} open={linksOpen} trackName={signalTrackName(track)} onOpenChange={setLinksOpen} onAnalyze={async (links, key) => { const owner = workspaceId; const target = track; const queued = await tracks.start(target, 'links', key, links); if (scope.current === owner) setPendingReviews(value => ({ ...value, [target]: queued.runId })) }} />

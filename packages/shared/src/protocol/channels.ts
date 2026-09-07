@@ -708,6 +708,12 @@ export const RPC_CHANNELS = {
     RESOLVE_CHANNEL: 'signals:resolveChannel',
     SAVE_CONFIG: 'signals:saveConfig',
     START: 'signals:start',
+    IDEAS: 'signals:ideas',
+    RESOLVE_IDEA: 'signals:resolveIdea',
+    FIND_HANDOFF: 'signals:findHandoff',
+    BIND_HANDOFF: 'signals:bindHandoff',
+    GET_HANDOFF: 'signals:getHandoff',
+    CLEAR_HANDOFF: 'signals:clearHandoff',
   },
   videoStudio: {
     IMPORT_MEDIA: 'video-studio:importMedia',

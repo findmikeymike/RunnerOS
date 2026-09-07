@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { AlertCircle, Globe, Copy, RefreshCw, Link2Off, Info } from 'lucide-react'
 import { ChatDisplay, type ChatDisplayHandle } from '@/components/app-shell/ChatDisplay'
+import { SignalHandoffNotice } from '@/components/app-shell/SignalHandoffNotice'
 import { ChatAgentHeader } from '@/components/app-shell/ChatAgentHeader'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { SessionMenu } from '@/components/app-shell/SessionMenu'
@@ -39,6 +40,8 @@ export interface ChatPageProps {
 }
 
 const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
+  const [signalDraftGuarded, setSignalDraftGuarded] = React.useState(true)
+  React.useEffect(() => { setSignalDraftGuarded(true) }, [sessionId])
   const { t } = useTranslation()
   // Diagnostic: mark when component runs
   React.useLayoutEffect(() => {
@@ -751,13 +754,15 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     <>
       <div className="runner-chat-page h-full flex flex-col">
         {chatHeader}
+        <SignalHandoffNotice key={sessionId} sessionId={sessionId} workspaceId={session.workspaceId} processing={!!session.isProcessing} onGuardChange={setSignalDraftGuarded} />
         <div className="flex-1 flex flex-col min-h-0">
           <ChatDisplay
             ref={chatDisplayRef}
             session={session}
+            preserveDraftUntilAccepted={signalDraftGuarded}
             onSendMessage={(message, attachments, skillSlugs) => {
               if (session) {
-                onSendMessage(session.id, message, attachments, skillSlugs)
+                return onSendMessage(session.id, message, attachments, skillSlugs)
               }
             }}
             onOpenFile={handleOpenFile}

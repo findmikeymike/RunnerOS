@@ -537,3 +537,5 @@ export type {
   SessionToolFilterOptions,
   SessionToolNameOptions,
 } from './tool-defs.ts';
+export { handleFindSignalIdeas } from './handlers/find-signal-ideas.ts';
+export type { FindSignalIdeasInput, SignalLookupResult } from '@craft-agent/shared/shared-intel';

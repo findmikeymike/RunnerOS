@@ -169,7 +169,8 @@ function projectSessionTasks(session: Session): TodoItem[] | undefined {
 
 interface ChatDisplayProps {
   session: Session | null
-  onSendMessage: (message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => void
+  onSendMessage: (message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => boolean | void | Promise<boolean | void>
+  preserveDraftUntilAccepted?: boolean
   onOpenFile: (path: string) => void
   onOpenUrl: (url: string) => void
   // Model selection
@@ -468,6 +469,7 @@ function ScrollOnMount({
 export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>(function ChatDisplay({
   session,
   onSendMessage,
+  preserveDraftUntilAccepted,
   onOpenFile,
   onOpenUrl,
   currentModel,
@@ -1309,7 +1311,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
   // Handle message submission from InputContainer
   // Backend handles interruption and queueing if currently processing
-  const handleSubmit = (message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => {
+  const handleSubmit = async (message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => {
     const goalObjective = parseChatGoalCommand(message)
     if (goalObjective !== undefined && session) {
       if (!goalObjective) {
@@ -1338,7 +1340,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
     // Force stick-to-bottom when user sends a message
     isStickToBottomRef.current = true
-    onSendMessage(normalizedMessage, attachments, skillSlugs)
+    const accepted = await onSendMessage(normalizedMessage, attachments, skillSlugs)
+    if (accepted === false) return false
 
     // Persist sent marker on follow-up annotations so TurnCard can distinguish
     // sent vs pending follow-ups. If user edits a follow-up later, TurnCard
@@ -1375,6 +1378,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     requestAnimationFrame(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     })
+    return accepted
   }
 
   const handleShareIntel = React.useCallback(async () => {
@@ -2153,6 +2157,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               isProcessing: session.isProcessing,
               onAnimatedHeightChange: handleAnimatedHeightChange,
               onSubmit: handleSubmit,
+              preserveDraftUntilAccepted,
               onStop: handleStop,
               textareaRef,
               currentModel,

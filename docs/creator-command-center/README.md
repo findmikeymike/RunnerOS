@@ -48,7 +48,7 @@ Core Artist HQ and campaign workspace specs live here.
 - [40 Artist HQ Legal & Deals Agent](./40-music-legal-agent-spec.md)
 - [46 Electron Runtime Upgrade](./46-electron-runtime-upgrade-spec.md) — Electron 39 → 44.2.0 (Node 24, Chromium 152); sharp natives packaged; vendor dist integrity; macOS 12 dropped (decision recorded)
 
-- [47 Signals: Industry And Your World](./47-signals-your-world-spec.md) - host foundation and two-track reader/audio reviewed on feature branch; content-worker retrieval/handoff and approved live acceptance remain
+- [47 Signals: Industry And Your World](./47-signals-your-world-spec.md) - all three implementation slices reviewed and verified on feature branch; Slice 3 commit, main landing, and approved live acceptance remain
 
 ## Not Yet Built
 

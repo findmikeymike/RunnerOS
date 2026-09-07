@@ -1,5 +1,7 @@
 import * as React from 'react'
 import { SignalsTracksPanel, type SignalNuggetInput } from './SignalsTracksPanel'
+import { SignalIdeaHandoff } from './SignalIdeaHandoff'
+import type { SignalEntryReference } from '@craft-agent/shared/shared-intel'
 import {
   Bot,
   CalendarClock,
@@ -330,6 +332,8 @@ export function ArtistHQHome({
   onCreateAgendaTask,
   onDeleteAgendaTask,
 }: ArtistHQHomeProps) {
+  const [signalIdea, setSignalIdea] = React.useState<SignalEntryReference | null>(null)
+  React.useEffect(() => { setSignalIdea(null) }, [workspaceId])
   const {
     activeAgents: shellActiveAgents = [],
     llmConnections,
@@ -2520,6 +2524,7 @@ export function ArtistHQHome({
             getOutput={getOutput}
             onSaveNugget={saveTrackNugget}
             ensureWorkflow={ensureTrackWorkflow}
+            onDevelopIdea={setSignalIdea}
             legacy={{
               config: intelConfig,
               busy: intelBusy,
@@ -2533,6 +2538,7 @@ export function ArtistHQHome({
           />
         )}
       </div>
+      {signalIdea ? <SignalIdeaHandoff key={`${workspaceId}:${signalIdea.outputId}:${signalIdea.entryId}`} reference={signalIdea} onClose={() => setSignalIdea(null)} /> : null}
       {selectedPerson ? (
         <PersonDetailPanel
           person={selectedPerson}
