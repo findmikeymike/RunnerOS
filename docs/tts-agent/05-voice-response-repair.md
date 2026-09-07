@@ -109,9 +109,8 @@ The user selected a speed-first comparison: DeepSeek Pro/medium, Pro/low, and
 Flash/low. An isolated Pi benchmark was prepared conceptually, but automatic
 approval review rejected creating its harness twice, requiring explicit consent
 to send the existing full Artist Manager context to `api.deepseek.com`.
-No benchmark request ran and no credentials were decrypted. Temporary encrypted
-credential copies were removed. No comparative speed result or new model
-recommendation is claimed.
+At that point no benchmark request ran and no credentials were decrypted.
+Temporary encrypted credential copies were removed; comparison awaited consent.
 
 ## Authorized model comparison and focused voice candidate
 
@@ -155,3 +154,30 @@ conversation can discuss goals, priorities and decisions; actions are referred
 to Manager chat. Recent successful conversation history is bounded. Cancellation
 is tied to the owning app window and handles pending registration, navigation,
 renderer loss and late provider events.
+
+The actual new main-owned service was then tested with its production connection,
+credential, model-resolution and streaming dependencies in an isolated windowless
+Electron host. It used the real generated HQ document and the new prompt builder
+(3,491 characters), confirmed `pi-api-key` / `pi/deepseek-v4-flash` / low,
+and registered in 249 ms. All four requests completed without errors or fallback.
+
+| Actual focused service | First text | Final text | Words |
+| --- | ---: | ---: | ---: |
+| Greeting | 1.572 s | 1.931 s | 27 |
+| Warm greeting | 1.550 s | 1.739 s | 11 |
+| Priority | 1.970 s | 2.435 s | 45 |
+| Action request | 0.966 s | 1.331 s | 38 |
+
+The action request explicitly directed scheduling/messaging to Manager chat and
+claimed no execution. The first greeting still included unsolicited campaign
+commentary, a remaining conversational-quality issue. Snapshot grounding does
+not prove fresh tool verification. These measurements still exclude TTS/audio.
+Local evidence: `/private/tmp/artist-os-focus-service-live-results.json`.
+
+Nineteen focused service, renderer-transport and prompt tests pass. They cover
+streaming before completion, absent tools/retries/fallback, bounded history,
+owner/turn isolation, provider failure and timeout, cancellation during pending
+setup/context, and context warnings. Review also found and closed a hook setup
+microtask race; ownership is now rechecked immediately before registration.
+The complete repository suite passed: 8,358 tests, 1 skip, 0 failures. Electron
+typecheck, main/preload bundles, and renderer production build also passed.
