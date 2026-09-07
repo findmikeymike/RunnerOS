@@ -9,6 +9,11 @@ import { markVoiceManagedSession } from '@/lib/voice-managed-sessions'
 import { createElectronMoonshineSttTransport } from '../../../../../vendor/voice-core-electron/renderer/moonshineSttTransport'
 import { parseMoonshineModelId, type ElectronMoonshineRuntimeStarted, type ElectronMoonshineRuntimePoll } from '../../../../../vendor/voice-core-electron/main/moonshineModels'
 import { ELECTRON_INWORLD_TTS_MODEL_ID } from '../../../../../vendor/voice-core-electron/renderer/inworldTtsPolicy'
+import {
+  buildArtistManagerVoiceStylePrompt,
+  normalizeArtistManagerVoiceStyle,
+  type ArtistManagerVoiceStyleId,
+} from '@/lib/artist-manager-voice-style'
 
 const VOICE_MODE_PROMPT = `
 VOICE CONVERSATION MODE
@@ -24,6 +29,7 @@ export type ArtistManagerVoiceState = {
   providerReady: boolean; assemblyAiReady: boolean; inworldReady: boolean; hearingReady: boolean
   status: string; error: string | null; userText: string; assistantText: string; sessionId: string | null; conversationSessionId: string | null
   sttSelection: string; setSttSelection(value: string): void
+  managerStyle: ArtistManagerVoiceStyleId; setManagerStyle(value: ArtistManagerVoiceStyleId): void
   moonshineAvailable: boolean; moonshineTiers: ArtistManagerMoonshineStatus['tiers']
   inputDeviceId: string; outputDeviceId: string; devices: MediaDeviceInfo[]
   setInputDeviceId(value: string): void; setOutputDeviceId(value: string): void
@@ -42,6 +48,7 @@ export function useArtistManagerVoice(input: {
   const [providers, setProviders] = React.useState({ assemblyAi: false, inworld: false, ready: false })
   const [moonshine, setMoonshine] = React.useState<ArtistManagerMoonshineStatus>({ available: false, tiers: [] })
   const [sttSelection, setSelection] = React.useState(() => readPreference('stt', 'moonshine-small-streaming-en'))
+  const [managerStyle, setManagerStyleState] = React.useState(() => normalizeArtistManagerVoiceStyle(readPreference('style', 'sharp')))
   const [inputDeviceId, setInput] = React.useState(() => readPreference('input', ''))
   const [outputDeviceId, setOutput] = React.useState(() => readPreference('output', ''))
   const [devices, setDevices] = React.useState<MediaDeviceInfo[]>([])
@@ -149,7 +156,7 @@ export function useArtistManagerVoice(input: {
         })
         const session = await window.electronAPI.createSession(input.workspaceId, {
           ...base, hidden: false, name: 'Artist Manager Voice',
-          customSystemPrompt: `${base.customSystemPrompt ?? manager.systemPrompt}\n\n${VOICE_MODE_PROMPT}`,
+          customSystemPrompt: `${base.customSystemPrompt ?? manager.systemPrompt}\n\n${VOICE_MODE_PROMPT}\n\n${buildArtistManagerVoiceStylePrompt(managerStyle)}`,
           launchReceipt: base.launchReceipt ? { ...base.launchReceipt, summary: 'Private Artist Manager voice conversation.' } : base.launchReceipt,
         })
         markVoiceManagedSession(session.id)
@@ -229,15 +236,16 @@ export function useArtistManagerVoice(input: {
     } catch (cause) {
       if (alive()) { await stop(); if (mounted.current) setError(messageFromError(cause)) }
     } finally { if (alive()) setStarting(false) }
-  }, [input.agents, input.skills, input.sources, input.workspaceId, lifecycle, sttSelection, inputDeviceId, outputDeviceId, stop, refreshDevices])
+  }, [input.agents, input.skills, input.sources, input.workspaceId, lifecycle, managerStyle, sttSelection, inputDeviceId, outputDeviceId, stop, refreshDevices])
 
-  const change = (key: string, setter: (value: string) => void, value: string) => { void stop(); setter(value); writePreference(key, value) }
+  const change = <T extends string>(key: string, setter: React.Dispatch<React.SetStateAction<T>>, value: T) => { void stop(); setter(value); writePreference(key, value) }
   const hearingReady = sttSelection === 'assembly_ai' ? providers.assemblyAi
     : moonshine.available && moonshine.tiers.some(tier => tier.modelId === sttSelection && tier.registered && tier.installState === 'ready' && !tier.hasError)
   return {
     open, running, starting, stopping, installing, status, error, userText, assistantText, sessionId, conversationSessionId,
     providerReady: hearingReady && providers.inworld, hearingReady, assemblyAiReady: providers.assemblyAi, inworldReady: providers.inworld,
     sttSelection, setSttSelection: value => { if (value !== 'assembly_ai') parseMoonshineModelId(value); change('stt', setSelection, value) },
+    managerStyle, setManagerStyle: value => change('style', setManagerStyleState, normalizeArtistManagerVoiceStyle(value)),
     moonshineAvailable: moonshine.available, moonshineTiers: moonshine.tiers, installMoonshine,
     inputDeviceId, outputDeviceId, devices, refreshDevices,
     setInputDeviceId: value => change('input', setInput, value), setOutputDeviceId: value => change('output', setOutput, value),

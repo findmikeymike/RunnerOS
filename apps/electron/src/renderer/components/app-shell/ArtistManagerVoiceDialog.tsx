@@ -9,6 +9,7 @@ import { handVoiceSessionToChat } from '@/lib/voice-managed-sessions'
 import { useAppShellContext, usePendingPermission, usePendingCredential } from '@/context/AppShellContext'
 import { StructuredInput } from './input/StructuredInput'
 import type { StructuredInputState, StructuredResponse } from './input/structured/types'
+import { ARTIST_MANAGER_VOICE_STYLES } from '@/lib/artist-manager-voice-style'
 
 export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceState }) {
   const { navigate } = useNavigation()
@@ -67,6 +68,34 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
               A private voice conversation with the same manager that knows your artist context, release horizon, campaigns, and weekly signals.
             </DialogDescription>
           </DialogHeader>
+
+          <fieldset disabled={busy} className="relative mt-5 disabled:opacity-55">
+            <legend className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/36">Manager style</legend>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {ARTIST_MANAGER_VOICE_STYLES.map((style) => {
+                const selected = voice.managerStyle === style.id
+                return (
+                  <button
+                    key={style.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => voice.setManagerStyle(style.id)}
+                    className={cn(
+                      'rounded-xl border px-3 py-2 text-xs font-medium transition-colors',
+                      selected
+                        ? 'border-orange-400/40 bg-orange-400/10 text-orange-100'
+                        : 'border-white/[0.07] bg-white/[0.025] text-white/46 hover:bg-white/[0.05] hover:text-white/75',
+                    )}
+                  >
+                    {style.label}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="mt-2 text-[11px] leading-4 text-white/32">
+              {ARTIST_MANAGER_VOICE_STYLES.find((style) => style.id === voice.managerStyle)?.description}
+            </p>
+          </fieldset>
 
           <div className="relative mt-6 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">
             <div className="flex items-center justify-between gap-4">
