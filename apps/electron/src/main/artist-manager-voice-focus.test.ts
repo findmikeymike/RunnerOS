@@ -59,8 +59,8 @@ describe('focused voice service', () => {
     expect(requests[0]![1].tools).toEqual([])
     expect(requests[0]![2].toolChoice).toBe('none')
     await service.startTurn(7, { sessionId: session.sessionId, turnId: 'work', text: "What's a great agent for creative campaigns and video content for a release?" }, () => {})
-    expect(requests[1]![1].systemPrompt).toBe(snapshot)
-    expect(requests[1]![1].tools?.[0]?.description).toContain('Creative Director')
+    expect(requests[1]![1].systemPrompt).toContain(snapshot)
+    expect(requests[1]![1].tools?.find(tool => tool.name === 'open_command_chat')?.description).toContain('Creative Director')
     expect(requests[1]![1].messages).toHaveLength(3)
     expect(requests[1]![0]).toEqual(requests[0]![0])
     service.close()
@@ -76,7 +76,7 @@ describe('focused voice service', () => {
         handoffTargets: [{ slug: 'creative-director', name: 'Creative Director' }],
       })
       await service.startTurn(7, { sessionId: session.sessionId, turnId: 'one', text }, () => {})
-      expect(requests[0]![1].systemPrompt).toBe(registration.systemPrompt)
+      expect(requests[0]![1].systemPrompt).toContain(registration.systemPrompt)
       expect(requests[0]![1].tools).toHaveLength(1)
       service.close()
     }

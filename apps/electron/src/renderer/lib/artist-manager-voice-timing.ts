@@ -20,7 +20,7 @@ export type VoiceTimingRecord = VoiceTimingDetails & {
   run: string; turn: number; stage: VoiceTimingStage; elapsedMs: number
 }
 
-/** Opt-in metadata only. No transcripts, prompts, credentials, or tool arguments. */
+/** Local timing metadata only. No transcripts, prompts, credentials, or tool arguments. */
 export class VoiceTimingTrace {
   private readonly startedAt: number
   private turn = 0

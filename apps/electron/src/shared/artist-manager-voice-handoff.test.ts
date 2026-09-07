@@ -58,7 +58,7 @@ describe('focused voice handoff boundary', () => {
   test('recognizes clear affirmative whole utterances, including transcription punctuation', () => {
     for (const utterance of ['Yes.', 'Sounds good!', 'Yes, sounds good.', 'Sure', "let's do it", 'Lets do it.',
       'Yes please!', ' Yes, go ahead. ', 'Let’s do it!', 'Okay.', 'Absolutely!',
-      'Yes, go.', 'Yeah, let’s go!', 'Um, yes, go.', 'Open the chat.', 'Yes, open it.']) {
+      'Yes, go.', 'Yeah, do it.', 'Okay, do it!', 'Sure, do it.', 'Yeah, let’s go!', 'Um, yes, go.', 'Open the chat.', 'Yes, open it.']) {
       expect(isVoiceHandoffConfirmation(utterance)).toBe(true)
     }
   })

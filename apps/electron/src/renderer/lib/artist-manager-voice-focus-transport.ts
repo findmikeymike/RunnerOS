@@ -93,6 +93,7 @@ export function createVoiceFocusTransport(deps: Deps): WebLlmTransport & { prepa
           })
           deps.onUserText?.(request.userText)
           // Subscribe before dispatch. Consume events while the IPC request runs.
+          deps.onTiming?.('manager-request')
           void deps.api.startTurn({ sessionId: session.sessionId, turnId, text: request.userText, systemPrompt })
             .catch(() => fail(new Error('Focused voice could not complete this reply')))
           while (true) {

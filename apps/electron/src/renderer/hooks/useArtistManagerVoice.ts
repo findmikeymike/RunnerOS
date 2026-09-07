@@ -155,11 +155,11 @@ export function useArtistManagerVoice(input: {
     stopEpoch.current++; setStopping(false)
     setPreparing(true); setError(null); setUserText(''); setAssistantText(''); setStatus('Warming up…')
     const alive = () => mounted.current && lifecycle.owns(ticket)
-    const trace = timingEnabled ? new VoiceTimingTrace(crypto.randomUUID(), record => {
+    const trace = new VoiceTimingTrace(crypto.randomUUID(), record => {
       if (!mounted.current) return
-      setTimingRecords(previous => [...previous.slice(-499), record])
+      if (timingEnabled) setTimingRecords(previous => [...previous.slice(-499), record])
       window.electronAPI.debugLog('[voice-timing]', JSON.stringify(record))
-    }) : null
+    })
     timingRef.current = trace
     trace?.mark('prepare-start')
     try {

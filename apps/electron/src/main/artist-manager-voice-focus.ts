@@ -17,10 +17,10 @@ import { normalizeVoiceHandoffTargets, buildVoiceHandoffTool, parseVoiceHandoffP
 import { resolveVoiceHandoffIntent } from './artist-manager-voice-handoff-intent'
 import { buildVoiceOpeningGreetingPrompt } from '../shared/artist-manager-voice-persona'
 
-type StreamEvent = { type: string; delta?: string; reason?: string; toolCall?: { name: string; arguments: unknown }; message?: { usage?: { output?: number; reasoning?: number } } }
+type StreamEvent = { contentIndex?: number; partial?: { content?: Array<{ type: string; name?: string; arguments?: unknown }> }; type: string; delta?: string; reason?: string; toolCall?: { name: string; arguments: unknown }; message?: { usage?: { output?: number; reasoning?: number } } }
 export type VoiceFocusResolvedConfig = { connection: LlmConnection; model: string; thinking?: ArtistManagerVoiceSettings['thinking']; style?: ArtistManagerVoiceSettings['style'] }
 export type VoiceFocusDiagnostic = {
-  stage: 'turn' | 'intent' | 'offer' | 'clarification' | 'confirmed' | 'completed' | 'failed'
+  stage: 'turn' | 'first-text' | 'speech-streaming' | 'intent' | 'offer' | 'clarification' | 'confirmed' | 'completed' | 'failed'
   sessionId: string
   turnId: string
   pendingOffer?: boolean
@@ -39,6 +39,25 @@ export type VoiceFocusDependencies = {
 
 const supportedApis = new Set(['openai-completions', 'openai-responses', 'anthropic-messages'])
 const bareModel = (id: string) => id.startsWith('pi/') ? id.slice(3) : id
+const SPEECH_MODE_PROMPT = 'Respond using exactly one tool: voice_reply for conversation or advice; open_command_chat only for an agreed handoff. voice_reply streams directly to speech, so keep it to 1–3 short sentences and at most 60 words unless more is requested. Never put text outside the tool or combine tools.\n\n'
+const SPEECH_TOOL: NonNullable<Context['tools']>[number] = {
+  name: 'voice_reply',
+  description: 'Speak an ordinary conversational reply. This only speaks; it does not execute work, navigate, or hand off. Use for advice, questions, discussion, and acknowledgements.',
+  parameters: { type: 'object', properties: { text: { type: 'string', description: 'The spoken answer: 1–3 short sentences, at most 60 words unless more was requested.' } }, required: ['text'], additionalProperties: false } as NonNullable<Context['tools']>[number]['parameters'],
+}
+
+// Keep provider payload validation separate from speech parsing. A changed SDK
+// shape must not silently turn the enforced speech choice into a free-text turn.
+function requireSpeechChoice(payload: unknown): unknown {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('invalid voice payload')
+  const value = payload as Record<string, unknown>
+  const thinking = value.thinking
+  if (!thinking || typeof thinking !== 'object' || !('type' in thinking) || thinking.type !== 'disabled') throw new Error('voice reasoning must be disabled')
+  const tools = value.tools
+  if (!Array.isArray(tools) || tools.length !== 2 || !tools.every((tool, index) =>
+    tool?.type === 'function' && tool.function?.name === (index === 0 ? 'voice_reply' : 'open_command_chat'))) throw new Error('invalid voice tools')
+  return { ...value, tool_choice: 'required', parallel_tool_calls: false }
+}
 
 // A greeting needs no career snapshot. Keep the whole-utterance boundary narrow:
 // "hey, what agent helps with campaigns?" must still receive the full context.
@@ -263,10 +282,16 @@ export class ArtistManagerVoiceFocusService {
       apiKey ??= await this.deps.getApiKey(session.info.connection)
       if (!current()) return
       if (!apiKey?.trim()) throw new Error('missing credential')
+      // DeepSeek rejects required tools while reasoning is enabled. Enable this
+      // verified streaming envelope only on its non-reasoning route; preserve
+      // the existing protocol for other providers and thinking settings.
+      const speechEnvelope = !!handoffTool && session.info.thinking === 'off'
+        && session.sdkModel.provider === 'deepseek' && session.sdkModel.api === 'openai-completions'
+        && session.sdkModel.id === 'deepseek-v4-flash' && session.sdkModel.baseUrl === 'https://api.deepseek.com'
       const context: Context = {
-        systemPrompt: greetingOnly ? session.greetingPrompt : session.systemPrompt + (continuingAfterOffer
+        systemPrompt: greetingOnly ? session.greetingPrompt : (speechEnvelope ? SPEECH_MODE_PROMPT : '') + session.systemPrompt + (continuingAfterOffer
           ? '\n\nThe artist wants to continue talking or change the plan. Answer their latest reply naturally. Do not repeat the previous handoff offer in this reply, and do not claim the app lacks handoff capability. A new handoff can be offered on a later turn after the revised work is agreed.' : ''),
-        tools: handoffTool ? [handoffTool as NonNullable<Context['tools']>[number]] : [],
+        tools: handoffTool ? [...(speechEnvelope ? [SPEECH_TOOL] : []), handoffTool as NonNullable<Context['tools']>[number]] : [],
         messages: session.history.flatMap<Context['messages'][number]>(exchange => [
           { role: 'user', content: exchange.user, timestamp: 0 },
           { role: 'assistant', content: [{ type: 'text', text: exchange.assistant }], api: session.sdkModel.api, provider: session.sdkModel.provider, model: session.sdkModel.id, stopReason: 'stop', timestamp: 0, usage: emptyUsage() },
@@ -277,30 +302,64 @@ export class ArtistManagerVoiceFocusService {
         apiKey, signal, maxTokens: session.info.thinking === 'off' ? VOICE_FOCUS_LIMITS.outputTokens : VOICE_FOCUS_LIMITS.reasoningOutputTokens, maxRetries: 0,
         reasoning: session.info.thinking === 'off' ? undefined : session.info.thinking,
         toolChoice: handoffTool ? 'auto' : 'none',
+        // The common SDK options expose only auto/none; its supported payload
+        // hook carries DeepSeek's required choice without a type cast or retry.
+        onPayload: speechEnvelope ? requireSpeechChoice : undefined,
       })
       let text = ''
       let done = false
       let proposal: VoiceHandoffProposal | null = null
       let toolStarts = 0
+      let speechTool = false
+      let toolCompleted = false
+      let providerTextSeen = false
+      const streamSpeech = (value: unknown) => {
+        if (typeof value !== 'string' || value.length > VOICE_FOCUS_LIMITS.outputChars || !value.startsWith(text)) throw new Error('invalid streamed speech')
+        const delta = value.slice(text.length)
+        text = value
+        if (delta) {
+          if (!providerTextSeen) { providerTextSeen = true; diagnostic({ stage: 'first-text' }) }
+          send({ type: 'text_delta', delta })
+        }
+      }
       for await (const event of stream) {
         if (!current()) return
         if (event.type === 'error') throw new Error('provider response failed')
         if (event.type.startsWith('toolcall')) {
-          if (!handoffTool) throw new Error('unexpected tool')
+          if (!handoffTool || toolCompleted) throw new Error('unexpected tool')
           if (event.type === 'toolcall_start' && ++toolStarts > 1) throw new Error('multiple handoffs')
-          if (event.type === 'toolcall_end') {
+          const partial = event.contentIndex === undefined ? undefined : event.partial?.content?.[event.contentIndex]
+          const call = event.type === 'toolcall_end' ? event.toolCall : partial?.type === 'toolCall' ? partial : undefined
+          if (call?.name) {
+            if (speechTool && call.name !== 'voice_reply') throw new Error('tool after speech commitment')
+            if (call.name === 'voice_reply') {
+              if (!speechEnvelope) throw new Error('unexpected speech tool')
+              if (!speechTool) {
+                speechTool = true
+                text = '' // Never speak or retain a provider preamble outside the speech tool.
+                diagnostic({ stage: 'speech-streaming' })
+              }
+              const args = call.arguments
+              if (args && typeof args === 'object' && !Array.isArray(args) && 'text' in args) streamSpeech(args.text)
+              if (event.type === 'toolcall_end') {
+                if (!args || typeof args !== 'object' || Array.isArray(args) || Object.keys(args).length !== 1 || !('text' in args) || !text.trim()) throw new Error('invalid speech tool')
+                toolCompleted = true
+              }
+            } else if (call.name !== 'open_command_chat') throw new Error('invalid handoff')
+          }
+          if (event.type === 'toolcall_end' && !speechTool) {
             if (proposal || event.toolCall?.name !== 'open_command_chat') throw new Error('invalid handoff')
             proposal = parseVoiceHandoffProposal(event.toolCall.arguments, randomUUID(), session.handoffTargets)
             if (!proposal) throw new Error('invalid handoff')
+            toolCompleted = true
           }
           continue
         }
         if (event.type === 'text_delta' && event.delta) {
+          if (!providerTextSeen) { providerTextSeen = true; diagnostic({ stage: 'first-text' }) }
           if (text.length + event.delta.length > VOICE_FOCUS_LIMITS.outputChars) throw new Error('response limit')
           text += event.delta
-          // A model can put an execution claim before its tool call. Hold this
-          // short reply until its final shape is known when handoff is available.
-          // Tool turns speak only the app's validated offer, never that preamble.
+          if (speechTool) throw new Error('text outside speech tool')
           if (!handoffTool) send({ type: 'text_delta', delta: event.delta })
         } else if (event.type === 'done') {
           send(completionMetadata(event))
@@ -308,7 +367,7 @@ export class ArtistManagerVoiceFocusService {
             incomplete = true
             throw new Error('reply truncated')
           }
-          if (proposal ? event.reason !== 'toolUse' : event.reason !== 'stop' || toolStarts > 0) throw new Error('unsupported completion')
+          if (proposal || speechTool ? event.reason !== 'toolUse' || !toolCompleted : event.reason !== 'stop' || toolStarts > 0) throw new Error('unsupported completion')
           done = true
           break
         }
@@ -321,7 +380,7 @@ export class ArtistManagerVoiceFocusService {
         send({ type: 'text_delta', delta: offer })
         session.pendingHandoff = { proposal, expiresAt: Date.now() + 120_000 }
         diagnostic({ stage: 'offer', toolCalls: toolStarts || 1 })
-      } else if (handoffTool) {
+      } else if (handoffTool && !speechTool) {
         send({ type: 'text_delta', delta: text })
       }
       remember(text)

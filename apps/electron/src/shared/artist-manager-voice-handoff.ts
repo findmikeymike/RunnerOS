@@ -77,7 +77,7 @@ const AFFIRMATIVE_UTTERANCES = new Set([
   'yes please', 'sure please', 'okay yes', 'ok yes',
   'lets do it', "let's do it", 'yes lets do it', "yes let's do it",
   'go ahead', 'yes go ahead', 'sure go ahead', 'okay go ahead', 'ok go ahead',
-  'do it', 'yes do it', 'please do', 'yes please do',
+  'do it', 'yes do it', 'yeah do it', 'okay do it', 'ok do it', 'sure do it', 'please do', 'yes please do',
   'go', 'yes go', 'yeah go', 'yep go', 'sure go', 'okay go', 'ok go',
   "let's go", 'lets go', "yes let's go", 'yes lets go', "yeah let's go", 'yeah lets go',
   'open it', 'yes open it', 'yeah open it', 'open the chat', 'yes open the chat',
