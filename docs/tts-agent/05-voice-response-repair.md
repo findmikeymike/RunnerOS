@@ -481,3 +481,40 @@ final and no errors; the quiet baseline remains 500 ms. Evidence:
 This is an energy-plus-transcript heuristic, not neural VAD. A sufficiently
 quiet, steady utterance whose recognizer stops producing new words can still
 be ambiguous; live microphone verification remains necessary.
+
+
+### Spoken handoff confirmation loop (2026-09-07)
+
+The user's latest call has no detailed voice trace in the available logs;
+the most recent recorded trace is an older 19:27 UTC run. Do not attribute its
+events to this incident. A concrete matching failure is reproduced in the
+production service: after a valid tool proposal, "Yes, go." was absent from
+the whole-utterance confirmation allowlist, so the offer was cleared and the
+reply went back to the provider, allowing another offer instead of navigation.
+
+The allowlist now accepts short natural variants including "yes go", "yeah
+let's go", and "open the chat", plus a single leading um/uh. Negation,
+conditions, timing changes, additional work instructions and uncertain
+questions remain rejected. A regression first failed against the old service,
+then passed with the fix: one proposal model call, then immediate handoff_ready
+on "Yes, go." with no second provider or credential request.
+
+The main process now records bounded handoff state diagnostics (pending offer,
+confirmation match, tool count, stage and session/turn identifiers). The
+renderer records ready/playback/stop/navigation stages. No spoken text, brief,
+provider payload or credentials are included, and logging cannot interrupt the
+call. These diagnostics remain available in the development app even when the
+optional detailed timing switch is off.
+
+Live isolated-provider check using the configured Flash/low route and real
+agent catalog: Branding Agent proposal completed in 2.716 seconds, then
+"Yes, go." emitted the validated branding-agent destination immediately with
+zero provider calls and no error. This provider test does not navigate the
+user's live app. Evidence: `/private/tmp/artist-os-voice-loop-live-results.json`.
+
+Five actual-hook harness scenarios verify that playback completion waits for
+cleanup, opens once, then closes the modal; cancellation, cleanup failure,
+workspace changes and late duplicates cannot open the chat. Playback and
+navigation endpoints are mocked. Source inspection confirms the real composer
+opens an unsent draft using the destination agent's normal model, not the
+voice model. Evidence: `/private/tmp/artist-os-voice-handoff-hook-harness/result.json`.

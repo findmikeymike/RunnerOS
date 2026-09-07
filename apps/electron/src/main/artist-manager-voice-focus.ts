@@ -17,6 +17,15 @@ import { normalizeVoiceHandoffTargets, buildVoiceHandoffTool, parseVoiceHandoffP
 
 type StreamEvent = { type: string; delta?: string; reason?: string; toolCall?: { name: string; arguments: unknown }; message?: { usage?: { output?: number; reasoning?: number } } }
 export type VoiceFocusResolvedConfig = { connection: LlmConnection; model: string; thinking?: ArtistManagerVoiceSettings['thinking'] }
+export type VoiceFocusDiagnostic = {
+  stage: 'turn' | 'offer' | 'confirmed' | 'completed' | 'failed'
+  sessionId: string
+  turnId: string
+  pendingOffer?: boolean
+  confirmation?: boolean
+  targetCount?: number
+  toolCalls?: number
+}
 export type VoiceFocusDependencies = {
   resolveConfig(request: VoiceFocusRegisterRequest): Promise<VoiceFocusResolvedConfig>
   resolveModel(connection: LlmConnection, model: string): Promise<Model<Api>>
@@ -139,7 +148,10 @@ type OwnerState = { session?: SessionState }
 /** Direct streaming with one confirmation-gated Command handoff; no general agent executor. */
 export class ArtistManagerVoiceFocusService {
   private readonly owners = new Map<number, OwnerState>()
-  constructor(private readonly deps: VoiceFocusDependencies = productionDependencies) {}
+  constructor(
+    private readonly deps: VoiceFocusDependencies = productionDependencies,
+    private readonly onDiagnostic?: (event: VoiceFocusDiagnostic) => void,
+  ) {}
 
   async register(ownerId: number, request: VoiceFocusRegisterRequest): Promise<VoiceFocusSession> {
     assertText(request.workspaceId, 200, 'workspace')
@@ -178,6 +190,10 @@ export class ArtistManagerVoiceFocusService {
     const active: ActiveTurn = { id: request.turnId, controller: new AbortController() }
     session.active = active
     const signal = active.controller.signal
+    const diagnostic = (details: Omit<VoiceFocusDiagnostic, 'sessionId' | 'turnId'>) => {
+      // Fixed scalar fields only: no speech, brief, provider payload or credentials.
+      try { this.onDiagnostic?.({ ...details, sessionId: session.info.sessionId, turnId: request.turnId }) } catch { /* Logging cannot break a call. */ }
+    }
     const current = () => this.owners.get(ownerId)?.session === session && session.active === active && !signal.aborted
     const send = (event: { type: 'text_delta'; delta: string } | { type: 'done' } | VoiceFocusCompletion | { type: 'handoff_ready'; proposal: VoiceHandoffProposal }) => {
       if (current()) emit({ ...event, sessionId: session.info.sessionId, turnId: request.turnId })
@@ -193,10 +209,14 @@ export class ArtistManagerVoiceFocusService {
     const run = async () => {
       const pending = session.pendingHandoff
       session.pendingHandoff = undefined
-      if (pending && pending.expiresAt > Date.now() && isVoiceHandoffConfirmation(request.text)) {
+      const pendingOffer = Boolean(pending && pending.expiresAt > Date.now())
+      const confirmation = isVoiceHandoffConfirmation(request.text)
+      diagnostic({ stage: 'turn', pendingOffer, confirmation, targetCount: session.handoffTargets.length })
+      if (pending && pendingOffer && confirmation) {
         // The app's previous turn named the destination and task. Consume once;
         // a bare yes without that live offer cannot open anything.
         session.handedOff = true
+        diagnostic({ stage: 'confirmed' })
         send({ type: 'text_delta', delta: `I'll open Command with ${pending.proposal.agentName} and put our plan in a draft for you to review and send.` })
         send({ type: 'handoff_ready', proposal: pending.proposal })
         send({ type: 'done' })
@@ -263,16 +283,19 @@ export class ArtistManagerVoiceFocusService {
         text = offer
         send({ type: 'text_delta', delta: offer })
         session.pendingHandoff = { proposal, expiresAt: Date.now() + 120_000 }
+        diagnostic({ stage: 'offer', toolCalls: toolStarts || 1 })
       } else if (handoffTool) {
         send({ type: 'text_delta', delta: text })
       }
       session.history.push({ user: request.text, assistant: text })
       while (session.history.length > VOICE_FOCUS_LIMITS.historyTurns || historySize(session.history) > VOICE_FOCUS_LIMITS.historyChars) session.history.shift()
       send({ type: 'done' })
+      diagnostic({ stage: 'completed', toolCalls: proposal ? 1 : 0 })
     }
     try {
       await Promise.race([run(), aborted])
     } catch {
+      diagnostic({ stage: 'failed' })
       session.pendingHandoff = undefined
       const shouldPublish = current() || (timedOut && this.owners.get(ownerId)?.session === session && session.active === active)
       active.controller.abort()

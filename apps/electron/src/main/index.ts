@@ -243,7 +243,7 @@ let messagingHandle: MessagingBootstrapHandle | null = null
 // before-quit handler can stop it cleanly.
 let triggerServerHandle: { url: string; stop: () => Promise<void> } | null = null
 let artistManagerVoiceProxy: ArtistManagerVoiceProxy | null = null
-const artistManagerVoiceFocus = new ArtistManagerVoiceFocusService()
+const artistManagerVoiceFocus = new ArtistManagerVoiceFocusService(undefined, event => mainLog.info('[voice-handoff]', JSON.stringify(event)))
 let artistManagerMoonshine: ArtistManagerMoonshine | null = null
 let embeddedOmniRoute: EmbeddedOmniRoute | null = null
 

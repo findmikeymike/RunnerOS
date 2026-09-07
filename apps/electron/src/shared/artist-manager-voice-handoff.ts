@@ -78,6 +78,10 @@ const AFFIRMATIVE_UTTERANCES = new Set([
   'lets do it', "let's do it", 'yes lets do it', "yes let's do it",
   'go ahead', 'yes go ahead', 'sure go ahead', 'okay go ahead', 'ok go ahead',
   'do it', 'yes do it', 'please do', 'yes please do',
+  'go', 'yes go', 'yeah go', 'yep go', 'sure go', 'okay go', 'ok go',
+  "let's go", 'lets go', "yes let's go", 'yes lets go', "yeah let's go", 'yeah lets go',
+  'open it', 'yes open it', 'yeah open it', 'open the chat', 'yes open the chat',
+  'open that chat', 'yes open that chat', 'take me there', 'yes take me there',
 ])
 
 /** Whole-utterance allowlist: uncertainty, extra instructions and questions fail closed. */
@@ -85,7 +89,7 @@ export function isVoiceHandoffConfirmation(text: string): boolean {
   if (typeof text !== 'string' || text.length > 100 || /[?？¿]/u.test(text) || UNSAFE_CONTROLS.test(text)) return false
   const normalized = text.toLowerCase().replace(/[’‘]/g, "'")
     .replace(/[.,!，。！]/g, ' ').replace(/\s+/g, ' ').trim()
-  return AFFIRMATIVE_UTTERANCES.has(normalized)
+  return AFFIRMATIVE_UTTERANCES.has(normalized.replace(/^(?:um|uh) /, ''))
 }
 
 /** Plain JSON schema accepted by the provider's TypeBox-compatible tool boundary. */

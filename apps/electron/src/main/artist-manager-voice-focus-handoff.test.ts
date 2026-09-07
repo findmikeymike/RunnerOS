@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { Api, Model } from '@earendil-works/pi-ai'
 import type { LlmConnection } from '@craft-agent/shared/config/llm-connections'
-import { ArtistManagerVoiceFocusService, type VoiceFocusDependencies } from './artist-manager-voice-focus'
+import { ArtistManagerVoiceFocusService, type VoiceFocusDependencies, type VoiceFocusDiagnostic } from './artist-manager-voice-focus'
 import type { VoiceFocusEvent } from '../shared/artist-manager-voice-focus'
 
 type ProviderEvent = Awaited<ReturnType<VoiceFocusDependencies['stream']>> extends AsyncIterable<infer E> ? E : never
@@ -23,6 +23,7 @@ const ordinary: ProviderEvent[] = [{ type: 'text_delta', delta: 'What would you 
 async function fixture(firstResponse: ProviderEvent[] | (() => AsyncIterable<ProviderEvent>) = [toolEnd, toolDone]) {
   const requests: Parameters<VoiceFocusDependencies['stream']>[] = []
   let credentials = 0
+  const diagnostics: VoiceFocusDiagnostic[] = []
   const service = new ArtistManagerVoiceFocusService({
     async resolveConfig() { return { connection, model: registration.model } },
     async resolveModel() { return model },
@@ -33,14 +34,14 @@ async function fixture(firstResponse: ProviderEvent[] | (() => AsyncIterable<Pro
       const events = requests.length === 1 ? firstResponse as ProviderEvent[] : ordinary
       return (async function* () { yield* events })()
     },
-  })
+  }, event => diagnostics.push(event))
   const session = await service.register(7, registration)
   async function turn(turnId: string, text: string) {
     const events: VoiceFocusEvent[] = []
     await service.startTurn(7, { sessionId: session.sessionId, turnId, text }, event => events.push(event))
     return events
   }
-  return { service, session, turn, requests, credentials: () => credentials }
+  return { service, session, turn, requests, diagnostics, credentials: () => credentials }
 }
 
 function assertNoHandoff(events: VoiceFocusEvent[]) {
@@ -48,6 +49,22 @@ function assertNoHandoff(events: VoiceFocusEvent[]) {
 }
 
 describe('focused voice confirmation-gated handoff', () => {
+  test('yes go consumes the existing offer without asking the model to offer it again', async () => {
+    const f = await fixture()
+    try {
+      await f.turn('offer', 'Prepare a release checklist')
+      const confirmed = await f.turn('confirm', 'Yes, go.')
+      expect(confirmed.some(event => event.type === 'handoff_ready')).toBe(true)
+      expect(f.requests).toHaveLength(1)
+      expect(f.diagnostics).toContainEqual(expect.objectContaining({ stage: 'turn', pendingOffer: true, confirmation: true }))
+      expect(f.diagnostics.at(-1)?.stage).toBe('confirmed')
+      const log = JSON.stringify(f.diagnostics)
+      expect(log).not.toContain(argumentsForHandoff.brief)
+      expect(log).not.toContain('Yes, go.')
+      expect(log).not.toContain('credential-canary')
+    } finally { f.service.close() }
+  })
+
   test('known proposal offers trusted task and agent; separate confirmation consumes it without another provider or credential read', async () => {
     const f = await fixture()
     try {
