@@ -54,6 +54,7 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
     }
   }
   const busy = voice.running || voice.starting || voice.stopping
+  const focused = voice.timingEnabled && voice.focusedTrial
   return (
     <Dialog open={voice.open} onOpenChange={(open) => {
       voice.setOpen(open)
@@ -66,7 +67,9 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
             <p className="text-[9px] font-medium uppercase tracking-[0.28em] text-orange-400/75">Artist HQ</p>
             <DialogTitle className="mt-2 text-2xl font-medium tracking-[-0.03em]">Talk to your manager</DialogTitle>
             <DialogDescription className="max-w-md text-[12px] leading-5 text-white/46">
-              A private voice conversation with the same manager that knows your artist context, release horizon, campaigns, and weekly signals.
+              {focused
+                ? 'Talk through priorities and decisions using your current artist brief. Open Manager chat when you want something done.'
+                : 'A private voice conversation with the same manager that knows your artist context, release horizon, campaigns, and weekly signals.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -208,7 +211,7 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
           }}>Open this conversation in chat · tools, connections and history</button> : null}
           <div className="relative mt-4 flex items-center justify-center gap-2 text-[10px] text-white/24">
             <Volume2 className="h-3 w-3" />
-            Voice uses the private HQ manager session. It does not create a second AI brain.
+            {focused ? 'Focused conversation · no tools · conversation is not saved to chat.' : 'Voice uses the private HQ manager session. It does not create a second AI brain.'}
           </div>
         </div>
       </DialogContent>

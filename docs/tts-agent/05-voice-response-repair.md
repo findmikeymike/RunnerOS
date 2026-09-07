@@ -181,3 +181,34 @@ setup/context, and context warnings. Review also found and closed a hook setup
 microtask race; ownership is now rechecked immediately before registration.
 The complete repository suite passed: 8,358 tests, 1 skip, 0 failures. Electron
 typecheck, main/preload bundles, and renderer production build also passed.
+
+## Integrated focused voice playback
+
+Canonical development app restarted on main `1f1c41293`. Existing High energy,
+Moonshine Balanced and audio devices were preserved. Response timing explicitly
+selected focused/no-tools, `pi/deepseek-v4-flash`, low, typed input. Run
+`5c73c326-2209-47b5-b21e-204a7624398c`; Listening at 3.515 s. Actual session
+receipt confirmed `pi-api-key`, Flash and low; setup took 24 ms.
+
+| Typed trial | First model text | Final model text | Playback started | Playback completed |
+| --- | ---: | ---: | ---: | ---: |
+| Greeting | 0.724 s | 1.067 s | 2.483 s | 11.533 s |
+| Warm greeting | 1.106 s | 1.114 s | 1.578 s | 5.059 s |
+| Priority question | 0.999 s | 1.401 s | 1.529 s | 17.019 s |
+| Schedule-post request | 1.343 s | 1.761 s | 1.801 s | 14.703 s |
+
+Times start at accepted typed input. All four turns returned to Listening with
+no errors, tool calls or fallback. The priority answer was 207 characters and
+used the current brief's Artist Profile next step. The schedule request explicitly
+said it could not schedule and required Manager chat; nothing was scheduled.
+The first greeting still mentioned the current release unprompted. The action
+reply also redirected toward profile completion, which can feel overbearing.
+These quality issues remain visible rather than being hidden by truncation.
+
+Speech synthesis began before complete model text on the longer replies,
+verifying the streaming path through Voice Core and Inworld. Compared with the
+earlier 25–32 s priority-answer waits, this is a substantial observed improvement;
+the context and session histories differ, so it is not a controlled distribution.
+Physical listening quality and microphone-start clipping are still not certified.
+Runtime stopped after the four tests. Scalar evidence:
+`/private/tmp/artist-os-focused-voice-live.json`.
