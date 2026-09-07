@@ -43,10 +43,10 @@ export function useArtistManagerVoice(input: {
   handoffTargets?: VoiceHandoffTarget[]
   onOpenCommand?(proposal: VoiceHandoffProposal, isCurrent: () => boolean): Promise<void>
 }): ArtistManagerVoiceState {
-  const [timingEnabled, setTimingEnabled] = React.useState(false)
+  const [timingEnabled, setTimingEnabled] = React.useState(() => readPreference('measure', 'false') === 'true')
   const [typedTrial, setTypedTrial] = React.useState(false)
-  const [modelTrial, setModelTrial] = React.useState<VoiceModelTrial>({ model: '', thinking: '' })
-  const [focusedTrial, setFocusedTrial] = React.useState(false)
+  const [modelTrial, setModelTrial] = React.useState<VoiceModelTrial>(() => ({ model: readPreference('trial-model', ''), thinking: readTrialThinking() }))
+  const [focusedTrial, setFocusedTrial] = React.useState(() => readPreference('focused', 'false') === 'true')
   const [typedSending, setTypedSending] = React.useState(false)
   const [timingRecords, setTimingRecords] = React.useState<VoiceTimingRecord[]>([])
   const timingRef = React.useRef<VoiceTimingTrace | null>(null)
@@ -338,10 +338,10 @@ export function useArtistManagerVoice(input: {
   const hearingReady = sttSelection === 'assembly_ai' ? providers.assemblyAi
     : moonshine.available && moonshine.tiers.some(tier => tier.modelId === sttSelection && tier.registered && tier.installState === 'ready' && !tier.hasError)
   return {
-    timingEnabled, setTimingEnabled: value => { if (!running && !starting && !stopping) setTimingEnabled(value) },
+    timingEnabled, setTimingEnabled: value => { if (!running && !starting && !stopping) { setTimingEnabled(value); writePreference('measure', String(value)) } },
     typedTrial, setTypedTrial: value => { if (!running && !starting && !stopping) setTypedTrial(value) },
-    modelTrial, setModelTrial: value => { if (!running && !starting && !stopping) setModelTrial(value) },
-    focusedTrial, setFocusedTrial: value => { if (!running && !starting && !stopping) setFocusedTrial(value) },
+    modelTrial, setModelTrial: value => { if (!running && !starting && !stopping) { setModelTrial(value); writePreference('trial-model', value.model); writePreference('trial-thinking', value.thinking) } },
+    focusedTrial, setFocusedTrial: value => { if (!running && !starting && !stopping) { setFocusedTrial(value); writePreference('focused', String(value)) } },
     timingRecords, canSendTyped, sendTyped,
     open, running, starting, stopping, installing, status, error, userText, assistantText, sessionId, conversationSessionId,
     providerReady: hearingReady && providers.inworld, hearingReady, assemblyAiReady: providers.assemblyAi, inworldReady: providers.inworld,
@@ -362,4 +362,9 @@ function readPreference(key: string, fallback: string): string {
 }
 function writePreference(key: string, value: string): void {
   try { localStorage.setItem('artist-manager-voice:' + key, value) } catch { /* Optional preferences. */ }
+}
+
+function readTrialThinking(): VoiceModelTrial['thinking'] {
+  const value = readPreference('trial-thinking', '')
+  return value === 'off' || value === 'low' ? value : ''
 }

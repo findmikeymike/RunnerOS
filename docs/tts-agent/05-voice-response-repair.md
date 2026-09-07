@@ -320,3 +320,14 @@ proposal-only checks (no navigation/execution), distinct from the earlier full
 UI handoff proof. Evidence: `/private/tmp/artist-os-voice-scope-live-results.json`.
 The UI test draft was subsequently labelled as test input and manually cleaned;
 it remains unsent and is not an approved creative direction.
+
+
+### Focused selection surviving navigation
+
+A follow-up exposed a host UI bug: measurement, focused mode and voice-model
+selection were plain hook state. Navigating out of HQ remounted the hook with
+focused mode off and the normal Manager model, making the next call slow again.
+Those user-selected values now persist alongside existing local voice/device
+preferences. Typed test input remains session-only so a later call uses the
+microphone. A packaged app is a separate build/profile and does not update when
+Git main or the development renderer changes.

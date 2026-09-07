@@ -32,7 +32,7 @@ export function ArtistManagerVoiceTiming({ voice }: { voice: ArtistManagerVoiceS
               <option value="off">Off</option>
             </select>
           </label>
-          <p>Applies only to this test conversation, using the Manager's connection. Saved settings stay unchanged.</p>
+          <p>Uses the Manager's connection. Voice choices are remembered on this device; Manager settings stay unchanged.</p>
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={voice.typedTrial} disabled={busy} onChange={event => voice.setTypedTrial(event.target.checked)} />
             Type instead of speaking for this test
