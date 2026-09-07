@@ -149,3 +149,108 @@ test('handoff notification is scoped to this turn and does not end acknowledgeme
   await iterator.next()
   h.pending.resolve(); await h.transport.stop()
 })
+
+
+describe('focused voice preparation', () => {
+  test('prepares eagerly without generating or refreshing, deduplicates registration and reuses it on the first turn', async () => {
+    const registration = deferred<VoiceFocusSession>()
+    let registrations = 0
+    let refreshes = 0
+    const h = fixture({
+      ensureSession: () => { registrations++; return registration.promise },
+      refreshPrompt: async () => { refreshes++; return 'Current snapshot' },
+    })
+    const firstPrepare = h.transport.prepare()
+    const secondPrepare = h.transport.prepare()
+    expect(registrations).toBe(1)
+    expect(h.starts).toHaveLength(0)
+    expect(h.listeners.size).toBe(0)
+    expect(refreshes).toBe(0)
+    registration.resolve(session)
+    await Promise.all([firstPrepare, secondPrepare])
+    await h.transport.prepare()
+    expect(registrations).toBe(1)
+    const iterator = await h.request()
+    const next = iterator.next(); await tick()
+    expect(registrations).toBe(1)
+    expect(refreshes).toBe(1)
+    expect(h.starts).toHaveLength(1)
+    const ids = { sessionId: session.sessionId, turnId: h.starts[0]!.turnId }
+    h.emit({ ...ids, type: 'text_delta', delta: 'Ready.' })
+    expect(await next).toEqual({ value: { text: 'Ready.' }, done: false })
+    h.emit({ ...ids, type: 'done' })
+    await iterator.next(); await iterator.next()
+    h.pending.resolve(); await h.transport.stop()
+  })
+
+  test('stop settles all waiting prepares and cancels pending registration without waiting for it', async () => {
+    const registration = deferred<VoiceFocusSession>()
+    let registrations = 0
+    const h = fixture({ ensureSession: () => { registrations++; return registration.promise } })
+    const first = settles(h.transport.prepare())
+    const second = settles(h.transport.prepare())
+    await h.transport.stop()
+    expect(await first).toEqual({ error: expect.any(Error) })
+    expect(await second).toEqual({ error: expect.any(Error) })
+    expect(h.stops).toEqual([undefined])
+    registration.resolve(session); await tick()
+    await expect(h.transport.prepare()).rejects.toThrow('stopped')
+    await expect(h.request()).rejects.toThrow('stopped')
+    expect(registrations).toBe(1)
+    expect(h.starts).toHaveLength(0)
+  })
+
+  test('preparation failures are delivered to every caller and first-turn reuse without another registration', async () => {
+    const registration = deferred<VoiceFocusSession>()
+    let registrations = 0
+    const h = fixture({ ensureSession: () => { registrations++; return registration.promise } })
+    const first = settles(h.transport.prepare())
+    const second = settles(h.transport.prepare())
+    registration.reject(new Error('Selected voice connection was deleted'))
+    expect(await first).toEqual({ error: expect.any(Error) })
+    expect(await second).toEqual({ error: expect.any(Error) })
+    const iterator = await h.request()
+    await expect(iterator.next()).rejects.toThrow('connection was deleted')
+    expect(registrations).toBe(1)
+    expect(h.starts).toHaveLength(0)
+    await h.transport.stop()
+  })
+
+  test('a late registration rejection after stop is observed and cannot start a turn', async () => {
+    const registration = deferred<VoiceFocusSession>()
+    const h = fixture({ ensureSession: () => registration.promise })
+    const pending = settles(h.transport.prepare())
+    await h.transport.stop()
+    expect(await pending).toEqual({ error: expect.any(Error) })
+    registration.reject(new Error('Late cancelled registration'))
+    await tick()
+    expect(h.starts).toHaveLength(0)
+    expect(h.listeners.size).toBe(0)
+  })
+})
+
+
+for (const outcome of ['success', 'failure'] as const) {
+  test(`repeated stop shares one immediate IPC request and its ${outcome}`, async () => {
+    const gate = deferred<void>()
+    let stops = 0
+    const h = fixture({ api: {
+      register: async () => session,
+      startTurn: async () => {},
+      cancel: async () => {},
+      stop: () => { stops++; return gate.promise },
+      onEvent: () => () => {},
+    } })
+    const first = h.transport.stop()
+    const result = first.then(() => undefined, error => error)
+    expect(stops).toBe(1)
+    expect(h.transport.stop()).toBe(first)
+    await expect(h.transport.prepare()).rejects.toThrow('stopped')
+    const failure = new Error('Shutdown could not be confirmed')
+    if (outcome === 'failure') gate.reject(failure)
+    else gate.resolve()
+    expect(await result).toBe(outcome === 'failure' ? failure : undefined)
+    expect(h.transport.stop()).toBe(first)
+    expect(stops).toBe(1)
+  })
+}

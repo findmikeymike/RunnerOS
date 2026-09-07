@@ -1,7 +1,7 @@
 import type { VoiceEvent, WebSttTransport, WebTtsTransport } from '@voice-core/web/cloud'
 
 export type VoiceTimingStage =
-  | 'start' | 'stt-start' | 'stt-ready' | 'listening' | 'first-capture'
+  | 'start' | 'prepare-start' | 'prepare-ready' | 'call-requested' | 'stt-start' | 'stt-ready' | 'listening' | 'first-capture'
   | 'first-partial' | 'stt-finalize-request' | 'stt-final' | 'typed-input'
   | 'manager-queued' | 'session-setup-start' | 'session-setup-ready'
   | 'manager-request' | 'manager-first-text' | 'manager-final-text'

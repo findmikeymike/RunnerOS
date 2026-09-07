@@ -9,6 +9,7 @@ import { buildVoiceFocusPrompt } from '@/lib/artist-manager-voice-focus-prompt'
 import { DEFAULT_ARTIST_MANAGER_VOICE_SETTINGS, type ArtistManagerVoiceSettings } from '@craft-agent/shared/config/artist-manager-voice-settings'
 import { VoiceTimingTrace, observeVoiceStt, observeVoiceTts, type VoiceTimingRecord } from '@/lib/artist-manager-voice-timing'
 import { VoiceSessionLifecycle } from '@/lib/voice-session-lifecycle'
+import { createPreparedVoiceRuntime } from '@/lib/prepared-voice-runtime'
 import { createElectronMoonshineSttTransport } from '../../../../../vendor/voice-core-electron/renderer/moonshineSttTransport'
 import { parseMoonshineModelId, type ElectronMoonshineRuntimeStarted, type ElectronMoonshineRuntimePoll } from '../../../../../vendor/voice-core-electron/main/moonshineModels'
 import { ELECTRON_INWORLD_TTS_MODEL_ID } from '../../../../../vendor/voice-core-electron/renderer/inworldTtsPolicy'
@@ -21,6 +22,7 @@ export type ArtistManagerVoiceState = {
   typedTrial: boolean; setTypedTrial(value: boolean): void
   voiceModel: string | null; voiceRouteReady: boolean
   timingRecords: VoiceTimingRecord[]; canSendTyped: boolean; sendTyped(text: string): Promise<void>
+  preparing: boolean
   open: boolean; running: boolean; starting: boolean; stopping: boolean; installing: boolean
   providerReady: boolean; assemblyAiReady: boolean; inworldReady: boolean; hearingReady: boolean
   status: string; error: string | null; userText: string; assistantText: string
@@ -32,6 +34,8 @@ export type ArtistManagerVoiceState = {
   refreshDevices(): Promise<void>; installMoonshine(modelId: string): Promise<void>
   setOpen(open: boolean): void; refreshProviders(): Promise<void>; start(): Promise<void>; stop(): Promise<void>
 }
+
+type PreparedCall = { runtime: VoiceCoreWeb; ticket: number; settings: ArtistManagerVoiceSettings; trace: VoiceTimingTrace | null }
 
 export function useArtistManagerVoice(input: {
   workspaceId: string; agents: AgentDefinitionDTO[]; skills: LoadedSkill[]; sources: LoadedSource[]
@@ -48,6 +52,10 @@ export function useArtistManagerVoice(input: {
   const [open, setOpenState] = React.useState(false)
   const [running, setRunning] = React.useState(false)
   const [starting, setStarting] = React.useState(false)
+  const [preparing, setPreparing] = React.useState(false)
+  const preparation = React.useRef<{ ticket: number; promise: Promise<PreparedCall | null> } | null>(null)
+  const activationEpoch = React.useRef(0)
+  const activating = React.useRef(false)
   const [stopping, setStopping] = React.useState(false)
   const [installing, setInstalling] = React.useState(false)
   const [providers, setProviders] = React.useState({ assemblyAi: false, inworld: false, ready: false })
@@ -63,7 +71,7 @@ export function useArtistManagerVoice(input: {
   const [error, setError] = React.useState<string | null>(null)
   const [userText, setUserText] = React.useState('')
   const [assistantText, setAssistantText] = React.useState('')
-  const lifecycle = React.useRef(new VoiceSessionLifecycle<VoiceCoreWeb>()).current
+  const lifecycle = React.useRef(new VoiceSessionLifecycle<{ destroy(): Promise<void> }>()).current
   const mounted = React.useRef(true)
   const refreshEpoch = React.useRef(0)
   const installBusy = React.useRef(false)
@@ -76,12 +84,13 @@ export function useArtistManagerVoice(input: {
 
   const stop = React.useCallback(async (cancelHandoff = true) => {
     if (cancelHandoff) handoff.current?.cancel()
+    preparation.current = null; activationEpoch.current++; activating.current = false
     shutdownSucceeded.current = false
     const epoch = ++stopEpoch.current
     timingRef.current?.stop(); timingRef.current = null; runtimeRef.current = null
     const cleanup = lifecycle.stop()
     unsubscribe.current?.(); unsubscribe.current = null
-    if (mounted.current) { setRunning(false); setStarting(false); setStopping(true); setStatus('Stopping audio and agent…') }
+    if (mounted.current) { setRunning(false); setStarting(false); setPreparing(false); setStopping(true); setStatus('Stopping audio and agent…') }
     try {
       await cleanup
       if (epoch === stopEpoch.current) shutdownSucceeded.current = true
@@ -141,13 +150,10 @@ export function useArtistManagerVoice(input: {
     finally { installBusy.current = false; if (mounted.current) setInstalling(false) }
   }, [stop, refreshProviders])
 
-  const start = React.useCallback(async () => {
-    if (installBusy.current) return
-    let ticket: number
-    try { ticket = lifecycle.begin() } catch { return }
+  const prepareCall = React.useCallback(async (ticket: number): Promise<PreparedCall | null> => {
     handoff.current?.cancel(); handoff.current = null
     stopEpoch.current++; setStopping(false)
-    setStarting(true); setError(null); setUserText(''); setAssistantText(''); setStatus('Connecting voice…')
+    setPreparing(true); setError(null); setUserText(''); setAssistantText(''); setStatus('Warming up…')
     const alive = () => mounted.current && lifecycle.owns(ticket)
     const trace = timingEnabled ? new VoiceTimingTrace(crypto.randomUUID(), record => {
       if (!mounted.current) return
@@ -155,6 +161,7 @@ export function useArtistManagerVoice(input: {
       window.electronAPI.debugLog('[voice-timing]', JSON.stringify(record))
     }) : null
     timingRef.current = trace
+    trace?.mark('prepare-start')
     try {
       await lifecycle.ready(ticket)
       const settings = await window.electronAPI.artistManagerVoiceSettings.get()
@@ -184,7 +191,6 @@ export function useArtistManagerVoice(input: {
         echoCancellation: true, noiseSuppression: true, autoGainControl: true, localBargeIn: false,
         inputDeviceId: inputDeviceId || undefined, outputDeviceId: outputDeviceId || undefined,
       })
-      lifecycle.attach(ticket, runtime)
       runtimeRef.current = runtime
       const nativeSession = crypto.randomUUID()
       const control = async (method: 'cancel' | 'stop' | 'finalize' | 'finish', turn?: number) => {
@@ -234,9 +240,7 @@ export function useArtistManagerVoice(input: {
         lifecycle.assertOwner(ticket)
         return buildVoiceFocusPrompt(docs, selectedStyle)
       }
-      await runtime.setTransports({
-        stt: observeVoiceStt(stt, trace, timingEnabled && typedTrial),
-        llm: createVoiceFocusTransport({
+      const focus = createVoiceFocusTransport({
           api: window.electronAPI.artistManagerVoiceFocus,
           ensureSession: async () => {
             trace?.mark('session-setup-start')
@@ -244,7 +248,7 @@ export function useArtistManagerVoice(input: {
             lifecycle.assertOwner(ticket)
             const session = await window.electronAPI.artistManagerVoiceFocus.register({
               workspaceId: input.workspaceId, systemPrompt,
-              handoffTargets: input.onOpenCommand ? normalizeVoiceHandoffTargets(input.handoffTargets ?? []) : [],
+              handoffTargets: currentInput.current.onOpenCommand ? normalizeVoiceHandoffTargets(currentInput.current.handoffTargets ?? []) : [],
             })
             if (alive()) trace?.mark('session-setup-ready', { sessionId: session.sessionId, model: session.model, connection: session.connection, thinking: session.thinking })
             return session
@@ -254,7 +258,16 @@ export function useArtistManagerVoice(input: {
           onTiming: (stage, details) => trace?.mark(stage, details),
           onUserText: text => { if (alive()) setUserText(text) },
           onAssistantText: text => { if (alive()) setAssistantText(text) },
-        }),
+      })
+      const owned = createPreparedVoiceRuntime({ runtime, ...(modelId ? { stt } : {}), focus })
+      const unsubscribeWarmError = modelId ? stt.onError?.(cause => {
+        if (alive()) { setError(messageFromError(cause)); void stop() }
+      }) : undefined
+      lifecycle.attach(ticket, { destroy: () => { unsubscribeWarmError?.(); return owned.destroy() } })
+      const observedStt = observeVoiceStt(stt, trace, timingEnabled && typedTrial)
+      await runtime.setTransports({
+        stt: observedStt,
+        llm: focus,
         tts: observeVoiceTts(createInworldTtsTransport({ webSocketUrl: proxyUrl.toString(), inworldVoiceId: proxy.voiceId, inworldModelId: ELECTRON_INWORLD_TTS_MODEL_ID }), trace),
       })
       lifecycle.assertOwner(ticket)
@@ -265,22 +278,82 @@ export function useArtistManagerVoice(input: {
         else if (event.type === 'assistantText') setAssistantText(event.text)
         else if (event.type === 'bargeIn' && handoffArmed) { coordinator.cancel(); void stop() }
         else if (event.type === 'agentSpeechComplete') {
-          void coordinator.finish().catch(cause => { if (mounted.current) setError(messageFromError(cause)) })
+          void coordinator.finish().catch(cause => { if (handoffCurrent()) setError(messageFromError(cause)) })
         }
         else if (event.type === 'assistantActivity') setStatus(event.text)
         else if (event.type === 'stateChanged') setStatus(labelForVoiceState(event.state))
         else if (event.type === 'error' || event.type === 'captureError' || event.type === 'renderError') { setError(event.message); void stop() }
       })
-      await runtime.start()
+      // Only the local speech engine and in-memory Manager session are prepared.
+      // runtime.start() is the exclusive microphone/capture boundary, in start() below.
+      await Promise.all([modelId ? observedStt.start() : Promise.resolve(), focus.prepare()])
       lifecycle.assertOwner(ticket)
-      trace?.mark('listening')
-      setRunning(true); setStarting(false); setStatus('Listening…')
-      void refreshDevices()
+      trace?.mark('prepare-ready')
+      setPreparing(false); setStatus('Ready when you are')
+      return { runtime, ticket, settings, trace }
     } catch (cause) {
       trace?.mark('error')
-      if (alive()) { await stop(); if (mounted.current) setError(messageFromError(cause)) }
-    } finally { if (alive()) setStarting(false) }
-  }, [timingEnabled, typedTrial, input.workspaceId, input.handoffTargets, input.onOpenCommand, lifecycle, inputDeviceId, outputDeviceId, stop, refreshDevices])
+      if (alive()) {
+        const cleanup = stop()
+        const epoch = stopEpoch.current
+        await cleanup
+        if (mounted.current && stopEpoch.current === epoch) setError(messageFromError(cause))
+      }
+    } finally { if (alive()) setPreparing(false) }
+    return null
+  }, [timingEnabled, typedTrial, input.workspaceId, lifecycle, inputDeviceId, outputDeviceId, stop])
+
+  const prepare = React.useCallback((): Promise<PreparedCall | null> => {
+    if (installBusy.current) return Promise.resolve(null)
+    if (preparation.current) return preparation.current.promise
+    let ticket: number
+    try { ticket = lifecycle.begin() } catch { return Promise.resolve(null) }
+    const pending = { ticket, promise: Promise.resolve<PreparedCall | null>(null) }
+    preparation.current = pending
+    pending.promise = prepareCall(ticket)
+    return pending.promise
+  }, [lifecycle, prepareCall])
+
+  React.useEffect(() => {
+    if (open && !installing) void prepare()
+  }, [open, installing, prepare])
+
+  const start = React.useCallback(async () => {
+    if (installBusy.current || activating.current || running) return
+    activating.current = true
+    const activation = ++activationEpoch.current
+    setStarting(true); setError(null)
+    let call: PreparedCall | null = null
+    try {
+      const pending = prepare()
+      timingRef.current?.mark('call-requested')
+      call = await pending
+      if (!call || activation !== activationEpoch.current) return
+      lifecycle.assertOwner(call.ticket)
+      const currentSettings = await window.electronAPI.artistManagerVoiceSettings.get()
+      lifecycle.assertOwner(call.ticket)
+      if (JSON.stringify(currentSettings) !== JSON.stringify(call.settings)) {
+        throw new Error('Conversation settings changed. Press Call again to prepare the new settings.')
+      }
+      await call.runtime.start()
+      lifecycle.assertOwner(call.ticket)
+      call.trace?.mark('listening')
+      setRunning(true); setStatus('Listening…')
+      void refreshDevices()
+    } catch (cause) {
+      if (activation === activationEpoch.current) {
+        const cleanup = stop()
+        const epoch = stopEpoch.current
+        await cleanup
+        if (mounted.current && stopEpoch.current === epoch) setError(messageFromError(cause))
+      }
+    } finally {
+      if (activation === activationEpoch.current) {
+        activating.current = false
+        if (mounted.current) setStarting(false)
+      }
+    }
+  }, [prepare, lifecycle, running, refreshDevices, stop])
 
   const canSendTyped = timingEnabled && typedTrial && running && !typedSending && status === 'Listening…'
   const sendTyped = async (text: string) => {
@@ -300,10 +373,10 @@ export function useArtistManagerVoice(input: {
   const voiceRouteReady = settingsLoaded && Boolean(voiceSettings.connectionSlug && voiceSettings.model)
   return {
     voiceModel: voiceSettings.model, voiceRouteReady,
-    timingEnabled, setTimingEnabled: value => { if (!running && !starting && !stopping) { setTimingEnabled(value); writePreference('measure', String(value)) } },
-    typedTrial, setTypedTrial: value => { if (!running && !starting && !stopping) setTypedTrial(value) },
+    timingEnabled, setTimingEnabled: value => { if (!running && !starting && !stopping) { void stop(); setTimingEnabled(value); writePreference('measure', String(value)) } },
+    typedTrial, setTypedTrial: value => { if (!running && !starting && !stopping) { void stop(); setTypedTrial(value) } },
     timingRecords, canSendTyped, sendTyped,
-    open, running, starting, stopping, installing, status, error, userText, assistantText,
+    open, preparing, running, starting, stopping, installing, status, error, userText, assistantText,
     providerReady: voiceRouteReady && hearingReady && providers.inworld, hearingReady, assemblyAiReady: providers.assemblyAi, inworldReady: providers.inworld,
     sttSelection,
     managerStyle,
