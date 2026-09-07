@@ -282,3 +282,31 @@ Voice Core still chunks synthesis/playback. This trades the remaining text
 streaming time for reliable handoff wording and avoids speaking a truncated
 reply in this mode. The no-handoff transport retains direct streaming. Measure
 this added wait in the integrated run rather than reusing earlier TTFT claims.
+
+
+### Fresh verification
+
+At `621a3482e`, the full app suite passed 8,393 tests, with one skip and zero
+failures. Electron typecheck, main bundle and renderer production build passed.
+The buffered production-service trial returned a greeting in 1.249 s and a
+complete 55-word answer in 1.571 s; the measured text hold was 381/772 ms.
+The trusted offer took 3.215 s; confirmation made zero provider calls and zero
+credential reads. No incomplete completion or provider error occurred in these
+four turns. Greeting still volunteered a campaign mention, so conversational
+judgment remains a model-quality limitation.
+
+The canonical app was restarted, then the actual UI used typed input through
+Voice Core/Inworld, run `c2c44a4a-2651-4e04-a1d3-98309e0072f2`. The request was
+artist-wide playful/raw/colorful branding. Listening took 3.827 s. The trusted
+Branding Agent offer began playback 3.125 s after input and finished normally.
+Separate “Yes, sounds good” began acknowledgement playback after 448 ms;
+playback completed and Stop occurred at the same trace timestamp. The app then
+opened Branding Agent session `260907-sleek-peak` in Command, with a populated
+unsent draft, normal DeepSeek Pro selection and Approval Mode. No drafted work
+was sent or executed. Scalar evidence: `/private/tmp/artist-os-voice-handoff-ui-live.json`.
+
+The draft correctly kept artist-wide scope, but also added unrelated campaign
+facts. The final prompt now requires the handoff brief to contain only work and
+direction actually agreed in the conversation, excluding snapshot campaign
+names/dates/blockers unless requested. The destination agent loads its own
+normal context, so this handoff does not need to duplicate it.

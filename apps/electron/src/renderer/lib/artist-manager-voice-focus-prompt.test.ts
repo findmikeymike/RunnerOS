@@ -53,6 +53,8 @@ describe('focused voice prompt', () => {
     expect(prompt).toContain('19 remain open')
     expect(prompt).toContain('never tell them to get with another manager')
     expect(prompt).toContain('only prepares that offer')
+    expect(tail).toContain('only the work, direction and decisions actually agreed')
+    expect(tail).toContain('Do not add campaign names, dates, readiness blockers or metrics')
     expect(prompt).toContain('snapshot, not live verification')
     expect(prompt).toContain('never turn a target date into a confirmed date')
   })

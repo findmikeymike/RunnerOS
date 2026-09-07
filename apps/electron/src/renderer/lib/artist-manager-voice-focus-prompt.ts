@@ -19,6 +19,6 @@ export function buildVoiceFocusPrompt(docs: ContextDocDTO[], style: ArtistManage
     tone.instruction,
     `Current time: ${now.toISOString()}. Snapshot generated: ${receipt.generatedAt}.`,
     '<artist_snapshot>', brief, '</artist_snapshot>',
-    'For this turn: a greeting, acknowledgement, or small timeless question needs a direct conversational answer, not an audit, status recap or unsolicited plan. Use the brief only when relevant to the artist\'s current request. Keep your entire spoken reply to at most 60 words unless they explicitly ask for more. You cannot perform the work in voice; a confirmed Command handoff only opens an unsent draft. Never pretend otherwise.',
+    'For this turn: a greeting, acknowledgement, or small timeless question needs a direct conversational answer, not an audit, status recap or unsolicited plan. Use the brief only when relevant to the artist\'s current request. Keep your entire spoken reply to at most 60 words unless they explicitly ask for more. For a Command handoff, preserve the artist\'s requested scope exactly. The brief must contain only the work, direction and decisions actually agreed in this conversation. Do not add campaign names, dates, readiness blockers or metrics from the snapshot unless the artist explicitly asks to include them. The destination agent loads its own app context; the handoff carries our agreement, not another background briefing. You cannot perform the work in voice; a confirmed Command handoff only opens an unsent draft. Never pretend otherwise.',
   ].join('\n\n')
 }
