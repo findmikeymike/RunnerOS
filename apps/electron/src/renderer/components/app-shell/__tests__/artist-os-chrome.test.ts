@@ -162,6 +162,7 @@ describe('Artist OS persistent shell chrome', () => {
 
   test('keeps outside intelligence in a direct Signals destination instead of Brain', () => {
     const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
+    const reader = readFileSync(join(import.meta.dir, '..', 'SignalsTracksPanel.tsx'), 'utf8')
     const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
     const peopleStart = shell.indexOf('id: "nav:people"')
     const signalsStart = shell.indexOf('id: "nav:signals"', peopleStart)
@@ -177,8 +178,11 @@ describe('Artist OS persistent shell chrome', () => {
     expect(hq).toContain("case 'signals':")
     expect(hq).toContain('title: \'Signals\'')
     expect(hq).toContain("if (raw === 'research') return 'signals'")
-    expect(hq).toContain('aria-label="Signals intelligence reader"')
-    expect(hq).toContain('Save selection')
+    expect(hq).toContain('<SignalsTracksPanel')
+    expect(hq).toContain('onSaveNugget={saveTrackNugget}')
+    expect(reader).toContain('aria-label="Signals intelligence reader"')
+    expect(reader).toContain('aria-label="Signals track"')
+    expect(reader).toContain('Save selection')
     expect(hq).toContain('SIGNAL_NUGGETS_CONTEXT_SLUG')
     expect(hq).toContain('WEEKLY_SIGNAL_SCAN_SLUG')
     expect(hq).toContain('createSignalScanQueueWorkAction')

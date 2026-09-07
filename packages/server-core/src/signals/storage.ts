@@ -11,7 +11,7 @@ export interface SignalRequest extends SignalRunSummary {
   idempotencyKey: string; requestHash: string; config: SignalTrackConfig; identity: SignalRunIdentity;
   coverage: SignalSourceCoverage[]; selected: SignalVideoMetadata[]; packets: SignalPacket[];
   websites: SignalWebsitePacket[];
-  collectionComplete?: boolean; workflowDigest: string; outputHash?: string; examinedVideoIds?: string[];
+  collectionComplete?: boolean; workflowDigest: string; outputHash?: string; reportMetadataHash?: string; examinedVideoIds?: string[];
   attempts?: Array<{ fromRunId: string; runId: string }>;
   refusedAttempts?: Array<{ fromRunId: string; runId: string }>;
   queueEvent?: { matcherId: string; eventTimestamp: number; eventKey: string };
@@ -49,7 +49,8 @@ export function writeSignals(root: string, state: SignalStore): void {
   try { writeFileSync(temp, JSON.stringify(journal), { flag: 'wx', mode: 0o600 }); renameSync(temp, path); }
   finally { rmSync(temp, { force: true }); }
 }
-function saveEvidence(root: string, contentHash: string, value: unknown): void {
+export function saveEvidence(root: string, contentHash: string, value: unknown): void {
+  if (!/^[a-f0-9]{64}$/.test(contentHash) || hash(value) !== contentHash) throw new Error('Invalid Signals evidence hash.');
   const dir = join(root, 'signals', 'packets');
   mkdirSync(dir, { recursive: true });
   const path = join(dir, `${contentHash}.json`);

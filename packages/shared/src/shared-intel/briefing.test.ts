@@ -66,6 +66,10 @@ describe('Signal briefing contract', () => {
     expect(acceptsSummary).toBe(isFinalSignalReport);
     expect(acceptsManifest).toBe(isFinalSignalReport);
     expect(isFinalSignalReport(final)).toBe(true);
+    for (const workflowSlug of ['signals-industry-scan', 'weekly-world-scan', 'signal-video-review']) {
+      expect(isFinalSignalReport({ ...final, title: 'Renamed', origin: { ...final.origin, workflowSlug } })).toBe(true);
+      expect(isFinalSignalReport({ ...final, origin: { ...final.origin, workflowSlug, stepId: 'collect' } })).toBe(false);
+    }
     expect(isFinalSignalReport({ ...final, title: 'My renamed report' })).toBe(true);
     expect(isFinalSignalReport({ ...final, primary: undefined, primaryAssetId: 'report.md' })).toBe(true);
     for (const patch of [{ kind: 'audio' }, { status: 'draft' }, { status: 'failed' },

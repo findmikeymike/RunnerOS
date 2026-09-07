@@ -12,7 +12,7 @@ Specification: [47 Signals / Your World](../creator-command-center/47-signals-yo
 | Slice | Implementation | Independent review | Verification |
 | --- | --- | --- | --- |
 | 1: identity, collection, lifecycle | Implemented; checkpoint ready | Independent review passed; all actionable findings closed | Final post-fix full suite: 8,533 passed, 1 skipped, 0 failed; monorepo typecheck and Artist OS main-process build passed |
-| 2: synthesis, reader, audio | Not started | Pending | Pending |
+| 2: synthesis, reader, audio | Implemented; checkpoint ready | Independent audio/metadata and renderer reviews passed after fixes | Final merged-base suite: 8,580 passed, 1 skipped, 0 failed; typecheck and both main/renderer builds passed |
 | 3: retrieval and handoff | Not started | Pending | Pending |
 
 ## Verified So Far
@@ -74,4 +74,45 @@ have been performed. Public read-only website fetches and bounded Zero capabilit
 metadata inspection were performed; these do not certify a complete live report.
 New deterministic YouTube metadata collection needs the existing YouTube Data
 API connection. No compatible healthy Zero channel-discovery fallback was found.
-Nothing is committed or landed by this evidence file.
+Slice 1 committed as `572d5ed6f`. Slice 2 is uncommitted. Current main through
+`188f1c8f0` was merged into the feature branch as `a676c72dd`; no Signals work
+has been landed into main or pushed by this task.
+
+## Slice 2 Review And Browser Evidence
+
+- Final commands on merged base `a676c72dd`: `PANGOCAIRO_BACKEND=fontconfig
+  bun run test` (8,281 regular + 299 isolated tests), `bun run typecheck:all`,
+  and `CRAFT_PRODUCT_VARIANT=artist-os bun run electron:build:main` /
+  `electron:build:renderer`: all exit 0. Renderer build retains bundle-size
+  warnings; no packaged, signed, or live-account build certification is claimed.
+  Logs: `/tmp/signals-slice2-full-tests-final.log`,
+  `/tmp/signals-slice2-typecheck-merged.log`,
+  `/tmp/signals-slice2-main-build-merged.log`,
+  `/tmp/signals-slice2-renderer-build-merged.log`.
+- Full-suite failure during verification identified a static chrome assertion
+  still expecting reader markup in HQ. The test now verifies HQ wiring and
+  the extracted reader; navigation and legacy assertions remain intact.
+
+- One shared reader now serves Industry and Your World, with scoped history,
+  explicit legacy adoption, weekly schedule/config consistency and one-off links.
+- Host finalization saves a hashed `SignalReportMetadata` sidecar only after
+  successful completion. Audio validates that sidecar, current admitted attempt,
+  final Output identity and actual saved report bytes before credentials/cache.
+  Missing or malformed recap leaves the report readable and shows unavailable.
+- Review fixes: custom multi-action schedules cannot be silently replaced;
+  stale setup drafts cannot overwrite a newer config; Weekly does not claim
+  active when Work re-enabled a matcher whose track config is disabled.
+- Rendered testing found duplicate sibling dialog keys retaining an orphan
+  portal after Cancel. Distinct setup/links keys fixed it; actual clicks,
+  cancellation during slow resolution and Escape were rerun successfully.
+- Isolated headless Chrome fixture: 1440px desktop and 390px narrow layouts,
+  empty/populated tracks, valid/invalid links, scan-first default despite a newer
+  one-off, per-track selection restoration, and no audio call before Listen.
+- Browser race fixture additionally verified late channel results after cancel
+  are ignored, stale settings preserve the draft without reaching save, and a
+  failed transport retry retains its idempotency key. No console errors.
+- Temporary browser fixture files and preview server were removed/stopped.
+  Screenshots: `/tmp/signals-world-report-desktop.png`,
+  `/tmp/signals-world-report-mobile-fixed.png`,
+  `/tmp/signals-world-setup-mobile.png`. Browser fixtures are not live-account
+  or paid-provider certification.

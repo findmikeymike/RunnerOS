@@ -11,7 +11,8 @@ interface Props {
 
 export function SignalBriefingPlayer({ workspaceId, output, content }: Props) {
   const briefing = parseSignalBriefing(content)
-  if (!isFinalSignalReport(output) || !briefing) return null
+  if (!isFinalSignalReport(output)) return null
+  if (!briefing) return <p className="border-b border-white/[0.055] px-5 py-3 text-xs text-white/45">Audio briefing unavailable for this report.</p>
   // Remount on report/voice text changes so pending responses cannot play another report.
   return <BriefingPlayer key={`${workspaceId}:${output.id}:${content}`} workspaceId={workspaceId} outputId={output.id} briefing={briefing} />
 }

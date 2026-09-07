@@ -63,7 +63,7 @@ export function signalFreshness(
 
 export function appendSignalNugget(
   currentBody: string | undefined,
-  input: { text: string; sourceTitle: string; sourceKey: string; amendedAt: string },
+  input: { text: string; sourceTitle: string; sourceKey: string; amendedAt: string; track?: 'industry' | 'your-world'; outputId?: string },
 ): string {
   const amendedLabel = `_Last amended: ${input.amendedAt}_`
   let base = currentBody?.trim()
@@ -84,5 +84,6 @@ export function appendSignalNugget(
     quote,
     '',
     `<!-- signal-source: ${input.sourceKey} -->`,
+    ...(input.track ? [`<!-- signal-track: ${input.track}${input.outputId ? `; output: ${input.outputId}` : ''} -->`] : []),
   ].join('\n')
 }

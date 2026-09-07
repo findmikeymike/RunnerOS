@@ -27,9 +27,12 @@ Implementation branch: `codex/signals-your-world`, based on current main in
 evidence/coverage, tracked admission/retry, and new opt-in workflows. Slice 1's
 independent review and final regression/typecheck/main-process build gates passed;
 see [implementation evidence](../audits/signals-your-world.md).
-The current app UI is unchanged. Slices 2 and 3 (reader/audio, retrieval and
-deliberate worker handoff) are not implemented yet. No live agent scan or paid
-transcript/audio call is claimed by the fixture tests.
+Slice 2 now implements the two-track reader, explicit setup adoption, weekly
+controls, one-off links, report metadata and audio eligibility. Its independent
+review, rendered checks, and final merged-base regression/typecheck/build gates
+passed. Slice 3 (retrieval and deliberate worker handoff) is not implemented.
+These changes remain on the feature branch, not the main running app. No live
+agent scan or paid transcript/audio call is claimed by the fixture tests.
 
 Provider reality: the new deterministic channel/video metadata path currently
 requires the existing YouTube Data API connection. Bounded live marketplace

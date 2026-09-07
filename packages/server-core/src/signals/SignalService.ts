@@ -10,12 +10,12 @@ import { loadContextDoc } from '@craft-agent/shared/workspace-context';
 import type { PendingQueuedWork } from '@craft-agent/shared/automations';
 import {
   SIGNAL_CONTRACT, validateSignalTrackConfig, normalizeSignalVideoLinks, signalWorkflowFor, selectSignalScanVideos,
-  finalizeSignalCoverage, canFinalizeSignalNoChange,
+  finalizeSignalCoverage, canFinalizeSignalNoChange, buildSignalReportMetadata,
   type SignalChannel, type SignalTrack, type SignalMode, type SignalTrackConfig, type SignalState, type SignalQueueResult, type SignalEvidenceReceipt,
 } from '@craft-agent/shared/shared-intel';
 import { queueAutomationWork } from '../scheduled-work/AutomationWorkQueue';
 import { LocalSignalProvider, type SignalProvider, type SignalTranscript } from './SignalProvider';
-import { hash, readSignals, writeSignals, readEvidence, withSignalsLock, type SignalRequest, type SignalStore } from './storage';
+import { hash, readSignals, writeSignals, readEvidence, saveEvidence, withSignalsLock, type SignalRequest, type SignalStore } from './storage';
 import { resolveSignalHqWorkspace } from './scope';
 import { SIGNAL_WEBSITE_SOURCES, type SignalWebsitePacket as CollectedWebsitePacket } from './website-collector';
 
@@ -227,7 +227,7 @@ export class SignalService {
       }
       request.attempts = [...(request.attempts ?? []), { fromRunId: original.id, runId: retry.id }];
       request.workflowRunId = retry.id; request.status = 'running'; request.error = undefined;
-      request.outputId = undefined; request.outputHash = undefined; request.updatedAt = this.now();
+      request.outputId = undefined; request.outputHash = undefined; request.reportMetadataHash = undefined; request.updatedAt = this.now();
       this.save(workspace, state);
     });
   }
@@ -374,7 +374,9 @@ export class SignalService {
     });
     const websites = request.websites.filter(packet => !packet.excludedFromSynthesis).map(packet => ({ id: packet.id, contentHash: packet.contentHash,
       ...(packet.content ?? readEvidence<CollectedWebsitePacket>(root, packet.contentHash)) }));
-    const serialized = JSON.stringify({ identity: request.identity, coverage: request.coverage, videos, websites });
+    const channelInterests = request.config.sources.filter(source => source.notes?.trim())
+      .map(source => ({ channelId: source.channelId, notes: source.notes!.trim() }));
+    const serialized = JSON.stringify({ identity: request.identity, coverage: request.coverage, videos, websites, channelInterests });
     if (enforceLimit && serialized.length > 450_000) throw new Error('Signals evidence is too large for one synthesis. Use fewer channels or videos.');
     return serialized;
   }
@@ -393,10 +395,9 @@ export class SignalService {
       const step = run.steps.find(item => item.id === 'synthesize');
       const raw = step?.output;
       const { parseSignalSynthesis } = await import('@craft-agent/shared/shared-intel');
-      const result = parseSignalSynthesis(typeof raw === 'string' ? JSON.parse(raw) : raw, {
-        identity, sources: [...request.packets.filter(packet => !packet.excludedFromSynthesis).map(packet => ({ sourceId: packet.id, sourceUrl: packet.metadata.sourceUrl, videoId: packet.metadata.videoId, sourcePublishedAt: packet.metadata.publishedAt })),
-          ...request.websites.filter(packet => !packet.excludedFromSynthesis).flatMap(packet => readEvidence<CollectedWebsitePacket>(workspace.rootPath, packet.contentHash).items.map(item => ({ sourceId: item.id, sourceUrl: item.url, sourcePublishedAt: item.publishedAt })))],
-      });
+      const sources = [...request.packets.filter(packet => !packet.excludedFromSynthesis).map(packet => ({ sourceId: packet.id, sourceUrl: packet.metadata.sourceUrl, videoId: packet.metadata.videoId, sourcePublishedAt: packet.metadata.publishedAt })),
+        ...request.websites.filter(packet => !packet.excludedFromSynthesis).flatMap(packet => readEvidence<CollectedWebsitePacket>(workspace.rootPath, packet.contentHash).items.map(item => ({ sourceId: item.id, sourceUrl: item.url, sourcePublishedAt: item.publishedAt })))];
+      const result = parseSignalSynthesis(typeof raw === 'string' ? JSON.parse(raw) : raw, { identity, sources });
       const completePacket = (packet: SignalRequest['packets'][number]) => !packet.excludedFromSynthesis;
       const included = new Set(result.coverage.includedVideoIds.filter(id => request.packets.some(packet => packet.metadata.videoId === id && completePacket(packet))));
       const fullyExamined = (packet: SignalRequest['packets'][number]) => result.coverage.examinedNoFindingVideoIds.includes(packet.metadata.videoId) && completePacket(packet);
@@ -432,6 +433,18 @@ export class SignalService {
       // The runner calls this once before publishing terminal success, and
       // reconciliation calls it again after success. Coverage waits for that.
       if (run.state !== 'succeeded') { this.save(workspace, state); return true; }
+      if (publishedReport) {
+        const output = readOutput(workspace.rootPath, publishedReport.outputId)!;
+        const persisted = readRun(workspace.rootPath, run.id)!;
+        const metadata = buildSignalReportMetadata({ identity, synthesis: result, sources,
+          coverageStatus: proof.coverageIncomplete ? 'partial' : 'complete',
+          report: { ...publishedReport, workspaceId: workspace.id, workflowSlug: run.workflowSlug,
+            stepId: 'synthesize', status: output.status, runState: persisted.state,
+            finalOutputId: persisted.finalOutputId ?? '', createdAt: output.createdAt } });
+        const metadataHash = hash(metadata);
+        saveEvidence(workspace.rootPath, metadataHash, metadata);
+        request.reportMetadataHash = metadataHash;
+      }
       state.ledger = finalizeSignalCoverage({ ...proof, ledger: state.ledger, outcome: result.outcome, publishedReport, finalizedAt: this.now() });
       request.status = result.outcome === 'report' && proof.coverageIncomplete ? 'partial' : result.outcome;
       request.examinedVideoIds = result.examinedVideoIds; request.updatedAt = this.now();

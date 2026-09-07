@@ -16,6 +16,7 @@ import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner';
 import { ScheduledWorkRunner } from '../scheduled-work/ScheduledWorkRunner';
 import { withWorkspaceContextLock } from '../scheduled-work/workspace-context-lock';
 import { createCampaignJobRun } from '@craft-agent/shared/campaign-calendar';
+import type { SignalReportMetadata } from '@craft-agent/shared/shared-intel';
 
 const definitions = [createSignalContractWorkflow('your-world', 'scan'), createSignalContractWorkflow('industry', 'scan'), createSignalContractWorkflow('your-world', 'links')];
 const loaded = (slug: string) => { const value = definitions.find(item => item.slug === slug); return value ? { ...value, path: '/fixture/WORKFLOW.md', source: 'global' as const } : null; };
@@ -104,6 +105,16 @@ test('packet bodies are external, immutable, reusable and corruption is rejected
   writeFileSync(join(root, 'signals/packets', `${request.packets[0]!.contentHash}.json`), '{}');
   expect(() => readEvidence(root, request.packets[0]!.contentHash)).toThrow('corrupt');
 });
+test('synthesis receives frozen channel interests without inventing artist beliefs', async () => {
+  const initial = (await configure()).tracks['your-world'];
+  await service.saveConfig('hq', 'your-world', { ...initial, sources: initial.sources.map(source => ({ ...source, notes: 'Architecture and public spaces' })) }, initial.revision);
+  const queued = await service.start('hq', { track: 'your-world', mode: 'scan', idempotencyKey: 'interests' });
+  const stored = readSignals(root, 'hq').requests[0]!;
+  const current = (await service.getState('hq')).tracks['your-world'];
+  await service.saveConfig('hq', 'your-world', { ...current, sources: current.sources.map(source => ({ ...source, notes: 'Changed later' })) }, current.revision);
+  const prepared = await service.prepare('hq', queued.runId, queued.orderIds[0]!, stored.workflowDigest);
+  expect(JSON.parse(service.packetInput(prepared)).channelInterests).toEqual([{ channelId, notes: 'Architecture and public spaces' }]);
+});
 test('deadline bounds preparation and releases active request for retry', async () => {
   service = new SignalService({ workspaces: () => [workspace], provider, permission, now: () => now, preparationTimeoutMs: 20 });
   provider.recent = mock(async () => new Promise<never>(() => {}));
@@ -131,6 +142,33 @@ test('parser index failure preserves readable report without inventing no-findin
   expect(state.ledger).toHaveLength(0);
   expect(state.requests[0]!.status).toBe('partial');
   expect(readOutput(root, state.requests[0]!.outputId!)).not.toBeNull();
+  const saved = readEvidence<SignalReportMetadata>(root, state.requests[0]!.reportMetadataHash!);
+  expect(saved.indexingStatus).toBe('failed');
+  expect(saved.coverageStatus).toBe('partial');
+  expect(saved.findings).toEqual([]);
+});
+test('final metadata is published only after success and recovers identically after interruption', async () => {
+  const request = await prepared();
+  const snapshot = run(request, report(), 'running');
+  workflows.writeRun(root, snapshot);
+  await service.complete(snapshot, new AbortController().signal);
+  expect(readSignals(root, 'hq').requests[0]!.reportMetadataHash).toBeUndefined();
+  const finished = { ...workflows.readRun(root, snapshot.id)!, state: 'succeeded' as const };
+  workflows.writeRun(root, finished);
+  await service.complete(finished, new AbortController().signal);
+  const finalized = readSignals(root, 'hq').requests[0]!;
+  const saved = readEvidence<SignalReportMetadata>(root, finalized.reportMetadataHash!);
+  expect(saved.identity).toEqual({ ...request.identity, workflowRunId: snapshot.id });
+  expect(saved.outputId).toBe(finalized.outputId!);
+  expect(saved.contentHash).toBe(finalized.outputHash!);
+  expect(saved.sources[0]?.sourcePublishedAt).toBe(now);
+  expect(saved.findings[0]?.excerpt).toBe('Useful finding.');
+  const interrupted = readSignals(root, 'hq');
+  delete interrupted.requests[0]!.reportMetadataHash;
+  writeSignals(root, interrupted);
+  await service.complete(workflows.readRun(root, snapshot.id)!, new AbortController().signal);
+  expect(readSignals(root, 'hq').requests[0]!.reportMetadataHash).toBe(finalized.reportMetadataHash);
+  expect(readSignals(root, 'hq').ledger).toHaveLength(1);
 });
 test('parser valid inclusion survives separate invalid index without becoming no-finding', async () => {
   const request = await prepared();
@@ -278,6 +316,9 @@ for (const originalState of ['failed', 'interrupted', 'retry-crash', 'projection
   expect(saved.attempts?.at(-1)).toEqual({ fromRunId: original.id, runId: retry.id });
   expect(saved.attempts).toHaveLength(crash ? 2 : 1);
   expect(saved.status).toBe('report');
+  const metadata = readEvidence<SignalReportMetadata>(root, saved.reportMetadataHash!);
+  expect(metadata.identity.workflowRunId).toBe(retry.id);
+  expect(metadata.outputId).toBe(saved.outputId!);
   expect(provider.transcript).toHaveBeenCalledTimes(1);
   expect(provider.recent).toHaveBeenCalledTimes(1);
   await expect(service.completeEmpty({ ...retry, id: '00000000-0000-4000-8000-000000000000' }, new AbortController().signal)).rejects.toThrow('provenance');

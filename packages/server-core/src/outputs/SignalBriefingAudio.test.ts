@@ -4,6 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assertOutputAssetPath, getOutputDir, type OutputManifest } from '@craft-agent/shared/outputs';
 import { SignalBriefingAudio, SIGNAL_AUDIO_LIMITS, SIGNAL_AUDIO_MODEL } from './SignalBriefingAudio';
+import { signalWorkflowFor, type SignalMode, type SignalTrack, type SignalReportMetadata } from '@craft-agent/shared/shared-intel';
+import { hash, readSignals, saveEvidence, writeSignals, type SignalRequest } from '../signals/storage';
+import type { SignalFinalReportRun } from '../signals/final-report';
 
 const workspaceId = 'signal-audio-test';
 const outputId = '11111111-1111-4111-8111-111111111111';
@@ -54,6 +57,110 @@ beforeEach(async () => {
   getOutput = mock(() => output);
 });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+
+function newReport(track: SignalTrack = 'your-world', mode: SignalMode = 'scan') {
+  const state = readSignals(workspace.rootPath, workspaceId);
+  const workflowSlug = signalWorkflowFor(track, mode);
+  output.origin.workflowSlug = workflowSlug;
+  output.title = 'Renamed report';
+  output.createdAt = '2026-09-07T12:00:00.000Z';
+  const identity = { version: 1 as const, hqWorkspaceId: workspaceId, track, mode, runId: 'request-1', workflowRunId: 'run-1', configRevision: 'initial', requestedVideoIds: mode === 'links' ? ['abcdefghijk'] : [] };
+  const metadata: SignalReportMetadata = { version: 1, identity, outputId, contentHash: hash(report), createdAt: output.createdAt, coverageStatus: 'complete', sources: [], findings: [], ideas: [], warnings: [], indexingStatus: 'ready' };
+  const entry: SignalRequest = { runId: identity.runId, identity, track, mode, status: 'report', workflowRunId: 'run-1', orderIds: [], outputId, createdAt: output.createdAt, updatedAt: output.createdAt,
+    idempotencyKey: 'key', requestHash: 'hash', config: state.tracks[track], coverage: [], selected: [], packets: [], websites: [], collectionComplete: true, workflowDigest: 'digest', outputHash: hash(report) };
+  state.requests.push(entry);
+  const run: SignalFinalReportRun = { id: 'run-1', workspaceId, workflowSlug, state: 'succeeded', finalOutputId: outputId,
+    trigger: { type: 'manual', firedAt: output.createdAt, inputs: { signalContract: 'signals-v1', signalRequestId: identity.runId, track, mode } } };
+  const persist = () => { entry.reportMetadataHash = hash(metadata); saveEvidence(workspace.rootPath, entry.reportMetadataHash, metadata); writeSignals(workspace.rootPath, state); };
+  persist();
+  return { state, entry, metadata, run, persist, audio: service({ getRun: () => run }) };
+}
+
+describe('new-contract audio host proof', () => {
+  for (const track of ['industry', 'your-world'] as const) for (const mode of ['scan', 'links'] as const) {
+    test(`accepts validated renamed ${track} ${mode} and reuses cache`, async () => {
+      const fixture = newReport(track, mode);
+      await fixture.audio.read(workspaceId, outputId, briefing);
+      await fixture.audio.read(workspaceId, outputId, briefing);
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(request.mock.calls[0]![1].body as string).text).toBe(briefing);
+    });
+  }
+  test('permits partial and index-failed readable reports with exact current retry identity', async () => {
+    const f = newReport();
+    f.entry.status = 'partial'; f.metadata.coverageStatus = 'partial'; f.metadata.indexingStatus = 'failed';
+    f.entry.workflowRunId = f.run.id = output.origin.workflowRunId = 'retry-2';
+    f.entry.attempts = [{ fromRunId: 'run-1', runId: 'retry-2' }];
+    f.metadata.identity = { ...f.metadata.identity, workflowRunId: 'retry-2' };
+    f.persist();
+    await f.audio.read(workspaceId, outputId, briefing);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+  for (const field of ['hq', 'track', 'mode', 'config', 'attempt', 'output', 'trigger', 'final', 'state', 'sidecar-identity', 'sidecar-output', 'sidecar-hash', 'sidecar-date'] as const) {
+    test(`rejects ${field} mismatch before report IO or provider access`, async () => {
+      const f = newReport();
+      switch (field) {
+        case 'hq': f.entry.identity.hqWorkspaceId = 'other'; break;
+        case 'track': f.entry.track = 'industry'; break;
+        case 'mode': f.entry.mode = 'links'; break;
+        case 'config': f.entry.config.revision = 'changed'; break;
+        case 'attempt': f.entry.workflowRunId = 'other'; break;
+        case 'output': f.entry.outputId = 'other'; break;
+        case 'trigger': f.run.trigger!.inputs.signalRequestId = 'other'; break;
+        case 'final': f.run.finalOutputId = 'other'; break;
+        case 'state': f.run.state = 'failed'; break;
+        case 'sidecar-identity': f.metadata.identity = { ...f.metadata.identity, runId: 'other' }; break;
+        case 'sidecar-output': f.metadata.outputId = 'other'; break;
+        case 'sidecar-hash': f.metadata.contentHash = hash('other'); break;
+        case 'sidecar-date': f.metadata.createdAt = '2025-01-01T00:00:00Z'; break;
+      }
+      f.persist();
+      await expect(f.audio.read(workspaceId, outputId, briefing)).rejects.toMatchObject({ code: 'REPORT_NOT_FINAL' });
+      expect(safePath).not.toHaveBeenCalled(); expect(secret).not.toHaveBeenCalled(); expect(request).not.toHaveBeenCalled();
+    });
+  }
+  for (const status of ['queued', 'running', 'failed', 'cancelled', 'no-change'] as const) {
+    test(`rejects journal ${status} even with succeeded run`, async () => {
+      const f = newReport(); f.entry.status = status; f.persist();
+      await expect(f.audio.read(workspaceId, outputId, briefing)).rejects.toMatchObject({ code: 'REPORT_NOT_FINAL' });
+      expect(safePath).not.toHaveBeenCalled();
+    });
+  }
+  test('requires a unique journal mapping and intact persisted sidecar', async () => {
+    const f = newReport();
+    f.state.requests.push(structuredClone(f.entry)); f.persist();
+    await expect(f.audio.read(workspaceId, outputId, briefing)).rejects.toMatchObject({ code: 'REPORT_NOT_FINAL' });
+    f.state.requests.pop(); f.persist();
+    const path = join(workspace.rootPath, 'signals', 'packets', `${f.entry.reportMetadataHash}.json`);
+    await writeFile(path, '{private corrupted JSON');
+    await expect(f.audio.read(workspaceId, outputId, briefing)).rejects.toMatchObject({ code: 'REPORT_NOT_FINAL' });
+    await rm(path);
+    await expect(f.audio.read(workspaceId, outputId, briefing)).rejects.toMatchObject({ code: 'REPORT_NOT_FINAL' });
+    expect(safePath).not.toHaveBeenCalled(); expect(request).not.toHaveBeenCalled();
+  });
+  test('rejects an unadmitted retry despite matching run, output and sidecar', async () => {
+    const f = newReport();
+    f.entry.workflowRunId = f.run.id = output.origin.workflowRunId = 'unadmitted';
+    f.metadata.identity = { ...f.metadata.identity, workflowRunId: 'unadmitted' };
+    f.entry.refusedAttempts = [{ fromRunId: 'run-1', runId: 'unadmitted' }]; f.persist();
+    await expect(f.audio.read(workspaceId, outputId, briefing)).rejects.toMatchObject({ code: 'REPORT_NOT_FINAL' });
+    expect(safePath).not.toHaveBeenCalled(); expect(request).not.toHaveBeenCalled();
+  });
+  test('never substitutes tags for missing journal or sidecar proof', async () => {
+    const f = newReport(); output.tags = ['signals-v1', 'signal-track:your-world'];
+    f.entry.reportMetadataHash = undefined; writeSignals(workspace.rootPath, f.state);
+    await expect(f.audio.read(workspaceId, outputId, briefing)).rejects.toMatchObject({ code: 'REPORT_NOT_FINAL' });
+    f.state.requests = []; writeSignals(workspace.rootPath, f.state);
+    await expect(f.audio.read(workspaceId, outputId, briefing)).rejects.toMatchObject({ code: 'REPORT_NOT_FINAL' });
+    expect(safePath).not.toHaveBeenCalled(); expect(secret).not.toHaveBeenCalled();
+  });
+  test('does not serve cached audio after unvalidated detail edits, even with matching visible briefing', async () => {
+    const f = newReport(); await f.audio.read(workspaceId, outputId, briefing); secret.mockClear();
+    await writeFile(reportPath, `${report}\nUnvalidated changed detail`);
+    await expect(f.audio.read(workspaceId, outputId, briefing)).rejects.toMatchObject({ code: 'REPORT_CHANGED' });
+    expect(request).toHaveBeenCalledTimes(1); expect(secret).not.toHaveBeenCalled();
+  });
+});
 
 describe('saved Signals audio', () => {
   test('uses official HTTP casing, encrypted-secret resolver and Dennis; sends only saved parsed briefing', async () => {
