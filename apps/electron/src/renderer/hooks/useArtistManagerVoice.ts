@@ -4,6 +4,7 @@ import type { AgentDefinitionDTO, LoadedSkill, LoadedSource, ArtistManagerMoonsh
 import { VoiceCoreWeb, createAssemblyAiSttTransport, createInworldTtsTransport, type VoiceEvent } from '@voice-core/web/cloud'
 import { buildAgentCreateSessionOptions, ensureAgentDeclaredSkillsEnabled, loadAgentMemoryEntries, loadUserMemoryEntries } from '@/lib/run-agent'
 import { createArtistManagerVoiceTransport } from '@/lib/artist-manager-voice-transport'
+import { VoiceTimingTrace, observeVoiceStt, observeVoiceTts, type VoiceTimingRecord } from '@/lib/artist-manager-voice-timing'
 import { VoiceSessionLifecycle } from '@/lib/voice-session-lifecycle'
 import { markVoiceManagedSession } from '@/lib/voice-managed-sessions'
 import { createElectronMoonshineSttTransport } from '../../../../../vendor/voice-core-electron/renderer/moonshineSttTransport'
@@ -25,6 +26,9 @@ VOICE CONVERSATION MODE
 `.trim()
 
 export type ArtistManagerVoiceState = {
+  timingEnabled: boolean; setTimingEnabled(value: boolean): void
+  typedTrial: boolean; setTypedTrial(value: boolean): void
+  timingRecords: VoiceTimingRecord[]; canSendTyped: boolean; sendTyped(text: string): Promise<void>
   open: boolean; running: boolean; starting: boolean; stopping: boolean; installing: boolean
   providerReady: boolean; assemblyAiReady: boolean; inworldReady: boolean; hearingReady: boolean
   status: string; error: string | null; userText: string; assistantText: string; sessionId: string | null; conversationSessionId: string | null
@@ -40,6 +44,13 @@ export type ArtistManagerVoiceState = {
 export function useArtistManagerVoice(input: {
   workspaceId: string; agents: AgentDefinitionDTO[]; skills: LoadedSkill[]; sources: LoadedSource[]
 }): ArtistManagerVoiceState {
+  const [timingEnabled, setTimingEnabled] = React.useState(false)
+  const [typedTrial, setTypedTrial] = React.useState(false)
+  const [typedSending, setTypedSending] = React.useState(false)
+  const [timingRecords, setTimingRecords] = React.useState<VoiceTimingRecord[]>([])
+  const timingRef = React.useRef<VoiceTimingTrace | null>(null)
+  const runtimeRef = React.useRef<VoiceCoreWeb | null>(null)
+  const typedSendingRef = React.useRef(false)
   const [open, setOpenState] = React.useState(false)
   const [running, setRunning] = React.useState(false)
   const [starting, setStarting] = React.useState(false)
@@ -67,6 +78,7 @@ export function useArtistManagerVoice(input: {
 
   const stop = React.useCallback(async () => {
     const epoch = ++stopEpoch.current
+    timingRef.current?.stop(); timingRef.current = null; runtimeRef.current = null
     const cleanup = lifecycle.stop()
     unsubscribe.current?.(); unsubscribe.current = null
     if (mounted.current) { setRunning(false); setStarting(false); setStopping(true); setSessionId(null); setStatus('Stopping audio and agent…') }
@@ -133,12 +145,19 @@ export function useArtistManagerVoice(input: {
     stopEpoch.current++; setStopping(false)
     setStarting(true); setError(null); setUserText(''); setAssistantText(''); setSessionId(null); setStatus('Connecting voice…')
     const alive = () => mounted.current && lifecycle.owns(ticket)
+    const trace = timingEnabled ? new VoiceTimingTrace(crypto.randomUUID(), record => {
+      if (!mounted.current) return
+      setTimingRecords(previous => [...previous.slice(-499), record])
+      window.electronAPI.debugLog('[voice-timing]', JSON.stringify(record))
+    }) : null
+    timingRef.current = trace
     // A fresh agent session per voice runtime prevents late cancellation crossing a restart.
     let managerSession: Promise<{ id: string }> | null = null
     const ensureManagerSession = () => {
       lifecycle.assertOwner(ticket)
       if (managerSession) return managerSession
       managerSession = (async () => {
+        trace?.mark('session-setup-start')
         let manager = input.agents.find(agent => agent.slug === CONCIERGE_SLUG) ?? null
         if (!manager) manager = await window.electronAPI.getAgentDefinition(CONCIERGE_SLUG)
         lifecycle.assertOwner(ticket)
@@ -161,6 +180,7 @@ export function useArtistManagerVoice(input: {
         })
         markVoiceManagedSession(session.id)
         lifecycle.assertOwner(ticket); setSessionId(session.id); setConversationSessionId(session.id)
+        trace?.mark('session-setup-ready', { sessionId: session.id, model: session.model, connection: session.llmConnection, thinking: session.thinkingLevel })
         return { id: session.id }
       })()
       return managerSession
@@ -189,8 +209,10 @@ export function useArtistManagerVoice(input: {
         inputDeviceId: inputDeviceId || undefined, outputDeviceId: outputDeviceId || undefined,
       })
       lifecycle.attach(ticket, runtime)
+      runtimeRef.current = runtime
       const nativeSession = crypto.randomUUID()
       const control = async (method: 'cancel' | 'stop' | 'finalize' | 'finish', turn?: number) => {
+        if (method === 'finalize') trace?.mark('stt-finalize-request', {}, false, true)
         await window.electronAPI.invokeArtistManagerMoonshine(method === 'finalize' || method === 'finish'
           ? { method, sessionId: nativeSession, turn: turn! } : { method, sessionId: nativeSession })
       }
@@ -209,20 +231,22 @@ export function useArtistManagerVoice(input: {
         speechModel: 'universal-streaming-multilingual', formatTurns: true,
       })
       await runtime.setTransports({
-        stt,
+        stt: observeVoiceStt(stt, trace, timingEnabled && typedTrial),
         llm: createArtistManagerVoiceTransport({
           ensureSession: ensureManagerSession,
+          onTiming: (stage, details) => trace?.mark(stage, details),
           sendMessage: (id, text) => window.electronAPI.sendMessage(id, text),
           cancelProcessing: id => window.electronAPI.cancelProcessing(id, true),
           onSessionEvent: handler => window.electronAPI.onSessionEvent(handler),
           onUserText: text => { if (alive()) setUserText(text) },
           onAssistantText: text => { if (alive()) setAssistantText(text) },
         }),
-        tts: createInworldTtsTransport({ webSocketUrl: proxyUrl.toString(), inworldVoiceId: proxy.voiceId, inworldModelId: ELECTRON_INWORLD_TTS_MODEL_ID }),
+        tts: observeVoiceTts(createInworldTtsTransport({ webSocketUrl: proxyUrl.toString(), inworldVoiceId: proxy.voiceId, inworldModelId: ELECTRON_INWORLD_TTS_MODEL_ID }), trace),
       })
       lifecycle.assertOwner(ticket)
       unsubscribe.current = runtime.onEvent((event: VoiceEvent) => {
         if (!alive()) return
+        trace?.event(event)
         if (event.type === 'userSpeechPartial' || event.type === 'userSpeechComplete') setUserText(event.text)
         else if (event.type === 'assistantText') setAssistantText(event.text)
         else if (event.type === 'assistantActivity') setStatus(event.text)
@@ -231,17 +255,34 @@ export function useArtistManagerVoice(input: {
       })
       await runtime.start()
       lifecycle.assertOwner(ticket)
+      trace?.mark('listening')
       setRunning(true); setStarting(false); setStatus('Listening…')
       void refreshDevices()
     } catch (cause) {
+      trace?.mark('error')
       if (alive()) { await stop(); if (mounted.current) setError(messageFromError(cause)) }
     } finally { if (alive()) setStarting(false) }
-  }, [input.agents, input.skills, input.sources, input.workspaceId, lifecycle, managerStyle, sttSelection, inputDeviceId, outputDeviceId, stop, refreshDevices])
+  }, [timingEnabled, typedTrial, input.agents, input.skills, input.sources, input.workspaceId, lifecycle, managerStyle, sttSelection, inputDeviceId, outputDeviceId, stop, refreshDevices])
+
+  const canSendTyped = timingEnabled && typedTrial && running && !typedSending && status === 'Listening…'
+  const sendTyped = async (text: string) => {
+    const runtime = runtimeRef.current
+    const trace = timingRef.current
+    if (!canSendTyped || typedSendingRef.current || !runtime || !text.trim() || text.length > 2000) return
+    typedSendingRef.current = true; setTypedSending(true)
+    trace?.queueInput(text.trim(), true)
+    try { await runtime.completeUserTranscript(text.trim()) }
+    catch (cause) { if (runtimeRef.current === runtime && mounted.current) setError(messageFromError(cause)) }
+    finally { typedSendingRef.current = false; if (mounted.current) setTypedSending(false) }
+  }
 
   const change = <T extends string>(key: string, setter: React.Dispatch<React.SetStateAction<T>>, value: T) => { void stop(); setter(value); writePreference(key, value) }
   const hearingReady = sttSelection === 'assembly_ai' ? providers.assemblyAi
     : moonshine.available && moonshine.tiers.some(tier => tier.modelId === sttSelection && tier.registered && tier.installState === 'ready' && !tier.hasError)
   return {
+    timingEnabled, setTimingEnabled: value => { if (!running && !starting && !stopping) setTimingEnabled(value) },
+    typedTrial, setTypedTrial: value => { if (!running && !starting && !stopping) setTypedTrial(value) },
+    timingRecords, canSendTyped, sendTyped,
     open, running, starting, stopping, installing, status, error, userText, assistantText, sessionId, conversationSessionId,
     providerReady: hearingReady && providers.inworld, hearingReady, assemblyAiReady: providers.assemblyAi, inworldReady: providers.inworld,
     sttSelection, setSttSelection: value => { if (value !== 'assembly_ai') parseMoonshineModelId(value); change('stt', setSelection, value) },

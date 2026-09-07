@@ -1,3 +1,4 @@
+import type { VoiceTimingStage, VoiceTimingDetails } from './artist-manager-voice-timing'
 import type { SessionEvent } from '../../shared/types'
 import {
   AgentActivitySpeechController,
@@ -15,6 +16,7 @@ export type ArtistManagerVoiceTransportDeps = {
   onSessionEvent(handler: (event: SessionEvent) => void): () => void
   onUserText?(text: string): void
   onAssistantText?(text: string): void
+  onTiming?(stage: VoiceTimingStage, details?: VoiceTimingDetails): void
   responseTimeoutMs?: number
   totalTimeoutMs?: number
   cancellationTimeoutMs?: number
@@ -45,6 +47,7 @@ export function createArtistManagerVoiceTransport(deps: ArtistManagerVoiceTransp
       request = { ...request, signal: AbortSignal.any([request.signal, consumerAbort.signal]) }
       let turn!: { abort: AbortController; close(): Promise<unknown> }
       const stream = (async function* () {
+        timing(deps, 'manager-queued')
         const preceding = tail
         let release!: () => void
         tail = new Promise<void>((resolve) => { release = resolve })
@@ -96,6 +99,12 @@ async function* streamManagerReply(
     emit: token => queue.push(token),
     ...deps.activitySpeech,
   })
+  let sawModelText = false
+  const tools = new Map<string, number>()
+  const toolNumber = (id: string) => {
+    if (!tools.has(id) && tools.size < 1000) tools.set(id, tools.size + 1)
+    return tools.get(id)
+  }
   let completeText = ''
   let completed = false
   let dispatched = false
@@ -109,6 +118,7 @@ async function* streamManagerReply(
     activitySpeech.finish()
     const answer = completeText.trim() || 'The manager finished this turn without a spoken summary. No completion was confirmed.'
     if (answer) {
+      timing(deps, 'answer-delivered', { chars: answer.length })
       queue.push({ text: answer })
       deps.onAssistantText?.(answer)
     }
@@ -119,6 +129,7 @@ async function* streamManagerReply(
     if (ended) return
     ended = true
     activitySpeech.finish()
+    timing(deps, 'error')
     queue.fail(error)
   }
   let responseTimeout: ReturnType<typeof setTimeout> | undefined
@@ -141,6 +152,17 @@ async function* streamManagerReply(
       || event.type === 'tool_result' || event.type === 'status' || event.type === 'auth_completed') {
       resetInactivity()
     }
+    if (!ended) {
+      if (event.type === 'text_delta' && event.delta && !sawModelText) {
+        sawModelText = true; timing(deps, 'manager-first-text')
+      } else if (event.type === 'tool_start') timing(deps, 'tool-start', { tool: toolNumber(event.toolUseId) })
+      else if (event.type === 'tool_result') timing(deps, 'tool-result', { tool: toolNumber(event.toolUseId), failed: event.isError === true })
+      else if (event.type === 'permission_request') timing(deps, 'approval-wait')
+      else if (event.type === 'credential_request' || event.type === 'auth_request') timing(deps, 'auth-wait')
+      else if (event.type === 'model_fallback_started') timing(deps, 'model-fallback')
+      else if (event.type === 'model_attempt_reset') { sawModelText = false; timing(deps, 'model-attempt-reset') }
+      else if (event.type === 'complete') timing(deps, 'manager-complete', { failed: event.stopReason === 'timeout' || event.handoff === 'auth' })
+    }
     if (event.type === 'tool_start') {
       activitySpeech.toolStarted(classifyToolActivity(event.toolName))
     } else if (event.type === 'permission_request') {
@@ -151,6 +173,7 @@ async function* streamManagerReply(
     // Deltas include tool commentary; they cannot be retracted after speaking.
     if (event.type === 'text_complete' && !event.isIntermediate && !event.parentToolUseId) {
       activitySpeech.answerBeginning()
+      if (!ended) timing(deps, 'manager-final-text', { chars: event.text.length })
       completeText = event.text
     } else if (event.type === 'model_attempt_reset') {
       completeText = ''
@@ -193,6 +216,7 @@ async function* streamManagerReply(
     send = Promise.resolve().then(() => {
       throwIfAborted(request.signal)
       dispatched = true
+      timing(deps, 'manager-request')
       return deps.sendMessage(sessionId, request.userText)
     })
     void send.catch((error) => fail(error instanceof Error ? error : new Error(String(error))))
@@ -296,4 +320,8 @@ function createEventQueue<T>() {
       wake()
     },
   }
+}
+
+function timing(deps: ArtistManagerVoiceTransportDeps, stage: VoiceTimingStage, details?: VoiceTimingDetails): void {
+  try { deps.onTiming?.(stage, details) } catch { /* Timing observers cannot alter agent execution. */ }
 }

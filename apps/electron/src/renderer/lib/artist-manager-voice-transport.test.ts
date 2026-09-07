@@ -510,3 +510,49 @@ describe('Artist Manager voice action safety', () => {
     expect(sends).toBe(1)
   })
 })
+
+// Exercise timing through the actual adapter: a fast first token must remain
+// distinct from final delivery, including fallback resets and failed tool work.
+describe('Artist Manager timing observer', () => {
+  test('records stage order without leaking session payloads or changing answer buffering', async () => {
+    let listener!: (event: SessionEvent) => void
+    const marks: Array<{ stage: string; details: unknown }> = []
+    const transport = createArtistManagerVoiceTransport({
+      ensureSession: async () => ({ id: 's' }),
+      onTiming: (stage, details) => marks.push({ stage, details }),
+      onSessionEvent: h => { listener = h; return () => {} },
+      cancelProcessing: async () => {},
+      sendMessage: async () => {
+        listener({ type: 'text_delta', sessionId: 'wrong', delta: 'wrong-canary' })
+        listener({ type: 'text_delta', sessionId: 's', delta: 'private-canary' })
+        listener({ type: 'text_delta', sessionId: 's', delta: 'more' })
+        listener({ type: 'tool_start', sessionId: 's', toolName: 'private-canary', toolUseId: 't', toolInput: { secret: 'private-canary' } })
+        listener({ type: 'tool_result', sessionId: 's', toolName: 'private-canary', toolUseId: 't', result: 'private-canary', isError: true })
+        listener({ type: 'model_fallback_started', sessionId: 's' })
+        listener({ type: 'model_attempt_reset', sessionId: 's', messageIds: [] })
+        listener({ type: 'text_delta', sessionId: 's', delta: 'answer' })
+        listener({ type: 'text_complete', sessionId: 's', text: 'answer' })
+        expect(marks.some(m => m.stage === 'answer-delivered')).toBe(false)
+        listener({ type: 'complete', sessionId: 's' })
+      },
+    })
+    expect(await drain(await transport.generateReply(request()))).toBe('answer')
+    expect(marks.map(m => m.stage)).toEqual([
+      'manager-queued', 'manager-request', 'manager-first-text', 'tool-start', 'tool-result',
+      'model-fallback', 'model-attempt-reset', 'manager-first-text', 'manager-final-text', 'manager-complete', 'answer-delivered',
+    ])
+    expect(marks.find(m => m.stage === 'tool-result')?.details).toEqual({ tool: 1, failed: true })
+    expect(JSON.stringify(marks)).not.toContain('canary')
+  })
+
+  test('a throwing timing observer cannot prevent a response or cleanup', async () => {
+    let listener!: (event: SessionEvent) => void
+    const transport = createArtistManagerVoiceTransport({
+      ensureSession: async () => ({ id: 's' }), onTiming: () => { throw new Error('logger failed') },
+      onSessionEvent: h => { listener = h; return () => {} }, cancelProcessing: async () => {},
+      sendMessage: async () => { listener({ type: 'text_complete', sessionId: 's', text: 'answer' }); listener({ type: 'complete', sessionId: 's' }) },
+    })
+    expect(await drain(await transport.generateReply(request()))).toBe('answer')
+    await transport.stop?.()
+  })
+})

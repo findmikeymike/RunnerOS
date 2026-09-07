@@ -10,6 +10,7 @@ import { useAppShellContext, usePendingPermission, usePendingCredential } from '
 import { StructuredInput } from './input/StructuredInput'
 import type { StructuredInputState, StructuredResponse } from './input/structured/types'
 import { ARTIST_MANAGER_VOICE_STYLES } from '@/lib/artist-manager-voice-style'
+import { ArtistManagerVoiceTiming } from './ArtistManagerVoiceTiming'
 
 export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceState }) {
   const { navigate } = useNavigation()
@@ -180,6 +181,8 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
               <p>Speaking: Inworld Flash with your saved default agent voice. Provider credentials stay in Settings.</p>
             </fieldset>
           </details>
+
+          <ArtistManagerVoiceTiming voice={voice} />
 
           <button
             type="button"
