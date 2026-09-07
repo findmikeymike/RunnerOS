@@ -487,6 +487,10 @@ client.onConnectionStateChanged((state) => {
 ;(api as ElectronAPI).changeLanguage = (lang: string) => ipcRenderer.invoke('i18n:changeLanguage', lang)
 ;(api as ElectronAPI).captureVisualElement = (rect) => ipcRenderer.invoke('__visual:capture-element', rect)
 ;(api as ElectronAPI).getArtistManagerVoiceProxyInfo = () => ipcRenderer.invoke('__artist-manager-voice:proxy-info')
+;(api as ElectronAPI).artistManagerVoiceSettings = {
+  get: () => ipcRenderer.invoke('__artist-manager-voice-settings:get'),
+  update: settings => ipcRenderer.invoke('__artist-manager-voice-settings:update', settings),
+}
 ;(api as ElectronAPI).artistManagerVoiceFocus = {
   register: request => ipcRenderer.invoke('__artist-manager-voice-focus:register', request),
   startTurn: request => ipcRenderer.invoke('__artist-manager-voice-focus:turn', request),

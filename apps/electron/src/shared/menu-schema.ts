@@ -233,6 +233,7 @@ export interface SettingsMenuItem {
 const SETTINGS_ICONS: Record<SettingsSubpage, string> = {
   app: 'ToggleRight',
   ai: 'Sparkles',
+  conversation: 'Mic',
   secrets: 'KeyRound',
   'social-accounts': 'Share2',
   spotify: 'Music2',

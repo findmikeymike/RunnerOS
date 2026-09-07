@@ -808,6 +808,8 @@
   "settings.appearance.usingDefaultTheme": "Standarddesign wird verwendet",
   "settings.appearance.workspaceThemes": "Workspace-Designs",
   "settings.appearance.workspaceThemesDesc": "Designeinstellungen pro Workspace überschreiben",
+  "settings.conversation.description": "Voice model, style, and hearing",
+  "settings.conversation.title": "Conversation",
   "settings.input.autoCapitalisation": "Automatische Großschreibung",
   "settings.input.autoCapitalisationDesc": "Den ersten Buchstaben beim Tippen einer Nachricht automatisch großschreiben.",
   "settings.input.cmdEnterKey": "⌘ Enter",

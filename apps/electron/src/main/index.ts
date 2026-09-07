@@ -140,7 +140,8 @@ import {
   startArtistManagerVoiceProxy,
   type ArtistManagerVoiceProxy,
 } from './artist-manager-voice-proxy'
-import { ArtistManagerVoiceFocusService } from './artist-manager-voice-focus'
+import { ArtistManagerVoiceFocusService, validateVoiceSettingsRoute } from './artist-manager-voice-focus'
+import { getArtistManagerVoiceSettings, updateArtistManagerVoiceSettings } from '@craft-agent/shared/config/artist-manager-voice-storage'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -722,6 +723,18 @@ app.whenReady().then(async () => {
       return sender
     }
     const observedFocusSenders = new WeakSet<Electron.WebContents>()
+    ipcMain.handle('__artist-manager-voice-settings:get', event => {
+      focusOwner(event)
+      return getArtistManagerVoiceSettings()
+    })
+    ipcMain.handle('__artist-manager-voice-settings:update', async (event, value: unknown) => {
+      focusOwner(event)
+      // Refuse malformed persisted settings before route lookup can load config migrations.
+      await getArtistManagerVoiceSettings()
+      const settings = await validateVoiceSettingsRoute(value)
+      focusOwner(event)
+      return updateArtistManagerVoiceSettings(settings)
+    })
     ipcMain.handle('__artist-manager-voice-focus:register', (event, request) =>
       artistManagerVoiceFocus.register(focusOwner(event).id, request))
     ipcMain.handle('__artist-manager-voice-focus:turn', (event, request) => {

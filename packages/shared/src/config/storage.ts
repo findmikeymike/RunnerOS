@@ -52,6 +52,8 @@ import {
 
 // Config stored in JSON file (credentials stored in encrypted file, not here)
 export interface StoredConfig {
+  /** Independent, non-secret conversation voice preferences. */
+  artistManagerVoice?: import('./artist-manager-voice-settings.ts').ArtistManagerVoiceSettings;
   // LLM Connections (authoritative source for auth and model config)
   llmConnections?: LlmConnection[];
   defaultLlmConnection?: string;  // Slug of default connection for new sessions

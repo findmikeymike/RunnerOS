@@ -37,6 +37,7 @@ export interface SettingsPageDefinition {
 export const SETTINGS_PAGES = [
   { id: 'app' as const, labelKey: 'settings.app.title', descriptionKey: 'settings.app.description' },
   { id: 'ai' as const, labelKey: 'settings.ai.title', descriptionKey: 'settings.ai.description' },
+  { id: 'conversation' as const, labelKey: 'settings.conversation.title', descriptionKey: 'settings.conversation.description' },
   { id: 'secrets' as const, labelKey: 'settings.secrets.title', descriptionKey: 'settings.secrets.description' },
   { id: 'social-accounts' as const, labelKey: 'settings.socialAccounts.title', descriptionKey: 'settings.socialAccounts.description' },
   { id: 'spotify' as const, labelKey: 'settings.spotify.title', descriptionKey: 'settings.spotify.description' },

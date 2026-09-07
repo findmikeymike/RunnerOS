@@ -808,6 +808,8 @@
   "settings.appearance.usingDefaultTheme": "使用默认主题",
   "settings.appearance.workspaceThemes": "Workspace 主题",
   "settings.appearance.workspaceThemesDesc": "按 Workspace 覆盖主题设置",
+  "settings.conversation.description": "Voice model, style, and hearing",
+  "settings.conversation.title": "Conversation",
   "settings.input.autoCapitalisation": "自动大写",
   "settings.input.autoCapitalisationDesc": "输入消息时自动大写首字母。",
   "settings.input.cmdEnterKey": "⌘ Enter",

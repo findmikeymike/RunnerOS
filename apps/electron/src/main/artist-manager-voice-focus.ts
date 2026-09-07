@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Api, Context, Model, SimpleStreamOptions } from '@earendil-works/pi-ai'
+import { getArtistManagerVoiceSettings } from '@craft-agent/shared/config/artist-manager-voice-storage'
+import { parseArtistManagerVoiceSettings, type ArtistManagerVoiceSettings } from '@craft-agent/shared/config/artist-manager-voice-settings'
 import type { LlmConnection } from '@craft-agent/shared/config/llm-connections'
 import {
   VOICE_FOCUS_LIMITS,
@@ -14,7 +16,7 @@ import {
 import { normalizeVoiceHandoffTargets, buildVoiceHandoffTool, parseVoiceHandoffProposal, isVoiceHandoffConfirmation, type VoiceHandoffTarget, type VoiceHandoffProposal } from '../shared/artist-manager-voice-handoff'
 
 type StreamEvent = { type: string; delta?: string; reason?: string; toolCall?: { name: string; arguments: unknown }; message?: { usage?: { output?: number; reasoning?: number } } }
-export type VoiceFocusResolvedConfig = { connection: LlmConnection; model: string }
+export type VoiceFocusResolvedConfig = { connection: LlmConnection; model: string; thinking?: ArtistManagerVoiceSettings['thinking'] }
 export type VoiceFocusDependencies = {
   resolveConfig(request: VoiceFocusRegisterRequest): Promise<VoiceFocusResolvedConfig>
   resolveModel(connection: LlmConnection, model: string): Promise<Model<Api>>
@@ -26,35 +28,79 @@ export type VoiceFocusDependencies = {
 const supportedApis = new Set(['openai-completions', 'openai-responses', 'anthropic-messages'])
 const bareModel = (id: string) => id.startsWith('pi/') ? id.slice(3) : id
 
+export type VoiceSettingsRouteDependencies = {
+  getConnection(slug: string): LlmConnection | null | Promise<LlmConnection | null>
+  resolveModel: VoiceFocusDependencies['resolveModel']
+}
+
+async function getConfiguredConnection(slug: string): Promise<LlmConnection | null> {
+  const { getLlmConnection } = await import('@craft-agent/shared/config/storage')
+  return getLlmConnection(slug)
+}
+
+async function resolveConfiguredVoiceModel(connection: LlmConnection, requestedModel: string): Promise<Model<Api>> {
+  const { getModels } = await import('@earendil-works/pi-ai/compat')
+  const provider = connection.piAuthProvider || (connection.providerType === 'anthropic' ? 'anthropic' : undefined)
+  if (!provider) throw new Error('This connection protocol is not supported by conversation voice yet')
+  const model = getModels(provider as Parameters<typeof getModels>[0]).find(candidate => candidate.id === bareModel(requestedModel))
+  if (!model) throw new Error('The exact voice model is unavailable for this connection; no fallback was used')
+  if (!supportedApis.has(model.api) || (connection.customEndpoint && connection.customEndpoint.api !== model.api)) {
+    throw new Error('This connection protocol is not supported by conversation voice yet')
+  }
+  return { ...model, ...(connection.baseUrl ? { baseUrl: connection.baseUrl } : {}) }
+}
+
+async function validateResolvedVoiceRoute(
+  connection: LlmConnection,
+  requestedModel: string,
+  resolveModel: VoiceFocusDependencies['resolveModel'],
+): Promise<Model<Api>> {
+  if (connection.authType !== 'api_key' && connection.authType !== 'api_key_with_endpoint') {
+    throw new Error('Conversation voice requires an API-key connection; OAuth and other auth are not supported')
+  }
+  const model = await resolveModel(connection, requestedModel)
+  if (bareModel(requestedModel) !== model.id || !supportedApis.has(model.api)) throw new Error('The exact voice model is unavailable; no fallback was used')
+  assertEndpoint(model.baseUrl)
+  return model
+}
+
+/** Validate routing without fetching credentials, starting a session or calling a provider. */
+export async function validateVoiceSettingsRoute(
+  value: unknown,
+  deps: VoiceSettingsRouteDependencies = { getConnection: getConfiguredConnection, resolveModel: resolveConfiguredVoiceModel },
+): Promise<ArtistManagerVoiceSettings> {
+  const settings = parseArtistManagerVoiceSettings(value)
+  if (settings.connectionSlug === null || settings.model === null) return settings
+  const connection = await deps.getConnection(settings.connectionSlug)
+  if (!connection || connection.slug !== settings.connectionSlug) throw new Error('The selected conversation voice connection no longer exists; choose it in Settings')
+  await validateResolvedVoiceRoute(connection, settings.model, deps.resolveModel)
+  return settings
+}
+
+/** Diagnostic model overrides stay on the saved voice connection; Command defaults are never consulted. */
+export async function resolveSavedVoiceFocusConfig(
+  request: Pick<VoiceFocusRegisterRequest, 'model' | 'thinking'>,
+  deps: {
+    getSettings(): ArtistManagerVoiceSettings | Promise<ArtistManagerVoiceSettings>
+    getConnection: VoiceSettingsRouteDependencies['getConnection']
+  } = { getSettings: getArtistManagerVoiceSettings, getConnection: getConfiguredConnection },
+): Promise<VoiceFocusResolvedConfig> {
+  const saved = parseArtistManagerVoiceSettings(await deps.getSettings())
+  if (!saved.connectionSlug || !saved.model) throw new Error('Choose a conversation voice connection and model in Settings before starting')
+  const settings = parseArtistManagerVoiceSettings({ ...saved, model: request.model ?? saved.model, thinking: request.thinking ?? saved.thinking })
+  const connection = await deps.getConnection(saved.connectionSlug)
+  if (!connection || connection.slug !== saved.connectionSlug) throw new Error('The selected conversation voice connection no longer exists; choose it in Settings')
+  return { connection, model: settings.model!, thinking: settings.thinking }
+}
+
 const productionDependencies: VoiceFocusDependencies = {
   async resolveConfig(request) {
-    const [{ loadGlobalAgent }, { getWorkspaceByNameOrId }, { loadWorkspaceConfig }, { resolveSessionConnection }] = await Promise.all([
-      import('@craft-agent/shared/agent-definitions/storage'),
-      import('@craft-agent/shared/config/storage'),
-      import('@craft-agent/shared/workspaces'),
-      import('@craft-agent/shared/agent/backend/factory'),
-    ])
-    const workspace = getWorkspaceByNameOrId(request.workspaceId)
-    const manager = loadGlobalAgent('concierge')
-    if (!workspace || !manager) throw new Error('Artist Manager workspace is unavailable')
-    const defaults = loadWorkspaceConfig(workspace.rootPath)?.defaults
-    const connection = resolveSessionConnection(manager.metadata.llmConnection, defaults?.defaultLlmConnection)
-    if (!connection) throw new Error('Configure an Artist Manager model connection first')
-    const model = request.model?.trim() || manager.metadata.model || defaults?.model || connection.defaultModel
-    if (!model || model === 'fast' || model === 'default') throw new Error('Select an exact configured voice model')
-    return { connection, model }
+    const resolved = await resolveSavedVoiceFocusConfig(request)
+    const { getWorkspaceByNameOrId } = await import('@craft-agent/shared/config/storage')
+    if (!getWorkspaceByNameOrId(request.workspaceId)) throw new Error('Artist Manager workspace is unavailable')
+    return resolved
   },
-  async resolveModel(connection, requestedModel) {
-    const { getModels } = await import('@earendil-works/pi-ai/compat')
-    const provider = connection.piAuthProvider || (connection.providerType === 'anthropic' ? 'anthropic' : undefined)
-    if (!provider) throw new Error('This connection protocol is not supported by focused voice yet')
-    const model = getModels(provider as Parameters<typeof getModels>[0]).find(candidate => candidate.id === bareModel(requestedModel))
-    if (!model) throw new Error('The exact voice model is unavailable for this connection; no fallback was used')
-    if (!supportedApis.has(model.api) || (connection.customEndpoint && connection.customEndpoint.api !== model.api)) {
-      throw new Error('This connection protocol is not supported by focused voice yet')
-    }
-    return { ...model, ...(connection.baseUrl ? { baseUrl: connection.baseUrl } : {}) }
-  },
+  resolveModel: resolveConfiguredVoiceModel,
   async getApiKey(connection) {
     const { getCredentialManager } = await import('@craft-agent/shared/credentials')
     return getCredentialManager().getLlmApiKey(connection)
@@ -97,14 +143,9 @@ export class ArtistManagerVoiceFocusService {
     this.owners.set(ownerId, owner)
     try {
       const resolved = await this.deps.resolveConfig(request)
-      if (resolved.connection.authType !== 'api_key' && resolved.connection.authType !== 'api_key_with_endpoint') {
-        throw new Error('Focused voice currently requires an API-key connection; OAuth and other auth are not supported')
-      }
-      const model = await this.deps.resolveModel(resolved.connection, resolved.model)
-      if (bareModel(resolved.model) !== model.id || !supportedApis.has(model.api)) throw new Error('The exact voice model is unavailable; no fallback was used')
-      assertEndpoint(model.baseUrl)
+      const model = await validateResolvedVoiceRoute(resolved.connection, resolved.model, this.deps.resolveModel)
       if (this.owners.get(ownerId) !== owner) throw new Error('Voice setup was cancelled')
-      const info: VoiceFocusSession = { sessionId: randomUUID(), connection: resolved.connection.slug, model: resolved.model, thinking: request.thinking ?? 'low' }
+      const info: VoiceFocusSession = { sessionId: randomUUID(), connection: resolved.connection.slug, model: resolved.model, thinking: request.thinking ?? resolved.thinking ?? 'low' }
       owner.session = { info, sdkModel: model, systemPrompt: request.systemPrompt, history: [], usedTurns: new Set(), handoffTargets: normalizeVoiceHandoffTargets(request.handoffTargets ?? []) }
       return { ...info }
     } catch (error) {

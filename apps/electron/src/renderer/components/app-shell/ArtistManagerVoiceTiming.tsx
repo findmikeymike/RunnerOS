@@ -16,24 +16,6 @@ export function ArtistManagerVoiceTiming({ voice }: { voice: ArtistManagerVoiceS
         {voice.timingEnabled ? <>
           <p>Records timing and counts in the app log. Does not record spoken text, audio, or keys. Choose the input before starting.</p>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={voice.focusedTrial} disabled={busy} onChange={event => voice.setFocusedTrial(event.target.checked)} />
-            Test focused conversation
-          </label>
-          {voice.focusedTrial ? <p>Uses the artist brief to discuss priorities and decisions. Agreed work can move to Command after you confirm. This test conversation is not saved to chat.</p> : null}
-          <label className="block space-y-1">
-            <span>Test model (blank uses Manager setting)</span>
-            <input aria-label="Voice test model" value={voice.modelTrial.model} disabled={busy} maxLength={200} onChange={event => voice.setModelTrial({ ...voice.modelTrial, model: event.target.value })} className="block w-full rounded-lg border border-white/10 bg-[#171717] p-2" />
-          </label>
-          <label className="block space-y-1">
-            <span>Test reasoning</span>
-            <select aria-label="Voice test reasoning" value={voice.modelTrial.thinking} disabled={busy} onChange={event => voice.setModelTrial({ ...voice.modelTrial, thinking: event.target.value as '' | 'off' | 'low' })} className="block w-full rounded-lg border border-white/10 bg-[#171717] p-2">
-              <option value="">{voice.focusedTrial ? 'Low (focused test)' : 'Manager setting'}</option>
-              <option value="low">Low</option>
-              <option value="off">Off</option>
-            </select>
-          </label>
-          <p>Applies only to this test conversation, using the Manager's connection. Saved settings stay unchanged.</p>
-          <label className="flex items-center gap-2">
             <input type="checkbox" checked={voice.typedTrial} disabled={busy} onChange={event => voice.setTypedTrial(event.target.checked)} />
             Type instead of speaking for this test
           </label>
@@ -43,7 +25,7 @@ export function ArtistManagerVoiceTiming({ voice }: { voice: ArtistManagerVoiceS
           </form> : null}
         </> : null}
         {voice.timingRecords.length ? <>
-          <p>{voice.timingRecords.length} recent timing markers collected. Playback includes brief progress announcements; answer audio is labelled separately.</p>
+          <p>{voice.timingRecords.length} recent timing markers collected. Timing does not change the voice model or enable tools.</p>
           <button type="button" className="underline underline-offset-4" onClick={async () => {
             try {
               await navigator.clipboard.writeText(JSON.stringify({ schemaVersion: 1, records: voice.timingRecords }, null, 2))

@@ -269,8 +269,9 @@ Command opens a normal agent session. The agreed brief is prefilled and unsent;
 the artist reviews and sends it. Normal agent permissions, context and model
 settings apply there. Only the agreed brief carries over, not a saved voice
 transcript. Cleanup failure, interruption, stale workspace or unavailable target
-blocks navigation. This remains the opt-in focused candidate under Response
-timing; the normal Manager session path is unchanged.
+blocks navigation. This was initially an opt-in focused candidate under Response
+timing. The Conversation settings integration below makes it the normal voice
+path; Command sessions remain unchanged.
 
 
 A real Flash/low trial selected Branding Agent correctly and confirmed in 0 ms,
@@ -320,3 +321,55 @@ proposal-only checks (no navigation/execution), distinct from the earlier full
 UI handoff proof. Evidence: `/private/tmp/artist-os-voice-scope-live-results.json`.
 The UI test draft was subsequently labelled as test input and manually cleaned;
 it remains unsent and is not an approved creative direction.
+
+
+### Focused selection surviving navigation
+
+A follow-up exposed a host UI bug: measurement, focused mode and voice-model
+selection were plain hook state. Navigating out of HQ remounted the hook with
+focused mode off and the normal Manager model, making the next call slow again.
+Those user-selected values now persist alongside existing local voice/device
+preferences. Typed test input remains session-only so a later call uses the
+microphone. A packaged app is a separate build/profile and does not update when
+Git main or the development renderer changes.
+
+
+### Dedicated Conversation settings
+
+Settings → Conversation now owns a profile-level `artistManagerVoice` record:
+exact connection/model, off/low reasoning, speaking style and hearing provider.
+It is independent of Agent definitions, Command session settings, connection
+defaults and global fallback settings. No second Manager identity is created.
+The initial route is unconfigured; users explicitly choose their voice model.
+Save validates the exact supported API-key route without fetching credentials.
+Malformed stored settings are reported, not overwritten. Deleted connections
+and unavailable models fail explicitly rather than falling back to Command.
+
+Every normal conversation uses the focused runtime and reads these saved
+preferences at Start. Registration resolves that voice connection and model
+without consulting the Manager. Response timing only controls measurements;
+it cannot switch runtimes or models. The dialog links to Conversation settings
+and keeps local hardware selection/model installation together. Confirmed
+handoffs still open an unsent draft in the normal Command agent and preserve
+that agent's normal model, context and permissions.
+
+The interim localStorage persistence patch above is superseded for voice
+model/style/hearing by the dedicated app configuration. Only measurement and
+existing hardware preferences remain local; typed diagnostic input is session-only.
+
+
+Production settings verification used an isolated copy of the profile and the
+actual storage/resolver/provider implementation. Two fresh service instances
+registered with no model or reasoning override and selected the saved
+`pi-api-key / pi/deepseek-v4-flash / low` route (registration 1 ms / 0 ms).
+A greeting produced first text in 1.264 s and completed in 1.452 s (13 words,
+normal stop). This is LLM-only timing, not microphone-to-playback timing.
+Manager file bytes and every other configuration field stayed unchanged;
+Command still resolves through the existing Pro default. The temporary
+credential copy was removed. Evidence: `/private/tmp/voice-settings-live-results.json`.
+
+The tested Flash/low, High energy, Moonshine Balanced configuration was then
+saved only in the Mikey Mike development profile (`~/.artist-os-dev`). Read-back
+verified the voice record and preservation of the Manager and all other
+configuration fields. The packaged app's separate `~/.artist-os` profile was
+not migrated or changed. Evidence: `/private/tmp/voice-settings-applied.json`.

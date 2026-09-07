@@ -808,6 +808,8 @@
   "settings.appearance.usingDefaultTheme": "alapértelmezett téma használata",
   "settings.appearance.workspaceThemes": "Munkaterület-témák",
   "settings.appearance.workspaceThemesDesc": "Témabeállítások felülírása munkaterületenként",
+  "settings.conversation.description": "Voice model, style, and hearing",
+  "settings.conversation.title": "Conversation",
   "settings.input.autoCapitalisation": "Automatikus nagybetűsítés",
   "settings.input.autoCapitalisationDesc": "Az első betű automatikus nagybetűsítése üzenet írásakor.",
   "settings.input.cmdEnterKey": "⌘ Enter",
