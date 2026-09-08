@@ -602,7 +602,7 @@ function AppShellContent({
   const effectiveSidebarAndNavigatorHidden = isSidebarAndNavigatorHidden || isAutoCompact
   const usesWorkspaceHeader = RENDERER_PRODUCT_VARIANT === 'artist-os'
   const usesWorkspaceRail = !usesWorkspaceHeader && !effectiveSidebarAndNavigatorHidden && !isAutoCompact
-  const effectiveSidebarWidth = usesWorkspaceHeader ? 180 : usesWorkspaceRail ? 150 : sidebarWidth
+  const effectiveSidebarWidth = usesWorkspaceHeader ? 186 : usesWorkspaceRail ? 150 : sidebarWidth
   const showsWorkspaceSidebar = usesWorkspaceHeader && !effectiveSidebarAndNavigatorHidden && isSidebarVisible
 
   // What's New overlay
@@ -3304,7 +3304,7 @@ function AppShellContent({
               {showsWorkspaceSidebar && (
                 <div
                   data-testid="sidebar-workspace-navigation"
-                  className="shrink-0 px-2 pt-3 pb-2"
+                  className="shrink-0 px-3 pt-4 pb-2"
                   // The selector and its portaled menus own their keyboard navigation.
                   onKeyDown={(event) => event.stopPropagation()}
                 >

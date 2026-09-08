@@ -160,7 +160,7 @@ export function PanelStackContainer({
     !isCompact &&
     !isMultiPanel &&
     containerWidth >= 1100
-  const inlineVisualGapCount = 1 + Number(hasSidebar) + Number(hasNavigator)
+  const inlineVisualGapCount = 1 + Number(hasSidebar && !edgeToEdge) + Number(hasNavigator)
   const inlineVisualMaxWidth = useMemo(() => {
     const available = containerWidth
       - sidebarWidth
@@ -248,7 +248,8 @@ export function PanelStackContainer({
           initial={false}
           animate={{
             width: hasSidebar ? sidebarWidth : 0,
-            marginRight: hasSidebar ? 0 : -stackGap,
+            // Artist OS joins the sidebar directly to the next surface.
+            marginRight: hasSidebar && !edgeToEdge ? 0 : -stackGap,
             opacity: hasSidebar ? 1 : 0,
           }}
           transition={transition}

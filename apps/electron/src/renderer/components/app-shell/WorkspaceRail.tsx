@@ -364,6 +364,7 @@ export function WorkspaceRail({
               <button
                 type="button"
                 onClick={(event) => void handleWorkspaceSelect(hqWorkspace, event.metaKey || event.ctrlKey)}
+                title={compact ? 'HQ' : undefined}
                 aria-current={hqWorkspace.id === activeWorkspaceId ? 'page' : undefined}
                 className={cn(
                   'flex h-[22px] items-center gap-1.5 rounded-[7px] px-2 text-[11px] font-medium transition-colors',
@@ -372,8 +373,8 @@ export function WorkspaceRail({
                     : 'text-white/52 hover:bg-white/[0.055] hover:text-white/88',
                 )}
               >
-                {!compact && <Home className="h-3.5 w-3.5" strokeWidth={1.8} />}
-                <span>HQ</span>
+                <Home className="h-3.5 w-3.5" strokeWidth={1.8} />
+                <span className={compact ? 'sr-only' : undefined}>HQ</span>
               </button>
             ) : null}
 
@@ -439,6 +440,7 @@ export function WorkspaceRail({
                 }
               }}
               disabled={isCreatingLab}
+              title={compact ? 'Creative Lab' : undefined}
               aria-busy={isCreatingLab}
               aria-label={isCreatingLab ? 'Creating Creative Lab' : undefined}
               aria-current={labWorkspace?.id === activeWorkspaceId ? 'page' : undefined}
@@ -449,8 +451,8 @@ export function WorkspaceRail({
                   : 'text-white/52 hover:bg-white/[0.055] hover:text-white/88',
               )}
             >
-              {!compact && <FlaskConical className="h-3.5 w-3.5 text-[#fdba74]" strokeWidth={1.8} />}
-              <span>{isCreatingLab && !compact ? 'Creating…' : 'Lab'}</span>
+              <FlaskConical className="h-3.5 w-3.5 text-[#fdba74]" strokeWidth={1.8} />
+              <span className={compact ? 'sr-only' : undefined}>{isCreatingLab && !compact ? 'Creating…' : 'Lab'}</span>
               {labWorkspace && workspaceUnreadMap?.[labWorkspace.id] ? (
                 <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#fb923c]" />
               ) : null}
