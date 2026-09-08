@@ -12,6 +12,7 @@ import { AlertCircle, Globe, Copy, RefreshCw, Link2Off, Info } from 'lucide-reac
 import { ChatDisplay, type ChatDisplayHandle } from '@/components/app-shell/ChatDisplay'
 import { SignalHandoffNotice } from '@/components/app-shell/SignalHandoffNotice'
 import { ChatAgentHeader } from '@/components/app-shell/ChatAgentHeader'
+import { ChatAgentTaskModeBar } from '@/components/app-shell/ChatAgentTaskModeBar'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { SessionMenu } from '@/components/app-shell/SessionMenu'
 import { SessionInfoPopover } from '@/components/app-shell/SessionInfoPopover'
@@ -423,6 +424,38 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   const sharedUrl = session?.sharedUrl || sessionMeta?.sharedUrl || null
   const currentSessionStatus = session?.sessionStatus || sessionMeta?.sessionStatus || 'todo'
   const hasMessages = !!(session?.messages?.length || sessionMeta?.lastFinalMessageId)
+  const taskModes = currentAgent?.metadata.taskModes ?? []
+  const receiptTaskModeId = session?.launchReceipt?.taskMode?.id
+  const [confirmedTaskModeId, setConfirmedTaskModeId] = React.useState<string | undefined>(receiptTaskModeId)
+  const [applyingTaskModeId, setApplyingTaskModeId] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    setConfirmedTaskModeId(receiptTaskModeId)
+    setApplyingTaskModeId(null)
+  }, [receiptTaskModeId, sessionId])
+
+  const selectedTaskModeId = receiptTaskModeId ?? confirmedTaskModeId
+  const taskModeSelectionRequired = session?.launchReceipt?.taskModeSelectionPending === true
+    && !selectedTaskModeId
+  const showTaskModeBar = !isCompactMode
+    && !hasMessages
+    && taskModes.length > 1
+    && (session?.launchReceipt?.taskModeSelectionPending === true || Boolean(selectedTaskModeId))
+
+  const handleTaskModeSelect = React.useCallback(async (taskModeId: string) => {
+    if (!session || applyingTaskModeId || selectedTaskModeId === taskModeId) return
+    setApplyingTaskModeId(taskModeId)
+    try {
+      await window.electronAPI.sessionCommand(session.id, { type: 'selectTaskMode', taskModeId })
+      setConfirmedTaskModeId(taskModeId)
+    } catch (error) {
+      toast.error('Could not set worker focus', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setApplyingTaskModeId(null)
+    }
+  }, [applyingTaskModeId, selectedTaskModeId, session])
   const hasUnreadMessages = sessionMeta
     ? !!(sessionMeta.lastFinalMessageId && sessionMeta.lastFinalMessageId !== sessionMeta.lastReadMessageId)
     : false
@@ -754,6 +787,14 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     <>
       <div className="runner-chat-page h-full flex flex-col">
         {chatHeader}
+        {showTaskModeBar && (
+          <ChatAgentTaskModeBar
+            modes={taskModes}
+            selectedModeId={selectedTaskModeId}
+            applyingModeId={applyingTaskModeId}
+            onSelect={(taskModeId) => void handleTaskModeSelect(taskModeId)}
+          />
+        )}
         <SignalHandoffNotice key={sessionId} sessionId={sessionId} workspaceId={session.workspaceId} processing={!!session.isProcessing} onGuardChange={setSignalDraftGuarded} />
         <div className="flex-1 flex flex-col min-h-0">
           <ChatDisplay
@@ -761,6 +802,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             session={session}
             preserveDraftUntilAccepted={signalDraftGuarded}
             onSendMessage={(message, attachments, skillSlugs) => {
+              if (taskModeSelectionRequired || applyingTaskModeId) return false
               if (session) {
                 return onSendMessage(session.id, message, attachments, skillSlugs)
               }
@@ -803,6 +845,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             onMatchInfoChange={onChatMatchInfoChange}
             connectionUnavailable={connectionUnavailable}
             compactMode={!!isCompactMode}
+            disableSend={taskModeSelectionRequired || Boolean(applyingTaskModeId)}
           />
         </div>
       </div>

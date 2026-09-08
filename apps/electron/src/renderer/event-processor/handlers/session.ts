@@ -12,6 +12,7 @@ import type {
   ErrorEvent,
   TypedErrorEvent,
   SourcesChangedEvent,
+  TaskModeSelectedEvent,
   LabelsChangedEvent,
   SessionStatusChangedEvent,
   SessionFlaggedEvent,
@@ -699,6 +700,27 @@ export function handleSourcesChanged(
       session: {
         ...session,
         enabledSourceSlugs: event.enabledSourceSlugs,
+      },
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/** Apply the prompt/tool receipt chosen before a worker's first turn. */
+export function handleTaskModeSelected(
+  state: SessionState,
+  event: TaskModeSelectedEvent
+): ProcessResult {
+  const { session, streaming } = state
+
+  return {
+    state: {
+      session: {
+        ...session,
+        agentSkillSlugs: event.agentSkillSlugs,
+        enabledSourceSlugs: event.enabledSourceSlugs,
+        launchReceipt: event.launchReceipt,
       },
       streaming,
     },

@@ -91,6 +91,23 @@ describe('sendMessage durability', () => {
     expect(onDiskAtAck).toBe(true)
   })
 
+  it('rejects a first message while an agent task-mode choice is pending', async () => {
+    const sessionId = 'pending-task-mode'
+    const managed = buildSession(sessionId)
+    managed.launchReceipt = {
+      createdAt: Date.now(),
+      origin: 'agent',
+      taskModeSelectionPending: true,
+      config: {},
+      injected: { skills: [], sources: [], contextDocs: [] },
+    }
+
+    await expect(sm.sendMessage(sessionId, 'start anyway')).rejects.toThrow(
+      'Choose what this worker should focus on before sending your first message.',
+    )
+    expect(managed.messages).toHaveLength(0)
+  })
+
   it('user message is on disk before onAck fires (mid-stream / queued branch)', async () => {
     const sessionId = 'durability-midstream'
     const managed = buildSession(sessionId)

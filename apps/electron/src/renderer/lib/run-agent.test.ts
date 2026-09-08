@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { buildAgentCreateSessionOptions, ensureAgentDeclaredSkillsEnabled, resolveArtistWorkspaceScope, sendAgentDraft } from './run-agent'
+import { buildAgentCreateSessionOptions, buildPendingAgentTaskModeSessionOptions, ensureAgentDeclaredSkillsEnabled, resolveArtistWorkspaceScope, sendAgentDraft, shouldDeferAgentTaskModeSelection } from './run-agent'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { AgentDefinitionDTO, LoadedSource } from '../../shared/types'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
@@ -45,6 +45,34 @@ function makeSource(slug: string, usable = true): LoadedSource {
     workspaceId: 'ws-1',
   } as unknown as LoadedSource
 }
+
+describe('pending in-chat task-mode selection', () => {
+  const agent = {
+    ...makeAgent(),
+    slug: 'branding-agent',
+    metadata: {
+      ...makeAgent().metadata,
+      name: 'Branding Agent',
+      skills: ['brand-audit', 'visual-world'],
+      taskModes: [
+        { id: 'brand-audit', label: 'Brand Audit', description: 'Audit it.', kind: 'focus', primarySkillSlugs: ['brand-audit'] },
+        { id: 'visual-world', label: 'Visual World', description: 'Shape it.', kind: 'focus', primarySkillSlugs: ['visual-world'] },
+      ],
+    },
+  } as AgentDefinitionDTO
+
+  test('opens a prompt-free shell until the user chooses a mode', () => {
+    expect(shouldDeferAgentTaskModeSelection(agent)).toBe(true)
+    expect(shouldDeferAgentTaskModeSelection(agent, 'brand-audit')).toBe(false)
+
+    const options = buildPendingAgentTaskModeSessionOptions(agent)
+    expect(options.customSystemPrompt).toBeUndefined()
+    expect(options.agentSkillSlugs).toBeUndefined()
+    expect(options.enabledSourceSlugs).toBeUndefined()
+    expect(options.launchReceipt?.taskModeSelectionPending).toBe(true)
+    expect(options.launchReceipt?.injected).toMatchObject({ skills: [], sources: [], contextDocs: [] })
+  })
+})
 
 describe('buildAgentCreateSessionOptions memory receipts', () => {
   test('launches a focused mode with only its primary skill and selected context', () => {

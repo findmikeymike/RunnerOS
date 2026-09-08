@@ -297,19 +297,23 @@ describe('Artist OS persistent shell chrome', () => {
     expect(workers).not.toContain('onClick={() => setSelectedAgent(agent)}')
   })
 
-  test('starts mode-aware workers with a focused task picker', () => {
+  test('starts mode-aware workers inside chat with a compact focus row', () => {
     const workers = readFileSync(join(import.meta.dir, '..', 'AgentsLaunchpad.tsx'), 'utf8')
-    const picker = readFileSync(join(import.meta.dir, '..', '..', 'agents', 'AgentTaskModePickerDialog.tsx'), 'utf8')
+    const chatPage = readFileSync(join(import.meta.dir, '..', '..', '..', 'pages', 'ChatPage.tsx'), 'utf8')
+    const focusBar = readFileSync(join(import.meta.dir, '..', 'ChatAgentTaskModeBar.tsx'), 'utf8')
+    const runAgent = readFileSync(join(import.meta.dir, '..', '..', '..', 'lib', 'run-agent.ts'), 'utf8')
 
-    expect(workers).toContain('AgentTaskModePickerDialog')
-    expect(workers).toContain('(agent.metadata.taskModes?.length ?? 0) > 1')
+    expect(workers).not.toContain('AgentTaskModePickerDialog')
+    expect(workers).toContain('shouldDeferAgentTaskModeSelection(agent)')
     expect(workers).toContain('openAgentSessionComposer({')
-    expect(workers).toContain('taskModeId,')
-    expect(picker).toContain('What are we doing?')
-    expect(picker).toContain('Focused start')
-    expect(picker).toContain('Comprehensive · slower')
-    expect(picker).toContain('instead of loading everything')
-    expect(picker).not.toContain('<img')
+    expect(chatPage).toContain('<ChatAgentTaskModeBar')
+    expect(chatPage.indexOf('<ChatAgentTaskModeBar')).toBeLessThan(chatPage.indexOf('<SignalHandoffNotice'))
+    expect(chatPage).toContain("type: 'selectTaskMode'")
+    expect(chatPage).toContain('disableSend={taskModeSelectionRequired || Boolean(applyingTaskModeId)}')
+    expect(focusBar).toContain('What are we doing?')
+    expect(focusBar).toContain("mode.fullMode ? 'General / all' : mode.label")
+    expect(focusBar).not.toContain('<Dialog')
+    expect(runAgent).toContain('taskModeSelectionPending: true')
   })
 
   test('keeps Artist OS chat and notification text visible on black surfaces', () => {

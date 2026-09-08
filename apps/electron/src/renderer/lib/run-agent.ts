@@ -246,6 +246,54 @@ export function buildAgentCreateSessionOptions(
   ) as CreateSessionOptions
 }
 
+export function shouldDeferAgentTaskModeSelection(
+  agent: AgentDefinitionDTO,
+  taskModeId?: string,
+): boolean {
+  return !taskModeId && (agent.metadata.taskModes?.length ?? 0) > 1
+}
+
+/** Create only the chat shell; the selected mode is composed server-side before first send. */
+export function buildPendingAgentTaskModeSessionOptions(agent: AgentDefinitionDTO): CreateSessionOptions {
+  const isConcierge = agent.slug === CONCIERGE_SLUG
+  return {
+    llmConnection: agent.metadata.llmConnection,
+    model: agent.metadata.model,
+    permissionMode: agent.metadata.permissionMode,
+    thinkingLevel: agent.metadata.thinkingLevel,
+    spawnedFromAgent: {
+      agentSlug: agent.slug,
+      agentName: agent.metadata.name,
+      timestamp: Date.now(),
+    },
+    launchReceipt: {
+      createdAt: Date.now(),
+      origin: isConcierge ? 'concierge' : 'agent',
+      summary: `Waiting for ${agent.metadata.name} focus selection.`,
+      agent: {
+        slug: agent.slug,
+        name: agent.metadata.name,
+        description: agent.metadata.description,
+        inputs: agent.metadata.inputs,
+        outputs: agent.metadata.outputs,
+        tags: agent.metadata.tags,
+      },
+      taskModeSelectionPending: true,
+      config: {
+        llmConnection: agent.metadata.llmConnection,
+        model: agent.metadata.model,
+        permissionMode: agent.metadata.permissionMode,
+        thinkingLevel: agent.metadata.thinkingLevel,
+      },
+      injected: {
+        skills: [],
+        sources: [],
+        contextDocs: [],
+      },
+    },
+  }
+}
+
 export async function openAgentSessionComposer(params: {
   agent: AgentDefinitionDTO
   workspaceId: string
@@ -291,6 +339,22 @@ export async function openAgentSessionComposer(params: {
 }): Promise<Session> {
   const assertCurrent = () => { if (params.shouldContinue && !params.shouldContinue()) throw new Error('Command handoff was cancelled.') }
   assertCurrent()
+  if (shouldDeferAgentTaskModeSelection(params.agent, params.taskModeId)) {
+    const session = await params.onCreateSession(
+      params.workspaceId,
+      buildPendingAgentTaskModeSessionOptions(params.agent),
+    )
+    assertCurrent()
+    const draft = params.draftInput?.trim()
+    if (draft) params.onInputChange(session.id, draft)
+    if (params.navigateOnCreate !== false) {
+      if (window.location.hash.startsWith('#artist-hq/')) {
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+      }
+      navigate(routes.view.allSessions(session.id))
+    }
+    return session
+  }
   const taskMode = resolveAgentTaskMode(params.agent, params.taskModeId)
   const launchAgent = taskMode
     ? {

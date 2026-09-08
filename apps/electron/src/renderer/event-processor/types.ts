@@ -6,7 +6,7 @@
  */
 
 import type { Session, Message, PermissionRequest, CredentialRequest, TypedError, PermissionMode, SessionStatus, AuthRequest, ToolDisplayMeta } from '../../shared/types'
-import type { ChatGoalState, CreateChatGoalInput, SessionTaskList } from '@craft-agent/shared/sessions'
+import type { ChatGoalState, CreateChatGoalInput, SessionLaunchReceipt, SessionTaskList } from '@craft-agent/shared/sessions'
 
 /**
  * Streaming state for a session - replaces streamingTextRef
@@ -143,6 +143,15 @@ export interface SourcesChangedEvent {
   type: 'sources_changed'
   sessionId: string
   enabledSourceSlugs: string[]
+}
+
+export interface TaskModeSelectedEvent {
+  type: 'task_mode_selected'
+  sessionId: string
+  taskMode: NonNullable<SessionLaunchReceipt['taskMode']>
+  agentSkillSlugs?: string[]
+  enabledSourceSlugs?: string[]
+  launchReceipt: SessionLaunchReceipt
 }
 
 /**
@@ -526,6 +535,7 @@ export type AgentEvent =
   | PermissionRequestEvent
   | CredentialRequestEvent
   | SourcesChangedEvent
+  | TaskModeSelectedEvent
   | LabelsChangedEvent
   | SessionStatusChangedEvent
   | SessionFlaggedEvent
