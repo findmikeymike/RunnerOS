@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { StoredSession } from '../types.ts'
 import { createSessionTaskList } from '../session-tasks.ts'
+import { createSessionHeader } from '../jsonl.ts'
 import { getSessionFilePath, loadSession, saveSession, updateSessionMetadata } from '../storage.ts'
 
 function makeTmpDir(): string {
@@ -139,5 +140,18 @@ describe('session metadata persistence', () => {
 
   it('keeps legacy sessions without task state valid', () => {
     expect(loadSession(workspaceRoot, 'session-1')?.sessionTasks).toBeUndefined()
+  })
+
+  it('keeps hidden host prompts out of session-list preview state', () => {
+    const stored = makeStoredSession(workspaceRoot)
+    stored.messages = [
+      { id: 'assistant-1', type: 'assistant', content: 'Where should we begin?', timestamp: 1 },
+      { id: 'hidden-1', type: 'user', content: 'INTERNAL TASK MODE START', timestamp: 2, hidden: true },
+      { id: 'user-1', type: 'user', content: 'Build my narrative universe.', timestamp: 3 },
+    ]
+
+    const header = createSessionHeader(stored)
+    expect(header.preview).toBe('Build my narrative universe.')
+    expect(header.lastMessageRole).toBe('user')
   })
 })

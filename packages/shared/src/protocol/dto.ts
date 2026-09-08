@@ -316,7 +316,7 @@ export type SessionCommand =
   | { type: 'setThinkingLevel'; level: ThinkingLevel }
   | { type: 'updateWorkingDirectory'; dir: string }
   | { type: 'setSources'; sourceSlugs: string[] }
-  | { type: 'selectTaskMode'; taskModeId: string }
+  | { type: 'selectTaskMode'; taskModeId: string; startConversation?: boolean }
   | { type: 'setLabels'; labels: string[] }
   | { type: 'showInFinder' }
   | { type: 'copyPath' }

@@ -275,6 +275,11 @@ export abstract class BaseAgent implements AgentBackend {
     this._currentTurnUserMessage = message;
   }
 
+  setAgentContext(context: { customSystemPrompt?: string; agentSkillSlugs?: string[] }): void {
+    this.config.customSystemPrompt = context.customSystemPrompt;
+    this.config.agentSkillSlugs = context.agentSkillSlugs ? [...context.agentSkillSlugs] : undefined;
+  }
+
   // ============================================================
   // Callbacks (public for facade wiring)
   // ============================================================

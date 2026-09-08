@@ -29,6 +29,7 @@
 // Core types
 export type {
   AgentBackend,
+  AgentContextUpdate,
   AgentProvider,
   CoreBackendConfig,
   BackendConfig,

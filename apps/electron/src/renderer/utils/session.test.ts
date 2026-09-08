@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { getSessionAgentIdentity, getSessionListDisplay } from './session'
+import { getSessionAgentIdentity, getSessionListDisplay, getSessionTitle } from './session'
 
 describe('session agent identity', () => {
   test('prefers the persisted spawning agent and keeps the receipt description', () => {
@@ -81,5 +81,18 @@ describe('session agent identity', () => {
 
     expect(identity?.name).toBe('Artist Manager')
     expect(identity?.slug).toBe('concierge')
+  })
+
+  test('keeps hidden host prompts out of chat titles and conversation previews', () => {
+    const session = {
+      name: undefined,
+      preview: undefined,
+      messages: [
+        { id: 'hidden', role: 'user', content: 'INTERNAL TASK MODE START', hidden: true },
+        { id: 'visible', role: 'user', content: 'Let us define the core mythology.' },
+      ],
+    } as never
+
+    expect(getSessionTitle(session)).toBe('Let us define the core mythology.')
   })
 })

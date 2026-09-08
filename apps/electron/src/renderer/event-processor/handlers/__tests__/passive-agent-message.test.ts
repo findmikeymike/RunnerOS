@@ -44,4 +44,26 @@ describe('passive agent messages', () => {
     expect(next.state.session.lastMessageRole).toBe('assistant')
     expect(next.state.session.isProcessing).toBe(true)
   })
+
+  it('starts processing for a hidden host prompt without exposing it as the latest user message', () => {
+    const state = makeState()
+    state.session.isProcessing = false
+    const event: UserMessageEvent = {
+      type: 'user_message',
+      sessionId: 'session-1',
+      status: 'accepted',
+      message: {
+        id: 'hidden-start',
+        role: 'user',
+        content: 'INTERNAL TASK MODE START',
+        timestamp: 123,
+        hidden: true,
+      },
+    }
+
+    const next = handleUserMessage(state, event)
+    expect(next.state.session.messages[0]?.hidden).toBe(true)
+    expect(next.state.session.lastMessageRole).toBe('assistant')
+    expect(next.state.session.isProcessing).toBe(true)
+  })
 })

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { parseAgentFile, serializeAgent } from './storage.ts';
 import { STARTER_AGENTS } from './starter-templates.ts';
-import { buildAgentTaskModePromptSection, filterContextDocsForTaskMode, resolveAgentTaskMode } from './task-modes.ts';
+import { buildAgentTaskModePromptSection, buildAgentTaskModeStarterPrompt, filterContextDocsForTaskMode, resolveAgentTaskMode } from './task-modes.ts';
 import type { AgentMetadata, LoadedAgent } from './types.ts';
 
 function testAgent(metadata: AgentMetadata): LoadedAgent {
@@ -32,14 +32,27 @@ describe('agent task modes', () => {
       .toBe(true);
   });
 
-  test('resolves one primary skill while keeping related skills awareness-only', () => {
+  test('resolves one primary skill while keeping related skills on-demand', () => {
     const branding = STARTER_AGENTS.find((agent) => agent.slug === 'branding-agent')! as LoadedAgent;
     const mode = resolveAgentTaskMode(branding, 'visual-world')!;
 
     expect(mode.primarySkillSlugs).toEqual(['artist-visual-world-director']);
     expect(mode.adjacentSkills.map((skill) => skill.slug)).toContain('artist-brand-dna-audit');
     expect(mode.definitionRevision).toMatch(/^task-mode-v1-[a-f0-9]{8}$/);
-    expect(buildAgentTaskModePromptSection(mode)).toContain('awareness only');
+    const prompt = buildAgentTaskModePromptSection(mode);
+    expect(prompt).toContain('available on demand — not preloaded');
+    expect(prompt).toContain('invoke and read that adjacent skill at that point');
+    expect(prompt).toContain('Never preload adjacent skills just in case.');
+  });
+
+  test('builds a hidden conversational opener from the selected focus', () => {
+    const branding = STARTER_AGENTS.find((agent) => agent.slug === 'branding-agent')! as LoadedAgent;
+    const mode = resolveAgentTaskMode(branding, 'narrative-universe')!;
+    const prompt = buildAgentTaskModeStarterPrompt(mode);
+
+    expect(prompt).toContain('selected Narrative Universe');
+    expect(prompt).toContain('ask one sharp, useful opening question');
+    expect(prompt).toContain('Do not mention this internal start signal');
   });
 
   test('narrows only prompt delivery and leaves unselected docs out of the launch set', () => {

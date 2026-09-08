@@ -281,7 +281,7 @@ import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
 import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, isAgentAllowedInArtistWorkspace, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
 import { composeAgentSystemPrompt, managerBriefReceiptFromDocs } from '@craft-agent/shared/agent-prompt'
-import { filterContextDocsForTaskMode, resolveAgentTaskMode } from '@craft-agent/shared/agent-definitions/task-modes'
+import { buildAgentTaskModeStarterPrompt, filterContextDocsForTaskMode, resolveAgentTaskMode } from '@craft-agent/shared/agent-definitions/task-modes'
 import { filterAttachmentsForModelInput } from './runtime-config'
 import { inferScheduledWorkScope, persistHnicScheduleWork } from '../scheduled-work/HnicScheduledWork'
 import { supplyScheduledWorkInputs } from '../scheduled-work/ScheduledWorkInputSupply'
@@ -11507,73 +11507,119 @@ user a clickable link to where the thing now lives.`
     sessionLog.info(`Session ${sessionId} sources updated: ${sourceSlugs.length} sources`)
   }
 
-  /** Finalize an in-chat task-mode choice before the session's first turn. */
-  async selectSessionTaskMode(sessionId: string, taskModeId: string): Promise<void> {
-    const managed = this.sessions.get(sessionId)
-    if (!managed) throw new Error(`Session not found: ${sessionId}`)
-
-    await this.ensureMessagesLoaded(managed)
-    if (managed.isProcessing || managed.messages.length > 0 || managed.messageQueue.length > 0) {
-      throw new Error('Choose a worker focus before the conversation starts.')
-    }
-    if (managed.agent) {
-      throw new Error('This worker has already initialized. Start a new chat to change its focus.')
-    }
-
-    const agentSlug = managed.spawnedFromAgent?.agentSlug ?? managed.launchReceipt?.agent?.slug
-    if (!agentSlug) throw new Error('This chat is not linked to a saved worker.')
-
-    const resolved = await this.resolveAgentSessionOptions(managed.workspace.id, agentSlug, {
-      referenceMode: 'lenient',
-      taskModeId,
-      taskModeSelectionSource: 'user',
-    })
-    const resolvedReceipt = resolved.launchReceipt
-    if (!resolvedReceipt?.taskMode) {
-      throw new Error(`Focus "${taskModeId}" is not available for this worker.`)
-    }
-
-    managed.customSystemPrompt = resolved.customSystemPrompt
-    managed.agentSkillSlugs = resolved.agentSkillSlugs
-    managed.enabledSourceSlugs = resolved.enabledSourceSlugs ?? []
-    managed.trustedWorkerTools = resolved.trustedWorkerTools
-    managed.launchReceipt = completeLaunchReceipt({
-      ...resolvedReceipt,
-      createdAt: managed.launchReceipt?.createdAt ?? resolvedReceipt.createdAt,
-      summary: managed.launchReceipt?.summary ?? resolvedReceipt.summary,
-      taskModeSelectionPending: false,
-      config: {
-        ...resolvedReceipt.config,
-        ...managed.launchReceipt?.config,
-      },
-    }, {
-      origin: resolvedReceipt.origin,
-      model: managed.model,
-      llmConnection: managed.llmConnection,
-      permissionMode: managed.permissionMode,
-      thinkingLevel: managed.thinkingLevel,
-      workingDirectory: managed.workingDirectory,
-      customSystemPrompt: managed.customSystemPrompt,
-      agentSkillSlugs: managed.agentSkillSlugs,
-      enabledSourceSlugs: managed.enabledSourceSlugs,
-      spawnedFromAgent: managed.spawnedFromAgent,
-    })
-
-    this.persistSession(managed)
+  /** Select a worker focus. The first choice may start the chat; later choices apply to the next turn. */
+  async selectSessionTaskMode(
+    sessionId: string,
+    taskModeId: string,
+    options: { startConversation?: boolean } = {},
+  ): Promise<void> {
+    const releaseSelectionLock = await this.acquireSendMessageAdmissionLock(sessionId)
+    let shouldStartConversation = false
+    let starterPrompt: string | undefined
     try {
-      await recordInjectedMemoryFromLaunchReceipt(managed.launchReceipt, managed.id)
-    } catch (error) {
-      sessionLog.warn(`[memory] Failed to record task-mode memory injection for session ${managed.id}:`, error)
+      const managed = this.sessions.get(sessionId)
+      if (!managed) throw new Error(`Session not found: ${sessionId}`)
+
+      await this.ensureMessagesLoaded(managed)
+      const hasVisibleConversation = managed.messages.some(message => (
+        !message.hidden && (message.role === 'user' || message.role === 'assistant')
+      ))
+      if (managed.isProcessing && !hasVisibleConversation) {
+        throw new Error('The opening response is still starting. Choose a new focus after it appears.')
+      }
+      const isInitialSelection = managed.launchReceipt?.taskModeSelectionPending === true
+        && !hasVisibleConversation
+      shouldStartConversation = options.startConversation === true && isInitialSelection
+      if (shouldStartConversation) this.assertPaidExecutionAuthorized()
+
+      const agentSlug = managed.spawnedFromAgent?.agentSlug ?? managed.launchReceipt?.agent?.slug
+      if (!agentSlug) throw new Error('This chat is not linked to a saved worker.')
+
+      const resolved = await this.resolveAgentSessionOptions(managed.workspace.id, agentSlug, {
+        referenceMode: 'lenient',
+        taskModeId,
+        taskModeSelectionSource: 'user',
+      })
+      const resolvedReceipt = resolved.launchReceipt
+      if (!resolvedReceipt?.taskMode) {
+        throw new Error(`Focus "${taskModeId}" is not available for this worker.`)
+      }
+
+      managed.customSystemPrompt = resolved.customSystemPrompt
+      managed.agentSkillSlugs = resolved.agentSkillSlugs
+      managed.enabledSourceSlugs = isInitialSelection
+        ? (resolved.enabledSourceSlugs ?? [])
+        : (mergeUniqueStrings(managed.enabledSourceSlugs, resolved.enabledSourceSlugs) ?? [])
+      managed.trustedWorkerTools = resolved.trustedWorkerTools
+      managed.agent?.setAgentContext({
+        customSystemPrompt: managed.customSystemPrompt,
+        agentSkillSlugs: managed.agentSkillSlugs,
+      })
+      managed.launchReceipt = completeLaunchReceipt({
+        ...resolvedReceipt,
+        createdAt: managed.launchReceipt?.createdAt ?? resolvedReceipt.createdAt,
+        summary: managed.launchReceipt?.summary ?? resolvedReceipt.summary,
+        taskModeSelectionPending: false,
+        config: {
+          ...resolvedReceipt.config,
+          ...managed.launchReceipt?.config,
+        },
+      }, {
+        origin: resolvedReceipt.origin,
+        model: managed.model,
+        llmConnection: managed.llmConnection,
+        permissionMode: managed.permissionMode,
+        thinkingLevel: managed.thinkingLevel,
+        workingDirectory: managed.workingDirectory,
+        customSystemPrompt: managed.customSystemPrompt,
+        agentSkillSlugs: managed.agentSkillSlugs,
+        enabledSourceSlugs: managed.enabledSourceSlugs,
+        spawnedFromAgent: managed.spawnedFromAgent,
+      })
+
+      this.persistSession(managed)
+      try {
+        await recordInjectedMemoryFromLaunchReceipt(managed.launchReceipt, managed.id)
+      } catch (error) {
+        sessionLog.warn(`[memory] Failed to record task-mode memory injection for session ${managed.id}:`, error)
+      }
+
+      this.sendEvent({
+        type: 'task_mode_selected',
+        sessionId: managed.id,
+        taskMode: resolvedReceipt.taskMode,
+        agentSkillSlugs: managed.agentSkillSlugs,
+        enabledSourceSlugs: managed.enabledSourceSlugs,
+        launchReceipt: managed.launchReceipt,
+      }, managed.workspace.id)
+      starterPrompt = shouldStartConversation
+        ? buildAgentTaskModeStarterPrompt(resolvedReceipt.taskMode)
+        : undefined
+    } finally {
+      releaseSelectionLock()
     }
 
-    this.sendEvent({
-      type: 'task_mode_selected',
-      sessionId: managed.id,
-      taskMode: resolvedReceipt.taskMode,
-      agentSkillSlugs: managed.agentSkillSlugs,
-      enabledSourceSlugs: managed.enabledSourceSlugs,
-      launchReceipt: managed.launchReceipt,
-    }, managed.workspace.id)
+    if (shouldStartConversation && starterPrompt) {
+      await new Promise<void>((resolve, reject) => {
+        let acknowledged = false
+        void this.sendMessage(
+          sessionId,
+          starterPrompt,
+          undefined,
+          undefined,
+          { hidden: true, inputOrigin: 'system' },
+          undefined,
+          undefined,
+          () => {
+            acknowledged = true
+            resolve()
+          },
+        ).catch((error) => {
+          sessionLog.error(`Failed to start focused conversation for session ${sessionId}:`, error)
+          if (!acknowledged) reject(error)
+        })
+      })
+    }
   }
 
   /**
@@ -12860,8 +12906,8 @@ user a clickable link to where the thing now lives.`
         // If this is the first user message and no title exists, set one immediately
         // AI generation will enhance it later, but we always have a title from the start
         // Automation sessions (triggeredBy set) already have a title and skip AI generation entirely
-        const isFirstUserMessage = managed.messages.filter(m => m.role === 'user').length === 1
-        if (isFirstUserMessage && !managed.name && !managed.triggeredBy) {
+        const isFirstVisibleUserMessage = managed.messages.filter(m => m.role === 'user' && !m.hidden).length === 1
+        if (!options?.hidden && isFirstVisibleUserMessage && !managed.name && !managed.triggeredBy) {
           // Replace bracket mentions with their display labels (e.g. [skill:ws:commit] -> "Commit")
           // so titles show human-readable names instead of raw IDs
           let titleSource = message

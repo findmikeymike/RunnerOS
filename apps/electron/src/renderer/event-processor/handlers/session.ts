@@ -649,7 +649,7 @@ export function handleUserMessage(
         ...session,
         messages: updatedMessages,
         lastMessageAt: Date.now(),
-        ...(message.role === 'user' ? { lastMessageRole: 'user' as const } : {}),
+        ...(message.role === 'user' && !message.hidden ? { lastMessageRole: 'user' as const } : {}),
         // Set isProcessing when message is accepted/processing (enables multi-window sync)
         isProcessing: message.role === 'user'
           ? status === 'accepted' || status === 'processing'

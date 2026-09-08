@@ -58,7 +58,7 @@ export function getSessionTitle(session: SessionLike | SessionMeta): string {
 
   // Check loaded messages first (only available on full Session)
   if ('messages' in session && session.messages) {
-    const firstUserMessage = session.messages.find(m => m.role === 'user')
+    const firstUserMessage = session.messages.find(m => m.role === 'user' && !m.hidden)
     if (firstUserMessage?.content) {
       const sanitized = sanitizePreview(firstUserMessage.content)
       if (sanitized) {
@@ -92,7 +92,7 @@ export function getSessionTitle(session: SessionLike | SessionMeta): string {
 export function getSessionPreviewText(session: SessionLike | SessionMeta, maxLength = 88, displayTitle?: string): string | null {
   const source = session.preview
     || (('messages' in session && session.messages)
-      ? session.messages.find(m => m.role === 'user')?.content
+      ? session.messages.find(m => m.role === 'user' && !m.hidden)?.content
       : undefined)
 
   if (!source) return null

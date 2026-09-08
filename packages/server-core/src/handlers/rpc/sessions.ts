@@ -395,7 +395,9 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
       case 'setSources':
         return sessionManager.setSessionSources(sessionId, command.sourceSlugs)
       case 'selectTaskMode':
-        return sessionManager.selectSessionTaskMode(sessionId, command.taskModeId)
+        return sessionManager.selectSessionTaskMode(sessionId, command.taskModeId, {
+          startConversation: command.startConversation,
+        })
       case 'setLabels':
         return sessionManager.setSessionLabels(sessionId, command.labels)
       case 'showInFinder': {

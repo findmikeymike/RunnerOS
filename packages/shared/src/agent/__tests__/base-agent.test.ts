@@ -36,6 +36,17 @@ describe('BaseAgent', () => {
       agent.setModel('new-model');
       expect(agent.getModel()).toBe('new-model');
     });
+
+    it('updates saved Agent prompt and skill context between turns', () => {
+      agent.setAgentContext({
+        customSystemPrompt: 'Focus on the visual world.',
+        agentSkillSlugs: ['artist-visual-world-director'],
+      });
+
+      const config = (agent as unknown as { config: { customSystemPrompt?: string; agentSkillSlugs?: string[] } }).config;
+      expect(config.customSystemPrompt).toBe('Focus on the visual world.');
+      expect(config.agentSkillSlugs).toEqual(['artist-visual-world-director']);
+    });
   });
 
   describe('Thinking Level Configuration', () => {

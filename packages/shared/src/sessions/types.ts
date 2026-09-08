@@ -118,7 +118,7 @@ export interface SessionLaunchReceipt {
     outputs?: string;
     tags?: string[];
   };
-  /** Immutable focused launch recipe selected before prompt composition. */
+  /** Current focused recipe selected by the user or launch route. */
   taskMode?: {
     schemaVersion: 1;
     id: string;
@@ -129,7 +129,7 @@ export interface SessionLaunchReceipt {
     adjacentSkills: Array<{ slug: string; when: string; expansion: 'same-session' | 'new-session' | 'delegate' }>;
     fullMode: boolean;
   };
-  /** The chat must receive a user-selected task mode before its first turn. */
+  /** The chat must receive a user-selected task mode before its first turn can begin. */
   taskModeSelectionPending?: boolean;
   workflow?: {
     runId?: string;

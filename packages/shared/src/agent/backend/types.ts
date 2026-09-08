@@ -131,6 +131,12 @@ export interface BridgeUpdateContext {
   poolServerUrl?: string;
 }
 
+/** Runtime prompt/skill context that can change between chat turns. */
+export interface AgentContextUpdate {
+  customSystemPrompt?: string;
+  agentSkillSlugs?: string[];
+}
+
 /**
  * Host runtime context passed from the application shell (Electron/CLI/etc.).
  * This is intentionally provider-agnostic metadata; backend drivers resolve
@@ -477,6 +483,9 @@ export interface AgentBackend {
 
   /** Set thinking level */
   setThinkingLevel(level: ThinkingLevel): void;
+
+  /** Apply a saved Agent focus change without rebuilding the provider session. */
+  setAgentContext(context: AgentContextUpdate): void;
 
   // ============================================================
   // Permission Mode

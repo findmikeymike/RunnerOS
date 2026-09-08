@@ -76,13 +76,13 @@ export function buildAgentTaskModePromptSection(mode: ResolvedAgentTaskMode | un
     `- Primary ${mode.primarySkillSlugs.length === 1 ? 'skill' : 'skills'} already selected: ${mode.primarySkillSlugs.map((slug) => `\`${slug}\``).join(', ')}`,
   ];
   if (mode.adjacentSkills.length > 0) {
-    lines.push('', 'Related capability boundaries (awareness only — not loaded in this pilot):');
+    lines.push('', 'Related capabilities (available on demand — not preloaded):');
     for (const adjacent of mode.adjacentSkills) {
       lines.push(`- \`${adjacent.slug}\`: ${adjacent.when} Route: ${adjacent.expansion}.`);
     }
     lines.push(
       '',
-      'Stay focused on the selected outcome. If the conversation materially crosses one of these boundaries, name the better mode or handoff and offer that as the next focused step. Do not claim an adjacent skill was loaded or use one merely because it might help.',
+      'Stay focused on the selected outcome. If the conversation materially crosses a same-session boundary, invoke and read that adjacent skill at that point before using it. For new-session or delegate boundaries, name the better handoff and offer it as the next focused step. Never preload adjacent skills just in case.',
     );
   }
   const retrieve = mode.context?.retrieveOnDemandTopics ?? [];
@@ -91,6 +91,18 @@ export function buildAgentTaskModePromptSection(mode: ResolvedAgentTaskMode | un
   }
   lines.push('The selected mode grants no new tool, source, permission, approval, or spending authority.');
   return lines.join('\n');
+}
+
+/** Hidden host prompt used after the artist deliberately chooses the first focus card. */
+export function buildAgentTaskModeStarterPrompt(
+  mode: Pick<ResolvedAgentTaskMode, 'label' | 'fullMode'>,
+): string {
+  const focus = mode.fullMode ? 'the full brand system' : mode.label;
+  return [
+    `The artist just selected ${focus} from the visible "What are we doing?" focus row.`,
+    'Start the conversation now. Acknowledge the chosen focus naturally in one short sentence, then ask one sharp, useful opening question grounded in any artist context you already have.',
+    'Do not mention this internal start signal, task-mode machinery, or skill loading. Do not produce the full deliverable before the artist answers.',
+  ].join('\n');
 }
 
 function taskModeRevision(mode: AgentTaskModeDefinition): string {

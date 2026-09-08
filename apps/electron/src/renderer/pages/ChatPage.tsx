@@ -423,8 +423,11 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   const isArchived = session?.isArchived || sessionMeta?.isArchived || false
   const sharedUrl = session?.sharedUrl || sessionMeta?.sharedUrl || null
   const currentSessionStatus = session?.sessionStatus || sessionMeta?.sessionStatus || 'todo'
-  const hasMessages = !!(session?.messages?.length || sessionMeta?.lastFinalMessageId)
-  const taskModes = currentAgent?.metadata.taskModes ?? []
+  const conversationStarted = Boolean(
+    session?.messages?.some((message) => !message.hidden && (message.role === 'user' || message.role === 'assistant'))
+      || sessionMeta?.lastFinalMessageId,
+  )
+  const taskModes = React.useMemo(() => currentAgent?.metadata.taskModes ?? [], [currentAgent])
   const receiptTaskModeId = session?.launchReceipt?.taskMode?.id
   const [confirmedTaskModeId, setConfirmedTaskModeId] = React.useState<string | undefined>(receiptTaskModeId)
   const [applyingTaskModeId, setApplyingTaskModeId] = React.useState<string | null>(null)
@@ -434,20 +437,31 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     setApplyingTaskModeId(null)
   }, [receiptTaskModeId, sessionId])
 
-  const selectedTaskModeId = receiptTaskModeId ?? confirmedTaskModeId
+  // The launch receipt can lag one event behind a successful mid-conversation
+  // focus change, so prefer the local RPC acknowledgement until it catches up.
+  const selectedTaskModeId = confirmedTaskModeId ?? receiptTaskModeId
   const taskModeSelectionRequired = session?.launchReceipt?.taskModeSelectionPending === true
     && !selectedTaskModeId
+  const openingTaskModeConversation = Boolean(session?.isProcessing && selectedTaskModeId && !conversationStarted)
   const showTaskModeBar = !isCompactMode
-    && !hasMessages
     && taskModes.length > 1
     && (session?.launchReceipt?.taskModeSelectionPending === true || Boolean(selectedTaskModeId))
 
   const handleTaskModeSelect = React.useCallback(async (taskModeId: string) => {
-    if (!session || applyingTaskModeId || selectedTaskModeId === taskModeId) return
+    if (!session || applyingTaskModeId || openingTaskModeConversation || selectedTaskModeId === taskModeId) return
+    const shouldStartConversation = taskModeSelectionRequired && !conversationStarted
     setApplyingTaskModeId(taskModeId)
     try {
-      await window.electronAPI.sessionCommand(session.id, { type: 'selectTaskMode', taskModeId })
+      await window.electronAPI.sessionCommand(session.id, {
+        type: 'selectTaskMode',
+        taskModeId,
+        startConversation: shouldStartConversation,
+      })
       setConfirmedTaskModeId(taskModeId)
+      if (!shouldStartConversation) {
+        const label = taskModes.find((mode) => mode.id === taskModeId)?.label ?? 'New focus'
+        toast.success(`${label} will guide the next reply.`)
+      }
     } catch (error) {
       toast.error('Could not set worker focus', {
         description: error instanceof Error ? error.message : String(error),
@@ -455,7 +469,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     } finally {
       setApplyingTaskModeId(null)
     }
-  }, [applyingTaskModeId, selectedTaskModeId, session])
+  }, [applyingTaskModeId, conversationStarted, openingTaskModeConversation, selectedTaskModeId, session, taskModeSelectionRequired, taskModes])
   const hasUnreadMessages = sessionMeta
     ? !!(sessionMeta.lastFinalMessageId && sessionMeta.lastFinalMessageId !== sessionMeta.lastReadMessageId)
     : false
@@ -792,6 +806,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             modes={taskModes}
             selectedModeId={selectedTaskModeId}
             applyingModeId={applyingTaskModeId}
+            conversationStarted={conversationStarted}
+            openingConversation={openingTaskModeConversation}
             onSelect={(taskModeId) => void handleTaskModeSelect(taskModeId)}
           />
         )}

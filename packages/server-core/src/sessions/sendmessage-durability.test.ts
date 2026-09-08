@@ -108,6 +108,22 @@ describe('sendMessage durability', () => {
     expect(managed.messages).toHaveLength(0)
   })
 
+  it('does not turn a hidden host starter into the conversation title', async () => {
+    const sessionId = 'hidden-task-mode-starter'
+    const managed = buildSession(sessionId)
+    managed.name = undefined
+
+    await sm.sendMessage(
+      sessionId,
+      'INTERNAL TASK MODE START',
+      undefined,
+      undefined,
+      { hidden: true, inputOrigin: 'system' },
+    ).catch(() => { /* expected post-ack agent-init failure */ })
+
+    expect(managed.name).toBeUndefined()
+  })
+
   it('user message is on disk before onAck fires (mid-stream / queued branch)', async () => {
     const sessionId = 'durability-midstream'
     const managed = buildSession(sessionId)

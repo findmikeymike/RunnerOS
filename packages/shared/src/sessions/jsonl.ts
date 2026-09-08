@@ -280,12 +280,15 @@ export function createSessionHeader(session: StoredSession): SessionHeader {
  * Only returns roles that are meaningful for UI display (user, assistant, plan, tool, error).
  */
 function extractLastMessageRole(messages: StoredMessage[]): SessionHeader['lastMessageRole'] {
-  const lastMessage = messages[messages.length - 1];
-  if (!lastMessage) return undefined;
-  // Map message types to the subset we care about for display
-  const role = lastMessage.type;
-  if (role === 'user' || role === 'assistant' || role === 'plan' || role === 'tool' || role === 'error') {
-    return role;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || message.hidden) continue;
+    // Map message types to the subset we care about for display
+    const role = message.type;
+    if (role === 'user' || role === 'assistant' || role === 'plan' || role === 'tool' || role === 'error') {
+      return role;
+    }
+    return undefined;
   }
   return undefined;
 }
@@ -311,7 +314,7 @@ function extractLastFinalMessageId(messages: StoredMessage[]): string | undefine
  * Returns first 150 chars.
  */
 function extractPreview(messages: StoredMessage[]): string | undefined {
-  const firstUserMessage = messages.find(m => m.type === 'user');
+  const firstUserMessage = messages.find(m => m.type === 'user' && !m.hidden);
   if (!firstUserMessage?.content) return undefined;
 
   // Sanitize: strip special blocks, tags, and bracket mentions, normalize whitespace

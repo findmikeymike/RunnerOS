@@ -41,7 +41,7 @@ export interface AgentTaskModeDefinition {
   kind: 'focus' | 'bundle';
   /** The only skills implicitly read at session start. */
   primarySkillSlugs: string[];
-  /** Awareness-only capabilities that are not read at startup. */
+  /** Adjacent capabilities available on demand, but not read at startup. */
   adjacentSkills?: AgentTaskModeAdjacentSkill[];
   requiredSourceSlugs?: string[];
   optionalSourceSlugs?: string[];

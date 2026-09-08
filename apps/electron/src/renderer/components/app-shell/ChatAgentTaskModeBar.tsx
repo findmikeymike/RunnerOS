@@ -7,6 +7,8 @@ interface ChatAgentTaskModeBarProps {
   modes: AgentTaskModeDefinition[]
   selectedModeId?: string
   applyingModeId?: string | null
+  conversationStarted?: boolean
+  openingConversation?: boolean
   onSelect: (modeId: string) => void
 }
 
@@ -14,15 +16,27 @@ export function ChatAgentTaskModeBar({
   modes,
   selectedModeId,
   applyingModeId,
+  conversationStarted = false,
+  openingConversation = false,
   onSelect,
 }: ChatAgentTaskModeBarProps) {
+  const helperText = applyingModeId
+    ? (conversationStarted ? 'Updating the next reply…' : 'Starting conversation…')
+    : openingConversation
+      ? 'Starting conversation…'
+    : selectedModeId && conversationStarted
+      ? 'Choose another anytime · applies to the next reply'
+      : selectedModeId
+        ? 'Focus selected'
+        : 'Choose a focus to start'
+
   return (
     <div className="shrink-0 border-b border-white/[0.055] bg-[#08090b]/72 px-3 py-2.5 @xs/panel:px-4">
       <div className="mx-auto max-w-3xl">
         <div className="mb-1.5 flex items-baseline gap-2">
           <span className="text-[11px] font-medium text-white/72">What are we doing?</span>
           <span className="text-[10px] text-white/30">
-            {selectedModeId ? 'Focus selected' : 'Choose a focus to start'}
+            {helperText}
           </span>
         </div>
         <div className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -37,7 +51,7 @@ export function ChatAgentTaskModeBar({
                 title={mode.description}
                 aria-pressed={selected}
                 onClick={() => onSelect(mode.id)}
-                disabled={Boolean(applyingModeId)}
+                disabled={Boolean(applyingModeId) || openingConversation}
                 className={cn(
                   'group flex h-10 min-w-[98px] shrink-0 items-center justify-between gap-2 rounded-[9px] border px-2.5 text-left transition-colors',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff8063]/55 focus-visible:ring-offset-1 focus-visible:ring-offset-[#08090b]',

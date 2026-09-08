@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { AgentEvent } from '@craft-agent/core/types';
-import type { AgentBackend } from '../types.ts';
+import type { AgentBackend, AgentContextUpdate } from '../types.ts';
 import { createModelFallbackBackend } from '../model-fallback-backend.ts';
 import { modelCooldownRegistry } from '../../model-fallback.ts';
 
@@ -8,6 +8,7 @@ interface FakeBackend extends AgentBackend {
   prompts: string[];
   postInitCalls: number;
   destroyCalls: number;
+  agentContexts: AgentContextUpdate[];
   queryLlm: (request: { prompt: string; model?: string }) => Promise<{ text: string; model?: string }>;
 }
 
@@ -16,6 +17,7 @@ function fakeBackend(events: AgentEvent[] | (() => AgentEvent[])): FakeBackend {
     prompts: [] as string[],
     postInitCalls: 0,
     destroyCalls: 0,
+    agentContexts: [] as AgentContextUpdate[],
     async *chat(message: string) {
       backend.prompts.push(message);
       for (const event of typeof events === 'function' ? events() : events) yield event;
@@ -34,6 +36,7 @@ function fakeBackend(events: AgentEvent[] | (() => AgentEvent[])): FakeBackend {
     setModel: () => {},
     getThinkingLevel: () => 'off' as const,
     setThinkingLevel: () => {},
+    setAgentContext: (context: AgentContextUpdate) => { backend.agentContexts.push(context); },
     getPermissionMode: () => 'safe' as const,
     setPermissionMode: () => {},
     cyclePermissionMode: () => 'safe' as const,
@@ -79,6 +82,38 @@ async function collect(backend: AgentBackend, message = 'hello'): Promise<AgentE
 
 describe('model fallback backend', () => {
   beforeEach(() => modelCooldownRegistry.clearAll());
+
+  test('propagates a focus change to the primary and any later fallback attempt', async () => {
+    const primary = fakeBackend([
+      { type: 'typed_error', error: { code: 'service_unavailable', title: 'Unavailable', message: 'Try another model', actions: [], canRetry: true } },
+      { type: 'complete' },
+    ]);
+    const fallback = fakeBackend([
+      { type: 'text_complete', text: 'focused fallback' },
+      { type: 'complete' },
+    ]);
+    const backend = createModelFallbackBackend({
+      primary,
+      primaryConnectionSlug: 'primary',
+      primaryModel: 'model-a',
+      resolveCandidates: async () => [{
+        connectionSlug: 'fallback',
+        model: 'model-b',
+        chainIndex: 1,
+        create: () => fallback,
+      }],
+    });
+    const context = {
+      customSystemPrompt: 'Focus on narrative.',
+      agentSkillSlugs: ['artist-narrative-universe'],
+    };
+
+    backend.setAgentContext(context);
+    await collect(backend);
+
+    expect(primary.agentContexts).toEqual([context]);
+    expect(fallback.agentContexts).toEqual([context]);
+  });
 
   test('passes through primary streaming unchanged when no usable fallback exists', async () => {
     const primary = fakeBackend([

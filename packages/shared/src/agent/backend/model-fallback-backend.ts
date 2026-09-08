@@ -1,5 +1,5 @@
 import type { AgentEvent } from '@craft-agent/core/types';
-import type { AgentBackend, RecoveryMessage } from './types.ts';
+import type { AgentBackend, AgentContextUpdate, RecoveryMessage } from './types.ts';
 import type { ModelAttempt } from '../../config/llm-connections.ts';
 import type { ResolvedModelFallbackCandidate } from '../../config/model-fallback.ts';
 import {
@@ -229,11 +229,13 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
   let active = primary;
   let disposed = false;
   const assigned = new Map<PropertyKey, unknown>();
+  let agentContext: AgentContextUpdate | undefined;
 
   const applyAssignedProperties = (backend: AgentBackend) => {
     for (const [property, value] of assigned) {
       Reflect.set(backend as object, property, value);
     }
+    if (agentContext && backend !== primary) backend.setAgentContext(agentContext);
   };
 
   const controller = {
@@ -630,6 +632,15 @@ export function createModelFallbackBackend(options: ModelFallbackBackendOptions)
         }
       }
       throw new Error('No model fallback attempt was available');
+    },
+
+    setAgentContext(context: AgentContextUpdate): void {
+      agentContext = {
+        customSystemPrompt: context.customSystemPrompt,
+        agentSkillSlugs: context.agentSkillSlugs ? [...context.agentSkillSlugs] : undefined,
+      };
+      primary.setAgentContext(agentContext);
+      if (active !== primary) active.setAgentContext(agentContext);
     },
 
     destroy(): void {

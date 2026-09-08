@@ -95,7 +95,7 @@ export interface ISessionManager {
   setSessionThinkingLevel(sessionId: string, level: ThinkingLevel): void
   updateWorkingDirectory(sessionId: string, path: string): void
   setSessionSources(sessionId: string, sourceSlugs: string[]): Promise<void>
-  selectSessionTaskMode(sessionId: string, taskModeId: string): Promise<void>
+  selectSessionTaskMode(sessionId: string, taskModeId: string, options?: { startConversation?: boolean }): Promise<void>
   setSessionLabels(sessionId: string, labels: string[]): void
   setSessionConnection(sessionId: string, connectionSlug: string): Promise<void>
   updateSessionModel(sessionId: string, workspaceId: string, model: string | null, connection?: string): Promise<void>
