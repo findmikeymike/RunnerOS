@@ -29,6 +29,8 @@ The core helper prompt and guide together are approximately 1,096 words versus 1
 
 ## Verification
 
-Focused agent/skill tests passed (261 tests). Independent rival review passed 51 helper/skill tests and found no concrete blocking issues. Full verification results follow after completion.
+Focused agent/skill tests passed (261 tests). Independent rival review passed 51 helper/skill tests and found no concrete blocking issues. All package typechecks and the Artist OS main-process build passed. A rehearsal against a temporary copy of the installed helper upgraded its stock prompt and guide, seeded the feature reference, and made no changes on a second pass. The original profile was untouched.
+
+The first complete suite exposed six Signals retry fixture failures inherited from the focus rollout: two runner harnesses lacked the resolver now required for explicit task modes. Production already supplies it. The fixtures now supply that dependency and assert the weekly-intelligence mode; all 63 Signals isolation tests passed afterward. The production guard was unchanged. The complete `bun run test` rerun passed: 9,162 passed, 0 failed, 1 skipped, including every isolated test file.
 
 No app restart, live provider call, or production package replacement is part of this refresh. Source and automated evidence do not certify a currently running session or external account. The existing development launch/profile must remain intact when a restart is authorized.
