@@ -1,4 +1,9 @@
 declare class VoiceCoreOutputProcessor {
+    constructor(options: any);
+    playbackEpoch: any;
+    playbackFrameActive: boolean;
+    playbackFrameInterval: number;
+    playbackFrameElapsed: number;
     pending: any[];
     offset: number;
     queuedSamples: number;
@@ -16,6 +21,8 @@ declare class VoiceCoreOutputProcessor {
     queueHighWaterSamples: number;
     queueLowWaterSamples: number;
     maxQueuedSamples: number;
+    postPlaybackFrame(active: any, level: any): void;
+    observeOutput(channel: any): void;
     syncBackpressureState(): void;
     process(_inputs: any, outputs: any): boolean;
 }

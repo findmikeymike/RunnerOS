@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { createAvatarPlayback } from '@/lib/artist-manager-avatar-playback'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { AgentDefinitionDTO, LoadedSkill, LoadedSource, ArtistManagerMoonshineStatus } from '../../shared/types'
 import { VoiceCoreWeb, createAssemblyAiSttTransport, createInworldTtsTransport, type VoiceEvent } from '@voice-core/web/cloud'
@@ -23,6 +24,8 @@ export type ArtistManagerVoiceState = {
   voiceModel: string | null; voiceRouteReady: boolean
   timingRecords: VoiceTimingRecord[]; canSendTyped: boolean; sendTyped(text: string): Promise<void>
   preparing: boolean
+  avatarState: 'idle' | 'listening' | 'waiting' | 'speaking'
+  getAvatarPlayback(): { active: boolean; level: number; updatedAt: number }
   open: boolean; running: boolean; starting: boolean; stopping: boolean; installing: boolean
   providerReady: boolean; assemblyAiReady: boolean; inworldReady: boolean; hearingReady: boolean
   status: string; error: string | null; userText: string; assistantText: string
@@ -48,6 +51,8 @@ export function useArtistManagerVoice(input: {
   const [timingRecords, setTimingRecords] = React.useState<VoiceTimingRecord[]>([])
   const timingRef = React.useRef<VoiceTimingTrace | null>(null)
   const runtimeRef = React.useRef<VoiceCoreWeb | null>(null)
+  const avatarPlayback = React.useRef(createAvatarPlayback()).current
+  const [avatarState, setAvatarState] = React.useState<'idle' | 'listening' | 'waiting' | 'speaking'>('idle')
   const typedSendingRef = React.useRef(false)
   const [open, setOpenState] = React.useState(false)
   const [running, setRunning] = React.useState(false)
@@ -83,6 +88,7 @@ export function useArtistManagerVoice(input: {
   const shutdownSucceeded = React.useRef(true)
 
   const stop = React.useCallback(async (cancelHandoff = true) => {
+    avatarPlayback.reset()
     if (cancelHandoff) handoff.current?.cancel()
     preparation.current = null; activationEpoch.current++; activating.current = false
     shutdownSucceeded.current = false
@@ -90,7 +96,7 @@ export function useArtistManagerVoice(input: {
     timingRef.current?.stop(); timingRef.current = null; runtimeRef.current = null
     const cleanup = lifecycle.stop()
     unsubscribe.current?.(); unsubscribe.current = null
-    if (mounted.current) { setRunning(false); setStarting(false); setPreparing(false); setStopping(true); setStatus('Stopping audio and agent…') }
+    if (mounted.current) { setAvatarState('idle'); setRunning(false); setStarting(false); setPreparing(false); setStopping(true); setStatus('Stopping audio and agent…') }
     try {
       await cleanup
       if (epoch === stopEpoch.current) shutdownSucceeded.current = true
@@ -100,7 +106,7 @@ export function useArtistManagerVoice(input: {
         setError(messageFromError(cause)); setStatus('Agent shutdown could not be confirmed. Restart is blocked.')
       }
     } finally { if (mounted.current && epoch === stopEpoch.current) setStopping(false) }
-  }, [lifecycle])
+  }, [lifecycle, avatarPlayback])
 
   React.useLayoutEffect(() => {
     mounted.current = true
@@ -272,9 +278,14 @@ export function useArtistManagerVoice(input: {
         tts: observeVoiceTts(createInworldTtsTransport({ webSocketUrl: proxyUrl.toString(), inworldVoiceId: proxy.voiceId, inworldModelId: ELECTRON_INWORLD_TTS_MODEL_ID }), trace),
       })
       lifecycle.assertOwner(ticket)
-      unsubscribe.current = runtime.onEvent((event: VoiceEvent) => {
+      const observePlayback = avatarPlayback.begin()
+      const unsubscribePlayback = runtime.onPlaybackFrame(frame => {
+        if (alive()) observePlayback(frame)
+      })
+      const unsubscribeEvents = runtime.onEvent((event: VoiceEvent) => {
         if (!alive()) return
         trace?.event(event)
+        if (event.type === 'bargeIn') { avatarPlayback.clear(); setAvatarState('listening') }
         if (event.type === 'userSpeechPartial' || event.type === 'userSpeechComplete') setUserText(event.text)
         else if (event.type === 'assistantText') setAssistantText(event.text)
         else if (event.type === 'bargeIn' && handoffArmed) { coordinator.cancel(); void stop() }
@@ -282,9 +293,13 @@ export function useArtistManagerVoice(input: {
           void coordinator.finish().catch(cause => { if (handoffCurrent()) setError(messageFromError(cause)) })
         }
         else if (event.type === 'assistantActivity') setStatus(event.text)
-        else if (event.type === 'stateChanged') setStatus(labelForVoiceState(event.state))
+        else if (event.type === 'stateChanged') {
+          setStatus(labelForVoiceState(event.state))
+          setAvatarState(event.state === 'speaking' ? 'speaking' : event.state === 'thinking' ? 'waiting' : 'listening')
+        }
         else if (event.type === 'error' || event.type === 'captureError' || event.type === 'renderError') { setError(event.message); void stop() }
       })
+      unsubscribe.current = () => { unsubscribePlayback(); unsubscribeEvents() }
       // Only the local speech engine and in-memory Manager session are prepared.
       // runtime.start() is the exclusive microphone/capture boundary, in start() below.
       await Promise.all([modelId ? observedStt.start() : Promise.resolve(), focus.prepare()])
@@ -302,7 +317,7 @@ export function useArtistManagerVoice(input: {
       }
     } finally { if (alive()) setPreparing(false) }
     return null
-  }, [timingEnabled, typedTrial, input.workspaceId, lifecycle, inputDeviceId, outputDeviceId, stop])
+  }, [timingEnabled, typedTrial, input.workspaceId, lifecycle, inputDeviceId, outputDeviceId, stop, avatarPlayback])
 
   const prepare = React.useCallback((): Promise<PreparedCall | null> => {
     if (installBusy.current) return Promise.resolve(null)
@@ -377,6 +392,7 @@ export function useArtistManagerVoice(input: {
     timingEnabled, setTimingEnabled: value => { if (!running && !starting && !stopping) { void stop(); setTimingEnabled(value); writePreference('measure', String(value)) } },
     typedTrial, setTypedTrial: value => { if (!running && !starting && !stopping) { void stop(); setTypedTrial(value) } },
     timingRecords, canSendTyped, sendTyped,
+    avatarState: running ? avatarState : 'idle', getAvatarPlayback: avatarPlayback.sample,
     open, preparing, running, starting, stopping, installing, status, error, userText, assistantText,
     providerReady: voiceRouteReady && hearingReady && providers.inworld, hearingReady, assemblyAiReady: providers.assemblyAi, inworldReady: providers.inworld,
     sttSelection,

@@ -4,5 +4,5 @@ export type { AgentActivityKind, AgentActivitySpeechOptions, AgentAttentionKind,
 export { createAssemblyAiSttTransport } from "./transport/assemblyai";
 export { createInworldTtsTransport } from "./transport/inworld";
 export type { LlmGenerateRequest, LlmTokenEvent, WebLlmTransport, WebSttTransport, WebTransportBundle, WebTtsTransport, } from "./transport/types";
-export type { VoiceEvent, VoiceRuntimeConfig } from "./types";
+export type { PlaybackFrame, VoiceEvent, VoiceRuntimeConfig } from "./types";
 //# sourceMappingURL=cloud.d.ts.map

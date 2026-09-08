@@ -23,6 +23,8 @@ export class VoiceCoreWeb {
     audioGraph = new AudioGraph();
     runtimeWorker = new RuntimeWorkerClient();
     handlers = new Set();
+    playbackFrameHandlers = new Set();
+    playbackFrameSequence = 0;
     config;
     capabilities = null;
     state = "idle";
@@ -69,6 +71,21 @@ export class VoiceCoreWeb {
         assertVoiceIdSupported(validatedConfig.voiceId);
         this.config = validatedConfig;
         this.audioGraph.setInputFramesHandler((frames, sampleRateHz, channels) => this.handleInputFrames(frames, sampleRateHz, channels));
+        this.audioGraph.setPlaybackFrameHandler((frame) => {
+            const sequence = ++this.playbackFrameSequence;
+            for (const handler of [...this.playbackFrameHandlers]) {
+                // An observer may synchronously stop/clear playback. Never deliver its old
+                // active frame after the resulting zero frame to the remaining observers.
+                if (sequence !== this.playbackFrameSequence)
+                    break;
+                if (!this.playbackFrameHandlers.has(handler))
+                    continue;
+                try {
+                    void Promise.resolve(handler({ ...frame })).catch(() => undefined);
+                }
+                catch { /* Optional visuals cannot fail audio. */ }
+            }
+        });
         this.audioGraph.setOutputPlaybackHandler((active) => {
             void this.handleOutputPlaybackState(active).catch((error) => {
                 void this.failRuntime(error instanceof Error ? error : new Error(String(error)));
@@ -260,6 +277,7 @@ export class VoiceCoreWeb {
             finally {
                 this.runtimeWorker.destroy();
                 this.handlers.clear();
+                this.playbackFrameHandlers.clear();
                 this.destroyed = true;
             }
             if (stopError !== undefined)
@@ -428,6 +446,14 @@ export class VoiceCoreWeb {
     }
     async activateVoice(_voiceId) {
         throw new Error("Host-managed voice assets are unavailable in this Web build.");
+    }
+    /** Audio-reactive output RMS, not phoneme lip sync. Silence resets immediately;
+     * audible updates are limited to approximately 30 Hz. Observers are optional. */
+    onPlaybackFrame(handler) {
+        if (this.destroyed)
+            throw new Error("VoiceCore has been destroyed");
+        this.playbackFrameHandlers.add(handler);
+        return () => { this.playbackFrameHandlers.delete(handler); };
     }
     onEvent(handler) {
         this.handlers.add(handler);

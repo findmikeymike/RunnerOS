@@ -1,4 +1,4 @@
-import type { VoiceRuntimeConfig } from "../types";
+import type { PlaybackFrame, VoiceRuntimeConfig } from "../types";
 export declare class AudioGraph {
     private static readonly OUTPUT_ACK_TIMEOUT_MS;
     private static readonly MEDIA_START_TIMEOUT_MS;
@@ -9,6 +9,8 @@ export declare class AudioGraph {
     private inputSinkNode;
     private outputNode;
     private inputFramesHandler;
+    private playbackEpoch;
+    private playbackFrameHandler;
     private outputPlaybackHandler;
     private outputQueuePressureHandler;
     private outputDebugHandler;
@@ -36,6 +38,8 @@ export declare class AudioGraph {
     private postOutputSlice;
     clearOutputQueue(): void;
     setInputFramesHandler(handler: ((frames: Float32Array, sampleRateHz: number, channels: number) => void | Promise<void>) | null): void;
+    setPlaybackFrameHandler(handler: ((frame: PlaybackFrame) => void) | null): void;
+    private emitPlaybackFrame;
     setOutputPlaybackHandler(handler: ((active: boolean) => void) | null): void;
     setOutputFlushedHandler(handler: (() => void) | null): void;
     flushOutputQueue(): void;

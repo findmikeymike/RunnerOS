@@ -1,5 +1,5 @@
 import type { WebTransportBundle } from "./transport/types";
-import type { BrowserCapabilities, InputStats, PocketInstallStatus, VoiceSdkCapabilities, VoiceEvent, VoiceRuntimeConfig, VoiceRecord } from "./types";
+import type { BrowserCapabilities, InputStats, PlaybackFrame, PocketInstallStatus, VoiceSdkCapabilities, VoiceEvent, VoiceRuntimeConfig, VoiceRecord } from "./types";
 type EventHandler = (event: VoiceEvent) => void;
 export declare class VoiceCoreWeb {
     private static readonly OUTPUT_POLL_IDLE_MS;
@@ -16,6 +16,8 @@ export declare class VoiceCoreWeb {
     private readonly audioGraph;
     private readonly runtimeWorker;
     private readonly handlers;
+    private readonly playbackFrameHandlers;
+    private playbackFrameSequence;
     private config;
     private capabilities;
     private state;
@@ -80,6 +82,9 @@ export declare class VoiceCoreWeb {
     removePocketModel(): Promise<void>;
     listVoices(): Promise<VoiceRecord[]>;
     activateVoice(_voiceId: string): Promise<void>;
+    /** Audio-reactive output RMS, not phoneme lip sync. Silence resets immediately;
+     * audible updates are limited to approximately 30 Hz. Observers are optional. */
+    onPlaybackFrame(handler: (frame: PlaybackFrame) => void): () => void;
     onEvent(handler: EventHandler): () => void;
     private emit;
     private emitNormalizedEvent;

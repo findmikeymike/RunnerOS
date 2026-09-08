@@ -1,7 +1,11 @@
 "use strict";
 class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
-    constructor() {
+    constructor(options) {
         super();
+        this.playbackEpoch = options?.processorOptions?.playbackEpoch ?? 0;
+        this.playbackFrameActive = false;
+        this.playbackFrameInterval = Math.ceil(sampleRate / 30);
+        this.playbackFrameElapsed = this.playbackFrameInterval;
         this.pending = [];
         this.offset = 0;
         this.queuedSamples = 0;
@@ -53,6 +57,9 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
                 return;
             }
             if (event.data?.type === "clearOutput") {
+                this.playbackEpoch = event.data.playbackEpoch ?? this.playbackEpoch + 1;
+                this.postPlaybackFrame(false, 0);
+                this.playbackFrameElapsed = this.playbackFrameInterval;
                 this.flushRequestId = null;
                 this.pending = [];
                 this.offset = 0;
@@ -75,6 +82,31 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
             }
         };
     }
+    postPlaybackFrame(active, level) {
+        this.playbackFrameActive = active;
+        this.port.postMessage({ type: "playbackFrame", active, level, playbackEpoch: this.playbackEpoch });
+    }
+    observeOutput(channel) {
+        // Audio-reactive RMS of this rendered quantum, including the existing fades.
+        // No queue depth, TTS input, or grace-period playback state drives this signal.
+        let sumSquares = 0;
+        for (let index = 0; index < channel.length; index += 1) {
+            const sample = channel[index];
+            if (Number.isFinite(sample))
+                sumSquares += sample * sample;
+        }
+        const level = Math.min(1, Math.sqrt(sumSquares / Math.max(1, channel.length)));
+        this.playbackFrameElapsed += channel.length;
+        if (level === 0) {
+            // Silence bypasses the meter cadence, including during the inactive grace.
+            if (this.playbackFrameActive)
+                this.postPlaybackFrame(false, 0);
+        }
+        else if (this.playbackFrameElapsed >= this.playbackFrameInterval) {
+            this.playbackFrameElapsed = 0;
+            this.postPlaybackFrame(true, level);
+        }
+    }
     syncBackpressureState() {
         let nextBackpressured = this.backpressured;
         if (this.queuedSamples >= this.queueHighWaterSamples) {
@@ -96,6 +128,8 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
         const output = outputs[0];
         const channel = output?.[0];
         if (!channel) {
+            if (this.playbackFrameActive)
+                this.postPlaybackFrame(false, 0);
             return true;
         }
         channel.fill(0);
@@ -132,9 +166,11 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
                 this.port.postMessage({ type: "outputFlushed", requestId: this.flushRequestId });
                 this.flushRequestId = null;
             }
+            this.observeOutput(channel);
             return true;
         }
         if (!this.active && this.queuedSamples < this.prebufferSamples && this.flushRequestId === null) {
+            this.observeOutput(channel);
             return true;
         }
         if (!this.active) {
@@ -181,6 +217,7 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
             }
         }
         this.syncBackpressureState();
+        this.observeOutput(channel);
         return true;
     }
 }

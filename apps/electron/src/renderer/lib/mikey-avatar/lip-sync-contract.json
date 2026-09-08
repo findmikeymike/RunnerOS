@@ -1,0 +1,53 @@
+{
+  "status": "candidate shapes exported and controller tested; articulation quality and live provider timing remain unverified",
+  "source": "https://docs.inworld.ai/tts/capabilities/timestamps",
+  "checked_on": "2026-09-07",
+  "request": {
+    "timestampType": "WORD",
+    "timestampTransportStrategy": "SYNC"
+  },
+  "provider_to_morph": {
+    "aei": {
+      "viseme_aa": 1
+    },
+    "o": {
+      "viseme_O": 1
+    },
+    "ee": {
+      "viseme_E": 1
+    },
+    "bmp": {
+      "viseme_PP": 1
+    },
+    "fv": {
+      "viseme_FF": 1
+    },
+    "l": {
+      "viseme_nn": 1
+    },
+    "r": {
+      "viseme_RR": 1
+    },
+    "th": {
+      "viseme_TH": 1
+    },
+    "qw": {
+      "viseme_U": 1
+    },
+    "chjsh": {
+      "viseme_CH": 1
+    },
+    "cdgknstxyz": {
+      "viseme_DD": 0.65
+    }
+  },
+  "notes": [
+    "Provider consonant groups are coarser than a 15-viseme rig; individual phoneSymbol can refine mappings.",
+    "Silence phone overrides visemeSymbol: return to neutral, do not treat silence bmp as speech.",
+    "Unknown symbols close to neutral; never cycle vowels as a fake fallback.",
+    "Use audible playback cursor, not request arrival or wall-clock speaking state.",
+    "Stop and stream generation changes clear all queued timings and mouth weights.",
+    "Crossfade neighbouring poses; keep blink, gaze and expression channels separate.",
+    "SYNC timing adds latency; measure full live speech delay in the app."
+  ]
+}

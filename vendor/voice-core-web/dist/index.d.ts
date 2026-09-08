@@ -5,7 +5,7 @@ export { BUILT_IN_LLM_MODEL_CATALOG, BUILT_IN_LLM_MODEL_CATALOG_PROVENANCE, getL
 export type { LlmCatalogProvider, LlmModelCatalog, LlmModelCatalogProvider, LlmModelRecommendation, LlmModelTier, } from "./llmModelCatalog";
 export { probePackagedRuntime } from "./runtime/probe";
 export { encodePocketInstallStatus, encodeVoiceRecord, parsePocketInstallStatus, parseVoiceRecord, } from "./voiceAssets";
-export type { VoiceBrowserExtensionEvent, VoiceSdkCapabilities, VoiceCanonicalEvent, VoiceConversationState, VoiceEvent, VoiceAssetKind, VoiceRecord, PocketInstallState, PocketInstallStatus, PocketRuntimeMode, VoiceRuntimeConfig, VoiceRuntimeStatus, VoiceState, } from "./types";
+export type { PlaybackFrame, VoiceBrowserExtensionEvent, VoiceSdkCapabilities, VoiceCanonicalEvent, VoiceConversationState, VoiceEvent, VoiceAssetKind, VoiceRecord, PocketInstallState, PocketInstallStatus, PocketRuntimeMode, VoiceRuntimeConfig, VoiceRuntimeStatus, VoiceState, } from "./types";
 export type { AssemblyAiSttTransportOptions, AssemblyAiTemporaryTokenResponse, } from "./transport/assemblyai";
 export { createAssemblyAiSttTransport, createAssemblyAiTemporaryTokenFetcher, } from "./transport/assemblyai";
 export { createInworldTtsTransport } from "./transport/inworld";

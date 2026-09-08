@@ -1,0 +1,541 @@
+diff --git a/voice-core-rs/wrappers/web/contract-tests/response-playback-completion.test.mjs b/voice-core-rs/wrappers/web/contract-tests/response-playback-completion.test.mjs
+index 30f0537..a734400 100644
+--- a/voice-core-rs/wrappers/web/contract-tests/response-playback-completion.test.mjs
++++ b/voice-core-rs/wrappers/web/contract-tests/response-playback-completion.test.mjs
+@@ -12,6 +12,7 @@ async function runtimeFixture() {
+     flushes = 0;
+     clears = 0;
+     setInputFramesHandler() {}
++    setPlaybackFrameHandler(handler) { this.onFrame = handler; }
+     setOutputPlaybackHandler(handler) { this.onPlayback = handler; }
+     setOutputFlushedHandler(handler) { this.onFlushed = handler; }
+     setOutputQueuePressureHandler() {}
+@@ -466,3 +467,42 @@ test('streaming keeps speech incremental and joins a surrogate pair across event
+   await runtime.generateAssistantResponse('stream');
+   assert.equal(spoken.slice(1).join(''), body);
+ });
++
++
++test("playback frame observers are optional, isolated, unsubscribable and cleared on destroy", async () => {
++  const runtime = await runtimeFixture();
++  assert.doesNotThrow(() => runtime.audioGraph.onFrame({ active: true, level: 0.5 }));
++  const frames = [];
++  const removeBad = runtime.onPlaybackFrame((frame) => {
++    frame.level = 99;
++    throw new Error("renderer unavailable");
++  });
++  const removeGood = runtime.onPlaybackFrame(frame => frames.push(frame));
++  runtime.audioGraph.onFrame({ active: true, level: 0.5 });
++  assert.equal(frames[0].level, 0.5);
++  removeBad(); removeBad(); removeGood();
++  runtime.audioGraph.onFrame({ active: true, level: 0.8 });
++  assert.equal(frames.length, 1);
++  runtime.onPlaybackFrame(frame => frames.push(frame));
++  runtime.enqueueLifecycle = task => task();
++  await runtime.destroy();
++  runtime.audioGraph.onFrame({ active: true, level: 0.9 });
++  assert.equal(frames.length, 1);
++  assert.throws(() => runtime.onPlaybackFrame(() => {}), /destroyed/);
++});
++
++
++test("playback observers cannot reanimate a later observer by clearing during dispatch", async () => {
++  const runtime = await runtimeFixture();
++  const frames = [];
++  runtime.onPlaybackFrame(frame => {
++    if (frame.active) runtime.audioGraph.onFrame({ active: false, level: 0 });
++  });
++  runtime.onPlaybackFrame(async () => { throw new Error("async renderer failed"); });
++  runtime.onPlaybackFrame(frame => frames.push(frame));
++  runtime.audioGraph.onFrame({ active: true, level: 0.8 });
++  await Promise.resolve();
++  assert.equal(frames.length, 1);
++  assert.equal(frames[0].active, false);
++  assert.equal(frames[0].level, 0);
++});
+diff --git a/voice-core-rs/wrappers/web/src/VoiceCoreWeb.ts b/voice-core-rs/wrappers/web/src/VoiceCoreWeb.ts
+index 8bab4ea..c33e10d 100644
+--- a/voice-core-rs/wrappers/web/src/VoiceCoreWeb.ts
++++ b/voice-core-rs/wrappers/web/src/VoiceCoreWeb.ts
+@@ -11,6 +11,7 @@ import { shouldSendSttAudio } from "./runtime/sttAudioGate";
+ import type {
+   BrowserCapabilities,
+   InputStats,
++  PlaybackFrame,
+   PocketInstallStatus,
+   VoiceSdkCapabilities,
+   VoiceConversationState,
+@@ -39,6 +40,8 @@ export class VoiceCoreWeb {
+   private readonly audioGraph = new AudioGraph();
+   private readonly runtimeWorker = new RuntimeWorkerClient();
+   private readonly handlers = new Set<EventHandler>();
++  private readonly playbackFrameHandlers = new Set<(frame: PlaybackFrame) => void>();
++  private playbackFrameSequence = 0;
+   private config: VoiceRuntimeConfig;
+   private capabilities: BrowserCapabilities | null = null;
+   private state: VoiceConversationState = "idle";
+@@ -90,6 +93,18 @@ export class VoiceCoreWeb {
+     this.audioGraph.setInputFramesHandler((frames, sampleRateHz, channels) =>
+       this.handleInputFrames(frames, sampleRateHz, channels),
+     );
++    this.audioGraph.setPlaybackFrameHandler((frame) => {
++      const sequence = ++this.playbackFrameSequence;
++      for (const handler of [...this.playbackFrameHandlers]) {
++        // An observer may synchronously stop/clear playback. Never deliver its old
++        // active frame after the resulting zero frame to the remaining observers.
++        if (sequence !== this.playbackFrameSequence) break;
++        if (!this.playbackFrameHandlers.has(handler)) continue;
++        try {
++          void Promise.resolve(handler({ ...frame })).catch(() => undefined);
++        } catch { /* Optional visuals cannot fail audio. */ }
++      }
++    });
+     this.audioGraph.setOutputPlaybackHandler((active) => {
+       void this.handleOutputPlaybackState(active).catch((error) => {
+         void this.failRuntime(error instanceof Error ? error : new Error(String(error)));
+@@ -277,6 +292,7 @@ export class VoiceCoreWeb {
+       } finally {
+         this.runtimeWorker.destroy();
+         this.handlers.clear();
++        this.playbackFrameHandlers.clear();
+         this.destroyed = true;
+       }
+       if (stopError !== undefined) throw stopError;
+@@ -489,6 +505,14 @@ export class VoiceCoreWeb {
+     throw new Error("Host-managed voice assets are unavailable in this Web build.");
+   }
+
++  /** Audio-reactive output RMS, not phoneme lip sync. Silence resets immediately;
++   * audible updates are limited to approximately 30 Hz. Observers are optional. */
++  onPlaybackFrame(handler: (frame: PlaybackFrame) => void): () => void {
++    if (this.destroyed) throw new Error("VoiceCore has been destroyed");
++    this.playbackFrameHandlers.add(handler);
++    return () => { this.playbackFrameHandlers.delete(handler); };
++  }
++
+   onEvent(handler: EventHandler): () => void {
+     this.handlers.add(handler);
+     return () => {
+diff --git a/voice-core-rs/wrappers/web/src/audio/AudioGraph.ts b/voice-core-rs/wrappers/web/src/audio/AudioGraph.ts
+index fc2919a..3908495 100644
+--- a/voice-core-rs/wrappers/web/src/audio/AudioGraph.ts
++++ b/voice-core-rs/wrappers/web/src/audio/AudioGraph.ts
+@@ -1,4 +1,4 @@
+-import type { VoiceRuntimeConfig } from "../types";
++import type { PlaybackFrame, VoiceRuntimeConfig } from "../types";
+ import { OutputAdmissionTracker } from "./OutputAdmissionTracker";
+ import { StreamingResampler } from "./StreamingResampler";
+ import { BoundedAudioDispatcher } from "./BoundedAudioDispatcher";
+@@ -19,6 +19,8 @@ export class AudioGraph {
+   private inputFramesHandler:
+     | ((frames: Float32Array, sampleRateHz: number, channels: number) => void | Promise<void>)
+     | null = null;
++  private playbackEpoch = 0;
++  private playbackFrameHandler: ((frame: PlaybackFrame) => void) | null = null;
+   private outputPlaybackHandler:
+     | ((active: boolean) => void)
+     | null = null;
+@@ -143,10 +145,14 @@ export class AudioGraph {
+       this.inputSinkNode.gain.value = 0;
+       this.inputNode.connect(this.inputSinkNode);
+       this.inputSinkNode.connect(this.audioContext.destination);
+-      this.outputNode = new AudioWorkletNode(this.audioContext, "voice-core-output");
++      this.outputNode = new AudioWorkletNode(this.audioContext, "voice-core-output", {
++        processorOptions: { playbackEpoch: this.playbackEpoch },
++      });
+       this.outputNode.port.onmessage = (
+         event: MessageEvent<{
+           type?: string;
++          level?: number;
++          playbackEpoch?: number;
+           active?: boolean;
+           droppedSamples?: number;
+           queuedSamples?: number;
+@@ -154,6 +160,17 @@ export class AudioGraph {
+         }>,
+       ) => {
+         if (startGeneration !== this.startGeneration) return;
++        if (event.data?.type === "playbackFrame") {
++          if (event.data.playbackEpoch === this.playbackEpoch
++            && typeof event.data.active === "boolean"
++            && typeof event.data.level === "number" && Number.isFinite(event.data.level)) {
++            this.emitPlaybackFrame({
++              active: event.data.active && event.data.level > 0,
++              level: event.data.active ? Math.max(0, Math.min(1, event.data.level)) : 0,
++            });
++          }
++          return;
++        }
+         if (
+           (event.data?.type === "outputAccepted" ||
+             event.data?.type === "outputRejected") &&
+@@ -213,6 +230,8 @@ export class AudioGraph {
+       };
+       this.outputNode.onprocessorerror = () => {
+         if (startGeneration !== this.startGeneration) return;
++        this.playbackEpoch++;
++        this.emitPlaybackFrame({ active: false, level: 0 });
+         const error = new Error("VoiceCore output worklet processor failed");
+         this.cancelPendingOutputRequests(error.message);
+         this.outputErrorHandler?.(error);
+@@ -300,6 +319,8 @@ export class AudioGraph {
+
+   cancelPendingStart(): void {
+     this.startGeneration += 1;
++    this.playbackEpoch++;
++    this.emitPlaybackFrame({ active: false, level: 0 });
+     this.pendingStartCancellation?.();
+     this.pendingStartCancellation = null;
+   }
+@@ -337,7 +358,9 @@ export class AudioGraph {
+     this.pendingOutputFlush = null;
+     this.cancelPendingOutputRequests("VoiceCore output queue cleared");
+     this.outputResampler.reset();
+-    this.outputNode?.port.postMessage({ type: "clearOutput" });
++    this.playbackEpoch++;
++    this.emitPlaybackFrame({ active: false, level: 0 });
++    this.outputNode?.port.postMessage({ type: "clearOutput", playbackEpoch: this.playbackEpoch });
+   }
+
+   setInputFramesHandler(
+@@ -346,6 +369,14 @@ export class AudioGraph {
+     this.inputFramesHandler = handler;
+   }
+
++  setPlaybackFrameHandler(handler: ((frame: PlaybackFrame) => void) | null): void {
++    this.playbackFrameHandler = handler;
++  }
++
++  private emitPlaybackFrame(frame: PlaybackFrame): void {
++    try { this.playbackFrameHandler?.(frame); } catch { /* Optional visuals cannot fail audio. */ }
++  }
++
+   setOutputPlaybackHandler(handler: ((active: boolean) => void) | null): void {
+     this.outputPlaybackHandler = handler;
+   }
+diff --git a/voice-core-rs/wrappers/web/src/audio/output-worklet.js b/voice-core-rs/wrappers/web/src/audio/output-worklet.js
+index 0e665f3..80cc4e0 100644
+--- a/voice-core-rs/wrappers/web/src/audio/output-worklet.js
++++ b/voice-core-rs/wrappers/web/src/audio/output-worklet.js
+@@ -1,6 +1,10 @@
+ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
+-  constructor() {
++  constructor(options) {
+     super();
++    this.playbackEpoch = options?.processorOptions?.playbackEpoch ?? 0;
++    this.playbackFrameActive = false;
++    this.playbackFrameInterval = Math.ceil(sampleRate / 30);
++    this.playbackFrameElapsed = this.playbackFrameInterval;
+     this.pending = [];
+     this.offset = 0;
+     this.queuedSamples = 0;
+@@ -55,6 +59,9 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
+       }
+
+       if (event.data?.type === "clearOutput") {
++        this.playbackEpoch = event.data.playbackEpoch ?? this.playbackEpoch + 1;
++        this.postPlaybackFrame(false, 0);
++        this.playbackFrameElapsed = this.playbackFrameInterval;
+         this.flushRequestId = null;
+         this.pending = [];
+         this.offset = 0;
+@@ -78,6 +85,30 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
+     };
+   }
+
++  postPlaybackFrame(active, level) {
++    this.playbackFrameActive = active;
++    this.port.postMessage({ type: "playbackFrame", active, level, playbackEpoch: this.playbackEpoch });
++  }
++
++  observeOutput(channel) {
++    // Audio-reactive RMS of this rendered quantum, including the existing fades.
++    // No queue depth, TTS input, or grace-period playback state drives this signal.
++    let sumSquares = 0;
++    for (let index = 0; index < channel.length; index += 1) {
++      const sample = channel[index];
++      if (Number.isFinite(sample)) sumSquares += sample * sample;
++    }
++    const level = Math.min(1, Math.sqrt(sumSquares / Math.max(1, channel.length)));
++    this.playbackFrameElapsed += channel.length;
++    if (level === 0) {
++      // Silence bypasses the meter cadence, including during the inactive grace.
++      if (this.playbackFrameActive) this.postPlaybackFrame(false, 0);
++    } else if (this.playbackFrameElapsed >= this.playbackFrameInterval) {
++      this.playbackFrameElapsed = 0;
++      this.postPlaybackFrame(true, level);
++    }
++  }
++
+   syncBackpressureState() {
+     let nextBackpressured = this.backpressured;
+     if (this.queuedSamples >= this.queueHighWaterSamples) {
+@@ -100,6 +131,7 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
+     const output = outputs[0];
+     const channel = output?.[0];
+     if (!channel) {
++      if (this.playbackFrameActive) this.postPlaybackFrame(false, 0);
+       return true;
+     }
+
+@@ -142,10 +174,12 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
+         this.port.postMessage({ type: "outputFlushed", requestId: this.flushRequestId });
+         this.flushRequestId = null;
+       }
++      this.observeOutput(channel);
+       return true;
+     }
+
+     if (!this.active && this.queuedSamples < this.prebufferSamples && this.flushRequestId === null) {
++      this.observeOutput(channel);
+       return true;
+     }
+
+@@ -201,6 +235,7 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
+     }
+
+     this.syncBackpressureState();
++    this.observeOutput(channel);
+
+     return true;
+   }
+diff --git a/voice-core-rs/wrappers/web/src/cloud.ts b/voice-core-rs/wrappers/web/src/cloud.ts
+index ef934bb..0c71fd7 100644
+--- a/voice-core-rs/wrappers/web/src/cloud.ts
++++ b/voice-core-rs/wrappers/web/src/cloud.ts
+@@ -13,4 +13,4 @@ export type {
+   LlmGenerateRequest, LlmTokenEvent, WebLlmTransport, WebSttTransport,
+   WebTransportBundle, WebTtsTransport,
+ } from "./transport/types";
+-export type { VoiceEvent, VoiceRuntimeConfig } from "./types";
++export type { PlaybackFrame, VoiceEvent, VoiceRuntimeConfig } from "./types";
+diff --git a/voice-core-rs/wrappers/web/src/index.ts b/voice-core-rs/wrappers/web/src/index.ts
+index a0d10f1..d45498e 100644
+--- a/voice-core-rs/wrappers/web/src/index.ts
++++ b/voice-core-rs/wrappers/web/src/index.ts
+@@ -31,6 +31,7 @@ export {
+   parseVoiceRecord,
+ } from "./voiceAssets";
+ export type {
++  PlaybackFrame,
+   VoiceBrowserExtensionEvent,
+   VoiceSdkCapabilities,
+   VoiceCanonicalEvent,
+diff --git a/voice-core-rs/wrappers/web/src/types.ts b/voice-core-rs/wrappers/web/src/types.ts
+index 9f97677..e7d94ab 100644
+--- a/voice-core-rs/wrappers/web/src/types.ts
++++ b/voice-core-rs/wrappers/web/src/types.ts
+@@ -1,3 +1,10 @@
++/** RMS of PCM actually rendered by the output worklet, normalized to 0..1.
++ * Audio-reactive animation only; no phoneme or viseme timing is inferred. */
++export interface PlaybackFrame {
++  readonly active: boolean;
++  readonly level: number;
++}
++
+ export type VoiceConversationState =
+   | "idle"
+   | "listening"
+diff --git a/voice-core-rs/wrappers/web/contract-tests/playback-observation.test.mjs b/voice-core-rs/wrappers/web/contract-tests/playback-observation.test.mjs
+new file mode 100644
+index 0000000..8ba4124
+--- /dev/null
++++ b/voice-core-rs/wrappers/web/contract-tests/playback-observation.test.mjs
+@@ -0,0 +1,197 @@
++import assert from 'node:assert/strict';
++import { readFile } from 'node:fs/promises';
++import { createHash } from 'node:crypto';
++import test from 'node:test';
++import vm from 'node:vm';
++import ts from 'typescript';
++import { BoundedAudioDispatcher } from '../src/audio/BoundedAudioDispatcher.ts';
++
++async function workletFixture() {
++  let Processor;
++  class AudioWorkletProcessor {
++    constructor() {
++      this.port = { onmessage: null, messages: [], postMessage: message => this.port.messages.push(message) };
++    }
++  }
++  vm.runInNewContext(await readFile(new URL('../src/audio/output-worklet.js', import.meta.url), 'utf8'), {
++    AudioWorkletProcessor, Float32Array, Math, sampleRate: 48_000,
++    registerProcessor: (_, implementation) => { Processor = implementation; },
++  });
++  const processor = new Processor({ processorOptions: { playbackEpoch: 17 } });
++  return {
++    processor,
++    send: data => processor.port.onmessage({ data }),
++    frames: () => processor.port.messages.filter(message => message.type === 'playbackFrame'),
++    render: () => {
++      const output = new Float32Array(128);
++      assert.equal(processor.process([], [[output]]), true);
++      return output;
++    },
++  };
++}
++
++test('meter follows rendered PCM including fade-in, never the queued prebuffer', async () => {
++  const { send, frames, render } = await workletFixture();
++  send({ type: 'output', frames: new Float32Array(960).fill(0.5) });
++  assert.equal(frames().length, 0);
++  assert.ok(render().every(sample => sample === 0));
++  assert.equal(frames().length, 0);
++  send({ type: 'flushOutput', requestId: 1 });
++  const actual = render();
++  const rms = Math.sqrt(actual.reduce((sum, sample) => sum + sample * sample, 0) / actual.length);
++  assert.equal(frames().at(-1).level, rms);
++  assert.equal(frames().at(-1).active, true);
++  assert.equal(frames().at(-1).playbackEpoch, 17);
++  assert.ok(rms > 0 && rms < 0.5, 'meter includes the existing fade');
++});
++
++test('silence resets on the first silent quantum before playback grace completes', async () => {
++  const { processor, send, frames, render } = await workletFixture();
++  send({ type: 'output', frames: new Float32Array(4800).fill(0.5) });
++  let lastAudible = false;
++  for (let index = 0; index < 60; index++) {
++    const audible = render().some(sample => sample !== 0);
++    if (lastAudible && !audible) {
++      assert.equal(frames().at(-1).active, false);
++      assert.equal(frames().at(-1).level, 0);
++      assert.equal(processor.active, true, 'response grace must stay independent');
++      return;
++    }
++    lastAudible = audible;
++  }
++  assert.fail('expected rendered tail followed by silence');
++});
++
++test('queued silent PCM also closes the meter immediately', async () => {
++  const { send, frames, render } = await workletFixture();
++  const pcm = new Float32Array(4800);
++  pcm.fill(0.4, 0, 256);
++  send({ type: 'output', frames: pcm });
++  render(); render();
++  assert.ok(render().every(sample => sample === 0));
++  assert.equal(frames().at(-1).active, false);
++  assert.equal(frames().at(-1).level, 0);
++});
++
++test('audible observations are bounded to 30 Hz and finite normalized RMS', async () => {
++  const { send, frames, render } = await workletFixture();
++  send({ type: 'output', frames: new Float32Array(48000).fill(2) });
++  for (let quantum = 0; quantum < 375; quantum++) render();
++  assert.ok(frames().length >= 28 && frames().length <= 30);
++  assert.ok(frames().every(frame => frame.active && frame.level >= 0 && frame.level <= 1));
++});
++
++test('clear resets immediately and all later observations carry the new epoch', async () => {
++  const { send, frames, render } = await workletFixture();
++  send({ type: 'output', frames: new Float32Array(4800).fill(0.5) });
++  render();
++  send({ type: 'clearOutput', playbackEpoch: 18 });
++  assert.equal(frames().at(-1).active, false);
++  assert.equal(frames().at(-1).playbackEpoch, 18);
++  assert.ok(render().every(sample => sample === 0));
++  send({ type: 'output', frames: new Float32Array(4800).fill(0.2) });
++  render();
++  assert.equal(frames().at(-1).active, true);
++  assert.equal(frames().at(-1).playbackEpoch, 18);
++});
++
++test('output PCM matches the pre-observation implementation across fade, underrun and clear', async () => {
++  const { send, render } = await workletFixture();
++  const digest = createHash('sha256');
++  const pcm = Float32Array.from({ length: 5000 }, (_, index) => Math.sin(index / 9) * 0.4);
++  send({ type: 'output', frames: pcm });
++  for (let index = 0; index < 110; index++) digest.update(new Uint8Array(render().buffer));
++  send({ type: 'output', frames: pcm });
++  for (let index = 0; index < 7; index++) digest.update(new Uint8Array(render().buffer));
++  send({ type: 'clearOutput', playbackEpoch: 18 });
++  for (let index = 0; index < 5; index++) digest.update(new Uint8Array(render().buffer));
++  // Captured from upstream c348947 before adding observation.
++  assert.equal(digest.digest('hex'), '18baf45a263d72c600ec19ac145202b3bc4ac8d1e9f12ab47647ef93c0d6cee8');
++});
++
++async function graphFixture() {
++  class Node {
++    constructor(_context, _name, options) { this.options = options; }
++    gain = { value: 1 };
++    port = { onmessage: null, sent: [], postMessage(message) { this.sent.push(message); } };
++    connect() {}
++    disconnect() {}
++  }
++  class Context extends EventTarget {
++    state = 'running'; sampleRate = 48_000; destination = {};
++    audioWorklet = { addModule: async () => {} };
++    createGain() { return new Node(); }
++    async resume() {}
++    async close() {}
++  }
++  const source = await readFile(new URL('../src/audio/AudioGraph.ts', import.meta.url), 'utf8');
++  const executable = ts.transpileModule(
++    source.replace(/^import[\s\S]*?;\n/gm, '')
++      .replace('export class AudioGraph', 'class AudioGraph')
++      .replaceAll('import.meta.url', JSON.stringify('https://app.test/AudioGraph.js')) + '\nglobalThis.Graph = AudioGraph;',
++    { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } },
++  ).outputText;
++  const context = {
++    URL, Float32Array, setTimeout, clearTimeout, BoundedAudioDispatcher,
++    window: { AudioContext: Context, setTimeout, clearTimeout },
++    navigator: { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [], getAudioTracks: () => [] }) } },
++    MediaStreamAudioSourceNode: Node, AudioWorkletNode: Node,
++    OutputAdmissionTracker: class { cancelAll() {} },
++    StreamingResampler: class { reset() {} },
++  };
++  vm.runInNewContext(executable, context);
++  const graph = new context.Graph();
++  await graph.start({});
++  return graph;
++}
++
++test('graph fences old messages after clear, stop and restart and isolates observer errors', async () => {
++  const graph = await graphFixture();
++  const seen = [];
++  graph.setPlaybackFrameHandler(frame => seen.push(frame));
++  const oldPort = graph.outputNode.port;
++  const oldCallback = oldPort.onmessage;
++  const epoch = graph.outputNode.options.processorOptions.playbackEpoch;
++  const deliver = (callback, playbackEpoch, level = 0.5) => callback({ data: {
++    type: 'playbackFrame', playbackEpoch, level, active: true,
++  } });
++  deliver(oldCallback, epoch);
++  assert.equal(seen.at(-1).active, true);
++  graph.clearOutputQueue();
++  assert.equal(seen.at(-1).active, false);
++  const count = seen.length;
++  deliver(oldCallback, epoch);
++  assert.equal(seen.length, count);
++  const nextEpoch = oldPort.sent.at(-1).playbackEpoch;
++  deliver(oldCallback, nextEpoch);
++  assert.equal(seen.at(-1).active, true);
++  deliver(oldCallback, nextEpoch, NaN);
++  assert.equal(seen.at(-1).level, 0.5);
++  graph.setPlaybackFrameHandler(() => { throw new Error('broken graphics'); });
++  assert.doesNotThrow(() => deliver(oldCallback, nextEpoch));
++  graph.setPlaybackFrameHandler(frame => seen.push(frame));
++  graph.cancelPendingStart(); // Public Stop calls this before async teardown.
++  assert.equal(seen.at(-1).active, false);
++  deliver(oldCallback, nextEpoch);
++  assert.equal(seen.at(-1).active, false);
++  await graph.stop();
++  await graph.start({});
++  deliver(oldCallback, nextEpoch);
++  assert.equal(seen.at(-1).active, false);
++  deliver(graph.outputNode.port.onmessage, graph.outputNode.options.processorOptions.playbackEpoch);
++  assert.equal(seen.at(-1).active, true);
++  await graph.stop();
++  assert.equal(seen.at(-1).level, 0);
++});
++
++
++test('missing output channels reset observation without consuming queued PCM', async () => {
++  const { processor, send, frames, render } = await workletFixture();
++  send({ type: 'output', frames: new Float32Array(4800).fill(0.4) });
++  render();
++  const queued = processor.queuedSamples;
++  processor.process([], []);
++  assert.equal(processor.queuedSamples, queued);
++  assert.equal(frames().at(-1).active, false);
++  assert.equal(frames().at(-1).level, 0);
++});

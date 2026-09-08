@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Captions, Phone, PhoneOff, Settings2, UserRound } from 'lucide-react'
+import { ArrowLeft, Captions, Phone, PhoneOff, Settings2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import type { ArtistManagerVoiceState } from '@/hooks/useArtistManagerVoice'
 import { ArtistManagerVoiceSetup } from './ArtistManagerVoiceSetup'
+import { MikeyAvatar } from '@/components/voice/MikeyAvatar'
 
 export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceState }) {
   const [showSetup, setShowSetup] = useState(false)
@@ -33,11 +34,7 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5"><ArtistManagerVoiceSetup voice={voice} /></div>
         ) : (
           <div data-voice-avatar-stage className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
-            {/* Neutral fallback until the artist's avatar asset is supplied. */}
-            <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.035),transparent_65%)]" />
-            <div aria-hidden="true" className="flex size-28 items-center justify-center rounded-full bg-white/[0.04] text-white/25">
-              <UserRound className="size-12" strokeWidth={1} />
-            </div>
+            <MikeyAvatar active={voice.open} state={voice.avatarState} getPlayback={voice.getAvatarPlayback} />
             {showCaptions && (voice.userText || voice.assistantText) ? (
               <div role="log" aria-label="Call captions" aria-live="polite" className="absolute inset-x-5 bottom-2 max-h-[45%] space-y-2 overflow-y-auto rounded-2xl bg-black/80 px-4 py-3 text-sm leading-5">
                 {voice.userText ? <p className="text-white/55"><span className="sr-only">You: </span>{voice.userText}</p> : null}

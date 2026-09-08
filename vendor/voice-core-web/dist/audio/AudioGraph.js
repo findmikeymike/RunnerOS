@@ -11,6 +11,8 @@ export class AudioGraph {
     inputSinkNode = null;
     outputNode = null;
     inputFramesHandler = null;
+    playbackEpoch = 0;
+    playbackFrameHandler = null;
     outputPlaybackHandler = null;
     outputQueuePressureHandler = null;
     outputDebugHandler = null;
@@ -113,10 +115,23 @@ export class AudioGraph {
             this.inputSinkNode.gain.value = 0;
             this.inputNode.connect(this.inputSinkNode);
             this.inputSinkNode.connect(this.audioContext.destination);
-            this.outputNode = new AudioWorkletNode(this.audioContext, "voice-core-output");
+            this.outputNode = new AudioWorkletNode(this.audioContext, "voice-core-output", {
+                processorOptions: { playbackEpoch: this.playbackEpoch },
+            });
             this.outputNode.port.onmessage = (event) => {
                 if (startGeneration !== this.startGeneration)
                     return;
+                if (event.data?.type === "playbackFrame") {
+                    if (event.data.playbackEpoch === this.playbackEpoch
+                        && typeof event.data.active === "boolean"
+                        && typeof event.data.level === "number" && Number.isFinite(event.data.level)) {
+                        this.emitPlaybackFrame({
+                            active: event.data.active && event.data.level > 0,
+                            level: event.data.active ? Math.max(0, Math.min(1, event.data.level)) : 0,
+                        });
+                    }
+                    return;
+                }
                 if ((event.data?.type === "outputAccepted" ||
                     event.data?.type === "outputRejected") &&
                     typeof event.data.requestId === "number") {
@@ -157,6 +172,8 @@ export class AudioGraph {
             this.outputNode.onprocessorerror = () => {
                 if (startGeneration !== this.startGeneration)
                     return;
+                this.playbackEpoch++;
+                this.emitPlaybackFrame({ active: false, level: 0 });
                 const error = new Error("VoiceCore output worklet processor failed");
                 this.cancelPendingOutputRequests(error.message);
                 this.outputErrorHandler?.(error);
@@ -245,6 +262,8 @@ export class AudioGraph {
     }
     cancelPendingStart() {
         this.startGeneration += 1;
+        this.playbackEpoch++;
+        this.emitPlaybackFrame({ active: false, level: 0 });
         this.pendingStartCancellation?.();
         this.pendingStartCancellation = null;
     }
@@ -275,10 +294,21 @@ export class AudioGraph {
         this.pendingOutputFlush = null;
         this.cancelPendingOutputRequests("VoiceCore output queue cleared");
         this.outputResampler.reset();
-        this.outputNode?.port.postMessage({ type: "clearOutput" });
+        this.playbackEpoch++;
+        this.emitPlaybackFrame({ active: false, level: 0 });
+        this.outputNode?.port.postMessage({ type: "clearOutput", playbackEpoch: this.playbackEpoch });
     }
     setInputFramesHandler(handler) {
         this.inputFramesHandler = handler;
+    }
+    setPlaybackFrameHandler(handler) {
+        this.playbackFrameHandler = handler;
+    }
+    emitPlaybackFrame(frame) {
+        try {
+            this.playbackFrameHandler?.(frame);
+        }
+        catch { /* Optional visuals cannot fail audio. */ }
     }
     setOutputPlaybackHandler(handler) {
         this.outputPlaybackHandler = handler;

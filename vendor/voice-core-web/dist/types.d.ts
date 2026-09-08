@@ -1,3 +1,9 @@
+/** RMS of PCM actually rendered by the output worklet, normalized to 0..1.
+ * Audio-reactive animation only; no phoneme or viseme timing is inferred. */
+export interface PlaybackFrame {
+    readonly active: boolean;
+    readonly level: number;
+}
 export type VoiceConversationState = "idle" | "listening" | "thinking" | "speaking" | "interrupted" | "recovering" | "ending";
 export type VoiceRuntimeStatus = "uninitialized" | "starting" | "running" | "stopping" | "stopped" | "error";
 /**
