@@ -7,7 +7,7 @@ import { useAction } from "@/actions"
 import { Inbox, Archive } from "lucide-react"
 
 import { getSessionStatus } from "@/utils/session"
-import { formatProjectLabel, GENERAL_PROJECT_KEY, getSessionProjectInfo } from "@/utils/session-project"
+import { formatProjectLabel, GENERAL_PROJECT_KEY, GENERAL_PROJECT_LABEL, getSessionProjectInfo } from "@/utils/session-project"
 import * as storage from "@/lib/local-storage"
 import { KEYS } from "@/lib/local-storage"
 import type { LabelConfig } from "@craft-agent/shared/labels"
@@ -303,7 +303,7 @@ export function SessionList({
       if (rows.length > 0 && !groupsByKey.has(GENERAL_PROJECT_KEY)) {
         groupsByKey.set(GENERAL_PROJECT_KEY, {
           key: GENERAL_PROJECT_KEY,
-          label: 'Past',
+          label: GENERAL_PROJECT_LABEL,
           items: [],
           collapsible: true,
         })
@@ -313,7 +313,7 @@ export function SessionList({
         if (!groupsByKey.has(meta.key)) {
           groupsByKey.set(meta.key, {
             key: meta.key,
-            label: meta.key === GENERAL_PROJECT_KEY ? 'Past' : formatProjectLabel(meta.key.replace(/^project:/, '')),
+            label: meta.key === GENERAL_PROJECT_KEY ? GENERAL_PROJECT_LABEL : formatProjectLabel(meta.key.replace(/^project:/, '')),
             items: [],
             collapsible: true,
             collapsedCount: meta.count,
@@ -330,8 +330,8 @@ export function SessionList({
       for (const group of orderedGroups) {
         group.items.sort((a, b) => compareSessionsByRecency(a.item, b.item))
         if (group.key === GENERAL_PROJECT_KEY && group.items.length > 10) {
-          group.itemsContainerClassName = 'max-h-[min(400px,50vh)] overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-foreground/15'
-          group.itemsContainerAriaLabel = 'Past conversations, newest first'
+          group.itemsContainerClassName = 'max-h-[min(520px,calc(100vh-190px))] overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-foreground/15'
+          group.itemsContainerAriaLabel = 'Conversations, newest first'
           group.onItemsContainerScroll = (event) => {
             const viewport = event.currentTarget
             if (hasMore && viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 120) {

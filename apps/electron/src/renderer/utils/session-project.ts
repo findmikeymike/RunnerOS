@@ -3,7 +3,7 @@ import type { SessionMeta } from '@/atoms/sessions'
 
 export const PROJECT_LABEL_ID = 'project'
 export const GENERAL_PROJECT_KEY = 'project:__general__'
-export const GENERAL_PROJECT_LABEL = 'Past'
+export const GENERAL_PROJECT_LABEL = 'Conversations'
 
 export interface SessionProjectInfo {
   key: string

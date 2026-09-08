@@ -11,7 +11,7 @@ import { SessionMenu } from "./SessionMenu"
 import { BatchSessionMenu } from "./BatchSessionMenu"
 import { SessionStatusIcon } from "./SessionStatusIcon"
 import { SessionBadges } from "./SessionBadges"
-import { getSessionAgentIdentity, getSessionTitle, getSessionPreviewText, highlightMatch, hasUnreadMeta, shortTimeLocale } from "@/utils/session"
+import { getSessionListDisplay, highlightMatch, hasUnreadMeta, shortTimeLocale } from "@/utils/session"
 import { getSessionProjectInfo } from "@/utils/session-project"
 import { useSessionListContext } from "@/context/SessionListContext"
 import { useAppShellContext } from "@/context/AppShellContext"
@@ -59,9 +59,7 @@ export function SessionItem({
   const hasRemoteWorkspaces = workspaces?.some(w => w.remoteServer) ?? false
   const { hotkey: nextHotkey } = useActionLabel('chat.nextSearchMatch')
   const { hotkey: prevHotkey } = useActionLabel('chat.prevSearchMatch')
-  const generatedTitle = getSessionTitle(item)
-  const agentIdentity = getSessionAgentIdentity(item)
-  const title = agentIdentity?.name ?? generatedTitle
+  const { title, subtitle } = getSessionListDisplay(item, isCompactMode)
   // For the active session, prefer logical match count over ripgrep count
   const activeMatch = ctx.activeChatMatchInfo
   const isActiveSession = isSelected && activeMatch?.sessionId === item.id
@@ -73,9 +71,6 @@ export function SessionItem({
     return ctx.flatLabels.some(l => l.id === labelId)
   }))
   const hasPendingPrompt = ctx.hasPendingPrompt?.(item.id) ?? false
-  const previewText = agentIdentity
-    ? getSessionPreviewText(item, 64, agentIdentity.name)
-    : (isCompactMode ? getSessionPreviewText(item) : null)
   const messagingBindingsBySession = useAtomValue(messagingBindingsBySessionAtom)
   const sessionBindings = messagingBindingsBySession.get(item.id) ?? []
   const hasMessagingBinding = sessionBindings.length > 0
@@ -119,6 +114,7 @@ export function SessionItem({
       onMouseDown={handleClick}
       buttonProps={{
         ...itemProps,
+        className: cn((itemProps as { className?: string }).className, subtitle && "py-2.5"),
         onKeyDown: (e: React.KeyboardEvent) => {
           ;(itemProps as { onKeyDown: (event: React.KeyboardEvent) => void }).onKeyDown(e)
           ctx.onKeyDown(e, item)
@@ -174,7 +170,7 @@ export function SessionItem({
       }
       title={ctx.searchQuery ? highlightMatch(title, ctx.searchQuery) : title}
       titleClassName={cn("text-[13px]", item.isAsyncOperationOngoing && "animate-shimmer-text")}
-      subtitle={previewText}
+      subtitle={subtitle}
       titleSuffix={
         hasMessagingBinding || projectInfo.value ? (
           <div className="flex items-center gap-1">
