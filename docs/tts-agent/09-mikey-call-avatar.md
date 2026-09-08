@@ -21,6 +21,16 @@ Close, failed load, and graphics context loss dispose the renderer, model,
 textures, image bitmaps, observers, fetch, and scheduled work. A neutral icon
 keeps the stage usable if graphics fail.
 
+## Built-app worklets
+
+Vite must emit both AudioWorklet scripts as separate assets. Its default small
+asset inlining embedded the input processor as a `data:` URL, which Chromium
+rejected during warmup in the built `file://` app. The narrow `assetsInlineLimit`
+callback keeps these modules external without changing other asset handling or
+relaxing Electron security. An isolated Electron 44 file-origin check using the
+app's CSP loaded both emitted modules and instantiated both processors without
+microphone access. The actual modal warmup remains the final launch check.
+
 ## Playback connection
 
 The current TTS transport supplies audio without verified timed visemes. This

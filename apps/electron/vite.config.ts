@@ -44,6 +44,11 @@ export default defineConfig({
     format: 'es',
   },
   build: {
+    // AudioWorklet modules must keep same-origin URLs. Inlining the small input
+    // processor as data: makes Chromium reject it when the app loads from file:.
+    assetsInlineLimit(filePath) {
+      if (/(?:input|output)-worklet\.js$/.test(filePath)) return false
+    },
     outDir: resolve(__dirname, 'dist/renderer'),
     emptyDirBeforeWrite: true,
     sourcemap: true,  // Source maps generated for debugging. Not uploaded to Sentry (see CLAUDE.md).
