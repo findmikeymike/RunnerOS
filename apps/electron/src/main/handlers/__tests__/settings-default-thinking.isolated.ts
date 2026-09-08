@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test'
+import * as actualConfig from '@craft-agent/shared/config'
 import { RPC_CHANNELS } from '../../../shared/types'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -8,7 +9,10 @@ type HandlerFn = (ctx: { clientId: string }, ...args: any[]) => Promise<any> | a
 const getDefaultThinkingLevelMock = mock(() => 'think')
 const setDefaultThinkingLevelMock = mock((_level: string) => true)
 
+// These unconditional config stubs must run in their own process. Preserve
+// other exports so settings' transitive imports keep the real module contract.
 mock.module('@craft-agent/shared/config', () => ({
+  ...actualConfig,
   getPreferencesPath: () => '/tmp/preferences.json',
   getSessionDraft: () => null,
   setSessionDraft: () => {},
