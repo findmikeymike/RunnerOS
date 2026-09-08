@@ -639,7 +639,7 @@ describe('loadAllSources', () => {
     expect(installed.isBuiltin).toBeUndefined();
     expect(installed.tier).toBe('workspace');
     expect(installed.folderPath).toBe(join(ws, 'sources', 'monid'));
-    expect(installed.guide?.raw).toContain('Discover a focused capability');
+    expect(installed.guide?.raw).toBe(builtin?.guide?.raw);
 
     expect(markLoadedSourceAuthenticated(installed)).toBe(true);
     const reloaded = getSourcesBySlugs(ws, ['monid'])[0];

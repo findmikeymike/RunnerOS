@@ -35,14 +35,15 @@ Three narrow spending contracts now support the real count semantics: a single H
 
 The migration accepts exact shipped prompt bodies and skill hashes only, including older YouTube and Zero versions proven in git history. It preserves custom prompt bytes, custom routing selections, deleted agents, and disabled workspace choices. Startup runs the migration before legacy metadata changes and after legacy prompt normalizers; obsolete unconditional routing restorations were removed.
 
-A copy of the existing local library upgraded eight stock agent definitions and all six affected skills; a second pass made no changes. The Artist Manager copy did not match the exact stock baseline and was preserved. The original profile was not modified during verification.
+A copy of the existing local library upgraded eight stock agent definitions and all six affected skills; a second pass made no changes. The Artist Manager copy did not match the exact stock baseline and was preserved; inspection confirmed it contains no Zero routing, so every installed Zero-routing definition was covered. The original profile was not modified during verification.
 
 ## Verification and limits
 
 - Focused skill loading, source, provider recovery, budgeting, migration, and startup tests passed.
 - Independent rival review: 158 focused tests passed, no remaining blocking finding. The review caught and corrected a MiniMax reference-image promise that exceeded the implemented bound.
 - Shared/server and full workspace typechecks passed during development; main and renderer builds passed.
-- Final post-catch-up regression and build results are recorded below when complete.
+- Final post-catch-up evidence: 8,703 main-suite tests passed, zero failed, one skipped. All 21 isolated files passed with 349 additional tests: **9,052 total passed, zero remaining failures, one skipped**. One isolated assertion expected old guidance wording; it was corrected to verify the persisted guide against the built-in guide, then the entire isolated set passed.
+- Final full workspace typecheck and Artist OS main build passed. Renderer build passed with the changed UI guidance. No source changes followed these checks; only the stale test assertion and this evidence note changed.
 
 Authenticated Monid MCP inspection/execution was unavailable to this engineering session. The public catalog and offline contract tests do not prove a real paid endpoint succeeds. Automatic Signals has no provider-choice UI or authoritative marketplace-wide absence detector: it now stops on Monid failures rather than guessing absence and charging Zero. General agent routing supports the two user exceptions through its tool instructions.
 
