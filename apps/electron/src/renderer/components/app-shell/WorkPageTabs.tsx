@@ -1,3 +1,4 @@
+import { pageSectionTabListClass, pageSectionTabClass, pageSectionTabSelectedClass, pageSectionTabIdleClass } from './page-section-tab-styles'
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { navigate, routes, type Route } from '@/lib/navigate'
@@ -17,7 +18,7 @@ const TABS: Array<{ id: WorkPageTab; label: string; route: () => Route }> = [
 
 export const WorkPageTabs: React.FC<WorkPageTabsProps> = ({ active, className }) => (
   <nav aria-label="Work sections" className={cn('flex justify-start', className)}>
-    <div className="inline-flex items-center rounded-[10px] border border-white/[0.08] bg-white/[0.025] p-1" role="tablist">
+    <div className={pageSectionTabListClass} role="tablist">
       {TABS.map((tab) => {
         const selected = tab.id === active
         return (
@@ -28,10 +29,10 @@ export const WorkPageTabs: React.FC<WorkPageTabsProps> = ({ active, className })
             aria-selected={selected}
             onClick={() => navigate(tab.route())}
             className={cn(
-              'h-8 rounded-[7px] px-3.5 text-xs font-medium transition-colors',
+              pageSectionTabClass,
               selected
-                ? 'bg-white/[0.10] text-white shadow-minimal'
-                : 'text-white/42 hover:bg-white/[0.05] hover:text-white/72',
+                ? pageSectionTabSelectedClass
+                : pageSectionTabIdleClass,
             )}
           >
             {tab.label}

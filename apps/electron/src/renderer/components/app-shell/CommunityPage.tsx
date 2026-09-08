@@ -239,7 +239,7 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
 
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
-      <div className="min-h-full w-full px-5 py-4 xl:px-8 xl:py-5">
+      <div className="mx-auto min-h-full w-full max-w-[1600px] px-5 py-4 xl:px-8 xl:py-5">
         <PeoplePageHeader activeView="community" onSelectView={selectPeopleView} />
 
         <section className="mt-3 rounded-2xl border border-white/[0.025] bg-[#0C0D0E] p-4">

@@ -1,3 +1,4 @@
+import { pageSectionTabListClass, pageSectionTabClass, pageSectionTabSelectedClass, pageSectionTabIdleClass } from './page-section-tab-styles'
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { CompactPageHeader } from './CompactPageHeader'
@@ -12,12 +13,12 @@ export function PeoplePageHeader({
   onSelectView: (view: PeopleView) => void
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <CompactPageHeader eyebrow="Artist HQ" title="People" tone="emerald" />
       <div
         role="tablist"
         aria-label="People view"
-        className="inline-flex items-center rounded-[9px] border border-white/[0.07] bg-white/[0.03] p-1 backdrop-blur-xl"
+        className={pageSectionTabListClass}
       >
         {(['network', 'community'] as const).map((view) => {
           const selected = activeView === view
@@ -29,10 +30,10 @@ export function PeoplePageHeader({
               aria-selected={selected}
               onClick={() => onSelectView(view)}
               className={cn(
-                'h-7 rounded-[6px] px-3 text-[10px] font-medium capitalize transition-colors',
+                pageSectionTabClass, 'capitalize',
                 selected
-                  ? 'bg-white/90 text-black'
-                  : 'text-white/46 hover:bg-white/[0.05] hover:text-white/78',
+                  ? pageSectionTabSelectedClass
+                  : pageSectionTabIdleClass,
               )}
             >
               {view}

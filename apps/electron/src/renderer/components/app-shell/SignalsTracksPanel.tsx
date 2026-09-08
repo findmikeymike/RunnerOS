@@ -1,3 +1,4 @@
+import { pageSectionTabListClass, pageSectionTabClass, pageSectionTabSelectedClass, pageSectionTabIdleClass } from './page-section-tab-styles'
 import * as React from 'react'
 import { Check, ExternalLink, Info, Link2, Maximize2, Play, Plus, Radio, RefreshCw, SlidersHorizontal, Bookmark } from 'lucide-react'
 import { DocumentFormattedMarkdownOverlay } from '@craft-agent/ui'
@@ -188,9 +189,9 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
   return <section aria-label="Signals intelligence reader" className="space-y-3">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-2">
-        <div role="tablist" aria-label="Signals track" className="flex gap-1">
+        <div role="tablist" aria-label="Signals track" className={pageSectionTabListClass}>
         {(['industry', 'your-world'] as const).map((kind, index) => <button key={kind} role="tab" aria-selected={track === kind} tabIndex={track === kind ? 0 : -1}
-          className={`${control} ${track === kind ? '!border-[#ff5a36] !text-[#ff5a36]' : ''}`}
+          className={`${pageSectionTabClass} ${track === kind ? pageSectionTabSelectedClass : pageSectionTabIdleClass}`}
           onClick={() => changeTrack(kind)} onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const next = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : 1 - index; changeTrack(next === 0 ? 'industry' : 'your-world'); (event.currentTarget.parentElement?.children[next] as HTMLButtonElement)?.focus() } }}>{signalTrackName(kind)}</button>)}
         </div>
         <Popover>

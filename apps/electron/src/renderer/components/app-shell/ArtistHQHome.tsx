@@ -1972,6 +1972,7 @@ export function ArtistHQHome({
     <div className={cn('h-full bg-[#050505] text-foreground', tab === 'calendar' ? 'overflow-hidden' : 'overflow-y-auto')}>
       <div className={cn(
         'mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5',
+        tab === 'signals' && 'gap-4',
         tab === 'calendar' ? 'h-full min-h-0' : 'min-h-full',
       )}>
         {tab !== 'calendar' && tab !== 'network' ? (
