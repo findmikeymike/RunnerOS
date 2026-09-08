@@ -65,6 +65,7 @@ export function isAgentAllowedInArtistWorkspace(
 /** Fallback capability broker available in both Artist HQ and campaigns. */
 export const HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS = [
   ANYTHING_AGENT_SLUG,
+  'scriptwriter',
   'site-builder',
   'website-agent',
 ] as const

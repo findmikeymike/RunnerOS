@@ -131,7 +131,7 @@ export const TIER_TWO_TASK_MODES: Record<string, AgentTaskModeDefinition[]> = {
   ],
   'content-genius': [
     mode({
-      id: 'ideas', label: 'Ideas & Scripts',
+      id: 'ideas', label: 'Ideas & Concepts',
       icon: 'lightbulb',
       description: 'Find a strong angle and shape the scene.',
       primarySkillSlugs: ['contentgenuis'],

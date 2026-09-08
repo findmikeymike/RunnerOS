@@ -46,7 +46,7 @@ describe('shared agent focus rollout', () => {
   })
   test('all installed recipes survive parsing and resolve against their own inventory', () => {
     const focused = STARTER_AGENTS.filter(agent => agent.metadata.taskModes?.length)
-    expect(focused).toHaveLength(27)
+    expect(focused).toHaveLength(28)
     for (const agent of focused) {
       const parsed = parseAgentFile(serializeAgent(agent.metadata, agent.systemPrompt))!
       expect(parsed.metadata.taskModes, agent.slug).toEqual(agent.metadata.taskModes)

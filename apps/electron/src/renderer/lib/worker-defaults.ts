@@ -1,5 +1,6 @@
 export const BASE_DEFAULT_WORKER_SLUGS = [
   'branding-agent',
+  'scriptwriter',
   'world-builder',
   'site-builder',
   'college-radio-agent',

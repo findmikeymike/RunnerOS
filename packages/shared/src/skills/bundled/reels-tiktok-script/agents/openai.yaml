@@ -1,0 +1,4 @@
+interface:
+  display_name: "Reels & TikTok Script"
+  short_description: "Hook-first scripts and direction for 30–60s videos"
+  default_prompt: "Use $reels-tiktok-script to create a 45-second talking-to-camera video for Instagram and TikTok, with three hook options and a simple filming plan."

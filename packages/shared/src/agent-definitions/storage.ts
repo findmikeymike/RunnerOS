@@ -936,6 +936,7 @@ export function replaceBuiltInAgentMetadata(
     'record-doctor',
     'x-editorial',
     'content-genius',
+    'scriptwriter',
     'persona-agent',
     'world-builder',
     'video-director',
@@ -987,7 +988,7 @@ export function replaceBuiltInAgentPromptText(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['anything-agent', 'concierge', 'orchestrator', 'social-publisher', 'industry-hunter', 'college-radio-agent', 'outreach-agent', 'record-doctor', 'x-editorial', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent', 'art-director', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'youtube-research-agent', 'youtube-intelligence-agent', 'trypost-agent', 'content-director', 'print-agent', 'signal-scout-agent', 'signal-analyst-agent', 'raw-video-editor']);
+  const builtIns = new Set(['anything-agent', 'concierge', 'orchestrator', 'social-publisher', 'industry-hunter', 'college-radio-agent', 'outreach-agent', 'record-doctor', 'x-editorial', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent', 'art-director', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'youtube-research-agent', 'youtube-intelligence-agent', 'trypost-agent', 'content-director', 'content-genius', 'print-agent', 'signal-scout-agent', 'signal-analyst-agent', 'raw-video-editor']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
   if (

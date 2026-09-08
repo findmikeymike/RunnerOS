@@ -1688,6 +1688,7 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
   if (
     slug === 'persona-agent'
     || slug === 'content-genius'
+    || slug === 'scriptwriter'
     || slug === 'record-doctor'
     || slug === 'art-director'
     || slug === 'scroll-stopper'
@@ -1800,6 +1801,7 @@ function launchpadAgentRank(slug: string): number {
     'spotify-analyst',
     'spotify-playlist-creator',
     'content-genius',
+    'scriptwriter',
     'hypermotion-agent',
     'lottie-animation-agent',
     'video-director',

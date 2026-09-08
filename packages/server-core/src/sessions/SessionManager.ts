@@ -215,6 +215,7 @@ import {
   getLiveManagerBrief,
   listAuthorizedWorkspaceContext,
 } from '../hq-state/manager-tools'
+import { withScriptwriterArtistContext } from '../hq-state/scriptwriter-context'
 import { findArtistHqWorkspace } from '../hq-state/snapshot'
 import { WebsiteService, type WebsiteToolResult } from '../website/WebsiteService'
 import { loadWebsiteManifest, type ApprovalBinding } from '@craft-agent/shared/website'
@@ -3156,7 +3157,8 @@ export class SessionManager implements ISessionManager {
       }
     }
     const contextDocs = filterContextDocsForTaskMode(
-      (taskMode ? loadAuthorizedContextDocsForAgent(ws.rootPath, agent.slug) : loadPromptContextDocsForAgent(ws.rootPath, agent.slug))
+      withScriptwriterArtistContext(ws.rootPath, agent.slug,
+        taskMode ? loadAuthorizedContextDocsForAgent(ws.rootPath, agent.slug) : loadPromptContextDocsForAgent(ws.rootPath, agent.slug))
         .filter((doc) => !unsafePersistedContextSlugs.has(doc.slug)),
       taskMode,
     )
@@ -4259,6 +4261,7 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'video-editor-agent'
             || a.slug === 'lyric-video-agent'
             || a.slug === 'content-genius'
+            || a.slug === 'scriptwriter'
             || a.slug === 'scroll-stopper'
             || a.slug === 'anticipation-director'
             || a.slug === 'content-director'
@@ -4789,6 +4792,13 @@ export class SessionManager implements ISessionManager {
             }
           }
           const contentGeniusAgent = STARTER_AGENTS.find(agent => agent.slug === 'content-genius')
+          const contentGeniusLegacyHandoff = 'Do not treat this as video editing or publishing. If the user needs cuts, subtitles burned into footage, exports, or final upload, hand off to Video Editor Agent, Raw Video Editor, or Social Publisher after the words are approved.'
+          const contentGeniusScriptwriterHandoff = 'Hand complete spoken YouTube, Reels, or TikTok scripts and cross-video continuity to Scriptwriter, with the chosen concept and approved artist context. Keep idea development and post captions here.'
+          replaceBuiltInAgentPromptText(
+            'content-genius',
+            contentGeniusLegacyHandoff,
+            `${contentGeniusScriptwriterHandoff}\n\n${contentGeniusLegacyHandoff}`,
+          )
           const contentGeniusSkillSlugs = contentGeniusAgent?.metadata.skills ?? []
           const missingContentGeniusSkills = contentGeniusSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
           if (contentGeniusAgent && missingContentGeniusSkills.length === 0) {

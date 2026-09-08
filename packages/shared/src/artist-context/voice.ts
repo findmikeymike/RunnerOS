@@ -16,6 +16,7 @@ export const ARTIST_VOICE_TARGET_AGENT_SLUGS = [
   'persona-agent',
   'branding-agent',
   'comms-agent',
+  'scriptwriter',
 ] as const;
 
 export interface ArtistVoice extends ArtistTextRecord {

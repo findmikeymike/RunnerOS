@@ -4,6 +4,8 @@ import type { CreateSessionOptions } from '@craft-agent/shared/protocol'
 import { createModelFallbackBackend } from '@craft-agent/shared/agent/backend/model-fallback-backend'
 import type { AgentEvent } from '@craft-agent/core/types'
 import { SessionManager, createManagedSession } from './SessionManager.ts'
+import { STARTER_AGENTS } from '@craft-agent/shared/agent-definitions'
+import { resolveAgentTaskMode } from '@craft-agent/shared/agent-definitions/task-modes'
 
 const focusedReceipt = {
   createdAt: 2,
@@ -105,6 +107,47 @@ describe('task-mode selection', () => {
     expect(appliedContexts).toEqual([])
     expect(managed.customSystemPrompt).toBe('Focused branding prompt')
     expect(managed.enabledSourceSlugs).toEqual(['manual-source', 'artist-profile'])
+  })
+
+  test('Scriptwriter switches format skills in the same chat while retaining DNA and prior script history', async () => {
+    const writer = STARTER_AGENTS.find(agent => agent.slug === 'scriptwriter')!
+    managed.spawnedFromAgent = { agentSlug: writer.slug, agentName: writer.metadata.name }
+    managed.messages = [{ id: 'approved-script', role: 'user', content: 'Keep the blue mug callback for this series.', timestamp: 1 }]
+    managed.launchReceipt = {
+      ...focusedReceipt,
+      agent: { slug: writer.slug, name: writer.metadata.name },
+      taskModeSelectionPending: false,
+    }
+    const history = [...managed.messages]
+    const internals = manager as unknown as {
+      resolveAgentSessionOptions: (_workspaceId: string, slug: string, options: { taskModeId: string }) => Promise<Partial<CreateSessionOptions>>
+    }
+    internals.resolveAgentSessionOptions = async (_workspaceId, slug, options) => {
+      expect(slug).toBe('scriptwriter')
+      const mode = resolveAgentTaskMode(writer, options.taskModeId)!
+      return {
+        customSystemPrompt: writer.systemPrompt,
+        agentSkillSlugs: mode.primarySkillSlugs,
+        launchReceipt: {
+          ...focusedReceipt,
+          agent: { slug: writer.slug, name: writer.metadata.name },
+          taskMode: { ...focusedReceipt.taskMode, id: mode.id, label: mode.label, primarySkills: mode.primarySkillSlugs },
+          injected: { skills: mode.primarySkillSlugs, sources: [], contextDocs: [] },
+        },
+      }
+    }
+    const contexts: AgentContextUpdate[] = []
+    managed.agent = { setAgentContext: (context: AgentContextUpdate) => contexts.push(context) } as unknown as AgentBackend
+    let sends = 0
+    manager.sendMessage = async () => { sends++ }
+    for (const [id, skill] of [['youtube', 'youtube-camera-script'], ['short-form', 'reels-tiktok-script'], ['youtube', 'youtube-camera-script']]) {
+      await manager.selectSessionTaskMode(managed.id, id!, { startConversation: true })
+      expect(managed.agentSkillSlugs).toEqual(['artist-script-dna', skill!])
+      expect(contexts.at(-1)?.agentSkillSlugs).toEqual(['artist-script-dna', skill!])
+      expect(managed.spawnedFromAgent?.agentSlug).toBe('scriptwriter')
+      expect(managed.messages).toEqual(history)
+    }
+    expect(sends).toBe(0)
   })
 
   test('does not rewrite context while the hidden opening turn is still initializing', async () => {

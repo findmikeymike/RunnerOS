@@ -1,0 +1,4 @@
+interface:
+  display_name: "Artist Script DNA"
+  short_description: "Turn artist identity and world into scripts people feel"
+  default_prompt: "Use $artist-script-dna to connect this artist’s beliefs, world, voice, and audience to a specific video script."
