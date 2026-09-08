@@ -17,12 +17,19 @@ export interface SignalRequest extends SignalRunSummary {
   queueEvent?: { matcherId: string; eventTimestamp: number; eventKey: string };
 }
 export interface SignalStore { version: 1; hqWorkspaceId: string; tracks: Record<SignalTrack, SignalTrackConfig>; requests: SignalRequest[]; ledger: SignalLedgerEntry[]; latestScan: Partial<Record<SignalTrack, string>> }
+export const MAX_SIGNALS_STATE_BYTES = 64 * 1024 * 1024;
+export class SignalStorageLimitError extends Error {
+  constructor() {
+    super('Signals history exceeds the 64 MiB storage limit. The existing saved history was not replaced. Back up this workspace and contact support to archive Signals history before retrying.');
+    this.name = 'SignalStorageLimitError';
+  }
+}
 export function hash(value: unknown): string { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
 export function readSignals(root: string, hqWorkspaceId: string): SignalStore {
   const path = join(root, 'signals', 'state.json');
   if (existsSync(path)) {
     const raw = readFileSync(path);
-    if (raw.length > 64 * 1024 * 1024) throw new Error('Signals state exceeds supported size.');
+    if (raw.length > MAX_SIGNALS_STATE_BYTES) throw new Error('Signals history exceeds the 64 MiB storage limit. Back up this workspace and contact support to archive Signals history.');
     const value = JSON.parse(raw.toString('utf8')) as SignalStore;
     if (value.version !== 1 || value.hqWorkspaceId !== hqWorkspaceId || !Array.isArray(value.requests) || !Array.isArray(value.ledger)) throw new Error('Signals state is invalid.');
     return value;
@@ -38,15 +45,21 @@ export function writeSignals(root: string, state: SignalStore): void {
   const journal = structuredClone(state);
   for (const request of journal.requests) {
     for (const packet of request.packets) {
-      if (packet.transcript) saveEvidence(root, packet.contentHash, packet.transcript);
       delete packet.transcript;
     }
     for (const packet of request.websites) {
-      if (packet.content !== undefined) saveEvidence(root, packet.contentHash, packet.content);
       delete packet.content;
     }
   }
-  try { writeFileSync(temp, JSON.stringify(journal), { flag: 'wx', mode: 0o600 }); renameSync(temp, path); }
+  const serialized = JSON.stringify(journal);
+  // Reject before replacing history or writing evidence sidecars. Never persist
+  // a journal that this same reader would refuse on the next status request.
+  if (Buffer.byteLength(serialized, 'utf8') > MAX_SIGNALS_STATE_BYTES) throw new SignalStorageLimitError();
+  for (const request of state.requests) {
+    for (const packet of request.packets) if (packet.transcript) saveEvidence(root, packet.contentHash, packet.transcript);
+    for (const packet of request.websites) if (packet.content !== undefined) saveEvidence(root, packet.contentHash, packet.content);
+  }
+  try { writeFileSync(temp, serialized, { flag: 'wx', mode: 0o600 }); renameSync(temp, path); }
   finally { rmSync(temp, { force: true }); }
 }
 export function saveEvidence(root: string, contentHash: string, value: unknown): void {

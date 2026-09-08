@@ -500,6 +500,87 @@ test('retry after a pre-admission crash collects only for the current attempt', 
   expect(readSignals(root, 'hq').requests[0]!.workflowRunId).toBe(next.id);
 });
 
+for (const phase of ['metadata', 'transcript'] as const) test(`status reads never recover paid ${phase}; explicit runner retry does`, async () => {
+  let restored = false;
+  provider.recent = mock(async () => {
+    if (!restored && phase === 'metadata') throw new Error('Metadata unavailable');
+    return { videos: [metadata], complete: true };
+  });
+  provider.transcript = mock(async () => {
+    if (!restored && phase === 'transcript') throw new Error('Transcript unavailable');
+    return { videoId, provider: 'fixture', segments: [{ start: 0, end: 10, text: 'Useful finding.' }] };
+  });
+  const request = await prepared();
+  const original = run(request, undefined, 'failed');
+  original.steps = [{ id: 'youtube-intel', state: 'succeeded', attempts: 1, output: 'Old analysis' }, { id: 'synthesize', state: 'failed', attempts: 1 }];
+  workflows.writeRun(root, original); trackRun(original);
+  let orphan = persistRetry(original);
+  const admitRetry = mock((old: WorkflowRunSnapshot, next: WorkflowRunSnapshot, ids: string[]) => trackedRunner.admitSignalWorkflowRetry(root, old, next, ids));
+  service = new SignalService({ workspaces: () => [workspace], provider, permission, now: () => now, admitRetry });
+  restored = true; permission.mockClear();
+  const events: WorkflowRunEvent[] = [];
+  const runner = new WorkflowRunner({ createSession: async () => ({ id: randomUUID() }), sendMessage: async () => {},
+    getLastAssistantText: () => JSON.stringify(report()), abortSession: async () => {}, getWorkspaceRootPath: () => root,
+    authorizeRerun: async (old, next, signal) => {
+      const refreshed = await service.authorizeRetry(old, next, signal);
+      expect(await service.authorizeRetry(old, next, signal)).toEqual(refreshed);
+      return refreshed;
+    },
+    completeWithoutSteps: (snapshot, signal) => service.completeEmpty(snapshot, signal),
+    postProcessSucceededRun: async (snapshot, signal) => { await service.complete(snapshot, signal); }, emit: event => events.push(event) });
+  for (const restarted of [false, true]) {
+    if (restarted) {
+      expect(runner.recoverInterruptedRuns([{ id: 'hq', rootPath: root }]).map(run => run.id)).toContain(orphan.id);
+      expect(workflows.readRun(root, orphan.id)!.state).toBe('interrupted');
+    }
+    await service.getState('hq'); await service.getState('hq'); await service.reconcile('hq');
+    expect(provider.recent).toHaveBeenCalledTimes(1);
+    expect(provider.transcript).toHaveBeenCalledTimes(phase === 'metadata' ? 0 : 1);
+    expect(admitRetry).toHaveBeenCalledTimes(0);
+    expect(permission).toHaveBeenCalledTimes(0);
+    const saved = readSignals(root, 'hq').requests[0]!;
+    expect(saved.workflowRunId ?? saved.identity.workflowRunId).toBe(original.id);
+    expect(saved.attempts ?? []).toHaveLength(0);
+    expect(workflows.readRun(root, orphan.id)!.trigger).toEqual(orphan.trigger);
+  }
+  // A second host can also crash before its retry admission callback runs.
+  orphan = persistRetry(workflows.readRun(root, orphan.id)!);
+  expect(runner.recoverInterruptedRuns([{ id: 'hq', rootPath: root }]).map(run => run.id)).toContain(orphan.id);
+  await service.getState('hq');
+  expect(admitRetry).toHaveBeenCalledTimes(0);
+  events.length = 0;
+  const retry = await runner.rerunFromStep({ workspaceId: 'hq', runId: orphan.id, stepId: 'synthesize' });
+  for (let i = 0; i < 100 && !events.some(event => event.type === 'run.completed'); i++) await new Promise(resolve => setTimeout(resolve, 5));
+  expect(events.find(event => event.type === 'run.completed')?.run.state).toBe('succeeded');
+  expect(provider.recent).toHaveBeenCalledTimes(phase === 'metadata' ? 2 : 1);
+  expect(provider.transcript).toHaveBeenCalledTimes(phase === 'metadata' ? 1 : 2);
+  expect(provider.transcript).toHaveBeenLastCalledWith(root, videoId, expect.any(AbortSignal), retry.id);
+  expect(readSignals(root, 'hq').requests[0]!.workflowRunId).toBe(retry.id);
+  await service.getState('hq');
+  expect(provider.transcript).toHaveBeenCalledTimes(phase === 'metadata' ? 1 : 2);
+});
+
+for (const tamper of ['trigger', 'reciprocal', 'too-long'] as const) test(`restart retry lineage rejects ${tamper} before admission or collection`, async () => {
+  const request = await prepared();
+  const original = run(request, undefined, 'failed'); workflows.writeRun(root, original); trackRun(original);
+  let previous = original;
+  for (let index = 0; index < (tamper === 'too-long' ? 65 : 2); index++) {
+    previous = { ...persistRetry(previous), state: 'interrupted' };
+    workflows.writeRun(root, previous);
+  }
+  const retry = persistRetry(previous);
+  const first = workflows.readRun(root, workflows.readRun(root, original.id)!.resumedByRunId!)!;
+  if (tamper === 'trigger') workflows.writeRun(root, { ...first, trigger: { ...first.trigger, inputs: { ...first.trigger.inputs, artist_name: 'altered' } } });
+  if (tamper === 'reciprocal') workflows.writeRun(root, { ...workflows.readRun(root, original.id)!, resumedByRunId: randomUUID() });
+  const admitRetry = mock(async () => {});
+  service = new SignalService({ workspaces: () => [workspace], provider, permission, now: () => now, admitRetry });
+  await expect(service.authorizeRetry(previous, retry)).rejects.toThrow('provenance');
+  expect(admitRetry).toHaveBeenCalledTimes(0);
+  expect(provider.recent).toHaveBeenCalledTimes(1);
+  expect(provider.transcript).toHaveBeenCalledTimes(1);
+  expect(readSignals(root, 'hq').requests[0]!.workflowRunId ?? request.identity.workflowRunId).toBe(original.id);
+});
+
 test('provider entry points receive the HQ root and deliberate host attempt scope', async () => {
   const scopes: Array<string | undefined> = [];
   provider.resolveChannel = mock(async (_url: string, _root?: string, scope?: string) => {

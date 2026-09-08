@@ -24,6 +24,7 @@ export interface Info_MarkdownProps {
   className?: string
   /** Enable fullscreen button (shows Maximize2 icon on hover) */
   fullscreen?: boolean
+  safeMode?: boolean
 }
 
 export function Info_Markdown({
@@ -32,6 +33,7 @@ export function Info_Markdown({
   mode = 'minimal',
   className,
   fullscreen = false,
+  safeMode = false,
 }: Info_MarkdownProps) {
   const { t } = useTranslation()
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -74,12 +76,13 @@ export function Info_Markdown({
           </button>
         )}
 
-        <Markdown mode={mode}>{children}</Markdown>
+        <Markdown mode={mode} safeMode={safeMode}>{children}</Markdown>
       </div>
 
       {/* Fullscreen overlay - reuses shared component from packages/ui */}
       {fullscreen && (
         <DocumentFormattedMarkdownOverlay
+          safeMode={safeMode}
           content={children}
           isOpen={isFullscreen}
           onClose={() => setIsFullscreen(false)}

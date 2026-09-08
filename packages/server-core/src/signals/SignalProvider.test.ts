@@ -4,11 +4,23 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { LocalSignalProvider } from './SignalProvider';
 import { MonidSignalError } from './monid-transcript';
+import { SignalToolPathError } from './tool-path';
 
 const channelId = 'UC' + 'a'.repeat(22);
 const videoId = 'abcdefghijk';
 const publishedAt = '2026-09-07T12:00:00.000Z';
 const snippet = { title: 'Fixture', channelId, publishedAt };
+
+test('native installation failures stay actionable without exposing command output or credentials', async () => {
+  for (const error of [new SignalToolPathError(), Object.assign(new Error('secret credential in stderr'), { code: 'EACCES' }), new SyntaxError('secret malformed provider payload')]) {
+    const provider = new LocalSignalProvider(undefined, { command: async () => { throw error; } });
+    let message = '';
+    try { await provider.video(videoId); } catch (error) { message = (error as Error).message; }
+    expect(message).toContain('installation');
+    expect(message).not.toContain('secret');
+    expect(message).not.toContain('Configure a YouTube Data API');
+  }
+});
 
 test('native CLI channels-list and videos-list results envelopes resolve real identities', async () => {
   const provider = new LocalSignalProvider(undefined, { command: async (_name, args) => ({

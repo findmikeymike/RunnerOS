@@ -29,8 +29,8 @@ export function useSignalTracks(workspaceId: string, ensureWorkflow: (track: Sig
     setError(null)
     void refresh()
     const timer = setInterval(() => { if (!mutation.current) void refresh() }, 5000)
-    const cleanupContext = window.electronAPI.onWorkspaceContextChanged((id) => { if (id === workspaceId) void refresh() })
-    const cleanupAutomations = window.electronAPI.onAutomationsChanged(() => { void refresh() })
+    const cleanupContext = window.electronAPI.onWorkspaceContextChanged((id) => { if (id === workspaceId && !mutation.current) void refresh() })
+    const cleanupAutomations = window.electronAPI.onAutomationsChanged(() => { if (!mutation.current) void refresh() })
     return () => { generation.current++; clearInterval(timer); cleanupContext(); cleanupAutomations() }
   }, [workspaceId, refresh])
 
@@ -74,7 +74,7 @@ export function useSignalTracks(workspaceId: string, ensureWorkflow: (track: Sig
   const start = useCallback(async (track: SignalTrack, mode: SignalMode, idempotencyKey: string, links?: string[]) => {
     if (mutation.current) throw new Error('Save your settings before starting research.')
     const owner = workspaceId
-    mutation.current = true; setBusy(true)
+    mutation.current = true; setBusy(true); generation.current++
     try {
       await ensureWorkflow(track, mode)
       return await window.electronAPI.startSignalResearch(owner, { track, mode, idempotencyKey, links })

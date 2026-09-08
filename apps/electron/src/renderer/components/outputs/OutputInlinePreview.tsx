@@ -3,7 +3,7 @@ import { AlertTriangle, ExternalLink, FileText, FileVideo, Link2, Presentation, 
 import { Button } from '@/components/ui/button'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../../shared/routes'
-import { StreamingMarkdown } from '@/components/markdown'
+import { Markdown } from '@/components/markdown'
 import { ShikiCodeViewer } from '@/components/shiki/ShikiCodeViewer'
 import { OutputWebPreview } from './OutputWebPreview'
 import { resolveWebPreviewTarget } from './web-preview'
@@ -297,7 +297,7 @@ export function OutputInlinePreview({
     return (
       <div className={className}>
         <div className={compact ? 'text-sm leading-6' : 'runneros-card p-4'}>
-          <StreamingMarkdown content={content} isStreaming={false} mode="minimal" />
+          <Markdown safeMode={manifest.kind === 'report' || manifest.tags?.includes('signals-v1')} mode="minimal">{content}</Markdown>
         </div>
       </div>
     )

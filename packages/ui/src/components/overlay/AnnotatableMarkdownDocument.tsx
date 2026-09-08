@@ -46,6 +46,8 @@ import { applyBlockAnnotationMarker, clearBlockAnnotationMarkers } from '../anno
 
 export interface AnnotatableMarkdownDocumentProps {
   content: string
+  /** Forward the host reading surface's trust policy to its Markdown renderer. */
+  safeMode?: boolean
   messageId: string
   sessionId?: string
   annotations?: AnnotationV1[]
@@ -62,6 +64,7 @@ export interface AnnotatableMarkdownDocumentProps {
 
 export function AnnotatableMarkdownDocument({
   content,
+  safeMode = false,
   messageId,
   sessionId,
   annotations,
@@ -623,7 +626,7 @@ export function AnnotatableMarkdownDocument({
         onMouseDown={handleSelectionPointerDown}
         onMouseUp={handleTextSelection}
       >
-        <Markdown mode="minimal" onUrlClick={onOpenUrl} onFileClick={onOpenFile} hideFirstMermaidExpand={false}>
+        <Markdown mode="minimal" safeMode={safeMode} onUrlClick={onOpenUrl} onFileClick={onOpenFile} hideFirstMermaidExpand={false}>
           {content}
         </Markdown>
 

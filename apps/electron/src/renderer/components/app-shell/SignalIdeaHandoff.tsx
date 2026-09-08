@@ -10,28 +10,6 @@ import { navigate, routes } from '@/lib/navigate'
 
 const button = 'inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 text-xs text-white/80 hover:bg-white/10 disabled:opacity-40'
 
-export function SignalIdeasActions({ workspaceId, outputId, revision, onDevelop }: {
-  workspaceId: string; outputId: string; revision: string; onDevelop: (reference: SignalEntryReference) => void
-}) {
-  const [ideas, setIdeas] = React.useState<SignalRetrievedEntry[]>([])
-  React.useEffect(() => {
-    let current = true
-    setIdeas([])
-    void window.electronAPI.getSignalIdeas(workspaceId, outputId).then(result => {
-      if (current && result.ok) setIdeas(result.entries.filter(entry => entry.kind === 'idea'
-        && entry.reference.hqWorkspaceId === workspaceId && entry.reference.outputId === outputId))
-    }).catch(() => {})
-    return () => { current = false }
-  }, [workspaceId, outputId, revision])
-  if (!ideas.length) return null
-  return <div aria-label="Develop report ideas" className="space-y-2 border-t border-white/10 px-4 py-3">
-    {ideas.map(idea => <div key={idea.reference.entryId} className="flex flex-wrap items-center justify-between gap-2">
-      <span className="min-w-0 flex-1 break-words text-sm text-white/75">{idea.title}</span>
-      <button className={button} onClick={() => onDevelop(idea.reference)} aria-label={`Develop this idea: ${idea.title}`}><ArrowRight size={14} />Develop this idea</button>
-    </div>)}
-  </div>
-}
-
 export function SignalIdeaHandoff({ reference, onClose }: { reference: SignalEntryReference; onClose: () => void }) {
   const shell = useAppShellContext()
   const [campaigns, setCampaigns] = React.useState<Workspace[]>([])

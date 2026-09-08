@@ -23,6 +23,8 @@ import { AnnotatableMarkdownDocument } from './AnnotatableMarkdownDocument'
 export interface DocumentFormattedMarkdownOverlayProps {
   /** The content to display (markdown) */
   content: string
+  /** Restrict links and rich previews for reports. Raw HTML is always disabled. */
+  safeMode?: boolean
   /** Whether the overlay is open */
   isOpen: boolean
   /** Called when overlay should close */
@@ -66,6 +68,7 @@ export interface DocumentFormattedMarkdownOverlayProps {
 
 export function DocumentFormattedMarkdownOverlay({
   content,
+  safeMode = false,
   isOpen,
   onClose,
   variant = 'response',
@@ -130,6 +133,7 @@ export function DocumentFormattedMarkdownOverlay({
               {messageId && onAddAnnotation ? (
                 <AnnotatableMarkdownDocument
                   content={content}
+                  safeMode={safeMode}
                   sessionId={sessionId}
                   messageId={messageId}
                   annotations={annotations}
@@ -146,6 +150,7 @@ export function DocumentFormattedMarkdownOverlay({
               ) : (
                 <Markdown
                   mode="minimal"
+                  safeMode={safeMode}
                   onUrlClick={onOpenUrl}
                   onFileClick={onOpenFile}
                   hideFirstMermaidExpand={false}

@@ -9,7 +9,7 @@ describe('Artist OS persistent shell chrome', () => {
     expect(gate).toBeGreaterThan(-1)
     expect(gate).toBeLessThan(notice.indexOf('aria-label="Signal draft source"'))
     expect(notice).not.toContain('if (!reference && !error) return null')
-    expect(notice).toContain('onGuardChange?.(true)')
+    expect(notice).toContain('guard.current?.(true)')
   })
 
   test('uses the thin ScriptOS-style sidebar and bottom-corner toggle', () => {

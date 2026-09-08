@@ -1,7 +1,6 @@
 import * as React from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
-import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import 'katex/dist/katex.min.css'
@@ -23,6 +22,7 @@ import { CollapsibleSection } from './CollapsibleSection'
 import { useCollapsibleMarkdown } from './CollapsibleMarkdownContext'
 import { wrapWithSafeProxy } from './safe-components'
 import { MARKDOWN_MATH_OPTIONS } from './math-options'
+import { isSafeMarkdownFence, safeMarkdownUrl } from './safe-mode'
 
 /**
  * Render modes for markdown content:
@@ -40,6 +40,13 @@ export type RenderMode = 'terminal' | 'minimal' | 'full'
 
 export interface MarkdownProps {
   children: string
+  /**
+   * For untrusted reports: no local/app links or resource-backed preview/SVG
+   * fences. Raw HTML is disabled in every mode. Markdown, math and inline data
+   * blocks remain available.
+   * Remote HTTP(S) markdown images still load. Defaults to false for compatibility.
+   */
+  safeMode?: boolean
   /**
    * Render mode controlling formatting level
    * @default 'minimal'
@@ -106,7 +113,8 @@ function createComponents(
   onFileClick?: (path: string) => void,
   collapsibleContext?: CollapsibleContext | null,
   firstMermaidCodeRef?: React.RefObject<string | null>,
-  hideFirstMermaidExpand: boolean = true
+  hideFirstMermaidExpand: boolean = true,
+  safeMode: boolean = false,
 ): Partial<Components> {
   let blockIndex = 0
   const wrapBlock = (
@@ -159,8 +167,16 @@ function createComponents(
     },
     // Links: Make clickable with callbacks
     a: ({ href, children }) => {
+      const safeHref = safeMode ? safeMarkdownUrl(href) : href
+      if (safeMode && !safeHref) return <span>{children}</span>
       const handleClick = (e: React.MouseEvent) => {
         e.preventDefault()
+
+        if (safeMode) {
+          if (safeHref?.startsWith('#')) return
+          if (safeHref) onUrlClick?.(safeHref)
+          return
+        }
 
         // Some AI outputs include raw HTML anchors with empty href but path text content.
         // Fallback to the anchor text when href is missing/empty.
@@ -182,8 +198,8 @@ function createComponents(
 
       return (
         <a
-          href={href}
-          onClick={handleClick}
+          href={safeHref}
+          onClick={safeMode && safeHref?.startsWith('#') ? undefined : handleClick}
           className="text-accent hover:underline cursor-pointer"
         >
           {children}
@@ -230,6 +246,9 @@ function createComponents(
         // Block code
         if (match || isBlock) {
           const code = String(children).replace(/\n$/, '')
+          if (safeMode && !isSafeMarkdownFence(match?.[1], code)) {
+            return <CodeBlock code={code} language={match?.[1]} mode={mode} />
+          }
           // Diff code blocks → pierre/diffs for a proper diff viewer
           if (match?.[1] === 'diff') {
             return wrapBlock('code', code, <MarkdownDiffBlock code={code} className="my-2" />, props.node?.position)
@@ -359,6 +378,9 @@ function createComponents(
 
       if (match || isBlock) {
         const code = String(children).replace(/\n$/, '')
+        if (safeMode && !isSafeMarkdownFence(match?.[1], code)) {
+          return <CodeBlock code={code} language={match?.[1]} mode={mode} />
+        }
         // Diff code blocks → pierre/diffs for a proper diff viewer
         if (match?.[1] === 'diff') {
           return wrapBlock('code', code, <MarkdownDiffBlock code={code} className="my-2" />, props.node?.position)
@@ -510,6 +532,7 @@ export function Markdown({
   onFileClick,
   collapsible = false,
   hideFirstMermaidExpand = true,
+  safeMode = false,
 }: MarkdownProps) {
   // Get collapsible context if enabled
   const collapsibleContext = useCollapsibleMarkdown()
@@ -528,8 +551,8 @@ export function Markdown({
   }
 
   const components = React.useMemo(
-    () => wrapWithSafeProxy(createComponents(mode, onUrlClick, onFileClick, collapsible ? collapsibleContext : null, firstMermaidCodeRef, hideFirstMermaidExpand)),
-    [mode, onUrlClick, onFileClick, collapsible, collapsibleContext, hideFirstMermaidExpand]
+    () => wrapWithSafeProxy(createComponents(mode, onUrlClick, onFileClick, collapsible ? collapsibleContext : null, firstMermaidCodeRef, hideFirstMermaidExpand, safeMode)),
+    [mode, onUrlClick, onFileClick, collapsible, collapsibleContext, hideFirstMermaidExpand, safeMode]
   )
 
   // Preprocess to convert raw URLs and file paths to markdown links
@@ -558,7 +581,11 @@ export function Markdown({
     <div className={cn('markdown-content', className)}>
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
-        rehypePlugins={[rehypeKatex, rehypeRaw]}
+        // Raw HTML is disabled even when a report is opened without metadata.
+        // KaTeX emits its own HAST and does not require raw HTML parsing.
+        rehypePlugins={[[rehypeKatex, { trust: false }]]}
+        skipHtml
+        urlTransform={safeMode ? (url, key) => safeMarkdownUrl(url, key === 'src') : undefined}
         components={components}
       >
         {processedContent}
@@ -576,6 +603,7 @@ export function Markdown({
 export const MemoizedMarkdown = React.memo(
   Markdown,
   (prevProps, nextProps) => {
+    if (prevProps.safeMode !== nextProps.safeMode) return false
     // If id is provided, use it for memoization
     if (prevProps.id && nextProps.id) {
       return (

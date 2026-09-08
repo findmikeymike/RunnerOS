@@ -8,35 +8,38 @@ export function SignalHandoffNotice({ sessionId, workspaceId, processing, onGuar
   const [reference, setReference] = React.useState<SignalEntryReference | null>(null)
   const [candidate, setCandidate] = React.useState<SignalRetrievedEntry | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+  const [lookupError, setLookupError] = React.useState<string | null>(null)
   const [detach, setDetach] = React.useState(false)
   const [reviewed, setReviewed] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const epoch = React.useRef(0)
   const locked = React.useRef(false)
   const sequence = React.useRef(0)
+  const guard = React.useRef(onGuardChange)
+  guard.current = onGuardChange
   React.useEffect(() => {
     const token = ++epoch.current
     locked.current = false
-    setReference(null); setCandidate(null); setError(null); setDetach(false); setBusy(false); setReviewed(false)
-    onGuardChange?.(true)
+    setReference(null); setCandidate(null); setError(null); setLookupError(null); setDetach(false); setBusy(false); setReviewed(false)
+    guard.current?.(true)
     const load = () => {
       if (locked.current) return
       const request = ++sequence.current
       void window.electronAPI.getSignalHandoff(sessionId).then(ref => {
         if (epoch.current !== token || sequence.current !== request) return
-        setReference(ref); setError(null); onGuardChange?.(!!ref)
+        setReference(ref); setLookupError(null); guard.current?.(!!ref)
       }).catch(() => {
         if (epoch.current !== token || sequence.current !== request) return
-        setError('The research source could not be checked. Review your draft before detaching its source.'); onGuardChange?.(true)
+        setLookupError('The research source could not be checked. Review your draft before detaching its source.'); guard.current?.(true)
       })
     }
     load()
     const timer = setInterval(load, 3000)
     return () => { clearInterval(timer); epoch.current++ }
-  }, [sessionId, workspaceId, processing, onGuardChange])
+  }, [sessionId, workspaceId])
   const run = async (action: () => Promise<void>) => {
     if (locked.current || processing) return
-    locked.current = true; sequence.current++; setBusy(true)
+    locked.current = true; sequence.current++; setBusy(true); setError(null)
     const token = epoch.current
     try { await action() }
     catch (cause) { if (epoch.current === token) setError(cause instanceof Error ? cause.message : String(cause)) }
@@ -74,6 +77,6 @@ export function SignalHandoffNotice({ sessionId, workspaceId, processing, onGuar
         await window.electronAPI.clearSignalHandoff(sessionId)
         if (epoch.current === token) { setReference(null); setDetach(false); setError(null); onGuardChange?.(false) }
       }) }}>Detach and keep reviewed draft</button></div> : null}
-    {error ? <p role="alert" className="mt-2 text-red-400">{error}</p> : null}
+    {error || lookupError ? <p role="alert" className="mt-2 text-red-400">{error || lookupError}</p> : null}
   </div>
 }

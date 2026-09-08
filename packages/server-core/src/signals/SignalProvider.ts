@@ -10,7 +10,7 @@ import { collectSignalWebsite, type SignalWebsitePacket, type SignalWebsiteColle
 import { zeroSignalTranscript } from './zero-transcript';
 import { monidSignalTranscript, isMonidSignalFallbackBlocked } from './monid-transcript';
 import { monidResolveChannel, monidRecentVideos, monidVideoMetadata } from './monid-metadata';
-import { resolveSignalToolPath } from './tool-path';
+import { resolveSignalToolPath, SignalToolPathError } from './tool-path';
 
 export interface SignalTranscript { videoId: string; segments: Array<{ start: number; end: number; text: string }>; provider: string }
 export interface SignalProvider {
@@ -60,7 +60,12 @@ export class LocalSignalProvider implements SignalProvider {
         timeout: 120_000, maxBuffer: 8 * 1024 * 1024, signal,
       });
       return JSON.parse(stdout);
-    } catch { signal?.throwIfAborted(); throw new Error(name === 'youtube-research'
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (error instanceof SignalToolPathError) throw error;
+      if (['ENOENT', 'EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException)?.code ?? '')) throw new SignalToolPathError(true);
+      if (error instanceof SyntaxError) throw new Error('The native YouTube tool returned invalid output. Repair the Artist OS installation or retry.');
+      throw new Error(name === 'youtube-research'
       ? 'Native YouTube metadata is unavailable. Configure a YouTube Data API source in Connections > Services and retry.'
       : 'YouTube transcript evidence is unavailable. Check transcript access and retry.'); }
   }

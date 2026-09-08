@@ -15,7 +15,7 @@ import {
 } from '@craft-agent/shared/shared-intel';
 import { queueAutomationWork } from '../scheduled-work/AutomationWorkQueue';
 import { LocalSignalProvider, type SignalProvider, type SignalTranscript } from './SignalProvider';
-import { hash, readSignals, writeSignals, readEvidence, saveEvidence, withSignalsLock, type SignalRequest, type SignalStore } from './storage';
+import { hash, readSignals, writeSignals, readEvidence, saveEvidence, withSignalsLock, SignalStorageLimitError, type SignalRequest, type SignalStore } from './storage';
 import { resolveSignalHqWorkspace } from './scope';
 import { SIGNAL_WEBSITE_SOURCES, type SignalWebsitePacket as CollectedWebsitePacket } from './website-collector';
 
@@ -186,13 +186,15 @@ export class SignalService {
       const run = await start(workflow, prepared);
       if (run.id !== prepared.identity.workflowRunId) throw new Error('Signals workflow start identity mismatch.');
       return { runId: run.id };
-    } catch {
+    } catch (error) {
       await withSignalsLock(workspace.rootPath, async () => {
         const state = this.state(workspace); const saved = state.requests.find(item => item.runId === requestId)!;
         if (['queued', 'running'].includes(saved.status)) {
-          saved.status = 'failed'; saved.error = 'Signals workflow could not start. Review Active work and retry.'; saved.updatedAt = this.now(); this.save(workspace, state);
+          saved.status = 'failed'; saved.error = error instanceof SignalStorageLimitError ? error.message : 'Signals workflow could not start. Review Active work and retry.';
+          saved.updatedAt = this.now(); this.save(workspace, state);
         }
       });
+      if (error instanceof SignalStorageLimitError) throw error;
       throw new Error('Signals workflow could not start. Review Active work and retry.');
     } finally { this.admissions.delete(requestId); }
   }
@@ -222,15 +224,19 @@ export class SignalService {
     });
   }
 
-  private async associateRetry(original: WorkflowRunSnapshot, retry: WorkflowRunSnapshot): Promise<void> {
+  private async associateRetry(original: WorkflowRunSnapshot, retry: WorkflowRunSnapshot, lineage = new Set<string>()): Promise<void> {
     if (original.trigger.inputs.signalContract !== SIGNAL_CONTRACT) return;
+    if (lineage.has(original.id) || lineage.size >= 64) throw new Error('Signals retry provenance is invalid.');
+    lineage.add(original.id);
     const workspace = this.scope(original.workspaceId); this.permission(workspace, 'automation.external.execute');
     const current = this.state(workspace).requests.find(item => item.runId === original.trigger.inputs.signalRequestId);
     if (current && !current.refusedAttempts?.some(attempt => attempt.runId === original.id)
-      && original.resumedFromRunId === (current.workflowRunId ?? current.identity.workflowRunId) && current.workflowRunId !== original.id) {
+      && original.resumedFromRunId && (current.workflowRunId ?? current.identity.workflowRunId) !== original.id
+      && current.workflowRunId !== retry.id) {
       const prior = readRun(workspace.rootPath, original.resumedFromRunId);
-      // Repair admission lineage without collecting into an abandoned attempt.
-      if (prior?.resumedByRunId === original.id) await this.associateRetry(prior, original);
+      // Several hosts may have crashed before admission. Repair only persisted,
+      // reciprocal edges through the normal gates, never collect for old attempts.
+      if (prior?.resumedByRunId === original.id) await this.associateRetry(prior, original, lineage);
     }
     await withSignalsLock(workspace.rootPath, async () => {
       const state = this.state(workspace);
@@ -445,7 +451,8 @@ export class SignalService {
       }
       request.collectionComplete = true; await saveRequest();
       return request;
-      } catch {
+      } catch (error) {
+        if (error instanceof SignalStorageLimitError) failureMessage = error.message;
         await withSignalsLock(workspace.rootPath, async () => {
           const current = this.state(workspace);
           const saved = current.requests.find(item => item.runId === requestId);
@@ -574,13 +581,10 @@ export class SignalService {
     });
     const requests = this.state(workspace).requests;
     for (const request of requests) {
-      let run = readRun(workspace.rootPath, request.workflowRunId ?? request.identity.workflowRunId);
-      if (run?.resumedByRunId && !request.refusedAttempts?.some(attempt => attempt.runId === run!.resumedByRunId)) {
-        const retry = readRun(workspace.rootPath, run.resumedByRunId);
-        if (retry && ['running', 'interrupted'].includes(retry.state) && retry.resumedFromRunId === run.id) {
-          run = await this.authorizeRetry(run, retry) ?? retry;
-        }
-      }
+      // Reads reconcile published state only. Retry admission and paid recovery
+      // belong to the runner's explicit authorizeRetry lifecycle callback.
+      if (!['running', 'queued'].includes(request.status)) continue;
+      const run = readRun(workspace.rootPath, request.workflowRunId ?? request.identity.workflowRunId);
       if (!['running', 'queued'].includes(this.state(workspace).requests.find(item => item.runId === request.runId)!.status)) continue;
       if (run?.state === 'succeeded' && !run.outputError) {
         if (!await this.completeEmpty(run, new AbortController().signal)) await this.complete(run, new AbortController().signal);
@@ -589,7 +593,7 @@ export class SignalService {
         const state = this.state(workspace); const saved = state.requests.find(item => item.runId === request.runId)!;
         saved.status = run.state === 'cancelled' ? 'cancelled' : 'failed'; saved.error = run.outputError ? 'Signals finalization needs a retry.'
           : saved.coverage.some(source => source.sourceId.startsWith('UC') && source.status === 'unavailable')
-            ? 'Native YouTube metadata is unavailable. Configure a YouTube Data API source in Connections > Services and retry.' : 'Signals research did not finish. Review Active work and retry.';
+            ? 'YouTube source evidence is unavailable. Check YouTube or Monid access and retry.' : 'Signals research did not finish. Review Active work and retry.';
         saved.updatedAt = this.now(); this.save(workspace, state);
       });
       else if (!run && request.orderIds.length) {
