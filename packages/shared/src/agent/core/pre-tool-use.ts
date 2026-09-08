@@ -1,3 +1,4 @@
+import { checkManagedSkillToolAccess } from './managed-skill-tool-guard.ts';
 /**
  * Shared PreToolUse utilities and centralized PreToolUse pipeline.
  *
@@ -619,6 +620,9 @@ export type PreToolUseCheckResult =
  * hook input. All fields needed for the pipeline are normalized here.
  */
 export interface PreToolUseInput {
+  containsPrivateSkillPath?: (path: string) => boolean;
+  remapSkillInput?: (input: Record<string, unknown>) => Record<string, unknown>;
+  classifyPrivateSkillPath?: (path: string) => { protected: true; helper: boolean } | null;
   /** SDK-normalized tool name (PascalCase for built-in, mcp__server__tool for MCP) */
   toolName: string;
   /** Tool input object */
@@ -844,6 +848,11 @@ function withPermissionModeContext(reason: string, sessionId: string, effectiveM
 }
 
 export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult {
+  const originalInput = ctx.input;
+  const mappedInput = ctx.remapSkillInput?.(originalInput) ?? originalInput;
+  ctx = { ...ctx, input: mappedInput };
+  const skillBlock = checkManagedSkillToolAccess(ctx.toolName, mappedInput, ctx.workingDirectory ?? ctx.workspaceRootPath, ctx.classifyPrivateSkillPath, ctx.containsPrivateSkillPath);
+  if (skillBlock) return { type: 'block', reason: skillBlock };
   const {
     toolName,
     input,
@@ -961,7 +970,7 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
   // 5. INPUT TRANSFORMS
   // ============================================================
   let currentInput = input;
-  let wasModified = false;
+  let wasModified = mappedInput !== originalInput;
 
   // 5a. Path expansion
   const pathResult = expandToolPaths(toolName, currentInput, workingDirectory, onDebug);

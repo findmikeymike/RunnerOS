@@ -48,7 +48,7 @@ import {
 } from "@craft-agent/ui"
 import { useFocusZone } from "@/hooks/keyboard"
 import { useTheme } from "@/hooks/useTheme"
-import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
+import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, SkillDescriptor } from "../../../shared/types"
 import type { PermissionMode } from "@craft-agent/shared/agent/modes"
 import type { ThinkingLevel } from "@craft-agent/shared/agent/thinking-levels"
 import {
@@ -224,7 +224,7 @@ interface ChatDisplayProps {
   onSourcesChange?: (slugs: string[]) => boolean | void | Promise<boolean | void>
   // Skill selection (for @mentions)
   /** Available skills for @mention autocomplete */
-  skills?: LoadedSkill[]
+  skills?: SkillDescriptor[]
   // Label selection (for #labels)
   /** Available label configs (tree) for label menu and badge display */
   labels?: import('@craft-agent/shared/labels').LabelConfig[]

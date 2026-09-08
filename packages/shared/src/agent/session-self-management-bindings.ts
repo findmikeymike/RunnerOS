@@ -87,6 +87,11 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'getSkillPersonalInstructions', { get: () => getSessionScopedToolCallbacks(sessionId)?.getSkillPersonalInstructionsFn, configurable: true });
+  Object.defineProperty(context, 'saveSkillPersonalInstructions', { get: () => getSessionScopedToolCallbacks(sessionId)?.saveSkillPersonalInstructionsFn, configurable: true });
+  Object.defineProperty(context, 'deleteSkillPersonalInstructions', { get: () => getSessionScopedToolCallbacks(sessionId)?.deleteSkillPersonalInstructionsFn, configurable: true });
+  Object.defineProperty(context, 'useSkill', { get: () => getSessionScopedToolCallbacks(sessionId)?.useSkillFn, configurable: true });
+  Object.defineProperty(context, 'readSkillReference', { get: () => getSessionScopedToolCallbacks(sessionId)?.readSkillReferenceFn, configurable: true });
   Object.defineProperty(context, 'listSkills', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.listSkillsFn;

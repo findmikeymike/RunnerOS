@@ -1,3 +1,4 @@
+import { isManagedSkillPath, getManagedSkillManifest } from '../skills/managed.ts'
 /**
  * Resource Bundle — Export/Import Logic
  *
@@ -245,6 +246,10 @@ function exportSkills(
       continue
     }
 
+    if (isManagedSkillPath(skillDir)) {
+      warnings.push(`Built-in skill '${slug}' cannot be exported`);
+      continue;
+    }
     // Collect all files in the skill directory
     const files = collectDirectoryFiles(skillDir)
 
@@ -770,6 +775,10 @@ function importSkills(
 
   for (const entry of entries) {
     try {
+      if (getManagedSkillManifest().has(entry.slug)) {
+        result.failed.push({ id: entry.slug, error: 'This identity belongs to a built-in skill. Import your custom skill under a different name.' });
+        continue;
+      }
       const targetDir = join(skillsDir, entry.slug)
       const exists = existsSync(targetDir)
 

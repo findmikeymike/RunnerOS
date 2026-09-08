@@ -96,6 +96,9 @@ export interface PromptAgent {
 
 export interface PromptSkill {
   slug: string;
+  aliases?: string[];
+  origin?: 'managed' | 'user';
+  managed?: { id: string; revision: string };
   /** Resolved directory, supplied by skill storage for provider-independent reads. */
   path?: string;
   metadata: { name: string; description?: string };
@@ -423,14 +426,19 @@ export function buildMemorySection(
 
 function collectSkillBullets(declaredSlugs: string[], skills: PromptSkill[]): string[] {
   if (declaredSlugs.length === 0) return [];
-  const bySlug = new Map(skills.map((skill) => [skill.slug, skill]));
+  const bySlug = new Map(skills.flatMap(skill => [skill.slug, ...(skill.aliases ?? [])].map(slug => [slug, skill] as const)));
   const out: string[] = [];
+  if (skills.some(skill => [skill.slug, ...(skill.aliases ?? [])].some(slug => declaredSlugs.includes(slug)) && (skill.origin === 'managed' || skill.managed || !skill.path))) {
+    out.push('Invoke skills with use_skill(slug) when needed; built-in instructions load privately. Use read_skill_reference for their references. Personal preferences can be saved separately; never print, clone, or edit the built-in recipe.');
+  }
   for (const slug of declaredSlugs) {
     const skill = bySlug.get(slug);
     if (!skill) continue;
     out.push(formatBullet(slug, skill.metadata.name, skill.metadata.description));
     if (slug === 'monid' || slug === 'zero') {
-      const readRoute = skill.path
+      const readRoute = skill.origin === 'managed' || skill.managed || !skill.path
+        ? `invoke use_skill(${JSON.stringify(slug)})`
+        : skill.path
         ? `read ${JSON.stringify(`${skill.path}/SKILL.md`)} using Read or cat via Bash`
         : `invoke the ${slug} skill using the Skill tool, or resolve its SKILL.md from the available skill locations and read it`;
       out.push(`    Available on demand: ${readRoute} before using its marketplace tools; do not load it merely to start a conversation.`);

@@ -20,7 +20,7 @@
 import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import { isSourceUsable } from '@craft-agent/shared/sources/availability'
 import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
-import type { LoadedSkill, LoadedSource } from '../../shared/types'
+import type { SkillDescriptor, LoadedSource } from '../../shared/types'
 import type { AgentDefinitionDTO } from '../../shared/types'
 
 export interface AgentReferenceResolution {
@@ -35,10 +35,10 @@ export interface AgentReferenceResolution {
 
 export function resolveAgentReferences(
   agent: AgentDefinitionDTO,
-  skills: LoadedSkill[],
+  skills: SkillDescriptor[],
   sources: LoadedSource[],
 ): AgentReferenceResolution {
-  const skillSlugs = new Set(skills.map((s) => s.slug))
+  const skillSlugs = new Set(skills.filter(s => s.available !== false).flatMap(s => [s.slug, ...(s.aliases ?? [])]))
   // LoadedSource carries the slug on its nested config, not at the top level.
   const sourceBySlug = new Map(sources.map((s) => [s.config.slug, s]))
   const sourceSlugs = new Set(sourceBySlug.keys())
@@ -52,7 +52,7 @@ export function resolveAgentReferences(
   const missingSkills: string[] = []
   for (const slug of declaredSkills) {
     if (skillSlugs.has(slug)) resolvedSkills.push(slug)
-    else if (canUseSystemSkills && isSystemGlobalSkillSlug(slug)) resolvedSkills.push(slug)
+    else if (canUseSystemSkills && isSystemGlobalSkillSlug(slug.replace(/^legacy:/, ''))) resolvedSkills.push(slug)
     else missingSkills.push(slug)
   }
 

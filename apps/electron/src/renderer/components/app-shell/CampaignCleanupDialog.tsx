@@ -74,8 +74,9 @@ export function CampaignCleanupDialog({ workspace, onClose, onDeleted }: Campaig
             </div>
             <div>
               <p className="font-medium">Permanently delete</p>
-              <p className="mt-1 text-foreground/60">Campaign chats, planning pages, temporary drafts, tasks, and local schedules. This cannot be undone.</p>
+              <p className="mt-1 text-foreground/60">Campaign chats, planning pages, temporary drafts, tasks, local schedules, and personal skill instructions saved only in this workspace. Shared personal instructions stay available. This cannot be undone.</p>
             </div>
+            <p className="text-xs text-foreground/60">Before deleting, copy any useful workspace-only skill instructions into All workspaces from the skill’s personal instructions editor.</p>
             {preview.warnings.length ? <ul className="space-y-2 rounded-lg bg-amber-500/10 p-3 text-xs text-amber-200">{preview.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul> : null}
           </div>
         ) : null}

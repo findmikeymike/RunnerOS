@@ -3,7 +3,7 @@ import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { SourceAvatar } from '@/components/ui/source-avatar'
-import type { LoadedSkill, LoadedSource } from '../../../shared/types'
+import type { SkillDescriptor, LoadedSource } from '../../../shared/types'
 import type { MentionItemType } from './mention-menu'
 
 // ============================================================================
@@ -14,7 +14,7 @@ export interface MentionBadgeProps {
   type: MentionItemType
   label: string
   /** Skill data for skill mentions */
-  skill?: LoadedSkill
+  skill?: SkillDescriptor
   /** Source data for source mentions */
   source?: LoadedSource
   /** Workspace ID for skill avatar */
@@ -89,7 +89,7 @@ export interface ParsedMention {
   id: string
   type: MentionItemType
   label: string
-  skill?: LoadedSkill
+  skill?: SkillDescriptor
   source?: LoadedSource
 }
 

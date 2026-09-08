@@ -1,3 +1,4 @@
+import { sanitizePrivateSkillHookInput } from './core/private-skill-activity.ts';
 import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessage, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions, resetClaudeConfigCheck } from './options.ts';
 // Local type for SDK user message content blocks (text, image, document)
@@ -1088,7 +1089,7 @@ export class ClaudeAgent extends BaseAgent {
         // - Mini agents: Use custom (lean) system prompt without Claude Code preset
         // - Normal agents: Append to Claude Code's system prompt (recommended by docs)
         systemPrompt: miniConfig.enabled
-          ? [this.getMiniSystemPrompt(), this.config.customSystemPrompt].filter(Boolean).join('\n\n')
+          ? [this.getMiniSystemPrompt(), this.privateSkillSystemPrompt, this.config.customSystemPrompt].filter(Boolean).join('\n\n')
           : {
               type: 'preset' as const,
               preset: 'claude_code' as const,
@@ -1103,6 +1104,7 @@ export class ClaudeAgent extends BaseAgent {
                   undefined, // backendName
                   this.pinnedIncludeCoAuthoredBy ?? undefined
                 ),
+                this.privateSkillSystemPrompt,
                 this.config.customSystemPrompt,
               ].filter(Boolean).join('\n\n'),
             },
@@ -1254,6 +1256,9 @@ export class ClaudeAgent extends BaseAgent {
 
               // Run centralized PreToolUse checks
               const checkResult = runPreToolUseChecks({
+                containsPrivateSkillPath: path => this.managedSkillRuntime?.containsPrivatePath(path) ?? false,
+                remapSkillInput: input => this.remapSkillToolInput(input),
+                classifyPrivateSkillPath: path => this.managedSkillRuntime?.classifyPath(path) ?? null,
                 toolName: input.tool_name,
                 input: toolInput,
                 sessionId,
@@ -1456,7 +1461,9 @@ export class ClaudeAgent extends BaseAgent {
           // Merge internal hooks with user hooks from automations.json
           // Internal hooks run first (permissions), then user hooks
           const mergedHooks: Record<string, SdkAutomationCallbackMatcher[]> = { ...internalHooks };
-          for (const [event, matchers] of Object.entries(userHooks) as [string, SdkAutomationCallbackMatcher[]][]) {
+          for (const [event, rawMatchers] of Object.entries(userHooks) as [string, SdkAutomationCallbackMatcher[]][]) {
+            const matchers = rawMatchers.map(matcher => ({ ...matcher, hooks: matcher.hooks.map(hook =>
+              ((...args: Parameters<typeof hook>) => hook(sanitizePrivateSkillHookInput(args[0]), ...args.slice(1) as [typeof args[1], typeof args[2]])) as typeof hook) }));
             if (!matchers) continue;
             if (mergedHooks[event]) {
               // Append user hooks after internal hooks

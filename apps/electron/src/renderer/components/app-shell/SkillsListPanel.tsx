@@ -1,3 +1,4 @@
+import { ImportPersonalInstructions } from '@/components/skills/ImportPersonalInstructions'
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { BookOpen, ChevronDown, ChevronRight, Plus, Search, Zap } from 'lucide-react'
@@ -22,7 +23,7 @@ import { SendResourceToWorkspaceDialog } from './SendResourceToWorkspaceDialog'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { useActiveWorkspace, useAppShellContext } from '@/context/AppShellContext'
 import { productDeepLink } from '@/lib/product-identity'
-import type { LoadedSkill } from '../../../shared/types'
+import type { SkillDescriptor } from '../../../shared/types'
 import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
 import {
   isSkillCategoryId,
@@ -33,12 +34,13 @@ import {
 } from '@craft-agent/shared/skills/types'
 
 export interface SkillsListPanelProps {
-  skills: LoadedSkill[]
+  skills: SkillDescriptor[]
   onDeleteSkill: (skillSlug: string) => void
-  onSkillClick: (skill: LoadedSkill) => void
+  onSkillClick: (skill: SkillDescriptor) => void
   selectedSkillSlug?: string | null
   workspaceId?: string
   workspaceRootPath?: string
+  workingDirectory?: string
   className?: string
 }
 
@@ -51,7 +53,7 @@ type SkillBrowseMetadata = {
   tags?: unknown
 }
 
-function getSkillBrowseFields(skill: LoadedSkill): { category: SkillCategoryId; tags: string[] } {
+function getSkillBrowseFields(skill: SkillDescriptor): { category: SkillCategoryId; tags: string[] } {
   const metadata = skill.metadata as SkillBrowseMetadata
   const category = isSkillCategoryId(metadata.category)
     ? metadata.category
@@ -66,16 +68,16 @@ function getSkillBrowseFields(skill: LoadedSkill): { category: SkillCategoryId; 
   return { category, tags }
 }
 
-function getSkillCategory(skill: LoadedSkill): SkillCategoryId {
+function getSkillCategory(skill: SkillDescriptor): SkillCategoryId {
   return getSkillBrowseFields(skill).category
 }
 
-function getSkillTags(skill: LoadedSkill): string[] {
+function getSkillTags(skill: SkillDescriptor): string[] {
   return getSkillBrowseFields(skill).tags
 }
 
-function groupSkillsByCategory(skills: LoadedSkill[]): EntityListGroup<LoadedSkill>[] {
-  const grouped = new Map<SkillCategoryId, LoadedSkill[]>()
+function groupSkillsByCategory(skills: SkillDescriptor[]): EntityListGroup<SkillDescriptor>[] {
+  const grouped = new Map<SkillCategoryId, SkillDescriptor[]>()
   for (const category of SKILL_CATEGORY_ORDER) {
     grouped.set(category, [])
   }
@@ -93,7 +95,7 @@ function groupSkillsByCategory(skills: LoadedSkill[]): EntityListGroup<LoadedSki
     .filter(group => group.items.length > 0)
 }
 
-function getCategoryCounts(skills: LoadedSkill[]): Map<SkillCategoryId, number> {
+function getCategoryCounts(skills: SkillDescriptor[]): Map<SkillCategoryId, number> {
   const counts = new Map<SkillCategoryId, number>()
   for (const category of SKILL_CATEGORY_ORDER) {
     counts.set(category, 0)
@@ -107,7 +109,7 @@ function getCategoryCounts(skills: LoadedSkill[]): Map<SkillCategoryId, number> 
   return counts
 }
 
-function getSkillSearchText(skill: LoadedSkill): string {
+function getSkillSearchText(skill: SkillDescriptor): string {
   const category = getSkillCategory(skill)
   const categoryLabel = SKILL_CATEGORY_LABELS[category]
   const tags = getSkillTags(skill)
@@ -141,12 +143,12 @@ interface SkillPanelItem {
 }
 
 interface GroupedSkillsPanelProps {
-  skills: LoadedSkill[]
+  skills: SkillDescriptor[]
   selectedSkillSlug?: string | null
-  onSkillClick: (skill: LoadedSkill) => void
+  onSkillClick: (skill: SkillDescriptor) => void
   emptyState?: React.ReactNode
   className?: string
-  mapItem: (skill: LoadedSkill) => SkillPanelItem
+  mapItem: (skill: SkillDescriptor) => SkillPanelItem
 }
 
 function GroupedSkillsPanel({
@@ -163,7 +165,7 @@ function GroupedSkillsPanel({
   const itemIndexBySlug = React.useMemo(() => {
     return new Map(groupedSkills.map((skill, index) => [skill.slug, index]))
   }, [groupedSkills])
-  const interactions = useEntityListInteractions<LoadedSkill>({
+  const interactions = useEntityListInteractions<SkillDescriptor>({
     items: groupedSkills,
     getId: (skill) => skill.slug,
     keyboard: {
@@ -181,7 +183,7 @@ function GroupedSkillsPanel({
   }, [interactions.selection])
 
   return (
-    <EntityList<LoadedSkill>
+    <EntityList<SkillDescriptor>
       groups={groups}
       getKey={(skill) => skill.slug}
       containerRef={interactions.listProps.containerRef}
@@ -218,6 +220,7 @@ export function SkillsListPanel({
   selectedSkillSlug,
   workspaceId,
   workspaceRootPath,
+  workingDirectory,
   className,
 }: SkillsListPanelProps) {
   const { t } = useTranslation()
@@ -260,6 +263,7 @@ export function SkillsListPanel({
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">Reusable capabilities available to agents in this workspace.</p>
               </div>
               <div className="flex items-center gap-2">
+                {workspaceId && <ImportPersonalInstructions workspaceId={workspaceId} />}
                 {workspaceRootPath && (
                   <EditPopover
                     align="end"
@@ -324,10 +328,10 @@ export function SkillsListPanel({
                             <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#fb923c]/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
                             <button type="button" onClick={() => onSkillClick(skill)} className="flex w-full items-start gap-2 text-left">
                               <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] border border-white/[0.08] bg-white/[0.06] shadow-middle">
-                                <SkillAvatar skill={skill} size="sm" workspaceId={workspaceId} />
+                                <SkillAvatar skill={skill} size="sm" workspaceId={workspaceId} workingDirectory={workingDirectory} />
                               </div>
                               <div className="min-w-0 flex-1 pr-6">
-                                <div className="truncate text-[12px] font-semibold text-white">{skill.metadata.name}</div>
+                                <div className="flex items-center gap-1.5"><span className="truncate text-[12px] font-semibold text-white">{skill.metadata.name}</span>{skill.origin === 'managed' && <span className="shrink-0 text-[9px] text-white/40">Built-in</span>}</div>
                                 <p className="mt-1 line-clamp-2 text-[9.5px] leading-3.5 text-white/44">{skill.metadata.description}</p>
                               </div>
                             </button>
@@ -349,13 +353,13 @@ export function SkillsListPanel({
                                 skillName={skill.metadata.name}
                                 onOpenInNewWindow={() => window.electronAPI.openUrl(productDeepLink(`skills/skill/${skill.slug}?window=focused`))}
                                 onShowInFinder={() => {
-                                  if (canRevealLocally) void window.electronAPI.showInFolder(`${skill.path}/SKILL.md`)
+                                  if (canRevealLocally && workspaceId) void window.electronAPI.openSkillInFinder(workspaceId, skill.slug, workingDirectory)
                                 }}
-                                canShowInFinder={canRevealLocally}
-                                onDelete={skill.source === 'workspace' ? () => onDeleteSkill(skill.slug) : undefined}
-                                canDelete={skill.source === 'workspace'}
-                                deleteLabel={skill.source === 'workspace' ? t('skillsList.deleteSkill') : t('skillsList.managedByProject')}
-                                onSendToWorkspace={hasOtherWorkspaces && skill.source === 'workspace' ? () => {
+                                canShowInFinder={canRevealLocally && skill.origin !== 'managed'}
+                                onDelete={skill.source === 'workspace' && skill.origin !== 'managed' ? () => onDeleteSkill(skill.slug) : undefined}
+                                canDelete={skill.source === 'workspace' && skill.origin !== 'managed'}
+                                deleteLabel={skill.source === 'workspace' && skill.origin !== 'managed' ? t('skillsList.deleteSkill') : t('skillsList.managedByProject')}
+                                onSendToWorkspace={hasOtherWorkspaces && skill.source === 'workspace' && skill.origin !== 'managed' ? () => {
                                   setSendResourceSlug(skill.slug)
                                   setSendResourceLabel(skill.metadata.name)
                                   setSendDialogOpen(true)
@@ -377,6 +381,7 @@ export function SkillsListPanel({
         <>
         {workspaceId && (
           <div className="flex shrink-0 items-center justify-end px-2 py-1">
+            <ImportPersonalInstructions workspaceId={workspaceId} />
             <button
               type="button"
               onClick={() => setLibraryOpen(true)}
@@ -414,7 +419,7 @@ export function SkillsListPanel({
             </EntityListEmptyScreen>
           }
           mapItem={(skill) => ({
-            icon: <SkillAvatar skill={skill} size="sm" workspaceId={workspaceId} />,
+            icon: <SkillAvatar skill={skill} size="sm" workspaceId={workspaceId} workingDirectory={workingDirectory} />,
             title: skill.metadata.name,
             badges: (
               <span className="flex min-w-0 items-center gap-1.5">
@@ -424,6 +429,7 @@ export function SkillsListPanel({
                   </span>
                 )}
                 <span className="truncate">{skill.metadata.description}</span>
+                {skill.origin === 'managed' && <span className="shrink-0 text-[10px] text-muted-foreground">Built-in</span>}
               </span>
             ),
             menu: (
@@ -432,15 +438,15 @@ export function SkillsListPanel({
                 skillName={skill.metadata.name}
                 onOpenInNewWindow={() => window.electronAPI.openUrl(productDeepLink(`skills/skill/${skill.slug}?window=focused`))}
                 onShowInFinder={() => {
-                  if (canRevealLocally) {
-                    void window.electronAPI.showInFolder(`${skill.path}/SKILL.md`)
+                  if (canRevealLocally && workspaceId) {
+                    void window.electronAPI.openSkillInFinder(workspaceId, skill.slug, workingDirectory)
                   }
                 }}
-                canShowInFinder={canRevealLocally}
-                onDelete={skill.source === 'workspace' ? () => onDeleteSkill(skill.slug) : undefined}
-                canDelete={skill.source === 'workspace'}
-                deleteLabel={skill.source === 'workspace' ? t('skillsList.deleteSkill') : t('skillsList.managedByProject')}
-                onSendToWorkspace={hasOtherWorkspaces && skill.source === 'workspace' ? () => {
+                canShowInFinder={canRevealLocally && skill.origin !== 'managed'}
+                onDelete={skill.source === 'workspace' && skill.origin !== 'managed' ? () => onDeleteSkill(skill.slug) : undefined}
+                canDelete={skill.source === 'workspace' && skill.origin !== 'managed'}
+                deleteLabel={skill.source === 'workspace' && skill.origin !== 'managed' ? t('skillsList.deleteSkill') : t('skillsList.managedByProject')}
+                onSendToWorkspace={hasOtherWorkspaces && skill.source === 'workspace' && skill.origin !== 'managed' ? () => {
                   setSendResourceSlug(skill.slug)
                   setSendResourceLabel(skill.metadata.name)
                   setSendDialogOpen(true)
@@ -482,7 +488,7 @@ interface GlobalSkillsLibraryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   workspaceId: string
-  activeSkills: LoadedSkill[]
+  activeSkills: SkillDescriptor[]
 }
 
 function GlobalSkillsLibraryDialog({
@@ -491,7 +497,7 @@ function GlobalSkillsLibraryDialog({
   workspaceId,
   activeSkills,
 }: GlobalSkillsLibraryDialogProps) {
-  const [globalSkills, setGlobalSkills] = React.useState<LoadedSkill[]>([])
+  const [globalSkills, setGlobalSkills] = React.useState<SkillDescriptor[]>([])
   const [enabledSlugs, setEnabledSlugs] = React.useState<Set<string>>(new Set())
   const [query, setQuery] = React.useState('')
   const [categoryFilter, setCategoryFilter] = React.useState<SkillCategoryFilter>('all')
@@ -547,7 +553,7 @@ function GlobalSkillsLibraryDialog({
 
   const filteredGroups = React.useMemo(() => groupSkillsByCategory(filteredSkills), [filteredSkills])
 
-  const handleToggle = React.useCallback(async (skill: LoadedSkill, enabled: boolean) => {
+  const handleToggle = React.useCallback(async (skill: SkillDescriptor, enabled: boolean) => {
     setUpdatingSlug(skill.slug)
     setEnabledSlugs(prev => {
       const next = new Set(prev)

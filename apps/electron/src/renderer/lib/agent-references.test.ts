@@ -51,3 +51,14 @@ function source(config: LoadedSource['config']): LoadedSource {
     workspaceId: 'workspace-1',
   }
 }
+
+test('migrated assignments resolve their active custom alias while unavailable parents cannot launch', () => {
+  const agent = { slug: 'writer', metadata: { name: 'Writer', description: '', skills: ['legacy:zero', 'removed-parent'] }, systemPrompt: '', path: '/test', source: 'global' } satisfies AgentDefinitionDTO
+  const caps = { canRead: true, canEdit: true, canDelete: true, canExport: true, canListFiles: true }
+  const result = resolveAgentReferences(agent, [
+    { id: 'custom', slug: 'zero-personal-123', aliases: ['legacy:zero'], origin: 'user', source: 'workspace', metadata: { name: 'My Zero', description: '' }, capabilities: caps },
+    { id: 'missing', slug: 'removed-parent', origin: 'managed', source: 'global', available: false, metadata: { name: 'Unavailable skill', description: '' }, capabilities: caps },
+  ], [])
+  expect(result.resolvedSkills).toEqual(['legacy:zero'])
+  expect(result.missingSkills).toEqual(['removed-parent'])
+})

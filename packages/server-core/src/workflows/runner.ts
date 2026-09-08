@@ -1,3 +1,4 @@
+import { getLegacyAuthoredSkillReferences } from '@craft-agent/shared/skills';
 /**
  * Workflows — runner state machine
  *
@@ -119,7 +120,7 @@ export interface WorkflowRunnerDeps {
    * `SessionManager.sendMessage` — that method already returns when the
    * turn ends.
    */
-  sendMessage: (sessionId: string, prompt: string) => Promise<void>;
+  sendMessage: (sessionId: string, prompt: string, options?: { legacySkillReferences?: string[] }) => Promise<void>;
   /**
    * Read the last assistant message text from a session. Used as the
    * naive Phase 1 step output. Returns '' when there are no assistant
@@ -965,7 +966,7 @@ export class WorkflowRunner {
         );
       }
 
-      await this.sendMessageWithOptionalTimeout(active, session.id, stepPrompt, timeoutSeconds);
+      await this.sendMessageWithOptionalTimeout(active, session.id, stepPrompt, timeoutSeconds, getLegacyAuthoredSkillReferences(stepDef));
 
       if (active.abort.signal.aborted) return;
 
@@ -1140,11 +1141,12 @@ export class WorkflowRunner {
     sessionId: string,
     prompt: string,
     timeoutSeconds: number,
+    legacySkillReferences?: string[],
   ): Promise<void> {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
-        this.deps.sendMessage(sessionId, prompt),
+        this.deps.sendMessage(sessionId, prompt, legacySkillReferences?.length ? { legacySkillReferences } : undefined),
         new Promise<never>((_, reject) => {
           timeoutId = setTimeout(() => {
             reject(new StepAttemptError('timeout', `Step timed out after ${timeoutSeconds} seconds.`));

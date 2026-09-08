@@ -9,7 +9,7 @@ import type { OutputSummary } from '../outputs'
 import type { PulseTickEntry } from '../pulses/types'
 import type { DeepResearchRunSnapshot } from '../deep-research'
 import type { LoadedSource } from '../sources/types'
-import type { LoadedSkill } from '../skills/types'
+import type { SkillDescriptor } from '../skills/types'
 import type { LoadedContextDoc } from '../workspace-context/types'
 import type { LoadedWorkflow, WorkflowRunSnapshot } from '../workflows'
 import type { WorkspaceSyncChange } from '../workspaces/sync-events'
@@ -57,7 +57,7 @@ export interface BroadcastEventMap {
   [RPC_CHANNELS.lab.UPDATED]: [workspaceId: string]
   [RPC_CHANNELS.notifications.UPDATED]: [workspaceId: string, entries: NotificationEntry[]]
   [RPC_CHANNELS.pulses.TICK]: [workspaceId: string, tick: PulseTickEntry]
-  [RPC_CHANNELS.skills.CHANGED]: [workspaceId: string, skills: LoadedSkill[]]
+  [RPC_CHANNELS.skills.CHANGED]: [workspaceId: string, skills: SkillDescriptor[]]
   [RPC_CHANNELS.llmConnections.CHANGED]: []
   [RPC_CHANNELS.secrets.CHANGED]: []
   [RPC_CHANNELS.permissions.DEFAULTS_CHANGED]: [value: null]

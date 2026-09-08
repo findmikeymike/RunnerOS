@@ -1,3 +1,4 @@
+import { isPrivateSkillLoaderTool, privateSkillActivityStatus } from './core/private-skill-activity.ts';
 /**
  * Pi Backend (Subprocess RPC Client)
  *
@@ -1070,13 +1071,15 @@ export class PiAgent extends BaseAgent {
       // Fire PostToolUse / PostToolUseFailure hook events (fire-and-forget)
       if (agentEvent.type === 'tool_result') {
         const hookEvent = agentEvent.isError ? 'PostToolUseFailure' : 'PostToolUse';
+        const hookResult = isPrivateSkillLoaderTool(agentEvent.toolName ?? event.toolName)
+          ? privateSkillActivityStatus(agentEvent.isError) : agentEvent.result;
         this.emitAutomationEvent(hookEvent, {
           hook_event_name: hookEvent,
           tool_name: agentEvent.toolName ?? (event.toolName as string) ?? 'unknown',
           tool_input: agentEvent.input,
           ...(agentEvent.isError
-            ? { error: typeof agentEvent.result === 'string' ? agentEvent.result : undefined }
-            : { tool_response: typeof agentEvent.result === 'string' ? agentEvent.result : undefined }),
+            ? { error: typeof hookResult === 'string' ? hookResult : undefined }
+            : { tool_response: typeof hookResult === 'string' ? hookResult : undefined }),
         });
       }
 
@@ -1134,6 +1137,9 @@ export class PiAgent extends BaseAgent {
       : undefined;
 
     const checkResult = runPreToolUseChecks({
+                containsPrivateSkillPath: path => this.managedSkillRuntime?.containsPrivatePath(path) ?? false,
+                remapSkillInput: input => this.remapSkillToolInput(input),
+                classifyPrivateSkillPath: path => this.managedSkillRuntime?.classifyPath(path) ?? null,
       toolName,
       input,
       sessionId,
@@ -1208,6 +1214,7 @@ export class PiAgent extends BaseAgent {
 
         // Re-run pipeline after activation
         const postResult = runPreToolUseChecks({
+                classifyPrivateSkillPath: path => this.managedSkillRuntime?.classifyPath(path) ?? null,
           toolName,
           input,
           sessionId,
@@ -1915,6 +1922,7 @@ export class PiAgent extends BaseAgent {
 
       const fullSystemPrompt = [
         systemPrompt,
+        this.privateSkillSystemPrompt,
         this.config.customSystemPrompt,
         ...stableContextParts,
       ].filter(Boolean).join('\n\n');

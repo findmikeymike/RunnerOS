@@ -1,3 +1,5 @@
+import { isPrivateSkillRuntimePath } from '@craft-agent/shared/agent/core/managed-skill-runtime'
+import { isManagedSkillPath, isPublicManagedSkillPath } from '@craft-agent/shared/skills'
 import { readFile, writeFile, unlink, mkdir, readdir, stat } from 'fs/promises'
 import { isAbsolute, join, resolve, dirname, parse as parsePath } from 'path'
 import { homedir } from 'os'
@@ -35,6 +37,7 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
     try {
       const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
       const safePath = await validateFilePath(path, getWorkspaceAllowedDirs(workspaceId))
+      if ((isManagedSkillPath(safePath) && !isPublicManagedSkillPath(safePath)) || isPrivateSkillRuntimePath(safePath)) throw new Error('Built-in instructions are managed by Artist OS.')
       const content = await readFile(safePath, 'utf-8')
       return content
     } catch (error) {
@@ -55,6 +58,7 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
     try {
       const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
       const safePath = await validateFilePath(path, getWorkspaceAllowedDirs(workspaceId))
+      if ((isManagedSkillPath(safePath) && !isPublicManagedSkillPath(safePath)) || isPrivateSkillRuntimePath(safePath)) throw new Error('Built-in instructions are managed by Artist OS.')
       const buffer = await readFile(safePath)
       const ext = safePath.split('.').pop()?.toLowerCase() ?? ''
 
@@ -87,6 +91,7 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
     try {
       const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
       const safePath = await validateFilePath(path, getWorkspaceAllowedDirs(workspaceId))
+      if ((isManagedSkillPath(safePath) && !isPublicManagedSkillPath(safePath)) || isPrivateSkillRuntimePath(safePath)) throw new Error('Built-in instructions are managed by Artist OS.')
       const size = Number.isFinite(maxSize) ? Math.max(16, Math.min(256, Math.floor(maxSize))) : 64
       const preview = await deps.platform.imageProcessor.process(safePath, {
         resize: { width: size, height: size },
@@ -107,6 +112,7 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
     try {
       const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
       const safePath = await validateFilePath(path, getWorkspaceAllowedDirs(workspaceId))
+      if ((isManagedSkillPath(safePath) && !isPublicManagedSkillPath(safePath)) || isPrivateSkillRuntimePath(safePath)) throw new Error('Built-in instructions are managed by Artist OS.')
       const buffer = await readFile(safePath)
       // Return as Uint8Array (serializes to ArrayBuffer over IPC)
       return new Uint8Array(buffer)
@@ -137,6 +143,7 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
     try {
       const workspaceId = ctx.workspaceId ?? deps.windowManager?.getWorkspaceForWindow(ctx.webContentsId!)
       const safePath = await validateFilePath(path, getWorkspaceAllowedDirs(workspaceId))
+      if ((isManagedSkillPath(safePath) && !isPublicManagedSkillPath(safePath)) || isPrivateSkillRuntimePath(safePath)) throw new Error('Built-in instructions are managed by Artist OS.')
       // Use shared utility that handles file type detection, encoding, etc.
       const attachment = await readFileAttachment(safePath)
       if (!attachment) return null
@@ -171,6 +178,7 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
   server.handle(RPC_CHANNELS.file.READ_USER_ATTACHMENT, async (_ctx, path: string) => {
     try {
       if (!path || typeof path !== 'string' || !isAbsolute(path)) return null
+      if ((isManagedSkillPath(path) && !isPublicManagedSkillPath(path)) || isPrivateSkillRuntimePath(path)) return null
       const info = await stat(path).catch(() => null)
       if (!info || !info.isFile()) return null
       if (info.size > USER_ATTACHMENT_MAX_BYTES) {
@@ -542,6 +550,7 @@ export function registerFilesHandlers(server: RpcServer, deps: HandlerDeps): voi
 
     // Normalize (collapses .. segments, trailing slashes, etc.)
     const resolved = resolve(dirPath)
+    if (isManagedSkillPath(resolved) || isPrivateSkillRuntimePath(resolved)) throw new Error('Built-in instructions are managed by Artist OS.')
 
     // Read entries, filter to directories
     const raw = await readdir(resolved, { withFileTypes: true })

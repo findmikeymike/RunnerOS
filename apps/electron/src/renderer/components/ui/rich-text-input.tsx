@@ -10,7 +10,7 @@ import {
   getSkillIconSync,
   EMOJI_ICON_PREFIX,
 } from '@/lib/icon-cache'
-import type { LoadedSkill, LoadedSource } from '../../../shared/types'
+import type { SkillDescriptor, LoadedSource } from '../../../shared/types'
 import type { MentionItemType } from './mention-menu'
 
 // ============================================================================
@@ -50,7 +50,7 @@ export interface RichTextInputProps extends Omit<React.HTMLAttributes<HTMLDivEle
   /** Placeholder text(s) when empty - can be a single string or array for rotation */
   placeholder?: string | string[]
   /** Available skills for mention parsing */
-  skills?: LoadedSkill[]
+  skills?: SkillDescriptor[]
   /** Available sources for mention parsing */
   sources?: LoadedSource[]
   /** Workspace ID for avatars */
@@ -122,7 +122,7 @@ function isCodeFile(name: string): boolean {
 function renderBadgeHTML(
   type: MentionItemType,
   label: string,
-  skill?: LoadedSkill,
+  skill?: SkillDescriptor,
   source?: LoadedSource,
   workspaceId?: string,
   tooltip?: string
@@ -354,7 +354,7 @@ function setCursorPosition(element: HTMLElement, targetPosition: number): void {
 
 function textToHTML(
   text: string,
-  skills: LoadedSkill[],
+  skills: SkillDescriptor[],
   sources: LoadedSource[],
   workspaceId?: string
 ): string {
@@ -391,7 +391,7 @@ function textToHTML(
 
     // Determine label and data for badge
     let label = match.id
-    let skill: LoadedSkill | undefined
+    let skill: SkillDescriptor | undefined
     let source: LoadedSource | undefined
     let tooltip: string | undefined
 

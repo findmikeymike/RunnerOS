@@ -36,7 +36,7 @@ export const SESSION_PERSISTENT_FIELDS = [
   'lastReadMessageId', 'hasUnread',
   // Config
   'enabledSourceSlugs', 'permissionMode', 'previousPermissionMode', 'workingDirectory',
-  'customSystemPrompt', 'agentSkillSlugs', 'trustedWorkerTools',
+  'customSystemPrompt', 'agentSkillSlugs', 'trustedWorkerTools', 'managedSkillRunId', 'managedSkillRunLegacyReferences', 'legacySkillReferences',
   // Model/Connection
   'model', 'llmConnection', 'connectionLocked', 'thinkingLevel',
   // Sharing
@@ -264,6 +264,12 @@ export interface SessionConfig {
   customSystemPrompt?: string;
   /** Saved Agent skills applied implicitly to every turn in this session. */
   agentSkillSlugs?: string[];
+  /** Latest admitted run; retries restore its exact private skill snapshot. */
+  managedSkillRunId?: string;
+  /** Frozen per-run choice; an empty array keeps fresh input current on retries. */
+  managedSkillRunLegacyReferences?: string[];
+  /** Pre-migration bare references, remapped only when replaying old input. */
+  legacySkillReferences?: string[];
   /** Session tool names preauthorized for this trusted worker session. */
   trustedWorkerTools?: string[];
   /**
@@ -398,6 +404,12 @@ export interface SessionHeader {
   customSystemPrompt?: string;
   /** Saved Agent skills applied implicitly to every turn in this session. */
   agentSkillSlugs?: string[];
+  /** Latest admitted run; retries restore its exact private skill snapshot. */
+  managedSkillRunId?: string;
+  /** Frozen per-run choice; an empty array keeps fresh input current on retries. */
+  managedSkillRunLegacyReferences?: string[];
+  /** Pre-migration bare references, remapped only when replaying old input. */
+  legacySkillReferences?: string[];
   /** Session tool names preauthorized for this trusted worker session. */
   trustedWorkerTools?: string[];
   /**

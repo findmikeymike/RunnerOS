@@ -6,11 +6,11 @@
  */
 
 import { atom } from 'jotai'
-import type { LoadedSkill } from '../../shared/types'
+import type { SkillDescriptor } from '../../shared/types'
 
 /**
  * Atom to store the current workspace's skills.
  * AppShell populates this when skills are loaded.
  * NavigationContext reads from it for auto-selection.
  */
-export const skillsAtom = atom<LoadedSkill[]>([])
+export const skillsAtom = atom<SkillDescriptor[]>([])

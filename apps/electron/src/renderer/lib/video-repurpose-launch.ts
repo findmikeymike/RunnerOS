@@ -3,7 +3,7 @@ import type {
   AgentDefinitionDTO,
   ContextDocDTO,
   CreateSessionOptions,
-  LoadedSkill,
+  SkillDescriptor,
   LoadedSource,
   Session,
 } from '../../shared/types'
@@ -18,7 +18,7 @@ export interface OpenVideoRepurposeSessionParams {
   autoSendDraft?: boolean
   navigateOnCreate?: boolean
   activeAgents?: AgentDefinitionDTO[]
-  skills?: LoadedSkill[]
+  skills?: SkillDescriptor[]
   sources?: LoadedSource[]
   onCreateSession: (workspaceId: string, options?: CreateSessionOptions) => Promise<Session>
   onInputChange: (sessionId: string, value: string) => void

@@ -8,7 +8,7 @@ import type { SessionLogEntry } from '@craft-agent/shared/sessions-log'
 import { selectActiveMemoryEntries } from '@craft-agent/shared/memory/render'
 import { resolveAgentReferences, hasMissingReferences, describeMissingReferences } from '@/lib/agent-references'
 import { composeAgentSystemPrompt, managerBriefReceiptFromDocs } from '@/lib/compose-agent-prompt'
-import type { AgentDefinitionDTO, ContextDocDTO, CreateSessionOptions, Session, LoadedSkill, LoadedSource } from '../../shared/types'
+import type { AgentDefinitionDTO, ContextDocDTO, CreateSessionOptions, Session, SkillDescriptor, LoadedSource } from '../../shared/types'
 
 /**
  * Look up the Artist OS workspace kind for a workspace id.
@@ -33,15 +33,15 @@ export async function resolveArtistWorkspaceScope(
 export async function ensureAgentDeclaredSkillsEnabled(params: {
   agent: AgentDefinitionDTO
   workspaceId: string
-  activeSkills: LoadedSkill[]
-  listGlobalSkills?: (workspaceId: string) => Promise<LoadedSkill[]>
+  activeSkills: SkillDescriptor[]
+  listGlobalSkills?: (workspaceId: string) => Promise<SkillDescriptor[]>
   setGlobalSkillEnabled?: (workspaceId: string, skillSlug: string, enabled: boolean) => Promise<string[]>
-  getSkills?: (workspaceId: string) => Promise<LoadedSkill[]>
-}): Promise<LoadedSkill[]> {
+  getSkills?: (workspaceId: string) => Promise<SkillDescriptor[]>
+}): Promise<SkillDescriptor[]> {
   const declaredSkillSlugs = params.agent.metadata.skills ?? []
   if (declaredSkillSlugs.length === 0) return params.activeSkills
 
-  const activeSlugs = new Set(params.activeSkills.map((skill) => skill.slug))
+  const activeSlugs = new Set(params.activeSkills.flatMap(skill => [skill.slug, ...(skill.aliases ?? [])]))
   const missingSlugs = declaredSkillSlugs.filter((slug) => !activeSlugs.has(slug))
   if (missingSlugs.length === 0) return params.activeSkills
 
@@ -49,7 +49,7 @@ export async function ensureAgentDeclaredSkillsEnabled(params: {
   const setGlobalSkillEnabled = params.setGlobalSkillEnabled ?? window.electronAPI.setGlobalSkillEnabled
   const getSkills = params.getSkills ?? window.electronAPI.getSkills
   const globalSkills = await listGlobalSkills(params.workspaceId)
-  const installedGlobalSlugs = new Set(globalSkills.map((skill) => skill.slug))
+  const installedGlobalSlugs = new Set(globalSkills.flatMap(skill => [skill.slug, ...(skill.aliases ?? [])]))
   const installedMissingSlugs = missingSlugs.filter((slug) => installedGlobalSlugs.has(slug))
   if (installedMissingSlugs.length === 0) return params.activeSkills
 
@@ -62,7 +62,7 @@ export async function ensureAgentDeclaredSkillsEnabled(params: {
   return getSkills(params.workspaceId)
 }
 
-function assertFocusedAgentReferences(agent: AgentDefinitionDTO, label: string, skills: LoadedSkill[], sources: LoadedSource[]): void {
+function assertFocusedAgentReferences(agent: AgentDefinitionDTO, label: string, skills: SkillDescriptor[], sources: LoadedSource[]): void {
   const resolution = resolveAgentReferences(agent, skills, sources)
   const unusable = (agent.metadata.sources ?? []).filter(slug => {
     const source = sources.find(source => source.config.slug === slug)
@@ -89,7 +89,7 @@ export function buildAgentCreateSessionOptions(
    * and no footer is generated.
    */
   context?: {
-    skills: LoadedSkill[]
+    skills: SkillDescriptor[]
     sources: LoadedSource[]
     contextDocs?: ContextDocDTO[]
     agentCatalog?: AgentDefinitionDTO[]
@@ -333,7 +333,7 @@ export async function openAgentSessionComposer(params: {
    * session may try to activate skills/sources that don't exist on this
    * machine and silently fail to bind them.
    */
-  skills?: LoadedSkill[]
+  skills?: SkillDescriptor[]
   sources?: LoadedSource[]
   /**
    * Workspace context docs already filtered by routing for this agent. When

@@ -316,6 +316,10 @@ export interface CoreBackendConfig {
  * Options for the chat method.
  */
 export interface ChatOptions {
+  /** Stable user-run identity, retained across internal retries. */
+  managedSkillRunId?: string;
+  resumeManagedSkillRun?: boolean;
+  legacySkillReferences?: string[];
   /** Retry flag (internal use for session recovery) */
   isRetry?: boolean;
   /** Override thinking level for this message only */

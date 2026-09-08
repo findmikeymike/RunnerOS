@@ -16,6 +16,8 @@
     ".": "./src/index.ts",
     "./agent-messaging": "./src/agent-messaging/index.ts",
     "./agent": "./src/agent/index.ts",
+    "./agent/core/private-skill-activity": "./src/agent/core/private-skill-activity.ts",
+    "./agent/core/managed-skill-runtime": "./src/agent/core/managed-skill-runtime.ts",
     "./agent/modes": "./src/agent/mode-types.ts",
     "./agent/mode-types": "./src/agent/mode-types.ts",
     "./agenda": "./src/agenda/index.ts",

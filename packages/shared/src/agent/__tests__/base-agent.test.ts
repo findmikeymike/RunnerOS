@@ -10,6 +10,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AbortReason } from '../backend/types.ts';
+import { migrateManagedSkillScope } from '../../skills/migration.ts';
 import { isRunnerOsSelfEditIntent, shouldActivateImplicitSkill } from '../base-agent.ts';
 import {
   TestAgent,
@@ -203,7 +204,7 @@ describe('BaseAgent', () => {
       expect(agent.chatCalls[0]?.message).toBe('test message');
     });
 
-    it('defers marketplace reads while preserving domain and explicitly requested skill prerequisites', async () => {
+    it('preserves deferred marketplace and explicit historical prerequisites for migrated custom skills', async () => {
       const root = mkdtempSync(join(tmpdir(), 'runner-marketplace-skills-'));
       try {
         for (const slug of ['monid', 'zero', 'artist-industry-hunter']) {
@@ -211,29 +212,31 @@ describe('BaseAgent', () => {
           mkdirSync(dir, { recursive: true });
           writeFileSync(join(dir, 'SKILL.md'), `---\nname: ${slug}\ndescription: Test instructions.\n---\nRead before using tools.\n`);
         }
+        const { aliases } = migrateManagedSkillScope(join(root, 'skills'), { globalSkillsDir: join(root, 'private-library') });
+        mkdirSync(join(root, 'sessions', 'test-session-id'), { recursive: true });
         const skillAgent = new TestAgent(createMockBackendConfig({
           workspace: createMockWorkspace({ rootPath: root }),
           session: createMockSession({ workspaceRootPath: root }),
-          agentSkillSlugs: ['monid', 'zero', 'artist-industry-hunter'],
+          agentSkillSlugs: ['legacy:monid', 'legacy:zero', 'legacy:artist-industry-hunter'],
         }));
-        const domainPath = join(root, 'skills', 'artist-industry-hunter', 'SKILL.md');
+        const domainPath = join(root, 'skills', aliases['artist-industry-hunter']!, 'SKILL.md');
         await collectEvents(skillAgent.chat('Hello, what can you do?'));
         expect(skillAgent.chatCalls.at(-1)?.message).toContain(domainPath);
-        expect(skillAgent.chatCalls.at(-1)?.message).not.toContain(join(root, 'skills', 'monid', 'SKILL.md'));
-        expect(skillAgent.chatCalls.at(-1)?.message).not.toContain(join(root, 'skills', 'zero', 'SKILL.md'));
+        expect(skillAgent.chatCalls.at(-1)?.message).not.toContain(join(root, 'skills', aliases.monid!, 'SKILL.md'));
+        expect(skillAgent.chatCalls.at(-1)?.message).not.toContain(join(root, 'skills', aliases.zero!, 'SKILL.md'));
         skillAgent.trackPrerequisiteRead({ file_path: domainPath });
         await collectEvents(skillAgent.chat('Help me think through a release.'));
         expect(skillAgent.chatCalls.at(-1)?.message).not.toContain('MUST read');
         for (const slug of ['monid', 'zero']) {
-          await collectEvents(skillAgent.chat(`[skill:${slug}] Find a tool.`));
-          expect(skillAgent.chatCalls.at(-1)?.message).toContain(join(root, 'skills', slug, 'SKILL.md'));
+          await collectEvents(skillAgent.chat(`[skill:${slug}] Find a tool.`, undefined, { legacySkillReferences: [slug] }));
+          expect(skillAgent.chatCalls.at(-1)?.message).toContain(join(root, 'skills', aliases[slug]!, 'SKILL.md'));
           expect(skillAgent.chatCalls.at(-1)?.message).toContain('MUST read');
-          skillAgent.trackPrerequisiteRead({ file_path: join(root, 'skills', slug, 'SKILL.md') });
+          skillAgent.trackPrerequisiteRead({ file_path: join(root, 'skills', aliases[slug]!, 'SKILL.md') });
         }
         // A cached catalog entry must not conceal a removed on-demand skill.
-        rmSync(join(root, 'skills', 'monid', 'SKILL.md'));
+        rmSync(join(root, 'skills', aliases.monid!, 'SKILL.md'));
         const events = await collectEvents(skillAgent.chat('Hello again.'));
-        expect(events).toContainEqual({ type: 'error', message: 'Skill(s) not found: monid' });
+        expect(events).toContainEqual({ type: 'error', message: 'Skill(s) not found: legacy:monid' });
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
@@ -242,15 +245,15 @@ describe('BaseAgent', () => {
     it('does not inject a skill reread directive after that skill was read in the same session', async () => {
       const root = mkdtempSync(join(tmpdir(), 'runner-base-agent-skill-'));
       try {
-        const skillDir = join(root, 'skills', 'artist-industry-hunter');
+        const skillDir = join(root, 'skills', 'outreach-notes');
         mkdirSync(skillDir, { recursive: true });
         const skillPath = join(skillDir, 'SKILL.md');
-        writeFileSync(skillPath, '---\nname: Artist Industry Hunter\ndescription: Finds outreach targets.\n---\nUse industry research.\n');
+        writeFileSync(skillPath, '---\nname: Personal Outreach Notes\ndescription: Finds outreach targets.\n---\nUse industry research.\n');
 
         const skillAgent = new TestAgent(createMockBackendConfig({
           workspace: createMockWorkspace({ rootPath: root }),
           session: createMockSession({ workspaceRootPath: root }),
-          agentSkillSlugs: ['artist-industry-hunter'],
+          agentSkillSlugs: ['outreach-notes'],
         }));
 
         await collectEvents(skillAgent.chat('Find targets.'));

@@ -3,7 +3,7 @@ import { buildAgentBundleFooter, buildAgentCatalogSection, buildMemorySection, b
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
 import { renderSharedIntelBody } from '@craft-agent/shared/shared-intel'
 import type { SharedIntelNote } from '@craft-agent/shared/shared-intel'
-import type { AgentDefinitionDTO, ContextDocDTO, LoadedSkill, LoadedSource } from '../../shared/types'
+import type { AgentDefinitionDTO, ContextDocDTO, SkillDescriptor, LoadedSource } from '../../shared/types'
 
 function makeDoc(slug: string, name: string, body: string, overrides: Partial<ContextDocDTO['metadata']> = {}): ContextDocDTO {
   return {
@@ -39,14 +39,15 @@ function makeAgent(overrides: Partial<AgentDefinitionDTO> = {}): AgentDefinition
   } as AgentDefinitionDTO
 }
 
-function makeSkill(slug: string, name: string, description: string): LoadedSkill {
+function makeSkill(slug: string, name: string, description: string): SkillDescriptor {
   return {
     slug,
     metadata: { name, description },
-    content: '',
-    path: `/tmp/skills/${slug}`,
+    id: `user:${slug}`,
+    origin: 'user',
+    capabilities: { canRead: true, canEdit: true, canExport: true, canDelete: true, canListFiles: true },
     source: 'workspace',
-  } as LoadedSkill
+  } as SkillDescriptor
 }
 
 function makeSource(slug: string, name: string, tagline?: string): LoadedSource {

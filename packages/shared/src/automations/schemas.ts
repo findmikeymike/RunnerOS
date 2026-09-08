@@ -24,6 +24,8 @@ const ThinkingLevelInputSchema = z
 export const PromptActionSchema = z.object({
   type: z.literal('prompt'),
   prompt: z.string().min(1, 'Prompt cannot be empty'),
+  legacySkillReferences: z.array(z.string().regex(/^[a-zA-Z][a-zA-Z0-9-]*$/)).optional(),
+  legacySkillPromptHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   agentSlug: z.string().min(1).optional(),
   taskModeId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/).optional(),
   bindMessagingChannel: z.boolean().optional(),

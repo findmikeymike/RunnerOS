@@ -43,7 +43,7 @@ import {
   isOutputsNavigation,
 } from '@/contexts/NavigationContext'
 import { isDeepResearchRunNavigation, isVideoStudioNavigation, isWorkflowsNavigation, isWorkflowRunNavigation } from '../../../shared/types'
-import type { LoadedSkill, LoadedSource } from '../../../shared/types'
+import type { SkillDescriptor, LoadedSource } from '../../../shared/types'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
 import { extractLabelId } from '@craft-agent/shared/labels'
@@ -808,7 +808,7 @@ type ResourceRowsProps = {
   sources?: LoadedSource[]
   sourceFilter?: string | null
   workspaceId?: string
-  skills?: LoadedSkill[]
+  skills?: SkillDescriptor[]
   automations?: AutomationListItem[]
   outputs?: OutputSummaryDTO[]
   workspaceRootPath?: string
@@ -1286,7 +1286,7 @@ function getSourceRowCategory(source: LoadedSource) {
   return 'Other'
 }
 
-function getSkillRowCategory(skill: LoadedSkill) {
+function getSkillRowCategory(skill: SkillDescriptor) {
   const text = [
     skill.slug,
     skill.metadata.name,

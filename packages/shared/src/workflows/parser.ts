@@ -1,3 +1,4 @@
+import { getLegacyAuthoredSkillReferences } from '../skills/authored-reference-migration.ts';
 import { matter, stringifyFrontmatter, type GrayMatterFile } from '../config/frontmatter';
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 import type { OutputKind } from '../outputs/types.ts';
@@ -218,6 +219,8 @@ function coerceOutputs(raw: unknown, warnings: WorkflowParseWarning[]): Workflow
 }
 
 interface RawStep {
+  legacySkillReferences?: unknown;
+  legacySkillPromptHash?: unknown;
   taskModeId?: unknown;
   id?: unknown;
   agent?: unknown;
@@ -367,6 +370,8 @@ export function parseWorkflowFile(
     if (refErrors.length > 0) return null;
 
     const step: WorkflowStep = { id, agent, input };
+    const legacyReferences = getLegacyAuthoredSkillReferences(rawStep);
+    if (legacyReferences.length) { step.legacySkillReferences = legacyReferences; step.legacySkillPromptHash = rawStep.legacySkillPromptHash as string; }
     if (typeof rawStep.taskModeId === 'string') step.taskModeId = rawStep.taskModeId;
     if (typeof rawStep.description === 'string' && rawStep.description.trim()) {
       step.description = rawStep.description.trim();
@@ -471,6 +476,8 @@ export function serializeWorkflow(metadata: WorkflowMetadata, body: string): str
     if (s.retries !== undefined) out.retries = s.retries;
     if (s.onFailure !== undefined) out.onFailure = s.onFailure;
     if (s.completion !== undefined) out.completion = s.completion;
+    const legacyReferences = getLegacyAuthoredSkillReferences(s);
+    if (legacyReferences.length) { out.legacySkillReferences = legacyReferences; out.legacySkillPromptHash = s.legacySkillPromptHash; }
     return out;
   });
 

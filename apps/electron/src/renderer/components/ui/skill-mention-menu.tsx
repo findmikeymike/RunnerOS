@@ -6,7 +6,7 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
-import type { LoadedSkill } from '../../../shared/types'
+import type { SkillDescriptor } from '../../../shared/types'
 
 // ============================================================================
 // Types
@@ -15,7 +15,7 @@ import type { LoadedSkill } from '../../../shared/types'
 export interface InlineSkillMentionProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  skills: LoadedSkill[]
+  skills: SkillDescriptor[]
   onSelect: (slug: string) => void
   filter?: string
   position: { x: number; y: number }
@@ -36,10 +36,10 @@ const MENU_ITEM_SELECTED = 'bg-foreground/5'
 // Filter skills utility
 // ============================================================================
 
-function filterSkills(skills: LoadedSkill[], filter: string): LoadedSkill[] {
-  if (!filter) return skills
+function filterSkills(skills: SkillDescriptor[], filter: string): SkillDescriptor[] {
+  if (!filter) return skills.filter(skill => skill.available !== false)
   const lowerFilter = filter.toLowerCase()
-  return skills.filter(
+  return skills.filter(skill => skill.available !== false).filter(
     skill =>
       skill.slug.toLowerCase().includes(lowerFilter) ||
       skill.metadata.name.toLowerCase().includes(lowerFilter)
@@ -178,7 +178,7 @@ export interface SkillMentionInputElement {
 
 export interface UseInlineSkillMentionOptions {
   inputRef: React.RefObject<SkillMentionInputElement | null>
-  skills: LoadedSkill[]
+  skills: SkillDescriptor[]
   onSelect: (slug: string) => void
 }
 

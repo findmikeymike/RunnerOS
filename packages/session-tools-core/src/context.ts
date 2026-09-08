@@ -347,6 +347,12 @@ export interface SessionToolContext {
   listAgents?(options?: ListAgentsOptions): ListAgentsResult;
 
   /** List skills (workspace-activated and dormant in global library). Injected by backend. */
+  getSkillPersonalInstructions?(slug: string): Promise<unknown>;
+  saveSkillPersonalInstructions?(slug: string, scope: 'shared' | 'workspace', text: string): Promise<string>;
+  deleteSkillPersonalInstructions?(slug: string, scope: 'shared' | 'workspace'): Promise<string>;
+  useSkill?(slug: string): Promise<string>;
+  readSkillReference?(slug: string, path: string): Promise<string>;
+
   listSkills?(options?: ListSkillsOptions): ListSkillsResult;
 
   /** Host-validated adjacent skill delivery. Does not grant new sources, tools, or permissions. */

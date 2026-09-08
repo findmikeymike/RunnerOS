@@ -1,3 +1,4 @@
+import { handleUseSkill, handleReadSkillReference, handleGetSkillPersonalInstructions, handleSaveSkillPersonalInstructions, handleDeleteSkillPersonalInstructions } from './handlers/managed-skills.ts';
 /**
  * Session Tool Definitions — Single Source of Truth
  *
@@ -358,6 +359,11 @@ export const LoadAgentCapabilitySchema = z.object({
   skillSlug: z.string().trim().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/).describe('Exact adjacent skill slug declared by the selected task mode.'),
   reason: z.string().trim().min(1).max(1000).describe('Why the current conversation now needs this adjacent capability.'),
 });
+
+export const SaveSkillPersonalInstructionsSchema = z.object({ slug: z.string().min(1).max(120), scope: z.enum(['shared', 'workspace']), text: z.string().max(16384) });
+export const DeleteSkillPersonalInstructionsSchema = z.object({ slug: z.string().min(1).max(120), scope: z.enum(['shared', 'workspace']) });
+export const UseSkillSchema = z.object({ slug: z.string().min(1).max(120) });
+export const ReadSkillReferenceSchema = z.object({ slug: z.string().min(1).max(120), path: z.string().min(1).max(300) });
 
 export const ListSkillsSchema = z.object({
   activeOnly: z.boolean().optional().describe('If true, return only skills currently active in this workspace (workspace + activated globals + project). Defaults to false, which also includes dormant skills from the global library.'),
@@ -2267,6 +2273,11 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'list_sessions', description: TOOL_DESCRIPTIONS.list_sessions, inputSchema: ListSessionsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSessions },
   { name: 'list_agents', description: TOOL_DESCRIPTIONS.list_agents, inputSchema: ListAgentsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListAgents },
   { name: 'load_agent_capability', description: TOOL_DESCRIPTIONS.load_agent_capability, inputSchema: LoadAgentCapabilitySchema, executionMode: 'registry', safeMode: 'allow', readOnly: false, handler: handleLoadAgentCapability },
+  { name: 'get_skill_personal_instructions', description: 'Read the user-owned shared and workspace preferences attached to a built-in skill. Does not expose private core instructions.', inputSchema: UseSkillSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetSkillPersonalInstructions },
+  { name: 'save_skill_personal_instructions', description: 'Save user-owned preferences for a built-in skill, scoped to this workspace or shared across workspaces. Only save when requested by the user or after they approve a proposed preference. Preserve existing preferences unless asked to replace them. Changes apply on the next fresh run and cannot override app safety or expose private core recipes.', inputSchema: SaveSkillPersonalInstructionsSchema, executionMode: 'registry', safeMode: 'block', readOnly: false, handler: handleSaveSkillPersonalInstructions },
+  { name: 'delete_skill_personal_instructions', description: 'Remove a user-owned preference for a built-in skill from the selected scope when the user requests this. Does not delete the built-in skill. Active runs keep their pinned preferences.', inputSchema: DeleteSkillPersonalInstructionsSchema, executionMode: 'registry', safeMode: 'block', readOnly: false, handler: handleDeleteSkillPersonalInstructions },
+  { name: 'use_skill', description: 'Load an available skill privately when needed for the task. Built-in instructions must be used through this tool, never read or copied from disk. Existing connection, budget and approval rules still apply.', inputSchema: UseSkillSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleUseSkill },
+  { name: 'read_skill_reference', description: 'Load one named instruction reference for a built-in skill already in use. Provide its exact relative reference path. This does not read helper source or export private recipes.', inputSchema: ReadSkillReferenceSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleReadSkillReference },
   { name: 'list_skills', description: TOOL_DESCRIPTIONS.list_skills, inputSchema: ListSkillsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSkills },
   { name: 'search_skill_marketplace', description: TOOL_DESCRIPTIONS.search_skill_marketplace, inputSchema: SearchSkillMarketplaceSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleSearchSkillMarketplace },
   { name: 'list_sources', description: TOOL_DESCRIPTIONS.list_sources, inputSchema: ListSourcesSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSources },

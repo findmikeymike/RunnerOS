@@ -1,3 +1,4 @@
+import { markLegacyAuthoredSkillReferences } from '@craft-agent/shared/skills';
 /**
  * Workflows — runner tests
  *
@@ -50,6 +51,19 @@ const INVALID_STEP_RUN_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const MISSING_RUN_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const INACTIVE_RUN_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const TERMINAL_RUN_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+
+test('workflow dispatch forwards unchanged authored legacy selections after templating', async () => {
+  const h = makeHarness();
+  const received: Array<{ legacySkillReferences?: string[] } | undefined> = [];
+  const send = h.deps.sendMessage;
+  h.deps.sendMessage = async (id, prompt, options) => { received.push(options); return send(id, prompt); };
+  const old = markLegacyAuthoredSkillReferences({ id: 'old', agent: 'researcher', input: '[skill:monid] Research {{trigger.topic}}' }, new Set(['monid']));
+  const changed = { ...old, id: 'changed', input: 'New [skill:monid] choice for {{trigger.topic}}' };
+  const workflow = makeWorkflow({ steps: [old, changed] });
+  await new WorkflowRunner(h.deps).start({ workflow, workspaceId: WORKSPACE_ID, triggerInputs: { topic: 'release' } });
+  await waitFor(() => lastCompleted(h.events) !== undefined);
+  expect(received).toEqual([{ legacySkillReferences: ['monid'] }, undefined]);
+});
 
 describe('explicit workflow task modes', () => {
   test('preflights agent plus mode once and executes every step with the same selection', async () => {

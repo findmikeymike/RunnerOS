@@ -40,3 +40,9 @@ export {
   isSystemGlobalSkillSlug,
   SYSTEM_GLOBAL_SKILL_SLUGS,
 } from './system.ts';
+export * from './managed.ts';
+export * from './personal-instructions.ts';
+export * from './migration.ts';
+export * from './startup-migration.ts';
+
+export { markLegacyAuthoredSkillReferences, getLegacyAuthoredSkillReferences, resolveRunLegacySkillReferences } from './authored-reference-migration.ts';

@@ -1,3 +1,5 @@
+import { resolveRuntimeIdentity } from '@craft-agent/shared/config/runtime-identity'
+import { sanitizePrivateSkillActivityInput, sanitizePrivateSkillResultPaths } from '@craft-agent/shared/agent/core/private-skill-activity'
 import { inheritHostAgentFocus, createPendingAgentFocusState, createAgentFocusTransferIntent, validateTransferredAgentFocus, parseAgentFocusTransferIntent } from '@craft-agent/shared/sessions'
 import { resolveAgentCapabilityExpansion } from './agent-capability-expansion'
 import type { EventSink } from '@craft-agent/server-core/transport'
@@ -151,7 +153,7 @@ import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/share
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, type CreateSessionOptions, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
 import { messageToStored, storedToMessage, type AgentMessageNoticeMetadata, type Message, type SessionTaskEventMetadata, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
-import { loadAllSkills, loadGlobalSkills, loadGlobalSkillBySlug, loadSkillBySlug, setGlobalSkillEnabled, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
+import { toSkillDescriptors, getOrphanedPersonalSkillDescriptors, resolveRunLegacySkillReferences, loadAllSkills, loadGlobalSkills, loadGlobalSkillBySlug, loadSkillBySlug, setGlobalSkillEnabled, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
 import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
@@ -1575,6 +1577,9 @@ interface ManagedSession {
   customSystemPrompt?: string
   // Saved Agent skills applied implicitly to every turn in this session.
   agentSkillSlugs?: string[]
+  managedSkillRunId?: string
+  managedSkillRunLegacyReferences?: string[]
+  legacySkillReferences?: string[]
   // Explicit internal session tools this worker can run without ask-mode babysitting.
   trustedWorkerTools?: string[]
   // System prompt preset for mini agents ('default' | 'mini')
@@ -1794,7 +1799,7 @@ export function ensureDeclaredGlobalSkillsEnabledForAgent(
     loadAllSkills?: typeof loadAllSkills
   } = {},
 ): LoadedSkill[] {
-  const skillBySlug = new Map(skills.map((skill) => [skill.slug, skill]))
+  const skillBySlug = new Map(skills.flatMap(skill => [skill.slug, ...(skill.aliases ?? [])].map(slug => [slug, skill] as const)))
   const loadGlobalSkill = deps.loadGlobalSkillBySlug ?? loadGlobalSkillBySlug
   const enableGlobalSkill = deps.setGlobalSkillEnabled ?? setGlobalSkillEnabled
   const reloadSkills = deps.loadAllSkills ?? loadAllSkills
@@ -2737,6 +2742,7 @@ export class SessionManager implements ISessionManager {
                 labels: pending.labels,
                 permissionMode: pending.permissionMode,
                 mentions: pending.mentions,
+                legacySkillReferences: pending.legacySkillReferences,
                 agentSlug: pending.agentSlug,
                 taskModeId: pending.taskModeId,
                 messagingChannel: pending.messagingChannel,
@@ -3091,10 +3097,10 @@ export class SessionManager implements ISessionManager {
     }
     const declaredSkillSlugs = launchAgent.metadata.skills ?? []
     const skills = ensureDeclaredGlobalSkillsEnabledForAgent(ws.rootPath, declaredSkillSlugs, loadAllSkills(ws.rootPath))
-    const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
+    const skillBySlug = new Map(skills.flatMap(skill => [skill.slug, ...(skill.aliases ?? [])].map(slug => [slug, skill] as const)))
     const canUseSystemSkills = agent.slug === CONCIERGE_SLUG || agent.slug === ORCHESTRATOR_SLUG
     const resolvedSkillSlugs = declaredSkillSlugs.filter((slug) => (
-      skillBySlug.has(slug) || (canUseSystemSkills && isSystemGlobalSkillSlug(slug))
+      skillBySlug.has(slug) || (canUseSystemSkills && isSystemGlobalSkillSlug(slug.replace(/^legacy:/, '')))
     ))
     const missingSkillSlugs = declaredSkillSlugs.filter((slug) => !resolvedSkillSlugs.includes(slug))
     if (strict && missingSkillSlugs.length > 0) {
@@ -3408,7 +3414,11 @@ export class SessionManager implements ISessionManager {
   broadcastSkillsChanged(workspaceId: string, skills: import('@craft-agent/shared/skills').LoadedSkill[]): void {
     if (!this.eventSink) return
     sessionLog.info(`Broadcasting skills changed (${skills.length} skills)`)
-    this.eventSink(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, skills)
+    const descriptors = toSkillDescriptors(skills)
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    const visible = new Set(descriptors.map(skill => skill.slug))
+    const orphans = workspace ? getOrphanedPersonalSkillDescriptors(workspace.rootPath).filter(skill => !visible.has(skill.slug)) : []
+    this.eventSink(RPC_CHANNELS.skills.CHANGED, { to: 'workspace', workspaceId }, workspaceId, [...descriptors, ...orphans])
   }
 
   private broadcastMemoryChanged(scope: MemoryScope, agentSlug: string | null): void {
@@ -4162,6 +4172,13 @@ export class SessionManager implements ISessionManager {
         info: (message) => sessionLog.info(message),
         error: (message, error) => sessionLog.error(message, error),
       })
+
+      // Preserve customized skill files and their existing assignments before
+      // starter defaults, watchers, or session restoration can see new ownership.
+      const { migrateManagedSkillsAtStartup } = await import('@craft-agent/shared/skills')
+      if (resolveRuntimeIdentity().variant === 'artist-os') {
+        migrateManagedSkillsAtStartup({ workspaceRoots: getWorkspaces().filter(workspace => !workspace.remoteServer).map(workspace => workspace.rootPath) })
+      }
 
       // Seed the global agent-definitions library on first run (idempotent —
       // never overwrites existing AGENT.md files; respects the .seeded marker).
@@ -6449,7 +6466,7 @@ user a clickable link to where the thing now lives.`
         preflightStepAgent: async (wsId, agentSlug, options) => {
           await this.resolveAgentSessionOptions(wsId, agentSlug, options)
         },
-        sendMessage: (sessionId, prompt) => this.sendMessage(sessionId, prompt),
+        sendMessage: (sessionId, prompt, options) => this.sendMessage(sessionId, prompt, undefined, undefined, options),
         getLastAssistantText: (sessionId) => this.getLastAssistantTextForSession(sessionId),
         getSessionToolUseCount: (sessionId) => {
           const managed = this.sessions.get(sessionId)
@@ -7384,6 +7401,9 @@ user a clickable link to where the thing now lives.`
       managed.tokenUsage = storedSession.tokenUsage
       managed.lastReadMessageId = storedSession.lastReadMessageId
       managed.hasUnread = storedSession.hasUnread  // Explicit unread flag for NEW badge state machine
+      managed.managedSkillRunLegacyReferences = storedSession.managedSkillRunLegacyReferences
+      managed.managedSkillRunId = storedSession.managedSkillRunId
+      managed.legacySkillReferences = storedSession.legacySkillReferences
       managed.enabledSourceSlugs = storedSession.enabledSourceSlugs
       managed.sharedUrl = storedSession.sharedUrl
       managed.sharedId = storedSession.sharedId
@@ -12875,6 +12895,15 @@ user a clickable link to where the thing now lives.`
     let openingMessageAccepted = false
     // The admission lock makes this the focus for this entire response,
     // including asynchronous initialization and every fallback attempt.
+    const runLegacySkillReferences = resolveRunLegacySkillReferences({
+      explicit: options?.legacySkillReferences,
+      historical: managed.legacySkillReferences,
+      previousRunId: managed.managedSkillRunId,
+      previousRunReferences: managed.managedSkillRunLegacyReferences,
+      replayMessageId: existingMessageId,
+      isRetry: Boolean(_isAuthRetry || sourceRetry),
+    })
+    const resumeSkillRun = Boolean(_isAuthRetry || sourceRetry || (existingMessageId && existingMessageId === managed.managedSkillRunId))
     const turnContext = sourceRetry?.turnContext || (_isAuthRetry && managed.lastSentTurnContext) || {
       customSystemPrompt: managed.customSystemPrompt,
       agentSkillSlugs: managed.agentSkillSlugs ? [...managed.agentSkillSlugs] : undefined,
@@ -13216,7 +13245,16 @@ user a clickable link to where the thing now lives.`
       managed.lastMessageAt = Date.now()
       if (sourceRetry) onAck?.(userMessage.id)
       managed.pendingSourceRetry = undefined
-      if (!_isAuthRetry && !sourceRetry) managed.lastSentInputMessageId = userMessage.id
+      if (!_isAuthRetry && !sourceRetry) {
+        managed.lastSentInputMessageId = userMessage.id
+        managed.managedSkillRunId = userMessage.id
+      } else {
+        managed.lastSentInputMessageId ??= managed.managedSkillRunId ?? userMessage.id
+      }
+      managed.managedSkillRunLegacyReferences = runLegacySkillReferences
+      // Persist the admitted boundary before provider execution, including crash recovery.
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
       managed.activeHumanMessageId = userMessage.inputOrigin === 'human' && !userMessage.hidden
         ? userMessage.id
         : undefined
@@ -13497,7 +13535,11 @@ user a clickable link to where the thing now lives.`
         sessionLog.warn(`Omitting ${attachmentFilter.omittedImages.length} image attachment(s) for text-only model ${messageBackendContext.resolvedModel} on connection ${managed.llmConnection ?? 'unknown'}`)
       }
 
-      const chatIterator = agent.chat(effectiveMessage, attachmentFilter.attachments)
+      const chatIterator = agent.chat(effectiveMessage, attachmentFilter.attachments, {
+        managedSkillRunId: managed.managedSkillRunId ?? managed.lastSentInputMessageId,
+        resumeManagedSkillRun: resumeSkillRun,
+        legacySkillReferences: runLegacySkillReferences,
+      })
       sessionLog.info('Got chat iterator, starting iteration...')
 
       for await (const event of chatIterator) {
@@ -14894,7 +14936,7 @@ user a clickable link to where the thing now lives.`
 
       case 'tool_start': {
         // Format tool input paths to relative for better readability
-        const rawFormattedToolInput = formatToolInputPaths(event.input)
+        const rawFormattedToolInput = formatToolInputPaths(sanitizePrivateSkillActivityInput(event.input))
         const formattedToolInput = isRecordDoctorSession(managed.spawnedFromAgent)
           ? redactRecordDoctorUserVisibleValue(rawFormattedToolInput)
           : rawFormattedToolInput
@@ -15025,10 +15067,13 @@ user a clickable link to where the thing now lives.`
 
       case 'tool_result': {
         // toolName comes directly from CraftAgent (resolved via ToolIndex)
-        const toolName = event.toolName || 'unknown'
+        const toolName = event.toolName || managed.messages.find(m => m.toolUseId === event.toolUseId)?.toolName || 'unknown'
 
         // Format absolute paths to relative paths for better readability
-        const pathFormattedResult = event.result ? formatPathsToRelative(event.result) : ''
+        const privateSkillResult = /(?:^|__)(?:use_skill|read_skill_reference)$/.test(toolName)
+        const pathFormattedResult = privateSkillResult
+          ? (event.isError ? 'Built-in guidance could not be loaded.' : 'Built-in guidance loaded privately.')
+          : event.result ? formatPathsToRelative(sanitizePrivateSkillResultPaths(event.result)) : ''
         const rawFormattedResult = isRecordDoctorSession(managed.spawnedFromAgent)
           ? redactRecordDoctorPrivateEmail(pathFormattedResult)
           : pathFormattedResult
@@ -15648,7 +15693,7 @@ user a clickable link to where the thing now lives.`
     }
 
     // Resolve @mentions to source/skill slugs
-    const resolved = mentions ? this.resolveAutomationMentions(workspaceRootPath, mentions) : undefined
+    const resolved = mentions ? this.resolveAutomationMentions(workspaceRootPath, mentions, input.legacySkillReferences) : undefined
     if (taskModeId !== undefined && (typeof taskModeId !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(taskModeId) || !agentSlug)) throw new Error('Choose a valid agent and focus for this work.')
     if (taskModeId && resolved?.skillSlugs?.length) throw new Error('A focused automation cannot also override its skills through mentions.')
     const agentOptions = agentSlug
@@ -15742,6 +15787,7 @@ user a clickable link to where the thing now lives.`
     // Send the prompt
     await this.sendMessage(session.id, teamModePrompt, undefined, undefined, {
       skillSlugs: resolved?.skillSlugs,
+      legacySkillReferences: input.legacySkillReferences,
     })
 
     if (agentSlug === 'spotify-analyst') {
@@ -15767,7 +15813,7 @@ user a clickable link to where the thing now lives.`
   /**
    * Resolve @mentions in automation prompts to source and skill slugs
    */
-  private resolveAutomationMentions(workspaceRootPath: string, mentions: string[]): { sourceSlugs: string[]; skillSlugs: string[] } | undefined {
+  private resolveAutomationMentions(workspaceRootPath: string, mentions: string[], legacySkillReferences: string[] = []): { sourceSlugs: string[]; skillSlugs: string[] } | undefined {
     const sources = loadAllSources(workspaceRootPath)
     const skills = loadAllSkills(workspaceRootPath)
     const sourceSlugs: string[] = []
@@ -15776,8 +15822,10 @@ user a clickable link to where the thing now lives.`
     for (const mention of mentions) {
       if (sources.some(s => s.config.slug === mention)) {
         sourceSlugs.push(mention)
-      } else if (skills.some(s => s.slug === mention)) {
-        skillSlugs.push(mention)
+      } else if (skills.some(s => s.slug === mention || s.aliases?.includes(mention))) {
+        const reference = legacySkillReferences.includes(mention) ? `legacy:${mention}` : mention
+        if (!loadSkillBySlug(workspaceRootPath, reference)) throw new Error(`Automation skill is unavailable: ${reference}`)
+        skillSlugs.push(reference)
       } else {
         sessionLog.warn(`[Automations] Unknown mention: @${mention}`)
       }
@@ -15908,7 +15956,7 @@ user a clickable link to where the thing now lives.`
     if (!workspace || !isAgentAllowedInArtistWorkspace(intent.agentSlug, workspace.artistWorkspaceScope)) throw new Error('Transferred worker is unavailable in this workspace.')
     const agent = loadGlobalAgent(intent.agentSlug)
     const validated = validateTransferredAgentFocus(intent, agent ?? undefined, {
-      installedSkillSlugs: new Set(loadAllSkills(workspace.rootPath).map(skill => skill.slug)),
+      installedSkillSlugs: new Set(loadAllSkills(workspace.rootPath).flatMap(skill => [skill.slug, ...(skill.aliases ?? [])])),
       readySourceSlugs: new Set(loadAllSources(workspace.rootPath).filter(isSourceUsable).map(source => source.config.slug)),
     })
     if (validated.intent.taskModeSelectionPending) return createPendingAgentFocusState(agent!)

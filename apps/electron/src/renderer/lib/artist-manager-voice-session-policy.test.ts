@@ -23,35 +23,16 @@ describe('Artist Manager voice session policy', () => {
     expect(base).toEqual(original)
   })
 
-  it('preloads complete declared procedures while preserving conditional and custom skill prerequisites', () => {
-    const skills = [
-      procedure('artist-manager-operating-system', 'Keep this entire procedure.\n\nRead references/current-state.md when needed.\nFinal instruction.'),
-      procedure('artist-os-guide'),
-      procedure('skill-scout'),
-      procedure('agent-creator'),
-      procedure('custom-manager-procedure'),
-    ]
-    const base: CreateSessionOptions = { agentSkillSlugs: [...skills.map(skill => skill.slug), 'runneros-self-edit'] }
-    const result = buildArtistManagerVoiceSessionOptions(base, skills, 'sharp')
-
-    for (const skill of skills.slice(0, 3)) {
-      expect(result.customSystemPrompt).toContain(skill.content)
-      expect(result.customSystemPrompt).toContain(`Skill directory: ${skill.path}`)
-    }
-    expect(result.agentSkillSlugs).toEqual(['agent-creator', 'custom-manager-procedure', 'runneros-self-edit'])
-    expect(result.customSystemPrompt).not.toContain(skills[3]!.content)
-    expect(base.agentSkillSlugs).toHaveLength(6)
-  })
-
-  it('keeps missing and empty bodies as prerequisites and does not inject undeclared procedures', () => {
-    const base: CreateSessionOptions = { agentSkillSlugs: ['artist-manager-operating-system', 'artist-os-guide', 'agent-creator'] }
-    const result = buildArtistManagerVoiceSessionOptions(base, [
-      procedure('artist-manager-operating-system', '  \n\t'),
-      procedure('skill-scout', 'Undeclared instruction must not become active.'),
-    ], 'laid-back')
+  it('keeps procedure assignments for private host loading without renderer bodies or paths', () => {
+    const base: CreateSessionOptions = { agentSkillSlugs: [
+      'artist-manager-operating-system', 'artist-os-guide', 'skill-scout', 'custom-manager-procedure',
+    ] }
+    const result = buildArtistManagerVoiceSessionOptions(base, [{ slug: 'artist-os-guide' }], 'laid-back')
     expect(result.agentSkillSlugs).toEqual(base.agentSkillSlugs)
-    expect(result.customSystemPrompt).not.toContain('Undeclared instruction')
+    expect(result.agentSkillSlugs).not.toBe(base.agentSkillSlugs)
     expect(result.customSystemPrompt).not.toContain('PRELOADED MANAGER PROCEDURES')
+    expect(result.customSystemPrompt).not.toContain('Skill directory:')
+    expect(JSON.stringify(result)).not.toContain('/workspace/skills/')
   })
 
   it('preserves artist context, permissions, provider settings and provenance without mutating the chat options', () => {
@@ -81,7 +62,7 @@ describe('Artist Manager voice session policy', () => {
     }
     expect(result.launchReceipt).toEqual({
       ...base.launchReceipt!,
-      summary: 'Private Artist Manager voice conversation. Procedure instructions preloaded: skill-scout.',
+      summary: 'Private Artist Manager voice conversation.',
       injected: { ...base.launchReceipt!.injected, systemPromptChars: result.customSystemPrompt!.length },
     })
     expect(base).toEqual(before)
@@ -108,8 +89,8 @@ describe('Artist Manager voice session policy', () => {
     }, [procedure('artist-manager-operating-system', skillInstruction)], 'sharp')
     const prompt = result.customSystemPrompt!
     expect(prompt).toContain(memoryInstruction)
-    expect(prompt).toContain(skillInstruction)
-    expect(prompt.lastIndexOf('VOICE CONVERSATION MODE')).toBeGreaterThan(prompt.indexOf(skillInstruction))
+    expect(prompt).not.toContain(skillInstruction)
+    expect(result.agentSkillSlugs).toContain('artist-manager-operating-system')
     expect(prompt).toContain('Your ENTIRE final assistant message is spoken aloud')
     expect(prompt).toContain('There is no separate written section or unspoken chat detail')
     expect(prompt).toContain('explicitly requests a longer explanation in their current message')

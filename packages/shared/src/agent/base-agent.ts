@@ -13,8 +13,10 @@
  * Provider-specific behavior (chat, abort, capabilities) is implemented in subclasses.
  */
 
+import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { join, dirname } from 'node:path';
 
 import type { AgentEvent } from '@craft-agent/core/types';
 import type { FileAttachment } from '../utils/files.ts';
@@ -28,6 +30,7 @@ import { buildCallLlmRequest, type LLMQueryRequest, type LLMQueryResult } from '
 import { getLlmConnections, getDefaultLlmConnection, loadStoredConfig } from '../config/storage.ts';
 import { resolveSelfEditTarget, validateSelfEditRepo } from '../config/self-edit.ts';
 import { loadAllSources } from '../sources/storage.ts';
+import { assertTeamPermission } from '../workspaces/team-mode.ts';
 import { loadWorkspaceConfig } from '../workspaces/storage.ts';
 import type { ApiServerConfig } from '../mcp/mcp-pool.ts';
 
@@ -67,7 +70,13 @@ import { buildTitlePrompt, buildRegenerateTitlePrompt, validateTitle } from '../
 
 // Skill extraction for Codex/Copilot backends (Claude uses native SDK Skill tool)
 import { parseMentions, resolveSkillMentions, resolveSourceMentions, resolveFileMentions } from '../mentions/index.ts';
-import { loadAllSkills, loadSystemGlobalSkillBySlug } from '../skills/storage.ts';
+import { ManagedSkillRuntime } from './core/managed-skill-runtime.ts';
+import type { LoadedSkill } from '../skills/types.ts';
+import { isManagedSkill } from '../skills/managed.ts';
+import { getPersonalInstructions, savePersonalInstruction, deletePersonalInstruction, resolveManagedSkillInstructions } from '../skills/personal-instructions.ts';
+import { mergeSessionScopedToolCallbacks } from './session-scoped-tool-callback-registry.ts';
+import { isSourceUsable } from '../sources/availability.ts';
+import { GLOBAL_AGENT_SKILLS_DIR, PROJECT_AGENT_SKILLS_DIR, loadAllSkills, loadSkillBySlug, loadSystemGlobalSkillBySlug } from '../skills/storage.ts';
 
 const RUNNEROS_SELF_EDIT_SKILL_SLUG = 'runneros-self-edit';
 const AGENT_CREATOR_SKILL_SLUG = 'agent-creator';
@@ -87,7 +96,7 @@ export function shouldActivateImplicitSkill(slug: string, message: string, parse
   if (parsedSkillSlugs.includes(slug)) return true;
   // Marketplace instructions are read when the agent needs that provider, not for every chat.
   // Explicit skill mentions above still register the normal read prerequisite.
-  if (slug === 'monid' || slug === 'zero') return false;
+  if (slug.replace(/^legacy:/, '') === 'monid' || slug.replace(/^legacy:/, '') === 'zero') return false;
   const text = message.toLowerCase();
 
   if (slug === AGENT_CREATOR_SKILL_SLUG) {
@@ -594,6 +603,7 @@ export abstract class BaseAgent implements AgentBackend {
   clearHistory(): void {
     this.usageTracker.reset();
     this.prerequisiteManager.resetReadState();
+    this.managedSkillRuntime?.resetContext();
     this.debug('History cleared');
   }
 
@@ -605,6 +615,7 @@ export abstract class BaseAgent implements AgentBackend {
    */
   resetPrerequisiteState(): void {
     this.prerequisiteManager.resetReadState();
+    this.managedSkillRuntime?.resetContext();
     this.sourceManager.resetSeenSources();
   }
 
@@ -875,6 +886,7 @@ ${formattedMessages}
    * Called when session resume fails and we need to start fresh.
    */
   protected clearSessionForRecovery(): void {
+    this.managedSkillRuntime?.resetContext();
     this.config.onSdkSessionIdCleared?.();
     this.debug('Session cleared for recovery');
   }
@@ -972,16 +984,86 @@ ${formattedMessages}
    *   - cleanMessage: Message with mentions stripped, or default directive
    *   - missingSkills: Array of skill slugs that were mentioned but not found
    */
-  protected extractSkillPaths(message: string, implicitSkillSlugs: string[] = []): {
+  protected privateSkillSystemPrompt = '';
+  private skillPathAliases = new Map<string, string>();
+
+  protected remapSkillToolInput(input: Record<string, unknown>): Record<string, unknown> {
+    let changed = false;
+    const remap = (value: unknown): unknown => {
+      if (typeof value !== 'string') return value;
+      let result = value;
+      for (const [oldPath, target] of this.skillPathAliases) {
+        result = result.split(oldPath + '/').join(target + '/');
+        if (result === oldPath) result = target;
+        result = result.replaceAll('\"' + oldPath + '\"', '\"' + target + '\"').replaceAll("'" + oldPath + "'", "'" + target + "'");
+      }
+      changed ||= result !== value;
+      return result;
+    };
+    const output = { ...input };
+    for (const key of ['command', 'cmd', 'file_path', 'path', 'source', 'destination', 'filePath', 'directory']) {
+      if (key in output) output[key] = remap(output[key]);
+    }
+    return changed ? output : input;
+  }
+  protected managedSkillRuntime?: ManagedSkillRuntime;
+
+  private resolveAvailableSkill(slug: string): LoadedSkill | null {
+    const pinned = this.managedSkillRuntime?.get(slug);
+    if (pinned) return { ...pinned, metadata: { description: '', ...pinned.metadata }, source: 'global', managed: { id: pinned.id, revision: pinned.revision } };
+    const root = this.config.workspace?.rootPath ?? this.workingDirectory;
+    return loadSkillBySlug(root, slug, this.config.session?.workingDirectory)
+      ?? ((this.config.agentSkillSlugs ?? []).includes(slug) ? loadSystemGlobalSkillBySlug(slug) : null);
+  }
+
+  private async loadManagedSkill(slug: string): Promise<string> {
+    const available = this.resolveAvailableSkill(slug);
+    if (!available) throw new Error('That skill is unavailable in this workspace. Activate it from the library first.');
+    if (!this.managedSkillRuntime?.get(available.slug) && !isManagedSkill(available)) {
+      if (slug.startsWith('legacy:')) this.skillPathAliases.set(join(dirname(available.path), slug.slice(7)), available.path);
+      return `Read the user-owned skill at ${join(available.path, 'SKILL.md')} before proceeding.`;
+    }
+    if (!this.managedSkillRuntime) throw new Error('Skill loading requires an active run.');
+    const root = this.config.workspace?.rootPath ?? this.workingDirectory;
+    const managedSlug = available.slug;
+    const record = this.managedSkillRuntime.pin(managedSlug, () => {
+      const skill = resolveManagedSkillInstructions(root, managedSlug);
+      if (!skill) throw new Error('This built-in skill is unavailable.');
+      return skill;
+    });
+    for (const oldRoot of [join(GLOBAL_AGENT_SKILLS_DIR, managedSlug), join(root, 'skills', managedSlug),
+      join(homedir(), '.agents', 'skills', managedSlug), `~/.agents/skills/${managedSlug}`,
+      available.path, ...(this.config.session?.workingDirectory ? [join(this.config.session.workingDirectory, PROJECT_AGENT_SKILLS_DIR, managedSlug)] : [])]) {
+      this.skillPathAliases.set(oldRoot, record.path);
+    }
+    for (const sourceSlug of record.metadata.requiredSources ?? []) {
+      if (this.sourceManager.isSourceActive(sourceSlug)) continue;
+      const source = this.sourceManager.getAllSources().find(item => item.config.slug === sourceSlug);
+      if (!source || !isSourceUsable(source) || !this.onSourceActivationRequest
+        || !(await this.onSourceActivationRequest(sourceSlug))) {
+        throw new Error(`Connect and enable ${sourceSlug} before using this skill. No alternative provider was selected.`);
+      }
+      const currentMessage = this.getCurrentTurnUserMessage();
+      if (currentMessage) this.setPendingSourceActivationRestart({ sourceSlug, userMessage: currentMessage });
+    }
+    return this.managedSkillRuntime.instructions(managedSlug).content;
+  }
+
+  protected extractSkillPaths(message: string, implicitSkillSlugs: string[] = [], legacySkillReferences: string[] = []): {
     skillPaths: Map<string, string>;
     cleanMessage: string;
     missingSkills: string[];
   } {
     const workspaceRoot = this.config.workspace?.rootPath ?? this.workingDirectory;
     const projectRoot = this.config.session?.workingDirectory;
-    const skills = loadAllSkills(workspaceRoot, projectRoot);
+    const currentSkills = loadAllSkills(workspaceRoot, projectRoot);
+    const pinnedSkills = (this.managedSkillRuntime?.records() ?? []).map(skill => this.resolveAvailableSkill(skill.slug)!);
+    const skills = [...pinnedSkills, ...currentSkills.filter(skill => !pinnedSkills.some(pinned => pinned.slug === skill.slug))];
     const implicitSystemSkills = implicitSkillSlugs
-      .map(slug => loadSystemGlobalSkillBySlug(slug))
+      .map(slug => {
+        const skill = this.resolveAvailableSkill(slug);
+        return skill ? { ...skill, slug } : null;
+      })
       .filter((skill): skill is NonNullable<typeof skill> => !!skill && !skills.some(s => s.slug === skill.slug));
     const availableSkills = [...skills, ...implicitSystemSkills];
     const skillSlugs = availableSkills.map(s => s.slug);
@@ -995,9 +1077,10 @@ ${formattedMessages}
     }
 
     const activeImplicitSkillSlugs = implicitSkillSlugs.filter(slug => shouldActivateImplicitSkill(slug, message, parsed.skills));
-    const requestedSkillSlugs = [...new Set([...parsed.skills, ...activeImplicitSkillSlugs])];
+    const mentionedSkillSlugs = parsed.skills.map(slug => legacySkillReferences.includes(slug) ? `legacy:${slug}` : slug);
+    const requestedSkillSlugs = [...new Set([...mentionedSkillSlugs, ...activeImplicitSkillSlugs])];
     // Validate declared marketplace skills immediately even though their reads are deferred.
-    const validatedImplicitSlugs = [...new Set([...activeImplicitSkillSlugs, ...implicitSkillSlugs.filter(slug => slug === 'monid' || slug === 'zero')])];
+    const validatedImplicitSlugs = [...new Set([...activeImplicitSkillSlugs, ...implicitSkillSlugs.filter(slug => ['monid', 'zero'].includes(slug.replace(/^legacy:/, '')))])];
     const missingImplicitSkills = validatedImplicitSlugs.filter(slug => {
       const skill = availableSkills.find(candidate => candidate.slug === slug);
       return !skill || !existsSync(join(skill.path, 'SKILL.md'));
@@ -1009,7 +1092,7 @@ ${formattedMessages}
     // Resolve SKILL.md paths for matched and implicit saved-agent skills
     const skillPaths = new Map<string, string>();
     for (const slug of requestedSkillSlugs) {
-      const skill = availableSkills.find(s => s.slug === slug);
+      const skill = slug.startsWith('legacy:') ? this.resolveAvailableSkill(slug) : availableSkills.find(s => s.slug === slug);
       if (skill) {
         const skillMdPath = join(skill.path, 'SKILL.md');
         if (existsSync(skillMdPath)) {
@@ -1111,12 +1194,76 @@ ${formattedMessages}
     attachments?: FileAttachment[],
     options?: ChatOptions
   ): AsyncGenerator<AgentEvent> {
+    const workspaceRoot = this.config.workspace?.rootPath ?? this.workingDirectory;
+    const sessionId = this.config.session?.id;
+    this.privateSkillSystemPrompt = '';
+    this.skillPathAliases.clear();
+    if (sessionId && (options?.resumeManagedSkillRun || existsSync(getSessionPath(workspaceRoot, sessionId)))) {
+      try {
+        this.managedSkillRuntime ??= new ManagedSkillRuntime(getSessionPath(workspaceRoot, sessionId));
+        this.managedSkillRuntime.beginRun(options?.managedSkillRunId ?? randomUUID(), options?.resumeManagedSkillRun);
+        this.managedSkillRuntime.resetContext();
+      } catch (error) {
+        yield { type: 'error', message: error instanceof Error ? error.message : 'Built-in guidance could not be restored.' };
+        yield { type: 'complete' };
+        return;
+      }
+    }
     const { skillPaths, cleanMessage, missingSkills } = this.extractSkillPaths(
       message,
       this.config.agentSkillSlugs ?? [],
+      options?.legacySkillReferences,
     );
     if (missingSkills.length > 0) {
       yield { type: 'error', message: `Skill(s) not found: ${missingSkills.join(', ')}` };
+      yield { type: 'complete' };
+      return;
+    }
+
+    for (const [slug, path] of skillPaths) {
+      if (slug.startsWith('legacy:')) this.skillPathAliases.set(join(dirname(dirname(path)), slug.slice(7)), dirname(path));
+    }
+    if (sessionId && this.managedSkillRuntime) {
+      try {
+        mergeSessionScopedToolCallbacks(sessionId, {
+          useSkillFn: slug => this.loadManagedSkill(slug),
+          getSkillPersonalInstructionsFn: async slug => getPersonalInstructions(workspaceRoot, slug),
+          saveSkillPersonalInstructionsFn: async (slug, scope, text) => {
+            assertTeamPermission(workspaceRoot, 'team.settings.update');
+            savePersonalInstruction(workspaceRoot, slug, { scope, text });
+            return 'Personal instructions saved. They apply the next time this skill starts a fresh run.';
+          },
+          deleteSkillPersonalInstructionsFn: async (slug, scope) => {
+            assertTeamPermission(workspaceRoot, 'team.settings.update');
+            deletePersonalInstruction(workspaceRoot, slug, scope);
+            return 'Personal instructions removed. The active run keeps its pinned guidance.';
+          },
+          readSkillReferenceFn: async (slug, path) => {
+            if (!this.managedSkillRuntime?.get(slug)) throw new Error('Use the parent skill before loading its references.');
+            return this.managedSkillRuntime.instructions(slug, path).content;
+          },
+        });
+        const privateParts: string[] = [];
+        for (const [slug] of skillPaths) {
+          const skill = this.resolveAvailableSkill(slug);
+          if (skill && (this.managedSkillRuntime.get(skill.slug) || isManagedSkill(skill))) {
+            privateParts.push(await this.loadManagedSkill(slug));
+            skillPaths.delete(slug);
+          }
+        }
+        this.privateSkillSystemPrompt = privateParts.join('\n\n');
+      } catch (error) {
+        yield { type: 'error', message: error instanceof Error ? error.message : 'Built-in guidance could not be loaded.' };
+        yield { type: 'complete' };
+        return;
+      }
+    }
+
+    if ([...skillPaths.keys()].some(slug => {
+      const skill = this.resolveAvailableSkill(slug);
+      return skill && isManagedSkill(skill);
+    })) {
+      yield { type: 'error', message: 'Built-in guidance requires an active session with private run storage.' };
       yield { type: 'complete' };
       return;
     }

@@ -94,7 +94,7 @@ import { useFocusContext } from "@/context/FocusContext"
 import { getSessionAgentIdentity, getSessionListDisplay, getSessionPreviewText, getSessionTitle } from "@/utils/session"
 import { GENERAL_PROJECT_KEY, getSessionProjectInfo } from "@/utils/session-project"
 import { useSetAtom } from "jotai"
-import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter } from "../../../shared/types"
+import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, SkillDescriptor, PermissionMode, SourceFilter } from "../../../shared/types"
 import { compareSessionsByRecency, sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
@@ -873,7 +873,7 @@ function AppShellContent({
   }, [sources, setSourcesAtom])
 
   // Skills state (workspace-scoped)
-  const [skills, setSkills] = React.useState<LoadedSkill[]>([])
+  const [skills, setSkills] = React.useState<SkillDescriptor[]>([])
   // Sync skills to atom for NavigationContext auto-selection
   const setSkillsAtom = useSetAtom(skillsAtom)
   const setSessionProjectDialog = useSetAtom(sessionProjectDialogAtom)
@@ -1137,7 +1137,7 @@ function AppShellContent({
   }, [activeWorkspaceId, navigateToSource])
 
   // Handle selecting a skill from the list
-  const handleSkillSelect = React.useCallback((skill: LoadedSkill) => {
+  const handleSkillSelect = React.useCallback((skill: SkillDescriptor) => {
     if (!activeWorkspaceId) return
     navigateInApp(routes.view.skills(skill.slug))
   }, [activeWorkspaceId, navigateInApp])
@@ -3982,6 +3982,7 @@ function AppShellContent({
             {isSkillsNavigation(navState) && activeWorkspaceId && (
               /* Skills List */
               <SkillsListPanel
+                workingDirectory={activeSessionWorkingDirectory}
                 skills={skills}
                 workspaceId={activeWorkspaceId}
                 workspaceRootPath={activeWorkspace?.rootPath}

@@ -66,6 +66,11 @@ export interface SessionScopedToolCallbacks {
   /** List saved agents available to the workspace. */
   listAgentsFn?: (options?: import('@craft-agent/session-tools-core').ListAgentsOptions) => import('@craft-agent/session-tools-core').ListAgentsResult;
   /** List skills (workspace-active + dormant globals) available to the workspace. */
+  getSkillPersonalInstructionsFn?: (slug: string) => Promise<unknown>;
+  saveSkillPersonalInstructionsFn?: (slug: string, scope: 'shared' | 'workspace', text: string) => Promise<string>;
+  deleteSkillPersonalInstructionsFn?: (slug: string, scope: 'shared' | 'workspace') => Promise<string>;
+  useSkillFn?: (slug: string) => Promise<string>;
+  readSkillReferenceFn?: (slug: string, path: string) => Promise<string>;
   listSkillsFn?: (options?: import('@craft-agent/session-tools-core').ListSkillsOptions) => import('@craft-agent/session-tools-core').ListSkillsResult;
   /** Host-validated adjacent capability loading; shared by provider contexts. */
   loadAgentCapabilityFn?: (input: import('@craft-agent/session-tools-core').LoadAgentCapabilityInput) => Promise<import('@craft-agent/session-tools-core').LoadAgentCapabilityResult>;

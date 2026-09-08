@@ -20,7 +20,7 @@ import type {
   PermissionMode,
   SessionStatus,
   LoadedSource,
-  LoadedSkill,
+  SkillDescriptor,
   NewChatActionParams,
   LlmConnectionWithStatus,
   TestAutomationResult,
@@ -58,7 +58,7 @@ export interface AppShellContextType {
   /** All enabled sources for this workspace - provided by AppShell component */
   enabledSources?: LoadedSource[]
   /** All skills for this workspace - provided by AppShell component (for @mentions) */
-  skills?: LoadedSkill[]
+  skills?: SkillDescriptor[]
   /** Active agents for this workspace - provided by AppShell component. */
   activeAgents?: AgentDefinitionDTO[]
   /** Working directory of the active session — needed for project-level skill resolution */

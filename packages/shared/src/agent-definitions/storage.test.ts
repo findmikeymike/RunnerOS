@@ -2482,3 +2482,15 @@ Body.
     expect(parseAgentFile(md)!.metadata.routing?.bestFor).toHaveLength(6)
   })
 })
+
+test('startup defaults preserve qualified legacy skill assignments without adding stock duplicates', () => {
+  const root = tmpWorkspace()
+  const options = { globalAgentsDir: root }
+  try {
+    writeGlobalAgent({ slug: 'concierge', metadata: { name: 'Manager', description: 'Custom manager', skills: ['legacy:zero'] }, systemPrompt: 'My manager instructions.' }, options)
+    expect(ensureBuiltInAgentSkillsForSlug('concierge', ['zero'], options).updated).toBe(false)
+    ensureBuiltInAgentMetadataSlugs('concierge', { skills: ['zero', 'monid'] }, options)
+    expect(loadGlobalAgent('concierge', options)!.metadata.skills).toEqual(['legacy:zero', 'monid'])
+    expect(loadGlobalAgent('concierge', options)!.systemPrompt).toBe('My manager instructions.')
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})

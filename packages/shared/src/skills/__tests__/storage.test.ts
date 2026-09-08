@@ -710,7 +710,9 @@ describe.serial('loadAllSkills', () => {
 
     expect(loadAllSkills(workspaceRoot).find(s => s.slug === 'agent-creator')).toBeUndefined();
     expect(loadSystemGlobalSkillBySlug('agent-creator')?.metadata.name).toBe('Agent Creator');
-    expect(loadSystemGlobalSkillBySlug('runneros-self-edit')).toBeNull();
+    // Explicit system loading resolves the shipped managed bundle even without an old loose copy.
+    expect(loadSystemGlobalSkillBySlug('runneros-self-edit')?.managed?.id).toBe('artist-os:skill:runneros-self-edit');
+    expect(loadAllSkills(workspaceRoot).find(s => s.slug === 'runneros-self-edit')).toBeUndefined();
     expect(loadSystemGlobalSkillBySlug(`${TEST_PREFIX}not_system`)).toBeNull();
   });
 

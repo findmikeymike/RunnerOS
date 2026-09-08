@@ -1,3 +1,4 @@
+import { getLegacyAuthoredSkillReferences } from '@craft-agent/shared/skills'
 import { readFile, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
@@ -438,6 +439,7 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
             labels: payload.labels,
             permissionMode: payload.permissionMode,
             mentions: references.mentions,
+            legacySkillReferences: getLegacyAuthoredSkillReferences(action),
             agentSlug: action.agentSlug,
             taskModeId: action.taskModeId,
             llmConnection: action.llmConnection,

@@ -27,6 +27,8 @@ import {
 import { isSystemGlobalSkillSlug } from './system.ts';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
 import { resolveRuntimeIdentity } from '../config/runtime-identity.ts';
+import { getManagedSkill, getManagedSkillManifest, isManagedSkillFeatureEnabled } from './managed.ts';
+import { getLegacySkillMigration, resolveLegacySkillAlias } from './migration.ts';
 import {
   validateIconValue,
   findIconFile,
@@ -40,7 +42,11 @@ import {
 // ============================================================
 
 /** Global agent skills directory: ~/.agents/skills/ */
-export const GLOBAL_AGENT_SKILLS_DIR = resolveRuntimeIdentity().skillsDir;
+const STORAGE_RUNTIME_IDENTITY = resolveRuntimeIdentity();
+export const GLOBAL_AGENT_SKILLS_DIR = STORAGE_RUNTIME_IDENTITY.skillsDir;
+const MANAGED_SKILLS_ENABLED = isManagedSkillFeatureEnabled(STORAGE_RUNTIME_IDENTITY.variant);
+const storageManagedManifest = (): ReturnType<typeof getManagedSkillManifest> => MANAGED_SKILLS_ENABLED ? getManagedSkillManifest() : new Map();
+const storageManagedSkill = (slug: string) => MANAGED_SKILLS_ENABLED ? getManagedSkill(slug, { globalSkillsDir: GLOBAL_AGENT_SKILLS_DIR }) : null;
 
 /** Project-level agent skills relative directory name */
 export const PROJECT_AGENT_SKILLS_DIR = '.agents/skills';
@@ -93,7 +99,7 @@ export function listEnabledGlobalSkillSlugs(workspaceRoot: string): string[] {
 }
 
 export function setGlobalSkillEnabled(workspaceRoot: string, slug: string, enabled: boolean): string[] {
-  const normalizedSlug = slug.trim();
+  const normalizedSlug = MANAGED_SKILLS_ENABLED ? slug.trim().replace(/^legacy:/, '') : slug.trim();
   if (!normalizedSlug) return listEnabledGlobalSkillSlugs(workspaceRoot);
 
   const current = new Set(listEnabledGlobalSkillSlugs(workspaceRoot));
@@ -262,6 +268,7 @@ function loadSkillsFromDir(skillsDir: string, source: SkillSource): LoadedSkill[
  */
 export function loadSkill(workspaceRoot: string, slug: string): LoadedSkill | null {
   const skillsDir = getWorkspaceSkillsPath(workspaceRoot);
+  if (storageManagedManifest().has(slug)) return getLegacySkillMigration(skillsDir, slug) || existsSync(join(skillsDir, slug, 'SKILL.md')) ? storageManagedSkill(slug) : null;
   return loadSkillFromDir(skillsDir, slug, 'workspace');
 }
 
@@ -271,16 +278,28 @@ export function loadSkill(workspaceRoot: string, slug: string): LoadedSkill | nu
  */
 export function loadWorkspaceSkills(workspaceRoot: string): LoadedSkill[] {
   const skillsDir = getWorkspaceSkillsPath(workspaceRoot);
-  return loadSkillsFromDir(skillsDir, 'workspace');
+  return [...loadSkillsFromDir(skillsDir, 'workspace').filter(skill => !storageManagedManifest().has(skill.slug)),
+    ...Array.from(storageManagedManifest().keys()).flatMap(slug => {
+      const managed = loadSkill(workspaceRoot, slug);
+      return managed ? [managed] : [];
+    })];
 }
 
 export function loadGlobalSkills(): LoadedSkill[] {
-  return loadSkillsFromDir(GLOBAL_AGENT_SKILLS_DIR, 'global');
+  const skills = [...loadSkillsFromDir(GLOBAL_AGENT_SKILLS_DIR, 'global').filter(skill => !storageManagedManifest().has(skill.slug)),
+    ...Array.from(storageManagedManifest().keys(), slug => storageManagedSkill(slug)!)];
+  const bySlug = new Map(skills.map(skill => [skill.slug, skill]));
+  for (const slug of storageManagedManifest().keys()) {
+    const target = resolveLegacySkillAlias(GLOBAL_AGENT_SKILLS_DIR, slug) ?? slug;
+    const skill = bySlug.get(target);
+    if (skill) bySlug.set(target, { ...skill, aliases: [...(skill.aliases ?? []), `legacy:${slug}`] });
+  }
+  return [...bySlug.values()];
 }
 
 export function loadSystemGlobalSkillBySlug(slug: string): LoadedSkill | null {
   if (!isSystemGlobalSkillSlug(slug)) return null;
-  return loadSkillFromDir(GLOBAL_AGENT_SKILLS_DIR, slug, 'global');
+  return loadGlobalSkillBySlug(slug);
 }
 
 // ── Skills cache ────────────────────────────────────────────────────────
@@ -320,8 +339,11 @@ export function loadAllSkills(workspaceRoot: string, projectRoot?: string): Load
 
   // 1. Enabled global skills (lowest priority): ~/.agents/skills/
   for (const slug of enabledGlobalSlugs) {
-    const skill = loadSkillFromDir(GLOBAL_AGENT_SKILLS_DIR, slug, 'global');
+    const skill = loadGlobalSkillBySlug(slug);
     if (skill) skillsBySlug.set(skill.slug, skill);
+    const legacySlug = MANAGED_SKILLS_ENABLED ? resolveLegacySkillAlias(GLOBAL_AGENT_SKILLS_DIR, slug) : null;
+    const custom = legacySlug ? loadSkillFromDir(GLOBAL_AGENT_SKILLS_DIR, legacySlug, 'global') : null;
+    if (custom) skillsBySlug.set(custom.slug, custom);
   }
 
   // 2. Workspace skills (medium priority)
@@ -333,10 +355,19 @@ export function loadAllSkills(workspaceRoot: string, projectRoot?: string): Load
   if (projectRoot) {
     const projectSkillsDir = join(projectRoot, PROJECT_AGENT_SKILLS_DIR);
     for (const skill of loadSkillsFromDir(projectSkillsDir, 'project')) {
+      if (storageManagedManifest().has(skill.slug)) continue;
       skillsBySlug.set(skill.slug, skill);
+    }
+    for (const slug of storageManagedManifest().keys()) {
+      if (getLegacySkillMigration(projectSkillsDir, slug) || existsSync(join(projectSkillsDir, slug, 'SKILL.md'))) skillsBySlug.set(slug, storageManagedSkill(slug)!);
     }
   }
 
+  for (const slug of storageManagedManifest().keys()) {
+    const target = loadSkillBySlug(workspaceRoot, `legacy:${slug}`, projectRoot);
+    const visible = target ? skillsBySlug.get(target.slug) : null;
+    if (visible) skillsBySlug.set(visible.slug, { ...visible, aliases: [...(visible.aliases ?? []), `legacy:${slug}`] });
+  }
   const result = Array.from(skillsBySlug.values());
   skillsCache.set(cacheKey, { skills: result, ts: now });
   return result;
@@ -351,6 +382,30 @@ export function loadAllSkills(workspaceRoot: string, projectRoot?: string): Load
  * @param projectRoot - Optional project root for project-level skills
  */
 export function loadSkillBySlug(workspaceRoot: string, slug: string, projectRoot?: string): LoadedSkill | null {
+  if (MANAGED_SKILLS_ENABLED && slug.startsWith('legacy:')) {
+    const original = slug.slice('legacy:'.length);
+    for (const [root, source] of [
+      ...(projectRoot ? [[join(projectRoot, PROJECT_AGENT_SKILLS_DIR), 'project']] : []),
+      [getWorkspaceSkillsPath(workspaceRoot), 'workspace'],
+      [GLOBAL_AGENT_SKILLS_DIR, 'global'],
+    ] as Array<[string, SkillSource]>) {
+      const migrated = getLegacySkillMigration(root, original);
+      if (source === 'global') {
+        const enabled = listEnabledGlobalSkillSlugs(workspaceRoot);
+        if (!enabled.includes(original) && !(migrated?.copySlug && enabled.includes(migrated.copySlug))) continue;
+      }
+      if (migrated) return migrated.copySlug ? loadSkillFromDir(root, migrated.copySlug, source) : storageManagedSkill(original);
+    }
+    // No customization in this scope: the previous assignment was the shipped skill.
+    return loadSkillBySlug(workspaceRoot, original, projectRoot);
+  }
+  if (storageManagedManifest().has(slug)) {
+    const workspaceSkills = getWorkspaceSkillsPath(workspaceRoot);
+    const projectSkills = projectRoot ? join(projectRoot, PROJECT_AGENT_SKILLS_DIR) : null;
+    const installed = [workspaceSkills, ...(projectSkills ? [projectSkills] : [])].some(root =>
+      getLegacySkillMigration(root, slug) || existsSync(join(root, slug, 'SKILL.md')));
+    return installed || listEnabledGlobalSkillSlugs(workspaceRoot).includes(slug) ? storageManagedSkill(slug) : null;
+  }
   // Highest priority: project-level
   if (projectRoot) {
     const projectSkillsDir = join(projectRoot, PROJECT_AGENT_SKILLS_DIR);
@@ -363,13 +418,20 @@ export function loadSkillBySlug(workspaceRoot: string, slug: string, projectRoot
   if (workspaceSkill) return workspaceSkill;
 
   // Lowest priority: enabled global library skill
-  if (!listEnabledGlobalSkillSlugs(workspaceRoot).includes(slug)) {
+  const enabled = listEnabledGlobalSkillSlugs(workspaceRoot);
+  if (!enabled.includes(slug) && !(MANAGED_SKILLS_ENABLED && enabled.some(original => resolveLegacySkillAlias(GLOBAL_AGENT_SKILLS_DIR, original) === slug))) {
     return null;
   }
   return loadSkillFromDir(GLOBAL_AGENT_SKILLS_DIR, slug, 'global');
 }
 
 export function loadGlobalSkillBySlug(slug: string): LoadedSkill | null {
+  if (MANAGED_SKILLS_ENABLED && slug.startsWith('legacy:')) {
+    const original = slug.slice('legacy:'.length);
+    const alias = resolveLegacySkillAlias(GLOBAL_AGENT_SKILLS_DIR, original);
+    return alias ? loadSkillFromDir(GLOBAL_AGENT_SKILLS_DIR, alias, 'global') : storageManagedSkill(original);
+  }
+  if (storageManagedManifest().has(slug)) return storageManagedSkill(slug);
   return loadSkillFromDir(GLOBAL_AGENT_SKILLS_DIR, slug, 'global');
 }
 
@@ -399,6 +461,7 @@ export function getSkillIconPath(workspaceRoot: string, slug: string): string | 
  * @param slug - Skill directory name
  */
 export function deleteSkill(workspaceRoot: string, slug: string): boolean {
+  if (storageManagedManifest().has(slug)) return false;
   const skillsDir = getWorkspaceSkillsPath(workspaceRoot);
   const skillDir = join(skillsDir, slug);
 
@@ -521,6 +584,8 @@ export function mirrorSkillToGlobal(
   options: { overwrite?: boolean } = {},
 ): MirrorSkillResult {
   const normalizedSlug = slug.trim();
+
+  if (storageManagedManifest().has(normalizedSlug)) return { mirrored: false, skipReason: 'invalid-skill' };
 
   if (!normalizedSlug) {
     return { mirrored: false, skipReason: 'invalid-skill' };
@@ -680,6 +745,7 @@ export function ensureRequiredGlobalSkills(
   mkdirSync(GLOBAL_AGENT_SKILLS_DIR, { recursive: true });
   let ensured = 0;
   for (const s of required) {
+    if (storageManagedManifest().has(s.slug)) { storageManagedSkill(s.slug); continue; }
     for (const file of s.files) {
       const target = join(GLOBAL_AGENT_SKILLS_DIR, s.slug, file.path);
       if (existsSync(target)) continue;
@@ -697,6 +763,7 @@ export function replaceRequiredGlobalSkillFileIfContains(
   marker: string,
   replacementContent: string,
 ): { updated: boolean } {
+  if (storageManagedManifest().has(slug)) return { updated: false };
   const target = join(GLOBAL_AGENT_SKILLS_DIR, slug, filePath);
   if (!existsSync(target)) return { updated: false };
 
@@ -720,6 +787,9 @@ export function replaceRequiredGlobalSkillFileIfHashMatches(
   replacementContent: string,
   globalSkillsDir = GLOBAL_AGENT_SKILLS_DIR,
 ): { updated: boolean } {
+  // Proven old stock can upgrade before managed migration captures ownership.
+  // Once a scope journal exists, neither pending copies nor retired files may change.
+  if (getLegacySkillMigration(globalSkillsDir, slug)) return { updated: false };
   const target = join(globalSkillsDir, slug, filePath);
   if (!existsSync(target)) return { updated: false };
 

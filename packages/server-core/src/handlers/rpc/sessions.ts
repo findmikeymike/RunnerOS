@@ -1,3 +1,4 @@
+import { humanSendMessageOptions } from './session-send-options.ts'
 import { resolveFocusedSessionCreateOptions } from '../../sessions/focused-session-create'
 import { readFile, writeFile, stat } from 'fs/promises'
 import { join } from 'path'
@@ -264,7 +265,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
           message,
           attachments,
           storedAttachments,
-          { ...options, inputOrigin: 'human' },
+          humanSendMessageOptions(options),
           undefined,
           undefined,
           onAck,

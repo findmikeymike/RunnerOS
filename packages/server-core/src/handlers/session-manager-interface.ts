@@ -300,6 +300,7 @@ export interface ISessionManager {
  * overrides) can be added without churn at every call site.
  */
 export interface ExecutePromptAutomationInput {
+  legacySkillReferences?: string[]
   workspaceId: string
   workspaceRootPath: string
   prompt: string

@@ -2,7 +2,7 @@ import * as React from 'react'
 import { createAvatarPlayback } from '@/lib/artist-manager-avatar-playback'
 import type { AvatarPlayback } from '@/lib/mikey-avatar/pose'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
-import type { AgentDefinitionDTO, LoadedSkill, LoadedSource, ArtistManagerMoonshineStatus } from '../../shared/types'
+import type { AgentDefinitionDTO, SkillDescriptor, LoadedSource, ArtistManagerMoonshineStatus } from '../../shared/types'
 import { VoiceCoreWeb, createAssemblyAiSttTransport, createInworldTtsTransport, type VoiceEvent } from '@voice-core/web/cloud'
 import { normalizeVoiceHandoffTargets, type VoiceHandoffTarget, type VoiceHandoffProposal } from '../../shared/artist-manager-voice-handoff'
 import { createVoiceHandoffCoordinator } from '@/lib/artist-manager-voice-handoff'
@@ -43,7 +43,7 @@ export type ArtistManagerVoiceState = {
 type PreparedCall = { runtime: VoiceCoreWeb; ticket: number; settings: ArtistManagerVoiceSettings; trace: VoiceTimingTrace | null }
 
 export function useArtistManagerVoice(input: {
-  workspaceId: string; agents: AgentDefinitionDTO[]; skills: LoadedSkill[]; sources: LoadedSource[]
+  workspaceId: string; agents: AgentDefinitionDTO[]; skills: SkillDescriptor[]; sources: LoadedSource[]
   handoffTargets?: VoiceHandoffTarget[]
   onOpenCommand?(proposal: VoiceHandoffProposal, isCurrent: () => boolean): Promise<void>
 }): ArtistManagerVoiceState {

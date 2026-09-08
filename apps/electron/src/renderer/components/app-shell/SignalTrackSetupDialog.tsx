@@ -107,7 +107,7 @@ export function SignalTrackSetupDialog({ open, configs, initialTrack, adoptIndus
   }
   const switchTrack = (kind: SignalTrack) => { setTrack(kind); setExpanded(null); setError(null); setConfirmClose(false) }
   return <Dialog open={open} onOpenChange={value => { if (!value) close() }}>
-    <DialogContent className="flex max-h-[min(820px,90dvh)] w-[calc(100vw-2rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-lg border-white/10 bg-[#141416] p-0 text-white shadow-xl sm:max-w-2xl">
+    <DialogContent className="flex max-h-[min(820px,90dvh)] w-[calc(100vw-2rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-lg border-white/10 bg-[#141416] p-0 text-white shadow-modal-small sm:max-w-2xl">
       <DialogHeader className="px-6 pb-5 pt-6 text-left">
         <DialogTitle className="text-lg font-semibold text-white">Channels & schedule</DialogTitle>
         <DialogDescription className="sr-only">Manage research channels and weekly scans for Industry and Your World.</DialogDescription>

@@ -499,8 +499,19 @@ test('marketplace skill awareness includes a concrete on-demand read route', () 
   expect(footer).toContain('@monid');
   expect(footer).toContain('Discover and run paid API tools.');
   expect(footer).toContain('read "/tmp/my skills/monid/SKILL.md" using Read or cat via Bash');
-  expect(footer).toContain('invoke the zero skill using the Skill tool');
+  expect(footer).toContain('invoke use_skill("zero")');
   expect(footer).toContain('before using its marketplace tools');
   expect(footer.match(/Available on demand:/g)).toHaveLength(2);
   expect(footer).toContain('@domain');
 });
+
+test('describes managed invocation once without leaking runtime paths or loading bodies', () => {
+  const footer = buildAgentBundleFooter(agent({ skills: ['monid', 'zero'] }), [
+    { slug: 'monid', path: '/private/managed/monid', origin: 'managed', metadata: { name: 'Monid', description: 'Discover tools.' } },
+    { slug: 'zero', path: '/private/managed/zero', managed: { id: 'artist-os:skill:zero', revision: 'r1' }, metadata: { name: 'Zero' } },
+  ], [])
+  expect(footer).not.toContain('/private/')
+  expect(footer).not.toContain('SKILL.md')
+  expect(footer).toContain('use_skill("monid")')
+  expect(footer.match(/built-in instructions load privately/g)).toHaveLength(1)
+})

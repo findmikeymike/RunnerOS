@@ -290,6 +290,8 @@ export type SessionEvent =
   | { type: 'session_tasks_changed'; sessionId: string; sessionTasks?: SessionTaskList; degraded?: boolean; error?: string }
 
 export interface SendMessageOptions {
+  /** Host-supplied frozen choices for an unchanged pre-migration automation template. */
+  legacySkillReferences?: string[]
   /** Single-use host token for resuming an admitted response after source activation. */
   sourceRetryToken?: string
   skillSlugs?: string[]

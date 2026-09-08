@@ -10,7 +10,7 @@
 
 import type { ContentBadge } from '@craft-agent/core'
 import type { MentionItemType } from '@/components/ui/mention-menu'
-import type { LoadedSkill, LoadedSource } from '../../shared/types'
+import type { SkillDescriptor, LoadedSource } from '../../shared/types'
 import { AGENTS_PLUGIN_NAME } from '@craft-agent/shared/skills/types'
 import { getSourceIconSync, getSkillIconSync } from './icon-cache'
 
@@ -202,7 +202,7 @@ export function stripSkillMentions(text: string): string {
  */
 export function extractBadges(
   text: string,
-  skills: LoadedSkill[],
+  skills: SkillDescriptor[],
   sources: LoadedSource[],
   workspaceId: string
 ): ContentBadge[] {

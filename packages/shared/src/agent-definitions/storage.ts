@@ -834,7 +834,7 @@ export function ensureBuiltInAgentSkillsForSlug(
   if (!loaded) return { updated: false };
 
   const current = new Set(loaded.metadata.skills ?? []);
-  const missing = requiredSkills.filter((s) => !current.has(s));
+  const missing = requiredSkills.filter((s) => !current.has(s) && !current.has(`legacy:${s}`));
   if (missing.length === 0) return { updated: false };
 
   const next: AgentMetadata = {
@@ -868,8 +868,9 @@ export function ensureBuiltInAgentMetadataSlugs(
     const requiredValues = required[key] ?? [];
     if (requiredValues.length === 0) continue;
     const current = next[key] ?? [];
-    const extras = current.filter((value) => !requiredValues.includes(value));
-    const requiredFirst = [...requiredValues, ...extras];
+    const effectiveRequired = key === 'skills' ? requiredValues.map(value => current.includes(`legacy:${value}`) ? `legacy:${value}` : value) : requiredValues;
+    const extras = current.filter((value) => !effectiveRequired.includes(value));
+    const requiredFirst = [...effectiveRequired, ...extras];
     if (agentMetadataValueEquals(current, requiredFirst)) continue;
     next[key] = requiredFirst;
     changed = true;

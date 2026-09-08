@@ -98,6 +98,9 @@ export interface WorkflowStepCompletionContract {
  * runner actually honors them.
  */
 export interface WorkflowStep {
+  /** Frozen pre-migration selections, invalidated by an authored input edit. */
+  legacySkillReferences?: string[];
+  legacySkillPromptHash?: string;
   /** Unique slug within this workflow; referenced as `{{steps.<id>.output}}`. */
   id: string;
   /** Agent slug to run. Existence is checked at run time, not parse time. */

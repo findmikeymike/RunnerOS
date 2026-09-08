@@ -1,3 +1,4 @@
+import { markLegacyAuthoredSkillReferences } from '../../skills/authored-reference-migration.ts';
 /**
  * Tests for PromptHandler
  */
@@ -37,6 +38,20 @@ describe('PromptHandler', () => {
   });
 
   describe('matcher matching for app events', () => {
+    it('dispatches frozen legacy selections only while the authored prompt remains unchanged', async () => {
+      const onPromptsReady = jest.fn();
+      const action = markLegacyAuthoredSkillReferences({ type: 'prompt' as const, prompt: 'Use @monid for $CRAFT_LABEL' }, new Set(['monid']));
+      const provider = createMockConfigProvider({ LabelAdd: [{ matcher: 'bug', actions: [action] }] });
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), provider);
+      handler.subscribe(bus);
+      await bus.emit('LabelAdd', { workspaceId: 'test-workspace', timestamp: Date.now(), label: 'bug' });
+      expect((onPromptsReady.mock.calls[0]![0] as PendingPrompt[])[0]?.legacySkillReferences).toEqual(['monid']);
+      action.prompt = 'New choice @monid';
+      await bus.emit('LabelAdd', { workspaceId: 'test-workspace', timestamp: Date.now(), label: 'bug' });
+      expect((onPromptsReady.mock.calls[1]![0] as PendingPrompt[])[0]?.legacySkillReferences).toEqual([]);
+      handler.dispose();
+    });
+
     it('preserves explicit focus in the pending prompt dispatch', async () => {
       const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({

@@ -172,8 +172,8 @@ import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, SourceTi
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus, SourceTier };
 
 // Skill types
-import type { LoadedSkill, SkillMetadata } from '@craft-agent/shared/skills/types';
-export type { LoadedSkill, SkillMetadata };
+import type { LoadedSkill, SkillDescriptor, PersonalInstruction, SkillMetadata } from '@craft-agent/shared/skills/types';
+export type { LoadedSkill, SkillDescriptor, PersonalInstruction, SkillMetadata };
 
 // Agent definitions — DTOs match the shared `LoadedAgent` shape but are
 // re-named here so the renderer doesn't import the storage module (which
@@ -1031,17 +1031,24 @@ export interface ElectronAPI {
   onDefaultPermissionsChanged(callback: () => void): () => void
 
 	  // Skills
-	  getSkills(workspaceId: string, workingDirectory?: string): Promise<LoadedSkill[]>
-	  listGlobalSkills(workspaceId: string): Promise<LoadedSkill[]>
+	  getSkills(workspaceId: string, workingDirectory?: string): Promise<SkillDescriptor[]>
+	  listGlobalSkills(workspaceId: string): Promise<SkillDescriptor[]>
 	  getEnabledGlobalSkills(workspaceId: string): Promise<string[]>
 	  setGlobalSkillEnabled(workspaceId: string, skillSlug: string, enabled: boolean): Promise<string[]>
 	  getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
+  getSkillIcon(workspaceId: string, skillSlug: string, workingDirectory?: string): Promise<string | null>
+  getSkillNotices(workspaceId: string, skillSlug: string): Promise<Array<{ name: string; content: string }>>
+  getSkillDetail(workspaceId: string, skillSlug: string, workingDirectory?: string): Promise<LoadedSkill | null>
+  importSkillPersonalInstructions(workspaceId: string, input: { parentManagedId: string; text: string }, scope: 'shared' | 'workspace'): Promise<PersonalInstruction | null>
+  getSkillPersonalInstructions(workspaceId: string, skillSlug: string): Promise<PersonalInstruction[]>
+  saveSkillPersonalInstructions(workspaceId: string, skillSlug: string, input: { scope: 'shared' | 'workspace'; text: string; enabled: boolean }): Promise<PersonalInstruction | null>
+  deleteSkillPersonalInstructions(workspaceId: string, skillSlug: string, scope: 'shared' | 'workspace'): Promise<void>
   deleteSkill(workspaceId: string, skillSlug: string): Promise<void>
-  openSkillInEditor(workspaceId: string, skillSlug: string): Promise<void>
-  openSkillInFinder(workspaceId: string, skillSlug: string): Promise<void>
+  openSkillInEditor(workspaceId: string, skillSlug: string, workingDirectory?: string): Promise<void>
+  openSkillInFinder(workspaceId: string, skillSlug: string, workingDirectory?: string): Promise<void>
 
   // Skills change listener (live updates when skills are added/removed/modified)
-  onSkillsChanged(callback: (workspaceId: string, skills: LoadedSkill[]) => void): () => void
+  onSkillsChanged(callback: (workspaceId: string, skills: SkillDescriptor[]) => void): () => void
 
   // Statuses (workspace-scoped)
   listStatuses(workspaceId: string): Promise<import('@craft-agent/shared/statuses').StatusConfig[]>

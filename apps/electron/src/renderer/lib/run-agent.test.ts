@@ -2,7 +2,7 @@ import { STARTER_AGENTS } from '@craft-agent/shared/agent-definitions/starter-te
 import { describe, expect, test } from 'bun:test'
 import { buildAgentCreateSessionOptions, buildPendingAgentTaskModeSessionOptions, ensureAgentDeclaredSkillsEnabled, openAgentSessionComposer, resolveArtistWorkspaceScope, sendAgentDraft, shouldDeferAgentTaskModeSelection } from './run-agent'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
-import type { AgentDefinitionDTO, LoadedSource, LoadedSkill, Session, CreateSessionOptions } from '../../shared/types'
+import type { AgentDefinitionDTO, LoadedSource, SkillDescriptor, Session, CreateSessionOptions } from '../../shared/types'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
 
 function makeAgent(): AgentDefinitionDTO {
@@ -83,7 +83,7 @@ test('focused launch requests authorized mode context even when the caller suppl
 describe('focused launch dependency enforcement', () => {
   const definition = STARTER_AGENTS.find(agent => agent.slug === 'hypermotion-agent')!
   const agent = { ...makeAgent(), ...definition } as AgentDefinitionDTO
-  const skills = definition.metadata.skills!.map(slug => ({ slug, metadata: { name: slug } })) as LoadedSkill[]
+  const skills = definition.metadata.skills!.map(slug => ({ slug, metadata: { name: slug } })) as SkillDescriptor[]
 
   test('focused builder rejects absent inventory, missing skill and unusable required source', () => {
     expect(() => buildAgentCreateSessionOptions(agent, undefined, 'motion')).toThrow('Load current Skills and Connections')

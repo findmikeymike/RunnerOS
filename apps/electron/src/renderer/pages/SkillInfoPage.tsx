@@ -12,6 +12,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Check, X, Minus } from 'lucide-react'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { toast } from 'sonner'
+import { SkillPersonalInstructions } from '@/components/skills/SkillPersonalInstructions'
 import { SkillMenu } from '@/components/app-shell/SkillMenu'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { routes, navigate } from '@/lib/navigate'
@@ -23,7 +24,7 @@ import {
   Info_Table,
   Info_Markdown,
 } from '@/components/info'
-import type { LoadedSkill } from '../../shared/types'
+import type { SkillDescriptor, LoadedSkill } from '../../shared/types'
 
 interface SkillInfoPageProps {
   skillSlug: string
@@ -34,7 +35,9 @@ interface SkillInfoPageProps {
 
 export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory, onClose }: SkillInfoPageProps) {
   const { t } = useTranslation()
-  const [skill, setSkill] = useState<LoadedSkill | null>(null)
+  const [skill, setSkill] = useState<SkillDescriptor | null>(null)
+  const [notices, setNotices] = useState<Array<{ name: string; content: string }>>([])
+  const [detail, setDetail] = useState<LoadedSkill | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const activeWorkspace = useActiveWorkspace()
@@ -45,6 +48,9 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
     let isMounted = true
     setLoading(true)
     setError(null)
+    setSkill(null)
+    setDetail(null)
+    setNotices([])
 
     const loadSkill = async () => {
       try {
@@ -56,6 +62,14 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
         const found = skills.find((s) => s.slug === skillSlug)
         if (found) {
           setSkill(found)
+          if (found.origin === 'managed') {
+            const publicNotices = await window.electronAPI.getSkillNotices(workspaceId, skillSlug)
+            if (isMounted) setNotices(publicNotices)
+          }
+          if (found.origin !== 'managed') {
+            const loaded = await window.electronAPI.getSkillDetail(workspaceId, skillSlug, workingDirectory)
+            if (isMounted) setDetail(loaded)
+          }
         } else {
           setError(t('skillInfo.notFound'))
         }
@@ -75,6 +89,8 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
       const updated = skills.find((s) => s.slug === skillSlug)
       if (updated) {
         setSkill(updated)
+        if (updated.origin === 'managed') setDetail(null)
+        else void window.electronAPI.getSkillDetail(workspaceId, skillSlug, workingDirectory).then(value => { if (isMounted) setDetail(value) }).catch(() => { if (isMounted) setDetail(null) })
       }
     })
 
@@ -90,18 +106,18 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
 
     try {
       if (!canRevealLocally) return
-      await window.electronAPI.showInFolder(`${skill.path}/SKILL.md`)
+      await window.electronAPI.openSkillInFinder(workspaceId, skillSlug, workingDirectory)
     } catch (err) {
       console.error('Failed to open skill in finder:', err)
     }
-  }, [canRevealLocally, skill])
+  }, [canRevealLocally, skill, workspaceId, skillSlug, workingDirectory])
 
   // Handle delete
   const handleDelete = useCallback(async () => {
     if (!skill) return
 
     try {
-      if (skill.source !== 'workspace') return
+      if (!skill.capabilities.canDelete) return
       await window.electronAPI.deleteSkill(workspaceId, skillSlug)
       toast.success(t('skillInfo.deletedSkill', { name: skill.metadata.name }))
       navigate(routes.view.skills())
@@ -119,7 +135,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
 
   // Get skill name for header
   const skillName = skill?.metadata.name || skillSlug
-  const canDeleteSkill = skill?.source === 'workspace'
+  const canDeleteSkill = skill?.capabilities.canDelete ?? false
 
   // Format path to show just the skill-relative portion (skills/{slug}/)
   const formatPath = (path: string) => {
@@ -135,7 +151,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
     if (!skill) return
     // Show the SKILL.md file in Finder (this reveals the enclosing folder with file focused)
     if (!canRevealLocally) return
-    window.electronAPI.showInFolder(`${skill.path}/SKILL.md`)
+    window.electronAPI.openSkillInFinder(workspaceId, skillSlug, workingDirectory)
   }
 
   return (
@@ -175,7 +191,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
             skillName={skillName}
             onOpenInNewWindow={handleOpenInNewWindow}
             onShowInFinder={handleOpenInFinder}
-            canShowInFinder={canRevealLocally}
+            canShowInFinder={canRevealLocally && skill?.origin !== 'managed'}
             onDelete={canDeleteSkill ? handleDelete : undefined}
             canDelete={canDeleteSkill}
             deleteLabel={canDeleteSkill ? t('skillInfo.deleteSkill') : t('skillInfo.managedByProject')}
@@ -187,7 +203,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
         <Info_Page.Content>
           {/* Hero: Avatar, title, and description */}
           <Info_Page.Hero
-            avatar={<SkillAvatar skill={skill} fluid workspaceId={workspaceId} />}
+            avatar={<SkillAvatar skill={skill} fluid workspaceId={workspaceId} workingDirectory={workingDirectory} />}
             title={skill.metadata.name}
             tagline={skill.metadata.description}
           />
@@ -197,14 +213,14 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
             title={t('skillInfo.metadata')}
             actions={
               // EditPopover for AI-assisted metadata editing (name, description in frontmatter)
-              <EditPopover
+              detail && skill.origin !== 'managed' ? <EditPopover
                 trigger={<EditButton />}
-                {...getEditConfig('skill-metadata', skill.path)}
+                {...getEditConfig('skill-metadata', detail!.path)}
                 secondaryAction={{
                   label: t('common.editFile'),
-                  filePath: `${skill.path}/SKILL.md`,
+                  filePath: `${detail?.path}/SKILL.md`,
                 }}
-              />
+              /> : undefined
             }
           >
             <Info_Table>
@@ -218,14 +234,14 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
                  skill.source === 'global' ? t('skillInfo.sourceGlobal') :
                  t('skillInfo.sourceWorkspace')}
               </Info_Table.Row>
-              <Info_Table.Row label={t('common.location')}>
+              {detail && skill.origin !== 'managed' && <Info_Table.Row label={t('common.location')}>
                 <button
                   onClick={handleLocationClick}
                   className="hover:underline cursor-pointer text-left"
                 >
-                  {formatPath(skill.path)}
+                  {formatPath(detail.path)}
                 </button>
-              </Info_Table.Row>
+              </Info_Table.Row>}
               {skill.metadata.requiredSources && skill.metadata.requiredSources.length > 0 && (
                 <Info_Table.Row label={t('skillInfo.requiredSources')}>
                   {skill.metadata.requiredSources.join(', ')}
@@ -235,7 +251,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
           </Info_Section>
 
           {/* Permission Modes */}
-          {skill.metadata.alwaysAllow && skill.metadata.alwaysAllow.length > 0 && (
+          {detail?.metadata.alwaysAllow && detail.metadata.alwaysAllow.length > 0 && (
             <Info_Section title={t('skillInfo.permissionModes')}>
               <div className="space-y-2 px-4 py-3">
                 <p className="mb-3 text-xs text-white/45">
@@ -272,25 +288,36 @@ export default function SkillInfoPage({ skillSlug, workspaceId, workingDirectory
             </Info_Section>
           )}
 
+          {skill.origin === 'managed' && (
+            <Info_Section title="Built-in">
+              <p className="px-4 py-3 text-sm text-muted-foreground">Built-in instructions are managed by Artist OS. Add personal instructions to tailor how this skill works for you.</p>
+              <SkillPersonalInstructions key={`${workspaceId}:${skillSlug}`} workspaceId={workspaceId} skillSlug={skillSlug} available={skill.available !== false} />
+            </Info_Section>
+          )}
+          {notices.length > 0 && <Info_Section title="Attribution and licenses">
+            {notices.map(notice => <details key={notice.name} className="px-4 py-2 text-sm"><summary className="cursor-pointer">{notice.name}</summary><pre className="whitespace-pre-wrap py-2 text-xs">{notice.content}</pre></details>)}
+          </Info_Section>}
           {/* Instructions */}
+          {skill.origin !== 'managed' && detail && (
           <Info_Section
             title={t('skillInfo.instructions')}
             actions={
               // EditPopover for AI-assisted editing with "Edit File" as secondary action
               <EditPopover
                 trigger={<EditButton />}
-                {...getEditConfig('skill-instructions', skill.path)}
+                {...getEditConfig('skill-instructions', detail!.path)}
                 secondaryAction={{
                   label: t('common.editFile'),
-                  filePath: `${skill.path}/SKILL.md`,
+                  filePath: `${detail?.path}/SKILL.md`,
                 }}
               />
             }
           >
             <Info_Markdown maxHeight={540} fullscreen>
-              {skill.content || t('skillInfo.noInstructions')}
+              {detail.content || t('skillInfo.noInstructions')}
             </Info_Markdown>
           </Info_Section>
+          )}
 
         </Info_Page.Content>
       )}

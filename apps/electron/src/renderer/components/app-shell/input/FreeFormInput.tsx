@@ -84,7 +84,7 @@ import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import { settleGuardedDraft } from '@/lib/guarded-draft-send'
 import { derivePickerMode } from './picker-mode'
-import type { FileAttachment, FileSearchResult, LoadedSource, LoadedSkill, LlmConnectionWithStatus } from '../../../../shared/types'
+import type { FileAttachment, FileSearchResult, LoadedSource, SkillDescriptor, LlmConnectionWithStatus } from '../../../../shared/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelNameKey } from '@craft-agent/shared/agent/thinking-levels'
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
@@ -204,7 +204,7 @@ export interface FreeFormInputProps {
   onSourcesChange?: (slugs: string[]) => boolean | void | Promise<boolean | void>
   // Skill selection (for @mentions)
   /** Available skills for @mention autocomplete */
-  skills?: LoadedSkill[]
+  skills?: SkillDescriptor[]
   // Label selection (for #labels)
   /** Available labels for #label autocomplete */
   labels?: LabelConfig[]

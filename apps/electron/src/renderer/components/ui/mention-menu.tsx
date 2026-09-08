@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import { FadingText } from '@/components/ui/fading-text'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { SourceAvatar } from '@/components/ui/source-avatar'
-import type { LoadedSkill, LoadedSource, FileSearchResult } from '../../../shared/types'
+import type { SkillDescriptor, LoadedSource, FileSearchResult } from '../../../shared/types'
 import { AGENTS_PLUGIN_NAME } from '@craft-agent/shared/skills/types'
 
 // ============================================================================
@@ -19,7 +19,7 @@ export interface MentionItem {
   label: string
   description?: string
   // Type-specific data
-  skill?: LoadedSkill
+  skill?: SkillDescriptor
   source?: LoadedSource
   file?: { path: string; type: 'file' | 'directory'; relativePath: string }
 }
@@ -448,7 +448,7 @@ export interface MentionInputElement {
 export interface UseInlineMentionOptions {
   /** Ref to input element (textarea or RichTextInput handle) */
   inputRef: React.RefObject<MentionInputElement | null>
-  skills: LoadedSkill[]
+  skills: SkillDescriptor[]
   sources: LoadedSource[]
   /** Base path for file search (working directory) */
   basePath?: string
@@ -512,7 +512,7 @@ export function useInlineMention({
       result.push({
         id: 'skills',
         label: 'Skills',
-        items: skills.map(skill => ({
+        items: skills.filter(skill => skill.available !== false).map(skill => ({
           id: skill.slug,
           type: 'skill' as const,
           label: skill.metadata.name,

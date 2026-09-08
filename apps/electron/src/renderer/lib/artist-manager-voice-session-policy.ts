@@ -1,4 +1,4 @@
-import type { CreateSessionOptions, LoadedSkill } from '../../shared/types'
+import type { CreateSessionOptions, SkillDescriptor } from '../../shared/types'
 import { buildArtistManagerVoiceStylePrompt, type ArtistManagerVoiceStyleId } from './artist-manager-voice-style'
 
 export type VoiceModelTrial = { model: string; thinking: '' | 'off' | 'low' }
@@ -17,15 +17,6 @@ export function applyVoiceModelTrial(base: CreateSessionOptions, enabled: boolea
   }
 }
 
-// These procedures are otherwise implicit on every Manager turn, including a
-// greeting. Inject their actual loaded bodies once, avoiding a model round trip
-// whose only purpose is to request the same instructions through Read.
-const PRELOADED_PROCEDURES = [
-  'artist-manager-operating-system',
-  'artist-os-guide',
-  'skill-scout',
-] as const
-
 const VOICE_MODE_PROMPT = `
 VOICE CONVERSATION MODE
 - Your ENTIRE final assistant message is spoken aloud. There is no separate written section or unspoken chat detail in this response.
@@ -42,26 +33,14 @@ VOICE CONVERSATION MODE
 /** Adapt only a voice session; the saved Manager and ordinary chat stay intact. */
 export function buildArtistManagerVoiceSessionOptions(
   base: CreateSessionOptions,
-  skills: readonly Pick<LoadedSkill, 'slug' | 'content' | 'path'>[],
+  _skills: readonly Pick<SkillDescriptor, 'slug'>[],
   style: ArtistManagerVoiceStyleId,
 ): CreateSessionOptions {
-  const declared = new Set(base.agentSkillSlugs ?? [])
-  const preloaded = PRELOADED_PROCEDURES.flatMap(slug => {
-    if (!declared.has(slug)) return []
-    const skill = skills.find(candidate => candidate.slug === slug)
-    // Never remove a prerequisite unless its complete procedure is present.
-    if (!skill?.content.trim()) return []
-    return [skill]
-  })
-  const preloadedSlugs = new Set(preloaded.map(skill => skill.slug))
-  const procedures = preloaded.length ? [
-    'PRELOADED MANAGER PROCEDURES',
-    'The following complete skill instructions are already included in this session. Follow them when relevant; do not read their SKILL.md files again just to initialize the conversation. Relative references resolve from each listed skill directory. Read referenced material only when the request requires it.',
-    ...preloaded.map(skill => `Skill: ${skill.slug}\nSkill directory: ${skill.path}\n${skill.content}`),
-  ].join('\n\n') : ''
+  // Keep declarations intact. The host runtime loads managed procedures privately
+  // before the provider turn, preserving the no-Read startup path without sending
+  // built-in bodies or filesystem paths through renderer session options.
   const customSystemPrompt = [
     base.customSystemPrompt,
-    procedures,
     buildArtistManagerVoiceStylePrompt(style),
     VOICE_MODE_PROMPT,
   ].filter(Boolean).join('\n\n')
@@ -71,10 +50,10 @@ export function buildArtistManagerVoiceSessionOptions(
     hidden: false,
     name: 'Artist Manager Voice',
     customSystemPrompt,
-    agentSkillSlugs: base.agentSkillSlugs?.filter(slug => !preloadedSlugs.has(slug)),
+    agentSkillSlugs: base.agentSkillSlugs ? [...base.agentSkillSlugs] : undefined,
     launchReceipt: base.launchReceipt ? {
       ...base.launchReceipt,
-      summary: `Private Artist Manager voice conversation.${preloaded.length ? ` Procedure instructions preloaded: ${preloaded.map(skill => skill.slug).join(', ')}.` : ''}`,
+      summary: 'Private Artist Manager voice conversation.',
       injected: { ...base.launchReceipt.injected, systemPromptChars: customSystemPrompt.length },
     } : base.launchReceipt,
   }

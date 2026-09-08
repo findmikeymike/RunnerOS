@@ -1,3 +1,5 @@
+import { isPrivateSkillRuntimePath } from '@craft-agent/shared/agent/core/managed-skill-runtime'
+import { isManagedSkillPath, isPublicManagedSkillPath } from '@craft-agent/shared/skills'
 import { resolve } from 'path'
 import { join } from 'path'
 import { homedir } from 'os'
@@ -336,6 +338,7 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
       const expanded = path.startsWith('~') ? path.replace(/^~/, homedir()) : path
       const absolutePath = resolve(expanded)
       const safePath = await validateFilePath(absolutePath, getWorkspaceAllowedDirs(ctx.workspaceId))
+      if ((isManagedSkillPath(safePath) && !isPublicManagedSkillPath(safePath)) || isPrivateSkillRuntimePath(safePath)) throw new Error('Built-in instructions are managed by Artist OS.')
       const result = await requestClientOpenPath(server, ctx.clientId, safePath)
       if (result.error) throw new Error(result.error)
     } catch (error) {
@@ -351,6 +354,7 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
       const expanded = path.startsWith('~') ? path.replace(/^~/, homedir()) : path
       const absolutePath = resolve(expanded)
       const safePath = await validateFilePath(absolutePath, getWorkspaceAllowedDirs(ctx.workspaceId))
+      if (isManagedSkillPath(safePath) || isPrivateSkillRuntimePath(safePath)) throw new Error('Built-in instructions are managed by Artist OS.')
       await requestClientShowInFolder(server, ctx.clientId, safePath)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'

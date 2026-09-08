@@ -198,7 +198,7 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
           <PopoverTrigger asChild>
             <button type="button" aria-label="How Signals works" title="How Signals works" className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-white/45 transition-colors hover:bg-white/5 hover:text-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60"><Info size={17} /></button>
           </PopoverTrigger>
-          <PopoverContent align="end" sideOffset={10} aria-label="How Signals works" className="w-[360px] max-w-[calc(100vw-40px)] max-h-[min(560px,var(--radix-popover-content-available-height))] overflow-y-auto rounded-lg border border-white/10 bg-[#151517] p-5 text-sm text-white/65 shadow-xl">
+          <PopoverContent align="end" sideOffset={10} aria-label="How Signals works" className="w-[360px] max-w-[calc(100vw-40px)] max-h-[min(560px,var(--radix-popover-content-available-height))] overflow-y-auto rounded-lg border border-white/10 bg-[#151517] p-5 text-sm text-white/65 shadow-modal-small">
             <h3 className="mb-4 font-semibold text-white/95">How Signals works</h3>
             <div className="space-y-4 leading-relaxed">
               <p><strong className="font-medium text-white/90">Industry</strong> follows music-business news. <strong className="font-medium text-white/90">Your World</strong> follows the interests, ideas and causes behind your music.</p>

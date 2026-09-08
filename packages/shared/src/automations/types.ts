@@ -67,6 +67,9 @@ export const AGENT_EVENTS: AgentEvent[] = [
 export interface PromptAction {
   type: 'prompt';
   prompt: string;
+  /** Frozen pre-migration selections, valid only for the exact authored prompt hash. */
+  legacySkillReferences?: string[];
+  legacySkillPromptHash?: string;
   /** Optional saved agent slug used for the spawned automation session. */
   agentSlug?: string;
   taskModeId?: string;
@@ -400,6 +403,7 @@ export type ActionExecutionResult = PromptActionResult | WebhookActionResult;
 
 /** A pending prompt with its metadata */
 export interface PendingPrompt {
+  legacySkillReferences?: string[];
   /** The session ID this prompt should be sent to */
   sessionId: string | undefined;
   /** The automation matcher ID this prompt originated from */

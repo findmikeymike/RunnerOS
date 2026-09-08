@@ -1,3 +1,4 @@
+import { getLegacyAuthoredSkillReferences } from '../../skills/authored-reference-migration.ts';
 /**
  * PromptHandler - Processes prompt actions for App events
  *
@@ -169,6 +170,7 @@ export class PromptHandler implements AutomationHandler {
           automationName,
           prompt: expandedPrompt,
           mentions: references.mentions,
+          legacySkillReferences: getLegacyAuthoredSkillReferences(prompt),
           labels: expandedLabels,
           agentSlug: prompt.agentSlug,
           taskModeId: prompt.taskModeId,

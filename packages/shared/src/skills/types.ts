@@ -62,6 +62,10 @@ export const AGENTS_PLUGIN_NAME = '.agents';
  * A loaded skill with parsed content
  */
 export interface LoadedSkill {
+  /** Scoped saved-reference identities; never sourced from frontmatter. */
+  aliases?: string[];
+  /** Set only by trusted managed resolution, never from user frontmatter. */
+  managed?: ManagedSkillIdentity;
   /** Directory name (slug) */
   slug: string;
   /** Parsed metadata from YAML frontmatter */
@@ -74,4 +78,32 @@ export interface LoadedSkill {
   path: string;
   /** Where this skill was loaded from */
   source: SkillSource;
+}
+
+/** Public catalog contract. Instruction bodies and filesystem paths never cross it. */
+export interface SkillDescriptor {
+  aliases?: string[];
+  /** Missing managed parent with retained personal instructions. */
+  available?: false;
+  id: string;
+  slug: string;
+  metadata: Pick<SkillMetadata, 'name' | 'description' | 'category' | 'tags' | 'icon' | 'requiredSources'>;
+  source: SkillSource;
+  origin: 'managed' | 'user';
+  revision?: string;
+  capabilities: { canRead: boolean; canEdit: boolean; canExport: boolean; canDelete: boolean; canListFiles: boolean };
+}
+
+export interface ManagedSkillIdentity { id: string; revision: string }
+export type PersonalInstructionScope = 'shared' | 'workspace';
+export interface PersonalInstruction {
+  id: string;
+  parentManagedId: string;
+  scope: PersonalInstructionScope;
+  /** Stable existing workspace root identity; omitted for shared instructions. */
+  workspaceRoot?: string;
+  text: string;
+  enabled: boolean;
+  updatedAt: string;
+  reviewedCoreRevision: string;
 }
