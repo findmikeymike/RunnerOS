@@ -111,6 +111,27 @@ export function getSessionPreviewText(session: SessionLike | SessionMeta, maxLen
 }
 
 /**
+ * Resolve the clean two-level hierarchy used in the conversation list.
+ * The conversation topic stays primary; a distinct agent name is supporting context.
+ */
+export function getSessionListDisplay(
+  session: SessionLike | SessionMeta,
+  compact = false,
+): { title: string; subtitle: string | null } {
+  const title = getSessionTitle(session)
+  const agentName = getSessionAgentIdentity(session)?.name
+  const hasDistinctAgentName = agentName
+    && agentName.trim().toLocaleLowerCase() !== title.trim().toLocaleLowerCase()
+
+  return {
+    title,
+    subtitle: hasDistinctAgentName
+      ? agentName
+      : (compact ? getSessionPreviewText(session, 64, title) : null),
+  }
+}
+
+/**
  * Get the ID of the last final assistant or plan message (not intermediate)
  * Used for unread message tracking
  */

@@ -6,7 +6,7 @@ import { sessionProjectDialogAtom } from '@/atoms/session-project-dialog'
 import { RenameDialog } from '@/components/ui/rename-dialog'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { getSessionProjectInfo, setSessionProjectLabel, slugifyProjectName } from '@/utils/session-project'
+import { GENERAL_PROJECT_LABEL, getSessionProjectInfo, setSessionProjectLabel, slugifyProjectName } from '@/utils/session-project'
 
 interface SessionProjectDialogHostProps {
   onLabelsChange: (sessionId: string, labels: string[]) => Promise<boolean>
@@ -98,7 +98,7 @@ export function SessionProjectDialogHost({ onLabelsChange }: SessionProjectDialo
       return
     }
 
-    toast.success('Deleted project', { description: `${changed} session${changed === 1 ? '' : 's'} moved to Past.` })
+    toast.success('Deleted project', { description: `${changed} session${changed === 1 ? '' : 's'} moved to ${GENERAL_PROJECT_LABEL}.` })
     if (changed > 0) close()
   }, [close, onLabelsChange, sessionMetaMap, state])
 
@@ -127,7 +127,7 @@ export function SessionProjectDialogHost({ onLabelsChange }: SessionProjectDialo
           <DialogHeader>
             <DialogTitle>Delete Project</DialogTitle>
             <DialogDescription>
-              Move every session in {state.kind === 'delete_project' ? state.projectLabel : 'this project'} back to Past.
+              Move every session in {state.kind === 'delete_project' ? state.projectLabel : 'this project'} back to {GENERAL_PROJECT_LABEL}.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

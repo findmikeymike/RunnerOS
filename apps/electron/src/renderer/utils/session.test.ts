@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { getSessionAgentIdentity, getSessionPreviewText } from './session'
+import { getSessionAgentIdentity, getSessionListDisplay } from './session'
 
 describe('session agent identity', () => {
   test('prefers the persisted spawning agent and keeps the receipt description', () => {
@@ -19,14 +19,31 @@ describe('session agent identity', () => {
     })
   })
 
-  test('keeps the request preview when the agent name replaces the generated title', () => {
+  test('uses the conversation topic as the title and agent as supporting context', () => {
     const session = {
-      name: 'Generated thread title',
+      name: 'Build Visual World',
       preview: 'Help me build the visual world.',
       spawnedFromAgent: { agentSlug: 'art-director', agentName: 'Art Director' },
     }
 
-    expect(getSessionPreviewText(session, 64, 'Art Director')).toBe('Help me build the visual world.')
+    expect(getSessionListDisplay(session)).toEqual({
+      title: 'Build Visual World',
+      subtitle: 'Art Director',
+    })
+  })
+
+  test('does not repeat the agent name before a conversation has a topic', () => {
+    const session = {
+      name: undefined,
+      preview: '',
+      messageCount: 0,
+      spawnedFromAgent: { agentSlug: 'art-director', agentName: 'Art Director' },
+    }
+
+    expect(getSessionListDisplay(session)).toEqual({
+      title: 'Art Director',
+      subtitle: null,
+    })
   })
 
   test('shows the current Artist Manager name for legacy HNIC sessions', () => {

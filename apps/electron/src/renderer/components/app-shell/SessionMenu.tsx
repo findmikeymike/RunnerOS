@@ -50,7 +50,7 @@ import { LabelMenuItems, StatusMenuItems, ShareMenuItems } from './SessionMenuPa
 import { getFileManagerName } from '@/lib/platform'
 import type { SessionMeta } from '@/atoms/sessions'
 import { getSessionStatus, hasUnreadMeta, hasMessagesMeta } from '@/utils/session'
-import { getSessionProjectInfo, setSessionProjectLabel } from '@/utils/session-project'
+import { GENERAL_PROJECT_LABEL, getSessionProjectInfo, setSessionProjectLabel } from '@/utils/session-project'
 import type { SessionProjectOption } from '@/context/SessionListContext'
 import { MessagingSessionMenuItem } from '@/components/messaging/MessagingSessionMenuItem'
 
@@ -275,7 +275,7 @@ export function SessionMenu({
           </SubTrigger>
           <SubContent>
             <MenuItem onSelect={() => handleMoveToProject(undefined)} className={currentProject.value ? '' : 'bg-foreground/5'}>
-              <span className="flex-1">Past</span>
+              <span className="flex-1">{GENERAL_PROJECT_LABEL}</span>
               {!currentProject.value && <span className="text-[10px] text-muted-foreground">Current</span>}
             </MenuItem>
             {projectOptions.map((project) => (
