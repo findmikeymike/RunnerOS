@@ -6,7 +6,9 @@ Canonical checkout: `/Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os
 branch `main`. The root RunnerOS checkout and other product branches are not Artist OS.
 This pass integrates completed Artist OS work, preserves unrelated/unfinished work,
 and distinguishes source verification from the running app and external providers.
-No app launch/restart, real campaign deletion, provider run, or paid operation was performed.
+The integration/build pass did not launch the app or delete real campaign data.
+The user subsequently authorized installation and launch; that verification is recorded
+below. No provider run, paid operation, or real campaign deletion was performed.
 
 ## Recent work accounted for
 
@@ -64,10 +66,17 @@ elevated verification proved it valid. The original outer package failed strict
 verification, which the staged signing resolved. Signing initially failed while working space was low and succeeded after freeing
 space; only this task's completed worktrees/build artifacts were removed.
 
-**Installation pending:** the running original package remains untouched. Obtain
-permission to close Artist OS, then replace the canonical package with the verified
-stage while it is stopped. Do not reopen it without authorization. Source main and
-remote are updated; the running process is intentionally not claimed current.
+**Installed and launched — 2026-09-08 11:25 UTC:** after explicit user authorization,
+the old process exited gracefully. The signed update replaced the package at
+`apps/electron/release-artist-os/mac-arm64/Artist OS.app`; the original is retained at
+`apps/electron/release-artist-os/previous-before-bbefb1102/Artist OS.app` for rollback.
+Strict/deep signature verification passed again after the move. `open` targeted that
+exact app path. New PID73650 was verified at the canonical executable (old PID75244
+had exited). The rendered Workers screen reports the canonical packaged renderer URL,
+and Website Agent is visibly present. This proves successful launch and that specific
+registration/UI path, not all provider flows or campaign deletion with real data.
+The installation receipt is `release-artist-os/staged-main/installation-verification.json`.
+Later documentation/test-only commits do not change the compiled production source.
 
 ## Remote CI
 

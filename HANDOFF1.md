@@ -186,9 +186,10 @@ Do not reuse older test totals as proof of the current combined tree.
 
 The current packaged process uses the production package at
 `apps/electron/release-artist-os/mac-arm64/Artist OS.app` and profile
-`~/.artist-os/electron`. The separate verified update is staged under
-`apps/electron/release-artist-os/staged-main/Artist OS.app`; installation awaits
-permission to close the current app. Do not swap unpacked resources under a live process.
+`~/.artist-os/electron`. The verified update was installed and launched from that canonical path with user
+authorization on September8; the rendered Workers page and Website Agent visibility
+were confirmed. The previous package is retained under `release-artist-os/previous-before-bbefb1102/`.
+Do not swap unpacked resources under a live process.
 
 To run a development instance only after explicit user permission:
 
@@ -311,4 +312,5 @@ What landed from 2026-09-04 through verified head `c82d4c6c9`: **179 commits
 Use [the consolidation audit](docs/audits/artist-os-consolidation-2026-09-08.md)
 for exact landed SHAs, current checks, remote state, and remaining runtime gates.
 Reconfirm `git status`, `git log -1`, and `origin/main` before acting. The user
-has not authorized an app launch or restart during this consolidation.
+subsequently authorized installation and launch; the consolidation audit records the
+new process and rendered app evidence.

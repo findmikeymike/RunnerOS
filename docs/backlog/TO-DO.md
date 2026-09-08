@@ -47,11 +47,11 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 
 ### App Installation
 
-- [ ] **Install the verified staged main update when the artist permits closing the app.** The signed build is ready under `release-artist-os/staged-main/Artist OS.app`; canonical source/remote are current. Keep the running app untouched until it exits, and do not reopen without authorization. [Build and signature evidence](../audits/artist-os-consolidation-2026-09-08.md).
+- [x] **Install and launch the verified main update.** User-authorized September8. The signed update is running from `release-artist-os/mac-arm64/Artist OS.app`; rendered Workers and Website Agent visibility confirmed. The old app is retained for rollback. [Installation evidence](../audits/artist-os-consolidation-2026-09-08.md).
 
 ### Campaign Lifecycle
 
-- [ ] **Live-smoke campaign cleanup with disposable data after restart approval.** `NEXT`. Implementation committed in `81a2673df`: confirmation, verified media/finished-document preservation in Vault → Past Releases, saved global memories retained, campaign-local chats/planning/tasks/schedules removed. Local solo campaigns only; external posts/events remain. Temporary filesystem and browser-fixture tests pass; no real campaign has been deleted. [Retention policy](../audits/campaign-cleanup-2026-09-08.md).
+- [ ] **Live-smoke campaign cleanup with disposable data in the updated app.** `NEXT`. Implementation committed in `81a2673df`: confirmation, verified media/finished-document preservation in Vault → Past Releases, saved global memories retained, campaign-local chats/planning/tasks/schedules removed. Local solo campaigns only; external posts/events remain. Temporary filesystem and browser-fixture tests pass; no real campaign has been deleted. [Retention policy](../audits/campaign-cleanup-2026-09-08.md).
 
 ### Calendar And Scheduled Work
 

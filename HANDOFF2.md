@@ -50,9 +50,10 @@ Feature checks are useful scope-specific evidence, not proof of the entire app:
 - Messaging boundaries (landing `69dd15768`): delegated agents retain target
   capability/permission limits; internal jobs stay out of ordinary conversation lists.
 
-No live app launch/restart or real campaign deletion is authorized by these
-records. Browser fixtures and temporary filesystem tests do not prove provider
-behavior or that the running packaged app includes the updated source.
+The user subsequently authorized installation and launch: the new canonical packaged
+app is running, and its Workers page visibly includes Website Agent. See the audit for
+process/path/signature evidence. Browser fixtures and temporary filesystem tests still
+do not prove live provider behavior or real campaign deletion.
 
 ## Historical verification — September 6, 2026
 
