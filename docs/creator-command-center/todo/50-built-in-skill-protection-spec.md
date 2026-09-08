@@ -1,5 +1,5 @@
 ---
-status: implementing
+status: implemented-pending-live
 owner: artist-os
 created: 2026-09-08
 source_snapshot: f29a4b716
@@ -13,7 +13,7 @@ Built-in skills remain visible and usable, but their internal instructions are n
 
 This is practical product protection, not DRM. Do not add encryption infrastructure, remote-only skill hosting, obfuscation, an OS sandbox, general shell surveillance, or a new licensing requirement. A determined computer owner may recover local material; preventing that is explicitly outside scope. Normal agent requests to print or clone a built-in should not provide an easy bypass.
 
-Implementation is in progress on `codex/built-in-skill-protection`. Final acceptance and integration remain pending.
+Implementation and automated verification are complete. Live Electron/provider acceptance remains pending; see [implementation evidence](../../audits/built-in-skill-protection-2026-09-08.md). This spec stays at its original path for stable references.
 
 ## Current implementation and reference
 

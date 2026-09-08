@@ -1,3 +1,4 @@
+import { RUNTIME_IDENTITY } from '../../config/runtime-identity.ts';
 /**
  * Tests for BaseAgent abstract class
  *
@@ -204,7 +205,7 @@ describe('BaseAgent', () => {
       expect(agent.chatCalls[0]?.message).toBe('test message');
     });
 
-    it('preserves deferred marketplace and explicit historical prerequisites for migrated custom skills', async () => {
+    it.skipIf(RUNTIME_IDENTITY.variant !== 'artist-os')('preserves deferred marketplace and explicit historical prerequisites for migrated custom skills', async () => {
       const root = mkdtempSync(join(tmpdir(), 'runner-marketplace-skills-'));
       try {
         for (const slug of ['monid', 'zero', 'artist-industry-hunter']) {

@@ -1,3 +1,4 @@
+import { RUNTIME_IDENTITY } from '../../config/runtime-identity.ts';
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -32,7 +33,7 @@ function setup(requiredSources?: string[]) {
   return { agent, sessionId, root };
 }
 afterEach(() => roots.splice(0).forEach(root => rmSync(root, { recursive: true, force: true })));
-describe('provider-neutral private loading', () => {
+describe.skipIf(RUNTIME_IDENTITY.variant !== 'artist-os')('provider-neutral private loading', () => {
   test('restores pinned primary recipe before discovery and keeps it out of the user message', async () => {
     const { agent, sessionId } = setup();
     await collectEvents(agent.chat('Help with the release.', undefined, { managedSkillRunId: 'original-run', resumeManagedSkillRun: true }));

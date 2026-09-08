@@ -1,4 +1,3 @@
-import { getLegacyAuthoredSkillReferences } from '../skills/authored-reference-migration.ts';
 import { matter, stringifyFrontmatter, type GrayMatterFile } from '../config/frontmatter';
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 import type { OutputKind } from '../outputs/types.ts';
@@ -370,7 +369,7 @@ export function parseWorkflowFile(
     if (refErrors.length > 0) return null;
 
     const step: WorkflowStep = { id, agent, input };
-    const legacyReferences = getLegacyAuthoredSkillReferences(rawStep);
+    const legacyReferences = preserveLegacySkillReferences(rawStep);
     if (legacyReferences.length) { step.legacySkillReferences = legacyReferences; step.legacySkillPromptHash = rawStep.legacySkillPromptHash as string; }
     if (typeof rawStep.taskModeId === 'string') step.taskModeId = rawStep.taskModeId;
     if (typeof rawStep.description === 'string' && rawStep.description.trim()) {
@@ -476,7 +475,7 @@ export function serializeWorkflow(metadata: WorkflowMetadata, body: string): str
     if (s.retries !== undefined) out.retries = s.retries;
     if (s.onFailure !== undefined) out.onFailure = s.onFailure;
     if (s.completion !== undefined) out.completion = s.completion;
-    const legacyReferences = getLegacyAuthoredSkillReferences(s);
+    const legacyReferences = preserveLegacySkillReferences(s);
     if (legacyReferences.length) { out.legacySkillReferences = legacyReferences; out.legacySkillPromptHash = s.legacySkillPromptHash; }
     return out;
   });
@@ -516,4 +515,10 @@ function validateSerializableWorkflowMetadata(metadata: WorkflowMetadata): void 
       throw new Error(`Unsupported execution field on workflow step "${step.id}".`);
     }
   }
+}
+
+/** Preserve browser-editable metadata; only the host runner validates its authored hash. */
+function preserveLegacySkillReferences(record: { legacySkillReferences?: unknown; legacySkillPromptHash?: unknown }): string[] {
+  if (typeof record.legacySkillPromptHash !== 'string' || !/^[a-f0-9]{64}$/.test(record.legacySkillPromptHash) || !Array.isArray(record.legacySkillReferences)) return [];
+  return [...new Set(record.legacySkillReferences.filter((slug): slug is string => typeof slug === 'string' && /^[a-zA-Z][a-zA-Z0-9-]*$/.test(slug)))];
 }

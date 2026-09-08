@@ -2383,6 +2383,7 @@ export interface SessionToolFilterOptions {
   /** Include input supply for Artist Manager sessions. */
   includeSupplyWorkInput?: boolean;
   /** Include the HNIC-only semantic Manager tools. */
+  includeManagedSkillTools?: boolean;
   includeManagerTools?: boolean;
   /** Include the current-campaign brief tool. */
   includeCampaignManagerTools?: boolean;
@@ -2414,6 +2415,7 @@ export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionT
   const includeSocialVariantQueryTools = options?.includeSocialVariantQueryTools ?? false;
 
   return SESSION_TOOL_DEFS.filter(def => {
+    if (!options?.includeManagedSkillTools && ['use_skill', 'read_skill_reference', 'get_skill_personal_instructions', 'save_skill_personal_instructions', 'delete_skill_personal_instructions'].includes(def.name)) return false;
     if (!includeDeveloperFeedback && def.name === 'send_developer_feedback') {
       return false;
     }
@@ -2538,6 +2540,7 @@ export function getToolDefsAsJsonSchema(opts?: {
   includeDeveloperFeedback?: boolean;
   includeScheduleWork?: boolean;
   includeSupplyWorkInput?: boolean;
+  includeManagedSkillTools?: boolean;
   includeManagerTools?: boolean;
   includeCampaignManagerTools?: boolean;
   includeLabTools?: boolean;
@@ -2550,6 +2553,7 @@ export function getToolDefsAsJsonSchema(opts?: {
     includeDeveloperFeedback: opts?.includeDeveloperFeedback,
     includeScheduleWork: opts?.includeScheduleWork,
     includeSupplyWorkInput: opts?.includeSupplyWorkInput,
+    includeManagedSkillTools: opts?.includeManagedSkillTools,
     includeManagerTools: opts?.includeManagerTools,
     includeCampaignManagerTools: opts?.includeCampaignManagerTools,
     includeLabTools: opts?.includeLabTools,

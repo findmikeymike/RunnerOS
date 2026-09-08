@@ -1,3 +1,4 @@
+import { RUNTIME_IDENTITY } from '../../config/runtime-identity.ts';
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -70,7 +71,7 @@ describe('private run guidance', () => {
     expect(isPrivateSkillRuntimePath(join(alias, 'not-created', 'export.md'))).toBe(true);
     expect(isPrivateSkillRuntimePath(join(root, 'ordinary', 'file.md'))).toBe(false);
   });
-  test('ordinary file and copy tools are blocked while a pinned helper retains normal execution', () => {
+  test.skipIf(RUNTIME_IDENTITY.variant !== 'artist-os')('ordinary file and copy tools are blocked while a pinned helper retains normal execution', () => {
     const { root, run } = runtime(); run.beginRun('one'); const record = run.pin('test-skill', fixture);
     const classify = (path: string) => run.classifyPath(path);
     expect(checkManagedSkillToolAccess('Bash', { command: `cp -R "${root}" /tmp/export-copy` }, root, classify, path => run.containsPrivatePath(path))).not.toBeNull();

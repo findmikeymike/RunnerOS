@@ -381,6 +381,16 @@ export function loadAllSkills(workspaceRoot: string, projectRoot?: string): Load
  * @param slug - Skill slug to load
  * @param projectRoot - Optional project root for project-level skills
  */
+/** Read-only activation check; does not materialize private skill files. */
+export function isManagedSkillAvailable(workspaceRoot: string, slug: string, projectRoot?: string): boolean {
+  if (!storageManagedManifest().has(slug)) return false;
+  const workspaceSkills = getWorkspaceSkillsPath(workspaceRoot);
+  const projectSkills = projectRoot ? join(projectRoot, PROJECT_AGENT_SKILLS_DIR) : null;
+  const installed = [workspaceSkills, ...(projectSkills ? [projectSkills] : [])].some(root =>
+    getLegacySkillMigration(root, slug) || existsSync(join(root, slug, 'SKILL.md')));
+  return installed || listEnabledGlobalSkillSlugs(workspaceRoot).includes(slug);
+}
+
 export function loadSkillBySlug(workspaceRoot: string, slug: string, projectRoot?: string): LoadedSkill | null {
   if (MANAGED_SKILLS_ENABLED && slug.startsWith('legacy:')) {
     const original = slug.slice('legacy:'.length);
@@ -400,11 +410,7 @@ export function loadSkillBySlug(workspaceRoot: string, slug: string, projectRoot
     return loadSkillBySlug(workspaceRoot, original, projectRoot);
   }
   if (storageManagedManifest().has(slug)) {
-    const workspaceSkills = getWorkspaceSkillsPath(workspaceRoot);
-    const projectSkills = projectRoot ? join(projectRoot, PROJECT_AGENT_SKILLS_DIR) : null;
-    const installed = [workspaceSkills, ...(projectSkills ? [projectSkills] : [])].some(root =>
-      getLegacySkillMigration(root, slug) || existsSync(join(root, slug, 'SKILL.md')));
-    return installed || listEnabledGlobalSkillSlugs(workspaceRoot).includes(slug) ? storageManagedSkill(slug) : null;
+    return isManagedSkillAvailable(workspaceRoot, slug, projectRoot) ? storageManagedSkill(slug) : null;
   }
   // Highest priority: project-level
   if (projectRoot) {

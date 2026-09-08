@@ -2133,6 +2133,7 @@ export function shouldAllowToolInMode(
     if (toolName.startsWith('mcp__session__')) {
       const safeAllowedSessionTools = getSessionSafeAllowedToolNames({
         prefix: 'mcp__session__',
+        includeManagedSkillTools: RUNTIME_IDENTITY.variant === 'artist-os',
         // Visibility is already role-scoped when tools are registered. The
         // permission layer must classify every exposed read-only variant, or
         // HNIC/Lab-only tools are incorrectly treated as configuration writes.

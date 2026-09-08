@@ -85,6 +85,14 @@ export async function handleSkillValidate(
   const workingDirectory = ctx.workingDirectory
     ?? resolveSessionWorkingDirectory(ctx.workspacePath, ctx.sessionId);
 
+  if (RUNTIME_IDENTITY.variant === 'artist-os') {
+    const { isManagedSkillAvailable, getManagedSkillManifest } = await import('@craft-agent/shared/skills');
+    if (getManagedSkillManifest().has(skillSlug)) {
+      const available = isManagedSkillAvailable(ctx.workspacePath, skillSlug, workingDirectory);
+      return { content: [{ type: 'text', text: `Built-in skill "${skillSlug}" is managed by Artist OS. ${available ? 'It is installed and available; use use_skill to load its guidance.' : 'It is not enabled in this workspace. Enable it from the skill library to use its guidance.'} Personal instructions can customize its behavior.` }], isError: false };
+    }
+  }
+
   // Resolve SKILL.md from all three tiers
   const resolved = resolveSkillMdPath(ctx, skillSlug, workingDirectory);
   if (!resolved) {

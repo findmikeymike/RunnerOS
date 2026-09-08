@@ -1,3 +1,4 @@
+import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 /**
  * Session-Scoped Tools
  *
@@ -266,6 +267,7 @@ export function getSessionScopedTools(
     // Create tools from the canonical registry — all tools with handlers.
     // Tool visibility is centrally filtered in session-tools-core to avoid backend drift.
     tools = getSessionToolDefs({
+      includeManagedSkillTools: RUNTIME_IDENTITY.variant === 'artist-os',
       includeDeveloperFeedback: FEATURE_FLAGS.developerFeedback,
       includeScheduleWork: agentSlug === 'concierge',
       includeSupplyWorkInput: agentSlug === 'concierge',

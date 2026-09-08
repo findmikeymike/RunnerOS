@@ -328,3 +328,17 @@ describe('session tool filtering helpers', () => {
     expect(parsed.metadata.steps[0]?.completion?.maxAgentMessages).toBe(2);
   });
 });
+
+
+describe('Artist OS private skill tool opt-in', () => {
+  it('keeps every private skill API out of ordinary product catalogs and registries', () => {
+    const names = ['use_skill', 'read_skill_reference', 'get_skill_personal_instructions', 'save_skill_personal_instructions', 'delete_skill_personal_instructions'];
+    for (const name of names) {
+      expect(getSessionToolNames().has(name)).toBe(false);
+      expect(getSessionToolRegistry().has(name)).toBe(false);
+      expect(getToolDefsAsJsonSchema().some(tool => tool.name === name)).toBe(false);
+      expect(getSessionToolNames({ includeManagedSkillTools: true }).has(name)).toBe(true);
+      expect(getToolDefsAsJsonSchema({ includeManagedSkillTools: true }).some(tool => tool.name === name)).toBe(true);
+    }
+  });
+});

@@ -1,9 +1,10 @@
+import { RUNTIME_IDENTITY } from '../../config/runtime-identity.ts';
 import { describe, expect, test } from 'bun:test';
 import { sanitizePrivateSkillHookInput, sanitizePrivateSkillActivityInput, sanitizePrivateSkillResultPaths } from './private-skill-activity.ts';
 import { pickSessionFields } from '../../sessions/utils.ts';
 import { getSessionToolDefs } from '../../../../session-tools-core/src/tool-defs.ts';
 
-describe('private skill boundaries', () => {
+describe.skipIf(RUNTIME_IDENTITY.variant !== 'artist-os')('private skill boundaries', () => {
   test('automation hooks receive status instead of private loader bodies or errors', () => {
     const input = { tool_name: 'mcp__session__use_skill', tool_input: { slug: 'monid' }, tool_response: '<private-built-in-guidance>private secret</private-built-in-guidance>' };
     const result = sanitizePrivateSkillHookInput(input);
@@ -21,7 +22,7 @@ describe('private skill boundaries', () => {
     const ordinary = { file_path: '/tmp/my-own-draft.md' }; expect(sanitizePrivateSkillActivityInput(ordinary)).toBe(ordinary);
   });
   test('personal preferences retain ordinary mutation approval classification on both registries', () => {
-    const definitions = getSessionToolDefs();
+    const definitions = getSessionToolDefs({ includeManagedSkillTools: true });
     for (const name of ['use_skill', 'read_skill_reference', 'get_skill_personal_instructions']) {
       const tool = definitions.find(item => item.name === name);
       expect(tool?.executionMode).toBe('registry'); expect(tool?.safeMode).toBe('allow'); expect(tool?.readOnly).toBe(true);

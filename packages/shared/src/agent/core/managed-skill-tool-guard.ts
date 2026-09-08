@@ -1,3 +1,4 @@
+import { RUNTIME_IDENTITY } from '../../config/runtime-identity.ts';
 import bashParser from 'bash-parser';
 import { existsSync, statSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
@@ -10,6 +11,7 @@ type ShellNode = { type: string; text?: string; name?: ShellNode; suffix?: Shell
 
 export function checkManagedSkillToolAccess(toolName: string, input: Record<string, unknown>, cwd: string,
   classifyPinned?: (path: string) => { protected: true; helper: boolean } | null, containsPinned?: (path: string) => boolean): string | null {
+  if (RUNTIME_IDENTITY.variant !== 'artist-os') return null;
   const classify = (value: string, directory = cwd) => {
     let path = resolve(directory, value.startsWith('~') ? expandPath(value) : value);
     try { if (existsSync(path)) path = realpathSync(path); } catch { /* missing targets retain lexical protection */ }

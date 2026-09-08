@@ -1,3 +1,4 @@
+import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 /**
  * BaseAgent Abstract Class
  *
@@ -1198,7 +1199,7 @@ ${formattedMessages}
     const sessionId = this.config.session?.id;
     this.privateSkillSystemPrompt = '';
     this.skillPathAliases.clear();
-    if (sessionId && (options?.resumeManagedSkillRun || existsSync(getSessionPath(workspaceRoot, sessionId)))) {
+    if (RUNTIME_IDENTITY.variant === 'artist-os' && sessionId && (options?.resumeManagedSkillRun || existsSync(getSessionPath(workspaceRoot, sessionId)))) {
       try {
         this.managedSkillRuntime ??= new ManagedSkillRuntime(getSessionPath(workspaceRoot, sessionId));
         this.managedSkillRuntime.beginRun(options?.managedSkillRunId ?? randomUUID(), options?.resumeManagedSkillRun);

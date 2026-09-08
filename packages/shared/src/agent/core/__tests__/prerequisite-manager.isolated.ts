@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { RUNTIME_IDENTITY } from '../../../config/runtime-identity.ts';
 import { resolve, join } from 'node:path';
 import type { PrerequisiteManager as PrerequisiteManagerInstance } from '../prerequisite-manager.ts';
 
@@ -18,11 +19,11 @@ let mockExistsPaths: Set<string> = new Set();
 mock.module('node:fs', () => ({
   existsSync: (path: string) =>
     mockExistsPaths.has(path)
-    || String(path).endsWith('.craft-agent/config-defaults.json')
+    || String(path) === join(RUNTIME_IDENTITY.dataRoot, 'config-defaults.json')
     || originalExistsSync(path),
   // Re-export anything else the module needs
   readFileSync: (path: string, ...args: unknown[]) => {
-    if (String(path).endsWith('.craft-agent/config-defaults.json')) {
+    if (String(path) === join(RUNTIME_IDENTITY.dataRoot, 'config-defaults.json')) {
       return JSON.stringify({
         defaults: { browserToolEnabled: true },
         workspaceDefaults: {},
@@ -42,7 +43,7 @@ function guidePath(slug: string): string {
 }
 
 function browserDocPath(): string {
-  return resolve(join(homedir(), '.craft-agent', 'docs', 'browser-tools.md'));
+  return resolve(join(RUNTIME_IDENTITY.dataRoot, 'docs', 'browser-tools.md'));
 }
 
 describe('PrerequisiteManager', () => {

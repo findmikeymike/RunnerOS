@@ -1,5 +1,5 @@
 import { resolveRuntimeIdentity } from '@craft-agent/shared/config/runtime-identity'
-import { sanitizePrivateSkillActivityInput, sanitizePrivateSkillResultPaths } from '@craft-agent/shared/agent/core/private-skill-activity'
+import { sanitizePrivateSkillActivityInput, sanitizePrivateSkillResultPaths, isPrivateSkillLoaderTool } from '@craft-agent/shared/agent/core/private-skill-activity'
 import { inheritHostAgentFocus, createPendingAgentFocusState, createAgentFocusTransferIntent, validateTransferredAgentFocus, parseAgentFocusTransferIntent } from '@craft-agent/shared/sessions'
 import { resolveAgentCapabilityExpansion } from './agent-capability-expansion'
 import type { EventSink } from '@craft-agent/server-core/transport'
@@ -15070,7 +15070,7 @@ user a clickable link to where the thing now lives.`
         const toolName = event.toolName || managed.messages.find(m => m.toolUseId === event.toolUseId)?.toolName || 'unknown'
 
         // Format absolute paths to relative paths for better readability
-        const privateSkillResult = /(?:^|__)(?:use_skill|read_skill_reference)$/.test(toolName)
+        const privateSkillResult = isPrivateSkillLoaderTool(toolName)
         const pathFormattedResult = privateSkillResult
           ? (event.isError ? 'Built-in guidance could not be loaded.' : 'Built-in guidance loaded privately.')
           : event.result ? formatPathsToRelative(sanitizePrivateSkillResultPaths(event.result)) : ''

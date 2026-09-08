@@ -1,3 +1,4 @@
+import { RUNTIME_IDENTITY } from '../../../config/runtime-identity.ts';
 /**
  * Pi Session Tool Proxy Definitions
  *
@@ -19,6 +20,7 @@ export { SESSION_TOOL_NAMES };
 export function getSessionToolProxyDefs(options?: { includeScheduleWork?: boolean; includeSupplyWorkInput?: boolean; includeManagerTools?: boolean; includeCampaignManagerTools?: boolean; includeLabTools?: boolean; includeSocialVariantTools?: boolean; includeSocialVariantQueryTools?: boolean }): SessionToolProxyDef[] {
   return getToolDefsAsJsonSchema({
     prefix: 'mcp__session__',
+    includeManagedSkillTools: RUNTIME_IDENTITY.variant === 'artist-os',
     includeDeveloperFeedback: FEATURE_FLAGS.developerFeedback,
     includeScheduleWork: options?.includeScheduleWork ?? false,
     includeSupplyWorkInput: options?.includeSupplyWorkInput ?? false,

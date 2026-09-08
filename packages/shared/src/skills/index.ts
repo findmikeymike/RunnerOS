@@ -14,6 +14,7 @@ export {
   loadSystemGlobalSkillBySlug,
   invalidateSkillsCache,
   loadSkillBySlug,
+  isManagedSkillAvailable,
   loadGlobalSkillBySlug,
   listEnabledGlobalSkillSlugs,
   setGlobalSkillEnabled,

@@ -1,7 +1,25 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
-import { writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
+import { writeFileSync, unlinkSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { tmpdir } from 'node:os';
+
+const isolatedProfile = process.env.CRAFT_SCHEMA_TEST_CHILD_ROOT;
+
+// The repository preloads the interceptor before test modules. Start this suite in a
+// child whose profile is isolated before that preload, rather than changing env too late.
+if (!isolatedProfile) {
+  it('runs all interceptor schema assertions in an isolated profile', () => {
+    const profile = mkdtempSync(join(tmpdir(), 'interceptor-schema-profile-'));
+    try {
+      const result = Bun.spawnSync([process.execPath, 'test', import.meta.path], {
+        env: { ...process.env, CRAFT_SCHEMA_TEST_CHILD_ROOT: profile, CRAFT_CONFIG_DIR: profile, CRAFT_PRODUCT_VARIANT: 'artist-os', CRAFT_INTERCEPTOR_DISABLE_AUTO_INSTALL: '1' },
+      });
+      if (result.exitCode !== 0) throw new Error(result.stderr.toString() + result.stdout.toString());
+      expect(result.exitCode).toBe(0);
+    } finally { rmSync(profile, { recursive: true, force: true }); }
+  });
+} else {
+const profileRoot: string = isolatedProfile;
 
 let injectMetadataIntoToolSchema: typeof import('../unified-network-interceptor.ts').injectMetadataIntoToolSchema;
 let sanitizeEmptyTextCacheControl: typeof import('../unified-network-interceptor.ts').sanitizeEmptyTextCacheControl;
@@ -12,7 +30,9 @@ describe('unified-network-interceptor schema metadata injection', () => {
   beforeAll(async () => {
     process.env.CRAFT_INTERCEPTOR_DISABLE_AUTO_INSTALL = '1';
     ({ injectMetadataIntoToolSchema, sanitizeEmptyTextCacheControl, upgradePromptCacheTtl } = await import('../unified-network-interceptor.ts'));
-    ({ _resetConfigCacheForTesting } = await import('../interceptor-common.ts'));
+    const common = await import('../interceptor-common.ts');
+    _resetConfigCacheForTesting = common._resetConfigCacheForTesting;
+    expect(common.CONFIG_FILE).toBe(join(isolatedProfile, 'config.json'));
   });
 
   it('injects metadata fields into empty/zero-arg schemas', () => {
@@ -123,7 +143,7 @@ describe('sanitizeEmptyTextCacheControl', () => {
 });
 
 describe('upgradePromptCacheTtl', () => {
-  const configFile = join(homedir(), '.craft-agent', 'config.json');
+  const configFile = join(isolatedProfile, 'config.json');
   let originalConfig: string | null = null;
 
   beforeEach(() => {
@@ -146,7 +166,7 @@ describe('upgradePromptCacheTtl', () => {
   });
 
   function enableExtendedCache() {
-    const dir = join(homedir(), '.craft-agent');
+    const dir = profileRoot;
     mkdirSync(dir, { recursive: true });
     const existing = originalConfig ? JSON.parse(originalConfig) : {};
     writeFileSync(configFile, JSON.stringify({ ...existing, extendedPromptCache: true }));
@@ -154,7 +174,7 @@ describe('upgradePromptCacheTtl', () => {
   }
 
   function disableExtendedCache() {
-    const dir = join(homedir(), '.craft-agent');
+    const dir = profileRoot;
     mkdirSync(dir, { recursive: true });
     const existing = originalConfig ? JSON.parse(originalConfig) : {};
     writeFileSync(configFile, JSON.stringify({ ...existing, extendedPromptCache: false }));
@@ -312,3 +332,5 @@ describe('upgradePromptCacheTtl', () => {
     expect(upgradePromptCacheTtl({})).toBe(0);
   });
 });
+
+}

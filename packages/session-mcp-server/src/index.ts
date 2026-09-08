@@ -380,6 +380,7 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
 
 function createSessionTools(includeDeveloperFeedback: boolean): Tool[] {
   return getToolDefsAsJsonSchema({
+    includeManagedSkillTools: RUNTIME_IDENTITY.variant === 'artist-os',
     includeDeveloperFeedback,
   }).map(def => ({
     name: def.name,
@@ -649,7 +650,7 @@ async function main() {
   const ctx = createCodexContext(config);
 
   const includeDeveloperFeedback = isDeveloperFeedbackEnabled();
-  const sessionToolRegistry = getSessionToolRegistry({ includeDeveloperFeedback });
+  const sessionToolRegistry = getSessionToolRegistry({ includeDeveloperFeedback, includeManagedSkillTools: RUNTIME_IDENTITY.variant === 'artist-os' });
 
   // Create MCP server
   const server = new Server(
