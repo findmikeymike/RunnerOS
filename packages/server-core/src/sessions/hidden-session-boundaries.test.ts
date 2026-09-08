@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { SessionManager, createManagedSession } from './SessionManager'
 import { assertCanSendAgentMessageToSession, shouldExposeSessionInLists } from './hidden-session-boundaries'
 
 describe('hidden job boundaries', () => {
@@ -22,8 +23,7 @@ describe('hidden job boundaries', () => {
   })
 })
 
-test('SessionManager filters public lists without losing internal metadata access', async () => {
-  const { SessionManager, createManagedSession } = await import('./SessionManager')
+test('SessionManager filters public lists without losing internal metadata access', () => {
   const manager = new SessionManager()
   const sessions = (manager as unknown as { sessions: Map<string, unknown> }).sessions
   for (const [id, workspaceId, hidden] of [['visible', 'ws', false], ['job', 'ws', true], ['other', 'other-ws', false]] as const) {
