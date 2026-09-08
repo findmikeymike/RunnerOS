@@ -688,6 +688,9 @@ export interface ElectronAPI {
   onLicenseRequired(callback: () => void): () => void
   relaunchApp(): Promise<void>
   removeWorkspace(workspaceId: string): Promise<boolean>
+  previewCampaignCleanup(workspaceId: string): Promise<import('@craft-agent/shared/campaign-cleanup').CampaignCleanupPreview>
+  deleteCampaign(workspaceId: string, previewToken: string): Promise<import('@craft-agent/shared/campaign-cleanup').CampaignCleanupResult>
+  onCampaignDeleted(callback: (event: { workspaceId: string; hqWorkspaceId: string }) => void): () => void
   invokeOnServer(url: string, token: string, channel: string, ...args: any[]): Promise<any>
 
   // Remote session transfer (main-process orchestrated, supports chunked upload)

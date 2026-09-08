@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   appendSessionLogEntry,
+  deleteWorkspaceSessionLogEntries,
   getSessionsArchiveFile,
   getSessionsLogFile,
   listSessionLogEntries,
@@ -246,5 +247,26 @@ describe('sessions log archive safety', () => {
 
     const archived = parseSessionsLog(readFileSync(archive, 'utf-8'), 'concierge').entries;
     expect(archived.filter((e) => e.sessionId === rollingOff.sessionId)).toHaveLength(1);
+  });
+});
+
+
+describe('campaign conversation cleanup', () => {
+  test('removes campaign summaries from current and archived logs while keeping saved memory and other campaigns', () => {
+    const owned = entry({ sessionId: 'owned', date: '2026-09-08', workspaceId: 'campaign-delete' });
+    const old = entry({ sessionId: 'legacy-owned', date: '2025-09-08' });
+    const keep = entry({ sessionId: 'keep', date: '2026-09-08', workspaceId: 'other-campaign' });
+    appendSessionLogEntry('branding-agent', owned, options);
+    appendSessionLogEntry('branding-agent', keep, options);
+    const archive = getSessionsArchiveFile('branding-agent', '2025', options);
+    // Use the exported archive path rather than assume a directory convention.
+    mkdirSync(archive.slice(0, archive.lastIndexOf('/')), { recursive: true });
+    writeFileSync(archive, serializeSessionsLog({ version: 1, agent: 'branding-agent' }, [old, keep]));
+    const memory = join(root, 'agents', 'branding-agent', 'MEMORY.md');
+    writeFileSync(memory, 'Useful artist preferences remain.');
+    expect(deleteWorkspaceSessionLogEntries('campaign-delete', ['legacy-owned'], options)).toBe(2);
+    expect(listSessionLogEntries('branding-agent', options).map(item => item.sessionId)).toEqual(['keep']);
+    expect(parseSessionsLog(readFileSync(archive, 'utf-8'), 'branding-agent').entries.map(item => item.sessionId)).toEqual(['keep']);
+    expect(readFileSync(memory, 'utf-8')).toBe('Useful artist preferences remain.');
   });
 });

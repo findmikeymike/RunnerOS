@@ -23,6 +23,9 @@ type ApiToChannelMapKeys = Exclude<
   | 'isChannelAvailable'
   | 'getSystemWarnings' // reads env var set at startup — no IPC needed
   | 'relaunchApp' // direct IPC to main process — not through WS RPC
+  | 'onCampaignDeleted' // direct local IPC event
+  | 'previewCampaignCleanup' // direct local IPC — campaign file preservation/deletion
+  | 'deleteCampaign' // direct local IPC — campaign file preservation/deletion
   | 'removeWorkspace' // direct IPC to main process — modifies local config
   | 'invokeOnServer' // direct IPC to main process — cross-server RPC
   | 'transferSessionToWorkspace' // direct IPC to main process — orchestrated remote transfer

@@ -516,3 +516,34 @@ export function listSessionsArchiveYears(
     .map((name) => name.slice(0, 4))
     .sort((a, b) => b.localeCompare(a));
 }
+
+/** Remove disposable conversation summaries for one deleted workspace, keeping all other history. */
+export function deleteWorkspaceSessionLogEntries(
+  workspaceId: string,
+  sessionIds: readonly string[],
+  options?: SessionsLogStorageOptions,
+): number {
+  const agentsRoot = join(getGlobalAgentsRoot(options), 'agents');
+  if (!existsSync(agentsRoot)) return 0;
+  const ids = new Set(sessionIds);
+  const updates: Array<{ file: string; contents: string }> = [];
+  let deleted = 0;
+  for (const directory of readdirSync(agentsRoot, { withFileTypes: true })) {
+    if (!directory.isDirectory() || !AGENT_SLUG_REGEX.test(directory.name)) continue;
+    const agent = directory.name;
+    const files = [getSessionsLogFile(agent, options), ...listSessionsArchiveYears(agent, options).map(year => getSessionsArchiveFile(agent, year, options))];
+    for (const file of files) {
+      if (!existsSync(file)) continue;
+      const parsed = parseSessionsLog(readFileSync(file, 'utf-8'), agent);
+      if (parsed.warnings.length) throw new Error(`Conversation history could not be read safely: ${file}. Repair it before deleting this campaign.`);
+      const kept = parsed.entries.filter(entry => entry.workspaceId !== workspaceId && (Boolean(entry.workspaceId) || !ids.has(entry.sessionId)));
+      if (kept.length === parsed.entries.length) continue;
+      deleted += parsed.entries.length - kept.length;
+      updates.push({ file, contents: serializeSessionsLog(parsed.envelope, kept) });
+    }
+  }
+  // Parse every affected file before modifying anything; malformed history must not
+  // quietly erase a different campaign's entries.
+  for (const update of updates) writeFileAtomic(update.file, update.contents);
+  return deleted;
+}

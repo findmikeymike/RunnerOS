@@ -70,13 +70,13 @@ export function appendSignalNugget(
 ): string {
   const amendedLabel = `_Last amended: ${input.amendedAt}_`
   let base = currentBody?.trim()
-    || `# Signal Nuggets\n\n${amendedLabel}\n\nSelected intelligence worth carrying into future artist and campaign work.`
+    || `# Saved insights\n\n${amendedLabel}\n\nSelected intelligence worth carrying into future artist and campaign work.`
   if (/_Last amended: [^\n]+_/.test(base)) {
     base = base.replace(/_Last amended: [^\n]+_/, amendedLabel)
-  } else if (base.startsWith('# Signal Nuggets')) {
-    base = base.replace('# Signal Nuggets', `# Signal Nuggets\n\n${amendedLabel}`)
+  } else if (/^# (?:Signal Nuggets|Saved insights)\b/.test(base)) {
+    base = base.replace(/^# (?:Signal Nuggets|Saved insights)\b/, (heading) => `${heading}\n\n${amendedLabel}`)
   } else {
-    base = `# Signal Nuggets\n\n${amendedLabel}\n\n${base}`
+    base = `# Saved insights\n\n${amendedLabel}\n\n${base}`
   }
   const quote = input.text.split('\n').map((line) => `> ${line}`).join('\n')
   return [

@@ -21,7 +21,7 @@ export function signalLibraryLabels(items: Array<{ key: string; title: string; d
   return new Map(items.map(item => {
     const date = item.date ? new Date(item.date) : null
     const stamp = date && Number.isFinite(date.getTime()) ? date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Undated'
-    const base = item.key === signalNuggetsKey ? 'Saved nuggets' : `${stamp} - ${item.mode === 'links' ? 'Video review: ' : ''}${item.title}`
+    const base = item.key === signalNuggetsKey ? 'Saved insights' : `${stamp} - ${item.mode === 'links' ? 'Video review: ' : ''}${item.title}`
     let label = base
     let occurrence = 1
     while (used.has(label)) label = `${base} (${++occurrence})`

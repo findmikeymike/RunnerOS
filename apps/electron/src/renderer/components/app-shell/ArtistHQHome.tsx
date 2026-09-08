@@ -1267,11 +1267,11 @@ export function ArtistHQHome({
     const existing = docs.find(doc => doc.slug === SIGNAL_NUGGETS_CONTEXT_SLUG)
     await upsert({
       slug: SIGNAL_NUGGETS_CONTEXT_SLUG,
-      metadata: existing?.metadata ?? { name: 'Signal Nuggets', description: 'Selected intelligence worth carrying into future artist and campaign work.', routing: { mode: 'broadcast' }, delivery: 'on-demand', enabled: true },
+      metadata: existing?.metadata ?? { name: 'Saved insights', description: 'Selected intelligence worth carrying into future artist and campaign work.', routing: { mode: 'broadcast' }, delivery: 'on-demand', enabled: true },
       body: appendSignalNugget(existing?.body, { ...input, amendedAt: new Date().toISOString() }),
       expectedBody: existing?.body ?? null,
     })
-    toast.success('Saved to Signal Nuggets')
+    toast.success('Saved to insights')
   }, [docs, upsert])
 
   const toggleIntelPulse = React.useCallback(async () => {

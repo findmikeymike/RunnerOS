@@ -465,6 +465,13 @@ client.onConnectionStateChanged((state) => {
   return () => ipcRenderer.removeListener('__license:required', handler)
 }
 ;(api as ElectronAPI).relaunchApp = () => ipcRenderer.invoke('app:relaunch')
+;(api as ElectronAPI).onCampaignDeleted = (callback) => {
+  const listener = (_event: unknown, data: { workspaceId: string; hqWorkspaceId: string }) => callback(data)
+  ipcRenderer.on('campaign:deleted', listener)
+  return () => ipcRenderer.removeListener('campaign:deleted', listener)
+}
+;(api as ElectronAPI).previewCampaignCleanup = (workspaceId: string) => ipcRenderer.invoke('campaign:cleanupPreview', workspaceId)
+;(api as ElectronAPI).deleteCampaign = (workspaceId: string, previewToken: string) => ipcRenderer.invoke('campaign:delete', workspaceId, previewToken)
 ;(api as ElectronAPI).removeWorkspace = (workspaceId: string) => ipcRenderer.invoke('workspace:remove', workspaceId)
 ;(api as ElectronAPI).invokeOnServer = (url: string, token: string, channel: string, ...args: any[]) =>
   ipcRenderer.invoke('server:invokeOnServer', url, token, channel, ...args)

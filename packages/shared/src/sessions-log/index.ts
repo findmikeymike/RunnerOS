@@ -14,6 +14,7 @@ export {
 
 export {
   appendSessionLogEntry,
+  deleteWorkspaceSessionLogEntries,
   getSessionsArchiveFile,
   getSessionsLogFile,
   isValidSessionLogDate,

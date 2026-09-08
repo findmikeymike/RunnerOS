@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence } from "motion/react"
-import { Check, ChevronDown, Cloud, CloudOff, Disc3, FlaskConical, FolderPlus, Home, Plus } from "lucide-react"
+import { Check, ChevronDown, Cloud, CloudOff, Disc3, FlaskConical, FolderPlus, Home, Plus, Trash2 } from "lucide-react"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@craft-agent/ui"
 import {
   DropdownMenu,
@@ -24,12 +24,15 @@ import { useTransportConnectionState } from "@/hooks/useTransportConnectionState
 import { navigate, routes } from "@/lib/navigate"
 import { isArtistHQWorkspace, isLabWorkspace } from "@/lib/artist-workspace"
 import type { Workspace } from "../../../shared/types"
+import { CampaignCleanupDialog } from './CampaignCleanupDialog'
+import type { CampaignCleanupResult } from '@craft-agent/shared/campaign-cleanup'
 
 interface WorkspaceRailProps {
   workspaces: Workspace[]
   activeWorkspaceId: string | null
   onSelect: (workspaceId: string, openInNewWindow?: boolean) => void | Promise<void>
   onWorkspaceCreated?: (workspace: Workspace) => void
+  onWorkspaceRemoved?: () => void
   workspaceUnreadMap?: Record<string, boolean>
   orientation?: 'horizontal' | 'vertical'
 }
@@ -39,6 +42,7 @@ export function WorkspaceRail({
   activeWorkspaceId,
   onSelect,
   onWorkspaceCreated,
+  onWorkspaceRemoved,
   workspaceUnreadMap,
   orientation = 'vertical',
 }: WorkspaceRailProps) {
@@ -49,6 +53,7 @@ export function WorkspaceRail({
   const [creationKind, setCreationKind] = useState<'campaign' | 'lab' | null>(null)
   const [isCreatingLab, setIsCreatingLab] = useState(false)
   const [reconnectTarget, setReconnectTarget] = useState<Workspace | null>(null)
+  const [cleanupTarget, setCleanupTarget] = useState<Workspace | null>(null)
   const [remoteHealthMap, setRemoteHealthMap] = useState<Map<string, 'ok' | 'error' | 'checking'>>(new Map())
   const healthCheckAbort = useRef<AbortController | null>(null)
   const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
@@ -62,6 +67,21 @@ export function WorkspaceRail({
     !isArtistHQWorkspace(workspace, workspaces)
     && !isLabWorkspace(workspace, workspaces)
   ))
+  const activeCampaign = campaignWorkspaces.find(workspace => workspace.id === activeWorkspaceId && workspace.artistWorkspaceScope === 'campaign')
+  const handleCampaignDeleted = (result: CampaignCleanupResult) => {
+    setCleanupTarget(null)
+    onWorkspaceRemoved?.()
+    toast.success('Campaign deleted', { description: `Kept files are in Vault → Past Releases → ${result.pastReleaseLabel}.` })
+  }
+  const deleteCampaignMenuItem = activeCampaign ? (
+    <>
+      <StyledDropdownMenuSeparator />
+      <StyledDropdownMenuItem onClick={() => setCleanupTarget(activeCampaign)} className="text-destructive">
+        <Trash2 className="h-3.5 w-3.5" />
+        Delete current campaign…
+      </StyledDropdownMenuItem>
+    </>
+  ) : null
 
   const checkRemoteHealth = useCallback(() => {
     healthCheckAbort.current?.abort()
@@ -304,12 +324,14 @@ export function WorkspaceRail({
             {isCreatingLab ? 'Creating Creative Lab…' : 'Add Creative Lab'}
           </StyledDropdownMenuItem>
         )}
+        {deleteCampaignMenuItem}
       </StyledDropdownMenuContent>
     </DropdownMenu>
   )
 
   return (
     <>
+      {cleanupTarget ? <CampaignCleanupDialog key={cleanupTarget.id} workspace={cleanupTarget} onClose={() => setCleanupTarget(null)} onDeleted={handleCampaignDeleted} /> : null}
       <AnimatePresence>
         {showCreationScreen && (
           <WorkspaceCreationScreen
@@ -396,6 +418,7 @@ export function WorkspaceRail({
                   <Plus className="h-3.5 w-3.5" />
                   New Campaign
                 </StyledDropdownMenuItem>
+                {deleteCampaignMenuItem}
               </StyledDropdownMenuContent>
             </DropdownMenu>
 

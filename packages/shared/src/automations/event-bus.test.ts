@@ -24,6 +24,26 @@ describe('WorkspaceEventBus', () => {
   });
 
   describe('emit', () => {
+    it('keeps already dispatched async hooks busy after disposal until every handler settles', async () => {
+      let finishFirst!: () => void;
+      let finishSecond!: () => void;
+      const first = new Promise<void>(resolve => { finishFirst = resolve; });
+      const second = new Promise<void>(resolve => { finishSecond = resolve; });
+      bus.onAny(async () => { await first; throw new Error('Hook failed'); });
+      bus.onAny(() => second);
+      const delivery = bus.emitWithResult('LabelAdd', {
+        sessionId: 'session-1', workspaceId: 'test-workspace', timestamp: Date.now(), label: 'test',
+      });
+      expect(bus.hasPendingExecutions()).toBe(true);
+      bus.dispose();
+      finishFirst();
+      await Promise.resolve();
+      expect(bus.hasPendingExecutions()).toBe(true);
+      finishSecond();
+      expect((await delivery).status).toBe('failed');
+      expect(bus.hasPendingExecutions()).toBe(false);
+    });
+
     it('should emit events to registered handlers', async () => {
       const handler = jest.fn();
       bus.on('LabelAdd', handler);

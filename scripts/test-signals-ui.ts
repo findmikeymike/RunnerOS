@@ -127,5 +127,47 @@ try {
     await page.waitForTimeout(50)
     assert.equal(await page.getByRole('button', { name: 'other: Ready' }).isEnabled(), true)
   })
+  await check('legacy pause re-fetches and preserves the exact schedule without providers', async () => {
+    await page.evaluate(() => (window as any).renderTracks())
+    await page.getByRole('button', { name: 'hq: Ready' }).waitFor()
+    const result = await page.evaluate(async () => {
+      const w = window as any
+      const matcher = { id: 'legacy', enabled: true, cron: '30 11 * * 4', timezone: 'America/Chicago', snoozedUntil: '2027-01-01T00:00:00Z', conditions: { test: true }, permissionMode: 'safe',
+        actions: [{ type: 'queue-work', execution: { type: 'workflow-run', workflowSlug: 'weekly-signal-scan' } }, { type: 'prompt', prompt: 'Keep this custom action' }] }
+      w.electronAPI.getAutomations = async () => ({ automations: { SchedulerTick: [matcher] } })
+      w.electronAPI.resolveSignalChannel = w.electronAPI.saveSignalConfig = async () => { throw new Error('Pause must not call providers or write config') }
+      const calls: any[] = []
+      w.electronAPI.replaceAutomation = async (...args: any[]) => { calls.push(args) }
+      await w.tracks.pauseLegacy()
+      return { calls, matcher }
+    })
+    assert.equal(result.calls.length, 1)
+    assert.deepEqual(result.calls[0], ['hq', 'SchedulerTick', 'legacy', result.matcher, { ...result.matcher, enabled: false }])
+  })
+  await check('legacy pause rejects ambiguity and does not retry CAS conflicts', async () => {
+    await page.evaluate(() => (window as any).renderTracks())
+    await page.getByRole('button', { name: 'hq: Ready' }).waitFor()
+    const result = await page.evaluate(async () => {
+      const w = window as any
+      const matcher = { id: 'one', enabled: true, actions: [{ type: 'queue-work', execution: { type: 'workflow-run', workflowSlug: 'weekly-signal-scan' } }] }
+      let items = [matcher, { ...matcher, id: 'two' }]; let calls = 0
+      w.electronAPI.getAutomations = async () => ({ automations: { SchedulerTick: items } })
+      w.electronAPI.replaceAutomation = async () => { calls++; throw new Error('Schedule changed') }
+      let ambiguous = ''; let conflict = ''; let missing = ''
+      try { await w.tracks.pauseLegacy() } catch (error) { ambiguous = String(error) }
+      const writesAfterAmbiguity = calls
+      items = [matcher]
+      try { await w.tracks.pauseLegacy() } catch (error) { conflict = String(error) }
+      items = []
+      try { await w.tracks.pauseLegacy() } catch (error) { missing = String(error) }
+      return { ambiguous, conflict, missing, writesAfterAmbiguity, calls }
+    })
+    assert.match(result.ambiguous, /Multiple Industry schedules/)
+    assert.equal(result.writesAfterAmbiguity, 0)
+    assert.match(result.conflict, /Schedule changed/)
+    assert.match(result.missing, /schedule changed/)
+    assert.equal(result.calls, 1)
+    assert.equal(await page.getByRole('button', { name: 'hq: Ready' }).isEnabled(), true)
+  })
   console.log(`${passed} Signals browser regression checks passed.`)
 } finally { await browser.close() }
