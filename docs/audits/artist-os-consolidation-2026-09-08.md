@@ -61,8 +61,8 @@ Receipts are beside the stage: `build-payload-verification.json` and
 `signed-payload-verification.json`. No timestamping, notarization, upload, app launch,
 or provider run was performed. Initial sandbox-only helper verification was misleading;
 elevated verification proved it valid. The original outer package failed strict
-verification, which the staged signing resolved. Signing initially exhausted available
-working space; only this task's completed worktrees/build artifacts were removed.
+verification, which the staged signing resolved. Signing initially failed while working space was low and succeeded after freeing
+space; only this task's completed worktrees/build artifacts were removed.
 
 **Installation pending:** the running original package remains untouched. Obtain
 permission to close Artist OS, then replace the canonical package with the verified
@@ -80,8 +80,13 @@ and no-event assertions. All six post-merge discovery shards passed locally:
 **8646 passed, 0 failed, 1 skipped**. The newly isolated settings suite passed 4 tests;
 all **21 isolated suites also passed: 349 tests, zero failures**. Together the
 final discovery shards and isolated processes verify **8,995 passed, 0 failed, 1 skipped**. Both test fixes are on remote main
-at `26f498ca6`. Fresh remote Tests/Validate are pending; local results do not claim
-remote CI success.
+at `26f498ca6`. Remote **Tests and Validate both passed** at integrated main
+`b408373ba0350e4ccccab17963273e1af99b485d`: all six discovery shards and isolated
+suites on both macOS and Linux. Evidence:
+[Tests](https://github.com/findmikeymike/RunnerOS/actions/runs/34204064761),
+[Validate](https://github.com/findmikeymike/RunnerOS/actions/runs/34204064729).
+This final documentation-only evidence update leaves that verified runtime/test tree
+unchanged; it does not claim a future CI run has already completed.
 Use `gh --repo findmikeymike/RunnerOS`: the implicit gh default points to upstream,
 which is not evidence for this repository.
 
