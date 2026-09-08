@@ -69,6 +69,7 @@ export interface PromptAction {
   prompt: string;
   /** Optional saved agent slug used for the spawned automation session. */
   agentSlug?: string;
+  taskModeId?: string;
   /** Bind the spawned session back to the inbound messaging channel when the trigger is MessageReceive. */
   bindMessagingChannel?: boolean;
   /** LLM connection slug for the created session (falls back to default if not found) */
@@ -416,6 +417,7 @@ export interface PendingPrompt {
   labels?: string[];
   /** Saved agent slug to apply to the created session */
   agentSlug?: string;
+  taskModeId?: string;
   /** Messaging channel to bind to the created session after it is spawned */
   messagingChannel?: {
     platform: string;

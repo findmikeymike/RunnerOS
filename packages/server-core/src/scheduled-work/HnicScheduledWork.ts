@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { Cron } from 'croner'
 import type { ScheduleWorkToolInput } from '@craft-agent/session-tools-core'
-import { loadGlobalAgent, readActivatedAgents } from '@craft-agent/shared/agent-definitions'
+import { loadGlobalAgent, readActivatedAgents, resolveAgentTaskMode } from '@craft-agent/shared/agent-definitions'
 import {
   ARTIST_CALENDAR_CONTEXT_SLUG,
   artistCalendarMetadata,
@@ -94,10 +94,19 @@ function resolveExecution(rootPath: string, request: ScheduleWorkToolInput): Sch
     if (!readActivatedAgents(rootPath).active.includes(input.agentSlug)) {
       throw new Error(`Agent is not active in this workspace: ${input.agentSlug}`)
     }
-    if (!loadGlobalAgent(input.agentSlug)) throw new Error(`Agent definition was not found: ${input.agentSlug}`)
+    const agent = loadGlobalAgent(input.agentSlug)
+    if (!agent) throw new Error(`Agent definition was not found: ${input.agentSlug}`)
+    if ((agent.metadata.taskModes?.length ?? 0) > 1 && !input.taskModeId) {
+      throw new Error(`Choose a focus for ${agent.metadata.name} before scheduling: ${agent.metadata.taskModes!.map(mode => mode.id).join(', ')}.`)
+    }
+    if (input.taskModeId !== undefined && (typeof input.taskModeId !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(input.taskModeId))) {
+      throw new Error('taskModeId must be a valid lowercase mode slug.')
+    }
+    resolveAgentTaskMode(agent, input.taskModeId)
     return {
       type: 'agent-task',
       agentSlug: input.agentSlug,
+      taskModeId: input.taskModeId,
       brief: input.brief.trim(),
       permissionMode: input.permissionMode ?? 'safe',
       expectedOutput: {

@@ -1,8 +1,8 @@
 import { STARTER_AGENTS } from '@craft-agent/shared/agent-definitions/starter-templates'
 import { describe, expect, test } from 'bun:test'
-import { buildAgentCreateSessionOptions, buildPendingAgentTaskModeSessionOptions, ensureAgentDeclaredSkillsEnabled, resolveArtistWorkspaceScope, sendAgentDraft, shouldDeferAgentTaskModeSelection } from './run-agent'
+import { buildAgentCreateSessionOptions, buildPendingAgentTaskModeSessionOptions, ensureAgentDeclaredSkillsEnabled, openAgentSessionComposer, resolveArtistWorkspaceScope, sendAgentDraft, shouldDeferAgentTaskModeSelection } from './run-agent'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
-import type { AgentDefinitionDTO, LoadedSource } from '../../shared/types'
+import type { AgentDefinitionDTO, LoadedSource, LoadedSkill, Session, CreateSessionOptions } from '../../shared/types'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
 
 function makeAgent(): AgentDefinitionDTO {
@@ -46,6 +46,77 @@ function makeSource(slug: string, usable = true): LoadedSource {
     workspaceId: 'ws-1',
   } as unknown as LoadedSource
 }
+
+test('focused launch requests authorized mode context even when the caller supplied a generic snapshot', async () => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  const requests: unknown[][] = []
+  const inventoryReads: string[] = []
+  const focusedDoc = { slug: 'artist-instagram-snapshot', metadata: { name: 'Insights', enabled: true, routing: { mode: 'broadcast' as const } }, body: 'Verified dated snapshot', path: '/tmp/context', workspaceRootPath: '/tmp/ws' }
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: { electronAPI: {
+    listWorkspaceContextDocsForAgent: async (...args: unknown[]) => { requests.push(args); return [focusedDoc] },
+    getSkills: async () => { inventoryReads.push('skills'); return [{ slug: 'narrow', metadata: { name: 'Narrow', description: 'Inspect the snapshot.' } }] },
+    getSources: async () => { inventoryReads.push('sources'); return [] },
+    listUserMemory: async () => [], listAgentMemory: async () => [], listAgentSessions: async () => [], getWorkspaces: async () => [],
+  } } })
+  try {
+    const agent: AgentDefinitionDTO = { ...makeAgent(), metadata: { ...makeAgent().metadata, skills: ['narrow'], taskModes: [{
+      id: 'snapshot', label: 'Snapshot', description: 'Inspect the snapshot.', kind: 'focus', primarySkillSlugs: ['narrow'],
+      context: { preloadTopics: ['artist-instagram-snapshot'] },
+    }] } }
+    let created: CreateSessionOptions | undefined
+    await openAgentSessionComposer({
+      workspaceId: 'ws-1', agent, taskModeId: 'snapshot', contextDocs: [],
+      navigateOnCreate: false, onInputChange: () => {},
+      onCreateSession: async (_workspace, options) => { created = options; return { id: 'focused-session' } as Session },
+    })
+    expect(requests).toEqual([['ws-1', 'test-agent', 'snapshot']])
+    expect(inventoryReads.sort()).toEqual(['skills', 'sources'])
+    expect(created?.enabledSourceSlugs).toEqual([])
+    expect(created?.launchReceipt?.injected.contextDocs.map(doc => doc.slug)).toEqual(['artist-instagram-snapshot'])
+    expect(created?.customSystemPrompt).toContain('Verified dated snapshot')
+  } finally {
+    if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow)
+    else Reflect.deleteProperty(globalThis, 'window')
+  }
+})
+
+describe('focused launch dependency enforcement', () => {
+  const definition = STARTER_AGENTS.find(agent => agent.slug === 'hypermotion-agent')!
+  const agent = { ...makeAgent(), ...definition } as AgentDefinitionDTO
+  const skills = definition.metadata.skills!.map(slug => ({ slug, metadata: { name: slug } })) as LoadedSkill[]
+
+  test('focused builder rejects absent inventory, missing skill and unusable required source', () => {
+    expect(() => buildAgentCreateSessionOptions(agent, undefined, 'motion')).toThrow('Load current Skills and Connections')
+    expect(() => buildAgentCreateSessionOptions(agent, { skills: [], sources: [makeSource('hypermotion')] }, 'motion')).toThrow('missing skill @hyperframes')
+    expect(() => buildAgentCreateSessionOptions(agent, { skills, sources: [] }, 'motion')).toThrow('missing connection @hypermotion')
+    expect(() => buildAgentCreateSessionOptions(agent, { skills, sources: [makeSource('hypermotion', false)] }, 'motion')).toThrow('disabled or disconnected @hypermotion')
+  })
+
+  test('focused composer never creates a session when a required dependency is unavailable', async () => {
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+    let creates = 0
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: { electronAPI: {
+      getSkills: async () => skills, getSources: async () => [makeSource('hypermotion', false)],
+    } } })
+    try {
+      await expect(openAgentSessionComposer({
+        workspaceId: 'ws-1', agent, taskModeId: 'motion', navigateOnCreate: false, onInputChange: () => {},
+        onCreateSession: async () => { creates += 1; return { id: 'should-not-exist' } as Session },
+      })).rejects.toThrow('disabled or disconnected @hypermotion')
+      expect(creates).toBe(0)
+    } finally {
+      if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow)
+      else Reflect.deleteProperty(globalThis, 'window')
+    }
+  })
+
+  test('an intentional empty source list cannot inherit workspace defaults', () => {
+    const options = buildAgentCreateSessionOptions(agent, { skills, sources: [makeSource('hypermotion')] }, 'canvas')
+    expect(options.enabledSourceSlugs).toEqual([])
+    const selectedSources = options.enabledSourceSlugs ?? ['unrelated-workspace-default']
+    expect(selectedSources).toEqual([])
+  })
+})
 
 describe('pending in-chat task-mode selection', () => {
   const agent = {
@@ -379,3 +450,29 @@ describe('artist workspace scope reaches the composed prompt', () => {
     expect(withScope.customSystemPrompt ?? '').toContain(contractHeader)
   })
 })
+
+
+describe('focused optional adapters', () => {
+  test('publishing prompt and receipt contain only the selected route', () => {
+    const definition = STARTER_AGENTS.find(agent => agent.slug === 'social-publisher')!;
+    const agent = { ...makeAgent(), ...definition } as AgentDefinitionDTO;
+    const options = buildAgentCreateSessionOptions(agent, {
+      skills: definition.metadata.skills!.map(slug => ({ slug, metadata: { name: slug } })) as any,
+      sources: [makeSource('trypost'), makeSource('postiz'), makeSource('printing-press-social')],
+    }, 'publish');
+    expect(options.enabledSourceSlugs).toEqual(['trypost']);
+    expect(options.launchReceipt?.injected.sources).toEqual(['trypost']);
+    expect(options.customSystemPrompt).toContain('Optional adapter candidates');
+    expect(options.customSystemPrompt).toContain('source_test(sourceSlug, autoEnable: true)');
+  });
+  test('having generation connections does not preload them for a Canvas discussion', () => {
+    const definition = STARTER_AGENTS.find(agent => agent.slug === 'hypermotion-agent')!;
+    const agent = { ...makeAgent(), ...definition } as AgentDefinitionDTO;
+    const options = buildAgentCreateSessionOptions(agent, {
+      skills: definition.metadata.skills!.map(slug => ({ slug, metadata: { name: slug } })) as any,
+      sources: [makeSource('hypermotion'), makeSource('media-generation')],
+    }, 'canvas');
+    expect(options.enabledSourceSlugs ?? []).toEqual([]);
+    expect(options.launchReceipt?.injected.sources).toEqual([]);
+  });
+});

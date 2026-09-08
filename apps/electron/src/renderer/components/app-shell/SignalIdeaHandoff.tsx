@@ -98,6 +98,7 @@ export function SignalIdeaHandoff({ reference, onClose }: { reference: SignalEnt
           let createdId: string | undefined
           try {
             const session = await openAgentSessionComposer({ agent: worker, workspaceId: target,
+              taskModeId: worker.slug === 'content-genius' ? 'ideas' : undefined,
               onCreateSession: async (...args) => { const created = await shell.onCreateSession(...args); createdId = created.id; return created },
               onInputChange: shell.onInputChange, skills, sources, navigateOnCreate: false, shouldContinue: isCurrent })
             return session.id

@@ -40,6 +40,8 @@ export interface PulseAction {
   type: 'pulse';
   /** Slug of the agent that drives the pulse. Defaults to 'orchestrator'. */
   driverAgentSlug?: string;
+  /** Explicit recipe; requires an explicit driverAgentSlug. */
+  taskModeId?: string;
   /** Goal slugs to consider. If omitted, all goals with status: active. */
   goalSlugs?: string[];
   /** How far back to look for "recent activity" diff. Defaults to schedule cadence. */

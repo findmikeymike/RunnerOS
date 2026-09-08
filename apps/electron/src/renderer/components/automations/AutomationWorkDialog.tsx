@@ -1,3 +1,5 @@
+import { AgentTaskModeSelect } from '@/components/agents/AgentTaskModeSelect'
+import { agentTaskModeSelectionError } from '@/lib/agent-task-mode-selection'
 import * as React from 'react'
 import { Bot, CalendarClock, FileSearch, Link2, MessageSquare, Search, Webhook, Workflow } from 'lucide-react'
 import type { WorkflowInputBinding } from '@craft-agent/shared/automations'
@@ -79,6 +81,7 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
   const [internalOpen, setInternalOpen] = React.useState(false)
   const [query, setQuery] = React.useState('')
   const [selectedId, setSelectedId] = React.useState('')
+  const [taskModeId, setTaskModeId] = React.useState<string | undefined>()
   const [name, setName] = React.useState('')
   const [brief, setBrief] = React.useState('')
   const [bindings, setBindings] = React.useState<Record<string, WorkflowInputBinding>>({})
@@ -159,6 +162,7 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
       setBindings(initialWorkflowInputBindings(workflow?.metadata.trigger.inputs ?? [], workflowPrefill.triggerInputs))
     } else {
       setSelectedId('')
+      setTaskModeId(undefined)
       setName(suggestedName || '')
       setBindings({})
     }
@@ -206,6 +210,7 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
 
   const chooseTarget = React.useCallback((target: SetupTarget) => {
     setSelectedId(targetId(target))
+    setTaskModeId(undefined)
     setName(targetName(target))
     setError(null)
     if (target.kind === 'workflow') {
@@ -227,7 +232,7 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
 
   const submit = React.useCallback(async () => {
     if (!workspace || !selected) return
-    const validationError = validateSetup({ selected, name, brief, bindings, workflowInputs, when, cron, onceDate, onceTime, watchPath, watchGlob, webhookSlug, secretEnv, pollUrl, pollIntervalSec, messageMatcher })
+    const validationError = validateSetup({ selected, taskModeId, name, brief, bindings, workflowInputs, when, cron, onceDate, onceTime, watchPath, watchGlob, webhookSlug, secretEnv, pollUrl, pollIntervalSec, messageMatcher })
     if (validationError) {
       setError(validationError)
       return
@@ -240,7 +245,7 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
         ? { scope: 'hq' as const, workspaceId: workspace.id }
         : { scope: 'campaign' as const, workspaceId: workspace.id, campaignId: workspace.id }
       let resolvedLabel = assignedScheduleLabel
-      const draft = buildDraft({ selected, owner, name, brief, bindings, date: onceDate, time: onceTime, timezone })
+      const draft = buildDraft({ selected, taskModeId, owner, name, brief, bindings, date: onceDate, time: onceTime, timezone })
       if (when === 'once') {
         if (draft.owner.scope === 'hq') {
           await window.electronAPI.scheduleHqWork(workspace.id, buildHqSchedulePlanFromComposer(draft))
@@ -283,7 +288,7 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
     } finally {
       setBusy(false)
     }
-  }, [assignedScheduleLabel, bindings, brief, cron, loadAutomaticSchedule, messageMatcher, name, onCreated, onceDate, onceTime, pollIntervalSec, pollUrl, requestedInputs, secretEnv, selected, setDialogOpen, showOnCalendar, timezone, watchGlob, watchPath, webhookSlug, when, workflowInputs, workspace, workspaces])
+  }, [assignedScheduleLabel, bindings, brief, cron, loadAutomaticSchedule, messageMatcher, name, onCreated, onceDate, onceTime, pollIntervalSec, pollUrl, requestedInputs, secretEnv, selected, taskModeId, setDialogOpen, showOnCalendar, timezone, watchGlob, watchPath, webhookSlug, when, workflowInputs, workspace, workspaces])
 
   const review = selected ? automationReviewSentence({
     title: name,
@@ -305,7 +310,8 @@ export function AutomationWorkDialog({ trigger, open, onOpenChange, workflowPref
 
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">
           <SetupSection number="1" title="What runs">
-            {selected ? <SelectedTarget target={selected} locked={Boolean(workflowPrefill)} onChange={() => setSelectedId('')} /> : <TargetPicker targets={filteredTargets} query={query} loading={agentsLoading || workflowsLoading} onQuery={setQuery} onChoose={chooseTarget} />}
+            {selected ? <SelectedTarget target={selected} locked={Boolean(workflowPrefill)} onChange={() => { setSelectedId(''); setTaskModeId(undefined) }} /> : <TargetPicker targets={filteredTargets} query={query} loading={agentsLoading || workflowsLoading} onQuery={setQuery} onChoose={chooseTarget} />}
+            {selected?.kind === 'agent' ? <AgentTaskModeSelect agent={selected.agent} value={taskModeId} onChange={setTaskModeId} /> : null}
             {selected ? <Field label="Name"><input className={INPUT_CLASS} value={name} onChange={(event) => setName(event.target.value)} placeholder={targetName(selected)} /></Field> : null}
           </SetupSection>
 
@@ -417,19 +423,23 @@ function targetName(target: SetupTarget): string { return target.kind === 'agent
 function targetDescription(target: SetupTarget): string { return target.kind === 'agent' ? target.agent.metadata.description : target.workflow.metadata.description }
 function targetSearchText(target: SetupTarget): string { return target.kind === 'agent' ? `${target.agent.metadata.name} ${target.agent.metadata.description} ${(target.agent.metadata.tags ?? []).join(' ')}`.toLowerCase() : `${target.workflow.metadata.name} ${target.workflow.metadata.description}`.toLowerCase() }
 
-function buildDraft(input: { selected: SetupTarget; owner: { scope: 'hq'; workspaceId: string } | { scope: 'campaign'; workspaceId: string; campaignId: string }; name: string; brief: string; bindings: Record<string, WorkflowInputBinding>; date: string; time: string; timezone: string }): Exclude<ScheduledWorkComposerDraft, { type: 'event' }> {
+function buildDraft(input: { selected: SetupTarget; taskModeId?: string; owner: { scope: 'hq'; workspaceId: string } | { scope: 'campaign'; workspaceId: string; campaignId: string }; name: string; brief: string; bindings: Record<string, WorkflowInputBinding>; date: string; time: string; timezone: string }): Exclude<ScheduledWorkComposerDraft, { type: 'event' }> {
   if (input.selected.kind === 'agent') {
     const draft = createScheduledWorkComposerDraft({ owner: input.owner, date: input.date, timezone: input.timezone, title: input.name, suggestedType: 'agent-task' })
     if (draft.type !== 'agent-task') throw new Error('Could not prepare the worker task.')
-    return { ...draft, time: input.time, agentSlug: input.selected.agent.slug, agentName: input.selected.agent.metadata.name, brief: input.brief, permissionMode: 'safe' }
+    return { ...draft, time: input.time, agentSlug: input.selected.agent.slug, agentName: input.selected.agent.metadata.name, taskModeId: input.taskModeId, brief: input.brief, permissionMode: 'safe' }
   }
   const draft = createScheduledWorkComposerDraft({ owner: input.owner, date: input.date, timezone: input.timezone, title: input.name, suggestedType: 'workflow-run' })
   if (draft.type !== 'workflow-run') throw new Error('Could not prepare the workflow.')
   return { ...draft, time: input.time, workflowSlug: input.selected.workflow.slug, workflowName: input.selected.workflow.metadata.name, workflowDigest: composerDefinitionDigest({ metadata: input.selected.workflow.metadata, body: input.selected.workflow.body }), triggerInputs: fixedTriggerInputs(input.bindings) }
 }
 
-function validateSetup(input: { selected: SetupTarget; name: string; brief: string; bindings: Record<string, WorkflowInputBinding>; workflowInputs: WorkflowTriggerInput[]; when: AutomationWhen; cron: string; onceDate: string; onceTime: string; watchPath: string; watchGlob: string; webhookSlug: string; secretEnv: string; pollUrl: string; pollIntervalSec: number; messageMatcher: string }): string | undefined {
+function validateSetup(input: { selected: SetupTarget; taskModeId?: string; name: string; brief: string; bindings: Record<string, WorkflowInputBinding>; workflowInputs: WorkflowTriggerInput[]; when: AutomationWhen; cron: string; onceDate: string; onceTime: string; watchPath: string; watchGlob: string; webhookSlug: string; secretEnv: string; pollUrl: string; pollIntervalSec: number; messageMatcher: string }): string | undefined {
   if (!input.name.trim()) return 'Add a name.'
+  if (input.selected.kind === 'agent') {
+    const focusError = agentTaskModeSelectionError(input.selected.agent, input.taskModeId)
+    if (focusError) return focusError
+  }
   if (input.selected.kind === 'agent' && !input.brief.trim()) return 'Tell the worker what to handle each time.'
   if (input.selected.kind === 'workflow') {
     const bindingError = validateWorkflowInputBindings(input.workflowInputs, input.bindings, input.when)

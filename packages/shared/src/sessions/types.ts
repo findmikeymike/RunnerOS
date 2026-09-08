@@ -98,6 +98,16 @@ export interface SessionTokenUsage {
   contextWindow?: number;
 }
 
+export interface AgentCapabilityExpansionReceipt {
+  skillSlug: string;
+  contentRevision: string;
+  taskModeId: string;
+  taskModeRevision: string;
+  inputMessageId: string;
+  reason: string;
+  loadedAt: number;
+}
+
 export interface SessionLaunchReceipt {
   createdAt: number;
   origin: 'manual' | 'agent' | 'concierge' | 'workflow' | 'deep-research' | 'automation' | 'branch' | 'spawned-session';
@@ -118,6 +128,8 @@ export interface SessionLaunchReceipt {
     outputs?: string;
     tags?: string[];
   };
+  /** Host-owned adjacent-capability deliveries, retained across mode changes. */
+  capabilityExpansions?: AgentCapabilityExpansionReceipt[];
   /** Current focused recipe selected by the user or launch route. */
   taskMode?: {
     schemaVersion: 1;

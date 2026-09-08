@@ -21,6 +21,7 @@ export type {
 
 export {
   resolveAgentTaskMode,
+  selectTaskModeSourceSlugs,
   filterContextDocsForTaskMode,
   buildAgentTaskModePromptSection,
   type ResolvedAgentTaskMode,

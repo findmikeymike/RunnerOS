@@ -1,38 +1,63 @@
 import * as React from 'react'
-import { AudioLines, Check, ChevronRight, Fingerprint, Layers3, LoaderCircle, Orbit, Sparkles } from 'lucide-react'
+import {
+  Activity, AudioLines, BookOpen, CalendarDays, Captions, ChartNoAxesCombined,
+  Check, ChevronRight, CircleHelp, ClipboardList, Coins, Compass,
+  Download, FileCheck, Fingerprint, Globe, Image, Layers3,
+  Lightbulb, ListChecks, ListMusic, LoaderCircle, Map, Megaphone,
+  MessageCircle, Mic, MousePointerClick, Orbit, Package, Palette,
+  PencilLine, Plug, Presentation, Radio, RefreshCw, Repeat,
+  ScanText, Scissors, Search, Send, ShieldCheck, Shirt,
+  SlidersHorizontal, Sparkles, Target, Users, Video,
+} from 'lucide-react'
 import type { AgentTaskModeDefinition } from '@craft-agent/shared/agent-definitions/types'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@craft-agent/ui'
 
 const FOCUS_ICONS: Record<string, typeof Fingerprint> = {
-  'brand-audit': Fingerprint,
-  'artist-world': Orbit,
-  'voice-beliefs': AudioLines,
-  'campaign-angles': Sparkles,
-  'full-brand-system': Layers3,
-}
-
-const FOCUS_HELP: Record<string, { summary: string; details: string }> = {
-  'brand-audit': {
-    summary: 'Assess how your music, image, and public presence add up—and what makes you distinct.',
-    details: 'Identify your strongest traits, mixed signals, and the changes that would sharpen your identity.',
-  },
-  'artist-world': {
-    summary: 'Build a recognizable world around your music, connecting its story with a clear visual direction.',
-    details: 'Explore themes, characters, symbols, color, styling, and imagery that belong together.',
-  },
-  'voice-beliefs': {
-    summary: 'Clarify what you stand for and how you show up for your audience—through your music, content, and community.',
-    details: 'Explore your point of view, your natural voice, and the shared ideas that bring your audience together.',
-  },
-  'campaign-angles': {
-    summary: 'Turn a release into a compelling idea people can follow, share, and participate in.',
-    details: 'Develop the central hook, content themes, fan participation, and ways to build anticipation.',
-  },
-  'full-brand-system': {
-    summary: 'Bring your identity, story, visuals, voice, and campaign direction into one connected brand.',
-    details: 'Work across all five areas for a complete foundation. A deeper session that takes longer.',
-  },
+  'activity': Activity,
+  'audio-lines': AudioLines,
+  'book-open': BookOpen,
+  'calendar': CalendarDays,
+  'captions': Captions,
+  'chart-no-axes-combined': ChartNoAxesCombined,
+  'circle-help': CircleHelp,
+  'clipboard-list': ClipboardList,
+  'coins': Coins,
+  'compass': Compass,
+  'download': Download,
+  'file-check': FileCheck,
+  'fingerprint': Fingerprint,
+  'globe': Globe,
+  'image': Image,
+  'layers': Layers3,
+  'lightbulb': Lightbulb,
+  'list-checks': ListChecks,
+  'list-music': ListMusic,
+  'map': Map,
+  'megaphone': Megaphone,
+  'message-circle': MessageCircle,
+  'mic': Mic,
+  'mouse-pointer-click': MousePointerClick,
+  'orbit': Orbit,
+  'package': Package,
+  'palette': Palette,
+  'pencil-line': PencilLine,
+  'plug': Plug,
+  'presentation': Presentation,
+  'radio': Radio,
+  'refresh-cw': RefreshCw,
+  'repeat': Repeat,
+  'scan-text': ScanText,
+  'scissors': Scissors,
+  'search': Search,
+  'send': Send,
+  'shield-check': ShieldCheck,
+  'shirt': Shirt,
+  'sliders-horizontal': SlidersHorizontal,
+  'sparkles': Sparkles,
+  'target': Target,
+  'users': Users,
+  'video': Video,
 }
 
 interface ChatAgentTaskModeBarProps {
@@ -81,7 +106,7 @@ export function ChatAgentTaskModeBar({
     ? (conversationStarted ? 'Updating the next reply…' : 'Starting conversation…')
     : openingConversation
       ? 'Starting conversation…'
-      : selectedModeId && conversationStarted
+      : conversationStarted
         ? 'Choose another anytime · applies to the next reply'
         : selectedModeId ? 'Focus selected' : 'Choose a focus to start'
 
@@ -97,8 +122,7 @@ export function ChatAgentTaskModeBar({
         {modes.map((mode) => {
           const selected = selectedModeId === mode.id
           const applying = applyingModeId === mode.id
-          const Icon = FOCUS_ICONS[mode.id] ?? Layers3
-          const help = FOCUS_HELP[mode.id]
+          const Icon = FOCUS_ICONS[mode.icon ?? ''] ?? Layers3
           const busy = Boolean(applyingModeId) || openingConversation
           // Keep pointer grace local: a shared provider can suppress a neighboring
           // trigger when the pointer crosses several focus buttons quickly.
@@ -136,8 +160,8 @@ export function ChatAgentTaskModeBar({
                     <Icon aria-hidden="true" className="size-3.5 shrink-0 text-[#fb923c]" strokeWidth={1.5} />
                     <span className="text-[12px] font-semibold tracking-wide">{mode.label}</span>
                   </div>
-                  <p className="text-[12px] leading-[18px] text-white/90">{help?.summary ?? mode.description}</p>
-                  {help && <p className="mt-3 border-t border-white/[0.07] pt-3 text-[11px] leading-[17px] text-white/55">{help.details}</p>}
+                  <p className="text-[12px] leading-[18px] text-white/90">{mode.description}</p>
+                  {mode.helpText && <p className="mt-3 border-t border-white/[0.07] pt-3 text-[11px] leading-[17px] text-white/55">{mode.helpText}</p>}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

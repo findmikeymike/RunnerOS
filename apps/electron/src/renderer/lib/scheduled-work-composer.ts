@@ -48,6 +48,7 @@ export interface AgentTaskComposerDraft extends WorkComposerBase {
   type: 'agent-task'
   agentSlug: string
   agentName: string
+  taskModeId?: string
   brief: string
   permissionMode: 'safe' | 'ask'
   expectedOutput: ExpectedOutputContract
@@ -601,6 +602,7 @@ function executionFromDraft(draft: Exclude<ScheduledWorkComposerDraft, EventComp
     return {
       type: draft.type,
       agentSlug: draft.agentSlug,
+      ...(draft.taskModeId ? { taskModeId: draft.taskModeId } : {}),
       brief: draft.brief.trim(),
       permissionMode: draft.permissionMode,
       expectedOutput: draft.expectedOutput,

@@ -44,3 +44,19 @@ describe('agent messaging validation', () => {
     }, { depth: 2, maxDepth: 2 })).toThrow('maximum delegation depth');
   });
 });
+
+
+describe('focused delegation validation', () => {
+  test('normalizes the selected mode without changing authority', () => {
+    const input = normalizeMessageAgentInput({ agentSlug: 'branding-agent', task: 'Build a world', taskModeId: ' artist-world ' }, { parentPermissionMode: 'safe' });
+    expect(input.taskModeId).toBe('artist-world');
+    expect(input.permissionMode).toBe('safe');
+    expect(input.skillSlugs).toEqual([]);
+  });
+  test.each(['', 'FULL', '../artist-world'])('rejects invalid mode id %s', taskModeId => {
+    expect(() => normalizeMessageAgentInput({ agentSlug: 'branding-agent', task: 'Build a world', taskModeId })).toThrow('taskModeId must');
+  });
+  test.each([{ skillSlugs: [] }, { skillSlugs: ['artist-narrative-universe'] }])('rejects raw skill overrides alongside a mode', ({ skillSlugs }) => {
+    expect(() => normalizeMessageAgentInput({ agentSlug: 'branding-agent', task: 'Build a world', taskModeId: 'artist-world', skillSlugs: [...skillSlugs] })).toThrow('cannot be combined');
+  });
+});

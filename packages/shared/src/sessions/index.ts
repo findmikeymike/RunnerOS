@@ -197,3 +197,17 @@ export {
   validateBundle,
   MAX_BUNDLE_SIZE_BYTES,
 } from './bundle.ts';
+
+// Host-owned focus inheritance across local branches and validated remote transfers.
+export {
+  inheritHostAgentFocus,
+  createPendingAgentFocusState,
+  createAgentFocusTransferIntent,
+  parseAgentFocusTransferIntent,
+  validateTransferredAgentFocus,
+} from './agent-focus-inheritance.ts';
+export type {
+  HostAgentFocusState,
+  AgentFocusTransferIntent,
+  ValidatedTransferredAgentFocus,
+} from './agent-focus-inheritance.ts';

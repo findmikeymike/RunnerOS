@@ -51,6 +51,55 @@ const MISSING_RUN_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const INACTIVE_RUN_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const TERMINAL_RUN_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 
+describe('explicit workflow task modes', () => {
+  test('preflights agent plus mode once and executes every step with the same selection', async () => {
+    const h = makeHarness();
+    const checked: Array<string | undefined> = [];
+    const resolved: Array<string | undefined> = [];
+    const baseResolve = h.deps.resolveAgentSessionOptions!;
+    h.deps.preflightStepAgent = async (_ws, _agent, options) => { checked.push(options?.taskModeId); };
+    h.deps.resolveAgentSessionOptions = async (ws, agent, options) => {
+      resolved.push(options?.taskModeId);
+      return { ...await baseResolve(ws, agent, options), agentSkillSlugs: [options?.taskModeId ?? 'default'] };
+    };
+    const workflow = makeWorkflow({ steps: [
+      { id: 'one', agent: 'content-genius', taskModeId: 'ideas', input: 'First' },
+      { id: 'two', agent: 'content-genius', taskModeId: 'captions', input: 'Second' },
+      { id: 'three', agent: 'content-genius', taskModeId: 'ideas', input: 'Third' },
+    ] });
+    await new WorkflowRunner(h.deps).start({ workflow, workspaceId: WORKSPACE_ID, triggerInputs: { topic: 'focus' } });
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    expect(checked).toEqual(['ideas', 'captions']);
+    expect(resolved).toEqual(['ideas', 'captions', 'ideas']);
+    expect([...h.sessions.values()].map(s => (s.options as { agentSkillSlugs: string[] }).agentSkillSlugs)).toEqual([['ideas'], ['captions'], ['ideas']]);
+  });
+
+  test('failed mode dependency preflight creates no sessions and never retries as Full', async () => {
+    const h = makeHarness();
+    const checked: Array<string | undefined> = [];
+    h.deps.preflightStepAgent = async (_ws, _agent, options) => {
+      checked.push(options?.taskModeId);
+      throw new Error('Selected mode requires the missing source.');
+    };
+    await expect(new WorkflowRunner(h.deps).start({
+      workflow: makeWorkflow({ steps: [{ id: 'work', agent: 'content-genius', taskModeId: 'ideas', input: 'Work' }] }),
+      workspaceId: WORKSPACE_ID, triggerInputs: { topic: 'focus' },
+    })).rejects.toThrow('missing source');
+    expect(checked).toEqual(['ideas']);
+    expect(h.sessions.size).toBe(0);
+  });
+
+  test('explicit focus cannot silently execute without a resolver', async () => {
+    const h = makeHarness();
+    h.deps.resolveAgentSessionOptions = undefined;
+    await expect(new WorkflowRunner(h.deps).start({
+      workflow: makeWorkflow({ steps: [{ id: 'work', agent: 'writer', taskModeId: 'focused', input: 'Work' }] }),
+      workspaceId: WORKSPACE_ID, triggerInputs: { topic: 'focus' },
+    })).rejects.toThrow('require an agent session resolver');
+    expect(h.sessions.size).toBe(0);
+  });
+});
+
 test('host empty completion persists supplied identity without creating agent sessions', async () => {
   const h = makeHarness();
   const runner = new WorkflowRunner({ ...h.deps, completeWithoutSteps: async () => true });

@@ -51,6 +51,14 @@ export function normalizeMessageAgentInput(
     throw new Error('agentSlug must be a valid agent slug.');
   }
 
+  const taskModeId = cleanString(input.taskModeId);
+  if (input.taskModeId !== undefined && (!taskModeId || !AGENT_SLUG_REGEX.test(taskModeId))) {
+    throw new Error('taskModeId must be a valid mode slug.');
+  }
+  if (taskModeId && input.skillSlugs !== undefined) {
+    throw new Error('taskModeId cannot be combined with skillSlugs; the selected mode owns its skill recipe.');
+  }
+
   const task = cleanString(input.task);
   if (!task) throw new Error('task is required.');
   if (task.length > MAX_TASK_CHARS) throw new Error(`task must be ${MAX_TASK_CHARS} characters or fewer.`);
@@ -79,6 +87,7 @@ export function normalizeMessageAgentInput(
 
   return {
     agentSlug,
+    ...(taskModeId ? { taskModeId } : {}),
     task,
     context,
     expectedOutput,

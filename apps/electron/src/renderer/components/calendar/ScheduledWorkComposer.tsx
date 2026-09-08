@@ -1,3 +1,5 @@
+import { AgentTaskModeSelect } from '@/components/agents/AgentTaskModeSelect'
+import { agentTaskModeSelectionError } from '@/lib/agent-task-mode-selection'
 import * as React from 'react'
 import {
   Bot,
@@ -316,11 +318,16 @@ function RunnerSection({ draft, agents, workflows, profiles, loading, onChange, 
 }) {
   if (loading) return <EmptyLine>Loading available targets...</EmptyLine>
   if (draft.type === 'agent-task') {
-    return <ChoiceList choices={agents.map((agent) => ({ id: agent.slug, label: agent.metadata.name, description: agent.metadata.description }))} selected={draft.agentSlug} empty="No active agents. Activate one from Agents." onSelect={(id) => {
+    const selectedAgent = agents.find(agent => agent.slug === draft.agentSlug)
+    return <div className="space-y-3"><ChoiceList choices={agents.map((agent) => ({ id: agent.slug, label: agent.metadata.name, description: agent.metadata.description }))} selected={draft.agentSlug} empty="No active agents. Activate one from Agents." onSelect={(id) => {
       const agent = agents.find((candidate) => candidate.slug === id)
-      onChange({ ...draft, agentSlug: id, agentName: agent?.metadata.name ?? id })
-      onComplete()
-    }} />
+      const taskModeId = id === draft.agentSlug ? draft.taskModeId : undefined
+      onChange({ ...draft, agentSlug: id, agentName: agent?.metadata.name ?? id, taskModeId })
+      if (agent && !agentTaskModeSelectionError(agent, taskModeId)) onComplete()
+    }} />{selectedAgent && <AgentTaskModeSelect agent={selectedAgent} value={draft.taskModeId} onChange={taskModeId => {
+      onChange({ ...draft, taskModeId })
+      if (!agentTaskModeSelectionError(selectedAgent, taskModeId)) onComplete()
+    }} />}</div>
   }
   if (draft.type === 'workflow-run') {
     return <ChoiceList choices={workflows.map((workflow) => ({ id: workflow.slug, label: workflow.metadata.name, description: `${workflow.metadata.steps.length} steps · ${workflow.metadata.description}` }))} selected={draft.workflowSlug} empty="No active workflows. Activate one from Workflows." onSelect={(id) => {
@@ -815,8 +822,11 @@ function validateLiveTarget(
   activeWorkflows: WorkflowDTO[],
   profiles: SocialProfile[],
 ): string | undefined {
-  if (draft.type === 'agent-task' && !activeAgents.some((agent) => agent.slug === draft.agentSlug)) {
-    return 'That agent is no longer active. Choose another agent.'
+  if (draft.type === 'agent-task') {
+    const agent = activeAgents.find(candidate => candidate.slug === draft.agentSlug)
+    if (!agent) return 'That agent is no longer active. Choose another agent.'
+    const focusError = agentTaskModeSelectionError(agent, draft.taskModeId)
+    if (focusError) return focusError
   }
   if (draft.type === 'workflow-run') {
     const workflow = activeWorkflows.find((candidate) => candidate.slug === draft.workflowSlug)

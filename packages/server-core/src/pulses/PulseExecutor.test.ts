@@ -101,6 +101,21 @@ beforeEach(() => { harnesses = []; });
 function track(h: Harness): Harness { harnesses.push(h); return h; }
 
 describe('PulseExecutor', () => {
+  it('passes the exact specialist task mode to its safe driver', async () => {
+    const h = track(makeHarness());
+    await new PulseExecutor(h.deps).execute({
+      ...BASE_INPUT(), pulseAction: { type: 'pulse', driverAgentSlug: 'content-genius', taskModeId: 'ideas' },
+    });
+    expect(h.driverCalls[0]).toMatchObject({ driverAgentSlug: 'content-genius', taskModeId: 'ideas', permissionMode: 'safe' });
+  });
+
+  it('rejects an orphan focus before driver execution', async () => {
+    const h = track(makeHarness());
+    await new PulseExecutor(h.deps).execute({ ...BASE_INPUT(), pulseAction: { type: 'pulse', taskModeId: 'ideas' } });
+    expect(h.driverCalls).toHaveLength(0);
+    expect(h.notifications.length).toBeGreaterThan(0);
+  });
+
   it('records a do_nothing tick when the driver chooses do_nothing', async () => {
     const h = track(makeHarness({ driverReply: '{"action":"do_nothing","reason":"all quiet"}' }));
     const exec = new PulseExecutor(h.deps);

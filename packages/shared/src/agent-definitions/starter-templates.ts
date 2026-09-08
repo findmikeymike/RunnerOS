@@ -11,6 +11,9 @@
 
 import type { CreateAgentInput } from './storage.ts'
 import type { AgentTaskModeDefinition } from './types.ts'
+import { TIER_ONE_TASK_MODES } from './task-mode-recipes/tier-one.ts'
+import { TIER_TWO_TASK_MODES } from './task-mode-recipes/tier-two.ts'
+import { MANAGER_TASK_MODES } from './task-mode-recipes/manager.ts'
 import { SIGNAL_BRIEFING_INSTRUCTIONS } from '../shared-intel/briefing.ts'
 import { signalTrackPromptPrefix, youtubeProviderPromptPrefix } from './signal-track-prompts.ts'
 import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, SONG_DIRECTOR_SLUG, OPEN_SLIDE_AGENT_SLUG } from './types.ts'
@@ -35,7 +38,9 @@ const BRANDING_TASK_MODES: AgentTaskModeDefinition[] = [
   {
     id: 'brand-audit',
     label: 'Brand Audit',
-    description: 'Find what is memorable, muddy, missing, or working against the artist.',
+    description: 'Assess how your music, image, and public presence add up—and what makes you distinct.',
+    helpText: 'Identify your strongest traits, mixed signals, and the changes that would sharpen your identity.',
+    icon: 'fingerprint',
     kind: 'focus',
     primarySkillSlugs: ['artist-brand-dna-audit'],
     adjacentSkills: [
@@ -52,7 +57,9 @@ const BRANDING_TASK_MODES: AgentTaskModeDefinition[] = [
   {
     id: 'artist-world',
     label: 'Artist World',
-    description: 'Build one coherent artist world: its story, mythology, and rules translated into symbols, styling, color, typography, and imagery.',
+    description: 'Build a recognizable world around your music, connecting its story with a clear visual direction.',
+    helpText: 'Explore themes, characters, symbols, color, styling, and imagery that belong together.',
+    icon: 'orbit',
     kind: 'bundle',
     primarySkillSlugs: ['artist-narrative-universe', 'artist-visual-world-director'],
     adjacentSkills: [
@@ -69,7 +76,9 @@ const BRANDING_TASK_MODES: AgentTaskModeDefinition[] = [
   {
     id: 'voice-beliefs',
     label: 'Voice & Beliefs',
-    description: 'Connect what the artist stands for with how they speak and behave: values, point of view, natural voice, recurring signals, and fan belonging.',
+    description: 'Clarify what you stand for and how you show up for your audience—through your music, content, and community.',
+    helpText: 'Explore your point of view, your natural voice, and the shared ideas that bring your audience together.',
+    icon: 'audio-lines',
     kind: 'bundle',
     primarySkillSlugs: ['artist-belief-system', 'artist-brand-expression-strategist'],
     adjacentSkills: [
@@ -86,7 +95,9 @@ const BRANDING_TASK_MODES: AgentTaskModeDefinition[] = [
   {
     id: 'campaign-angles',
     label: 'Campaign Angles',
-    description: 'Find rollout ideas, content pillars, fan rituals, and word-of-mouth hooks.',
+    description: 'Turn a release into a compelling idea people can follow, share, and participate in.',
+    helpText: 'Develop the central hook, content themes, fan participation, and ways to build anticipation.',
+    icon: 'sparkles',
     kind: 'focus',
     primarySkillSlugs: ['artist-campaign-angle-builder'],
     adjacentSkills: [
@@ -102,9 +113,16 @@ const BRANDING_TASK_MODES: AgentTaskModeDefinition[] = [
   {
     id: 'full-brand-system',
     label: 'Full Brand System',
-    description: 'Build or rebuild the complete brand foundation across every branding discipline.',
+    description: 'Bring your identity, story, visuals, voice, and campaign direction into one connected brand.',
+    helpText: 'Work across all five areas for a complete foundation. A deeper session that takes longer.',
+    icon: 'layers',
     kind: 'bundle',
     primarySkillSlugs: BRANDING_SKILL_SLUGS,
+    context: {
+      preloadTopics: ['artist-profile', 'artist-voice', 'artist-branding', 'artist-release-horizon', 'mission-brief'],
+      retrieveOnDemandTopics: ['approved visual references', 'lyrics and interviews', 'audience evidence', 'past campaign results'],
+      maxPreloadChars: 12_000,
+    },
     fullMode: true,
     recommendedThinkingLevel: 'high',
   },
@@ -3294,5 +3312,10 @@ You are not here to be liked. You are here to make the work better.
 
 export const STARTER_AGENTS: CreateAgentInput[] = BASE_STARTER_AGENTS.map(agent => ({
   ...agent,
+  metadata: {
+    ...agent.metadata,
+    ...((TIER_ONE_TASK_MODES[agent.slug] ?? TIER_TWO_TASK_MODES[agent.slug]) ? { taskModes: TIER_ONE_TASK_MODES[agent.slug] ?? TIER_TWO_TASK_MODES[agent.slug] } : {}),
+    ...(agent.slug === CONCIERGE_SLUG ? { taskModes: MANAGER_TASK_MODES } : {}),
+  },
   systemPrompt: `${signalTrackPromptPrefix(agent.slug)}${youtubeProviderPromptPrefix(agent.slug)}${agent.systemPrompt}`,
 }))

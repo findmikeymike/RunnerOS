@@ -160,6 +160,8 @@ describe('task-mode selection', () => {
       .rejects.toThrow('Disk unavailable')
     expect(managed.messages).toEqual([])
     expect(managed.launchReceipt?.taskModeSelectionPending).toBe(true)
+    expect(managed.launchReceipt?.taskMode).toBeUndefined()
+    expect(managed.agentSkillSlugs).toBeUndefined()
     let starts = 0
     manager.sendMessage = async (...args) => { starts += 1; args[7]?.('accepted') }
     await manager.selectSessionTaskMode(managed.id, 'narrative-universe', { startConversation: true })
@@ -221,6 +223,60 @@ describe('task-mode selection', () => {
     managed.isProcessing = false
     await expect(manager.sendMessage(managed.id, 'Now change focus')).rejects.toThrow('Stop before provider execution')
     expect(captured?.customSystemPrompt).toBe('Focused branding prompt')
+  })
+
+  test('source retry keeps admitted focus, activated source and input identity without another user bubble', async () => {
+    managed.launchReceipt = { ...focusedReceipt, taskModeSelectionPending: false }
+    managed.messages = [{ id: 'original', role: 'user', content: 'Original ask', timestamp: 1, inputOrigin: 'human' }]
+    managed.name = 'Branding'
+    managed.lastSentInputMessageId = 'original'
+    managed.lastSentMessage = 'Original ask'
+    managed.lastSentOptions = { inputOrigin: 'human' }
+    managed.lastSentTurnContext = { customSystemPrompt: 'Admitted focus', agentSkillSlugs: ['original-skill'], enabledSourceSlugs: ['activated-source'], launchReceipt: managed.launchReceipt }
+    managed.customSystemPrompt = 'Pending next focus'
+    const internals = manager as unknown as {
+      processEvent: (session: typeof managed, event: AgentEvent) => Promise<void>
+      getOrCreateAgent: (session: typeof managed, context: NonNullable<typeof managed.lastSentTurnContext>) => Promise<AgentBackend>
+    }
+    await internals.processEvent(managed, { type: 'source_activated', sourceSlug: 'activated-source', originalMessage: 'Original ask' })
+    const token = managed.pendingSourceRetry!.token
+    let captured: typeof managed.lastSentTurnContext | undefined
+    internals.getOrCreateAgent = async (_session, context) => { captured = context; throw new Error('Stop before provider') }
+    let ack: string | undefined
+    await expect(manager.sendMessage(managed.id, 'Untrusted replacement text', undefined, undefined, { sourceRetryToken: token, inputOrigin: 'system' }, undefined, undefined, id => { ack = id }))
+      .rejects.toThrow('Stop before provider')
+    expect(ack).toBe('original')
+    expect(managed.messages.filter(message => message.role === 'user')).toHaveLength(1)
+    expect(managed.lastSentInputMessageId).toBe('original')
+    expect(managed.lastSentMessage).toContain('Original ask')
+    expect(managed.lastSentMessage).not.toContain('Untrusted replacement')
+    expect(captured?.customSystemPrompt).toBe('Admitted focus')
+    expect(captured?.enabledSourceSlugs).toEqual(['activated-source'])
+    await expect(manager.sendMessage(managed.id, '', undefined, undefined, { sourceRetryToken: token })).rejects.toThrow('stale')
+    managed.isProcessing = false
+    await expect(manager.sendMessage(managed.id, 'Auth retry', undefined, undefined, undefined, 'original', true)).rejects.toThrow('Stop before provider')
+    expect(captured?.customSystemPrompt).toBe('Admitted focus')
+    expect(captured?.enabledSourceSlugs).toEqual(['activated-source'])
+    managed.isProcessing = false
+    await expect(manager.sendMessage(managed.id, 'Next real ask')).rejects.toThrow('Stop before provider')
+    expect(captured?.customSystemPrompt).toBe('Pending next focus')
+    expect(managed.lastSentInputMessageId).not.toBe('original')
+  })
+
+  test('forged source retry token never admits a user message', async () => {
+    await expect(manager.sendMessage(managed.id, 'Injected ask', undefined, undefined, { sourceRetryToken: 'forged' })).rejects.toThrow('stale')
+    expect(managed.messages).toHaveLength(0)
+  })
+
+  test('Stop invalidates a source retry even after provider teardown', async () => {
+    managed.pendingSourceRetry = {
+      token: 'stopped-token', inputMessageId: 'original', generation: managed.processingGeneration,
+      sourceSlug: 'calendar', message: 'Original ask', turnContext: {},
+    }
+    managed.isProcessing = false
+    await manager.cancelProcessing(managed.id)
+    await expect(manager.sendMessage(managed.id, '', undefined, undefined, { sourceRetryToken: 'stopped-token' })).rejects.toThrow('stale')
+    expect(managed.messages).toHaveLength(0)
   })
 
   test('an in-flight fallback keeps the admitted focus and the next send receives the new focus', async () => {

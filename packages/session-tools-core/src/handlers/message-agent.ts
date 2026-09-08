@@ -4,6 +4,7 @@ import { errorResponse } from '../response.ts';
 
 export interface MessageAgentToolInput {
   agentSlug: string;
+  taskModeId?: string;
   task: string;
   context?: string;
   expectedOutput?: string;

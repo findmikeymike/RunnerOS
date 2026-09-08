@@ -1,3 +1,5 @@
+import { AgentTaskModeSelect } from '@/components/agents/AgentTaskModeSelect'
+import { agentTaskModeSelectionError } from '@/lib/agent-task-mode-selection'
 import * as React from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
@@ -96,7 +98,14 @@ export default function WorkflowEditPage({ workflowSlug, workspaceId }: Props) {
     })
   }, [activeAgentSlugs, agentBySlug, agentsError, agentsLoading, parsed])
 
+  const taskModeError = parsed?.metadata.steps.map(step => {
+    const agent = agentBySlug.get(step.agent)
+    const error = agent ? agentTaskModeSelectionError(agent, step.taskModeId) : undefined
+    return error ? `Step "${step.id}": ${error}` : undefined
+  }).find(Boolean)
+
   const handleSave = async () => {
+    if (taskModeError) { toast.error(taskModeError); return }
     if (!parsed) {
       toast.error(t('workflows.editor.parseError'))
       return
@@ -142,7 +151,7 @@ export default function WorkflowEditPage({ workflowSlug, workspaceId }: Props) {
             <X className="h-3.5 w-3.5 mr-1.5" />
             {t('common.cancel')}
           </Button>
-          <Button size="sm" className="border border-[#fb923c]/25 bg-[#f97316]/18 text-white/90 hover:bg-[#f97316]/26" onClick={handleSave} disabled={saving || !!parseError}>
+          <Button size="sm" className="border border-[#fb923c]/25 bg-[#f97316]/18 text-white/90 hover:bg-[#f97316]/26" onClick={handleSave} disabled={saving || !!parseError || !!taskModeError}>
             <Save className="h-3.5 w-3.5 mr-1.5" />
             {saving ? t('workflows.editor.saving') : t('common.save')}
           </Button>
@@ -150,10 +159,10 @@ export default function WorkflowEditPage({ workflowSlug, workspaceId }: Props) {
         </div>
 
       <div className="flex min-h-0 flex-col gap-3">
-        {parseError && (
+        {(parseError || taskModeError) && (
           <div className="flex items-center gap-2 rounded-[12px] border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300">
             <AlertTriangle className="h-3.5 w-3.5" />
-            <span>{parseError}</span>
+            <span>{parseError || taskModeError}</span>
           </div>
         )}
         {stepAgentIssues.length > 0 && (
@@ -179,6 +188,15 @@ export default function WorkflowEditPage({ workflowSlug, workspaceId }: Props) {
             activeAgentSlugs={activeAgentSlugs}
             loading={agentsLoading}
             error={agentsError}
+            onTaskModeChange={(stepId, taskModeId) => {
+              if (!parsed) return
+              const steps = parsed.metadata.steps.map(step => {
+                if (step.id !== stepId) return step
+                const { taskModeId: _previous, ...rest } = step
+                return { ...rest, ...(taskModeId ? { taskModeId } : {}) }
+              })
+              setText(serializeWorkflow({ ...parsed.metadata, steps }, parsed.body))
+            }}
           />
         </div>
 
@@ -206,6 +224,7 @@ interface WorkflowAgentCapabilitiesPanelProps {
   activeAgentSlugs: Set<string>
   loading: boolean
   error: string | null
+  onTaskModeChange: (stepId: string, taskModeId: string | undefined) => void
 }
 
 function WorkflowAgentCapabilitiesPanel({
@@ -214,6 +233,7 @@ function WorkflowAgentCapabilitiesPanel({
   activeAgentSlugs,
   loading,
   error,
+  onTaskModeChange,
 }: WorkflowAgentCapabilitiesPanelProps) {
   const steps = parsed?.metadata.steps ?? []
 
@@ -224,7 +244,7 @@ function WorkflowAgentCapabilitiesPanel({
           Worker capabilities
         </h2>
         <p className="mt-1 text-[11px] leading-relaxed text-white/42">
-          Read-only hints from saved workers used by this workflow.
+          Choose a focus for each worker and review its capabilities.
         </p>
       </div>
 
@@ -260,7 +280,7 @@ function WorkflowAgentCapabilitiesPanel({
                       {agent && !isActive && <Info_Badge color="warning">inactive</Info_Badge>}
                     </div>
                     {agent ? (
-                      <AgentCapabilitySummary agent={agent} />
+                      <><AgentCapabilitySummary agent={agent} /><div className="mt-2"><AgentTaskModeSelect agent={agent} value={step.taskModeId} onChange={taskModeId => onTaskModeChange(step.id, taskModeId)} /></div></>
                     ) : (
                       <p className="mt-2 text-[11px] leading-relaxed text-white/45">
                         Add this worker to the global library, or change the step to an existing active worker.

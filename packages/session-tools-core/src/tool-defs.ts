@@ -50,6 +50,7 @@ import { handleUpdateTasks } from './handlers/session-tasks.ts';
 import { handleListSessions } from './handlers/list-sessions.ts';
 import { handleListAgents } from './handlers/list-agents.ts';
 import { handleListSkills } from './handlers/list-skills.ts';
+import { handleLoadAgentCapability } from './handlers/load-agent-capability.ts';
 import { handleSearchSkillMarketplace } from './handlers/search-skill-marketplace.ts';
 import { handleListSources } from './handlers/list-sources.ts';
 import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
@@ -353,6 +354,11 @@ export const ListAgentsSchema = z.object({
   tags: z.array(z.string()).optional().describe('Optional capability tags to require. Matching is case-insensitive.'),
 });
 
+export const LoadAgentCapabilitySchema = z.object({
+  skillSlug: z.string().trim().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/).describe('Exact adjacent skill slug declared by the selected task mode.'),
+  reason: z.string().trim().min(1).max(1000).describe('Why the current conversation now needs this adjacent capability.'),
+});
+
 export const ListSkillsSchema = z.object({
   activeOnly: z.boolean().optional().describe('If true, return only skills currently active in this workspace (workspace + activated globals + project). Defaults to false, which also includes dormant skills from the global library.'),
   search: z.string().optional().describe('Optional case-insensitive search across slug, name, description, and tags.'),
@@ -492,6 +498,7 @@ export const SendAgentMessageSchema = z.object({
 
 export const MessageAgentSchema = z.object({
   agentSlug: z.string().describe('Target saved agent slug. Use list_agents first if unsure.'),
+  taskModeId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/).optional().describe('Exact task mode id from list_agents. Resolves the focused recipe before composing the child prompt. Cannot be combined with skillSlugs.'),
   task: z.string().describe('Concrete bounded task for the target agent.'),
   context: z.string().optional().describe('Compact context the target agent needs. Do not paste the whole transcript.'),
   expectedOutput: z.string().optional().describe('Plain-language expected result shape.'),
@@ -639,6 +646,7 @@ const ScheduleWorkExecutionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('agent-task'),
     agentSlug: z.string().min(1),
+    taskModeId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/).optional().describe('Exact focus ID from the saved agent. Required when the agent has focus choices; never guess Full.'),
     brief: z.string().min(1),
     permissionMode: z.enum(['safe', 'ask']).optional(),
     expectedOutput: z.object({
@@ -649,6 +657,7 @@ const ScheduleWorkExecutionSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('workflow-run'),
+    taskModeId: z.never().optional(),
     workflowSlug: z.string().min(1),
     triggerInputs: z.record(z.string(), z.unknown()).optional(),
     inputBindings: z.record(z.string(), z.discriminatedUnion('mode', [
@@ -1668,7 +1677,13 @@ Use get_session_info for full details on a specific session (list-then-detail pa
 
 Use this before recommending which agent should handle a task. It returns each agent's slug, display name, description, active status, skills, sources, source readiness, and capability fields (inputs, outputs, tags). Source readiness is ready, degraded when only optional sources are unavailable, or blocked when a required source is missing, disabled, or needs authentication.
 
+Available taskModes list ids, labels, outcomes, and whether they are comprehensive. Pass the exact taskModeId to message_agent for a focused handoff; mode selection grants no additional authority.
+
 Prefer this over filesystem searches for AGENT.md files. For normal routing questions, call with activeOnly=true so recommendations come from the user's active workspace agents.`,
+
+  load_agent_capability: `Load instructions for one declared same-session adjacent capability when the conversation materially needs it.
+
+Only the host can validate the selected mode, available skill, limits, and receipt. At most one new capability per assistant turn and two per session; repeated loads are idempotent. This tool never installs skills or grants sources, tools, accounts, permissions, approvals, or spending authority. For a different mode or specialist, use a focused handoff instead. Use the returned instructions before applying the capability.`,
 
   list_skills: `List skills available in this workspace.
 
@@ -2251,6 +2266,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'update_tasks', description: TOOL_DESCRIPTIONS.update_tasks, inputSchema: UpdateTasksSchema, executionMode: 'registry', safeMode: 'allow', handler: handleUpdateTasks },
   { name: 'list_sessions', description: TOOL_DESCRIPTIONS.list_sessions, inputSchema: ListSessionsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSessions },
   { name: 'list_agents', description: TOOL_DESCRIPTIONS.list_agents, inputSchema: ListAgentsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListAgents },
+  { name: 'load_agent_capability', description: TOOL_DESCRIPTIONS.load_agent_capability, inputSchema: LoadAgentCapabilitySchema, executionMode: 'registry', safeMode: 'allow', readOnly: false, handler: handleLoadAgentCapability },
   { name: 'list_skills', description: TOOL_DESCRIPTIONS.list_skills, inputSchema: ListSkillsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSkills },
   { name: 'search_skill_marketplace', description: TOOL_DESCRIPTIONS.search_skill_marketplace, inputSchema: SearchSkillMarketplaceSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleSearchSkillMarketplace },
   { name: 'list_sources', description: TOOL_DESCRIPTIONS.list_sources, inputSchema: ListSourcesSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSources },

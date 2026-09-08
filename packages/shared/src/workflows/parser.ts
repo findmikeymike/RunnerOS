@@ -218,6 +218,7 @@ function coerceOutputs(raw: unknown, warnings: WorkflowParseWarning[]): Workflow
 }
 
 interface RawStep {
+  taskModeId?: unknown;
   id?: unknown;
   agent?: unknown;
   input?: unknown;
@@ -359,12 +360,14 @@ export function parseWorkflowFile(
     if (!id || !WORKFLOW_SLUG_REGEX.test(id)) return null;
     if (seenIds.has(id)) return null;
     if (!agent || !AGENT_SLUG_REGEX.test(agent)) return null;
+    if (rawStep.taskModeId !== undefined && (typeof rawStep.taskModeId !== 'string' || !AGENT_SLUG_REGEX.test(rawStep.taskModeId))) return null;
     if (!input) return null;
 
     const refErrors = validateTemplateReferences(input, previousIds, triggerInputNames);
     if (refErrors.length > 0) return null;
 
     const step: WorkflowStep = { id, agent, input };
+    if (typeof rawStep.taskModeId === 'string') step.taskModeId = rawStep.taskModeId;
     if (typeof rawStep.description === 'string' && rawStep.description.trim()) {
       step.description = rawStep.description.trim();
     } else if (rawStep.description !== undefined && typeof rawStep.description !== 'string') {
@@ -461,6 +464,7 @@ export function serializeWorkflow(metadata: WorkflowMetadata, body: string): str
 
   data.steps = metadata.steps.map((s) => {
     const out: Record<string, unknown> = { id: s.id, agent: s.agent, input: s.input };
+    if (s.taskModeId !== undefined) out.taskModeId = s.taskModeId;
     if (s.description) out.description = s.description;
     if (s.outputSchema) out.outputSchema = s.outputSchema;
     if (s.timeout !== undefined) out.timeout = s.timeout;
@@ -497,6 +501,10 @@ function validateSerializableWorkflowMetadata(metadata: WorkflowMetadata): void 
     throw new Error('Workflow trigger inputs contain invalid bounds or references.');
   }
   for (const step of metadata.steps) {
+    if (step.taskModeId !== undefined && (
+      typeof step.taskModeId !== 'string' || !AGENT_SLUG_REGEX.test(step.taskModeId)
+      || typeof step.agent !== 'string' || !AGENT_SLUG_REGEX.test(step.agent)
+    )) throw new Error(`Invalid task mode or missing agent on workflow step "${step.id}".`);
     if (hasUnsupportedExecutionField(step as unknown as Record<string, unknown>)) {
       throw new Error(`Unsupported execution field on workflow step "${step.id}".`);
     }

@@ -183,6 +183,8 @@ export interface CreateSessionOptions {
 }
 
 export interface RemoteSessionTransferPayload {
+  /** Selection intent only; destination resolves its own prompt and capabilities. */
+  agentFocus?: import('../sessions/agent-focus-inheritance.ts').AgentFocusTransferIntent
   sourceSessionId: string
   name?: string
   sessionStatus?: SessionStatus
@@ -252,7 +254,7 @@ export type SessionEvent =
   | {
       type: 'task_mode_selected'
       sessionId: string
-      taskMode: NonNullable<SessionLaunchReceipt['taskMode']>
+      taskMode?: SessionLaunchReceipt['taskMode']
       agentSkillSlugs?: string[]
       enabledSourceSlugs?: string[]
       launchReceipt: SessionLaunchReceipt
@@ -278,7 +280,7 @@ export type SessionEvent =
   | { type: 'session_unshared'; sessionId: string }
   | { type: 'auth_request'; sessionId: string; message: Message; request: SharedAuthRequest }
   | { type: 'auth_completed'; sessionId: string; requestId: string; success: boolean; cancelled?: boolean; error?: string }
-  | { type: 'source_activated'; sessionId: string; sourceSlug: string; originalMessage: string }
+  | { type: 'source_activated'; sessionId: string; sourceSlug: string; originalMessage: string; retryToken: string }
   | { type: 'usage_update'; sessionId: string; tokenUsage: { inputTokens: number; contextWindow?: number } }
   | { type: 'message_annotations_updated'; sessionId: string; messageId: string; annotations: AnnotationV1[] }
   | { type: 'working_directory_error'; sessionId: string; error: string }
@@ -288,6 +290,8 @@ export type SessionEvent =
   | { type: 'session_tasks_changed'; sessionId: string; sessionTasks?: SessionTaskList; degraded?: boolean; error?: string }
 
 export interface SendMessageOptions {
+  /** Single-use host token for resuming an admitted response after source activation. */
+  sourceRetryToken?: string
   skillSlugs?: string[]
   badges?: ContentBadge[]
   optimisticMessageId?: string
@@ -681,7 +685,7 @@ export interface ClaudeOAuthResult {
 // ---------------------------------------------------------------------------
 
 export type TestAutomationAction =
-  | { type: 'prompt'; prompt: string; agentSlug?: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel }
+  | { type: 'prompt'; prompt: string; agentSlug?: string; taskModeId?: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel }
   | { type: 'webhook'; url: string; method?: string; headers?: Record<string, string>; bodyFormat?: 'json' | 'form' | 'raw'; body?: unknown; captureResponse?: boolean; auth?: { type: 'basic'; username: string; password: string } | { type: 'bearer'; token: string } }
   | QueueWorkAction
 

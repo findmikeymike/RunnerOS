@@ -12,6 +12,7 @@ export type ScheduleWorkExecutionInput =
   | {
       type: 'agent-task';
       agentSlug: string;
+      taskModeId?: string;
       brief: string;
       permissionMode?: 'safe' | 'ask';
       expectedOutput?: {
@@ -75,10 +76,14 @@ export async function handleScheduleWork(ctx: SessionToolContext, args: Schedule
   }
   if (args.execution.type === 'agent-task') {
     if (!args.execution.agentSlug?.trim()) return errorResponse('agent-task requires agentSlug.');
+    if (args.execution.taskModeId !== undefined && (
+      typeof args.execution.taskModeId !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(args.execution.taskModeId)
+    )) return errorResponse('taskModeId must be a valid lowercase mode slug.');
     if (!args.execution.brief?.trim()) return errorResponse('agent-task requires a clear brief.');
   } else if (!args.execution.workflowSlug?.trim()) {
     return errorResponse('workflow-run requires workflowSlug.');
   }
+  if (args.execution.type !== 'agent-task' && 'taskModeId' in args.execution) return errorResponse('taskModeId requires agent-task execution.');
   if (args.execution.type === 'workflow-run' && args.execution.inputBindings && args.destination !== 'automation') {
     return errorResponse('Workflow input bindings are available only for Automation work.');
   }

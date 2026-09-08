@@ -1,4 +1,6 @@
-import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
+import { loadGlobalAgent, CONCIERGE_SLUG, isAgentAllowedInArtistWorkspace } from '@craft-agent/shared/agent-definitions'
+import { createPendingAgentFocusState } from '@craft-agent/shared/sessions'
+import { getWorkspaceByNameOrId, setSessionDraft } from '@craft-agent/shared/config'
 import {
   type HqRecommendationCandidate,
   type HqRecommendationDetail,
@@ -130,8 +132,17 @@ export function registerHqStateHandlers(server: RpcServer, deps: HandlerDeps): v
 
       const recommendationId = candidate.id
       let sessionId: string | undefined
+      let draftInput: string | undefined
       try {
-        const options = await deps.sessionManager.resolveAgentSessionOptions(workspaceId, route.agentSlug)
+        const agent = loadGlobalAgent(route.agentSlug)
+        if (!agent) throw new Error(`Agent not found: ${route.agentSlug}`)
+        if (!isAgentAllowedInArtistWorkspace(agent.slug, getWorkspaceByNameOrId(workspaceId)?.artistWorkspaceScope)) {
+          throw new Error(`Agent "${agent.slug}" is not available in this workspace.`)
+        }
+        const pending = agent.slug !== CONCIERGE_SLUG && !route.taskModeId && (agent.metadata.taskModes?.length ?? 0) > 1
+        const options = pending
+          ? { ...createPendingAgentFocusState(agent), permissionMode: agent.metadata.permissionMode, model: agent.metadata.model, llmConnection: agent.metadata.llmConnection, thinkingLevel: agent.metadata.thinkingLevel }
+          : await deps.sessionManager.resolveAgentSessionOptions(workspaceId, route.agentSlug, { taskModeId: route.taskModeId, taskModeSelectionSource: 'manager' })
         const session = await deps.sessionManager.createSession(workspaceId, options)
         sessionId = session.id
         candidate = transitionHqRecommendation(rootPath, candidate.id, 'launched', {
@@ -139,7 +150,12 @@ export function registerHqStateHandlers(server: RpcServer, deps: HandlerDeps): v
           reason: `Created and linked @${route.agentSlug} session.`,
           executionRef: { kind: 'session', id: session.id, linkedAt: new Date().toISOString() },
         })
-        await sendPersistedMessage(deps, session.id, launchPrompt(candidate, route.prompt))
+        if (pending) {
+          draftInput = launchPrompt(candidate, route.prompt)
+          setSessionDraft(session.id, { text: draftInput })
+        } else {
+          await sendPersistedMessage(deps, session.id, launchPrompt(candidate, route.prompt))
+        }
       } catch (error) {
         const current = readHqRecommendationStore(rootPath).candidates.find((item) => item.id === recommendationId)
         if (current && (current.status === 'accepted' || current.status === 'launched')) {
@@ -154,7 +170,7 @@ export function registerHqStateHandlers(server: RpcServer, deps: HandlerDeps): v
       }
 
       refreshAndBroadcast(deps, workspaceId, rootPath)
-      return { recommendation: candidate, sessionId: sessionId! }
+      return { recommendation: candidate, sessionId: sessionId!, ...(draftInput ? { taskModeSelectionPending: true, draftInput } : {}) }
     })
   })
 }

@@ -52,6 +52,7 @@ describe('openVideoRepurposeSession', () => {
       openSessionComposer: async (params) => {
         called = true
         expect(params.agent.slug).toBe('raw-video-editor')
+        expect(params.taskModeId).toBe('social-versions')
         expect(params.workspaceId).toBe('workspace-1')
         expect(params.draftInput).toBe('Create variants from this source.')
         expect(params.autoSendDraft).toBe(true)

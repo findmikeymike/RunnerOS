@@ -136,6 +136,34 @@ try {
   })
   await page.screenshot({ path: '/tmp/artist-focus-ui/narrow.png' })
   assert.deepEqual(await page.evaluate(() => (window as any).focusClicks), ['voice-beliefs', 'artist-world', 'full-brand-system'])
+  for (const agent of STARTER_AGENTS.filter(agent => agent.metadata.taskModes?.length)) {
+    await page.setViewportSize({ width: 1280, height: 400 })
+    await page.evaluate(({ modes, name }) => {
+      window.focusModes = modes
+      window.renderFocusHeader(name)
+    }, { modes: agent.metadata.taskModes!, name: agent.metadata.name })
+    const agentTitle = page.getByRole('heading', { name: agent.metadata.name, exact: true })
+    await agentTitle.waitFor()
+    const buttons = page.getByLabel('Agent focus', { exact: true }).locator('button[aria-pressed]')
+    assert.equal(await buttons.count(), agent.metadata.taskModes!.length, `${agent.slug} renders every focus`)
+    for (let index = 0; index < agent.metadata.taskModes!.length; index++) {
+      await buttons.nth(index).hover()
+      await page.getByRole('tooltip').filter({ hasText: agent.metadata.taskModes![index]!.description }).waitFor({ timeout: 700 })
+      await page.keyboard.press('Escape')
+    }
+    for (const width of [768, 390, 320]) {
+      await page.setViewportSize({ width, height: 400 })
+      const titleBox = (await agentTitle.boundingBox())!
+      const rowBox = (await page.getByLabel('Agent focus', { exact: true }).boundingBox())!
+      assert.ok(titleBox.y + titleBox.height <= rowBox.y, `${agent.slug} title above controls at ${width}px`)
+      assert.ok(rowBox.y + rowBox.height <= 76, `${agent.slug} stays compact at ${width}px`)
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${agent.slug} has no page overflow`)
+      await buttons.last().focus()
+      await page.keyboard.press('Enter')
+      assert.equal(await buttons.last().getAttribute('aria-pressed'), 'true')
+      await page.keyboard.press('Escape')
+    }
+  }
   assert.deepEqual(errors, [])
-  console.log('PASS: hover under 700ms, rapid sweeps and re-entry, hoverable cards, busy-state helpers, keyboard, selection, and 1280/768/390/320px layouts; no browser errors.')
+  console.log('PASS: hover under 700ms, rapid sweeps and re-entry, hoverable cards, busy-state helpers, keyboard, selection, and 1280/768/390/320px layouts across all focused agents; no browser errors.')
 } finally { await browser.close() }

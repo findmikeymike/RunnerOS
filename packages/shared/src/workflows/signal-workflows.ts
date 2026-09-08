@@ -51,6 +51,7 @@ export function createSignalContractWorkflow(track: SignalTrack, mode: SignalMod
       steps: [
         {
           id: 'youtube-intel', agent: 'youtube-intelligence-agent',
+          taskModeId: 'weekly-intelligence',
           description: 'Analyze already persisted host evidence without recollection.',
           input: [header, 'Analyze only these host-supplied source packets. Extract concrete findings and exact source IDs, excerpts, timestamps and missing-access disclosures. Return a compact analysis packet; do not create another Output or claim ledger coverage. A complete empty result is valid only when supported by host evidence.', packet].join('\n\n'),
           timeout: 900, retries: 1, onFailure: 'stop',

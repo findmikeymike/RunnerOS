@@ -31,6 +31,8 @@ export interface HqStateRouteHint {
   prompt: string;
   confidence: 'high' | 'medium' | 'low';
   agentSlug?: string;
+  /** Explicit specialist focus; absent means open a chooser when the job is broad. */
+  taskModeId?: string;
   contextDocSlugs: string[];
   blockedReason?: string;
 }

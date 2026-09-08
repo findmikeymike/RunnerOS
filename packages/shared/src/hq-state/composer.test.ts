@@ -41,6 +41,7 @@ describe('HQ State of Play composer', () => {
     expect(state.nextMove.attentionRequired).toBe(true);
     expect(state.nextMove.route?.target).toBe('agent');
     expect(state.nextMove.route?.agentSlug).toBe('branding-agent');
+    expect(state.nextMove.route?.taskModeId).toBe('brand-audit');
     expect(state.nextMove.route?.blockedReason).toContain('Artist profile');
     expect(state.missing).toContain('artist sound');
     expect(state.sources['artist-profile']).toBe('2026-07-04T00:00:00.000Z');
@@ -152,10 +153,12 @@ describe('HQ State of Play composer', () => {
     });
 
     expect(state.nextMove.title).toBe('Add a Spotify snapshot');
+    expect(parseHqStateOfPlay(serializeHqStateOfPlay(state))?.nextMove.route?.taskModeId).toBe('fresh-snapshot');
     expect(state.nextMove.attentionRequired).toBe(false);
     expect(state.nextMove.route).toEqual(expect.objectContaining({
       target: 'agent',
       agentSlug: 'spotify-analyst',
+      taskModeId: 'fresh-snapshot',
       action: 'refresh',
       confidence: 'high',
       blockedReason: undefined,
@@ -302,6 +305,7 @@ describe('HQ State of Play composer', () => {
     });
 
     expect(state.nextMove.title).toBe('Add a Spotify snapshot');
+    expect(parseHqStateOfPlay(serializeHqStateOfPlay(state))?.nextMove.route?.taskModeId).toBe('fresh-snapshot');
     expect(state.nextMove.title).not.toContain('Grow the audience');
     expect(state.goalProgress[0]?.goal).toBe('Grow the audience');
   });

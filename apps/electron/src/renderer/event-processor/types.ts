@@ -148,7 +148,7 @@ export interface SourcesChangedEvent {
 export interface TaskModeSelectedEvent {
   type: 'task_mode_selected'
   sessionId: string
-  taskMode: NonNullable<SessionLaunchReceipt['taskMode']>
+  taskMode?: SessionLaunchReceipt['taskMode']
   agentSkillSlugs?: string[]
   enabledSourceSlugs?: string[]
   launchReceipt: SessionLaunchReceipt
@@ -477,6 +477,7 @@ export interface SourceActivatedEvent {
   sessionId: string
   sourceSlug: string
   originalMessage: string
+  retryToken: string
 }
 
 /**
@@ -580,7 +581,7 @@ export type Effect =
   | { type: 'credential_request'; request: CredentialRequest }
   | { type: 'generate_title'; sessionId: string; userMessage: string }
   | { type: 'permission_mode_changed'; sessionId: string; permissionMode: PermissionMode; previousPermissionMode?: PermissionMode; transitionDisplay?: string; modeVersion?: number; changedAt?: string; changedBy?: 'user' | 'system' | 'restore' | 'automation' | 'unknown' }
-  | { type: 'auto_retry'; sessionId: string; originalMessage: string; sourceSlug: string }
+  | { type: 'auto_retry'; sessionId: string; originalMessage: string; sourceSlug: string; retryToken: string }
   | { type: 'restore_input'; text: string }
   | { type: 'toast_error'; message: string }
   | { type: 'open_goal_setup'; sessionId: string; proposal: CreateChatGoalInput; confirmationNonce: string }

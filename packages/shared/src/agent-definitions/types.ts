@@ -38,6 +38,10 @@ export interface AgentTaskModeDefinition {
   id: string;
   label: string;
   description: string;
+  /** Extra artist-facing guidance in the shared focus hover card. */
+  helpText?: string;
+  /** Presentation hint; unsupported names use the shared fallback icon. */
+  icon?: string;
   kind: 'focus' | 'bundle';
   /** The only skills implicitly read at session start. */
   primarySkillSlugs: string[];

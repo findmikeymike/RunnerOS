@@ -5,6 +5,7 @@ import {
   buildCampaignScheduleFromComposer,
   buildCampaignSchedulePlanFromComposer,
   buildAutomationQueueWorkAction,
+  buildHqSchedulePlanFromComposer,
   applyWorkflowRunComposerPrefill,
   createScheduledWorkComposerDraft,
   selectScheduledWorkComposerType,
@@ -20,6 +21,18 @@ const defaults = {
 }
 
 describe('scheduled work composer drafts', () => {
+  test('retains the selected focus in one-time and recurring agent jobs', () => {
+    const initial = createScheduledWorkComposerDraft({ ...defaults, suggestedType: 'agent-task' })
+    if (initial.type !== 'agent-task') throw new Error('Expected agent draft')
+    const draft = { ...initial, title: 'Plan cover', agentSlug: 'art-director', taskModeId: 'cover-art', brief: 'Plan the cover art.', time: '10:00' }
+    const campaign = buildCampaignScheduleFromComposer(draft)
+    expect(campaign.order.execution).toMatchObject({ agentSlug: 'art-director', taskModeId: 'cover-art' })
+    const hq = buildHqSchedulePlanFromComposer({ ...draft, owner: { scope: 'hq', workspaceId: 'hq' } })
+    expect(hq.orders[0]!.execution).toMatchObject({ agentSlug: 'art-director', taskModeId: 'cover-art' })
+    const recurring = buildAutomationQueueWorkAction(draft, { calendarVisibility: 'visible' })
+    expect(recurring.execution).toMatchObject({ agentSlug: 'art-director', taskModeId: 'cover-art' })
+  })
+
   test('starts as a compact Event without executable fields', () => {
     expect(createScheduledWorkComposerDraft(defaults)).toEqual(expect.objectContaining({
       type: 'event',

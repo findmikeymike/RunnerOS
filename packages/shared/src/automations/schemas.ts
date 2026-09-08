@@ -25,10 +25,13 @@ export const PromptActionSchema = z.object({
   type: z.literal('prompt'),
   prompt: z.string().min(1, 'Prompt cannot be empty'),
   agentSlug: z.string().min(1).optional(),
+  taskModeId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/).optional(),
   bindMessagingChannel: z.boolean().optional(),
   llmConnection: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
   thinkingLevel: ThinkingLevelInputSchema,
+}).refine((action) => action.taskModeId === undefined || Boolean(action.agentSlug?.trim()), {
+  message: 'taskModeId requires an explicit agentSlug', path: ['taskModeId'],
 });
 
 export const WebhookActionSchema = z.object({
@@ -67,6 +70,7 @@ export const WebhookActionSchema = z.object({
 
 export const PulseActionSchema = z.object({
   type: z.literal('pulse'),
+  taskModeId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/).optional(),
   driverAgentSlug: z
     .string()
     .regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/, 'driverAgentSlug must be lowercase letters, digits, hyphens (1-64 chars, no leading/trailing hyphen)')
@@ -89,6 +93,8 @@ export const PulseActionSchema = z.object({
     })
     .passthrough()
     .optional(),
+}).refine((action) => action.taskModeId === undefined || Boolean(action.driverAgentSlug), {
+  message: 'taskModeId requires an explicit driverAgentSlug', path: ['taskModeId'],
 });
 
 const ExpectedOutputSchema = z.object({
@@ -103,6 +109,7 @@ const ScheduledExecutionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('agent-task'),
     agentSlug: z.string().min(1),
+    taskModeId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/).optional(),
     brief: z.string().min(1),
     permissionMode: z.enum(['safe', 'ask']),
     expectedOutput: ExpectedOutputSchema,
@@ -110,12 +117,14 @@ const ScheduledExecutionSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('workflow-run'),
+    taskModeId: z.never().optional(),
     workflowSlug: z.string().min(1),
     workflowDigest: z.string().min(1),
     triggerInputs: z.record(z.string(), z.unknown()),
   }),
   z.object({
     type: z.literal('social-publish'),
+    taskModeId: z.never().optional(),
     platform: z.string().min(1),
     profileId: z.string().min(1),
     accountSetId: z.string().min(1).optional(),
@@ -124,6 +133,7 @@ const ScheduledExecutionSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('review'),
+    taskModeId: z.never().optional(),
     reviewerType: z.enum(['person', 'agent', 'user']),
     reviewerId: z.string().min(1).optional(),
   }),

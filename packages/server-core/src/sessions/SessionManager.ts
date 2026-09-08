@@ -1,3 +1,5 @@
+import { inheritHostAgentFocus, createPendingAgentFocusState, createAgentFocusTransferIntent, validateTransferredAgentFocus, parseAgentFocusTransferIntent } from '@craft-agent/shared/sessions'
+import { resolveAgentCapabilityExpansion } from './agent-capability-expansion'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput, WorkspaceMigrationRuntimeLease } from '@craft-agent/server-core/handlers'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
@@ -284,7 +286,7 @@ import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
 import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, isAgentAllowedInArtistWorkspace, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
 import { composeAgentSystemPrompt, managerBriefReceiptFromDocs } from '@craft-agent/shared/agent-prompt'
-import { buildAgentTaskModeStarterPrompt, filterContextDocsForTaskMode, resolveAgentTaskMode } from '@craft-agent/shared/agent-definitions/task-modes'
+import { buildAgentTaskModeStarterPrompt, filterContextDocsForTaskMode, resolveAgentTaskMode, selectTaskModeSourceSlugs } from '@craft-agent/shared/agent-definitions/task-modes'
 import { filterAttachmentsForModelInput } from './runtime-config'
 import { inferScheduledWorkScope, persistHnicScheduleWork } from '../scheduled-work/HnicScheduledWork'
 import { supplyScheduledWorkInputs } from '../scheduled-work/ScheduledWorkInputSupply'
@@ -821,6 +823,7 @@ function completeLaunchReceipt(
         }
       : undefined),
     taskMode: receipt?.taskMode,
+    capabilityExpansions: receipt?.capabilityExpansions,
     taskModeSelectionPending: receipt?.taskModeSelectionPending,
     workflow: receipt?.workflow,
     deepResearch: receipt?.deepResearch,
@@ -1621,7 +1624,19 @@ interface ManagedSession {
   lastSentAttachments?: FileAttachment[]
   lastSentStoredAttachments?: StoredAttachment[]
   lastSentOptions?: SendMessageOptions
+  lastSentInputMessageId?: string
   lastSentTurnContext?: Pick<ManagedSession, 'customSystemPrompt' | 'agentSkillSlugs' | 'enabledSourceSlugs' | 'launchReceipt'>
+  pendingSourceRetry?: {
+    token: string
+    inputMessageId: string
+    generation: number
+    sourceSlug: string
+    message: string
+    turnContext: NonNullable<ManagedSession['lastSentTurnContext']>
+    options?: SendMessageOptions
+    attachments?: FileAttachment[]
+    storedAttachments?: StoredAttachment[]
+  }
   // Flag to prevent infinite retry loops (reset at start of each sendMessage)
   authRetryAttempted?: boolean
   // Flag indicating auth retry is in progress (to prevent complete handler from interfering)
@@ -2723,6 +2738,7 @@ export class SessionManager implements ISessionManager {
                 permissionMode: pending.permissionMode,
                 mentions: pending.mentions,
                 agentSlug: pending.agentSlug,
+                taskModeId: pending.taskModeId,
                 messagingChannel: pending.messagingChannel,
                 llmConnection: pending.llmConnection,
                 model: pending.model,
@@ -2874,7 +2890,7 @@ export class SessionManager implements ISessionManager {
             // the resolved customSystemPrompt — never replace it. Earlier
             // wiring replaced the system prompt with just the addendum,
             // running the driver as a blank LLM with no persona or context.
-            const baseOpts = await this.resolveAgentSessionOptions(workspaceId, params.driverAgentSlug)
+            const baseOpts = await this.resolveAgentSessionOptions(workspaceId, params.driverAgentSlug, { taskModeId: params.taskModeId, taskModeSelectionSource: 'automation' })
             const composedPrompt = baseOpts.customSystemPrompt
               ? `${baseOpts.customSystemPrompt}\n\n---\n\n${params.systemPromptAddendum}`
               : params.systemPromptAddendum
@@ -3048,10 +3064,13 @@ export class SessionManager implements ISessionManager {
     if (!isAgentAllowedInArtistWorkspace(agentSlug, ws.artistWorkspaceScope)) {
       throw new Error(`Agent "${agentSlug}" is not available in this workspace.`)
     }
-    const { loadPromptContextDocsForAgent } = await import('@craft-agent/shared/workspace-context')
+    const { loadPromptContextDocsForAgent, loadAuthorizedContextDocsForAgent } = await import('@craft-agent/shared/workspace-context')
     const agent = loadGlobalAgent(agentSlug)
     if (!agent) throw new Error(`Agent not found: ${agentSlug}`)
-    const taskMode = resolveAgentTaskMode(agent, options.taskModeId)
+    if (!options.taskModeId && agent.slug !== CONCIERGE_SLUG && (agent.metadata.taskModes?.length ?? 0) > 1) {
+      throw new Error(`Choose a focus for ${agent.metadata.name} before starting this work: ${agent.metadata.taskModes!.map(mode => `${mode.label} (${mode.id})`).join(', ')}.`)
+    }
+    const taskMode = resolveAgentTaskMode(agent, options.taskModeId ?? (agent.slug === CONCIERGE_SLUG && agent.metadata.taskModes?.some(mode => mode.id === 'just-talk') ? 'just-talk' : undefined))
     const launchAgent = taskMode
       ? {
           ...agent,
@@ -3062,7 +3081,9 @@ export class SessionManager implements ISessionManager {
             optionalSources: taskMode.optionalSourceSlugs,
           },
         }
-      : agent
+      : agent.slug === CONCIERGE_SLUG
+        ? { ...agent, metadata: { ...agent.metadata, skills: ['artist-manager-operating-system'] } }
+        : agent
     if (agent.slug === CONCIERGE_SLUG && ws.artistWorkspaceScope === 'hq') {
       refreshHqStateContextDocBestEffort(ws.rootPath)
     } else if (agent.slug === CONCIERGE_SLUG && ws.artistWorkspaceScope === 'campaign') {
@@ -3099,7 +3120,11 @@ export class SessionManager implements ISessionManager {
     if (strict && sourceProblems.length > 0) {
       throw new Error(`Agent "${agentSlug}" references unavailable sources in this workspace: ${sourceProblems.join(', ')}`)
     }
-    const usableSources = sources.filter(isSourceUsable)
+    const availableSources = sources.filter(isSourceUsable)
+    const selectedSourceSlugs = taskMode
+      ? new Set(selectTaskModeSourceSlugs(taskMode, availableSources.map(source => source.config.slug)))
+      : new Set(availableSources.map(source => source.config.slug))
+    const usableSources = availableSources.filter(source => selectedSourceSlugs.has(source.config.slug))
     const resolvedSourceSlugs = usableSources.map((s) => s.config.slug)
     const unsafePersistedContextSlugs = new Set<string>()
     if (ws.artistWorkspaceScope === 'campaign' || ws.artistWorkspaceScope === 'hq') {
@@ -3125,7 +3150,7 @@ export class SessionManager implements ISessionManager {
       }
     }
     const contextDocs = filterContextDocsForTaskMode(
-      loadPromptContextDocsForAgent(ws.rootPath, agent.slug)
+      (taskMode ? loadAuthorizedContextDocsForAgent(ws.rootPath, agent.slug) : loadPromptContextDocsForAgent(ws.rootPath, agent.slug))
         .filter((doc) => !unsafePersistedContextSlugs.has(doc.slug)),
       taskMode,
     )
@@ -3169,7 +3194,7 @@ export class SessionManager implements ISessionManager {
     return {
       customSystemPrompt,
       agentSkillSlugs: resolvedSkillSlugs.length > 0 ? resolvedSkillSlugs : undefined,
-      enabledSourceSlugs: resolvedSourceSlugs.length > 0 ? resolvedSourceSlugs : undefined,
+      enabledSourceSlugs: taskMode || resolvedSourceSlugs.length > 0 ? resolvedSourceSlugs : undefined,
       trustedWorkerTools: agent.metadata.trustedWorkerTools?.length ? agent.metadata.trustedWorkerTools : undefined,
       llmConnection: agent.metadata.llmConnection,
       model: agent.metadata.model,
@@ -3520,6 +3545,7 @@ export class SessionManager implements ISessionManager {
             labels: ['scheduled-work'],
             permissionMode: input.permissionMode,
             agentSlug: input.agentSlug,
+            taskModeId: input.taskModeId,
             automationName: `Scheduled work: ${input.workOrderId}`,
             workOrderId: input.workOrderId,
             onSessionCreated: input.onStarted,
@@ -4602,10 +4628,13 @@ export class SessionManager implements ISessionManager {
           }
           const brandingAgent = STARTER_AGENTS.find(agent => agent.slug === 'branding-agent')
           const brandingSkillSlugs = brandingAgent?.metadata.skills ?? []
-          if (brandingAgent?.metadata.taskModes?.length && replaceBuiltInAgentMetadata('branding-agent', {
-            taskModes: { from: undefined, to: brandingAgent.metadata.taskModes },
-          }).updated) {
-            sessionLog.info('[agent-definitions] Added focused task modes to Branding Agent')
+          for (const starter of STARTER_AGENTS) {
+            if (!starter.metadata.taskModes?.length) continue
+            const installed = loadGlobalAgent(starter.slug)
+            if (!installed || JSON.stringify(installed.metadata.taskModes) === JSON.stringify(starter.metadata.taskModes)) continue
+            if (replaceBuiltInAgentMetadata(starter.slug, {
+              taskModes: { from: installed.metadata.taskModes, to: starter.metadata.taskModes },
+            }).updated) sessionLog.info(`[agent-definitions] Updated focus recipes for ${starter.slug}`)
           }
           const missingBrandingSkills = brandingSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
           if (brandingAgent && missingBrandingSkills.length === 0) {
@@ -6403,10 +6432,10 @@ user a clickable link to where the thing now lives.`
 
       this.workflowRunner = new WorkflowRunner({
         createSession: (wsId, opts) => this.createSession(wsId, opts).then((s) => ({ id: s.id })),
-        resolveAgentSessionOptions: (wsId, agentSlug) =>
-          this.resolveAgentSessionOptions(wsId, agentSlug),
-        preflightStepAgent: async (wsId, agentSlug) => {
-          await this.resolveAgentSessionOptions(wsId, agentSlug)
+        resolveAgentSessionOptions: (wsId, agentSlug, options) =>
+          this.resolveAgentSessionOptions(wsId, agentSlug, options),
+        preflightStepAgent: async (wsId, agentSlug, options) => {
+          await this.resolveAgentSessionOptions(wsId, agentSlug, options)
         },
         sendMessage: (sessionId, prompt) => this.sendMessage(sessionId, prompt),
         getLastAssistantText: (sessionId) => this.getLastAssistantTextForSession(sessionId),
@@ -7435,7 +7464,7 @@ user a clickable link to where the thing now lives.`
     // Get default model from workspace config (used when no session-specific model is set)
     const defaultModel = wsConfig?.defaults?.model
     // Get default enabled sources from workspace config
-    const defaultEnabledSourceSlugs = options?.enabledSourceSlugs ?? wsConfig?.defaults?.enabledSourceSlugs
+    let defaultEnabledSourceSlugs = options?.enabledSourceSlugs ?? wsConfig?.defaults?.enabledSourceSlugs
 
     // Resolve model tier hints ('fast' / 'default') to actual model IDs.
     // EditPopover uses tier hints instead of hardcoded Anthropic model names
@@ -7557,7 +7586,8 @@ user a clickable link to where the thing now lives.`
         throw new Error('Branching is only supported within the same provider/backend. Switch this panel connection and try again.')
       }
 
-      const branchIdx = sourceSession.messages.findIndex(m => m.id === options.branchFromMessageId)
+      const requestedBranchMessageId = options.branchFromMessageId
+      const branchIdx = sourceSession.messages.findIndex(m => m.id === requestedBranchMessageId)
       if (branchIdx === -1) {
         sessionLog.warn('Branch validation failed: message not found in source session', {
           workspaceId,
@@ -7664,6 +7694,11 @@ user a clickable link to where the thing now lives.`
         branchFromSdkSessionId: !!validatedBranch.branchFromSdkSessionId,
         copiedMessageCount: validatedBranch.branchIdx + 1,
       })
+    }
+
+    if (validatedBranch) {
+      options = { ...options, ...inheritHostAgentFocus(validatedBranch.sourceSession) }
+      defaultEnabledSourceSlugs = options.enabledSourceSlugs
     }
 
     const launchReceipt = completeLaunchReceipt(options?.launchReceipt, {
@@ -9816,6 +9851,7 @@ user a clickable link to where the thing now lives.`
               permissionMode: agent.metadata.permissionMode,
               thinkingLevel: agent.metadata.thinkingLevel,
               skills: agent.metadata.skills ?? [],
+              taskModes: agent.metadata.taskModes?.map(mode => ({ id: mode.id, label: mode.label, description: mode.description, fullMode: mode.fullMode === true })),
               sources,
               optionalSources,
               sourceReadiness: resolveAgentSourceReadiness(sources, optionalSources, sourceCandidates),
@@ -10111,10 +10147,49 @@ user a clickable link to where the thing now lives.`
 
           await this.sendMessage(sessionId, message, fileAttachments, undefined, { inputOrigin: 'agent' })
         },
+        loadAgentCapabilityFn: async (input) => {
+          const release = await this.acquireSendMessageAdmissionLock(managed.id)
+          try {
+            const admitted = managed.lastSentTurnContext
+            const inputMessageId = managed.lastSentInputMessageId
+            if (!managed.isProcessing || !admitted || !inputMessageId) throw new Error('An active focused response is required.')
+            const agentSlug = admitted.launchReceipt?.agent?.slug ?? managed.spawnedFromAgent?.agentSlug
+            const definition = agentSlug ? loadGlobalAgent(agentSlug) : null
+            if (!definition) throw new Error('The saved worker is unavailable.')
+            const expansion = resolveAgentCapabilityExpansion({
+              ...input,
+              taskMode: admitted.launchReceipt?.taskMode,
+              agentMetadata: definition.metadata,
+              skill: loadAllSkills(managed.workspace.rootPath).find(skill => skill.slug === input.skillSlug),
+              expansions: managed.launchReceipt?.capabilityExpansions ?? [],
+              inputMessageId,
+              enabledSourceSlugs: admitted.enabledSourceSlugs ?? [],
+              authorizedToolNames: managed.trustedWorkerTools ?? [],
+              currentSkillSlugs: admitted.agentSkillSlugs ?? [],
+              now: Date.now(),
+            })
+            const previousReceipt = managed.launchReceipt
+            const previousSkills = managed.agentSkillSlugs
+            managed.launchReceipt = { ...managed.launchReceipt!, capabilityExpansions: expansion.expansions }
+            const sameFocus = managed.launchReceipt.taskMode?.id === admitted.launchReceipt?.taskMode?.id
+              && managed.launchReceipt.taskMode?.definitionRevision === admitted.launchReceipt?.taskMode?.definitionRevision
+            if (sameFocus) managed.agentSkillSlugs = expansion.nextSkillSlugs
+            this.persistSession(managed)
+            try { await this.flushSession(managed.id) } catch (error) {
+              managed.launchReceipt = previousReceipt
+              managed.agentSkillSlugs = previousSkills
+              this.persistSession(managed)
+              throw error
+            }
+            admitted.agentSkillSlugs = expansion.nextSkillSlugs
+            admitted.launchReceipt = { ...admitted.launchReceipt!, capabilityExpansions: expansion.expansions }
+            return expansion.result
+          } finally { release() }
+        },
         messageAgentFn: async (input) => {
           const service = new AgentMessageService({
             createSession: (wsId, opts) => this.createSession(wsId, opts).then((session) => ({ id: session.id })),
-            resolveAgentSessionOptions: (wsId, agentSlug) => this.resolveAgentSessionOptions(wsId, agentSlug),
+            resolveAgentSessionOptions: (wsId, agentSlug, options) => this.resolveAgentSessionOptions(wsId, agentSlug, options),
             sendMessage: (sessionId, prompt, options) => this.sendMessage(
               sessionId,
               prompt,
@@ -10645,6 +10720,13 @@ user a clickable link to where the thing now lives.`
         await applyBridgeUpdates(managed.agent!, sessionPath, allEnabledSources, mcpServers, managed.id, workspaceRootPath, 'source enable', managed.poolServer?.url)
 
         await managed.agent!.setSourceServers(mcpServers, apiServers, intendedSlugs)
+
+        // Activation extends this admitted response's adapters, not its pending focus.
+        if (managed.lastSentTurnContext) {
+          managed.lastSentTurnContext.enabledSourceSlugs = mergeUniqueStrings(
+            managed.lastSentTurnContext.enabledSourceSlugs, [sourceSlug],
+          )
+        }
 
         sessionLog.info(`Auto-enabled source ${sourceSlug} for session ${managed.id}`)
 
@@ -11605,6 +11687,7 @@ user a clickable link to where the thing now lives.`
     const releaseSelectionLock = await this.acquireSendMessageAdmissionLock(sessionId)
     let shouldStartConversation = false
     let starterPrompt: string | undefined
+    let previousFocus: ReturnType<typeof inheritHostAgentFocus> | undefined
     try {
       const managed = this.sessions.get(sessionId)
       if (!managed) throw new Error(`Session not found: ${sessionId}`)
@@ -11616,6 +11699,7 @@ user a clickable link to where the thing now lives.`
       if (this.taskModeOpenings.has(sessionId) || (managed.isProcessing && !hasVisibleConversation)) {
         throw new Error('The opening response is still starting. Choose a new focus after it appears.')
       }
+      previousFocus = inheritHostAgentFocus(managed)
       const isInitialSelection = managed.launchReceipt?.taskModeSelectionPending === true
         && !hasVisibleConversation
       shouldStartConversation = options.startConversation === true && isInitialSelection
@@ -11625,7 +11709,7 @@ user a clickable link to where the thing now lives.`
       if (!agentSlug) throw new Error('This chat is not linked to a saved worker.')
 
       const resolved = await this.resolveAgentSessionOptions(managed.workspace.id, agentSlug, {
-        referenceMode: 'lenient',
+        referenceMode: 'strict',
         taskModeId,
         taskModeSelectionSource: 'user',
       })
@@ -11634,11 +11718,13 @@ user a clickable link to where the thing now lives.`
         throw new Error(`Focus "${taskModeId}" is not available for this worker.`)
       }
 
+      const previousRecipeSources = new Set(managed.launchReceipt?.injected.sources ?? [])
+      const explicitSources = (managed.enabledSourceSlugs ?? []).filter(slug => !previousRecipeSources.has(slug))
       managed.customSystemPrompt = resolved.customSystemPrompt
       managed.agentSkillSlugs = resolved.agentSkillSlugs
       managed.enabledSourceSlugs = isInitialSelection
         ? (resolved.enabledSourceSlugs ?? [])
-        : (mergeUniqueStrings(managed.enabledSourceSlugs, resolved.enabledSourceSlugs) ?? [])
+        : (mergeUniqueStrings(explicitSources, resolved.enabledSourceSlugs) ?? [])
       managed.trustedWorkerTools = resolved.trustedWorkerTools
       // Persist the next-turn choice now; never mutate the active provider or
       // fallback attempt. sendMessage applies its admission snapshot below.
@@ -11653,6 +11739,7 @@ user a clickable link to where the thing now lives.`
         createdAt: managed.launchReceipt?.createdAt ?? resolvedReceipt.createdAt,
         summary: managed.launchReceipt?.summary ?? resolvedReceipt.summary,
         taskModeSelectionPending: false,
+        capabilityExpansions: managed.launchReceipt?.capabilityExpansions,
         config: {
           ...resolvedReceipt.config,
           ...managed.launchReceipt?.config,
@@ -11719,8 +11806,13 @@ user a clickable link to where the thing now lives.`
       } catch (error) {
         const managed = this.sessions.get(sessionId)
         if (managed?.launchReceipt && !managed.messages.some(message => message.role === 'user')) {
-          managed.launchReceipt.taskModeSelectionPending = true
+          if (previousFocus) Object.assign(managed, previousFocus)
+          managed.launchReceipt!.taskModeSelectionPending = true
+          managed.agent?.setAgentContext({ customSystemPrompt: managed.customSystemPrompt, agentSkillSlugs: managed.agentSkillSlugs })
           this.persistSession(managed)
+          this.sendEvent({ type: 'task_mode_selected', sessionId, taskMode: managed.launchReceipt!.taskMode,
+            agentSkillSlugs: managed.agentSkillSlugs, enabledSourceSlugs: managed.enabledSourceSlugs,
+            launchReceipt: managed.launchReceipt! }, managed.workspace.id)
         }
         throw error
       } finally {
@@ -12750,13 +12842,28 @@ user a clickable link to where the thing now lives.`
     let signalAdmissionMessageId: string | undefined
     let signalAdmissionAccepted = false
     const previousLastMessageRole = managed.lastMessageRole
+    const sourceRetry = options?.sourceRetryToken ? managed.pendingSourceRetry : undefined
+    if (options?.sourceRetryToken && (!sourceRetry || sourceRetry.token !== options.sourceRetryToken
+      || sourceRetry.generation !== managed.processingGeneration || managed.isProcessing
+      || sourceRetry.inputMessageId !== managed.lastSentInputMessageId)) {
+      releaseAdmissionLockOnce()
+      throw new Error('This source retry is stale or the previous response has not stopped.')
+    }
+    if (sourceRetry) {
+      // Never accept renderer prompt text, provenance, or attachments as retry authority.
+      message = sourceRetry.message
+      options = sourceRetry.options
+      attachments = sourceRetry.attachments
+      storedAttachments = sourceRetry.storedAttachments
+      existingMessageId = sourceRetry.inputMessageId
+    }
     const isTaskModeOpening = this.taskModeOpenings.has(sessionId)
       && this.taskModeOpenings.get(sessionId) === options
     let openingMessageId: string | undefined
     let openingMessageAccepted = false
     // The admission lock makes this the focus for this entire response,
     // including asynchronous initialization and every fallback attempt.
-    const turnContext = (_isAuthRetry && managed.lastSentTurnContext) || {
+    const turnContext = sourceRetry?.turnContext || (_isAuthRetry && managed.lastSentTurnContext) || {
       customSystemPrompt: managed.customSystemPrompt,
       agentSkillSlugs: managed.agentSkillSlugs ? [...managed.agentSkillSlugs] : undefined,
       enabledSourceSlugs: managed.enabledSourceSlugs ? [...managed.enabledSourceSlugs] : undefined,
@@ -12904,6 +13011,7 @@ user a clickable link to where the thing now lives.`
       // - Pi: steers (injects message, events continue through existing stream)
       // - Claude: aborts internally, session layer queues for re-send
       if (managed.isProcessing) {
+        managed.pendingSourceRetry = undefined
         releaseAdmissionLockOnce()
         const agent = managed.agent
         const steered = agent?.redirect(message) ?? false
@@ -13094,6 +13202,9 @@ user a clickable link to where the thing now lives.`
       }
 
       managed.lastMessageAt = Date.now()
+      if (sourceRetry) onAck?.(userMessage.id)
+      managed.pendingSourceRetry = undefined
+      if (!_isAuthRetry && !sourceRetry) managed.lastSentInputMessageId = userMessage.id
       managed.activeHumanMessageId = userMessage.inputOrigin === 'human' && !userMessage.hidden
         ? userMessage.id
         : undefined
@@ -13136,7 +13247,7 @@ user a clickable link to where the thing now lives.`
     // IMPORTANT: Skip reset if this is an auth retry call - the flag is already true
     // and resetting it would allow infinite retry loops
     // Note: authRetryInProgress is NOT reset here - it's managed by the retry logic
-    if (!_isAuthRetry) {
+    if (!_isAuthRetry && !sourceRetry) {
       managed.authRetryAttempted = false
     }
 
@@ -13572,6 +13683,7 @@ user a clickable link to where the thing now lives.`
 
   async cancelProcessing(sessionId: string, silent = false): Promise<void> {
     const managed = this.sessions.get(sessionId)
+    if (managed) managed.pendingSourceRetry = undefined
     if (!managed?.isProcessing) {
       return // Not processing, nothing to cancel
     }
@@ -13598,7 +13710,6 @@ user a clickable link to where the thing now lives.`
     // Signal intent to stop - let the event loop drain remaining events before clearing isProcessing
     // This prevents losing in-flight messages after soft interrupt
     managed.stopRequested = true
-
     // Track interruption so the next user message gets a context note
     // telling the LLM the previous response was cut short
     managed.wasInterrupted = true
@@ -13693,14 +13804,17 @@ user a clickable link to where the thing now lives.`
           sessionLog.info(`[auth-retry] Retrying message for session ${sessionId}`)
           this.setProcessing(managed, false)
 
-          const lastUserMsgIndex = managed.messages.findLastIndex(m => m.role === 'user')
+          const lastUserMsgIndex = managed.lastSentInputMessageId
+            ? managed.messages.findIndex(m => m.id === managed.lastSentInputMessageId)
+            : managed.messages.findLastIndex(m => m.role === 'user')
           const lastUserMessage = managed.messages[lastUserMsgIndex]
           const handoffDirectory = getSessionStoragePath(managed.workspace.rootPath, sessionId)
           const handoff = hasSignalHandoff(handoffDirectory) ? readSignalHandoffState(handoffDirectory) : null
           // A Signals acceptance receipt belongs to this durable user turn,
           // not to the provider attempt. Reuse it instead of orphaning the receipt.
-          const retryMessageId = lastUserMessage && handoff?.acceptedMessageId === lastUserMessage.id
-            && loadStoredSession(managed.workspace.rootPath, sessionId)?.messages.some(m => m.type === 'user' && m.id === lastUserMessage.id)
+          const retryMessageId = lastUserMessage && (managed.lastSentInputMessageId === lastUserMessage.id
+            || (handoff?.acceptedMessageId === lastUserMessage.id
+              && loadStoredSession(managed.workspace.rootPath, sessionId)?.messages.some(m => m.type === 'user' && m.id === lastUserMessage.id)))
             ? lastUserMessage.id : undefined
           if (lastUserMsgIndex !== -1 && !retryMessageId) {
             managed.messages.splice(lastUserMsgIndex, 1)
@@ -13874,6 +13988,14 @@ user a clickable link to where the thing now lives.`
 
     // 6. Always persist
     this.persistSession(managed)
+    const sourceRetry = managed.pendingSourceRetry
+    if (sourceRetry && !managed.isProcessing && sourceRetry.generation === managed.processingGeneration
+      && managed.messageQueue.length === 0) {
+      this.sendEvent({
+        type: 'source_activated', sessionId, sourceSlug: sourceRetry.sourceSlug,
+        originalMessage: sourceRetry.message, retryToken: sourceRetry.token,
+      }, managed.workspace.id)
+    }
   }
 
   /**
@@ -15310,16 +15432,31 @@ user a clickable link to where the thing now lives.`
         }, workspaceId)
         break
 
-      case 'source_activated':
+      case 'source_activated': {
+        if (managed.stopRequested) break
+        const turnContext = managed.lastSentTurnContext
+        const inputMessageId = managed.lastSentInputMessageId
+        if (!turnContext || !inputMessageId || !managed.messages.some(message => message.id === inputMessageId)) {
+          sessionLog.warn('Cannot retry source activation without an admitted input', { sessionId })
+          break
+        }
+        const retryToken = randomUUID()
+        managed.pendingSourceRetry = {
+          token: retryToken,
+          inputMessageId,
+          generation: managed.processingGeneration,
+          sourceSlug: event.sourceSlug,
+          message: `${managed.lastSentMessage ?? event.originalMessage}\n\n[${event.sourceSlug} activated]`,
+          turnContext,
+          options: managed.lastSentOptions,
+          attachments: managed.lastSentAttachments,
+          storedAttachments: managed.lastSentStoredAttachments,
+        }
         // A source was auto-activated mid-turn, forward to renderer for auto-retry
         sessionLog.info(`Source "${event.sourceSlug}" activated, notifying renderer for auto-retry`)
-        this.sendEvent({
-          type: 'source_activated',
-          sessionId,
-          sourceSlug: event.sourceSlug,
-          originalMessage: event.originalMessage,
-        }, workspaceId)
+        // Notify only after onProcessingStopped finishes; no timeout race with teardown.
         break
+      }
 
       case 'complete':
         // Complete event from CraftAgent - accumulate usage from this turn
@@ -15480,6 +15617,7 @@ user a clickable link to where the thing now lives.`
       permissionMode,
       mentions,
       agentSlug,
+      taskModeId,
       messagingChannel,
       llmConnection,
       model,
@@ -15499,8 +15637,10 @@ user a clickable link to where the thing now lives.`
 
     // Resolve @mentions to source/skill slugs
     const resolved = mentions ? this.resolveAutomationMentions(workspaceRootPath, mentions) : undefined
+    if (taskModeId !== undefined && (typeof taskModeId !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(taskModeId) || !agentSlug)) throw new Error('Choose a valid agent and focus for this work.')
+    if (taskModeId && resolved?.skillSlugs?.length) throw new Error('A focused automation cannot also override its skills through mentions.')
     const agentOptions = agentSlug
-      ? await this.resolveAgentSessionOptions(workspaceId, agentSlug)
+      ? await this.resolveAgentSessionOptions(workspaceId, agentSlug, { taskModeId, taskModeSelectionSource: 'automation' })
       : undefined
 
     // Ensure labels exist in workspace config before assigning to session
@@ -15737,6 +15877,7 @@ user a clickable link to where the thing now lives.`
 
       return {
         sourceSessionId: managed.id,
+        agentFocus: createAgentFocusTransferIntent(managed),
         name: managed.name,
         sessionStatus: managed.sessionStatus,
         labels: managed.labels,
@@ -15745,6 +15886,22 @@ user a clickable link to where the thing now lives.`
         chatGoal: managed.chatGoal,
         sessionTasks: managed.sessionTasksDegraded ? undefined : managed.sessionTasks,
       }
+    })
+  }
+
+  private async resolveTransferredAgentFocusOptions(workspaceId: string, rawIntent: unknown): Promise<Partial<CreateSessionOptions>> {
+    if (rawIntent === undefined) return {}
+    const intent = parseAgentFocusTransferIntent(rawIntent)
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace || !isAgentAllowedInArtistWorkspace(intent.agentSlug, workspace.artistWorkspaceScope)) throw new Error('Transferred worker is unavailable in this workspace.')
+    const agent = loadGlobalAgent(intent.agentSlug)
+    const validated = validateTransferredAgentFocus(intent, agent ?? undefined, {
+      installedSkillSlugs: new Set(loadAllSkills(workspace.rootPath).map(skill => skill.slug)),
+      readySourceSlugs: new Set(loadAllSources(workspace.rootPath).filter(isSourceUsable).map(source => source.config.slug)),
+    })
+    if (validated.intent.taskModeSelectionPending) return createPendingAgentFocusState(agent!)
+    return this.resolveAgentSessionOptions(workspaceId, intent.agentSlug, {
+      taskModeId: intent.taskMode?.id, taskModeSelectionSource: 'handoff',
     })
   }
 
@@ -15761,7 +15918,9 @@ user a clickable link to where the thing now lives.`
     }
     const transferredTasks = relocateImportedSessionTaskList(payload.sessionTasks, 'transfer')
 
+    const focusOptions = await this.resolveTransferredAgentFocusOptions(workspaceId, payload.agentFocus)
     const session = await this.createSession(workspaceId, {
+      ...focusOptions,
       name: payload.name,
       permissionMode: payload.permissionMode,
       sessionStatus: payload.sessionStatus,
@@ -15881,6 +16040,11 @@ user a clickable link to where the thing now lives.`
       throw new Error(`Session ${sessionId} already exists in target workspace`)
     }
 
+    const focusOptions = await this.resolveTransferredAgentFocusOptions(workspaceId, createAgentFocusTransferIntent(bundle.session.header))
+    const focusedState = createAgentFocusTransferIntent(bundle.session.header)
+      ? inheritHostAgentFocus(focusOptions)
+      : {}
+
     // Create session directory with all subdirectories
     const sessionDir = ensureSessionDir(workspaceRootPath, sessionId)
 
@@ -15914,6 +16078,7 @@ user a clickable link to where the thing now lives.`
       transferredSessionSummaryApplied: header.transferredSessionSummaryApplied,
       messages: bundle.session.messages,
       tokenUsage: header.tokenUsage ?? DEFAULT_TOKEN_USAGE,
+      ...focusedState,
     }
 
     const bundledGoal = parseChatGoalState(header.chatGoal)

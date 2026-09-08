@@ -234,7 +234,7 @@ describe('Artist Manager voice action safety', () => {
       ensureSession: async () => ({ id: 's' }),
       sendMessage: async () => {
         sends++
-        listener({ type: 'source_activated', sessionId: 's', sourceSlug: 'calendar', originalMessage: 'Create an event' })
+        listener({ type: 'source_activated', sessionId: 's', sourceSlug: 'calendar', originalMessage: 'Create an event', retryToken: 'host-token' })
         listener({ type: 'complete', sessionId: 's' })
       },
       cancelProcessing: async () => {}, onSessionEvent: (h) => { listener = h; return () => {} },

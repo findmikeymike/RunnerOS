@@ -1475,8 +1475,9 @@ export function ArtistHQHome({
     setHqRouteBusy(true)
     try {
       const result = await window.electronAPI.launchHqRecommendation(workspaceId, { recommendationId })
+      if (result.draftInput) onInputChange(result.sessionId, result.draftInput)
       navigate(routes.view.allSessions(result.sessionId))
-      toast.success(`Started @${route.agentSlug}`)
+      toast.success(result.taskModeSelectionPending ? `Choose a focus for @${route.agentSlug}` : `Started @${route.agentSlug}`)
     } catch (error) {
       toast.error('Failed to launch HQ route', {
         description: error instanceof Error ? error.message : String(error),
@@ -1486,6 +1487,7 @@ export function ArtistHQHome({
     }
   }, [
     availableAgents,
+    onInputChange,
     workspaceId,
   ])
 
@@ -1530,6 +1532,7 @@ export function ArtistHQHome({
         actions: [{
           type: 'prompt',
           agentSlug: 'spotify-analyst',
+          taskModeId: 'fresh-snapshot',
           prompt: createSpotifySyncPrompt(),
           ...pulseExecutionTarget,
         }],
@@ -1589,6 +1592,7 @@ export function ArtistHQHome({
         actions: [{
           type: 'prompt',
           agentSlug: 'social-publisher',
+          taskModeId: 'growth',
           prompt: createInstagramSyncPrompt(),
           ...pulseExecutionTarget,
         }],
@@ -4730,6 +4734,7 @@ function createSpotifySyncMatcher(executionTarget: PulseExecutionTarget = {}): R
       {
         type: 'prompt',
         agentSlug: 'spotify-analyst',
+        taskModeId: 'fresh-snapshot',
         prompt: createSpotifySyncPrompt(),
         ...executionTarget,
       },
@@ -4758,6 +4763,7 @@ function createInstagramSyncMatcher(executionTarget: PulseExecutionTarget = {}):
       {
         type: 'prompt',
         agentSlug: 'social-publisher',
+        taskModeId: 'growth',
         prompt: createInstagramSyncPrompt(),
         ...executionTarget,
       },

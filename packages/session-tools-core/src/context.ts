@@ -349,6 +349,9 @@ export interface SessionToolContext {
   /** List skills (workspace-activated and dormant in global library). Injected by backend. */
   listSkills?(options?: ListSkillsOptions): ListSkillsResult;
 
+  /** Host-validated adjacent skill delivery. Does not grant new sources, tools, or permissions. */
+  loadAgentCapability?(input: import('./handlers/load-agent-capability.ts').LoadAgentCapabilityInput): Promise<import('./handlers/load-agent-capability.ts').LoadAgentCapabilityResult>;
+
   /** List workflows available to this workspace. Injected by backend. */
   listWorkflows?(options?: ListWorkflowsOptions): ListWorkflowsResult;
 
@@ -717,6 +720,7 @@ export interface ListSessionsResult {
 /** Compact agent summary (returned by list_agents). */
 export interface AgentListItem {
   slug: string;
+  taskModes?: Array<{ id: string; label: string; description: string; fullMode: boolean }>;
   name: string;
   description: string;
   avatar?: string;

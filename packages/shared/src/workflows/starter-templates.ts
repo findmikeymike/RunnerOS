@@ -51,6 +51,7 @@ const weeklySignalScan = {
       {
         id: 'youtube-intel',
         agent: 'youtube-intelligence-agent',
+        taskModeId: 'weekly-intelligence',
         description: 'Check only the newest unprocessed upload from each configured trusted channel.',
         input: `Act as the YouTube collector for the Weekly Signal Scan for {{trigger.artist_name}}.
 
@@ -220,6 +221,7 @@ const socialCommentReplies = {
       {
         id: 'reply',
         agent: 'social-publisher',
+        taskModeId: 'engagement',
         description: 'Verify every target, answer eligible public engagement in Artist Voice, and return one private receipt.',
         input: `Run Social Comment Replies across every social account pack currently saved in Settings.
 
@@ -403,6 +405,7 @@ const contentMastermind = {
       {
         id: 'native-ideas',
         agent: 'content-genius',
+        taskModeId: 'ideas',
         description: 'Generate human, native, personality-driven concepts.',
         input: `Independently generate 4–6 strong content concepts.
 
@@ -567,6 +570,7 @@ const paidCampaignBuilder = {
       {
         id: 'strategy',
         agent: 'ads-strategist',
+        taskModeId: 'full-ad-strategy',
         description: 'Build the media strategy, budget allocation, audiences, territories, and testing rules.',
         input: `Build a decisive Ads Strategy Packet for this artist campaign.
 
@@ -609,6 +613,7 @@ Deliver:
       {
         id: 'creative',
         agent: 'ad-creative-agent',
+        taskModeId: 'creative-package',
         description: 'Convert the strategy into platform-native creative concepts, hooks, copy, formats, and tests.',
         input: `Build the Paid Creative Packet from the approved strategic direction.
 
@@ -641,6 +646,7 @@ Do not weaken every concept into the same safe brand expression. Preserve distin
       {
         id: 'execution-packet',
         agent: 'ads-agent',
+        taskModeId: 'cross-platform',
         description: 'Reconcile strategy and creative into one account-ready, approval-gated campaign build plan.',
         input: `Act as final Ad Runner. Compile one execution-ready Paid Campaign Packet.
 
@@ -828,6 +834,7 @@ Return the research packet directly to the workflow. Do not create a separate Ou
       {
         id: 'outreach-packet',
         agent: 'outreach-agent',
+        taskModeId: 'cold-message',
         description: 'Select the strongest opportunities and create deeply personalized outreach drafts.',
         input: `Act as the final Outreach Director for this campaign.
 
@@ -974,6 +981,7 @@ const collegeRadioCampaign = {
       {
         id: 'verify-stations',
         agent: 'college-radio-agent',
+        taskModeId: 'match',
         description: 'Verify current stations, shows, contacts, and submission rules.',
         input: `Build a current, verified College Radio Target List for this release.
 
@@ -1026,6 +1034,7 @@ Do not call create_output or message_agent in this workflow. Return the complete
       {
         id: 'campaign-packet',
         agent: 'outreach-agent',
+        taskModeId: 'relationship-message',
         description: 'Turn verified stations into a focused, approval-ready campaign.',
         input: `Act as the final College Radio Campaign Director.
 
@@ -1155,6 +1164,7 @@ const merchProductBuilder = {
       {
         id: 'build-kit',
         agent: 'print-agent',
+        taskModeId: 'full-product-launch',
         description: 'Lead the complete product build and conditionally delegate visual or Shopify work only when needed.',
         input: `Act as lead Merch Product Builder and final director.
 

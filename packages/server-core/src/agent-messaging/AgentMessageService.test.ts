@@ -460,3 +460,46 @@ describe('delegate capability boundaries', () => {
     expect(mode).toBe('safe');
   });
 });
+
+
+describe('mode-aware delegation', () => {
+  test('resolves mode before creating child and preserves focused recipe and permission ceiling', async () => {
+    const calls: string[] = [];
+    let childOptions: import('@craft-agent/shared/protocol').CreateSessionOptions | undefined;
+    const service = new AgentMessageService(deps({
+      resolveAgentSessionOptions: async (workspaceId, agentSlug, options) => {
+        calls.push('resolve');
+        expect([workspaceId, agentSlug]).toEqual(['ws', 'branding-agent']);
+        expect(options).toEqual({ taskModeId: 'artist-world', taskModeSelectionSource: 'handoff' });
+        return {
+          permissionMode: 'safe', model: 'configured-model', llmConnection: 'configured-provider',
+          customSystemPrompt: 'Focused world prompt', agentSkillSlugs: ['narrative', 'visual'], enabledSourceSlugs: [],
+          launchReceipt: {
+            createdAt: 1, origin: 'agent', config: {}, injected: { skills: ['narrative', 'visual'], sources: [], contextDocs: [] },
+            taskMode: { schemaVersion: 1, id: 'artist-world', label: 'Artist World', definitionRevision: 'task-mode-v1-test', selectionSource: 'handoff', primarySkills: ['narrative', 'visual'], adjacentSkills: [], fullMode: false },
+          },
+        };
+      },
+      createSession: async (_workspaceId, options) => { calls.push('create'); childOptions = options; return { id: 'focused-child' }; },
+    }));
+    const result = await service.messageAgent({ workspaceId: 'ws', parentPermissionMode: 'ask' }, { agentSlug: 'branding-agent', task: 'Build the world', taskModeId: 'artist-world' });
+    expect(result.ok).toBe(true);
+    expect(calls).toEqual(['resolve', 'create']);
+    expect(childOptions?.customSystemPrompt).toBe('Focused world prompt');
+    expect(childOptions?.agentSkillSlugs).toEqual(['narrative', 'visual']);
+    expect(childOptions?.permissionMode).toBe('safe');
+    expect(childOptions?.model).toBe('configured-model');
+    expect(childOptions?.llmConnection).toBe('configured-provider');
+    expect(childOptions?.launchReceipt?.taskMode?.id).toBe('artist-world');
+    expect(readAgentMessageReceipt(root, result.receiptId!)?.constraints.taskModeId).toBe('artist-world');
+  });
+
+  test('fails closed if the resolver ignores the selected mode', async () => {
+    let creates = 0;
+    const service = new AgentMessageService(deps({ createSession: async () => { creates++; return { id: 'never' }; } }));
+    const result = await service.messageAgent({ workspaceId: 'ws', parentPermissionMode: 'ask' }, { agentSlug: 'branding-agent', task: 'Build world', taskModeId: 'missing' });
+    expect(result.ok).toBe(false);
+    expect(result.error?.message).toContain('was not resolved');
+    expect(creates).toBe(0);
+  });
+});

@@ -161,6 +161,7 @@ export type ScheduledWorkExecution =
   | {
       type: 'agent-task'
       agentSlug: string
+      taskModeId?: string
       brief: string
       permissionMode: 'safe' | 'ask'
       expectedOutput: ExpectedOutputContract
@@ -989,8 +990,10 @@ function isScheduledWorkExecution(value: unknown, type: ScheduledWorkType): valu
   if (!value || typeof value !== 'object') return false
   const execution = value as Partial<ScheduledWorkExecution>
   if (execution.type !== type) return false
+  if (execution.type !== 'agent-task' && 'taskModeId' in execution) return false
   if (execution.type === 'agent-task') {
     return Boolean(clean(execution.agentSlug))
+      && (execution.taskModeId === undefined || (typeof execution.taskModeId === 'string' && /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(execution.taskModeId)))
       && Boolean(clean(execution.brief))
       && (execution.permissionMode === 'safe' || execution.permissionMode === 'ask')
       && (execution.postProcess === undefined || execution.postProcess === 'youtube-intelligence')

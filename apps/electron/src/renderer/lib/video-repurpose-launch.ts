@@ -41,6 +41,7 @@ export async function openVideoRepurposeSession(params: OpenVideoRepurposeSessio
   const contextDocs = await listWorkspaceContextDocsForAgent(params.workspaceId, agent.slug).catch(() => [])
   return openSessionComposer({
     agent,
+    taskModeId: 'social-versions',
     workspaceId: params.workspaceId,
     onCreateSession: params.onCreateSession,
     onInputChange: params.onInputChange,

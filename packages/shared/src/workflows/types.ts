@@ -102,6 +102,8 @@ export interface WorkflowStep {
   id: string;
   /** Agent slug to run. Existence is checked at run time, not parse time. */
   agent: string;
+  /** Explicit launch recipe for this step; never inferred as Full. */
+  taskModeId?: string;
   /** User-message template for the step's session. Supports `{{...}}`. */
   input: string;
   /** Optional human-readable note describing the step. UI hint only. */

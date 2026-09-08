@@ -63,6 +63,7 @@ export interface ScheduledWorkRunnerDeps {
     workOrderId: string
     workspace: { id: string; rootPath: string }
     agentSlug: string
+    taskModeId?: string
     brief: string
     permissionMode: 'safe' | 'ask'
     expectedOutput: ExpectedOutputContract
@@ -572,6 +573,7 @@ export class ScheduledWorkRunner {
         workOrderId: order.id,
         workspace: { id: workspaceId, rootPath: workspaceRootPath },
         agentSlug: execution.agentSlug,
+        taskModeId: execution.taskModeId,
         brief: execution.brief,
         permissionMode: execution.permissionMode,
         expectedOutput: execution.expectedOutput,

@@ -1,7 +1,7 @@
 ---
-status: proposed
+status: implemented; live acceptance open
 owner: agent
-last_verified: 2026-09-07
+last_verified: 2026-09-08
 source_of_truth: true
 related:
   - ../19-artist-manager-brief-context-architecture-spec.md
@@ -15,8 +15,8 @@ related:
 ## Current Branding pilot decision — 2026-09-08
 
 The user has superseded the original immutable-mode UI below for deliberate
-Branding Agent focus changes. Cards remain visible inside the real chat, sharing one compact row with
-the agent identity. The first choice starts one hidden host turn; subsequent choices
+Branding Agent focus changes. Cards remain visible inside the real chat, beneath the centered agent identity
+in one compact header. The first choice starts one hidden host turn; subsequent choices
 select the focus for the next user turn without generating another response.
 The selected card stays active and Full Brand System remains explicit.
 
@@ -37,8 +37,8 @@ memory, session-log summaries, title-generation input, or visible chat metadata.
 
 This decision overrides conflicting removal/immutable-primary instructions below
 for explicit same-agent card selections. It does not authorize provider,
-permission, spending, or approval changes. Capability expansion, Manager focus,
-and the remaining rollout slices still require their own implementation and gates.
+permission, spending, or approval changes. The rollout below now implements capability expansion, Manager focus, and the
+listed specialist recipes. Live provider performance and quality acceptance remain separate gates.
 
 ## Approved shared focus UI — 2026-09-08
 
@@ -53,6 +53,40 @@ The user has authorized rollout to the listed agents using this design and the
 pilot's first-selection hidden start / later next-turn switching behavior.
 This supersedes earlier visual instructions and immutable-mode restrictions for
 explicit user selections. The lightweight Manager voice experience stays separate.
+
+## Implemented rollout — 2026-09-08
+
+The user authorized the wider rollout after approving the Branding presentation.
+There are now 27 focused agents: Branding, 13 other Tier 1 specialists, 12 Tier 2
+specialists, and the full Artist Manager. The canonical executable recipes are
+`packages/shared/src/agent-definitions/task-mode-recipes/{tier-one,tier-two,manager}.ts`
+and Branding's definitions in `starter-templates.ts`. They supersede provisional
+labels and unsupported capability assumptions in the original matrix below.
+
+Recipes group real installed skills rather than forcing every agent to have five
+choices. Video creation and YouTube research presets are consolidated. Record
+Doctor prepares producer submissions; Lyric Video has two single-asset choices;
+Playlist Review does not promise unproven playlist mutation. Manager starts in
+optional Just Talk, preloads only its operating skill, and keeps creator/setup
+capabilities on demand. Lightweight voice is unchanged.
+
+The shared resolver now governs direct launches, delegation, workflows, scheduled
+work, Pulse, HQ actions, and deep links. Authoring forms persist explicit focus.
+Missing focus/dependencies fail clearly. Forks preserve the source's current
+host-owned focus; transfers validate and rebuild the destination recipe. A branch
+from an older message inherits the current selected focus, not an invented
+historical focus that was never recorded on that message.
+
+`load_agent_capability` delivers installed instructions only at declared same-session
+boundaries, with revision/reason/time receipts, one new expansion per response and
+two per session. It cannot add source or tool authority. Focused context can select
+authorized on-demand documents; budgets withhold whole documents. Optional adapters
+stay on demand, with one deterministic publishing route. Source/auth retries retain
+the admitted focus and original input identity even when the user changes the next
+focus mid-response.
+
+See [rollout evidence](../../audits/agent-focus-rollout-2026-09-08.md) for checks and
+remaining live acceptance. No customer migration framework was added.
 
 ## Decision
 

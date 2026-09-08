@@ -50,6 +50,7 @@ export interface PulseNotificationPayload {
 export interface PulseExecutorRunDriverParams {
   workspaceId: string;
   driverAgentSlug: string;
+  taskModeId?: string;
   systemPromptAddendum: string;
   userMessage: string;
   outputSchema: Record<string, unknown>;
@@ -256,9 +257,14 @@ export class PulseExecutor {
     let driverSessionId = '';
     let rawText = '';
     try {
+      if (pulseAction.taskModeId !== undefined && (
+        !pulseAction.driverAgentSlug || typeof pulseAction.taskModeId !== 'string'
+        || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(pulseAction.taskModeId)
+      )) throw new Error('Pulse taskModeId must be a valid slug with an explicit driverAgentSlug.');
       const result = await this.deps.runDriverTurn({
         workspaceId,
         driverAgentSlug,
+        taskModeId: pulseAction.taskModeId,
         systemPromptAddendum,
         userMessage: snapshot.text,
         outputSchema: PULSE_DECISION_OUTPUT_SCHEMA as unknown as Record<string, unknown>,
@@ -268,6 +274,18 @@ export class PulseExecutor {
       rawText = result.rawAssistantText;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      if (pulseAction.taskModeId !== undefined || pulseAction.driverAgentSlug !== undefined) {
+        const notification = `Pulse needs attention: ${message}`;
+        await this.deps.emitNotification({
+          workspaceId, pulseId, source: 'pulse', message: notification,
+          urgency: 'normal', createdAt: new Date().toISOString(),
+        });
+        return this.recordTick({
+          workspaceRoot, pulseId,
+          decision: { action: 'notify_user', message: notification, urgency: 'normal' },
+          driverSessionId, startedAt, diffSummary: snapshot.diffSummary, truncated: snapshot.truncated,
+        });
+      }
       return this.recordTick({
         workspaceRoot,
         pulseId,

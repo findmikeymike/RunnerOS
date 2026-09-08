@@ -1,3 +1,5 @@
+import * as agentDefinitions from '@craft-agent/shared/agent-definitions'
+import { STARTER_AGENTS } from '@craft-agent/shared/agent-definitions/starter-templates'
 import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -8,11 +10,19 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 
 const rootPath = mkdtempSync(join(tmpdir(), 'runneros-hq-state-rpc-'))
 const workspace = { id: 'ws-1', name: 'Artist HQ', rootPath }
+const savedDrafts = new Map<string, { text: string }>()
+const resolvedLaunches: unknown[] = []
+const createdOptions: any[] = []
+mock.module('@craft-agent/shared/agent-definitions', () => ({
+  ...agentDefinitions,
+  loadGlobalAgent: (slug: string) => STARTER_AGENTS.find(agent => agent.slug === slug),
+}))
 
 mock.module('@craft-agent/shared/config', () => ({
   getWorkspaceByNameOrId: (id: string) => id === workspace.id ? workspace : undefined,
   getWorkspaces: () => [workspace],
   loadPreferences: () => ({}),
+  setSessionDraft: (id: string, draft: { text: string }) => savedDrafts.set(id, draft),
 }))
 
 type Handler = (...args: unknown[]) => Promise<unknown>
@@ -30,8 +40,8 @@ beforeAll(async () => {
   } as never, {
     wsServer: { push: (...args: unknown[]) => pushes.push(args) },
     sessionManager: {
-      resolveAgentSessionOptions: async () => ({ permissionMode: 'safe' }),
-      createSession: async () => ({ id: `session-${++sessionCounter}` }),
+      resolveAgentSessionOptions: async (...args: unknown[]) => { resolvedLaunches.push(args); return { permissionMode: 'safe' } },
+      createSession: async (_workspaceId: string, options: unknown) => { createdOptions.push(options); return { id: `session-${++sessionCounter}` } },
       sendMessage: async (_sessionId: string, prompt: string, ...args: unknown[]) => {
         if (sendShouldFail) throw new Error('dispatch failed')
         sentPrompts.push(prompt)
@@ -48,6 +58,30 @@ beforeAll(async () => {
 afterAll(() => rmSync(rootPath, { recursive: true, force: true }))
 
 describe('HQ state RPC handlers', () => {
+  test('broad specialist routes preserve a draft without dispatching before focus selection', async () => {
+    const candidate = launchCandidate('sop_choose_focus')
+    candidate.route!.agentSlug = 'art-director'
+    upsertHqRecommendation(rootPath, candidate)
+    const sendsBefore = sentPrompts.length
+    const resolvesBefore = resolvedLaunches.length
+    const result = await invoke(RPC_CHANNELS.hqState.LAUNCH_RECOMMENDATION, workspace.id, { recommendationId: candidate.id }) as { sessionId: string; draftInput: string; taskModeSelectionPending: boolean }
+    expect(result.taskModeSelectionPending).toBe(true)
+    expect(savedDrafts.get(result.sessionId)?.text).toBe(result.draftInput)
+    expect(sentPrompts.length).toBe(sendsBefore)
+    expect(resolvedLaunches.length).toBe(resolvesBefore)
+    expect(createdOptions.at(-1).launchReceipt.taskModeSelectionPending).toBe(true)
+    expect(createdOptions.at(-1).agentSkillSlugs).toEqual([])
+  })
+
+  test('known specialist routes pass their exact focus to the server resolver', async () => {
+    const candidate = launchCandidate('sop_spotify_focus')
+    candidate.route!.agentSlug = 'spotify-analyst'
+    candidate.route!.taskModeId = 'fresh-snapshot'
+    upsertHqRecommendation(rootPath, candidate)
+    await invoke(RPC_CHANNELS.hqState.LAUNCH_RECOMMENDATION, workspace.id, { recommendationId: candidate.id })
+    expect(resolvedLaunches.at(-1)).toEqual([workspace.id, 'spotify-analyst', { taskModeId: 'fresh-snapshot', taskModeSelectionSource: 'manager' }])
+  })
+
   test('explicitly regenerates and broadcasts State of Play context', async () => {
     const pushesBefore = pushes.length
 

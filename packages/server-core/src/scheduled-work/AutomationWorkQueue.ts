@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { loadGlobalAgent, readActivatedAgents } from '@craft-agent/shared/agent-definitions'
+import { loadGlobalAgent, readActivatedAgents, resolveAgentTaskMode } from '@craft-agent/shared/agent-definitions'
 import {
   ARTIST_CALENDAR_CONTEXT_SLUG,
   artistCalendarMetadata,
@@ -801,9 +801,17 @@ function validateAction(rootPath: string, action: QueueWorkAction): void {
   }
   for (const execution of executions) {
     if (execution.type === 'agent-task') {
-      if (!readActivatedAgents(rootPath).active.includes(execution.agentSlug) || !loadGlobalAgent(execution.agentSlug)) {
+      const agent = loadGlobalAgent(execution.agentSlug)
+      if (!readActivatedAgents(rootPath).active.includes(execution.agentSlug) || !agent) {
         throw new Error(`Automation agent is not active: ${execution.agentSlug}`)
       }
+      if ((agent.metadata.taskModes?.length ?? 0) > 1 && !execution.taskModeId) {
+        throw new Error(`Choose a focus for ${agent.metadata.name} before scheduling: ${agent.metadata.taskModes!.map(mode => mode.id).join(', ')}.`)
+      }
+      if (execution.taskModeId !== undefined && (typeof execution.taskModeId !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(execution.taskModeId))) {
+        throw new Error('taskModeId must be a valid lowercase mode slug.')
+      }
+      resolveAgentTaskMode(agent, execution.taskModeId)
     }
     if (execution.type === 'workflow-run') {
       if (!readActivatedWorkflows(rootPath).active.includes(execution.workflowSlug)) {

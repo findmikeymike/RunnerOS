@@ -33,9 +33,14 @@ const realLoadGlobalWorkflow = actualWorkflows.loadGlobalWorkflow
 mock.module('@craft-agent/shared/agent-definitions', () => ({
   ...actualAgentDefinitions,
   readActivatedAgents: (rootPath: string, ...rest: Tail<Parameters<typeof realReadActivatedAgents>>) => rootPath.includes('hnic-scheduled-work-')
-    ? { version: 1, active: ['youtube-intel'] }
+    ? { version: 1, active: ['youtube-intel', 'focused-intel'] }
     : realReadActivatedAgents(rootPath, ...rest),
-  loadGlobalAgent: (slug: string, ...rest: Tail<Parameters<typeof realLoadGlobalAgent>>) => slug === 'youtube-intel'
+  loadGlobalAgent: (slug: string, ...rest: Tail<Parameters<typeof realLoadGlobalAgent>>) => slug === 'focused-intel'
+    ? { slug, metadata: { name: 'Focused Intel', description: 'Focused reports.', skills: ['research'], taskModes: [
+      { id: 'scan', label: 'Scan', description: 'Scan.', kind: 'focus', primarySkillSlugs: ['research'] },
+      { id: 'deep', label: 'Deep', description: 'Deep.', kind: 'focus', primarySkillSlugs: ['research'] },
+    ] }, systemPrompt: 'Research.', path: '/tmp/focused-intel', source: 'global' }
+    : slug === 'youtube-intel'
     ? { slug, metadata: { name: 'YouTube Intel', description: 'Creates reports.' }, systemPrompt: 'Research.', path: '/tmp/youtube-intel', source: 'global' }
     : realLoadGlobalAgent(slug, ...rest),
 }))
@@ -154,6 +159,17 @@ afterEach(async () => {
 })
 
 describe('persistHnicScheduleWork', () => {
+  test('requires focus for multi-mode agents and persists the exact chosen recipe', async () => {
+    const root = createRoot()
+    const execution = { type: 'agent-task' as const, agentSlug: 'focused-intel', brief: 'Research the artist.' }
+    await expect(persistHnicScheduleWork(options(root, input({ execution })))).rejects.toThrow('Choose a focus')
+    await expect(persistHnicScheduleWork(options(root, input({ execution: { ...execution, taskModeId: 'invented' } })))).rejects.toThrow('not available')
+    await persistHnicScheduleWork(options(root, input({ execution: { ...execution, taskModeId: 'scan' } })))
+    const parsed = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, 'campaign-1')
+    if (!parsed.ok) throw new Error(parsed.error)
+    expect(parsed.work.items[0]?.execution).toMatchObject({ agentSlug: 'focused-intel', taskModeId: 'scan' })
+  })
+
   test('defaults unattended agent work to safe mode', async () => {
     const root = createRoot()
     await persistHnicScheduleWork(options(root, input()))

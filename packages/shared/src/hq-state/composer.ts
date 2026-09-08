@@ -389,6 +389,9 @@ function buildRouteHint(input: HqInputState, nextMove: HqStateNextMove): HqState
     prompt: buildRoutePrompt(nextMove, contextDocSlugs),
     confidence: routeConfidence(nextMove, blockedReason),
     agentSlug: agentSlug || undefined,
+    taskModeId: agentSlug === 'spotify-analyst' && action === 'refresh'
+      ? 'fresh-snapshot'
+      : agentSlug === 'branding-agent' && action === 'review' ? 'brand-audit' : undefined,
     contextDocSlugs,
     blockedReason,
   };
@@ -887,6 +890,7 @@ function normalizeRouteHint(value: unknown): HqStateRouteHint | undefined {
     prompt,
     confidence,
     agentSlug: clean(candidate.agentSlug),
+    taskModeId: clean(candidate.taskModeId),
     contextDocSlugs: normalizeStringArray(candidate.contextDocSlugs ?? (candidate as { sourceSlugs?: unknown }).sourceSlugs),
     blockedReason: clean(candidate.blockedReason),
   };

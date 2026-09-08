@@ -448,7 +448,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   const openingTaskModeConversation = Boolean(session?.isProcessing && selectedTaskModeId && !conversationStarted)
   const showTaskModeBar = !isCompactMode
     && taskModes.length > 1
-    && (session?.launchReceipt?.taskModeSelectionPending === true || Boolean(selectedTaskModeId))
 
   const handleTaskModeSelect = React.useCallback(async (taskModeId: string) => {
     if (!session || applyingTaskModeId || openingTaskModeConversation || selectedTaskModeId === taskModeId) return

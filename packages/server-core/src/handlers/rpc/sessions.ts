@@ -1,3 +1,4 @@
+import { resolveFocusedSessionCreateOptions } from '../../sessions/focused-session-create'
 import { readFile, writeFile, stat } from 'fs/promises'
 import { join } from 'path'
 import { RPC_CHANNELS, type FileAttachment, type SendMessageOptions, type SessionCommand, type SessionEvent } from '@craft-agent/shared/protocol'
@@ -218,7 +219,8 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   server.handle(RPC_CHANNELS.sessions.CREATE, async (_ctx, workspaceId: string, options?: import('@craft-agent/shared/protocol').CreateSessionOptions) => {
     await assertWorkspacePermission(workspaceId, 'files.write')
     const end = perf.start('rpc.createSession', { workspaceId })
-    const session = await sessionManager.createSession(workspaceId, options)
+    const focusedOptions = await resolveFocusedSessionCreateOptions(workspaceId, options, sessionManager.resolveAgentSessionOptions.bind(sessionManager))
+    const session = await sessionManager.createSession(workspaceId, focusedOptions)
     end()
     return session
   })

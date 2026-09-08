@@ -37,6 +37,19 @@ describe('PromptHandler', () => {
   });
 
   describe('matcher matching for app events', () => {
+    it('preserves explicit focus in the pending prompt dispatch', async () => {
+      const onPromptsReady = jest.fn();
+      const configProvider = createMockConfigProvider({
+        LabelAdd: [{ matcher: 'bug', actions: [{ type: 'prompt', prompt: 'Write.', agentSlug: 'content-genius', taskModeId: 'ideas' }] }],
+      });
+      const handler = new PromptHandler(createOptions({ onPromptsReady }), configProvider);
+      handler.subscribe(bus);
+      await bus.emit('LabelAdd', { workspaceId: 'test-workspace', timestamp: Date.now(), label: 'bug' });
+      const prompts: PendingPrompt[] = onPromptsReady.mock.calls[0]![0];
+      expect(prompts[0]).toMatchObject({ agentSlug: 'content-genius', taskModeId: 'ideas' });
+      handler.dispose();
+    });
+
     it('should process prompt actions for matching LabelAdd event', async () => {
       const onPromptsReady = jest.fn();
       const configProvider = createMockConfigProvider({

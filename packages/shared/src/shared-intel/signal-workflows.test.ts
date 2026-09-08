@@ -11,9 +11,21 @@ import { deleteGlobalWorkflow, ensureRequiredWorkflows, loadGlobalWorkflow, writ
 import { normalizeWorkflowTriggerInputs } from '../workflows/trigger-inputs.ts';
 
 describe('new-contract Signal workflows', () => {
-  test('legacy serialized workflow bytes retain the current-main approved digest', () => {
+  test('legacy weekly scan retains its approved content with one explicit worker focus pin', () => {
     const legacy = STARTER_WORKFLOWS.find(workflow => workflow.slug === 'weekly-signal-scan')!;
-    expect(createHash('sha256').update(serializeWorkflow(legacy.metadata, legacy.body)).digest('hex')).toBe('d4fcc0dcd8537e7ff9d7eba96551e863c9f1de44284eeb1b40baa2bb9b979b40');
+    // Artist HQ still queues this workflow. The task-mode rollout pins its
+    // existing YouTube scan discipline without changing the frozen Signals
+    // instructions, inputs, ordering or output contract.
+    expect(legacy.metadata.steps[0]?.taskModeId).toBe('weekly-intelligence');
+    const frozenMetadata = {
+      ...legacy.metadata,
+      steps: legacy.metadata.steps.map((step, index) => {
+        if (index !== 0) return step;
+        const { taskModeId: _focus, ...frozenStep } = step;
+        return frozenStep;
+      }),
+    };
+    expect(createHash('sha256').update(serializeWorkflow(frozenMetadata, legacy.body)).digest('hex')).toBe('d4fcc0dcd8537e7ff9d7eba96551e863c9f1de44284eeb1b40baa2bb9b979b40');
   });
   test('new definitions use host packets, existing workers and host finalization', () => {
     for (const workflow of SIGNAL_CONTRACT_WORKFLOWS) {

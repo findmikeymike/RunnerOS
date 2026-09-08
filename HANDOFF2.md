@@ -42,6 +42,9 @@ Feature checks are useful scope-specific evidence, not proof of the entire app:
 - Branding (`72d7791f2`): persistent paired focuses, durable selection, stable
   active-turn context, and hidden-starter privacy.
   [Feature evidence](docs/audits/branding-task-mode-hardening-2026-09-08.md).
+- Agent focus rollout: the approved Branding UI now covers 27 agents, with
+  mode-aware launches, scheduling/editors, next-turn switching and bounded
+  capability expansion. [Checks and live limits](docs/audits/agent-focus-rollout-2026-09-08.md).
 - Campaign cleanup (`81a2673df`): confirmed deletion, verified retained files in
   Past Releases, and local runtime cleanup. Saved global memories survive;
   outside-service events/posts are not canceled.

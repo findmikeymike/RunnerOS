@@ -79,6 +79,14 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'loadAgentCapability', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.loadAgentCapabilityFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'listSkills', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.listSkillsFn;

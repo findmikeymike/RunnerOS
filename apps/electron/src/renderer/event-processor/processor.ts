@@ -226,6 +226,7 @@ export function processEvent(
           sessionId: event.sessionId,
           originalMessage: event.originalMessage,
           sourceSlug: event.sourceSlug,
+          retryToken: event.retryToken,
         }],
       }
 

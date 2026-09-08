@@ -307,6 +307,7 @@ export interface ExecutePromptAutomationInput {
   permissionMode?: PermissionMode
   mentions?: string[]
   agentSlug?: string
+  taskModeId?: string
   messagingChannel?: {
     platform: string
     channelId: string

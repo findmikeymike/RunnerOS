@@ -106,12 +106,13 @@ export interface WorkflowRunnerDeps {
   resolveAgentSessionOptions?: (
     workspaceId: string,
     agentSlug: string,
-    options?: { referenceMode?: 'strict' | 'lenient' },
+    options?: { referenceMode?: 'strict' | 'lenient'; taskModeId?: string },
   ) => Promise<Partial<CreateSessionOptions>>;
   /** Cheap preflight for step agent availability before a run is persisted. */
   preflightStepAgent?: (
     workspaceId: string,
     agentSlug: string,
+    options?: { taskModeId?: string },
   ) => Promise<void> | void;
   /**
    * Send a message and wait for the LLM turn to complete. Mirrors
@@ -586,13 +587,24 @@ export class WorkflowRunner {
   }
 
   private async preflightStepAgents(workspaceId: string, steps: WorkflowStep[]): Promise<void> {
-    if (!this.deps.preflightStepAgent) return;
     const seen = new Set<string>();
     for (const step of steps) {
-      if (seen.has(step.agent)) continue;
-      seen.add(step.agent);
+      if (step.taskModeId !== undefined && (
+        typeof step.taskModeId !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(step.taskModeId)
+        || !step.agent
+      )) throw new Error(`Workflow step "${step.id}" has an invalid task mode or missing agent.`);
+      const key = JSON.stringify([step.agent, step.taskModeId ?? null]);
+      if (seen.has(key)) continue;
+      seen.add(key);
       try {
-        await this.deps.preflightStepAgent(workspaceId, step.agent);
+        if (step.taskModeId && !this.deps.resolveAgentSessionOptions) {
+          throw new Error('Explicit task modes require an agent session resolver.');
+        }
+        if (this.deps.preflightStepAgent) {
+          await this.deps.preflightStepAgent(workspaceId, step.agent, step.taskModeId ? { taskModeId: step.taskModeId } : undefined);
+        } else if (step.taskModeId) {
+          await this.deps.resolveAgentSessionOptions!(workspaceId, step.agent, { taskModeId: step.taskModeId, referenceMode: 'strict' });
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         throw new Error(`Workflow step "${step.id}" references unavailable agent "${step.agent}": ${message}`);
@@ -867,6 +879,7 @@ export class WorkflowRunner {
     const resolvedAgentOptions = await this.deps.resolveAgentSessionOptions?.(
       active.snapshot.workspaceId,
       stepDef.agent,
+      stepDef.taskModeId ? { taskModeId: stepDef.taskModeId } : undefined,
     ) ?? {};
     const agentOptionsWithMode = normalizeWorkflowPermissionMode(resolvedAgentOptions);
     // R5: Per-run toolset override (Hermes MIT — cron/scheduler.py:60-88,

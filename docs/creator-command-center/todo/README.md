@@ -25,8 +25,10 @@ an implementing agent as-is.
 
 Specs 38 and 41 remain at their existing paths for cross-reference stability,
 and their core workflows are implemented; full live loop acceptance remains open. Spec 48 also stays here for stable links: its
-Branding pilot is implemented with persistent paired focuses and hardened turn
-selection (`72d7791f2`); wider rollout and performance/quality gates remain.
+27-agent rollout is implemented with shared focus presentation, explicit recipes,
+tracked-work propagation, and bounded expansion. Automated and browser evidence is
+in [the rollout audit](../../audits/agent-focus-rollout-2026-09-08.md); live provider
+performance/quality acceptance remains open.
 See the [parent index](../README.md), [backlog](../../backlog/TO-DO.md), and
 [consolidation audit](../../audits/artist-os-consolidation-2026-09-08.md) for
 implementation and acceptance status. The folder name is not a status claim.

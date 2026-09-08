@@ -766,13 +766,12 @@ export default function App() {
             // work after Stop/workspace switch; source activation asks the user
             // to continue explicitly until a voice continuation protocol exists.
             if (isVoiceManagedSession(effect.sessionId)) break
-            // A source was auto-activated, automatically re-send the original message
-            // Add suffix to indicate the source was activated
-            const messageWithSuffix = `${effect.originalMessage}\n\n[${effect.sourceSlug} activated]`
-            // Use setTimeout to ensure the previous turn has fully completed
+            // Host emits after teardown and supplies a single-use admitted-turn token.
+            // Keep the existing short deferral so intervening user input can invalidate it.
             setTimeout(() => {
               if (isVoiceManagedSession(effect.sessionId)) return
-              window.electronAPI.sendMessage(effect.sessionId, messageWithSuffix)
+              window.electronAPI.sendMessage(effect.sessionId, '', undefined, undefined, { sourceRetryToken: effect.retryToken })
+                .catch(error => console.warn('Source retry was not admitted:', error))
             }, 100)
             break
           }

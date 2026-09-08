@@ -5,6 +5,7 @@ export type AgentMessageStatus = 'running' | 'succeeded' | 'failed' | 'cancelled
 
 export interface MessageAgentInput {
   agentSlug: string;
+  taskModeId?: string;
   task: string;
   context?: string;
   expectedOutput?: string;
@@ -57,6 +58,7 @@ export interface AgentMessageReceipt {
     background?: boolean;
   };
   constraints: {
+    taskModeId?: string;
     sourceSlugs: string[];
     skillSlugs: string[];
     outputSchema?: JsonSchema;

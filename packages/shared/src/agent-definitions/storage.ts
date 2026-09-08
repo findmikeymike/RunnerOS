@@ -337,7 +337,7 @@ function coerceTaskModes(
       const maxPreloadChars = typeof contextRaw.maxPreloadChars === 'number' && Number.isFinite(contextRaw.maxPreloadChars)
         ? Math.max(1_000, Math.min(24_000, Math.floor(contextRaw.maxPreloadChars)))
         : undefined;
-      if (preloadTopics.length > 0) {
+      if (Array.isArray(contextRaw.preloadTopics)) {
         context = {
           preloadTopics,
           ...(retrieveOnDemandTopics.length > 0 ? { retrieveOnDemandTopics } : {}),
@@ -351,6 +351,8 @@ function coerceTaskModes(
       id,
       label,
       description,
+      ...(typeof raw.helpText === 'string' && raw.helpText.trim().length <= TASK_MODE_TEXT_MAX ? { helpText: raw.helpText.trim() } : {}),
+      ...(typeof raw.icon === 'string' && AGENT_SLUG_REGEX.test(raw.icon) ? { icon: raw.icon } : {}),
       kind,
       primarySkillSlugs,
       ...(adjacentSkills.length > 0 ? { adjacentSkills } : {}),

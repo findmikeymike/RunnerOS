@@ -1251,7 +1251,7 @@ export interface ElectronAPI {
   // Workspace context docs (per-workspace markdown injected into agent prompts)
   listWorkspaceContextDocs(workspaceId: string): Promise<ContextDocDTO[]>
   getWorkspaceContextDoc(workspaceId: string, slug: string): Promise<ContextDocDTO | null>
-  listWorkspaceContextDocsForAgent(workspaceId: string, agentSlug: string | null): Promise<ContextDocDTO[]>
+  listWorkspaceContextDocsForAgent(workspaceId: string, agentSlug: string | null, taskModeId?: string): Promise<ContextDocDTO[]>
   upsertWorkspaceContextDoc(workspaceId: string, payload: {
     slug: string
     metadata: ContextDocMetadata

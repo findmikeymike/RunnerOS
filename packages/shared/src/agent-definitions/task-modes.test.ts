@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { parseAgentFile, serializeAgent } from './storage.ts';
 import { STARTER_AGENTS } from './starter-templates.ts';
-import { buildAgentTaskModePromptSection, buildAgentTaskModeStarterPrompt, filterContextDocsForTaskMode, resolveAgentTaskMode } from './task-modes.ts';
+import { buildAgentTaskModePromptSection, buildAgentTaskModeStarterPrompt, filterContextDocsForTaskMode, resolveAgentTaskMode, selectTaskModeSourceSlugs } from './task-modes.ts';
 import type { AgentMetadata, LoadedAgent } from './types.ts';
 
 function testAgent(metadata: AgentMetadata): LoadedAgent {
@@ -42,7 +42,7 @@ describe('agent task modes', () => {
     expect(prompt).toContain('Use every selected primary skill together');
     expect(prompt).toContain('one coherent result');
     expect(prompt).toContain('available on demand — not preloaded');
-    expect(prompt).toContain('invoke and read that adjacent skill at that point');
+    expect(prompt).toContain('call load_agent_capability with its skillSlug and the concrete reason');
     expect(prompt).toContain('Never preload adjacent skills just in case.');
   });
 
@@ -113,5 +113,20 @@ describe('agent task modes', () => {
 
     expect(parsed?.warnings).toEqual([]);
     expect(parsed?.metadata.taskModes).toEqual(branding.metadata.taskModes);
+  });
+});
+
+describe('focused adapter selection', () => {
+  test('publishing chooses one ready declared route in policy order', () => {
+    const mode = { id: 'publish', primarySkillSlugs: ['social-publishing'], requiredSourceSlugs: [], optionalSourceSlugs: ['printing-press-social', 'postiz', 'trypost'] };
+    expect(selectTaskModeSourceSlugs(mode, ['trypost', 'postiz', 'printing-press-social', 'unrelated'])).toEqual(['trypost']);
+    expect(selectTaskModeSourceSlugs(mode, ['postiz', 'printing-press-social'])).toEqual(['postiz']);
+    expect(selectTaskModeSourceSlugs(mode, ['printing-press-social'])).toEqual(['printing-press-social']);
+    expect(selectTaskModeSourceSlugs(mode, ['unrelated'])).toEqual([]);
+    expect(selectTaskModeSourceSlugs({ ...mode, optionalSourceSlugs: ['postiz'] }, ['trypost', 'postiz'])).toEqual(['postiz']);
+  });
+  test('ordinary optional generation sources remain awareness-only even when usable', () => {
+    const mode = { id: 'canvas', primarySkillSlugs: ['spotify-canvas-video'], requiredSourceSlugs: ['video-studio'], optionalSourceSlugs: ['media-generation', 'hypermotion'] };
+    expect(selectTaskModeSourceSlugs(mode, ['video-studio', 'media-generation', 'hypermotion'])).toEqual(['video-studio']);
   });
 });

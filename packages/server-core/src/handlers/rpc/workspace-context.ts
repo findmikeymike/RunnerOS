@@ -7,13 +7,16 @@ import {
   loadAllContextDocs,
   loadContextDoc,
   loadPromptContextDocsForAgent,
+  loadAuthorizedContextDocsForAgent,
+  canAgentAccessContextDoc,
+  shouldInjectContextDoc,
   upsertContextDoc,
   deleteContextDoc,
   type UpsertContextDocInput,
   type LoadedContextDoc,
 } from '@craft-agent/shared/workspace-context'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
-import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions'
+import { CONCIERGE_SLUG, loadGlobalAgent, resolveAgentTaskMode, filterContextDocsForTaskMode, isAgentAllowedInArtistWorkspace, type ResolvedAgentTaskMode } from '@craft-agent/shared/agent-definitions'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
@@ -66,6 +69,18 @@ function resolveRootPath(workspaceId: string): string {
   return workspace.rootPath
 }
 
+/** A chosen focus changes delivery, never the artist's access or disabled rules. */
+export function selectContextDocsForAgentLaunch(
+  docs: LoadedContextDoc[],
+  agentSlug: string | null,
+  taskMode?: ResolvedAgentTaskMode,
+): LoadedContextDoc[] {
+  const authorized = docs.filter(doc => canAgentAccessContextDoc(doc, agentSlug))
+  return taskMode
+    ? filterContextDocsForTaskMode(authorized, taskMode)
+    : authorized.filter(doc => shouldInjectContextDoc(doc, agentSlug))
+}
+
 export function registerWorkspaceContextHandlers(server: RpcServer, deps: HandlerDeps): void {
   server.handle(RPC_CHANNELS.workspaceContext.LIST, async (_ctx, workspaceId: string): Promise<LoadedContextDoc[]> => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
@@ -79,15 +94,34 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
     return loadContextDoc(workspace.rootPath, slug)
   })
 
-  server.handle(RPC_CHANNELS.workspaceContext.LIST_FOR_AGENT, async (_ctx, workspaceId: string, agentSlug: string | null): Promise<LoadedContextDoc[]> => {
+  server.handle(RPC_CHANNELS.workspaceContext.LIST_FOR_AGENT, async (_ctx, workspaceId: string, agentSlug: string | null, taskModeId?: string): Promise<LoadedContextDoc[]> => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
-    if (!workspace) return []
+    if (!workspace) {
+      if (taskModeId !== undefined) throw new Error(`Workspace not found: ${workspaceId}`)
+      return []
+    }
+    let taskMode: ResolvedAgentTaskMode | undefined
+    if (taskModeId !== undefined) {
+      if (!agentSlug || typeof taskModeId !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(taskModeId)) {
+        throw new Error('Choose a valid agent and focus before loading focused context.')
+      }
+      if (!isAgentAllowedInArtistWorkspace(agentSlug, workspace.artistWorkspaceScope)) throw new Error('This worker is unavailable in this workspace.')
+      const agent = loadGlobalAgent(agentSlug)
+      if (!agent) throw new Error(`Agent not found: ${agentSlug}`)
+      taskMode = resolveAgentTaskMode(agent, taskModeId)
+    }
     if (agentSlug?.trim().toLowerCase() === CONCIERGE_SLUG && workspace.artistWorkspaceScope === 'hq') {
       refreshHqStateContextDocBestEffort(workspace.rootPath)
     } else if (agentSlug?.trim().toLowerCase() === CONCIERGE_SLUG && workspace.artistWorkspaceScope === 'campaign') {
       refreshCampaignStateContextDocBestEffort(workspace.rootPath)
     }
-    const docs = loadPromptContextDocsForAgent(workspace.rootPath, agentSlug)
+    const docs = selectContextDocsForAgentLaunch(
+      taskMode
+        ? loadAuthorizedContextDocsForAgent(workspace.rootPath, agentSlug)
+        : loadPromptContextDocsForAgent(workspace.rootPath, agentSlug),
+      agentSlug,
+      taskMode,
+    )
     if (workspace.artistWorkspaceScope !== 'hq' && workspace.artistWorkspaceScope !== 'campaign' && workspace.artistWorkspaceScope !== 'lab') return docs
     return [{
       slug: 'artist-os-workspace',

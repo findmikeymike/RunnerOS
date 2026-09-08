@@ -98,6 +98,9 @@ export interface HqRecommendationLaunchInput {
 }
 
 export interface HqRecommendationLaunchResult {
+  /** Broad specialist routes open a persisted draft and wait for a focus selection. */
+  taskModeSelectionPending?: boolean
+  draftInput?: string
   recommendation: HqRecommendationCandidate
   sessionId: string
 }

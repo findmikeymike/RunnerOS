@@ -34,7 +34,11 @@ export interface AgentMessageRuntimeContext {
 
 export interface AgentMessageServiceDeps {
   createSession: (workspaceId: string, options: CreateSessionOptions) => Promise<{ id: string }>;
-  resolveAgentSessionOptions: (workspaceId: string, agentSlug: string) => Promise<Partial<CreateSessionOptions>>;
+  resolveAgentSessionOptions: (
+    workspaceId: string,
+    agentSlug: string,
+    options?: { taskModeId?: string; taskModeSelectionSource?: 'handoff' },
+  ) => Promise<Partial<CreateSessionOptions>>;
   sendMessage: (sessionId: string, prompt: string, options?: {
     skillSlugs?: string[];
     displayIntent?: 'agent-delegation-task';
@@ -170,6 +174,7 @@ export class AgentMessageService {
         background: input.background,
       },
       constraints: {
+        ...(input.taskModeId ? { taskModeId: input.taskModeId } : {}),
         sourceSlugs: input.sourceSlugs,
         skillSlugs: input.skillSlugs,
         outputSchema: input.outputSchema,
@@ -242,7 +247,14 @@ export class AgentMessageService {
     }
 
     try {
-      const agentOptions = await this.deps.resolveAgentSessionOptions(runtime.workspaceId, input.agentSlug);
+      const agentOptions = await this.deps.resolveAgentSessionOptions(
+        runtime.workspaceId,
+        input.agentSlug,
+        input.taskModeId ? { taskModeId: input.taskModeId, taskModeSelectionSource: 'handoff' } : undefined,
+      );
+      if (input.taskModeId && agentOptions.launchReceipt?.taskMode?.id !== input.taskModeId) {
+        throw new Error(`Task mode "${input.taskModeId}" was not resolved for the target agent.`);
+      }
       // A delegate must stay within both the caller and the specialist's defaults.
       const targetPermission = agentOptions.permissionMode ?? runtime.parentPermissionMode;
       if (rawInput.permissionMode && isPermissionEscalation(rawInput.permissionMode, targetPermission)) {

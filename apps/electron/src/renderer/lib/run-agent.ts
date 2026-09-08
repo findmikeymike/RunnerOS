@@ -1,7 +1,8 @@
 import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
-import { filterContextDocsForTaskMode, resolveAgentTaskMode } from '@craft-agent/shared/agent-definitions/task-modes'
+import { isSourceUsable } from '@craft-agent/shared/sources/availability'
+import { buildAgentTaskModePromptSection, filterContextDocsForTaskMode, resolveAgentTaskMode, selectTaskModeSourceSlugs } from '@craft-agent/shared/agent-definitions/task-modes'
 import type { MemoryEntry, LoadedMemoryFile } from '@craft-agent/shared/memory/types'
 import type { SessionLogEntry } from '@craft-agent/shared/sessions-log'
 import { selectActiveMemoryEntries } from '@craft-agent/shared/memory/render'
@@ -61,6 +62,20 @@ export async function ensureAgentDeclaredSkillsEnabled(params: {
   return getSkills(params.workspaceId)
 }
 
+function assertFocusedAgentReferences(agent: AgentDefinitionDTO, label: string, skills: LoadedSkill[], sources: LoadedSource[]): void {
+  const resolution = resolveAgentReferences(agent, skills, sources)
+  const unusable = (agent.metadata.sources ?? []).filter(slug => {
+    const source = sources.find(source => source.config.slug === slug)
+    return source && !isSourceUsable(source)
+  })
+  const problems = [
+    ...resolution.missingSkills.map(slug => `missing skill @${slug}`),
+    ...resolution.missingSources.map(slug => `missing connection @${slug}`),
+    ...unusable.map(slug => `disabled or disconnected @${slug}`),
+  ]
+  if (problems.length) throw new Error(`${agent.metadata.name} — ${label} needs ${problems.join(', ')}. Fix the listed Skills or Connections, then retry this focus.`)
+}
+
 export function buildAgentCreateSessionOptions(
   agent: AgentDefinitionDTO,
   /**
@@ -94,7 +109,7 @@ export function buildAgentCreateSessionOptions(
   },
   taskModeId?: string,
 ): CreateSessionOptions {
-  const taskMode = resolveAgentTaskMode(agent, taskModeId)
+  const taskMode = resolveAgentTaskMode(agent, taskModeId ?? (agent.slug === CONCIERGE_SLUG && agent.metadata.taskModes?.some(mode => mode.id === 'just-talk') ? 'just-talk' : undefined))
   const promptAgent = taskMode
     ? {
         ...agent,
@@ -105,7 +120,13 @@ export function buildAgentCreateSessionOptions(
           optionalSources: taskMode.optionalSourceSlugs,
         },
       }
-    : agent
+    : agent.slug === CONCIERGE_SLUG
+      ? { ...agent, metadata: { ...agent.metadata, skills: ['artist-manager-operating-system'] } }
+      : agent
+  if (taskMode) {
+    if (!context) throw new Error(`Load current Skills and Connections before starting ${agent.metadata.name} — ${taskMode.label}.`)
+    assertFocusedAgentReferences(promptAgent, taskMode.label, context.skills, context.sources)
+  }
   const contextDocs = filterContextDocsForTaskMode(context?.contextDocs ?? [], taskMode)
   let skillSlugs = promptAgent.metadata.skills ?? []
   let sourceSlugs = [
@@ -120,6 +141,12 @@ export function buildAgentCreateSessionOptions(
     sourceSlugs = [...resolution.resolvedSources, ...resolution.resolvedOptionalSources]
     const includedSourceSlugs = new Set(sourceSlugs)
     promptSources = context.sources.filter((source) => includedSourceSlugs.has(source.config.slug))
+  }
+
+  if (taskMode) {
+    sourceSlugs = selectTaskModeSourceSlugs(taskMode, sourceSlugs)
+    const selectedSources = new Set(sourceSlugs)
+    promptSources = promptSources.filter(source => selectedSources.has(source.config.slug))
   }
 
   // Compose the prompt: persona body + workspace context + bundle footer.
@@ -149,15 +176,15 @@ export function buildAgentCreateSessionOptions(
           taskMode,
         },
       )
-    : agent.systemPrompt
+    : [agent.systemPrompt, buildAgentTaskModePromptSection(taskMode)].filter(Boolean).join("\n\n")
   const isConcierge = agent.slug === CONCIERGE_SLUG
   const agentCatalog = taskMode && agent.slug !== CONCIERGE_SLUG ? [] : context?.agentCatalog ?? []
   const managerBriefReceipt = managerBriefReceiptFromDocs(contextDocs)
 
   const options: CreateSessionOptions = {
     customSystemPrompt: composedPrompt || undefined,
-    agentSkillSlugs: skillSlugs.length ? skillSlugs : undefined,
-    enabledSourceSlugs: sourceSlugs.length ? sourceSlugs : undefined,
+    agentSkillSlugs: taskMode ? skillSlugs : skillSlugs.length ? skillSlugs : undefined,
+    enabledSourceSlugs: taskMode ? sourceSlugs : sourceSlugs.length ? sourceSlugs : undefined,
     trustedWorkerTools: agent.metadata.trustedWorkerTools?.length ? agent.metadata.trustedWorkerTools : undefined,
     llmConnection: agent.metadata.llmConnection,
     model: agent.metadata.model,
@@ -250,7 +277,7 @@ export function shouldDeferAgentTaskModeSelection(
   agent: AgentDefinitionDTO,
   taskModeId?: string,
 ): boolean {
-  return !taskModeId && (agent.metadata.taskModes?.length ?? 0) > 1
+  return agent.slug !== CONCIERGE_SLUG && !taskModeId && (agent.metadata.taskModes?.length ?? 0) > 1
 }
 
 /** Create only the chat shell; the selected mode is composed server-side before first send. */
@@ -355,14 +382,21 @@ export async function openAgentSessionComposer(params: {
     }
     return session
   }
-  const taskMode = resolveAgentTaskMode(params.agent, params.taskModeId)
+  const taskMode = resolveAgentTaskMode(params.agent, params.taskModeId ?? (params.agent.slug === CONCIERGE_SLUG && params.agent.metadata.taskModes?.some(mode => mode.id === 'just-talk') ? 'just-talk' : undefined))
   const launchAgent = taskMode
     ? {
         ...params.agent,
-        metadata: { ...params.agent.metadata, skills: taskMode.primarySkillSlugs },
+        metadata: { ...params.agent.metadata, skills: taskMode.primarySkillSlugs, sources: taskMode.requiredSourceSlugs, optionalSources: taskMode.optionalSourceSlugs },
       }
     : params.agent
   let launchSkills = params.skills
+  let launchSources = params.sources
+  if (taskMode) {
+    ;[launchSkills, launchSources] = await Promise.all([
+      launchSkills ?? window.electronAPI.getSkills(params.workspaceId),
+      launchSources ?? window.electronAPI.getSources(params.workspaceId),
+    ])
+  }
   if (launchSkills) {
     try {
       launchSkills = await ensureAgentDeclaredSkillsEnabled({
@@ -371,13 +405,17 @@ export async function openAgentSessionComposer(params: {
         activeSkills: launchSkills,
       })
     } catch (error) {
+      if (taskMode) throw new Error(`Could not prepare Skills for ${params.agent.metadata.name} — ${taskMode.label}. ${error instanceof Error ? error.message : String(error)}`)
       console.error(`[Agents] Failed to activate declared skills for ${params.agent.slug}:`, error)
     }
   }
 
+  if (taskMode) assertFocusedAgentReferences(launchAgent, taskMode.label, launchSkills!, launchSources!)
+
   assertCurrent()
-  const contextDocs = params.contextDocs
-    ?? await window.electronAPI.listWorkspaceContextDocsForAgent(params.workspaceId, params.agent.slug)
+  const contextDocs = taskMode
+    ? await window.electronAPI.listWorkspaceContextDocsForAgent(params.workspaceId, params.agent.slug, taskMode.id)
+    : params.contextDocs ?? await window.electronAPI.listWorkspaceContextDocsForAgent(params.workspaceId, params.agent.slug)
   const [userMemoryEntries, agentMemoryEntries] = await Promise.all([
     loadUserMemoryEntries(),
     loadAgentMemoryEntries(params.agent.slug),
@@ -387,8 +425,8 @@ export async function openAgentSessionComposer(params: {
   // Surface a one-off toast if the agent declares slugs that don't resolve in
   // this workspace. The session still spawns without them; the warning is so
   // the user knows why output may be reduced.
-  if (launchSkills && params.sources) {
-    const resolution = resolveAgentReferences(launchAgent, launchSkills, params.sources)
+  if (!taskMode && launchSkills && launchSources) {
+    const resolution = resolveAgentReferences(launchAgent, launchSkills, launchSources)
     if (hasMissingReferences(resolution)) {
       const summary = describeMissingReferences(resolution)
       toast.warning(`${params.agent.metadata.name}: ${summary}`, {
@@ -405,8 +443,8 @@ export async function openAgentSessionComposer(params: {
   // When live skills/sources are available, pass them through so the session
   // gets a composed system prompt (persona body + bundle footer) and any
   // missing slugs are dropped from agentSkillSlugs/enabledSourceSlugs.
-  const context = launchSkills && params.sources
-    ? { skills: launchSkills, sources: params.sources, contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries, artistWorkspaceScope, recentSessions, currentWorkspaceId: params.workspaceId }
+  const context = launchSkills && launchSources
+    ? { skills: launchSkills, sources: launchSources, contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries, artistWorkspaceScope, recentSessions, currentWorkspaceId: params.workspaceId }
     : contextDocs.length > 0 || userMemoryEntries.length > 0 || agentMemoryEntries.length > 0 || (params.agentCatalog?.length ?? 0) > 0 || artistWorkspaceScope || recentSessions.length > 0
       ? { skills: [], sources: [], contextDocs, agentCatalog: params.agentCatalog, userMemoryEntries, agentMemoryEntries, artistWorkspaceScope, recentSessions, currentWorkspaceId: params.workspaceId }
       : undefined

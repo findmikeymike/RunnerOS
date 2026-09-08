@@ -48,6 +48,8 @@ import {
   type ParsedRoute,
 } from '../../shared/route-parser'
 import { routes, type Route, type ViewRoute } from '../../shared/routes'
+import { openAgentSessionComposer } from '@/lib/run-agent'
+import { parseAgentDeepLinkSelection } from '../../shared/agent-deep-link'
 import { parsePermissionMode } from '@craft-agent/shared/agent/mode-types'
 import { NAVIGATE_EVENT, type NavigateOptions } from '../lib/navigate'
 import { normalizePanelRouteForReconcile } from './navigation-reconcile'
@@ -682,7 +684,25 @@ export function NavigationProvider({
           if (parsed.params.systemPrompt) {
             createOptions.systemPromptPreset = parsed.params.systemPrompt as 'default' | 'mini' | string
           }
-          const session = await onCreateSession(workspaceId, createOptions)
+          const agentSelection = parseAgentDeepLinkSelection(parsed.params)
+          const session = agentSelection ? await (async () => {
+            const agent = await window.electronAPI.getAgentDefinition(agentSelection.agentSlug)
+            if (!agent) throw new Error(`Agent not found: ${agentSelection.agentSlug}`)
+            const [skills, sources, contextDocs] = await Promise.all([
+              window.electronAPI.getSkills(workspaceId),
+              window.electronAPI.getSources(workspaceId),
+              window.electronAPI.listWorkspaceContextDocsForAgent(workspaceId, agent.slug),
+            ])
+            return openAgentSessionComposer({
+              agent, taskModeId: agentSelection.taskModeId, workspaceId,
+              skills, sources, contextDocs,
+              onCreateSession: (id, options) => onCreateSession(id, { ...options, ...createOptions }),
+              onInputChange: (id, text) => { onInputChange?.(id, text) },
+              onSendMessage: (id, text) => window.electronAPI.sendMessage(id, text),
+              draftInput: parsed.params.input, autoSendDraft: parsed.params.send === 'true',
+              navigateOnCreate: false,
+            })
+          })() : await onCreateSession(workspaceId, createOptions)
 
           if (parsed.params.name) {
             await window.electronAPI.sessionCommand(session.id, { type: 'rename', name: parsed.params.name })
@@ -738,7 +758,7 @@ export function NavigationProvider({
           }
 
           // Handle input: either auto-send or pre-fill
-          if (parsed.params.input) {
+          if (parsed.params.input && !agentSelection) {
             const shouldSend = parsed.params.send === 'true'
             if (shouldSend) {
               setTimeout(() => {

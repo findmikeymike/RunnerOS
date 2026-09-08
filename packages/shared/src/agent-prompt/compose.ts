@@ -151,7 +151,7 @@ export function composeAgentSystemPrompt(
   const managerBriefSection = agent.slug?.trim().toLowerCase() === CONCIERGE_SLUG
     ? buildManagerBriefPromptSectionFromDocs(contextDocs)
     : '';
-  const contextSection = buildWorkspaceContextSection(contextDocs);
+  const contextSection = buildWorkspaceContextSection(contextDocs, memory.taskMode?.context?.maxPreloadChars);
   const assetContractSection = buildArtistAssetContractSection(agent, contextDocs, memory.artistWorkspaceScope);
   const sharedIntelSection = buildSharedIntelPromptSection(contextDocs);
   const signalIdeasSection = buildSignalIdeasGuidance(agent, memory.artistWorkspaceScope);
@@ -167,6 +167,7 @@ export function composeAgentSystemPrompt(
 
   const parts: string[] = [body];
   if (taskModeSection) parts.push(taskModeSection);
+  if (agent.slug === CONCIERGE_SLUG) parts.push('Start with artist-manager-operating-system only. Keep setup, creator, workflow, automation, and self-edit skills on demand; do not read them merely because they are in the Manager inventory. Stay conversational. For specialist work, discover the appropriate worker and its explicit focus with list_agents, then pass taskModeId when delegating.');
   if (managerBriefSection) parts.push(managerBriefSection);
   if (assetContractSection) parts.push(assetContractSection);
   if (contextSection) parts.push(contextSection);
@@ -279,7 +280,7 @@ export const WORKSPACE_CONTEXT_MAX_CHARS = 24_000;
  * would leave an agent confidently acting on half a brief; being told a doc was
  * withheld lets it fetch the doc with `get_workspace_context` instead.
  */
-export function buildWorkspaceContextSection(docs: PromptContextDoc[]): string {
+export function buildWorkspaceContextSection(docs: PromptContextDoc[], maxChars?: number): string {
   const usable = docs.filter(
     (doc) =>
       doc.metadata.enabled !== false
@@ -296,8 +297,8 @@ export function buildWorkspaceContextSection(docs: PromptContextDoc[]): string {
   for (const doc of usable) {
     const heading = doc.metadata.name.trim() || doc.slug;
     const block = `## ${heading}\n\n${doc.body.trim()}`;
-    // Always admit the first doc: an empty section would hide that context exists.
-    if (blocks.length > 0 && used + block.length > WORKSPACE_CONTEXT_MAX_CHARS) {
+    // Keep documents whole; the retrieval note preserves discoverability when withheld.
+    if ((maxChars !== undefined || blocks.length > 0) && used + block.length > (maxChars ?? WORKSPACE_CONTEXT_MAX_CHARS)) {
       dropped.push(doc.slug);
       continue;
     }

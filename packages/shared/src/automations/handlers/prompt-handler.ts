@@ -171,6 +171,7 @@ export class PromptHandler implements AutomationHandler {
           mentions: references.mentions,
           labels: expandedLabels,
           agentSlug: prompt.agentSlug,
+          taskModeId: prompt.taskModeId,
           messagingChannel: prompt.bindMessagingChannel
             ? getMessagingChannelFromPayload(payload)
             : undefined,

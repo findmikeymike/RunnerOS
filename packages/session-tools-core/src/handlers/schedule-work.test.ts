@@ -22,6 +22,21 @@ const calendarInput: ScheduleWorkToolInput = {
 };
 
 describe('schedule_work', () => {
+  test('preserves explicit focus and rejects malformed selections before persistence', async () => {
+    let captured: ScheduleWorkToolInput | undefined;
+    const ctx = context(async input => { captured = input; return { ok: true, id: 'focused' }; });
+    const input: ScheduleWorkToolInput = { ...calendarInput, execution: {
+      type: 'agent-task', agentSlug: 'content-genius', taskModeId: 'ideas', brief: 'Develop a concept.',
+    } };
+    expect((await handleScheduleWork(ctx, input)).isError).not.toBe(true);
+    expect(captured?.execution).toMatchObject({ taskModeId: 'ideas' });
+    captured = undefined;
+    for (const taskModeId of ['', 'Full Mode', '-bad', 'a'.repeat(65)]) {
+      expect((await handleScheduleWork(ctx, { ...input, execution: { ...input.execution, taskModeId } } as ScheduleWorkToolInput)).isError).toBe(true);
+    }
+    expect(captured).toBeUndefined();
+  });
+
   test('is unavailable without the HNIC backend capability', async () => {
     const result = await handleScheduleWork(context(), calendarInput);
     expect(result.isError).toBe(true);

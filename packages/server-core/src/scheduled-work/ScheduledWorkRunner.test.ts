@@ -210,6 +210,30 @@ async function waitFor(predicate: () => boolean, attempts = 100): Promise<void> 
 }
 
 describe('ScheduledWorkRunner', () => {
+  test('preserves focus through persisted scheduled work and agent dispatch', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder({ execution: {
+      type: 'agent-task', agentSlug: 'content-genius', taskModeId: 'ideas', brief: 'Develop an idea.',
+      permissionMode: 'safe', expectedOutput: { requirement: 'none' },
+    } })])
+    const calls: Array<{ agentSlug: string; taskModeId?: string }> = []
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true, withLock: createLock(),
+      executeAgentTask: async (input) => { calls.push(input); return { sessionId: 'focused-session' } },
+      startWorkflow: async () => ({ runId: 'unused' }), readWorkflowRun: () => null, listOutputManifests: () => [],
+    })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => calls.length === 1)
+    expect(calls[0]).toMatchObject({ agentSlug: 'content-genius', taskModeId: 'ideas' })
+    expect(readWork(root).items[0]?.execution).toMatchObject({ taskModeId: 'ideas' })
+    const work = readWork(root)
+    for (const taskModeId of ['', 'Full Mode', '-bad', null, 42]) {
+      const invalid = structuredClone(work)
+      Object.assign(invalid.items[0]!.execution, { taskModeId })
+      expect(parseScheduledWorkDocResult({ body: serializeScheduledWorkBody(invalid) }, workspaceId).ok).toBe(false)
+    }
+  })
+
   test('defers scheduled work while a legacy automatic prompt occupies the shared lane', async () => {
     const root = makeRoot()
     writeWork(root, [buildOrder()])

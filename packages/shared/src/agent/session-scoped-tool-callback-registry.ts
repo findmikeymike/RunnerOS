@@ -67,6 +67,8 @@ export interface SessionScopedToolCallbacks {
   listAgentsFn?: (options?: import('@craft-agent/session-tools-core').ListAgentsOptions) => import('@craft-agent/session-tools-core').ListAgentsResult;
   /** List skills (workspace-active + dormant globals) available to the workspace. */
   listSkillsFn?: (options?: import('@craft-agent/session-tools-core').ListSkillsOptions) => import('@craft-agent/session-tools-core').ListSkillsResult;
+  /** Host-validated adjacent capability loading; shared by provider contexts. */
+  loadAgentCapabilityFn?: (input: import('@craft-agent/session-tools-core').LoadAgentCapabilityInput) => Promise<import('@craft-agent/session-tools-core').LoadAgentCapabilityResult>;
   /** List workflows available to the workspace. */
   listWorkflowsFn?: (options?: import('@craft-agent/session-tools-core').ListWorkflowsOptions) => import('@craft-agent/session-tools-core').ListWorkflowsResult;
   /** Get workflow details by slug. */

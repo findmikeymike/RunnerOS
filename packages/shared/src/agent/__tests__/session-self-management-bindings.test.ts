@@ -457,3 +457,23 @@ describe('Claude/Pi session self-management parity', () => {
     expect(listResult.content[0]!.text).toContain('not available in this context');
   });
 });
+
+it('adjacent capability host binding resolves late merges and replacements without recreating either provider context', async () => {
+  const sessionId = 'capability-host-binding';
+  const claude = createBaseContext(sessionId);
+  const pi = createBaseContext(sessionId);
+  attachSessionSelfManagementBindings(claude, sessionId);
+  attachSessionSelfManagementBindings(pi, sessionId);
+  expect(claude.loadAgentCapability).toBeUndefined();
+  try {
+    mergeSessionScopedToolCallbacks(sessionId, { loadAgentCapabilityFn: async input => ({ skillSlug: input.skillSlug, instructions: 'Host instructions' }) });
+    for (const ctx of [claude, pi]) {
+      expect(await ctx.loadAgentCapability?.({ skillSlug: 'visual', reason: 'Visual work' })).toEqual({ skillSlug: 'visual', instructions: 'Host instructions' });
+    }
+    mergeSessionScopedToolCallbacks(sessionId, { loadAgentCapabilityFn: async () => { throw new Error('Host rejected expansion'); } });
+    await expect(pi.loadAgentCapability?.({ skillSlug: 'visual', reason: 'Visual work' })).rejects.toThrow('Host rejected expansion');
+  } finally {
+    unregisterSessionScopedToolCallbacks(sessionId);
+  }
+  expect(claude.loadAgentCapability).toBeUndefined();
+});

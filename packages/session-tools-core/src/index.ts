@@ -539,3 +539,5 @@ export type {
 } from './tool-defs.ts';
 export { handleFindSignalIdeas } from './handlers/find-signal-ideas.ts';
 export type { FindSignalIdeasInput, SignalLookupResult } from '@craft-agent/shared/shared-intel';
+
+export type { LoadAgentCapabilityInput, LoadAgentCapabilityResult } from './handlers/load-agent-capability.ts';
