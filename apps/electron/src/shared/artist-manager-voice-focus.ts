@@ -5,6 +5,7 @@ export type VoiceFocusThinking = 'off' | 'low'
 
 export type VoiceFocusRegisterRequest = {
   workspaceId: string
+  artistName?: string
   systemPrompt: string
   /** Diagnostic override only; still uses the saved voice connection. */
   model?: string
@@ -23,6 +24,8 @@ export type VoiceFocusTurnRequest = {
   sessionId: string
   turnId: string
   text: string
+  /** App-originated opener; never an artist utterance or model instruction. */
+  opening?: boolean
   systemPrompt?: string
 }
 

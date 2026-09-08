@@ -15,6 +15,7 @@ import {
 
 import { normalizeVoiceHandoffTargets, buildVoiceHandoffTool, parseVoiceHandoffProposal, isVoiceHandoffConfirmation, type VoiceHandoffTarget, type VoiceHandoffProposal } from '../shared/artist-manager-voice-handoff'
 import { resolveVoiceHandoffIntent } from './artist-manager-voice-handoff-intent'
+import { selectVoiceOpener, voiceArtistName } from '../shared/artist-manager-voice-openers'
 import { buildVoiceOpeningGreetingPrompt } from '../shared/artist-manager-voice-persona'
 
 type StreamEvent = { contentIndex?: number; partial?: { content?: Array<{ type: string; name?: string; arguments?: unknown }> }; type: string; delta?: string; reason?: string; toolCall?: { name: string; arguments: unknown }; message?: { usage?: { output?: number; reasoning?: number } } }
@@ -150,13 +151,15 @@ const productionDependencies: VoiceFocusDependencies = {
   },
 }
 
-type Exchange = { user: string; assistant: string }
+type Exchange = { user: string | null; assistant: string }
 type ActiveTurn = { id: string; controller: AbortController }
 type SessionState = {
   info: VoiceFocusSession
   sdkModel: Model<Api>
   systemPrompt: string
   greetingPrompt: string
+  workspaceId: string
+  artistName: string
   history: Exchange[]
   active?: ActiveTurn
   usedTurns: Set<string>
@@ -168,6 +171,7 @@ type OwnerState = { session?: SessionState }
 
 /** Direct streaming with one confirmation-gated Command handoff; no general agent executor. */
 export class ArtistManagerVoiceFocusService {
+  private readonly recentOpeners = new Map<string, number>()
   private readonly owners = new Map<number, OwnerState>()
   constructor(
     private readonly deps: VoiceFocusDependencies = productionDependencies,
@@ -189,7 +193,7 @@ export class ArtistManagerVoiceFocusService {
       const model = await validateResolvedVoiceRoute(resolved.connection, resolved.model, this.deps.resolveModel)
       if (this.owners.get(ownerId) !== owner) throw new Error('Voice setup was cancelled')
       const info: VoiceFocusSession = { sessionId: randomUUID(), connection: resolved.connection.slug, model: resolved.model, thinking: request.thinking ?? resolved.thinking ?? 'low' }
-      owner.session = { info, sdkModel: model, systemPrompt: request.systemPrompt, greetingPrompt: buildVoiceOpeningGreetingPrompt(resolved.style), history: [], usedTurns: new Set(), handoffTargets: normalizeVoiceHandoffTargets(request.handoffTargets ?? []) }
+      owner.session = { info, workspaceId: request.workspaceId, artistName: voiceArtistName(request.artistName), sdkModel: model, systemPrompt: request.systemPrompt, greetingPrompt: buildVoiceOpeningGreetingPrompt(resolved.style), history: [], usedTurns: new Set(), handoffTargets: normalizeVoiceHandoffTargets(request.handoffTargets ?? []) }
       return { ...info }
     } catch (error) {
       if (this.owners.get(ownerId) === owner) this.owners.delete(ownerId)
@@ -202,6 +206,8 @@ export class ArtistManagerVoiceFocusService {
     assertText(request.turnId, 100, 'turn')
     assertText(request.text, VOICE_FOCUS_LIMITS.inputChars, 'input')
     if (request.systemPrompt !== undefined) assertText(request.systemPrompt, VOICE_FOCUS_LIMITS.promptChars, 'context')
+    if (request.opening !== undefined && typeof request.opening !== 'boolean') throw new Error('Invalid opening mode')
+    if (request.opening && session.usedTurns.size > 0) throw new Error('Opening is only available before the first voice turn')
     if (session.handedOff) throw new Error('This voice conversation has handed off to Command')
     if (session.active) throw new Error('A voice response is already running')
     if (session.usedTurns.has(request.turnId)) throw new Error('Voice turn was already submitted')
@@ -232,8 +238,18 @@ export class ArtistManagerVoiceFocusService {
     })
     const run = async () => {
       const remember = (text: string) => {
-        session.history.push({ user: request.text, assistant: text })
+        session.history.push({ user: request.opening ? null : request.text, assistant: text })
         while (session.history.length > VOICE_FOCUS_LIMITS.historyTurns || historySize(session.history) > VOICE_FOCUS_LIMITS.historyChars) session.history.shift()
+      }
+      if (request.opening) {
+        const opener = selectVoiceOpener(session.artistName, this.recentOpeners.get(session.workspaceId))
+        this.recentOpeners.delete(session.workspaceId)
+        this.recentOpeners.set(session.workspaceId, opener.index)
+        if (this.recentOpeners.size > 128) this.recentOpeners.delete(this.recentOpeners.keys().next().value!)
+        remember(opener.text)
+        send({ type: 'text_delta', delta: opener.text })
+        send({ type: 'done' })
+        return
       }
       const pending = session.pendingHandoff
       const pendingOffer = Boolean(pending && pending.expiresAt > Date.now())
@@ -293,7 +309,7 @@ export class ArtistManagerVoiceFocusService {
           ? '\n\nThe artist wants to continue talking or change the plan. Answer their latest reply naturally. Do not repeat the previous handoff offer in this reply, and do not claim the app lacks handoff capability. A new handoff can be offered on a later turn after the revised work is agreed.' : ''),
         tools: handoffTool ? [...(speechEnvelope ? [SPEECH_TOOL] : []), handoffTool as NonNullable<Context['tools']>[number]] : [],
         messages: session.history.flatMap<Context['messages'][number]>(exchange => [
-          { role: 'user', content: exchange.user, timestamp: 0 },
+          ...(exchange.user === null ? [] : [{ role: 'user' as const, content: exchange.user, timestamp: 0 }]),
           { role: 'assistant', content: [{ type: 'text', text: exchange.assistant }], api: session.sdkModel.api, provider: session.sdkModel.provider, model: session.sdkModel.id, stopReason: 'stop', timestamp: 0, usage: emptyUsage() },
         ]),
       }
@@ -438,7 +454,7 @@ function assertEndpoint(endpoint: string): void {
   const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]'
   if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) || url.username || url.password || url.search || url.hash) throw new Error('Unsupported voice endpoint')
 }
-function historySize(history: Exchange[]): number { return history.reduce((size, exchange) => size + exchange.user.length + exchange.assistant.length, 0) }
+function historySize(history: Exchange[]): number { return history.reduce((size, exchange) => size + (exchange.user?.length ?? 0) + exchange.assistant.length, 0) }
 function completionMetadata(event: StreamEvent): VoiceFocusCompletion {
   const record: VoiceFocusCompletion = {
     type: 'completion',

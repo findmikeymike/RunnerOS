@@ -254,3 +254,42 @@ for (const outcome of ['success', 'failure'] as const) {
     expect(stops).toBe(1)
   })
 }
+
+describe('automatic opening turn', () => {
+  test('uses the existing speech input once, hides its internal cue, and skips a context refresh', async () => {
+    const userTexts: string[] = []
+    let refreshed = 0
+    const h = fixture({ onUserText: text => userTexts.push(text), refreshPrompt: async () => { refreshed++; return 'context' } })
+    let submissions = 0
+    const greet = () => h.transport.greet(async text => {
+      submissions++
+      expect(h.transport.isOpeningTranscript(text)).toBe(true)
+      const stream = await h.transport.generateReply({ userText: text, contextJson: '[]', signal: new AbortController().signal })
+      const iterator = stream[Symbol.asyncIterator]()
+      const first = iterator.next(); await tick()
+      const turn = h.starts[0]!
+      expect(turn.opening).toBe(true)
+      expect(turn.text).toBe('Call opened')
+      h.emit({ sessionId: session.sessionId, turnId: turn.turnId, type: 'text_delta', delta: 'Yo, Nova!' })
+      expect((await first).value).toEqual({ text: 'Yo, Nova!' })
+      h.emit({ sessionId: session.sessionId, turnId: turn.turnId, type: 'done' })
+      await iterator.next(); await iterator.next()
+    })
+    await Promise.all([greet(), greet()])
+    expect(submissions).toBe(1)
+    expect(refreshed).toBe(0)
+    expect(userTexts).toEqual([])
+    h.pending.resolve(); await h.transport.stop()
+    await greet()
+    expect(submissions).toBe(1)
+  })
+
+  test('does not greet over a user who has already started a turn', async () => {
+    const h = fixture()
+    const iterator = await h.request()
+    let submissions = 0
+    await h.transport.greet(async () => { submissions++ })
+    expect(submissions).toBe(0)
+    await iterator.return?.(); await h.transport.stop()
+  })
+})

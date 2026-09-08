@@ -15,7 +15,11 @@ type Deps = {
 }
 
 /** Each text event is final-answer content from a model with no tool executor. */
-export function createVoiceFocusTransport(deps: Deps): WebLlmTransport & { prepare(): Promise<void>; stop(): Promise<void> } {
+export function createVoiceFocusTransport(deps: Deps): WebLlmTransport & { prepare(): Promise<void>; stop(): Promise<void>; greet(submit: (text: string) => Promise<void>): Promise<void>; isOpeningTranscript(text: string): boolean } {
+  const openingTranscript = `voice-opening:${crypto.randomUUID()}`
+  let greetingSubmitted = false
+  let hasTurn = false
+  let openingConsumed = false
   let stopped = false
   let stopPromise: Promise<void> | undefined
   let sessionPromise: Promise<VoiceFocusSession> | undefined
@@ -26,6 +30,12 @@ export function createVoiceFocusTransport(deps: Deps): WebLlmTransport & { prepa
   }
   return {
     retryEmptyResponse: false,
+    isOpeningTranscript: text => text === openingTranscript,
+    async greet(submit) {
+      if (stopped || greetingSubmitted || hasTurn) return
+      greetingSubmitted = true
+      await submit(openingTranscript)
+    },
     async prepare() {
       if (stopped) throw new Error('Focused voice stopped')
       const controller = new AbortController()
@@ -49,6 +59,9 @@ export function createVoiceFocusTransport(deps: Deps): WebLlmTransport & { prepa
     },
     async generateReply(request) {
       if (stopped || request.signal.aborted) throw new Error('Focused voice stopped')
+      const opening = greetingSubmitted && !openingConsumed && request.userText === openingTranscript
+      if (opening) openingConsumed = true
+      hasTurn = true
       const controller = new AbortController()
       active.add(controller)
       const signal = AbortSignal.any([request.signal, controller.signal])
@@ -69,7 +82,7 @@ export function createVoiceFocusTransport(deps: Deps): WebLlmTransport & { prepa
           if (signal.aborted || stopped) throw new Error('Focused voice stopped')
           deps.onTiming?.('manager-queued')
           session = await abortable(ensurePreparedSession(), signal)
-          const systemPrompt = await abortable(deps.refreshPrompt(), signal)
+          const systemPrompt = opening ? undefined : await abortable(deps.refreshPrompt(), signal)
           if (signal.aborted || stopped) throw new Error('Focused voice stopped')
           unsubscribe = deps.api.onEvent((event: VoiceFocusEvent) => {
             if (event.sessionId !== session!.sessionId || event.turnId !== turnId || done || failure || signal.aborted) return
@@ -91,10 +104,10 @@ export function createVoiceFocusTransport(deps: Deps): WebLlmTransport & { prepa
             }
             wake?.()
           })
-          deps.onUserText?.(request.userText)
+          if (!opening) deps.onUserText?.(request.userText)
           // Subscribe before dispatch. Consume events while the IPC request runs.
           deps.onTiming?.('manager-request')
-          void deps.api.startTurn({ sessionId: session.sessionId, turnId, text: request.userText, systemPrompt })
+          void deps.api.startTurn({ sessionId: session.sessionId, turnId, text: opening ? 'Call opened' : request.userText, ...(opening ? { opening: true } : {}), systemPrompt })
             .catch(() => fail(new Error('Focused voice could not complete this reply')))
           while (true) {
             if (failure) throw failure

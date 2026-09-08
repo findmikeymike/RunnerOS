@@ -35,6 +35,25 @@ function fixture(overrides: Partial<VoiceFocusDependencies> = {}) {
 }
 
 describe('focused voice service', () => {
+  it('opens once without a model request, remembers only assistant speech, and varies the next call', async () => {
+    const { service, requests } = fixture()
+    const session = await service.register(7, { ...registration, artistName: 'Nova' })
+    const events: VoiceFocusEvent[] = []
+    await service.startTurn(7, { sessionId: session.sessionId, turnId: 'open', text: 'Call opened', opening: true }, event => events.push(event))
+    expect(requests).toHaveLength(0)
+    const first = events.find(event => event.type === 'text_delta')!
+    expect(first.type === 'text_delta' && first.delta).toContain('Nova')
+    await expect(service.startTurn(7, { sessionId: session.sessionId, turnId: 'duplicate', text: 'Call opened', opening: true }, () => {})).rejects.toThrow('first voice turn')
+    await service.startTurn(7, { sessionId: session.sessionId, turnId: 'reply', text: 'Good, thanks.' }, () => {})
+    const messages = requests[0]![1].messages
+    expect(messages.map(message => message.role)).toEqual(['assistant', 'user'])
+    expect(JSON.stringify(messages)).not.toContain('Call opened')
+    const next = await service.register(7, { ...registration, artistName: 'Nova' })
+    const nextEvents: VoiceFocusEvent[] = []
+    await service.startTurn(7, { sessionId: next.sessionId, turnId: 'open2', text: 'Call opened', opening: true }, event => nextEvents.push(event))
+    expect(nextEvents.find(event => event.type === 'text_delta')?.type === 'text_delta' && (nextEvents.find(event => event.type === 'text_delta') as { delta: string }).delta).not.toBe(first.type === 'text_delta' ? first.delta : '')
+    service.close()
+  })
   it('uses the saved Mikey persona for hello without exposing the career snapshot or tools', async () => {
     const { service, requests } = fixture({ resolveConfig: async () => ({ connection, model: registration.model, style: 'laid-back' }) })
     try {

@@ -7,6 +7,7 @@ import { VoiceCoreWeb, createAssemblyAiSttTransport, createInworldTtsTransport, 
 import { normalizeVoiceHandoffTargets, type VoiceHandoffTarget, type VoiceHandoffProposal } from '../../shared/artist-manager-voice-handoff'
 import { createVoiceHandoffCoordinator } from '@/lib/artist-manager-voice-handoff'
 import { createVoiceFocusTransport } from '@/lib/artist-manager-voice-focus-transport'
+import { ARTIST_PROFILE_CONTEXT_SLUG, parseArtistProfileDocResult } from '@/lib/artist-profile'
 import { buildVoiceFocusPrompt } from '@/lib/artist-manager-voice-focus-prompt'
 import { DEFAULT_ARTIST_MANAGER_VOICE_SETTINGS, type ArtistManagerVoiceSettings } from '@craft-agent/shared/config/artist-manager-voice-settings'
 import { VoiceTimingTrace, observeVoiceStt, observeVoiceTts, type VoiceTimingRecord } from '@/lib/artist-manager-voice-timing'
@@ -40,7 +41,7 @@ export type ArtistManagerVoiceState = {
   setOpen(open: boolean): void; refreshProviders(): Promise<void>; start(): Promise<void>; stop(): Promise<void>
 }
 
-type PreparedCall = { runtime: VoiceCoreWeb; ticket: number; settings: ArtistManagerVoiceSettings; trace: VoiceTimingTrace | null }
+type PreparedCall = { greet(): Promise<void>; runtime: VoiceCoreWeb; ticket: number; settings: ArtistManagerVoiceSettings; trace: VoiceTimingTrace | null }
 
 export function useArtistManagerVoice(input: {
   workspaceId: string; agents: AgentDefinitionDTO[]; skills: SkillDescriptor[]; sources: LoadedSource[]
@@ -257,10 +258,14 @@ export function useArtistManagerVoice(input: {
           api: window.electronAPI.artistManagerVoiceFocus,
           ensureSession: async () => {
             trace?.mark('session-setup-start')
-            const systemPrompt = await refreshFocusPrompt()
+            const [systemPrompt, profileDoc] = await Promise.all([
+              refreshFocusPrompt(),
+              window.electronAPI.getWorkspaceContextDoc(input.workspaceId, ARTIST_PROFILE_CONTEXT_SLUG).catch(() => null),
+            ])
+            const profile = parseArtistProfileDocResult(profileDoc ?? undefined)
             lifecycle.assertOwner(ticket)
             const session = await window.electronAPI.artistManagerVoiceFocus.register({
-              workspaceId: input.workspaceId, systemPrompt,
+              workspaceId: input.workspaceId, systemPrompt, artistName: profile.ok ? profile.profile.artistName : undefined,
               handoffTargets: currentInput.current.onOpenCommand ? normalizeVoiceHandoffTargets(currentInput.current.handoffTargets ?? []) : [],
             })
             if (alive()) trace?.mark('session-setup-ready', { sessionId: session.sessionId, model: session.model, connection: session.connection, thinking: session.thinking })
@@ -288,8 +293,14 @@ export function useArtistManagerVoice(input: {
       const unsubscribePlayback = runtime.onPlaybackFrame(frame => {
         if (alive()) observePlayback(frame)
       })
+      let artistSpoke = false
       const unsubscribeEvents = runtime.onEvent((event: VoiceEvent) => {
         if (!alive()) return
+        if (event.type === 'userSpeechPartial' || event.type === 'userSpeechComplete') {
+          // The SDK has a transcript entry point; its private opening cue is not artist speech.
+          if (focus.isOpeningTranscript(event.text)) return
+          if (event.text.trim()) artistSpoke = true
+        }
         trace?.event(event)
         if (event.type === 'bargeIn') { avatarPlayback.clear(); setAvatarState('listening') }
         if (event.type === 'userSpeechPartial' || event.type === 'userSpeechComplete') setUserText(event.text)
@@ -313,7 +324,9 @@ export function useArtistManagerVoice(input: {
       trace?.mark('prepare-ready')
       preparedSettings.current = JSON.stringify(settings)
       setPrepared(true); setPreparing(false); setStatus('Ready when you are')
-      return { runtime, ticket, settings, trace }
+      return { runtime, ticket, settings, trace, greet: async () => {
+        if (alive() && !artistSpoke) await focus.greet(text => runtime.completeUserTranscript(text))
+      } }
     } catch (cause) {
       trace?.mark('error')
       if (alive()) {
@@ -363,6 +376,7 @@ export function useArtistManagerVoice(input: {
       call.trace?.mark('listening')
       setRunning(true); setStatus('Listening…')
       void refreshDevices()
+      await call.greet()
     } catch (cause) {
       if (activation === activationEpoch.current) {
         const cleanup = stop()
