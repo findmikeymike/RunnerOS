@@ -219,17 +219,9 @@ export function WorkspaceRail({
     if (disconnected) return
     await Promise.resolve(onSelect(workspace.id, openInNewWindow))
 
-    if (orientation !== 'horizontal' || openInNewWindow) return
-    if (window.location.hash.startsWith('#artist-hq/')) {
-      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
-    }
-    if (isArtistHQWorkspace(workspace, workspaces)) {
-      navigate(routes.view.allSessions(), { skipAutoSelect: true })
-    } else if (isLabWorkspace(workspace, workspaces)) {
-      navigate(routes.view.lab())
-    } else {
-      navigate(routes.view.campaign())
-    }
+    // NavigationProvider restores the destination's last page; ordinary
+    // workspace selection must not override it with a home-page navigation.
+
   }, [isRemoteDisconnected, onSelect, orientation, setFullscreenOverlayOpen, workspaces])
 
   const renderWorkspaceButton = (workspace: Workspace, variant: 'workspace' | 'home' | 'lab' = 'workspace') => {

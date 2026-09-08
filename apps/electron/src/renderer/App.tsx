@@ -1,3 +1,5 @@
+import * as navigationStorage from '@/lib/local-storage'
+import { isArtistHQWorkspace, isLabWorkspace, isArtistCampaignWorkspace } from '@/lib/artist-workspace'
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '@/hooks/useTheme'
@@ -436,11 +438,14 @@ export default function App() {
     }
   }, [clearStreamingState, updateSessionDirect, syncSessionOptionsFromSession, reconcilePermissionModeState, store])
 
+  const sessionLoadGenerationRef = useRef(0)
   const loadSessionsFromServer = useCallback(async () => {
+    const generation = ++sessionLoadGenerationRef.current
     setSessionLoadError(null)
 
     try {
       const loadedSessions = await window.electronAPI.getSessions()
+      if (generation !== sessionLoadGenerationRef.current) return
 
       // Initialize per-session atoms and metadata map
       // NOTE: No sessionsAtom used - sessions are only in per-session atoms
@@ -464,6 +469,7 @@ export default function App() {
         loadedSessions.map((s) => reconcilePermissionModeState(s.id))
       )
 
+      if (generation !== sessionLoadGenerationRef.current) return
       setSessionsLoaded(true)
 
       if (initialSessionId && windowWorkspaceId) {
@@ -473,8 +479,10 @@ export default function App() {
         }
       }
     } catch (err) {
+      if (generation !== sessionLoadGenerationRef.current) return
       console.error('[App] Failed to load sessions:', err)
       const transportState = await window.electronAPI.getTransportConnectionState().catch(() => null)
+      if (generation !== sessionLoadGenerationRef.current) return
 
       if (shouldTreatSessionLoadFailureAsTransportFallback(transportState)) {
         console.error('[App] Treating session load failure as transport fallback:', transportState)
@@ -1672,9 +1680,20 @@ export default function App() {
       // Open (or focus) the window for the selected workspace
       window.electronAPI.openWorkspace(workspaceId)
     } else {
+      // Capture hash-only HQ navigation before the destination begins rendering.
+      // On browser back/forward the URL already belongs to the target: do not
+      // save that location under the workspace being left.
+      const outgoingUrl = new URL(window.location.href)
+      if (windowWorkspaceSlug && outgoingUrl.searchParams.get('ws') === windowWorkspaceSlug) {
+        navigationStorage.set(navigationStorage.KEYS.workspaceUrl, outgoingUrl.search + outgoingUrl.hash, windowWorkspaceSlug)
+      }
       // Switch workspace in current window
       // 1. Update the main process's window-workspace mapping
       await window.electronAPI.switchWorkspace(workspaceId)
+
+      // Destination routes must wait for destination session metadata.
+      sessionLoadGenerationRef.current += 1
+      setSessionsLoaded(false)
 
       // 2. Update React state to trigger re-renders
       setWindowWorkspaceId(workspaceId)
@@ -1711,7 +1730,7 @@ export default function App() {
       // Sessions and theme will reload automatically due to windowWorkspaceId dependency
       // in useEffect hooks.
     }
-  }, [windowWorkspaceId, setSession, store])
+  }, [windowWorkspaceId, windowWorkspaceSlug, setSession, store])
 
   // Handle workspace switch by slug (called by NavigationContext on popstate when ?ws= changes)
   const handleSwitchWorkspaceBySlug = useCallback((slug: string) => {
@@ -2011,6 +2030,9 @@ export default function App() {
         <NavigationProvider
           workspaceId={windowWorkspaceId}
           workspaceSlug={windowWorkspaceSlug}
+          workspaceHomeKind={isArtistHQWorkspace(workspaces.find(w => w.id === windowWorkspaceId), workspaces) ? 'hq'
+            : isLabWorkspace(workspaces.find(w => w.id === windowWorkspaceId), workspaces) ? 'lab'
+              : isArtistCampaignWorkspace(workspaces.find(w => w.id === windowWorkspaceId)) ? 'campaign' : 'general'}
           onSwitchWorkspaceBySlug={handleSwitchWorkspaceBySlug}
           onCreateSession={handleCreateSession}
           onInputChange={handleInputChange}

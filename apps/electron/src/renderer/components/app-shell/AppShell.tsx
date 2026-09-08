@@ -635,7 +635,7 @@ function AppShellContent({
   const sessionListHandleRef = React.useRef<HTMLDivElement>(null)
   const [session, setSession] = useSession()
   const { resolvedMode, isDark, setMode } = useTheme()
-  const { canGoBack, canGoForward, goBack, goForward, navigate: navigateInApp, navigateToSource, navigateToSession } = useNavigation()
+  const { isWorkspaceNavigationReady, canGoBack, canGoForward, goBack, goForward, navigate: navigateInApp, navigateToSource, navigateToSession } = useNavigation()
 
   // Double-Esc interrupt feature: first Esc shows warning, second Esc interrupts
   const { handleEscapePress } = useEscapeInterrupt()
@@ -1658,8 +1658,8 @@ function AppShellContent({
 
   const handleSelectWorkspaceAndNavigate = React.useCallback(async (workspaceId: string, route: Route, hash?: string) => {
     if (workspaceId === activeWorkspaceId) {
-      if (hash !== undefined) window.location.hash = hash
-      navigate(route)
+      window.location.hash = hash ?? ''
+      navigate(route, { skipAutoSelect: Boolean(hash?.startsWith('#artist-hq/')) })
       return
     }
     const pending = { workspaceId, route, hash }
@@ -1683,7 +1683,7 @@ function AppShellContent({
 
   React.useEffect(() => {
     const pending = pendingWorkspaceNavigationRef.current
-    if (!pending || pending.workspaceId !== activeWorkspaceId) return
+    if (!pending || pending.workspaceId !== activeWorkspaceId || !isWorkspaceNavigationReady) return
     const targetSessionId = /^allSessions\/session\/([^/]+)$/.exec(pending.route)?.[1]
     if (targetSessionId) {
       const targetSession = sessionMetaMap.get(targetSessionId)
@@ -1695,10 +1695,10 @@ function AppShellContent({
       pendingWorkspaceNavigationRef.current = null
       if (pendingWorkspaceNavigationTimeoutRef.current) clearTimeout(pendingWorkspaceNavigationTimeoutRef.current)
       pendingWorkspaceNavigationTimeoutRef.current = null
-      if (pending.hash !== undefined) window.location.hash = pending.hash
-      navigate(pending.route)
+      window.location.hash = pending.hash ?? ''
+      navigate(pending.route, { skipAutoSelect: Boolean(pending.hash?.startsWith('#artist-hq/')) })
     }, 0)
-  }, [activeWorkspaceId, sessionMetaMap])
+  }, [activeWorkspaceId, sessionMetaMap, isWorkspaceNavigationReady])
 
   React.useEffect(() => () => {
     if (pendingWorkspaceNavigationTimeoutRef.current) clearTimeout(pendingWorkspaceNavigationTimeoutRef.current)
@@ -1811,15 +1811,10 @@ function AppShellContent({
       toast.error('No HQ workspace found')
       return
     }
-    if (hqWorkspace.id !== activeWorkspaceId) {
-      void onSelectWorkspace(hqWorkspace.id)
-    }
     setSessionsNavExpanded(false)
-    const nextHash = `#artist-hq/${tab}`
-    window.location.hash = nextHash
-    setArtistHqHash(nextHash)
-    navigate(routes.view.allSessions(), { skipAutoSelect: true })
-  }, [activeWorkspaceId, onSelectWorkspace, workspaces])
+    void handleSelectWorkspaceAndNavigate(hqWorkspace.id, routes.view.allSessions(), `#artist-hq/${tab}`)
+      .catch(error => { console.error('Could not open HQ page:', error) })
+  }, [handleSelectWorkspaceAndNavigate, workspaces])
 
   const toggleMainNavGroup = React.useCallback((group: string) => {
     setExpandedMainNavGroups((current) => {

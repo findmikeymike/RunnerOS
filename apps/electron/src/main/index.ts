@@ -1,3 +1,4 @@
+import { artistStartupWindow } from './artist-startup-window'
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
 import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import { createBuiltInConnection, planOmniRouteTierRepair } from '@craft-agent/server-core/domain'
@@ -404,6 +405,18 @@ async function createInitialWindows(): Promise<void> {
         mainLog.info('[omniroute] Pinned the default tier to the free route')
       }
     }
+  }
+
+  // A normal Artist OS launch starts with one HQ Overview window. Saved routes
+  // still serve in-session switching; explicit pending deep links run afterward.
+  const artistStartup = artistStartupWindow(RUNTIME_IDENTITY.variant, workspaces)
+  if (artistStartup) {
+    const win = windowManager.createWindow(artistStartup)
+    const previous = savedState?.windows.find(saved => saved.workspaceId === artistStartup.workspaceId && !saved.focused)
+      ?? savedState?.windows.find(saved => !saved.focused)
+    if (previous) win.setBounds(previous.bounds)
+    mainLog.info(`Opened Artist HQ Overview: ${artistStartup.workspaceId}`)
+    return
   }
 
   const validWorkspaceIds = workspaces.map(ws => ws.id)
@@ -1498,6 +1511,11 @@ app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0 && windowManager) {
       // Open first workspace or last focused
       const workspaces = getWorkspaces()
+      const artistStartup = artistStartupWindow(RUNTIME_IDENTITY.variant, workspaces)
+      if (artistStartup) {
+        windowManager.createWindow(artistStartup)
+        return
+      }
       if (workspaces.length > 0) {
         const savedState = loadWindowState()
         const wsId = savedState?.lastFocusedWorkspaceId || workspaces[0].id

@@ -70,6 +70,8 @@ export interface CreateWindowOptions {
   initialDeepLink?: string
   /** Full URL to restore from saved state (preserves route/query params) */
   restoreUrl?: string
+  /** Clean Artist OS startup landing, independent of the previous window route. */
+  initialPage?: 'hq-overview'
 }
 
 export class WindowManager {
@@ -124,7 +126,7 @@ export class WindowManager {
    * @param options - Window creation options
    */
   createWindow(options: CreateWindowOptions): BrowserWindow {
-    const { workspaceId, focused = false, initialDeepLink, restoreUrl } = options
+    const { workspaceId, focused = false, initialDeepLink, restoreUrl, initialPage } = options
 
     // Load platform-specific app icon
     // In packaged app, resources are at dist/resources/ (same level as __dirname)
@@ -297,15 +299,17 @@ export class WindowManager {
     } else {
       // Build URL from options
       const query: Record<string, string> = { workspaceId }
+      if (initialPage === 'hq-overview') query.route = 'allSessions'
+      const initialHash = initialPage === 'hq-overview' ? 'artist-hq/home' : undefined
       if (focused) {
         query.focused = 'true' // Open in focused mode (no sidebars)
       }
 
       if (VITE_DEV_SERVER_URL) {
         const params = new URLSearchParams(query).toString()
-        window.loadURL(`${VITE_DEV_SERVER_URL}?${params}`)
+        window.loadURL(`${VITE_DEV_SERVER_URL}?${params}${initialHash ? `#${initialHash}` : ''}`)
       } else {
-        window.loadFile(join(__dirname, 'renderer/index.html'), { query })
+        window.loadFile(join(__dirname, 'renderer/index.html'), { query, hash: initialHash })
       }
     }
 

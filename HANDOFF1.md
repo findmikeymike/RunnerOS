@@ -196,6 +196,8 @@ From the canonical checkout, after build verification and restart authorization:
 CRAFT_PRODUCT_VARIANT=artist-os CRAFT_CONFIG_DIR="$HOME/.artist-os" CRAFT_BUNDLED_ASSETS_ROOT="$PWD/apps/electron" node_modules/electron/dist/Electron.app/Contents/MacOS/Electron apps/electron
 ```
 
+Ordinary Artist OS startup opens HQ Overview, even when the previous window was in a campaign. During use, workspace switching restores each workspace's last page; first visits use the workspace home. Explicit navigation and deep links keep their requested destination.
+
 This uses the existing unpackaged development entitlement; it does not change release
 licensing or license records. Keep this mode for ongoing development unless the user
 specifically asks to test the packaged release. The packaged app remains available at

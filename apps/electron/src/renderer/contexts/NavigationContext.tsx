@@ -1,3 +1,4 @@
+import { workspaceLocation, restoreWorkspaceLocation, canPersistWorkspaceLocation, type WorkspaceHomeKind } from './workspace-location'
 /**
  * NavigationContext
  *
@@ -112,6 +113,8 @@ interface NavigationContextValue {
   navigate: (route: Route, options?: NavigateOptions) => void | Promise<void>
   /** Check if navigation is ready */
   isReady: boolean
+  /** Destination metadata and saved-page reconciliation are complete. */
+  isWorkspaceNavigationReady: boolean
   /** Unified navigation state — derived from focused panel + right sidebar */
   navigationState: NavigationState
   /** Whether we can go back in history */
@@ -140,6 +143,7 @@ interface NavigationProviderProps {
   workspaceId: string | null
   /** Current workspace slug (used for URL ?ws= param and localStorage) */
   workspaceSlug: string | null
+  workspaceHomeKind?: WorkspaceHomeKind
   /** Switch to a workspace by slug (called on popstate when ?ws= changes) */
   onSwitchWorkspaceBySlug?: (slug: string) => void
   /** Session creation handler */
@@ -162,6 +166,7 @@ export function NavigationProvider({
   children,
   workspaceId,
   workspaceSlug,
+  workspaceHomeKind = 'general',
   onSwitchWorkspaceBySlug,
   onCreateSession,
   onInputChange,
@@ -229,13 +234,16 @@ export function NavigationProvider({
   const isPopstateSwitchRef = useRef(false)
 
   // Queue navigation if not ready yet
-  const pendingNavigationRef = useRef<ParsedRoute | null>(null)
+  const pendingNavigationRef = useRef<{ route: Route; options?: NavigateOptions } | null>(null)
 
   // Suppress auto-select for one cycle (used by skipAutoSelect to prevent the effect from re-selecting)
   const suppressAutoSelectRef = useRef(false)
 
   // Track whether initial route restoration has been attempted
+  const [restoredWorkspaceId, setRestoredWorkspaceId] = useState<string | null>(null)
+  const isWorkspaceNavigationReady = isReady && isSessionsReady && restoredWorkspaceId === workspaceId
   const initialRouteRestoredRef = useRef(false)
+  const previousWorkspaceSlugRef = useRef<string | null>(null)
 
   // Semantic key for the last history entry we intentionally pushed/reconciled.
   // Excludes layout-only values (like panel proportions) so resize does not create history entries.
@@ -271,6 +279,7 @@ export function NavigationProvider({
    * Also persists the URL per-workspace in localStorage for workspace switch restoration.
    */
   const syncUrl = useCallback((push: boolean = false) => {
+    if (previousWorkspaceSlugRef.current && previousWorkspaceSlugRef.current !== workspaceSlug) return
     const panels = store.get(panelStackAtom)
     const focusedIdx = store.get(focusedPanelIndexAtom)
     if (panels.length === 0) return
@@ -323,7 +332,7 @@ export function NavigationProvider({
 
     // Persist per-workspace URL for workspace switch restoration
     if (workspaceSlug) {
-      storage.set(storage.KEYS.workspaceUrl, url.search, workspaceSlug)
+      storage.set(storage.KEYS.workspaceUrl, workspaceLocation(url.search, url.hash), workspaceSlug)
     }
   }, [store, workspaceSlug, updateCanGoBackForward])
 
@@ -345,6 +354,18 @@ export function NavigationProvider({
     if (!initialRouteRestoredRef.current) return
     syncUrlRef.current(false)
   }, [panelStack, focusedPanelId, rightSidebar])
+
+  // HQ pages change only the fragment, without changing a panel atom.
+  useEffect(() => {
+    const saveHashNavigation = () => {
+      const url = new URL(window.location.href)
+      if (initialRouteRestoredRef.current && canPersistWorkspaceLocation(url, workspaceSlug, previousWorkspaceSlugRef.current)) {
+        storage.set(storage.KEYS.workspaceUrl, workspaceLocation(url.search, url.hash), workspaceSlug!)
+      }
+    }
+    window.addEventListener('hashchange', saveHashNavigation)
+    return () => window.removeEventListener('hashchange', saveHashNavigation)
+  }, [workspaceSlug])
 
   // =========================================================================
   // ATOM SUBSCRIPTIONS FOR pushState (meaningful navigation)
@@ -404,6 +425,7 @@ export function NavigationProvider({
    */
   const reconcileFromUrlParams = useCallback(
     (params: URLSearchParams) => {
+      suppressAutoSelectRef.current = window.location.hash.startsWith('#artist-hq/')
       const initialRoute = params.get('route')
       const sidebarParam = params.get('sidebar') || undefined
       const panelsParam = params.get('panels')
@@ -459,9 +481,9 @@ export function NavigationProvider({
         // Single panel from ?route=
         const navState = parseRouteToNavigationState(initialRoute)
         if (navState) {
-          const finalRoute = ('details' in navState && navState.details)
+          const finalRoute = ('details' in navState && navState.details && !isSessionsNavigation(navState))
             ? (initialRoute as ViewRoute)
-            : (buildRouteFromNavigationState(resolveAutoSelectionRef.current(navState)) as ViewRoute)
+            : (buildRouteFromNavigationState(resolveAutoSelectionRef.current(navState, { skipAutoSelect: window.location.hash.startsWith('#artist-hq/') })) as ViewRoute)
           entries = [{ route: finalRoute, proportion: 1 }]
         }
       }
@@ -859,9 +881,17 @@ export function NavigationProvider({
         return
       }
 
-      if (!isReady) {
-        pendingNavigationRef.current = parsed
+      if (!isWorkspaceNavigationReady) {
+        pendingNavigationRef.current = { route, options }
         return
+      }
+
+      // Explicit navigation away from an HQ page wins over its restored hash.
+      if (!options?.skipAutoSelect && window.location.hash.startsWith('#artist-hq/')) {
+        const url = new URL(window.location.href)
+        url.hash = ''
+        history.replaceState(history.state, '', url.toString())
+        window.dispatchEvent(new Event('hashchange'))
       }
 
       // Handle actions (side effects)
@@ -921,7 +951,7 @@ export function NavigationProvider({
         store.set(updateFocusedPanelRouteAtom, finalRoute)
       }
     },
-    [isReady, handleActionNavigation, resolveAutoSelection, store, pushPanel, workspaceId]
+    [isWorkspaceNavigationReady, handleActionNavigation, resolveAutoSelection, store, pushPanel, workspaceId]
   )
 
   // =========================================================================
@@ -983,16 +1013,15 @@ export function NavigationProvider({
   // WORKSPACE SWITCH
   // =========================================================================
 
-  const previousWorkspaceSlugRef = useRef<string | null>(null)
-
   useEffect(() => {
-    if (!workspaceId || !workspaceSlug || !isSessionsReady) return
+    if (!workspaceId || !workspaceSlug) return
 
     if (previousWorkspaceSlugRef.current === null) {
       // First mount — initial route restoration handles it
       previousWorkspaceSlugRef.current = workspaceSlug
       return
     }
+    if (!isSessionsReady) return
 
     if (previousWorkspaceSlugRef.current === workspaceSlug) return
     previousWorkspaceSlugRef.current = workspaceSlug
@@ -1009,22 +1038,12 @@ export function NavigationProvider({
       // UI-triggered: load stored URL for the new workspace, push history entry
       const savedSearch = storage.get<string>(storage.KEYS.workspaceUrl, '', workspaceSlug)
 
-      const url = new URL(window.location.href)
-      if (savedSearch) {
-        // Replace all params with the saved workspace's URL
-        url.search = savedSearch
-      } else {
-        // No saved state — default to allSessions
-        for (const key of [...url.searchParams.keys()]) {
-          url.searchParams.delete(key)
-        }
-        url.searchParams.set('ws', workspaceSlug)
-        url.searchParams.set('route', 'allSessions')
-      }
+      const url = restoreWorkspaceLocation(window.location.href, savedSearch, workspaceSlug, workspaceHomeKind)
 
       // Push a new history entry for the workspace switch
       const seq = nextHistorySeqRef.current++
       history.pushState({ seq }, '', url.toString())
+      window.dispatchEvent(new Event('hashchange'))
       historySeqRef.current = seq
       historyMaxSeqRef.current = seq
       updateCanGoBackForward()
@@ -1039,8 +1058,9 @@ export function NavigationProvider({
     requestAnimationFrame(() => {
       suppressPushRef.current = false
       lastSemanticHistoryKeyRef.current = getSemanticHistoryKey()
+      if (previousWorkspaceSlugRef.current === workspaceSlug) setRestoredWorkspaceId(workspaceId)
     })
-  }, [workspaceId, workspaceSlug, store, updateCanGoBackForward, getSemanticHistoryKey, isSessionsReady])
+  }, [workspaceId, workspaceSlug, store, updateCanGoBackForward, getSemanticHistoryKey, isSessionsReady, workspaceHomeKind])
 
   // =========================================================================
   // INITIAL ROUTE RESTORATION (CMD+R reload)
@@ -1077,6 +1097,7 @@ export function NavigationProvider({
     requestAnimationFrame(() => {
       suppressPushRef.current = false
       lastSemanticHistoryKeyRef.current = getSemanticHistoryKey()
+      if (previousWorkspaceSlugRef.current === workspaceSlug) setRestoredWorkspaceId(workspaceId)
     })
   }, [isReady, isSessionsReady, workspaceId, navigate, store, getSemanticHistoryKey])
 
@@ -1085,24 +1106,12 @@ export function NavigationProvider({
   // =========================================================================
 
   useEffect(() => {
-    if (isReady && pendingNavigationRef.current) {
-      const pending = pendingNavigationRef.current
-      pendingNavigationRef.current = null
-
-      if (pending.type === 'action') {
-        handleActionNavigation(pending)
-        return
-      }
-
-      const routeStr = `${pending.name}${pending.id ? `/${pending.id}` : ''}`
-      const navState = parseRouteToNavigationState(routeStr)
-      if (navState) {
-        const resolved = resolveAutoSelection(navState)
-        const finalRoute = buildRouteFromNavigationState(resolved) as ViewRoute
-        store.set(updateFocusedPanelRouteAtom, finalRoute)
-      }
-    }
-  }, [isReady, handleActionNavigation, resolveAutoSelection, store])
+    if (!isWorkspaceNavigationReady || !pendingNavigationRef.current) return
+    const pending = pendingNavigationRef.current
+    pendingNavigationRef.current = null
+    // Replay the same path, including hash clearing, action parameters and options.
+    void navigate(pending.route, pending.options)
+  }, [isWorkspaceNavigationReady, navigate])
 
   // =========================================================================
   // DEEP LINK LISTENER
@@ -1238,7 +1247,7 @@ export function NavigationProvider({
 
   useEffect(() => {
     if (suppressAutoSelectRef.current) return
-    if (!isReady || !workspaceId) return
+    if (!isReady || !isSessionsReady || !workspaceId || window.location.hash.startsWith('#artist-hq/')) return
     // Don't auto-select when panel stack is empty (user closed all panels)
     if (store.get(panelStackAtom).length === 0) return
     if (!isSessionsNavigation(navigationState) || navigationState.details) return
@@ -1250,6 +1259,7 @@ export function NavigationProvider({
     navigateToSession(fallbackSessionId)
   }, [
     isReady,
+    isSessionsReady,
     workspaceId,
     navigationState,
     getLastSelectedSessionId,
@@ -1266,6 +1276,7 @@ export function NavigationProvider({
       value={{
         navigate,
         isReady,
+        isWorkspaceNavigationReady,
         navigationState,
         canGoBack,
         canGoForward,
