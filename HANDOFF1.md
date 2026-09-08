@@ -184,12 +184,24 @@ The current consolidation evidence is in
 [the 2026-09-08 audit](docs/audits/artist-os-consolidation-2026-09-08.md).
 Do not reuse older test totals as proof of the current combined tree.
 
-The current packaged process uses the production package at
-`apps/electron/release-artist-os/mac-arm64/Artist OS.app` and profile
-`~/.artist-os/electron`. The verified update was installed and launched from that canonical path with user
-authorization on September8; the rendered Workers page and Website Agent visibility
-were confirmed. The previous package is retained under `release-artist-os/previous-before-bbefb1102/`.
-Do not swap unpacked resources under a live process.
+**Current working mode: development access, using the existing artist profile.**
+The packaged release launch on September8 was the wrong mode for Michael's daily
+work: it enforced licensing. The corrected live instance uses the current canonical
+compiled app, Electron44, and the same `~/.artist-os` data root. Settings → App →
+Behavior explicitly shows “Development access” and paid features enabled.
+
+From the canonical checkout, after build verification and restart authorization:
+
+```sh
+CRAFT_PRODUCT_VARIANT=artist-os CRAFT_CONFIG_DIR="$HOME/.artist-os" CRAFT_BUNDLED_ASSETS_ROOT="$PWD/apps/electron" node_modules/electron/dist/Electron.app/Contents/MacOS/Electron apps/electron
+```
+
+This uses the existing unpackaged development entitlement; it does not change release
+licensing or license records. Keep this mode for ongoing development unless the user
+specifically asks to test the packaged release. The packaged app remains available at
+`apps/electron/release-artist-os/mac-arm64/Artist OS.app`, with licensing enforced.
+Do not silently switch profiles: `electron:dev:artist-os` below defaults to the separate
+`~/.artist-os-dev` profile.
 
 To run a development instance only after explicit user permission:
 

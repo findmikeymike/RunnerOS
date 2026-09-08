@@ -20,6 +20,12 @@ process can be at different revisions: verify each before calling the app update
 See `docs/audits/artist-os-consolidation-2026-09-08.md` for the current integration
 and staged-build evidence. Verify `origin/main` rather than assuming it matches.
 
+**Daily development launch:** use the canonical compiled app through the unpackaged
+Electron runtime with `CRAFT_PRODUCT_VARIANT=artist-os` and Michael's existing
+`CRAFT_CONFIG_DIR=$HOME/.artist-os`. See HANDOFF1 for the exact command. This mode
+intentionally grants development access. The packaged `.app` enforces licensing and
+must not silently replace the development mode during ordinary work.
+
 If your work is not on `main`, it is not in the product yet. It does not matter
 how good it is or how long it took.
 

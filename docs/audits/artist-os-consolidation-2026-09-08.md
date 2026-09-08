@@ -78,6 +78,21 @@ registration/UI path, not all provider flows or campaign deletion with real data
 The installation receipt is `release-artist-os/staged-main/installation-verification.json`.
 Later documentation/test-only commits do not change the compiled production source.
 
+## Correction: restore the intended development access
+
+The subsequent user report showed the packaged launch was wrong for ongoing development:
+it enabled release license enforcement. The code's existing `DesktopEntitlementAuthority`
+grants development access when Electron is unpackaged; no license-policy edit was needed.
+The release instance was closed and the current canonical compiled app was reopened
+through `node_modules/electron/dist/Electron.app/Contents/MacOS/Electron apps/electron`,
+with Artist OS variant and the same `~/.artist-os` profile (PID84977 at verification).
+The renderer URL points to canonical `apps/electron/dist/renderer/index.html` and the
+same workspace ID. Settings → App → Behavior visibly confirms **Development access**,
+**Paid features are enabled in this development build**, and **Development entitlement**.
+No license key, entitlement record, project data, or production licensing policy was edited.
+Use this development launch for continued local work; packaged release verification is
+separate and must not be mistaken for Michael's requested license-free development mode.
+
 ## Remote CI
 
 GitHub Validate passed at `e9ab74b06`, while Tests failed. Inspection proved a whole-config
