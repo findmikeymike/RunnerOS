@@ -1,7 +1,8 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-09-06
+last_verified: 2026-09-07
+verified_head: c82d4c6c9
 worktree: /Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os
 branch: main
 scope: onboarding
@@ -39,7 +40,7 @@ than trusting this doc or the folder name.
 This is a **git worktree**, not the main checkout. Run everything from here and
 never `cd` to the repo root.
 
-As of 2026-09-06 this folder holds the `main` branch, the built app, and
+As of 2026-09-07 this folder holds the `main` branch, the built app, and
 everything that ships. Read
 **[GIT-FACTS-ALWAYS-READ-ME.md](GIT-FACTS-ALWAYS-READ-ME.md)** before your
 first commit, branch, or merge — it is the authority on where work lives and
@@ -138,11 +139,14 @@ parallel execution, so a tool that writes local state must not claim it.
 
 ## Docs — and which ones lie
 
-The single best doc is `docs/creator-command-center/todo/README.md`. It indexes
-unbuilt specs and its stated rule is that a spec is only listed after verifying
-its defining symbol is absent from the tree. **However** it currently still
-lists specs 38 and 41 as unbuilt; both are now built. Verify before trusting any
-line in it.
+Start with `docs/creator-command-center/README.md`, then its `todo/README.md`.
+The parent index separates implemented, partially implemented, and unbuilt
+work; the todo index requires a defining symbol to be absent before calling a
+spec unbuilt. Known drift at verified head: **Spec 48 still appears under Not
+Yet Built even though its Branding Agent pilot shipped**. Treat 48 as partial;
+its remaining agent rollout/capability-loading slices are still open. Specs 38
+and 41 are implemented with live acceptance still open. Verify symbols before
+trusting any status label.
 
 `HANDOFF.md` and `docs/CURRENT.md` both declare `source_of_truth: true` but were
 last verified 2026-08-30 and point at a **different worktree and branch**
@@ -152,8 +156,8 @@ wrong about current state. Do not follow their "start here" instructions.
 `docs/system-map/runner-system-map.md` is generated — regenerate with
 `bun run docs:system-map` rather than reading a stale copy.
 
-`docs/creator-command-center/` holds ~44 numbered specs, the real design record.
-Read the one covering your area before writing code.
+`docs/creator-command-center/` holds the numbered product specs, the real design
+record. Read the one covering your area before writing code.
 
 ## Runtime
 
@@ -167,20 +171,22 @@ Electron binary. Details, packaging paths and the sharp-natives gate:
     bun test <path>                              # targeted; fast
     cd packages/<name> && bun run tsc --noEmit   # per package
     cd apps/electron && bun run tsc --noEmit
-    cd apps/electron && bun run build:renderer   # catches import/bundling breaks
+    bun run electron:build:renderer              # from worktree root
 
-Some pre-existing failures are unrelated to you — artwork and video tool tests
-time out on ffmpeg/sharp. Establish whether a failure is yours before claiming
-it isn't.
+At verified head `c82d4c6c9`, the full discovery suite passed **8,555 tests,
+one skip, zero failures** across 733 files. That is a snapshot, not permission
+to dismiss a new failure as pre-existing: isolate and prove its cause.
 
 To actually run the app (needed for visual checks):
 
-    CRAFT_PRODUCT_VARIANT=artist-os CRAFT_CONFIG_DIR=$HOME/.artist-os-dev
+    bun run electron:dev:artist-os
 
-from `apps/electron`. Without those env vars you get the old RunnerOS profile
-and will think nothing works. The app holds a single-instance lock, so ask the
-user to close theirs first. The renderer is served from `dist/renderer`, not a
-Vite dev server — run `build:renderer` then Cmd+R to see changes.
+Run that from this worktree root. It supplies the Artist OS variant and the
+`~/.artist-os-dev` profile; a generic launch can show the old RunnerOS profile
+and make correct work look missing. The app holds a single-instance lock, so
+ask the user to close theirs first. The renderer is served from
+`dist/renderer`, not a Vite dev server — after renderer-only changes run
+`bun run electron:build:renderer`, then Cmd+R to see them.
 
 ## House rules
 
@@ -199,20 +205,76 @@ Vite dev server — run `build:renderer` then Cmd+R to see changes.
 
 ## Recently shipped (don't redo)
 
-Spec 41, Slice D — the artist's *existing* site, the one they're not going to
-abandon:
+Older but still current context — Spec 41 Slice D, the artist's *existing*
+site: `website_inspect_external` (`packages/server-core/src/website/inspect.ts`)
+crawls their live page once and reports consequences; the Community CSV
+importer survives real provider exports
+(`packages/shared/src/community/list-export.ts`); editing an existing site
+goes through `browser_tool`, never a REST API write (Elementor/Divi keep
+layout in postmeta — an API write silently breaks the page).
 
-- `website_inspect_external` crawls their Squarespace/Wix/WordPress page once,
-  stores the reading on `manifest.external`, and reports findings as
-  consequences ("your signup goes to mailchimp, so those fans can't be emailed
-  from here"). `packages/server-core/src/website/inspect.ts`
-- The Community CSV importer now survives real provider exports: proper RFC 4180
-  parsing, provider column mapping, and unsubscribed rows becoming suppressions
-  instead of contacts. The page previews the file before writing.
-  `packages/shared/src/community/list-export.ts`
-- Editing an existing site goes through **the browser** (`browser_tool`), not an
-  API adapter. Decided deliberately: WordPress's REST API writes `post_content`,
-  but Elementor/Divi sites keep the layout in postmeta, so an API write breaks
-  the page and reports success.
+What landed from 2026-09-04 through verified head `c82d4c6c9`: **179 commits
+(164 non-merge)**. This is the compact map; use `git log` for the ledger.
 
-Last four commits: `bec22c3b0`, `ec1412ab8`, `7afe1de29`, `5437309f9`.
+- **Voice / Mikey** (largest line, `codex/artist-os-voice-*`): voice call UX
+  with **Mikey**, the Artist Manager voice persona. Focused context
+  conversation without agent tools; Command handoff confirmation (natural
+  language agreement) with navigation traces; Conversation settings separated
+  from the Command model; focused mode/model persist across HQ navigation;
+  compact call view; Moonshine room-noise endpoint repair; spoken-format
+  replies, preloaded procedures, bounded Voice Core speech chunking; streamed
+  focused replies on a verified Flash route; voice campaign advice grounded
+  in the Release Kit. The modal now bundles the **Mikey GLB** (`e9b87972c`)
+  with restrained motion and audio-reactive mouth opening. This is not timed
+  phoneme/viseme sync, and a physical microphone/provider performance pass is
+  still a release gate. See `docs/tts-agent/09-mikey-call-avatar.md`.
+- **Signals** (`codex/signals-your-world`, merged `57eaa8255`): spec
+  `docs/creator-command-center/47-signals-your-world-spec.md` (audits in
+  `docs/audits/`). Reviewed worker retrieval, idea handoffs, reviewed track
+  reader, audio experience, hardened reports. The chat SignalHandoffNotice
+  hides itself without a confirmed attachment.
+- **Agent task modes** (spec 48,
+  `docs/creator-command-center/todo/48-agent-task-modes-spec.md`, `ffd4a1150`):
+  the **Branding Agent pilot** asks what the artist is doing, then starts with
+  the focused skill/context route while retaining explicit overlap awareness.
+  Adjacent skills are **not loaded in the pilot**; it offers the better next
+  mode/handoff when the boundary is crossed. Core:
+  `packages/shared/src/agent-definitions/task-modes.ts`, picker dialog
+  `AgentTaskModePickerDialog.tsx`, and SessionManager support.
+- **Conversation history** (`654050905`, `ad0cabed2`): the unprojected section
+  is now **Conversations**, newest first, capped to a compact inner scroller.
+  Rows use the stable generated/manual topic as the primary title and the agent
+  as quiet secondary context; no extra title-model call was added.
+- **Memory / context**: bounded prompt injection, durable `SESSIONS.md`,
+  `recall_session`, campaign-scoped facts, safer session-log parsing, and less
+  whole-workspace context on every turn. Do not reintroduce giant eager prompts.
+- **Models / gateway**: keyless **OmniRoute** gateway embedded with route
+  tiers, free-route default, and retry-on-gateway-ask; z.ai connections
+  default to GLM 5.3; cheap model for chat titles; current Claude generation
+  + its thinking rule; provider preference lists corrected; **Monid** built-in
+  MCP with spend controls; pi credential fixes for SDK changes.
+- **Platform / security**: Electron 39 → **44.2.0**; remote-workspace TLS
+  validation on by default; frontmatter parsing moved off gray-matter's
+  js-yaml 3 to a safe engine; libsignal protobuf advisory cleared; sharp
+  pinned at 0.34.5 with natives gating; per-platform onnxruntime binaries;
+  upstream baseline at v0.13.1
+  (`docs/creator-command-center/17-craft-upstream-porting-ledger-2026-08.md`).
+- **Suite/CI**: the suite is order-independent under macOS/Linux sharding, but
+  current CI is **not all green**. At `c82d4c6c9`, `Validate` passed; `Tests`
+  failed one Linux shard because `blocks Bash redirect to sibling path with
+  data prefix` exceeded the 5-second test timeout. A focused local rerun passed
+  that file 8/8 (the failed case took 30.71 ms), and both workflows passed at
+  `ad0cabed2`, so the failure did not reproduce locally; it still needs a clean
+  CI rerun or a deliberate reliability fix before claiming current CI green.
+  The full-suite evidence above was recorded after the avatar absorbed the
+  conversation-list changes.
+- **Product fixes**: website publishing retries/scheduling/rollback; community
+  email retries + unsubscribe hardening; chat shows "still working" and
+  elapsed time for slow tools; libvips artwork fix (25s → fast); release
+  manager scoped to campaigns; squad storyboard ships bundled Python runtime;
+  native window close and the web-canvas resize divider were restored
+  (`2c9b68e92`).
+
+Current main anchor: `c82d4c6c9` (`docs(voice): record final avatar integration
+checks`). Reconfirm `git status`, `git log -1`, and `origin/main` before acting;
+other agents can move this tree after this document is written.
