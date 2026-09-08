@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Check, ExternalLink, Info, Link2, Maximize2, Play, Plus, Radio, RefreshCw, SlidersHorizontal, Diamond } from 'lucide-react'
+import { Check, ExternalLink, Info, Link2, Maximize2, Play, Plus, Radio, RefreshCw, SlidersHorizontal, Bookmark } from 'lucide-react'
 import { DocumentFormattedMarkdownOverlay } from '@craft-agent/ui'
 import { isFinalSignalReport, parseSignalBriefing, type SignalMode, type SignalTrack, type SignalTrackConfig, type SignalEntryReference } from '@craft-agent/shared/shared-intel'
 import type { ContextDocDTO } from '../../../shared/types'
@@ -39,7 +39,7 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
   const [track, setTrack] = React.useState<SignalTrack>('industry')
   const [selections, setSelections] = React.useState<Record<SignalTrack, string | null>>({ industry: null, 'your-world': null })
   const [pendingReviews, setPendingReviews] = React.useState<Partial<Record<SignalTrack, string>>>({})
-  const [setup, setSetup] = React.useState<{ config: SignalTrackConfig; adoption: boolean } | null>(null)
+  const [setup, setSetup] = React.useState<{ configs: Record<SignalTrack, SignalTrackConfig>; adoptIndustry: boolean; industryError?: string } | null>(null)
   const [linksOpen, setLinksOpen] = React.useState(false)
   const [fullscreen, setFullscreen] = React.useState(false)
   const [selection, setSelection] = React.useState('')
@@ -48,13 +48,11 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
   const [nuggetError, setNuggetError] = React.useState<string | null>(null)
   const nuggetPending = React.useRef(false)
   const [actionError, setActionError] = React.useState<{ track: SignalTrack; message: string } | null>(null)
-  const [adopting, setAdopting] = React.useState(false)
-  const adoptionEpoch = React.useRef(0)
   const requests = React.useRef<Partial<Record<SignalTrack, string>>>({})
   const reader = React.useRef<HTMLDivElement>(null)
   const scope = React.useRef(workspaceId); scope.current = workspaceId
-  React.useEffect(() => { setSelections({ industry: null, 'your-world': null }); setPendingReviews({}); setTrack('industry'); setSetup(null); setLinksOpen(false); setActionError(null); requests.current = {}; return () => { adoptionEpoch.current++ } }, [workspaceId])
-  const changeTrack = (next: SignalTrack) => { adoptionEpoch.current++; setAdopting(false); setSetup(null); setLinksOpen(false); setTrack(next) }
+  React.useEffect(() => { setSelections({ industry: null, 'your-world': null }); setPendingReviews({}); setTrack('industry'); setSetup(null); setLinksOpen(false); setActionError(null); requests.current = {} }, [workspaceId])
+  const changeTrack = (next: SignalTrack) => { setSetup(null); setLinksOpen(false); setTrack(next) }
   const legacySchedules = tracks.automations.filter(legacySignalSchedule)
   const legacyMode = !tracks.state || tracks.state.tracks.industry.revision === 'initial' || legacySchedules.length > 0
   const currentLegacy = track === 'industry' && legacyMode
@@ -62,7 +60,7 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
   const schedule = tracks.automations.find(item => tracks.state && signalScheduleMatches(item, tracks.state.hqWorkspaceId, track))
   const readiness = signalWeeklyReadiness(config, schedule)
   const weekly = currentLegacy ? legacy.weeklyEnabled : readiness.active
-  const busy = tracks.busy || adopting || (currentLegacy && legacy.busy)
+  const busy = tracks.busy || (currentLegacy && legacy.busy)
   const runs = tracks.state?.runs.filter(run => run.track === track) ?? []
   const latestRun = runs[0]
   const active = runs.some(run => run.mode === 'scan' && ['queued', 'running'].includes(run.status))
@@ -82,9 +80,9 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
     }
     for (const doc of documents) {
       if (!signalDocumentInTrack(doc, track)) continue
-      items.push({ key: `context:${doc.slug}`, kind: 'context', title: doc.slug === 'artist-signal-nuggets' ? 'Saved nuggets' : doc.metadata.name, summary: doc.metadata.description ?? '', date: signalDocumentDate(doc.body), body: readableSignalBody(doc.body) })
+      items.push({ key: `context:${doc.slug}`, kind: 'context', title: doc.slug === 'artist-signal-nuggets' ? 'Saved insights' : doc.metadata.name, summary: doc.metadata.description ?? '', date: signalDocumentDate(doc.body), body: readableSignalBody(doc.body) })
     }
-    if (!items.some(item => item.key === signalNuggetsKey)) items.push({ key: signalNuggetsKey, kind: 'context', title: 'Saved nuggets', summary: '' })
+    if (!items.some(item => item.key === signalNuggetsKey)) items.push({ key: signalNuggetsKey, kind: 'context', title: 'Saved insights', summary: '' })
     if (track === 'industry') {
       const previous = parseArtistIntelReportDocResult(documents.find(doc => doc.slug === 'artist-intel-report'))
       if (previous.ok && !previous.report.outputId && (previous.report.title || previous.report.summary)) {
@@ -94,6 +92,7 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
     }
     return items.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''))
   }, [outputs, documents, track, tracks.state])
+  const reports = library.filter(item => item.key !== signalNuggetsKey)
   const selectedKey = signalDefaultKey(library, selections[track])
   const selected = library.find(item => item.key === selectedKey) ?? null
   const { content, loading, error: contentError, retry } = useSignalReportContent(workspaceId, selected, getOutput)
@@ -136,31 +135,32 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
     try { await tracks.start(target, 'scan', key); delete requests.current[target] }
     catch (cause) { reportError(cause, target) }
   }
-  const toggleWeekly = async () => {
-    if (currentLegacy) { await legacy.onToggleWeekly(); return }
-    if (!config) return
-    try { await tracks.save({ ...config, enabled: !weekly, cadence: !weekly ? 'weekly' : 'manual' }, false); setActionError(null) }
-    catch (cause) { reportError(cause) }
-  }
-  const adopt = async () => {
+  const openSettings = () => {
     if (!tracks.state) return
-    const owner = workspaceId; const token = ++adoptionEpoch.current; setAdopting(true); setActionError(null)
     try {
-      const body = tracks.state.legacyIndustry?.configBody ?? documents.find(doc => doc.slug === 'artist-intel-config')?.body
-      const old = legacySignalSources(body, legacy.config)
-      const sources: SignalTrackConfig['sources'] = []
-      for (const source of old) {
-        if (scope.current !== owner || token !== adoptionEpoch.current) return
-        const resolved = await window.electronAPI.resolveSignalChannel(owner, source.url)
-        if (scope.current !== owner || token !== adoptionEpoch.current) return
-        if (sources.some(item => item.channelId === resolved.channelId)) throw new Error('Existing channels resolve to the same channel. Review duplicates in existing settings first.')
-        sources.push({ ...resolved, name: source.name, priority: source.priority, notes: source.notes })
+      const configs = { ...tracks.state.tracks }
+      for (const kind of ['industry', 'your-world'] as const) {
+        const matcher = tracks.automations.find(item => signalScheduleMatches(item, tracks.state!.hqWorkspaceId, kind))
+        const enabled = signalWeeklyReadiness(configs[kind], matcher).active
+        configs[kind] = { ...configs[kind], enabled, cadence: enabled ? 'weekly' : 'manual' }
       }
-      if (scope.current !== owner || token !== adoptionEpoch.current) return
-      setSetup({ adoption: true, config: { ...tracks.state.tracks.industry, sinceDays: legacy.config.sinceDays, maxPerChannel: legacy.config.maxPerChannel,
-        sources, enabled: legacy.weeklyEnabled, cadence: legacy.weeklyEnabled ? 'weekly' : 'manual' } })
-    } catch (cause) { if (scope.current === owner && token === adoptionEpoch.current) reportError(cause, 'industry') }
-    finally { if (scope.current === owner && token === adoptionEpoch.current) setAdopting(false) }
+      let industryError: string | undefined
+      if (legacyMode) {
+        try {
+        const body = tracks.state.legacyIndustry?.configBody ?? documents.find(doc => doc.slug === 'artist-intel-config')?.body
+        const sources = legacySignalSources(body, legacy.config).map((source, index) => ({
+          channelId: `legacy:${index}`, url: source.url, name: source.name, priority: source.priority, notes: source.notes,
+        }))
+        configs.industry = { ...configs.industry, sources, sinceDays: legacy.config.sinceDays, maxPerChannel: legacy.config.maxPerChannel,
+          enabled: legacy.weeklyEnabled, cadence: legacy.weeklyEnabled ? 'weekly' : 'manual' }
+        } catch (cause) {
+          industryError = cause instanceof Error ? cause.message : String(cause)
+          configs.industry = { ...configs.industry, enabled: legacy.weeklyEnabled, cadence: legacy.weeklyEnabled ? 'weekly' : 'manual' }
+        }
+      }
+      setActionError(null)
+      setSetup({ configs, adoptIndustry: legacyMode, industryError })
+    } catch (cause) { reportError(cause) }
   }
   const saveNugget = async () => {
     if (!selected || !selection || nuggetPending.current) return
@@ -177,7 +177,14 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
   const detail = currentLegacy ? legacy.notice?.detail : latestRun?.error
   const nextRun = weekly && schedule ? signalNextRun(schedule) : null
   const snoozed = weekly && schedule?.snoozedUntil && Date.parse(schedule.snoozedUntil) > Date.now()
-  const saveSelectionButton = <button className={`${control} !w-9 !px-0`} aria-label="Save selection" title={nuggetSaved ? 'Saved to nuggets' : 'Save selection'} disabled={nuggetBusy || !selection} onPointerDown={event => event.preventDefault()} onMouseDown={event => event.preventDefault()} onClick={() => { void saveNugget() }}>{nuggetSaved ? <Check size={15} /> : <Diamond size={15} />}</button>
+  const channelCount = currentLegacy ? legacy.config.sources.length : config?.sources.length ?? 0
+  const nextRuns: Partial<Record<SignalTrack, string>> = {}
+  for (const kind of ['industry', 'your-world'] as const) {
+    const matcher = kind === 'industry' && legacyMode ? legacySchedules[0] : tracks.automations.find(item => tracks.state && signalScheduleMatches(item, tracks.state.hqWorkspaceId, kind))
+    const date = matcher && signalNextRun(matcher)
+    if (date) nextRuns[kind] = `Next: ${date.toLocaleString()}`
+  }
+  const saveSelectionButton = <button className={`${control} !w-9 !px-0`} aria-label="Save selection" title={nuggetSaved ? 'Saved to insights' : 'Save selection'} disabled={nuggetBusy || !selection} onPointerDown={event => event.preventDefault()} onMouseDown={event => event.preventDefault()} onClick={() => { void saveNugget() }}>{nuggetSaved ? <Check size={15} /> : <Bookmark size={15} />}</button>
   return <section aria-label="Signals intelligence reader" className="space-y-3">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-2">
@@ -194,56 +201,58 @@ export function SignalsTracksPanel(props: SignalsTracksPanelProps) {
             <h3 className="mb-4 font-semibold text-white/95">How Signals works</h3>
             <div className="space-y-4 leading-relaxed">
               <p><strong className="font-medium text-white/90">Industry</strong> follows music-business news. <strong className="font-medium text-white/90">Your World</strong> follows the interests, ideas and causes behind your music.</p>
-              <p>Add channels with the sliders button, then choose <strong className="font-medium text-white/90">Run scan</strong> or turn on <strong className="font-medium text-white/90">Weekly</strong>. Use <strong className="font-medium text-white/90">Analyze links</strong> for specific videos.</p>
+              <p>Use <strong className="font-medium text-white/90">Channels &amp; schedule</strong> to choose channels and turn weekly scans on or off for each track. <strong className="font-medium text-white/90">Scan now</strong> checks those channels immediately. <strong className="font-medium text-white/90">Review videos</strong> creates a one-off report from specific video links.</p>
               <div className="border-t border-white/10 pt-4">
                 <h4 className="mb-1 font-medium text-white/90">Connections</h4>
                 <p>Set up YouTube Data API or connect Monid in Settings → Connections to discover channel videos. For reliable transcripts, connect Monid; Zero adds another backup.</p>
                 <p className="mt-2 text-xs text-white/50">Native YouTube first, Monid second, Zero last. Zero handles transcripts, not channel discovery. Paid fallbacks use your saved spending limits.</p>
               </div>
-              <p>Each scan checks for new material and builds a report. Read the briefing, open the full report, save useful nuggets, or listen when a voice connection is set up.</p>
+              <p>Each scan checks for new material and builds a report. Read the briefing, open the full report, save useful excerpts to Saved insights, or listen when a voice connection is set up.</p>
             </div>
           </PopoverContent>
         </Popover>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <label className={control}><input type="checkbox" aria-label={`${signalTrackName(track)} weekly scan`} checked={weekly} disabled={busy || (!currentLegacy && !config) || (track === 'your-world' && !config?.sources.length && !weekly)} onChange={() => { void toggleWeekly() }} />Weekly</label>
-        <button className={control} title="Edit channels" aria-label="Edit channels" disabled={busy || (!currentLegacy && !config)} onClick={() => currentLegacy ? legacy.onConfigure() : config && setSetup({ config, adoption: false })}><SlidersHorizontal size={15} /></button>
-        <button className={control} disabled={busy || !tracks.state} onClick={() => setLinksOpen(true)}><Link2 size={15} />Analyze links</button>
-        <button className={`${control} bg-white/90 !text-black`} aria-label="Run scan" title={currentLegacy ? legacy.runDisabledReason ?? 'Run scan' : 'Run scan'} disabled={busy || active || (currentLegacy ? !!legacy.runDisabledReason : !config || (track === 'your-world' && !config.sources.length))} onClick={() => { void runScan() }}><Play size={15} /><span className="hidden sm:inline">Run scan</span></button>
+        <button className={control} disabled={busy || !tracks.state} onClick={openSettings}><SlidersHorizontal size={15} />Channels &amp; schedule</button>
+        <button className={control} disabled={busy || !tracks.state} onClick={() => setLinksOpen(true)}><Link2 size={15} />Review videos</button>
+        <button className={`${control} !border-transparent !bg-white/90 !text-black`} aria-label="Scan now" title={currentLegacy ? legacy.runDisabledReason ?? 'Scan now' : 'Scan saved sources now'} disabled={busy || active || (currentLegacy ? !!legacy.runDisabledReason : !config || (track === 'your-world' && !config.sources.length))} onClick={() => { void runScan() }}><Play size={15} /><span>Scan now</span></button>
       </div>
     </div>
-    <div className="flex flex-wrap items-center gap-2 text-xs text-white/50"><span>Weekly {snoozed ? 'snoozed' : weekly ? 'active' : 'paused'}</span>{snoozed ? <span>Until {formatSignalDate(schedule!.snoozedUntil!)}</span> : null}{nextRun ? <span>Next {nextRun.toLocaleString()}</span> : null}
-      {currentLegacy && tracks.state ? <button className="text-white/80 underline underline-offset-4" disabled={busy} onClick={() => { void adopt() }}>Review scan update</button> : null}
-      {adopting ? <button className="text-white/80 underline underline-offset-4" onClick={() => { adoptionEpoch.current++; setAdopting(false) }}>Cancel update review</button> : null}</div>
-    {!currentLegacy && readiness.needsRepair ? <div role="status" className="flex flex-wrap items-center gap-2 text-xs text-amber-200"><span>Weekly schedule and Signals settings do not match.</span><button className={control} disabled={busy || !config || (track === 'your-world' && !config.sources.length)} onClick={() => { void toggleWeekly() }}>Repair weekly scan</button></div> : null}
+    <div className="flex flex-wrap items-center gap-2 text-xs text-white/45">
+      <span>{channelCount} {channelCount === 1 ? 'channel' : 'channels'}</span><span aria-hidden="true">&middot;</span>
+      <span>Weekly {snoozed ? 'snoozed' : weekly ? 'on' : 'off'}</span>{snoozed ? <span>Until {formatSignalDate(schedule!.snoozedUntil!)}</span> : null}{nextRun ? <span>Next {nextRun.toLocaleString()}</span> : null}
+    </div>
+    {!currentLegacy && readiness.needsRepair ? <div role="status" className="flex flex-wrap items-center gap-2 text-xs text-amber-200"><span>Weekly schedule needs attention.</span><button className={control} disabled={busy || !tracks.state} onClick={openSettings}>Review schedule</button></div> : null}
     {tracks.error || actionError?.track === track || status ? <div aria-live="polite" className="border-l-2 border-white/20 px-3 py-1 text-sm text-white/70">
       {tracks.error ? <p role="alert">{tracks.error}</p> : null}{actionError?.track === track ? <p role="alert" className="text-red-300">{actionError.message}</p> : null}{status ? <p>{status}</p> : null}{detail ? <p className="text-xs text-white/50">{detail}</p> : null}</div> : null}
-    <div className="border-t border-white/10 bg-[#111214]">
+    <div className="border-t border-white/10">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 px-4 py-4">
-        <div className="min-w-0 flex-1"><p className="text-xs text-white/45">{selected?.mode === 'links' ? 'Video review' : selected?.mode === 'scan' ? `${signalTrackName(track)} scan` : 'Saved intelligence'}</p>
-          <h2 className="mt-1 break-words text-lg font-medium text-white">{selected?.title || signalTrackName(track)}</h2>{selected?.date ? <p className="mt-1 text-xs text-white/45">Report {formatSignalDate(selected.date)}</p> : null}</div>
+        <div className="min-w-0 flex-1"><p className="text-xs text-white/45">{selectedKey === signalNuggetsKey ? 'Excerpts you saved from reports' : selected?.mode === 'links' ? 'Video review' : selected?.mode === 'scan' ? `${signalTrackName(track)} scan` : ''}</p>
+          <h2 className="mt-1 break-words text-lg font-medium text-white">{selected?.title || 'Reports'}</h2>{selected?.date ? <p className="mt-1 text-xs text-white/45">Report {formatSignalDate(selected.date)}</p> : null}</div>
         <div className="flex w-full max-w-full flex-wrap items-center gap-2 sm:w-auto">
-          <select aria-label={`${signalTrackName(track)} report library`} className={`${control} min-w-0 max-w-[240px] !shrink flex-1 truncate`} value={selectedKey ?? ''} onChange={event => setSelections(value => ({ ...value, [track]: event.target.value }))}>
-            {!selectedKey ? <option value="">No reports yet</option> : null}{library.map(item => <option key={item.key} value={item.key}>{labels.get(item.key)}</option>)}</select>
-          <button className={`${control} !w-9 !px-0`} title="Saved nuggets" aria-label="Saved nuggets" onClick={() => setSelections(value => ({ ...value, [track]: signalNuggetsKey }))}><Diamond size={15} /></button>
+          {reports.length > 1 ? <select aria-label={`${signalTrackName(track)} report library`} className={`${control} min-w-0 max-w-[280px] !shrink flex-1 truncate`} value={selectedKey === signalNuggetsKey ? '' : selectedKey ?? ''} onChange={event => setSelections(value => ({ ...value, [track]: event.target.value }))}>
+            {selectedKey === signalNuggetsKey ? <option value="" disabled>Choose a report</option> : null}{reports.map(item => <option key={item.key} value={item.key}>{labels.get(item.key)}</option>)}</select> : null}
+          {selectedKey === signalNuggetsKey ? <button className={control} onClick={() => setSelections(value => ({ ...value, [track]: null }))}>Back to reports</button>
+            : <button className={control} onClick={() => setSelections(value => ({ ...value, [track]: signalNuggetsKey }))}><Bookmark size={15} />Saved insights</button>}
           {selected?.output ? <button className={`${control} !w-9 !px-0`} title="Open source output" aria-label="Open source output" onClick={() => navigate(routes.view.output(selected.output!.id))}><ExternalLink size={15} /></button> : null}
         </div>
       </div>
       {contentError ? <div role="alert" className="space-y-2 break-words border-b border-white/10 px-4 py-3 text-sm text-red-300"><p>Could not load the full report. {contentError}</p><button className={control} disabled={loading} onClick={retry}><RefreshCw size={15} />Retry report</button></div> : null}
       {!loading && !contentError && selected?.output ? <SignalBriefingPlayer key={`${workspaceId}:${track}:${selectedKey}:${fullscreen}`} workspaceId={workspaceId} output={selected.output} content={content} showTranscriptControl={false} /> : null}
-      {selected ? <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3">
+      {selected && (fullReportReady || selected.output) ? <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3">
         <p className="text-xs text-white/50">{selected.output ? contentError ? 'Preview only - full report unavailable' : briefing ? 'Your briefing' : 'Report preview' : 'Saved intelligence'}</p>
-        <div className="flex items-center gap-2">{saveSelectionButton}<button className={control} disabled={!fullReportReady} onClick={() => { setSelection(''); setFullscreen(true) }}><Maximize2 size={15} />{selected.output ? 'Read full report' : 'Open reader'}</button></div>
+        <div className="flex items-center gap-2">{selection || nuggetBusy || nuggetSaved ? saveSelectionButton : null}<button className={control} disabled={!fullReportReady} onClick={() => { setSelection(''); setFullscreen(true) }}><Maximize2 size={15} />{selected.output ? 'Read full report' : 'Open reader'}</button></div>
       </div> : null}
       {nuggetError ? <p role="alert" className="break-words px-4 py-2 text-sm text-red-300">Could not save selection. {nuggetError}</p> : null}
       {!loading && selected?.output && props.onDevelopIdea ? <SignalIdeasActions key={`ideas:${workspaceId}:${selected.output.id}`} workspaceId={workspaceId} outputId={selected.output.id} revision={content} onDevelop={props.onDevelopIdea} /> : null}
       <div ref={reader} className={`px-4 py-4 selection:bg-orange-400/30 ${selected?.output ? '' : 'max-h-[420px] overflow-y-auto'}`}>
-        {loading ? <div role="status" className="flex h-24 items-center justify-center gap-2 text-xs text-white/50"><RefreshCw size={18} className="animate-spin" />Loading report</div> : boardContent ? selected?.output ? <p className="mx-auto max-w-[900px] break-words text-sm leading-6 text-white/75">{boardContent}</p> : <Info_Markdown safeMode className="mx-auto max-w-[900px] break-words text-sm leading-7 text-white/75">{boardContent}</Info_Markdown> : <div className="flex min-h-32 flex-col items-center justify-center gap-3 text-white/55"><Radio size={20} /><p>{selectedKey === signalNuggetsKey ? 'No saved nuggets yet' : contentError ? 'No preview available' : `No ${signalTrackName(track)} reports yet`}</p>{track === 'your-world' && !selected ? <div className="flex flex-wrap gap-2"><button className={control} disabled={!config} onClick={() => config && setSetup({ config, adoption: false })}><Plus size={15} />Add channels</button><button className={control} disabled={!tracks.state} onClick={() => setLinksOpen(true)}><Link2 size={15} />Analyze links</button></div> : null}</div>}
+        {loading ? <div role="status" className="flex h-24 items-center justify-center gap-2 text-xs text-white/50"><RefreshCw size={18} className="animate-spin" />Loading report</div> : boardContent ? selected?.output ? <p className="mx-auto max-w-[900px] break-words text-sm leading-6 text-white/75">{boardContent}</p> : <Info_Markdown safeMode className="mx-auto max-w-[900px] break-words text-sm leading-7 text-white/75">{boardContent}</Info_Markdown> : <div className="flex min-h-48 flex-col items-center justify-center gap-3 py-6 text-white/55"><Radio size={22} className="text-white/30" /><p className="text-sm">{selectedKey === signalNuggetsKey ? 'No saved insights yet' : contentError ? 'No preview available' : `No ${signalTrackName(track)} reports yet`}</p>
+          {selectedKey === signalNuggetsKey ? <p className="text-xs text-white/40">Select a passage in a report to save it here.</p> : !contentError ? currentLegacy || (track === 'your-world' && !channelCount) ? <button className={control} disabled={busy || !tracks.state} onClick={openSettings}><Plus size={15} />Choose channels</button> : <button className={control} disabled={busy || active || !config} onClick={() => { void runScan() }}><Play size={15} />Create first report</button> : null}</div>}
       </div>
     </div>
-    {nuggetSaved ? <p role="status" className="px-4 text-xs text-white/60">Saved to nuggets</p> : null}
+    {nuggetSaved ? <p role="status" className="px-4 text-xs text-white/60">Saved to insights</p> : null}
     <DocumentFormattedMarkdownOverlay safeMode content={content} isOpen={fullscreen && fullReportReady} onClose={() => setFullscreen(false)} accessibleTitle={selected?.title} onSelectionChange={setSelection} headerActions={saveSelectionButton} error={nuggetError ?? undefined} errorLabel="Could not save selection" typeBadge={{ label: signalTrackName(track), icon: Radio }} />
-    {setup ? <SignalTrackSetupDialog key={`setup:${workspaceId}:${setup.config.track}`} open config={setup.config} adoption={setup.adoption} weeklyEnabled={setup.adoption ? legacy.weeklyEnabled : weekly} onOpenChange={open => { if (!open) setSetup(null) }} resolveChannel={url => window.electronAPI.resolveSignalChannel(workspaceId, url)} onSave={next => tracks.save(next, setup.adoption)} /> : null}
+    {setup ? <SignalTrackSetupDialog key={`setup:${workspaceId}`} open configs={setup.configs} initialTrack={track} adoptIndustry={setup.adoptIndustry} nextRuns={nextRuns} industryError={setup.industryError} onPauseLegacy={tracks.pauseLegacy} onOpenChange={open => { if (!open) setSetup(null) }} resolveChannel={url => window.electronAPI.resolveSignalChannel(workspaceId, url)} onSave={tracks.save} /> : null}
     <SignalLinksDialog key={`links:${workspaceId}:${track}`} open={linksOpen} trackName={signalTrackName(track)} onOpenChange={setLinksOpen} onAnalyze={async (links, key) => { const owner = workspaceId; const target = track; const queued = await tracks.start(target, 'links', key, links); if (scope.current === owner) setPendingReviews(value => ({ ...value, [target]: queued.runId })) }} />
   </section>
 }

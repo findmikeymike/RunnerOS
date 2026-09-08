@@ -37,7 +37,7 @@ describe('Signals track UI contracts', () => {
     expect(labels.get('same')).toEndWith('(2)')
     expect(labels.get('undated')).toStartWith('Undated')
     expect(labels.get('review')).toContain('Video review:')
-    expect(labels.get(signalNuggetsKey)).toBe('Saved nuggets')
+    expect(labels.get(signalNuggetsKey)).toBe('Saved insights')
   })
   test('shared nuggets are reachable in both tracks without becoming the default report', () => {
     const nugget = { slug: 'artist-signal-nuggets', metadata: { name: 'My renamed excerpts' } }

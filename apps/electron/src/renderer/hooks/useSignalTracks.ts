@@ -51,7 +51,7 @@ export function useSignalTracks(workspaceId: string, ensureWorkflow: (track: Sig
       const weekly = next.enabled && next.cadence === 'weekly'
       assertSignalScheduleCanRewrite(existing, weekly || adopt)
       const digest = weekly || adopt ? await ensureWorkflow(next.track, 'scan') : ''
-      await saveSignalSettingsTransaction({
+      const saved = await saveSignalSettingsTransaction({
         previous: state.tracks[next.track], next,
         save: (config, revision) => window.electronAPI.saveSignalConfig(owner, next.track, config, revision),
         schedule: async () => {
@@ -65,6 +65,7 @@ export function useSignalTracks(workspaceId: string, ensureWorkflow: (track: Sig
           }
         },
       })
+      return saved.tracks[next.track]
     } finally {
       mutation.current = false
       if (scope.current === owner) { setBusy(false); await refresh() }
@@ -83,5 +84,25 @@ export function useSignalTracks(workspaceId: string, ensureWorkflow: (track: Sig
       if (scope.current === owner) { setBusy(false); await refresh() }
     }
   }, [workspaceId, ensureWorkflow, refresh])
-  return { state, automations, error, busy, refresh, save, start }
+  // Pausing must work without a metadata provider or adopting a new workflow.
+  const pauseLegacy = useCallback(async () => {
+    if (mutation.current) throw new Error('Signals settings are busy. Try again after refresh.')
+    const owner = workspaceId
+    mutation.current = true; setBusy(true); generation.current++
+    try {
+      const raw = await window.electronAPI.getAutomations(owner)
+      const matches = (raw ? parseAutomationsConfig(raw) : []).filter(legacySignalSchedule)
+      if (!matches.length) throw new Error('The schedule changed. Close and reopen settings before pausing.')
+      if (matches.length > 1) throw new Error('Multiple Industry schedules found. Pause them in Workers before changing setup.')
+      const existing = matches[0]
+      if (existing?.enabled) {
+        if (!existing.rawMatcher) throw new Error('Schedule revision is unavailable. Reload before pausing.')
+        await window.electronAPI.replaceAutomation(owner, existing.event, existing.id, existing.rawMatcher, { ...existing.rawMatcher, enabled: false })
+      }
+    } finally {
+      mutation.current = false
+      if (scope.current === owner) { setBusy(false); await refresh() }
+    }
+  }, [workspaceId, refresh])
+  return { state, automations, error, busy, refresh, save, start, pauseLegacy }
 }

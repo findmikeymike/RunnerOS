@@ -36,6 +36,7 @@ host.renderIdeas = (outputId = 'report') => root.render(<SignalIdeasActions key=
 const ensure = async () => 'digest'
 function TrackHarness({ workspaceId }: { workspaceId: string }) {
   const tracks = useSignalTracks(workspaceId, ensure)
+  host.tracks = tracks
   return <button disabled={tracks.busy || !tracks.state} onClick={() => { void tracks.start('industry', 'scan', 'test') }}>{workspaceId}: {tracks.busy ? 'Busy' : 'Ready'}</button>
 }
 host.renderTracks = (workspaceId = 'hq') => root.render(<TrackHarness key={workspaceId} workspaceId={workspaceId} />)
