@@ -353,7 +353,7 @@ export function WorkspaceRail({
         >
           <div
             data-testid="artist-place-switcher"
-            className="artist-os-workspace-switcher flex h-8 shrink-0 items-center rounded-[11px] border border-white/[0.10] p-0.5"
+            className="artist-os-workspace-switcher flex h-7 shrink-0 items-center rounded-[10px] border border-white/[0.10] p-0.5"
           >
             {hqWorkspace ? (
               <button
@@ -361,7 +361,7 @@ export function WorkspaceRail({
                 onClick={(event) => void handleWorkspaceSelect(hqWorkspace, event.metaKey || event.ctrlKey)}
                 aria-current={hqWorkspace.id === activeWorkspaceId ? 'page' : undefined}
                 className={cn(
-                  'flex h-7 items-center gap-1.5 rounded-[8px] px-2.5 text-[11px] font-medium transition-colors',
+                  'flex h-[22px] items-center gap-1.5 rounded-[7px] px-2 text-[11px] font-medium transition-colors',
                   hqWorkspace.id === activeWorkspaceId
                     ? 'bg-white/[0.12] text-white'
                     : 'text-white/52 hover:bg-white/[0.055] hover:text-white/88',
@@ -380,7 +380,7 @@ export function WorkspaceRail({
                   type="button"
                   aria-current={campaignWorkspaces.some((workspace) => workspace.id === activeWorkspaceId) ? 'page' : undefined}
                   className={cn(
-                    'relative flex h-7 items-center gap-1.5 rounded-[8px] px-2.5 text-[11px] font-medium transition-colors',
+                    'relative flex h-[22px] items-center gap-1.5 rounded-[7px] px-2 text-[11px] font-medium transition-colors',
                     campaignWorkspaces.some((workspace) => workspace.id === activeWorkspaceId)
                       ? 'bg-white/[0.12] text-white'
                       : 'text-white/52 hover:bg-white/[0.055] hover:text-white/88',
@@ -436,7 +436,7 @@ export function WorkspaceRail({
               disabled={isCreatingLab}
               aria-current={labWorkspace?.id === activeWorkspaceId ? 'page' : undefined}
               className={cn(
-                'relative flex h-7 items-center gap-1.5 rounded-[8px] px-2.5 text-[11px] font-medium transition-colors disabled:opacity-45',
+                'relative flex h-[22px] items-center gap-1.5 rounded-[7px] px-2 text-[11px] font-medium transition-colors disabled:opacity-45',
                 labWorkspace?.id === activeWorkspaceId
                   ? 'bg-white/[0.12] text-white'
                   : 'text-white/52 hover:bg-white/[0.055] hover:text-white/88',
