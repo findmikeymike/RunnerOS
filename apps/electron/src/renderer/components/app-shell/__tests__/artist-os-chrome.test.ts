@@ -3,6 +3,15 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 describe('Artist OS persistent shell chrome', () => {
+  test('does not turn a failed handoff lookup into an attached Signals banner', () => {
+    const notice = readFileSync(join(import.meta.dir, '..', 'SignalHandoffNotice.tsx'), 'utf8')
+    const gate = notice.indexOf('if (!reference) return null')
+    expect(gate).toBeGreaterThan(-1)
+    expect(gate).toBeLessThan(notice.indexOf('aria-label="Signal draft source"'))
+    expect(notice).not.toContain('if (!reference && !error) return null')
+    expect(notice).toContain('onGuardChange?.(true)')
+  })
+
   test('uses the thin ScriptOS-style sidebar and bottom-corner toggle', () => {
     const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
     const styles = readFileSync(join(import.meta.dir, '..', '..', '..', 'index.css'), 'utf8')

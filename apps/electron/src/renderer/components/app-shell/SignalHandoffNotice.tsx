@@ -42,7 +42,9 @@ export function SignalHandoffNotice({ sessionId, workspaceId, processing, onGuar
     catch (cause) { if (epoch.current === token) setError(cause instanceof Error ? cause.message : String(cause)) }
     finally { if (epoch.current === token) { locked.current = false; setBusy(false) } }
   }
-  if (!reference && !error) return null
+  // A failed lookup is not evidence of an attachment. Keep the draft guarded
+  // until the host answers, but never show Signals UI in an unconfirmed chat.
+  if (!reference) return null
   const token = epoch.current
   return <div className="border-b border-white/10 px-4 py-2 text-xs text-muted-foreground" aria-label="Signal draft source">
     <div className="flex flex-wrap items-center gap-3"><span>Signal idea attached. Its saved source is checked when you send.</span>
