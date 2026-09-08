@@ -905,16 +905,18 @@ body
     expect(initialAgentSlugsForWorkspace('lab', true)).toEqual([])
     expect(CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['anticipation-director'])
     expect(HQ_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['catalog-royalty-agent', 'legal-agent'])
-    expect(HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual([ANYTHING_AGENT_SLUG, 'site-builder'])
+    expect(HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual([ANYTHING_AGENT_SLUG, 'site-builder', 'website-agent'])
     expect(initialAgentSlugsForWorkspace('campaign', false)).toEqual([
       RELEASE_MANAGER_AGENT_SLUG,
       ANYTHING_AGENT_SLUG,
       'site-builder',
+      'website-agent',
       'anticipation-director',
     ])
     expect(initialAgentSlugsForWorkspace('hq', false)).toEqual([
       ANYTHING_AGENT_SLUG,
       'site-builder',
+      'website-agent',
       'catalog-royalty-agent',
       'legal-agent',
     ])

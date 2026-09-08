@@ -2622,7 +2622,7 @@ Open rate falling across three sends means the last few were not worth opening â
     slug: 'website-agent',
     metadata: {
       name: 'Website Agent',
-      description: 'Runs the artist website: keeps it current with releases and shows, pulls signups into the fan list, watches search health, and brings one thing to approve instead of a list of chores.',
+      description: 'Runs the artist website: keeps it current with releases and shows, pulls signups into the fan list, and watches search health.',
       avatar: 'ğŸŒ',
       permissionMode: 'ask',
       thinkingLevel: 'medium',

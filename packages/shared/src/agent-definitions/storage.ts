@@ -945,6 +945,7 @@ export function replaceBuiltInAgentMetadata(
     'lyric-video-agent',
     'open-slide-agent',
     'site-builder',
+    'website-agent',
     'setup-concierge',
   ]);
   if (!builtIns.has(slug)) return { updated: false };

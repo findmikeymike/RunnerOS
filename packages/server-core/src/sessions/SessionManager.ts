@@ -4283,6 +4283,12 @@ export class SessionManager implements ISessionManager {
         if (ensured > 0) {
           sessionLog.info(`[agent-definitions] Ensured ${ensured} required agent(s)`)
         }
+        replaceBuiltInAgentMetadata('website-agent', {
+          description: {
+            from: 'Runs the artist website: keeps it current with releases and shows, pulls signups into the fan list, watches search health, and brings one thing to approve instead of a list of chores.',
+            to: 'Runs the artist website: keeps it current with releases and shows, pulls signups into the fan list, and watches search health.',
+          },
+        })
         const anythingAgentLegacyBudgetRules = `5. The saved weekly Zero allowance authorizes routine read-like paid calls inside its remaining balance. Do not ask before each small call. The guard enforces the cap and records a receipt. If no allowance exists, ask once for the weekly amount and configure it only after the user answers.
 6. Never bypass the guard, automatically retry a paid failure, fund a wallet, install software, accept terms, or exceed the remaining allowance.
 7. A spending allowance does not authorize posting, sending, purchasing, deleting, account changes, or other external mutations. Those require exact current approval.`

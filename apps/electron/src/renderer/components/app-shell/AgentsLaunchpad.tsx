@@ -1673,7 +1673,7 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
     return 'Brand & Story'
   }
 
-  if (slug === 'site-builder') {
+  if (slug === 'site-builder' || slug === 'website-agent') {
     return 'Website'
   }
 
