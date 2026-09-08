@@ -34,3 +34,9 @@ Focused agent/skill tests passed (261 tests). Independent rival review passed 51
 The first complete suite exposed six Signals retry fixture failures inherited from the focus rollout: two runner harnesses lacked the resolver now required for explicit task modes. Production already supplies it. The fixtures now supply that dependency and assert the weekly-intelligence mode; all 63 Signals isolation tests passed afterward. The production guard was unchanged. The complete `bun run test` rerun passed: 9,162 passed, 0 failed, 1 skipped, including every isolated test file.
 
 No app restart, live provider call, or production package replacement is part of this refresh. Source and automated evidence do not certify a currently running session or external account. The existing development launch/profile must remain intact when a restart is authorized.
+
+## Concurrent main catch-up
+
+Merged main `364ca573f` after the initial green run. Repeated full typechecks and Artist OS main build passed. The independent review confirmed helper migration compatibility. It separately flagged the inherited focus-refresh loop using installed task modes as its migration baseline, which can replace custom focus recipes; this was sent to the focus-change owner. Customization preservation above describes `migrateHelperGuide`, not every startup migration. Combined-suite results are recorded below.
+
+Final combined `bun run test`: **9,163 passed, 0 failed, 1 skipped**. The focus owner confirmed the separate recipe limitation is existing development behavior; no further main edits were made during this verification.
