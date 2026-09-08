@@ -4,6 +4,7 @@ import {
   DEFAULT_MAX_DEPTH,
   listAgentMessageReceipts,
   normalizeMessageAgentInput,
+  isPermissionEscalation,
   writeAgentMessageReceipt,
   type AgentMessageReceipt,
   type MessageAgentInput,
@@ -242,6 +243,20 @@ export class AgentMessageService {
 
     try {
       const agentOptions = await this.deps.resolveAgentSessionOptions(runtime.workspaceId, input.agentSlug);
+      // A delegate must stay within both the caller and the specialist's defaults.
+      const targetPermission = agentOptions.permissionMode ?? runtime.parentPermissionMode;
+      if (rawInput.permissionMode && isPermissionEscalation(rawInput.permissionMode, targetPermission)) {
+        throw new Error(`message_agent cannot raise permissionMode above target agent default (${targetPermission}).`);
+      }
+      const effectivePermission = isPermissionEscalation(input.permissionMode, targetPermission)
+        ? targetPermission : input.permissionMode;
+      for (const [kind, requested, allowed] of [
+        ['source', input.sourceSlugs, agentOptions.enabledSourceSlugs],
+        ['skill', input.skillSlugs, agentOptions.agentSkillSlugs],
+      ] as const) {
+        const unavailable = requested.filter(slug => !(allowed ?? []).includes(slug));
+        if (unavailable.length) throw new Error(`Requested ${kind} slug(s) are not available to the target agent: ${unavailable.join(', ')}`);
+      }
       if (input.sourceSlugs.length > 0 && this.deps.resolveUsableSourceSlugs) {
         const readiness = this.deps.resolveUsableSourceSlugs(runtime.workspaceId, input.sourceSlugs);
         if (readiness.unavailable.length > 0) {
@@ -263,7 +278,7 @@ export class AgentMessageService {
         name: `Delegated: ${input.agentSlug}`,
         hidden: true,
         labels: [`agent-message-depth:${depth + 1}`],
-        permissionMode: input.permissionMode,
+        permissionMode: effectivePermission,
         enabledSourceSlugs,
         agentSkillSlugs,
         spawnedFromAgent: {
@@ -296,7 +311,7 @@ export class AgentMessageService {
             : baseLaunchReceipt?.workflow,
           config: {
             ...(baseLaunchReceipt?.config ?? {}),
-            permissionMode: input.permissionMode,
+            permissionMode: effectivePermission,
             model: agentOptions.model,
             llmConnection: agentOptions.llmConnection,
             thinkingLevel: agentOptions.thinkingLevel,
@@ -313,12 +328,15 @@ export class AgentMessageService {
       });
 
       receipt.childSessionId = child.id;
+      receipt.policy.permissionMode = effectivePermission;
+      receipt.constraints.sourceSlugs = enabledSourceSlugs ?? [];
+      receipt.constraints.skillSlugs = agentSkillSlugs ?? [];
       receipt.updatedAt = now();
       persist();
 
       const prompt = buildDelegationPrompt(input, runtime);
       const startSend = () => this.deps.sendMessage(child.id, prompt, {
-        skillSlugs: input.skillSlugs,
+        skillSlugs: agentSkillSlugs,
         displayIntent: 'agent-delegation-task',
       });
       const finish = (sendPromise: Promise<void>) => this.finishDelegatedTurn({

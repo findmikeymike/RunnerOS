@@ -394,3 +394,69 @@ describe('delegation guards', () => {
     expect(result.error?.code).not.toBe('agent-not-active');
   });
 });
+
+describe('delegate capability boundaries', () => {
+  test('inherits the stricter target mode and records actual capabilities', async () => {
+    const created: unknown[] = [];
+    const sent: unknown[] = [];
+    const base = deps();
+    const service = new AgentMessageService(deps({
+      resolveAgentSessionOptions: async (...args) => ({
+        ...await base.resolveAgentSessionOptions(...args), permissionMode: 'safe',
+      }),
+      createSession: async (_workspace, options) => { created.push(options); return { id: 'child-1' }; },
+      sendMessage: async (_session, _prompt, options) => { sent.push(options); },
+    }));
+    const result = await service.messageAgent({ workspaceId: 'ws', parentPermissionMode: 'allow-all' }, {
+      agentSlug: 'reviewer', task: 'Review.',
+    });
+    expect(result.ok).toBe(true);
+    expect(created[0]).toMatchObject({ permissionMode: 'safe', launchReceipt: { config: { permissionMode: 'safe' } } });
+    expect(sent[0]).toMatchObject({ skillSlugs: ['research'] });
+    expect(readAgentMessageReceipt(root, result.receiptId!)).toMatchObject({
+      policy: { permissionMode: 'safe' }, constraints: { sourceSlugs: ['exa'], skillSlugs: ['research'] },
+    });
+  });
+
+  test('cannot explicitly raise the target permission even when the caller allows it', async () => {
+    let creates = 0;
+    const service = new AgentMessageService(deps({
+      resolveAgentSessionOptions: async () => ({ permissionMode: 'safe' }),
+      createSession: async () => { creates++; return { id: 'child-1' }; },
+    }));
+    const result = await service.messageAgent({ workspaceId: 'ws', parentPermissionMode: 'allow-all' }, {
+      agentSlug: 'reviewer', task: 'Review.', permissionMode: 'ask',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error?.message).toContain('target agent default');
+    expect(creates).toBe(0);
+  });
+
+  for (const field of ['sourceSlugs', 'skillSlugs'] as const) {
+    test(`cannot add undeclared ${field} even when globally available`, async () => {
+      let creates = 0;
+      const service = new AgentMessageService(deps({
+        createSession: async () => { creates++; return { id: 'child-1' }; },
+      }));
+      const result = await service.messageAgent({ workspaceId: 'ws', parentPermissionMode: 'ask' }, {
+        agentSlug: 'reviewer', task: 'Review.', [field]: ['not-declared'],
+      });
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain('not available to the target agent');
+      expect(creates).toBe(0);
+    });
+  }
+
+  test('keeps a stricter parent mode when the target permits more', async () => {
+    let mode: string | undefined;
+    const service = new AgentMessageService(deps({
+      resolveAgentSessionOptions: async () => ({ permissionMode: 'allow-all' }),
+      createSession: async (_workspace, options) => { mode = options.permissionMode; return { id: 'child-1' }; },
+    }));
+    const result = await service.messageAgent({ workspaceId: 'ws', parentPermissionMode: 'safe' }, {
+      agentSlug: 'reviewer', task: 'Review.',
+    });
+    expect(result.ok).toBe(true);
+    expect(mode).toBe('safe');
+  });
+});

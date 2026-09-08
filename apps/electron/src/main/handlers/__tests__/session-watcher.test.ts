@@ -95,6 +95,16 @@ function makeCtx(clientId: string, workspaceId = 'ws-1'): RequestContext {
   return { clientId, workspaceId, webContentsId: null }
 }
 
+async function waitForPush(pushCalls: PushCall[], clientId: string, sessionId: string) {
+  // Native watcher delivery plus the handler's debounce can exceed 300ms on
+  // a busy CI host. Wait for the actual event, with a bounded failure deadline.
+  const deadline = Date.now() + 2000
+  while (!pushCalls.some(p => p.target?.clientId === clientId && p.args[0] === sessionId)
+    && Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 20))
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -126,8 +136,7 @@ describe('session file watcher isolation', () => {
     // Trigger a change in s1
     writeFileSync(join(dir1, 'output.txt'), 'hello')
 
-    // Wait for debounce + fs.watch delay
-    await new Promise(r => setTimeout(r, 300))
+    await waitForPush(pushCalls, 'client-a', 's1')
 
     // Only client-a should have received the notification
     const clientAPushes = pushCalls.filter(p => p.target?.clientId === 'client-a')
@@ -147,7 +156,7 @@ describe('session file watcher isolation', () => {
 
     // Trigger a change in s2
     writeFileSync(join(dir2, 'data.json'), '{}')
-    await new Promise(r => setTimeout(r, 300))
+    await waitForPush(pushCalls, 'client-b', 's2')
 
     // Client B should still receive notifications
     const clientBAfter = pushCalls.filter(p => p.target?.clientId === 'client-b')
@@ -188,7 +197,7 @@ describe('session file watcher isolation', () => {
 
     // Write to s2 — should trigger notification
     writeFileSync(join(dir2, 'new.txt'), 'fresh')
-    await new Promise(r => setTimeout(r, 300))
+    await waitForPush(pushCalls, 'client-a', 's2')
 
     const s2Pushes = pushCalls.filter(p =>
       p.args[0] === 's2' && p.channel === RPC_CHANNELS.sessions.FILES_CHANGED
@@ -218,7 +227,7 @@ describe('session file watcher isolation', () => {
 
     // Write a normal file — should trigger notification
     writeFileSync(join(dir, 'result.txt'), 'output')
-    await new Promise(r => setTimeout(r, 300))
+    await waitForPush(pushCalls, 'client-a', 's1')
 
     expect(pushCalls.length).toBeGreaterThanOrEqual(1)
 
