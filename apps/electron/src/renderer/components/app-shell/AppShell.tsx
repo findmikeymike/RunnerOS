@@ -91,11 +91,11 @@ import { getResizeGradientStyle } from "@/hooks/useResizeGradient"
 import { useAction } from "@/actions"
 import { useFocusZone } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
-import { getSessionAgentIdentity, getSessionTitle } from "@/utils/session"
+import { getSessionAgentIdentity, getSessionListDisplay, getSessionTitle } from "@/utils/session"
 import { GENERAL_PROJECT_KEY, getSessionProjectInfo } from "@/utils/session-project"
 import { useSetAtom } from "jotai"
 import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter } from "../../../shared/types"
-import { sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
+import { compareSessionsByRecency, sessionMetaMapAtom, sendToWorkspaceAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
 import { panelStackAtom, panelCountAtom, focusedPanelIdAtom, focusedSessionIdAtom, focusNextPanelAtom, focusPrevPanelAtom, parseSessionIdFromRoute } from "@/atoms/panel-stack"
@@ -2559,7 +2559,7 @@ function AppShellContent({
     const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
     const visibleSessions = searchActive ? workspaceSessionMetas : filteredSessionMetas
 
-    for (const item of visibleSessions) {
+    for (const item of [...visibleSessions].sort(compareSessionsByRecency)) {
       const project = getSessionProjectInfo(item)
       const group = groups.get(project.key) ?? { key: project.key, label: project.label, value: project.value, items: [] }
       group.items.push(item)
@@ -3103,22 +3103,40 @@ function AppShellContent({
                 )}
               </div>
               {projectExpanded && (
-                <div className="space-y-0.5 pl-3">
+                <div
+                  className={cn(
+                    "pl-3",
+                    project.items.length > 10
+                      && "max-h-[min(440px,calc(100vh-260px))] overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]",
+                  )}
+                  role="group"
+                  aria-label={`${project.label}, newest first`}
+                >
                   {project.items.map((item) => {
                     const active = item.id === session.selected
+                    const { title, subtitle } = getSessionListDisplay(item, true)
                     return (
                       <button
                         key={item.id}
                         type="button"
                         onClick={() => handleSidebarSessionClick(item.id)}
+                        title={subtitle ? `${title}: ${subtitle}` : title}
                         className={cn(
-                          "block w-full truncate rounded-[7px] px-2.5 py-1.5 text-left text-[12px] leading-5 transition-colors",
+                          "flex h-11 w-full min-w-0 flex-col justify-center rounded-[7px] px-2.5 text-left transition-colors",
                           active
                             ? "bg-white/[0.06] text-white"
                             : "text-white/42 hover:bg-white/[0.035] hover:text-white/70",
                         )}
                       >
-                        {getSessionAgentIdentity(item)?.name ?? getSessionTitle(item)}
+                        <span className="block w-full truncate text-[12px] font-medium leading-4">{title}</span>
+                        {subtitle && (
+                          <span className={cn(
+                            "block w-full truncate text-[10.5px] leading-3.5",
+                            active ? "text-white/55" : "text-white/30",
+                          )}>
+                            {subtitle}
+                          </span>
+                        )}
                       </button>
                     )
                   })}

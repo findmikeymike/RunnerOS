@@ -73,6 +73,16 @@ describe('Artist OS persistent shell chrome', () => {
     expect(shell).toContain("{isLabWorkspace ? 'New Command' : 'New Chat'}")
   })
 
+  test('keeps Command conversation history bounded, newest-first, and topic-labelled', () => {
+    const shell = readFileSync(join(import.meta.dir, '..', 'AppShell.tsx'), 'utf8')
+
+    expect(shell).toContain('[...visibleSessions].sort(compareSessionsByRecency)')
+    expect(shell).toContain('project.items.length > 10')
+    expect(shell).toContain('max-h-[min(440px,calc(100vh-260px))] overflow-y-auto')
+    expect(shell).toContain('getSessionListDisplay(item, true)')
+    expect(shell).toContain('{subtitle}')
+  })
+
   test('keeps the black canvas scoped to Artist OS main content', () => {
     const panelSlot = readFileSync(join(import.meta.dir, '..', 'PanelSlot.tsx'), 'utf8')
     const styles = readFileSync(join(import.meta.dir, '..', '..', '..', 'index.css'), 'utf8')
