@@ -39,4 +39,4 @@ New archive copies start private from agent use (`usableByAgents: false`, rights
 
 The first full run hit disk exhaustion (`ENOSPC`) and one unchanged video-sync test using random noise missed its drift threshold. The video test passed separately on both main and this branch. After removing only this task's build outputs and two clean, already-landed worktrees, the complete rerun above passed. No unrelated tests or thresholds were changed.
 
-Implementation remains uncommitted on `codex/campaign-cleanup`, based on main `72d7791f2`. The separate Website Agent fix is already landed and pushed on main through `b913e1a36`; its startup registration line/test are not part of this uncommitted patch.
+Committed as `81a2673df`, caught up with main, and landed/pushed through `27613e1ca`. The post-merge full suite passed **8,986 tests, 0 failures, 1 skipped**, across 21 processes. The earlier 8,985-test evidence above predates the Website Agent startup regression test. See [consolidation audit](artist-os-consolidation-2026-09-08.md) for final integrated build and verification status.

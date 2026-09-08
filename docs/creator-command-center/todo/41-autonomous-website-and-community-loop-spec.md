@@ -1,7 +1,7 @@
 ---
-status: proposed
+status: partially-implemented
 owner: agent
-last_verified: 2026-09-04
+last_verified: 2026-09-08
 source_of_truth: true
 related: ../39-artist-website-agent-spec.md, ./38-community-email-engine-spec.md, ../33-automations-input-aware-setup-spec.md, ../24-session-task-list-spec.md, ../13-scheduled-work-composer-execution-spec.md, ../26-agent-bound-messaging-spec.md, ../09-hq-state-of-play-proactive-routing.md
 ---
@@ -53,46 +53,21 @@ path and makes everything else visible but not blocking.
 
 ## Current State
 
-Verified in tree on 2026-09-04, branch `codex/artist-website-engine`.
+Source rechecked on canonical main, 2026-09-08. Website publishing/rollback,
+domain checks, capture sync, cadenced routines, the Website Agent and Website page,
+external-site inspection/admin editing, and Community email execution are implemented.
+The prior “Slice 1 only / sending is a stub” snapshot is obsolete.
 
-**Built (39 Slice 1)**
+Current paths: `packages/server-core/src/website/`,
+`packages/shared/src/website/`, `packages/shared/src/community/`, and the Website
+page in Electron. Website startup registration now repairs existing agent libraries.
+Cloudflare is the implemented deploy adapter; other adapters and the complete Monday
+Brief experience described below must not be inferred from this status.
 
-- `website/` HQ object, content contract, theme tokens, structured content
-  operations (`packages/shared/src/website/`).
-- `tools/site-builder` CLI: init, build, audit, serve, pack, doctor. Template
-  engine, SEO scaffolding, structured data, credential scan.
-- `WebsiteService` with loopback preview; six session tools:
-  `website_get_manifest`, `website_create`, `website_set_content`,
-  `website_build`, `website_preview`, `website_seo_audit`.
-- `site-builder` starter agent with routing hints; skills
-  `artist-website-builder` and `artist-website-playbook`.
-- Manifest already carries `publishPolicy`, `targetApproval`, `capture`, and
-  `history` fields, so the contracts below have somewhere to land.
-
-**Built (elsewhere, reused here)**
-
-- Spec 33 automations with declared inputs and the one list; Needs You on HQ
-  home with `WAITING_WORK_STATUSES`.
-- Scheduled work attention reasons including `needs-approval`,
-  `changes-requested`, `approval-expired`, `approval-invalidated`,
-  `execution-failed`, `asset-missing`, `provider-unavailable`
-  (`packages/shared/src/scheduled-work/index.ts`).
-- Spec 24 delegation return path and `message_agent` for bounded handoffs.
-- Spec 26 agent-bound messaging, so the Monday Brief can also reach the artist
-  on Telegram or WhatsApp.
-- Community records with consent evidence, suppression, frozen audiences, and
-  email jobs (`packages/shared/src/community/`). Sending is a stub.
-- Starter agents `world-builder`, `branding-agent`, `comms-agent`,
-  `outreach-agent`.
-
-**Not built**
-
-- Any deploy adapter, production publish, rollback, or domain connection.
-- Any capture endpoint on the site; `capture.backend` is `none`.
-- The Website Agent, the weekly routine, and the Website page.
-- The Community Agent and every `community_*` tool.
-- Any external-site mode: inspect, WordPress, static repo, closed builder.
-- The Change Receipt, approval tiers, and Monday Brief defined below.
+Live provider/domain/email acceptance and the complete autonomous cross-agent loop
+remain separate verification work. See the [consolidation audit](../../audits/artist-os-consolidation-2026-09-08.md).
+The design and acceptance slices below are retained as requirements, not proof that
+every proposed feature or provider shipped.
 
 ## Core Laws
 

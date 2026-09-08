@@ -1,7 +1,7 @@
 ---
 status: partially-implemented
 owner: agent
-last_verified: 2026-09-03
+last_verified: 2026-09-08
 source_of_truth: true
 related: ./todo/38-community-email-engine-spec.md, ./33-automations-input-aware-setup-spec.md, ./24-session-task-list-spec.md, ./23-release-kit-architecture-spec.md, ./11-outputs-finals-asset-promotion-spec.md, ./09-hq-state-of-play-proactive-routing.md
 ---
@@ -10,43 +10,24 @@ related: ./todo/38-community-email-engine-spec.md, ./33-automations-input-aware-
 
 ## Implementation Status
 
-**Slice 1 is built** (`codex/artist-website-engine`). Everything below Slice 1
-in the slice list remains unbuilt.
+Current main implements the managed website, builder CLI, Website page, Website Agent,
+Cloudflare publishing/rollback, domain checks, consent-preserving capture sync,
+cadenced routines, external-site inspection, and editing through an existing site's
+admin. See `packages/server-core/src/website/`, `packages/shared/src/website/`,
+and `apps/electron/src/renderer/components/app-shell/WebsitePage.tsx`.
 
-Shipped:
+The Website Agent is distinct from Site Builder. Startup registration now installs
+it into existing libraries as well as fresh profiles (`48608a694`, on main through
+`b913e1a36`); this repairs its absence from Workers/Library.
 
-- `website/` HQ object with manifest, content contract, theme tokens, and
-  structured content operations (`packages/shared/src/website/`).
-- Bundled builder CLI at `tools/site-builder`: `init`, `build`, `audit`,
-  `serve`, `pack`, `doctor`. Tiny mustache-style template engine, SEO
-  scaffolding (sitemap, robots, Open Graph, schema.org `MusicGroup` /
-  `MusicAlbum` / `MusicRecording` / `Event`), and a credential scan that
-  refuses to emit a build containing a key-shaped value.
-- One starter template (`minimal`) rendering home, press kit, custom pages,
-  and 404.
-- `WebsiteService` (`packages/server-core/src/website/`) running the builder
-  and serving previews from an in-process static server bound to loopback.
-- Six session tools: `website_get_manifest`, `website_create`,
-  `website_set_content`, `website_build`, `website_preview`,
-  `website_seo_audit`. All resolve the Artist HQ workspace, so a campaign
-  session edits the same site.
-- `site-builder` starter agent with routing hints, plus the
-  `artist-website-builder` and `artist-website-playbook` skills.
-- 35 tests across the builder, storage, and service.
+This is implemented source behavior, not proof of a live domain, provider account,
+or autonomous website-to-email journey. Additional adapters/modes described below
+are design scope unless their implementation is present. The only current deploy
+adapter is Cloudflare. See the [consolidation audit](../audits/artist-os-consolidation-2026-09-08.md)
+for final integration evidence and remaining live checks.
 
-Deviation from the spec below: **`website_create` was added as a session
-tool.** The spec routed site creation through the UI setup flow in Slice 2,
-which would have left Slice 1 with no way to create a site at all. It creates
-local files only and connects no account.
-
-Slice 1 safety behavior: signup is disabled and omitted while capture backend
-is `none`; capture and Community sync remain Slice 4 work. Referenced Vault or
-Release Kit assets are staged only when approved, converted to metadata-free
-WebP when they are images, recorded by hash, and verified again by the builder.
-
-Not built: every deploy adapter, publishing, domains, capture doors, external
-site modes, the Website Agent, routines, and the Website page. `website_preview`
-serves locally; nothing in the tree can reach an external host.
+The remaining specification preserves the intended design; its slice descriptions
+are not a current implementation checklist.
 
 ## Decision
 

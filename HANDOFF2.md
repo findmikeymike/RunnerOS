@@ -1,7 +1,7 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-09-06
+last_verified: 2026-09-08
 worktree: /Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os
 branch: main
 scope: state of the tree, what has been verified, what has not
@@ -21,17 +21,44 @@ out to make the picture look tidier.
 ## Where the code is
 
 Trunk is `main`, in `/Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os`,
-pushed to `origin/main`. One trunk, no rival copies.
+with `origin/main` as its remote trunk. Verify the current local/remote SHA;
+this document is not proof that a later change has been pushed.
 
 The root checkout at `/Users/michaelb.williams/RunnerOS` is on an old branch and
 has untracked files belonging to other agents. Do not build or land from there.
 [GIT-FACTS-ALWAYS-READ-ME.md](GIT-FACTS-ALWAYS-READ-ME.md) is the authority on
 worktrees and is the file to read before your first commit.
 
-## Verified, with the check that proves it
+## Current integration evidence
 
-Every line here was run on the current trunk. Numbers are what the tooling
-printed, not estimates.
+The [2026-09-08 consolidation audit](docs/audits/artist-os-consolidation-2026-09-08.md)
+records the final integrated commits, fresh combined checks, and remote state.
+Feature checks are useful scope-specific evidence, not proof of the entire app:
+
+- Steering (`aa53a41ba`): input remains available during work; pending updates
+  survive blocked hooks. [Steering record](docs/backlog/steer-feature.md).
+- Website Agent startup (`48608a694`): repairs an already-seeded library while
+  preserving customization and deletion tombstones.
+- Branding (`72d7791f2`): persistent paired focuses, durable selection, stable
+  active-turn context, and hidden-starter privacy.
+  [Feature evidence](docs/audits/branding-task-mode-hardening-2026-09-08.md).
+- Campaign cleanup (`81a2673df`): confirmed deletion, verified retained files in
+  Past Releases, and local runtime cleanup. Saved global memories survive;
+  outside-service events/posts are not canceled.
+  [Retention and checks](docs/audits/campaign-cleanup-2026-09-08.md).
+- Signals UX (`fc3a793fa`, landing `e9ab74b06`): shared setup and report navigation.
+- Messaging boundaries (landing `69dd15768`): delegated agents retain target
+  capability/permission limits; internal jobs stay out of ordinary conversation lists.
+
+No live app launch/restart or real campaign deletion is authorized by these
+records. Browser fixtures and temporary filesystem tests do not prove provider
+behavior or that the running packaged app includes the updated source.
+
+## Historical verification — September 6, 2026
+
+The table below is retained historical evidence from the earlier maintenance
+pass. It does **not** describe current trunk, current CI, or today's dependency
+advisories. New combined results belong in the consolidation audit.
 
 | What | How it was checked | Result |
 | --- | --- | --- |
@@ -52,7 +79,7 @@ to break again: mocking a whole package poisons that package's own tests, so
 those files carry an `.isolated.ts` suffix and run one process at a time. The
 traps are written up in GIT-FACTS §5.
 
-## What landed recently
+## Earlier platform integration
 
 Electron moved from 39 to 44.2.0, so the app now runs Node 24 and Chromium 152.
 That brought a Node floor of 22.12, a change to how the Electron binary is
@@ -80,7 +107,7 @@ and 224 in this repo, all of which parse identically.
 
 What remains is listed with reasons in GIT-FACTS §8.
 
-## Not verified, and honest about it
+## Remaining platform acceptance
 
 Nothing below is known broken. It is simply unchecked, and should not be
 described as working.
@@ -95,7 +122,7 @@ described as working.
 - **macOS 12.** Dropped by Electron 44. Whether that is acceptable is a product
   call; Electron 43 keeps it and is a two-line change.
 
-## Known broken
+## Previously recorded maintenance issues — recheck before acting
 
 - **Eight root `package.json` scripts point at deleted files**: `release`,
   `check-version`, `fresh-start`, `oss:sync`, `sync-secrets`,

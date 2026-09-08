@@ -1,8 +1,8 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-09-07
-verified_head: c82d4c6c9
+last_verified: 2026-09-08
+verification_record: docs/audits/artist-os-consolidation-2026-09-08.md
 worktree: /Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os
 branch: main
 scope: onboarding
@@ -40,8 +40,8 @@ than trusting this doc or the folder name.
 This is a **git worktree**, not the main checkout. Run everything from here and
 never `cd` to the repo root.
 
-As of 2026-09-07 this folder holds the `main` branch, the built app, and
-everything that ships. Read
+This folder is the canonical `main` checkout. Source integration does not prove
+the running packaged app has loaded those changes. Read
 **[GIT-FACTS-ALWAYS-READ-ME.md](GIT-FACTS-ALWAYS-READ-ME.md)** before your
 first commit, branch, or merge — it is the authority on where work lives and
 how it gets onto `main`.
@@ -50,7 +50,7 @@ The stash stack is shared with every other worktree and other agents are working
 concurrently. **Never use bare `git stash` / `git stash pop`** — you can pop
 someone else's work. Use a temporary WIP commit instead.
 
-Other agents have uncommitted files in this tree right now. Check `git status`
+Other agents may have uncommitted files in this tree. Check `git status`
 before you stage anything, and only ever `git add` your own paths explicitly.
 Never `git add -A` blindly, never `git checkout .`.
 
@@ -83,7 +83,7 @@ classes in `packages/shared/src/agent/`, which is a real source of confusion.
   A tool not listed there does not exist for it.
 - Agents live in a **global** library and are activated **per workspace**.
 
-**Defining a persona does not make it appear.** There are three separate lists,
+**Defining a persona does not make it appear.** There are four separate registration steps,
 and time has been lost to this:
 
 1. `BUILTIN_VISIBLE_AGENT_SLUGS` in `apps/electron/src/renderer/hooks/useAgents.ts`
@@ -94,6 +94,11 @@ and time has been lost to this:
 3. `packages/shared/src/agent-definitions/defaults.ts` — activates agents when a
    workspace is **created**. Returns `[]` for existing roots, so it will not fix
    anything retroactively.
+4. Required startup agents in `packages/server-core/src/sessions/SessionManager.ts`
+   — passes selected `STARTER_AGENTS` to `ensureRequiredAgents`. This adds
+   missing built-ins to already-seeded libraries while preserving customizations
+   and explicit deletion tombstones. Website Agent was added here in `48608a694`:
+   visibility lists alone cannot show a definition absent from the global library.
 
 Workspace kinds: **Artist HQ** (career-wide, one), **Campaign** (per release,
 many), **Creative Lab** (songwriting, one).
@@ -141,12 +146,10 @@ parallel execution, so a tool that writes local state must not claim it.
 
 Start with `docs/creator-command-center/README.md`, then its `todo/README.md`.
 The parent index separates implemented, partially implemented, and unbuilt
-work; the todo index requires a defining symbol to be absent before calling a
-spec unbuilt. Known drift at verified head: **Spec 48 still appears under Not
-Yet Built even though its Branding Agent pilot shipped**. Treat 48 as partial;
-its remaining agent rollout/capability-loading slices are still open. Specs 38
-and 41 are implemented with live acceptance still open. Verify symbols before
-trusting any status label.
+work. Spec 48 has an implemented Branding Agent pilot; its remaining rollout and
+capability-loading slices are open. Specs 38 and 41 have implemented core workflows, with live
+acceptance and the complete cross-agent loop still open. Some spec files remain under `todo/` to preserve links;
+that path is not a status claim. Verify symbols before trusting a status label.
 
 `HANDOFF.md` and `docs/CURRENT.md` both declare `source_of_truth: true` but were
 last verified 2026-08-30 and point at a **different worktree and branch**
@@ -173,11 +176,21 @@ Electron binary. Details, packaging paths and the sharp-natives gate:
     cd apps/electron && bun run tsc --noEmit
     bun run electron:build:renderer              # from worktree root
 
-At verified head `c82d4c6c9`, the full discovery suite passed **8,555 tests,
+Historical evidence from 2026-09-07 at `c82d4c6c9`: the discovery suite passed **8,555 tests,
 one skip, zero failures** across 733 files. That is a snapshot, not permission
 to dismiss a new failure as pre-existing: isolate and prove its cause.
 
-To actually run the app (needed for visual checks):
+The current consolidation evidence is in
+[the 2026-09-08 audit](docs/audits/artist-os-consolidation-2026-09-08.md).
+Do not reuse older test totals as proof of the current combined tree.
+
+The current packaged process uses the production package at
+`apps/electron/release-artist-os/mac-arm64/Artist OS.app` and profile
+`~/.artist-os/electron`. The separate verified update is staged under
+`apps/electron/release-artist-os/staged-main/Artist OS.app`; installation awaits
+permission to close the current app. Do not swap unpacked resources under a live process.
+
+To run a development instance only after explicit user permission:
 
     bun run electron:dev:artist-os
 
@@ -225,9 +238,9 @@ What landed from 2026-09-04 through verified head `c82d4c6c9`: **179 commits
   replies, preloaded procedures, bounded Voice Core speech chunking; streamed
   focused replies on a verified Flash route; voice campaign advice grounded
   in the Release Kit. The modal now bundles the **Mikey GLB** (`e9b87972c`)
-  with restrained motion and audio-reactive mouth opening. This is not timed
-  phoneme/viseme sync, and a physical microphone/provider performance pass is
-  still a release gate. See `docs/tts-agent/09-mikey-call-avatar.md`.
+  with restrained motion. The later `0c3650bdc` update adds phoneme sync and
+  warmup readiness; a physical microphone/provider performance pass remains
+  separate from source/build verification. See `docs/tts-agent/09-mikey-call-avatar.md`.
 - **Signals** (`codex/signals-your-world`, merged `57eaa8255`): spec
   `docs/creator-command-center/47-signals-your-world-spec.md` (audits in
   `docs/audits/`). Reviewed worker retrieval, idea handoffs, reviewed track
@@ -239,8 +252,11 @@ What landed from 2026-09-04 through verified head `c82d4c6c9`: **179 commits
   the focused skill/context route while retaining explicit overlap awareness.
   Adjacent skills are **not loaded in the pilot**; it offers the better next
   mode/handoff when the boundary is crossed. Core:
-  `packages/shared/src/agent-definitions/task-modes.ts`, picker dialog
-  `AgentTaskModePickerDialog.tsx`, and SessionManager support.
+  `packages/shared/src/agent-definitions/task-modes.ts`, in-chat
+  `ChatAgentTaskModeBar.tsx`, and SessionManager support. The later `25c636ba9`
+  and `72d7791f2` changes persist focus cards, pair related Branding skills, and
+  isolate active-turn context from later selections. Hidden starters do not enter
+  artist memory or conversation summaries; broader rollout remains open.
 - **Conversation history** (`654050905`, `ad0cabed2`): the unprojected section
   is now **Conversations**, newest first, capped to a compact inner scroller.
   Rows use the stable generated/manual topic as the primary title and the agent
@@ -260,7 +276,7 @@ What landed from 2026-09-04 through verified head `c82d4c6c9`: **179 commits
   upstream baseline at v0.13.1
   (`docs/creator-command-center/17-craft-upstream-porting-ledger-2026-08.md`).
 - **Suite/CI**: the suite is order-independent under macOS/Linux sharding, but
-  current CI is **not all green**. At `c82d4c6c9`, `Validate` passed; `Tests`
+  the historical CI snapshot was **not all green**. At `c82d4c6c9`, `Validate` passed; `Tests`
   failed one Linux shard because `blocks Bash redirect to sibling path with
   data prefix` exceeded the 5-second test timeout. A focused local rerun passed
   that file 8/8 (the failed case took 30.71 ms), and both workflows passed at
@@ -275,6 +291,24 @@ What landed from 2026-09-04 through verified head `c82d4c6c9`: **179 commits
   native window close and the web-canvas resize divider were restored
   (`2c9b68e92`).
 
-Current main anchor: `c82d4c6c9` (`docs(voice): record final avatar integration
-checks`). Reconfirm `git status`, `git log -1`, and `origin/main` before acting;
-other agents can move this tree after this document is written.
+## September 8 consolidation
+
+- `38e7b8986`: compact conversation previews, following the sidebar/topic series.
+- `aa53a41ba`: steer input and Send update stay available while processing;
+  pending Claude updates retain their order until delivery. Several steers can
+  arrive together at the next opportunity; this is not a one-per-response queue.
+- `48608a694`: existing libraries receive the built-in Website Agent, distinct
+  from Site Builder, without overwriting customization or deliberate deletion.
+- `72d7791f2`: compact, persistent Branding focuses and safer selection/turn state.
+- `81a2673df`: confirmed campaign deletion preserves useful files in HQ Vault →
+  Past Releases and saved global memories, then removes campaign-local clutter.
+  See [retention and limits](docs/audits/campaign-cleanup-2026-09-08.md).
+- Signals UX `fc3a793fa` landed through `e9ab74b06`: shared track setup, clearer
+  report navigation, and saved insights.
+- `69dd15768`: recovered historical delegate permission/capability limits and
+  hidden-session boundaries while retaining legitimate background-job replies.
+
+Use [the consolidation audit](docs/audits/artist-os-consolidation-2026-09-08.md)
+for exact landed SHAs, current checks, remote state, and remaining runtime gates.
+Reconfirm `git status`, `git log -1`, and `origin/main` before acting. The user
+has not authorized an app launch or restart during this consolidation.

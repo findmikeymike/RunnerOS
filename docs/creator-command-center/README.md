@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-09-07
+last_verified: 2026-09-08
 source_of_truth: true
 ---
 
@@ -60,9 +60,10 @@ Specs written but with no implementation in the tree. They live in
 - [43 Approved Branding Amendments](./todo/43-approved-branding-amendments-spec.md) — approved, append-only Branding additions from durable agent Outputs without replacing artist-written context
 - [44 State-Aware First-Use Guide](./todo/44-state-aware-first-use-guide-spec.md) — optional first-use setup inside the existing question-mark Guide, completed from real app state instead of page visits
 - [45 HQ / Campaign Scope Clarity](./todo/45-hq-campaign-scope-clarity-spec.md) — one rule for shared work, timeline inside campaigns, channel-collision warnings
-- [48 Agent Task Modes And Focused Context Loading](./todo/48-agent-task-modes-spec.md) — plain-language job cards that preload the smallest relevant capability, preserve bounded overlap, and keep Artist Manager as the front door
 
 Implementation and live acceptance tracking (spec files retained at their existing paths):
+
+- [48 Agent Task Modes And Focused Context Loading](./todo/48-agent-task-modes-spec.md) — Branding pilot implemented: persistent paired focus cards, stable active-turn context, and safe hidden starters; wider rollout and measured performance/quality gates remain
 
 - [38 Community Email Engine And The Community Agent](./todo/38-community-email-engine-spec.md) — sending, imports, approvals, and Community Agent implemented; live send/unsubscribe acceptance remains
 - [41 The Autonomous Website And Community Loop](./todo/41-autonomous-website-and-community-loop-spec.md) — publishing, capture, cadence, and routine implemented; live acceptance remains
@@ -70,6 +71,10 @@ Implementation and live acceptance tracking (spec files retained at their existi
 When one ships, move it back up into the numbered list above.
 
 Current V1 implementation notes:
+
+- [September 8 consolidation](../audits/artist-os-consolidation-2026-09-08.md) records final integration and checks for steering, Website Agent startup registration, Branding focuses, sidebar/voice updates, campaign cleanup, and Signals UX. Feature tests do not certify the running packaged app.
+- Website Agent operates the site; Site Builder creates/edits it. Startup now installs missing Website Agent definitions in existing libraries, preserving customization and deliberate deletion.
+- Campaign deletion previews retained files and requires confirmation. Useful files go to HQ Vault → Past Releases; saved global memories survive. Campaign-local chats, planning, tasks, and schedules are removed. External activity is not canceled. [Retention details](../audits/campaign-cleanup-2026-09-08.md).
 
 - State of Play V2 is specified as a phased opportunity engine; V1 remains the shipped implementation until each phase is verified.
 

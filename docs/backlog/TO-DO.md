@@ -1,7 +1,7 @@
 ---
 status: current
 owner: unassigned
-last_verified: 2026-07-11
+last_verified: 2026-09-08
 source_of_truth: true
 ---
 
@@ -32,7 +32,7 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 
 ### Product Intelligence
 
-- [ ] **Finish Signals: Industry And Your World.** `NOW`. All three implementation slices, including bounded worker retrieval and deliberate draft handoff, passed independent review, rendered checks, the 8,653-test regression suite, typecheck and builds on `codex/signals-your-world`. Remaining: commit Slice 3, land into main, and approved live acceptance. Source: [Signals: Industry And Your World](../creator-command-center/47-signals-your-world-spec.md).
+- [ ] **Finish Signals live acceptance.** `NOW`. The three implementation slices and report/recovery hardening are integrated. UX commit `fc3a793fa` adds shared Channels & schedule, distinct one-off review, report selection, and Saved insights; its combined landing/checks are tracked in the [consolidation audit](../audits/artist-os-consolidation-2026-09-08.md). Remaining: approved live-account collection, spoken-summary, failure/recovery, and handoff acceptance. Source: [Signals](../creator-command-center/47-signals-your-world-spec.md).
 
 - [ ] **Finish the State of Play V2 release gate.** Implemented: operational adapters for Outputs, Scheduled Work, workflows, automations, approvals, campaign deadlines, and release-critical asset gaps; source health and stale-evidence windows; durable ranked recommendations and lifecycle history; guarded launch/retry/defer actions; objective outcome evidence and usefulness feedback; exact semantic-intent duplicate suppression with legacy migration; same-server launch serialization; rendered control coverage; and explicit regeneration. Remaining: live Electron smoke, campaign-scoped source-health UI, additional domain-specific completion-criterion generators, and a distributed Team Mode lease. Source: [State of Play Opportunity Engine](../creator-command-center/14-state-of-play-opportunity-engine-spec.md).
 - [ ] **Live-smoke weekly YouTube Intelligence.** Implemented: preloaded channels including `@its21master`, newest-unseen-upload filtering, persisted processed IDs, transcript caching/provider flow, required HQ report Output, categorized Shared Intel routing, weekly default Automation, toggle, and manual run. Remaining: real-key packaged smoke across all channels, transcript failure/retry proof, dashboard report verification, and measured token/cost evidence.
@@ -42,7 +42,16 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 
 ### Chat
 
-- [ ] **Surface mid-stream chat steering in the UI.** `NOW`. The full steer pipeline is built and tested — renderer mid-stream send flags, `SessionManager` mid-stream branch, Pi native `steer()`, Claude PreToolUse injection with `steer_undelivered` re-queue, queued/steered bubble rendering. Remaining: the UI never shows it — send button becomes Stop while processing, placeholder is empty, compact mode (<768px, EditPopover) hides the input entirely so steering is unreachable, and a landed steer is invisible. Source: [STEER FEATURE](./steer-feature.md).
+- [ ] **Live-smoke steering and Branding focus changes.** `NEXT`. Steering visibility and ordered pending updates shipped in `aa53a41ba`; persistent Branding focuses and selection hardening shipped in `25c636ba9` / `72d7791f2`. Automated/browser evidence exists; remaining acceptance is the updated Electron app and real provider paths. Multiple steers may be delivered together, not sequenced one per response. Sources: [Steering](./steer-feature.md), [Branding verification](../audits/branding-task-mode-hardening-2026-09-08.md).
+- [ ] **Complete task-mode rollout and performance gates.** `NEXT`. Branding pilot is implemented. Remaining: additional specialist/Manager routes, capability expansion, context-size and response-quality measurements. [Spec 48](../creator-command-center/todo/48-agent-task-modes-spec.md).
+
+### App Installation
+
+- [ ] **Install the verified staged main update when the artist permits closing the app.** The signed build is ready under `release-artist-os/staged-main/Artist OS.app`; canonical source/remote are current. Keep the running app untouched until it exits, and do not reopen without authorization. [Build and signature evidence](../audits/artist-os-consolidation-2026-09-08.md).
+
+### Campaign Lifecycle
+
+- [ ] **Live-smoke campaign cleanup with disposable data after restart approval.** `NEXT`. Implementation committed in `81a2673df`: confirmation, verified media/finished-document preservation in Vault → Past Releases, saved global memories retained, campaign-local chats/planning/tasks/schedules removed. Local solo campaigns only; external posts/events remain. Temporary filesystem and browser-fixture tests pass; no real campaign has been deleted. [Retention policy](../audits/campaign-cleanup-2026-09-08.md).
 
 ### Calendar And Scheduled Work
 
@@ -109,3 +118,20 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 ## Deferred
 
 - Scheduled-job expansion is intentionally deferred for now. Preserve the existing Calendar/Automation work, but do not broaden recurring-job behavior until the user reopens that phase.
+
+## Completed implementation — September 8, 2026
+
+These are completed code changes; remaining live/provider gates stay above.
+Exact consolidation, remote state, and fresh combined evidence are in the
+[consolidation audit](../audits/artist-os-consolidation-2026-09-08.md).
+
+- [x] Reachable chat steering and ordered pending updates (`aa53a41ba`).
+- [x] Website Agent startup registration for existing libraries (`48608a694`); Workers visibility already existed. User customizations/deletions are preserved.
+- [x] Persistent paired Branding focuses and safe selection state (`72d7791f2`).
+- [x] Compact conversation topic previews (`38e7b8986` and preceding sidebar commits).
+- [x] Mikey phoneme sync and warmup readiness (`0c3650bdc`); physical/provider acceptance remains separate.
+- [x] Confirmed campaign cleanup and Past Releases retention (`81a2673df`); integration state is recorded in the consolidation audit.
+
+- [x] Shared Signals setup and clear report navigation (`fc3a793fa`, main `e9ab74b06`).
+- [x] Recovered delegated-agent and hidden-session boundaries (main `69dd15768`).
+- [x] CI config-mock isolation and bounded native watcher event assertions (`cab2ecde5`, `26f498ca6`); remote rerun tracked in consolidation audit.

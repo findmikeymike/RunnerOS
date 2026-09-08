@@ -1,8 +1,8 @@
 # Branding task-mode correctness
 
-Base: canonical Artist OS `main` at `25c636ba9`. Changes remain uncommitted.
-Unrelated FreeFormInput/Claude steering code, docs, tests, and scripts were preserved.
-No app restart, push, merge, or live model request was performed.
+Original verification base: canonical Artist OS `main` at `25c636ba9`.
+This work subsequently landed as `72d7791f2` and is on main. Evidence below records the original focused verification; final integration evidence is in the [consolidation audit](artist-os-consolidation-2026-09-08.md).
+Unrelated steering changes were preserved during development. No live model request or app restart was part of this verification.
 
 ## Fixed
 

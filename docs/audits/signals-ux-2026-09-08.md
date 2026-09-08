@@ -3,7 +3,7 @@
 ## Scope
 
 Worktree: `/tmp/artist-os-signals-ux`, branch `codex/signals-ux-clarity`.
-Base: main `25c636ba9`. No live app restart, provider runs, or landing performed.
+Original verification base: main `25c636ba9`. Committed as `fc3a793fa` and landed/pushed through `e9ab74b06`. No live app restart or provider run was performed.
 
 The old page mixed legacy channel setup, new track controls, recurring scheduling,
 one-off reviews, reports, and an unexplained saved-nuggets selector.
@@ -59,6 +59,7 @@ No viewport overflow or runtime page errors were observed in the tested states.
 
 ## Landing
 
-User authorized the scoped Signals commit. Landing remains separate. Catch up from current main,
-rerun the required integration checks, and land only the scoped Signals files.
-Do not include the other task's dirty chat/steering changes or restart its live app.
+Caught up with current main after campaign cleanup. The post-merge full suite passed
+**8,986 tests, 0 failures, 1 skipped** across 21 processes. Integrated browser checks
+passed again: **42 setup checks and 13 report checks**. See the
+[consolidation audit](artist-os-consolidation-2026-09-08.md) for final source/build evidence.

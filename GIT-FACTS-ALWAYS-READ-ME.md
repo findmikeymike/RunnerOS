@@ -14,9 +14,11 @@ finished, correct, and sitting somewhere nobody can find.
 /Users/michaelb.williams/RunnerOS/.worktrees/main/artist-os     branch: main
 ```
 
-That folder is the compiled, updated, authoritative Artist OS. It holds the
-`main` branch, the built `Artist OS.app`, and everything that ships. It matches
-`origin/main` on GitHub.
+That folder is the authoritative Artist OS checkout. It holds the `main` branch
+and the packaged `Artist OS.app`. Git, build payload, packaged app, and running
+process can be at different revisions: verify each before calling the app updated.
+See `docs/audits/artist-os-consolidation-2026-09-08.md` for the current integration
+and staged-build evidence. Verify `origin/main` rather than assuming it matches.
 
 If your work is not on `main`, it is not in the product yet. It does not matter
 how good it is or how long it took.
@@ -283,12 +285,13 @@ app has already run once.
 
 ---
 
-## 7. Current state — 2026-09-06
+## 7. Historical verification snapshot — 2026-09-06
 
 - Trunk is `main` in `.worktrees/main/artist-os`, pushed. Runtime: Electron 44.2.0
   (Node 24, Chromium 152) since 2026-09-06 — see §6. `git log -1 main` for the SHA;
   this file will not keep it current.
-- The suite is **green: 8090 pass, 0 fail**. Keep it that way. If you make it
+- That snapshot passed **8090 tests, 0 failures**; it does not certify later commits.
+  Current integration evidence is in the September 8 consolidation audit. Keep the suite green. If you make it
   red, fix it before you hand off — a red suite means CI can no longer tell
   anyone about a *new* break, which is the whole point of having it.
 - CI (`.github/workflows/test.yml`) runs on every push and PR, macOS and Linux,

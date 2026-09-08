@@ -149,9 +149,7 @@ fix and the settings presets all exist on trunk. Git counts them as unmerged
 only because that history was rebased. Merging it would re-fight conflicts to
 arrive at code trunk already has.
 
-The one thing on it trunk lacks is `dc48b0611`'s TLS half: remote workspace
-connections currently run with `tlsRejectUnauthorized: false` in three places
-(`main/handlers/workspace.ts`, `preload/bootstrap.ts` twice). The fix flips
-that to validate by default with a `CRAFT_INSECURE_TLS=1` escape hatch. It is
-the right default but it breaks anyone using a self-signed remote server, so
-it is a product decision, not a merge. Once decided, archive the branch.
+The historical TLS exception is now resolved on main: all three remote connection
+sites validate certificates by default and use `CRAFT_INSECURE_TLS=1` only as an
+explicit local opt-out. See `GIT-FACTS-ALWAYS-READ-ME.md` section 6. Do not merge
+this old branch to recover that already-landed behavior.
