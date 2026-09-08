@@ -188,6 +188,8 @@ import {
 } from './ChatGoalDriver'
 import { withWorkspaceContextLock } from '../scheduled-work/workspace-context-lock'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
+import { listAgentMessageReceipts } from '@craft-agent/shared/agent-messaging'
+import { shouldExposeSessionInLists, assertCanSendAgentMessageToSession, type SessionVisibilityOptions } from './hidden-session-boundaries'
 import { AgentMessageService } from '../agent-messaging/AgentMessageService'
 import { DEFAULT_MAX_DEPTH, isPermissionEscalation, readAgentMessageReceipt, type AgentMessageReceipt } from '@craft-agent/shared/agent-messaging'
 import { agentMatchesSearch } from './agent-search'
@@ -7121,7 +7123,7 @@ user a clickable link to where the thing now lives.`
     await this.loadSessionsFromDisk()
   }
 
-  getSessions(workspaceId?: string): Session[] {
+  getSessions(workspaceId?: string, options?: SessionVisibilityOptions): Session[] {
     // Returns session metadata only - messages are NOT included to save memory
     // Use getSession(id) to load messages for a specific session
     let sessions = Array.from(this.sessions.values())
@@ -7132,6 +7134,7 @@ user a clickable link to where the thing now lives.`
     }
 
     return sessions
+      .filter(m => shouldExposeSessionInLists(m, options))
       .map(m => managedToSession(m))
       .sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0))
   }
@@ -9997,6 +10000,12 @@ user a clickable link to where the thing now lives.`
           if (target.workspace.id !== managed.workspace.id) {
             throw new Error(`Session "${sessionId}" is not in this workspace.`)
           }
+
+          assertCanSendAgentMessageToSession(
+            target, managed.id, options?.deliveryMode,
+            target.hidden && options?.deliveryMode === 'passive'
+              ? listAgentMessageReceipts(managed.workspace.rootPath) : [],
+          )
 
           if (options?.deliveryMode === 'passive' && attachments?.length) {
             throw new Error('Passive agent messages do not support attachments.')

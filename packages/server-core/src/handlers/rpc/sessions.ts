@@ -171,7 +171,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
   }
 
   async function assertSessionPermission(sessionId: string, action: TeamPermissionAction): Promise<void> {
-    const session = sessionManager.getSessions().find((item) => item.id === sessionId)
+    const session = sessionManager.getSessions(undefined, { includeHidden: true }).find((item) => item.id === sessionId)
     if (!session) throw new Error(`Session not found: ${sessionId}`)
     await assertWorkspacePermission(session.workspaceId, action)
   }
@@ -518,7 +518,7 @@ export function registerSessionsHandlers(server: RpcServer, deps: HandlerDeps): 
     })
 
     // Filter out hidden sessions (e.g., mini edit sessions)
-    const allSessions = await sessionManager.getSessions()
+    const allSessions = await sessionManager.getSessions(undefined, { includeHidden: true })
     const hiddenSessionIds = new Set(
       allSessions.filter(s => s.hidden).map(s => s.id)
     )
