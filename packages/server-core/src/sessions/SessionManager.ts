@@ -6191,6 +6191,12 @@ user a clickable link to where the thing now lives.`
           if (monidRoutingMigration.updatedAgents.length || monidRoutingMigration.updatedSkills.length) {
             sessionLog.info('[agent-definitions] Updated Monid-first routing', monidRoutingMigration)
           }
+          // Refresh exact shipped helper guidance after older routing normalizers.
+          const { migrateHelperGuide } = await import('@craft-agent/shared/agent-definitions')
+          const helperGuideMigration = migrateHelperGuide()
+          if (helperGuideMigration.updatedAgents.length || helperGuideMigration.updatedSkills.length) {
+            sessionLog.info('[agent-definitions] Updated app helper guidance', helperGuideMigration)
+          }
         } catch (err) {
           const detail = err instanceof Error
             ? (err.stack ?? `${err.name}: ${err.message}`)

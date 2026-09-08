@@ -1,0 +1,27 @@
+{
+  "agents": [
+    {
+      "file": "setup-concierge.md",
+      "bodySha256": "9f8de9a5084c7cfd3c28cb606f8c80aa0823ea350a720ac8553aa1cae5c33871"
+    },
+    {
+      "file": "setup-concierge-pre-monid.md",
+      "bodySha256": "0d2bc5bd321d5ac184eaa8984320cad8cd919eeeb04729fd2bdead503a7dc14c"
+    },
+    {
+      "file": "setup-concierge-450bd45c.md",
+      "bodySha256": "450bd45c238e2b26865289c3a6e875874e16761fdc7e145831eac17e8cea9564",
+      "commit": "86f7340bc6f05ca118d0f31f35f63f70784340ec"
+    }
+  ],
+  "skills": [
+    {
+      "file": "artist-os-guide.md",
+      "sha256": "48b88db2cfd3ec3588dad70c91498f359bb7ee02b83e9723dfecca054a7f74ff"
+    },
+    {
+      "file": "artist-os-guide-7cfc3032.md",
+      "sha256": "7cfc30321e82a8e877a4513fa37570271df413718345d469d64c0cf5cc19cc62"
+    }
+  ]
+}

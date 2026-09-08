@@ -64,3 +64,4 @@ export { migrateYouTubeRouting } from './youtube-routing-migration.ts';
 export { RELEASE_MANAGER_AGENT_SLUG, RELEASE_MANAGER_SKILL_SLUGS, ANYTHING_AGENT_SLUG, hasReleaseManagerIdentity, isReleaseManagerDefinition, DEFAULT_ACTIVATED_AGENT_SLUGS, CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS, HQ_DEFAULT_ACTIVATED_AGENT_SLUGS, HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS, LAB_DEFAULT_ACTIVATED_AGENT_SLUGS, initialAgentSlugsForWorkspace, isAgentAllowedInArtistWorkspace } from './defaults.ts';
 export { CANVAS_GUIDANCE_HEADER, buildCanvasGuidanceSection } from './canvas-guidance.ts';
 export { migrateMonidRouting } from './monid-routing-migration.ts';
+export { migrateHelperGuide } from './helper-guide-migration.ts';

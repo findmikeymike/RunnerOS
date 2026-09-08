@@ -556,8 +556,8 @@ body
     expect(setupConcierge?.metadata.skills).toContain('artist-os-guide')
     expect(setupConcierge?.metadata.skills).toContain('source-recipe')
     expect(setupConcierge?.metadata.tags).toContain('setup')
-    expect(setupConcierge?.systemPrompt).toContain('Save credentials')
-    expect(setupConcierge?.systemPrompt).toContain('Never ask for account passwords')
+    expect(setupConcierge?.systemPrompt).toContain('`save_secret` only when available and authorized')
+    expect(setupConcierge?.systemPrompt).toContain('or ask for passwords, recovery/2FA codes, cookies, or raw session tokens')
   })
 
   test('starter library includes an HQ royalty reconciliation worker with SoundExchange coverage', () => {

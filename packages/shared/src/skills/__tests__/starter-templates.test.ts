@@ -81,13 +81,16 @@ describe('STARTER_SKILLS', () => {
     expect(parsed.content).toContain('apps/electron');
   });
 
-  it('includes the Artist OS guide starter skill for HNIC support', () => {
+  it('includes current helper guidance with an on-demand feature reference', () => {
     const skill = STARTER_SKILLS.find(s => s.slug === 'artist-os-guide');
     expect(skill).toBeDefined();
     const parsed = matter(getSkillMd(skill!));
     expect(parsed.data.name).toBe('Artist OS Guide');
-    expect(parsed.content).toContain('What Artist OS is');
-    expect(parsed.content).toContain('Settings → Messaging');
+    expect(parsed.content).toContain('list_agents');
+    expect(parsed.content).toContain('references/features.md');
+    const reference = skill!.files.find(file => file.path === 'references/features.md');
+    expect(reference?.content).toContain('Settings → Connections');
+    expect(reference?.content).toContain('Manage workers');
   });
 
   it('workflow-creator can save confirmed workflow drafts', () => {
