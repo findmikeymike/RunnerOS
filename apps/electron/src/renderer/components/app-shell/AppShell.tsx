@@ -91,7 +91,7 @@ import { getResizeGradientStyle } from "@/hooks/useResizeGradient"
 import { useAction } from "@/actions"
 import { useFocusZone } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
-import { getSessionAgentIdentity, getSessionListDisplay, getSessionTitle } from "@/utils/session"
+import { getSessionAgentIdentity, getSessionListDisplay, getSessionPreviewText, getSessionTitle } from "@/utils/session"
 import { GENERAL_PROJECT_KEY, getSessionProjectInfo } from "@/utils/session-project"
 import { useSetAtom } from "jotai"
 import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter } from "../../../shared/types"
@@ -594,6 +594,7 @@ function AppShellContent({
   // and switches to single-panel mode. Works in both webui (narrow viewport) and
   // desktop (narrow window or small screen).
   const shellRef = useRef<HTMLDivElement>(null)
+  const primaryNavScrollRef = useRef<HTMLDivElement>(null)
   const shellWidth = useContainerWidth(shellRef)
   const MOBILE_THRESHOLD = 768
   const isAutoCompact = shellWidth > 0 && shellWidth < MOBILE_THRESHOLD
@@ -3115,9 +3116,11 @@ function AppShellContent({
                   {project.items.map((item) => {
                     const active = item.id === session.selected
                     const { title, subtitle } = getSessionListDisplay(item, true)
-                    const compactSubtitle = subtitle && subtitle.length > 17
-                      ? `${subtitle.slice(0, 17).trimEnd()}…`
+                    const subtitleWords = subtitle?.trim().split(/\s+/) ?? []
+                    const compactSubtitle = subtitleWords.length > 2
+                      ? `${subtitleWords.slice(0, 2).join(' ')}…`
                       : subtitle
+                    const hoverPreview = getSessionPreviewText(item, 140, title) ?? subtitle ?? title
                     return (
                       <Tooltip key={item.id} delayDuration={250}>
                         <TooltipTrigger asChild>
@@ -3135,7 +3138,7 @@ function AppShellContent({
                             <span className="block w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-medium leading-4">{title}</span>
                             {compactSubtitle && (
                               <span className={cn(
-                                "block w-full max-w-full whitespace-nowrap text-[10.5px] leading-3.5",
+                                "block w-full min-w-0 truncate text-[10.5px] leading-3.5",
                                 active ? "text-white/55" : "text-white/30",
                               )}>
                                 {compactSubtitle}
@@ -3148,10 +3151,9 @@ function AppShellContent({
                           align="start"
                           sideOffset={1}
                           collisionPadding={8}
-                          className="w-[320px] max-w-[calc(100vw-180px)] whitespace-normal px-3 py-2.5"
+                          className="w-[240px] max-w-[calc(100vw-180px)] whitespace-normal px-2.5 py-2"
                         >
-                          <p className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/70">{title}</p>
-                          {subtitle && <p className="mt-1 line-clamp-2 text-[11.5px] leading-4 text-foreground/90">{subtitle}</p>}
+                          <p className="line-clamp-2 text-[11px] leading-4 text-foreground/90">{hoverPreview}</p>
                         </TooltipContent>
                       </Tooltip>
                     )
@@ -3164,6 +3166,10 @@ function AppShellContent({
       </div>
     )
   }, [handleNewChat, handleSidebarSessionClick, isExpanded, isLabWorkspace, session.selected, sessionsNavExpanded, setSessionProjectDialog, sidebarProjectGroups, toggleExpanded, workChatActive])
+
+  React.useLayoutEffect(() => {
+    if (primaryNavScrollRef.current) primaryNavScrollRef.current.scrollLeft = 0
+  }, [activeWorkspaceId, sessionsNavExpanded])
 
   return (
     <AppShellProvider value={appShellContextValue}>
@@ -3296,10 +3302,16 @@ function AppShellContent({
               <div className="flex-1 flex flex-col min-h-0">
                 {/* Primary Nav */}
                 {/* pb-4 provides clearance so the last item scrolls above the mask-fade-bottom gradient */}
-                <div className={cn(
-                  "flex-1 w-full overflow-y-auto overflow-x-hidden min-h-0 mask-fade-bottom",
-                  usesWorkspaceHeader ? "px-3 pb-10 pt-10" : "pt-[18px] pb-4",
-                )}>
+                <div
+                  ref={primaryNavScrollRef}
+                  onScroll={(event) => {
+                    if (event.currentTarget.scrollLeft !== 0) event.currentTarget.scrollLeft = 0
+                  }}
+                  className={cn(
+                    "flex-1 w-full overflow-y-auto overflow-x-hidden min-h-0 mask-fade-bottom",
+                    usesWorkspaceHeader ? "px-3 pb-10 pt-10" : "pt-[18px] pb-4",
+                  )}
+                >
                 <LeftSidebar
                   isCollapsed={false}
                   getItemProps={getSidebarItemProps}
