@@ -1,5 +1,7 @@
 import { AudioGraph } from "./audio/AudioGraph";
 import { BoundedAudioDispatcher } from "./audio/BoundedAudioDispatcher";
+import { ConsumedAudioVisemeScheduler } from "./audio/ConsumedAudioVisemeScheduler";
+import { TtsVisemeMetadataQueue } from "./audio/TtsVisemeMetadataQueue";
 import { assertBrowserSupport, probeBrowserCapabilities } from "./runtime/featureProbe";
 import { RuntimeWorkerClient } from "./runtime/worker";
 import { SerialTaskQueue } from "./runtime/SerialTaskQueue";
@@ -21,6 +23,8 @@ export class VoiceCoreWeb {
     static BARGE_IN_NO_AEC_THRESHOLD = 0.03;
     static EMPTY_LLM_RETRY_MAX_OUTPUT_TOKENS = 320;
     audioGraph = new AudioGraph();
+    visemeScheduler = new ConsumedAudioVisemeScheduler();
+    ttsVisemeMetadata = new TtsVisemeMetadataQueue();
     runtimeWorker = new RuntimeWorkerClient();
     handlers = new Set();
     playbackFrameHandlers = new Set();
@@ -71,7 +75,10 @@ export class VoiceCoreWeb {
         assertVoiceIdSupported(validatedConfig.voiceId);
         this.config = validatedConfig;
         this.audioGraph.setInputFramesHandler((frames, sampleRateHz, channels) => this.handleInputFrames(frames, sampleRateHz, channels));
-        this.audioGraph.setPlaybackFrameHandler((frame) => {
+        this.audioGraph.setPlaybackFrameHandler((frame, playbackClock) => {
+            const visemes = playbackClock?.consuming
+                ? this.visemeScheduler.sample(playbackClock.playbackEpoch, playbackClock.playbackSamples, playbackClock.playbackSampleRate)
+                : [];
             const sequence = ++this.playbackFrameSequence;
             for (const handler of [...this.playbackFrameHandlers]) {
                 // An observer may synchronously stop/clear playback. Never deliver its old
@@ -81,7 +88,7 @@ export class VoiceCoreWeb {
                 if (!this.playbackFrameHandlers.has(handler))
                     continue;
                 try {
-                    void Promise.resolve(handler({ ...frame })).catch(() => undefined);
+                    void Promise.resolve(handler({ ...frame, ...(visemes === undefined ? {} : { visemes: visemes.map(cue => ({ ...cue })) }) })).catch(() => undefined);
                 }
                 catch { /* Optional visuals cannot fail audio. */ }
             }
@@ -114,6 +121,9 @@ export class VoiceCoreWeb {
             if (message.type === "events") {
                 for (const event of message.events) {
                     if (event.type === "bargeIn") {
+                        this.outputDrainGeneration += 1;
+                        this.visemeScheduler.reset();
+                        this.ttsVisemeMetadata.reset();
                         this.audioGraph.clearOutputQueue();
                         this.outputPlaybackActive = false;
                         this.outputBackpressured = false;
@@ -239,6 +249,8 @@ export class VoiceCoreWeb {
             this.sttPausedForAssistant = false;
             this.userSpeechActive = false;
             this.resetBargeInDetector();
+            this.visemeScheduler.reset();
+            this.ttsVisemeMetadata.reset();
             try {
                 await this.audioGraph.stop();
             }
@@ -365,7 +377,7 @@ export class VoiceCoreWeb {
         const payload = Array.isArray(samples) ? Int16Array.from(samples) : samples;
         await this.pushTtsAudioSlices(payload, sampleRateHz, channels, timestampMs, () => this.running);
     }
-    async pushTtsAudioSlices(payload, sampleRateHz, channels, timestampMs, shouldContinue) {
+    async pushTtsAudioSlices(payload, sampleRateHz, channels, timestampMs, shouldContinue, visemes) {
         if (!Number.isFinite(sampleRateHz) || sampleRateHz <= 0) {
             throw new RangeError("VoiceCore TTS sample rate must be positive");
         }
@@ -377,19 +389,29 @@ export class VoiceCoreWeb {
         }
         if (!payload.length)
             return;
+        const metadataGeneration = this.outputDrainGeneration;
+        const isCurrent = () => shouldContinue() && metadataGeneration === this.outputDrainGeneration;
         const samplesPerSlice = Math.max(channels, Math.floor(sampleRateHz * 0.1) * channels);
         for (let offset = 0; offset < payload.length; offset += samplesPerSlice) {
             const slice = payload.slice(offset, offset + samplesPerSlice);
-            while (shouldContinue()) {
-                if (await this.runtimeWorker.pushTtsAudio(slice, sampleRateHz, channels, timestampMs)) {
+            while (isCurrent()) {
+                const accepted = await this.ttsVisemeMetadata.run(async () => {
+                    if (!isCurrent())
+                        return false;
+                    const accepted = await this.runtimeWorker.pushTtsAudio(slice, sampleRateHz, channels, timestampMs);
+                    if (accepted && isCurrent()) {
+                        this.ttsVisemeMetadata.appendAcceptedSlice(slice.length * 1000 / sampleRateHz / channels, offset * 1000 / sampleRateHz / channels, visemes);
+                    }
+                    return accepted;
+                });
+                if (accepted)
                     break;
-                }
-                if (!shouldContinue())
+                if (!isCurrent())
                     return;
                 this.scheduleDrainOutputAudio(0);
                 await new Promise((resolve) => window.setTimeout(resolve, VoiceCoreWeb.OUTPUT_POLL_ACTIVE_MS));
             }
-            if (!shouldContinue())
+            if (!isCurrent())
                 return;
         }
         this.scheduleDrainOutputAudio(0);
@@ -504,7 +526,7 @@ export class VoiceCoreWeb {
             let emittedChunks = 0;
             let emittedSeconds = 0;
             while (this.running && !this.outputBackpressured) {
-                const chunkJson = await this.runtimeWorker.popAudioChunk();
+                const chunkJson = await this.ttsVisemeMetadata.run(() => this.runtimeWorker.popAudioChunk());
                 if (!this.running || generation !== this.outputDrainGeneration)
                     break;
                 if (!chunkJson || chunkJson === "null") {
@@ -523,8 +545,17 @@ export class VoiceCoreWeb {
                 for (let i = 0; i < chunk.samples.length; i += 1) {
                     frames[i] = chunk.samples[i] / 32768;
                 }
+                const normalizedFrames = this.audioGraph.prepareOutputFrames(frames, chunk.sample_rate_hz, chunk.channels);
+                const playbackEpoch = this.audioGraph.getPlaybackEpoch();
+                this.visemeScheduler.beginEpoch(playbackEpoch);
+                this.visemeScheduler.enqueueChunk({
+                    playbackEpoch,
+                    chunk: { visemes: this.ttsVisemeMetadata.consume(normalizedFrames.length, this.audioGraph.getSampleRate() ?? 48_000) },
+                    outputFrames: normalizedFrames.length,
+                    outputSampleRate: this.audioGraph.getSampleRate() ?? 48_000,
+                });
                 try {
-                    await this.audioGraph.enqueueOutputFrames(frames, chunk.sample_rate_hz, chunk.channels);
+                    await this.audioGraph.enqueueNormalizedOutputFrames(normalizedFrames);
                 }
                 catch (error) {
                     if (!this.running || generation !== this.outputDrainGeneration)
@@ -769,6 +800,8 @@ export class VoiceCoreWeb {
         this.responseAbortController = null;
         this.lastAssistantPreviewText = "";
         this.outputBackpressured = false;
+        this.visemeScheduler.reset();
+        this.ttsVisemeMetadata.reset();
         this.audioGraph.clearOutputQueue();
         this.outputPlaybackActive = false;
         this.resetBargeInDetector();
@@ -1249,7 +1282,7 @@ export class VoiceCoreWeb {
             }
             await this.pushTtsAudioSlices(this.float32ToPcm16(chunk.frames), chunk.sampleRate, chunk.channels, 0, () => this.running &&
                 !controller.signal.aborted &&
-                generation === this.responseGeneration);
+                generation === this.responseGeneration, chunk.visemes);
         }
     }
     emitLatencyDebug(label) {

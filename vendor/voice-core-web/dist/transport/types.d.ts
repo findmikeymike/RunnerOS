@@ -14,7 +14,15 @@ export type LlmTokenEvent = {
      */
     kind?: "answer" | "activity";
 };
+export type TtsVisemeCue = {
+    startMs: number;
+    endMs: number;
+    viseme: string;
+    phoneme?: string;
+};
 export type TtsAudioChunk = {
+    /** Times relative to these PCM frames. Undefined = unavailable; [] = known silence. */
+    visemes?: readonly TtsVisemeCue[];
     frames: Float32Array;
     sampleRate: number;
     channels: number;

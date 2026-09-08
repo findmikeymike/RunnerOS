@@ -4,6 +4,8 @@ export type InworldTtsTransportOptions = Pick<VoiceRuntimeConfig, "inworldRuntim
     webSocketUrl?: string;
     sampleRateHz?: number;
     bufferCharThreshold?: number;
+    /** Request synchronized phoneme timing; adds provider alignment latency. */
+    phonemeTimestamps?: boolean;
 };
 export declare function createInworldTtsTransport(options?: InworldTtsTransportOptions): WebTtsTransport;
 export declare function createAsyncQueue<T>(maxQueuedWeight?: number, weightOf?: (value: T) => number, overflowMessage?: string): {

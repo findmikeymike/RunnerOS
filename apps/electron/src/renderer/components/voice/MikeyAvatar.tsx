@@ -31,7 +31,7 @@ export function MikeyAvatar(props: MikeyAvatarProps) {
 
   return (
     <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-      <canvas ref={canvas} className={`size-full transition-opacity motion-reduce:transition-none ${ready ? 'opacity-100' : 'opacity-0'}`} />
+      <canvas ref={canvas} className={`size-full transition-opacity duration-500 ease-out motion-reduce:transition-none ${props.active && ready ? 'opacity-100' : 'opacity-0'}`} />
       {!ready ? <div className="absolute inset-0 flex items-center justify-center"><div className="flex size-28 items-center justify-center rounded-full bg-white/[0.04] text-white/25"><UserRound className="size-12" strokeWidth={1} /></div></div> : null}
     </div>
   )

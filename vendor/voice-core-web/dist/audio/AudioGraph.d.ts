@@ -34,11 +34,19 @@ export declare class AudioGraph {
     getSampleRate(): number | null;
     assertCaptureHealthy(): void;
     cancelPendingStart(): void;
+    getPlaybackEpoch(): number;
     enqueueOutputFrames(frames: Float32Array, sampleRateHz: number, channels: number): Promise<void>;
+    enqueueNormalizedOutputFrames(frames: Float32Array): Promise<void>;
+    prepareOutputFrames(frames: Float32Array, sampleRateHz: number, channels: number): Float32Array;
     private postOutputSlice;
     clearOutputQueue(): void;
     setInputFramesHandler(handler: ((frames: Float32Array, sampleRateHz: number, channels: number) => void | Promise<void>) | null): void;
-    setPlaybackFrameHandler(handler: ((frame: PlaybackFrame) => void) | null): void;
+    setPlaybackFrameHandler(handler: ((frame: PlaybackFrame, playbackClock: {
+        playbackSamples: number;
+        playbackSampleRate: number;
+        playbackEpoch: number;
+        consuming: boolean;
+    } | null) => void) | null): void;
     private emitPlaybackFrame;
     setOutputPlaybackHandler(handler: ((active: boolean) => void) | null): void;
     setOutputFlushedHandler(handler: (() => void) | null): void;

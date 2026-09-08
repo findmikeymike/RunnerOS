@@ -14,6 +14,8 @@ export declare class VoiceCoreWeb {
     private static readonly BARGE_IN_NO_AEC_THRESHOLD;
     private static readonly EMPTY_LLM_RETRY_MAX_OUTPUT_TOKENS;
     private readonly audioGraph;
+    private readonly visemeScheduler;
+    private readonly ttsVisemeMetadata;
     private readonly runtimeWorker;
     private readonly handlers;
     private readonly playbackFrameHandlers;

@@ -3,6 +3,8 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
     constructor(options) {
         super();
         this.playbackEpoch = options?.processorOptions?.playbackEpoch ?? 0;
+        this.playbackSamples = 0;
+        this.playbackConsuming = false;
         this.playbackFrameActive = false;
         this.playbackFrameInterval = Math.ceil(sampleRate / 30);
         this.playbackFrameElapsed = this.playbackFrameInterval;
@@ -58,6 +60,7 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
             }
             if (event.data?.type === "clearOutput") {
                 this.playbackEpoch = event.data.playbackEpoch ?? this.playbackEpoch + 1;
+                this.playbackSamples = 0;
                 this.postPlaybackFrame(false, 0);
                 this.playbackFrameElapsed = this.playbackFrameInterval;
                 this.flushRequestId = null;
@@ -82,11 +85,16 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
             }
         };
     }
-    postPlaybackFrame(active, level) {
+    postPlaybackFrame(active, level, consuming = false) {
+        this.playbackConsuming = consuming;
         this.playbackFrameActive = active;
-        this.port.postMessage({ type: "playbackFrame", active, level, playbackEpoch: this.playbackEpoch });
+        this.port.postMessage({ type: "playbackFrame", active, level, playbackEpoch: this.playbackEpoch,
+            playbackSamples: this.playbackSamples, playbackSampleRate: sampleRate, consuming });
     }
-    observeOutput(channel) {
+    observeOutput(channel, consumedSamples = 0) {
+        // Advance only for source PCM: prebuffer waits and generated tails have no cues.
+        this.playbackSamples += consumedSamples;
+        const consuming = consumedSamples > 0;
         // Audio-reactive RMS of this rendered quantum, including the existing fades.
         // No queue depth, TTS input, or grace-period playback state drives this signal.
         let sumSquares = 0;
@@ -97,14 +105,11 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
         }
         const level = Math.min(1, Math.sqrt(sumSquares / Math.max(1, channel.length)));
         this.playbackFrameElapsed += channel.length;
-        if (level === 0) {
-            // Silence bypasses the meter cadence, including during the inactive grace.
-            if (this.playbackFrameActive)
-                this.postPlaybackFrame(false, 0);
-        }
-        else if (this.playbackFrameElapsed >= this.playbackFrameInterval) {
+        const silenceEdge = level === 0 && this.playbackFrameActive;
+        const consumptionEdge = consuming !== this.playbackConsuming;
+        if (silenceEdge || consumptionEdge || ((level > 0 || consuming) && this.playbackFrameElapsed >= this.playbackFrameInterval)) {
             this.playbackFrameElapsed = 0;
-            this.postPlaybackFrame(true, level);
+            this.postPlaybackFrame(level > 0, level, consuming);
         }
     }
     syncBackpressureState() {
@@ -128,7 +133,7 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
         const output = outputs[0];
         const channel = output?.[0];
         if (!channel) {
-            if (this.playbackFrameActive)
+            if (this.playbackFrameActive || this.playbackConsuming)
                 this.postPlaybackFrame(false, 0);
             return true;
         }
@@ -217,7 +222,7 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
             }
         }
         this.syncBackpressureState();
-        this.observeOutput(channel);
+        this.observeOutput(channel, writeIndex);
         return true;
     }
 }

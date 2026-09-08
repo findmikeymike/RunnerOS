@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { createAvatarPlayback } from '@/lib/artist-manager-avatar-playback'
+import type { AvatarPlayback } from '@/lib/mikey-avatar/pose'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { AgentDefinitionDTO, LoadedSkill, LoadedSource, ArtistManagerMoonshineStatus } from '../../shared/types'
 import { VoiceCoreWeb, createAssemblyAiSttTransport, createInworldTtsTransport, type VoiceEvent } from '@voice-core/web/cloud'
@@ -24,8 +25,9 @@ export type ArtistManagerVoiceState = {
   voiceModel: string | null; voiceRouteReady: boolean
   timingRecords: VoiceTimingRecord[]; canSendTyped: boolean; sendTyped(text: string): Promise<void>
   preparing: boolean
+  prepared: boolean
   avatarState: 'idle' | 'listening' | 'waiting' | 'speaking'
-  getAvatarPlayback(): { active: boolean; level: number; updatedAt: number }
+  getAvatarPlayback(): AvatarPlayback
   open: boolean; running: boolean; starting: boolean; stopping: boolean; installing: boolean
   providerReady: boolean; assemblyAiReady: boolean; inworldReady: boolean; hearingReady: boolean
   status: string; error: string | null; userText: string; assistantText: string
@@ -58,6 +60,8 @@ export function useArtistManagerVoice(input: {
   const [running, setRunning] = React.useState(false)
   const [starting, setStarting] = React.useState(false)
   const [preparing, setPreparing] = React.useState(false)
+  const [prepared, setPrepared] = React.useState(false)
+  const preparedSettings = React.useRef<string | null>(null)
   const preparation = React.useRef<{ ticket: number; promise: Promise<PreparedCall | null> } | null>(null)
   const activationEpoch = React.useRef(0)
   const activating = React.useRef(false)
@@ -88,6 +92,7 @@ export function useArtistManagerVoice(input: {
   const shutdownSucceeded = React.useRef(true)
 
   const stop = React.useCallback(async (cancelHandoff = true) => {
+    preparedSettings.current = null
     avatarPlayback.reset()
     if (cancelHandoff) handoff.current?.cancel()
     preparation.current = null; activationEpoch.current++; activating.current = false
@@ -96,7 +101,7 @@ export function useArtistManagerVoice(input: {
     timingRef.current?.stop(); timingRef.current = null; runtimeRef.current = null
     const cleanup = lifecycle.stop()
     unsubscribe.current?.(); unsubscribe.current = null
-    if (mounted.current) { setAvatarState('idle'); setRunning(false); setStarting(false); setPreparing(false); setStopping(true); setStatus('Stopping audio and agent…') }
+    if (mounted.current) { setPrepared(false); setAvatarState('idle'); setRunning(false); setStarting(false); setPreparing(false); setStopping(true); setStatus('Stopping audio and agent…') }
     try {
       await cleanup
       if (epoch === stopEpoch.current) shutdownSucceeded.current = true
@@ -157,9 +162,10 @@ export function useArtistManagerVoice(input: {
   }, [stop, refreshProviders])
 
   const prepareCall = React.useCallback(async (ticket: number): Promise<PreparedCall | null> => {
+    preparedSettings.current = null
     handoff.current?.cancel(); handoff.current = null
     stopEpoch.current++; setStopping(false)
-    setPreparing(true); setError(null); setUserText(''); setAssistantText(''); setStatus('Warming up…')
+    setPrepared(false); setPreparing(true); setError(null); setUserText(''); setAssistantText(''); setStatus('Warming up…')
     const alive = () => mounted.current && lifecycle.owns(ticket)
     const trace = new VoiceTimingTrace(crypto.randomUUID(), record => {
       if (!mounted.current) return
@@ -275,7 +281,7 @@ export function useArtistManagerVoice(input: {
       await runtime.setTransports({
         stt: observedStt,
         llm: focus,
-        tts: observeVoiceTts(createInworldTtsTransport({ webSocketUrl: proxyUrl.toString(), inworldVoiceId: proxy.voiceId, inworldModelId: ELECTRON_INWORLD_TTS_MODEL_ID }), trace),
+        tts: observeVoiceTts(createInworldTtsTransport({ webSocketUrl: proxyUrl.toString(), inworldVoiceId: proxy.voiceId, inworldModelId: ELECTRON_INWORLD_TTS_MODEL_ID, phonemeTimestamps: true }), trace),
       })
       lifecycle.assertOwner(ticket)
       const observePlayback = avatarPlayback.begin()
@@ -305,7 +311,8 @@ export function useArtistManagerVoice(input: {
       await Promise.all([modelId ? observedStt.start() : Promise.resolve(), focus.prepare()])
       lifecycle.assertOwner(ticket)
       trace?.mark('prepare-ready')
-      setPreparing(false); setStatus('Ready when you are')
+      preparedSettings.current = JSON.stringify(settings)
+      setPrepared(true); setPreparing(false); setStatus('Ready when you are')
       return { runtime, ticket, settings, trace }
     } catch (cause) {
       trace?.mark('error')
@@ -393,7 +400,7 @@ export function useArtistManagerVoice(input: {
     typedTrial, setTypedTrial: value => { if (!running && !starting && !stopping) { void stop(); setTypedTrial(value) } },
     timingRecords, canSendTyped, sendTyped,
     avatarState: running ? avatarState : 'idle', getAvatarPlayback: avatarPlayback.sample,
-    open, preparing, running, starting, stopping, installing, status, error, userText, assistantText,
+    open, preparing, prepared: prepared && preparedSettings.current === JSON.stringify(voiceSettings), running, starting, stopping, installing, status, error, userText, assistantText,
     providerReady: voiceRouteReady && hearingReady && providers.inworld, hearingReady, assemblyAiReady: providers.assemblyAi, inworldReady: providers.inworld,
     sttSelection,
     managerStyle,

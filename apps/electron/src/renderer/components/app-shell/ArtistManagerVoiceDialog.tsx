@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Captions, Phone, PhoneOff, Settings2 } from 'lucide-react'
+import { ArrowLeft, Captions, CircleCheck, Phone, PhoneOff, Settings2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import type { ArtistManagerVoiceState } from '@/hooks/useArtistManagerVoice'
 import { ArtistManagerVoiceSetup } from './ArtistManagerVoiceSetup'
 import { MikeyAvatar } from '@/components/voice/MikeyAvatar'
+import { getVoiceCallPresentation } from '@/components/voice/voice-call-readiness'
 
 export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceState }) {
   const [showSetup, setShowSetup] = useState(false)
@@ -13,10 +14,7 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
   useEffect(() => {
     if (!voice.open) { setShowSetup(false); setShowCaptions(false) }
   }, [voice.open])
-  const status = voice.stopping ? 'Ending call…' : voice.starting ? 'Connecting…'
-    : voice.preparing ? 'Warming up…' : voice.installing ? 'Preparing audio…' : voice.error ? 'Connection needs attention'
-    : voice.running ? (voice.status === 'Working…' ? 'One moment…' : voice.status)
-    : voice.providerReady ? 'Ready when you are' : 'Set up your conversation'
+  const { status, showReady } = getVoiceCallPresentation(voice)
   const callLabel = voice.stopping ? 'Ending call' : voice.starting ? 'Cancel connection' : voice.running ? 'End call' : 'Start call'
   const iconButton = 'inline-flex size-10 items-center justify-center rounded-full bg-white/[0.07] text-white/60 transition-colors hover:bg-white/[0.12] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70'
 
@@ -27,7 +25,7 @@ export function ArtistManagerVoiceDialog({ voice }: { voice: ArtistManagerVoiceS
           {showSetup ? <button type="button" aria-label="Back to call" onClick={() => setShowSetup(false)} className="absolute left-5 top-5 rounded-full p-2 text-white/60 hover:text-white focus-visible:ring-2 focus-visible:ring-white/70"><ArrowLeft className="size-4" /></button> : null}
           <DialogTitle className="text-sm font-medium tracking-tight">{showSetup ? 'Call settings' : 'Artist Manager'}</DialogTitle>
           <DialogDescription className="sr-only">A voice call with your artist manager. Start or end the call below. Captions and audio settings are optional.</DialogDescription>
-          {!showSetup ? <p role="status" aria-live="polite" className="mt-1.5 text-xs text-white/45">{status}</p> : null}
+          {!showSetup ? <p role="status" aria-live="polite" className="mt-1.5 flex items-center justify-center gap-1.5 text-xs text-white/45">{showReady ? <CircleCheck data-voice-ready aria-hidden="true" className="size-3.5 text-emerald-400" /> : null}{status}</p> : null}
         </header>
 
         {showSetup ? (

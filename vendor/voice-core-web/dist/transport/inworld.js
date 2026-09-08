@@ -1,3 +1,4 @@
+import { InworldVisemeTimeline, crossfadeSourceSpans, sliceSourceSpans } from "./inworld-phonemes.js";
 import { assertSecureWebSocketSessionTarget, validateVoiceCoreSessionToken, } from "../sessionSecurity.js";
 const INWORLD_DEFAULT_WS_URL = "/api/inworld/tts/ws";
 const DEFAULT_INWORLD_MODEL_ID = "inworld-tts-1.5-max";
@@ -29,6 +30,7 @@ class InworldTtsTransport {
             sampleRateHz: this.options.sampleRateHz ?? DEFAULT_SAMPLE_RATE_HZ,
             bufferCharThreshold: this.options.bufferCharThreshold ?? DEFAULT_BUFFER_THRESHOLD,
             sessionToken: this.options.sessionToken,
+            phonemeTimestamps: this.options.phonemeTimestamps === true,
         }, signal);
     }
     async synthesize(request) {
@@ -47,6 +49,9 @@ async function createInworldStreamingSession(options, signal) {
     socket.binaryType = "arraybuffer";
     const queue = createAsyncQueue(options.sampleRateHz * (MAX_QUEUED_AUDIO_MS / 1_000), (chunk) => chunk.frames.length / Math.max(1, chunk.channels), `Inworld TTS audio queue exceeded ${MAX_QUEUED_AUDIO_MS}ms`);
     let prevChunkTail = null;
+    let providerSamples = 0;
+    let tailSpans = [];
+    const timeline = options.phonemeTimestamps ? new InworldVisemeTimeline() : undefined;
     let finished = false;
     let contextReady = false;
     let flushed = false;
@@ -89,8 +94,10 @@ async function createInworldStreamingSession(options, signal) {
         finished = true;
         cleanup();
         readyResolve?.();
-        flushTail(queue, prevChunkTail, options.sampleRateHz);
+        flushTail(queue, prevChunkTail, options.sampleRateHz, timeline?.project(tailSpans, options.sampleRateHz));
         prevChunkTail = null;
+        tailSpans = [];
+        timeline?.clear();
         queue.end();
         closeSocket();
     };
@@ -102,6 +109,8 @@ async function createInworldStreamingSession(options, signal) {
         terminalError = error;
         cleanup();
         prevChunkTail = null;
+        tailSpans = [];
+        timeline?.clear();
         readyReject?.(error);
         queue.throw(error);
         closeSocket();
@@ -121,6 +130,7 @@ async function createInworldStreamingSession(options, signal) {
                         sampleRateHertz: options.sampleRateHz,
                     },
                     bufferCharThreshold: options.bufferCharThreshold,
+                    ...(options.phonemeTimestamps ? { timestampType: "WORD", timestampTransportStrategy: "SYNC" } : {}),
                 },
                 contextId: CONTEXT_ID,
             }));
@@ -152,18 +162,27 @@ async function createInworldStreamingSession(options, signal) {
             readyResolve?.();
             return;
         }
+        const timestampInfo = result.audioChunk?.timestampInfo ?? result.timestampInfo;
         const audioContent = result.audioChunk?.audioContent;
         if (audioContent) {
             resetAudioDeadline();
             try {
                 const pcm16 = decodeAudioChunk(audioContent);
                 if (pcm16.length > 0) {
+                    timeline?.ingest(timestampInfo, {
+                        startMs: providerSamples * 1000 / options.sampleRateHz,
+                        endMs: (providerSamples + pcm16.length) * 1000 / options.sampleRateHz,
+                    });
+                    const spans = timeline ? crossfadeSourceSpans(tailSpans, prevChunkTail?.length ?? 0, providerSamples, pcm16.length, CROSSFADE_SAMPLES) : [];
+                    providerSamples += pcm16.length;
                     const blended = blendChunkBoundary(prevChunkTail, pcm16);
                     if (blended.length > CROSSFADE_SAMPLES) {
                         const splitIndex = blended.length - CROSSFADE_SAMPLES;
                         const body = blended.subarray(0, splitIndex);
                         prevChunkTail = blended.slice(splitIndex);
+                        tailSpans = sliceSourceSpans(spans, splitIndex, blended.length);
                         queue.push({
+                            ...(timeline ? { visemes: timeline.project(sliceSourceSpans(spans, 0, splitIndex), options.sampleRateHz) } : {}),
                             frames: pcm16ToFloat32(body),
                             sampleRate: options.sampleRateHz,
                             channels: 1,
@@ -171,7 +190,10 @@ async function createInworldStreamingSession(options, signal) {
                     }
                     else {
                         prevChunkTail = blended;
+                        tailSpans = spans;
                     }
+                    if (tailSpans.length)
+                        timeline?.discardBefore(Math.min(...tailSpans.map(span => span.sourceStart)), options.sampleRateHz);
                 }
             }
             catch (error) {
@@ -179,6 +201,7 @@ async function createInworldStreamingSession(options, signal) {
             }
             return;
         }
+        timeline?.ingest(timestampInfo);
         if (result.flushCompleted || result.contextClosed) {
             finish();
         }
@@ -285,6 +308,9 @@ function buildWebSocketUrl(baseUrl, sessionToken) {
     return url.toString();
 }
 function validateInworldOptions(options) {
+    if (options.phonemeTimestamps !== undefined && typeof options.phonemeTimestamps !== "boolean") {
+        throw new TypeError("Inworld phonemeTimestamps must be a boolean");
+    }
     assertInworldInteger(options.sampleRateHz, "sampleRateHz", 8_000, 192_000);
     assertInworldInteger(options.bufferCharThreshold, "bufferCharThreshold", 1, 1_000);
     if (options.inworldVoiceId !== undefined)
@@ -356,12 +382,13 @@ function pcm16ToFloat32(pcm16) {
     }
     return frames;
 }
-function flushTail(queue, tail, sampleRate) {
+function flushTail(queue, tail, sampleRate, visemes) {
     if (!tail || tail.length === 0) {
         return;
     }
     applyEdgeFade(tail, sampleRate);
     queue.push({
+        ...(visemes !== undefined ? { visemes } : {}),
         frames: pcm16ToFloat32(tail),
         sampleRate,
         channels: 1,

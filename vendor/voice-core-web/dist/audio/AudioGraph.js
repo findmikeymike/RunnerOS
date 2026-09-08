@@ -125,10 +125,22 @@ export class AudioGraph {
                     if (event.data.playbackEpoch === this.playbackEpoch
                         && typeof event.data.active === "boolean"
                         && typeof event.data.level === "number" && Number.isFinite(event.data.level)) {
+                        const playbackClock = (typeof event.data.playbackSamples === "number"
+                            && Number.isSafeInteger(event.data.playbackSamples)
+                            && event.data.playbackSamples >= 0
+                            && typeof event.data.playbackSampleRate === "number"
+                            && Number.isFinite(event.data.playbackSampleRate)
+                            && event.data.playbackSampleRate === context.sampleRate
+                            && typeof event.data.consuming === "boolean") ? {
+                            playbackSamples: event.data.playbackSamples,
+                            playbackSampleRate: event.data.playbackSampleRate,
+                            playbackEpoch: event.data.playbackEpoch,
+                            consuming: event.data.consuming,
+                        } : null;
                         this.emitPlaybackFrame({
                             active: event.data.active && event.data.level > 0,
                             level: event.data.active ? Math.max(0, Math.min(1, event.data.level)) : 0,
-                        });
+                        }, playbackClock);
                     }
                     return;
                 }
@@ -173,7 +185,7 @@ export class AudioGraph {
                 if (startGeneration !== this.startGeneration)
                     return;
                 this.playbackEpoch++;
-                this.emitPlaybackFrame({ active: false, level: 0 });
+                this.emitPlaybackFrame({ active: false, level: 0 }, null);
                 const error = new Error("VoiceCore output worklet processor failed");
                 this.cancelPendingOutputRequests(error.message);
                 this.outputErrorHandler?.(error);
@@ -263,20 +275,29 @@ export class AudioGraph {
     cancelPendingStart() {
         this.startGeneration += 1;
         this.playbackEpoch++;
-        this.emitPlaybackFrame({ active: false, level: 0 });
+        this.emitPlaybackFrame({ active: false, level: 0 }, null);
         this.pendingStartCancellation?.();
         this.pendingStartCancellation = null;
     }
+    getPlaybackEpoch() {
+        return this.playbackEpoch;
+    }
     async enqueueOutputFrames(frames, sampleRateHz, channels) {
+        const normalized = this.normalizeOutputFrames(frames, sampleRateHz, channels);
+        return this.enqueueNormalizedOutputFrames(normalized);
+    }
+    async enqueueNormalizedOutputFrames(frames) {
         if (!this.outputNode) {
             throw new Error("output node is not initialized");
         }
-        const normalized = this.normalizeOutputFrames(frames, sampleRateHz, channels);
         this.pendingOutputFlush = null;
         const maxSliceSamples = Math.max(128, Math.round((this.audioContext?.sampleRate ?? 48_000) * 0.1));
-        for (let offset = 0; offset < normalized.length; offset += maxSliceSamples) {
-            await this.postOutputSlice(normalized.slice(offset, offset + maxSliceSamples));
+        for (let offset = 0; offset < frames.length; offset += maxSliceSamples) {
+            await this.postOutputSlice(frames.slice(offset, offset + maxSliceSamples));
         }
+    }
+    prepareOutputFrames(frames, sampleRateHz, channels) {
+        return this.normalizeOutputFrames(frames, sampleRateHz, channels);
     }
     postOutputSlice(frames) {
         const outputNode = this.outputNode;
@@ -295,7 +316,7 @@ export class AudioGraph {
         this.cancelPendingOutputRequests("VoiceCore output queue cleared");
         this.outputResampler.reset();
         this.playbackEpoch++;
-        this.emitPlaybackFrame({ active: false, level: 0 });
+        this.emitPlaybackFrame({ active: false, level: 0 }, null);
         this.outputNode?.port.postMessage({ type: "clearOutput", playbackEpoch: this.playbackEpoch });
     }
     setInputFramesHandler(handler) {
@@ -304,11 +325,13 @@ export class AudioGraph {
     setPlaybackFrameHandler(handler) {
         this.playbackFrameHandler = handler;
     }
-    emitPlaybackFrame(frame) {
+    emitPlaybackFrame(frame, playbackClock) {
         try {
-            this.playbackFrameHandler?.(frame);
+            this.playbackFrameHandler?.(frame, playbackClock);
         }
-        catch { /* Optional visuals cannot fail audio. */ }
+        catch {
+            /* Optional visuals cannot fail audio. */
+        }
     }
     setOutputPlaybackHandler(handler) {
         this.outputPlaybackHandler = handler;

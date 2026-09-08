@@ -1,347 +1,422 @@
-diff --git a/voice-core-rs/wrappers/web/contract-tests/response-playback-completion.test.mjs b/voice-core-rs/wrappers/web/contract-tests/response-playback-completion.test.mjs
-index 30f0537..a734400 100644
---- a/voice-core-rs/wrappers/web/contract-tests/response-playback-completion.test.mjs
-+++ b/voice-core-rs/wrappers/web/contract-tests/response-playback-completion.test.mjs
-@@ -12,6 +12,7 @@ async function runtimeFixture() {
-     flushes = 0;
-     clears = 0;
-     setInputFramesHandler() {}
-+    setPlaybackFrameHandler(handler) { this.onFrame = handler; }
-     setOutputPlaybackHandler(handler) { this.onPlayback = handler; }
-     setOutputFlushedHandler(handler) { this.onFlushed = handler; }
-     setOutputQueuePressureHandler() {}
-@@ -466,3 +467,42 @@ test('streaming keeps speech incremental and joins a surrogate pair across event
-   await runtime.generateAssistantResponse('stream');
-   assert.equal(spoken.slice(1).join(''), body);
- });
+diff --git a/voice-core-rs/wrappers/web/contract-tests/consumed-audio-visemes.test.mjs b/voice-core-rs/wrappers/web/contract-tests/consumed-audio-visemes.test.mjs
+new file mode 100644
+index 0000000..a9ec6b4
+--- /dev/null
++++ b/voice-core-rs/wrappers/web/contract-tests/consumed-audio-visemes.test.mjs
+@@ -0,0 +1,58 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import { ConsumedAudioVisemeScheduler } from '../src/audio/ConsumedAudioVisemeScheduler.ts';
 +
-+
-+test("playback frame observers are optional, isolated, unsubscribable and cleared on destroy", async () => {
-+  const runtime = await runtimeFixture();
-+  assert.doesNotThrow(() => runtime.audioGraph.onFrame({ active: true, level: 0.5 }));
-+  const frames = [];
-+  const removeBad = runtime.onPlaybackFrame((frame) => {
-+    frame.level = 99;
-+    throw new Error("renderer unavailable");
-+  });
-+  const removeGood = runtime.onPlaybackFrame(frame => frames.push(frame));
-+  runtime.audioGraph.onFrame({ active: true, level: 0.5 });
-+  assert.equal(frames[0].level, 0.5);
-+  removeBad(); removeBad(); removeGood();
-+  runtime.audioGraph.onFrame({ active: true, level: 0.8 });
-+  assert.equal(frames.length, 1);
-+  runtime.onPlaybackFrame(frame => frames.push(frame));
-+  runtime.enqueueLifecycle = task => task();
-+  await runtime.destroy();
-+  runtime.audioGraph.onFrame({ active: true, level: 0.9 });
-+  assert.equal(frames.length, 1);
-+  assert.throws(() => runtime.onPlaybackFrame(() => {}), /destroyed/);
-+});
-+
-+
-+test("playback observers cannot reanimate a later observer by clearing during dispatch", async () => {
-+  const runtime = await runtimeFixture();
-+  const frames = [];
-+  runtime.onPlaybackFrame(frame => {
-+    if (frame.active) runtime.audioGraph.onFrame({ active: false, level: 0 });
-+  });
-+  runtime.onPlaybackFrame(async () => { throw new Error("async renderer failed"); });
-+  runtime.onPlaybackFrame(frame => frames.push(frame));
-+  runtime.audioGraph.onFrame({ active: true, level: 0.8 });
-+  await Promise.resolve();
-+  assert.equal(frames.length, 1);
-+  assert.equal(frames[0].active, false);
-+  assert.equal(frames[0].level, 0);
-+});
-diff --git a/voice-core-rs/wrappers/web/src/VoiceCoreWeb.ts b/voice-core-rs/wrappers/web/src/VoiceCoreWeb.ts
-index 8bab4ea..c33e10d 100644
---- a/voice-core-rs/wrappers/web/src/VoiceCoreWeb.ts
-+++ b/voice-core-rs/wrappers/web/src/VoiceCoreWeb.ts
-@@ -11,6 +11,7 @@ import { shouldSendSttAudio } from "./runtime/sttAudioGate";
- import type {
-   BrowserCapabilities,
-   InputStats,
-+  PlaybackFrame,
-   PocketInstallStatus,
-   VoiceSdkCapabilities,
-   VoiceConversationState,
-@@ -39,6 +40,8 @@ export class VoiceCoreWeb {
-   private readonly audioGraph = new AudioGraph();
-   private readonly runtimeWorker = new RuntimeWorkerClient();
-   private readonly handlers = new Set<EventHandler>();
-+  private readonly playbackFrameHandlers = new Set<(frame: PlaybackFrame) => void>();
-+  private playbackFrameSequence = 0;
-   private config: VoiceRuntimeConfig;
-   private capabilities: BrowserCapabilities | null = null;
-   private state: VoiceConversationState = "idle";
-@@ -90,6 +93,18 @@ export class VoiceCoreWeb {
-     this.audioGraph.setInputFramesHandler((frames, sampleRateHz, channels) =>
-       this.handleInputFrames(frames, sampleRateHz, channels),
-     );
-+    this.audioGraph.setPlaybackFrameHandler((frame) => {
-+      const sequence = ++this.playbackFrameSequence;
-+      for (const handler of [...this.playbackFrameHandlers]) {
-+        // An observer may synchronously stop/clear playback. Never deliver its old
-+        // active frame after the resulting zero frame to the remaining observers.
-+        if (sequence !== this.playbackFrameSequence) break;
-+        if (!this.playbackFrameHandlers.has(handler)) continue;
-+        try {
-+          void Promise.resolve(handler({ ...frame })).catch(() => undefined);
-+        } catch { /* Optional visuals cannot fail audio. */ }
-+      }
-+    });
-     this.audioGraph.setOutputPlaybackHandler((active) => {
-       void this.handleOutputPlaybackState(active).catch((error) => {
-         void this.failRuntime(error instanceof Error ? error : new Error(String(error)));
-@@ -277,6 +292,7 @@ export class VoiceCoreWeb {
-       } finally {
-         this.runtimeWorker.destroy();
-         this.handlers.clear();
-+        this.playbackFrameHandlers.clear();
-         this.destroyed = true;
-       }
-       if (stopError !== undefined) throw stopError;
-@@ -489,6 +505,14 @@ export class VoiceCoreWeb {
-     throw new Error("Host-managed voice assets are unavailable in this Web build.");
-   }
-
-+  /** Audio-reactive output RMS, not phoneme lip sync. Silence resets immediately;
-+   * audible updates are limited to approximately 30 Hz. Observers are optional. */
-+  onPlaybackFrame(handler: (frame: PlaybackFrame) => void): () => void {
-+    if (this.destroyed) throw new Error("VoiceCore has been destroyed");
-+    this.playbackFrameHandlers.add(handler);
-+    return () => { this.playbackFrameHandlers.delete(handler); };
-+  }
-+
-   onEvent(handler: EventHandler): () => void {
-     this.handlers.add(handler);
-     return () => {
-diff --git a/voice-core-rs/wrappers/web/src/audio/AudioGraph.ts b/voice-core-rs/wrappers/web/src/audio/AudioGraph.ts
-index fc2919a..3908495 100644
---- a/voice-core-rs/wrappers/web/src/audio/AudioGraph.ts
-+++ b/voice-core-rs/wrappers/web/src/audio/AudioGraph.ts
-@@ -1,4 +1,4 @@
--import type { VoiceRuntimeConfig } from "../types";
-+import type { PlaybackFrame, VoiceRuntimeConfig } from "../types";
- import { OutputAdmissionTracker } from "./OutputAdmissionTracker";
- import { StreamingResampler } from "./StreamingResampler";
- import { BoundedAudioDispatcher } from "./BoundedAudioDispatcher";
-@@ -19,6 +19,8 @@ export class AudioGraph {
-   private inputFramesHandler:
-     | ((frames: Float32Array, sampleRateHz: number, channels: number) => void | Promise<void>)
-     | null = null;
-+  private playbackEpoch = 0;
-+  private playbackFrameHandler: ((frame: PlaybackFrame) => void) | null = null;
-   private outputPlaybackHandler:
-     | ((active: boolean) => void)
-     | null = null;
-@@ -143,10 +145,14 @@ export class AudioGraph {
-       this.inputSinkNode.gain.value = 0;
-       this.inputNode.connect(this.inputSinkNode);
-       this.inputSinkNode.connect(this.audioContext.destination);
--      this.outputNode = new AudioWorkletNode(this.audioContext, "voice-core-output");
-+      this.outputNode = new AudioWorkletNode(this.audioContext, "voice-core-output", {
-+        processorOptions: { playbackEpoch: this.playbackEpoch },
-+      });
-       this.outputNode.port.onmessage = (
-         event: MessageEvent<{
-           type?: string;
-+          level?: number;
-+          playbackEpoch?: number;
-           active?: boolean;
-           droppedSamples?: number;
-           queuedSamples?: number;
-@@ -154,6 +160,17 @@ export class AudioGraph {
-         }>,
-       ) => {
-         if (startGeneration !== this.startGeneration) return;
-+        if (event.data?.type === "playbackFrame") {
-+          if (event.data.playbackEpoch === this.playbackEpoch
-+            && typeof event.data.active === "boolean"
-+            && typeof event.data.level === "number" && Number.isFinite(event.data.level)) {
-+            this.emitPlaybackFrame({
-+              active: event.data.active && event.data.level > 0,
-+              level: event.data.active ? Math.max(0, Math.min(1, event.data.level)) : 0,
-+            });
-+          }
-+          return;
-+        }
-         if (
-           (event.data?.type === "outputAccepted" ||
-             event.data?.type === "outputRejected") &&
-@@ -213,6 +230,8 @@ export class AudioGraph {
-       };
-       this.outputNode.onprocessorerror = () => {
-         if (startGeneration !== this.startGeneration) return;
-+        this.playbackEpoch++;
-+        this.emitPlaybackFrame({ active: false, level: 0 });
-         const error = new Error("VoiceCore output worklet processor failed");
-         this.cancelPendingOutputRequests(error.message);
-         this.outputErrorHandler?.(error);
-@@ -300,6 +319,8 @@ export class AudioGraph {
-
-   cancelPendingStart(): void {
-     this.startGeneration += 1;
-+    this.playbackEpoch++;
-+    this.emitPlaybackFrame({ active: false, level: 0 });
-     this.pendingStartCancellation?.();
-     this.pendingStartCancellation = null;
-   }
-@@ -337,7 +358,9 @@ export class AudioGraph {
-     this.pendingOutputFlush = null;
-     this.cancelPendingOutputRequests("VoiceCore output queue cleared");
-     this.outputResampler.reset();
--    this.outputNode?.port.postMessage({ type: "clearOutput" });
-+    this.playbackEpoch++;
-+    this.emitPlaybackFrame({ active: false, level: 0 });
-+    this.outputNode?.port.postMessage({ type: "clearOutput", playbackEpoch: this.playbackEpoch });
-   }
-
-   setInputFramesHandler(
-@@ -346,6 +369,14 @@ export class AudioGraph {
-     this.inputFramesHandler = handler;
-   }
-
-+  setPlaybackFrameHandler(handler: ((frame: PlaybackFrame) => void) | null): void {
-+    this.playbackFrameHandler = handler;
-+  }
-+
-+  private emitPlaybackFrame(frame: PlaybackFrame): void {
-+    try { this.playbackFrameHandler?.(frame); } catch { /* Optional visuals cannot fail audio. */ }
-+  }
-+
-   setOutputPlaybackHandler(handler: ((active: boolean) => void) | null): void {
-     this.outputPlaybackHandler = handler;
-   }
-diff --git a/voice-core-rs/wrappers/web/src/audio/output-worklet.js b/voice-core-rs/wrappers/web/src/audio/output-worklet.js
-index 0e665f3..80cc4e0 100644
---- a/voice-core-rs/wrappers/web/src/audio/output-worklet.js
-+++ b/voice-core-rs/wrappers/web/src/audio/output-worklet.js
-@@ -1,6 +1,10 @@
- class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
--  constructor() {
-+  constructor(options) {
-     super();
-+    this.playbackEpoch = options?.processorOptions?.playbackEpoch ?? 0;
-+    this.playbackFrameActive = false;
-+    this.playbackFrameInterval = Math.ceil(sampleRate / 30);
-+    this.playbackFrameElapsed = this.playbackFrameInterval;
-     this.pending = [];
-     this.offset = 0;
-     this.queuedSamples = 0;
-@@ -55,6 +59,9 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
-       }
-
-       if (event.data?.type === "clearOutput") {
-+        this.playbackEpoch = event.data.playbackEpoch ?? this.playbackEpoch + 1;
-+        this.postPlaybackFrame(false, 0);
-+        this.playbackFrameElapsed = this.playbackFrameInterval;
-         this.flushRequestId = null;
-         this.pending = [];
-         this.offset = 0;
-@@ -78,6 +85,30 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
-     };
-   }
-
-+  postPlaybackFrame(active, level) {
-+    this.playbackFrameActive = active;
-+    this.port.postMessage({ type: "playbackFrame", active, level, playbackEpoch: this.playbackEpoch });
-+  }
-+
-+  observeOutput(channel) {
-+    // Audio-reactive RMS of this rendered quantum, including the existing fades.
-+    // No queue depth, TTS input, or grace-period playback state drives this signal.
-+    let sumSquares = 0;
-+    for (let index = 0; index < channel.length; index += 1) {
-+      const sample = channel[index];
-+      if (Number.isFinite(sample)) sumSquares += sample * sample;
-+    }
-+    const level = Math.min(1, Math.sqrt(sumSquares / Math.max(1, channel.length)));
-+    this.playbackFrameElapsed += channel.length;
-+    if (level === 0) {
-+      // Silence bypasses the meter cadence, including during the inactive grace.
-+      if (this.playbackFrameActive) this.postPlaybackFrame(false, 0);
-+    } else if (this.playbackFrameElapsed >= this.playbackFrameInterval) {
-+      this.playbackFrameElapsed = 0;
-+      this.postPlaybackFrame(true, level);
-+    }
-+  }
-+
-   syncBackpressureState() {
-     let nextBackpressured = this.backpressured;
-     if (this.queuedSamples >= this.queueHighWaterSamples) {
-@@ -100,6 +131,7 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
-     const output = outputs[0];
-     const channel = output?.[0];
-     if (!channel) {
-+      if (this.playbackFrameActive) this.postPlaybackFrame(false, 0);
-       return true;
-     }
-
-@@ -142,10 +174,12 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
-         this.port.postMessage({ type: "outputFlushed", requestId: this.flushRequestId });
-         this.flushRequestId = null;
-       }
-+      this.observeOutput(channel);
-       return true;
-     }
-
-     if (!this.active && this.queuedSamples < this.prebufferSamples && this.flushRequestId === null) {
-+      this.observeOutput(channel);
-       return true;
-     }
-
-@@ -201,6 +235,7 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
-     }
-
-     this.syncBackpressureState();
-+    this.observeOutput(channel);
-
-     return true;
-   }
-diff --git a/voice-core-rs/wrappers/web/src/cloud.ts b/voice-core-rs/wrappers/web/src/cloud.ts
-index ef934bb..0c71fd7 100644
---- a/voice-core-rs/wrappers/web/src/cloud.ts
-+++ b/voice-core-rs/wrappers/web/src/cloud.ts
-@@ -13,4 +13,4 @@ export type {
-   LlmGenerateRequest, LlmTokenEvent, WebLlmTransport, WebSttTransport,
-   WebTransportBundle, WebTtsTransport,
- } from "./transport/types";
--export type { VoiceEvent, VoiceRuntimeConfig } from "./types";
-+export type { PlaybackFrame, VoiceEvent, VoiceRuntimeConfig } from "./types";
-diff --git a/voice-core-rs/wrappers/web/src/index.ts b/voice-core-rs/wrappers/web/src/index.ts
-index a0d10f1..d45498e 100644
---- a/voice-core-rs/wrappers/web/src/index.ts
-+++ b/voice-core-rs/wrappers/web/src/index.ts
-@@ -31,6 +31,7 @@ export {
-   parseVoiceRecord,
- } from "./voiceAssets";
- export type {
-+  PlaybackFrame,
-   VoiceBrowserExtensionEvent,
-   VoiceSdkCapabilities,
-   VoiceCanonicalEvent,
-diff --git a/voice-core-rs/wrappers/web/src/types.ts b/voice-core-rs/wrappers/web/src/types.ts
-index 9f97677..e7d94ab 100644
---- a/voice-core-rs/wrappers/web/src/types.ts
-+++ b/voice-core-rs/wrappers/web/src/types.ts
-@@ -1,3 +1,10 @@
-+/** RMS of PCM actually rendered by the output worklet, normalized to 0..1.
-+ * Audio-reactive animation only; no phoneme or viseme timing is inferred. */
-+export interface PlaybackFrame {
-+  readonly active: boolean;
-+  readonly level: number;
++const cue = (startMs, endMs, viseme) => ({ startMs, endMs, viseme });
++function fixture() {
++  const scheduler = new ConsumedAudioVisemeScheduler(); scheduler.beginEpoch(4);
++  return { scheduler, enqueue: (visemes, duration = 100) => scheduler.enqueueChunk({playbackEpoch:4,chunk:{visemes},outputFrames:duration * 48,outputSampleRate:48000}), sample: ms => scheduler.sample(4, Math.round(ms * 48), 48000) };
 +}
-+
- export type VoiceConversationState =
-   | "idle"
-   | "listening"
++test('consumed clock freezes pose on underrun and unknown metadata retains fallback', () => {
++  const { enqueue, sample } = fixture();
++  enqueue([cue(0,100,'bmp')]); enqueue(undefined); enqueue([]);
++  assert.deepEqual(sample(50), [{symbol:'bmp',weight:1}]);
++  assert.deepEqual(sample(50), [{symbol:'bmp',weight:1}]);
++  assert.equal(sample(150), undefined); assert.deepEqual(sample(250), []);
++});
++test('blends adjacent shapes across chunk boundaries and keeps lip closure at full strength', () => {
++  const { enqueue, sample } = fixture();
++  enqueue([cue(0,100,'bmp')]); enqueue([cue(0,100,'o')]);
++  assert.deepEqual(sample(50),[{symbol:'bmp',weight:1}]);
++  const a=sample(90), b=sample(100), c=sample(110);
++  assert.ok(Math.abs(a[0].weight-.7)<1e-6);
++  assert.deepEqual(b,[{symbol:'bmp',weight:.5},{symbol:'o',weight:.5}]);
++  assert.ok(Math.abs(c[1].weight-.7)<1e-6);
++  assert.equal(sample(150)[0].symbol,'o');
++});
++test('split identical cues remain continuous and explicit gaps close', () => {
++  const { enqueue, sample } = fixture();
++  enqueue([cue(0,100,'fv')]); enqueue([cue(0,100,'fv')]); enqueue([]);
++  assert.deepEqual(sample(100),[{symbol:'fv',weight:1}]);
++  assert.deepEqual(sample(225),[]);
++});
++test('stale epochs never erase queued current-turn metadata', () => {
++  const { scheduler, enqueue, sample }=fixture(); enqueue([cue(0,100,'o')]);
++  assert.equal(scheduler.sample(3,2400,48000),undefined);
++  assert.deepEqual(sample(50),[{symbol:'o',weight:1}]);
++  scheduler.beginEpoch(5);
++  assert.equal(sample(50),undefined);
++  scheduler.enqueueChunk({playbackEpoch:4,chunk:{visemes:[cue(0,100,'o')]},outputFrames:4800,outputSampleRate:48000});
++  assert.equal(scheduler.sample(5,2400,48000),undefined);
++});
++test('pruned silence and sample-rate changes do not shift later chunks', () => {
++  const { scheduler, enqueue, sample }=fixture();
++  enqueue([cue(0,100,'o')]); sample(100);
++  enqueue([cue(0,100,'bmp')]);
++  assert.deepEqual(sample(150),[{symbol:'bmp',weight:1}]);
++  scheduler.enqueueChunk({playbackEpoch:4,chunk:{visemes:[cue(0,100,'fv')]},outputFrames:4410,outputSampleRate:44100});
++  assert.deepEqual(scheduler.sample(4,11025,44100),[{symbol:'fv',weight:1}]);
++  assert.equal(sample(200),undefined); // stale decreasing cursor
++});
++test('malformed metadata falls back and bounded pressure never rewinds positions', () => {
++  const { scheduler, enqueue, sample }=fixture();
++  enqueue([{startMs:0,endMs:100,viseme:null}]); assert.equal(sample(50),undefined);
++  for(let i=0;i<5000;i++) enqueue([]);
++  assert.ok(scheduler.chunks.length<=4096);
++  assert.ok(scheduler.queuedEnd>500);
++  scheduler.reset(); assert.equal(sample(50),undefined);
++});
+diff --git a/voice-core-rs/wrappers/web/contract-tests/fixtures/inworld-phoneme-sync.json b/voice-core-rs/wrappers/web/contract-tests/fixtures/inworld-phoneme-sync.json
+new file mode 100644
+index 0000000..5891630
+--- /dev/null
++++ b/voice-core-rs/wrappers/web/contract-tests/fixtures/inworld-phoneme-sync.json
+@@ -0,0 +1,219 @@
++{
++  "source": "Sanitized live Inworld TTS 2 Flash WORD/SYNC probe; fixed synthetic sentence; no audio or credentials.",
++  "sampleRate": 16000,
++  "chunks": [
++    {
++      "bytes": 4204,
++      "timestampInfo": {
++        "wordAlignment": {
++          "words": [
++            "My"
++          ],
++          "wordStartTimeSeconds": [
++            0
++          ],
++          "wordEndTimeSeconds": [
++            0.13
++          ],
++          "phoneticDetails": [
++            {
++              "wordIndex": 0,
++              "phones": [
++                {
++                  "phoneSymbol": "m",
++                  "startTimeSeconds": 0,
++                  "durationSeconds": 0.05,
++                  "visemeSymbol": "bmp"
++                },
++                {
++                  "phoneSymbol": "\u02c8a",
++                  "startTimeSeconds": 0.05,
++                  "durationSeconds": 0.04,
++                  "visemeSymbol": "aei"
++                },
++                {
++                  "phoneSymbol": "\u026a",
++                  "startTimeSeconds": 0.09,
++                  "durationSeconds": 0.04,
++                  "visemeSymbol": "ee"
++                }
++              ],
++              "isPartial": false
++            }
++          ]
++        }
++      }
++    },
++    {
++      "bytes": 21804,
++      "timestampInfo": {
++        "wordAlignment": {
++          "words": [
++            " ",
++            "music",
++            " ",
++            "makes",
++            " "
++          ],
++          "wordStartTimeSeconds": [
++            0.13,
++            0.13,
++            0.57,
++            0.57,
++            0.81
++          ],
++          "wordEndTimeSeconds": [
++            0.13,
++            0.57,
++            0.57,
++            0.81,
++            0.81
++          ],
++          "phoneticDetails": [
++            {
++              "wordIndex": 0,
++              "phones": [
++                {
++                  "phoneSymbol": "[silence]",
++                  "startTimeSeconds": 0.13,
++                  "durationSeconds": 0,
++                  "visemeSymbol": "bmp"
++                }
++              ],
++              "isPartial": false
++            },
++            {
++              "wordIndex": 1,
++              "phones": [
++                {
++                  "phoneSymbol": "m",
++                  "startTimeSeconds": 0.13,
++                  "durationSeconds": 0.1,
++                  "visemeSymbol": "bmp"
++                },
++                {
++                  "phoneSymbol": "j",
++                  "startTimeSeconds": 0.23,
++                  "durationSeconds": 0.1,
++                  "visemeSymbol": "cdgknstxyz"
++                },
++                {
++                  "phoneSymbol": "\u02c8u\u02d0",
++                  "startTimeSeconds": 0.33,
++                  "durationSeconds": 0.05,
++                  "visemeSymbol": "o"
++                },
++                {
++                  "phoneSymbol": "z",
++                  "startTimeSeconds": 0.38,
++                  "durationSeconds": 0.1,
++                  "visemeSymbol": "cdgknstxyz"
++                },
++                {
++                  "phoneSymbol": "\u026a",
++                  "startTimeSeconds": 0.48,
++                  "durationSeconds": 0.05,
++                  "visemeSymbol": "ee"
++                },
++                {
++                  "phoneSymbol": "k",
++                  "startTimeSeconds": 0.53,
++                  "durationSeconds": 0.04,
++                  "visemeSymbol": "cdgknstxyz"
++                }
++              ],
++              "isPartial": false
++            },
++            {
++              "wordIndex": 2,
++              "phones": [
++                {
++                  "phoneSymbol": "[silence]",
++                  "startTimeSeconds": 0.57,
++                  "durationSeconds": 0,
++                  "visemeSymbol": "bmp"
++                }
++              ],
++              "isPartial": false
++            },
++            {
++              "wordIndex": 3,
++              "phones": [
++                {
++                  "phoneSymbol": "m",
++                  "startTimeSeconds": 0.57,
++                  "durationSeconds": 0.08,
++                  "visemeSymbol": "bmp"
++                },
++                {
++                  "phoneSymbol": "e",
++                  "startTimeSeconds": 0.65,
++                  "durationSeconds": 0.03,
++                  "visemeSymbol": "ee"
++                },
++                {
++                  "phoneSymbol": "\u026a",
++                  "startTimeSeconds": 0.68,
++                  "durationSeconds": 0.04,
++                  "visemeSymbol": "ee"
++                },
++                {
++                  "phoneSymbol": "k",
++                  "startTimeSeconds": 0.72,
++                  "durationSeconds": 0.04,
++                  "visemeSymbol": "cdgknstxyz"
++                },
++                {
++                  "phoneSymbol": "s",
++                  "startTimeSeconds": 0.76,
++                  "durationSeconds": 0.05,
++                  "visemeSymbol": "cdgknstxyz"
++                }
++              ],
++              "isPartial": false
++            },
++            {
++              "wordIndex": 4,
++              "phones": [
++                {
++                  "phoneSymbol": "[silence]",
++                  "startTimeSeconds": 0.81,
++                  "durationSeconds": 0,
++                  "visemeSymbol": "bmp"
++                }
++              ],
++              "isPartial": false
++            }
++          ]
++        }
++      }
++    }
++  ],
++  "finalSilence": {
++    "wordAlignment": {
++      "words": [
++        ""
++      ],
++      "wordStartTimeSeconds": [
++        4.4
++      ],
++      "wordEndTimeSeconds": [
++        4.42
++      ],
++      "phoneticDetails": [
++        {
++          "wordIndex": 0,
++          "phones": [
++            {
++              "phoneSymbol": "[silence]",
++              "startTimeSeconds": 4.4,
++              "durationSeconds": 0.019999905,
++              "visemeSymbol": "bmp"
++            }
++          ],
++          "isPartial": false
++        }
++      ]
++    }
++  }
++}
+diff --git a/voice-core-rs/wrappers/web/contract-tests/inworld-phonemes.test.mjs b/voice-core-rs/wrappers/web/contract-tests/inworld-phonemes.test.mjs
+new file mode 100644
+index 0000000..ace0e41
+--- /dev/null
++++ b/voice-core-rs/wrappers/web/contract-tests/inworld-phonemes.test.mjs
+@@ -0,0 +1,118 @@
++import assert from "node:assert/strict";
++import test from "node:test";
++import { createInworldTtsTransport } from "../src/transport/inworld.ts";
++import { parseInworldPhonemes, InworldVisemeTimeline } from "../src/transport/inworld-phonemes.ts";
++const phone = (start, duration, viseme = "aei", symbol = "a") => ({ startTimeSeconds: start, durationSeconds: duration, visemeSymbol: viseme, phoneSymbol: symbol });
++const timing = (...phones) => ({ wordAlignment: { words: ["hello"], phoneticDetails: [{ wordIndex: 0, phones }] } });
++function setup(t, enabled = true) {
++  const oldWindow = globalThis.window, oldSocket = globalThis.WebSocket, sockets = [];
++  class FakeSocket extends EventTarget {
++    static CONNECTING = 0; static OPEN = 1; readyState = 0; sent = []; closes = 0;
++    constructor() { super(); sockets.push(this); }
++    send(data) { this.sent.push(JSON.parse(data)); }
++    close() { this.readyState = 3; this.closes++; }
++    message(result) { this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify({ result }) })); }
++    open() { this.readyState = 1; this.dispatchEvent(new Event("open")); this.message({ contextCreated: {} }); }
++    audio(samples, timestampInfo) { this.message({ audioChunk: { audioContent: Buffer.from(samples.buffer).toString("base64"), timestampInfo } }); }
++  }
++  globalThis.window = { location: { href: "https://app.test/" } }; globalThis.WebSocket = FakeSocket;
++  const controller = new AbortController();
++  t.after(() => { controller.abort(); globalThis.window = oldWindow; globalThis.WebSocket = oldSocket; });
++  return { sockets, controller, transport: createInworldTtsTransport({ phonemeTimestamps: enabled }) };
++}
++async function session(t, enabled = true) {
++  const state = setup(t, enabled), stream = await state.transport.createStreamingSession(state.controller.signal), socket = state.sockets[0];
++  socket.open(); await stream.pushText("Hello", true); return { ...state, stream, socket };
++}
++async function collect(stream) { const result = []; for await (const chunk of stream) result.push(chunk); return result; }
++test("official word phonetics distinguish silence from bilabial consonants", () => {
++  const result = parseInworldPhonemes({ wordAlignment: { words: ["", "be"], phoneticDetails: [
++    { wordIndex: 0, phones: [phone(0, .24, "bmp", "[silence]")] },
++    { wordIndex: 1, isPartial: false, phones: [phone(.24, .05, "bmp", "b"), phone(.29, .06, "ee", "i")] },
++  ] } });
++  assert.deepEqual(result.map(cue => cue.viseme), ["sil", "bmp", "ee"]);
++});
++test("malformed partial excessive and unknown metadata safely declines alignment", () => {
++  for (const value of [null, {}, timing(), timing(phone(-1, .1)), timing(phone(0, Infinity)), timing(phone(0, .1, "bogus")), timing(phone(0, 121)), timing(phone(0, .2), phone(.1, .2)),
++    { wordAlignment: { words: ["a"], phoneticDetails: [{ wordIndex: 0, isPartial: true, phones: [phone(0, .1)] }] } },
++    { wordAlignment: { words: ["a", "b"], phoneticDetails: [{ wordIndex: 0, phones: [phone(0, .1)] }] } },
++    timing(...Array.from({length: 4097}, () => phone(0, .1)))]) assert.equal(parseInworldPhonemes(value), undefined);
++});
++test("WORD and SYNC are opt in", async t => {
++  const { stream, socket } = await session(t);
++  assert.equal(socket.sent[0].create.timestampType, "WORD"); assert.equal(socket.sent[0].create.timestampTransportStrategy, "SYNC");
++  socket.message({ flushCompleted: {} }); await collect(stream);
++  const state = await session(t, false); assert.equal(state.socket.sent[0].create.timestampType, undefined);
++  state.socket.message({ flushCompleted: {} }); await collect(state.stream);
++});
++test("cumulative clock remaps crossfade tails and final flush without drift", async t => {
++  const { stream, socket } = await session(t);
++  socket.audio(new Int16Array(1600).fill(1000), timing(phone(0, .1)));
++  socket.audio(new Int16Array(1600).fill(2000), timing(phone(.1, .1, "bmp", "b")));
++  socket.audio(new Int16Array(1600).fill(3000), timing(phone(.2, .1, "ee", "i")));
++  socket.message({ flushCompleted: {} }); const chunks = await collect(stream);
++  assert.deepEqual(chunks.map(c => c.frames.length), [1120, 1120, 1120, 480]);
++  const cues = chunks.map(c => c.visemes.map(v => [Math.round(v.startMs), Math.round(v.endMs), v.viseme]));
++  assert.deepEqual(cues, [[[0,70,"aei"]], [[0,15,"aei"],[15,70,"bmp"]], [[0,15,"bmp"],[15,70,"ee"]], [[0,30,"ee"]]]);
++});
++test("metadata path preserves original PCM including tiny chunks crossfades and fades", async t => {
++  const input = [23, 200, 1900, 57, 960, 800].map((length, i) => Int16Array.from({length}, (_, j) => Math.round(Math.sin(j / 7 + i) * 20000)));
++  const enabled = await session(t); let start = 0;
++  for (const samples of input) { enabled.socket.audio(samples, timing(phone(start / 16000, samples.length / 16000))); start += samples.length; }
++  enabled.socket.message({ flushCompleted: {} }); const aligned = await collect(enabled.stream);
++  const disabled = await session(t, false); for (const samples of input) disabled.socket.audio(samples);
++  disabled.socket.message({ flushCompleted: {} }); const original = await collect(disabled.stream);
++  assert.deepEqual(aligned.map(c => c.frames), original.map(c => c.frames)); assert.ok(aligned.every(c => c.visemes !== undefined));
++  for (const chunk of aligned) for (const cue of chunk.visemes) assert.ok(cue.startMs >= 0 && cue.endMs <= chunk.frames.length / 16 + .00001);
++});
++test("absent malformed unrelated and partial timing use amplitude fallback", async t => {
++  for (const info of [undefined, {}, timing(phone(9, .1)), { wordAlignment: { words: ["a"], phoneticDetails: [{ wordIndex: 0, isPartial: true, phones: [phone(0, .1)] }] } }]) {
++    const { stream, socket } = await session(t); socket.audio(new Int16Array(1600), info); socket.message({ flushCompleted: {} });
++    assert.ok((await collect(stream)).every(c => c.visemes === undefined));
++  }
++});
++test("silence has empty cues and trailing metadata can annotate held audio only", async t => {
++  const { stream, socket } = await session(t);
++  socket.audio(new Int16Array(1600), timing(phone(0, .1, "bmp", "[silence]")));
++  socket.audio(new Int16Array(1600)); socket.message({ audioChunk: { timestampInfo: timing(phone(.1, .1, "ee", "i")) } });
++  socket.message({ flushCompleted: {} }); const chunks = await collect(stream);
++  assert.deepEqual(chunks[0].visemes, []); assert.equal(chunks[1].visemes, undefined); assert.equal(chunks[2].visemes[0].viseme, "ee");
++});
++test("reordered duplicate metadata is idempotent and never certifies later missing audio", () => {
++  const timeline = new InworldVisemeTimeline(); timeline.ingest(timing(phone(.1, .1, "ee", "i"))); timeline.ingest(timing(phone(0, .1))); timeline.ingest(timing(phone(.1, .1, "ee", "i")));
++  assert.equal(timeline.project([{ offset: 0, sourceStart: 0, length: 3200 }], 16000).length, 2);
++  timeline.ingest(timing(phone(0, .1)), { startMs: 200, endMs: 300 }); assert.equal(timeline.project([{ offset: 0, sourceStart: 3200, length: 1600 }], 16000), undefined);
++});
++test("abort clears timed audio closes once and ignores late provider data", async t => {
++  const { stream, socket, controller } = await session(t); socket.audio(new Int16Array(1600), timing(phone(0, .1))); controller.abort(); socket.audio(new Int16Array(1600), timing(phone(.1, .1)));
++  await assert.rejects(collect(stream), { name: "AbortError" }); assert.equal(socket.closes, 1);
++});
++test("conflicting out-of-order metadata cannot overlap an accepted source timeline", () => {
++  const timeline = new InworldVisemeTimeline();
++  timeline.ingest(timing(phone(0, .1)));
++  timeline.ingest(timing(phone(.05, .1, "bmp", "b")));
++  assert.deepEqual(timeline.project([{ offset: 0, sourceStart: 0, length: 1600 }], 16000).map(c => c.viseme), ["aei"]);
++  assert.equal(timeline.project([{ offset: 0, sourceStart: 1600, length: 800 }], 16000), undefined);
++  timeline.clear(); assert.equal(timeline.project([{ offset: 0, sourceStart: 0, length: 1600 }], 16000), undefined);
++});
++test("real TTS 2 Flash SYNC metadata and per-chunk WAV headers stay aligned", async t => {
++  const { readFileSync } = await import("node:fs");
++  const fixture = JSON.parse(readFileSync(new URL("./fixtures/inworld-phoneme-sync.json", import.meta.url), "utf8"));
++  const { stream, socket } = await session(t);
++  for (const chunk of fixture.chunks) {
++    // Reproduce real chunk sizes and WAV framing with synthetic PCM only.
++    const wav = Buffer.alloc(chunk.bytes);
++    wav.write("RIFF", 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write("WAVEfmt ", 8);
++    wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
++    wav.writeUInt32LE(fixture.sampleRate, 24); wav.writeUInt32LE(fixture.sampleRate * 2, 28);
++    wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write("data", 36); wav.writeUInt32LE(wav.length - 44, 40);
++    socket.message({ audioChunk: { audioContent: wav.toString("base64"), timestampInfo: chunk.timestampInfo } });
++  }
++  socket.message({ flushCompleted: {} });
++  const chunks = await collect(stream);
++  assert.deepEqual(chunks.map(c => c.frames.length), [1600, 10400, 480]);
++  assert.deepEqual(chunks.map(c => c.visemes?.length), [3, 12, 1]);
++  assert.deepEqual(chunks[1].visemes.slice(0, 2).map(c => [c.startMs, c.endMs, c.viseme]), [[0, 15, "ee"], [15, 100, "bmp"]]);
++  assert.ok(chunks.every(c => c.visemes !== undefined));
++  assert.equal(parseInworldPhonemes(fixture.finalSilence)[0].viseme, "sil");
++});
 diff --git a/voice-core-rs/wrappers/web/contract-tests/playback-observation.test.mjs b/voice-core-rs/wrappers/web/contract-tests/playback-observation.test.mjs
 new file mode 100644
-index 0000000..8ba4124
+index 0000000..7f65e6f
 --- /dev/null
 +++ b/voice-core-rs/wrappers/web/contract-tests/playback-observation.test.mjs
-@@ -0,0 +1,197 @@
+@@ -0,0 +1,217 @@
 +import assert from 'node:assert/strict';
 +import { readFile } from 'node:fs/promises';
 +import { createHash } from 'node:crypto';
@@ -539,3 +614,1223 @@ index 0000000..8ba4124
 +  assert.equal(frames().at(-1).active, false);
 +  assert.equal(frames().at(-1).level, 0);
 +});
++
++test('phoneme cursor counts only source PCM including zeroes, never prebuffer waits or generated tails', async () => {
++  const {processor,send,frames,render}=await workletFixture();
++  send({type:'output',frames:new Float32Array(960).fill(.4)});
++  for(let i=0;i<50;i++) render();
++  assert.equal(processor.playbackSamples,0);
++  send({type:'flushOutput',requestId:1});
++  for(let i=0;i<30;i++) render();
++  assert.equal(processor.playbackSamples,960);
++  assert.equal(frames().at(-1).consuming,false);
++  send({type:'output',frames:new Float32Array(4800)});
++  for(let i=0;i<60;i++) render();
++  assert.equal(processor.playbackSamples,5760);
++  assert.ok(frames().some(frame=>frame.consuming && frame.level===0));
++  assert.equal(frames().at(-1).consuming,false);
++  send({type:'clearOutput',playbackEpoch:18});
++  assert.equal(processor.playbackSamples,0);
++  assert.equal(frames().at(-1).playbackSamples,0);
++  assert.equal(frames().at(-1).consuming,false);
++});
+diff --git a/voice-core-rs/wrappers/web/contract-tests/response-playback-completion.test.mjs b/voice-core-rs/wrappers/web/contract-tests/response-playback-completion.test.mjs
+index 30f0537..c4384d5 100644
+--- a/voice-core-rs/wrappers/web/contract-tests/response-playback-completion.test.mjs
++++ b/voice-core-rs/wrappers/web/contract-tests/response-playback-completion.test.mjs
+@@ -4,6 +4,8 @@ import test from "node:test";
+ import vm from "node:vm";
+ import ts from "typescript";
+ import { BoundedAudioDispatcher } from "../src/audio/BoundedAudioDispatcher.ts";
++import { ConsumedAudioVisemeScheduler } from "../src/audio/ConsumedAudioVisemeScheduler.ts";
++import { TtsVisemeMetadataQueue } from "../src/audio/TtsVisemeMetadataQueue.ts";
+
+ // Run the actual orchestration class with controlled browser/worker boundaries.
+ // The production imports use bundler resolution, so transpile only this module.
+@@ -12,6 +14,7 @@ async function runtimeFixture() {
+     flushes = 0;
+     clears = 0;
+     setInputFramesHandler() {}
++    setPlaybackFrameHandler(handler) { this.onFrame = handler; }
+     setOutputPlaybackHandler(handler) { this.onPlayback = handler; }
+     setOutputFlushedHandler(handler) { this.onFlushed = handler; }
+     setOutputQueuePressureHandler() {}
+@@ -51,6 +54,8 @@ async function runtimeFixture() {
+   const context = {
+     AudioGraph: FakeAudioGraph,
+     BoundedAudioDispatcher,
++    ConsumedAudioVisemeScheduler,
++    TtsVisemeMetadataQueue,
+     RuntimeWorkerClient: FakeWorker,
+     SerialTaskQueue: class {},
+     validateVoiceRuntimeConfig: (config) => config,
+@@ -466,3 +471,42 @@ test('streaming keeps speech incremental and joins a surrogate pair across event
+   await runtime.generateAssistantResponse('stream');
+   assert.equal(spoken.slice(1).join(''), body);
+ });
++
++
++test("playback frame observers are optional, isolated, unsubscribable and cleared on destroy", async () => {
++  const runtime = await runtimeFixture();
++  assert.doesNotThrow(() => runtime.audioGraph.onFrame({ active: true, level: 0.5 }));
++  const frames = [];
++  const removeBad = runtime.onPlaybackFrame((frame) => {
++    frame.level = 99;
++    throw new Error("renderer unavailable");
++  });
++  const removeGood = runtime.onPlaybackFrame(frame => frames.push(frame));
++  runtime.audioGraph.onFrame({ active: true, level: 0.5 });
++  assert.equal(frames[0].level, 0.5);
++  removeBad(); removeBad(); removeGood();
++  runtime.audioGraph.onFrame({ active: true, level: 0.8 });
++  assert.equal(frames.length, 1);
++  runtime.onPlaybackFrame(frame => frames.push(frame));
++  runtime.enqueueLifecycle = task => task();
++  await runtime.destroy();
++  runtime.audioGraph.onFrame({ active: true, level: 0.9 });
++  assert.equal(frames.length, 1);
++  assert.throws(() => runtime.onPlaybackFrame(() => {}), /destroyed/);
++});
++
++
++test("playback observers cannot reanimate a later observer by clearing during dispatch", async () => {
++  const runtime = await runtimeFixture();
++  const frames = [];
++  runtime.onPlaybackFrame(frame => {
++    if (frame.active) runtime.audioGraph.onFrame({ active: false, level: 0 });
++  });
++  runtime.onPlaybackFrame(async () => { throw new Error("async renderer failed"); });
++  runtime.onPlaybackFrame(frame => frames.push(frame));
++  runtime.audioGraph.onFrame({ active: true, level: 0.8 });
++  await Promise.resolve();
++  assert.equal(frames.length, 1);
++  assert.equal(frames[0].active, false);
++  assert.equal(frames[0].level, 0);
++});
+diff --git a/voice-core-rs/wrappers/web/contract-tests/tts-viseme-metadata.test.mjs b/voice-core-rs/wrappers/web/contract-tests/tts-viseme-metadata.test.mjs
+new file mode 100644
+index 0000000..4072e49
+--- /dev/null
++++ b/voice-core-rs/wrappers/web/contract-tests/tts-viseme-metadata.test.mjs
+@@ -0,0 +1,92 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import fs from 'node:fs';
++import vm from 'node:vm';
++import ts from 'typescript';
++import { TtsVisemeMetadataQueue } from '../src/audio/TtsVisemeMetadataQueue.ts';
++import { ConsumedAudioVisemeScheduler } from '../src/audio/ConsumedAudioVisemeScheduler.ts';
++import { SerialTaskQueue } from '../src/runtime/SerialTaskQueue.ts';
++import { BoundedAudioDispatcher } from '../src/audio/BoundedAudioDispatcher.ts';
++import { initSync, WebRuntime } from '../pkg/conversational_web.js';
++initSync({module: fs.readFileSync(new URL('../pkg/conversational_web_bg.wasm',import.meta.url))});
++const cue = (startMs,endMs,viseme='ee') => ({startMs,endMs,viseme});
++
++test('source duration FIFO splits combines known silent and unknown metadata', () => {
++ const q=new TtsVisemeMetadataQueue(); q.appendAcceptedSlice(100,0,[cue(50,150)]); q.appendAcceptedSlice(100,100,[cue(50,150)]);
++ assert.deepEqual(q.consume(120,1000),[cue(50,100),cue(100,120)]);
++ assert.deepEqual(q.consume(80,1000),[cue(0,30)]);
++ q.appendAcceptedSlice(40,0,[]); assert.deepEqual(q.consume(40,1000),[]);
++ q.appendAcceptedSlice(40,0); q.appendAcceptedSlice(40,0,[cue(0,40)]); assert.equal(q.consume(60,1000),undefined); assert.deepEqual(q.consume(20,1000),[cue(0,20)]);
++});
++test('source queue copies cues and only allows single resampler rounding sample', () => {
++ const q=new TtsVisemeMetadataQueue(), cues=[cue(0,10)];q.appendAcceptedSlice(10,0,cues);cues[0].viseme='changed';
++ assert.deepEqual(q.consume(441,44100),[cue(0,10)]);
++ q.appendAcceptedSlice(1000/16000,0,[]); assert.deepEqual(q.consume(3,44100),[]);
++ q.appendAcceptedSlice(10,0,[]);assert.equal(q.consume(100,1000),undefined);
++ q.appendAcceptedSlice(10,0,[cue(0,10)]);q.reset();assert.equal(q.consume(10,1000),undefined);
++});
++test('malformed optional metadata becomes unknown without affecting FIFO duration', () => {
++ const q=new TtsVisemeMetadataQueue();for(const value of [[cue(-1,30)], [cue(10,1)], [cue(0,Infinity)], [null], {}]){q.appendAcceptedSlice(100,0,value);assert.equal(q.consume(100,1000),undefined);}
++ q.appendAcceptedSlice(100,0,[]);assert.deepEqual(q.consume(100,1000),[]);
++});
++
++function fixture(t, outputRate=48000) {
++ class Graph {
++  epoch=1; frames=[];
++  setInputFramesHandler(){} setPlaybackFrameHandler(cb){this.onFrame=cb;} setOutputPlaybackHandler(){} setOutputFlushedHandler(){} setOutputQueuePressureHandler(){} setOutputDebugHandler(){} setOutputErrorHandler(){} setInputErrorHandler(){}
++  getPlaybackEpoch(){return this.epoch;} getSampleRate(){return outputRate;}
++  prepareOutputFrames(frames,rate,channels){assert.equal(rate,outputRate);assert.equal(channels,1);return frames;}
++  async enqueueNormalizedOutputFrames(frames){this.frames.push(frames);} clearOutputQueue(){this.epoch++;this.frames=[];} flushOutputQueue(){}
++ }
++ class Worker {
++  wasm=new WebRuntime(JSON.stringify({outputSampleRateHz:outputRate})); attempts=0; accepted=0; hook;
++  constructor(){this.wasm.start();t.after(()=>{this.wasm.stop();this.wasm.free();});}
++  setMessageHandler(cb){this.onMessage=cb;}
++  async pushTtsAudio(samples,rate,channels,timestamp){this.attempts++;if(this.hook&&await this.hook()===false)return false;const accepted=this.wasm.push_tts_audio(samples,rate,channels,BigInt(timestamp));if(accepted)this.accepted++;return accepted;}
++  async popAudioChunk(){return this.wasm.pop_audio_json();}
++  async flushOutputAudio(){this.wasm.flush_output_audio(0n);}
++ }
++ class Scheduler extends ConsumedAudioVisemeScheduler { recorded=[];enqueueChunk(input){this.recorded.push(input);super.enqueueChunk(input);} }
++ const source=fs.readFileSync(new URL('../src/VoiceCoreWeb.ts',import.meta.url),'utf8');
++ const executable=ts.transpileModule(source.replace(/^import[\s\S]*?;\n/gm,'').replace('export class VoiceCoreWeb','class VoiceCoreWeb')+'\nglobalThis.Runtime=VoiceCoreWeb;', {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
++ const context={AudioGraph:Graph,RuntimeWorkerClient:Worker,ConsumedAudioVisemeScheduler:Scheduler,TtsVisemeMetadataQueue,SerialTaskQueue,BoundedAudioDispatcher,validateVoiceRuntimeConfig:c=>c,assertVoiceIdSupported(){},AbortController,Date,Set,Float32Array,Int16Array,window:{setTimeout,clearTimeout}};
++ vm.runInNewContext(executable,context);const runtime=new context.Runtime({});runtime.running=true;runtime.state='speaking';runtime.scheduleDrainOutputAudio=()=>{};return runtime;
++}
++async function drainAll(runtime){for(let i=0;i<200;i++){if(runtime.drainingAudio){await new Promise(resolve=>setImmediate(resolve));continue;}const count=runtime.visemeScheduler.recorded.length;await runtime.drainOutputAudio();if(count===runtime.visemeScheduler.recorded.length&&!runtime.drainingAudio)return;}throw Error('drain did not settle');}
++function flatten(runtime){let start=0;return runtime.visemeScheduler.recorded.flatMap(({chunk,outputFrames,outputSampleRate})=>{const offset=start;start+=outputFrames/outputSampleRate*1000;return(chunk.visemes??[]).map(v=>({...v,startMs:v.startMs+offset,endMs:v.endMs+offset}));});}
++
++test('actual VoiceCore synthesis carries provider visemes through real WASM resampling',async t=>{
++ const r=fixture(t);r.transports={tts:{async synthesize(){return(async function*(){yield{frames:new Float32Array(4800).fill(.2),sampleRate:16000,channels:1,visemes:[cue(0,90,'bmp'),cue(90,210,'o'),cue(210,300,'fv')]};})();}}};
++ await r.synthesizeAssistantChunk('My music moves.',new AbortController(),r.responseGeneration);await r.runtimeWorker.flushOutputAudio();await drainAll(r);
++ assert.equal(r.runtimeWorker.accepted,3);assert.equal(r.audioGraph.frames.reduce((n,f)=>n+f.length,0),14400);
++ assert.ok(r.visemeScheduler.recorded.every(c=>c.chunk.visemes!==undefined));const result=flatten(r);
++ for(const [time,symbol]of[[30,'bmp'],[150,'o'],[250,'fv']])assert.ok(result.some(c=>c.startMs<=time&&c.endMs>time&&c.viseme===symbol));
++ assert.equal(r.visemeScheduler.sample(1,7200,48000)[0].symbol,'o');
++});
++test('accepted metadata is appended once despite backpressure and concurrent drain',async t=>{
++ const r=fixture(t);let rejected=false;let concurrent;
++ r.runtimeWorker.hook=async()=>{if(!rejected){rejected=true;return false;}concurrent=r.drainOutputAudio();return true;};
++ await r.pushTtsAudioSlices(new Int16Array(3200),16000,1,0,()=>true,[cue(0,100,'bmp'),cue(100,200,'ee')]);await concurrent;await r.runtimeWorker.flushOutputAudio();await drainAll(r);
++ assert.equal(r.runtimeWorker.attempts,3);assert.equal(r.runtimeWorker.accepted,2);assert.equal(r.audioGraph.frames.reduce((n,f)=>n+f.length,0),9600);
++ const result=flatten(r);assert.ok(result.some(c=>c.viseme==='ee'&&c.startMs<=150&&c.endMs>150));assert.equal(r.ttsVisemeMetadata.consume(1,48000),undefined);
++});
++test('cancellation while push acknowledgement is pending cannot restore stale cues',async t=>{
++ const r=fixture(t);let release;let entered;const started=new Promise(resolve=>entered=resolve);r.runtimeWorker.hook=()=>{entered();return new Promise(resolve=>release=resolve);};
++ const pushing=r.pushTtsAudioSlices(new Int16Array(1600),16000,1,0,()=>true,[cue(0,100,'bmp')]);await started;r.abortResponsePipeline();release(true);await pushing;assert.equal(r.ttsVisemeMetadata.consume(1600,16000),undefined);
++});
++test('worker barge-in invalidates pending metadata acceptance and drain epoch',async t=>{
++ const r=fixture(t);let release,entered;const started=new Promise(resolve=>entered=resolve);r.runtimeWorker.hook=()=>{entered();return new Promise(resolve=>release=resolve);};
++ const pushing=r.pushTtsAudioSlices(new Int16Array(1600),16000,1,0,()=>true,[cue(0,100)]);await started;r.runtimeWorker.onMessage({type:'events',events:[{type:'bargeIn'}]});release(true);await pushing;assert.equal(r.ttsVisemeMetadata.consume(1600,16000),undefined);
++});
++test('real WASM arbitrary rate and stereo source preserve cue time and final ceil sample',async t=>{
++ const r=fixture(t,44100), sourceFrames=1601;
++ await r.pushTtsAudioSlices(new Int16Array(sourceFrames*2),16000,2,0,()=>true,[cue(0,50,'bmp'),cue(50,sourceFrames/16,'ee')]);await r.runtimeWorker.flushOutputAudio();await drainAll(r);
++ assert.equal(r.audioGraph.frames.reduce((n,f)=>n+f.length,0),Math.ceil(sourceFrames*44100/16000));
++ assert.ok(r.visemeScheduler.recorded.every(c=>c.chunk.visemes!==undefined));const result=flatten(r);assert.ok(result.some(c=>c.viseme==='ee'&&c.startMs<=75&&c.endMs>75));
++});
++test('playback observers receive independent cue copies and synthetic tail closes mouth',async t=>{
++ const r=fixture(t);r.visemeScheduler.beginEpoch(1);r.visemeScheduler.enqueueChunk({playbackEpoch:1,chunk:{visemes:[cue(0,100,'bmp')]},outputFrames:4800,outputSampleRate:48000});
++ const received=[];r.onPlaybackFrame(frame=>{frame.active=false;if(frame.visemes?.[0])frame.visemes[0].symbol='corrupted';});r.onPlaybackFrame(frame=>received.push(frame));
++ r.audioGraph.onFrame({active:true,level:.2},{playbackEpoch:1,playbackSamples:480,playbackSampleRate:48000,consuming:true});assert.equal(received[0].active,true);assert.equal(received[0].visemes[0].symbol,'bmp');
++ r.audioGraph.onFrame({active:true,level:.2},{playbackEpoch:1,playbackSamples:480,playbackSampleRate:48000,consuming:false});assert.equal(received[1].visemes.length,0);
++});
+diff --git a/voice-core-rs/wrappers/web/src/VoiceCoreWeb.ts b/voice-core-rs/wrappers/web/src/VoiceCoreWeb.ts
+index 8bab4ea..bd73eb8 100644
+--- a/voice-core-rs/wrappers/web/src/VoiceCoreWeb.ts
++++ b/voice-core-rs/wrappers/web/src/VoiceCoreWeb.ts
+@@ -1,16 +1,19 @@
+ import { AudioGraph } from "./audio/AudioGraph";
+ import { BoundedAudioDispatcher } from "./audio/BoundedAudioDispatcher";
++import { ConsumedAudioVisemeScheduler } from "./audio/ConsumedAudioVisemeScheduler";
++import { TtsVisemeMetadataQueue } from "./audio/TtsVisemeMetadataQueue";
+ import { assertBrowserSupport, probeBrowserCapabilities } from "./runtime/featureProbe";
+ import { RuntimeWorkerClient } from "./runtime/worker";
+ import { SerialTaskQueue } from "./runtime/SerialTaskQueue";
+ import { validateVoiceRuntimeConfig } from "./runtime/config";
+ import { shouldDetectLocalBargeIn } from "./runtime/bargeInPolicy";
+-import type { WebTransportBundle } from "./transport/types";
++import type { WebTransportBundle, TtsVisemeCue } from "./transport/types";
+ import { resumeTranscriptionOnlyIfNeeded } from "./runtime/transcriptionOnly";
+ import { shouldSendSttAudio } from "./runtime/sttAudioGate";
+ import type {
+   BrowserCapabilities,
+   InputStats,
++  PlaybackFrame,
+   PocketInstallStatus,
+   VoiceSdkCapabilities,
+   VoiceConversationState,
+@@ -37,8 +40,12 @@ export class VoiceCoreWeb {
+   private static readonly BARGE_IN_NO_AEC_THRESHOLD = 0.03;
+   private static readonly EMPTY_LLM_RETRY_MAX_OUTPUT_TOKENS = 320;
+   private readonly audioGraph = new AudioGraph();
++  private readonly visemeScheduler = new ConsumedAudioVisemeScheduler();
++  private readonly ttsVisemeMetadata = new TtsVisemeMetadataQueue();
+   private readonly runtimeWorker = new RuntimeWorkerClient();
+   private readonly handlers = new Set<EventHandler>();
++  private readonly playbackFrameHandlers = new Set<(frame: PlaybackFrame) => void>();
++  private playbackFrameSequence = 0;
+   private config: VoiceRuntimeConfig;
+   private capabilities: BrowserCapabilities | null = null;
+   private state: VoiceConversationState = "idle";
+@@ -90,6 +97,26 @@ export class VoiceCoreWeb {
+     this.audioGraph.setInputFramesHandler((frames, sampleRateHz, channels) =>
+       this.handleInputFrames(frames, sampleRateHz, channels),
+     );
++    this.audioGraph.setPlaybackFrameHandler((frame, playbackClock) => {
++      const visemes = playbackClock?.consuming
++        ? this.visemeScheduler.sample(
++          playbackClock.playbackEpoch,
++          playbackClock.playbackSamples,
++          playbackClock.playbackSampleRate,
++        )
++        : [];
++
++      const sequence = ++this.playbackFrameSequence;
++      for (const handler of [...this.playbackFrameHandlers]) {
++        // An observer may synchronously stop/clear playback. Never deliver its old
++        // active frame after the resulting zero frame to the remaining observers.
++        if (sequence !== this.playbackFrameSequence) break;
++        if (!this.playbackFrameHandlers.has(handler)) continue;
++        try {
++          void Promise.resolve(handler({ ...frame, ...(visemes === undefined ? {} : { visemes: visemes.map(cue => ({ ...cue })) }) })).catch(() => undefined);
++        } catch { /* Optional visuals cannot fail audio. */ }
++      }
++    });
+     this.audioGraph.setOutputPlaybackHandler((active) => {
+       void this.handleOutputPlaybackState(active).catch((error) => {
+         void this.failRuntime(error instanceof Error ? error : new Error(String(error)));
+@@ -117,6 +144,9 @@ export class VoiceCoreWeb {
+       if (message.type === "events") {
+         for (const event of message.events as VoiceEvent[]) {
+           if (event.type === "bargeIn") {
++            this.outputDrainGeneration += 1;
++            this.visemeScheduler.reset();
++            this.ttsVisemeMetadata.reset();
+             this.audioGraph.clearOutputQueue();
+             this.outputPlaybackActive = false;
+             this.outputBackpressured = false;
+@@ -243,6 +273,8 @@ export class VoiceCoreWeb {
+       this.sttPausedForAssistant = false;
+       this.userSpeechActive = false;
+       this.resetBargeInDetector();
++      this.visemeScheduler.reset();
++      this.ttsVisemeMetadata.reset();
+       try {
+         await this.audioGraph.stop();
+       } catch (error) {
+@@ -277,6 +309,7 @@ export class VoiceCoreWeb {
+       } finally {
+         this.runtimeWorker.destroy();
+         this.handlers.clear();
++        this.playbackFrameHandlers.clear();
+         this.destroyed = true;
+       }
+       if (stopError !== undefined) throw stopError;
+@@ -395,6 +428,7 @@ export class VoiceCoreWeb {
+     channels: number,
+     timestampMs: number,
+     shouldContinue: () => boolean,
++    visemes?: readonly TtsVisemeCue[],
+   ): Promise<void> {
+     if (!Number.isFinite(sampleRateHz) || sampleRateHz <= 0) {
+       throw new RangeError("VoiceCore TTS sample rate must be positive");
+@@ -407,21 +441,33 @@ export class VoiceCoreWeb {
+     }
+     if (!payload.length) return;
+
++    const metadataGeneration = this.outputDrainGeneration;
++    const isCurrent = () => shouldContinue() && metadataGeneration === this.outputDrainGeneration;
+     const samplesPerSlice = Math.max(
+       channels,
+       Math.floor(sampleRateHz * 0.1) * channels,
+     );
+     for (let offset = 0; offset < payload.length; offset += samplesPerSlice) {
+       const slice = payload.slice(offset, offset + samplesPerSlice);
+-      while (shouldContinue()) {
+-        if (await this.runtimeWorker.pushTtsAudio(slice, sampleRateHz, channels, timestampMs)) {
+-          break;
+-        }
+-        if (!shouldContinue()) return;
++      while (isCurrent()) {
++        const accepted = await this.ttsVisemeMetadata.run(async () => {
++          if (!isCurrent()) return false;
++          const accepted = await this.runtimeWorker.pushTtsAudio(slice, sampleRateHz, channels, timestampMs);
++          if (accepted && isCurrent()) {
++            this.ttsVisemeMetadata.appendAcceptedSlice(
++              slice.length * 1000 / sampleRateHz / channels,
++              offset * 1000 / sampleRateHz / channels,
++              visemes,
++            );
++          }
++          return accepted;
++        });
++        if (accepted) break;
++        if (!isCurrent()) return;
+         this.scheduleDrainOutputAudio(0);
+         await new Promise<void>((resolve) => window.setTimeout(resolve, VoiceCoreWeb.OUTPUT_POLL_ACTIVE_MS));
+       }
+-      if (!shouldContinue()) return;
++      if (!isCurrent()) return;
+     }
+     this.scheduleDrainOutputAudio(0);
+   }
+@@ -489,6 +535,14 @@ export class VoiceCoreWeb {
+     throw new Error("Host-managed voice assets are unavailable in this Web build.");
+   }
+
++  /** Audio-reactive output RMS, not phoneme lip sync. Silence resets immediately;
++   * audible updates are limited to approximately 30 Hz. Observers are optional. */
++  onPlaybackFrame(handler: (frame: PlaybackFrame) => void): () => void {
++    if (this.destroyed) throw new Error("VoiceCore has been destroyed");
++    this.playbackFrameHandlers.add(handler);
++    return () => { this.playbackFrameHandlers.delete(handler); };
++  }
++
+   onEvent(handler: EventHandler): () => void {
+     this.handlers.add(handler);
+     return () => {
+@@ -545,7 +599,7 @@ export class VoiceCoreWeb {
+       let emittedSeconds = 0;
+
+       while (this.running && !this.outputBackpressured) {
+-        const chunkJson = await this.runtimeWorker.popAudioChunk();
++        const chunkJson = await this.ttsVisemeMetadata.run(() => this.runtimeWorker.popAudioChunk());
+         if (!this.running || generation !== this.outputDrainGeneration) break;
+         if (!chunkJson || chunkJson === "null") {
+           // An underrun between synthesized sentences is not end-of-response.
+@@ -570,12 +624,24 @@ export class VoiceCoreWeb {
+         for (let i = 0; i < chunk.samples.length; i += 1) {
+           frames[i] = chunk.samples[i] / 32768;
+         }
++        const normalizedFrames = this.audioGraph.prepareOutputFrames(
++          frames,
++          chunk.sample_rate_hz,
++          chunk.channels,
++        );
++        const playbackEpoch = this.audioGraph.getPlaybackEpoch();
++        this.visemeScheduler.beginEpoch(playbackEpoch);
++        this.visemeScheduler.enqueueChunk({
++          playbackEpoch,
++          chunk: { visemes: this.ttsVisemeMetadata.consume(
++            normalizedFrames.length,
++            this.audioGraph.getSampleRate() ?? 48_000,
++          ) },
++          outputFrames: normalizedFrames.length,
++          outputSampleRate: this.audioGraph.getSampleRate() ?? 48_000,
++        });
+         try {
+-          await this.audioGraph.enqueueOutputFrames(
+-            frames,
+-            chunk.sample_rate_hz,
+-            chunk.channels,
+-          );
++          await this.audioGraph.enqueueNormalizedOutputFrames(normalizedFrames);
+         } catch (error) {
+           if (!this.running || generation !== this.outputDrainGeneration) break;
+           throw error;
+@@ -851,6 +917,8 @@ export class VoiceCoreWeb {
+     this.responseAbortController = null;
+     this.lastAssistantPreviewText = "";
+     this.outputBackpressured = false;
++    this.visemeScheduler.reset();
++    this.ttsVisemeMetadata.reset();
+     this.audioGraph.clearOutputQueue();
+     this.outputPlaybackActive = false;
+     this.resetBargeInDetector();
+@@ -1438,6 +1506,7 @@ export class VoiceCoreWeb {
+           this.running &&
+           !controller.signal.aborted &&
+           generation === this.responseGeneration,
++        chunk.visemes,
+       );
+     }
+   }
+diff --git a/voice-core-rs/wrappers/web/src/audio/AudioGraph.ts b/voice-core-rs/wrappers/web/src/audio/AudioGraph.ts
+index fc2919a..837d6fa 100644
+--- a/voice-core-rs/wrappers/web/src/audio/AudioGraph.ts
++++ b/voice-core-rs/wrappers/web/src/audio/AudioGraph.ts
+@@ -1,4 +1,4 @@
+-import type { VoiceRuntimeConfig } from "../types";
++import type { PlaybackFrame, VoiceRuntimeConfig } from "../types";
+ import { OutputAdmissionTracker } from "./OutputAdmissionTracker";
+ import { StreamingResampler } from "./StreamingResampler";
+ import { BoundedAudioDispatcher } from "./BoundedAudioDispatcher";
+@@ -19,6 +19,18 @@ export class AudioGraph {
+   private inputFramesHandler:
+     | ((frames: Float32Array, sampleRateHz: number, channels: number) => void | Promise<void>)
+     | null = null;
++  private playbackEpoch = 0;
++  private playbackFrameHandler:
++    | ((
++      frame: PlaybackFrame,
++      playbackClock: {
++        playbackSamples: number;
++        playbackSampleRate: number;
++        playbackEpoch: number;
++        consuming: boolean;
++      } | null,
++    ) => void)
++    | null = null;
+   private outputPlaybackHandler:
+     | ((active: boolean) => void)
+     | null = null;
+@@ -143,17 +155,49 @@ export class AudioGraph {
+       this.inputSinkNode.gain.value = 0;
+       this.inputNode.connect(this.inputSinkNode);
+       this.inputSinkNode.connect(this.audioContext.destination);
+-      this.outputNode = new AudioWorkletNode(this.audioContext, "voice-core-output");
++      this.outputNode = new AudioWorkletNode(this.audioContext, "voice-core-output", {
++        processorOptions: { playbackEpoch: this.playbackEpoch },
++      });
+       this.outputNode.port.onmessage = (
+         event: MessageEvent<{
+           type?: string;
++          level?: number;
++          playbackEpoch?: number;
+           active?: boolean;
++          playbackSamples?: number;
++          playbackSampleRate?: number;
++          consuming?: boolean;
+           droppedSamples?: number;
+           queuedSamples?: number;
+           requestId?: number;
+         }>,
+       ) => {
+         if (startGeneration !== this.startGeneration) return;
++        if (event.data?.type === "playbackFrame") {
++          if (event.data.playbackEpoch === this.playbackEpoch
++            && typeof event.data.active === "boolean"
++            && typeof event.data.level === "number" && Number.isFinite(event.data.level)) {
++            const playbackClock = (
++              typeof event.data.playbackSamples === "number"
++              && Number.isSafeInteger(event.data.playbackSamples)
++              && event.data.playbackSamples >= 0
++              && typeof event.data.playbackSampleRate === "number"
++              && Number.isFinite(event.data.playbackSampleRate)
++              && event.data.playbackSampleRate === context.sampleRate
++              && typeof event.data.consuming === "boolean"
++            ) ? {
++              playbackSamples: event.data.playbackSamples,
++              playbackSampleRate: event.data.playbackSampleRate,
++              playbackEpoch: event.data.playbackEpoch,
++              consuming: event.data.consuming,
++            } : null;
++            this.emitPlaybackFrame({
++              active: event.data.active && event.data.level > 0,
++              level: event.data.active ? Math.max(0, Math.min(1, event.data.level)) : 0,
++            }, playbackClock);
++          }
++          return;
++        }
+         if (
+           (event.data?.type === "outputAccepted" ||
+             event.data?.type === "outputRejected") &&
+@@ -213,6 +257,8 @@ export class AudioGraph {
+       };
+       this.outputNode.onprocessorerror = () => {
+         if (startGeneration !== this.startGeneration) return;
++        this.playbackEpoch++;
++        this.emitPlaybackFrame({ active: false, level: 0 }, null);
+         const error = new Error("VoiceCore output worklet processor failed");
+         this.cancelPendingOutputRequests(error.message);
+         this.outputErrorHandler?.(error);
+@@ -300,27 +346,47 @@ export class AudioGraph {
+
+   cancelPendingStart(): void {
+     this.startGeneration += 1;
++    this.playbackEpoch++;
++    this.emitPlaybackFrame({ active: false, level: 0 }, null);
+     this.pendingStartCancellation?.();
+     this.pendingStartCancellation = null;
+   }
+
++  getPlaybackEpoch(): number {
++    return this.playbackEpoch;
++  }
++
+   async enqueueOutputFrames(
+     frames: Float32Array,
+     sampleRateHz: number,
+     channels: number,
++  ): Promise<void> {
++    const normalized = this.normalizeOutputFrames(frames, sampleRateHz, channels);
++    return this.enqueueNormalizedOutputFrames(normalized);
++  }
++
++  async enqueueNormalizedOutputFrames(
++    frames: Float32Array,
+   ): Promise<void> {
+     if (!this.outputNode) {
+       throw new Error("output node is not initialized");
+     }
+
+-    const normalized = this.normalizeOutputFrames(frames, sampleRateHz, channels);
+     this.pendingOutputFlush = null;
+     const maxSliceSamples = Math.max(128, Math.round((this.audioContext?.sampleRate ?? 48_000) * 0.1));
+-    for (let offset = 0; offset < normalized.length; offset += maxSliceSamples) {
+-      await this.postOutputSlice(normalized.slice(offset, offset + maxSliceSamples));
++    for (let offset = 0; offset < frames.length; offset += maxSliceSamples) {
++      await this.postOutputSlice(frames.slice(offset, offset + maxSliceSamples));
+     }
+   }
+
++  prepareOutputFrames(
++    frames: Float32Array,
++    sampleRateHz: number,
++    channels: number,
++  ): Float32Array {
++    return this.normalizeOutputFrames(frames, sampleRateHz, channels);
++  }
++
+   private postOutputSlice(frames: Float32Array): Promise<void> {
+     const outputNode = this.outputNode;
+     if (!outputNode) throw new Error("output node is not initialized");
+@@ -337,7 +403,9 @@ export class AudioGraph {
+     this.pendingOutputFlush = null;
+     this.cancelPendingOutputRequests("VoiceCore output queue cleared");
+     this.outputResampler.reset();
+-    this.outputNode?.port.postMessage({ type: "clearOutput" });
++    this.playbackEpoch++;
++    this.emitPlaybackFrame({ active: false, level: 0 }, null);
++    this.outputNode?.port.postMessage({ type: "clearOutput", playbackEpoch: this.playbackEpoch });
+   }
+
+   setInputFramesHandler(
+@@ -346,6 +414,31 @@ export class AudioGraph {
+     this.inputFramesHandler = handler;
+   }
+
++  setPlaybackFrameHandler(handler: (
++    (
++      frame: PlaybackFrame,
++      playbackClock: {
++        playbackSamples: number;
++        playbackSampleRate: number;
++        playbackEpoch: number;
++        consuming: boolean;
++      } | null,
++    ) => void
++  ) | null): void {
++    this.playbackFrameHandler = handler;
++  }
++
++  private emitPlaybackFrame(
++    frame: PlaybackFrame,
++    playbackClock: { playbackSamples: number; playbackSampleRate: number; playbackEpoch: number; consuming: boolean; } | null,
++  ): void {
++    try {
++      this.playbackFrameHandler?.(frame, playbackClock);
++    } catch {
++      /* Optional visuals cannot fail audio. */
++    }
++  }
++
+   setOutputPlaybackHandler(handler: ((active: boolean) => void) | null): void {
+     this.outputPlaybackHandler = handler;
+   }
+diff --git a/voice-core-rs/wrappers/web/src/audio/ConsumedAudioVisemeScheduler.ts b/voice-core-rs/wrappers/web/src/audio/ConsumedAudioVisemeScheduler.ts
+new file mode 100644
+index 0000000..96b924c
+--- /dev/null
++++ b/voice-core-rs/wrappers/web/src/audio/ConsumedAudioVisemeScheduler.ts
+@@ -0,0 +1,79 @@
++import type { PlaybackViseme } from "../types";
++import type { TtsAudioChunk } from "../transport/types";
++
++type Cue = { symbol: string; start: number; end: number };
++type Chunk = { start: number; end: number; cues?: Cue[] };
++type Input = { playbackEpoch: number; chunk: Pick<TtsAudioChunk, "visemes">; outputFrames: number; outputSampleRate: number };
++const EPSILON = 1e-7;
++const BLEND_SECONDS = 0.025;
++
++/** Consumed source-PCM time, never queued duration or wall time, selects the pose. */
++export class ConsumedAudioVisemeScheduler {
++  private epoch = -1;
++  private chunks: Chunk[] = [];
++  private cursor = 0;
++  private queuedEnd = 0;
++
++  beginEpoch(epoch: number): void {
++    if (!Number.isSafeInteger(epoch) || epoch < 0 || epoch <= this.epoch) return;
++    this.epoch = epoch;
++    this.reset();
++  }
++
++  enqueueChunk(input: Input): void {
++    if (input.playbackEpoch !== this.epoch || !Number.isSafeInteger(input.outputFrames) || input.outputFrames <= 0
++      || !Number.isFinite(input.outputSampleRate) || input.outputSampleRate <= 0) return;
++    const start = this.queuedEnd;
++    const end = start + input.outputFrames / input.outputSampleRate;
++    this.queuedEnd = end;
++    const raw = input.chunk.visemes;
++    let cues: Cue[] | undefined;
++    if (Array.isArray(raw) && raw.length <= 4096 && raw.every(cue => cue && typeof cue.viseme === "string"
++      && cue.viseme.length <= 32 && Number.isFinite(cue.startMs) && Number.isFinite(cue.endMs) && cue.endMs > cue.startMs)) {
++      cues = raw.map(cue => ({ symbol: cue.viseme, start: Math.max(start, start + cue.startMs / 1000), end: Math.min(end, start + cue.endMs / 1000) }))
++        .filter(cue => cue.end > cue.start).sort((a, b) => a.start - b.start);
++    }
++    this.prune();
++    // Losing metadata under pathological producer pressure must never shift the audio clock.
++    if (this.chunks.length < 4096 && start <= this.cursor + 120) this.chunks.push({ start, end, cues });
++  }
++
++  sample(epoch: number, samples: number, rate: number): readonly PlaybackViseme[] | undefined {
++    if (epoch !== this.epoch || !Number.isSafeInteger(samples) || samples < 0 || !Number.isFinite(rate) || rate <= 0) return undefined;
++    const time = samples / rate;
++    if (time + EPSILON < this.cursor) return undefined;
++    this.cursor = time;
++    this.prune();
++    const chunk = this.chunks.find(entry => time + EPSILON >= entry.start && time < entry.end - EPSILON);
++    if (!chunk || chunk.cues === undefined) return undefined;
++    const current = chunk.cues.find(cue => time + EPSILON >= cue.start && time < cue.end - EPSILON);
++    if (!current) return [];
++    const nearby = this.chunks.filter(entry => entry.end >= current.start - 0.1 && entry.start <= current.end + 0.1).flatMap(entry => entry.cues ?? []);
++    const previous = nearby.find(cue => cue !== current && Math.abs(cue.end - current.start) < EPSILON);
++    const next = nearby.find(cue => cue !== current && Math.abs(cue.start - current.end) < EPSILON);
++    const blend = Math.min(BLEND_SECONDS, (current.end - current.start) / 2);
++    const previousBlend = previous ? Math.min(blend, (previous.end - previous.start) / 2) : 0;
++    const nextBlend = next ? Math.min(blend, (next.end - next.start) / 2) : 0;
++    const result = new Map<string, number>();
++    const add = (symbol: string, weight: number) => result.set(symbol, (result.get(symbol) ?? 0) + weight);
++    if (previous && previousBlend && time < current.start + previousBlend) {
++      const alpha = 0.5 + (time - current.start) / (2 * previousBlend);
++      add(previous.symbol, 1 - alpha); add(current.symbol, alpha);
++    } else if (next && nextBlend && time > current.end - nextBlend) {
++      const alpha = 0.5 - (current.end - time) / (2 * nextBlend);
++      add(current.symbol, 1 - alpha); add(next.symbol, alpha);
++    } else {
++      const attack = previousBlend ? 1 : Math.min(1, Math.max(0, (time - current.start) / blend));
++      const release = nextBlend ? 1 : Math.min(1, Math.max(0, (current.end - time) / blend));
++      add(current.symbol, Math.min(attack, release));
++    }
++    return [...result].map(([symbol, weight]) => ({ symbol, weight }));
++  }
++
++  private prune(): void {
++    // Keep the previous short cue for blending at a chunk boundary.
++    while (this.chunks.length && this.chunks[0]!.end < this.cursor - 0.1) this.chunks.shift();
++  }
++
++  reset(): void { this.chunks = []; this.cursor = 0; this.queuedEnd = 0; }
++}
+diff --git a/voice-core-rs/wrappers/web/src/audio/TtsVisemeMetadataQueue.ts b/voice-core-rs/wrappers/web/src/audio/TtsVisemeMetadataQueue.ts
+new file mode 100644
+index 0000000..e4a1f57
+--- /dev/null
++++ b/voice-core-rs/wrappers/web/src/audio/TtsVisemeMetadataQueue.ts
+@@ -0,0 +1,81 @@
++import type { TtsVisemeCue } from "../transport/types";
++
++type Segment = { durationMs: number; visemes?: TtsVisemeCue[] };
++const MAX_CUES = 4096;
++const EPSILON_MS = 0.000001;
++
++/** Side channel for metadata that the Rust PCM/resampler deliberately does not carry. */
++export class TtsVisemeMetadataQueue {
++  private segments: Segment[] = [];
++  private tail: Promise<void> = Promise.resolve();
++
++  /** Acceptance and pop commands share this gate: output cannot overtake a pending
++   * push acknowledgement, and rejected/backpressured retries never duplicate cues. */
++  run<T>(operation: () => Promise<T>): Promise<T> {
++    const result = this.tail.catch(() => undefined).then(operation);
++    this.tail = result.then(() => undefined, () => undefined);
++    return result;
++  }
++
++  appendAcceptedSlice(durationMs: number, chunkOffsetMs: number, visemes?: readonly TtsVisemeCue[]): void {
++    if (!Number.isFinite(durationMs) || durationMs <= 0) return;
++    let sliced: TtsVisemeCue[] | undefined;
++    if (Array.isArray(visemes) && visemes.length <= MAX_CUES && visemes.every(cue =>
++      cue && Number.isFinite(cue.startMs) && Number.isFinite(cue.endMs) &&
++      cue.startMs >= 0 && cue.endMs > cue.startMs && typeof cue.viseme === "string" &&
++      cue.viseme.length > 0 && cue.viseme.length <= 64 &&
++      (cue.phoneme === undefined || (typeof cue.phoneme === "string" && cue.phoneme.length <= 64)))) {
++      sliced = visemes.flatMap(cue => {
++        const startMs = Math.max(0, cue.startMs - chunkOffsetMs);
++        const endMs = Math.min(durationMs, cue.endMs - chunkOffsetMs);
++        return endMs > startMs ? [{ ...cue, startMs, endMs }] : [];
++      });
++    }
++    this.segments.push({ durationMs, visemes: sliced });
++    // Bound optional graphics metadata without dropping its position in the audio
++    // FIFO. Collapsing old entries to unknown preserves later alignment exactly.
++    if (this.segments.length > MAX_CUES) {
++      const collapsed = this.segments.splice(0, MAX_CUES / 2);
++      this.segments.unshift({ durationMs: collapsed.reduce((sum, entry) => sum + entry.durationMs, 0) });
++    }
++  }
++
++  /** Consume source time for an arbitrary resampler output block. Empty [] means
++   * verified silence; any unknown span makes this block use amplitude fallback. */
++  consume(outputFrames: number, outputSampleRate: number): TtsVisemeCue[] | undefined {
++    if (!Number.isInteger(outputFrames) || outputFrames <= 0 || !Number.isFinite(outputSampleRate) || outputSampleRate <= 0) return undefined;
++    const durationMs = outputFrames * 1000 / outputSampleRate;
++    const cues: TtsVisemeCue[] = [];
++    let remaining = durationMs;
++    let offset = 0;
++    let known = true;
++    let consumed = false;
++    while (remaining > EPSILON_MS && this.segments.length) {
++      const segment = this.segments[0]!;
++      const take = Math.min(remaining, segment.durationMs);
++      consumed = true;
++      if (segment.visemes === undefined) known = false;
++      else {
++        for (const cue of segment.visemes) {
++          const startMs = Math.max(0, cue.startMs);
++          const endMs = Math.min(take, cue.endMs);
++          if (endMs > startMs) cues.push({ ...cue, startMs: offset + startMs, endMs: offset + endMs });
++        }
++      }
++      remaining -= take;
++      offset += take;
++      if (segment.durationMs - take <= EPSILON_MS) this.segments.shift();
++      else {
++        segment.durationMs -= take;
++        segment.visemes = segment.visemes?.flatMap(cue => cue.endMs > take
++          ? [{ ...cue, startMs: Math.max(0, cue.startMs - take), endMs: cue.endMs - take }] : []);
++      }
++    }
++    // Rust flush rounds total resampled duration up by at most one output sample.
++    // That final padding is known silence, never debt against the next response.
++    if (remaining > 1000 / outputSampleRate + EPSILON_MS || !consumed) known = false;
++    return known ? cues : undefined;
++  }
++
++  reset(): void { this.segments = []; }
++}
+diff --git a/voice-core-rs/wrappers/web/src/audio/output-worklet.js b/voice-core-rs/wrappers/web/src/audio/output-worklet.js
+index 0e665f3..1efebb0 100644
+--- a/voice-core-rs/wrappers/web/src/audio/output-worklet.js
++++ b/voice-core-rs/wrappers/web/src/audio/output-worklet.js
+@@ -1,6 +1,12 @@
+ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
+-  constructor() {
++  constructor(options) {
+     super();
++    this.playbackEpoch = options?.processorOptions?.playbackEpoch ?? 0;
++    this.playbackSamples = 0;
++    this.playbackConsuming = false;
++    this.playbackFrameActive = false;
++    this.playbackFrameInterval = Math.ceil(sampleRate / 30);
++    this.playbackFrameElapsed = this.playbackFrameInterval;
+     this.pending = [];
+     this.offset = 0;
+     this.queuedSamples = 0;
+@@ -55,6 +61,10 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
+       }
+
+       if (event.data?.type === "clearOutput") {
++        this.playbackEpoch = event.data.playbackEpoch ?? this.playbackEpoch + 1;
++        this.playbackSamples = 0;
++        this.postPlaybackFrame(false, 0);
++        this.playbackFrameElapsed = this.playbackFrameInterval;
+         this.flushRequestId = null;
+         this.pending = [];
+         this.offset = 0;
+@@ -78,6 +88,34 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
+     };
+   }
+
++  postPlaybackFrame(active, level, consuming = false) {
++    this.playbackConsuming = consuming;
++    this.playbackFrameActive = active;
++    this.port.postMessage({ type: "playbackFrame", active, level, playbackEpoch: this.playbackEpoch,
++      playbackSamples: this.playbackSamples, playbackSampleRate: sampleRate, consuming });
++  }
++
++  observeOutput(channel, consumedSamples = 0) {
++    // Advance only for source PCM: prebuffer waits and generated tails have no cues.
++    this.playbackSamples += consumedSamples;
++    const consuming = consumedSamples > 0;
++    // Audio-reactive RMS of this rendered quantum, including the existing fades.
++    // No queue depth, TTS input, or grace-period playback state drives this signal.
++    let sumSquares = 0;
++    for (let index = 0; index < channel.length; index += 1) {
++      const sample = channel[index];
++      if (Number.isFinite(sample)) sumSquares += sample * sample;
++    }
++    const level = Math.min(1, Math.sqrt(sumSquares / Math.max(1, channel.length)));
++    this.playbackFrameElapsed += channel.length;
++    const silenceEdge = level === 0 && this.playbackFrameActive;
++    const consumptionEdge = consuming !== this.playbackConsuming;
++    if (silenceEdge || consumptionEdge || ((level > 0 || consuming) && this.playbackFrameElapsed >= this.playbackFrameInterval)) {
++      this.playbackFrameElapsed = 0;
++      this.postPlaybackFrame(level > 0, level, consuming);
++    }
++  }
++
+   syncBackpressureState() {
+     let nextBackpressured = this.backpressured;
+     if (this.queuedSamples >= this.queueHighWaterSamples) {
+@@ -100,6 +138,7 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
+     const output = outputs[0];
+     const channel = output?.[0];
+     if (!channel) {
++      if (this.playbackFrameActive || this.playbackConsuming) this.postPlaybackFrame(false, 0);
+       return true;
+     }
+
+@@ -142,10 +181,12 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
+         this.port.postMessage({ type: "outputFlushed", requestId: this.flushRequestId });
+         this.flushRequestId = null;
+       }
++      this.observeOutput(channel);
+       return true;
+     }
+
+     if (!this.active && this.queuedSamples < this.prebufferSamples && this.flushRequestId === null) {
++      this.observeOutput(channel);
+       return true;
+     }
+
+@@ -201,6 +242,7 @@ class VoiceCoreOutputProcessor extends AudioWorkletProcessor {
+     }
+
+     this.syncBackpressureState();
++    this.observeOutput(channel, writeIndex);
+
+     return true;
+   }
+diff --git a/voice-core-rs/wrappers/web/src/cloud.ts b/voice-core-rs/wrappers/web/src/cloud.ts
+index ef934bb..ec2f457 100644
+--- a/voice-core-rs/wrappers/web/src/cloud.ts
++++ b/voice-core-rs/wrappers/web/src/cloud.ts
+@@ -13,4 +13,4 @@ export type {
+   LlmGenerateRequest, LlmTokenEvent, WebLlmTransport, WebSttTransport,
+   WebTransportBundle, WebTtsTransport,
+ } from "./transport/types";
+-export type { VoiceEvent, VoiceRuntimeConfig } from "./types";
++export type { PlaybackViseme, PlaybackFrame, VoiceEvent, VoiceRuntimeConfig } from "./types";
+diff --git a/voice-core-rs/wrappers/web/src/index.ts b/voice-core-rs/wrappers/web/src/index.ts
+index a0d10f1..ee0bab3 100644
+--- a/voice-core-rs/wrappers/web/src/index.ts
++++ b/voice-core-rs/wrappers/web/src/index.ts
+@@ -31,6 +31,8 @@ export {
+   parseVoiceRecord,
+ } from "./voiceAssets";
+ export type {
++  PlaybackFrame,
++  PlaybackViseme,
+   VoiceBrowserExtensionEvent,
+   VoiceSdkCapabilities,
+   VoiceCanonicalEvent,
+diff --git a/voice-core-rs/wrappers/web/src/transport/inworld-phonemes.ts b/voice-core-rs/wrappers/web/src/transport/inworld-phonemes.ts
+new file mode 100644
+index 0000000..129606c
+--- /dev/null
++++ b/voice-core-rs/wrappers/web/src/transport/inworld-phonemes.ts
+@@ -0,0 +1,143 @@
++import type { TtsVisemeCue } from "./types";
++
++const SYMBOLS = new Set(["aei", "o", "ee", "bmp", "fv", "l", "r", "th", "qw", "chjsh", "cdgknstxyz"]);
++const MAX_PHONES = 4096;
++const MAX_TIME_MS = 120_000;
++
++type Range = { startMs: number; endMs: number };
++export type SourceSpan = { offset: number; length: number; sourceStart: number };
++
++function record(value: unknown): Record<string, unknown> | undefined {
++  return value !== null && typeof value === "object" && !Array.isArray(value)
++    ? value as Record<string, unknown> : undefined;
++}
++
++/** Strictly optional metadata: bad alignment can never fail audio playback. */
++export function parseInworldPhonemes(value: unknown): TtsVisemeCue[] | undefined {
++  const alignment = record(record(value)?.wordAlignment);
++  const details = alignment?.phoneticDetails;
++  const words = alignment?.words;
++  if (!Array.isArray(details) || !Array.isArray(words) || !details.length ||
++      details.length > MAX_PHONES || words.length > MAX_PHONES) return undefined;
++  const cues: TtsVisemeCue[] = [];
++  const seenWords = new Set<number>();
++  let total = 0;
++  for (const raw of details) {
++    const detail = record(raw);
++    const wordIndex = detail?.wordIndex;
++    if (!detail || (detail.isPartial !== undefined && detail.isPartial !== false) || !Number.isInteger(wordIndex) ||
++        seenWords.has(wordIndex as number) ||
++        (wordIndex as number) < 0 || (wordIndex as number) >= words.length ||
++        typeof words[wordIndex as number] !== "string" ||
++        (words[wordIndex as number] as string).length > 4096 ||
++        !Array.isArray(detail.phones) || !detail.phones.length) return undefined;
++    seenWords.add(wordIndex as number);
++    for (const rawPhone of detail.phones) {
++      if (++total > MAX_PHONES) return undefined;
++      const phone = record(rawPhone);
++      const start = phone?.startTimeSeconds;
++      const duration = phone?.durationSeconds;
++      const symbol = phone?.visemeSymbol;
++      const phoneme = phone?.phoneSymbol;
++      if (typeof start !== "number" || typeof duration !== "number" ||
++          !Number.isFinite(start) || !Number.isFinite(duration) || start < 0 || duration < 0 ||
++          (start + duration) * 1000 > MAX_TIME_MS || typeof phoneme !== "string" ||
++          !phoneme.length || phoneme.length > 64 || typeof symbol !== "string" ||
++          !SYMBOLS.has(symbol)) return undefined;
++      // Inworld labels [silence] as bmp; do not turn pauses into lip presses.
++      if (duration > 0) cues.push({ startMs: start * 1000, endMs: (start + duration) * 1000,
++        viseme: phoneme === "[silence]" ? "sil" : symbol, phoneme });
++    }
++  }
++  // Incomplete words or deprecated partial entries cannot certify silence in gaps.
++  if (seenWords.size !== words.length || !cues.length) return undefined;
++  cues.sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
++  for (let index = 1; index < cues.length; index++) {
++    if (cues[index]!.startMs < cues[index - 1]!.endMs - 0.1) return undefined;
++  }
++  return cues;
++}
++
++/** Maps the actual crossfaded PCM to the provider clock without altering audio. */
++export class InworldVisemeTimeline {
++  private cues: TtsVisemeCue[] = [];
++  private known: Range[] = [];
++
++  ingest(value: unknown, audioRange?: Range): void {
++    const cues = parseInworldPhonemes(value);
++    if (!cues) return;
++    const first = cues[0]!.startMs;
++    const last = cues[cues.length - 1]!.endMs;
++    // Reject unrelated/out-of-order metadata on an audio chunk. A repeated complete
++    // alignment is allowed, but cannot certify a later chunk that it never covers.
++    if (audioRange && (last <= audioRange.startMs || first >= audioRange.endMs)) return;
++    const deduped = new Map(this.cues.map(cue => [`${cue.startMs}:${cue.endMs}`, cue]));
++    for (const cue of cues) deduped.set(`${cue.startMs}:${cue.endMs}`, cue);
++    if (deduped.size > MAX_PHONES) return;
++    const mergedCues = [...deduped.values()].sort((a, b) => a.startMs - b.startMs);
++    for (let index = 1; index < mergedCues.length; index++) {
++      if (mergedCues[index]!.startMs < mergedCues[index - 1]!.endMs - 0.1) return;
++    }
++    this.cues = mergedCues;
++    // SYNC certifies the associated chunk, including gaps/padding. Standalone
++    // metadata only certifies its explicit interval, never unknown past audio.
++    this.known.push(audioRange ?? { startMs: first, endMs: last });
++    this.known.sort((a, b) => a.startMs - b.startMs);
++    const merged: Range[] = [];
++    for (const range of this.known) {
++      const previous = merged[merged.length - 1];
++      if (previous && range.startMs <= previous.endMs + 0.1) previous.endMs = Math.max(previous.endMs, range.endMs);
++      else merged.push({ ...range });
++    }
++    this.known = merged;
++  }
++
++  project(spans: readonly SourceSpan[], sampleRate: number): TtsVisemeCue[] | undefined {
++    const result: TtsVisemeCue[] = [];
++    for (const span of spans) {
++      const startMs = span.sourceStart * 1000 / sampleRate;
++      const endMs = (span.sourceStart + span.length) * 1000 / sampleRate;
++      if (!this.known.some(range => range.startMs <= startMs + 0.1 && range.endMs >= endMs - 0.1)) return undefined;
++      for (const cue of this.cues) {
++        const start = Math.max(cue.startMs, startMs);
++        const end = Math.min(cue.endMs, endMs);
++        if (end <= start || cue.viseme === "sil") continue;
++        result.push({ ...cue, startMs: span.offset * 1000 / sampleRate + start - startMs,
++          endMs: span.offset * 1000 / sampleRate + end - startMs });
++      }
++    }
++    return result.sort((a, b) => a.startMs - b.startMs);
++  }
++
++  clear(): void {
++    this.cues = [];
++    this.known = [];
++  }
++
++  discardBefore(sample: number, sampleRate: number): void {
++    const time = sample * 1000 / sampleRate;
++    this.cues = this.cues.filter(cue => cue.endMs > time);
++    this.known = this.known.filter(range => range.endMs > time);
++  }
++}
++
++export function sliceSourceSpans(spans: readonly SourceSpan[], start: number, end: number): SourceSpan[] {
++  return spans.flatMap(span => {
++    const left = Math.max(start, span.offset);
++    const right = Math.min(end, span.offset + span.length);
++    return right > left ? [{ offset: left - start, length: right - left,
++      sourceStart: span.sourceStart + left - span.offset }] : [];
++  });
++}
++
++export function crossfadeSourceSpans(previous: readonly SourceSpan[], previousLength: number,
++  sourceStart: number, currentLength: number, crossfadeSamples: number): SourceSpan[] {
++  if (!previousLength) return [{ offset: 0, length: currentLength, sourceStart }];
++  const overlap = Math.min(previousLength, currentLength, crossfadeSamples);
++  // Cosine crossfade reaches equal source gains at overlap / 2.
++  const oldDominates = Math.ceil(overlap / 2);
++  const result = sliceSourceSpans(previous, previousLength - overlap, previousLength - overlap + oldDominates);
++  if (currentLength > oldDominates) result.push({ offset: oldDominates,
++    length: currentLength - oldDominates, sourceStart: sourceStart + oldDominates });
++  return result;
++}
+diff --git a/voice-core-rs/wrappers/web/src/transport/inworld.ts b/voice-core-rs/wrappers/web/src/transport/inworld.ts
+index a25f862..69d929c 100644
+--- a/voice-core-rs/wrappers/web/src/transport/inworld.ts
++++ b/voice-core-rs/wrappers/web/src/transport/inworld.ts
+@@ -1,3 +1,4 @@
++import { InworldVisemeTimeline, crossfadeSourceSpans, sliceSourceSpans, type SourceSpan } from "./inworld-phonemes.ts";
+ import type { VoiceRuntimeConfig } from "../types";
+ import {
+   assertSecureWebSocketSessionTarget,
+@@ -27,7 +28,9 @@ type InworldEnvelope = {
+     contextCreated?: unknown;
+     audioChunk?: {
+       audioContent?: string;
++      timestampInfo?: unknown;
+     };
++    timestampInfo?: unknown;
+     flushCompleted?: unknown;
+     contextClosed?: unknown;
+     status?: {
+@@ -44,6 +47,8 @@ export type InworldTtsTransportOptions = Pick<
+   webSocketUrl?: string;
+   sampleRateHz?: number;
+   bufferCharThreshold?: number;
++  /** Request synchronized phoneme timing; adds provider alignment latency. */
++  phonemeTimestamps?: boolean;
+ };
+
+ export function createInworldTtsTransport(
+@@ -73,6 +78,7 @@ class InworldTtsTransport implements WebTtsTransport {
+         sampleRateHz: this.options.sampleRateHz ?? DEFAULT_SAMPLE_RATE_HZ,
+         bufferCharThreshold: this.options.bufferCharThreshold ?? DEFAULT_BUFFER_THRESHOLD,
+         sessionToken: this.options.sessionToken,
++        phonemeTimestamps: this.options.phonemeTimestamps === true,
+       },
+       signal,
+     );
+@@ -94,6 +100,7 @@ async function createInworldStreamingSession(
+     sampleRateHz: number;
+     bufferCharThreshold: number;
+     sessionToken?: string;
++    phonemeTimestamps: boolean;
+   },
+   signal: AbortSignal,
+ ): Promise<WebTtsStreamingSession> {
+@@ -110,6 +117,9 @@ async function createInworldStreamingSession(
+     `Inworld TTS audio queue exceeded ${MAX_QUEUED_AUDIO_MS}ms`,
+   );
+   let prevChunkTail: Int16Array | null = null;
++  let providerSamples = 0;
++  let tailSpans: SourceSpan[] = [];
++  const timeline = options.phonemeTimestamps ? new InworldVisemeTimeline() : undefined;
+   let finished = false;
+   let contextReady = false;
+   let flushed = false;
+@@ -155,8 +165,10 @@ async function createInworldStreamingSession(
+     finished = true;
+     cleanup();
+     readyResolve?.();
+-    flushTail(queue, prevChunkTail, options.sampleRateHz);
++    flushTail(queue, prevChunkTail, options.sampleRateHz, timeline?.project(tailSpans, options.sampleRateHz));
+     prevChunkTail = null;
++    tailSpans = [];
++    timeline?.clear();
+     queue.end();
+     closeSocket();
+   };
+@@ -169,6 +181,8 @@ async function createInworldStreamingSession(
+     terminalError = error;
+     cleanup();
+     prevChunkTail = null;
++    tailSpans = [];
++    timeline?.clear();
+     readyReject?.(error);
+     queue.throw(error);
+     closeSocket();
+@@ -190,6 +204,7 @@ async function createInworldStreamingSession(
+             sampleRateHertz: options.sampleRateHz,
+           },
+           bufferCharThreshold: options.bufferCharThreshold,
++          ...(options.phonemeTimestamps ? { timestampType: "WORD", timestampTransportStrategy: "SYNC" } : {}),
+         },
+         contextId: CONTEXT_ID,
+       }));
+@@ -224,25 +239,37 @@ async function createInworldStreamingSession(
+       return;
+     }
+
++    const timestampInfo = result.audioChunk?.timestampInfo ?? result.timestampInfo;
+     const audioContent = result.audioChunk?.audioContent;
+     if (audioContent) {
+       resetAudioDeadline();
+       try {
+         const pcm16 = decodeAudioChunk(audioContent);
+         if (pcm16.length > 0) {
++          timeline?.ingest(timestampInfo, {
++            startMs: providerSamples * 1000 / options.sampleRateHz,
++            endMs: (providerSamples + pcm16.length) * 1000 / options.sampleRateHz,
++          });
++          const spans = timeline ? crossfadeSourceSpans(tailSpans, prevChunkTail?.length ?? 0,
++            providerSamples, pcm16.length, CROSSFADE_SAMPLES) : [];
++          providerSamples += pcm16.length;
+           const blended = blendChunkBoundary(prevChunkTail, pcm16);
+           if (blended.length > CROSSFADE_SAMPLES) {
+             const splitIndex = blended.length - CROSSFADE_SAMPLES;
+             const body = blended.subarray(0, splitIndex);
+             prevChunkTail = blended.slice(splitIndex);
++            tailSpans = sliceSourceSpans(spans, splitIndex, blended.length);
+             queue.push({
++              ...(timeline ? { visemes: timeline.project(sliceSourceSpans(spans, 0, splitIndex), options.sampleRateHz) } : {}),
+               frames: pcm16ToFloat32(body),
+               sampleRate: options.sampleRateHz,
+               channels: 1,
+             });
+           } else {
+             prevChunkTail = blended;
++            tailSpans = spans;
+           }
++          if (tailSpans.length) timeline?.discardBefore(Math.min(...tailSpans.map(span => span.sourceStart)), options.sampleRateHz);
+         }
+       } catch (error) {
+         fail(error instanceof Error ? error : new Error(String(error)));
+@@ -250,6 +277,7 @@ async function createInworldStreamingSession(
+       return;
+     }
+
++    timeline?.ingest(timestampInfo);
+     if (result.flushCompleted || result.contextClosed) {
+       finish();
+     }
+@@ -359,6 +387,9 @@ function buildWebSocketUrl(baseUrl: string, sessionToken?: string): string {
+ }
+
+ function validateInworldOptions(options: InworldTtsTransportOptions): InworldTtsTransportOptions {
++  if (options.phonemeTimestamps !== undefined && typeof options.phonemeTimestamps !== "boolean") {
++    throw new TypeError("Inworld phonemeTimestamps must be a boolean");
++  }
+   assertInworldInteger(options.sampleRateHz, "sampleRateHz", 8_000, 192_000);
+   assertInworldInteger(options.bufferCharThreshold, "bufferCharThreshold", 1, 1_000);
+   if (options.inworldVoiceId !== undefined) assertInworldString(options.inworldVoiceId, "inworldVoiceId", 512);
+@@ -442,6 +473,7 @@ function flushTail(
+   queue: ReturnType<typeof createAsyncQueue<TtsAudioChunk>>,
+   tail: Int16Array | null,
+   sampleRate: number,
++  visemes?: TtsAudioChunk["visemes"],
+ ): void {
+   if (!tail || tail.length === 0) {
+     return;
+@@ -450,6 +482,7 @@ function flushTail(
+   applyEdgeFade(tail, sampleRate);
+
+   queue.push({
++    ...(visemes !== undefined ? { visemes } : {}),
+     frames: pcm16ToFloat32(tail),
+     sampleRate,
+     channels: 1,
+diff --git a/voice-core-rs/wrappers/web/src/transport/types.ts b/voice-core-rs/wrappers/web/src/transport/types.ts
+index bd69ead..7f35d17 100644
+--- a/voice-core-rs/wrappers/web/src/transport/types.ts
++++ b/voice-core-rs/wrappers/web/src/transport/types.ts
+@@ -12,7 +12,16 @@ export type LlmTokenEvent = {
+   kind?: "answer" | "activity";
+ };
+
++export type TtsVisemeCue = {
++  startMs: number;
++  endMs: number;
++  viseme: string;
++  phoneme?: string;
++};
++
+ export type TtsAudioChunk = {
++  /** Times relative to these PCM frames. Undefined = unavailable; [] = known silence. */
++  visemes?: readonly TtsVisemeCue[];
+   frames: Float32Array;
+   sampleRate: number;
+   channels: number;
+diff --git a/voice-core-rs/wrappers/web/src/types.ts b/voice-core-rs/wrappers/web/src/types.ts
+index 9f97677..6125af2 100644
+--- a/voice-core-rs/wrappers/web/src/types.ts
++++ b/voice-core-rs/wrappers/web/src/types.ts
+@@ -1,3 +1,17 @@
++/** RMS of PCM actually rendered by the output worklet, normalized to 0..1.
++ * Optional viseme metadata may be available when runtime chunks include it.
++ */
++export interface PlaybackViseme {
++  readonly symbol: string;
++  readonly weight: number;
++}
++
++export interface PlaybackFrame {
++  readonly active: boolean;
++  readonly level: number;
++  readonly visemes?: readonly PlaybackViseme[];
++}
++
+ export type VoiceConversationState =
+   | "idle"
+   | "listening"

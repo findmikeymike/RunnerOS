@@ -33,6 +33,9 @@ microphone access. The actual modal warmup remains the final launch check.
 
 ## Playback connection
 
+This section records the initial amplitude integration. The current phoneme
+upgrade is documented in [10-mikey-phoneme-sync.md](10-mikey-phoneme-sync.md).
+
 The current TTS transport supplies audio without verified timed visemes. This
 integration therefore uses **audio-reactive mouth opening, not phoneme sync**.
 `VoiceCoreWeb.onPlaybackFrame` observes actual output-worklet PCM after the

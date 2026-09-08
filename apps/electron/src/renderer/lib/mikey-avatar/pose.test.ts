@@ -30,4 +30,17 @@ describe('Mikey speaker-driven mouth', () => {
     expect(pose.morphs.blinkLeft).toBe(0); expect(pose.morphs.blinkRight).toBe(0)
     expect(pose.morphs.viseme_aa).toBeGreaterThan(0)
   })
+  test('uses the authored consonant and vowel shapes from consumed phonemes', () => {
+    const playback = { ...playing, visemes: [{ symbol: 'bmp', weight: 0.75 }, { symbol: 'o', weight: 0.25 }] }
+    const pose = sampleMikeyPose('speaking', playback, 1050, false)
+    expect(pose.morphs['viseme_PP']).toBe(0.75)
+    expect(pose.morphs['viseme_O']).toBe(0.25)
+    expect(pose.morphs.viseme_aa).toBe(0)
+    expect(sampleMikeyPose('speaking', { ...playback, level: 0 }, 1050, false).morphs.viseme_PP).toBe(0.75)
+    expect(sampleMikeyPose('speaking', { ...playing, visemes: [{ symbol: 'aei', weight: 1 }] }, 1050, false).morphs.viseme_aa).toBe(0.75)
+    expect(sampleMikeyPose('speaking', { ...playing, visemes: [] }, 1050, false).morphs.viseme_aa).toBe(0)
+    expect(sampleMikeyPose('speaking', { ...playing, visemes: [{ symbol: 'unknown', weight: 1 }] }, 1050, false).morphs.viseme_aa).toBe(0)
+    expect(sampleMikeyPose('listening', playback, 1050, false).morphs['viseme_PP'] ?? 0).toBe(0)
+    expect(sampleMikeyPose('speaking', playback, 1201, false).morphs['viseme_PP'] ?? 0).toBe(0)
+  })
 })
