@@ -161,8 +161,8 @@ export function ReleaseHorizon({
   }
 
   return (
-    <section className="overflow-hidden rounded-[18px] border border-white/[0.075] bg-white/[0.032] shadow-panel-lift backdrop-blur-2xl">
-      <div className="flex flex-col gap-4 border-b border-white/[0.055] px-5 py-4 md:flex-row md:items-end md:justify-between">
+    <section className="hq-premium-panel overflow-hidden rounded-[14px] border border-white/[0.075]">
+      <div className="hq-panel-heading flex flex-col gap-4 px-5 py-4 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[9px] font-medium uppercase tracking-[0.18em] text-white/34">
             <CalendarDays className="h-3.5 w-3.5 text-[#ff5a00]" />
@@ -521,7 +521,7 @@ function HorizonTrack({
   const pastReleases = campaigns.filter((campaign) => campaign.releaseDate && campaign.releaseDate < `${months[0]!.key}-01`).length
 
   return (
-    <div className="relative h-[124px] min-w-0 select-none" data-testid="horizon-track">
+    <div className="hq-horizon-track relative isolate h-[124px] min-w-0 select-none" data-testid="horizon-track">
       {track.map((month) => {
         const monthPlan = plan.months[month.key]
         const populated = Boolean(
@@ -539,13 +539,13 @@ function HorizonTrack({
             title={monthPlan?.title ? `${month.label}: ${monthPlan.title}` : `${month.label} ${month.year}`}
             aria-label={`Open ${month.label} ${month.year}`}
             style={{ left: `${month.left}%`, width: `${month.width}%` }}
-            className="group absolute inset-y-0 rounded-[8px] transition-colors hover:bg-white/[0.035] focus-visible:outline-none focus-visible:bg-white/[0.045]"
+            className="group absolute inset-y-0 z-[2] rounded-[8px] transition-colors hover:bg-white/[0.035] focus-visible:outline-none focus-visible:bg-white/[0.045]"
           >
             <span className="absolute left-0 top-[60px] h-[9px] w-px bg-white/[0.14]" aria-hidden="true" />
             <span className="absolute bottom-2 left-2 flex items-baseline gap-1 whitespace-nowrap">
               <span className={cn(
                 'text-[10px] font-medium uppercase tracking-[0.12em]',
-                populated ? 'text-[#ff6a00]' : 'text-white/38 group-hover:text-white/70',
+                populated ? 'text-[#ff6a00]' : month.key === todayKey.slice(0, 7) ? 'text-white/74' : 'text-white/46 group-hover:text-white/70',
               )}>
                 {month.label}
               </span>
@@ -562,6 +562,7 @@ function HorizonTrack({
       })}
 
       <div className="pointer-events-none absolute inset-x-0 top-[64px] h-px bg-white/[0.12]" aria-hidden="true" />
+      <div className="hq-horizon-blur" aria-hidden="true"><span /><span /><span /></div>
 
       {spans.map((span) => (
         <button
@@ -572,7 +573,7 @@ function HorizonTrack({
           title={span.name}
           aria-label={`Open ${span.name}`}
           style={{ left: `${span.from}%`, width: `${Math.max(0.6, span.to - span.from)}%` }}
-          className="absolute top-[60px] h-[9px] rounded-full bg-[#ff5a00]/25 transition-colors hover:bg-[#ff5a00]/45 disabled:cursor-default"
+          className="absolute top-[60px] z-[3] h-[9px] rounded-full bg-[#ff5a00]/25 transition-colors hover:bg-[#ff5a00]/45 disabled:cursor-default"
         />
       ))}
 
@@ -583,7 +584,7 @@ function HorizonTrack({
           onClick={() => onOpenCampaign?.(release.id)}
           disabled={!onOpenCampaign}
           style={{ left: `${release.at}%` }}
-          className="group absolute top-0 h-[124px] w-0 disabled:cursor-default"
+          className="group absolute top-0 z-[3] h-[124px] w-0 disabled:cursor-default"
           aria-label={`${release.name}, ${formatDate(release.date)}`}
         >
           <span className="absolute left-0 top-[64px] h-[11px] w-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#050505] bg-white transition-transform group-hover:scale-125" />
@@ -599,11 +600,12 @@ function HorizonTrack({
 
       {today !== null ? (
         <div
-          className="pointer-events-none absolute inset-y-0"
+          className="pointer-events-none absolute inset-y-0 z-[4]"
           style={{ left: `${today}%` }}
           aria-label="Today"
         >
-          <span className="absolute inset-y-0 left-0 w-px bg-white/55" />
+          <span className="hq-today-stem absolute inset-y-0 left-0 w-px" />
+          <span className="hq-today-point absolute left-0 top-[64px] h-[5px] w-[5px] -translate-x-1/2 -translate-y-1/2 rounded-full" />
           <span className="absolute left-1.5 top-2 text-[9px] font-medium uppercase tracking-[0.14em] text-white/70">Today</span>
         </div>
       ) : null}

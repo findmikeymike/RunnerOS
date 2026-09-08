@@ -598,7 +598,7 @@ describe('Artist OS persistent shell chrome', () => {
     const hq = readFileSync(join(import.meta.dir, '..', 'ArtistHQHome.tsx'), 'utf8')
 
     expect(hq).toContain("bg-[#0C0D0E] p-4")
-    expect(hq).toContain('divide-x divide-white/[0.075] overflow-hidden rounded-[14px]')
+    expect(hq).toContain('className="hq-pulse-metrics"')
   })
 
   test('places the lifecycle activity card below the Release Horizon', () => {
@@ -636,15 +636,15 @@ describe('Artist OS persistent shell chrome', () => {
     expect(hq).toContain('id="hq-home-operations" className="space-y-3"')
     expect(hq).toContain('<div id="hq-home-details">')
     expect(hq).toContain('<SignalsStrip')
-    expect(hq).toContain('group relative flex h-[104px] w-full min-w-0 flex-col overflow-hidden p-3.5')
-    expect(hq).toContain('divide-x divide-white/[0.075] overflow-hidden rounded-[14px]')
+    expect(hq).toContain('group relative flex h-[68px] w-full min-w-0 flex-col overflow-hidden px-3 py-2')
+    expect(hq).toContain('className="hq-manager-performance-row"')
     expect(hq).toContain('backdrop-blur-2xl')
     expect(hq).not.toContain('border border-[#f97316]/35')
     expect(hq).toContain('ariaLabel="Open Spotify Pulse analysis"')
     expect(hq).toContain('ariaLabel="Open Social Pulse analysis"')
     expect(hq).toContain('<PulseDetailsDialog')
     expect(hq).not.toContain('mt-3 grid grid-cols-3 gap-2 rounded-[12px] bg-black/20 py-3')
-    expect(hq).toContain('placeholder="Tell your manager what you need…"')
+    expect(hq).toContain('<ArtistManagerOrb onOpen={() => managerVoice.setOpen(true)} />')
     expect(hq).not.toContain('h-1.5 w-1.5 shrink-0 rounded-full bg-[#f97316]')
     expect(hq).not.toContain('>This week</span>')
     expect(hq).toContain('aria-label="Work activity"')

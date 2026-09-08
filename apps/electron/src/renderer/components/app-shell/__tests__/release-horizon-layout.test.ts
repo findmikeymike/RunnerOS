@@ -13,8 +13,8 @@ describe('Release Horizon timeline UI', () => {
     expect(source).toContain('data-testid="horizon-track"')
     expect(source).not.toContain('grid min-w-[1040px] grid-cols-12')
     expect(source).not.toContain('aspect-square min-h-[86px]')
-    expect(source).toContain('bg-white/[0.032]')
-    expect(source).toContain('backdrop-blur-2xl')
+    expect(source).toContain('hq-premium-panel')
+    expect(source).toContain('className="hq-horizon-blur" aria-hidden="true"')
   })
 
   test('marks today, campaign spans, and release dots on the track', () => {

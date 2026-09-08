@@ -16,14 +16,12 @@ import {
   Library,
   Maximize2,
   MessageSquareText,
-  Mic,
   Pencil,
   Play,
   Plus,
   RefreshCw,
   Radio,
   Search,
-  Send,
   SlidersHorizontal,
   Sparkles,
   Star,
@@ -38,7 +36,6 @@ import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
 import { resolvePulseExecutionTarget, type PulseExecutionTarget } from '@/lib/pulse-execution'
 import { openAgentSessionComposer } from '@/lib/run-agent'
-import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import { appendSignalNugget, signalFreshness } from '@/lib/artist-signals'
 import {
   createWeeklyManagerCheckInMatcher,
@@ -83,6 +80,8 @@ import { CompactPageHeader } from './CompactPageHeader'
 import { ReleaseHorizon } from './ReleaseHorizon'
 import { ManagerKnowledgePanel, type ManagerSourceSurface } from './ManagerKnowledgePanel'
 import { ArtistManagerVoiceDialog } from './ArtistManagerVoiceDialog'
+import { ArtistManagerOrb } from './ArtistManagerOrb'
+import './artist-hq-surfaces.css'
 import { useArtistManagerVoice } from '@/hooks/useArtistManagerVoice'
 import { buildCampaignSchedulePlanFromComposer, buildHqSchedulePlanFromComposer, composerDefinitionDigest, type ScheduledWorkComposerDraft } from '@/lib/scheduled-work-composer'
 import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult, type ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
@@ -619,35 +618,6 @@ export function ArtistHQHome({
       })
     },
   })
-  const [managerAskBusy, setManagerAskBusy] = React.useState(false)
-  const askManager = React.useCallback(async (text: string) => {
-    const draft = text.trim()
-    if (!draft) return
-    setManagerAskBusy(true)
-    try {
-      const manager = availableAgents.find((agent) => agent.slug === CONCIERGE_SLUG)
-        ?? await window.electronAPI.getAgentDefinition(CONCIERGE_SLUG)
-      if (!manager) throw new Error('The Artist Manager agent is not installed')
-      await openAgentSessionComposer({
-        agent: manager,
-        workspaceId,
-        onCreateSession,
-        onInputChange,
-        onSendMessage,
-        skills,
-        sources,
-        agentCatalog: availableAgents.filter((agent) => agent.slug !== manager.slug),
-        draftInput: draft,
-        autoSendDraft: true,
-      })
-    } catch (error) {
-      toast.error('Could not reach your manager', {
-        description: error instanceof Error ? error.message : String(error),
-      })
-    } finally {
-      setManagerAskBusy(false)
-    }
-  }, [availableAgents, onCreateSession, onInputChange, onSendMessage, skills, sources, workspaceId])
   const activeCalendarEvents = React.useMemo(
     () => calendar.events.filter((event) => !event.deletedAt),
     [calendar.events],
@@ -2029,14 +1999,9 @@ export function ArtistHQHome({
 
         {tab === 'home' && (
           <div id="hq-home-operations" className="space-y-3">
-            <ManagerAskBar
-              busy={managerAskBusy}
-              onAsk={askManager}
-              onVoice={() => managerVoice.setOpen(true)}
-            />
-
             <div id="hq-home-details">
               <SignalsStrip
+                manager={<ArtistManagerOrb onOpen={() => managerVoice.setOpen(true)} />}
                 spotifySnapshot={spotifySnapshot}
                 spotifyHistory={spotifyHistory}
                 spotifyPublicApi={spotifyIsPublicApi}
@@ -2719,59 +2684,8 @@ function PulseRunControls({
   )
 }
 
-function ManagerAskBar({
-  busy,
-  onAsk,
-  onVoice,
-}: {
-  busy: boolean
-  onAsk: (text: string) => Promise<void>
-  onVoice: () => void
-}) {
-  const [value, setValue] = React.useState('')
-  const submit = async () => {
-    const text = value.trim()
-    if (!text || busy) return
-    await onAsk(text)
-    setValue('')
-  }
-  return (
-    <form
-      onSubmit={(event) => { event.preventDefault(); void submit() }}
-      className="flex h-11 items-center gap-2 rounded-[14px] border border-white/[0.075] bg-white/[0.035] pl-4 pr-2 backdrop-blur-2xl focus-within:border-[#f97316]/40"
-    >
-      <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#f97316]/80" />
-      <input
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-        placeholder="Tell your manager what you need…"
-        aria-label="Tell your manager"
-        disabled={busy}
-        className="h-full min-w-0 flex-1 bg-transparent text-[13px] text-white/88 outline-none placeholder:text-white/30 disabled:opacity-60"
-      />
-      <button
-        type="button"
-        onClick={onVoice}
-        aria-label="Talk to Artist Manager"
-        title="Talk to Artist Manager"
-        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-white/45 transition-colors hover:bg-white/[0.06] hover:text-white/90"
-      >
-        <Mic className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="submit"
-        disabled={busy || !value.trim()}
-        aria-label="Send to Artist Manager"
-        title="Send to Artist Manager"
-        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#f97316] text-black transition-colors hover:bg-[#fb8a3c] disabled:cursor-not-allowed disabled:bg-white/[0.06] disabled:text-white/30"
-      >
-        <Send className="h-3.5 w-3.5" />
-      </button>
-    </form>
-  )
-}
-
 function SignalsStrip({
+  manager,
   spotifySnapshot,
   spotifyHistory,
   spotifyPublicApi,
@@ -2792,6 +2706,7 @@ function SignalsStrip({
   onToggleInstagram,
   onManageSocial,
 }: {
+  manager: React.ReactNode
   spotifySnapshot: ArtistSpotifySnapshot | null
   spotifyHistory: ArtistSpotifyHistoryPoint[]
   spotifyPublicApi: boolean
@@ -2833,17 +2748,26 @@ function SignalsStrip({
   const spotifyDate = spotifySnapshot ? formatShortDate(spotifySnapshot.snapshotDate) : null
 
   return (
-    <section className="min-w-0">
-      <div className="mb-2 flex h-6 items-center px-1">
-        <p className="text-[9px] font-medium uppercase tracking-[0.16em] text-white/42">
-          Performance
-          {spotifyDate ? <span className="text-white/24"> · {spotifyDate}</span> : null}
-          {spotifySnapshot?.windowDays && !spotifyPublicApi ? <span className="text-white/24"> · {spotifySnapshot.windowDays} days</span> : null}
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-        <div className="relative grid min-w-0 grid-cols-2 divide-x divide-white/[0.075] overflow-hidden rounded-[14px] border border-white/[0.075] bg-white/[0.035] backdrop-blur-2xl">
+    <section className="hq-performance" aria-label="Artist performance and manager">
+      <div className="hq-manager-performance-row">
+        <div className="hq-pulse-card shadow-[0px_2px_3px_-1px_rgba(0,0,0,0.1),0px_1px_0px_0px_rgba(25,28,33,0.02),0px_0px_0px_1px_rgba(25,28,33,0.08)]" aria-label="Spotify performance">
+          <div className="hq-pulse-heading">
+            <div className="hq-pulse-identity">
+              <h3>Spotify</h3>
+              {spotifyDate ? <span title={spotifySnapshot?.windowDays && !spotifyPublicApi ? `${spotifySnapshot.windowDays} days` : undefined}>{spotifyDate}</span> : null}
+            </div>
+            <PulseRunControls
+              active={spotifyActive}
+              busy={spotifyBusy}
+              runDisabled={spotifyRunDisabled}
+              manualLabel="Run Spotify Pulse now — manual"
+              weeklyLabel="Weekly Spotify auto-run"
+              activeClassName="bg-[#f97316]/14 text-[#f97316]"
+              onRun={onRunSpotify}
+              onToggle={onToggleSpotify}
+            />
+          </div>
+          <div className="hq-pulse-metrics">
           <SignalTile
             embedded
             label={spotifyPublicApi ? 'Popularity' : 'Streams'}
@@ -2870,40 +2794,13 @@ function SignalsStrip({
             ariaLabel="Open Spotify listener analysis"
             onOpen={() => setSpotifyOpen(true)}
           />
-          <div className="absolute right-3 top-2.5 z-10">
-            <PulseRunControls
-              active={spotifyActive}
-              busy={spotifyBusy}
-              runDisabled={spotifyRunDisabled}
-              manualLabel="Run Spotify Pulse now — manual"
-              weeklyLabel="Weekly Spotify auto-run"
-              activeClassName="bg-[#f97316]/14 text-[#f97316]"
-              onRun={onRunSpotify}
-              onToggle={onToggleSpotify}
-            />
           </div>
         </div>
-        <div className="relative grid min-w-0 grid-cols-2 divide-x divide-white/[0.075] overflow-hidden rounded-[14px] border border-white/[0.075] bg-white/[0.035] backdrop-blur-2xl">
-          <SignalTile
-            embedded
-            label="Followers"
-            value={formatMetric(instagramSnapshot?.metrics.followers)}
-            trend={[]}
-            foot={instagramFoot}
-            ariaLabel="Open Instagram follower analysis"
-            onOpen={() => setSocialOpen(true)}
-          />
-          <SignalTile
-            embedded
-            label="Change"
-            value={formatSignedMetric(instagramSnapshot?.metrics.followerDelta)}
-            trend={instagramHistory.map((point) => point.followerDelta)}
-            trendMode="bars"
-            foot={instagramSnapshot?.windowDays ? `${instagramSnapshot.windowDays} days` : instagramPending}
-            ariaLabel="Open Social Pulse analysis"
-            onOpen={() => setSocialOpen(true)}
-          />
-          <div className="absolute right-3 top-2.5 z-10 flex items-center gap-1">
+        <div className="hq-performance-manager">{manager}</div>
+        <div className="hq-pulse-card shadow-[0px_2px_3px_-1px_rgba(0,0,0,0.1),0px_1px_0px_0px_rgba(25,28,33,0.02),0px_0px_0px_1px_rgba(25,28,33,0.08)]" aria-label="Instagram performance">
+          <div className="hq-pulse-heading">
+            <div className="hq-pulse-identity"><h3>Instagram</h3></div>
+            <div className="flex shrink-0 items-center gap-1">
             <button
               type="button"
               onClick={onManageSocial}
@@ -2923,6 +2820,28 @@ function SignalsStrip({
               onRun={onRunInstagram}
               onToggle={onToggleInstagram}
             />
+            </div>
+          </div>
+          <div className="hq-pulse-metrics">
+          <SignalTile
+            embedded
+            label="Followers"
+            value={formatMetric(instagramSnapshot?.metrics.followers)}
+            trend={[]}
+            foot={instagramFoot}
+            ariaLabel="Open Instagram follower analysis"
+            onOpen={() => setSocialOpen(true)}
+          />
+          <SignalTile
+            embedded
+            label="Change"
+            value={formatSignedMetric(instagramSnapshot?.metrics.followerDelta)}
+            trend={instagramHistory.map((point) => point.followerDelta)}
+            trendMode="bars"
+            foot={instagramSnapshot?.windowDays ? `${instagramSnapshot.windowDays} days` : instagramPending}
+            ariaLabel="Open Social Pulse analysis"
+            onOpen={() => setSocialOpen(true)}
+          />
           </div>
         </div>
       </div>
@@ -2975,13 +2894,13 @@ function SignalTile({
       aria-label={ariaLabel}
       onClick={onOpen}
       className={cn(
-        'group relative flex h-[104px] w-full min-w-0 flex-col overflow-hidden p-3.5 text-left transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#f97316]/70',
+        'group relative flex h-[68px] w-full min-w-0 flex-col overflow-hidden px-3 py-2 text-left transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#f97316]/70',
         embedded ? 'bg-transparent' : 'rounded-[14px] border border-white/[0.075] bg-white/[0.035] backdrop-blur-2xl',
       )}
     >
       <span className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/42">{label}</span>
       <span className={cn(
-        'mt-1 truncate text-[22px] font-medium leading-none tracking-[-0.03em]',
+        'mt-1 truncate text-[20px] font-medium leading-none tracking-[-0.03em]',
         empty ? 'text-white/28' : 'text-white/90',
       )}>
         {empty ? '—' : value}
@@ -2989,7 +2908,7 @@ function SignalTile({
       <span className="mt-auto flex items-end justify-between gap-2">
         <span className={cn(
           'truncate text-[10px] leading-4',
-          footTone === 'up' ? 'text-emerald-300/85' : footTone === 'down' ? 'text-red-300/80' : 'text-white/32',
+          footTone === 'up' ? 'text-emerald-300/85' : footTone === 'down' ? 'text-red-300/80' : 'text-white/44',
         )}>
           {foot}
         </span>
@@ -3317,8 +3236,8 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
 
   return (
     <>
-      <HQCard className="overflow-hidden border-white/[0.075] bg-white/[0.032] p-0 shadow-hairline-top backdrop-blur-xl">
-        <div className="flex min-h-12 items-center justify-between gap-3 border-b border-white/[0.055] px-3 sm:px-4">
+      <HQCard className="hq-premium-panel hq-activity-panel overflow-hidden p-0">
+        <div className="hq-panel-heading flex min-h-12 items-center justify-between gap-3 px-3 sm:px-4">
           <div className="flex min-w-0 items-center gap-1" role="tablist" aria-label="Work activity">
             {([
               ['needs', 'Needs you'],
@@ -3474,7 +3393,7 @@ function StateOfPlayPanel(props: StateOfPlayPanelProps) {
 }
 
 function ActivityEmpty({ label }: { label: string }) {
-  return <p className="px-4 py-4 text-xs text-white/34">{label}</p>
+  return <p className="px-4 py-4 text-xs text-white/48">{label}</p>
 }
 
 function activityStatusLabel(status: string): string {
