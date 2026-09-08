@@ -281,6 +281,7 @@ import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
 import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, isAgentAllowedInArtistWorkspace, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
 import { composeAgentSystemPrompt, managerBriefReceiptFromDocs } from '@craft-agent/shared/agent-prompt'
+import { filterContextDocsForTaskMode, resolveAgentTaskMode } from '@craft-agent/shared/agent-definitions/task-modes'
 import { filterAttachmentsForModelInput } from './runtime-config'
 import { inferScheduledWorkScope, persistHnicScheduleWork } from '../scheduled-work/HnicScheduledWork'
 import { supplyScheduledWorkInputs } from '../scheduled-work/ScheduledWorkInputSupply'
@@ -2951,7 +2952,11 @@ export class SessionManager implements ISessionManager {
   async resolveAgentSessionOptions(
     workspaceId: string,
     agentSlug: string,
-    options: { referenceMode?: 'strict' | 'lenient' } = {},
+    options: {
+      referenceMode?: 'strict' | 'lenient'
+      taskModeId?: string
+      taskModeSelectionSource?: 'manager' | 'workflow' | 'automation' | 'handoff'
+    } = {},
   ): Promise<Partial<CreateSessionOptions>> {
     const strict = options.referenceMode !== 'lenient'
     const ws = getWorkspaceByNameOrId(workspaceId)
@@ -2962,12 +2967,24 @@ export class SessionManager implements ISessionManager {
     const { loadPromptContextDocsForAgent } = await import('@craft-agent/shared/workspace-context')
     const agent = loadGlobalAgent(agentSlug)
     if (!agent) throw new Error(`Agent not found: ${agentSlug}`)
+    const taskMode = resolveAgentTaskMode(agent, options.taskModeId)
+    const launchAgent = taskMode
+      ? {
+          ...agent,
+          metadata: {
+            ...agent.metadata,
+            skills: taskMode.primarySkillSlugs,
+            sources: taskMode.requiredSourceSlugs,
+            optionalSources: taskMode.optionalSourceSlugs,
+          },
+        }
+      : agent
     if (agent.slug === CONCIERGE_SLUG && ws.artistWorkspaceScope === 'hq') {
       refreshHqStateContextDocBestEffort(ws.rootPath)
     } else if (agent.slug === CONCIERGE_SLUG && ws.artistWorkspaceScope === 'campaign') {
       refreshCampaignStateContextDocBestEffort(ws.rootPath)
     }
-    const declaredSkillSlugs = agent.metadata.skills ?? []
+    const declaredSkillSlugs = launchAgent.metadata.skills ?? []
     const skills = ensureDeclaredGlobalSkillsEnabledForAgent(ws.rootPath, declaredSkillSlugs, loadAllSkills(ws.rootPath))
     const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
     const canUseSystemSkills = agent.slug === CONCIERGE_SLUG || agent.slug === ORCHESTRATOR_SLUG
@@ -2978,8 +2995,8 @@ export class SessionManager implements ISessionManager {
     if (strict && missingSkillSlugs.length > 0) {
       throw new Error(`Agent "${agentSlug}" references unavailable skills in this workspace: ${missingSkillSlugs.join(', ')}`)
     }
-    const declaredSourceSlugs = agent.metadata.sources ?? []
-    const declaredOptionalSourceSlugs = (agent.metadata.optionalSources ?? [])
+    const declaredSourceSlugs = launchAgent.metadata.sources ?? []
+    const declaredOptionalSourceSlugs = (launchAgent.metadata.optionalSources ?? [])
       .filter((slug) => !declaredSourceSlugs.includes(slug))
     const sources = getSourcesBySlugs(ws.rootPath, [
       ...declaredSourceSlugs,
@@ -3023,8 +3040,11 @@ export class SessionManager implements ISessionManager {
         })
       }
     }
-    const contextDocs = loadPromptContextDocsForAgent(ws.rootPath, agent.slug)
-      .filter((doc) => !unsafePersistedContextSlugs.has(doc.slug))
+    const contextDocs = filterContextDocsForTaskMode(
+      loadPromptContextDocsForAgent(ws.rootPath, agent.slug)
+        .filter((doc) => !unsafePersistedContextSlugs.has(doc.slug)),
+      taskMode,
+    )
     const [userMemoryEntries, agentMemoryEntries] = await Promise.all([
       loadUserMemoryEntries(),
       loadAgentMemoryEntries(agent.slug),
@@ -3033,9 +3053,11 @@ export class SessionManager implements ISessionManager {
     // from it. Server-spawned sessions (workflow steps, pulses, delegated
     // children) need it too, or an agent can be delegated to but cannot delegate
     // onward. Recursion stays bounded by the agent-message depth limit.
-    const agentCatalog = loadActivatedAgents(ws.rootPath)
-      .filter(entry => isAgentAllowedInArtistWorkspace(entry.slug, ws.artistWorkspaceScope))
-      .map((entry) => ({
+    const agentCatalog = taskMode && agent.slug !== CONCIERGE_SLUG
+      ? []
+      : loadActivatedAgents(ws.rootPath)
+        .filter(entry => isAgentAllowedInArtistWorkspace(entry.slug, ws.artistWorkspaceScope))
+        .map((entry) => ({
       slug: entry.slug,
       name: entry.metadata.name,
       description: entry.metadata.description,
@@ -3043,9 +3065,9 @@ export class SessionManager implements ISessionManager {
       outputs: entry.metadata.outputs,
       visualAgent: entry.metadata.visualAgent,
       tags: entry.metadata.tags,
-    }))
+        }))
     const customSystemPrompt = composeAgentSystemPrompt(
-      agent,
+      launchAgent,
       skills,
       usableSources,
       contextDocs,
@@ -3056,6 +3078,7 @@ export class SessionManager implements ISessionManager {
         artistWorkspaceScope: ws.artistWorkspaceScope,
         currentWorkspaceId: ws.id,
         recentSessions: loadRecentSessionEntries(agent.slug),
+        taskMode,
       },
     )
     const managerBriefReceipt = managerBriefReceiptFromDocs(contextDocs)
@@ -3084,6 +3107,20 @@ export class SessionManager implements ISessionManager {
           outputs: agent.metadata.outputs,
           tags: agent.metadata.tags,
         },
+        ...(taskMode
+          ? {
+              taskMode: {
+                schemaVersion: 1 as const,
+                id: taskMode.id,
+                label: taskMode.label,
+                definitionRevision: taskMode.definitionRevision,
+                selectionSource: options.taskModeSelectionSource ?? 'handoff',
+                primarySkills: taskMode.primarySkillSlugs,
+                adjacentSkills: taskMode.adjacentSkills,
+                fullMode: taskMode.fullMode,
+              },
+            }
+          : {}),
         config: {},
         injected: {
           systemPromptChars: customSystemPrompt.length,
@@ -4471,6 +4508,11 @@ export class SessionManager implements ISessionManager {
           }
           const brandingAgent = STARTER_AGENTS.find(agent => agent.slug === 'branding-agent')
           const brandingSkillSlugs = brandingAgent?.metadata.skills ?? []
+          if (brandingAgent?.metadata.taskModes?.length && replaceBuiltInAgentMetadata('branding-agent', {
+            taskModes: { from: undefined, to: brandingAgent.metadata.taskModes },
+          }).updated) {
+            sessionLog.info('[agent-definitions] Added focused task modes to Branding Agent')
+          }
           const missingBrandingSkills = brandingSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
           if (brandingAgent && missingBrandingSkills.length === 0) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')

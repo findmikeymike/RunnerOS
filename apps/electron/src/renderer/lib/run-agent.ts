@@ -1,6 +1,7 @@
 import { toast } from 'sonner'
 import { navigate, routes } from '@/lib/navigate'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
+import { filterContextDocsForTaskMode, resolveAgentTaskMode } from '@craft-agent/shared/agent-definitions/task-modes'
 import type { MemoryEntry, LoadedMemoryFile } from '@craft-agent/shared/memory/types'
 import type { SessionLogEntry } from '@craft-agent/shared/sessions-log'
 import { selectActiveMemoryEntries } from '@craft-agent/shared/memory/render'
@@ -91,16 +92,30 @@ export function buildAgentCreateSessionOptions(
      */
     artistWorkspaceScope?: 'hq' | 'campaign' | 'lab' | 'general'
   },
+  taskModeId?: string,
 ): CreateSessionOptions {
-  let skillSlugs = agent.metadata.skills ?? []
+  const taskMode = resolveAgentTaskMode(agent, taskModeId)
+  const promptAgent = taskMode
+    ? {
+        ...agent,
+        metadata: {
+          ...agent.metadata,
+          skills: taskMode.primarySkillSlugs,
+          sources: taskMode.requiredSourceSlugs,
+          optionalSources: taskMode.optionalSourceSlugs,
+        },
+      }
+    : agent
+  const contextDocs = filterContextDocsForTaskMode(context?.contextDocs ?? [], taskMode)
+  let skillSlugs = promptAgent.metadata.skills ?? []
   let sourceSlugs = [
-    ...(agent.metadata.sources ?? []),
-    ...(agent.metadata.optionalSources ?? []),
+    ...(promptAgent.metadata.sources ?? []),
+    ...(promptAgent.metadata.optionalSources ?? []),
   ]
   let promptSources = context?.sources ?? []
 
   if (context) {
-    const resolution = resolveAgentReferences(agent, context.skills, context.sources)
+    const resolution = resolveAgentReferences(promptAgent, context.skills, context.sources)
     skillSlugs = resolution.resolvedSkills
     sourceSlugs = [...resolution.resolvedSources, ...resolution.resolvedOptionalSources]
     const includedSourceSlugs = new Set(sourceSlugs)
@@ -111,11 +126,11 @@ export function buildAgentCreateSessionOptions(
   // Each section is optional; pure absence collapses cleanly.
   const composedPrompt = context
     ? composeAgentSystemPrompt(
-        agent,
+        promptAgent,
         context.skills,
         promptSources,
-        context.contextDocs ?? [],
-        (context.agentCatalog ?? []).map((a) => ({
+        contextDocs,
+        (taskMode && agent.slug !== CONCIERGE_SLUG ? [] : context.agentCatalog ?? []).map((a) => ({
           slug: a.slug,
           name: a.metadata.name,
           description: a.metadata.description,
@@ -131,12 +146,13 @@ export function buildAgentCreateSessionOptions(
           artistWorkspaceScope: context.artistWorkspaceScope,
           recentSessions: context.recentSessions,
           currentWorkspaceId: context.currentWorkspaceId,
+          taskMode,
         },
       )
     : agent.systemPrompt
   const isConcierge = agent.slug === CONCIERGE_SLUG
-  const agentCatalog = context?.agentCatalog ?? []
-  const managerBriefReceipt = managerBriefReceiptFromDocs(context?.contextDocs ?? [])
+  const agentCatalog = taskMode && agent.slug !== CONCIERGE_SLUG ? [] : context?.agentCatalog ?? []
+  const managerBriefReceipt = managerBriefReceiptFromDocs(contextDocs)
 
   const options: CreateSessionOptions = {
     customSystemPrompt: composedPrompt || undefined,
@@ -164,6 +180,20 @@ export function buildAgentCreateSessionOptions(
         outputs: agent.metadata.outputs,
         tags: agent.metadata.tags,
       },
+      ...(taskMode
+        ? {
+            taskMode: {
+              schemaVersion: 1 as const,
+              id: taskMode.id,
+              label: taskMode.label,
+              definitionRevision: taskMode.definitionRevision,
+              selectionSource: 'user' as const,
+              primarySkills: taskMode.primarySkillSlugs,
+              adjacentSkills: taskMode.adjacentSkills,
+              fullMode: taskMode.fullMode,
+            },
+          }
+        : {}),
       config: {
         llmConnection: agent.metadata.llmConnection,
         model: agent.metadata.model,
@@ -175,7 +205,7 @@ export function buildAgentCreateSessionOptions(
         skills: skillSlugs,
         sources: sourceSlugs,
         trustedWorkerTools: agent.metadata.trustedWorkerTools ?? [],
-        contextDocs: (context?.contextDocs ?? []).map((doc) => ({
+        contextDocs: contextDocs.map((doc) => ({
           slug: doc.slug,
           name: doc.metadata.name,
         })),
@@ -239,6 +269,8 @@ export async function openAgentSessionComposer(params: {
    * Active agents visible to the Concierge as a structured routing catalog.
    */
   agentCatalog?: AgentDefinitionDTO[]
+  /** Focused launch recipe chosen before this session is created. */
+  taskModeId?: string
   /**
    * Optional draft to prefill instead of the agent's saved greeting.
    */
@@ -259,11 +291,18 @@ export async function openAgentSessionComposer(params: {
 }): Promise<Session> {
   const assertCurrent = () => { if (params.shouldContinue && !params.shouldContinue()) throw new Error('Command handoff was cancelled.') }
   assertCurrent()
+  const taskMode = resolveAgentTaskMode(params.agent, params.taskModeId)
+  const launchAgent = taskMode
+    ? {
+        ...params.agent,
+        metadata: { ...params.agent.metadata, skills: taskMode.primarySkillSlugs },
+      }
+    : params.agent
   let launchSkills = params.skills
   if (launchSkills) {
     try {
       launchSkills = await ensureAgentDeclaredSkillsEnabled({
-        agent: params.agent,
+        agent: launchAgent,
         workspaceId: params.workspaceId,
         activeSkills: launchSkills,
       })
@@ -285,7 +324,7 @@ export async function openAgentSessionComposer(params: {
   // this workspace. The session still spawns without them; the warning is so
   // the user knows why output may be reduced.
   if (launchSkills && params.sources) {
-    const resolution = resolveAgentReferences(params.agent, launchSkills, params.sources)
+    const resolution = resolveAgentReferences(launchAgent, launchSkills, params.sources)
     if (hasMissingReferences(resolution)) {
       const summary = describeMissingReferences(resolution)
       toast.warning(`${params.agent.metadata.name}: ${summary}`, {
@@ -311,7 +350,7 @@ export async function openAgentSessionComposer(params: {
   assertCurrent()
   const session = await params.onCreateSession(
     params.workspaceId,
-    buildAgentCreateSessionOptions(params.agent, context),
+    buildAgentCreateSessionOptions(params.agent, context, params.taskModeId),
   )
   assertCurrent()
   // Seed a guarded handoff before navigation unmounts its voice owner. The shell

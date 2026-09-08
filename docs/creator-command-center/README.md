@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-09-04
+last_verified: 2026-09-07
 source_of_truth: true
 ---
 
@@ -60,6 +60,7 @@ Specs written but with no implementation in the tree. They live in
 - [43 Approved Branding Amendments](./todo/43-approved-branding-amendments-spec.md) — approved, append-only Branding additions from durable agent Outputs without replacing artist-written context
 - [44 State-Aware First-Use Guide](./todo/44-state-aware-first-use-guide-spec.md) — optional first-use setup inside the existing question-mark Guide, completed from real app state instead of page visits
 - [45 HQ / Campaign Scope Clarity](./todo/45-hq-campaign-scope-clarity-spec.md) — one rule for shared work, timeline inside campaigns, channel-collision warnings
+- [48 Agent Task Modes And Focused Context Loading](./todo/48-agent-task-modes-spec.md) — plain-language job cards that preload the smallest relevant capability, preserve bounded overlap, and keep Artist Manager as the front door
 
 Implementation and live acceptance tracking (spec files retained at their existing paths):
 

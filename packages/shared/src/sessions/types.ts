@@ -118,6 +118,17 @@ export interface SessionLaunchReceipt {
     outputs?: string;
     tags?: string[];
   };
+  /** Immutable focused launch recipe selected before prompt composition. */
+  taskMode?: {
+    schemaVersion: 1;
+    id: string;
+    label: string;
+    definitionRevision: string;
+    selectionSource: 'user' | 'manager' | 'workflow' | 'automation' | 'handoff' | 'legacy';
+    primarySkills: string[];
+    adjacentSkills: Array<{ slug: string; when: string; expansion: 'same-session' | 'new-session' | 'delegate' }>;
+    fullMode: boolean;
+  };
   workflow?: {
     runId?: string;
     slug: string;

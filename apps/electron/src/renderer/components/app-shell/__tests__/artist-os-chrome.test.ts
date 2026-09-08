@@ -288,6 +288,21 @@ describe('Artist OS persistent shell chrome', () => {
     expect(workers).not.toContain('onClick={() => setSelectedAgent(agent)}')
   })
 
+  test('starts mode-aware workers with a focused task picker', () => {
+    const workers = readFileSync(join(import.meta.dir, '..', 'AgentsLaunchpad.tsx'), 'utf8')
+    const picker = readFileSync(join(import.meta.dir, '..', '..', 'agents', 'AgentTaskModePickerDialog.tsx'), 'utf8')
+
+    expect(workers).toContain('AgentTaskModePickerDialog')
+    expect(workers).toContain('(agent.metadata.taskModes?.length ?? 0) > 1')
+    expect(workers).toContain('openAgentSessionComposer({')
+    expect(workers).toContain('taskModeId,')
+    expect(picker).toContain('What are we doing?')
+    expect(picker).toContain('Focused start')
+    expect(picker).toContain('Comprehensive · slower')
+    expect(picker).toContain('instead of loading everything')
+    expect(picker).not.toContain('<img')
+  })
+
   test('keeps Artist OS chat and notification text visible on black surfaces', () => {
     const chat = readFileSync(join(import.meta.dir, '..', 'ChatDisplay.tsx'), 'utf8')
     const input = readFileSync(join(import.meta.dir, '..', 'input', 'FreeFormInput.tsx'), 'utf8')

@@ -10,10 +10,21 @@
 export type {
   AgentDefinitionSource,
   AgentMetadata,
+  AgentTaskModeDefinition,
+  AgentTaskModeAdjacentSkill,
+  AgentTaskModeContext,
+  AgentTaskModeExpansion,
   LoadedAgent,
   AgentParseWarning,
   ActivatedAgentsManifest,
 } from './types.ts';
+
+export {
+  resolveAgentTaskMode,
+  filterContextDocsForTaskMode,
+  buildAgentTaskModePromptSection,
+  type ResolvedAgentTaskMode,
+} from './task-modes.ts';
 
 export { AGENT_SLUG_REGEX, ORCHESTRATOR_SLUG, CONCIERGE_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, SONG_DIRECTOR_SLUG } from './types.ts';
 

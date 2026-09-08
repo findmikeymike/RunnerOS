@@ -10,6 +10,7 @@
  */
 
 import type { CreateAgentInput } from './storage.ts'
+import type { AgentTaskModeDefinition } from './types.ts'
 import { SIGNAL_BRIEFING_INSTRUCTIONS } from '../shared-intel/briefing.ts'
 import { signalTrackPromptPrefix, youtubeProviderPromptPrefix } from './signal-track-prompts.ts'
 import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, SONG_DIRECTOR_SLUG, OPEN_SLIDE_AGENT_SLUG } from './types.ts'
@@ -20,6 +21,127 @@ import { ANYTHING_AGENT_SLUG, RELEASE_MANAGER_AGENT_SLUG, RELEASE_MANAGER_SKILL_
 const PORTABLE_AGENT_LIBRARY_ROOT = RUNTIME_IDENTITY.variant === 'artist-os'
   ? '~/.artist-os/libraries/agents'
   : '~/.agents'
+
+const BRANDING_SKILL_SLUGS = [
+  'artist-brand-dna-audit',
+  'artist-narrative-universe',
+  'artist-belief-system',
+  'artist-campaign-angle-builder',
+  'artist-visual-world-director',
+  'artist-brand-expression-strategist',
+]
+
+const BRANDING_TASK_MODES: AgentTaskModeDefinition[] = [
+  {
+    id: 'brand-audit',
+    label: 'Brand Audit',
+    description: 'Find what is memorable, muddy, missing, or working against the artist.',
+    kind: 'focus',
+    primarySkillSlugs: ['artist-brand-dna-audit'],
+    adjacentSkills: [
+      { slug: 'artist-belief-system', when: 'Use when the audit reveals an undefined enemy, value system, or tribe.', expansion: 'same-session' },
+      { slug: 'artist-visual-world-director', when: 'Use when the audit finds a visual contradiction that needs a concrete direction.', expansion: 'same-session' },
+      { slug: 'artist-brand-expression-strategist', when: 'Use when the gap is how the artist behaves or communicates publicly.', expansion: 'same-session' },
+    ],
+    context: {
+      preloadTopics: ['artist-profile', 'artist-voice', 'artist-branding'],
+      retrieveOnDemandTopics: ['recent campaigns', 'approved outputs', 'public-channel evidence'],
+      maxPreloadChars: 12_000,
+    },
+  },
+  {
+    id: 'narrative-universe',
+    label: 'Narrative Universe',
+    description: 'Build the world, mythology, archetypes, rules, and story people can enter.',
+    kind: 'focus',
+    primarySkillSlugs: ['artist-narrative-universe'],
+    adjacentSkills: [
+      { slug: 'artist-belief-system', when: 'Use when the world lacks a clear belief, enemy, or reason for the tribe to gather.', expansion: 'same-session' },
+      { slug: 'artist-visual-world-director', when: 'Use when the story must become a coherent visual language.', expansion: 'same-session' },
+      { slug: 'artist-campaign-angle-builder', when: 'Delegate when the established world needs a release rollout.', expansion: 'delegate' },
+    ],
+    context: {
+      preloadTopics: ['artist-profile', 'artist-voice', 'artist-branding', 'artist-release-horizon', 'mission-brief'],
+      retrieveOnDemandTopics: ['lyrics and demos', 'historical campaigns', 'reference assets'],
+      maxPreloadChars: 12_000,
+    },
+  },
+  {
+    id: 'belief-worldview',
+    label: 'Belief / Worldview',
+    description: 'Define the values, enemy, tribe, language, and point of view behind the music.',
+    kind: 'focus',
+    primarySkillSlugs: ['artist-belief-system'],
+    adjacentSkills: [
+      { slug: 'artist-narrative-universe', when: 'Use when the belief needs a story world, archetype, or mythology.', expansion: 'same-session' },
+      { slug: 'artist-brand-expression-strategist', when: 'Use when the worldview must translate into subtle public behavior.', expansion: 'same-session' },
+    ],
+    context: {
+      preloadTopics: ['artist-profile', 'artist-voice', 'artist-branding'],
+      retrieveOnDemandTopics: ['lyrics and interviews', 'fan language', 'community evidence'],
+      maxPreloadChars: 12_000,
+    },
+  },
+  {
+    id: 'visual-world',
+    label: 'Visual World',
+    description: 'Shape the symbols, styling, color, typography, photography, and visual rules.',
+    kind: 'focus',
+    primarySkillSlugs: ['artist-visual-world-director'],
+    adjacentSkills: [
+      { slug: 'artist-brand-dna-audit', when: 'Use when existing visuals conflict and the underlying identity must be diagnosed.', expansion: 'same-session' },
+      { slug: 'artist-narrative-universe', when: 'Use when the visual language depends on a missing story world.', expansion: 'same-session' },
+      { slug: 'artist-brand-expression-strategist', when: 'Use when the conversation moves from appearance into public behavior.', expansion: 'same-session' },
+    ],
+    context: {
+      preloadTopics: ['artist-profile', 'artist-voice', 'artist-branding', 'mission-brief'],
+      retrieveOnDemandTopics: ['approved Vault references', 'past visual campaigns', 'current asset inventory'],
+      maxPreloadChars: 12_000,
+    },
+  },
+  {
+    id: 'brand-expression',
+    label: 'Brand Expression',
+    description: 'Turn the brand into natural voice, behavior, recurring signals, and fan belonging.',
+    kind: 'focus',
+    primarySkillSlugs: ['artist-brand-expression-strategist'],
+    adjacentSkills: [
+      { slug: 'artist-belief-system', when: 'Use when the public behavior has no clear principle or worldview behind it.', expansion: 'same-session' },
+      { slug: 'artist-visual-world-director', when: 'Use when the expression system needs repeatable visual signals.', expansion: 'same-session' },
+      { slug: 'artist-campaign-angle-builder', when: 'Delegate when the user wants a release-specific content rollout.', expansion: 'delegate' },
+    ],
+    context: {
+      preloadTopics: ['artist-profile', 'artist-voice', 'artist-branding'],
+      retrieveOnDemandTopics: ['recent posts and captions', 'fan comments', 'channel performance'],
+      maxPreloadChars: 12_000,
+    },
+  },
+  {
+    id: 'campaign-angles',
+    label: 'Campaign Angles',
+    description: 'Find rollout ideas, content pillars, fan rituals, and word-of-mouth hooks.',
+    kind: 'focus',
+    primarySkillSlugs: ['artist-campaign-angle-builder'],
+    adjacentSkills: [
+      { slug: 'artist-narrative-universe', when: 'Use when a campaign angle needs a stronger world or story foundation.', expansion: 'same-session' },
+      { slug: 'artist-brand-expression-strategist', when: 'Use when the rollout needs subtle recurring behavior instead of campaign theater.', expansion: 'same-session' },
+    ],
+    context: {
+      preloadTopics: ['artist-profile', 'artist-voice', 'artist-branding', 'artist-release-horizon', 'mission-brief'],
+      retrieveOnDemandTopics: ['audience signals', 'approved release assets', 'channel-specific execution details'],
+      maxPreloadChars: 12_000,
+    },
+  },
+  {
+    id: 'full-brand-system',
+    label: 'Full Brand System',
+    description: 'Build or rebuild the complete brand foundation across every branding discipline.',
+    kind: 'bundle',
+    primarySkillSlugs: BRANDING_SKILL_SLUGS,
+    fullMode: true,
+    recommendedThinkingLevel: 'high',
+  },
+]
 
 /**
  * Reserved slug for the Orchestrator. The sidebar pins this agent first;
@@ -1179,14 +1301,8 @@ Next approval:
       inputs: 'Artist HQ Profile, Voice, Branding cards, Intel reports, lyrics, songs, visuals, captions, references, campaign goals, or a brand problem.',
       outputs: 'Brand DNA audits, narrative universes, belief systems, visual-world direction, campaign angles, subtle behavior rules, fan rituals, and next moves.',
       tags: ['branding', 'artist', 'strategy', 'mythology', 'campaigns', 'creative-direction'],
-      skills: [
-        'artist-brand-dna-audit',
-        'artist-narrative-universe',
-        'artist-belief-system',
-        'artist-campaign-angle-builder',
-        'artist-visual-world-director',
-        'artist-brand-expression-strategist',
-      ],
+      skills: BRANDING_SKILL_SLUGS,
+      taskModes: BRANDING_TASK_MODES,
     },
     systemPrompt: `You are Branding Agent, the RunnerOS artist brand architect.
 

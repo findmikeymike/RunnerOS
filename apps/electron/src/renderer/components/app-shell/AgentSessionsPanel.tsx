@@ -27,6 +27,7 @@ import { openAgentSessionComposer } from '@/lib/run-agent'
 import { navigate, routes } from '@/lib/navigate'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ORCHESTRATOR_SLUG } from '@craft-agent/shared/agent-definitions/types'
+import { AgentTaskModePickerDialog } from '@/components/agents/AgentTaskModePickerDialog'
 
 interface AgentSessionsPanelProps {
   agentSlug: string
@@ -40,6 +41,8 @@ export function AgentSessionsPanel({ agentSlug, workspaceId, remoteWorkspaceId }
   const sources = useAtomValue(sourcesAtom)
   const { allAgents, activeAgents } = useAgents(workspaceId)
   const { onCreateSession, onInputChange } = useAppShellContext()
+  const [taskModePickerOpen, setTaskModePickerOpen] = React.useState(false)
+  const [launchingTaskModeId, setLaunchingTaskModeId] = React.useState<string | null>(null)
 
   const agent = React.useMemo(
     () => allAgents.find((a) => a.slug === agentSlug),
@@ -61,11 +64,16 @@ export function AgentSessionsPanel({ agentSlug, workspaceId, remoteWorkspaceId }
     return out
   }, [sessionMetaMap, agentSlug, workspaceId, remoteWorkspaceId])
 
-  const handleRun = React.useCallback(async () => {
+  const handleRun = React.useCallback(async (taskModeId?: string) => {
     if (!workspaceId || !agent) {
       navigate(routes.view.agents(agentSlug))
       return
     }
+    if (!taskModeId && (agent.metadata.taskModes?.length ?? 0) > 1) {
+      setTaskModePickerOpen(true)
+      return
+    }
+    setLaunchingTaskModeId(taskModeId ?? 'default')
     try {
       // Fetch context docs filtered by routing for this agent. Server applies
       // the Concierge omniscience override.
@@ -81,11 +89,14 @@ export function AgentSessionsPanel({ agentSlug, workspaceId, remoteWorkspaceId }
         sources,
         contextDocs,
         agentCatalog: activeAgents,
+        taskModeId,
       })
     } catch (err) {
       toast.error('Failed to run worker', {
         description: err instanceof Error ? err.message : String(err),
       })
+    } finally {
+      setLaunchingTaskModeId(null)
     }
   }, [activeAgents, agent, agentSlug, onCreateSession, onInputChange, skills, sources, workspaceId])
 
@@ -116,7 +127,8 @@ export function AgentSessionsPanel({ agentSlug, workspaceId, remoteWorkspaceId }
         </div>
         <button
           type="button"
-          onClick={handleRun}
+          onClick={() => void handleRun()}
+          disabled={Boolean(launchingTaskModeId)}
           className="inline-flex items-center gap-1 px-2 py-1 text-[11px] rounded-md border border-border/40 hover:bg-foreground/5 shrink-0"
           title={`Run ${name}`}
         >
@@ -127,7 +139,7 @@ export function AgentSessionsPanel({ agentSlug, workspaceId, remoteWorkspaceId }
 
       {/* Sessions list */}
       {sessions.length === 0 ? (
-        <EmptyState agentName={name} onRun={handleRun} />
+        <EmptyState agentName={name} onRun={() => void handleRun()} />
       ) : (
         <ScrollArea className="flex-1 min-h-0">
           <div className="flex flex-col">
@@ -146,6 +158,16 @@ export function AgentSessionsPanel({ agentSlug, workspaceId, remoteWorkspaceId }
           </div>
         </ScrollArea>
       )}
+      <AgentTaskModePickerDialog
+        open={taskModePickerOpen}
+        agentName={name}
+        modes={agent?.metadata.taskModes ?? []}
+        launchingModeId={launchingTaskModeId === 'default' ? null : launchingTaskModeId}
+        onSelect={(taskModeId) => void handleRun(taskModeId)}
+        onOpenChange={(open) => {
+          if (!open && !launchingTaskModeId) setTaskModePickerOpen(false)
+        }}
+      />
     </div>
   )
 }

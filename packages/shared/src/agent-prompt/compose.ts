@@ -32,6 +32,7 @@
  */
 import { buildCanvasGuidanceSection } from '../agent-definitions/canvas-guidance.ts';
 import { CONCIERGE_SLUG } from '../agent-definitions/types.ts';
+import { buildAgentTaskModePromptSection, type ResolvedAgentTaskMode } from '../agent-definitions/task-modes.ts';
 import {
   CAMPAIGN_MANAGER_BRIEF_MAX_CHARS,
   CAMPAIGN_STATE_CONTEXT_SLUG,
@@ -109,6 +110,7 @@ export interface PromptContextDoc {
 }
 
 export interface AgentPromptMemoryOptions {
+  taskMode?: ResolvedAgentTaskMode;
   userMemoryEntries?: MemoryEntry[];
   agentMemoryEntries?: MemoryEntry[];
   artistWorkspaceScope?: 'hq' | 'campaign' | 'lab' | 'general';
@@ -143,6 +145,7 @@ export function composeAgentSystemPrompt(
   memory: AgentPromptMemoryOptions = {},
 ): string {
   const body = (agent.systemPrompt ?? '').trimEnd();
+  const taskModeSection = buildAgentTaskModePromptSection(memory.taskMode);
   const managerBriefSection = agent.slug?.trim().toLowerCase() === CONCIERGE_SLUG
     ? buildManagerBriefPromptSectionFromDocs(contextDocs)
     : '';
@@ -161,6 +164,7 @@ export function composeAgentSystemPrompt(
   const footer = buildAgentBundleFooter(agent, skills, sources);
 
   const parts: string[] = [body];
+  if (taskModeSection) parts.push(taskModeSection);
   if (managerBriefSection) parts.push(managerBriefSection);
   if (assetContractSection) parts.push(assetContractSection);
   if (contextSection) parts.push(contextSection);

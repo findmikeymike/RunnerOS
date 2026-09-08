@@ -17,6 +17,40 @@
 import type { PermissionMode } from '../agent/mode-types.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 
+export type AgentTaskModeExpansion = 'same-session' | 'new-session' | 'delegate';
+
+export interface AgentTaskModeAdjacentSkill {
+  slug: string;
+  when: string;
+  expansion: AgentTaskModeExpansion;
+}
+
+export interface AgentTaskModeContext {
+  /** Context doc slugs delivered at launch. Other authorized docs stay retrievable. */
+  preloadTopics: string[];
+  /** Plain-language retrieval hints for details that should stay out of the launch prompt. */
+  retrieveOnDemandTopics?: string[];
+  maxPreloadChars?: number;
+}
+
+/** A stable, user-facing launch recipe beneath one saved Agent. */
+export interface AgentTaskModeDefinition {
+  id: string;
+  label: string;
+  description: string;
+  kind: 'focus' | 'bundle';
+  /** The only skills implicitly read at session start. */
+  primarySkillSlugs: string[];
+  /** Awareness-only capabilities that are not read at startup. */
+  adjacentSkills?: AgentTaskModeAdjacentSkill[];
+  requiredSourceSlugs?: string[];
+  optionalSourceSlugs?: string[];
+  context?: AgentTaskModeContext;
+  /** Explicit comprehensive choice; never an ambiguity fallback. */
+  fullMode?: boolean;
+  recommendedThinkingLevel?: ThinkingLevel;
+}
+
 /** Where an agent definition was loaded from. */
 export type AgentDefinitionSource = 'global' | 'workspace' | 'project';
 
@@ -42,6 +76,8 @@ export interface AgentMetadata {
   thinkingLevel?: ThinkingLevel;
   /** Skill slugs auto-activated when this agent runs. Validated at run time. */
   skills?: string[];
+  /** Optional focused launch recipes. The parent skills/sources remain the maximum inventory. */
+  taskModes?: AgentTaskModeDefinition[];
   /** Source slugs auto-activated when this agent runs. Validated at run time. */
   sources?: string[];
   /** Source slugs used when already connected, but never required to launch the agent. */
@@ -118,6 +154,7 @@ export type AgentParseWarningCode =
   | 'invalid-sources'
   | 'invalid-optional-sources'
   | 'invalid-trusted-worker-tools'
+  | 'invalid-task-modes'
   | 'invalid-tags'
   | 'invalid-routing';
 

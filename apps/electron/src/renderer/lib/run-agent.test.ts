@@ -47,6 +47,61 @@ function makeSource(slug: string, usable = true): LoadedSource {
 }
 
 describe('buildAgentCreateSessionOptions memory receipts', () => {
+  test('launches a focused mode with only its primary skill and selected context', () => {
+    const agent = {
+      ...makeAgent(),
+      slug: 'branding-agent',
+      metadata: {
+        name: 'Branding Agent',
+        description: 'For tests.',
+        skills: ['brand-audit', 'visual-world'],
+        taskModes: [{
+          id: 'visual-world',
+          label: 'Visual World',
+          description: 'Define the visual system.',
+          kind: 'focus',
+          primarySkillSlugs: ['visual-world'],
+          adjacentSkills: [{
+            slug: 'brand-audit',
+            when: 'Use when the identity conflicts.',
+            expansion: 'same-session',
+          }],
+          context: {
+            preloadTopics: ['artist-profile'],
+            retrieveOnDemandTopics: ['artist-network'],
+          },
+        }],
+      },
+    } as AgentDefinitionDTO
+    const options = buildAgentCreateSessionOptions(agent, {
+      skills: [
+        { slug: 'brand-audit', metadata: { name: 'Audit' } },
+        { slug: 'visual-world', metadata: { name: 'Visual World' } },
+      ] as any,
+      sources: [],
+      contextDocs: [
+        { slug: 'artist-profile', metadata: { name: 'Artist Profile', enabled: true }, body: 'Profile.' },
+        { slug: 'artist-network', metadata: { name: 'Network', enabled: true }, body: 'Network.' },
+      ] as any,
+      agentCatalog: [{ ...makeAgent(), slug: 'other-agent' }],
+    }, 'visual-world')
+
+    expect(options.agentSkillSlugs).toEqual(['visual-world'])
+    expect(options.launchReceipt?.taskMode).toEqual(expect.objectContaining({
+      id: 'visual-world',
+      label: 'Visual World',
+      primarySkills: ['visual-world'],
+      selectionSource: 'user',
+    }))
+    expect(options.launchReceipt?.injected.contextDocs).toEqual([
+      { slug: 'artist-profile', name: 'Artist Profile' },
+    ])
+    expect(options.launchReceipt?.injected.agentCatalog).toBeUndefined()
+    expect(options.customSystemPrompt).toContain('Task mode (host-selected):')
+    expect(options.customSystemPrompt).toContain('Related capability boundaries (awareness only')
+    expect(options.customSystemPrompt).not.toContain('Network.')
+  })
+
   test('records active user and agent memory names in direct launch receipts', () => {
     const options = buildAgentCreateSessionOptions(makeAgent(), {
       skills: [],

@@ -40,6 +40,7 @@ import {
   type AgentDefinitionSource,
   type AgentMetadata,
   type AgentParseWarning,
+  type AgentTaskModeDefinition,
   type LoadedAgent,
 } from './types.ts';
 import { getActivatedAgentsManifestPath } from '../workspaces/storage.ts';
@@ -259,6 +260,117 @@ function coerceTags(value: unknown, warnings: AgentParseWarning[]): string[] | u
   return cleaned;
 }
 
+const TASK_MODE_MAX_COUNT = 12;
+const TASK_MODE_TEXT_MAX = 240;
+const TASK_MODE_EXPANSIONS = new Set(['same-session', 'new-session', 'delegate']);
+
+function cleanTaskModeStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => entry.trim())
+    .filter(Boolean)));
+}
+
+function coerceTaskModes(
+  value: unknown,
+  inventory: Pick<AgentMetadata, 'skills' | 'sources' | 'optionalSources'>,
+  warnings: AgentParseWarning[],
+): AgentTaskModeDefinition[] | undefined {
+  if (value == null) return undefined;
+  if (!Array.isArray(value)) {
+    warnings.push(warning('taskModes', 'invalid-task-modes', 'taskModes must be an array of focused launch recipes.'));
+    return undefined;
+  }
+  const skills = new Set(inventory.skills ?? []);
+  const sources = new Set([...(inventory.sources ?? []), ...(inventory.optionalSources ?? [])]);
+  const seen = new Set<string>();
+  const modes: AgentTaskModeDefinition[] = [];
+  let dropped = 0;
+  for (const candidate of value.slice(0, TASK_MODE_MAX_COUNT)) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      dropped += 1;
+      continue;
+    }
+    const raw = candidate as Record<string, unknown>;
+    const id = typeof raw.id === 'string' ? raw.id.trim() : '';
+    const label = typeof raw.label === 'string' ? raw.label.trim() : '';
+    const description = typeof raw.description === 'string' ? raw.description.trim() : '';
+    const kind = raw.kind === 'bundle' ? 'bundle' : raw.kind === 'focus' ? 'focus' : null;
+    const primarySkillSlugs = cleanTaskModeStrings(raw.primarySkillSlugs);
+    if (!AGENT_SLUG_REGEX.test(id) || seen.has(id) || !label || label.length > 80
+      || !description || description.length > TASK_MODE_TEXT_MAX || !kind
+      || primarySkillSlugs.length === 0 || primarySkillSlugs.some((slug) => !skills.has(slug))) {
+      dropped += 1;
+      continue;
+    }
+    if ((primarySkillSlugs.length > 1 || raw.fullMode === true) && (kind !== 'bundle' || raw.fullMode !== true)) {
+      dropped += 1;
+      continue;
+    }
+
+    const primarySet = new Set(primarySkillSlugs);
+    const adjacentSkills = Array.isArray(raw.adjacentSkills)
+      ? raw.adjacentSkills.flatMap((entry) => {
+          if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+          const adjacent = entry as Record<string, unknown>;
+          const slug = typeof adjacent.slug === 'string' ? adjacent.slug.trim() : '';
+          const when = typeof adjacent.when === 'string' ? adjacent.when.trim() : '';
+          const expansion = typeof adjacent.expansion === 'string' ? adjacent.expansion : '';
+          if (!skills.has(slug) || primarySet.has(slug) || !when || when.length > TASK_MODE_TEXT_MAX
+            || !TASK_MODE_EXPANSIONS.has(expansion)) return [];
+          return [{ slug, when, expansion: expansion as NonNullable<AgentTaskModeDefinition['adjacentSkills']>[number]['expansion'] }];
+        })
+      : [];
+    const requiredSourceSlugs = cleanTaskModeStrings(raw.requiredSourceSlugs);
+    const optionalSourceSlugs = cleanTaskModeStrings(raw.optionalSourceSlugs);
+    if ([...requiredSourceSlugs, ...optionalSourceSlugs].some((slug) => !sources.has(slug))) {
+      dropped += 1;
+      continue;
+    }
+
+    let context: AgentTaskModeDefinition['context'];
+    if (raw.context && typeof raw.context === 'object' && !Array.isArray(raw.context)) {
+      const contextRaw = raw.context as Record<string, unknown>;
+      const preloadTopics = cleanTaskModeStrings(contextRaw.preloadTopics);
+      const retrieveOnDemandTopics = cleanTaskModeStrings(contextRaw.retrieveOnDemandTopics);
+      const maxPreloadChars = typeof contextRaw.maxPreloadChars === 'number' && Number.isFinite(contextRaw.maxPreloadChars)
+        ? Math.max(1_000, Math.min(24_000, Math.floor(contextRaw.maxPreloadChars)))
+        : undefined;
+      if (preloadTopics.length > 0) {
+        context = {
+          preloadTopics,
+          ...(retrieveOnDemandTopics.length > 0 ? { retrieveOnDemandTopics } : {}),
+          ...(maxPreloadChars ? { maxPreloadChars } : {}),
+        };
+      }
+    }
+
+    seen.add(id);
+    modes.push({
+      id,
+      label,
+      description,
+      kind,
+      primarySkillSlugs,
+      ...(adjacentSkills.length > 0 ? { adjacentSkills } : {}),
+      ...(requiredSourceSlugs.length > 0 ? { requiredSourceSlugs } : {}),
+      ...(optionalSourceSlugs.length > 0 ? { optionalSourceSlugs } : {}),
+      ...(context ? { context } : {}),
+      ...(raw.fullMode === true ? { fullMode: true } : {}),
+      ...(typeof raw.recommendedThinkingLevel === 'string'
+        && (THINKING_LEVEL_IDS as ReadonlyArray<string>).includes(raw.recommendedThinkingLevel)
+        ? { recommendedThinkingLevel: normalizeThinkingLevel(raw.recommendedThinkingLevel as ThinkingLevel) }
+        : {}),
+    });
+  }
+  dropped += Math.max(0, value.length - TASK_MODE_MAX_COUNT);
+  if (dropped > 0) {
+    warnings.push(warning('taskModes', 'invalid-task-modes', `taskModes ignored ${dropped} invalid or excess entr${dropped === 1 ? 'y' : 'ies'}.`));
+  }
+  return modes.length > 0 ? modes : undefined;
+}
+
 /**
  * Parse an AGENT.md file's contents. Returns null if the file is malformed
  * or missing required fields. Callers should treat null as "skip this entry"
@@ -285,17 +397,23 @@ export function parseAgentFile(content: string): { metadata: AgentMetadata; syst
   // here — UI is forgiving. Strip whitespace.
   const avatar = typeof data.avatar === 'string' ? data.avatar.trim() : undefined;
 
+  const permissionMode = coercePermissionMode(data.permissionMode, warnings);
+  const thinkingLevel = coerceThinkingLevel(data.thinkingLevel, warnings);
+  const skills = coerceStringArray(data.skills, 'skills', warnings);
+  const sources = coerceStringArray(data.sources, 'sources', warnings);
+  const optionalSources = coerceStringArray(data.optionalSources, 'optionalSources', warnings);
   const metadata: AgentMetadata = {
     name,
     description,
     avatar: avatar || undefined,
     llmConnection: typeof data.llmConnection === 'string' ? data.llmConnection.trim() || undefined : undefined,
     model: typeof data.model === 'string' ? data.model.trim() || undefined : undefined,
-    permissionMode: coercePermissionMode(data.permissionMode, warnings),
-    thinkingLevel: coerceThinkingLevel(data.thinkingLevel, warnings),
-    skills: coerceStringArray(data.skills, 'skills', warnings),
-    sources: coerceStringArray(data.sources, 'sources', warnings),
-    optionalSources: coerceStringArray(data.optionalSources, 'optionalSources', warnings),
+    permissionMode,
+    thinkingLevel,
+    skills,
+    taskModes: coerceTaskModes(data.taskModes, { skills, sources, optionalSources }, warnings),
+    sources,
+    optionalSources,
     trustedWorkerTools: coerceStringArray(data.trustedWorkerTools, 'trustedWorkerTools', warnings),
     visualAgent: data.visualAgent === true ? true : undefined,
     greeting: typeof data.greeting === 'string' ? data.greeting.trim() || undefined : undefined,
@@ -461,6 +579,7 @@ export function serializeAgent(metadata: AgentMetadata, systemPrompt: string): s
   if (metadata.permissionMode) data.permissionMode = metadata.permissionMode;
   if (metadata.thinkingLevel) data.thinkingLevel = metadata.thinkingLevel;
   if (metadata.skills?.length) data.skills = metadata.skills;
+  if (metadata.taskModes?.length) data.taskModes = metadata.taskModes;
   if (metadata.sources?.length) data.sources = metadata.sources;
   if (metadata.optionalSources?.length) data.optionalSources = metadata.optionalSources;
   if (metadata.trustedWorkerTools?.length) data.trustedWorkerTools = metadata.trustedWorkerTools;
@@ -522,6 +641,7 @@ const SERIALIZED_AGENT_METADATA_KEYS = [
   'permissionMode',
   'thinkingLevel',
   'skills',
+  'taskModes',
   'sources',
   'optionalSources',
   'trustedWorkerTools',
@@ -801,6 +921,7 @@ export function replaceBuiltInAgentMetadata(
     'industry-hunter',
     'college-radio-agent',
     'outreach-agent',
+    'branding-agent',
     'art-director',
     'spotify-playlist-creator',
     'spotify-analyst',
