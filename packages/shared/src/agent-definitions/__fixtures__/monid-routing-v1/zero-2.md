@@ -10,14 +10,6 @@ tags: [tools, api, marketplace, paid]
 
 Use a dedicated connected source first, then Monid for marketplace capabilities. Use Zero only when the user explicitly requests Zero or current Monid discovery and inspection establish that Monid does not provide the needed capability. A disconnected account, budget block, outage, failed request, or unresolved paid attempt is not capability absence and never authorizes switching to Zero. Do not use Zero for code edits, local files, shell work, math, or ordinary model answers.
 
-## Capability planning and account checks
-
-Suggested endpoints are starting points. Anything Agent may compare focused read-only discovery and inspection across both connected marketplaces when coverage or fit is uncertain, including useful tool combinations. Keep Monid preferred for execution; comparison alone does not authorize paid Zero work. Apply the existing explicit-choice or confirmed-capability-gap exception to each Zero execution step.
-
-Connection, account funds, and the app's spending allowance are different facts. Before paid work, use an available read-only account/balance tool and the existing budget status. An unavailable balance is **unknown**, never zero or assumed funded. Never make a paid probe to test funds or inspect credential files. Refresh stale status before execution; do not run account checks for ordinary chat.
-
-For Zero, `zero wallet balance` checks actual wallet funds; `node <zero-skill-dir>/scripts/zero-budget.mjs status --json` checks the local weekly allowance. Check CLI availability first. Neither command authorizes funding or changing spending limits.
-
 ## Discover
 
 Check setup without spending:

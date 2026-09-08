@@ -48,3 +48,11 @@ A copy of the existing local library upgraded eight stock agent definitions and 
 Authenticated Monid MCP inspection/execution was unavailable to this engineering session. The public catalog and offline contract tests do not prove a real paid endpoint succeeds. Automatic Signals has no provider-choice UI or authoritative marketplace-wide absence detector: it now stops on Monid failures rather than guessing absence and charging Zero. General agent routing supports the two user exceptions through its tool instructions.
 
 No app restart or production package replacement was performed. The running development app keeps its existing profile and development access; updated startup migrations take effect on the next authorized restart.
+
+## Anything Agent follow-up
+
+Anything Agent explicitly considers both marketplaces while planning and may compare focused read-only catalog searches when fit/coverage is uncertain, including tool combinations. Monid remains preferred for execution; comparing catalogs does not itself authorize a paid Zero step.
+
+Connection status, wallet funds, and local spending limits are separate facts. Zero has a known read-only `zero wallet balance` command. Monid's official REST wallet API is documented, but availability through the OAuth MCP connection is not verified: agents must use a genuinely exposed balance tool or report the amount as unknown. They must not invent tools, extract credentials, request an extra API key, or make paid probes. Ordinary chat does not trigger account checks.
+
+The rival follow-up found a historical-metadata edge: an already-current prompt with intentionally selected old routing could have that routing restored. Migration now requires a matching previous prompt body before changing metadata, with a regression proving byte-preservation across repeated runs. New exact stock snapshots preserve upgrades from `4c78d219d` without replacing user edits.

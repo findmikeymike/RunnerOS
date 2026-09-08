@@ -14,14 +14,6 @@ Do not use Monid for local files, code edits, shell work, math, or questions the
 
 This is the MCP-native RunnerOS adaptation of Monid's official agent guidance. Do not install the Monid CLI or ask the user for an API key; users connect their Monid account in RunnerOS Settings.
 
-## Capability planning and account checks
-
-Suggested endpoints are starting points. Anything Agent may compare focused read-only discovery and inspection across both connected marketplaces when coverage or fit is uncertain, including useful tool combinations. Keep Monid preferred for execution; comparison alone does not authorize paid Zero work. Apply the existing explicit-choice or confirmed-capability-gap exception to each Zero execution step.
-
-Connection, account funds, and the app's spending allowance are different facts. Before paid work, use an available read-only account/balance tool and the existing budget status. An unavailable balance is **unknown**, never zero or assumed funded. Never make a paid probe to test funds or inspect credential files. Refresh stale status before execution; do not run account checks for ordinary chat.
-
-Use the balance/account tool only if the connected MCP server actually exposes it. The [official wallet API](https://docs.monid.ai/api/wallet.html) documents a separate authenticated balance endpoint; this does not prove that the current OAuth MCP connection exposes it. Do not invent an MCP tool name, request an extra API key, or extract credentials to work around a missing balance tool.
-
 ## Marketplace preference
 
 Use a dedicated connected source first, then Monid for marketplace capabilities. Use Zero only when the user explicitly requests Zero or current Monid discovery and inspection establish that Monid does not provide the needed capability. A disconnected account, budget block, outage, failed request, or unresolved paid attempt is not capability absence and never authorizes switching to Zero.

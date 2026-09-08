@@ -30,7 +30,7 @@ export function migrateMonidRouting(options?: AgentStorageOptions & { globalSkil
     const currentBody = `${current.systemPrompt}\n`;
     const isPreviousBody = [previous.bodySha256, 'normalizedBodySha256' in previous ? previous.normalizedBodySha256 : undefined].includes(digest(parsed.content));
     // Even whitespace-only prompt customizations remain untouched.
-    if (!isPreviousBody && parsed.content !== currentBody) continue;
+    if (!isPreviousBody) continue;
     const data: Record<string, unknown> = { ...parsed.data };
     const prior: Record<string, unknown> = previous.metadata;
     const next = current.metadata;

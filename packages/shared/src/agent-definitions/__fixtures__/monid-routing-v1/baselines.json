@@ -4,7 +4,7 @@
       "slug": "anything-agent",
       "bodySha256": "6d508687baa63721cd4ff6e8def28fd02b8800df332e25fee75baed864f71337",
       "metadata": {
-        "description": "Connects to thousands of tools, apps, and services to help you do almost anything \u2014 a Swiss Army knife for workflows.",
+        "description": "Connects to thousands of tools, apps, and services to help you do almost anything — a Swiss Army knife for workflows.",
         "greeting": "Tell me what the current workers cannot do. I will find the safest, strongest, best-value route.",
         "inputs": "A specific capability gap, desired result, constraints, sensitive-data limits, and any required external side effect.",
         "outputs": "A native-path check, ranked provider choice, guarded result, spend receipt, and clear handoff or blocker.",
@@ -54,9 +54,9 @@
       "slug": "setup-concierge",
       "bodySha256": "0d2bc5bd321d5ac184eaa8984320cad8cd919eeeb04729fd2bdead503a7dc14c",
       "metadata": {
-        "description": "Guides app setup, connections, keys, services, and \u201chow do I use this?\u201d questions.",
+        "description": "Guides app setup, connections, keys, services, and “how do I use this?” questions.",
         "greeting": "Tell me what you want to connect or understand. I will walk you through it step by step.",
-        "inputs": "A setup goal, pasted credential, app-feature question, broken connection, or \u201cwhat do I do next?\u201d request.",
+        "inputs": "A setup goal, pasted credential, app-feature question, broken connection, or “what do I do next?” request.",
         "outputs": "A guided setup step, saved-setting plan, connection test path, app explanation, or follow-up checklist.",
         "tags": [
           "setup",
@@ -251,16 +251,49 @@
           "zero"
         ]
       }
+    },
+    {
+      "slug": "anything-agent",
+      "bodySha256": "acfbf42ad377c1144b6866eb0f84b21e683875be9b2ace897a135ed58c8a1fb3",
+      "metadata": {
+        "name": "Anything Agent",
+        "description": "Connects to thousands of tools, apps, and services to help you do almost anything — a Swiss Army knife for workflows.",
+        "avatar": "∞",
+        "permissionMode": "ask",
+        "thinkingLevel": "high",
+        "greeting": "Tell me what the current workers cannot do. I will find the safest, strongest, best-value route.",
+        "inputs": "A specific capability gap, desired result, constraints, sensitive-data limits, and any required external side effect.",
+        "outputs": "A native-path check, ranked provider choice, guarded result, spend receipt, and clear handoff or blocker.",
+        "tags": [
+          "command",
+          "monid",
+          "zero",
+          "api",
+          "fallback",
+          "external-tools",
+          "paid"
+        ],
+        "skills": [
+          "monid",
+          "zero"
+        ],
+        "optionalSources": [
+          "monid",
+          "zero"
+        ]
+      }
     }
   ],
   "skills": {
     "monid": [
       "2ccc441ba7de87c10329e43bdb9c7f577def0749dd4f2c8e5b93d2768ed7e5c2",
-      "7dead1570fe44e2481b327380e19a6c8024d2c396eb121db0f92bebf3412f6ca"
+      "7dead1570fe44e2481b327380e19a6c8024d2c396eb121db0f92bebf3412f6ca",
+      "fb866a2a46469119cc93e8546320e58556f638b392d731cd1eb7aef5d96f2076"
     ],
     "zero": [
       "1f686fb0f44ceaccda153ca65f9d65c70129f0087838c90f6dcc0609c4cde5d0",
-      "000f0248f0dd840bb20f826e6ac621229c0d1503b0f50355db42d3396c0a331a"
+      "000f0248f0dd840bb20f826e6ac621229c0d1503b0f50355db42d3396c0a331a",
+      "1eb0c59ef7c3d89b9151ab7089961e9c85295a203da43389b55b02c94d1cd43a"
     ],
     "artist-art-direction": [
       "c26d770696deeca3897f1d7d04aa05455bc8f42f7d582bb4f41c518cb1391e44"

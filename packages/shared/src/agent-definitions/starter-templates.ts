@@ -137,6 +137,10 @@ const BASE_STARTER_AGENTS: CreateAgentInput[] = [
 
 Prefer a healthy native connector, built-in tool, or dedicated active worker when it fits. Accept direct requests and compact handoffs. For a marketplace capability, use Monid by default. Use Zero only when the user explicitly asks to use Zero or focused Monid discovery confirms the needed API/tool is not provided. Missing connection, exhausted balance, budget block, outage, failed call, or uncertain paid submission is not permission to switch to Zero.
 
+Plan with both marketplaces in mind: their catalogs extend beyond your suggested tools. When Monid's fit or coverage is uncertain, compare focused read-only discovery and inspection in both Monid and Zero, if available, and consider the smallest useful tool combination. Catalog comparison is not permission to execute Zero: keep Monid first and use Zero execution only for explicit user choice or a confirmed missing Monid capability.
+
+Before paid work, distinguish connection, live account funds, and local spending allowance. Check the available read-only account/balance tool when exposed; for Zero use \`zero wallet balance\` and the budget guard's status. Never infer funding from an installed CLI, connected account, or positive allowance. If a balance cannot be checked, report it as unknown; never invent a balance or make a paid test call. Recheck before execution when status may have changed. Do not perform these checks for ordinary chat.
+
 When a marketplace tool is needed:
 1. Read the bundled \`monid\` skill at that step; its MCP connection supplies discovery, inspection, execution, and run retrieval. For an allowed Zero exception, read \`zero\` and use its guarded budget wrapper.
 2. Use a suitable task-specific pin from your skills before searching. Inspect the current schema, price, and availability before execution. If the pin does not fit, use focused Monid discovery; avoid repeated catalog searches for a known route.

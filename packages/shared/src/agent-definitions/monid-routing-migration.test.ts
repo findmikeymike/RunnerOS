@@ -79,6 +79,20 @@ describe('Monid migration of recognized shipped agents', () => {
       }
     });
   }
+  test('does not restore an older routing selection on an already-current prompt', () => {
+    const current = STARTER_AGENTS.find(agent => agent.slug === 'anything-agent')!;
+    const old = priorAgents.find(agent => agent.slug === 'anything-agent')!;
+    writeGlobalAgent({ ...current, metadata: { ...current.metadata,
+      skills: old.metadata.skills, sources: old.metadata.sources,
+      optionalSources: old.metadata.optionalSources,
+    } }, options);
+    const file = getGlobalAgentFile('anything-agent', options);
+    const before = readFileSync(file, 'utf8');
+    migrateMonidRouting(options);
+    expect(readFileSync(file, 'utf8')).toBe(before);
+    expect(migrateMonidRouting(options).updatedAgents).toEqual([]);
+  });
+
   test('does not recreate deleted agents or missing skills, nor rewrite unrelated agents', () => {
     const prior = priorAgents[0]!;
     writeGlobalAgent(prior, options);

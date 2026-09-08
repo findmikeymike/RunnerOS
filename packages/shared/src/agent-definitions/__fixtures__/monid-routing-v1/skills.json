@@ -9,6 +9,11 @@
       "file": "monid-1.md",
       "sha256": "7dead1570fe44e2481b327380e19a6c8024d2c396eb121db0f92bebf3412f6ca",
       "commit": "9e2d0635ea9efe0fa705ecd9da4bb94b7c9e493a"
+    },
+    {
+      "file": "monid-2.md",
+      "sha256": "fb866a2a46469119cc93e8546320e58556f638b392d731cd1eb7aef5d96f2076",
+      "commit": "4c78d219d272deaf02ea07dd8c4935932b0b004c"
     }
   ],
   "zero": [
@@ -21,6 +26,11 @@
       "file": "zero-1.md",
       "sha256": "000f0248f0dd840bb20f826e6ac621229c0d1503b0f50355db42d3396c0a331a",
       "commit": "60905b4d4a22eb108e489f947a7b48c903b90049"
+    },
+    {
+      "file": "zero-2.md",
+      "sha256": "1eb0c59ef7c3d89b9151ab7089961e9c85295a203da43389b55b02c94d1cd43a",
+      "commit": "4c78d219d272deaf02ea07dd8c4935932b0b004c"
     }
   ],
   "artist-art-direction": [
