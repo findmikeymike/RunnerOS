@@ -905,16 +905,18 @@ body
     expect(initialAgentSlugsForWorkspace('lab', true)).toEqual([])
     expect(CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['anticipation-director'])
     expect(HQ_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual(['catalog-royalty-agent', 'legal-agent'])
-    expect(HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual([ANYTHING_AGENT_SLUG, 'site-builder', 'website-agent'])
+    expect(HQ_CAMPAIGN_DEFAULT_ACTIVATED_AGENT_SLUGS).toEqual([ANYTHING_AGENT_SLUG, 'scriptwriter', 'site-builder', 'website-agent'])
     expect(initialAgentSlugsForWorkspace('campaign', false)).toEqual([
       RELEASE_MANAGER_AGENT_SLUG,
       ANYTHING_AGENT_SLUG,
+      'scriptwriter',
       'site-builder',
       'website-agent',
       'anticipation-director',
     ])
     expect(initialAgentSlugsForWorkspace('hq', false)).toEqual([
       ANYTHING_AGENT_SLUG,
+      'scriptwriter',
       'site-builder',
       'website-agent',
       'catalog-royalty-agent',
@@ -2030,6 +2032,23 @@ body
     expect(loadGlobalAgent('anything-agent', { globalAgentsDir })!.systemPrompt).toBe('Before\nnew Zero guard\nAfter')
     expect(replaceBuiltInAgentPromptText('writer', 'old shipped paragraph', 'new shipped paragraph', { globalAgentsDir }).updated).toBe(false)
     expect(loadGlobalAgent('writer', { globalAgentsDir })!.systemPrompt).toBe('old shipped paragraph')
+  })
+
+  test('Content Genius exact handoff migration preserves customization and is idempotent', () => {
+    const oldParagraph = 'Do not treat this as video editing or publishing. If the user needs cuts, subtitles burned into footage, exports, or final upload, hand off to Video Editor Agent, Raw Video Editor, or Social Publisher after the words are approved.'
+    const handoff = 'Hand complete spoken YouTube, Reels, or TikTok scripts and cross-video continuity to Scriptwriter, with the chosen concept and approved artist context. Keep idea development and post captions here.'
+    const replacement = `${handoff}\n\n${oldParagraph}`
+    writeGlobalAgent({ slug: 'content-genius', metadata: { name: 'Content Genius', description: 'Custom description' },
+      systemPrompt: `Custom opening\n${oldParagraph}\nCustom closing` }, { globalAgentsDir })
+    expect(replaceBuiltInAgentPromptText('content-genius', oldParagraph, replacement, { globalAgentsDir }).updated).toBe(true)
+    const updated = loadGlobalAgent('content-genius', { globalAgentsDir })!
+    expect(updated.systemPrompt).toBe(`Custom opening\n${replacement}\nCustom closing`)
+    expect(updated.metadata.description).toBe('Custom description')
+    expect(replaceBuiltInAgentPromptText('content-genius', oldParagraph, replacement, { globalAgentsDir }).updated).toBe(false)
+    writeGlobalAgent({ slug: 'content-genius', metadata: updated.metadata,
+      systemPrompt: 'My custom handoff replaces the shipped paragraph.' }, { globalAgentsDir })
+    expect(replaceBuiltInAgentPromptText('content-genius', oldParagraph, replacement, { globalAgentsDir }).updated).toBe(false)
+    expect(loadGlobalAgent('content-genius', { globalAgentsDir })!.systemPrompt).toBe('My custom handoff replaces the shipped paragraph.')
   })
 
   test('replaceBuiltInAgentPromptText is idempotent when the replacement contains the old text', () => {

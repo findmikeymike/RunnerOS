@@ -5853,6 +5853,265 @@ confidence.
     ],
   },
   {
+    slug: "artist-script-dna",
+    files: [
+      {
+        path: "agents/openai.yaml",
+        content: `interface:
+  display_name: "Artist Script DNA"
+  short_description: "Turn artist identity and world into scripts people feel"
+  default_prompt: "Use $artist-script-dna to connect this artist’s beliefs, world, voice, and audience to a specific video script."
+`,
+      },
+      {
+        path: "references/script-integration.md",
+        content: `# Translating the DNA brief into actual scripts
+
+## Integration points
+
+| Layer | What identity changes | Weak expression | Stronger direction |
+|---|---|---|---|
+| Topic/angle | What the artist notices about this subject | Generic productivity tips | Which part of finishing threatens the expressive quality this artist protects? |
+| Hook | The observation this person would make | “Stop being a perfectionist” | A line about the specific take, object, or decision in the source material |
+| Evidence | What makes the belief tangible | An inspirational assertion | A real comparison, retained imperfection, or consequential choice |
+| Voice | Rhythm, relationship, humor, degree of explanation | “Rebellious, authentic” | Two actual lines demonstrating their register |
+| Frame/sound | What belongs in this encounter | Random symbolic clutter | A relevant object being used and an audible detail connected to the topic |
+| Turn | What pressure tests the conviction | Unrelated dramatic reveal | The belief has a cost or limitation and the artist chooses knowingly |
+| Ending | What the audience can carry away | “Join our movement” | An earned thought, action, or invitation that expresses the same value |
+
+## The workflow
+
+1. State the episode's ordinary useful or emotional promise. It must remain true after the identity pass.
+2. Select the one conviction or tension this topic naturally tests. Leave unrelated brand doctrine outside the clip.
+3. Choose a source-backed detail and observable action. If no source exists, label a creative proposal or ask; don't fabricate an anecdote.
+4. Write the opening and next two lines together. Check that character does not delay the premise.
+5. Let the turn or proof carry the belief. Avoid stopping for a speech about what the brand stands for.
+6. Make the ending resolve the episode and leave a recognizable feeling or choice.
+7. Apply platform timing and filming constraints. Cut duplicate explanation before cutting the detail that makes the script this artist's.
+
+## Quiet, explicit, and communal expression
+
+Quiet expression lets a choice or object carry the point. Explicit expression states a conviction when the episode earns it. Communal expression offers words or a practice the audience can use. These are options, not mandatory stages or percentages.
+
+A repair tutorial may simply use the artist's voice and world. An origin story can state a belief directly. A community episode can invite participation. Do not turn a normal informational video into a manifesto because brand context is available.
+
+## Swap and removal tests
+
+If the artist's name is removed, does the piece still contain their recognizable observations, voice, or decisions? If another artist could say it unchanged, determine whether more specificity is useful; an ordinary factual instruction need not be artificially unique.
+
+Remove the prop or catchphrase mentally. Does the perspective survive? If identity vanishes, it may be decoration rather than character. Conversely, if a detail makes the story concrete and emotionally legible, keep it even if it is not necessary to summarize the argument.
+
+## Handoff and source authority
+
+Pass the Artist DNA brief with the actual source excerpts needed for the episode, not an entire archive. Mark protected lines and what may be rewritten. The platform writer owns duration and structure; this brief supplies identity. Neither authorizes new biography or unsupported results. Final review checks both.
+
+When repairing an approved draft, preserve its intent and protected wording. Suggest small substitutions or staging choices that add identity. Full rewriting is appropriate only within the user's requested scope. Do not save inferred artist identity into global memory or overwrite brand documents without a request to do so.
+`,
+      },
+      {
+        path: "references/sources.md",
+        content: `# Sources and limits
+
+Created 2026-09-08 from the user's request, pasted signal/archetype material, attached creative-world essay, and inspected local artist skills. The attachment's celebrity anecdotes and historical design claims were not independently verified; do not repeat them as established facts.
+
+Local source ingredients, under \`the source skill collection/\`:
+- \`artist-brand-dna-audit/SKILL.md\`: evidence-first tensions, fascinations, audience recognition, and uncertainty.
+- \`artist-belief-system/SKILL.md\` and \`references/belief-system.md\`: conviction, opposition, and an identity people can express.
+- \`artist-brand-expression-strategist/SKILL.md\` and \`references/expression-strategy.md\`: translation into repeatable behaviors, objects, and voluntary participation; adapted with restraint and clear source status.
+- \`artist-narrative-universe/SKILL.md\`: specific setting, character mode, and coherent world constraints.
+- The task's \`youtube-camera-script\` and \`reels-tiktok-script\`: downstream script execution, honest evidence, timing, and production checks.
+
+The new job is compilation into actual scripts, not replacing those discovery disciplines. It is self-contained when they are unavailable.
+
+Archetype correction: [Carol S. Pearson identifies herself as creator of the 12-Archetype System](https://carolspearson.com/), developed from Jungian work. Her [system explanation](https://carolspearson.com/about/the-pearson-12-archetype-system-human-development-and-evolution) presents a model. Do not attribute a fixed twelve-brand taxonomy or 80/20 posting rule directly to Jung, or treat creative labels as clinical findings.
+
+“Signal,” “tribe,” “witness,” and “world” are creative vocabulary here. The skill does not claim bots cannot recognize cultural details, that local specificity guarantees global success, or that symbols cause permanent loyalty. Emotional interpretations should be tested against artist feedback and actual audience responses. This is informed creative practice, not diagnosis or covert psychological control.
+`,
+      },
+      {
+        path: "references/worked-transformations.md",
+        content: `# Worked transformations
+
+All artist contexts below are invented teaching briefs, not claims about the user. They illustrate decisions, not completed timed platform scripts.
+
+## Same subject, different person
+
+Subject: finishing a track.
+
+**Artist A, supplied fictional brief:** meticulous producer who protects expressive mistakes; fixes old equipment; dry warmth. Audience: people whose care sometimes turns into self-erasure.
+
+Generic: “Done is better than perfect. Stop overthinking and release your music.”
+
+Opening: “The clean take lost the part I liked.”
+
+Action: play a brief rough vocal beside the corrected version, only if the recordings actually support the comparison.
+
+Development: “That break in the voice is where the sentence starts to mean something. I fixed the noise around it. I'm keeping that.”
+
+Ending: “Finish the work. Leave the person in it.”
+
+Why it belongs: a precise choice embodies care without erasure. The artist isn't declaring themselves a rebel. A repaired mic can support this world if it is really theirs, without a fabricated family history.
+
+**Artist B, supplied fictional brief:** playful maximalist who loves musical surprise; treats finishing as deciding which surprise deserves the spotlight.
+
+Opening: “Three endings. Only one gets to be ridiculous.”
+
+Action: demonstrate the competing endings and choose the one that delivers the desired surprise.
+
+Development: “This one does everything. This one gives the weird part room.”
+
+Ending: “Keep the surprise. Lose the queue behind it.”
+
+Same topic, different motivation, humor, proof, and wording. Swapping wardrobe would not produce that difference.
+
+## A signal without explanation overload
+
+Brief: the artist supplies a real late-night kitchen habit: leaving a chair out for whoever comes home last. Theme: making room.
+
+Possible opening: “We always left one chair out.”
+
+The story must use the artist's actual context, not invent abandonment or hardship. Show the chair while telling the relevant event. End on a present-day action that connects the habit to the music or gathering if the source supports it. Returning viewers may recognize the chair elsewhere; newcomers still understand the gesture.
+
+Weak extension: require fans to buy a miniature chair to prove they belong.
+
+Better proposal: invite listeners, optionally, to name an ordinary gesture that made room for them. Do not repost private answers without permission or pretend the ritual already exists.
+
+## When the right choice is less branding
+
+Brief: a 30-second explanation of changing a microphone input. The artist's belief system is not the topic.
+
+Keep the instruction accurate and direct. Let warmth, a familiar workspace, and one dry line express the person. Don't force a hometown story, antagonist, archetype label, and community pledge into the tutorial. The bridge makes identity available; it does not require every asset to carry the entire world.
+`,
+      },
+      {
+        path: "references/world-and-belonging.md",
+        content: `# World, character, and emotional belonging
+
+## Go beneath adjectives
+
+“Bold,” “authentic,” “cinematic,” and “rebellious” are conclusions without instructions. Ask what gets defended, what gets refused, which small thing receives disproportionate care, and what choice costs convenience or approval. If the artist says they value imperfection, look for whether they actually retain an unintended sound, wear a repaired object, or make room for an unfinished thought. None of these proves a personality trait alone.
+
+Use the music as material when accessible: rhythmic restraint or urgency, lyrical address, repeated images, texture, contrast, silence. Explain what was observed and what is interpretation. Do not claim to have heard audio when only lyrics or descriptions were available.
+
+Useful questions draw out actions: “What did you keep when someone wanted it removed?” “What do people misunderstand about the work?” “Which detail would disappear if someone else made this?” “What does your audience already know that the outside world gets wrong?” Avoid pressuring the artist to reveal a wound as the price of an interesting identity.
+
+## Opposition with a point
+
+A specific pressure creates an intelligible choice: emotional composure at all costs, disposable objects, compulsory speed, polish that erases a voice, or gatekeeping that treats taste as a credential. Verify that this is the artist's position rather than assigning it because rebels seem marketable.
+
+Connect pressure → artist's response → benefit or invitation. “I hate perfection” offers little. Keeping a flawed but expressive note offers an argument the listener can hear. A story may contain no antagonist at all; devotion to craft, shared pleasure, or preservation can establish a strong position.
+
+The artist need not speak for every fan or claim that outsiders are inferior. Shared values can form a clear boundary without turning disagreement into betrayal. “People who keep making after work” is a possible audience situation; claiming to know their hidden shame requires evidence and care.
+
+## Emotional intelligence without mind-reading
+
+Infer a plausible felt situation from lyrics, comments, or supplied experiences. Identify the specific language that supports the inference. Choose what the video offers: recognition, permission, relief, challenge, agency, wonder, or companionship. Translate that into an encounter: a truthful line, a choice witnessed, an unexpected generosity, a joke that releases pressure.
+
+For example, reassurance becomes concrete when a creator demonstrates that a rough take still contains something worth keeping. Don't tell viewers they are damaged so the artist can appear to repair them. A statement can invite recognition without asserting “I know exactly how you feel.”
+
+## Signal design
+
+Use a small record when developing recurring signals:
+
+| Detail | Source/origin | Emotional association | Script/behavior use | Visual/sound use | Status |
+|---|---|---|---|---|---|
+| User-supplied object or phrase | Exact note/example | Interpretation, not fact unless confirmed | Action or wording | Placement, sound, recurrence | Established / proposed / uncertain |
+
+A locally specific detail needs enough immediate context to be felt outside its origin. Do not dilute it into a universal slogan, but don't require a lore manual. Cultural references belong through real relationship and context, not invented ancestry or borrowed ceremonies used as exotic set dressing. Ordinary life can carry the strongest detail.
+
+A red mic band might mean nothing more than the artist's practical visual habit. Keep that if true. Do not invent a story about a parent's repair kit to make it profound. If its origin matters and isn't supplied, ask or leave it unassigned.
+
+## Character and archetype
+
+Treat archetypes as optional creative prompts: what does this figure want, what do they do under pressure, and what might surprise us about them? “Explorer” could appear through experimenting with one sound at a desk; travel is not required. “Rebel” can act softly. “Everyperson” can make meticulous art. Choose a coherent motivation without policing every post into a label.
+
+Separate private person, public practice, and fictional persona. A fictional character can have invented lore, but don't pass it off as the artist's biography. Let changes in the artist's life revise the working brief when the user approves them; don't freeze someone inside a marketable identity.
+
+## Belonging without compulsory performance
+
+Build symbols people can recognize, words they can borrow, and practices they can adapt. A ritual should have meaning even if filmed by nobody. Test whether it is accessible without purchasing or revealing private experience. Allow quiet listeners to belong too.
+
+Newcomers should get a complete piece; regulars may notice the extra layer. Repetition becomes recognition when meaning accumulates, not merely when a logo appears. A fan-created phrase is stronger evidence of adoption than the artist announcing what fans supposedly call themselves. Never fabricate community responses.
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: artist-script-dna
+description: Bridge an artist's brand, world, beliefs, cultural signals, and character into video scripts, hooks, delivery, and recurring content. Use when scripts need artist-specific emotional connection, belonging, ethos, or a recognizable point of view; works upstream of YouTube and Reels/TikTok scriptwriting or on existing drafts.
+---
+
+# Artist Script DNA
+
+Make the script belong to someone. The artist's world should change what gets noticed, which conflict matters, how a sentence sounds, what the camera sees, and what the ending means. Reach is not the only goal: give listeners a reason to recognize themselves, care about the artist's choices, and return.
+
+This is the bridge between brand discovery and script execution. Do not deliver another abstract brand manifesto when the user needs a script. Translate identity into observable creative decisions and actual language.
+
+## Read the person before writing the character
+
+Start with user-approved brand/voice/world documents, then lyrics, music descriptions or accessible audio, captions, performances, interviews, images, meaningful objects, places, and audience responses. Approved current direction outranks an inferred pattern. If sources conflict, identify the conflict rather than silently redefining the artist.
+
+Separate: source facts; repeated patterns; user-stated beliefs; proposed creative interpretations. Label uncertain readings as hypotheses. Do not invent hometowns, ancestry, trauma, marginalization, spiritual practices, audience testimony, or formative experiences to create depth. An artistic persona can be fictional when chosen explicitly; distinguish its fiction from real biography.
+
+If material is thin, ask for two or three concrete details together: something they keep returning to, a choice they made against pressure, and a place/object/line that matters. Work with what exists while waiting. Do not demand disclosure of painful private material. Do not infer a psychological diagnosis or hidden motive from taste.
+
+## 1. Find the emotional position
+
+Read [world and belonging](references/world-and-belonging.md) for deeper discovery.
+
+Describe the artist's place in the world through:
+- **Desire:** what they are trying to make, protect, recover, or become.
+- **Pressure:** the norm, expectation, habit, aesthetic, or constraint they resist; why it matters personally.
+- **Conviction:** what they choose when that pressure appears, with a real example or clearly proposed action.
+- **Tension:** the contradiction that keeps the person alive: meticulous yet impulsive, tender yet defiant, communal yet private. Don't flatten them into a slogan.
+- **Audience recognition:** the experience a listener may recognize, the feeling they arrive with, and what this work might let them feel or do differently.
+
+A useful emotional movement might be shame → recognition → permission; numbness → curiosity → aliveness; isolation → shared language; frustration → agency; or delight → affection. These are hypotheses grounded in material, not guaranteed reactions. Joy, desire, beauty, play, and craft are as legitimate as pain.
+
+Name a positive invitation as well as opposition. “Against the industry” is too vague unless the artist identifies a specific practice and an alternative. Do not manufacture hostility to make belonging easier. A listener should be free to disagree or leave; deep affinity does not require loyalty tests, humiliation, secrecy, or dependence on the artist.
+
+## 2. Give the world material form
+
+Choose a small set of source-backed details: local language, domestic textures, remembered objects, musical gestures, recurring settings, humor, customs, clothing, color, or a way of addressing people. For each, explain privately its origin, felt meaning, how it can appear, and whether its use is established or proposed.
+
+Use “signal” as creative shorthand for a meaningful recurring detail, not a scientific claim that humans can decode something algorithms cannot. An object is not automatically a symbol because it is unusual. Let its meaning come from provenance, use, and repeated choices.
+
+Choose whether the artist presents their everyday self, a heightened public character, a fictional world, or a deliberate combination. Optional archetypes can suggest motivations and behavior; never require a twelve-type diagnosis, exact 80/20 split, or content quota. Behavior and source truth decide whether a choice belongs.
+
+## 3. Compile identity into the script
+
+Read [script integration](references/script-integration.md). Give the platform writer a compact **Artist DNA brief**:
+
+- Source/version and any unresolved hypotheses.
+- One-sentence point of view; underlying desire and pressure.
+- Intended emotional movement and audience recognition, with evidence status.
+- Voice demonstrated by two short lines, plus any protected wording.
+- One or two episode-relevant signals and an observable action that embodies the belief.
+- World/production constraints and what would feel false.
+- Topic, promise, platform/duration, and the payoff the script still owes.
+
+Use this brief with \`reels-tiktok-script\` for 30–60 seconds or \`youtube-camera-script\` for 2–7 minutes when those skills are available. Read the selected skill's instructions, preserving its runtime, hook, evidence, and production checks. If unavailable, write the requested script directly using the same brief and honest word-count timing; do not stop at a handoff.
+
+Keep identity in the angle, example, choice, phrase, silence, or object. A 30-second video may need only one telling detail. A longer piece can develop the conviction through a complication. No fixed branding density and no obligation to mention the artist's beliefs aloud. When identity decoration distracts from the video's promise, change the expression rather than pad the script.
+
+## 4. Make recognition repeatable
+
+When planning a series, define stable convictions and a flexible palette of objects, settings, question types, jokes, and behaviors. Vary the situation and stakes. Do not repeat the same catchphrase and origin speech in every clip.
+
+Offer participation that naturally fits the work: a listener's version of a recurring exercise, a shared phrase they can use freely, or a low-pressure ritual around making/listening. Propose rather than fabricate existing fan language. Give newcomers enough meaning to enter even when returning listeners notice a deeper callback. Never require spending, confession, or personal access to prove membership.
+
+## Output and final check
+
+Match the request. For a bridge/discovery task, give a short DNA brief plus actual example lines/actions. For a script task, deliver the completed script and concise directing notes, with a brief explanation of where ethos enters. For an audit, identify generic or false moments and offer concrete replacement lines without overwriting protected text.
+
+Check: source truth; distinct voice; belief visible in behavior; topic/payoff intact; understandable to a newcomer; signals belong to this artist; emotional intention is plausible; performance is feasible; and any proposed community practice allows voluntary participation. The artist can be recognizable without being reduced to a costume. The audience should feel addressed, not analyzed.
+
+Use [worked transformations](references/worked-transformations.md) for calibration. Source adaptations and evidence limits are in [sources](references/sources.md).
+`,
+      },
+    ],
+  },
+  {
     slug: "artist-typography-taste",
     files: [
       {
@@ -34667,6 +34926,267 @@ Missing info:
     ],
   },
   {
+    slug: "reels-tiktok-script",
+    files: [
+      {
+        path: "agents/openai.yaml",
+        content: `interface:
+  display_name: "Reels & TikTok Script"
+  short_description: "Hook-first scripts and direction for 30–60s videos"
+  default_prompt: "Use $reels-tiktok-script to create a 45-second talking-to-camera video for Instagram and TikTok, with three hook options and a simple filming plan."
+`,
+      },
+      {
+        path: "references/hook-lab.md",
+        content: `# Hook lab
+
+## The opening is one idea across three channels
+
+The image establishes the situation, the voice advances it, and optional text clarifies context. They can complement each other rather than repeat verbatim, but should not create three unrelated puzzles. Captions reproduce speech accessibly; a headline overlay has a different job. Simplify one if both compete.
+
+Example, illustrative: frame contains two versions of the same sentence; voice says “Same request. One makes you do all the work”; overlay says “Which one would you answer?” The body must compare the actual wording and explain the difference. No real response-rate claims without evidence.
+
+The first word matters because it can name the subject or begin a concrete action. Starting “So today I just wanted to...” spends time before meaning. That is a craft diagnosis, not a ban on every natural filler or greeting in every context.
+
+## Mechanism menu
+
+| Mechanism | When it fits | Original illustrative line | What must follow |
+|---|---|---|---|
+| Recognition | Viewer knows the situation but hasn't named it | “You wrote the message. Now you're editing ‘hi.’” | A useful or funny observation about that exact behavior |
+| Demonstrated contrast | Difference can be shown honestly | “Same desk. One thing moved.” | Show the meaningful change and explain it |
+| Specific problem | Clear practical friction | “Your notes are clear until you need to use them.” | Identify a concrete failure and show an alternative |
+| Bounded disagreement | Evidence genuinely challenges a belief | “A shorter message can create more work.” | A fair example, not an exaggerated enemy |
+| In-progress decision | Consequences are apparent | “I can keep one of these sentences.” | Let viewers see the choice and its reason |
+| Visual incongruity | Wrong object/context helps the subject | “This trophy is for answering one email.” | A joke or point grounded in the incongruity |
+| Known approaching payoff | Progress can be watched | “Watch the water reach this line.” | Actually show the result; use an appropriate controlled demonstration |
+| Honest incident | User supplied a consequential moment | Start on their real decision or exact detail | Their actual consequence, not an invented origin story |
+
+Do not require a contradiction or question in every opening. A beautiful demonstration, accurate observation, or generous answer can earn attention directly. Stakes can be inconvenience, embarrassment, possibility, or amusement; not every subject needs dread.
+
+## Keep source mechanisms distinct
+
+SNATCH-EM contributes expectation contrast and entry specificity. Scroll Stopper contributes visual norm violation. Anticipation Engine concerns a knowable approaching outcome with visible progress; an unexplained box is curiosity instead. SLAY-SCRIPT contributes concrete angle alternatives; TONGUE-ME contributes directness and cadence. Preserve these distinctions without importing their deterministic neuroscience or default cold posture.
+
+## Hook-to-body bridge
+
+After drafting the first line, write the next two lines immediately. If they restart the topic, retreat into biography, or abandon the pictured thing, fix the hook or bridge. A strong opening that attracts the wrong viewer or promises unsupported results is a weak opening for this video.
+
+For each candidate, privately ask: who would pause; what do they believe they will get; what do they see/hear before three seconds; what must be shown to deliver; can this person film it? Reject on concrete failures rather than scoring “dopamine.” State one reason for the selected option and one tradeoff if useful.
+
+## Hook tests
+
+Compare different mechanisms, not trivial punctuation. Keep the same underlying promise and body where possible. Example: recognition vs demonstration of the same problem. If the demonstration requires a different explanation, it is a whole-concept test and should be labeled accordingly.
+
+Show a brief opening to someone without priming them. Ask what they think the video will deliver. Inspect muted and audio-only versions for conflicting messages. Test actual performance: a dry line and a warm line can read alike but play differently. Informal feedback is guidance, not statistically established improvement.
+`,
+      },
+      {
+        path: "references/platform-research.md",
+        content: `# Platform evidence and research
+
+Checked 2026-09-08. Platform explanations, paid-ad studies, creator profiles, and craft hypotheses answer different questions. None guarantees organic virality. Verify changing features, trends, and metrics in the actual account when relevant.
+
+## Sources and bounded implications
+
+- **TikTok organic recommendations:** [How TikTok recommends content](https://support.tiktok.com/en/using-tiktok/exploring-videos/how-tiktok-recommends-content) lists viewing/skipping and other interactions alongside content and user information; interaction signals generally receive greater weight for most users. Application: build a relevant complete experience. It supplies no universal completion threshold, retention formula, or optimal number of cuts.
+- **TikTok creative production, paid ads:** [Creative Codes](https://ads.tiktok.com/business/en-US/creative-codes) and [creative best practices](https://ads.tiktok.com/business/en/blog/creative-best-practices-top-performing-ads) recommend platform-fitting vertical creative, early value, sound, and hook/body/close structure. Adapt these as craft. Their six-second recall findings concern advertising outcomes; do not turn them into a biological deadline or proof of organic reach. A commercial CTA is not mandatory in an organic story.
+- **Instagram personalized guidance:** [Best Practices education hub](https://about.fb.com/news/2024/10/best-practices-education-hub-creators-instagram/) describes guidance across creation, engagement, reach, monetization, and guidelines, including personalized tips. Use available account guidance alongside evidence; don't pretend one generic benchmark fits every creator.
+- **Instagram experimentation:** [Trial Reels](https://about.fb.com/news/2024/12/trial-reels-try-content-non-followers-first-see-what-perfoms-best/) describes showing a trial to non-followers first. If available and the user authorizes publishing, this can inform concept exploration. Trials are live distribution, not private drafts or randomized A/B tests; do not enable automatic sharing without the user's authorization.
+- **Creator experimentation:** [Adam Mosseri's June 2025 update](https://about.fb.com/news/2025/06/inspiring-creativity-that-brings-people-together/) discusses creative experimentation and trial reels. Reported aggregate outcomes are not a forecast for this account or proof that a particular script caused reach.
+
+The Instagram ranking blog was unavailable during this research pass. Avoid substituting unattributed claims such as “DMs are worth five times likes.” No ranking weights are asserted here.
+
+## Creator examples: inspiration, not clip-level proof
+
+[TikTok's 2026 WomenOfTikTok spotlight](https://newsroom.tiktok.com/celebrating-the-impact-of-womenoftiktok?lang=en) describes Brunch With Babs' bite-sized practical advice and warm delivery. Transferable hypothesis: recognizable host relationship plus one useful thing can support a short without a loud or hostile opening.
+
+[The Korean Vegan spotlight](https://newsroom.tiktok.com/creator-spotlight-series-thekoreanvegan?lang=en) describes personal storytelling alongside cooking. Transferable hypothesis: voice and a coherent visual world can complement each other. This is adjacent inspiration rather than a mostly talking-head template.
+
+These are published creator profiles, not watched and measured 30–60-second clips. No clip durations, cut counts, first lines, view counts, or causal virality conclusions were verified. Do not present them as such.
+
+## Researching videos that spread
+
+When a user supplies a niche, creator references, or asks for live examples, find relevant 30–60-second videos and inspect the available audiovisual material. Favor comparable subject, audience, language, format, and account context. Include a less successful comparable example when evidence permits to reduce winner-only reasoning. Public popularity is an observed outcome, not an explanation.
+
+For each inspected clip record URL, creator, date checked, approximate duration, available public counts with date, first frame, opening wording, text, first actual reward, major turn, payoff, performance and edits. Distinguish observation, hypothesis, and unavailable information. Transcripts alone support wording/structure; they cannot prove tone, visual hooks, angles, or cut counts. Don't infer retention from views or claim a trend is current from an old compilation. Do not copy scripts or manufacture another creator's experiences for the user.
+
+## Measure separately
+
+Use metrics actually available in the account: watch-time/retention shape, completion where exposed, replays if distinct, reach, shares/sends, saves, and relevant response quality. State denominators when computing rates; views and unique reach are not interchangeable. Replay-influenced watch time is not a completion rate. If raw data is unavailable, propose a test rather than invent a baseline.
+
+Compare similar lengths and audiences over comparable windows. Keep opening variants compatible with the same body; changing subject, distribution, music, and hook together prevents attribution. A small unprimed viewer test can diagnose clarity without publishing. Platform trials and separate uploads remain confounded by distribution. No universal percent benchmark establishes virality.
+
+Useful failure hypotheses: immediate departure → premise/fit/legibility; post-hook departure → weak bridge or delayed reward; replay spike → enjoyment OR confusion; high viewing but low useful response → inspect relevance and meaning. Verify before treating any hypothesis as a diagnosis.
+
+## Review of user-supplied “Short-Form Video Mastery” guide
+
+Reviewed 2026-09-08. No supporting reference files accompanied the pasted guide. Its exact 1.3-second deadline, ranked 1–5 interaction weights, cold-start viewer counts, view multipliers, and completion thresholds are unsupported by the supplied material and are not adopted. Topic-specific evidence would be needed before using its claimed caption lifts or posting-time gains.
+
+The Facebook 90-second cap and mandatory format claims conflict with [Meta's June 2025 announcement](https://about.fb.com/news/2025/06/making-it-easier-create-videos-facebook/), which described a rollout without Reel length or format restrictions. This skill remains scoped to the user's 30–60-second Instagram/TikTok brief; it does not inherit the guide's platform maxima, monetization advice, or expansion into other platforms. Verify actual upload requirements when requested.
+
+Trial Reels are live exposure to non-followers, not risk-free private testing. Existing guidance already covers their limitations. Trending audio, looping, captions, and consistent publishing are not guaranteed distribution multipliers. Evaluate their fit and observed results, rather than adopting numerical quotas.
+`,
+      },
+      {
+        path: "references/short-structure.md",
+        content: `# Structure, voice, and production for 30–60 seconds
+
+## Select the minimum complete unit
+
+A short can contain one observation with an example, a demonstration, a compressed incident, or a single useful distinction. Don't squeeze a seven-minute outline into 45 seconds by deleting all connective logic. When repurposing longer work, extract a self-contained promise and rewrite the opening for a stranger.
+
+Planning landmarks for a 45-second draft might be 0–3: legible premise; 3–10: advance it or start proof; 10–30: example/test/consequence; 30–40: resolution; 40–45: optional callback/action. These are adjustable design slots, not mandatory sections. Thirty seconds needs fewer words; sixty allows more evidence, not a longer greeting. Verify words per beat as well as total duration.
+
+## Development without padding
+
+- Demonstration: show or start the difference → explain what caused it → state the limit or takeaway.
+- Recognition/comedy: specific familiar behavior → escalation or revealing detail → turn/punchline. Don't explain the punchline afterward.
+- Personal story: enter the consequential moment → minimal necessary context → choice → consequence. Mark hypothetical scenarios and don't invent lived experience.
+- Micro-explainer: problem → concrete example → meaning. Move between the principle and the object without requiring a visual cut.
+- Fair disagreement: name the belief → show where it fails → give a more useful distinction. Do not pretend a qualified claim overturns everything.
+
+Mark the first delivered benefit, not merely the promise. Remove repeated setup; protect the causal link. An ending can resolve with understanding rather than a dramatic reveal. A practical clip can finish when the useful action is complete.
+
+## A reason to travel
+
+Privately finish “Someone might send this to ___ because ___.” A specific recipient and reason is more useful than “everyone will relate.” Saving fits a reusable instruction or reference; sharing fits a shared joke, useful correction, or expression of something difficult to say. These are creative hypotheses, not claims about guaranteed algorithmic weighting. Both behaviors can matter on either platform.
+
+Do not bait disagreement with deliberate mistakes, manufacture insecurity, or ask for meaningless comments. Genuine invitations can work: invite a real example when it advances the conversation. An ordinary closing line can be enough.
+
+## Delivery
+
+Write for one listener. Use a specific noun before abstraction, concrete verbs, and breath-sized units. Vary rhythm rather than making every sentence clipped. Place the key contrast or comic reveal where it can land; allow a short pause if necessary and include it in timing. Preserve the speaker's dialect and approved voice examples.
+
+Choose one primary delivery posture and an intentional shift if the material needs it. A precise quiet statement may be stronger than exaggerated excitement. Directions such as “drier on this phrase” are actionable; “make it viral” is not. Never treat uncertainty that protects truth as removable filler.
+
+## Small-world filming
+
+Default to a stable phone, eye-level medium close-up, readable face, clean speech, and one relevant prop if needed. Vertical framing makes head/hand/object placement important: test the actual frame rather than assuming a landscape setup crops cleanly. Leave room for gestures and captions. Keep light and clothing from competing with evidence.
+
+A funny background object can express character; it does not have to steal the opening. A signature mic mark may stay subtle. If motion attracts attention toward something, ensure that object matters. Before choosing an extra camera angle, ask whether the viewer needs new evidence or simply clearer words.
+
+Plan cuts at a thought turn, reveal, comparison, or compression of a restart. Count transitions. For an A-roll → evidence insert → A-roll sequence, count two cuts. Consider an in-frame demonstration that avoids both. Keep reading time for essential text and preserve meaningful facial reactions.
+
+Use synchronized captions with readable contrast and sensible phrase breaks. Avoid covering the mouth or the object being discussed; inspect the platform preview for controls. Narrate essential visual differences when useful for accessibility. Background audio should support voice, not replace comprehension. Use an original clean master for platform exports; verify sound availability and usage rights separately when relevant.
+
+## Platform adaptation as an editorial choice
+
+For both platforms, one script may be appropriate. On Instagram, consider how the cover and concise caption orient a profile visitor and whether the observation is worth sending to a friend. On TikTok, consider natural topic wording, an authentic reply-to-question framing when a real question exists, and whether a current format genuinely fits. These are testing options, not fixed cultural stereotypes. Don't invent a viewer comment or call a trend current without checking.
+
+A trend should carry the premise, not merely supply background music. Observe current regional examples and account audio availability before recommending a specific sound. A talking-head clip may need no trend at all. Do not bury the spoken point beneath a song.
+
+## Revision
+
+If early departures occur, inspect legibility, audience mismatch, delivery, and promise clarity. If viewers stay initially then drop, examine whether the next sentence restarts and whether proof arrives. If the clip finishes well but gets little sharing, examine usefulness/recognition and distribution before changing every hook. These are hypotheses; analytics alone cannot identify the cause.
+
+Try a leaner draft and restore any line whose loss damages voice, comprehension, evidence, or emotional timing. No percentage quota. When an ending loops into the opening, keep a complete first-view answer and label any version without the loop. Don't require rewatching to understand.
+
+## Optional production refinements
+
+**Loop junction:** If a loop serves the concept, play the final seconds directly into the opening. Check framing, hand/prop position, speech, music, and room tone for a distracting discontinuity. A deliberate hard restart is also valid. Preserve a complete first-view payoff; continuity is a production choice, not evidence of an algorithm boost.
+
+**Caption treatment:** Choose ordinary phrase captions by default. Highlight a key contrast or reveal only when emphasis improves understanding; avoid animating every word simply because the style is fashionable. Check actual reading time, synchronization, contrast, and overlap with the demonstration. Review automatic transcription for names, numbers, and negations. If no preview was inspected, call this a planned treatment rather than verified legibility.
+
+**Batch hook takes:** When testing alternatives, record the selected hook and one or two genuinely different openings in the same lighting and framing session, with the same compatible body. Label takes by mechanism and keep enough lead-in/out for clean editing. Recheck the bridge and runtime for each version. This makes comparison easier; it does not require posting every variant or adopting a daily upload quota.
+`,
+      },
+      {
+        path: "references/source-map.md",
+        content: `# Adapted ingredients
+
+Built 2026-09-08. Original local skills remain unchanged; this package does not require them at runtime.
+
+- \`the source skill collection/snatch-em/SKILL.md\`: specific entry, expectation contrast, meaningful open questions. Excludes chemical capture and universal neurological deadlines.
+- \`the source skill collection/scroll-stopper/SKILL.md\`: readable norm violation and opening-frame intent. Absurdity is optional; no compulsory AI generation or found-footage aesthetic.
+- \`the source skill collection/anticipation-engine/SKILL.md\`: visible progress toward a knowable payoff, kept distinct from mystery. No compulsory peril.
+- \`the source skill collection/slay-script/SKILL.md\`: genuinely different concrete hook angles grounded in supplied material.
+- \`the source skill collection/tongue-me/SKILL.md\`: directness, cadence, silence; not compulsory coldness or removal of truthful qualifications.
+- \`youtube-camera-script\`, built in this task: voice fidelity, truthful promises, motivated editing, explicit runtime arithmetic, concrete section rewards, and research limits. Reworked for a feed opening and one compact payoff; not a shortened multi-minute template.
+
+The broader \`create-viral-content\` skill and \`tiktok-strategist\` agent were inspected for fit but not adopted. Their generic benchmark claims, rigid format rules, and campaign scope add little to this narrow writing skill. No extra skills, agents, databases, or production dependencies are installed.
+
+User-supplied \`viral-video-short-form\` / “Short-Form Video Mastery” guide reviewed 2026-09-08: added optional loop-junction checks, selective caption treatment, and batching compatible hook takes. Most hook, sound, caption-placement, and testing advice was already covered. Excluded unsupported numerical algorithm claims, rigid posting schedules, platform expansion, and unrelated Windows tool instructions. No external files or software were installed.
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: reels-tiktok-script
+description: Write and direct 30–60 second Instagram Reels and TikTok videos, especially talking to camera, with coordinated visual, spoken, and text hooks, compressed stories, distinctive delivery, and earned payoffs. Use for hook variants, full short scripts, platform adaptations, or retention repairs; not primarily for longer YouTube videos, ad campaigns, or AI clip generation.
+---
+
+# Reels & TikTok Script
+
+Win the opening, then earn the rest. Build a complete short experience around one observation, demonstration, change of mind, or story turn. Script and delivery remain central; visual novelty should help viewers understand why to stay. Default to one person talking to camera in vertical 9:16, 45 seconds, available equipment, and natural confident speech. Match the user's explicit length, voice, and platform.
+
+## Brief and routing
+
+Use the topic, viewer, supplied facts, intended payoff, voice samples, location/props, and target platform. Ask only for missing information that changes the idea. Without a topic, ask for one; do not fabricate a creator biography or results. Preserve protected user wording and label alternative edits. This is creative planning, not authorization to publish or buy production services.
+
+If both platforms are requested, write one core script with only meaningful Instagram/TikTok differences. Do not claim Instagram must be polished or TikTok must be messy. If only hooks are requested, supply hooks; if a full script is requested, complete the body and ending rather than stopping at a shortlist.
+
+Use [platform evidence and research](references/platform-research.md) when choosing platform tactics, researching examples, or evaluating performance. Existing YouTube skill is not required; this skill is self-contained.
+
+## Artist identity bridge
+
+When the brief supplies artist brand/world/ethos or asks for identity-level connection, use \`artist-script-dna\` if available before choosing the angle. If an Artist DNA brief is already supplied, use it directly and do not invoke the bridge again. Pass its compact Artist DNA brief into this workflow: source-backed conviction, pressure, emotional intention, voice examples, episode-relevant signals, and observable behavior. Let those change the script's words and choices while preserving the video's promise and runtime. Do not force a manifesto into an ordinary topic or invent biography. If the bridge skill is unavailable, derive the same compact brief from supplied evidence and label interpretations. Skip this step for work without artist-identity scope.
+
+## 1. Choose one reason to watch
+
+Write privately: what the viewer recognizes, what changes by the end, and what visible or factual material earns that change. Identify a plausible reason to share or save if the idea has one: it names a shared experience, helps a particular friend, delivers a useful technique, or lands a retellable surprise. Do not force a share CTA or inflate stakes.
+
+Favor one useful turn over a compressed lecture. Keep topic and benefit intelligible without the viewer opening a caption or seeing earlier episodes. A thumbnail/cover may help browsing; the playing first frame still needs to work on its own.
+
+## 2. Build and select the opening
+
+Read [hook lab](references/hook-lab.md) for hook creation or repair.
+
+For a fresh full-video brief, provide three substantially different hook packages and recommend one, unless the user has selected an opening or wants only a finished script. Each package contains:
+- First frame and any opening movement, feasible with the setup.
+- Exact first spoken line.
+- Short optional overlay, distinct from accessibility captions.
+- The viewer's specific reason to continue and the payoff that will fulfill it.
+
+Start with the relevant thing already present: the object, mistake, comparison, expression, or statement. Aim for a legible premise in the first roughly 1–3 seconds as a design target, not a universal brain deadline. The complete opening sentence may take longer. Estimate its actual spoken duration. Don't fit twelve words into a two-second timestamp by wishful labeling.
+
+Select on clarity, relevance, distinctiveness, truth, shootability, and the connection to the body. No predictive virality scores. Three synonym rewrites are not three hook concepts. Avoid disconnected shocking visuals, false statistics, manufactured confession, or insults to create artificial conflict.
+
+## 3. Write the whole short
+
+Read [short structure and filming](references/short-structure.md) for full scripts.
+
+Choose a compact structure: show result → explain how; recognizable mistake → demonstration → better choice; specific moment → decision → consequence; supported disagreement → example → qualified conclusion. The hook should start the story, not be a separate trailer followed by an introduction.
+
+The next sentence must advance the hook. Give a concrete benefit or story development early; at the midpoint, deepen through proof, a consequence, or an objection where needed. Do not insert generic “wait for it” re-hooks on a clock. Resolve the main promise within this clip. A follow-up can extend the answer, never replace it.
+
+Write complete spoken text in the user's register: concrete language, contractions where natural, varied rhythm, and sparse performance cues. Bold can be quiet. Keep warmth and truthful qualifications. Use a grounded joke or natural aside when appropriate; do not require shouting, slang, or a fake vulnerable persona.
+
+Count spoken words separately from overlays and stage directions. Estimate runtime as words / assumed spoken words-per-minute × 60 + distinct non-speaking seconds. Begin around 135–165 wpm if no measured pace is available; choose rather than impose a pace. Rough budgets at 150 wpm: 30s with 3s holds ≈68 words; 45s with 4s holds ≈103; 60s with 5s holds ≈138. Revise scope or language if it doesn't fit. A timed read confirms runtime; arithmetic does not.
+
+## 4. Direct a small, legible world
+
+Design first-frame dominance and where attention goes next. A face, evidence object, or expressive action may lead; a red mic band or funny background object can be a supporting signature. If the oddity creates an explicit question, pay it off; otherwise don't force a prop explanation. Keep the person visible through most of the timeline unless asked otherwise.
+
+Specify frame, eyeline, hand/prop action, sound, text placement, and only motivated shot changes. Give a cut count derived from the plan, counting an insert's entry and exit separately. Camera movement, text changes, and gestures are not editorial cuts. A still take can work; frantic cuts are not the default.
+
+Keep readable captions and essential evidence away from platform controls and caption areas. Check each destination's current preview rather than hard-coding a universal safe zone. Let speech remain intelligible with music and make the premise understandable muted through image/captions. Do not overload the opening with unrelated text, action, and speech.
+
+## 5. End with a payoff, not a delay
+
+Finish on the result, reframe, punchline, or useful action. An optional callback can make the opening mean more on a second viewing. A loop must preserve comprehension and closure; do not cut off the answer to manufacture replays. An optional CTA gets one relevant action, only if it fits. Never invent promised downloadable resources, automated DMs, or a next video.
+
+## Deliver and check
+
+For a full request: selected premise/platform/duration; three hook packages when useful; clean complete script with word count and timing assumptions; compact timed filming table including overlays and cut count; minimal platform adaptations; one useful test. Keep the explanation brief and the script easy to perform.
+
+Check opening/body/payoff continuity, factual support, understandable muted opening, natural speech, plausible total/beat timing, feasible props/angles, and a reason to care beyond novelty. If changing hooks for a test, keep the promise and body compatible and recalculate duration. Report unknowns honestly. Never guarantee viral reach, invent analytics, or treat ad recall findings as organic distribution laws.
+
+Adapted source decisions are documented in [source map](references/source-map.md).
+`,
+      },
+    ],
+  },
+  {
     slug: "reference-finder",
     files: [
       {
@@ -55982,6 +56502,408 @@ Use this structure:
 - Do not quote long passages from the book in normal responses.
 - Do not imitate another artist's lyrics or voice. Use references as craft lenses only.
 - Do not call a song great unless the diagnosis supports it.
+`,
+      },
+    ],
+  },
+  {
+    slug: "youtube-camera-script",
+    files: [
+      {
+        path: "agents/openai.yaml",
+        content: `interface:
+  display_name: "YouTube Camera Script"
+  short_description: "Scripts, voice, and direction for 2–7 minute videos"
+  default_prompt: "Use $youtube-camera-script to write a 4-minute talking-to-camera YouTube video with a strong story, natural voice, and a practical filming plan."
+`,
+      },
+      {
+        path: "references/evidence-and-testing.md",
+        content: `# Evidence and testing
+
+Research checked 2026-09-08. Distinguish official platform guidance, empirical research in a different setting, and production judgment. None of the research below validates a complete formula for organic 2–7 minute talking-head YouTube videos. Recheck platform-specific instructions when they matter to a live task.
+
+## What the sources actually support
+
+1. **Audience retention — official guidance.** YouTube's [key moments documentation](https://support.google.com/youtube/answer/9314415?hl=en) describes the first-30-second intro measure and retention patterns. Spikes can reflect rewatching or confusion; dips can reflect skipping or leaving. Application: compare the opening promise with the actual content, and inspect a dip in context. The 30-second metric is not a recommended intro length or a neurological deadline.
+
+2. **Satisfaction — official explanation, dated 2021.** YouTube's [recommendation-system explanation](https://blog.youtube/inside-youtube/on-youtubes-recommendation-system/) identifies multiple signals including watch time and satisfaction surveys. Application: optimize for delivering value, not merely delaying an answer. This historical explanation does not establish current signal weights or a channel-specific ranking formula.
+
+3. **Packaging and format — official creator advice, 2024.** [Six ways to grow your channel](https://blog.youtube/creator-and-artist-stories/grow-your-youtube-channel/) emphasizes the idea, viewer perspective, accurate engaging packaging, and distinguishes Shorts from other formats. Application: make title, opening, and video agree; do not copy short-feed tactics indiscriminately. It does not prescribe a universal storyline or cut schedule.
+
+4. **Curiosity and memory — laboratory study, 2014.** [Gruber and colleagues](https://pmc.ncbi.nlm.nih.gov/articles/PMC4252494/) found curiosity-related memory benefits in a trivia task, with neural correlates during anticipation. Application by inference: build an understandable, meaningful question and resolve it. This does not establish retention gains, involuntary viewing, or a measurable dopamine effect from a particular script.
+
+5. **Interesting irrelevant material — learning experiment, 2023.** [Seductive details hamper learning even when they do not disrupt](https://pubmed.ncbi.nlm.nih.gov/37362861/) studied 247 participants and found poorer learning with interesting irrelevant details. Application by inference: test whether the funny object competes with the point. Learning from educational materials is not equivalent to entertainment engagement; this is not a ban on jokes or set dressing.
+
+6. **Presenter expressiveness — eye-tracking experiment, 2024.** [Exploring the impact of nonverbal social behavior](https://pmc.ncbi.nlm.nih.gov/articles/PMC11151426/) studied 87 participants: higher nonverbal immediacy increased motivation/enjoyment, without improved cognitive learning, and shifted attention toward the instructor. Application by inference: performance can change the viewing experience while competing with other material. More expressiveness is not automatically more comprehension.
+
+7. **Editing — experimental cinematography research, 2023.** [Continuity edits across shot scales and camera angles](https://pubmed.ncbi.nlm.nih.gov/37521689/) examines neural responses to continuity edits. Application is limited: editing can be studied as perceptual processing, but this record supplies no optimal cut rate or YouTube retention promise. The skill's motivated-cut recommendations are production judgment.
+
+## Claims deliberately not inherited
+
+No chemically obligated viewers; no universal three-second prefrontal deadline; no claim that open loops double YouTube memory; no NLP receptivity window; no fixed red-color retention effect; no guaranteed high/low camera-angle authority effect; no arbitrary neurochemical, virality, or threshold score. Specificity, anticipation, contrast, and cadence remain useful craft without those claims.
+
+## Evaluate outcomes separately
+
+- **Promise delivery:** can viewers state the main answer and recognize how it addressed the title?
+- **Attention pattern:** where do viewers leave, skip, or replay?
+- **Comprehension:** what do they remember or misunderstand?
+- **Identity:** do they recognize the speaker's world or distinctive signature?
+- **Enjoyment/trust:** what did they enjoy, disbelieve, or find distracting?
+
+A prop may improve recognition while reducing comprehension. A cut may improve pace while removing an emotionally useful pause. Select the outcome the video actually needs before calling a choice a win.
+
+## Practical iteration
+
+For a red-tape mic test, compare otherwise identical brief samples with/without tape. Ask an unprimed viewer what they noticed first and what the speaker's point was; assess recognition later if that is the goal. A few informal responses guide a revision but are not statistically reliable evidence.
+
+For a script opening, compare two honest openings for the same promise while keeping the body stable in a small viewer test. For edit density, compare a continuous section with a version using motivated cuts and ask about clarity and enjoyment. Avoid leading prompts such as “Did the exciting edit hold your attention?”
+
+After publication, inspect first-30-second retention, average view duration, percentage viewed, and relevant spikes/dips where available. Compare similar lengths, topics, audience types, and traffic sources. Do not impose universal percentage benchmarks, equate a spike with delight, or claim causality from two different uploads. Title/thumbnail changes and audience mix are confounds. Record the change, observed pattern, alternative explanations, and next bounded test. Never fabricate unavailable analytics.
+
+## Learning from supplied reference videos
+
+Where transcript access is available, validate the language and preserve source URLs and timestamps. Map the opening, first delivered benefit, key turns, and ending. Extract transferable decisions, then write from the creator's own material rather than reproducing another person's script or personal history.
+
+A transcript can support analysis of wording and structure. It does not establish tone of voice, camera angle, props, cut frequency, or viewer retention. Inspect playable audiovisual material for performance/edit claims and record timestamps; mark those dimensions unassessed if only text is accessible. Distinguish approximate transcript times from frame-accurate edit points. If retrieval fails, report the actual limitation rather than assuming captions are disabled. Reference-video popularity alone does not prove that a particular technique caused success.
+
+## Peak-end claims and the pasted framework
+
+The user-supplied scriptwriting essay (reviewed 2026-09-08) offers production heuristics but supplies no citations for its claims of inevitable viewing, fixed attention decay, or ascending rewards compelling continuation. Its assertion that writing difficulty predicts viewing difficulty is not a reliable quality test. Retention alone also does not establish whether a video fulfilled its purpose.
+
+Peak-end effects have been studied, but their generality depends on the experience and outcome. A [2019 VR experiment on complex experiences](https://pubmed.ncbi.nlm.nih.gov/31396135/) found whole-experience measures better predicted remembered experience than peak/end emotional valence. This does not disprove every peak-end effect, nor directly test YouTube. It does rule out treating the essay's ending formula as established evidence for likes, sharing, or rewatches. Design an earned ending as craft; measure the actual audience response.
+`,
+      },
+      {
+        path: "references/frame-and-performance.md",
+        content: `# Frame, ethos, performance, and edit
+
+The choices here are production craft and testable hypotheses, not experimentally proven YouTube formulas.
+
+## Make the room mean something
+
+Decide what relationship the setting invites: workshop peer, thoughtful desk conversation, playful experiment, intimate reflection. Connect the speaker's perspective to evidence in the room. A working object can imply a lived practice; expensive-looking furniture alone does not establish expertise. Do not manufacture credentials through props.
+
+Use a simple hierarchy: primary subject, supporting context, optional signature. Treat color, contrast, scale, motion, legibility, and placement together. A tiny bright mark may pull attention in a dark frame; red on an already red background may barely register. Check the actual composition instead of assigning a universal psychological meaning to a color.
+
+### The red-tape mic
+
+Possible role: a repeatable handmade signature that suggests a practical, slightly irreverent world. Put a small band on the handle/body where it leaves controls and the pickup area clear; keep the mouth and expressions visible. Place it within the speaker's visual area, not as the brightest isolated object on the opposite side of the frame. Do a recorded audio check with the actual microphone.
+
+Compare a still with and without the tape. If the band overwhelms the face, reduce its size or contrast. It does not need a spoken explanation unless the video makes its meaning a promise. Test recognition and recall; do not assume increased comments about tape mean the main idea landed.
+
+### The funny background object
+
+Choose an object that fits the creator's taste or subject: a tiny trophy for an ordinary task, a deliberately unimpressed ceramic animal, an oddly formal frame around a mundane note. Keep it secondary during dense explanations. It can become a callback if the topic genuinely supports one; leave it as texture when a joke would interrupt the argument.
+
+A visibly changing object creates a different task for the viewer than a static signature. If you animate it, reveal what it means and budget the distraction. Do not give viewers a hidden puzzle while asking them to follow a difficult explanation unless the puzzle is the explanation.
+
+## Camera decisions
+
+Begin with an eye-level medium close-up and comfortable distance as a neutral working setup, then depart for a reason. Eye-level can support a conversational feel; a closer frame may suit a personal admission or detailed expression; a wider frame can show a process and give gestures room. These effects depend on performance and context, not guaranteed status cues.
+
+State height relative to eyes, framing extent, approximate distance when the room permits it, and a test-frame check. Avoid extreme close wide-angle placement when facial distortion is unwanted. With a phone, use the normal camera as a starting point and step back to frame; do not require a lens purchase. Focal-length advice must account for sensor/crop and available space.
+
+Keep the lens near the script's eyeline. Return gaze to the lens when addressing the viewer; look at an object when directing attention to it. Natural thinking glances are acceptable. A second angle should establish a meaningful viewpoint or hide an edit cleanly, not make the speaker appear to address an absent interviewer by accident.
+
+## Light, wardrobe, and sound
+
+Prioritize readable eyes and facial movement, separation from the background, and a consistent exposure. Use the available soft window/light, and inspect reflections, mixed color casts, and flicker in a recorded sample. Wardrobe should separate from the background and permit natural movement; a signature accent need not compete with the mic, captions, and props simultaneously.
+
+Capture intelligible speech before designing music. Place the microphone according to its type and test plosives, room reflections, clipping, and clothing noise. If music is used, keep it under the words and simplify it during dense explanations. Silence can carry a revelation or dry joke. Avoid recommending numerical loudness targets without checking the actual delivery requirements.
+
+## Delivery as changing intention
+
+Map intentions such as invite, challenge, demonstrate, admit, or conclude onto beats. Translate them into sparse actions: slow the crucial distinction; pause before the example resolves; soften the admission; let a joke pass without a grin. Do not flatten the entire video into “high energy.”
+
+Gesture where it clarifies scale, contrast, sequence, or a referent. Stillness can distinguish the most important sentence. Use readable selective overlays for terms or comparisons, with captions for accessibility; avoid simultaneously making viewers track a face, dense text, a prop gag, and a moving graphic.
+
+## Cuts and holds
+
+Build an edit ledger: location, from/to shot, purpose, what information survives, and estimated duration. Count actual shot transitions separately from overlays, pauses, and movement inside a continuous take. An insert usually needs a cut into it and a cut back. A jump cut can compress an unwanted restart; it cannot repair missing reasoning.
+
+- Cut on a new piece of evidence when seeing it is more useful than seeing the speaker.
+- Change scale for a genuine shift in intimacy or emphasis, sparingly enough that it means something.
+- Hold through an admission or punchline when continuity gives it credibility or timing.
+- Allow reading time for on-screen evidence; do not cut away just to meet a cadence.
+- Maintain spatial and audio continuity unless disorientation is intentional and useful.
+
+Offer a single-camera baseline first. If a brief benefits from a busier edit, explain the added work and compute the count from the plan. There is no supported universal optimal cut count for 2–7 minute videos.
+
+## Cheap checks before the full shoot
+
+Watch a short recorded sample normally, muted, and audio-only. Normal viewing checks whether image and speech help each other; mute checks hierarchy and distractors; audio-only checks whether the argument and delivery stand on their own. These are craft reviews, not proof of retention. On a phone-sized preview, verify the expression and essential text remain legible.
+`,
+      },
+      {
+        path: "references/source-skill-map.md",
+        content: `# Source skill map
+
+Audited 2026-09-08. These are selective adaptations; original skills are preserved and are not runtime dependencies. Source paths below identify inspected local material, not files bundled into this package.
+
+| Source under \`the source skill collection/\` | Useful ingredient | Adaptation / exclusion |
+|---|---|---|
+| \`snatch-em/SKILL.md\` | Specific expectation, opening tension, information gap | Remove chemical-compulsion language, universal three-second deadline, and unsupported memory multipliers |
+| \`slay-script/SKILL.md\` | Concrete openings, distinct angles, anchoring to real source material | Use a few strong variants; do not invent personal facts or require all Campbell stages or predictive scores |
+| \`arc-her/SKILL.md\` | Changes in understanding, consequences, emotional shape | Fit the arc to 2–7 minutes; no compulsory twelve-stage journey or sales CTA |
+| \`tongue-me/SKILL.md\` | Directness, varied cadence, comfortable silence | Let warm, vulnerable, or careful voices lead; preserve truthful qualifications and explanations |
+| \`anticipation-engine/SKILL.md\` | Legible approaching outcome and watchable progress | Use real demonstrative/narrative progression when warranted; do not rename generic mystery “anticipation” or import crisis-neuroscience claims |
+| \`scroll-stopper/SKILL.md\` | Readable visual oddness and a deliberate frame | Optional character/prop accent, not compulsory absurdity, found footage, or 6–10-second vertical grammar |
+| \`hook-writer/SKILL.md\` | Specific setup earning a plain memorable payoff; attention to mouthfeel | This is a song-hook skill, not the requested hook-psychology source; no chorus structure imported |
+
+“Hook psych” and “bold voice” were descriptive names in the request, not verified exact catalog matches. SNATCH-EM and TONGUE-ME were the closest inspected fits; do not represent that identification as confirmed by the user. The new skill supplies its own YouTube-specific timing, middle, delivery, visual hierarchy, edit planning, and evidence distinctions.
+
+## External comparisons, 2026-09-08
+
+These are craft references, not scientific validation. Selective synthesis only; no external code or dependency was installed.
+
+- [cdeistopened / youtube-scriptwriting](https://github.com/cdeistopened/skill-stack/blob/main/.claude/skills/youtube-scriptwriting/SKILL.md): useful section-level benefit progression. Its [editing reference](https://github.com/cdeistopened/skill-stack/blob/main/.claude/skills/youtube-scriptwriting/references/editing.md) motivated a separate first-delivered-benefit audit. Excluded shock scores, mandatory timing, and blanket point ordering. LobeHub was inaccessible; the upstream skill and hook/editing references were read instead. The retention reference could not be fetched.
+- [mohitagw15856 / youtube-script-writer](https://github.com/mohitagw15856/pm-claude-skills/blob/main/skills/youtube-script-writer/SKILL.md): reinforces small section payoffs and aligned packaging; most production guidance already covered here. Excluded mandatory visual changes every 4–8 seconds and withholding the main payoff until a fixed percentage of runtime.
+- [ailabs-393 / script-writer](https://github.com/ailabs-393/ai-labs-claude-skills/blob/main/packages/skills/script-writer/SKILL.md): adapted continuity of preferences into a compact, source-backed voice profile. Excluded automatic database storage, lengthy mandatory intake, and fixed long-video scaffolding. Read upstream source rather than relying on explainx's unrelated product-management boilerplate.
+- [NousResearch / youtube-content listing](https://skillsmp.com/creators/nousresearch/hermes-agent/skills-media-youtube-content): transcript handling informs reference-video analysis. Useful for research input, not a new script psychology model. Added explicit limits on inferring visual or performance choices from transcript text.
+
+## User-supplied scriptwriting essay, 2026-09-08
+
+Adapted three craft ideas from the attachment beginning “Scriptwriting is not a creative endeavor”: switching between abstract and concrete explanation, connecting prior material in the ending, and comparing a leaner draft against the original. These are conditional techniques, not psychological laws. Click alignment, section rewards, and natural re-hooks were already covered. Excluded mandatory five-part intros, deletion quotas, ranking-based sequencing, unsupported compulsion claims, and named-product promotion. No promotional resource or paid dependency was added.
+`,
+      },
+      {
+        path: "references/story-and-speech.md",
+        content: `# Story, wording, and voice
+
+## The viewer's internal conversation
+
+Plan the sequence of questions a real viewer would ask: “Is this about my problem?” → “Why should I believe this person?” → “Show me” → “But what about this exception?” → “What changes for me?” These are diagnostic questions, not compulsory lines of dialogue.
+
+Start with something graspable: an observed behavior, an artifact, a result you can demonstrate, a specific tension, or a sharply bounded disagreement. Replace “This changes everything” with what changes and for whom. Avoid spending the opening announcing that a video is about to begin. Brief orientation is valuable when the subject requires it.
+
+A specific knowledge gap requires enough context to see what is missing. “The third mistake will shock you” creates a weak generic debt. “Both recordings use the same mic. Listen to what changes when I turn toward the window” supplies an intelligible comparison and a reachable answer. Use only if the footage actually demonstrates it.
+
+## Select the architecture
+
+| Material | Useful progression | Typical failure | Repair |
+|---|---|---|---|
+| Demonstration | Question → prediction → test → observed result → explanation → application | Talking around a result never shown | Put the actual comparison on screen and state limits |
+| Changed belief | Old model → disconfirming example → better explanation → boundary case → new choice | Contrarian headline, conventional body | Make the evidence change the model or soften the headline |
+| Personal incident | Enter a specific moment → goal → obstacle → decision → consequence → reflection | Manufactured trauma or chronological diary | Use a real decision with a visible cost; compress irrelevant chronology |
+| Diagnosis/tutorial | Recognizable symptom → distinguish causes → show fix → check result | Too many equal tips | Organize by the viewer's next decision |
+| Argument/commentary | Position → example → strongest objection → reasoned answer → implication | Strawman, repeated assertion | Give the objection its strongest fair form and earn the answer |
+
+Story does not require a villain or a redemption arc. A shift in understanding can carry a quiet explanation. Add complexity only when it changes the answer, not to fill seven minutes.
+
+## Duration choices
+
+These are authoring heuristics, not platform requirements:
+- **2–3 minutes:** one question, one strong example or incident, one meaningful turn, one useful landing.
+- **3–5 minutes:** room for a second piece of evidence or an honest objection; develop rather than repeat.
+- **5–7 minutes:** deepen with a case, counterexample, or consequence. If all the value fits in three minutes, recommend three.
+
+Example speech budgets at 145 words/minute with separate non-speaking time: 2 minutes with 10 seconds of holds ≈266 words; 4 minutes with 20 seconds ≈532; 7 minutes with 30 seconds ≈943. These are arithmetic illustrations, not target quotas. Use actual counts and a pace range for delivery.
+
+## Make each beat move
+
+For each paragraph ask: what does the viewer know or feel afterward that they did not before? Give the claim an example; give the example meaning; let that meaning generate the next question. A transition like “That solves the noise, but it creates a different problem” is useful only when the next section shows that actual problem.
+
+Avoid recapping before the viewer needs it. A short explanation can return to a central phrase at the end with new meaning; repeating an unsupported assertion adds no proof. Re-hooks should arise from a new consequence, objection, or reveal. They need not sound like headlines.
+
+For anticipation, make progress observable: a live comparison being prepared, options eliminated in view, a constraint tightening, or a decision whose consequences we now understand. A static decorative timer does not create meaningful stakes. Do not graft peril onto a talking-head explanation.
+
+## Voice design that produces words
+
+Define a few usable settings: relationship to viewer, warmth, directness, energy, humor, vocabulary, and willingness to acknowledge uncertainty. Give a sample line rather than merely “bold and authentic.”
+
+Same idea, different voices:
+- Warm peer: “You might not need a better camera. Let's move this one first.”
+- Dry challenger: “The camera is fine. It's currently filming your ceiling.”
+- Careful expert: “Before replacing it, compare the same shot at eye level.”
+
+These are options, not claims about which performs best. Boldness can come from a precise observation spoken quietly. Do not erase warmth to simulate authority. Separate factual qualification (“in this example”) from empty throat-clearing (“I kind of just think maybe”).
+
+## Line-level craft
+
+Put the important word where the listener can hear it; avoid burying a reveal inside subordinate clauses. Trade nominalizations for actions: “the implementation of changes” becomes “change it.” Specify what “this” or “that” refers to when there are competing objects or claims.
+
+Alternate a short landing with a longer explanation. Overusing tiny sentences becomes mannered. Use one image or analogy at a time and return to the literal point before adding another. Keep technical terms when the audience needs them, with an immediate concrete demonstration.
+
+Let humor grow from an accurate observation, an object, or the speaker's behavior. Place the reveal word late in a joke, allow a beat, then continue without explaining the joke. A vulnerability beat must come from supplied truth, not a fabricated confession. An invented teaching scenario must be labeled as an illustration outside the script or clearly introduced as hypothetical inside it.
+
+## Rehearsal pass
+
+Read aloud at the intended emotional pace. Mark where the speaker runs out of breath, loses the antecedent, or needs to reread. Repair those lines before adding emphasis instructions. If reading cannot be performed, call it a text-based speakability review. Never claim a timed read from word-count arithmetic.
+
+Record the opening in two plausible registers if the speaker wants options. Choose the one that communicates the premise most naturally, not automatically the louder one. Remove an unnecessary sentence before adding a jump cut to compensate for it.
+
+## Section rewards and delay audit
+
+A useful section can identify the issue, demonstrate an application, and explain the consequence. Adapt that movement to the material rather than announcing three headings. Example: show a cluttered shot → remove one competing object → explain what becomes easier to see. A narrative section may reward attention with a consequential decision instead of advice.
+
+Mark the first delivered benefit in the draft, then inspect everything before it. Keep context required to understand the benefit; cut repeated promises and credibility padding. Later sections should supply further rewards, not merely hold the answer hostage. Sequence by understanding and relevance, not a mandatory ranking of “best” facts.
+
+## Compact creator voice profile
+
+Use approved previous scripts and explicit feedback to establish a small working profile: relationship to viewer, typical rhythm, humor level, vocabulary, disliked phrasing, and two short representative lines. Identify the source examples and distinguish observed habits from provisional choices. Apply episode-specific instructions over the default profile.
+
+Keep the profile within the current task unless the user asks to save it for future use; then use their chosen workspace location and preserve approved versions. Do not silently create a personal-history database or write global memory. Avoid an exhaustive onboarding questionnaire when examples already answer the relevant questions.
+
+## Change scale, then connect the pieces
+
+When a passage becomes abstract, move into a specific case, observable action, or exact sentence. After the example, return to what it changes about the larger idea. Example: explain competing focal points → move a bright object out of the shot → connect the clearer frame to the viewer's job of following the speaker. This is a change in explanatory scale; it does not require a camera zoom or cut. Use it where understanding benefits, not on a timer.
+
+Let emotional changes arise from the material: frustration can ease when a demonstration works; a small joke can release tension after a difficult admission. Do not cycle through fear, laughter, and relief simply to keep arousal high. A calm explanation can remain calm.
+
+Build an ending that makes earlier details fit together. If the body separately addressed clutter, mic placement, and pauses, the final insight could connect them: each choice gives the important thing room. Earn that synthesis with the actual examples. Do not add a grand theory the evidence cannot carry, recap every section by default, or tell viewers that their expectations have been exceeded. An appropriate final demonstration or useful next action can be enough.
+
+## Subtraction pass
+
+Try removing lines that repeat a promise, explain an already clear joke, announce a transition, or restate the same point without adding anything. Compare the shorter version with the original for clarity, voice, evidence, and emotional rhythm. Restore anything whose removal weakens those qualities. There is no required deletion percentage. Preserve necessary context, qualifications, and pauses; a denser script is not automatically a better one. Recalculate runtime after editing. Leave protected user wording unchanged and propose cuts separately.
+`,
+      },
+      {
+        path: "references/worked-example.md",
+        content: `# Worked example: a simple two-minute demonstration
+
+Illustrative brief, not a real creator's history: “Show how to make an opening more specific. Warm, dry delivery. Phone, desk, red-tape mic. No inserts required.” All example copy below is invented teaching material.
+
+**Viewer promise:** turn a vague opening into a sentence that tells someone why to listen.
+**Title:** Make Your First Sentence Give Me Something
+**Thumbnail idea:** speaker holding a card marked “Too vague?”; the card is actually used in the video.
+**Ethos/world:** practical desk conversation; an ordinary index card supplies the evidence. The small red mic band is a signature accent, not an unexplained mystery.
+
+## Clean spoken script
+
+This sentence could open almost any video: “Today, I want to share something really important.”
+
+That's the problem. It tells you how I feel about the information. It doesn't give you any of it.
+
+Let's fix it with one index card.
+
+Write the sentence you were going to say. Underneath it, finish this thought: “The thing I actually want you to notice is...”
+
+For this example, let's say you're showing someone how to pack a bag. Your first version is, “Here are my travel tips.” Fine. But we still don't know what problem you're solving.
+
+Now try: “If your bag won't close, take out the second pair of shoes before you buy a bigger suitcase.”
+
+You can picture the bag. You know the decision. And you have something to agree with or argue about.
+
+It isn't automatically the right advice for every trip. That's where the rest of the video comes in. Show the shoes. Show what fits. Explain when you'd keep them.
+
+The opening gives us a starting point. The demonstration earns it.
+
+Now look at your own sentence. Can someone picture what you're talking about? Do they know what they might get from listening? And can the rest of your video actually deliver it?
+
+If the answer is no, don't add “You won't believe this.” We haven't believed anything yet. You've given us nothing to work with.
+
+Name the thing. Show the problem. Make a promise you can keep.
+
+Then say that sentence out loud. If it sounds like a headline wearing your clothes, change it until it sounds like you.
+
+## Direction and edit ledger
+
+Begin eye-level in a medium close-up. Use soft available light and keep the face more prominent than the mic band. Record a short audio sample before the full take. Put the card beside the lens rather than covering the mouth.
+
+| Beat | Direction | Purpose |
+|---|---|---|
+| Vague sentence → diagnosis | Look into lens; let the quoted sentence sound deliberately generic | Make the difference audible |
+| Index-card instruction | Raise the card briefly within the same shot | Give the exercise an ordinary physical anchor |
+| Bag example | Return card to desk; slightly slower on the specific sentence | Let the listener picture the concrete problem |
+| “It isn't automatically...” | Calm delivery, no dramatic punch-in | Keep the qualification part of credible advice |
+| “We haven't believed anything yet” | Dry, brief pause afterward | Let the joke land without explaining it |
+| Closing exercise | Direct lens address | End with an action that fulfills the promise |
+
+**Planned editorial cuts: 0.** Continuous A-roll; card movement is not a cut. An optional card close-up would add two transitions: into the insert and back. If the text needs a close-up to be read, use one or omit the requirement to read it; do not assume tiny handwriting is legible.
+
+**Timing:** 263 spoken words (whitespace count). At 130–138 words/minute plus six seconds for the card and joke pause, approximately 120–127 seconds. This is an estimate, not a recorded rehearsal. Adapt the wording or pace to the actual speaker.
+
+The example demonstrates a specific opening, a useful early answer, an example that earns the argument, a truthful boundary, natural humor, an actionable ending, and a visually simple plan. Its shape and cut count are not universal recommendations.
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: youtube-camera-script
+description: Plan and write 2–7 minute YouTube videos led by a person talking to camera, combining spoken scripts, story progression, distinctive voice, delivery, set design, framing, and motivated edits. Use for new videos or revisions to hooks, middles, endings, or filming plans; not primarily for Shorts, ads, or AI video generation.
+---
+
+# YouTube Camera Script
+
+Create a video worth listening to, then direct the picture to strengthen it. Script, wording, speaker character, and delivery are the core work. The output should feel like one person saying something that matters to one viewer, in a recognizable world.
+
+## Working brief
+
+Use the supplied material first. Establish the topic, intended viewer and their current belief, desired change by the end, available evidence/story, duration, speaker voice, and filming constraints. Ask only for missing information that would materially change the script. If no topic is available, ask for one while offering a compact concept direction; do not invent the creator's history or results.
+
+Default to a conventional horizontal YouTube video, one speaker, one affordable setup, natural confident speech, and a four-minute target when unspecified. These are changeable production assumptions. Do not silently convert a two-minute request into a vertical Short. Treat user scripts and protected passages as source material; preserve wording when asked and label proposed revisions.
+
+Choose the requested scope: concept, full script, script repair, delivery pass, or production plan. Do not produce a full dossier when the user requests three opening lines.
+
+When the brief includes reference videos, use the timestamped comparison method in [evidence and testing](references/evidence-and-testing.md). When a creator supplies approved past scripts, use the compact voice-profile method in [story and speech](references/story-and-speech.md).
+
+## Artist identity bridge
+
+When the brief supplies artist brand/world/ethos or asks for identity-level connection, use \`artist-script-dna\` if available before choosing the angle. If an Artist DNA brief is already supplied, use it directly and do not invoke the bridge again. Pass its compact Artist DNA brief into this workflow: source-backed conviction, pressure, emotional intention, voice examples, episode-relevant signals, and observable behavior. Let those change the script's words and choices while preserving the video's promise and runtime. Do not force a manifesto into an ordinary topic or invent biography. If the bridge skill is unavailable, derive the same compact brief from supplied evidence and label interpretations. Skip this step for work without artist-identity scope.
+
+## 1. Decide the promise and the person
+
+Write a one-sentence viewer contract: “By the end, this viewer will understand/feel/be able to ___ because we show ___.” Choose one governing idea and the strongest honest evidence. Draft the ending before polishing the hook so the promise has somewhere to land.
+
+Define the speaker's position toward the viewer (peer, witness, guide, challenger), their perspective, one productive contradiction, and what earns their credibility. Build ethos from evidence, specificity, demonstrated judgment, or clearly bounded experience. Do not fabricate expertise, vulnerability, numbers, testimonials, or a persona.
+
+During concept exploration, offer three genuinely different title/opening pairs, recommend one, and explain the tradeoff in a sentence. For a finished-script request with a clear topic, choose one strong opening and omit alternatives unless requested. Give each an opening frame and an actual first spoken line. The title, thumbnail implication, opening, and final payoff must make the same promise. Cleverness that obscures the subject loses to specificity.
+
+## 2. Build a developing middle
+
+Read [story and speech](references/story-and-speech.md) when drafting or restructuring.
+
+Choose an arc that fits the material: demonstration, changed belief, personal incident, diagnosis, or escalating argument. A useful sequence is promise → concrete example → complication → better understanding → earned payoff. It is an option, not a mandatory five-act template.
+
+Map each beat to what changes in the viewer's understanding, the evidence or scene causing that change, and why the next beat follows. Replace disconnected list items with consequences, comparisons, or an accumulating model when appropriate. Useful lists can remain lists.
+
+Distinguish these tools:
+- **Curiosity:** a specific answer the viewer does not yet know.
+- **Anticipation:** the viewer can imagine an approaching result and sees progress toward it.
+- **Surprise:** a meaningful departure from an expectation already established.
+- **Recognition:** an accurately observed experience that makes the viewer feel understood.
+
+Choose what this video needs. Do not force all four into every opening. Give useful information early. Each substantive section should leave the viewer with a concrete answer, usable move, or changed understanding. Check where the first actual benefit arrives, not only where it is promised. Keep a small working ledger of promises: setup, progress, and payoff location. Close the main promise inside this video, before any optional next-video invitation. Never save the entire answer for a sequel merely to manufacture retention.
+
+## 3. Write for a mouth and an ear
+
+Deliver complete spoken wording when a script is requested. Use contractions, concrete nouns, active verbs, and varied sentence lengths. Write in breath-sized thought units; let the voice move between direct claims, examples, questions, and reflection. Read awkward lines as speech and simplify them. Preserve deliberate dialect, humor, or fragments when they belong to the speaker.
+
+Confidence is clarity plus support; retain uncertainty that changes the truth. Do not import a compulsory cold, superior, loud, or sales-driven voice from source skills. Use supplied voice samples; without them state the provisional register instead of claiming a voice match.
+
+Mark only performance cues that materially affect interpretation: a pause before a reveal, a slower explanation, a dry aside, a softer admission, a stressed word. Avoid directing every sentence. Provide clean teleprompter copy separately from production annotations when a filming packet is requested.
+
+Calculate duration from the spoken words. Start with an explicitly estimated 125–165 spoken words/minute range; use the speaker's measured pace when available. Add non-speaking demonstrations, holds, and transitions separately; do not double-count pauses already captured in a recorded read. Report word count, pace assumption, and estimated runtime. Revise scope or wording to fit 2–7 minutes rather than speeding up to hide excess material. A timed human read is the final timing check.
+
+## 4. Direct the world and the eye
+
+Read [frame and performance](references/frame-and-performance.md) for filming or visual-direction work.
+
+Choose one coherent relationship among speaker, room, clothing, sound, and objects. Specify the dominant visual: usually the face, temporarily a relevant demonstration. A prop may provide evidence, express character, deliver a joke, or become a repeatable signature. Assign it a job before giving it prominence.
+
+A funny object or red tape on a mic can be a useful hypothesis. Explain why it belongs to this person and whether it should be noticed immediately, discovered later, or revealed by action. A signature need not become a contrived plot point. If a prop explicitly creates a question, resolve that question. Do not claim red automatically increases retention or visual oddness causes a dopamine response.
+
+Give executable choices: camera height, framing, distance/perspective, eyeline, placement of relevant objects, lighting priorities, mic placement, sound, and a simple setup alternative. Keep the presenter on camera for most of the timeline unless the user asks otherwise.
+
+Map cuts to thought turns, evidence, time compression, emotional change, or jokes. Derive cut count from those decisions and disclose the planned count; do not prescribe a universal “cut every X seconds” rule. Preserve a sustained shot when stillness is doing useful work.
+
+## 5. Deliver only the useful packet
+
+For a full video, ordinarily include:
+1. Selected angle, viewer promise, title, and thumbnail idea.
+2. Complete script with estimated beat times, spoken-word count, pace and runtime assumptions; clean read copy if requested or needed for filming.
+3. Compact directing table: beat/time, visual and delivery action, reason for the action. Include total planned editorial cuts and any optional inserts separately.
+4. Set/ethos note and the minimum filming setup.
+5. One or two uncertainties worth testing, not a generic growth checklist.
+
+Keep research explanations outside spoken copy unless the topic itself needs them. Do the reasoning in depth, but give the user concise decisions and performable material. Use [worked example](references/worked-example.md) only to calibrate the relationship between speech and direction, never as a universal template.
+
+## Quality check
+
+Before delivery, check: the promise is true and fulfilled; the middle develops; evidence is distinguishable from illustration; the words sound speakable; duration is plausible; visual changes serve the message; the chosen voice fits; and the plan is feasible with the available setup. Repair weaknesses rather than announcing a numerical “virality score.”
+
+For analytics-led revisions, consult [evidence and testing](references/evidence-and-testing.md). Mark craft choices and audience-specific hypotheses as such. No guaranteed attention, fixed neurological deadlines, unsupported neurotransmitter claims, or invented retention benchmarks. The adapted ingredients and their limits are documented in [source skill map](references/source-skill-map.md); this skill works without loading those originals.
 `,
       },
     ],

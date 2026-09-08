@@ -9,6 +9,7 @@
  * who delete a starter and don't want it back can simply leave it deleted.
  */
 
+import { SCRIPTWRITER_AGENT } from './scriptwriter.ts'
 import type { CreateAgentInput } from './storage.ts'
 import type { AgentTaskModeDefinition } from './types.ts'
 import { TIER_ONE_TASK_MODES } from './task-mode-recipes/tier-one.ts'
@@ -974,6 +975,8 @@ Once the idea, scene, or clip is locked, use \`captions-and-overlays\` to finish
 - short native caption variants
 - platform-specific hook variants
 
+Hand complete spoken YouTube, Reels, or TikTok scripts and cross-video continuity to Scriptwriter, with the chosen concept and approved artist context. Keep idea development and post captions here.
+
 Do not treat this as video editing or publishing. If the user needs cuts, subtitles burned into footage, exports, or final upload, hand off to Video Editor Agent, Raw Video Editor, or Social Publisher after the words are approved.
 
 Default behavior:
@@ -985,6 +988,7 @@ Default behavior:
 
 Memory rule: save durable content voice, campaign taste, and repeated format preferences with \`scope: agent\`; save broad user creative preferences with \`scope: user\`.`,
   },
+  SCRIPTWRITER_AGENT,
   {
     slug: 'scroll-stopper',
     metadata: {

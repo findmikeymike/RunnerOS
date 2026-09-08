@@ -21,6 +21,7 @@ import {
   rmSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { ARTIST_VOICE_TARGET_AGENT_SLUGS } from '../artist-context/voice.ts';
 import { atomicWriteFileSync } from '../utils/files.ts';
 import { matter, stringifyFrontmatter, type GrayMatterFile } from '../config/frontmatter';
 import { CONCIERGE_SLUG, AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
@@ -354,6 +355,16 @@ export function serializeContextDoc(metadata: ContextDocMetadata, body: string):
 // Load
 // ============================================================================
 
+/** Extend only the exact product-default voice audience; custom/private rules stay intact. */
+export function upgradeDefaultArtistVoiceRouting(slug: string, metadata: ContextDocMetadata): ContextDocMetadata {
+  const legacy = ARTIST_VOICE_TARGET_AGENT_SLUGS.filter(agent => agent !== 'scriptwriter');
+  const routing = metadata.routing;
+  if (slug !== 'artist-voice' || metadata.private || !metadata.enabled || metadata.name !== 'Artist Voice'
+    || routing.mode !== 'targeted' || routing.agents.length !== legacy.length
+    || !legacy.every(agent => routing.agents.includes(agent))) return metadata;
+  return { ...metadata, routing: { mode: 'targeted', agents: [...routing.agents, 'scriptwriter'] } };
+}
+
 function loadDocFromDir(
   workspaceRootPath: string,
   dir: string,
@@ -371,7 +382,7 @@ function loadDocFromDir(
   if (!parsed) return null;
   return {
     slug,
-    metadata: parsed.metadata,
+    metadata: upgradeDefaultArtistVoiceRouting(slug, parsed.metadata),
     body: parsed.body,
     path: dir,
     workspaceRootPath,

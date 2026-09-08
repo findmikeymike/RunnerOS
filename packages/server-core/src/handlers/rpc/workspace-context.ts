@@ -19,6 +19,7 @@ import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { CONCIERGE_SLUG, loadGlobalAgent, resolveAgentTaskMode, filterContextDocsForTaskMode, isAgentAllowedInArtistWorkspace, type ResolvedAgentTaskMode } from '@craft-agent/shared/agent-definitions'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import { withScriptwriterArtistContext } from '../../hq-state/scriptwriter-context'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
 import {
   refreshArtistManagerStateForWorkspaceBestEffort,
@@ -116,9 +117,9 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
       refreshCampaignStateContextDocBestEffort(workspace.rootPath)
     }
     const docs = selectContextDocsForAgentLaunch(
-      taskMode
+      withScriptwriterArtistContext(workspace.rootPath, agentSlug, taskMode
         ? loadAuthorizedContextDocsForAgent(workspace.rootPath, agentSlug)
-        : loadPromptContextDocsForAgent(workspace.rootPath, agentSlug),
+        : loadPromptContextDocsForAgent(workspace.rootPath, agentSlug)),
       agentSlug,
       taskMode,
     )

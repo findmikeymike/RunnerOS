@@ -1,0 +1,4 @@
+interface:
+  display_name: "YouTube Camera Script"
+  short_description: "Scripts, voice, and direction for 2–7 minute videos"
+  default_prompt: "Use $youtube-camera-script to write a 4-minute talking-to-camera YouTube video with a strong story, natural voice, and a practical filming plan."
